@@ -252,6 +252,37 @@ export function isExpectedMulticoApplicationFormUrl(
   }
 }
 
+export function extractMulticoResponseDiagnostics(html: string): string[] {
+  const diagnostics = new Set<string>();
+  for (const tag of html.match(/<(?:input|select|textarea)\b[^>]*>/gi) ?? []) {
+    if (!/(?:is-invalid|has-error|\berror\b)/i.test(tag)) continue;
+    const name = /\bname=["']([^"']+)["']/i.exec(tag)?.[1];
+    if (name) diagnostics.add(`invalid:${name}`);
+  }
+
+  const messagePattern =
+    /<(?:div|span|small|p|li)\b[^>]*class=["'][^"']*(?:alert|invalid-feedback|error|danger)[^"']*["'][^>]*>([\s\S]*?)<\/(?:div|span|small|p|li)>/gi;
+  for (const match of html.matchAll(messagePattern)) {
+    const text = match[1]
+      .replace(/<[^>]+>/g, " ")
+      .replace(/&(?:nbsp|#160);/gi, " ")
+      .replace(/&amp;/gi, "&")
+      .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, "[email]")
+      .replace(/\b\d{5,}\b/g, "[number]")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (
+      text &&
+      /required|invalid|error|failed|upload|file|large|exceed|school|year|passport|diploma|transcript/i.test(
+        text,
+      )
+    ) {
+      diagnostics.add(text.slice(0, 160));
+    }
+  }
+  return [...diagnostics].slice(0, 12);
+}
+
 /**
  * Parses an application row from the student edit page's Candidate Applications
  * table. Returns application ID, fee, status if found.
@@ -948,19 +979,19 @@ async function createMulticoStudent(
       profile.email,
     ));
   if (!studentId) {
-    const errMatch =
-      /<div[^>]+(?:alert|error)[^>]*>([\s\S]{0,200}?)<\/div>/i.exec(
-        html,
-      );
+    const diagnostics = extractMulticoResponseDiagnostics(html);
+    const responsePath = (() => {
+      try {
+        return new URL(resp.url()).pathname;
+      } catch {
+        return "unknown";
+      }
+    })();
     throw new Error(
-      `Multico student create could not be proved${
-        isSuccess
-          ? ""
-          : `: ${
-              errMatch?.[1]?.replace(/<[^>]+>/g, "").trim() ??
-              "no success marker"
-            }`
-      }`,
+      `Multico student create could not be proved ` +
+        `(path=${responsePath}, successMarker=${isSuccess}, ` +
+        `responseBytes=${Buffer.byteLength(html)}, ` +
+        `validation=${diagnostics.join(" | ") || "none"})`,
     );
   }
   return { studentId, uploadedSlots };

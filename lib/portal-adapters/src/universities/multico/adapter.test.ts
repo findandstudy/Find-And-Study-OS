@@ -23,6 +23,7 @@ import {
   normalizeMulticoGpaSystem,
   parseMulticoStudentIdFromHtml,
   isExpectedMulticoApplicationFormUrl,
+  extractMulticoResponseDiagnostics,
 } from "./adapter.js";
 
 // ---------------------------------------------------------------------------
@@ -126,6 +127,21 @@ describe("live Multico form contract", () => {
         "https://evil.example/crm/student-applications/add/33286",
         "33286",
       ),
+    );
+  });
+
+  it("extracts safe field-level form diagnostics without retaining PII", () => {
+    assert.deepEqual(
+      extractMulticoResponseDiagnostics(`
+        <input name="graduate_year" class="form-control is-invalid" value="2027">
+        <div class="invalid-feedback">
+          Passport 123456789 and user@example.com: file is too large.
+        </div>
+      `),
+      [
+        "invalid:graduate_year",
+        "Passport [number] and [email]: file is too large.",
+      ],
     );
   });
 
