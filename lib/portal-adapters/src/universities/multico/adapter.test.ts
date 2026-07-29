@@ -27,6 +27,7 @@ import {
   findMatchingMulticoApplication,
   isMulticoMultipartWithinSafeBudget,
   MULTICO_MULTIPART_SAFE_BYTES,
+  isExpectedMulticoStudentEditUrl,
 } from "./adapter.js";
 
 // ---------------------------------------------------------------------------
@@ -130,6 +131,30 @@ describe("live Multico form contract", () => {
         "https://evil.example/crm/student-applications/add/33286",
         "33286",
       ),
+    );
+  });
+
+  it("accepts only the exact same-origin Multico student edit route", () => {
+    assert.equal(
+      isExpectedMulticoStudentEditUrl(
+        "https://www.multico.com.tr/crm/students/edit/33409",
+        "33409",
+      ),
+      true,
+    );
+    assert.equal(
+      isExpectedMulticoStudentEditUrl(
+        "https://www.multico.com.tr/crm/students/edit/334090",
+        "33409",
+      ),
+      false,
+    );
+    assert.equal(
+      isExpectedMulticoStudentEditUrl(
+        "https://evil.example/crm/students/edit/33409",
+        "33409",
+      ),
+      false,
     );
   });
 

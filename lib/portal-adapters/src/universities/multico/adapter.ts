@@ -394,6 +394,21 @@ export function isExpectedMulticoApplicationFormUrl(
   }
 }
 
+export function isExpectedMulticoStudentEditUrl(
+  url: string,
+  studentId: string,
+): boolean {
+  try {
+    const parsed = new URL(url);
+    return (
+      parsed.origin === new URL(MULTICO_BASE).origin &&
+      parsed.pathname === `/crm/students/edit/${studentId}`
+    );
+  } catch {
+    return false;
+  }
+}
+
 export function extractMulticoResponseDiagnostics(html: string): string[] {
   const diagnostics = new Set<string>();
   for (const tag of html.match(/<(?:input|select|textarea)\b[^>]*>/gi) ?? []) {
@@ -483,7 +498,14 @@ async function readMulticoApplicationTable(
     `${MULTICO_BASE}/students/edit/${studentId}`,
     { waitUntil: "networkidle" },
   );
-  if (!response?.ok()) {
+  // A successful application POST redirects directly to this exact page.
+  // Playwright may return null when goto() is then asked to navigate to the
+  // already-current URL. Accept that only when the same-origin, exact student
+  // route is visible; every other null response remains fail-closed.
+  if (
+    (response && !response.ok()) ||
+    (!response && !isExpectedMulticoStudentEditUrl(page.url(), studentId))
+  ) {
     throw new Error(
       `Multico student application table returned ` +
         `${response?.status() ?? "none"}`,
