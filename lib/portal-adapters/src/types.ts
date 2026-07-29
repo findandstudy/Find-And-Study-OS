@@ -328,6 +328,11 @@ export interface SubmitFiles {
 export interface AdapterCredentials {
   user: string;
   password: string;
+  /**
+   * Optional encrypted portal-specific settings resolved by the worker.
+   * Adapters must read only documented keys and must never log this object.
+   */
+  extra?: Record<string, unknown>;
 }
 
 // ---------------------------------------------------------------------------

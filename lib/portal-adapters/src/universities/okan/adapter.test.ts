@@ -5,6 +5,7 @@ import {
   chooseOkanProgramIndex,
   resolveOkanDegreeValue,
   resolveOkanRequiredFields,
+  verifyOkanSubmissionEvidence,
 } from "./adapter.js";
 
 const baseProfile = {
@@ -80,5 +81,46 @@ test("Okan program selection chooses a proven match and refuses ambiguity", () =
       "Business Administration",
     ),
     null,
+  );
+});
+
+test("Okan submission success requires an exact durable Track Applications row", () => {
+  const profile = {
+    firstName: "Ada",
+    lastName: "Lovelace",
+    programName: "Software Engineering (English)",
+  };
+  assert.equal(
+    verifyOkanSubmissionEvidence(profile, {
+      externalRef: "10234",
+      applicantName: "Ada Lovelace",
+      programName: "Software Engineering (English)",
+      status: "Submitted",
+      completed: "Yes",
+      stage: "Completed",
+    }),
+    true,
+  );
+  assert.equal(
+    verifyOkanSubmissionEvidence(profile, {
+      externalRef: "10234",
+      applicantName: "Ada Lovelace",
+      programName: "Software Engineering (English)",
+      status: "Pending",
+      completed: "No",
+      stage: "Documents",
+    }),
+    false,
+  );
+  assert.equal(
+    verifyOkanSubmissionEvidence(profile, {
+      externalRef: "",
+      applicantName: "Ada Lovelace",
+      programName: "Software Engineering (English)",
+      status: "Submitted",
+      completed: "Yes",
+      stage: "Completed",
+    }),
+    false,
   );
 });

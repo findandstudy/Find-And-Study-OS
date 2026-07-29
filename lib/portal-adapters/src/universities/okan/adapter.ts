@@ -50,6 +50,35 @@ export function chooseOkanProgramIndex(labels: string[], wanted: string): number
   const index = Number(matched.match.id);
   return Number.isInteger(index) && index >= 0 ? index : null;
 }
+
+export interface OkanTrackEvidence {
+  externalRef: string;
+  applicantName: string;
+  programName: string;
+  status: string;
+  completed: string;
+  stage: string;
+}
+
+export function verifyOkanSubmissionEvidence(
+  profile: Pick<SubmitProfile, "firstName" | "lastName" | "programName">,
+  evidence: OkanTrackEvidence,
+): boolean {
+  if (!/^\d{3,}$/.test(evidence.externalRef.trim())) return false;
+  const expectedNames = new Set([
+    fold(`${profile.firstName} ${profile.lastName}`),
+    fold(`${profile.lastName} ${profile.firstName}`),
+  ]);
+  if (!expectedNames.has(fold(evidence.applicantName))) return false;
+  if (fold(evidence.programName) !== fold(profile.programName)) return false;
+  const durableState = fold(
+    `${evidence.status} ${evidence.completed} ${evidence.stage}`,
+  );
+  if (/\b(not completed|incomplete|draft|cancelled|canceled)\b/.test(durableState)) {
+    return false;
+  }
+  return /\b(completed|submitted|received|yes|true)\b/.test(durableState);
+}
 const genderText = (g: string) => (/fem|kadın|female/i.test(g || "") ? "Female" : "Male");
 
 export function resolveOkanRequiredFields(profile: SubmitProfile): {
@@ -152,7 +181,16 @@ export const okanAdapter: UniversityAdapter = {
     const clickVisible = async (label: string) => {
       const b = page.locator(`button:has-text("${label}")`);
       const n = await b.count();
-      for (let i = 0; i < n; i++) { const x = b.nth(i); if (await x.isVisible().catch(() => false)) { await x.click({ timeout: 8000 }).catch(() => {}); return true; } }
+      for (let i = 0; i < n; i++) {
+        const x = b.nth(i);
+        if (!(await x.isVisible().catch(() => false))) continue;
+        try {
+          await x.click({ timeout: 8000 });
+          return true;
+        } catch {
+          return false;
+        }
+      }
       return false;
     };
     const next = () => clickVisible("Next");
@@ -258,26 +296,184 @@ export const okanAdapter: UniversityAdapter = {
       await setKendo("countryOfSecondarySchoolId", profile.nationality);
       if ((profile as any).gpa != null) await setNumeric("gpa of secondary", Number((profile as any).gpa));
       await wait(600); await next(); await wait(1800);
-      // 5 Documents — Passport + Last High School Transcript (PDF). One file input + "Upload" per doc.
-      const uploadDoc = async (labelRe: RegExp, fpath?: string) => {
-        if (!fpath) return;
-        const grp = page.locator(`div:has(> label:text-matches("${labelRe.source}", "i"))`).first();
-        const fi = (await grp.count()) ? grp.locator('input[type=file]').first() : page.locator('input[type=file]').first();
-        if (await fi.count()) { await fi.setInputFiles(fpath).catch(() => {}); await wait(800); }
-        // click the Upload button nearest this doc
-        const up = (await grp.count()) ? grp.locator('button:has-text("Upload")').first() : page.locator('button:has-text("Upload")').first();
-        if (await up.count()) { await up.click({ timeout: 8000 }).catch(() => {}); await wait(2500); }
+      // 5 Documents — Passport + Last High School Transcript (PDF). One file
+      // input + one Upload action per document, followed by exact filename or
+      // success-state readback. Missing/ambiguous uploads never advance.
+      const uploadDoc = async (
+        labelRe: RegExp,
+        fpath: string | undefined,
+        slot: string,
+      ): Promise<boolean> => {
+        if (!fpath) return false;
+        const labels = page.locator("label").filter({ hasText: labelRe });
+        const candidates: any[] = [];
+        for (let i = 0; i < await labels.count(); i++) {
+          const label = labels.nth(i);
+          if (!(await label.isVisible().catch(() => false))) continue;
+          const group = label
+            .locator(
+              'xpath=ancestor::*[(self::div or self::fieldset) and .//input[@type="file"] and .//button[contains(normalize-space(.), "Upload")]][1]',
+            )
+            .first();
+          if (!(await group.count())) continue;
+          const fileInputs = group.locator('input[type="file"]');
+          const uploadButtons = group.locator('button:has-text("Upload")');
+          if (
+            (await fileInputs.count()) === 1 &&
+            (await uploadButtons.count()) === 1
+          ) {
+            candidates.push(group);
+          }
+        }
+        if (candidates.length !== 1) {
+          logger.warn("[okan] upload target is not unique", {
+            slot,
+            count: candidates.length,
+          });
+          return false;
+        }
+        const group = candidates[0];
+        const fi = group.locator('input[type="file"]').first();
+        await fi.setInputFiles(fpath);
+        const selected = await fi.inputValue().catch(() => "");
+        if (!selected) return false;
+        await group
+          .locator('button:has-text("Upload")')
+          .first()
+          .click({ timeout: 8000 });
+        await wait(2500);
+        const fileName = fpath.split("/").pop() || "";
+        const groupText = (
+          (await group.innerText().catch(() => "")) || ""
+        ).replace(/\s+/g, " ");
+        const invalid =
+          (await fi.getAttribute("aria-invalid").catch(() => null)) === "true";
+        return (
+          !invalid &&
+          (groupText.toLowerCase().includes(fileName.toLowerCase()) ||
+            /\b(uploaded|success|complete)\b/i.test(groupText))
+        );
       };
-      await uploadDoc(/passport/i, (files as any).passport);
-      await uploadDoc(/transcript|high school/i, (files as any).transcript);
+      const uploadedSlots: string[] = [];
+      if (
+        await uploadDoc(/passport/i, (files as any).passport, "passport")
+      ) {
+        uploadedSlots.push("passport");
+      }
+      if (
+        await uploadDoc(
+          /transcript|high school/i,
+          (files as any).transcript,
+          "transcript",
+        )
+      ) {
+        uploadedSlots.push("transcript");
+      }
+      result.uploadedSlots = uploadedSlots;
+      const missingDocuments = ["passport", "transcript"].filter(
+        (slot) => !uploadedSlots.includes(slot),
+      );
+      if (missingDocuments.length > 0) {
+        result.missingDocuments = missingDocuments;
+        result.detail = "Okan required document upload could not be proved";
+        return result as SubmitResult;
+      }
       await wait(1000); await next(); await wait(2000);
       // 6 Completed — final submit
-      (await clickVisible("Submit")) || (await clickVisible("Complete")) || (await clickVisible("Finish")) || (await clickVisible("Done"));
+      const finalClicked =
+        (await clickVisible("Submit")) ||
+        (await clickVisible("Complete")) ||
+        (await clickVisible("Finish")) ||
+        (await clickVisible("Done"));
+      if (!finalClicked) {
+        result.detail = "Okan final submit action was not found or could not be clicked";
+        return result as SubmitResult;
+      }
       await wait(6000);
-      const body = (await page.evaluate("(()=>document.body?document.body.innerText:'')()")) as string;
-      if (/already|kayıtlı|duplicate|zaten/i.test(body)) result.alreadyExists = true;
-      else if (/success|completed|received|başvurunuz|thank you|tamamland|application.*complete/i.test(body)) result.submitted = true;
-      result.detail = body.replace(/\s+/g, " ").slice(0, 180);
+      const finalBody = (await page.evaluate(
+        "(()=>document.body?document.body.innerText:'')()",
+      )) as string;
+      if (/already|kayıtlı|duplicate|zaten/i.test(finalBody)) {
+        result.alreadyExists = true;
+        result.detail = "Okan portal reported a duplicate applicant/application";
+        return result as SubmitResult;
+      }
+
+      // The grid headings themselves contain "Completed" even when it has zero
+      // rows. A generic body-text success regex therefore produced historical
+      // submitted=true/programMissing=true contradictions. Success now requires
+      // a durable, exact row in Track Applications.
+      await page.goto(BASE + "/Agency/TrackApplications", {
+        waitUntil: "domcontentloaded",
+        timeout: 60000,
+      });
+      await wait(3500);
+      const trackRows = page.locator("table tbody tr,.k-grid-content tbody tr");
+      const proofs: OkanTrackEvidence[] = [];
+      for (let rowIndex = 0; rowIndex < await trackRows.count(); rowIndex++) {
+        const row = trackRows.nth(rowIndex);
+        if (!(await row.isVisible().catch(() => false))) continue;
+        const cells = row.locator("td");
+        if ((await cells.count()) < 3) continue;
+        const texts: string[] = [];
+        for (let cellIndex = 0; cellIndex < await cells.count(); cellIndex++) {
+          texts.push(
+            ((await cells.nth(cellIndex).innerText().catch(() => "")) || "")
+              .replace(/\s+/g, " ")
+              .trim(),
+          );
+        }
+        const applicantName =
+          texts.find((text) => {
+            const value = fold(text);
+            return (
+              value === fold(`${profile.firstName} ${profile.lastName}`) ||
+              value === fold(`${profile.lastName} ${profile.firstName}`)
+            );
+          }) || "";
+        const programName =
+          texts.find((text) => fold(text) === fold(profile.programName)) || "";
+        if (!applicantName || !programName) continue;
+        const rowHref =
+          (await row
+            .locator('a[href*="trackwizard"],a[href*="application"]')
+            .first()
+            .getAttribute("href")
+            .catch(() => "")) || "";
+        const externalRef =
+          rowHref.match(/[?&](?:id|applicationId)=(\d+)/i)?.[1] ||
+          texts.find((text) => /^\d{3,}$/.test(text)) ||
+          "";
+        const status =
+          texts.find((text) =>
+            /\b(submitted|received|approved|pending|rejected)\b/i.test(text),
+          ) || "";
+        const completed =
+          texts.find((text) => /^(?:yes|true|completed)$/i.test(text)) || "";
+        const stage =
+          texts.find((text) =>
+            /\b(completed|submitted|received|evaluation|review)\b/i.test(text),
+          ) || "";
+        proofs.push({
+          externalRef,
+          applicantName,
+          programName,
+          status,
+          completed,
+          stage,
+        });
+      }
+      const proof = proofs.find((candidate) =>
+        verifyOkanSubmissionEvidence(profile, candidate),
+      );
+      if (proof) {
+        result.submitted = true;
+        result.externalRef = proof.externalRef;
+        result.detail = `Okan application ${proof.externalRef} verified in Track Applications`;
+      } else {
+        result.detail =
+          "Okan final submission outcome could not be proved in Track Applications";
+      }
       logger.info("[okan] submit " + JSON.stringify(result));
       return result as SubmitResult;
     } catch (e: any) {

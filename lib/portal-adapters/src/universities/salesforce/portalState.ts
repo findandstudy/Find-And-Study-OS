@@ -277,3 +277,40 @@ export function isOwnedSalesforceApplicant(input: {
       rowEmail.includes(email))
   );
 }
+
+export interface SalesforceBinaryCandidate {
+  index: number;
+  value?: string | null;
+  dataValue?: string | null;
+  ariaLabel?: string | null;
+  label?: string | null;
+  text?: string | null;
+}
+
+/**
+ * Salesforce/LWC radio controls are not consistent across builds: some expose
+ * value=Yes/No, some only data-value, and some keep the answer solely in an
+ * associated label while the native input lives in shadow-style markup.
+ * Resolve from control-local metadata and refuse ambiguous matches.
+ */
+export function chooseSalesforceBinaryCandidate(
+  candidates: SalesforceBinaryCandidate[],
+  answer: "Yes" | "No",
+): number | null {
+  const wanted = answer === "Yes"
+    ? new Set(["yes", "evet", "true", "1"])
+    : new Set(["no", "hayir", "false", "0"]);
+  const matches = candidates.filter((candidate) => {
+    const values = [
+      candidate.value,
+      candidate.dataValue,
+      candidate.ariaLabel,
+      candidate.label,
+      candidate.text,
+    ]
+      .map((value) => fold(value ?? ""))
+      .filter(Boolean);
+    return values.some((value) => wanted.has(value));
+  });
+  return matches.length === 1 ? matches[0].index : null;
+}

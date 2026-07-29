@@ -11,6 +11,7 @@ import { portalCreds } from "../../portalCreds.js";
 import { fold } from "../../programMatch.js";
 import { SALESFORCE_SCHOOLS, type SalesforceSchoolConfig } from "./config.js";
 import {
+  chooseSalesforceBinaryCandidate,
   hasSalesforceCompletionProof,
   inferSalesforceDocumentSlot,
   isOwnedSalesforceApplicant,
@@ -339,10 +340,18 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
         if ((await selectors.count().catch(() => 0)) === 1) {
           await selectors.first().check({ force: true }).catch(() => {});
         }
-        const actions = row.getByRole("button", {
+        let actions = row.getByRole("button", {
           name: /complete application|continue application|edit application|view application/i,
         });
-        const actionCount = await actions.count().catch(() => 0);
+        let actionCount = await actions.count().catch(() => 0);
+        if (actionCount === 0) {
+          // Üsküdar enables a page-level action only after the row selector is
+          // checked. It is not a descendant of the selected table row.
+          actions = page.getByRole("button", {
+            name: /complete application|continue application|edit application|view application/i,
+          });
+          actionCount = await actions.count().catch(() => 0);
+        }
         if (actionCount !== 1) {
           logger.warn(
             `[salesforce:${cfg.key}] owned application resume action is not unique`,
@@ -653,7 +662,33 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
           return false;
         }
       };
-      const clickNext = async () => { const n = page.getByRole("button", { name: /^\s*(next|ileri|sonraki|devam)\s*$/i }).first(); if (await n.count()) { await n.click({ timeout: 6000 }).catch(() => {}); return true; } const __cna = page.getByRole("button", { name: /create new application|add application|create application/i }).first(); if (await __cna.count()) { await __cna.click({ timeout: 6000 }).catch(() => {}); return true; } return false; };
+      const clickNext = async (): Promise<boolean> => {
+        const candidates = [
+          page.getByRole("button", {
+            name: /^\s*(next|ileri|sonraki|devam)\s*$/i,
+          }),
+          page.getByRole("button", {
+            name: /create new application|add application|create application/i,
+          }),
+        ];
+        for (const locator of candidates) {
+          const visible: any[] = [];
+          for (let index = 0; index < await locator.count(); index++) {
+            const button = locator.nth(index);
+            if (await button.isVisible().catch(() => false)) {
+              visible.push(button);
+            }
+          }
+          if (visible.length !== 1) continue;
+          try {
+            await visible[0].click({ timeout: 6000 });
+            return true;
+          } catch {
+            return false;
+          }
+        }
+        return false;
+      };
       const setBinaryAnswer = async (
         question: RegExp,
         answer: "Yes" | "No",
@@ -661,17 +696,103 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
         const groups = page
           .locator("fieldset,.slds-form-element,[role=radiogroup]")
           .filter({ hasText: question });
-        const count = await groups.count().catch(() => 0);
-        if (count !== 1) return false;
-        const target = groups
-          .first()
-          .locator(
-            `input[type="radio"][value="${answer}" i],input[type="radio"][data-value="${answer}" i]`,
-          )
-          .first();
-        if (!(await target.count())) return false;
-        await target.check({ force: true }).catch(() => {});
-        return target.isChecked().catch(() => false);
+        const groupCandidates: Array<{
+          group: any;
+          radioCount: number;
+          textLength: number;
+        }> = [];
+        for (let groupIndex = 0; groupIndex < await groups.count(); groupIndex++) {
+          const group = groups.nth(groupIndex);
+          if (!(await group.isVisible().catch(() => false))) continue;
+          const radioCount = await group
+            .locator('input[type="radio"],[role="radio"]')
+            .count()
+            .catch(() => 0);
+          if (radioCount < 2) continue;
+          const textLength = (
+            (await group.innerText().catch(() => "")) || ""
+          ).replace(/\s+/g, " ").length;
+          groupCandidates.push({ group, radioCount, textLength });
+        }
+        if (groupCandidates.length === 0) return false;
+        groupCandidates.sort(
+          (left, right) =>
+            Math.abs(left.radioCount - 2) - Math.abs(right.radioCount - 2) ||
+            left.textLength - right.textLength,
+        );
+        const best = groupCandidates[0];
+        const equallySpecific = groupCandidates.filter(
+          (candidate) =>
+            candidate.radioCount === best.radioCount &&
+            candidate.textLength === best.textLength,
+        );
+        if (equallySpecific.length !== 1) return false;
+
+        const controls = best.group.locator(
+          'input[type="radio"],[role="radio"]',
+        );
+        const candidates = [];
+        for (let index = 0; index < await controls.count(); index++) {
+          const control = controls.nth(index);
+          const id = (await control.getAttribute("id").catch(() => "")) || "";
+          let labelText = "";
+          if (id) {
+            const label = page.locator(
+              `label[for="${id.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"]`,
+            );
+            if ((await label.count().catch(() => 0)) === 1) {
+              labelText = await label.innerText().catch(() => "");
+            }
+          }
+          if (!labelText) {
+            labelText = await control
+              .locator("xpath=ancestor::label[1]")
+              .innerText()
+              .catch(() => "");
+          }
+          candidates.push({
+            index,
+            value: await control.getAttribute("value").catch(() => null),
+            dataValue: await control
+              .getAttribute("data-value")
+              .catch(() => null),
+            ariaLabel: await control
+              .getAttribute("aria-label")
+              .catch(() => null),
+            label: labelText,
+            text: await control.innerText().catch(() => ""),
+          });
+        }
+        const targetIndex = chooseSalesforceBinaryCandidate(
+          candidates,
+          answer,
+        );
+        if (targetIndex == null) return false;
+        const target = controls.nth(targetIndex);
+        try {
+          if (
+            (await target.getAttribute("type").catch(() => null)) === "radio"
+          ) {
+            await target.check({ force: true });
+          } else {
+            await target.click({ force: true });
+          }
+        } catch {
+          return false;
+        }
+        await target.evaluate((node: HTMLElement) => {
+          node.dispatchEvent(new Event("input", { bubbles: true }));
+          node.dispatchEvent(new Event("change", { bubbles: true }));
+          node.dispatchEvent(new Event("blur", { bubbles: true }));
+        }).catch(() => {});
+        const checked =
+          (await target.isChecked().catch(() => false)) ||
+          (await target.getAttribute("aria-checked").catch(() => null)) ===
+            "true";
+        const invalid =
+          (await target.getAttribute("aria-invalid").catch(() => null)) ===
+          "true";
+        return checked && !invalid;
       };
       const readActiveStage = async (): Promise<SalesforceStage> => {
         const stageName = page.locator(".slds-path__stage-name").first();

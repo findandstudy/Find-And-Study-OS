@@ -87,6 +87,17 @@ export interface LaunchOpts {
    * The path is ALWAYS supplied by the caller — never hard-coded inside an adapter.
    */
   storagePath?: string;
+  /**
+   * Optional egress proxy for portals that reject datacentre IP ranges.
+   * Credentials are supplied from encrypted portal credential metadata and
+   * must never be logged.
+   */
+  proxy?: {
+    server: string;
+    username?: string;
+    password?: string;
+    bypass?: string;
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -102,7 +113,7 @@ export interface LaunchOpts {
 // in a finally block — never reuse a browser across submissions.
 // ---------------------------------------------------------------------------
 export async function launchPortal(opts: LaunchOpts = {}): Promise<AdapterSession> {
-  const { storagePath } = opts;
+  const { storagePath, proxy } = opts;
 
   const executablePath = resolveChromiumPath();
 
@@ -115,6 +126,7 @@ export async function launchPortal(opts: LaunchOpts = {}): Promise<AdapterSessio
   const launchArgs = {
     args: MEM_ARGS,
     ...(executablePath ? { executablePath } : {}),
+    ...(proxy ? { proxy } : {}),
   };
 
   let browser: Browser;

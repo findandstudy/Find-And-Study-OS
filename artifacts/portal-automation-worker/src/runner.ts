@@ -108,10 +108,21 @@ export async function runSubmission(
 
   // Inject resolved creds so the adapter's internal portalCreds() call
   // picks them up without relying on env vars.
-  setCredsOverride(adapter.key, { user: creds.user, password: creds.password });
+  setCredsOverride(adapter.key, {
+    user: creds.user,
+    password: creds.password,
+    extra: creds.extra,
+  });
 
   try {
-    session = await adapter.login({ headless: true });
+    session = await adapter.login({
+      headless: true,
+      credentials: {
+        user: creds.user,
+        password: creds.password,
+        extra: creds.extra,
+      },
+    });
 
     const result = await adapter.submit(session, profile, files);
 

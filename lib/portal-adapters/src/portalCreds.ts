@@ -13,6 +13,7 @@
 export interface ResolvedCreds {
   user: string;
   password: string;
+  extra?: Record<string, unknown>;
 }
 
 const _overrides = new Map<string, ResolvedCreds>();

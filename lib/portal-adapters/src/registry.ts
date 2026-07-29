@@ -7,6 +7,7 @@ import { okanAdapter }             from "./universities/okan/adapter.js";
 import { emuAdapter }              from "./universities/emu/adapter.js";
 import { altinbasAdapter }         from "./universities/altinbas/adapter.js";
 import { multicoAdapter }          from "./universities/multico/adapter.js";
+import { medipolAdapter }          from "./universities/medipol/adapter.js";
 import { createDeclarativeAdapter } from "./declarativeAdapter.js";
 import { declarativeConfigs, declarativeSpecRaws } from "./declarativeConfigs.js";
 import { parseAdapterSpec }        from "./declarative/schema.js";
@@ -48,6 +49,7 @@ export const adapters: UniversityAdapter[] = [
   emuAdapter,
   altinbasAdapter,
   multicoAdapter,
+  medipolAdapter,
   ..._declarativeAdapters,
   ..._specAdapters,
 ];
@@ -75,7 +77,7 @@ export function allAdapterKeys(): string[] {
 // Adapter family classification
 // ---------------------------------------------------------------------------
 
-type AdapterFamily = "metronic" | "salesforce" | "sit" | "united" | "okan" | "emu" | "altinbas" | "multico" | "declarative";
+type AdapterFamily = "metronic" | "salesforce" | "sit" | "united" | "okan" | "emu" | "altinbas" | "multico" | "medipol" | "declarative";
 
 function resolveFamily(adapterKey: string): AdapterFamily {
   if (adapterKey === topkapiAdapter.key) return "metronic";
@@ -86,6 +88,7 @@ function resolveFamily(adapterKey: string): AdapterFamily {
   if (adapterKey === emuAdapter.key) return "emu";
   if (adapterKey === altinbasAdapter.key) return "altinbas";
   if (adapterKey === multicoAdapter.key) return "multico";
+  if (adapterKey === medipolAdapter.key) return "medipol";
   return "declarative";
 }
 
@@ -95,8 +98,9 @@ function resolveFamily(adapterKey: string): AdapterFamily {
 // These adapters are not yet production-proven. They MUST NOT auto-submit:
 // the scheduled drain worker excludes them and the panel blocks enabling
 // auto-process for them. Manual single-submission (operator-triggered) is
-// still allowed. Topkapı (metronic) and the Okan/Medipol declarative flow
-// remain production-active.
+// still allowed. Topkapı (metronic) remains production-active. Okan is kept
+// active but fail-closed; Medipol stays experimental until its code flow and
+// network route have durable production evidence.
 //
 // ---------------------------------------------------------------------------
 const EXPERIMENTAL_FAMILIES: ReadonlySet<AdapterFamily> = new Set<AdapterFamily>([
@@ -106,6 +110,7 @@ const EXPERIMENTAL_FAMILIES: ReadonlySet<AdapterFamily> = new Set<AdapterFamily>
   "emu",
   "altinbas",
   "multico",
+  "medipol",
 ]);
 
 /**
