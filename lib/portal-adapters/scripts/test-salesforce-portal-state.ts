@@ -8,6 +8,7 @@ import {
   parseSalesforceStageMarker,
   resolveSalesforceProgramTarget,
   salesforceApplicantReadbackFailures,
+  salesforcePortalProgramCandidates,
   salesforcePortalProgramName,
 } from "../src/universities/salesforce/portalState.js";
 
@@ -46,6 +47,41 @@ test("university Salesforce programme mapping wins without using catalogue ids",
       source: "university",
       ambiguous: false,
     },
+  );
+});
+
+test("normalized Salesforce programme target supports exact live language suffix variants", () => {
+  assert.deepEqual(
+    salesforcePortalProgramCandidates(
+      resolveSalesforceProgramTarget(
+        "Bachelor of Business Administration (English)",
+      ),
+    ),
+    [
+      "Business Administration - English",
+      "Business Administration (English)",
+    ],
+  );
+  assert.deepEqual(
+    salesforcePortalProgramCandidates(
+      resolveSalesforceProgramTarget("Associate of Nursing (Turkish)"),
+    ),
+    ["Nursing - Turkish", "Nursing (Turkish)"],
+  );
+});
+
+test("explicit Salesforce mappings remain exact and are never expanded", () => {
+  assert.deepEqual(
+    salesforcePortalProgramCandidates(
+      resolveSalesforceProgramTarget(
+        "Bachelor of Business Administration (English)",
+        {
+          "İşletme - İngilizce":
+            "Bachelor of Business Administration (English)",
+        },
+      ),
+    ),
+    ["İşletme - İngilizce"],
   );
 });
 

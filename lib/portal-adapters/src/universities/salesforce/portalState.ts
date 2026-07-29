@@ -26,6 +26,32 @@ export interface SalesforceProgramTarget {
 }
 
 /**
+ * Salesforce schools do not use one consistent language suffix:
+ * some expose "Programme (English)", while Beykent currently exposes
+ * "Programme - English". Explicit admin mappings remain authoritative and
+ * are never expanded; only the deterministic CRM-name fallback gets the
+ * equivalent spelling candidates.
+ */
+export function salesforcePortalProgramCandidates(
+  target: SalesforceProgramTarget,
+): string[] {
+  const label = target.label.replace(/\s+/g, " ").trim();
+  if (!label || target.ambiguous) return [];
+  if (target.source !== "normalized") return [label];
+
+  const languageSuffix = label.match(
+    /^(.*?)\s*\((English|Turkish)\)\s*$/i,
+  );
+  if (!languageSuffix) return [label];
+
+  const programme = languageSuffix[1].trim();
+  const language =
+    languageSuffix[2].slice(0, 1).toUpperCase() +
+    languageSuffix[2].slice(1).toLowerCase();
+  return [...new Set([`${programme} - ${language}`, label])];
+}
+
+/**
  * Resolve the live portal label without relying on the CRM catalogue id.
  *
  * Portal mappings are stored as { portal label -> CRM programme name }. A

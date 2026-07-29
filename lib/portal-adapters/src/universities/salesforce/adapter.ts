@@ -18,6 +18,7 @@ import {
   parseSalesforceStageMarker,
   resolveSalesforceProgramTarget,
   salesforceApplicantReadbackFailures,
+  salesforcePortalProgramCandidates,
   type SalesforceStage,
 } from "./portalState.js";
 
@@ -725,24 +726,64 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
               `${cfg.label}: programme mapping is ambiguous for the requested CRM programme`;
             break;
           }
-          const portalProg = programTarget.label;
+          const programCandidates =
+            salesforcePortalProgramCandidates(programTarget);
           // Boş program adı match-all regex üretir (yanlış program seçer) → güvenli çıkış.
-          if (!portalProg || !portalProg.trim()) {
+          if (!programCandidates.length) {
             result.programMissing = true;
             logger.warn("[salesforce:" + cfg.key + "] program adı boş — Available Programs atlanıyor", { crmProgram: profile.programName });
             break;
           }
-          // ZORUNLU FİLTRE: "Economics" varsayılan listede yok, aramayla geliyor. Temizle + yaz + render bekle.
-          try {
-            const kw = page.getByPlaceholder(/search program name|keyword/i).first();
-            if (await kw.count()) {
-              await kw.fill("").catch(() => {});
-              await kw.fill(portalProg).catch(() => {});
-              await page.waitForTimeout(3000);
-            } else {
-              await page.waitForTimeout(2500);
+          // Live Salesforce builds use both "Programme (English)" and
+          // "Programme - English". Search each deterministic spelling and
+          // accept only one exact visible label; never fall back to a similar
+          // or first programme.
+          const kw = page
+            .getByPlaceholder(/search program name|keyword/i)
+            .first();
+          let portalProg = programCandidates[0];
+          let visibleExactLabels: any[] = [];
+          for (const candidate of programCandidates) {
+            try {
+              if (await kw.count()) {
+                await kw.fill("");
+                await kw.fill(candidate);
+                await kw.press("Tab").catch(() => {});
+                await page.waitForTimeout(2500);
+              } else {
+                await page.waitForTimeout(1200);
+              }
+            } catch {
+              await page.waitForTimeout(1200);
             }
-          } catch (e) { await page.waitForTimeout(2500); }
+
+            const escapedCandidate = candidate.replace(
+              /[.*+?^${}()|[\]\\]/g,
+              "\\$&",
+            );
+            const exactCandidateLabels = page.getByText(
+              new RegExp(`^\\s*${escapedCandidate}\\s*$`, "i"),
+            );
+            const visibleCandidates: any[] = [];
+            const candidateCount = await exactCandidateLabels
+              .count()
+              .catch(() => 0);
+            for (let i = 0; i < candidateCount; i++) {
+              if (
+                await exactCandidateLabels
+                  .nth(i)
+                  .isVisible()
+                  .catch(() => false)
+              ) {
+                visibleCandidates.push(exactCandidateLabels.nth(i));
+              }
+            }
+            if (visibleCandidates.length > 0) {
+              portalProg = candidate;
+              visibleExactLabels = visibleCandidates;
+              break;
+            }
+          }
           // Teşhis: filtre sonrası kart metinlerini dök (mapping doğrulama için)
           try {
             const cards = page.locator('li, article, lightning-card, [class*="card" i], [class*="tile" i], tr');
@@ -754,6 +795,7 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
             }
             logger.info("[salesforce:" + cfg.key + "] Available Programs kartları", {
               portalProg,
+              programCandidates,
               mappingSource: programTarget.source,
               count: labels.length,
               sample: labels.slice(0, 15),
@@ -768,11 +810,19 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
           const exactProgramLabel = page.getByText(
             new RegExp(`^\\s*${escapedPortalProgram}\\s*$`, "i"),
           );
-          const visibleExactLabels: any[] = [];
-          const exactLabelCount = await exactProgramLabel.count().catch(() => 0);
-          for (let i = 0; i < exactLabelCount; i++) {
-            if (await exactProgramLabel.nth(i).isVisible().catch(() => false)) {
-              visibleExactLabels.push(exactProgramLabel.nth(i));
+          if (!visibleExactLabels.length) {
+            const exactLabelCount = await exactProgramLabel
+              .count()
+              .catch(() => 0);
+            for (let i = 0; i < exactLabelCount; i++) {
+              if (
+                await exactProgramLabel
+                  .nth(i)
+                  .isVisible()
+                  .catch(() => false)
+              ) {
+                visibleExactLabels.push(exactProgramLabel.nth(i));
+              }
             }
           }
           const cartBtn = page.getByRole("button", { name: /selected programs/i }).first();
