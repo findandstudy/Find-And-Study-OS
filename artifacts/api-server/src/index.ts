@@ -40,6 +40,37 @@ function getSeedDir(): string {
 }
 const seedDir = getSeedDir();
 
+async function ensurePgEnumValue(typeName: string, value: string): Promise<void> {
+  // Both values are internal constants, but keep the dynamic DDL construction
+  // fail-closed so this helper can never become an injection primitive.
+  if (!/^[a-z][a-z0-9_]*$/.test(typeName) || !/^[a-z][a-z0-9_]*$/.test(value)) {
+    throw new Error("Invalid PostgreSQL enum identifier");
+  }
+  const existing = await pool.query<{ exists: boolean }>(
+    `SELECT EXISTS (
+       SELECT 1
+       FROM pg_type t
+       JOIN pg_enum e ON e.enumtypid = t.oid
+       JOIN pg_namespace n ON n.oid = t.typnamespace
+       WHERE n.nspname = 'public' AND t.typname = $1 AND e.enumlabel = $2
+     ) AS exists`,
+    [typeName, value],
+  );
+  if (existing.rows[0]?.exists) return;
+  try {
+    await pool.query(`ALTER TYPE "public"."${typeName}" ADD VALUE IF NOT EXISTS '${value}'`);
+  } catch (err: any) {
+    // Production commonly connects with a restricted app role while the enum
+    // is owned by the migration role. Do not abort the rest of the idempotent
+    // startup migration block; emit one precise warning for operator action.
+    if (err?.code === "42501") {
+      console.warn(`[migrate] enum value requires owner: ${typeName}.${value}`);
+      return;
+    }
+    throw err;
+  }
+}
+
 async function ensureSuperAdmin() {
   if (isProd) return;
   const seedPassword = process.env.SEED_ADMIN_PASSWORD;
@@ -1836,21 +1867,11 @@ async function seedClaudeIntegration() {
       EXCEPTION WHEN duplicate_object THEN null;
       END $$
     `);
-    await pool.query(`
-      ALTER TYPE "public"."portal_submission_status" ADD VALUE IF NOT EXISTS 'dry_run'
-    `);
-    await pool.query(`
-      ALTER TYPE "public"."portal_submission_status" ADD VALUE IF NOT EXISTS 'program_full'
-    `);
-    await pool.query(`
-      ALTER TYPE "public"."portal_submission_status" ADD VALUE IF NOT EXISTS 'exclusive_region'
-    `);
-    await pool.query(`
-      ALTER TYPE "public"."portal_submission_status" ADD VALUE IF NOT EXISTS 'accepted'
-    `);
-    await pool.query(`
-      ALTER TYPE "public"."portal_submission_status" ADD VALUE IF NOT EXISTS 'rejected'
-    `);
+    await ensurePgEnumValue("portal_submission_status", "dry_run");
+    await ensurePgEnumValue("portal_submission_status", "program_full");
+    await ensurePgEnumValue("portal_submission_status", "exclusive_region");
+    await ensurePgEnumValue("portal_submission_status", "accepted");
+    await ensurePgEnumValue("portal_submission_status", "rejected");
     await pool.query(`
       CREATE TABLE IF NOT EXISTS portal_submissions (
         id SERIAL PRIMARY KEY,

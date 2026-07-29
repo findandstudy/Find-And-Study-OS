@@ -18,6 +18,7 @@ const leadsRoute = read("../src/routes/leads.ts");
 const studentsRoute = read("../src/routes/students.ts");
 const applicationsRoute = read("../src/routes/applications.ts");
 const apiApp = read("../src/app.ts");
+const apiIndex = read("../src/index.ts");
 const leadsPage = read("../../edcons/src/pages/staff/Leads.tsx");
 const studentsPage = read("../../edcons/src/pages/staff/Students.tsx");
 const applicationsPage = read("../../edcons/src/pages/staff/Applications.tsx");
@@ -120,4 +121,13 @@ test("API logs slow requests without query strings or payload data", () => {
   assert.match(apiApp, /durationMs < 1_500/);
   assert.match(apiApp, /path:\s*req\.path/);
   assert.doesNotMatch(apiApp, /path:\s*req\.(originalUrl|url)/);
+});
+
+test("startup enum migrations do not abort when the app role is not the enum owner", () => {
+  assert.match(apiIndex, /async function ensurePgEnumValue/);
+  assert.match(apiIndex, /JOIN pg_enum e ON e\.enumtypid = t\.oid/);
+  assert.match(apiIndex, /if \(existing\.rows\[0\]\?\.exists\) return/);
+  assert.match(apiIndex, /if \(err\?\.code === "42501"\)/);
+  assert.match(apiIndex, /await ensurePgEnumValue\("portal_submission_status", "accepted"\)/);
+  assert.match(apiIndex, /await ensurePgEnumValue\("portal_submission_status", "rejected"\)/);
 });
