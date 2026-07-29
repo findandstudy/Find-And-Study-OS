@@ -131,7 +131,7 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
       // warmed goto. Retry up to 3× until a wizard form field is visible.
       const agencyUrl = cfg.portalUrl.replace(/\/$/, "") + "/";
       const appFormUrl = agencyUrl + "application-form";
-      const FORM_SEL = 'input[name="First_Name"], input[name="Last_Name"], input[name="Passport_Number"], input[name="Student_First_Name"], input[name="eduhubPicklistOptions"], select[name="Gender"], input[name="Country_of_Secondary_School"], input[type=file]';
+      const FORM_SEL = 'input[name="First_Name"], input[name="Last_Name"], input[name="Passport_Number"], input[name="Student_First_Name"], input[name="eduhubPicklistOptions"], input[placeholder*="search program" i], input[placeholder*="keyword" i], select[name="Gender"], input[name="Country_of_Secondary_School"], input[type=file]';
       // "Any visible match" — FORM_SEL is a broad union, so .first() can bind to
       // a hidden element while another field is actually on screen. Iterate.
       const onWizard = async (): Promise<boolean> => { try { const loc = page.locator(FORM_SEL); const n = await loc.count(); for (let i = 0; i < Math.min(n, 12); i++) { if (await loc.nth(i).isVisible().catch(() => false)) return true; } return false; } catch (e) { return false; } };
