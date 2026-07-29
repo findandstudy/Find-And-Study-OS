@@ -95,6 +95,100 @@ export function mapEducationLevel(level: string | undefined | null): string | nu
   return null;
 }
 
+export type SitAcademicHistoryLevel = "high_school" | "bachelor" | "master";
+
+export interface SitAcademicHistoryInput {
+  educationRecords?: Array<{
+    level: string;
+    schoolName?: string | null;
+    country?: string | null;
+    gpa?: string | null;
+  }>;
+  legacyEducation?: {
+    highSchool?: string;
+    bachelorSchool?: string;
+    masterSchool?: string;
+    rawGpa?: string;
+  };
+  highSchool?: string;
+  universityBachelor?: string;
+  universityMaster?: string;
+  schoolName?: string;
+  gpa?: string | number;
+  nationality?: string;
+  highSchoolCountry?: string;
+  schoolCountry?: string;
+}
+
+/**
+ * Resolve which completed-education record a live SIT country question asks
+ * for. SIT changes the label by application level:
+ *   Bachelor/Associate applicant -> "High School Country"
+ *   Master applicant             -> "Bachelor Country"
+ *   PhD applicant                -> "Master Country"
+ */
+export function sitAcademicHistoryLevelFromCountryLabel(
+  label: string | undefined | null,
+): SitAcademicHistoryLevel | null {
+  const f = fold(label ?? "");
+  if (!/\bcountry\b/.test(f)) return null;
+  if (/\b(high school|secondary school)\b/.test(f)) return "high_school";
+  if (/\bbachelor\b/.test(f)) return "bachelor";
+  if (/\bmaster\b/.test(f)) return "master";
+  return null;
+}
+
+/**
+ * Pick the matching structured education row for SIT. Explicit
+ * education_records always win. Legacy student columns remain a compatibility
+ * fallback for historical students; nationality is used only as the final
+ * country fallback because the old CRM had no education-country column.
+ */
+export function resolveSitAcademicHistory(
+  profile: SitAcademicHistoryInput,
+  requiredLevel: SitAcademicHistoryLevel,
+): { country: string; schoolName: string; gpa: string } {
+  const levelMatches = (raw: string): boolean => {
+    const f = fold(raw);
+    if (requiredLevel === "high_school") {
+      return /\b(high school|secondary|lise)\b/.test(f);
+    }
+    if (requiredLevel === "bachelor") {
+      return /\b(bachelor|undergraduate|lisans)\b/.test(f);
+    }
+    return /\b(master|graduate|yuksek lisans)\b/.test(f);
+  };
+  const row = profile.educationRecords?.find((record) =>
+    levelMatches(record.level),
+  );
+
+  const legacySchool =
+    requiredLevel === "high_school"
+      ? profile.legacyEducation?.highSchool || profile.highSchool
+      : requiredLevel === "bachelor"
+        ? profile.legacyEducation?.bachelorSchool || profile.universityBachelor
+        : profile.legacyEducation?.masterSchool || profile.universityMaster;
+
+  const country =
+    row?.country?.trim() ||
+    (requiredLevel === "high_school"
+      ? profile.highSchoolCountry?.trim() || profile.schoolCountry?.trim()
+      : "") ||
+    profile.nationality?.trim() ||
+    "";
+
+  return {
+    country: toEnglishCountryName(country),
+    schoolName:
+      row?.schoolName?.trim() || legacySchool?.trim() || profile.schoolName?.trim() || "",
+    gpa:
+      row?.gpa?.trim() ||
+      profile.legacyEducation?.rawGpa?.trim() ||
+      String(profile.gpa ?? "").trim() ||
+      "",
+  };
+}
+
 export function isSitDocumentsStep(
   heading: string | undefined | null,
   uploadAffordanceCount: number,

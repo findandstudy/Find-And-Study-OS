@@ -57,6 +57,8 @@ import {
   isSitDocumentsStep,
   distinctiveTokens,
   toEnglishCountryName,
+  sitAcademicHistoryLevelFromCountryLabel,
+  resolveSitAcademicHistory,
 } from "./helpers.js";
 import {
   findStudent,
@@ -879,7 +881,16 @@ async function selectCombo(
   triggerRe: RegExp,
   valueRe: RegExp,
 ): Promise<boolean> {
-  const trigger = page.getByRole("button", { name: triggerRe }).first();
+  // SIT's shadcn combobox button has an accessible name equal to its CURRENT
+  // value ("-Select-"), not the field label ("Bachelor Country"). Resolve the
+  // trigger inside the labelled form-item first; accessible-name lookup is only
+  // a compatibility fallback for older portal builds.
+  let trigger = formItemByLabel(page, triggerRe)
+    .locator('button[role="combobox"]')
+    .first();
+  if (!(await trigger.count().catch(() => 0))) {
+    trigger = page.getByRole("button", { name: triggerRe }).first();
+  }
   if (!(await trigger.count())) return false;
   await trigger.click({ timeout: 6000 }).catch(() => {});
   await sleep(page, 900);
@@ -894,7 +905,10 @@ async function selectCombo(
   if (await opt.count()) {
     await opt.click({ timeout: 3000 }).catch(() => {});
     await sleep(page, 1100);
-    return true;
+    // Clicking is not proof: Radix/cmdk can swallow a click while the visible
+    // value remains "-Select-". Require exact intended-value readback.
+    const selectedText = ((await trigger.textContent().catch(() => "")) || "").trim();
+    if (valueRe.test(selectedText)) return true;
   }
   // Close the dropdown to avoid blocking later interactions.
   await page.keyboard.press("Escape").catch(() => {});
@@ -2051,93 +2065,87 @@ export const sitAdapter: SitAdapter = {
           everSet.add("phone");
         }
       }
-      // STEP6 handler: Educational Background (High School Country/Name/GPA) for Bachelor applicants.
+      // Educational Background is level-dependent in SIT:
+      // Bachelor/Associate -> High School, Master -> Bachelor, PhD -> Master.
+      // The former implementation only recognized "High School Country", so a
+      // Master applicant's required "Bachelor Country" stayed at "-Select-".
       try {
-        const hasHS = await page.evaluate(
-          () => !!Array.from(document.querySelectorAll("label")).find((l) => /high school/i.test(l.textContent || "")),
-        );
-        if (hasHS) {
-          const selIdx = await page.evaluate(() => {
-            const arr = Array.from(document.querySelectorAll("select"));
-            for (let k = 0; k < arr.length; k++) {
-              const fi = (arr[k] as HTMLElement).closest('[data-slot="form-item"]');
-              const lab = fi ? (fi.querySelector("label")?.textContent || "").toLowerCase() : "";
-              if (lab.includes("school") && lab.includes("country")) return k;
-            }
-            return -1;
-          });
-          const hsCountry =
-            toEnglishCountryName(
-              (profile as any).highSchoolCountry || (profile as any).schoolCountry || profile.nationality,
-            ) ||
-            profile.nationality ||
-            "";
-          let cOk = false;
-          if (selIdx >= 0 && hsCountry) {
-            const cs = page.locator("select").nth(selIdx);
-            try {
-              await cs.selectOption({ label: hsCountry });
-              cOk = true;
-            } catch {}
-            if (!cOk) {
-              const opts = (await cs.locator("option").allTextContents()).map((o) => o.trim());
-              const hit =
-                opts.find((o) => o.toLowerCase() === hsCountry.toLowerCase()) ||
-                opts.find((o) => o.toLowerCase().includes(hsCountry.toLowerCase()));
-              if (hit) {
-                try {
-                  await cs.selectOption({ label: hit });
-                  cOk = true;
-                } catch {}
-              }
-            }
-          }
-          const hsName = String(
-            (profile as any).highSchoolName ||
-              (profile as any).schoolName ||
-              (profile as any).bachelorSchoolName ||
-              "",
-          ).trim();
-          const gpaRaw =
-            (profile as any).highSchoolGpaPercent ??
-            (profile as any).highSchoolGpa ??
-            (profile as any).gpa ??
-            (profile as any).gpaPercent;
-          // Zoho, gpa_percent alanında yalnızca 0-100 arası TAM SAYI kabul
-          // ediyor (86.6 / 4.33 / "3.0" → INVALID_DATA: High_School_GPA).
-          // normalizeGpa yuvarlar + 0-100'e sıkıştırır; sayısal olmayan değerde
-          // alanı HİÇ gönderme (fail-closed) ve nedenini logla — eski "3.0"
-          // ondalık varsayılanı bizzat hatanın kaynağıydı.
-          const hsGpaInt = normalizeGpa(gpaRaw as any);
-          const hsGpa = hsGpaInt !== undefined ? String(hsGpaInt) : "";
-          if (hsGpa === "") {
-            logger.warn(
-              `[sit] SCHOOLFIX gpa ATLANDI (fail-closed): sayısal olmayan/boş GPA değeri raw='${String(gpaRaw ?? "")}' — gpa_percent gönderilmeyecek`,
-            );
-          }
-          const setByName = (nm: string, val: string) =>
-            page.evaluate(
-              (a: { nm: string; val: string }) => {
-                const el = document.querySelector('input[name="' + a.nm + '"]') as HTMLInputElement | null;
-                if (!el) return "no-el";
-                el.focus();
-                const d = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(el), "value");
-                if (d && d.set) d.set.call(el, a.val);
-                el.dispatchEvent(new Event("input", { bubbles: true }));
-                el.dispatchEvent(new Event("change", { bubbles: true }));
-                el.dispatchEvent(new Event("blur", { bubbles: true }));
-                return "val=" + el.value;
-              },
-              { nm, val },
-            );
-          const nR = await setByName("high_school_name", hsName);
-          const gR = hsGpa !== "" ? await setByName("high_school_gpa_percent", hsGpa) : "skipped";
+        const countryLabels = await page
+          .locator('label[data-slot="form-label"]')
+          .allTextContents()
+          .catch(() => [] as string[]);
+        const requirements = countryLabels
+          .map((label) => ({
+            label: label.trim(),
+            level: sitAcademicHistoryLevelFromCountryLabel(label),
+          }))
+          .filter(
+            (
+              item,
+            ): item is {
+              label: string;
+              level: "high_school" | "bachelor" | "master";
+            } => item.level !== null,
+          );
+
+        for (const requirement of requirements) {
+          const academic = resolveSitAcademicHistory(
+            profile as Parameters<typeof resolveSitAcademicHistory>[0],
+            requirement.level,
+          );
+          const prefix =
+            requirement.level === "high_school"
+              ? "High School"
+              : requirement.level === "bachelor"
+                ? "Bachelor"
+                : "Master";
+          const countryKey = `academicCountry:${requirement.level}`;
+          critical[countryKey] = true;
+          const countryLabelRe = new RegExp(
+            `^\\s*${prefix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s+Country\\b`,
+            "i",
+          );
+          const exactCountryRe = new RegExp(
+            `^\\s*${academic.country.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*$`,
+            "i",
+          );
+          const countryOk =
+            !!academic.country &&
+            (await selectField(
+              page,
+              countryLabelRe,
+              exactCountryRe,
+              academic.country,
+            ));
+          mark(countryKey, countryOk);
+
+          const schoolNameOk =
+            !!academic.schoolName &&
+            (await fillField(
+              page,
+              new RegExp(`^\\s*${prefix}\\s+School Name\\b`, "i"),
+              academic.schoolName,
+            ));
+          mark("schoolName", schoolNameOk);
+
+          const academicGpa = normalizeGpa(academic.gpa);
+          const gpaOk =
+            academicGpa !== undefined &&
+            (await fillField(
+              page,
+              new RegExp(`^\\s*${prefix}\\s+GPA\\b`, "i"),
+              String(academicGpa),
+            ));
+          mark("gpa", gpaOk);
           logger.info(
-            "[sit] SCHOOLFIX cOk=" + cOk + " hsCountry='" + hsCountry + "' name=" + nR + " gpa=" + gR,
+            `[sit] ACADEMICFIX level=${requirement.level}` +
+              ` country=${countryOk ? "ok" : "missing"}` +
+              ` school=${schoolNameOk ? "ok" : "missing"}` +
+              ` gpa=${gpaOk ? "ok" : "missing"}`,
           );
         }
       } catch (e) {
-        logger.info("[sit] SCHOOLFIX err " + (e as any)?.message);
+        logger.info("[sit] ACADEMICFIX err " + (e as any)?.message);
       }
       // STEP5 handler v5: cmdk education-level combobox (opts: Associate/Bachelor/Master/PhD).
       try {

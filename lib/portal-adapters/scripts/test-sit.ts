@@ -29,6 +29,8 @@ import {
   isSitMember,
   isLanguageCompatible,
   isSitDocumentsStep,
+  sitAcademicHistoryLevelFromCountryLabel,
+  resolveSitAcademicHistory,
 } from "../src/universities/sit/helpers.js";
 import {
   SIT_URLS,
@@ -156,6 +158,68 @@ test("EDU1 — mapEducationLevel maps TR/EN to canonical labels", () => {
   assert.equal(mapEducationLevel("PhD"), "PhD");
   assert.equal(mapEducationLevel(""), null);
   assert.equal(mapEducationLevel("unknown"), null);
+});
+
+test("EDU2 — live SIT academic country labels resolve the required prior level", () => {
+  assert.equal(
+    sitAcademicHistoryLevelFromCountryLabel("High School Country *"),
+    "high_school",
+  );
+  assert.equal(
+    sitAcademicHistoryLevelFromCountryLabel("Bachelor Country *"),
+    "bachelor",
+  );
+  assert.equal(
+    sitAcademicHistoryLevelFromCountryLabel("Master Country *"),
+    "master",
+  );
+  assert.equal(sitAcademicHistoryLevelFromCountryLabel("Nationality *"), null);
+});
+
+test("EDU3 — Master applicant uses the explicit Bachelor education record", () => {
+  const result = resolveSitAcademicHistory(
+    {
+      nationality: "Afganistan",
+      schoolName: "WRONG FALLBACK",
+      gpa: "55",
+      educationRecords: [
+        {
+          level: "bachelor",
+          schoolName: "KABUL POLYTECHNIC UNIVERSITY",
+          country: "Afghanistan",
+          gpa: "66",
+        },
+      ],
+      legacyEducation: {
+        bachelorSchool: "LEGACY SCHOOL",
+        rawGpa: "60",
+      },
+    },
+    "bachelor",
+  );
+  assert.deepEqual(result, {
+    country: "Afghanistan",
+    schoolName: "KABUL POLYTECHNIC UNIVERSITY",
+    gpa: "66",
+  });
+});
+
+test("EDU4 — historical rows use controlled legacy and nationality fallbacks", () => {
+  const result = resolveSitAcademicHistory(
+    {
+      nationality: "Afganistan",
+      legacyEducation: {
+        bachelorSchool: "HISTORICAL BACHELOR SCHOOL",
+        rawGpa: "73",
+      },
+    },
+    "bachelor",
+  );
+  assert.deepEqual(result, {
+    country: "Afghanistan",
+    schoolName: "HISTORICAL BACHELOR SCHOOL",
+    gpa: "73",
+  });
 });
 
 // ---------------------------------------------------------------------------
