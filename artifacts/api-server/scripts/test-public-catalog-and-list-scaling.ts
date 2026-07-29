@@ -16,8 +16,11 @@ const settingsSchema = read("../../../lib/db/src/schema/settings.ts");
 const publicPrograms = read("../../edcons/src/pages/public/Programs.tsx");
 const leadsRoute = read("../src/routes/leads.ts");
 const studentsRoute = read("../src/routes/students.ts");
+const applicationsRoute = read("../src/routes/applications.ts");
+const apiApp = read("../src/app.ts");
 const leadsPage = read("../../edcons/src/pages/staff/Leads.tsx");
 const studentsPage = read("../../edcons/src/pages/staff/Students.tsx");
+const applicationsPage = read("../../edcons/src/pages/staff/Applications.tsx");
 
 test("public catalogue uses an explicit public scope for programs and facets", () => {
   assert.match(publicPrograms, /p\.set\("scope", "public"\)/);
@@ -88,4 +91,33 @@ test("lead and student pages no longer request 100000 records", () => {
   assert.doesNotMatch(studentsPage, /limit:\s*100000/);
   assert.match(leadsPage, /viewMode === "list" \? pg\.pageSize : 500/);
   assert.match(studentsPage, /viewMode === "list" \? pg\.pageSize : 500/);
+});
+
+test("applications list is server-paginated and keeps pipeline loading bounded", () => {
+  assert.doesNotMatch(applicationsPage, /limit=100000/);
+  assert.match(applicationsPage, /viewMode === "list" \? pg\.pageSize : 2000/);
+  assert.match(applicationsPage, /viewMode === "list" \? sortedApps : pipelinePage\.paged/);
+  assert.match(applicationsPage, /applicationsResp\?\.meta\?\.total/);
+  assert.match(applicationsRoute, /maxLimit: 5000/);
+});
+
+test("applications API owns list filtering, sorting, and cross-page facets", () => {
+  for (const key of [
+    "search", "country", "universityId", "universityType", "createdSource",
+    "assignment", "dateRange", "name", "program", "level", "intake",
+    "sortKey", "sortDir",
+  ]) {
+    assert.ok(applicationsRoute.includes(key), `applications route must support ${key}`);
+  }
+  assert.match(applicationsRoute, /facets:\s*\{/);
+  assert.match(applicationsRoute, /countries:\s*countryRows/);
+  assert.match(applicationsRoute, /universities:\s*universityRows/);
+  assert.match(applicationsRoute, /agents:\s*agentRows/);
+});
+
+test("API logs slow requests without query strings or payload data", () => {
+  assert.match(apiApp, /\[slow-request\]/);
+  assert.match(apiApp, /durationMs < 1_500/);
+  assert.match(apiApp, /path:\s*req\.path/);
+  assert.doesNotMatch(apiApp, /path:\s*req\.(originalUrl|url)/);
 });

@@ -1114,11 +1114,18 @@ function isDateInRange(dateStr: string, range: string): boolean {
   return true;
 }
 
-function FilterPopover({ filters, onChange, stages, apps, staffUsersList, canViewOthers, canViewUnassigned, currentUserId, clearAssignedTo }: {
+type ApplicationFilterFacets = {
+  countries?: string[];
+  universities?: Array<{ id: number; name: string }>;
+  agents?: Array<{ id: number; name: string }>;
+};
+
+function FilterPopover({ filters, onChange, stages, apps, facets, staffUsersList, canViewOthers, canViewUnassigned, currentUserId, clearAssignedTo }: {
   stages: PipelineStage[];
   filters: AppFilters;
   onChange: (f: AppFilters) => void;
   apps: any[];
+  facets?: ApplicationFilterFacets;
   staffUsersList: { id: number; name: string }[];
   canViewOthers: boolean;
   canViewUnassigned: boolean;
@@ -1131,22 +1138,30 @@ function FilterPopover({ filters, onChange, stages, apps, staffUsersList, canVie
   const { data: allCountries = [] } = useCountries();
 
   const countriesInApps = useMemo(() => {
-    const seen = new Set<string>();
-    apps.forEach((a: any) => { if (a.country) seen.add(a.country); });
+    const seen = new Set<string>(facets?.countries || []);
+    if (seen.size === 0) {
+      apps.forEach((a: any) => { if (a.country) seen.add(a.country); });
+    }
     return allCountries.filter(c => seen.has(c.name)).sort((a, b) => a.name.localeCompare(b.name));
-  }, [apps, allCountries]);
+  }, [apps, allCountries, facets?.countries]);
 
   const uniqueUniversities = useMemo(() => {
+    if (facets?.universities?.length) {
+      return facets.universities.map(u => [u.id, u.name] as [number, string]);
+    }
     const map = new Map<number, string>();
     apps.forEach((a: any) => { if (a.universityId && a.universityName) map.set(a.universityId, a.universityName); });
     return Array.from(map.entries()).sort((a, b) => a[1].localeCompare(b[1]));
-  }, [apps]);
+  }, [apps, facets?.universities]);
 
   const uniqueAgents = useMemo(() => {
+    if (facets?.agents?.length) {
+      return facets.agents.map(a => [a.id, a.name] as [number, string]);
+    }
     const map = new Map<number, string>();
     apps.forEach((a: any) => { if (a.agentId && a.agentName) map.set(a.agentId, a.agentName); });
     return Array.from(map.entries()).sort((a, b) => a[1].localeCompare(b[1]));
-  }, [apps]);
+  }, [apps, facets?.agents]);
 
   return (
     <>
@@ -1487,7 +1502,7 @@ export default function ApplicationsPage() {
 
   const [search, setSearch] = useState("");
   const [addOpen, setAddOpen] = useState(false);
-  const [viewMode, setViewMode] = useState<"pipeline" | "list">(() => (localStorage.getItem(VIEW_KEY) as "pipeline" | "list") || "pipeline");
+  const [viewMode, setViewMode] = useState<"pipeline" | "list">(() => (localStorage.getItem(VIEW_KEY) as "pipeline" | "list") || "list");
   // Role-based default for the "Assigned to" filter: admins/managers/super admins
   // default to "all", every other role to the restricted value they are allowed to
   // see. Shared between the persisted default and the filter panel's Clear action.
@@ -1545,23 +1560,64 @@ export default function ApplicationsPage() {
   const stageOrder = pipelineStages.map(s => s.key);
   const stageMap = Object.fromEntries(pipelineStages.map((s, i) => [s.key, { ...s, _index: i }]));
 
+  const [debouncedSearch, setDebouncedSearch] = useState(search);
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedSearch(search), 300);
+    return () => window.clearTimeout(timer);
+  }, [search]);
+
+  const applicationListParams = useMemo(() => {
+    const params = new URLSearchParams({
+      season,
+      page: String(viewMode === "list" ? pg.page : 1),
+      limit: String(viewMode === "list" ? pg.pageSize : 2000),
+      sortKey: sort.key,
+      sortDir: sort.dir,
+    });
+    const setIf = (key: string, value: string | undefined) => {
+      if (value && value !== "all") params.set(key, value);
+    };
+    setIf("search", debouncedSearch);
+    setIf("stage", filters.stage);
+    setIf("country", filters.country);
+    setIf("universityId", filters.university);
+    setIf("universityType", filters.universityType);
+    setIf("agentId", filters.agent);
+    setIf("assignment", filters.assignedTo);
+    setIf("dateRange", filters.dateRange);
+    setIf("originType", filters.originType);
+    setIf("createdSource", filters.createdSource);
+    setIf("name", colFilters.student);
+    setIf("program", colFilters.program);
+    setIf("level", colFilters.level);
+    setIf("intake", colFilters.intake);
+    return params.toString();
+  }, [
+    season, viewMode, pg.page, pg.pageSize, sort, debouncedSearch,
+    filters, colFilters,
+  ]);
+
   const { data: applicationsResp, isLoading } = useQuery({
-    queryKey: ["applications", season, search],
-    queryFn: () => apiFetch(`${BASE_URL}/api/applications?season=${encodeURIComponent(season)}&limit=100000${search ? `&search=${encodeURIComponent(search)}` : ""}`),
+    queryKey: ["applications", applicationListParams],
+    queryFn: () => apiFetch(`${BASE_URL}/api/applications?${applicationListParams}`),
   });
   const allApps: any[] = applicationsResp?.data || [];
+  const applicationFacets = applicationsResp?.meta?.facets as ApplicationFilterFacets | undefined;
 
   const uniqueAppCountries = useMemo(() => {
-    const set = new Set<string>();
+    const set = new Set<string>(applicationFacets?.countries || []);
     allApps.forEach((a: any) => { if (a.country) set.add(a.country); });
     return Array.from(set).sort();
-  }, [allApps]);
+  }, [allApps, applicationFacets?.countries]);
 
   const uniqueAppUniversities = useMemo(() => {
+    if (applicationFacets?.universities?.length) {
+      return applicationFacets.universities.map(u => [u.id, u.name] as [number, string]);
+    }
     const m = new Map<number, string>();
     allApps.forEach((a: any) => { if (a.universityId) m.set(a.universityId, a.universityName || ""); });
     return Array.from(m.entries()).sort((a, b) => (a[1] || "").localeCompare(b[1] || ""));
-  }, [allApps]);
+  }, [allApps, applicationFacets?.universities]);
 
   const isAdmin = user?.role === "super_admin" || user?.role === "admin" || user?.role === "manager";
   const canMoveCards = isAdmin || hasPermission("records.move_cards");
@@ -1614,7 +1670,8 @@ export default function ApplicationsPage() {
     if (filters.university !== "all" && String(a.universityId) !== filters.university) return false;
     if (filters.universityType !== "all") {
       const uType = (a.universityType || "").toLowerCase();
-      if (uType !== filters.universityType) return false;
+      const expectedType = filters.universityType === "state" ? "public" : filters.universityType;
+      if (uType !== expectedType && !(filters.universityType === "state" && uType === "state")) return false;
     }
     if (filters.agent !== "all") {
       if (filters.agent === "none") { if (a.agentId) return false; }
@@ -1659,7 +1716,11 @@ export default function ApplicationsPage() {
     return arr;
   }, [filteredApps, sort, stageOrder]);
 
-  const { paged: pagedApps, total: totalAppsCount } = pg.paginate(sortedApps);
+  const pipelinePage = pg.paginate(sortedApps);
+  const pagedApps = viewMode === "list" ? sortedApps : pipelinePage.paged;
+  const totalAppsCount = viewMode === "list"
+    ? Number(applicationsResp?.meta?.total ?? sortedApps.length)
+    : pipelinePage.total;
 
   useEffect(() => { pg.setPage(1); setSelectedIds(new Set()); }, [search, filters, colFilters, sort]);
 
@@ -1957,7 +2018,7 @@ export default function ApplicationsPage() {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input placeholder={t("applicationsPage.searchApplications")} value={search} onChange={e => setSearch(e.target.value)} className="pl-9 bg-white dark:bg-black/20 border-border rounded-full" />
             </div>
-            <FilterPopover filters={filters} onChange={setFilters} stages={pipelineStages} apps={allApps} staffUsersList={staffUsersList} canViewOthers={canViewOthers} canViewUnassigned={canViewUnassigned} currentUserId={user?.id} clearAssignedTo={roleBasedAssignedDefault} />
+            <FilterPopover filters={filters} onChange={setFilters} stages={pipelineStages} apps={allApps} facets={applicationFacets} staffUsersList={staffUsersList} canViewOthers={canViewOthers} canViewUnassigned={canViewUnassigned} currentUserId={user?.id} clearAssignedTo={roleBasedAssignedDefault} />
             <div className="flex items-center border rounded-full overflow-hidden">
               <button onClick={() => toggleView("pipeline")} className={`p-2 transition-colors ${viewMode === "pipeline" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`} title="Pipeline view"><LayoutGrid className="w-4 h-4" /></button>
               <button onClick={() => toggleView("list")} className={`p-2 transition-colors ${viewMode === "list" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`} title="List view"><List className="w-4 h-4" /></button>

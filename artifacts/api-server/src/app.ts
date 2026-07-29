@@ -131,6 +131,28 @@ app.use(
   }),
 );
 
+// Production performance guardrail. Log only genuinely slow API responses and
+// never include query strings or request bodies (which may contain PII). This
+// makes the next regression visible in PM2 logs without adding noise to normal
+// traffic or holding the response open.
+app.use((req, res, next) => {
+  if (!req.path.startsWith("/api/")) return next();
+  const startedAt = process.hrtime.bigint();
+  res.once("finish", () => {
+    const contentType = String(res.getHeader("Content-Type") || "");
+    if (contentType.includes("text/event-stream")) return;
+    const durationMs = Number(process.hrtime.bigint() - startedAt) / 1_000_000;
+    if (durationMs < 1_500) return;
+    console.warn("[slow-request]", JSON.stringify({
+      method: req.method,
+      path: req.path,
+      status: res.statusCode,
+      durationMs: Math.round(durationMs),
+    }));
+  });
+  next();
+});
+
 // Webhook routes are mounted BEFORE express.json so the raw body is available
 // for HMAC signature verification. These endpoints do not require auth or CSRF.
 app.use("/api", webhooksRouter);

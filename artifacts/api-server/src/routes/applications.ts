@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db, applicationsTable, notesTable, usersTable, studentsTable, agentsTable, commissionsTable, serviceFeesTable, programsTable, universitiesTable, pipelineStagesTable, applicationStageDocumentsTable, documentsTable, settingsTable, softDelete } from "@workspace/db";
-import { eq, sql, and, inArray, desc, isNull, isNotNull, ne } from "drizzle-orm";
+import { eq, sql, and, inArray, asc, desc, ilike, isNull, isNotNull, ne, lt, gte } from "drizzle-orm";
 import { normalizeGpaTo100 } from "../lib/gpaNormalize";
 import { requireAuth, requireRole, requireAgentStaffPermission, logAudit } from "../lib/auth";
 import { STAFF_ROLES, ADMIN_ROLES, AGENT_ROLES, isAgentRole } from "../lib/roles";
@@ -63,6 +63,33 @@ function resolvedApplicationIntakeSql() {
   )`;
 }
 
+function addApplicationDateRangeCondition(conditions: any[], range?: string): void {
+  if (!range || range === "all") return;
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const tomorrow = new Date(today);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  if (range === "today") {
+    conditions.push(and(gte(applicationsTable.createdAt, today), lt(applicationsTable.createdAt, tomorrow))!);
+  } else if (range === "yesterday") {
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+    conditions.push(and(gte(applicationsTable.createdAt, yesterday), lt(applicationsTable.createdAt, today))!);
+  } else if (range === "last7") {
+    const start = new Date(today);
+    start.setDate(start.getDate() - 7);
+    conditions.push(gte(applicationsTable.createdAt, start));
+  } else if (range === "thisMonth") {
+    const start = new Date(now.getFullYear(), now.getMonth(), 1);
+    const end = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    conditions.push(and(gte(applicationsTable.createdAt, start), lt(applicationsTable.createdAt, end))!);
+  } else if (range === "thisYear") {
+    const start = new Date(now.getFullYear(), 0, 1);
+    const end = new Date(now.getFullYear() + 1, 0, 1);
+    conditions.push(and(gte(applicationsTable.createdAt, start), lt(applicationsTable.createdAt, end))!);
+  }
+}
+
 async function isStageFileUploadMandatory(stageKey: string): Promise<boolean> {
   const [row] = await db.select({ isFileUploadMandatory: pipelineStagesTable.isFileUploadMandatory })
     .from(pipelineStagesTable)
@@ -116,8 +143,13 @@ async function autoCancelSiblingApplications(wonAppId: number, studentId: number
 }
 
 router.get("/applications", requireAuth, requireAgentStaffPermission("applications"), async (req, res): Promise<void> => {
-  const { studentId, agentId, stage, season, originType: originFilter } = req.query as Record<string, string>;
-  const pageParams = parsePaginationParams(req, { defaultLimit: 20, maxLimit: 100000 });
+  const query = req.query as Record<string, string>;
+  const {
+    studentId, agentId, stage, season, originType: originFilter, search,
+    country, universityId, universityType, createdSource, assignment,
+    dateRange, name, program, level, intake, sortKey = "date", sortDir = "desc",
+  } = query;
+  const pageParams = parsePaginationParams(req, { defaultLimit: 20, maxLimit: 5000 });
   const pageNum = pageParams.page;
   const limitNum = pageParams.limit;
   const offset = pageParams.offset;
@@ -134,8 +166,6 @@ router.get("/applications", requireAuth, requireAgentStaffPermission("applicatio
 
   if (isStaff) {
     if (studentId) conditions.push(eq(applicationsTable.studentId, parseInt(studentId, 10)));
-    if (agentId) conditions.push(eq(applicationsTable.agentId, parseInt(agentId, 10)));
-    if (stage) conditions.push(eq(applicationsTable.stage, stage));
     // Non-admin staff: only see applications assigned to them or unassigned
     // (mirrors the leads / students lists). Admins see everything in scope.
     if (!(ADMIN_ROLES as readonly string[]).includes(user.role)) {
@@ -177,7 +207,6 @@ router.get("/applications", requireAuth, requireAgentStaffPermission("applicatio
     }
     conditions.push(inArray(applicationsTable.agentId, visibleIds));
     if (studentId) conditions.push(eq(applicationsTable.studentId, parseInt(studentId, 10)));
-    if (stage) conditions.push(eq(applicationsTable.stage, stage));
   }
 
   // Branch scoping (super_admin: null = all). Applies to staff AND agents.
@@ -192,14 +221,85 @@ router.get("/applications", requireAuth, requireAgentStaffPermission("applicatio
     }
   }
 
+  // Keep the unfiltered, permission-scoped base for filter facets. This lets
+  // the UI request only one page of rows without losing university/country/
+  // agent options that happen to be on later pages.
+  const scopeWhereClause = conditions.length > 0 ? and(...conditions) : undefined;
+
+  if (search) {
+    const term = `%${search.trim()}%`;
+    conditions.push(orFn(
+      ilike(studentsTable.firstName, term),
+      ilike(studentsTable.lastName, term),
+      ilike(studentsTable.email, term),
+      ilike(applicationsTable.universityName, term),
+      ilike(applicationsTable.programName, term),
+      sql`(coalesce(${studentsTable.firstName}, '') || ' ' || coalesce(${studentsTable.lastName}, '')) ILIKE ${term}`,
+    )!);
+  }
+  if (stage && stage !== "all") conditions.push(eq(applicationsTable.stage, stage));
+  if (country && country !== "all") conditions.push(eq(applicationsTable.country, country));
+  if (universityId && universityId !== "all") {
+    const parsed = parseInt(universityId, 10);
+    if (Number.isFinite(parsed)) conditions.push(eq(applicationsTable.universityId, parsed));
+  }
+  if (universityType && universityType !== "all") {
+    if (universityType === "state" || universityType === "public") {
+      conditions.push(sql`lower(coalesce(${universitiesTable.universityType}, '')) IN ('state', 'public')`);
+    } else {
+      conditions.push(sql`lower(coalesce(${universitiesTable.universityType}, '')) = lower(${universityType})`);
+    }
+  }
+  if (agentId && agentId !== "all") {
+    if (agentId === "none") conditions.push(isNull(applicationsTable.agentId));
+    else {
+      const parsed = parseInt(agentId, 10);
+      if (Number.isFinite(parsed)) conditions.push(eq(applicationsTable.agentId, parsed));
+    }
+  }
+  if (assignment === "mine") conditions.push(eq(applicationsTable.assignedToId, user.id));
+  else if (assignment === "unassigned") conditions.push(isNull(applicationsTable.assignedToId));
+  else if (assignment === "mine_unassigned") {
+    conditions.push(orFn(eq(applicationsTable.assignedToId, user.id), isNull(applicationsTable.assignedToId))!);
+  } else if (assignment && assignment !== "all") {
+    const parsed = parseInt(assignment, 10);
+    if (Number.isFinite(parsed)) conditions.push(eq(applicationsTable.assignedToId, parsed));
+  }
+  if (createdSource === "exclude_automation") {
+    conditions.push(sql`coalesce(${applicationsTable.createdSource}, 'student') != 'automation'`);
+  } else if (createdSource === "only_automation") {
+    conditions.push(eq(applicationsTable.createdSource, "automation"));
+  }
+  if (name) {
+    const term = `%${name.trim()}%`;
+    conditions.push(orFn(
+      ilike(studentsTable.firstName, term),
+      ilike(studentsTable.lastName, term),
+      sql`(coalesce(${studentsTable.firstName}, '') || ' ' || coalesce(${studentsTable.lastName}, '')) ILIKE ${term}`,
+    )!);
+  }
+  if (program) conditions.push(ilike(applicationsTable.programName, `%${program.trim()}%`));
+  if (level && level !== "all") conditions.push(eq(applicationsTable.level, level));
+  if (intake) conditions.push(ilike(resolvedApplicationIntakeSql(), `%${intake.trim()}%`));
+  addApplicationDateRangeCondition(conditions, dateRange);
+
   const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
-  const [{ count }] = await db
-    .select({ count: sql<number>`count(*)` })
-    .from(applicationsTable)
-    .where(whereClause);
+  const sortColumns: Record<string, any> = {
+    student: sql`lower(coalesce(${studentsTable.firstName}, '') || ' ' || coalesce(${studentsTable.lastName}, ''))`,
+    stage: applicationsTable.stage,
+    country: applicationsTable.country,
+    university: applicationsTable.universityName,
+    program: applicationsTable.programName,
+    level: applicationsTable.level,
+    intake: resolvedApplicationIntakeSql(),
+    fee: commissionsTable.universityCommissionAmount,
+    date: applicationsTable.createdAt,
+  };
+  const orderColumn = sortColumns[sortKey] || applicationsTable.createdAt;
+  const order = sortDir === "asc" ? asc(orderColumn) : desc(orderColumn);
 
-  const rows = await db
+  const rowsQuery = db
     .select({
       id: applicationsTable.id,
       studentId: applicationsTable.studentId,
@@ -248,7 +348,29 @@ router.get("/applications", requireAuth, requireAgentStaffPermission("applicatio
     .where(whereClause)
     .limit(limitNum)
     .offset(offset)
-    .orderBy(desc(applicationsTable.updatedAt), desc(applicationsTable.createdAt));
+    .orderBy(order, desc(applicationsTable.id));
+
+  const [countRows, rows, countryRows, universityRows, agentRows] = await Promise.all([
+    db.select({ count: sql<number>`count(*)` }).from(applicationsTable)
+      .leftJoin(studentsTable, eq(applicationsTable.studentId, studentsTable.id))
+      .leftJoin(universitiesTable, eq(applicationsTable.universityId, universitiesTable.id))
+      .where(whereClause),
+    rowsQuery,
+    db.selectDistinct({ country: applicationsTable.country })
+      .from(applicationsTable)
+      .where(and(scopeWhereClause, isNotNull(applicationsTable.country)))
+      .orderBy(applicationsTable.country),
+    db.selectDistinct({ id: applicationsTable.universityId, name: applicationsTable.universityName })
+      .from(applicationsTable)
+      .where(and(scopeWhereClause, isNotNull(applicationsTable.universityId), isNotNull(applicationsTable.universityName)))
+      .orderBy(applicationsTable.universityName),
+    db.selectDistinct({ id: applicationsTable.agentId, name: agentsTable.companyName })
+      .from(applicationsTable)
+      .innerJoin(agentsTable, eq(applicationsTable.agentId, agentsTable.id))
+      .where(scopeWhereClause)
+      .orderBy(agentsTable.companyName),
+  ]);
+  const count = countRows[0]?.count ?? 0;
 
   const isAgentUser = req.user && isAgentRole(req.user.role);
   let isSubAgentUser = false;
@@ -279,6 +401,15 @@ router.get("/applications", requireAuth, requireAgentStaffPermission("applicatio
       page: pageNum,
       limit: limitNum,
       totalPages: Math.ceil(Number(count) / limitNum),
+      facets: {
+        countries: countryRows.map(r => r.country).filter((v): v is string => Boolean(v)),
+        universities: universityRows
+          .filter((r): r is { id: number; name: string } => Number.isFinite(r.id) && Boolean(r.name))
+          .map(r => ({ id: r.id, name: r.name })),
+        agents: agentRows
+          .filter((r): r is { id: number; name: string } => Number.isFinite(r.id) && Boolean(r.name))
+          .map(r => ({ id: r.id, name: r.name })),
+      },
     },
   });
 });
