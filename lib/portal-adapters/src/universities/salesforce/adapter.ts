@@ -136,13 +136,13 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
       // a hidden element while another field is actually on screen. Iterate.
       const onWizard = async (): Promise<boolean> => { try { const loc = page.locator(FORM_SEL); const n = await loc.count(); for (let i = 0; i < Math.min(n, 12); i++) { if (await loc.nth(i).isVisible().catch(() => false)) return true; } return false; } catch (e) { return false; } };
       const filterTrackApplicant = async (
-        displayName: string,
+        query: string,
       ): Promise<void> => {
         const listSearch = page
           .getByPlaceholder(/search this list/i)
           .first();
-        if (displayName && (await listSearch.count())) {
-          await listSearch.fill(displayName).catch(() => {});
+        if (query && (await listSearch.count())) {
+          await listSearch.fill(query).catch(() => {});
           await listSearch.press("Enter").catch(() => {});
           await page.waitForTimeout(4000);
           return;
@@ -169,8 +169,8 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
             visibleTextInputs.push(textInputs.nth(index));
           }
         }
-        if (displayName && visibleTextInputs.length === 1) {
-          await visibleTextInputs[0].fill(displayName).catch(() => {});
+        if (query && visibleTextInputs.length === 1) {
+          await visibleTextInputs[0].fill(query).catch(() => {});
           await visibleTextInputs[0].press("Enter").catch(() => {});
           await page.waitForTimeout(4000);
         }
@@ -209,7 +209,10 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
         }).catch(() => {});
         await page.waitForTimeout(8000);
         const displayName = `${profile.firstName} ${profile.lastName}`.trim();
-        await filterTrackApplicant(displayName);
+        // Beykent's global filter matches one column at a time, so an exact
+        // email lookup is reliable while a combined "First Last" query is not.
+        // Ownership below still requires both the name and email readback.
+        await filterTrackApplicant(profile.email);
         const namePattern = new RegExp(
           displayName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
           "i",
@@ -223,7 +226,11 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
             .replace(/\s+/g, " ")
             .trim();
         };
-        const rowName = await cellText("Name");
+        const firstName = await cellText("First Name");
+        const lastName = await cellText("Last Name");
+        const rowName =
+          `${firstName} ${lastName}`.trim() ||
+          (await cellText("Name"));
         const rowEmail = await cellText("Email");
         const mailtoHref =
           (await row
@@ -241,7 +248,9 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
         if (!owned) return empty;
         return {
           owned,
-          externalRef: await cellText("Application Name"),
+          externalRef:
+            (await cellText("Application Name")) ||
+            (await cellText("Name")),
           applicationStatus: await cellText("Application Status"),
           trackStage: await cellText("Stage"),
         };
@@ -275,7 +284,7 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
           .catch(() => {});
         await page.waitForTimeout(7000);
         const displayName = `${profile.firstName} ${profile.lastName}`.trim();
-        await filterTrackApplicant(displayName);
+        await filterTrackApplicant(profile.email);
         const namePattern = new RegExp(
           displayName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
           "i",
@@ -307,11 +316,21 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
         if ((await selectors.count().catch(() => 0)) === 1) {
           await selectors.first().check({ force: true }).catch(() => {});
         }
-        const actions = page.getByRole("button", {
-          name: /complete application|continue application|edit application/i,
+        const actions = row.getByRole("button", {
+          name: /complete application|continue application|edit application|view application/i,
         });
         if ((await actions.count().catch(() => 0)) !== 1) return false;
         await actions.first().click({ timeout: 6000 }).catch(() => {});
+        await page.waitForTimeout(4500);
+        if (await onWizard()) return true;
+
+        // Beykent first opens a read-only detail page from the table. Resume
+        // only through one uniquely named edit/complete action.
+        const detailAction = page.getByRole("button", {
+          name: /complete application|continue application|edit application/i,
+        });
+        if ((await detailAction.count().catch(() => 0)) !== 1) return false;
+        await detailAction.first().click({ timeout: 6000 }).catch(() => {});
         await page.waitForTimeout(4500);
         return onWizard();
       };
