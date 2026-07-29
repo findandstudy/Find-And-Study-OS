@@ -693,9 +693,29 @@ export const unitedAdapter: UniversityAdapter = {
       try { await page.evaluate(() => { (globalThis as any).__name = (globalThis as any).__name || ((f: any) => f); }); } catch {}
     };
 
+    let profileDocumentControlsReady: boolean | undefined;
     const findProfileDocumentTarget = async (
       documentKey: string,
     ): Promise<{ index: number; state: string } | null> => {
+      // Student profile details render after the surrounding page shell. Do
+      // not classify all slots as missing during that short hydration window.
+      if (profileDocumentControlsReady === undefined) {
+        profileDocumentControlsReady = await page
+          .waitForSelector('button[onclick*="uploadfile("]', {
+            state: "attached",
+            timeout: 15000,
+          })
+          .then(() => true)
+          .catch(() => false);
+        const controlCount = await page
+          .locator('button[onclick*="uploadfile("]')
+          .count()
+          .catch(() => 0);
+        logger.info(
+          `[united] profile document controls ready=${profileDocumentControlsReady} count=${controlCount}`,
+        );
+      }
+      if (!profileDocumentControlsReady) return null;
       const targets = (await page
         .locator('button[onclick*="uploadfile("]')
         .evaluateAll((buttons: Element[], wantedKey: string) => {
@@ -809,6 +829,7 @@ export const unitedAdapter: UniversityAdapter = {
           .waitForURL(/\/Manage\/studentprofile\//i, { timeout: 12000 })
           .catch(() => {});
         await wait(1000);
+        profileDocumentControlsReady = undefined;
         target = await findProfileDocumentTarget(documentKey);
         if (!target || !isUploadedState(target.state)) {
           logger.warn(
