@@ -25,6 +25,8 @@ import {
   isExpectedMulticoApplicationFormUrl,
   extractMulticoResponseDiagnostics,
   findMatchingMulticoApplication,
+  isMulticoMultipartWithinSafeBudget,
+  MULTICO_MULTIPART_SAFE_BYTES,
 } from "./adapter.js";
 
 // ---------------------------------------------------------------------------
@@ -164,6 +166,24 @@ describe("live Multico form contract", () => {
         status: "Pending Review",
       },
     );
+  });
+
+  it("fails closed when Multico multipart content exceeds its safe budget", () => {
+    assert.equal(
+      isMulticoMultipartWithinSafeBudget([
+        MULTICO_MULTIPART_SAFE_BYTES - 1,
+        1,
+      ]),
+      true,
+    );
+    assert.equal(
+      isMulticoMultipartWithinSafeBudget([
+        MULTICO_MULTIPART_SAFE_BYTES,
+        1,
+      ]),
+      false,
+    );
+    assert.equal(isMulticoMultipartWithinSafeBudget([1, -1]), false);
   });
 
   it("maps all supported levels and fails closed for unknown levels", () => {

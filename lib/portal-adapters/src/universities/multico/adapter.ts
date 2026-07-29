@@ -49,6 +49,8 @@ import { fold, matchProgram } from "../../programMatch.js";
 import type { ProgramCandidate } from "../../programMatch.js";
 import { db, portalProgramCacheTable, type PortalProgramOption } from "@workspace/db";
 import { and, eq, gt } from "drizzle-orm";
+import { execFile } from "node:child_process";
+import { createHash } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 
@@ -64,6 +66,146 @@ export const MULTICO_STUDENT_FORM_PATH = "/students/add";
 
 /** Cache TTL for program catalog (8 hours). */
 const PROGRAM_CACHE_TTL_MS = 8 * 60 * 60 * 1000;
+
+/**
+ * Keep Multico's student-create and document PATCH payloads below a
+ * conservative boundary. The live CRM may answer an oversized multipart POST
+ * with the add form again (HTTP 200) instead of an explicit 413, which makes a
+ * transport-size failure look like a validation failure.
+ */
+export const MULTICO_MULTIPART_SAFE_BYTES = 12 * 1024 * 1024;
+
+export function isMulticoMultipartWithinSafeBudget(
+  sizes: readonly number[],
+): boolean {
+  return sizes.every((size) => Number.isFinite(size) && size >= 0) &&
+    sizes.reduce((sum, size) => sum + size, 0) <=
+      MULTICO_MULTIPART_SAFE_BYTES;
+}
+
+type MulticoUploadFile = {
+  fieldName: string;
+  filePath: string;
+  name: string;
+  mimeType: string;
+  buffer: Buffer;
+};
+
+function runGhostscriptPdfOptimization(
+  inputPath: string,
+  outputPath: string,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    execFile(
+      "gs",
+      [
+        "-sDEVICE=pdfwrite",
+        "-dCompatibilityLevel=1.4",
+        "-dPDFSETTINGS=/ebook",
+        "-dDetectDuplicateImages=true",
+        "-dCompressFonts=true",
+        "-dNOPAUSE",
+        "-dQUIET",
+        "-dBATCH",
+        "-dSAFER",
+        `-sOutputFile=${outputPath}`,
+        inputPath,
+      ],
+      { timeout: 60_000, maxBuffer: 256 * 1024 },
+      (error) => {
+        if (error) reject(error);
+        else resolve();
+      },
+    );
+  });
+}
+
+async function optimizeMulticoMultipartFiles(
+  files: MulticoUploadFile[],
+): Promise<MulticoUploadFile[]> {
+  if (
+    isMulticoMultipartWithinSafeBudget(
+      files.map((file) => file.buffer.length),
+    )
+  ) {
+    return files;
+  }
+
+  const originalBytes = files.reduce(
+    (sum, file) => sum + file.buffer.length,
+    0,
+  );
+  const optimizedByDigest = new Map<string, Buffer | null>();
+  const optimized: MulticoUploadFile[] = [];
+
+  for (const file of files) {
+    if (
+      file.mimeType !== "application/pdf" ||
+      !file.buffer.subarray(0, 5).equals(Buffer.from("%PDF-"))
+    ) {
+      optimized.push(file);
+      continue;
+    }
+
+    const digest = createHash("sha256").update(file.buffer).digest("hex");
+    let candidate = optimizedByDigest.get(digest);
+    if (candidate === undefined) {
+      const outputPath = path.join(
+        path.dirname(file.filePath),
+        `.multico-${file.fieldName}-${process.pid}.pdf`,
+      );
+      try {
+        await runGhostscriptPdfOptimization(file.filePath, outputPath);
+        const output = await fs.readFile(outputPath);
+        candidate =
+          output.subarray(0, 5).equals(Buffer.from("%PDF-")) &&
+          output.length < file.buffer.length
+            ? output
+            : null;
+        optimizedByDigest.set(digest, candidate);
+      } catch (error) {
+        throw new Error(
+          "Multico PDF optimization failed for oversized documents: " +
+            (error instanceof Error ? error.message : String(error)),
+        );
+      } finally {
+        await fs.rm(outputPath, { force: true }).catch(() => {});
+      }
+    }
+    optimized.push(
+      candidate
+        ? {
+            ...file,
+            name: file.name.replace(/\.pdf$/i, "-optimized.pdf"),
+            buffer: candidate,
+          }
+        : file,
+    );
+  }
+
+  const optimizedBytes = optimized.reduce(
+    (sum, file) => sum + file.buffer.length,
+    0,
+  );
+  logger.info(
+    `[multico] multipart optimized: ` +
+      `${Math.ceil(originalBytes / 1024)}KB → ` +
+      `${Math.ceil(optimizedBytes / 1024)}KB`,
+  );
+  if (
+    !isMulticoMultipartWithinSafeBudget(
+      optimized.map((file) => file.buffer.length),
+    )
+  ) {
+    throw new Error(
+      `Multico required documents exceed the safe upload budget after ` +
+        `loss-controlled PDF optimization ` +
+        `(${Math.ceil(optimizedBytes / 1024)}KB > ` +
+        `${Math.ceil(MULTICO_MULTIPART_SAFE_BYTES / 1024)}KB)`,
+    );
+  }
+  return optimized;
+}
 
 // ---------------------------------------------------------------------------
 // Central Asian nationality list — exported for the enqueue hook and tests
@@ -943,7 +1085,7 @@ async function createMulticoStudent(
     ["file_diploma", files.diploma],
     ["file_transcript", files.transcript],
   ] as const;
-  const uploadedSlots: string[] = [];
+  const uploadFiles: MulticoUploadFile[] = [];
   for (const [fieldName, filePath] of requiredFiles) {
     if (!filePath) {
       throw new Error(
@@ -951,23 +1093,35 @@ async function createMulticoStudent(
       );
     }
     const buffer = await fs.readFile(filePath);
-    multipartData[fieldName] = {
+    uploadFiles.push({
+      fieldName,
+      filePath,
       name: path.basename(filePath),
       mimeType: filePath.toLowerCase().endsWith(".pdf")
         ? "application/pdf"
         : "application/octet-stream",
       buffer,
-    };
-    uploadedSlots.push(fieldName);
+    });
   }
   if (files.photo) {
     const buffer = await fs.readFile(files.photo);
-    multipartData["profile_photo"] = {
+    uploadFiles.push({
+      fieldName: "profile_photo",
+      filePath: files.photo,
       name: path.basename(files.photo).replace(/\.[^.]+$/, ".jpg"),
       mimeType: "image/jpeg",
       buffer,
+    });
+  }
+  const preparedUploads = await optimizeMulticoMultipartFiles(uploadFiles);
+  const uploadedSlots: string[] = [];
+  for (const upload of preparedUploads) {
+    multipartData[upload.fieldName] = {
+      name: upload.name,
+      mimeType: upload.mimeType,
+      buffer: upload.buffer,
     };
-    uploadedSlots.push("profile_photo");
+    uploadedSlots.push(upload.fieldName);
   }
 
   const resp = await page.request.post(
@@ -1053,6 +1207,7 @@ async function uploadDocuments(
   skipSlots: readonly string[] = [],
 ): Promise<string[]> {
   const uploadedSlots: string[] = [];
+  const uploadFiles: MulticoUploadFile[] = [];
   const multipartData: Record<string, string | { name: string; mimeType: string; buffer: Buffer }> = {
     _method: "PATCH",
   };
@@ -1082,14 +1237,28 @@ async function uploadDocuments(
         mimeType = "application/pdf";
       }
 
-      multipartData[fieldName] = { name, mimeType, buffer: buf };
-      uploadedSlots.push(fieldName);
+      uploadFiles.push({
+        fieldName,
+        filePath,
+        name,
+        mimeType,
+        buffer: buf,
+      });
     } catch {
       logger.warn(`[multico] doc upload: could not read file for ${fieldName}: ${filePath}`);
     }
   }
 
-  if (uploadedSlots.length === 0) return uploadedSlots;
+  if (uploadFiles.length === 0) return uploadedSlots;
+  const preparedUploads = await optimizeMulticoMultipartFiles(uploadFiles);
+  for (const upload of preparedUploads) {
+    multipartData[upload.fieldName] = {
+      name: upload.name,
+      mimeType: upload.mimeType,
+      buffer: upload.buffer,
+    };
+    uploadedSlots.push(upload.fieldName);
+  }
 
   const uploadResponse = await page.request.post(
     `${MULTICO_BASE}/students/update/${studentId}`,
