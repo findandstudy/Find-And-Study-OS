@@ -24,6 +24,7 @@ import {
   parseMulticoStudentIdFromHtml,
   isExpectedMulticoApplicationFormUrl,
   extractMulticoResponseDiagnostics,
+  findMatchingMulticoApplication,
 } from "./adapter.js";
 
 // ---------------------------------------------------------------------------
@@ -142,6 +143,26 @@ describe("live Multico form contract", () => {
         "invalid:graduate_year",
         "Passport [number] and [email]: file is too large.",
       ],
+    );
+  });
+
+  it("parses the live two-ID Multico application edit URL exactly", () => {
+    assert.deepEqual(
+      findMatchingMulticoApplication(
+        `<table><tr>
+          <td>38738</td><td>Topkapı University</td>
+          <td>Architecture</td><td>Bachelor</td>
+          <td>2026-2027 Fall Semester</td><td>3.900,00 USD</td>
+          <td>Pending Review</td>
+          <td><a href="/crm/student-applications/edit/33408/38738">Edit</a></td>
+        </tr></table>`,
+        "Architecture (Bachelor - TURKISH)",
+      ),
+      {
+        applicationId: "38738",
+        fee: "3.900,00 USD",
+        status: "Pending Review",
+      },
     );
   });
 

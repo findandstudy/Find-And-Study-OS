@@ -283,37 +283,11 @@ export function extractMulticoResponseDiagnostics(html: string): string[] {
   return [...diagnostics].slice(0, 12);
 }
 
-/**
- * Parses an application row from the student edit page's Candidate Applications
- * table. Returns application ID, fee, status if found.
- */
-function parseLatestApplication(
-  html: string,
-): { applicationId: string; fee: string; status: string } | null {
-  // Try to find a table with application data. Row pattern varies by CRM version.
-  // We look for a numeric application # followed by fee/status columns.
-  const appRe =
-    /#(\d+)[\s\S]{0,200}?([\d,. ]+\s*(?:USD|EUR|TRY|₺|\$|€)?)[\s\S]{0,200}?(Pending|Accepted|Rejected|Review|Waiting|In Progress|[A-Za-z ]+)[\s\S]{0,50}?/i;
-  const m = appRe.exec(html);
-  if (m) {
-    return {
-      applicationId: m[1].trim(),
-      fee: m[2].trim(),
-      status: m[3].trim(),
-    };
-  }
-  // Fallback: any numeric "application_id" reference
-  const idRe = /application[_-]?id['":\s=]+(\d+)/i;
-  const im = idRe.exec(html);
-  if (im) return { applicationId: im[1], fee: "", status: "Pending Review" };
-  return null;
-}
-
 export function findMatchingMulticoApplication(
   html: string,
   programName: string,
 ): { applicationId: string; fee: string; status: string } | null {
-  const wanted = fold(programName).replace(/\([^)]*\)/g, " ").trim();
+  const wanted = fold(programName.replace(/\([^)]*\)/g, " ")).trim();
   if (!wanted) return null;
   const rows = html.match(/<tr\b[\s\S]*?<\/tr>/gi) ?? [];
   const matches: Array<{ applicationId: string; fee: string; status: string }> = [];
@@ -324,7 +298,7 @@ export function findMatchingMulticoApplication(
       .replace(/&amp;/gi, "&")
       .replace(/\s+/g, " ")
       .trim();
-    const normalized = fold(text).replace(/\([^)]*\)/g, " ").trim();
+    const normalized = fold(text.replace(/\([^)]*\)/g, " ")).trim();
     if (
       !normalized.includes(wanted) &&
       !wanted.includes(normalized)
@@ -343,12 +317,13 @@ export function findMatchingMulticoApplication(
       }
     }
     const id =
+      /student-applications\/(?:edit|view)\/\d+\/(\d+)/i.exec(row)?.[1] ??
       /student-applications\/(?:edit\/|view\/)?(\d+)/i.exec(row)?.[1] ??
       /#\s*(\d+)/.exec(text)?.[1] ??
       /application[_-]?id[^0-9]*(\d+)/i.exec(row)?.[1];
     if (!id) continue;
     const status =
-      /(Pending|Accepted|Rejected|Review|Waiting|In Progress|Completed)/i.exec(
+      /(Pending Review|Pending|Accepted|Rejected|Review|Waiting|In Progress|Completed)/i.exec(
         text,
       )?.[1] ?? "Pending Review";
     const fee =
@@ -358,10 +333,58 @@ export function findMatchingMulticoApplication(
   return matches.length === 1 ? matches[0] : null;
 }
 
-function hasMulticoApplicationTable(html: string): boolean {
-  return /candidate applications|my applications|student-applications/i.test(
-    html,
+async function readMulticoApplicationTable(
+  page: AdapterSession["page"],
+  studentId: string,
+): Promise<{ tableFound: boolean; html: string; rows: Array<{ html: string; text: string }> }> {
+  const response = await page.goto(
+    `${MULTICO_BASE}/students/edit/${studentId}`,
+    { waitUntil: "networkidle" },
   );
+  if (!response?.ok()) {
+    throw new Error(
+      `Multico student application table returned ` +
+        `${response?.status() ?? "none"}`,
+    );
+  }
+  return page.locator("table").evaluateAll((tables) => {
+    const table = tables.find((candidate) => {
+      const headings = Array.from(candidate.querySelectorAll("th")).map((heading) =>
+        (heading.textContent ?? "").trim().toLowerCase(),
+      );
+      return headings.includes("department") && headings.includes("university");
+    });
+    if (!table) return { tableFound: false, html: "", rows: [] };
+    const rows = Array.from(table.querySelectorAll("tbody tr")).map((row) => ({
+      html: row.innerHTML,
+      text: (row.textContent ?? "").replace(/\s+/g, " ").trim(),
+    }));
+    return {
+      tableFound: true,
+      html: table.innerHTML,
+      rows,
+    };
+  });
+}
+
+async function findMatchingMulticoApplicationInDom(
+  page: AdapterSession["page"],
+  studentId: string,
+  programName: string,
+): Promise<{
+  tableFound: boolean;
+  application: { applicationId: string; fee: string; status: string } | null;
+}> {
+  const table = await readMulticoApplicationTable(page, studentId);
+  return {
+    tableFound: table.tableFound,
+    application: table.tableFound
+      ? findMatchingMulticoApplication(
+          `<table>${table.html}</table>`,
+          programName,
+        )
+      : null,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -1250,21 +1273,20 @@ async function createApplication(
     );
   }
 
-  const studentPage = await page.request.get(
-    `${MULTICO_BASE}/students/edit/${studentId}`,
-  );
-  if (!studentPage.ok()) {
+  const observedApplications =
+    await findMatchingMulticoApplicationInDom(
+      page,
+      studentId,
+      programName,
+    );
+  if (!observedApplications.tableFound) {
     throw new Error(
-      `Multico application verification failed ` +
-        `(status=${studentPage.status()})`,
+      "Multico application verification table is missing",
     );
   }
-  const studentHtml = await studentPage.text();
-  const application = findMatchingMulticoApplication(
-    studentHtml,
-    programName,
-  );
-  if (application) return application;
+  if (observedApplications.application) {
+    return observedApplications.application;
+  }
 
   const responseHtml = await submitResponse.text().catch(() => "");
   const diagnostics = extractMulticoResponseDiagnostics(responseHtml);
@@ -1288,16 +1310,23 @@ export async function pollStatus(
   studentId: string,
   applicationId: string,
 ): Promise<{ status: string } | null> {
-  const resp = await page.request.get(
-    `${MULTICO_BASE}/students/edit/${studentId}`,
-  );
-  const html = await resp.text();
-
-  // Look for the application # row
+  const table = await readMulticoApplicationTable(page, studentId);
+  if (!table.tableFound) return null;
   const idEscaped = applicationId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const rowRe = new RegExp(`#${idEscaped}[\\s\\S]{0,500}?(Pending|Accepted|Rejected|Review|Waiting|In Progress|[A-Za-z ]+)`, "i");
-  const m = rowRe.exec(html);
-  if (m) return { status: m[1].trim() };
+  const row = table.rows.find(
+    (candidate) =>
+      new RegExp(
+        `student-applications/(?:edit|view)/\\d+/${idEscaped}(?:["'?/]|$)`,
+        "i",
+      ).test(candidate.html) ||
+      new RegExp(`^#?\\s*${idEscaped}\\b`).test(candidate.text),
+  );
+  if (!row) return null;
+  const status =
+    /(Pending Review|Pending|Accepted|Rejected|Review|Waiting|In Progress|Completed)/i.exec(
+      row.text,
+    )?.[1];
+  if (status) return { status: status.trim() };
   return null;
 }
 
@@ -1458,24 +1487,18 @@ export const multicoAdapter: UniversityAdapter = {
       | { applicationId: string; fee: string; status: string }
       | null = null;
     if (existingStudentId) {
-      const studentResponse = await page.request.get(
-        `${MULTICO_BASE}/students/edit/${existingStudentId}`,
-      );
-      if (!studentResponse.ok()) {
-        throw new Error(
-          `Multico dedup_unknown: existing student application list returned ${studentResponse.status()}`,
+      const observedApplications =
+        await findMatchingMulticoApplicationInDom(
+          page,
+          existingStudentId,
+          match.name,
         );
-      }
-      const studentHtml = await studentResponse.text();
-      if (!hasMulticoApplicationTable(studentHtml)) {
+      if (!observedApplications.tableFound) {
         throw new Error(
           "Multico dedup_unknown: existing student page has no verifiable application table",
         );
       }
-      existingTarget = findMatchingMulticoApplication(
-        studentHtml,
-        match.name,
-      );
+      existingTarget = observedApplications.application;
     }
 
     // ---- DRY-RUN exit ----------------------------------------------------
