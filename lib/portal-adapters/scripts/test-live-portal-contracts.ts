@@ -9,6 +9,7 @@ import {
   resolveOkanDegreeValue,
 } from "../src/universities/okan/adapter.js";
 import {
+  findUnitedProfileHrefByExternalRef,
   findUniqueUnitedTargetApplication,
   parseUnitedProfileUploadKey,
   resolveUnitedDegreeLabel,
@@ -147,6 +148,47 @@ test("United target application proof rejects wrong default portal cards", () =>
       [rows[1], { ...rows[1], href: "/Manage/applicationdetails/a0vDUP" }],
       "Ankara Bilim University",
       "Bachelor of Law (Turkish)",
+    ),
+    null,
+  );
+});
+
+test("United duplicate-profile repair requires unique prior external-ref ownership", () => {
+  const rows = [
+    {
+      href: "/Manage/applicationdetails/a0vP200000ZtJM1IAN",
+      ref: "APP-286081",
+      university: "Istanbul Kent University",
+      program: "Dentistry (Turkish)",
+      profileHref: "/Manage/studentprofile/001P200001DQR1NIAX",
+    },
+    {
+      href: "/Manage/applicationdetails/a0vP200000ZtJHBIA3",
+      ref: "APP-286080",
+      university: "Istanbul Kent University",
+      program: "Dentistry (Turkish)",
+      profileHref: "/Manage/studentprofile/001P200001DQEHDIA5",
+    },
+  ];
+  assert.equal(
+    findUnitedProfileHrefByExternalRef(rows, "a0vP200000ZtJHBIA3"),
+    "/Manage/studentprofile/001P200001DQEHDIA5",
+  );
+  assert.equal(
+    findUnitedProfileHrefByExternalRef(rows, "APP-286081"),
+    "/Manage/studentprofile/001P200001DQR1NIAX",
+  );
+  assert.equal(findUnitedProfileHrefByExternalRef(rows, undefined), null);
+  assert.equal(
+    findUnitedProfileHrefByExternalRef(
+      [
+        rows[0],
+        {
+          ...rows[0],
+          profileHref: "/Manage/studentprofile/001DUPLICATE",
+        },
+      ],
+      "a0vP200000ZtJM1IAN",
     ),
     null,
   );

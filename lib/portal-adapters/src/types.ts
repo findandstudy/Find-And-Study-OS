@@ -140,6 +140,12 @@ export interface SubmitProfile {
   programName: string;
   programId: string;
   universityName?: string;
+  /**
+   * External reference already stored on the portal submission currently
+   * being retried. Adapters may use this only as scoped dedup/repair evidence;
+   * it is not proof that the requested target was submitted successfully.
+   */
+  portalSubmissionExternalRef?: string;
   schoolName?: string;
   gpa?: number;
   graduationYear?: number;

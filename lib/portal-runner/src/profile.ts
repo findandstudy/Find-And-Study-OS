@@ -784,6 +784,8 @@ export async function buildStudentProfile(
   // (e.g. Altınbaş pre-flight dangling-record check). Optional — not set in the
   // dry-test CLI path (buildProfileFromApplication).
   profile.applicationDbId = sub.applicationId;
+  profile.portalSubmissionExternalRef =
+    sub.externalRef?.trim() || undefined;
 
   return { profile, ...dl };
 }

@@ -387,6 +387,38 @@ function unitedApplicationIdFromHref(href: string): string | null {
   return match?.[1] || null;
 }
 
+/**
+ * Resolve a duplicate exact-email student to one profile using the external
+ * application reference already persisted for this same submission.
+ *
+ * The previous application may be the wrong university/program (the repair
+ * case), so this proves only which duplicate profile owns the prior write. It
+ * never proves target success and never chooses a profile when the reference
+ * is absent or ambiguous.
+ */
+export function findUnitedProfileHrefByExternalRef(
+  applications: readonly UnitedApplicationIdentity[],
+  externalRef: string | undefined,
+): string | null {
+  const wanted = String(externalRef || "").trim().toLowerCase();
+  if (!wanted) return null;
+  const matchingProfiles = [
+    ...new Set(
+      applications
+        .filter((application) => {
+          const hrefId = unitedApplicationIdFromHref(application.href);
+          return (
+            String(hrefId || "").toLowerCase() === wanted ||
+            String(application.ref || "").trim().toLowerCase() === wanted
+          );
+        })
+        .map((application) => application.profileHref || "")
+        .filter(Boolean),
+    ),
+  ];
+  return matchingProfiles.length === 1 ? matchingProfiles[0] : null;
+}
+
 export const unitedAdapter: UniversityAdapter = {
   key:       "united",
   label:     "United Portal",
@@ -877,9 +909,17 @@ export const unitedAdapter: UniversityAdapter = {
       ): Promise<{
         applications: UnitedApplicationIdentity[];
         createHrefs: string[];
+        createTargets: Array<{
+          profileHref: string;
+          createHref: string;
+        }>;
       }> => {
         const applications: UnitedApplicationIdentity[] = [];
         const createHrefs: string[] = [];
+        const createTargets: Array<{
+          profileHref: string;
+          createHref: string;
+        }> = [];
         for (const profileHref of profileHrefs) {
           await page.goto(new URL(profileHref, PORTAL_URL).href, {
             waitUntil: "domcontentloaded",
@@ -891,7 +931,10 @@ export const unitedAdapter: UniversityAdapter = {
             .first()
             .getAttribute("href")
             .catch(() => null);
-          if (createHref) createHrefs.push(createHref);
+          if (createHref) {
+            createHrefs.push(createHref);
+            createTargets.push({ profileHref, createHref });
+          }
           const rows = (await page
             .$$eval(
               "a[href*='/Manage/applicationdetails/']",
@@ -924,6 +967,7 @@ export const unitedAdapter: UniversityAdapter = {
         return {
           applications,
           createHrefs: [...new Set(createHrefs)],
+          createTargets,
         };
       };
       const exactTargetMatches = (
@@ -983,12 +1027,30 @@ export const unitedAdapter: UniversityAdapter = {
             : "United: target application exists, but required document repair is incomplete";
           return result;
         }
-        if (profileHrefs.length !== 1 || inspected.createHrefs.length !== 1) {
+        let createHref: string | null = null;
+        if (profileHrefs.length === 1 && inspected.createHrefs.length === 1) {
+          createHref = inspected.createHrefs[0];
+        } else {
+          const provedProfileHref = findUnitedProfileHrefByExternalRef(
+            inspected.applications,
+            profile.portalSubmissionExternalRef,
+          );
+          const provedCreateTargets = inspected.createTargets.filter(
+            (target) => target.profileHref === provedProfileHref,
+          );
+          if (provedProfileHref && provedCreateTargets.length === 1) {
+            createHref = provedCreateTargets[0].createHref;
+            logger.info(
+              "[united] duplicate exact-email profiles resolved by prior submission externalRef ownership",
+            );
+          }
+        }
+        if (!createHref) {
           result.detail =
-            "United dedup_ambiguous: existing student has no target application but a unique profile could not be selected";
+            "United dedup_ambiguous: existing student has no target application and no unique profile ownership proof";
           return result;
         }
-        await page.goto(new URL(inspected.createHrefs[0], PORTAL_URL).href, {
+        await page.goto(new URL(createHref, PORTAL_URL).href, {
           waitUntil: "domcontentloaded",
           timeout: 60000,
         });
