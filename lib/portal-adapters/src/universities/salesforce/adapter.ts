@@ -208,16 +208,15 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
           timeout: 60000,
         }).catch(() => {});
         await page.waitForTimeout(8000);
-        const displayName = `${profile.firstName} ${profile.lastName}`.trim();
         // Beykent's global filter matches one column at a time, so an exact
         // email lookup is reliable while a combined "First Last" query is not.
         // Ownership below still requires both the name and email readback.
         await filterTrackApplicant(profile.email);
-        const namePattern = new RegExp(
-          displayName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
+        const emailPattern = new RegExp(
+          profile.email.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
           "i",
         );
-        const rows = page.locator("tr").filter({ hasText: namePattern });
+        const rows = page.locator("tr").filter({ hasText: emailPattern });
         if ((await rows.count().catch(() => 0)) !== 1) return empty;
         const row = rows.first();
         const cellText = async (label: string): Promise<string> => {
@@ -283,13 +282,12 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
           })
           .catch(() => {});
         await page.waitForTimeout(7000);
-        const displayName = `${profile.firstName} ${profile.lastName}`.trim();
         await filterTrackApplicant(profile.email);
-        const namePattern = new RegExp(
-          displayName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
+        const emailPattern = new RegExp(
+          profile.email.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
           "i",
         );
-        const rows = page.locator("tr").filter({ hasText: namePattern });
+        const rows = page.locator("tr").filter({ hasText: emailPattern });
         if ((await rows.count().catch(() => 0)) !== 1) return false;
         const row = rows.first();
         const rowText = await row.innerText().catch(() => "");
