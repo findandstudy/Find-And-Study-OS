@@ -698,29 +698,67 @@ async function resolveTopkapiUniversityId(
 async function searchStudentByPassport(
   page: AdapterSession["page"],
   passportNumber: string,
+  email: string,
 ): Promise<string | null> {
-  const encoded = encodeURIComponent(passportNumber);
-
-  // Try GET search first (common CRM pattern).
-  const resp = await page.request.get(
-    `${MULTICO_BASE}/students?search=${encoded}&passport_number=${encoded}`,
-  );
-  const html = await resp.text();
-
-  // Check if the passport number appears in the response (search hit).
-  if (!html.toLowerCase().includes(passportNumber.toLowerCase())) {
-    // Try POST search
-    const postResp = await page.request.post(`${MULTICO_BASE}/students/search`, {
-      form: { passport_number: passportNumber, search: passportNumber },
-    });
-    const postHtml = await postResp.text();
-    if (postHtml.toLowerCase().includes(passportNumber.toLowerCase())) {
-      return parseMulticoStudentIdFromHtml(postHtml);
-    }
-    return null;
+  const response = await page.goto(`${MULTICO_BASE}/students`, {
+    waitUntil: "networkidle",
+  });
+  if (!response?.ok()) {
+    throw new Error(
+      `Multico dedup_unknown: student list returned ` +
+        `${response?.status() ?? "none"}`,
+    );
   }
 
-  return parseMulticoStudentIdFromHtml(html);
+  const searchInput = page.locator("input.inputDatatablesSearch");
+  if ((await searchInput.count()) !== 1) {
+    throw new Error(
+      "Multico dedup_unknown: student search control is not unique",
+    );
+  }
+  await searchInput.fill(email);
+  await searchInput.press("Enter");
+  await page.waitForTimeout(1_000);
+
+  const rows = page.locator("table.data-table tbody tr");
+  const noRecords = (await rows.allTextContents()).some((text) =>
+    /no matching|no data/i.test(text),
+  );
+  if (noRecords) return null;
+
+  const hrefs = await rows.locator("a").evaluateAll((links) =>
+    links
+      .map((link) => link.getAttribute("href") ?? "")
+      .filter((href) => href.includes("/crm/students/edit/")),
+  );
+  const uniqueHrefs = [...new Set(hrefs)];
+  const verifiedIds: string[] = [];
+  for (const href of uniqueHrefs) {
+    const studentId = parseMulticoStudentIdFromHtml(href);
+    if (!studentId) continue;
+    const studentResponse = await page.request.get(href);
+    if (!studentResponse.ok()) {
+      throw new Error(
+        `Multico dedup_unknown: student detail returned ` +
+          `${studentResponse.status()}`,
+      );
+    }
+    const studentHtml = await studentResponse.text();
+    if (studentHtml.toLowerCase().includes(passportNumber.toLowerCase())) {
+      verifiedIds.push(studentId);
+    }
+  }
+  const uniqueIds = [...new Set(verifiedIds)];
+  if (uniqueIds.length > 1) {
+    throw new Error(
+      `Multico dedup_unknown: multiple students matched verified passport ` +
+        `(count=${uniqueIds.length})`,
+    );
+  }
+  if (uniqueIds.length === 0) {
+    return null;
+  }
+  return uniqueIds[0];
 }
 
 // ---------------------------------------------------------------------------
@@ -781,7 +819,7 @@ async function createMulticoStudent(
   page: AdapterSession["page"],
   profile: SubmitProfile,
   files: SubmitFiles,
-): Promise<string> {
+): Promise<{ studentId: string; uploadedSlots: string[] }> {
   const school = extractSchoolFields(profile);
 
   // The live form is POST /students/add and carries an agent_id hidden field.
@@ -844,20 +882,37 @@ async function createMulticoStudent(
   if (nationalityId) formData["nationality_id"] = nationalityId;
   if (phoneCode)     formData["phone_code"]     = phoneCode;
 
-  // First create the student without files (to get the student ID quickly)
-  // then upload documents separately.
-  // Attach passport file inline if available (required field).
   const multipartData: Record<string, string | { name: string; mimeType: string; buffer: Buffer }> = { ...formData };
-
-  if (files.passport) {
-    try {
-      const buf = await fs.readFile(files.passport);
-      multipartData["file_passport"] = {
-        name: path.basename(files.passport),
-        mimeType: "application/pdf",
-        buffer: buf,
-      };
-    } catch { /* non-fatal in dry mode, will be caught by caller */ }
+  const requiredFiles = [
+    ["file_passport", files.passport],
+    ["file_diploma", files.diploma],
+    ["file_transcript", files.transcript],
+  ] as const;
+  const uploadedSlots: string[] = [];
+  for (const [fieldName, filePath] of requiredFiles) {
+    if (!filePath) {
+      throw new Error(
+        `Multico student form contract requires ${fieldName}`,
+      );
+    }
+    const buffer = await fs.readFile(filePath);
+    multipartData[fieldName] = {
+      name: path.basename(filePath),
+      mimeType: filePath.toLowerCase().endsWith(".pdf")
+        ? "application/pdf"
+        : "application/octet-stream",
+      buffer,
+    };
+    uploadedSlots.push(fieldName);
+  }
+  if (files.photo) {
+    const buffer = await fs.readFile(files.photo);
+    multipartData["profile_photo"] = {
+      name: path.basename(files.photo).replace(/\.[^.]+$/, ".jpg"),
+      mimeType: "image/jpeg",
+      buffer,
+    };
+    uploadedSlots.push("profile_photo");
   }
 
   const resp = await page.request.post(
@@ -884,8 +939,14 @@ async function createMulticoStudent(
     );
   }
 
-  // Re-search by passport to get the new student ID
-  const studentId = await searchStudentByPassport(page, profile.passportNumber);
+  const redirectStudentId = parseMulticoStudentIdFromHtml(resp.url());
+  const studentId =
+    redirectStudentId ??
+    (await searchStudentByPassport(
+      page,
+      profile.passportNumber,
+      profile.email,
+    ));
   if (!studentId) {
     const errMatch =
       /<div[^>]+(?:alert|error)[^>]*>([\s\S]{0,200}?)<\/div>/i.exec(
@@ -902,7 +963,7 @@ async function createMulticoStudent(
       }`,
     );
   }
-  return studentId;
+  return { studentId, uploadedSlots };
 }
 
 // ---------------------------------------------------------------------------
@@ -934,6 +995,7 @@ async function uploadDocuments(
   page: AdapterSession["page"],
   studentId: string,
   files: SubmitFiles,
+  skipSlots: readonly string[] = [],
 ): Promise<string[]> {
   const uploadedSlots: string[] = [];
   const multipartData: Record<string, string | { name: string; mimeType: string; buffer: Buffer }> = {
@@ -949,7 +1011,7 @@ async function uploadDocuments(
   };
 
   for (const [fieldName, filePath] of Object.entries(fileMap)) {
-    if (!filePath) continue;
+    if (!filePath || skipSlots.includes(fieldName)) continue;
     try {
       let buf = await fs.readFile(filePath);
       let mimeType = "application/octet-stream";
@@ -987,6 +1049,39 @@ async function uploadDocuments(
   }
 
   return uploadedSlots;
+}
+
+async function verifyStudentDocuments(
+  page: AdapterSession["page"],
+  studentId: string,
+  fields: readonly string[],
+): Promise<string[]> {
+  const response = await page.goto(
+    `${MULTICO_BASE}/students/edit/${studentId}`,
+    { waitUntil: "networkidle" },
+  );
+  if (!response?.ok()) {
+    throw new Error(
+      `Multico document verification failed (status=${
+        response?.status() ?? "none"
+      })`,
+    );
+  }
+
+  return page.evaluate((requiredFields) => {
+    const present: string[] = [];
+    for (const fieldName of requiredFields) {
+      const control = document.querySelector(
+        `input[name="${fieldName}"]`,
+      );
+      const container =
+        control?.closest(".form-group") ??
+        control?.parentElement?.parentElement ??
+        control?.parentElement;
+      if (container?.querySelector("a[href]")) present.push(fieldName);
+    }
+    return present;
+  }, fields);
 }
 
 // ---------------------------------------------------------------------------
@@ -1058,7 +1153,9 @@ export async function pollStatus(
   studentId: string,
   applicationId: string,
 ): Promise<{ status: string } | null> {
-  const resp = await page.request.get(`${MULTICO_BASE}/students/${studentId}`);
+  const resp = await page.request.get(
+    `${MULTICO_BASE}/students/edit/${studentId}`,
+  );
   const html = await resp.text();
 
   // Look for the application # row
@@ -1162,7 +1259,11 @@ export const multicoAdapter: UniversityAdapter = {
 
     let existingStudentId: string | null = null;
     try {
-      existingStudentId = await searchStudentByPassport(page, profile.passportNumber);
+      existingStudentId = await searchStudentByPassport(
+        page,
+        profile.passportNumber,
+        profile.email,
+      );
     } catch (err) {
       throw new Error(
         "Multico dedup_unknown: passport search could not be verified",
@@ -1223,7 +1324,7 @@ export const multicoAdapter: UniversityAdapter = {
       | null = null;
     if (existingStudentId) {
       const studentResponse = await page.request.get(
-        `${MULTICO_BASE}/students/${existingStudentId}`,
+        `${MULTICO_BASE}/students/edit/${existingStudentId}`,
       );
       if (!studentResponse.ok()) {
         throw new Error(
@@ -1278,9 +1379,12 @@ export const multicoAdapter: UniversityAdapter = {
 
     // ---- Step C: Student create (if not duplicate) ----------------------
     let studentId = existingStudentId;
+    let inlineUploadedSlots: string[] = [];
     if (!alreadyExists) {
       try {
-        studentId = await createMulticoStudent(page, profile, files);
+        const created = await createMulticoStudent(page, profile, files);
+        studentId = created.studentId;
+        inlineUploadedSlots = created.uploadedSlots;
         logger.info(`[multico] student created: studentId=${studentId}`);
       } catch (err) {
         throw new Error(`Multico student create error: ${(err as Error).message}`);
@@ -1292,10 +1396,18 @@ export const multicoAdapter: UniversityAdapter = {
     }
 
     // ---- Step D: Document upload ----------------------------------------
-    let uploadedSlots: string[] = [];
+    let uploadedSlots: string[] = [...inlineUploadedSlots];
     try {
-      uploadedSlots = await uploadDocuments(page, studentId, files);
-      logger.info(`[multico] documents uploaded: ${uploadedSlots.join(", ") || "none"}`);
+      const patchedSlots = await uploadDocuments(
+        page,
+        studentId,
+        files,
+        inlineUploadedSlots,
+      );
+      uploadedSlots = [...new Set([...uploadedSlots, ...patchedSlots])];
+      logger.info(
+        `[multico] documents sent: ${uploadedSlots.join(", ") || "none"}`,
+      );
     } catch (err) {
       throw new Error(
         `Multico document upload error: ${(err as Error).message}`,
@@ -1306,8 +1418,13 @@ export const multicoAdapter: UniversityAdapter = {
       "file_diploma",
       "file_transcript",
     ];
+    const verifiedUploads = await verifyStudentDocuments(
+      page,
+      studentId,
+      requiredUploadFields,
+    );
     const missingUploads = requiredUploadFields.filter(
-      (slot) => !uploadedSlots.includes(slot),
+      (slot) => !verifiedUploads.includes(slot),
     );
     if (missingUploads.length > 0) {
       return {
@@ -1315,11 +1432,12 @@ export const multicoAdapter: UniversityAdapter = {
         alreadyExists,
         programMissing: false,
         missingDocuments: missingUploads,
-        uploadedSlots,
+        uploadedSlots: verifiedUploads,
         detail:
           "Multico: required document upload could not be proved; application creation blocked",
       };
     }
+    uploadedSlots = [...new Set([...uploadedSlots, ...verifiedUploads])];
 
     if (existingTarget) {
       return {
