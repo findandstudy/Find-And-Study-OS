@@ -21,6 +21,8 @@ import {
   mapProgramType,
   MULTICO_STUDENT_FORM_PATH,
   normalizeMulticoGpaSystem,
+  parseMulticoStudentIdFromHtml,
+  isExpectedMulticoApplicationFormUrl,
 } from "./adapter.js";
 
 // ---------------------------------------------------------------------------
@@ -89,6 +91,42 @@ describe("live Multico form contract", () => {
 
   it("uses the observed authenticated add-student route", () => {
     assert.equal(MULTICO_STUDENT_FORM_PATH, "/students/add");
+  });
+
+  it("derives a valid catalog context from the live students/edit URL", () => {
+    assert.equal(
+      parseMulticoStudentIdFromHtml(
+        '<a href="https://www.multico.com.tr/crm/students/edit/33286">Edit</a>',
+      ),
+      "33286",
+    );
+    assert.equal(
+      parseMulticoStudentIdFromHtml(
+        '<a href="https://www.multico.com.tr/crm/students">Students</a>',
+      ),
+      null,
+    );
+  });
+
+  it("rejects the silent invalid-student redirect as a catalog form", () => {
+    assert.ok(
+      isExpectedMulticoApplicationFormUrl(
+        "https://www.multico.com.tr/crm/student-applications/add/33286",
+        "33286",
+      ),
+    );
+    assert.ok(
+      !isExpectedMulticoApplicationFormUrl(
+        "https://www.multico.com.tr/crm/students",
+        "1",
+      ),
+    );
+    assert.ok(
+      !isExpectedMulticoApplicationFormUrl(
+        "https://evil.example/crm/student-applications/add/33286",
+        "33286",
+      ),
+    );
   });
 
   it("maps all supported levels and fails closed for unknown levels", () => {

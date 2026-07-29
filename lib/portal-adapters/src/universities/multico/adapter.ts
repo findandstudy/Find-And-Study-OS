@@ -216,7 +216,7 @@ function parseSelectOptions(
  * Looks for href patterns like "/crm/students/1234" or "students/edit/1234".
  * Returns the first numeric ID found, or null.
  */
-function parseStudentIdFromHtml(html: string): string | null {
+export function parseMulticoStudentIdFromHtml(html: string): string | null {
   const patterns = [
     /\/crm\/students\/edit\/(\d+)/i,
     /\/crm\/students\/(\d+)/i,
@@ -229,6 +229,27 @@ function parseStudentIdFromHtml(html: string): string | null {
     if (m) return m[1];
   }
   return null;
+}
+
+/**
+ * The application-add route silently redirects invalid student IDs back to
+ * /crm/students with HTTP 200. Treat the final URL as part of the contract so
+ * a redirected list page can never be mistaken for an empty program catalog.
+ */
+export function isExpectedMulticoApplicationFormUrl(
+  url: string,
+  studentId: string,
+): boolean {
+  try {
+    const parsed = new URL(url);
+    return (
+      parsed.origin === "https://www.multico.com.tr" &&
+      parsed.pathname.replace(/\/+$/, "") ===
+        `/crm/student-applications/add/${studentId}`
+    );
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -317,44 +338,172 @@ function hasMulticoApplicationTable(html: string): boolean {
 // ---------------------------------------------------------------------------
 
 /**
- * Fetches the department_id <select> from the Multico application-add page.
- * The form is at: GET /crm/student-applications/add/{studentId}
- * (any valid student ID will work; we use a placeholder if none is known).
+ * Finds a valid, existing Multico student ID that can be used to open the
+ * application-add form for read-only catalog discovery. New students do not
+ * yet have a Multico ID, and invalid placeholder IDs redirect to /crm/students.
+ */
+async function resolveCatalogStudentId(
+  page: AdapterSession["page"],
+  existingStudentId: string | null,
+): Promise<string> {
+  if (existingStudentId) return existingStudentId;
+
+  const response = await page.request.get(`${MULTICO_BASE}/students`);
+  if (!response.ok()) {
+    throw new Error(
+      `Multico catalog_unavailable: student list returned ${response.status()}`,
+    );
+  }
+
+  const studentId = parseMulticoStudentIdFromHtml(await response.text());
+  if (!studentId) {
+    throw new Error(
+      "Multico catalog_unavailable: no valid catalog student context",
+    );
+  }
+  return studentId;
+}
+
+/**
+ * Fetches the Topkapı-only department catalog from the live application form.
+ * The form initially contains departments from every university. Selecting
+ * university + program type fires a read-only AJAX request which replaces the
+ * department options with the exact target subset.
  *
  * Options format: "Program Adı (Degree - DİL)" e.g. "Bilgisayar Mühendisliği (Lisans - Türkçe)"
  */
 async function fetchProgramCatalogFromCrm(
   page: AdapterSession["page"],
   studentId: string,
+  programType: string,
 ): Promise<ProgramCandidate[]> {
   const url = `${MULTICO_BASE}/student-applications/add/${studentId}`;
-  const resp = await page.request.get(url);
-  const html = await resp.text();
-
-  const opts = parseSelectOptions(html, "department_id");
-  if (opts.length === 0) {
-    // Try alternate select name patterns
-    const opts2 = parseSelectOptions(html, "program_id");
-    if (opts2.length > 0) {
-      return opts2.map((o) => ({ id: o.value, name: o.text }));
-    }
-    logger.warn("[multico] department_id select not found in app-add form");
-    return [];
+  const response = await page.goto(url, { waitUntil: "domcontentloaded" });
+  if (
+    !response?.ok() ||
+    !isExpectedMulticoApplicationFormUrl(page.url(), studentId)
+  ) {
+    throw new Error(
+      `Multico catalog_unavailable: application form redirected ` +
+        `(status=${response?.status() ?? "none"}, finalUrl=${page.url()})`,
+    );
   }
-  return opts.map((o) => ({ id: o.value, name: o.text }));
+
+  const universitySelect = page.locator('select[name="university_id"]');
+  const programTypeSelect = page.locator('select[name="program_type"]');
+  const departmentSelect = page.locator('select[name="department_id"]');
+
+  if (
+    (await universitySelect.count()) !== 1 ||
+    (await programTypeSelect.count()) !== 1 ||
+    (await departmentSelect.count()) !== 1
+  ) {
+    throw new Error(
+      "Multico catalog_unavailable: application form controls missing",
+    );
+  }
+
+  const universities = await universitySelect.locator("option").evaluateAll(
+    (options) =>
+      options.map((option) => ({
+        value: option.getAttribute("value") ?? "",
+        text: option.textContent?.trim() ?? "",
+      })),
+  );
+  const topkapiOptions = universities.filter(
+    (option) => option.value && fold(option.text).includes("topkapi"),
+  );
+  if (topkapiOptions.length !== 1) {
+    throw new Error(
+      `Multico catalog_unavailable: Topkapı university option is not unique ` +
+        `(count=${topkapiOptions.length})`,
+    );
+  }
+
+  const programTypes = await programTypeSelect.locator("option").evaluateAll(
+    (options) =>
+      options.map((option) => ({
+        value: option.getAttribute("value") ?? "",
+        text: option.textContent?.trim() ?? "",
+      })),
+  );
+  const requestedProgramType = fold(programType);
+  const programTypeOptions = programTypes.filter(
+    (option) =>
+      option.value && fold(option.text) === requestedProgramType,
+  );
+  if (programTypeOptions.length !== 1) {
+    throw new Error(
+      `Multico catalog_unavailable: program type option is not unique ` +
+        `(type=${programType}, count=${programTypeOptions.length})`,
+    );
+  }
+
+  const waitForDepartmentAjax = () =>
+    page
+      .waitForResponse(
+        (candidate) =>
+          candidate.request().method() === "POST" &&
+          candidate.url().includes(
+            "/crm/ajax/get-departments-by-university.php",
+          ),
+        { timeout: 10_000 },
+      )
+      .catch(() => null);
+
+  const universityAjax = waitForDepartmentAjax();
+  await universitySelect.selectOption(topkapiOptions[0].value);
+  const universityResponse = await universityAjax;
+  if (!universityResponse?.ok()) {
+    throw new Error(
+      "Multico catalog_unavailable: university department filter failed",
+    );
+  }
+
+  const programTypeAjax = waitForDepartmentAjax();
+  await programTypeSelect.selectOption(programTypeOptions[0].value);
+  const programTypeResponse = await programTypeAjax;
+  if (!programTypeResponse?.ok()) {
+    throw new Error(
+      "Multico catalog_unavailable: program-type department filter failed",
+    );
+  }
+
+  const options = await departmentSelect.locator("option").evaluateAll(
+    (elements) =>
+      elements
+        .map((option) => ({
+          id: option.getAttribute("value") ?? "",
+          name: option.textContent?.trim() ?? "",
+        }))
+        .filter((option) => option.id && option.name),
+  );
+  if (options.length === 0) {
+    throw new Error(
+      `Multico catalog_unavailable: filtered department list is empty ` +
+        `(type=${programType})`,
+    );
+  }
+
+  logger.info(
+    `[multico] filtered Topkapı catalog loaded ` +
+      `(type=${programType}, programs=${options.length})`,
+  );
+  return options;
 }
 
 /**
  * Returns cached programs from portal_program_cache if fresh (< 8h), else
  * fetches live from the CRM and writes back to cache.
  *
- * Cache key: (universityKey=ADAPTER_KEY, level=""). The table stores
+ * Cache key: (universityKey=ADAPTER_KEY, level=programType). The table stores
  * PortalProgramOption[] {v, t}; we convert to ProgramCandidate {id, name}
  * for the caller.
  */
 async function getProgramCatalog(
   page: AdapterSession["page"],
   studentId: string,
+  programType: string,
 ): Promise<ProgramCandidate[]> {
   const cutoff = new Date(Date.now() - PROGRAM_CACHE_TTL_MS);
 
@@ -364,7 +513,7 @@ async function getProgramCatalog(
     .where(
       and(
         eq(portalProgramCacheTable.universityKey, ADAPTER_KEY),
-        eq(portalProgramCacheTable.level, ""),
+        eq(portalProgramCacheTable.level, programType),
         gt(portalProgramCacheTable.fetchedAt, cutoff),
       ),
     )
@@ -375,12 +524,21 @@ async function getProgramCatalog(
     return opts.map((o) => ({ id: o.v, name: o.t }));
   }
 
-  const live = await fetchProgramCatalogFromCrm(page, studentId);
+  const live = await fetchProgramCatalogFromCrm(
+    page,
+    studentId,
+    programType,
+  );
   if (live.length > 0) {
     const cacheOpts: PortalProgramOption[] = live.map((c) => ({ v: c.id, t: c.name }));
     await db
       .insert(portalProgramCacheTable)
-      .values({ universityKey: ADAPTER_KEY, level: "", options: cacheOpts, fetchedAt: new Date() })
+      .values({
+        universityKey: ADAPTER_KEY,
+        level: programType,
+        options: cacheOpts,
+        fetchedAt: new Date(),
+      })
       .onConflictDoUpdate({
         target: [portalProgramCacheTable.universityKey, portalProgramCacheTable.level],
         set: { options: cacheOpts, fetchedAt: new Date() },
@@ -539,12 +697,12 @@ async function searchStudentByPassport(
     });
     const postHtml = await postResp.text();
     if (postHtml.toLowerCase().includes(passportNumber.toLowerCase())) {
-      return parseStudentIdFromHtml(postHtml);
+      return parseMulticoStudentIdFromHtml(postHtml);
     }
     return null;
   }
 
-  return parseStudentIdFromHtml(html);
+  return parseMulticoStudentIdFromHtml(html);
 }
 
 // ---------------------------------------------------------------------------
@@ -1000,8 +1158,21 @@ export const multicoAdapter: UniversityAdapter = {
     );
 
     // ---- Step B: Program catalog + match ---------------------------------
-    const catalogStudentId = existingStudentId ?? "1"; // fallback ID for catalog fetch
-    const candidates = await getProgramCatalog(page, catalogStudentId);
+    const programType = mapProgramType(profile.level);
+    if (!programType) {
+      throw new Error(
+        "Multico data_missing: unsupported or empty application level",
+      );
+    }
+    const catalogStudentId = await resolveCatalogStudentId(
+      page,
+      existingStudentId,
+    );
+    const candidates = await getProgramCatalog(
+      page,
+      catalogStudentId,
+      programType,
+    );
 
     const { match, alternatives } = matchMulticoProgram(profile, candidates);
 
@@ -1024,12 +1195,6 @@ export const multicoAdapter: UniversityAdapter = {
     }
 
     logger.info(`[multico] program matched: "${match.name}" (id=${match.id})`);
-    const programType = mapProgramType(profile.level);
-    if (!programType) {
-      throw new Error(
-        "Multico data_missing: unsupported or empty application level",
-      );
-    }
 
     const missingDocuments = (
       ["passport", "diploma", "transcript"] as const
