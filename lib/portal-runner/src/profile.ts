@@ -83,6 +83,7 @@ type ApplicationRow = typeof applicationsTable.$inferSelect;
 function buildSubmitProfileFromRecords(
   student: StudentRow,
   app: ApplicationRow,
+  options: { allowMissingProgramId?: boolean } = {},
 ): SubmitProfile {
   return buildProfile({
     email:          student.email          ?? "",
@@ -118,7 +119,7 @@ function buildSubmitProfileFromRecords(
     languageScore:      student.languageScore != null ? Number(student.languageScore) : undefined,
     passportIssueDate:  student.passportIssueDate ?? undefined,
     passportExpiryDate: student.passportExpiry    ?? undefined,
-  });
+  }, options);
 }
 
 // ---------------------------------------------------------------------------
@@ -688,7 +689,15 @@ export async function buildStudentProfile(
     .where(eq(educationRecordsTable.studentId, sub.studentId));
 
   // ----- 4. Build profile + download documents -----------------------------
-  const profile = buildSubmitProfileFromRecords(student, app);
+  const profile = buildSubmitProfileFromRecords(student, app, {
+    // United identifies the programme from exact live university+programme
+    // labels. Catalog rows are periodically replaced, so a historical
+    // application may legitimately have no surviving mutable program id.
+    // No other adapter receives this relaxation.
+    allowMissingProgramId:
+      sub.adapterKey === "united" ||
+      sub.universityKey === "united_education",
+  });
   const legacyAddressCity = resolveLegacyAddressCity({
     universityKey: sub.universityKey,
     addressCity: student.addressCity,

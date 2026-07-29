@@ -318,6 +318,22 @@ test("BP12: explicit structured address fields are preserved", () => {
   assert.equal(profile.addressZip, "735700");
 });
 
+test("BP13: missing programId remains fail-closed by default", () => {
+  assert.throws(
+    () => buildProfile({ ...BASE_DATA, programId: "" }),
+    /missing required field "programId"/,
+  );
+});
+
+test("BP14: explicitly scoped name-based adapters may omit legacy programId", () => {
+  const profile = buildProfile(
+    { ...BASE_DATA, programId: "" },
+    { allowMissingProgramId: true },
+  );
+  assert.equal(profile.programId, "");
+  assert.equal(profile.programName, BASE_DATA.programName);
+});
+
 // ---------------------------------------------------------------------------
 // SV_NEW — parseAdapterSpec accepts new PROFILE_FIELDS in valueFrom
 // ---------------------------------------------------------------------------

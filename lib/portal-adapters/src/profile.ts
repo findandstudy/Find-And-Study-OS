@@ -482,8 +482,22 @@ function isBlank(v: unknown): boolean {
   return v == null || v === "";
 }
 
-export function buildProfile(data: Record<string, unknown>): SubmitProfile {
+export interface BuildProfileOptions {
+  /**
+   * Aggregator portals such as United resolve programmes by an exact live
+   * university+programme label and do not consume the mutable catalog row id.
+   * Keep the global default strict; only an explicitly scoped caller may allow
+   * a missing legacy programId.
+   */
+  allowMissingProgramId?: boolean;
+}
+
+export function buildProfile(
+  data: Record<string, unknown>,
+  options: BuildProfileOptions = {},
+): SubmitProfile {
   for (const key of HARD_REQUIRED_FIELDS) {
+    if (key === "programId" && options.allowMissingProgramId) continue;
     if (isBlank(data[key])) {
       throw new Error(
         `buildProfile: eksik veri: ${key} — profili tamamlayın (missing required field "${key}")`,
