@@ -8,6 +8,7 @@ import {
   parseSalesforceStageMarker,
   resolveSalesforceProgramTarget,
   salesforceApplicantReadbackFailures,
+  salesforceDuplicateDisposition,
   salesforcePortalProgramCandidates,
   salesforcePortalProgramName,
 } from "../src/universities/salesforce/portalState.js";
@@ -126,6 +127,41 @@ test("Salesforce applicant proof requires exact native readback for all four fie
       invalidFields: ["passportNumber"],
     }),
     ["passportNumber"],
+  );
+});
+
+test("applicant duplicate is never application success without completion proof", () => {
+  assert.equal(
+    salesforceDuplicateDisposition({
+      activeStage: null,
+      ownedApplicant: false,
+      completionProved: false,
+    }),
+    "blocked",
+  );
+  assert.equal(
+    salesforceDuplicateDisposition({
+      activeStage: null,
+      ownedApplicant: true,
+      completionProved: false,
+    }),
+    "resume",
+  );
+  assert.equal(
+    salesforceDuplicateDisposition({
+      activeStage: "Program Selection",
+      ownedApplicant: false,
+      completionProved: false,
+    }),
+    "continue",
+  );
+  assert.equal(
+    salesforceDuplicateDisposition({
+      activeStage: null,
+      ownedApplicant: true,
+      completionProved: true,
+    }),
+    "already_exists",
   );
 });
 

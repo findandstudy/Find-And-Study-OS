@@ -18,6 +18,7 @@ import {
   parseSalesforceStageMarker,
   resolveSalesforceProgramTarget,
   salesforceApplicantReadbackFailures,
+  salesforceDuplicateDisposition,
   salesforcePortalProgramCandidates,
   type SalesforceStage,
 } from "./portalState.js";
@@ -134,6 +135,46 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
       // "Any visible match" — FORM_SEL is a broad union, so .first() can bind to
       // a hidden element while another field is actually on screen. Iterate.
       const onWizard = async (): Promise<boolean> => { try { const loc = page.locator(FORM_SEL); const n = await loc.count(); for (let i = 0; i < Math.min(n, 12); i++) { if (await loc.nth(i).isVisible().catch(() => false)) return true; } return false; } catch (e) { return false; } };
+      const filterTrackApplicant = async (
+        displayName: string,
+      ): Promise<void> => {
+        const listSearch = page
+          .getByPlaceholder(/search this list/i)
+          .first();
+        if (displayName && (await listSearch.count())) {
+          await listSearch.fill(displayName).catch(() => {});
+          await listSearch.press("Enter").catch(() => {});
+          await page.waitForTimeout(4000);
+          return;
+        }
+
+        // Beykent's current lightning-datatable exposes Search as a button.
+        // It opens one unlabeled text filter rather than a placeholder input.
+        const searchButton = page
+          .getByRole("button", { name: /^\s*search\s*$/i })
+          .first();
+        if (!(await searchButton.count())) return;
+        await searchButton.click({ timeout: 4000 }).catch(() => {});
+        await page.waitForTimeout(1200);
+        const textInputs = page.locator('input[type="text"]');
+        const visibleTextInputs: any[] = [];
+        const count = await textInputs.count().catch(() => 0);
+        for (let index = 0; index < count; index++) {
+          if (
+            await textInputs
+              .nth(index)
+              .isVisible()
+              .catch(() => false)
+          ) {
+            visibleTextInputs.push(textInputs.nth(index));
+          }
+        }
+        if (displayName && visibleTextInputs.length === 1) {
+          await visibleTextInputs[0].fill(displayName).catch(() => {});
+          await visibleTextInputs[0].press("Enter").catch(() => {});
+          await page.waitForTimeout(4000);
+        }
+      };
       const gotoAppForm = async (): Promise<void> => {
         await page.goto(agencyUrl, { waitUntil: "domcontentloaded", timeout: 60000 }).catch(() => {});
         await page.waitForTimeout(8000); // SPA app-shell hydration (networkidle unreliable on Salesforce)
@@ -168,12 +209,7 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
         }).catch(() => {});
         await page.waitForTimeout(8000);
         const displayName = `${profile.firstName} ${profile.lastName}`.trim();
-        const search = page.getByPlaceholder(/search this list/i).first();
-        if (displayName && (await search.count())) {
-          await search.fill(displayName).catch(() => {});
-          await search.press("Enter").catch(() => {});
-          await page.waitForTimeout(4000);
-        }
+        await filterTrackApplicant(displayName);
         const namePattern = new RegExp(
           displayName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
           "i",
@@ -239,12 +275,7 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
           .catch(() => {});
         await page.waitForTimeout(7000);
         const displayName = `${profile.firstName} ${profile.lastName}`.trim();
-        const search = page.getByPlaceholder(/search this list/i).first();
-        if (displayName && (await search.count())) {
-          await search.fill(displayName).catch(() => {});
-          await search.press("Enter").catch(() => {});
-          await page.waitForTimeout(3500);
-        }
+        await filterTrackApplicant(displayName);
         const namePattern = new RegExp(
           displayName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
           "i",
@@ -534,10 +565,19 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
         const txt = await bodyText();
         const activeStage = await readActiveStage();
         if (DUP.test(txt)) {
-          if (
-            applicantPreflight.owned &&
-            !hasSalesforceCompletionProof(applicantPreflight)
-          ) {
+          const duplicateDisposition = salesforceDuplicateDisposition({
+            activeStage,
+            ownedApplicant: applicantPreflight.owned,
+            completionProved: hasSalesforceCompletionProof(
+              applicantPreflight,
+            ),
+          });
+          if (duplicateDisposition === "continue") {
+            logger.info(
+              `[salesforce:${cfg.key}] stale applicant duplicate notice ignored after verified wizard advance`,
+              { activeStage },
+            );
+          } else if (duplicateDisposition === "resume") {
             const resume = page
               .getByRole("button", {
                 name: /create new application|add application|continue application|complete application/i,
@@ -570,8 +610,13 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
                 `${cfg.label}: owned applicant exists but application continuation did not advance`;
               break;
             }
-          } else {
+          } else if (duplicateDisposition === "already_exists") {
             result.alreadyExists = true;
+            break;
+          } else {
+            result.stuckStep = step;
+            result.detail =
+              `${cfg.label}: applicant already exists, but no owned application continuation or completion proof was found`;
             break;
           }
         }
@@ -579,7 +624,12 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
           !activeStage &&
           /application\s*number/i.test(txt) &&
           APP_NUM.test(txt)
-        ) { result.alreadyExists = true; break; }
+        ) {
+          result.stuckStep = step;
+          result.detail =
+            `${cfg.label}: application reference exists, but completion could not be proved`;
+          break;
+        }
         const before = (await bodyText()).replace(/\s+/g, " ").slice(0, 600);
         if ((await has("input[name=\"Student_First_Name\"]")) || ((await has("input[name=\"First_Name\"]")) && !(await has("select[name=\"Gender\"]")))) {
           if (strictMappedPortal) {

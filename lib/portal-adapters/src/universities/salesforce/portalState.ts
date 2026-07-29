@@ -109,6 +109,28 @@ export interface SalesforceApplicantReadback {
   invalidFields?: string[];
 }
 
+export type SalesforceDuplicateDisposition =
+  | "continue"
+  | "resume"
+  | "already_exists"
+  | "blocked";
+
+/**
+ * A duplicate toast is applicant-level evidence, not proof that an
+ * application was submitted. It can be ignored when the wizard demonstrably
+ * advanced, or resumed when an owned incomplete application was found.
+ */
+export function salesforceDuplicateDisposition(input: {
+  activeStage: SalesforceStage;
+  ownedApplicant: boolean;
+  completionProved: boolean;
+}): SalesforceDuplicateDisposition {
+  if (input.completionProved) return "already_exists";
+  if (input.activeStage) return "continue";
+  if (input.ownedApplicant) return "resume";
+  return "blocked";
+}
+
 /**
  * Fail-closed proof for the Salesforce "create student" screen. The portal's
  * email control is often type=text with a dynamic "<name>'s Email" label, so
