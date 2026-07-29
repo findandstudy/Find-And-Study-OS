@@ -699,20 +699,22 @@ export const unitedAdapter: UniversityAdapter = {
       const targets = (await page
         .locator('button[onclick*="uploadfile("]')
         .evaluateAll((buttons: Element[], wantedKey: string) => {
-          const parseKey = (onclick: string) => {
-            const match = String(onclick || "").match(
-              /,\s*'((?:\\'|[^'])*)'\s*\)\s*;?\s*$/,
-            );
-            return match ? match[1].replace(/\\'/g, "'") : null;
-          };
           return buttons
-            .map((button, index) => ({
-              index,
-              key: parseKey(button.getAttribute("onclick") || ""),
-              state: (button.parentElement?.textContent || "")
-                .replace(/\s+/g, " ")
-                .trim(),
-            }))
+            .map((button, index) => {
+              // Keep the parser inline: esbuild names locally-declared
+              // functions with __name(), which does not exist after a fresh
+              // profile navigation inside Playwright's browser context.
+              const match = String(
+                button.getAttribute("onclick") || "",
+              ).match(/,\s*'((?:\\'|[^'])*)'\s*\)\s*;?\s*$/);
+              return {
+                index,
+                key: match ? match[1].replace(/\\'/g, "'") : null,
+                state: (button.parentElement?.textContent || "")
+                  .replace(/\s+/g, " ")
+                  .trim(),
+              };
+            })
             .filter((entry) => entry.key === wantedKey);
         }, documentKey)
         .catch(() => [])) as Array<{
