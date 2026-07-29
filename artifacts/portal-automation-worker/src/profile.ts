@@ -131,47 +131,62 @@ export async function buildStudentProfile(
       `${addressVal === "-" ? "placeholder" : "nationality"} fallback`,
     );
 
-  const profile: SubmitProfile = buildProfile({
-    email:          student.email         ?? "",
-    passportNumber: student.passportNumber ?? "",
-    firstName:      student.firstName      ?? "",
-    lastName:       student.lastName       ?? "",
-    dateOfBirth:    student.dateOfBirth ?? "",
-    gender:         student.gender      ?? "",
-    fatherName:     fatherNameVal,
-    motherName:     motherNameVal,
-    nationality:    student.nationality ?? "",
-    address:        addressVal,
-    addressStreet:  student.address?.trim() || undefined,
-    addressCity:    student.addressCity?.trim() || undefined,
-    addressZip:     student.postalCode?.trim() || undefined,
-    cityOfBirth:    student.cityOfBirth?.trim() || undefined,
-    visaSupport:
-      student.needsVisaSupport == null
-        ? undefined
-        : student.needsVisaSupport ? "Yes" : "No",
-    phone:          student.phoneE164 ?? student.phone ?? "",
-    level:          app.level              ?? "",
-    programName:    app.programName        ?? "",
-    programId:      app.programId          != null ? String(app.programId) : "",
-    universityName: app.universityName       ?? undefined,
-    schoolName:     selectPriorSchoolName(app.level, {
-      highSchool:         student.highSchool,
-      universityBachelor: student.universityBachelor,
-      universityMaster:   student.universityMaster,
-    }),
-    gpa:            student.gpa             ?? undefined,
-    graduationYear: student.graduationYear  != null ? Number(student.graduationYear) : undefined,
-    languageScore:  student.languageScore   != null ? Number(student.languageScore)  : undefined,
-    passportIssueDate:  student.passportIssueDate ?? undefined,
-    passportExpiryDate: student.passportExpiry    ?? undefined,
-    // Additive — Altınbaş Faz-B: pass education/address data for new derive helpers
-    highSchool:         student.highSchool         ?? undefined,
-    universityBachelor: student.universityBachelor ?? undefined,
-    universityMaster:   student.universityMaster   ?? undefined,
-    // intakeTerm: application intake period first, season as fallback open-term
-    intakeTerm: app.intake ?? app.season ?? undefined,
-  });
+  const profile: SubmitProfile = buildProfile(
+    {
+      email:          student.email         ?? "",
+      passportNumber: student.passportNumber ?? "",
+      firstName:      student.firstName      ?? "",
+      lastName:       student.lastName       ?? "",
+      dateOfBirth:    student.dateOfBirth ?? "",
+      gender:         student.gender      ?? "",
+      fatherName:     fatherNameVal,
+      motherName:     motherNameVal,
+      nationality:    student.nationality ?? "",
+      address:        addressVal,
+      addressStreet:  student.address?.trim() || undefined,
+      addressCity:    student.addressCity?.trim() || undefined,
+      addressZip:     student.postalCode?.trim() || undefined,
+      cityOfBirth:    student.cityOfBirth?.trim() || undefined,
+      visaSupport:
+        student.needsVisaSupport == null
+          ? undefined
+          : student.needsVisaSupport ? "Yes" : "No",
+      phone:          student.phoneE164 ?? student.phone ?? "",
+      level:          app.level              ?? "",
+      programName:    app.programName        ?? "",
+      programId:      app.programId          != null ? String(app.programId) : "",
+      universityName: app.universityName       ?? undefined,
+      schoolName:     selectPriorSchoolName(app.level, {
+        highSchool:         student.highSchool,
+        universityBachelor: student.universityBachelor,
+        universityMaster:   student.universityMaster,
+      }),
+      gpa:            student.gpa             ?? undefined,
+      graduationYear: student.graduationYear  != null ? Number(student.graduationYear) : undefined,
+      languageScore:  student.languageScore   != null ? Number(student.languageScore)  : undefined,
+      passportIssueDate:  student.passportIssueDate ?? undefined,
+      passportExpiryDate: student.passportExpiry    ?? undefined,
+      // Additive — Altınbaş Faz-B: pass education/address data for new derive helpers
+      highSchool:         student.highSchool         ?? undefined,
+      universityBachelor: student.universityBachelor ?? undefined,
+      universityMaster:   student.universityMaster   ?? undefined,
+      // intakeTerm: application intake period first, season as fallback open-term
+      intakeTerm: app.intake ?? app.season ?? undefined,
+    },
+    {
+      // United resolves the live programme by exact university/programme
+      // labels. Catalog refreshes may legitimately retire the historical
+      // mutable program id, so only United may build without it.
+      allowMissingProgramId:
+        sub.adapterKey === "united" ||
+        sub.universityKey === "united_education",
+    },
+  );
+  // Preserve the previously verified United application id across retries.
+  // It is candidate evidence only: the adapter still requires an exact
+  // university + programme readback before accepting the existing profile.
+  profile.portalSubmissionExternalRef =
+    sub.externalRef?.trim() || undefined;
   const legacyAddressCity = resolveLegacyAddressCity({
     universityKey: sub.universityKey,
     addressCity: student.addressCity,
