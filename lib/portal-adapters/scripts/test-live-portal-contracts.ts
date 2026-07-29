@@ -11,9 +11,11 @@ import {
 import {
   findUnitedProfileHrefByExternalRef,
   findUniqueUnitedTargetApplication,
+  hasExactUnitedUniversityCard,
   parseUnitedProfileUploadKey,
   resolveUnitedDegreeLabel,
   resolveUnitedDocumentSlots,
+  resolveUnitedProfileLookupAction,
   resolveUnitedProfileDocumentKeys,
   resolveUnitedProgramOption,
   resolveUnitedUniversityLabel,
@@ -82,6 +84,29 @@ test("United resolves CRM university aliases to exact live portal labels", () =>
       "Ankara Bilim University",
     ),
     null,
+  );
+});
+
+test("United exact-email My Students rows override stale zero search counts", () => {
+  assert.equal(resolveUnitedProfileLookupAction(0, 1), "inspect");
+  assert.equal(resolveUnitedProfileLookupAction(2, 0), "unknown");
+  assert.equal(resolveUnitedProfileLookupAction(0, 0), "new");
+});
+
+test("United university filter tolerates unrelated staging cards but requires the exact target", () => {
+  assert.equal(
+    hasExactUnitedUniversityCard(
+      ["Biruni University", "Nisantasi University"],
+      "Istanbul Nisantasi University",
+    ),
+    true,
+  );
+  assert.equal(
+    hasExactUnitedUniversityCard(
+      ["Biruni University", "Ankara Science University"],
+      "Istanbul Nisantasi University",
+    ),
+    false,
   );
 });
 

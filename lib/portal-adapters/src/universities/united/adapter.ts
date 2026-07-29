@@ -284,6 +284,39 @@ export function resolveUnitedUniversityOption(
   return matches.length === 1 ? matches[0] : null;
 }
 
+/**
+ * The legacy /Account/searchapp endpoint is eventually consistent and has
+ * returned zero for profiles already visible in My Students. Exact-email
+ * profile rows are therefore the authoritative dedup signal. A positive
+ * searchapp count without an exact-email row remains unknown/fail-closed.
+ */
+export function resolveUnitedProfileLookupAction(
+  searchCount: number,
+  exactEmailProfileCount: number,
+): "inspect" | "new" | "unknown" {
+  if (exactEmailProfileCount > 0) return "inspect";
+  return searchCount > 0 ? "unknown" : "new";
+}
+
+/**
+ * Selecting a university does not hide every unrelated pagination/staging
+ * card in the current United build. It is enough to prove that at least one
+ * visible card belongs to the exact selected university; the subsequent
+ * university+programme+degree card proof is still unique and fail-closed.
+ */
+export function hasExactUnitedUniversityCard(
+  visibleUniversityLabels: readonly string[],
+  expectedUniversity: string,
+): boolean {
+  const expected = normalizeUnitedUniversity(expectedUniversity);
+  return (
+    !!expected &&
+    visibleUniversityLabels.some(
+      (label) => normalizeUnitedUniversity(label) === expected,
+    )
+  );
+}
+
 function normalizeUnitedProgram(value: string): string {
   return fold(
     String(value || "").replace(
@@ -990,8 +1023,20 @@ export const unitedAdapter: UniversityAdapter = {
           "United dedup_unknown: searchapp verification failed",
         );
       }
-      if (dedupCountBefore > 0) {
-        const profileHrefs = await getExactEmailProfileHrefs();
+      const profileHrefs = await getExactEmailProfileHrefs();
+      const profileLookupAction = resolveUnitedProfileLookupAction(
+        dedupCountBefore,
+        profileHrefs.length,
+      );
+      logger.info(
+        `[united] dedup profile lookup -> exactEmailProfiles=${profileHrefs.length} action=${profileLookupAction}`,
+      );
+      if (profileLookupAction === "unknown") {
+        result.detail =
+          "United dedup_unknown: searchapp found records but no exact-email student profile could be verified";
+        return result;
+      }
+      if (profileLookupAction === "inspect") {
         if (profileHrefs.length === 0) {
           result.detail =
             "United dedup_unknown: searchapp found records but no exact-email student profile could be verified";
@@ -1055,6 +1100,16 @@ export const unitedAdapter: UniversityAdapter = {
           timeout: 60000,
         });
         await wait(2500);
+      }
+      if (profileLookupAction === "new") {
+        // getExactEmailProfileHrefs() necessarily visited My Students. Restore
+        // the clean wizard only after both dedup sources proved no profile.
+        await page.goto(PORTAL_URL + "/Manage/newapplication", {
+          waitUntil: "domcontentloaded",
+          timeout: 60000,
+        });
+        await wait(2500);
+        await ensureNameShim();
       }
 
       // ===== United 6-step wizard (Term → Degree card → Program grid → Personal) =====
@@ -1273,7 +1328,7 @@ export const unitedAdapter: UniversityAdapter = {
             ).filter((card) => !!card.offsetParent);
             return (
               visible.length > 0 &&
-              visible.every(
+              visible.some(
                 (card) =>
                   normalize(card.querySelector("h4")?.textContent || "") ===
                   normalize(expectedUniversity),
@@ -1288,7 +1343,7 @@ export const unitedAdapter: UniversityAdapter = {
       if (!universityCardsRendered) {
         result.programMissing = true;
         result.detail =
-          "United program_missing: university filter did not render a pure target-university card set";
+          "United program_missing: university filter did not render an exact target-university card";
         return result;
       }
 
