@@ -348,14 +348,32 @@ async function resolveCatalogStudentId(
 ): Promise<string> {
   if (existingStudentId) return existingStudentId;
 
-  const response = await page.request.get(`${MULTICO_BASE}/students`);
-  if (!response.ok()) {
+  const response = await page.goto(`${MULTICO_BASE}/students`, {
+    waitUntil: "domcontentloaded",
+  });
+  if (!response?.ok()) {
     throw new Error(
-      `Multico catalog_unavailable: student list returned ${response.status()}`,
+      `Multico catalog_unavailable: student list returned ` +
+        `${response?.status() ?? "none"}`,
     );
   }
 
-  const studentId = parseMulticoStudentIdFromHtml(await response.text());
+  const studentLinks = page.locator(
+    'a[href*="/crm/students/edit/"], a[href*="students/edit/"]',
+  );
+  await studentLinks
+    .first()
+    .waitFor({ state: "attached", timeout: 10_000 })
+    .catch(() => null);
+  const hrefs = await studentLinks.evaluateAll((links) =>
+    links
+      .map((link) => link.getAttribute("href") ?? "")
+      .filter(Boolean),
+  );
+  const studentId =
+    hrefs
+      .map(parseMulticoStudentIdFromHtml)
+      .find((candidate): candidate is string => candidate !== null) ?? null;
   if (!studentId) {
     throw new Error(
       "Multico catalog_unavailable: no valid catalog student context",
