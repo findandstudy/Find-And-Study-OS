@@ -406,6 +406,17 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
             relevantButtons,
           },
         );
+        if (
+          cfg.key === "beykent" &&
+          process.env.PORTAL_DIAGNOSTIC_CAPTURE === "1"
+        ) {
+          await page
+            .screenshot({
+              path: "/tmp/beykent-resume-state.png",
+              fullPage: true,
+            })
+            .catch(() => {});
+        }
         if (detailActionCount !== 1) return false;
         await detailAction.first().click({ timeout: 6000 }).catch(() => {});
         await page.waitForTimeout(4500);
