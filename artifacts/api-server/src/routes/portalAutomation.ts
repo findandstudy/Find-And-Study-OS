@@ -74,6 +74,7 @@ import {
 import { batchPortalCredentialKeys, resolvePortalCreds, checkHasPortalCredentials } from "../lib/portalCreds.js";
 import { reconcilePortalUniversityCrmLinks } from "../lib/portalUniversityLinker.js";
 import { enqueuePortalSubmissions } from "../lib/portalManualEnqueue.js";
+import { prepareApplicationPortalPreflight } from "../lib/portalApplicationPreflight.js";
 import {
   diagnosePortalSubmission,
   isDiagnosablePortalStatus,
@@ -145,6 +146,20 @@ router.post(
     // Stamp the adapter this row will run on (multi-portal routing aware) —
     // feeds the per-adapter auto-graduation success count.
     const { adapterKey: routedAdapterKey } = await resolveAdapterKey(universityKey);
+    const preflight = await prepareApplicationPortalPreflight({
+      applicationId: app.id,
+      adapterKey: routedAdapterKey,
+      actorUserId: user.id,
+      ip: req.ip,
+    });
+    if (preflight.supported && !preflight.ready) {
+      res.status(422).json({
+        error: "PORTAL_PREFLIGHT_NOT_READY",
+        message: "Application data is incomplete for the selected portal.",
+        preflight,
+      });
+      return;
+    }
 
     const [row] = await db
       .insert(portalSubmissionsTable)
@@ -157,6 +172,7 @@ router.post(
         mode,
         status: "queued",
         enqueuedBy: user.id,
+        meta: { preflight },
       })
       .returning();
 
@@ -258,6 +274,18 @@ router.post(
           message: "Mandatory documents must be uploaded before portal automation can run.",
           missingDocTypes: only.missingDocTypes ?? [],
           missingDocLabels: only.missingDocLabels ?? [],
+        });
+        return;
+      }
+      if (only?.reason === "PREFLIGHT_NOT_READY") {
+        res.status(422).json({
+          error: "PORTAL_PREFLIGHT_NOT_READY",
+          message: "Application data is incomplete for the selected portal.",
+          missingFields: only.missingFields ?? [],
+          incompatibleFields: only.incompatibleFields ?? [],
+          missingDocTypes: only.missingDocTypes ?? [],
+          missingDocLabels: only.missingDocLabels ?? [],
+          autoFilledFields: only.autoFilledFields ?? [],
         });
         return;
       }
@@ -739,7 +767,10 @@ router.post(
     }
 
     const [retryTarget] = await db
-      .select({ applicationId: portalSubmissionsTable.applicationId })
+      .select({
+        applicationId: portalSubmissionsTable.applicationId,
+        adapterKey: portalSubmissionsTable.adapterKey,
+      })
       .from(portalSubmissionsTable)
       .where(eq(portalSubmissionsTable.id, id))
       .limit(1);
@@ -754,6 +785,22 @@ router.post(
         missingDocLabels: docStatus.missing.map(getDocLabel),
       });
       return;
+    }
+    if (retryTarget) {
+      const preflight = await prepareApplicationPortalPreflight({
+        applicationId: retryTarget.applicationId,
+        adapterKey: retryTarget.adapterKey ?? "",
+        actorUserId: user.id,
+        ip: req.ip,
+      });
+      if (preflight.supported && !preflight.ready) {
+        res.status(422).json({
+          error: "PORTAL_PREFLIGHT_NOT_READY",
+          message: "Application data is incomplete for this portal.",
+          preflight,
+        });
+        return;
+      }
     }
 
     await db
@@ -1293,6 +1340,7 @@ router.post(
       .select({
         id: portalSubmissionsTable.id,
         applicationId: portalSubmissionsTable.applicationId,
+        adapterKey: portalSubmissionsTable.adapterKey,
       })
       .from(portalSubmissionsTable)
       .where(and(
@@ -1310,9 +1358,9 @@ router.post(
         status: await checkMandatoryDocsForApplication(row.applicationId),
       })),
     );
-    const eligibleIds = docChecks
+    const docReady = docChecks
       .filter(({ status }) => status !== null && status.missing.length === 0)
-      .map(({ row }) => row.id);
+      .map(({ row }) => row);
     const missingMandatory = docChecks
       .filter(({ status }) => status !== null && status.missing.length > 0)
       .map(({ row, status }) => ({
@@ -1320,6 +1368,37 @@ router.post(
         missingDocTypes: status!.missing,
         missingDocLabels: status!.missing.map(getDocLabel),
       }));
+    const preflightReady: number[] = [];
+    const preflightBlocked: Array<{
+      id: number;
+      missingFields: string[];
+      incompatibleFields: Array<{ field: string; reason: string }>;
+      missingDocuments: string[];
+      autoFilledFields: string[];
+    }> = [];
+    // Deliberately sequential: a bulk retry may contain hundreds of rows and
+    // preflight can invoke document extraction. Avoid an uncontrolled burst of
+    // AI calls and object-storage downloads.
+    for (const row of docReady) {
+      const preflight = await prepareApplicationPortalPreflight({
+        applicationId: row.applicationId,
+        adapterKey: row.adapterKey ?? "",
+        actorUserId: user.id,
+        ip: req.ip,
+      });
+      if (preflight.supported && !preflight.ready) {
+        preflightBlocked.push({
+          id: row.id,
+          missingFields: preflight.missingFields,
+          incompatibleFields: preflight.incompatibleFields,
+          missingDocuments: preflight.missingDocuments,
+          autoFilledFields: preflight.autoFilledFields,
+        });
+      } else {
+        preflightReady.push(row.id);
+      }
+    }
+    const eligibleIds = preflightReady;
 
     if (eligibleIds.length > 0) {
       await db
@@ -1349,6 +1428,7 @@ router.post(
       ids: eligibleIds,
       skipped: ids.filter((id) => !eligibleIds.includes(id)),
       missingMandatory,
+      preflightBlocked,
     });
   },
 );
@@ -1601,6 +1681,10 @@ async function fanOutApplicationToUniversities(
   const sourceLevel = levelGroup(srcApp.level);
 
   const results: ApplyToAllItem[] = [];
+  const preflightByAdapter = new Map<
+    string,
+    Promise<Awaited<ReturnType<typeof prepareApplicationPortalPreflight>>>
+  >();
 
   for (const uni of unis) {
     const crmUniversityId = uni.crmUniversityId;
@@ -1618,6 +1702,37 @@ async function fanOutApplicationToUniversities(
     const submissionDedupStatuses: ("queued" | "running" | "submitted")[] =
       routeVia ? ["queued", "running", "submitted"] : ["queued", "running"];
     try {
+      const adapterKey = routeVia?.adapterKey ?? uni.adapterKey;
+      let preflightPromise = preflightByAdapter.get(adapterKey);
+      if (!preflightPromise) {
+        // The target programme is guaranteed to be the same level and is
+        // resolved below. Readiness fields/documents belong to the same student,
+        // so the source application is a safe, mutation-free preflight input.
+        // Cache per adapter to avoid repeating AI extraction for every member.
+        preflightPromise = prepareApplicationPortalPreflight({
+          applicationId: srcApp.id,
+          adapterKey,
+          actorUserId: userId,
+        });
+        preflightByAdapter.set(adapterKey, preflightPromise);
+      }
+      const preflight = await preflightPromise;
+      if (preflight.supported && !preflight.ready) {
+        results.push({
+          universityKey: uni.universityKey,
+          universityName: uni.universityName,
+          outcome:
+            preflight.missingDocuments.length > 0
+              ? "missing-docs"
+              : "failed",
+          message:
+            `PORTAL_PREFLIGHT_NOT_READY` +
+            ` fields=${preflight.missingFields.join(",") || "-"}` +
+            ` documents=${preflight.missingDocuments.join(",") || "-"}`,
+        });
+        continue;
+      }
+
       // --- Exclusion (nationality / exclusive region) ---
       // Check the SAME key the runner will use at submit time (the submission
       // key), so the preventive pre-filter and the reactive runner agree.

@@ -490,6 +490,13 @@ export interface BuildProfileOptions {
    * a missing legacy programId.
    */
   allowMissingProgramId?: boolean;
+  /**
+   * Readiness inspection only. Build an incomplete shape with empty strings so
+   * the central preflight can report every missing field in one response.
+   * Normal callers remain strict, and a known adapter's fail-closed preflight
+   * must run before any browser mutation.
+   */
+  allowIncompleteProfile?: boolean;
 }
 
 export function buildProfile(
@@ -497,6 +504,7 @@ export function buildProfile(
   options: BuildProfileOptions = {},
 ): SubmitProfile {
   for (const key of HARD_REQUIRED_FIELDS) {
+    if (options.allowIncompleteProfile) continue;
     if (key === "programId" && options.allowMissingProgramId) continue;
     if (isBlank(data[key])) {
       throw new Error(
@@ -505,7 +513,8 @@ export function buildProfile(
     }
   }
 
-  const str = (k: RequiredField) => String(data[k]);
+  const str = (k: RequiredField) =>
+    isBlank(data[k]) ? "" : String(data[k]);
 
   // SOFT fallbacks — never throw. Each substitution is logged so the gap is
   // visible without killing the whole build (mirrors the GPA/graduation-year

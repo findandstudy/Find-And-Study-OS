@@ -5796,6 +5796,7 @@
       "queuedToast": "{count} başvuru portal otomasyonuna kuyruğa alındı.",
       "noAdapterNote": "{count} başvuru atlandı — portal adaptörü tanımlı değil.",
       "alreadyQueuedNote": "{count} başvuru zaten kuyrukta.",
+      "preflightNote": "{count} başvurunun portal gönderiminden önce bilgileri tamamlanmalı: {fields}.",
       "submitError": "Portal otomasyonu çalıştırılamadı."
     },
     "mappingImport": {

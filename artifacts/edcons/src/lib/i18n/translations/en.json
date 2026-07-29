@@ -5796,6 +5796,7 @@
       "queuedToast": "{count} application(s) queued for portal automation.",
       "noAdapterNote": "{count} skipped — no portal adapter configured.",
       "alreadyQueuedNote": "{count} already queued.",
+      "preflightNote": "{count} application(s) need information before portal submission: {fields}.",
       "submitError": "Failed to run portal automation."
     },
     "mappingImport": {

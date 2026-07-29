@@ -5796,6 +5796,7 @@
       "queuedToast": "{count} आवेदन पोर्टल स्वचालन के लिए कतारबद्ध किए गए।",
       "noAdapterNote": "{count} छोड़े गए — कोई पोर्टल एडाप्टर कॉन्फ़िगर नहीं है।",
       "alreadyQueuedNote": "{count} पहले से ही कतार में हैं।",
+      "preflightNote": "{count} आवेदन को पोर्टल पर भेजने से पहले जानकारी पूरी करनी होगी: {fields}.",
       "submitError": "पोर्टल स्वचालन चलाने में विफल।"
     },
     "mappingImport": {

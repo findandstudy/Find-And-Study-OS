@@ -178,3 +178,13 @@ export {
   type IdentityFieldsInput,
   type DateConsistencyInput,
 } from "./identityValidation.js";
+
+export {
+  portalPreflightManifest,
+  evaluatePortalPreflight,
+  type PortalPreflightDocument,
+  type PortalPreflightField,
+  type PortalPreflightIssue,
+  type PortalPreflightManifest,
+  type PortalPreflightResult,
+} from "./preflight.js";

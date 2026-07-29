@@ -5796,6 +5796,7 @@
       "queuedToast": "{count} 个申请已加入门户自动化队列。",
       "noAdapterNote": "已跳过 {count} 个 — 未配置门户适配器。",
       "alreadyQueuedNote": "{count} 个已在队列中。",
+      "preflightNote": "{count} 个申请在提交到门户前需要补充信息：{fields}。",
       "submitError": "运行门户自动化失败。"
     },
     "mappingImport": {

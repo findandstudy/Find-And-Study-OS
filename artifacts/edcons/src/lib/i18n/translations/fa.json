@@ -5796,6 +5796,7 @@
       "queuedToast": "{count} درخواست در صف اتوماسیون پورتال قرار گرفت.",
       "noAdapterNote": "{count} رد شد — آداپتور پورتال تنظیم نشده است.",
       "alreadyQueuedNote": "{count} از قبل در صف است.",
+      "preflightNote": "{count} درخواست پیش از ارسال به پورتال به تکمیل اطلاعات نیاز دارد: {fields}.",
       "submitError": "اجرای اتوماسیون پورتال ناموفق بود."
     },
     "mappingImport": {

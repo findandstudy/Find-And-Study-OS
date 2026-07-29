@@ -5796,6 +5796,7 @@
       "queuedToast": "{count} candidature(s) mises en file d'attente pour l'automatisation du portail.",
       "noAdapterNote": "{count} ignorée(s) — aucun adaptateur de portail configuré.",
       "alreadyQueuedNote": "{count} déjà en file d'attente.",
+      "preflightNote": "{count} candidature(s) nécessitent des informations avant l’envoi au portail : {fields}.",
       "submitError": "Échec de l'exécution de l'automatisation du portail."
     },
     "mappingImport": {

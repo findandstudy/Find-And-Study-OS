@@ -5796,6 +5796,7 @@
       "queuedToast": "تم وضع {count} طلب في قائمة انتظار أتمتة البوابة.",
       "noAdapterNote": "تم تخطي {count} — لا يوجد محول بوابة مُهيأ.",
       "alreadyQueuedNote": "{count} في قائمة الانتظار بالفعل.",
+      "preflightNote": "{count} طلب يحتاج إلى استكمال المعلومات قبل الإرسال إلى البوابة: {fields}.",
       "submitError": "فشل تشغيل أتمتة البوابة."
     },
     "mappingImport": {

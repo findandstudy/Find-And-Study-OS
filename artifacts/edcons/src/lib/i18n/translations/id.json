@@ -5796,6 +5796,7 @@
       "queuedToast": "{count} aplikasi telah diantrekan untuk otomatisasi portal.",
       "noAdapterNote": "{count} dilewati — adaptor portal belum dikonfigurasi.",
       "alreadyQueuedNote": "{count} sudah dalam antrean.",
+      "preflightNote": "{count} aplikasi memerlukan informasi sebelum dikirim ke portal: {fields}.",
       "submitError": "Gagal menjalankan otomatisasi portal."
     },
     "mappingImport": {

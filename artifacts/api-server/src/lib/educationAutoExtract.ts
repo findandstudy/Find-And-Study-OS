@@ -18,7 +18,7 @@
  * application's program degree). Low confidence never drops readable
  * records (LOW_CONFIDENCE_EDUCATION warning instead).
  */
-import { eq, desc, and, isNull, or, ilike, asc } from "drizzle-orm";
+import { eq, desc, and, isNull, or, ilike, asc, sql } from "drizzle-orm";
 import {
   db,
   studentsTable,
@@ -26,6 +26,7 @@ import {
   programsTable,
   documentsTable,
   studentEducationRecordsTable,
+  educationRecordsTable,
 } from "@workspace/db";
 import { getAnthropicClient, getClaudeConfig } from "@workspace/integrations-anthropic-ai";
 import { logAudit } from "./auth";
@@ -101,6 +102,11 @@ export interface RunEducationExtractionOptions {
    * the student already has at least one data-bearing education record.
    */
   skipIfFilled?: boolean;
+  /**
+   * Portal preflight mode: AI may complete only empty cells. Existing
+   * staff-entered/previously-extracted education is never replaced.
+   */
+  mergeMissingOnly?: boolean;
   /** Audit action name — endpoint keeps "ai_extract_education". */
   auditAction?: string;
 }
@@ -302,12 +308,19 @@ export async function runEducationExtraction(
           languageScore: rec.languageScore,
           sortOrder: i,
         };
-        await tx.insert(studentEducationRecordsTable)
-          .values(values)
-          .onConflictDoUpdate({
-            target: [studentEducationRecordsTable.studentId, studentEducationRecordsTable.level],
-            targetWhere: isNull(studentEducationRecordsTable.deletedAt),
-            set: {
+        const currentSet = opts.mergeMissingOnly
+          ? {
+              institution: sql`coalesce(nullif(btrim(${studentEducationRecordsTable.institution}), ''), ${values.institution})`,
+              program: sql`coalesce(nullif(btrim(${studentEducationRecordsTable.program}), ''), ${values.program})`,
+              graduationYear: sql`coalesce(${studentEducationRecordsTable.graduationYear}, ${values.graduationYear})`,
+              gpa: sql`coalesce(nullif(btrim(${studentEducationRecordsTable.gpa}), ''), ${values.gpa})`,
+              gpaRaw: sql`coalesce(nullif(btrim(${studentEducationRecordsTable.gpaRaw}), ''), ${values.gpaRaw})`,
+              gpaScale: sql`coalesce(${studentEducationRecordsTable.gpaScale}, ${values.gpaScale})`,
+              languageScore: sql`coalesce(nullif(btrim(${studentEducationRecordsTable.languageScore}), ''), ${values.languageScore})`,
+              sortOrder: studentEducationRecordsTable.sortOrder,
+              updatedAt: new Date(),
+            }
+          : {
               institution: values.institution,
               program: values.program,
               graduationYear: values.graduationYear,
@@ -317,7 +330,54 @@ export async function runEducationExtraction(
               languageScore: values.languageScore,
               sortOrder: values.sortOrder,
               updatedAt: new Date(),
-            },
+            };
+        await tx.insert(studentEducationRecordsTable)
+          .values(values)
+          .onConflictDoUpdate({
+            target: [studentEducationRecordsTable.studentId, studentEducationRecordsTable.level],
+            targetWhere: isNull(studentEducationRecordsTable.deletedAt),
+            set: currentSet,
+          });
+
+        // Keep the detailed portal-facing education store in sync. The worker
+        // also merges both stores defensively, but this bridge makes readiness
+        // badges and older API surfaces see the same newly recovered fields.
+        const detailedValues = {
+          studentId,
+          level: rec.level,
+          schoolName: rec.institution,
+          fieldOfStudy: rec.program,
+          endYear: rec.graduationYear,
+          gpa: rec.gpa ?? rec.gpaRaw,
+          gpaType: rec.gpaScale != null ? String(rec.gpaScale) : null,
+          languageScore: rec.languageScore,
+          source: "portal_preflight_ai",
+        };
+        const detailedSet = opts.mergeMissingOnly
+          ? {
+              schoolName: sql`coalesce(nullif(btrim(${educationRecordsTable.schoolName}), ''), ${detailedValues.schoolName})`,
+              fieldOfStudy: sql`coalesce(nullif(btrim(${educationRecordsTable.fieldOfStudy}), ''), ${detailedValues.fieldOfStudy})`,
+              endYear: sql`coalesce(${educationRecordsTable.endYear}, ${detailedValues.endYear})`,
+              gpa: sql`coalesce(nullif(btrim(${educationRecordsTable.gpa}), ''), ${detailedValues.gpa})`,
+              gpaType: sql`coalesce(nullif(btrim(${educationRecordsTable.gpaType}), ''), ${detailedValues.gpaType})`,
+              languageScore: sql`coalesce(nullif(btrim(${educationRecordsTable.languageScore}), ''), ${detailedValues.languageScore})`,
+              updatedAt: new Date(),
+            }
+          : {
+              schoolName: detailedValues.schoolName,
+              fieldOfStudy: detailedValues.fieldOfStudy,
+              endYear: detailedValues.endYear,
+              gpa: detailedValues.gpa,
+              gpaType: detailedValues.gpaType,
+              languageScore: detailedValues.languageScore,
+              source: detailedValues.source,
+              updatedAt: new Date(),
+            };
+        await tx.insert(educationRecordsTable)
+          .values(detailedValues)
+          .onConflictDoUpdate({
+            target: [educationRecordsTable.studentId, educationRecordsTable.level],
+            set: detailedSet,
           });
         upserted++;
       }

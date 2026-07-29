@@ -13,12 +13,17 @@ import { db, applicationsTable, portalSubmissionsTable } from "@workspace/db";
 import { resolvePortalRouting } from "./portalAutoTrigger.js";
 import { checkMandatoryDocsForApplication } from "./mandatoryDocs.js";
 import { getDocLabel } from "./docNaming.js";
+import {
+  prepareApplicationPortalPreflight,
+  type PreparedPortalPreflight,
+} from "./portalApplicationPreflight.js";
 
 export type PortalEnqueueSkipReason =
   | "NOT_FOUND"
   | "NO_PORTAL"
   | "ALREADY_QUEUED"
-  | "MISSING_MANDATORY_DOCUMENTS";
+  | "MISSING_MANDATORY_DOCUMENTS"
+  | "PREFLIGHT_NOT_READY";
 
 export interface PortalEnqueueQueuedRow {
   applicationId: number;
@@ -32,6 +37,9 @@ export interface PortalEnqueueSkippedRow {
   submissionId?: number;
   missingDocTypes?: string[];
   missingDocLabels?: string[];
+  missingFields?: string[];
+  incompatibleFields?: Array<{ field: string; reason: string }>;
+  autoFilledFields?: string[];
 }
 
 export interface PortalEnqueueResult {
@@ -102,6 +110,23 @@ export async function enqueuePortalSubmissions(opts: {
       continue;
     }
     const { portalUni, target } = routing;
+    const preflight = await prepareApplicationPortalPreflight({
+      applicationId: appId,
+      adapterKey: portalUni.adapterKey,
+      actorUserId: opts.userId,
+    });
+    if (preflight.supported && !preflight.ready) {
+      skipped.push({
+        applicationId: appId,
+        reason: "PREFLIGHT_NOT_READY",
+        missingFields: preflight.missingFields,
+        incompatibleFields: preflight.incompatibleFields,
+        missingDocTypes: preflight.missingDocuments,
+        missingDocLabels: preflight.missingDocuments.map(getDocLabel),
+        autoFilledFields: preflight.autoFilledFields,
+      });
+      continue;
+    }
 
     const outcome = await db.transaction(async (tx) => {
       // The former read-then-insert guard raced when the user clicked Run
@@ -150,6 +175,7 @@ export async function enqueuePortalSubmissions(opts: {
           // exist only to scope AUTOMATIC/scheduled processing.
           meta: {
             manual: true,
+            preflight: preflight as PreparedPortalPreflight,
             ...(target
               ? {
                   targetCatalogUniversityId: target.catalogUniversityId,

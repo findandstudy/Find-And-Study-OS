@@ -35,6 +35,7 @@ import {
   setCredsOverride,
   clearCredsOverride,
   isSitMember,
+  evaluatePortalPreflight,
 } from "@workspace/portal-adapters";
 import type { SubmitResult, SubmitProfile, SubmitFiles } from "@workspace/portal-adapters";
 import {
@@ -211,7 +212,27 @@ export async function runSubmission(
     }
   }
 
-  // ----- 2. Creds required for real mode; optional for dry (browser dry run) --
+  // ----- 2. Final browser-free readiness gate ------------------------------
+  // API enqueue paths run the same preflight and may recover missing values
+  // from documents first. Re-evaluate inside the runner as a defense-in-depth
+  // boundary so stale/legacy queued rows still cannot open a portal with an
+  // incomplete profile.
+  const preflight = evaluatePortalPreflight({
+    adapterKey: adapter.key,
+    profile,
+    files,
+  });
+  if (preflight.supported && !preflight.ready) {
+    await cleanup(tempDir);
+    throw new Error(
+      `PORTAL_PREFLIGHT_NOT_READY: adapter=${adapter.key}` +
+      ` missing=${preflight.missingFields.join(",") || "-"}` +
+      ` incompatible=${preflight.incompatibleFields.map((issue) => issue.field).join(",") || "-"}` +
+      ` documents=${preflight.missingDocuments.join(",") || "-"}`,
+    );
+  }
+
+  // ----- 3. Creds required for real mode; optional for dry (browser dry run) --
   const isDry = submission.mode !== "real";
 
   if (!isDry && !creds) {
@@ -221,7 +242,7 @@ export async function runSubmission(
     );
   }
 
-  // ----- 3. Login + submit -------------------------------------------------
+  // ----- 4. Login + submit -------------------------------------------------
   // doSubmit=true for real mode; doSubmit=false for dry mode (fill form, no click)
   const localScreenshots: string[] = [];
   let session: Awaited<ReturnType<typeof adapter.login>> | null = null;
@@ -295,6 +316,7 @@ export async function runSubmission(
       ...(portalEvidence ? { portalEvidence } : {}),
       meta: {
         adapterKey: adapter.key,
+        preflight,
         ...(isDry ? { dryRun: true } : {}),
       },
     };

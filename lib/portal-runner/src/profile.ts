@@ -27,9 +27,10 @@ import {
   studentsTable,
   documentsTable,
   educationRecordsTable,
+  studentEducationRecordsTable,
 } from "@workspace/db";
-import { eq, and, isNull, desc } from "drizzle-orm";
-import { buildProfile, mapDocType, REQUIRED_DOCS, extractStudentDocumentRefs, selectPriorSchoolName, buildSignedStudentPhotoPath, buildSignedDocumentPath, docFetchUrl, validateIdentityFields, formatIdentityErrors } from "@workspace/portal-adapters";
+import { eq, and, isNull, isNotNull, or, desc } from "drizzle-orm";
+import { buildProfile, mapDocType, REQUIRED_DOCS, extractStudentDocumentRefs, selectPriorSchoolName, buildSignedStudentPhotoPath, buildSignedDocumentPath, docFetchUrl, validateIdentityFields, formatIdentityErrors, portalPreflightManifest } from "@workspace/portal-adapters";
 import type { SubmitProfile, SubmitFiles, StudentDocumentRef } from "@workspace/portal-adapters";
 import {
   resolveAltinbasPassportDates,
@@ -69,6 +70,13 @@ export interface StudentProfileResult {
   hasContentBearingDocs: boolean;
 }
 
+export interface ApplicationPreflightSnapshot {
+  applicationId: number;
+  studentId: number;
+  profile: SubmitProfile;
+  documentTypes: string[];
+}
+
 type StudentRow = typeof studentsTable.$inferSelect;
 type ApplicationRow = typeof applicationsTable.$inferSelect;
 
@@ -80,10 +88,13 @@ type ApplicationRow = typeof applicationsTable.$inferSelect;
  * Maps a CRM student + application record into a CRM-agnostic SubmitProfile.
  * Single source of truth shared by both entry points below.
  */
-function buildSubmitProfileFromRecords(
+export function buildSubmitProfileFromRecords(
   student: StudentRow,
   app: ApplicationRow,
-  options: { allowMissingProgramId?: boolean } = {},
+  options: {
+    allowMissingProgramId?: boolean;
+    allowIncompleteProfile?: boolean;
+  } = {},
 ): SubmitProfile {
   return buildProfile({
     email:          student.email          ?? "",
@@ -120,6 +131,173 @@ function buildSubmitProfileFromRecords(
     passportIssueDate:  student.passportIssueDate ?? undefined,
     passportExpiryDate: student.passportExpiry    ?? undefined,
   }, options);
+}
+
+type LegacyEducationRow = typeof educationRecordsTable.$inferSelect;
+type StudentEducationRow = typeof studentEducationRecordsTable.$inferSelect;
+
+/**
+ * The application currently has two education stores:
+ * - education_records: detailed/legacy portal shape
+ * - student_education_records: current staff form + automatic AI extraction
+ *
+ * Merge them level-by-level without overwriting a detailed value. This keeps
+ * the worker compatible with historical rows while making newly AI-extracted
+ * education immediately visible to every adapter.
+ */
+export function mergePortalEducationRecords(
+  detailed: LegacyEducationRow[],
+  current: StudentEducationRow[],
+): LegacyEducationRow[] {
+  const byLevel = new Map<string, LegacyEducationRow>();
+  for (const row of detailed) byLevel.set(row.level, { ...row });
+
+  for (const row of current) {
+    const existing = byLevel.get(row.level);
+    const supplemental = {
+      id: existing?.id ?? -row.id,
+      studentId: row.studentId,
+      level: row.level,
+      schoolName: row.institution,
+      country: null,
+      fieldOfStudy: row.program,
+      startMonth: null,
+      startYear: null,
+      endMonth: null,
+      endYear: row.graduationYear,
+      city: null,
+      languageScore: row.languageScore,
+      gpa: row.gpa ?? row.gpaRaw,
+      gpaType: row.gpaScale != null ? String(row.gpaScale) : null,
+      source: "student_education_records",
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+    } satisfies LegacyEducationRow;
+
+    if (!existing) {
+      byLevel.set(row.level, supplemental);
+      continue;
+    }
+    const fill = <T>(primary: T | null, fallback: T | null): T | null =>
+      primary == null ||
+      (typeof primary === "string" && primary.trim() === "")
+        ? fallback
+        : primary;
+    byLevel.set(row.level, {
+      ...existing,
+      schoolName: fill(existing.schoolName, supplemental.schoolName),
+      fieldOfStudy: fill(existing.fieldOfStudy, supplemental.fieldOfStudy),
+      endYear: fill(existing.endYear, supplemental.endYear),
+      languageScore: fill(existing.languageScore, supplemental.languageScore),
+      gpa: fill(existing.gpa, supplemental.gpa),
+      gpaType: fill(existing.gpaType, supplemental.gpaType),
+    });
+  }
+  return [...byLevel.values()];
+}
+
+function applyEducationFallbacks(
+  profile: SubmitProfile,
+  records: LegacyEducationRow[],
+): void {
+  const level = String(profile.level ?? "").toLowerCase();
+  const wanted =
+    /phd|doctor|doktora/.test(level)
+      ? ["master", "bachelor", "high_school"]
+      : /master|graduate|yüksek|yuksek/.test(level)
+        ? ["bachelor", "high_school"]
+        : ["high_school"];
+  const record =
+    wanted.map((key) => records.find((row) => row.level === key)).find(Boolean) ??
+    records[0];
+  if (!record) return;
+
+  if (!profile.schoolName?.trim() && record.schoolName?.trim()) {
+    profile.schoolName = record.schoolName.trim();
+  }
+  if (
+    profile.graduationYear == null &&
+    record.endYear != null &&
+    Number.isFinite(Number(record.endYear))
+  ) {
+    profile.graduationYear = Number(record.endYear);
+  }
+  if (profile.gpa == null && record.gpa != null) {
+    const numeric = Number(String(record.gpa).replace(",", "."));
+    if (Number.isFinite(numeric)) profile.gpa = numeric;
+  }
+  if (profile.languageScore == null && record.languageScore != null) {
+    const numeric = Number(String(record.languageScore).replace(",", "."));
+    if (Number.isFinite(numeric)) profile.languageScore = numeric;
+  }
+}
+
+/**
+ * Cheap DB-only profile snapshot for the API enqueue gate. It deliberately
+ * does not download document bytes or open a browser.
+ */
+export async function buildApplicationPreflightSnapshot(
+  applicationId: number,
+  options: { adapterKey?: string } = {},
+): Promise<ApplicationPreflightSnapshot> {
+  const [app] = await db
+    .select()
+    .from(applicationsTable)
+    .where(and(
+      eq(applicationsTable.id, applicationId),
+      isNull(applicationsTable.deletedAt),
+    ));
+  if (!app) throw new Error(`Application ${applicationId} not found`);
+
+  const [student] = await db
+    .select()
+    .from(studentsTable)
+    .where(and(
+      eq(studentsTable.id, app.studentId),
+      isNull(studentsTable.deletedAt),
+    ));
+  if (!student) throw new Error(`Student ${app.studentId} not found`);
+
+  const [detailed, current, documents] = await Promise.all([
+    db.select().from(educationRecordsTable)
+      .where(eq(educationRecordsTable.studentId, app.studentId)),
+    db.select().from(studentEducationRecordsTable)
+      .where(and(
+        eq(studentEducationRecordsTable.studentId, app.studentId),
+        isNull(studentEducationRecordsTable.deletedAt),
+      )),
+    db.select({ type: documentsTable.type })
+      .from(documentsTable)
+      .where(and(
+        eq(documentsTable.studentId, app.studentId),
+        isNull(documentsTable.deletedAt),
+        or(
+          isNotNull(documentsTable.fileUrl),
+          isNotNull(documentsTable.fileKey),
+          isNotNull(documentsTable.fileData),
+        ),
+      )),
+  ]);
+
+  const merged = mergePortalEducationRecords(detailed, current);
+  const profile = buildSubmitProfileFromRecords(student, app, {
+    // Portal rows must be matched against the portal's live catalogue by
+    // university/program/level labels. CRM catalogue ids are mutable and can
+    // disappear after a yearly programme refresh; they are optional evidence,
+    // never the only identity proof.
+    allowMissingProgramId: true,
+    allowIncompleteProfile: true,
+  });
+  applyEducationFallbacks(profile, merged);
+  if (merged.length > 0) profile.educationRecords = merged as any;
+  if (student.photoUrl?.trim()) profile.photoUrl = student.photoUrl.trim();
+
+  return {
+    applicationId,
+    studentId: app.studentId,
+    profile,
+    documentTypes: documents.map((row) => row.type),
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -687,17 +865,31 @@ export async function buildStudentProfile(
     .select()
     .from(educationRecordsTable)
     .where(eq(educationRecordsTable.studentId, sub.studentId));
+  const currentEducationRecords = await db
+    .select()
+    .from(studentEducationRecordsTable)
+    .where(and(
+      eq(studentEducationRecordsTable.studentId, sub.studentId),
+      isNull(studentEducationRecordsTable.deletedAt),
+    ));
+  const mergedEducationRecords = mergePortalEducationRecords(
+    educationRecords,
+    currentEducationRecords,
+  );
 
   // ----- 4. Build profile + download documents -----------------------------
   const profile = buildSubmitProfileFromRecords(student, app, {
-    // United identifies the programme from exact live university+programme
-    // labels. Catalog rows are periodically replaced, so a historical
-    // application may legitimately have no surviving mutable program id.
-    // No other adapter receives this relaxation.
-    allowMissingProgramId:
-      sub.adapterKey === "united" ||
-      sub.universityKey === "united_education",
+    // Every portal adapter matches the live programme by labels. A CRM
+    // catalogue id is a useful override key when present, but yearly catalogue
+    // replacement must not make an otherwise valid historical application
+    // impossible to run.
+    allowMissingProgramId: true,
+    // Only adapters covered by the common manifest receive an incomplete
+    // shape. The runner evaluates that manifest before credentials/login.
+    allowIncompleteProfile:
+      portalPreflightManifest(sub.adapterKey ?? "") !== null,
   });
+  applyEducationFallbacks(profile, mergedEducationRecords);
   const legacyAddressCity = resolveLegacyAddressCity({
     universityKey: sub.universityKey,
     addressCity: student.addressCity,
@@ -758,8 +950,8 @@ export async function buildStudentProfile(
   // per-level city and languageScore without falling back to legacy top-level
   // student fields. Typed as any[] to avoid a circular type dependency — the
   // shape mirrors EducationRecord from @workspace/db.
-  if (educationRecords.length > 0) {
-    profile.educationRecords = educationRecords as any;
+  if (mergedEducationRecords.length > 0) {
+    profile.educationRecords = mergedEducationRecords as any;
   }
 
   // Expose E164 phone on the profile as untyped extra fields so adapters that
@@ -838,10 +1030,22 @@ export async function buildProfileFromApplication(
     .select()
     .from(educationRecordsTable)
     .where(eq(educationRecordsTable.studentId, app.studentId));
+  const currentEducationRecords = await db
+    .select()
+    .from(studentEducationRecordsTable)
+    .where(and(
+      eq(studentEducationRecordsTable.studentId, app.studentId),
+      isNull(studentEducationRecordsTable.deletedAt),
+    ));
+  const mergedEducationRecords = mergePortalEducationRecords(
+    educationRecords,
+    currentEducationRecords,
+  );
 
   const profile = buildSubmitProfileFromRecords(student, app);
-  if (educationRecords.length > 0) {
-    profile.educationRecords = educationRecords as any;
+  applyEducationFallbacks(profile, mergedEducationRecords);
+  if (mergedEducationRecords.length > 0) {
+    profile.educationRecords = mergedEducationRecords as any;
   }
   (profile as any).phoneE164  = student.phoneE164 ?? null;
   (profile as any).phone_e164 = student.phoneE164 ?? null;

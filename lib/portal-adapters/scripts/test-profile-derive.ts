@@ -334,6 +334,21 @@ test("BP14: explicitly scoped name-based adapters may omit legacy programId", ()
   assert.equal(profile.programName, BASE_DATA.programName);
 });
 
+test("BP15: readiness inspection preserves blanks instead of fabricating undefined text", () => {
+  const profile = buildProfile(
+    {
+      ...BASE_DATA,
+      email: "",
+      passportNumber: null,
+      programId: "",
+    },
+    { allowIncompleteProfile: true, allowMissingProgramId: true },
+  );
+  assert.equal(profile.email, "");
+  assert.equal(profile.passportNumber, "");
+  assert.equal(profile.programId, "");
+});
+
 // ---------------------------------------------------------------------------
 // SV_NEW — parseAdapterSpec accepts new PROFILE_FIELDS in valueFrom
 // ---------------------------------------------------------------------------

@@ -40,6 +40,7 @@ import { logAudit } from "./auth.js";
 import { checkHasPortalCredentials } from "./portalCreds.js";
 import { isMulticoNationality, validateIdentityFields, formatIdentityErrors } from "@workspace/portal-adapters";
 import { checkMandatoryDocsForApplication } from "./mandatoryDocs.js";
+import { prepareApplicationPortalPreflight } from "./portalApplicationPreflight.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -68,6 +69,7 @@ export type SkipReason =
   | "duplicate"
   | "max_failures"
   | "missing_mandatory_documents"
+  | "preflight_not_ready"
   /** mode=real submission blocked due to invalid/placeholder identity fields. */
   | "invalid_identity_fields";
 
@@ -377,12 +379,31 @@ export async function enqueueIfEligible(
   }
   // scope='only_applied' and scope='all' both pass when a portal_uni row exists
 
-  // ----- Gate 5: credentials check (DB-first + env fallback) -----------
+  // ----- Gate 5: application-scoped portal preflight + safe enrichment -----
+  // This is the common cross-portal contract: recover high-confidence values
+  // from existing documents into EMPTY CRM fields, re-evaluate, and keep an
+  // incomplete application out of the queue.
+  const preflight = await prepareApplicationPortalPreflight({
+    applicationId,
+    adapterKey: portalUni.adapterKey,
+    actorUserId,
+  });
+  if (preflight.supported && !preflight.ready) {
+    console.warn(
+      `[portal-enqueue] preflight blocked app=${applicationId}` +
+      ` adapter=${portalUni.adapterKey}` +
+      ` missing=${preflight.missingFields.join(",") || "-"}` +
+      ` docs=${preflight.missingDocuments.join(",") || "-"}`,
+    );
+    return { status: "skipped", reason: "preflight_not_ready" };
+  }
+
+  // ----- Gate 6: credentials check (DB-first + env fallback) -----------
   if (!await checkHasPortalCredentials(portalUni.universityKey, portalUni.adapterKey)) {
     return { status: "skipped", reason: "no_credentials" };
   }
 
-  // ----- Gate 6: identity field validation (mode=real only) ----------------
+  // ----- Gate 7: identity field validation (mode=real only) ----------------
   // We never enqueue a real submission when critical identity fields are
   // missing, placeholder, or logically inconsistent — a wrong passport number
   // or garbled name is worse than no submission at all (it can block the
@@ -419,7 +440,7 @@ export async function enqueueIfEligible(
     }
   }
 
-  // ----- Gate 7: dedup + enqueue (atomic) -------------------------------
+  // ----- Gate 8: dedup + enqueue (atomic) -------------------------------
   // A plain SELECT-then-INSERT is racy: multiple callers (creation hook, PATCH
   // hook, Run Now scan, or multiple server instances) can fire for the same
   // application concurrently, all pass the read, and all insert duplicate
@@ -486,15 +507,16 @@ export async function enqueueIfEligible(
         mode:           settings.mode,
         status:         "queued",
         enqueuedBy:     actorUserId,
-        ...(target
-          ? {
-              meta: {
+        meta: {
+          preflight,
+          ...(target
+            ? {
                 targetCatalogUniversityId: target.catalogUniversityId,
                 targetUniversityName:      target.universityName,
                 routedViaAggregator:       portalUni.universityKey,
-              },
-            }
-          : {}),
+              }
+            : {}),
+        },
       })
       .returning({ id: portalSubmissionsTable.id });
 

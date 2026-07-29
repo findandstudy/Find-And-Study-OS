@@ -1,0 +1,118 @@
+import {
+  evaluatePortalPreflight,
+  type PortalPreflightResult,
+} from "@workspace/portal-adapters";
+import { buildApplicationPreflightSnapshot } from "@workspace/portal-runner";
+import { runEducationExtraction } from "./educationAutoExtract.js";
+import { autoFillMissingProfileFromPassport } from "./portalProfileAutoExtract.js";
+import { logAudit } from "./auth.js";
+
+export interface PreparedPortalPreflight extends PortalPreflightResult {
+  applicationId: number;
+  studentId: number;
+  autoFilledFields: string[];
+  enrichmentWarnings: string[];
+}
+
+const ACADEMIC_FIELDS = new Set([
+  "schoolName",
+  "gpa",
+  "graduationYear",
+]);
+
+export async function prepareApplicationPortalPreflight(opts: {
+  applicationId: number;
+  adapterKey: string;
+  actorUserId: number | null;
+  ip?: string;
+  autoEnrich?: boolean;
+}): Promise<PreparedPortalPreflight> {
+  let snapshot = await buildApplicationPreflightSnapshot(
+    opts.applicationId,
+    { adapterKey: opts.adapterKey },
+  );
+  let result = evaluatePortalPreflight({
+    adapterKey: opts.adapterKey,
+    profile: snapshot.profile,
+    documentTypes: snapshot.documentTypes,
+  });
+  const autoFilledFields: string[] = [];
+  const enrichmentWarnings: string[] = [];
+
+  if (opts.autoEnrich !== false && result.supported && !result.ready) {
+    const identity = await autoFillMissingProfileFromPassport({
+      studentId: snapshot.studentId,
+      actorUserId: opts.actorUserId,
+      ip: opts.ip,
+      requiredFields: result.missingFields,
+    });
+    autoFilledFields.push(...identity.fields);
+    if (
+      identity.status === "low_confidence" ||
+      identity.status === "ai_unavailable"
+    ) {
+      enrichmentWarnings.push(`identity:${identity.status}`);
+    }
+
+    if (result.missingFields.some((field) => ACADEMIC_FIELDS.has(field))) {
+      const education = await runEducationExtraction({
+        studentId: snapshot.studentId,
+        actorUserId: opts.actorUserId,
+        ip: opts.ip,
+        skipIfFilled: false,
+        mergeMissingOnly: true,
+        auditAction: "portal_preflight_auto_fill_education",
+      });
+      if (education.status === "ok") {
+        if (education.upserted > 0) {
+          autoFilledFields.push("educationRecords");
+        }
+        enrichmentWarnings.push(...education.warnings);
+      } else if (
+        education.status === "ai_failed" ||
+        education.status === "ai_unavailable"
+      ) {
+        enrichmentWarnings.push(`education:${education.status}`);
+      }
+    }
+
+    if (autoFilledFields.length > 0) {
+      snapshot = await buildApplicationPreflightSnapshot(
+        opts.applicationId,
+        { adapterKey: opts.adapterKey },
+      );
+      result = evaluatePortalPreflight({
+        adapterKey: opts.adapterKey,
+        profile: snapshot.profile,
+        documentTypes: snapshot.documentTypes,
+      });
+    }
+  }
+
+  const prepared: PreparedPortalPreflight = {
+    ...result,
+    applicationId: opts.applicationId,
+    studentId: snapshot.studentId,
+    autoFilledFields: [...new Set(autoFilledFields)],
+    enrichmentWarnings: [...new Set(enrichmentWarnings)],
+  };
+
+  await logAudit(
+    opts.actorUserId,
+    "portal_application_preflight",
+    "application",
+    opts.applicationId,
+    {
+      adapterKey: opts.adapterKey,
+      ready: prepared.ready,
+      supported: prepared.supported,
+      missingFields: prepared.missingFields,
+      incompatibleFields: prepared.incompatibleFields,
+      missingDocuments: prepared.missingDocuments,
+      autoFilledFields: prepared.autoFilledFields,
+      enrichmentWarnings: prepared.enrichmentWarnings,
+    },
+    opts.ip,
+  );
+  return prepared;
+}

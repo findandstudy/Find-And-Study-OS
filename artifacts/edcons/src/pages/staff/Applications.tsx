@@ -1900,6 +1900,7 @@ export default function ApplicationsPage() {
       const noAdapterN = skippedArr.filter((s) => s.reason === "NO_PORTAL").length;
       const alreadyQueuedN = skippedArr.filter((s) => s.reason === "ALREADY_QUEUED").length;
       const missingDocs = skippedArr.filter((s) => s.reason === "MISSING_MANDATORY_DOCUMENTS");
+      const preflightBlocked = skippedArr.filter((s) => s.reason === "PREFLIGHT_NOT_READY");
       const descParts: string[] = [];
       if (noAdapterN > 0) descParts.push(t("portalAutomation.bulkRun.noAdapterNote", { count: noAdapterN }));
       if (alreadyQueuedN > 0) descParts.push(t("portalAutomation.bulkRun.alreadyQueuedNote", { count: alreadyQueuedN }));
@@ -1912,10 +1913,26 @@ export default function ApplicationsPage() {
           (labels.length > 0 ? `: ${labels.join(", ")}` : ""),
         );
       }
+      if (preflightBlocked.length > 0) {
+        const fields = Array.from(new Set(
+          preflightBlocked.flatMap((s: any) =>
+            Array.isArray(s.missingFields) ? s.missingFields : [],
+          ),
+        ));
+        descParts.push(
+          t("portalAutomation.bulkRun.preflightNote", {
+            count: preflightBlocked.length,
+            fields: fields.join(", ") || "—",
+          }),
+        );
+      }
       toast({
         title: t("portalAutomation.bulkRun.queuedToast", { count: queuedN }),
         description: descParts.length > 0 ? descParts.join(" · ") : undefined,
-        variant: queuedN === 0 && missingDocs.length > 0 ? "destructive" : undefined,
+        variant:
+          queuedN === 0 && (missingDocs.length > 0 || preflightBlocked.length > 0)
+            ? "destructive"
+            : undefined,
       });
     } catch {
       toast({ title: t("portalAutomation.bulkRun.submitError"), variant: "destructive" });

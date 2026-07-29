@@ -5796,6 +5796,7 @@
       "queuedToast": "{count} solicitud(es) en cola para la automatización del portal.",
       "noAdapterNote": "{count} omitida(s): no hay un adaptador de portal configurado.",
       "alreadyQueuedNote": "{count} ya en cola.",
+      "preflightNote": "{count} solicitud(es) necesitan información antes del envío al portal: {fields}.",
       "submitError": "No se pudo ejecutar la automatización del portal."
     },
     "mappingImport": {
