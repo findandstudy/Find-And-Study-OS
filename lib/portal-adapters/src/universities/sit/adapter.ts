@@ -60,6 +60,7 @@ import {
   sitAcademicHistoryLevelFromCountryLabel,
   resolveSitAcademicHistory,
   isSitContactStepLabels,
+  hasSitProgramSubjectAnchor,
 } from "./helpers.js";
 import {
   findStudent,
@@ -3251,6 +3252,45 @@ export const sitAdapter: SitAdapter = {
           ...base,
           programMissing: true,
           detail: `Program bulunamadı: "${profile.programName}" — ${pool.length} aday arasında güvenli eşleşme yok`,
+        };
+      }
+
+      const isExplicitNameMap = [
+        profile.programNameMap,
+        profile.programNameMapGeneral,
+      ].some((mapping) =>
+        Object.entries(mapping ?? {}).some(([portalLabel, crmName]) => {
+          if (fold(crmName) !== fold(profile.programName)) return false;
+          const portalFold = fold(portalLabel);
+          return (
+            found.match.id === portalLabel ||
+            fold(found.match.name) === portalFold ||
+            (!!portalFold && fold(found.match.name).includes(portalFold))
+          );
+        }),
+      );
+      const safeFuzzyMatch =
+        found.conf >= 0.75 &&
+        hasSitProgramSubjectAnchor(
+          profile.programName,
+          found.match.name,
+          profile.programSynonyms,
+        );
+      if (!isExplicitNameMap && !safeFuzzyMatch) {
+        logger.warn(
+          `[sit] program eşleşmesi güvenlik kapısında reddedildi: "${profile.programName}"` +
+            ` → "${found.match.name}" (güven=${found.conf.toFixed(2)}, konu-çapası=${safeFuzzyMatch})`,
+        );
+        logProgramPoolDiagnostic(
+          "güvensiz fuzzy eşleşme",
+          profile.programName,
+          pool,
+        );
+        return {
+          ...base,
+          programMissing: true,
+          detail:
+            `Program bulunamadı: "${profile.programName}" — en yakın aday güvenli eşleşme şartlarını sağlamadı`,
         };
       }
       match = found;

@@ -111,6 +111,8 @@ const DUPLICATE_SAFE_PORTAL_KEYS = new Set([
   "isik_university",
   "multico",
   "okan_university",
+  "sit",
+  "study_in_turkey",
   "united_education",
   "uskudar_university",
 ]);
@@ -119,9 +121,8 @@ const DUPLICATE_SAFE_PORTAL_KEYS = new Set([
  * Portals allowed to recover a dedicated city value from historical
  * "City, street" address rows.
  *
- * SIT is intentionally included here without adding it to
- * DUPLICATE_SAFE_PORTAL_KEYS: its document-normalisation behaviour remains
- * unchanged, while legacy applications that pre-date `students.address_city`
+ * SIT is intentionally included here under both its worker routing key and
+ * adapter key, so legacy applications that pre-date `students.address_city`
  * can still pass SIT's required City / District field.
  */
 const LEGACY_CITY_PORTAL_KEYS = new Set([
@@ -157,13 +158,14 @@ function conservativeLegacyCityCandidate(value: string): string | undefined {
 }
 
 /**
- * Limits concurrent document normalization to one writer per logical slot for
- * the six newly live portals. Historical CRM imports can contain duplicate
+ * Limits concurrent document normalization to one writer per logical slot.
+ * Historical CRM imports can contain duplicate
  * rows for the same file; processing those duplicates in parallel writes to
  * the same temp path and can crash native PDF/image tooling with SIGBUS.
  *
- * Altınbaş keeps its existing policy. SIT and Topkapı are intentionally
- * excluded so this rollout does not alter their proven document behavior.
+ * Altınbaş keeps its existing policy. SIT is included after a live duplicate
+ * document set reproduced exactly that SIGBUS failure. Topkapı remains
+ * unchanged.
  */
 export function shouldDeduplicateDocumentSlots(universityKey: string): boolean {
   return /altinbas/i.test(universityKey) ||

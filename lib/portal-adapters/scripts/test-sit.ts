@@ -32,6 +32,7 @@ import {
   sitAcademicHistoryLevelFromCountryLabel,
   resolveSitAcademicHistory,
   isSitContactStepLabels,
+  hasSitProgramSubjectAnchor,
 } from "../src/universities/sit/helpers.js";
 import {
   SIT_URLS,
@@ -157,8 +158,33 @@ test("EDU1 — mapEducationLevel maps TR/EN to canonical labels", () => {
   assert.equal(mapEducationLevel("Ön Lisans"), "Associate");
   assert.equal(mapEducationLevel("Doktora"), "PhD");
   assert.equal(mapEducationLevel("PhD"), "PhD");
+  assert.equal(mapEducationLevel("Ph.D"), "PhD");
   assert.equal(mapEducationLevel(""), null);
   assert.equal(mapEducationLevel("unknown"), null);
+});
+
+test("EDU1B — SIT fuzzy matching requires a real subject anchor", () => {
+  assert.equal(
+    hasSitProgramSubjectAnchor(
+      "Bachelor of Data Science and Analytics (Turkish)",
+      "Bachelor of Exercise and Sport Sciences (Turkish)",
+    ),
+    false,
+  );
+  assert.equal(
+    hasSitProgramSubjectAnchor(
+      "Bachelor of Computer Engineering (English)",
+      "Bilgisayar Mühendisliği (İngilizce)",
+    ),
+    true,
+  );
+  assert.equal(
+    hasSitProgramSubjectAnchor(
+      "Bachelor of Law (Turkish)",
+      "Hukuk (Türkçe)",
+    ),
+    true,
+  );
 });
 
 test("EDU2 — live SIT academic country labels resolve the required prior level", () => {

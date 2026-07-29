@@ -70,7 +70,7 @@ test("ALP4: Altınbaş document normalization selects one writer per slot", () =
   );
 });
 
-test("ALP5: duplicate-slot protection is scoped to the six new portals", () => {
+test("ALP5: duplicate-slot protection includes SIT after live SIGBUS evidence", () => {
   for (const key of [
     "beykent_university",
     "isik_university",
@@ -82,8 +82,8 @@ test("ALP5: duplicate-slot protection is scoped to the six new portals", () => {
     assert.equal(shouldDeduplicateDocumentSlots(key), true, key);
   }
   assert.equal(shouldDeduplicateDocumentSlots("altinbas_univeristy"), true);
-  assert.equal(shouldDeduplicateDocumentSlots("sit"), false);
-  assert.equal(shouldDeduplicateDocumentSlots("study_in_turkey"), false);
+  assert.equal(shouldDeduplicateDocumentSlots("sit"), true);
+  assert.equal(shouldDeduplicateDocumentSlots("study_in_turkey"), true);
   assert.equal(shouldDeduplicateDocumentSlots("topkapi_university"), false);
 });
 
@@ -114,28 +114,28 @@ test("ALP6: legacy city uses only a validated comma prefix", () => {
   );
 });
 
-test("ALP7: legacy city does not change unrelated SIT aliases or Topkapı", () => {
-  for (const key of ["sit", "topkapi_university"]) {
-    assert.equal(
-      resolveLegacyAddressCity({
-        universityKey: key,
-        address: "Dushanbe, Rudaki Street 12",
-        nationality: "Tajikistan",
-      }),
-      undefined,
-    );
-  }
-});
-
-test("ALP8: SIT recovers City / District from legacy comma-prefixed addresses", () => {
+test("ALP7: legacy city remains disabled for Topkapı", () => {
   assert.equal(
     resolveLegacyAddressCity({
-      universityKey: "study_in_turkey",
-      address: "Baku, Nizami Street 10",
-      nationality: "Azerbaijan",
+      universityKey: "topkapi_university",
+      address: "Dushanbe, Rudaki Street 12",
+      nationality: "Tajikistan",
     }),
-    "Baku",
+    undefined,
   );
+});
+
+test("ALP8: both SIT keys recover City / District from legacy comma-prefixed addresses", () => {
+  for (const universityKey of ["sit", "study_in_turkey"]) {
+    assert.equal(
+      resolveLegacyAddressCity({
+        universityKey,
+        address: "Baku, Nizami Street 10",
+        nationality: "Azerbaijan",
+      }),
+      "Baku",
+    );
+  }
   assert.equal(
     resolveLegacyAddressCity({
       universityKey: "study_in_turkey",

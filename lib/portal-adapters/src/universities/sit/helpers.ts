@@ -8,7 +8,7 @@
 //   isLanguageCompatible   — program language-of-instruction compatibility
 // ---------------------------------------------------------------------------
 
-import { fold } from "../../programMatch.js";
+import { expandProgramTokens, fold } from "../../programMatch.js";
 
 // ---------------------------------------------------------------------------
 // SIT allowlist — EXACTLY 11 universities (do not add/remove without sign-off).
@@ -88,11 +88,91 @@ export function normalizeGpa(
 // ---------------------------------------------------------------------------
 export function mapEducationLevel(level: string | undefined | null): string | null {
   const f = fold(level ?? "");
-  if (/doktora|phd|doctora|doctoral/.test(f)) return "PhD";
+  // fold("Ph.D") is "ph d", so accept both the joined and punctuation-folded
+  // spellings. CRM degree labels legitimately contain both variants.
+  if (/doktora|ph\s*d|doctora|doctoral/.test(f)) return "PhD";
   if (/yukseklisans|yuksek lisans|master|graduate/.test(f)) return "Master";
   if (/onlisans|on lisans|associate/.test(f)) return "Associate";
   if (/lisans|bachelor|undergraduate/.test(f)) return "Bachelor";
   return null;
+}
+
+const SIT_PROGRAM_GENERIC_TOKENS = new Set([
+  "associate",
+  "bachelor",
+  "master",
+  "phd",
+  "ph",
+  "doctorate",
+  "doctoral",
+  "degree",
+  "program",
+  "programme",
+  "english",
+  "ingilizce",
+  "turkish",
+  "turkce",
+  "thesis",
+  "non",
+  "tezli",
+  "tezsiz",
+  "and",
+  "the",
+  "of",
+  "in",
+  // These broad faculty words must not make two unrelated subjects look like
+  // the same programme (for example Data Science vs Sport Sciences).
+  "science",
+  "sciences",
+  "bilim",
+  "bilimi",
+  "engineering",
+  "muhendislik",
+  "muhendisligi",
+  "management",
+  "administration",
+  "yonetim",
+  "studies",
+]);
+
+function sitProgramSubjectTokens(name: string): Set<string> {
+  return new Set(
+    fold(name)
+      .split(" ")
+      .filter(
+        (token) =>
+          token.length > 1 && !SIT_PROGRAM_GENERIC_TOKENS.has(token),
+      ),
+  );
+}
+
+/**
+ * Additional fail-closed guard for SIT's large live catalogue. The shared
+ * fuzzy matcher also considers degree/language and broad synonym tokens; those
+ * must never be enough to turn two unrelated subjects into a match.
+ */
+export function hasSitProgramSubjectAnchor(
+  desiredName: string,
+  candidateName: string,
+  extraSynonyms?: readonly (readonly string[])[],
+): boolean {
+  if (fold(desiredName) === fold(candidateName)) return true;
+
+  const desired = sitProgramSubjectTokens(desiredName);
+  const candidate = sitProgramSubjectTokens(candidateName);
+  if (desired.size === 0 || candidate.size === 0) return false;
+
+  const desiredExpanded = expandProgramTokens(desired, extraSynonyms);
+  const candidateExpanded = expandProgramTokens(candidate, extraSynonyms);
+  for (const token of desiredExpanded) {
+    if (
+      !SIT_PROGRAM_GENERIC_TOKENS.has(token) &&
+      candidateExpanded.has(token)
+    ) {
+      return true;
+    }
+  }
+  return false;
 }
 
 export type SitAcademicHistoryLevel = "high_school" | "bachelor" | "master";
