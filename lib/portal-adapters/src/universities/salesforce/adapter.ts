@@ -135,6 +135,15 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
       // "Any visible match" — FORM_SEL is a broad union, so .first() can bind to
       // a hidden element while another field is actually on screen. Iterate.
       const onWizard = async (): Promise<boolean> => { try { const loc = page.locator(FORM_SEL); const n = await loc.count(); for (let i = 0; i < Math.min(n, 12); i++) { if (await loc.nth(i).isVisible().catch(() => false)) return true; } return false; } catch (e) { return false; } };
+      const readPageText = async (): Promise<string> => {
+        try {
+          return (await page.evaluate(
+            "(() => document.body ? document.body.innerText : '')()",
+          )) as string;
+        } catch {
+          return "";
+        }
+      };
       const filterTrackApplicant = async (
         query: string,
       ): Promise<void> => {
@@ -273,6 +282,13 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
           detail: `${cfg.label}: application already completed in portal`,
         };
       }
+      let ownedCompletedApplication:
+        | {
+            externalRef: string;
+            portalProgram: string;
+            programMismatch: boolean;
+          }
+        | null = null;
       const tryResumeOwnedApplicant = async (): Promise<boolean> => {
         if (!strictMappedPortal || !applicantPreflight.owned) return false;
         await page
@@ -406,6 +422,52 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
             relevantButtons,
           },
         );
+        const detailText = await readPageText();
+        const externalRef =
+          (
+            detailText.match(
+              /\b[A-Z]{2,4}-\d{4,}\b/,
+            ) || []
+          )[0] || "";
+        if (
+          /application has been successfully sent/i.test(detailText) &&
+          externalRef
+        ) {
+          const portalProgram = (
+            (await page
+              .locator('[data-label="Program Name"]')
+              .first()
+              .innerText()
+              .catch(() => "")) || ""
+          )
+            .replace(/\s+/g, " ")
+            .trim();
+          const expectedTarget = strictMappedPortal
+            ? resolveSalesforceProgramTarget(
+                profile.programName,
+                profile.programNameMap,
+                profile.programNameMapGeneral,
+              )
+            : {
+                label: profile.programName,
+                source: "normalized" as const,
+                ambiguous: false,
+              };
+          const expectedCandidates =
+            salesforcePortalProgramCandidates(expectedTarget);
+          ownedCompletedApplication = {
+            externalRef,
+            portalProgram,
+            programMismatch:
+              Boolean(portalProgram) &&
+              expectedCandidates.length > 0 &&
+              !expectedCandidates.some(
+                (candidate) =>
+                  fold(candidate) === fold(portalProgram),
+              ),
+          };
+          return false;
+        }
         if (
           cfg.key === "beykent" &&
           process.env.PORTAL_DIAGNOSTIC_CAPTURE === "1"
@@ -423,6 +485,29 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
         return onWizard();
       };
       await tryResumeOwnedApplicant();
+      if (ownedCompletedApplication) {
+        const completed = ownedCompletedApplication as {
+          externalRef: string;
+          portalProgram: string;
+          programMismatch: boolean;
+        };
+        return {
+          alreadyExists: true,
+          submitted: false,
+          programMissing: false,
+          externalRef: completed.externalRef,
+          detail: completed.programMismatch
+            ? `${cfg.label}: student already has a completed portal application for a different programme`
+            : `${cfg.label}: application already completed in portal`,
+          meta: {
+            existingPortalApplication: true,
+            programMismatch: completed.programMismatch,
+            ...(completed.portalProgram
+              ? { portalProgram: completed.portalProgram }
+              : {}),
+          },
+        };
+      }
       for (let attempt = 0; attempt < 3 && !(await onWizard()); attempt++) await gotoAppForm();
       await page.waitForTimeout(2000);
 
@@ -432,7 +517,7 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
       // never open a NEW application for the same student.
       const APP_NUM = /\b[A-Z]{2,3}\d{6,}\b/;
       const result: any = { alreadyExists: false, submitted: false, programMissing: false };
-      const bodyText = async (): Promise<string> => { try { return (await page.evaluate("(() => document.body ? document.body.innerText : '')()")) as string; } catch (e) { return ""; } };
+      const bodyText = readPageText;
       const has = async (sel: string): Promise<boolean> => { try { return (await page.locator(sel).count()) > 0; } catch (e) { return false; } };
       const hasVisible = async (sel: string): Promise<boolean> => {
         try {
