@@ -6,7 +6,7 @@ import { db, knowledgeSourcesTable, knowledgeChunksTable } from "@workspace/db";
 import { and, count, desc, eq, inArray } from "drizzle-orm";
 import { triggerKnowledgeIngest } from "./knowledgeIngest";
 
-export const RAG_SOURCE_TYPES = ["file", "url", "text"] as const;
+export const RAG_SOURCE_TYPES = ["file", "url", "text", "academy"] as const;
 export type RagSourceType = (typeof RAG_SOURCE_TYPES)[number];
 
 export interface RagSourceListItem {

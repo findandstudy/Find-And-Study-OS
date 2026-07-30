@@ -3037,6 +3037,10 @@ async function seedClaudeIntegration() {
       const { startPortalAiGuardianScanner } = await import("./lib/portalAiGuardian");
       startPortalAiGuardianScanner();
     });
+    staggerStart("academyKnowledgeSync", 43_000, async () => {
+      const { startAcademyKnowledgeSync } = await import("./lib/inbox/academyKnowledgeSync");
+      startAcademyKnowledgeSync();
+    });
   }
 
   serveStaticFrontend();

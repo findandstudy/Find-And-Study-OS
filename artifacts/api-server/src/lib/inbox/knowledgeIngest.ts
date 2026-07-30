@@ -1,5 +1,6 @@
 // AI Agent Faz 2 — ingestion orchestrator: extract → chunk → embed → store.
-// Runs for a single knowledge_sources row (type='file'|'url'|'text') and is
+// Runs for a single knowledge_sources row
+// (type='file'|'url'|'text'|'academy') and is
 // safe to re-run (reprocess replaces the row's chunks). Best-effort: any
 // failure is recorded as status='error' with a message, never thrown to a
 // caller that fired this fire-and-forget after an admin create/reprocess call.
@@ -14,6 +15,8 @@ import {
   type TextSourceConfig,
 } from "./knowledgeExtract";
 import { chunkText, embedTexts, estimateTokenCount } from "./knowledgeEmbed";
+import { extractAcademyDestinations } from "./academyKnowledge";
+import { count } from "drizzle-orm";
 
 const MAX_SOURCE_CHARS = 400_000; // guard against runaway ingestion cost
 
@@ -45,6 +48,43 @@ export async function ingestKnowledgeSource(sourceId: number): Promise<void> {
     } else if (source.type === "text") {
       const textConfig = config as unknown as TextSourceConfig;
       text = extractPlainText(textConfig);
+    } else if (source.type === "academy") {
+      const result = await extractAcademyDestinations();
+      text = result.text;
+      extra = {
+        sourceVersion: result.sourceVersion,
+        fetchedAt: result.fetchedAt,
+        countryCount: result.countryCount,
+        contentCount: result.contentCount,
+        sourceUrl: "https://academy.findandstudy.com",
+        studentSafeOnly: true,
+        error: null,
+        lastSyncError: null,
+        lastSyncErrorAt: null,
+      };
+
+      // Academy exposes stable ETags. A periodic sync that sees the same
+      // version only refreshes freshness metadata; it must not spend money or
+      // time re-embedding identical content.
+      const [{ n: existingChunkCount }] = await db
+        .select({ n: count() })
+        .from(knowledgeChunksTable)
+        .where(eq(knowledgeChunksTable.sourceId, sourceId));
+      if (
+        Number(existingChunkCount) > 0 &&
+        typeof config.sourceVersion === "string" &&
+        config.sourceVersion === result.sourceVersion
+      ) {
+        await db
+          .update(knowledgeSourcesTable)
+          .set({
+            status: "ready",
+            lastSyncedAt: new Date(),
+            config: { ...config, ...extra },
+          })
+          .where(eq(knowledgeSourcesTable.id, sourceId));
+        return;
+      }
     } else {
       throw new Error(`ingestKnowledgeSource called for unsupported type: ${source.type}`);
     }
@@ -88,6 +128,29 @@ export async function ingestKnowledgeSource(sourceId: number): Promise<void> {
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown ingestion error";
     console.error(`[knowledge-ingest] source #${sourceId} failed:`, message);
+    if (source.type === "academy") {
+      const [{ n }] = await db
+        .select({ n: count() })
+        .from(knowledgeChunksTable)
+        .where(eq(knowledgeChunksTable.sourceId, sourceId));
+      if (Number(n) > 0) {
+        // Last-known-good policy: a temporary Academy outage must not remove
+        // already verified knowledge from the AI. Keep the source ready and
+        // expose the failed refresh in admin metadata.
+        await db
+          .update(knowledgeSourcesTable)
+          .set({
+            status: "ready",
+            config: {
+              ...(source.config as Record<string, unknown>),
+              lastSyncError: message,
+              lastSyncErrorAt: new Date().toISOString(),
+            },
+          })
+          .where(eq(knowledgeSourcesTable.id, sourceId));
+        return;
+      }
+    }
     await db
       .update(knowledgeSourcesTable)
       .set({ status: "error", config: { ...(source.config as Record<string, unknown>), error: message } })

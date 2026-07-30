@@ -25,6 +25,7 @@ export const knowledgeSourceTypeValues = [
   "url",
   "file",
   "text",
+  "academy",
   "webhook",
   "conversation",
 ] as const;

@@ -1,5 +1,5 @@
 // AI Agent Faz 2 — retrieval: embed the student's message and pull the top-K
-// most relevant chunks from ACTIVE, ready file/url/text knowledge sources.
+// most relevant chunks from ACTIVE, ready file/url/text/academy sources.
 // Never touches program_scope/webhook/conversation source types — those stay
 // on their own dedicated paths (searchPrograms tool / future integrations).
 //
@@ -23,7 +23,8 @@ export interface RetrievedChunk {
   distance: number;
 }
 
-const RAG_SOURCE_TYPES = ["file", "url", "text"] as const;
+export const RAG_SOURCE_TYPES = ["file", "url", "text", "academy"] as const;
+export type RetrievalSourceType = (typeof RAG_SOURCE_TYPES)[number];
 // Vector channel: how many top cosine-scored chunks to keep.
 const TOP_K = 8;
 // Cosine distance (1 - cosine similarity) ranges 0 (identical) to 2
@@ -85,9 +86,15 @@ function queryTerms(query: string): string[] {
  * (e.g. missing OPENAI_API_KEY) or the DB being unreachable must never break
  * the bot reply; retrieval is an enhancement, not a hard dependency.
  */
-export async function retrieveKnowledgeChunks(query: string): Promise<RetrievedChunk[]> {
+export async function retrieveKnowledgeChunks(
+  query: string,
+  options: { sourceTypes?: readonly RetrievalSourceType[] } = {},
+): Promise<RetrievedChunk[]> {
   const trimmed = query.trim();
   if (!trimmed) return [];
+  const sourceTypes = options.sourceTypes?.length
+    ? [...options.sourceTypes]
+    : [...RAG_SOURCE_TYPES];
 
   try {
     const activeSourceIds = await db
@@ -95,7 +102,7 @@ export async function retrieveKnowledgeChunks(query: string): Promise<RetrievedC
       .from(knowledgeSourcesTable)
       .where(
         and(
-          inArray(knowledgeSourcesTable.type, [...RAG_SOURCE_TYPES]),
+          inArray(knowledgeSourcesTable.type, sourceTypes),
           eq(knowledgeSourcesTable.isActive, true),
           eq(knowledgeSourcesTable.status, "ready"),
         ),

@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/select";
 import {
   FileText,
+  GraduationCap,
   Link as LinkIcon,
   Type,
   Plus,
@@ -36,7 +37,8 @@ import {
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
-type RagSourceType = "file" | "url" | "text";
+type ManualRagSourceType = "file" | "url" | "text";
+type RagSourceType = ManualRagSourceType | "academy";
 type RagSourceStatus = "pending" | "processing" | "ready" | "error" | null;
 
 interface RagSource {
@@ -55,6 +57,7 @@ const TYPE_ICON: Record<RagSourceType, typeof FileText> = {
   file: FileText,
   url: LinkIcon,
   text: Type,
+  academy: GraduationCap,
 };
 
 function statusBadgeVariant(status: RagSourceStatus): "default" | "secondary" | "destructive" | "outline" {
@@ -71,7 +74,7 @@ export default function KnowledgeSourcesRag() {
   const [sources, setSources] = useState<RagSource[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const [newType, setNewType] = useState<RagSourceType>("file");
+  const [newType, setNewType] = useState<ManualRagSourceType>("file");
   const [newName, setNewName] = useState("");
   const [newUrl, setNewUrl] = useState("");
   const [newText, setNewText] = useState("");
@@ -245,7 +248,7 @@ export default function KnowledgeSourcesRag() {
           <div className="grid grid-cols-1 sm:grid-cols-[160px_1fr] gap-3">
             <div className="space-y-1.5">
               <Label>{t("aiAgentAdmin.ragSources.typeLabel")}</Label>
-              <Select value={newType} onValueChange={(v) => setNewType(v as RagSourceType)}>
+              <Select value={newType} onValueChange={(v) => setNewType(v as ManualRagSourceType)}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
@@ -354,15 +357,17 @@ export default function KnowledgeSourcesRag() {
                     >
                       <RefreshCw className="h-4 w-4" />
                     </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 text-destructive"
-                      onClick={() => remove(source)}
-                      title={t("aiAgentAdmin.ragSources.delete")}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
+                    {source.type !== "academy" && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-destructive"
+                        onClick={() => remove(source)}
+                        title={t("aiAgentAdmin.ragSources.delete")}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    )}
                   </div>
                 </div>
               );
