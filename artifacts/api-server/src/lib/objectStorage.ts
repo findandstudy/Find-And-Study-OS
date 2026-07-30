@@ -488,7 +488,7 @@ export class ObjectStorageService {
     const normalizedPath = this.normalizeObjectEntityPath(rawPath);
     if (!normalizedPath.startsWith("/")) return normalizedPath;
     const objectFile = await this.getObjectEntityFile(normalizedPath);
-    await setObjectAclPolicy(objectFile as File, aclPolicy);
+    await setObjectAclPolicy(objectFile as unknown as File, aclPolicy);
     return normalizedPath;
   }
 

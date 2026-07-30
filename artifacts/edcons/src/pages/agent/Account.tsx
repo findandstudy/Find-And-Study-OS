@@ -918,8 +918,14 @@ function WebToLeadTab() {
           </div>
           <h3 className="font-display font-semibold text-base">{t("agentAccount.formPreview")}</h3>
         </div>
-        <div className="bg-secondary/30 rounded-xl p-8 flex justify-center">
-          <div dangerouslySetInnerHTML={{ __html: formCode }} />
+        <div className="bg-secondary/30 rounded-xl p-4">
+          <iframe
+            title={t("agentAccount.formPreview")}
+            srcDoc={formCode}
+            sandbox=""
+            referrerPolicy="no-referrer"
+            className="w-full min-h-[640px] rounded-xl border bg-white"
+          />
         </div>
       </Card>
 

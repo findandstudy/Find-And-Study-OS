@@ -20,7 +20,30 @@ export function getAllowedOrigins(): string[] {
     origins.push("http://localhost:25197");
     origins.push("http://localhost:5173");
   }
-  return origins;
+  return Array.from(new Set(origins.filter(Boolean)));
+}
+
+/**
+ * Decide whether a browser Origin may make a credentialed CORS request.
+ *
+ * Fail closed in production: an empty ALLOWED_ORIGINS configuration must not
+ * silently turn into "allow every origin". Requests without an Origin header
+ * remain allowed because service-to-service and same-origin non-browser
+ * clients do not necessarily send one. The request's own origin is accepted
+ * explicitly, while localhost is restricted to development/test.
+ */
+export function isCredentialedCorsOriginAllowed(
+  origin: string | undefined,
+  requestOrigin: string | null,
+  allowedOrigins: readonly string[] = getAllowedOrigins(),
+  nodeEnv: string | undefined = process.env.NODE_ENV,
+): boolean {
+  if (!origin) return true;
+  if (requestOrigin && origin === requestOrigin) return true;
+  if (nodeEnv !== "production" && /^https?:\/\/localhost(:\d+)?$/.test(origin)) {
+    return true;
+  }
+  return allowedOrigins.includes(origin);
 }
 
 /**

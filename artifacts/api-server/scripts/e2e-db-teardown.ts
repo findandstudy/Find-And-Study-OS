@@ -27,6 +27,9 @@ import {
   programsTable,
 } from "@workspace/db";
 import { eq, like } from "drizzle-orm";
+import { assertSafeE2eDatabase } from "./e2e-database-safety";
+
+assertSafeE2eDatabase();
 
 const stateFile = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),

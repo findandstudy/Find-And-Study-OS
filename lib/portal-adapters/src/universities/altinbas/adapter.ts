@@ -107,6 +107,7 @@ import {
   selectAltinbasRollbackIds,
   shouldUseAltinbasUiPath,
   type AltinbasDocumentSlot,
+  type AltinbasEducationAddCandidate,
   type AltinbasWizardSnapshot,
   type AltinbasWizardState,
 } from "./altinbasWizard.js";
@@ -2568,7 +2569,13 @@ async function ensureEducationRecordUI(
         ? `${error.name}:${error.message}`
         : String(error || "evaluate_error"),
   }));
-  const addDecision = decideAltinbasEducationAddCandidate(addScan.candidates);
+  const addCandidates = addScan.candidates as Array<
+    AltinbasEducationAddCandidate & {
+      targetMeta?: Array<Record<string, unknown>>;
+      signalMeta?: Array<Record<string, unknown>>;
+    }
+  >;
+  const addDecision = decideAltinbasEducationAddCandidate(addCandidates);
   const modalControls = page.locator(
     "input:visible,textarea:visible,select:visible,[role='combobox']:visible",
   );
@@ -2608,14 +2615,14 @@ async function ensureEducationRecordUI(
       ` (headingCount=${addScan.headingCount},` +
       ` rawSignals=${addScan.rawSignalCount},` +
       ` activations=${addScan.activationCount},` +
-      ` candidates=${addScan.candidates.length},` +
-      ` semantic=${addScan.candidates.filter((candidate) => candidate.semantic).length},` +
-      ` targeted=${addScan.candidates.filter((candidate) => candidate.semantic && candidate.targetContext).length},` +
-      ` targetedExcluded=${addScan.candidates.filter((candidate) => candidate.semantic && candidate.targetContext && candidate.excluded).length},` +
-      ` dialog=${addScan.candidates.filter((candidate) => candidate.semantic && candidate.insideDialog).length},` +
-      ` tops=${addScan.candidates.filter((candidate) => candidate.semantic && candidate.insideDialog).map((candidate) => candidate.top).sort((a, b) => a - b).join(":") || "none"},` +
-      ` semanticTops=${addScan.candidates.filter((candidate) => candidate.semantic && !candidate.excluded).map((candidate) => candidate.top).sort((a, b) => a - b).join(":") || "none"},` +
-      ` icons=${addScan.candidates.filter((candidate) => candidate.genericIcon && !candidate.excluded).length},` +
+      ` candidates=${addCandidates.length},` +
+      ` semantic=${addCandidates.filter((candidate) => candidate.semantic).length},` +
+      ` targeted=${addCandidates.filter((candidate) => candidate.semantic && candidate.targetContext).length},` +
+      ` targetedExcluded=${addCandidates.filter((candidate) => candidate.semantic && candidate.targetContext && candidate.excluded).length},` +
+      ` dialog=${addCandidates.filter((candidate) => candidate.semantic && candidate.insideDialog).length},` +
+      ` tops=${addCandidates.filter((candidate) => candidate.semantic && candidate.insideDialog).map((candidate) => candidate.top ?? 0).sort((a, b) => a - b).join(":") || "none"},` +
+      ` semanticTops=${addCandidates.filter((candidate) => candidate.semantic && !candidate.excluded).map((candidate) => candidate.top ?? 0).sort((a, b) => a - b).join(":") || "none"},` +
+      ` icons=${addCandidates.filter((candidate) => candidate.genericIcon && !candidate.excluded).length},` +
       ` decision=${addDecision.reason},` +
       ` scanError=${redactAltinbasLog(
         "scanError" in addScan ? addScan.scanError : "none",
@@ -2639,7 +2646,7 @@ async function ensureEducationRecordUI(
     afterModalControls <= beforeModalControls ||
     afterModalControls === 0
   ) {
-    const selectedCandidate = addScan.candidates.find(
+    const selectedCandidate = addCandidates.find(
       (candidate) => candidate.id === addDecision.id,
     );
     logger.warn(

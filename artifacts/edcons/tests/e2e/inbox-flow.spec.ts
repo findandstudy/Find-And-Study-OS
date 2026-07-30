@@ -64,10 +64,16 @@ test.describe("inbox e2e: webhook -> assign -> mine", () => {
       timeout: 15_000,
     });
 
-    // 3. Open the Messages page and switch to the Unmatched tab so the
-    //    fresh conversation is visible (no identity match was made).
+    // 3. Open the Messages page, expose test-tagged conversations, and switch
+    //    to Unmatched through the current inbox-filter dropdown.
     await page.goto(`${BASE_URL}/staff/messages`);
-    await page.getByRole("button", { name: /unmatched/i }).click();
+    const showTests = page.getByTestId("button-inbox-show-tests");
+    await expect(showTests).toBeVisible({ timeout: 15_000 });
+    await showTests.click();
+    const tabFilter = page.getByTestId("button-inbox-tab-filter");
+    await expect(tabFilter).toBeVisible({ timeout: 15_000 });
+    await tabFilter.click();
+    await page.getByRole("menuitem", { name: /unmatched/i }).click();
 
     // Pick the conversation by its run-tagged display name / message body.
     const conversationItem = page
@@ -78,14 +84,19 @@ test.describe("inbox e2e: webhook -> assign -> mine", () => {
     await conversationItem.click();
 
     // 4. Assign to me, then assert the conversation now appears in Mine.
-    const assignBtn = page.getByRole("button", { name: /assign to me/i });
+    const assignBtn = page.getByTestId("button-assign-staff");
     await expect(assignBtn).toBeVisible();
     await assignBtn.click();
+    const staffSearch = page.getByTestId("input-assign-staff-search");
+    await expect(staffSearch).toBeVisible();
+    await staffSearch.fill("Find Study");
+    await page.getByRole("menuitem", { name: /^Find Study$/i }).click();
     await expect(page.getByText(/assigned to you/i)).toBeVisible({
       timeout: 5_000,
     });
 
-    await page.getByRole("button", { name: /^mine$/i }).click();
+    await tabFilter.click();
+    await page.getByRole("menuitem", { name: /^mine/i }).click();
     const inMine = page
       .locator('[data-testid="inbox-conversation-item"], li, button')
       .filter({ hasText: TEST_NAME })

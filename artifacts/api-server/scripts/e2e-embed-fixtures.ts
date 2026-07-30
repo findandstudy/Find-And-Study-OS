@@ -25,6 +25,9 @@ import {
   embedWidgetsTable,
 } from "@workspace/db";
 import { eq } from "drizzle-orm";
+import { assertSafeE2eDatabase } from "./e2e-database-safety";
+
+assertSafeE2eDatabase();
 
 function generateWidgetApiKey(): string {
   return crypto.randomBytes(32).toString("hex");

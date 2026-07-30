@@ -95,9 +95,9 @@ export const emuAdapter: UniversityAdapter = {
       await clickN("btnKaydet");
 
       // --- Education section ---
-      await fill("txtOkul", profile.lastSchool || "High School");
+      await fill("txtOkul", profile.schoolName || "High School");
       await fill("txtOSehir", profile.address || "Istanbul");
-      await fill("txtOAvg", profile.gpa || "3.5");
+      await fill("txtOAvg", String(profile.gpa ?? "3.5"));
       await sel("ddlOUlke", profile.nationality);
       await clickN("btnEekle");
 

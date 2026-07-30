@@ -1,44 +1,59 @@
 /**
- * RBAC E2E Teardown Script — removes accounts + agent records created by setup.
- * Run: cd artifacts/api-server && pnpm exec tsx scripts/rbac-e2e-teardown.ts
+ * RBAC E2E teardown — removes only rows that the matching setup run created.
  */
-import { Pool } from "pg";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { pool } from "@workspace/db";
+import { assertSafeE2eDatabase } from "./e2e-database-safety";
 
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+assertSafeE2eDatabase();
 
-const CLEANUP_EMAILS = [
-  "audit-superadmin@audit.test",
-  "audit-agentstaff@audit.test",
-];
-const AUDIT_AGENT_USER_ID = 8733;
-const AUDIT_SUBAGENT_USER_ID = 8734;
+const stateFile = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "../../../rbac-e2e-state.json",
+);
+
+interface RbacState {
+  createdUserEmails: string[];
+  createdAgentIds: number[];
+}
 
 async function main() {
+  if (!fs.existsSync(stateFile)) {
+    console.log("[rbac-e2e-teardown] No saved state — skipping");
+    await pool.end();
+    return;
+  }
+
+  const state = JSON.parse(fs.readFileSync(stateFile, "utf8")) as RbacState;
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
-
-    // Remove agent records
-    await client.query(`DELETE FROM agents WHERE user_id IN ($1, $2)`,
-      [AUDIT_AGENT_USER_ID, AUDIT_SUBAGENT_USER_ID]);
-    console.log("[teardown] Agent records removed");
-
-    // Remove created users
-    for (const email of CLEANUP_EMAILS) {
-      await client.query(`DELETE FROM users WHERE email = $1`, [email]);
-      console.log(`[teardown] ${email} removed`);
+    if (state.createdAgentIds.length > 0) {
+      await client.query(`DELETE FROM agents WHERE id = ANY($1::int[])`, [
+        state.createdAgentIds,
+      ]);
     }
-
+    if (state.createdUserEmails.length > 0) {
+      await client.query(`DELETE FROM users WHERE email = ANY($1::text[])`, [
+        state.createdUserEmails,
+      ]);
+    }
     await client.query("COMMIT");
-    console.log("[teardown] DONE");
+    fs.rmSync(stateFile, { force: true });
+    console.log(
+      `[rbac-e2e-teardown] Removed ${state.createdUserEmails.length} users and ` +
+      `${state.createdAgentIds.length} agents created by setup`,
+    );
   } catch (err) {
     await client.query("ROLLBACK");
-    console.error("[teardown] ERROR:", err);
-    process.exit(1);
+    console.error("[rbac-e2e-teardown] ERROR:", err);
+    process.exitCode = 1;
   } finally {
     client.release();
     await pool.end();
   }
 }
 
-main();
+void main();

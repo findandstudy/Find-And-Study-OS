@@ -1623,7 +1623,12 @@ function InboxTab() {
 
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm" className="w-full justify-between gap-2 h-8">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full justify-between gap-2 h-8"
+                  data-testid="button-inbox-tab-filter"
+                >
                   <span className="flex items-center gap-2 min-w-0">
                     {(() => {
                       const current = tabs.find((tb) => tb.key === tab) ?? tabs[0];

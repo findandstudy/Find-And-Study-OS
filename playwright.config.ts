@@ -1,11 +1,24 @@
 import { defineConfig, devices } from "@playwright/test";
 import { execSync } from "child_process";
+import { existsSync } from "node:fs";
 
 function findSystemChromium(): string | undefined {
   const envPath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH;
-  if (envPath) return envPath;
+  if (envPath && existsSync(envPath)) return envPath;
+
+  const knownPaths = [
+    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+    "/Applications/Chromium.app/Contents/MacOS/Chromium",
+    "/usr/bin/google-chrome",
+    "/usr/bin/chromium",
+  ];
+  const knownPath = knownPaths.find((candidate) => existsSync(candidate));
+  if (knownPath) return knownPath;
+
   try {
-    const p = execSync("which chromium", { stdio: ["pipe", "pipe", "pipe"] })
+    const p = execSync("command -v chromium || command -v google-chrome", {
+      stdio: ["pipe", "pipe", "pipe"],
+    })
       .toString()
       .trim();
     return p || undefined;

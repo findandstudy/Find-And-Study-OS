@@ -33,6 +33,9 @@ import {
 } from "@workspace/db";
 import { eq, and, isNull } from "drizzle-orm";
 import { encryptConfig, decryptConfig } from "../src/lib/encryption";
+import { assertSafeE2eDatabase } from "./e2e-database-safety";
+
+assertSafeE2eDatabase();
 
 const stateFile = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -68,6 +71,7 @@ async function seedWebFormIntegration() {
     await db.insert(integrationsTable).values({
       key: "web_form",
       name: "Web Form",
+      category: "communication",
       isEnabled: true,
       config: encryptConfig({}),
     });

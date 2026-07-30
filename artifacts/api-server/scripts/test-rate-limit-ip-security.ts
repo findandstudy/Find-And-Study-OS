@@ -25,21 +25,13 @@
  * Run with:
  *   pnpm --filter @workspace/api-server run test:rate-limit-ip-security
  */
-import { test, after } from "node:test";
+import { test } from "node:test";
 import assert from "node:assert/strict";
 import http from "http";
 import express, { type Express } from "express";
 import rateLimit from "express-rate-limit";
 
 import { getClientIp, getRateLimitIp } from "../src/lib/clientIp.js";
-import { PgRateLimitStore } from "../src/lib/pgRateLimiter.js";
-import { pool } from "@workspace/db";
-
-after(() => {
-  setImmediate(() => process.exit(process.exitCode ?? 0));
-});
-
-const RUN_ID = `rlis_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
 
 // ---------------------------------------------------------------------------
 // HTTP helper
@@ -152,11 +144,12 @@ test("RL2b: rotating the spoofed first XFF entry does not change req.ip", async 
 // ---------------------------------------------------------------------------
 test("RL3: keyGenerator bound to getRateLimitIp — 9th request from same IP gets 429", async () => {
   // Build an app with a tight limiter (max 8 / window) using the same
-  // keyGenerator pattern as all public limiters in the app. The PgRateLimitStore
-  // prefix is unique per run so it does not pollute other test buckets.
+  // keyGenerator pattern as all public limiters in the app. The in-memory
+  // store keeps this security regression deterministic and independent from a
+  // developer's local PostgreSQL availability; PgRateLimitStore integration is
+  // covered by the DB-backed integration suite.
   const WINDOW_MS = 60_000;
   const MAX = 8;
-  const PREFIX = `rl3-test-${RUN_ID}`;
 
   const app = express();
   app.set("trust proxy", 1);
@@ -169,7 +162,6 @@ test("RL3: keyGenerator bound to getRateLimitIp — 9th request from same IP get
       standardHeaders: true,
       legacyHeaders: false,
       message: { error: "Too many requests" },
-      store: new PgRateLimitStore(WINDOW_MS, PREFIX),
       keyGenerator: (req) => getRateLimitIp(req),
       // No NODE_ENV skip — this test explicitly exercises the limiter.
     }),
@@ -188,15 +180,11 @@ test("RL3: keyGenerator bound to getRateLimitIp — 9th request from same IP get
     assert.equal(blocked.status, 429,
       `Request ${MAX + 1} should be rate-limited (got ${blocked.status})`);
   });
-
-  // Cleanup: remove the test bucket so it doesn't linger in the DB.
-  await pool.query(`DELETE FROM pg_rate_limits WHERE key LIKE $1`, [`${PREFIX}:%`]);
 });
 
 test("RL3b: a different IP is not limited by the first IP's counter", async () => {
   const WINDOW_MS = 60_000;
   const MAX = 8;
-  const PREFIX = `rl3b-test-${RUN_ID}`;
 
   const app = express();
   app.set("trust proxy", 1);
@@ -209,7 +197,6 @@ test("RL3b: a different IP is not limited by the first IP's counter", async () =
       standardHeaders: true,
       legacyHeaders: false,
       message: { error: "Too many requests" },
-      store: new PgRateLimitStore(WINDOW_MS, PREFIX),
       keyGenerator: (req) => getRateLimitIp(req),
     }),
     (_req, res) => { res.json({ ok: true }); },
@@ -231,6 +218,4 @@ test("RL3b: a different IP is not limited by the first IP's counter", async () =
     assert.equal(allowedB.status, 200,
       `IP_B should NOT be limited by IP_A's counter (got ${allowedB.status})`);
   });
-
-  await pool.query(`DELETE FROM pg_rate_limits WHERE key LIKE $1`, [`${PREFIX}:%`]);
 });

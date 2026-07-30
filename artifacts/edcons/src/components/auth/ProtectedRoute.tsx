@@ -97,9 +97,24 @@ export function ProtectedRoute({ children, allowedRoles, requiredPermission }: P
   }
 
   if (requiredPermission && effectiveUser.role !== "super_admin" && effectiveUser.role !== "admin") {
-    const raw = effectiveUser.agentStaffPermissions;
-    const perms = Array.isArray(raw) ? raw : [];
-    if (!perms.includes(requiredPermission)) {
+    // The short, section-level keys on /agent routes are the granular
+    // agent_staff switches. Primary agents and sub-agents own those portal
+    // sections by role and must not be denied merely because role permissions
+    // use dotted keys such as "applications.view".
+    const isAgentOwner =
+      (effectiveUser.role === "agent" || effectiveUser.role === "sub_agent") &&
+      !requiredPermission.includes(".");
+
+    const rolePermissions =
+      (effectiveUser as typeof effectiveUser & { permissions?: string[] }).permissions ?? [];
+    const effectivePermissions = new Set([
+      ...(Array.isArray(rolePermissions) ? rolePermissions : []),
+      ...(Array.isArray(effectiveUser.agentStaffPermissions)
+        ? effectiveUser.agentStaffPermissions
+        : []),
+    ]);
+
+    if (!isAgentOwner && !effectivePermissions.has(requiredPermission)) {
       return <AccessDeniedScreen />;
     }
   }

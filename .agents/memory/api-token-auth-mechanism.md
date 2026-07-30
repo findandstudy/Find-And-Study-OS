@@ -7,8 +7,8 @@ Persistent API tokens (`fas_live_` + 32 base62) let external callers hit the api
 
 **Core design (do not regress):**
 - Store only `SHA-256(plain)` in `api_tokens.token_hash`; the plain value is returned exactly once at create time and never again.
-- Auth middleware checks **Bearer first**, then **`?api_key=` query fallback** (header always wins; only consulted when no Bearer), then falls back to session. A valid token sets `req.user` + `req.tokenScopes` (+ `req.apiTokenAuth=true`). Sessions are completely unaffected — no regression.
-- Query fallback reads `api_key` (documented) + `apiKey` (alias) via `extractQueryToken`; **deliberately NOT `token`** (collides with public-sign/intake `?token=` links). No `fas_live_` prefix gate on the query (unlike Bearer) so an invalid `?api_key=` still hits `lookupApiToken` → same 401 body. **Why:** Bearer gates the prefix to let unknown Bearer schemes fall through to session; `api_key` is reserved for us so any value is a token attempt.
+- Auth middleware accepts API tokens **only** through `Authorization: Bearer fas_live_…`, then falls back to the normal session cookie. A valid token sets `req.user` + `req.tokenScopes` (+ `req.apiTokenAuth=true`). Sessions are completely unaffected.
+- API tokens must never be accepted from URL query parameters (`api_key`, `apiKey`, or `token`). URLs are routinely retained by browser history, proxies, access logs and referrer headers; putting a persistent credential there creates an avoidable disclosure path.
 - **Bearer requests skip CSRF** (no cookie, no double-submit). Session requests still require CSRF.
 
 **Scope enforcement is central + default-deny, NOT per-route:**

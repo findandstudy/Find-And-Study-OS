@@ -6,7 +6,7 @@ import compression from "compression";
 import cookieParser from "cookie-parser";
 import { authMiddleware } from "./middlewares/authMiddleware";
 import { getCsrfCookieOptions } from "./lib/cookieOptions";
-import { getAllowedOrigins } from "./lib/requestOrigin";
+import { getAllowedOrigins, isCredentialedCorsOriginAllowed } from "./lib/requestOrigin";
 import router from "./routes";
 import webhooksRouter from "./routes/webhooks";
 
@@ -93,11 +93,16 @@ app.use((req, res, next) => {
     cors({
       credentials: true,
       origin: (origin, callback) => {
-        if (!origin) return callback(null, true);
-        // Always allow localhost origins (needed for local dev and e2e tests)
-        if (/^https?:\/\/localhost(:\d+)?$/.test(origin)) return callback(null, true);
-        const allowed = getAllowedOrigins();
-        if (allowed.length === 0 || allowed.includes(origin)) {
+        const host = req.get("host");
+        const requestOrigin = host ? `${req.protocol}://${host}` : null;
+        if (
+          isCredentialedCorsOriginAllowed(
+            origin,
+            requestOrigin,
+            getAllowedOrigins(),
+            process.env.NODE_ENV,
+          )
+        ) {
           return callback(null, true);
         }
         return callback(new Error(`CORS: origin ${origin} not allowed`));

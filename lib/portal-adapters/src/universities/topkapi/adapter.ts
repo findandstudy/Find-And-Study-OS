@@ -1749,7 +1749,10 @@ export const topkapiAdapter: UniversityAdapter = {
     await page.fill("input[name=fathersName]", profile.fatherName || "-");
     await page.fill("input[name=mothersName]", profile.motherName || "-");
 
-    await page.waitForFunction(() => { const s = document.querySelector("select[name=countryOfBirth]"); return !!s && s.options.length > 1; }, { timeout: 30000 }).catch(() => {});
+    await page.waitForFunction(() => {
+      const s = document.querySelector<HTMLSelectElement>("select[name=countryOfBirth]");
+      return !!s && s.options.length > 1;
+    }, { timeout: 30000 }).catch(() => {});
 
     // Country <select>s now carry ONLY English option text (the portal used
     // to be Turkish-only) — try the English translation FIRST, Turkish name
@@ -1772,11 +1775,30 @@ export const topkapiAdapter: UniversityAdapter = {
     }
 
     logger.info("[topkapi] DBG country=" + country + " countryEn=" + countryEn + " natl=" + (profile.nationality || ""));
-    logger.info("[topkapi] DBG cob=" + JSON.stringify(await page.evaluate(() => { const s = document.querySelector("select[name=countryOfBirth]"); return s ? { n: s.options.length, sel: s.value, sample: Array.from(s.options).slice(0, 6).map((o) => o.value + "::" + o.text) } : "NO"; })));
+    logger.info("[topkapi] DBG cob=" + JSON.stringify(await page.evaluate(() => {
+      const s = document.querySelector<HTMLSelectElement>("select[name=countryOfBirth]");
+      return s
+        ? {
+            n: s.options.length,
+            sel: s.value,
+            sample: Array.from(s.options)
+              .slice(0, 6)
+              .map((o: HTMLOptionElement) => `${o.value}::${o.text}`),
+          }
+        : "NO";
+    })));
     await page.fill("input[name=address]", profile.address || "-");
     try { await page.fill("input[name=addressCity]", "-"); } catch { /* field optional */ }
     await page.fill("input[name=mobilePhone]", profile.phone);
-    const _dump = await page.evaluate(() => { const names = ["studentName","studentSurname","dateOfBirth","gender","fathersName","mothersName","countryOfBirth","nationality","addressCountry","address","addressCity","mobilePhone"]; const out = {}; for (const n of names) { const el = document.querySelector("[name=" + n + "]"); out[n] = el ? el.value : "MISSING"; } return out; });
+    const _dump = await page.evaluate(() => {
+      const names = ["studentName","studentSurname","dateOfBirth","gender","fathersName","mothersName","countryOfBirth","nationality","addressCountry","address","addressCity","mobilePhone"];
+      const out: Record<string, string> = {};
+      for (const n of names) {
+        const el = document.querySelector<HTMLInputElement | HTMLSelectElement>(`[name="${n}"]`);
+        out[n] = el ? el.value : "MISSING";
+      }
+      return out;
+    });
     logger.info("[topkapi] Step 2 field values:", JSON.stringify(_dump));
 
     await clickNext(page, logger);
@@ -1996,7 +2018,14 @@ export const topkapiAdapter: UniversityAdapter = {
     });
 
     logger.info("[topkapi] Step 4: program selection (AJAX)");
-    await page.waitForSelector("input[name=educationLevel]", { timeout: 15000 }).catch(async () => { const d = await page.evaluate(() => { const r=[...document.querySelectorAll("input[type=radio]")].map(x=>x.name); const se=[...document.querySelectorAll("select")].map(x=>x.name); return { radios:[...new Set(r)], selects:[...new Set(se)] }; }); logger.warn("[topkapi] STEP4 DBG " + JSON.stringify(d)); });
+    await page.waitForSelector("input[name=educationLevel]", { timeout: 15000 }).catch(async () => {
+      const d = await page.evaluate(() => {
+        const r = Array.from(document.querySelectorAll<HTMLInputElement>("input[type=radio]")).map((x) => x.name);
+        const se = Array.from(document.querySelectorAll<HTMLSelectElement>("select")).map((x) => x.name);
+        return { radios: [...new Set(r)], selects: [...new Set(se)] };
+      });
+      logger.warn("[topkapi] STEP4 DBG " + JSON.stringify(d));
+    });
 
     // Trigger the AJAX call by programmatically checking the education-level radio
     await page.evaluate((lv: string) => {
@@ -2639,4 +2668,3 @@ export const topkapiAdapter: UniversityAdapter = {
     return options;
   },
 };
-

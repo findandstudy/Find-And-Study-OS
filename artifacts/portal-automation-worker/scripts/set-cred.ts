@@ -8,7 +8,7 @@ function getKey() {
   if (!raw) throw new Error("ENCRYPTION_KEY/SESSION_SECRET yok");
   return crypto.createHash("sha256").update(raw).digest();
 }
-function enc(v) {
+function enc(v: string) {
   const iv = crypto.randomBytes(12);
   const c = crypto.createCipheriv("aes-256-gcm", getKey(), iv);
   const ct = Buffer.concat([c.update(v, "utf8"), c.final()]);
