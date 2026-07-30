@@ -167,11 +167,55 @@ const channelColor: Record<string, string> = {
   instagram: "bg-pink-500/10 text-pink-600",
 };
 
+interface InboxChannelAccountSummary {
+  id: number;
+  displayName: string;
+  externalAccountId?: string | null;
+  isDefault: boolean;
+}
+
+// This is Zernio's stable account identity for the second WhatsApp line.
+// Meta display names may change after review; the visual identity must not.
+const INTERNATIONAL_OFFICE_ACCOUNT_ID = "6a6b7478df17280d93f6076c";
+
+interface WhatsAppLineBrand {
+  label: string;
+  badgeClassName: string;
+  iconClassName: string;
+  dotClassName: string;
+}
+
+function whatsappLineBrand(
+  channel: string,
+  account: InboxChannelAccountSummary | null | undefined,
+): WhatsAppLineBrand | null {
+  if (channel !== "whatsapp" || !account) return null;
+  const isInternationalOffice = account.externalAccountId === INTERNATIONAL_OFFICE_ACCOUNT_ID;
+
+  if (isInternationalOffice) {
+    return {
+      label: "International Office",
+      badgeClassName: "border-[#e31e24]/35 bg-[#e31e24]/10 text-[#c81920] dark:bg-[#e31e24]/20 dark:text-red-200",
+      iconClassName: "bg-[#e31e24]/10 text-[#e31e24]",
+      dotClassName: "bg-[#e31e24]",
+    };
+  }
+
+  return {
+    label: "Find And Study",
+    badgeClassName: "border-[#143591]/35 bg-[#143591]/10 text-[#143591] dark:bg-[#143591]/20 dark:text-blue-200",
+    iconClassName: "bg-[#143591]/10 text-[#143591]",
+    dotClassName: "bg-[#143591]",
+  };
+}
+
 interface InboxConversation {
   id: number;
   type: string;
   title: string | null;
   channel: string;
+  channelAccountId: number | null;
+  channelAccount: InboxChannelAccountSummary | null;
   externalContactId: number | null;
   unmatched: boolean;
   status: string;
@@ -316,9 +360,16 @@ const INBOX_LIST_WIDTH_STORAGE_KEY = "inbox.listWidth";
 const INTERNAL_LIST_WIDTH_STORAGE_KEY = "internal.listWidth";
 const INBOX_LIST_MIN_WIDTH = 220;
 const INBOX_LIST_DEFAULT_WIDTH = 280;
+const INBOX_LIST_MAX_WIDTH = 420;
 
 function inboxListMaxWidth(): number {
-  return Math.max(INBOX_LIST_MIN_WIDTH, Math.floor((typeof window !== "undefined" ? window.innerWidth : 1280) * 0.5));
+  return Math.max(
+    INBOX_LIST_MIN_WIDTH,
+    Math.min(
+      INBOX_LIST_MAX_WIDTH,
+      Math.floor((typeof window !== "undefined" ? window.innerWidth : 1280) * 0.36),
+    ),
+  );
 }
 
 function readStoredListWidth(storageKey: string): number {
@@ -353,8 +404,15 @@ function InboxTab() {
   const [pinnedTab, setPinnedTab] = useState<InboxTabKey | null>(() => readPinnedInboxTab());
   const [listWidth, setListWidth] = useState<number>(() => readInboxListWidth());
   const listResizeCleanupRef = useRef<(() => void) | null>(null);
-  useEffect(() => () => {
-    if (listResizeCleanupRef.current) listResizeCleanupRef.current();
+  useEffect(() => {
+    const clampListWidth = () => {
+      setListWidth((width) => Math.min(inboxListMaxWidth(), Math.max(INBOX_LIST_MIN_WIDTH, width)));
+    };
+    window.addEventListener("resize", clampListWidth);
+    return () => {
+      window.removeEventListener("resize", clampListWidth);
+      if (listResizeCleanupRef.current) listResizeCleanupRef.current();
+    };
   }, []);
   const [assignedNotice, setAssignedNotice] = useState(false);
   const [channel, setChannel] = useState<string>("all");
@@ -1574,6 +1632,7 @@ function InboxTab() {
 
   // Safe non-null assertion: `conv` is only read inside the `!detail ? loader : (...)` JSX branch below.
   const conv = detail?.conversation!;
+  const activeLineBrand = whatsappLineBrand(conv?.channel, conv?.channelAccount);
   const metaReplyWindowClosed = Boolean(
     detail &&
     (conv?.channel === "whatsapp" || conv?.channel === "messenger" || conv?.channel === "instagram") &&
@@ -1838,6 +1897,7 @@ function InboxTab() {
               </div>
             ) : convs.map((c) => {
               const Icon = channelIcon[c.channel] || MessageCircle;
+              const lineBrand = whatsappLineBrand(c.channel, c.channelAccount);
               const isSel = c.id === selectedId;
               const isChecked = selectedIds.has(c.id);
               const unreadCount = c.unreadCount ?? 0;
@@ -1871,7 +1931,7 @@ function InboxTab() {
                     />
                   )}
                   <div className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 ${
-                    channelColor[c.channel] || ""
+                    lineBrand?.iconClassName || channelColor[c.channel] || ""
                   } ${isUnread ? "ring-2 ring-emerald-500 ring-offset-2 ring-offset-background" : ""}`}>
                     <Icon className="w-4 h-4" />
                   </div>
@@ -1884,6 +1944,19 @@ function InboxTab() {
                         {isUnread && (
                           <span className="shrink-0 rounded-full bg-emerald-600 px-1.5 py-0.5 text-[9px] font-extrabold uppercase leading-none tracking-wide text-white">
                             {t("inbox.tabs.unread")}
+                          </span>
+                        )}
+                        {lineBrand && (
+                          <span
+                            className={cn(
+                              "inline-flex h-4 shrink-0 items-center gap-1 rounded-full border px-1.5 text-[9px] font-bold leading-none",
+                              lineBrand.badgeClassName,
+                            )}
+                            title={`Gelen hat: ${lineBrand.label}`}
+                            data-testid={`line-badge-${c.id}`}
+                          >
+                            <span className={cn("h-1.5 w-1.5 rounded-full", lineBrand.dotClassName)} />
+                            {lineBrand.label}
                           </span>
                         )}
                       </div>
@@ -1961,14 +2034,33 @@ function InboxTab() {
             <div className="flex items-center justify-center w-full h-full"><Loader2 className="w-5 h-5 animate-spin text-primary" /></div>
           ) : (
             <>
-              <div className="px-4 py-3 border-b border-border/50 flex items-center gap-3 shrink-0">
+              <div className="px-3 py-2.5 border-b border-border/50 flex flex-wrap items-start gap-x-3 gap-y-2 shrink-0">
                 <Button size="icon" variant="ghost" className="lg:hidden" onClick={() => setSelectedId(null)}>
                   <ArrowLeft className="w-4 h-4" />
                 </Button>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
+                <div className="flex-1 basis-[18rem] min-w-0">
+                  <div className="flex min-w-0 flex-wrap items-center gap-1.5">
                     <p className="font-semibold text-sm truncate">{ext?.displayName || conv.title || "(unknown)"}</p>
                     <Badge variant="secondary" className={`text-[10px] ${channelColor[conv.channel] || ""}`}>{conv.channel}</Badge>
+                    {activeLineBrand && (
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          "gap-1 text-[10px]",
+                          activeLineBrand.badgeClassName,
+                        )}
+                        title={`Gelen hat: ${activeLineBrand.label}`}
+                        data-testid="active-line-badge"
+                      >
+                        <span
+                          className={cn(
+                            "h-1.5 w-1.5 rounded-full",
+                            activeLineBrand.dotClassName,
+                          )}
+                        />
+                        {activeLineBrand.label}
+                      </Badge>
+                    )}
                     {linked && linkedHref && (
                       <button type="button" onClick={() => setLocation(linkedHref)}>
                         <Badge variant="outline" className="text-[10px] gap-1 cursor-pointer hover:bg-primary/10">
@@ -1977,9 +2069,9 @@ function InboxTab() {
                       </button>
                     )}
                   </div>
-                  <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground min-w-0">
+                  <div className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[11px] text-muted-foreground">
                     {(ext?.phone || ext?.email) && (
-                      <span className="truncate">{ext?.phone || ext?.email}</span>
+                      <span className="max-w-full truncate">{ext?.phone || ext?.email}</span>
                     )}
                     {conv.assignedTo && (
                       <>
@@ -2001,7 +2093,7 @@ function InboxTab() {
                     )}
                   </div>
                 </div>
-                <div className="flex gap-1.5 items-center">
+                <div className="ml-auto flex max-w-full flex-wrap items-center justify-end gap-1.5">
                   {conv.needsHuman && (
                     <span className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-800">
                       <AlertTriangle className="w-3 h-3" /> {t("messagesPage.needsHuman")}
@@ -2044,7 +2136,7 @@ function InboxTab() {
                     title={(conv as any).isSubscribed ? t("inbox.action.unsubscribe") : t("inbox.action.subscribe")}
                   >
                     <Bell className="w-3 h-3" />
-                    <span className="hidden lg:inline">{(conv as any).isSubscribed ? t("inbox.action.unsubscribe") : t("inbox.action.subscribe")}</span>
+                    <span className="hidden min-[1800px]:inline">{(conv as any).isSubscribed ? t("inbox.action.unsubscribe") : t("inbox.action.subscribe")}</span>
                   </Button>
                   <Button
                     size="sm"
@@ -2055,12 +2147,12 @@ function InboxTab() {
                     data-testid="button-mark-conversation-unread"
                   >
                     <Mail className="w-3 h-3" />
-                    <span className="hidden xl:inline">{t("inbox.action.markUnread")}</span>
+                    <span className="hidden min-[1800px]:inline">{t("inbox.action.markUnread")}</span>
                   </Button>
                   <Button
                     size="icon"
                     variant="ghost"
-                    className="lg:hidden h-8 w-8"
+                    className="h-8 w-8 min-[1800px]:hidden"
                     onClick={() => setSidebarSheetOpen(true)}
                     aria-label={t("inbox.sidebar.openLeadInfo")}
                     data-testid="button-open-lead-info"
@@ -2661,7 +2753,7 @@ function InboxTab() {
         </div>
 
         {selectedId !== null && detail && (
-          <div className="hidden lg:flex lg:w-1/4 lg:shrink-0 lg:flex-col h-full min-h-0 overflow-hidden border-l border-border/50 bg-muted/20">
+          <div className="hidden min-[1800px]:flex min-[1800px]:w-[340px] min-[1800px]:shrink-0 min-[1800px]:flex-col h-full min-h-0 overflow-hidden border-l border-border/50 bg-muted/20">
             <LeadDetailSidebar
               detail={detail}
               conversationId={selectedId}
@@ -2685,7 +2777,7 @@ function InboxTab() {
         <Sheet open={sidebarSheetOpen} onOpenChange={setSidebarSheetOpen}>
           <SheetContent
             side={isRTL ? "left" : "right"}
-            className="w-[85vw] max-w-md p-0 lg:hidden flex flex-col"
+            className="w-[90vw] max-w-md p-0 min-[1800px]:hidden flex flex-col"
           >
             <SheetHeader className="px-4 py-3 border-b border-border/50 text-start">
               <SheetTitle className="text-sm">{t("inbox.sidebar.leadInfoTitle")}</SheetTitle>

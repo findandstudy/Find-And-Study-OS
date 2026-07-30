@@ -278,6 +278,50 @@ router.get("/programs/enrolled-counts", requireAuth, requireRole(...MANAGER_ROLE
   res.json(counts);
 });
 
+// Bulk status changes are intentionally handled in one database statement.
+// Apart from being much faster than issuing one PATCH per row, this prevents a
+// large selection from being left half-updated if the client disconnects.
+// Keep this route above /programs/:id so "bulk-status" is never parsed as an id.
+router.patch("/programs/bulk-status", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
+  const rawIds = req.body?.ids;
+  const isActive = req.body?.isActive;
+  if (!Array.isArray(rawIds) || rawIds.length === 0 || rawIds.length > 5000) {
+    res.status(400).json({ error: "ids must be a non-empty array with at most 5000 items" });
+    return;
+  }
+  if (typeof isActive !== "boolean") {
+    res.status(400).json({ error: "isActive must be a boolean" });
+    return;
+  }
+
+  const ids = Array.from(new Set(rawIds));
+  if (!ids.every((id): id is number => typeof id === "number" && Number.isSafeInteger(id) && id > 0)) {
+    res.status(400).json({ error: "ids must contain only positive integers" });
+    return;
+  }
+
+  const updated = await db.update(programsTable)
+    .set({ isActive })
+    .where(inArray(programsTable.id, ids))
+    .returning({ id: programsTable.id });
+
+  await logAudit(
+    req.user!.id,
+    isActive ? "bulk_activate_programs" : "bulk_deactivate_programs",
+    "program",
+    undefined,
+    {
+      requestedCount: ids.length,
+      updatedCount: updated.length,
+      // Keep audit rows useful without storing thousands of ids.
+      programIds: ids.slice(0, 100),
+      truncated: ids.length > 100,
+    },
+    req.ip,
+  );
+  res.json({ updated: updated.length, ids: updated.map(row => row.id), isActive });
+});
+
 router.get("/programs/:id", async (req, res): Promise<void> => {
   const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }

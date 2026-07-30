@@ -1498,6 +1498,7 @@ function ProgramsTab() {
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [bulkDelOpen, setBulkDelOpen] = useState(false);
   const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [bulkStatusUpdating, setBulkStatusUpdating] = useState<boolean | null>(null);
   const [selectingAll, setSelectingAll] = useState(false);
   const [delAllOpen, setDelAllOpen] = useState(false);
   const [delAllInProgress, setDelAllInProgress] = useState(false);
@@ -1515,18 +1516,27 @@ function ProgramsTab() {
 
   const [fName, setFName] = useState("");
   const [fDegree, setFDegree] = useState("");
+  const [fLanguage, setFLanguage] = useState("");
   const [fField, setFField] = useState("");
   const dfName = useDebounce(fName);
 
+  function programFilterParams(pageValue?: number, limitValue?: number) {
+    const params = new URLSearchParams();
+    if (pageValue != null) params.set("page", String(pageValue));
+    if (limitValue != null) params.set("limit", String(limitValue));
+    if (dSearch) params.set("search", dSearch);
+    if (filterUni !== "all") params.set("universityId", filterUni);
+    if (dfName) params.set("name", dfName);
+    if (fDegree) params.set("degree", fDegree);
+    if (fLanguage) params.set("language", fLanguage);
+    if (fField) params.set("field", fField);
+    return params;
+  }
+
   const { data } = useQuery({
-    queryKey: ["programs", page, dSearch, filterUni, dfName, fDegree, fField],
+    queryKey: ["programs", page, dSearch, filterUni, dfName, fDegree, fLanguage, fField],
     queryFn: () => {
-      const params = new URLSearchParams({ page: String(page), limit: "30" });
-      if (dSearch) params.set("search", dSearch);
-      if (filterUni !== "all") params.set("universityId", filterUni);
-      if (dfName) params.set("name", dfName);
-      if (fDegree) params.set("degree", fDegree);
-      if (fField) params.set("field", fField);
+      const params = programFilterParams(page, 30);
       return api(`/api/programs?${params.toString()}`);
     },
   });
@@ -1579,24 +1589,46 @@ function ProgramsTab() {
     if (failures > 0) toast({ title: t("catalogPage.bulkDeleteFailed"), description: t("catalogPage.bulkDeleteFailedDesc", { failed: failures, total: count }), variant: "destructive" });
   }
 
+  async function handleBulkStatus(isActive: boolean) {
+    if (selected.size === 0) return;
+    setBulkStatusUpdating(isActive);
+    try {
+      const result = await api("/api/programs/bulk-status", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: [...selected], isActive }),
+      });
+      setSelected(new Set());
+      await qc.invalidateQueries({ queryKey: ["programs"] });
+      toast({
+        title: t("common.success"),
+        description: `${result.updated} ${t("adminCatalog.tabPrograms")} · ${isActive ? t("common.active") : t("common.inactive")}`,
+      });
+    } catch (error) {
+      toast({
+        title: t("common.error"),
+        description: error instanceof Error ? error.message : undefined,
+        variant: "destructive",
+      });
+    } finally {
+      setBulkStatusUpdating(null);
+    }
+  }
+
   const total = data?.meta?.total ?? 0;
   const allMatchingSelected = total > 0 && selected.size >= total;
   async function selectAllMatching() {
     setSelectingAll(true);
     try {
-      const params = new URLSearchParams({ limit: "5000" });
-      if (dSearch) params.set("search", dSearch);
-      if (filterUni !== "all") params.set("universityId", filterUni);
-      if (dfName) params.set("name", dfName);
-      if (fDegree) params.set("degree", fDegree);
-      if (fField) params.set("field", fField);
+      const params = programFilterParams(undefined, 100);
       const ids = await fetchAllIds(`/api/programs?${params.toString()}`);
       setSelected(new Set(ids));
     } catch {} finally { setSelectingAll(false); }
   }
   async function runExport(onlySelected: boolean) {
     try {
-      const exportUrl = !onlySelected && filterUni !== "all" ? `/api/programs?universityId=${filterUni}` : "/api/programs";
+      const params = programFilterParams();
+      const exportUrl = `/api/programs${params.size ? `?${params.toString()}` : ""}`;
       let list = await fetchAllRows<Program>(exportUrl);
       if (onlySelected) list = list.filter(p => selected.has(p.id));
       const rows = list.map((p: Program) => ({
@@ -1767,12 +1799,26 @@ function ProgramsTab() {
       <div className="flex items-center gap-2 flex-wrap">
         <div className="relative flex-1 min-w-[160px] max-w-xs">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input placeholder={t("catalogPage.searchPrograms")} className="pl-8" value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} />
+          <Input
+            placeholder={t("catalogPage.searchPrograms")}
+            className="pl-8"
+            value={search}
+            onChange={e => {
+              setSearch(e.target.value);
+              setPage(1);
+              setSelected(new Set());
+            }}
+          />
         </div>
         <SearchableSelect
           value={filterUni}
-          onValueChange={v => { setFilterUni(v); setPage(1); }}
+          onValueChange={v => {
+            setFilterUni(v);
+            setPage(1);
+            setSelected(new Set());
+          }}
           placeholder={t("catalogPage.allUniversities")}
+          searchPlaceholder={t("common.searchPlaceholder")}
           className="w-[220px]"
           options={[
             { value: "all", label: t("catalogPage.allUniversities") },
@@ -1782,6 +1828,64 @@ function ProgramsTab() {
             })),
           ]}
         />
+        <SearchableSelect
+          value={fDegree || "all"}
+          onValueChange={v => {
+            setFDegree(v === "all" ? "" : v);
+            setPage(1);
+            setSelected(new Set());
+          }}
+          placeholder={t("catalogPage.degree")}
+          searchPlaceholder={t("common.searchPlaceholder")}
+          className="w-[170px]"
+          options={[
+            { value: "all", label: `${t("common.all")} · ${t("catalogPage.degree")}` },
+            ...activeOpts("degree").map(degree => ({ value: degree, label: degree })),
+          ]}
+        />
+        <SearchableSelect
+          value={fLanguage || "all"}
+          onValueChange={v => {
+            setFLanguage(v === "all" ? "" : v);
+            setPage(1);
+            setSelected(new Set());
+          }}
+          placeholder={t("catalogPage.language")}
+          searchPlaceholder={t("common.searchPlaceholder")}
+          className="w-[170px]"
+          options={[
+            { value: "all", label: `${t("common.all")} · ${t("catalogPage.language")}` },
+            ...activeOpts("language").map(language => ({ value: language, label: language })),
+          ]}
+        />
+        {selected.size > 0 && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="border-emerald-300 text-emerald-700 hover:bg-emerald-50"
+            onClick={() => handleBulkStatus(true)}
+            disabled={bulkStatusUpdating !== null}
+          >
+            {bulkStatusUpdating === true
+              ? <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              : <Check className="h-4 w-4 mr-2" />}
+            {t("common.active")} ({selected.size})
+          </Button>
+        )}
+        {selected.size > 0 && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="border-amber-300 text-amber-700 hover:bg-amber-50"
+            onClick={() => handleBulkStatus(false)}
+            disabled={bulkStatusUpdating !== null}
+          >
+            {bulkStatusUpdating === false
+              ? <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              : <X className="h-4 w-4 mr-2" />}
+            {t("common.inactive")} ({selected.size})
+          </Button>
+        )}
         {selected.size > 0 && (
           <Button variant="destructive" size="sm" onClick={() => setBulkDelOpen(true)}>
             <Trash2 className="h-4 w-4 mr-2" />{t("catalogPage.deleteSelected", { n: selected.size })}
@@ -1809,28 +1913,29 @@ function ProgramsTab() {
               </th>
               <ColumnHeader asTh label={t("catalogPage.program")}
                 sort={{ sortKey: "name", current: { key: sort.col, dir: sort.dir }, onSort: handleSort }}
-                filter={{ type: "text", value: fName, onChange: v => { setFName(v); setPage(1); }, placeholder: t("catalogPage.filterByName"), label: t("catalogPage.program") }} />
+                filter={{ type: "text", value: fName, onChange: v => { setFName(v); setPage(1); setSelected(new Set()); }, placeholder: t("catalogPage.filterByName"), label: t("catalogPage.program") }} />
               <ColumnHeader asTh label={t("catalogPage.university")}
                 sort={{ sortKey: "university", current: { key: sort.col, dir: sort.dir }, onSort: handleSort }}
                 filter={{ type: "select", value: filterUni, onChange: v => { setFilterUni(v); setPage(1); setSelected(new Set()); },
                   options: universities.map(u => ({ value: String(u.id), label: u.name })), allLabel: t("catalogPage.allUniversities"), allValue: "all", label: t("catalogPage.university") }} />
               <ColumnHeader asTh label={t("catalogPage.degree")}
                 sort={{ sortKey: "degree", current: { key: sort.col, dir: sort.dir }, onSort: handleSort }}
-                filter={{ type: "select", value: fDegree || "all", onChange: v => { setFDegree(v === "all" ? "" : v); setPage(1); },
+                filter={{ type: "select", value: fDegree || "all", onChange: v => { setFDegree(v === "all" ? "" : v); setPage(1); setSelected(new Set()); },
                   options: activeOpts("degree").map(d => ({ value: d, label: d })), allLabel: t("common.all"), label: t("catalogPage.degree") }} />
               <ColumnHeader asTh label={t("catalogPage.field")}
                 sort={{ sortKey: "field", current: { key: sort.col, dir: sort.dir }, onSort: handleSort }}
-                filter={{ type: "select", value: fField || "all", onChange: v => { setFField(v === "all" ? "" : v); setPage(1); },
+                filter={{ type: "select", value: fField || "all", onChange: v => { setFField(v === "all" ? "" : v); setPage(1); setSelected(new Set()); },
                   options: activeOpts("field").map(f => ({ value: f, label: f })), allLabel: t("common.all"), label: t("catalogPage.field") }} />
               <SortTh label={t("common.fee")} col="fee" sort={sort} onSort={handleSort} />
               <SortTh label={t("catalogPage.commission")} col="commission" sort={sort} onSort={handleSort} />
               <th className="px-4 py-2 text-xs font-medium text-left">{t("catalogPage.quota")}</th>
+              <th className="px-4 py-2 text-xs font-medium text-left">{t("common.status")}</th>
               <th className="w-20 px-4 py-2" />
             </tr>
           </thead>
           <tbody className="divide-y">
             {sorted.length === 0 && (
-              <tr><td colSpan={9} className="text-center py-8 text-muted-foreground">{t("catalogPage.noProgramsFound")}</td></tr>
+              <tr><td colSpan={10} className="text-center py-8 text-muted-foreground">{t("catalogPage.noProgramsFound")}</td></tr>
             )}
             {sorted.map(p => (
               <tr key={p.id} className={`hover:bg-muted/20 transition-colors ${selected.has(p.id) ? "bg-primary/5" : ""}`}>
@@ -1850,6 +1955,16 @@ function ProgramsTab() {
                   {p.quota != null
                     ? <span className={(enrolledCounts[p.id] ?? 0) >= p.quota ? "text-destructive font-semibold" : ""}>{enrolledCounts[p.id] ?? 0}/{p.quota}</span>
                     : "∞"}
+                </td>
+                <td className="px-4 py-2.5 text-xs">
+                  <Badge
+                    variant="outline"
+                    className={p.isActive
+                      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                      : "border-slate-200 bg-slate-50 text-slate-500"}
+                  >
+                    {p.isActive ? t("common.active") : t("common.inactive")}
+                  </Badge>
                 </td>
                 <td className="px-4 py-2.5">
                   <div className="flex gap-1 justify-end">

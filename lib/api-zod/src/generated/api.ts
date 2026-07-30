@@ -2374,6 +2374,17 @@ export const GetInboxConversationDetailResponse = zod.object({
     metadata: zod.record(zod.string(), zod.unknown()).nullish(),
     channel: zod.string(),
     channelAccountId: zod.number().nullish(),
+    channelAccount: zod
+      .union([
+        zod.object({
+          id: zod.number(),
+          displayName: zod.string(),
+          externalAccountId: zod.string().nullish(),
+          isDefault: zod.boolean(),
+        }),
+        zod.null(),
+      ])
+      .optional(),
     externalContactId: zod.number().nullish(),
     externalThreadId: zod.string().nullish(),
     assignedToId: zod.number().nullish(),

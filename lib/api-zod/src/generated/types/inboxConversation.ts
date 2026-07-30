@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { InboxAssignedUser } from "./inboxAssignedUser";
+import type { InboxChannelAccountSummary } from "./inboxChannelAccountSummary";
 import type { InboxConversationMetadata } from "./inboxConversationMetadata";
 
 export interface InboxConversation {
@@ -24,6 +25,7 @@ export interface InboxConversation {
   channel: string;
   /** @nullable */
   channelAccountId?: number | null;
+  channelAccount?: InboxChannelAccountSummary | null;
   /** @nullable */
   externalContactId?: number | null;
   /** @nullable */

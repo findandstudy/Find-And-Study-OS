@@ -105,6 +105,7 @@ export * from "./getUniversityContract200";
 export * from "./healthStatus";
 export * from "./inboxAgentSummary";
 export * from "./inboxAssignedUser";
+export * from "./inboxChannelAccountSummary";
 export * from "./inboxConversation";
 export * from "./inboxConversationDetailResponse";
 export * from "./inboxConversationMetadata";

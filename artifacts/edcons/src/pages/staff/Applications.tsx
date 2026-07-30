@@ -1690,7 +1690,15 @@ export default function ApplicationsPage() {
       let valA: any, valB: any;
       switch (sort.key) {
         case "student": valA = `${a.studentFirstName} ${a.studentLastName}`.toLowerCase(); valB = `${b.studentFirstName} ${b.studentLastName}`.toLowerCase(); break;
-        case "stage": valA = stageOrder.indexOf(a.stage); valB = stageOrder.indexOf(b.stage); break;
+        case "stage": {
+          const indexA = stageOrder.indexOf(a.stage);
+          const indexB = stageOrder.indexOf(b.stage);
+          // Keep retired/unknown custom stages after configured pipeline
+          // stages, matching the server-side ordering used before pagination.
+          valA = indexA === -1 ? Number.MAX_SAFE_INTEGER : indexA;
+          valB = indexB === -1 ? Number.MAX_SAFE_INTEGER : indexB;
+          break;
+        }
         case "country": valA = (a.country || "").toLowerCase(); valB = (b.country || "").toLowerCase(); break;
         case "university": valA = (a.universityName || "").toLowerCase(); valB = (b.universityName || "").toLowerCase(); break;
         case "program": valA = (a.programName || "").toLowerCase(); valB = (b.programName || "").toLowerCase(); break;

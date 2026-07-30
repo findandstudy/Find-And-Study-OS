@@ -1589,6 +1589,14 @@ export interface InboxAssignedUser {
   avatarUrl?: string | null;
 }
 
+export interface InboxChannelAccountSummary {
+  id: number;
+  displayName: string;
+  /** @nullable */
+  externalAccountId?: string | null;
+  isDefault: boolean;
+}
+
 /**
  * @nullable
  */
@@ -1610,6 +1618,7 @@ export interface InboxConversation {
   channel: string;
   /** @nullable */
   channelAccountId?: number | null;
+  channelAccount?: InboxChannelAccountSummary | null;
   /** @nullable */
   externalContactId?: number | null;
   /** @nullable */

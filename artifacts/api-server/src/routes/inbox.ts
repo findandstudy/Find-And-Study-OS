@@ -773,6 +773,7 @@ router.get(
         type: conversationsTable.type,
         title: conversationsTable.title,
         channel: conversationsTable.channel,
+        channelAccountId: conversationsTable.channelAccountId,
         externalContactId: conversationsTable.externalContactId,
         externalThreadId: conversationsTable.externalThreadId,
         unmatched: conversationsTable.unmatched,
@@ -804,12 +805,19 @@ router.get(
 
     const externalIds = rows.map((r) => r.externalContactId).filter((x): x is number => !!x);
     const assignedIds = rows.map((r) => r.assignedToId).filter((x): x is number => !!x);
+    const channelAccountIds = rows.map((r) => r.channelAccountId).filter((x): x is number => !!x);
 
     type AssignedUserSummary = {
       id: number;
       firstName: string | null;
       lastName: string | null;
       email: string | null;
+    };
+    type ChannelAccountSummary = {
+      id: number;
+      displayName: string;
+      externalAccountId: string | null;
+      isDefault: boolean;
     };
 
     const contactsMap = new Map<number, ExternalContact>();
@@ -828,11 +836,25 @@ router.get(
         .where(inArray(usersTable.id, assignedIds));
       for (const u of users) usersMap.set(u.id, u);
     }
+    const channelAccountsMap = new Map<number, ChannelAccountSummary>();
+    if (channelAccountIds.length > 0) {
+      const accounts = await db
+        .select({
+          id: channelAccountsTable.id,
+          displayName: channelAccountsTable.displayName,
+          externalAccountId: channelAccountsTable.externalAccountId,
+          isDefault: channelAccountsTable.isDefault,
+        })
+        .from(channelAccountsTable)
+        .where(inArray(channelAccountsTable.id, channelAccountIds));
+      for (const account of accounts) channelAccountsMap.set(account.id, account);
+    }
 
     const data = rows.map((r) => ({
       ...r,
       externalContact: r.externalContactId ? contactsMap.get(r.externalContactId) : null,
       assignedTo: r.assignedToId ? usersMap.get(r.assignedToId) : null,
+      channelAccount: r.channelAccountId ? channelAccountsMap.get(r.channelAccountId) ?? null : null,
     }));
 
     res.json({ data });
@@ -856,6 +878,17 @@ router.get(
     }
     const [externalContact] = conv.externalContactId
       ? await db.select().from(externalContactsTable).where(eq(externalContactsTable.id, conv.externalContactId))
+      : [null];
+    const [channelAccount] = conv.channelAccountId
+      ? await db
+          .select({
+            id: channelAccountsTable.id,
+            displayName: channelAccountsTable.displayName,
+            externalAccountId: channelAccountsTable.externalAccountId,
+            isDefault: channelAccountsTable.isDefault,
+          })
+          .from(channelAccountsTable)
+          .where(eq(channelAccountsTable.id, conv.channelAccountId))
       : [null];
     // Single-owner rule: keep the conversation owner in lockstep with the CRM
     // chain owner (chain wins) so the header always shows the true owner. Runs
@@ -1056,7 +1089,11 @@ router.get(
     const aiSummary = readAiSummary(conv.metadata);
 
     res.json({
-      conversation: { ...conv, assignedTo: assignedTo ?? null },
+      conversation: {
+        ...conv,
+        assignedTo: assignedTo ?? null,
+        channelAccount: channelAccount ?? null,
+      },
       externalContact,
       messages,
       hasMoreMessages,

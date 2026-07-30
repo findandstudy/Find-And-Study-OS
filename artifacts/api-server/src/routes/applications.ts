@@ -289,9 +289,26 @@ router.get("/applications", requireAuth, requireAgentStaffPermission("applicatio
 
   const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
+  // Application stages are admin-configurable and their keys are not ordered
+  // alphabetically in workflow order. Sorting by `applications.stage` before
+  // pagination caused the API to choose the wrong 25-row window; the client
+  // could only re-order that incomplete page, so early stages such as Inquiry
+  // appeared to be missing. Resolve the configured pipeline position in SQL so
+  // ordering is correct across the full result set before LIMIT/OFFSET.
+  const applicationStageSortOrder = sql<number | null>`(
+    SELECT ps.sort_order
+    FROM pipeline_stages ps
+    WHERE ps.entity_type = 'application'
+      AND ps.key = ${applicationsTable.stage}
+    LIMIT 1
+  )`;
+  const applicationStageIsUnknown = sql<number>`CASE
+    WHEN ${applicationStageSortOrder} IS NULL THEN 1
+    ELSE 0
+  END`;
+
   const sortColumns: Record<string, any> = {
     student: sql`lower(coalesce(${studentsTable.firstName}, '') || ' ' || coalesce(${studentsTable.lastName}, ''))`,
-    stage: applicationsTable.stage,
     country: applicationsTable.country,
     university: applicationsTable.universityName,
     program: applicationsTable.programName,
@@ -302,6 +319,14 @@ router.get("/applications", requireAuth, requireAgentStaffPermission("applicatio
   };
   const orderColumn = sortColumns[sortKey] || applicationsTable.createdAt;
   const order = sortDir === "asc" ? asc(orderColumn) : desc(orderColumn);
+  const orderBy = sortKey === "stage"
+    ? [
+        // Unknown/retired custom stages stay at the end in both directions.
+        asc(applicationStageIsUnknown),
+        sortDir === "asc" ? asc(applicationStageSortOrder) : desc(applicationStageSortOrder),
+        sortDir === "asc" ? asc(applicationsTable.stage) : desc(applicationsTable.stage),
+      ]
+    : [order];
 
   const rowsQuery = db
     .select({
@@ -352,7 +377,7 @@ router.get("/applications", requireAuth, requireAgentStaffPermission("applicatio
     .where(whereClause)
     .limit(limitNum)
     .offset(offset)
-    .orderBy(order, desc(applicationsTable.id));
+    .orderBy(...orderBy, desc(applicationsTable.id));
 
   const [countRows, rows, countryRows, universityRows, agentRows] = await Promise.all([
     db.select({ count: sql<number>`count(*)` }).from(applicationsTable)

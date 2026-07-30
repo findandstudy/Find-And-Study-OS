@@ -5588,6 +5588,22 @@ components:
       required:
         - id
 
+    InboxChannelAccountSummary:
+      type: object
+      properties:
+        id:
+          type: integer
+        displayName:
+          type: string
+        externalAccountId:
+          type: ["string", "null"]
+        isDefault:
+          type: boolean
+      required:
+        - id
+        - displayName
+        - isDefault
+
     InboxConversation:
       type: object
       properties:
@@ -5615,6 +5631,10 @@ components:
           type: string
         channelAccountId:
           type: ["integer", "null"]
+        channelAccount:
+          anyOf:
+            - $ref: "#/components/schemas/InboxChannelAccountSummary"
+            - type: "null"
         externalContactId:
           type: ["integer", "null"]
         externalThreadId:
