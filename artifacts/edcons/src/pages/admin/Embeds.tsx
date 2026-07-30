@@ -736,7 +736,7 @@ function WidgetFormDialog({ open, onClose, widget, onSaved }: {
                   <Input
                     value={assistantName}
                     onChange={e => setAssistantName(e.target.value)}
-                    placeholder="X Üniversitesi Yetkili Temsilci Başvuru Asistanı"
+                    placeholder="X University Authorized Representative Application Assistant"
                   />
                 </div>
                 <div>
