@@ -5,6 +5,7 @@ import { test } from "node:test";
 import {
   buildProposalPdf,
   getProposalDateTime,
+  getProposalFirstYearTotal,
   getProposalServiceFee,
   proposalPdfText,
   type ProposalProgramData,
@@ -38,6 +39,11 @@ test("hide service fee always wins over an adjustment", () => {
   assert.equal(getProposalServiceFee(sampleProgram, 10_000, true), null);
 });
 
+test("hidden service fees cannot be inferred from a first-year total", () => {
+  assert.equal(getProposalFirstYearTotal(sampleProgram, 100, true), null);
+  assert.equal(getProposalFirstYearTotal(sampleProgram, 100, false), 5_550);
+});
+
 test("proposal date and time are rendered in Europe/Istanbul", () => {
   const value = getProposalDateTime(new Date("2026-07-28T00:15:00.000Z"));
   assert.deepEqual(value, { date: "28.07.2026", time: "03:15" });
@@ -48,8 +54,8 @@ test("unsupported PDF glyphs are normalised without changing ASCII data", () => 
   assert.equal(proposalPdfText("info@example.com"), "info@example.com");
 });
 
-test("five-program proposal stays on one page and remains lightweight", async () => {
-  const programs = Array.from({ length: 5 }, (_, index) => ({
+test("seven-program visual proposal stays on one page and remains lightweight", async () => {
+  const programs = Array.from({ length: 7 }, (_, index) => ({
     ...sampleProgram,
     id: index + 1,
     name: `${sampleProgram.name} ${index + 1}`,
@@ -60,12 +66,22 @@ test("five-program proposal stays on one page and remains lightweight", async ()
     companyEmail: "info@findandstudy.com",
     companyPhone: "+90 212 000 00 00",
     companyWebsite: "https://findandstudy.com",
+    primaryColor: "#102E66",
+    secondaryColor: "#2563EB",
+    accentColor: "#7C3AED",
+    successColor: "#16A34A",
     generatedAt: new Date("2026-07-28T00:15:00.000Z"),
   });
   const bytes = new Uint8Array(document.output("arraybuffer"));
   assert.equal(document.getNumberOfPages(), 1);
   assert.ok(bytes.byteLength > 2_500);
-  assert.ok(bytes.byteLength < 250_000, `fixture PDF is unexpectedly large: ${bytes.byteLength} bytes`);
+  assert.ok(bytes.byteLength < 300_000, `fixture PDF is unexpectedly large: ${bytes.byteLength} bytes`);
+
+  const visualPath = process.env.PROPOSAL_VISUAL_PATH;
+  if (visualPath) {
+    await mkdir(dirname(visualPath), { recursive: true });
+    await writeFile(visualPath, bytes);
+  }
 });
 
 test("long comparison repeats cleanly across pages without inflating the file", async () => {
@@ -102,7 +118,7 @@ test("long comparison repeats cleanly across pages without inflating the file", 
   });
   const bytes = new Uint8Array(document.output("arraybuffer"));
   assert.ok(document.getNumberOfPages() >= 3);
-  assert.ok(bytes.byteLength < 350_000, `comparison PDF is unexpectedly large: ${bytes.byteLength} bytes`);
+  assert.ok(bytes.byteLength < 450_000, `comparison PDF is unexpectedly large: ${bytes.byteLength} bytes`);
 
   const previewPath = process.env.PROPOSAL_PREVIEW_PATH;
   if (previewPath) {

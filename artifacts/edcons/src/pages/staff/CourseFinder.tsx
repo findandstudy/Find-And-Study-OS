@@ -334,7 +334,12 @@ export default function CourseFinder() {
     logoUrl?: string | null;
     logoSquareUrl?: string | null;
     pdfLogoUrl?: string | null;
+    pdfPrimaryColor?: string | null;
     pdfAccentColor?: string | null;
+    themePrimary?: string | null;
+    themeSecondary?: string | null;
+    themeAccent?: string | null;
+    themeSuccess?: string | null;
   }>({
     queryKey: ["settings-for-pdf"],
     queryFn: () => apiFetch(`${BASE_URL}/api/settings`),
@@ -431,7 +436,12 @@ export default function CourseFinder() {
         agentShareRate: agentShareRate ?? null,
         serviceFeeMarkup: pdfMarkup !== 0 ? pdfMarkup : undefined,
         hideServiceFee: hideServiceFee || effectiveForceHideServiceFee,
-        accentColor: settings?.pdfAccentColor || undefined,
+        // A PDF-specific override wins. Otherwise white-label proposals inherit
+        // the tenant theme automatically, with safe defaults in the generator.
+        primaryColor: settings?.pdfPrimaryColor || settings?.themePrimary || undefined,
+        secondaryColor: settings?.themeSecondary || settings?.themePrimary || undefined,
+        accentColor: settings?.pdfAccentColor || settings?.themeAccent || undefined,
+        successColor: settings?.themeSuccess || undefined,
       });
       toast({ title: t("courseFinderPage.pdfGenerated"), description: t("courseFinderPage.proposalDownloaded", { n: selected.length }) });
     } catch (err: any) {

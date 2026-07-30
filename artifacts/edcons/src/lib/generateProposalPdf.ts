@@ -4,6 +4,7 @@ export type ProposalProgramData = {
   id: number;
   name: string;
   degree?: string | null;
+  field?: string | null;
   language?: string | null;
   duration?: string | null;
   tuitionFee?: number | null;
@@ -34,39 +35,28 @@ export type ProposalOptions = {
   agentShareRate?: number | null;
   serviceFeeMarkup?: number;
   hideServiceFee?: boolean;
+  primaryColor?: string | null;
+  secondaryColor?: string | null;
   accentColor?: string | null;
+  successColor?: string | null;
   generatedAt?: Date;
 };
 
 type Rgb = readonly [number, number, number];
 
 const NAVY: Rgb = [15, 23, 42];
-const BODY: Rgb = [71, 85, 105];
+const BODY: Rgb = [51, 65, 85];
 const MUTED: Rgb = [100, 116, 139];
 const SUBTLE: Rgb = [148, 163, 184];
-const BORDER: Rgb = [226, 232, 240];
+const BORDER: Rgb = [218, 226, 238];
 const LIGHT_BG: Rgb = [248, 250, 252];
 const WHITE: Rgb = [255, 255, 255];
-const EMERALD: Rgb = [5, 150, 105];
-const EMERALD_BG: Rgb = [236, 253, 245];
-const RED: Rgb = [220, 38, 38];
-const RED_BG: Rgb = [254, 242, 242];
-const DEFAULT_ACCENT: Rgb = [30, 64, 175];
-
-type Column = {
-  key: "program" | "degree" | "location" | "language" | "fees" | "availability";
-  label: string;
-  width: number;
-};
-
-const COLUMNS: Column[] = [
-  { key: "program", label: "PROGRAM DETAILS", width: 54 },
-  { key: "degree", label: "DEGREE", width: 21 },
-  { key: "location", label: "LOCATION", width: 27 },
-  { key: "language", label: "LANGUAGE", width: 19 },
-  { key: "fees", label: "FEES", width: 39 },
-  { key: "availability", label: "INTAKE / STATUS", width: 26 },
-];
+const DEFAULT_PRIMARY: Rgb = [17, 43, 91];
+const DEFAULT_SECONDARY: Rgb = [37, 99, 235];
+const DEFAULT_ACCENT: Rgb = [124, 58, 237];
+const DEFAULT_SUCCESS: Rgb = [22, 163, 74];
+const WARNING: Rgb = [194, 65, 12];
+const DANGER: Rgb = [220, 38, 38];
 
 function hexToRgb(hex: string): Rgb | null {
   const clean = hex.replace(/^#/, "");
@@ -78,11 +68,19 @@ function hexToRgb(hex: string): Rgb | null {
   ];
 }
 
+function mix(color: Rgb, target: Rgb, amount: number): Rgb {
+  const ratio = Math.max(0, Math.min(1, amount));
+  return [
+    Math.round(color[0] + (target[0] - color[0]) * ratio),
+    Math.round(color[1] + (target[1] - color[1]) * ratio),
+    Math.round(color[2] + (target[2] - color[2]) * ratio),
+  ];
+}
+
 /**
- * jsPDF's compact built-in Helvetica font is intentionally retained to keep
- * proposals small enough for email and WhatsApp. Transliteration prevents
- * unsupported glyphs from rendering as black boxes without embedding a large
- * Unicode font in every proposal.
+ * jsPDF's compact built-in Helvetica font keeps proposals small enough for
+ * WhatsApp and email. Transliteration prevents unsupported glyphs from
+ * rendering as black boxes without embedding a large Unicode font.
  */
 export function proposalPdfText(value: unknown): string {
   return String(value ?? "")
@@ -126,6 +124,23 @@ export function getProposalServiceFee(
   return total > 0 ? total : null;
 }
 
+export function getProposalFirstYearTotal(
+  program: Pick<
+    ProposalProgramData,
+    "discountedFee" | "tuitionFee" | "applicationFee" | "serviceFeeAmount"
+  >,
+  serviceFeeMarkup = 0,
+  hideServiceFee = false,
+): number | null {
+  // When service fees are hidden, a combined total could reveal the hidden
+  // value by subtraction. Do not expose a derived total in that mode.
+  if (hideServiceFee) return null;
+  const tuition = program.discountedFee ?? program.tuitionFee;
+  if (tuition == null || !Number.isFinite(tuition)) return null;
+  const serviceFee = getProposalServiceFee(program, serviceFeeMarkup, false) ?? 0;
+  return tuition + Math.max(0, program.applicationFee ?? 0) + serviceFee;
+}
+
 export function getProposalDateTime(date = new Date()): { date: string; time: string } {
   const turkeyDate = new Intl.DateTimeFormat("en-GB", {
     timeZone: "Europe/Istanbul",
@@ -158,11 +173,6 @@ async function blobAsDataUrl(blob: Blob): Promise<string | null> {
   });
 }
 
-/**
- * Normalise the only bitmap in the proposal - the preparing organisation's
- * logo - before it reaches jsPDF. University logos are deliberately omitted
- * from the comparison table to keep multi-page WhatsApp attachments small.
- */
 async function compressLogoBlob(blob: Blob, maxSide: number, quality: number): Promise<string | null> {
   if (typeof document === "undefined" || typeof createImageBitmap === "undefined") {
     return blobAsDataUrl(blob);
@@ -176,7 +186,7 @@ async function compressLogoBlob(blob: Blob, maxSide: number, quality: number): P
     const context = canvas.getContext("2d");
     if (!context) {
       bitmap.close();
-      return blobAsDataUrl(blob);
+      return null;
     }
 
     context.fillStyle = "#ffffff";
@@ -188,7 +198,22 @@ async function compressLogoBlob(blob: Blob, maxSide: number, quality: number): P
     bitmap.close();
     return canvas.toDataURL("image/jpeg", quality);
   } catch {
-    return blobAsDataUrl(blob);
+    return null;
+  }
+}
+
+async function loadCompressedLogo(
+  source: string | null | undefined,
+  maxSide: number,
+  quality: number,
+): Promise<string | null> {
+  if (!source) return null;
+  try {
+    const response = await fetch(source);
+    if (!response.ok) return null;
+    return compressLogoBlob(await response.blob(), maxSide, quality);
+  } catch {
+    return null;
   }
 }
 
@@ -196,6 +221,36 @@ function compactWebsite(value: string | undefined): string {
   return proposalPdfText(value ?? "")
     .replace(/^https?:\/\//i, "")
     .replace(/\/$/, "");
+}
+
+function normaliseType(value: string | null | undefined): "public" | "private" | "other" {
+  const normalised = proposalPdfText(value).toLowerCase();
+  if (/public|state|government/.test(normalised)) return "public";
+  if (/private|foundation/.test(normalised)) return "private";
+  return "other";
+}
+
+function commonValue(values: Array<string | null | undefined>, fallback = "Multiple"): string {
+  const nonEmpty = [...new Set(values.map((value) => proposalPdfText(value).trim()).filter(Boolean))];
+  return nonEmpty.length === 1 ? nonEmpty[0] : fallback;
+}
+
+function effectiveTuition(program: ProposalProgramData): number | null {
+  const amount = program.discountedFee ?? program.tuitionFee;
+  return amount != null && Number.isFinite(amount) ? amount : null;
+}
+
+function discountData(program: ProposalProgramData): { saving: number; percent: number } | null {
+  if (
+    program.tuitionFee == null ||
+    program.discountedFee == null ||
+    program.tuitionFee <= 0 ||
+    program.discountedFee >= program.tuitionFee
+  ) {
+    return null;
+  }
+  const saving = program.tuitionFee - program.discountedFee;
+  return { saving, percent: Math.round((saving / program.tuitionFee) * 100) };
 }
 
 export async function buildProposalPdf(options: ProposalOptions): Promise<jsPDF> {
@@ -208,16 +263,22 @@ export async function buildProposalPdf(options: ProposalOptions): Promise<jsPDF>
     companyWebsite,
     serviceFeeMarkup = 0,
     hideServiceFee = false,
+    primaryColor,
+    secondaryColor,
     accentColor,
+    successColor,
     generatedAt = new Date(),
   } = options;
 
+  const primary = (primaryColor && hexToRgb(primaryColor)) || DEFAULT_PRIMARY;
+  const secondary = (secondaryColor && hexToRgb(secondaryColor)) || DEFAULT_SECONDARY;
   const accent = (accentColor && hexToRgb(accentColor)) || DEFAULT_ACCENT;
-  const accentSoft: Rgb = [
-    Math.round(255 - (255 - accent[0]) * 0.09),
-    Math.round(255 - (255 - accent[1]) * 0.09),
-    Math.round(255 - (255 - accent[2]) * 0.09),
-  ];
+  const success = (successColor && hexToRgb(successColor)) || DEFAULT_SUCCESS;
+  const primarySoft = mix(primary, WHITE, 0.92);
+  const secondarySoft = mix(secondary, WHITE, 0.9);
+  const accentSoft = mix(accent, WHITE, 0.9);
+  const successSoft = mix(success, WHITE, 0.9);
+
   const doc = new jsPDF({
     orientation: "portrait",
     unit: "mm",
@@ -229,25 +290,24 @@ export async function buildProposalPdf(options: ProposalOptions): Promise<jsPDF>
 
   const pageW = 210;
   const pageH = 297;
-  const marginX = 12;
+  const marginX = 14;
   const contentW = pageW - marginX * 2;
-  const tableStartY = 51;
-  const tableHeaderH = 9;
-  const footerLineY = pageH - 11;
-  const rowBottomLimit = footerLineY - 3;
+  const footerLineY = pageH - 10.5;
   const { date: dateStr, time: timeStr } = getProposalDateTime(generatedAt);
 
-  const companyLogo = logoDataUrl
-    ? await (async () => {
-        try {
-          const response = await fetch(logoDataUrl);
-          if (response.ok) return compressLogoBlob(await response.blob(), 240, 0.78);
-        } catch {
-          // A data URL can still be passed directly if browser compression fails.
-        }
-        return logoDataUrl;
-      })()
-    : null;
+  const companyLogo = await loadCompressedLogo(logoDataUrl, 160, 0.78);
+  const universityLogos = new Map<string, string | null>();
+  const uniqueLogoUrls = [
+    ...new Set(programs.map((program) => program.universityLogoUrl).filter(Boolean) as string[]),
+  ];
+  const universityLogoAliases = new Map(
+    uniqueLogoUrls.map((url, index) => [url, `proposal-university-logo-${index + 1}`]),
+  );
+  await Promise.all(
+    uniqueLogoUrls.map(async (url) => {
+      universityLogos.set(url, await loadCompressedLogo(url, 72, 0.7));
+    }),
+  );
 
   function setText(color: Rgb) {
     doc.setTextColor(color[0], color[1], color[2]);
@@ -269,150 +329,62 @@ export async function buildProposalPdf(options: ProposalOptions): Promise<jsPDF>
     return `${result.trimEnd()}...`;
   }
 
-  function split(value: unknown, maxWidth: number, maxLines: number): string[] {
-    const lines = doc.splitTextToSize(proposalPdfText(value), maxWidth) as string[];
-    if (lines.length <= maxLines) return lines;
-    const visible = lines.slice(0, maxLines);
-    visible[maxLines - 1] = fitText(`${visible[maxLines - 1]}...`, maxWidth);
-    return visible;
+  function titleCase(value: string): string {
+    return value
+      .toLowerCase()
+      .replace(/\b\w/g, (letter) => letter.toUpperCase());
   }
 
-  function drawCompanyLogo(x: number, y: number, size: number) {
+  function drawFallbackLogo(x: number, y: number, size: number, label: string, color: Rgb) {
     setFill(WHITE);
     setDraw(BORDER);
-    doc.setLineWidth(0.2);
-    doc.roundedRect(x, y, size, size, 1.8, 1.8, "FD");
-    if (!companyLogo) {
-      setFill(accentSoft);
-      doc.roundedRect(x + 1.2, y + 1.2, size - 2.4, size - 2.4, 1.2, 1.2, "F");
-      setText(accent);
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(11);
-      doc.text(
-        proposalPdfText(companyName).trim().slice(0, 1).toUpperCase() || "F",
-        x + size / 2,
-        y + size / 2 + 2,
-        { align: "center" },
-      );
+    doc.setLineWidth(0.25);
+    doc.roundedRect(x, y, size, size, 2, 2, "FD");
+    setText(color);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(Math.max(5.5, size * 0.55));
+    const initials =
+      proposalPdfText(label)
+        .split(/\s+/)
+        .filter(Boolean)
+        .slice(0, 2)
+        .map((part) => part[0])
+        .join("")
+        .toUpperCase() || "U";
+    doc.text(initials, x + size / 2, y + size / 2 + 1.7, { align: "center" });
+  }
+
+  function drawLogo(
+    dataUrl: string | null,
+    x: number,
+    y: number,
+    size: number,
+    label: string,
+    alias: string,
+    fallbackColor: Rgb,
+  ) {
+    if (!dataUrl) {
+      drawFallbackLogo(x, y, size, label, fallbackColor);
       return;
     }
+    setFill(WHITE);
+    setDraw(BORDER);
+    doc.setLineWidth(0.25);
+    doc.roundedRect(x, y, size, size, 2, 2, "FD");
     try {
       doc.addImage(
-        companyLogo,
-        dataUrlFormat(companyLogo),
+        dataUrl,
+        dataUrlFormat(dataUrl),
         x + 0.7,
         y + 0.7,
         size - 1.4,
         size - 1.4,
-        "proposal-company-logo",
+        alias,
         "FAST",
       );
     } catch {
-      // A malformed remote logo must never block proposal creation.
+      drawFallbackLogo(x, y, size, label, fallbackColor);
     }
-  }
-
-  function drawHeader() {
-    const logoSize = 16;
-    const logoX = marginX;
-    const logoY = 8;
-    drawCompanyLogo(logoX, logoY, logoSize);
-
-    const titleX = logoX + logoSize + 4;
-    setText(NAVY);
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(12.5);
-    doc.text(fitText(companyName, 87), titleX, 13.5);
-
-    setText(MUTED);
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(7);
-    doc.text("Comprehensive Programs Proposal", titleX, 19);
-    setText(SUBTLE);
-    doc.setFontSize(6.2);
-    doc.text(`${programs.length} selected program${programs.length === 1 ? "" : "s"}`, titleX, 23);
-
-    const stampW = 52;
-    const stampH = 17;
-    const stampX = pageW - marginX - stampW;
-    const stampY = 8;
-    setFill(LIGHT_BG);
-    doc.roundedRect(stampX, stampY, stampW, stampH, 2, 2, "F");
-    setText(MUTED);
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(5.8);
-    doc.text("PREPARED", stampX + 4, stampY + 5);
-    setText(NAVY);
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(8.2);
-    doc.text(`${dateStr}  ${timeStr}`, stampX + 4, stampY + 10.5);
-    setText(SUBTLE);
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(5.4);
-    doc.text("Europe/Istanbul", stampX + 4, stampY + 14.5);
-
-    setDraw(BORDER);
-    doc.setLineWidth(0.25);
-    doc.line(marginX, 29, pageW - marginX, 29);
-
-    const contacts = [
-      companyPhone ? `Phone  ${proposalPdfText(companyPhone)}` : "",
-      companyEmail ? `Email  ${proposalPdfText(companyEmail)}` : "",
-      companyWebsite ? `Web  ${compactWebsite(companyWebsite)}` : "",
-    ].filter(Boolean);
-    setFill(LIGHT_BG);
-    doc.roundedRect(marginX, 33, contentW, 11, 2, 2, "F");
-    if (contacts.length) {
-      const cellW = contentW / contacts.length;
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(6.4);
-      contacts.forEach((contact, index) => {
-        const x = marginX + index * cellW;
-        if (index > 0) {
-          setDraw(BORDER);
-          doc.setLineWidth(0.2);
-          doc.line(x, 35.5, x, 41.5);
-        }
-        setText(BODY);
-        doc.text(fitText(contact, cellW - 6), x + 3, 39.8);
-      });
-    } else {
-      setText(MUTED);
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(6.4);
-      doc.text("Prepared for student review", marginX + 3, 39.8);
-    }
-  }
-
-  function drawTableHeader() {
-    setFill(accent);
-    doc.roundedRect(marginX, tableStartY, contentW, tableHeaderH, 2, 2, "F");
-    // Square the lower corners so rows join the header cleanly.
-    doc.rect(marginX, tableStartY + tableHeaderH - 2, contentW, 2, "F");
-    let x = marginX;
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(5.4);
-    COLUMNS.forEach((column) => {
-      setText(WHITE);
-      doc.text(column.label, x + 2.4, tableStartY + 5.7);
-      x += column.width;
-    });
-  }
-
-  function programRowHeight(program: ProposalProgramData): number {
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(7.2);
-    const titleLines = Math.min(split(program.name, COLUMNS[0].width - 5, 2).length, 2);
-    const feeLines =
-      2 +
-      (program.discountedFee != null &&
-      program.tuitionFee != null &&
-      program.discountedFee < program.tuitionFee
-        ? 1
-        : 0) +
-      1 +
-      (getProposalServiceFee(program, serviceFeeMarkup, hideServiceFee) != null ? 1 : 0);
-    return Math.max(22, 9 + titleLines * 3.7, 8 + feeLines * 3.2);
   }
 
   function drawPill(
@@ -422,202 +394,523 @@ export async function buildProposalPdf(options: ProposalOptions): Promise<jsPDF>
     maxWidth: number,
     foreground: Rgb,
     background: Rgb,
-  ) {
-    const safe = fitText(text, maxWidth - 4);
+    height = 4.5,
+  ): number {
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(5.4);
+    doc.setFontSize(5.1);
+    const safe = fitText(text, maxWidth - 4);
     const width = Math.min(maxWidth, Math.max(10, doc.getTextWidth(safe) + 4));
     setFill(background);
-    doc.roundedRect(x, y, width, 4.8, 1.6, 1.6, "F");
+    doc.roundedRect(x, y, width, height, height / 2, height / 2, "F");
     setText(foreground);
-    doc.text(safe, x + width / 2, y + 3.25, { align: "center" });
+    doc.text(safe, x + width / 2, y + height * 0.68, { align: "center" });
+    return width;
   }
 
-  function drawProgramRow(program: ProposalProgramData, rowIndex: number, y: number, height: number) {
-    const currency = program.currency || "USD";
-    const effectiveTuition = program.discountedFee ?? program.tuitionFee;
-    const hasDiscount =
-      program.discountedFee != null &&
-      program.tuitionFee != null &&
-      program.discountedFee < program.tuitionFee;
-    const serviceFee = getProposalServiceFee(program, serviceFeeMarkup, hideServiceFee);
+  function drawHeader(pageNumber: number) {
+    const compact = pageNumber > 1;
+    const height = compact ? 28 : 39;
+    setFill(primary);
+    doc.rect(0, 0, pageW, height, "F");
+    setFill(mix(primary, secondary, 0.55));
+    doc.triangle(145, 0, pageW, 0, pageW, height, "F");
+    setFill(secondary);
+    doc.triangle(182, 0, pageW, 0, pageW, height, "F");
 
-    setFill(rowIndex % 2 === 0 ? WHITE : LIGHT_BG);
-    doc.rect(marginX, y, contentW, height, "F");
+    const logoSize = compact ? 12 : 14;
+    const logoX = marginX;
+    const logoY = compact ? 7 : 10.5;
+    drawLogo(
+      companyLogo,
+      logoX,
+      logoY,
+      logoSize,
+      companyName,
+      "proposal-company-logo",
+      primary,
+    );
 
-    let x = marginX;
-    setDraw(BORDER);
-    doc.setLineWidth(0.15);
-    COLUMNS.slice(0, -1).forEach((column) => {
-      x += column.width;
-      doc.line(x, y + 2, x, y + height - 2);
-    });
-    doc.line(marginX, y + height, marginX + contentW, y + height);
-
-    // Program and university.
-    x = marginX;
-    setFill(accent);
-    doc.circle(x + 3.1, y + 6.2, 1.2, "F");
-    setText(NAVY);
+    const titleX = logoX + logoSize + 3.5;
+    setText(WHITE);
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(7.2);
-    const titleLines = split(program.name, COLUMNS[0].width - 8, 2);
-    titleLines.forEach((line, index) => doc.text(line, x + 6, y + 5.4 + index * 3.7));
-    const universityY = y + 7.1 + titleLines.length * 3.7;
-    setText(MUTED);
+    doc.setFontSize(compact ? 12 : 14);
+    doc.text(fitText(companyName.toUpperCase(), compact ? 92 : 103), titleX, compact ? 13.5 : 16.5);
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(5.9);
-    doc.text(fitText(program.universityName, COLUMNS[0].width - 8), x + 6, universityY);
-    if (program.duration) {
-      setText(SUBTLE);
-      doc.setFontSize(5.3);
-      doc.text(fitText(program.duration, COLUMNS[0].width - 8), x + 6, universityY + 3.3);
-    }
+    doc.setFontSize(compact ? 6 : 6.8);
+    setText(mix(WHITE, primary, 0.12));
+    doc.text(
+      compact ? "PROGRAM PROPOSAL - CONTINUED" : "GLOBAL EDUCATION CONSULTANCY",
+      titleX,
+      compact ? 18.2 : 21.8,
+    );
 
-    // Degree.
-    x += COLUMNS[0].width;
-    drawPill(program.degree || "-", x + 2.3, y + 4, COLUMNS[1].width - 4.6, accent, accentSoft);
-
-    // Location.
-    x += COLUMNS[1].width;
-    setText(NAVY);
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(6.2);
-    const city = program.universityCity || "-";
-    doc.text(fitText(city, COLUMNS[2].width - 5), x + 2.4, y + 6);
-    setText(MUTED);
+    const rightX = pageW - marginX;
+    setText(mix(WHITE, primary, 0.13));
     doc.setFont("helvetica", "normal");
     doc.setFontSize(5.8);
-    split(program.universityCountry || "-", COLUMNS[2].width - 5, 2).forEach((line, index) => {
-      doc.text(line, x + 2.4, y + 10 + index * 3);
-    });
-    if (program.universityType) {
-      setText(SUBTLE);
-      doc.setFontSize(5.3);
-      doc.text(fitText(program.universityType, COLUMNS[2].width - 5), x + 2.4, y + height - 3);
-    }
-
-    // Language.
-    x += COLUMNS[2].width;
-    setText(NAVY);
+    doc.text(compact ? "Prepared" : "Prepared for", rightX, compact ? 9 : 12, { align: "right" });
+    setText(WHITE);
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(6.2);
-    split(program.language || "-", COLUMNS[3].width - 5, 3).forEach((line, index) => {
-      doc.text(line, x + 2.4, y + 6 + index * 3.3);
+    doc.setFontSize(compact ? 7.8 : 9.2);
+    doc.text(compact ? `${dateStr} ${timeStr}` : "Student Review", rightX, compact ? 14 : 17.5, {
+      align: "right",
     });
-
-    // Fees. Commission remains intentionally absent from student proposals.
-    x += COLUMNS[3].width;
-    setText(MUTED);
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(5.1);
-    doc.text("TUITION", x + 2.4, y + 4.5);
-    setText(hasDiscount ? EMERALD : NAVY);
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(7.8);
-    doc.text(fitText(fmt(effectiveTuition, currency), COLUMNS[4].width - 5), x + 2.4, y + 8.5);
-    let feeY = y + 12;
-    if (hasDiscount) {
-      const original = fmt(program.tuitionFee, currency);
-      setText(SUBTLE);
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(5.3);
-      doc.text(`Was ${original}`, x + 2.4, feeY);
-      feeY += 3.1;
-    }
-    setText(BODY);
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(5.3);
+    doc.setFontSize(5.8);
+    setText(mix(WHITE, primary, 0.13));
     doc.text(
-      fitText(`Application  ${feeOrFree(program.applicationFee, currency)}`, COLUMNS[4].width - 5),
-      x + 2.4,
-      feeY,
+      compact ? `${programs.length} selected programs` : `${dateStr} - ${timeStr} Istanbul`,
+      rightX,
+      compact ? 19 : 24,
+      { align: "right" },
     );
-    feeY += 3.1;
-    if (serviceFee != null) {
-      doc.text(
-        fitText(`Service  ${fmt(serviceFee, currency)}`, COLUMNS[4].width - 5),
-        x + 2.4,
-        feeY,
+    if (!compact) {
+      drawPill(
+        `${programs.length} selected program${programs.length === 1 ? "" : "s"}`,
+        rightX - 31,
+        27,
+        31,
+        WHITE,
+        mix(primary, WHITE, 0.22),
+        5.4,
       );
     }
+  }
 
-    // Intake and status.
-    x += COLUMNS[4].width;
+  function drawSectionLabel(text: string, x: number, y: number) {
+    setText(MUTED);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(5.6);
+    doc.text(proposalPdfText(text).toUpperCase(), x, y, { charSpace: 0.9 });
+  }
+
+  function drawOverview() {
+    const top = 46;
+    drawSectionLabel("Your selection at a glance", marginX, top);
+
+    setFill(WHITE);
+    setDraw(BORDER);
+    doc.setLineWidth(0.25);
+    doc.roundedRect(marginX, top + 3, 112, 20, 3, 3, "FD");
+    doc.roundedRect(marginX + 115, top + 3, contentW - 115, 20, 3, 3, "FD");
+
+    const summaryValues = [
+      commonValue(programs.map((program) => program.degree)),
+      commonValue(programs.map((program) => program.field), ""),
+      commonValue(programs.map((program) => program.language)),
+      commonValue(programs.map((program) => program.duration), ""),
+      commonValue(programs.map((program) => program.universityCountry)),
+      commonValue(programs.map((program) => program.intakes)),
+    ].filter(Boolean);
+    let chipX = marginX + 4;
+    let chipY = top + 6.5;
+    for (const value of summaryValues) {
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(5.5);
+      const width = Math.min(34, Math.max(14, doc.getTextWidth(value) + 7));
+      if (chipX + width > marginX + 108) {
+        chipX = marginX + 4;
+        chipY += 7.2;
+      }
+      setFill(primarySoft);
+      setDraw(mix(primary, WHITE, 0.78));
+      doc.roundedRect(chipX, chipY, width, 5.8, 1.8, 1.8, "FD");
+      setText(primary);
+      doc.text(fitText(value, width - 5), chipX + width / 2, chipY + 3.8, { align: "center" });
+      chipX += width + 2;
+    }
+
+    const tuitionValues = programs
+      .map(effectiveTuition)
+      .filter((value): value is number => value != null);
+    const minTuition = tuitionValues.length ? Math.min(...tuitionValues) : null;
+    const maxTuition = tuitionValues.length ? Math.max(...tuitionValues) : null;
+    const displayCurrency = commonValue(programs.map((program) => program.currency), "USD");
+    const publicCount = programs.filter(
+      (program) => normaliseType(program.universityType) === "public",
+    ).length;
+    const privateCount = programs.filter(
+      (program) => normaliseType(program.universityType) === "private",
+    ).length;
+    const statsX = marginX + 119;
+    setText(MUTED);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(5.6);
+    doc.text("Annual tuition range", statsX, top + 10);
+    setText(primary);
+    doc.setFontSize(12);
+    doc.text(
+      minTuition == null
+        ? "-"
+        : `${fmt(minTuition, displayCurrency)} - ${fmt(maxTuition, displayCurrency)}`,
+      statsX,
+      top + 16,
+    );
     setText(MUTED);
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(5.1);
-    doc.text("INTAKE", x + 2.4, y + 4.5);
-    setText(NAVY);
+    doc.setFontSize(5.3);
+    const countParts = [
+      publicCount ? `${publicCount} public` : "",
+      privateCount ? `${privateCount} private` : "",
+    ].filter(Boolean);
+    doc.text(countParts.join("  |  ") || `${programs.length} universities`, pageW - marginX - 4, top + 20, {
+      align: "right",
+    });
+
+    setFill(secondarySoft);
+    setDraw(mix(secondary, WHITE, 0.7));
+    doc.roundedRect(marginX, top + 27, contentW, 12, 2.6, 2.6, "FD");
+    setFill(secondary);
+    doc.roundedRect(marginX, top + 27, 1.3, 12, 0.65, 0.65, "F");
+    setText(mix(primary, WHITE, 0.18));
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(6);
+    const degree = commonValue(programs.map((program) => program.degree), "selected");
+    const language = commonValue(programs.map((program) => program.language), "multiple languages");
+    doc.text(
+      fitText(
+        `Compare these ${degree} options by tuition, university, location and intake. All fees remain subject to university confirmation.`,
+        contentW - 9,
+      ),
+      marginX + 4,
+      top + 34.5,
+    );
+
+    drawSectionLabel("Data-driven quick picks", marginX, top + 44);
+    drawQuickPicks(top + 47);
+  }
+
+  function drawQuickPicks(y: number) {
+    const available = programs.filter((program) => effectiveTuition(program) != null);
+    const lowestTuition = [...available].sort(
+      (a, b) => (effectiveTuition(a) ?? Infinity) - (effectiveTuition(b) ?? Infinity),
+    )[0];
+    const biggestDiscount = [...programs]
+      .filter((program) => discountData(program))
+      .sort(
+        (a, b) =>
+          (discountData(b)?.percent ?? 0) - (discountData(a)?.percent ?? 0),
+      )[0];
+    const istanbulLowest = [...available]
+      .filter((program) => /istanbul/i.test(program.universityCity || ""))
+      .sort(
+        (a, b) => (effectiveTuition(a) ?? Infinity) - (effectiveTuition(b) ?? Infinity),
+      )[0];
+
+    const firstYearLowest = hideServiceFee
+      ? null
+      : [...programs]
+          .map((program) => ({
+            program,
+            total: getProposalFirstYearTotal(program, serviceFeeMarkup, false),
+          }))
+          .filter((entry): entry is { program: ProposalProgramData; total: number } => entry.total != null)
+          .sort((a, b) => a.total - b.total)[0];
+
+    const picks: Array<{
+      label: string;
+      program: ProposalProgramData | undefined;
+      detail: string;
+      color: Rgb;
+    }> = [
+      {
+        label: firstYearLowest ? "Lowest first-year total" : "Lowest annual tuition",
+        program: firstYearLowest?.program || lowestTuition,
+        detail: firstYearLowest
+          ? `${fmt(firstYearLowest.total, firstYearLowest.program.currency || "USD")} including visible fees`
+          : lowestTuition
+            ? `${fmt(effectiveTuition(lowestTuition), lowestTuition.currency || "USD")} per year`
+            : "Tuition not available",
+        color: success,
+      },
+      {
+        label: biggestDiscount ? "Biggest verified discount" : "Lowest application fee",
+        program:
+          biggestDiscount ||
+          [...programs].sort(
+            (a, b) => (a.applicationFee ?? Infinity) - (b.applicationFee ?? Infinity),
+          )[0],
+        detail: biggestDiscount
+          ? `${discountData(biggestDiscount)?.percent}% discount - save ${fmt(
+              discountData(biggestDiscount)?.saving,
+              biggestDiscount.currency || "USD",
+            )}`
+          : "Compare the application fee",
+        color: WARNING,
+      },
+      {
+        label: istanbulLowest ? "Lowest Istanbul tuition" : "Lowest tuition alternative",
+        program: istanbulLowest || lowestTuition,
+        detail: (istanbulLowest || lowestTuition)
+          ? `${fmt(
+              effectiveTuition(istanbulLowest || lowestTuition),
+              (istanbulLowest || lowestTuition)?.currency || "USD",
+            )} per year`
+          : "Review the selected options",
+        color: accent,
+      },
+    ];
+
+    const gap = 2.3;
+    const width = (contentW - gap * 2) / 3;
+    picks.forEach((pick, index) => {
+      const x = marginX + index * (width + gap);
+      setFill(WHITE);
+      setDraw(BORDER);
+      doc.setLineWidth(0.25);
+      doc.roundedRect(x, y, width, 14.8, 2.5, 2.5, "FD");
+      setText(pick.color);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(4.7);
+      doc.text(pick.label.toUpperCase(), x + 3, y + 4.2, { charSpace: 0.35 });
+      setText(primary);
+      doc.setFontSize(6.5);
+      doc.text(fitText(pick.program?.universityName || "No data", width - 6), x + 3, y + 8.5);
+      setText(MUTED);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(5.1);
+      doc.text(fitText(pick.detail, width - 6), x + 3, y + 12.3);
+    });
+  }
+
+  function drawProgramRow(program: ProposalProgramData, rank: number, y: number, featured: boolean) {
+    const height = 17.4;
+    const currency = program.currency || "USD";
+    const tuition = effectiveTuition(program);
+    const discount = discountData(program);
+    const serviceFee = getProposalServiceFee(program, serviceFeeMarkup, hideServiceFee);
+    const firstYearTotal = getProposalFirstYearTotal(program, serviceFeeMarkup, hideServiceFee);
+    const status = proposalPdfText(program.universityStatus || "Open").toLowerCase();
+    const isClosed = /closed|inactive/.test(status);
+    const type = normaliseType(program.universityType);
+
+    setFill(WHITE);
+    setDraw(featured ? success : BORDER);
+    doc.setLineWidth(featured ? 0.45 : 0.25);
+    doc.roundedRect(marginX, y, contentW, height, 2.7, 2.7, "FD");
+    if (featured) {
+      setFill(success);
+      doc.roundedRect(marginX, y, 1.2, height, 0.6, 0.6, "F");
+    }
+
+    const middleY = y + height / 2;
+    setFill(primary);
+    doc.circle(marginX + 6, middleY, 3.25, "F");
+    setText(WHITE);
     doc.setFont("helvetica", "bold");
     doc.setFontSize(6.1);
-    split(program.intakes || "-", COLUMNS[5].width - 5, 2).forEach((line, index) => {
-      doc.text(line, x + 2.4, y + 8.5 + index * 3.2);
-    });
-    const status = proposalPdfText(program.universityStatus || "Open").toUpperCase();
-    const isClosed = /CLOSED|INACTIVE/.test(status);
+    doc.text(String(rank), marginX + 6, middleY + 1.4, { align: "center" });
+
+    const logoX = marginX + 12.2;
+    const logoY = y + 2;
+    const logo = program.universityLogoUrl
+      ? universityLogos.get(program.universityLogoUrl) ?? null
+      : null;
+    drawLogo(
+      logo,
+      logoX,
+      logoY,
+      13.4,
+      program.universityName,
+      (program.universityLogoUrl && universityLogoAliases.get(program.universityLogoUrl)) ||
+        `proposal-university-${program.id}`,
+      primary,
+    );
+
+    const textX = logoX + 16;
+    const textMax = 99;
+    setText(primary);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7);
+    doc.text(fitText(program.name, textMax), textX, y + 5.2);
+    setText(BODY);
+    doc.setFontSize(5.8);
+    doc.text(fitText(program.universityName, textMax), textX, y + 8.7);
+
+    setText(MUTED);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(4.9);
+    const location = [program.universityCity, program.universityCountry].filter(Boolean).join(", ") || "-";
+    doc.text(fitText(location, 34), textX, y + 13.4);
+
+    let chipX = textX + Math.min(37, doc.getTextWidth(fitText(location, 34)) + 3);
+    if (type !== "other") {
+      chipX += drawPill(
+        type,
+        chipX,
+        y + 10.2,
+        19,
+        type === "public" ? secondary : accent,
+        type === "public" ? secondarySoft : accentSoft,
+        4.3,
+      ) + 1.2;
+    }
+    if (featured) {
+      drawPill("LOWEST TOTAL", chipX, y + 10.2, 24, success, successSoft, 4.3);
+    } else if (discount) {
+      drawPill(`${discount.percent}% DISCOUNT`, chipX, y + 10.2, 26, success, successSoft, 4.3);
+    }
+
+    const feeRight = pageW - marginX - 30;
+    setText(primary);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(10.2);
+    doc.text(fitText(fmt(tuition, currency), 31), feeRight, y + 6.2, { align: "right" });
+    setText(MUTED);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(4.7);
+    doc.text("/ year", feeRight + 1.5, y + 6.2);
+    if (discount) {
+      setText(SUBTLE);
+      doc.setFontSize(4.4);
+      doc.text(`Was ${fmt(program.tuitionFee, currency)}`, feeRight, y + 9.3, { align: "right" });
+      setText(success);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(4.5);
+      doc.text(`Save ${fmt(discount.saving, currency)} - ${discount.percent}%`, feeRight, y + 12.2, {
+        align: "right",
+      });
+      if (serviceFee != null) {
+        setText(MUTED);
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(4.3);
+        doc.text(`Service fee ${fmt(serviceFee, currency)}`, feeRight, y + 15, { align: "right" });
+      }
+    } else if (serviceFee != null) {
+      setText(MUTED);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(4.5);
+      doc.text(`Service fee ${fmt(serviceFee, currency)}`, feeRight, y + 9.4, { align: "right" });
+    }
+    if (firstYearTotal != null && !discount) {
+      setText(BODY);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(4.6);
+      doc.text(`First year ${fmt(firstYearTotal, currency)}`, feeRight, y + 15, { align: "right" });
+    } else if (serviceFee == null) {
+      setText(MUTED);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(4.4);
+      doc.text(`Application ${feeOrFree(program.applicationFee, currency)}`, feeRight, y + 15, {
+        align: "right",
+      });
+    }
+
+    const statusX = pageW - marginX - 19.5;
     drawPill(
       isClosed ? "CLOSED" : "OPEN",
-      x + 2.4,
-      y + height - 7.2,
-      COLUMNS[5].width - 4.8,
-      isClosed ? RED : EMERALD,
-      isClosed ? RED_BG : EMERALD_BG,
+      statusX,
+      y + 2.5,
+      11.5,
+      isClosed ? DANGER : success,
+      isClosed ? mix(DANGER, WHITE, 0.9) : successSoft,
+      4.2,
+    );
+    setText(primary);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(5.3);
+    doc.text(fitText(program.intakes || "-", 19), statusX + 5.7, y + 10, { align: "center" });
+    setText(MUTED);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(4.2);
+    doc.text(
+      `Application ${feeOrFree(program.applicationFee, currency)}`,
+      statusX + 5.7,
+      y + 13.9,
+      { align: "center" },
     );
   }
 
-  function closeTable(lastY: number) {
-    setDraw(BORDER);
-    doc.setLineWidth(0.25);
-    doc.roundedRect(marginX, tableStartY, contentW, Math.max(tableHeaderH, lastY - tableStartY), 2, 2, "S");
+  function drawProgramsLabel(y: number, continued = false) {
+    drawSectionLabel(
+      continued ? "Programs continued" : "Programs sorted by annual tuition",
+      marginX,
+      y,
+    );
+  }
+
+  function drawCallToAction(y: number) {
+    setFill(primary);
+    doc.roundedRect(marginX, y, contentW, 11.5, 2.5, 2.5, "F");
+    setText(WHITE);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(6.8);
+    doc.text("Ready to move forward?", marginX + 3, y + 4.8);
+    setText(mix(WHITE, primary, 0.18));
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(5.1);
+    doc.text(
+      "Send your preferred choices to your advisor. We will review the documents and prepare the application.",
+      marginX + 3,
+      y + 8.2,
+    );
+    const contactLines = [companyEmail, companyPhone || compactWebsite(companyWebsite)]
+      .filter(Boolean)
+      .map(proposalPdfText);
+    setText(WHITE);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(5.1);
+    contactLines.slice(0, 2).forEach((line, index) => {
+      doc.text(fitText(line, 45), pageW - marginX - 3, y + 4.5 + index * 3.2, { align: "right" });
+    });
   }
 
   function drawFooter(pageNumber: number, totalPages: number) {
     setDraw(BORDER);
     doc.setLineWidth(0.25);
     doc.line(marginX, footerLineY, pageW - marginX, footerLineY);
-    setText(SUBTLE);
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(5.7);
-    const companyFooter = companyEmail
-      ? `${proposalPdfText(companyName)}  |  ${proposalPdfText(companyEmail)}`
-      : proposalPdfText(companyName);
-    doc.text(fitText(companyFooter, 69), marginX, footerLineY + 4);
-    doc.text("Fees and availability are subject to university confirmation.", pageW / 2, footerLineY + 4, {
-      align: "center",
-    });
-    setText(accent);
+    setText(primary);
     doc.setFont("helvetica", "bold");
-    doc.text(`Page ${pageNumber} of ${totalPages}`, pageW - marginX, footerLineY + 4, { align: "right" });
-  }
-
-  drawHeader();
-  drawTableHeader();
-  let y = tableStartY + tableHeaderH;
-  let rowIndex = 0;
-
-  if (!programs.length) {
+    doc.setFontSize(5);
+    doc.text(fitText(companyName.toUpperCase(), 45), marginX, footerLineY + 4);
     setText(MUTED);
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(8);
-    doc.text("No programs were selected.", marginX + 5, y + 12);
-    y += 20;
-  } else {
-    for (const program of programs) {
-      const height = programRowHeight(program);
-      if (y + height > rowBottomLimit) {
-        closeTable(y);
-        doc.addPage();
-        drawHeader();
-        drawTableHeader();
-        y = tableStartY + tableHeaderH;
-      }
-      drawProgramRow(program, rowIndex, y, height);
-      y += height;
-      rowIndex += 1;
-    }
+    doc.text("Program Proposal", marginX + 48, footerLineY + 4);
+    doc.text(`Page ${pageNumber} / ${totalPages}`, pageW - marginX, footerLineY + 4, {
+      align: "right",
+    });
   }
-  closeTable(y);
+
+  const sortedPrograms = [...programs].sort((a, b) => {
+    const left = effectiveTuition(a);
+    const right = effectiveTuition(b);
+    if (left == null && right == null) return a.name.localeCompare(b.name);
+    if (left == null) return 1;
+    if (right == null) return -1;
+    return left - right;
+  });
+
+  const firstPagePrograms = sortedPrograms.slice(0, 7);
+  const remainingPrograms = sortedPrograms.slice(7);
+  const pages: ProposalProgramData[][] = [firstPagePrograms];
+  for (let index = 0; index < remainingPrograms.length; index += 11) {
+    pages.push(remainingPrograms.slice(index, index + 11));
+  }
+
+  pages.forEach((pagePrograms, pageIndex) => {
+    if (pageIndex > 0) doc.addPage();
+    const pageNumber = pageIndex + 1;
+    drawHeader(pageNumber);
+    if (pageNumber === 1) {
+      drawOverview();
+      drawProgramsLabel(108);
+      let rowY = 111;
+      pagePrograms.forEach((program, index) => {
+        drawProgramRow(program, index + 1, rowY, index === 0);
+        rowY += 19.2;
+      });
+      if (pages.length === 1) drawCallToAction(Math.min(266, rowY + 1.5));
+    } else {
+      drawProgramsLabel(35, true);
+      let rowY = 38;
+      pagePrograms.forEach((program, index) => {
+        const absoluteRank = 7 + (pageIndex - 1) * 11 + index + 1;
+        drawProgramRow(program, absoluteRank, rowY, false);
+        rowY += 19.2;
+      });
+      if (pageNumber === pages.length) drawCallToAction(Math.min(267, rowY + 1.5));
+    }
+  });
 
   const totalPages = doc.getNumberOfPages();
   for (let page = 1; page <= totalPages; page++) {
