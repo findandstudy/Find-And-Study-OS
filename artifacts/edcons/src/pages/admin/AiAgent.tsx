@@ -55,6 +55,7 @@ import {
   Plus,
   Trash2,
   Database,
+  RefreshCw,
 } from "lucide-react";
 
 type HistoryDirection = "inbound" | "outbound";
@@ -68,6 +69,12 @@ const ESCALATION_TOPICS: EscalationTopicKey[] = [
 ];
 const TEST_LANGUAGES = ["tr", "en", "ar", "ru", "fr"] as const;
 type TestLanguage = (typeof TEST_LANGUAGES)[number];
+type AiAgentModelOption = {
+  id: string;
+  displayName: string;
+  createdAt?: string;
+  current: boolean;
+};
 
 // Parse a textarea of comma/newline-separated keywords into a clean array.
 function parseKeywords(raw: string): string[] {
@@ -90,6 +97,9 @@ export default function AiAgent() {
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [modelOptions, setModelOptions] = useState<AiAgentModelOption[]>([]);
+  const [modelsLoading, setModelsLoading] = useState(true);
+  const [modelsFallback, setModelsFallback] = useState(false);
 
   // Knowledge Sources — program_scope (FAZ 1 scaffold).
   const [programScopeSource, setProgramScopeSource] =
@@ -163,10 +173,30 @@ export default function AiAgent() {
     }
   }, [t, toast]);
 
+  const loadModels = useCallback(async () => {
+    setModelsLoading(true);
+    try {
+      const result = await customFetch<{
+        source: "provider" | "current_config";
+        models: AiAgentModelOption[];
+      }>("/api/inbox/ai-agent/models");
+      setModelOptions(result.models);
+      setModelsFallback(result.source !== "provider");
+    } catch {
+      // The current configured model is injected below as a local fallback, so
+      // a transient provider/list request failure can never clear the setting.
+      setModelOptions([]);
+      setModelsFallback(true);
+    } finally {
+      setModelsLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     load();
     loadProgramScope();
-  }, [load, loadProgramScope]);
+    loadModels();
+  }, [load, loadModels, loadProgramScope]);
 
   const patch = (p: Partial<AiAgentConfig>) =>
     setConfig((prev) => (prev ? { ...prev, ...p } : prev));
@@ -343,6 +373,17 @@ export default function AiAgent() {
     );
   }
 
+  const selectableModels = modelOptions.some((model) => model.id === config.model)
+    ? modelOptions
+    : [
+        {
+          id: config.model,
+          displayName: config.model,
+          current: true,
+        },
+        ...modelOptions,
+      ];
+
   return (
     <div className="space-y-6 py-2 max-w-4xl">
       {/* Header */}
@@ -413,11 +454,47 @@ export default function AiAgent() {
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="space-y-1.5">
               <Label htmlFor="model">{t("aiAgentAdmin.modelLabel")}</Label>
-              <Input
-                id="model"
-                value={config.model}
-                onChange={(e) => patch({ model: e.target.value })}
-              />
+              <div className="flex gap-2">
+                <Select
+                  value={config.model}
+                  onValueChange={(model) => patch({ model })}
+                  disabled={modelsLoading}
+                >
+                  <SelectTrigger id="model" className="min-w-0">
+                    <SelectValue
+                      placeholder={modelsLoading ? "Loading models..." : "Select a model"}
+                    />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-80">
+                    {selectableModels.map((model) => (
+                      <SelectItem key={model.id} value={model.id}>
+                        {model.displayName === model.id
+                          ? model.id
+                          : `${model.displayName} — ${model.id}`}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="shrink-0"
+                  onClick={loadModels}
+                  disabled={modelsLoading}
+                  title="Refresh available models"
+                  aria-label="Refresh available models"
+                >
+                  <RefreshCw
+                    className={`h-4 w-4 ${modelsLoading ? "animate-spin" : ""}`}
+                  />
+                </Button>
+              </div>
+              {modelsFallback && (
+                <p className="text-xs text-amber-700">
+                  Live model list is unavailable; the saved model remains selected.
+                </p>
+              )}
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="temperature">

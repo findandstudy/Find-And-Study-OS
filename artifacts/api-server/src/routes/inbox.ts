@@ -64,6 +64,7 @@ import {
   writeAiAgentConfig,
   aiAgentConfigPatchSchema,
 } from "../lib/inbox/aiAgentConfig";
+import { loadAnthropicModelOptions } from "../lib/inbox/aiAgentModels";
 import { runBotReplyTest } from "../lib/inbox/botAutoReply";
 import {
   getProgramScopeSource,
@@ -3133,6 +3134,44 @@ router.get(
   async (_req, res): Promise<void> => {
     const config = await getAiAgentConfig();
     res.json({ config });
+  },
+);
+
+// GET /inbox/ai-agent/models — list models available to the configured
+// Anthropic account. Provider failures are fail-soft for this read-only admin
+// control: the saved model remains selectable and the live config is untouched.
+router.get(
+  "/inbox/ai-agent/models",
+  requireAuth,
+  requireRole(...ADMIN_ROLES),
+  async (_req, res): Promise<void> => {
+    const config = await getAiAgentConfig();
+    try {
+      const anthropic = await getAnthropicClient();
+      const models = await loadAnthropicModelOptions(anthropic, config.model);
+      res.json({
+        provider: "anthropic",
+        source: "provider",
+        models,
+      });
+    } catch (err) {
+      console.warn(
+        "[ai-agent-models] provider model list unavailable:",
+        err instanceof Error ? err.message : "unknown error",
+      );
+      res.json({
+        provider: "anthropic",
+        source: "current_config",
+        models: [
+          {
+            id: config.model,
+            displayName: config.model,
+            current: true,
+          },
+        ],
+        warning: "Provider model list is temporarily unavailable.",
+      });
+    }
   },
 );
 

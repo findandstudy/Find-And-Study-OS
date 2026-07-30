@@ -1,8 +1,9 @@
 /**
  * AI Agent admin panel (FAZ 2) — route-level integration test.
  *
- * Covers the three admin-only endpoints added to the inbox router:
+ * Covers the admin-only endpoints added to the inbox router:
  *   - GET  /inbox/ai-agent/config
+ *   - GET  /inbox/ai-agent/models
  *   - PUT  /inbox/ai-agent/config
  *   - POST /inbox/ai-agent/test
  *
@@ -121,6 +122,8 @@ for (const role of ["student", "agent", "sub_agent", "staff", "agent_staff"]) {
     currentUser = { id: 999001, role, isActive: true };
     const get = await apiReq("GET", "/inbox/ai-agent/config");
     assert.equal(get.status, 403, `GET should 403 for ${role}`);
+    const models = await apiReq("GET", "/inbox/ai-agent/models");
+    assert.equal(models.status, 403, `models GET should 403 for ${role}`);
     const put = await apiReq("PUT", "/inbox/ai-agent/config", { enabled: false });
     assert.equal(put.status, 403, `PUT should 403 for ${role}`);
     const post = await apiReq("POST", "/inbox/ai-agent/test", { message: "hi" });
