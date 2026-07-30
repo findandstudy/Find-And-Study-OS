@@ -124,13 +124,14 @@ function intersectWithScope(requested: string | undefined, scope: string[] | "al
  */
 export async function executeSearchProgramsTool(
   input: SearchProgramsToolInput,
+  enforcedUniversityId?: number,
 ): Promise<SearchProgramsToolOutput> {
   const { enabled, scope } = await isProgramSearchToolEnabled();
   if (!enabled) {
     return { disabled: true, count: 0, results: [] };
   }
 
-  const params = scopedParams(input, scope);
+  const params = scopedParams(input, scope, enforcedUniversityId);
   const where = buildProgramFacetConditions(params, undefined, { fuzzyField: true });
 
   const rows = await db
@@ -166,6 +167,7 @@ export async function executeSearchProgramsTool(
 function scopedParams(
   input: SearchProgramsToolInput,
   scope: ProgramScope,
+  enforcedUniversityId?: number,
 ): Record<string, string | undefined> {
   const country = intersectWithScope(input.country, scope.countries);
   const universityType = intersectWithScope(input.universityType, scope.universityTypes);
@@ -173,7 +175,10 @@ function scopedParams(
     country,
     city: input.city,
     universityType,
-    universityId: undefined,
+    universityId:
+      Number.isInteger(enforcedUniversityId) && Number(enforcedUniversityId) > 0
+        ? String(enforcedUniversityId)
+        : undefined,
     level: input.level,
     language: input.language,
     field: input.field,

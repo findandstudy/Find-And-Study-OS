@@ -152,6 +152,7 @@ const channelIcon: Record<string, any> = {
   email: Mail,
   sms: Smartphone,
   web_form: FormInput,
+  web_chat: Bot,
   messenger: Facebook,
   instagram: Instagram,
 };
@@ -163,6 +164,7 @@ const channelColor: Record<string, string> = {
   email: "bg-purple-500/10 text-purple-600",
   sms: "bg-amber-500/10 text-amber-600",
   web_form: "bg-indigo-500/10 text-indigo-600",
+  web_chat: "bg-cyan-500/10 text-cyan-700",
   messenger: "bg-blue-600/10 text-blue-700",
   instagram: "bg-pink-500/10 text-pink-600",
 };
@@ -1473,7 +1475,7 @@ function InboxTab() {
     });
   }
 
-  const channelOptions = ["all", "whatsapp", "messenger", "instagram", "web_form", "email", "sms", "telegram"];
+  const channelOptions = ["all", "whatsapp", "web_chat", "messenger", "instagram", "web_form", "email", "sms", "telegram"];
   const tabs: Array<{ key: typeof tab; label: string; icon: any }> = [
     { key: "all", label: t("messagesPage.all"), icon: Hash },
     { key: "mine", label: t("messagesPage.mine"), icon: UserCheck },
@@ -1757,6 +1759,7 @@ function InboxTab() {
                           channel === "messenger" && "bg-blue-600",
                           channel === "instagram" && "bg-pink-500",
                           channel === "web_form" && "bg-indigo-500",
+                          channel === "web_chat" && "bg-cyan-600",
                           channel === "email" && "bg-purple-500",
                           channel === "sms" && "bg-amber-500",
                           channel === "telegram" && "bg-sky-500"
@@ -1785,6 +1788,7 @@ function InboxTab() {
                           ch === "messenger" && "text-blue-700",
                           ch === "instagram" && "text-pink-600",
                           ch === "web_form" && "text-indigo-600",
+                          ch === "web_chat" && "text-cyan-700",
                           ch === "email" && "text-purple-600",
                           ch === "sms" && "text-amber-600",
                           ch === "telegram" && "text-sky-600"

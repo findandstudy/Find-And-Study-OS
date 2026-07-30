@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { customFetch } from "@workspace/api-client-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, MessageCircle, Send, Mail, Smartphone, MessageSquare, FormInput } from "lucide-react";
+import { Loader2, MessageCircle, Send, Mail, Smartphone, MessageSquare, FormInput, Bot } from "lucide-react";
 import { useI18n } from "@/hooks/use-i18n";
 
 const CHANNEL_ICON: Record<string, any> = {
@@ -12,6 +12,7 @@ const CHANNEL_ICON: Record<string, any> = {
   sms: Smartphone,
   internal: MessageSquare,
   web_form: FormInput,
+  web_chat: Bot,
 };
 
 const CHANNEL_COLOR: Record<string, string> = {
@@ -21,6 +22,7 @@ const CHANNEL_COLOR: Record<string, string> = {
   sms: "bg-amber-500/10 text-amber-600",
   internal: "bg-blue-500/10 text-blue-600",
   web_form: "bg-indigo-500/10 text-indigo-600",
+  web_chat: "bg-cyan-500/10 text-cyan-700",
 };
 
 interface AllMessagingHistoryProps {

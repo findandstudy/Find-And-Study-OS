@@ -1,7 +1,24 @@
 import express, { Router, type IRouter, json } from "express";
 import crypto from "crypto";
-import { db, embedWidgetsTable, embedSubmissionsTable, leadsTable, programsTable, universitiesTable, documentsTable, studentsTable, applicationsTable, usersTable, programDocumentRequirementsTable, settingsTable, countriesTable } from "@workspace/db";
-import { eq, ilike, sql, and, or, desc, inArray, isNotNull, isNull } from "drizzle-orm";
+import {
+  db,
+  embedWidgetsTable,
+  embedSubmissionsTable,
+  leadsTable,
+  programsTable,
+  universitiesTable,
+  documentsTable,
+  studentsTable,
+  applicationsTable,
+  usersTable,
+  programDocumentRequirementsTable,
+  settingsTable,
+  countriesTable,
+  externalContactsTable,
+  conversationsTable,
+  messagesTable,
+} from "@workspace/db";
+import { eq, ilike, sql, and, or, asc, desc, inArray, isNotNull, isNull } from "drizzle-orm";
 import { requireAuth, requireRole, logAudit } from "../lib/auth";
 import { ADMIN_ROLES, STAFF_ROLES } from "../lib/roles";
 import rateLimit from "express-rate-limit";
@@ -21,6 +38,14 @@ import { generateSecureToken } from "../lib/email";
 import { applyLeadAssignmentRules } from "../lib/leadAssignment";
 import { findOrUpsertEmbedLead } from "../lib/embedLeadDedup";
 import { toE164 } from "../lib/inbox/phone";
+import { resolveIdentity } from "../lib/inbox/identityResolver";
+import { maybeAutoReply } from "../lib/inbox/botAutoReply";
+import { inboxBus } from "../lib/inbox/eventBus";
+import { processInboundMessage } from "../lib/inbox/processInbound";
+import {
+  createEmbedChatSessionToken,
+  verifyEmbedChatSessionToken,
+} from "../lib/embedChatSession";
 import { rejectInvalidPhone } from "../lib/phoneValidation";
 import { containsNonLatinLetter, NON_LATIN_NAME_CODE } from "../lib/textNormalize";
 import {
@@ -103,6 +128,7 @@ const router: IRouter = Router();
 // only /apply needs the larger envelope for documents.
 const embedApplyJson = json({ limit: "20mb" });
 const embedLeadJson = json({ limit: "256kb" });
+const embedChatJson = json({ limit: "64kb" });
 
 const EMBED_WINDOW_MS = 15 * 60 * 1000;
 const embedSubmitLimiter = rateLimit({
@@ -112,6 +138,17 @@ const embedSubmitLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: "Too many submissions. Please try again later." },
   store: new PgRateLimitStore(EMBED_WINDOW_MS, "embed-submit"),
+  keyGenerator: (req) => getRateLimitIp(req),
+});
+
+const EMBED_CHAT_WINDOW_MS = 60 * 1000;
+const embedChatLimiter = rateLimit({
+  windowMs: EMBED_CHAT_WINDOW_MS,
+  max: 40,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many chat requests. Please wait a moment." },
+  store: new PgRateLimitStore(EMBED_CHAT_WINDOW_MS, "embed-chat"),
   keyGenerator: (req) => getRateLimitIp(req),
 });
 
@@ -263,6 +300,23 @@ function getBaseUrl(req: any): string {
 const VALID_COLOR_RE = /^#[0-9a-fA-F]{3,8}$/;
 const VALID_RADIUS_RE = /^\d{1,3}(px|rem|em|%)$/;
 const VALID_FONT_RE = /^[a-zA-Z0-9\s,\-'"]+$/;
+const CHAT_TEXT_MAX = 500;
+
+function sanitizeChatText(value: unknown, max = CHAT_TEXT_MAX): string {
+  return typeof value === "string"
+    ? value.replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim().slice(0, max)
+    : "";
+}
+
+function sanitizePublicUrl(value: unknown): string {
+  if (typeof value !== "string" || value.length > 1000) return "";
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" || url.protocol === "http:" ? url.toString() : "";
+  } catch {
+    return "";
+  }
+}
 
 function sanitizeTheme(theme: any): Record<string, string> {
   if (!theme || typeof theme !== "object") return {};
@@ -272,10 +326,22 @@ function sanitizeTheme(theme: any): Record<string, string> {
   if (theme.buttonColor && VALID_COLOR_RE.test(theme.buttonColor)) safe.buttonColor = theme.buttonColor;
   if (theme.borderRadius && VALID_RADIUS_RE.test(theme.borderRadius)) safe.borderRadius = theme.borderRadius;
   if (theme.fontFamily && VALID_FONT_RE.test(theme.fontFamily)) safe.fontFamily = theme.fontFamily;
+  const logoUrl = sanitizePublicUrl(theme.logoUrl);
+  if (logoUrl) safe.logoUrl = logoUrl;
+  const welcomeMessage = sanitizeChatText(theme.welcomeMessage, 400);
+  if (welcomeMessage) safe.welcomeMessage = welcomeMessage;
+  const assistantName = sanitizeChatText(theme.assistantName, 160);
+  if (assistantName) safe.assistantName = assistantName;
   return safe;
 }
 
-const VALID_MODES = ["combined", "course_finder", "application_only", "lead_form"];
+const VALID_MODES = ["combined", "course_finder", "application_only", "lead_form", "ai_chatbot"];
+
+function chatbotUniversityId(presetFilters: unknown): number | null {
+  if (!presetFilters || typeof presetFilters !== "object") return null;
+  const universityId = Number((presetFilters as Record<string, unknown>).universityId);
+  return Number.isInteger(universityId) && universityId > 0 ? universityId : null;
+}
 
 function sanitizeWidget(widget: Record<string, any>, userRole: string): Record<string, any> {
   if (ADMIN_ROLES.includes(userRole)) return widget;
@@ -310,6 +376,10 @@ router.post("/embed/widgets", requireAuth, requireRole(...ADMIN_ROLES), async (r
   const { name, slug, mode, presetFilters, lockedFilters, hiddenFilters, visibleFilters, theme, allowedDomains } = req.body;
   if (!name || !slug) { res.status(400).json({ error: "name and slug are required" }); return; }
   const validMode = VALID_MODES.includes(mode) ? mode : "combined";
+  if (validMode === "ai_chatbot" && !chatbotUniversityId(presetFilters)) {
+    res.status(400).json({ error: "AI chatbot widgets require exactly one universityId preset." });
+    return;
+  }
   const cleanSlug = slug.toLowerCase().replace(/[^a-z0-9-]/g, "-").replace(/-+/g, "-");
   try {
     const isRestricted = Array.isArray(allowedDomains) && allowedDomains.length > 0;
@@ -321,7 +391,7 @@ router.post("/embed/widgets", requireAuth, requireRole(...ADMIN_ROLES), async (r
       lockedFilters: lockedFilters || [],
       hiddenFilters: hiddenFilters || [],
       visibleFilters: visibleFilters || [],
-      theme: theme || {},
+      theme: validMode === "ai_chatbot" ? sanitizeTheme(theme) : (theme || {}),
       allowedDomains: allowedDomains || [],
       // Auto-generate an API key for restricted widgets so it's ready immediately.
       // Open widgets (no allowedDomains) don't need one.
@@ -347,24 +417,38 @@ router.patch("/embed/widgets/:id", requireAuth, requireRole(...ADMIN_ROLES), asy
   if (!/^\d+$/.test(String(req.params.id))) { next(); return; }
   const id = parseInt(String(req.params.id), 10);
   const { name, slug, mode, presetFilters, lockedFilters, hiddenFilters, visibleFilters, theme, allowedDomains, isActive } = req.body;
+  const [current] = await db
+    .select()
+    .from(embedWidgetsTable)
+    .where(eq(embedWidgetsTable.id, id))
+    .limit(1);
+  if (!current) { res.status(404).json({ error: "Widget not found" }); return; }
+  const effectiveMode = mode !== undefined
+    ? (VALID_MODES.includes(mode) ? mode : "combined")
+    : current.mode;
+  const effectivePresetFilters = presetFilters !== undefined
+    ? presetFilters
+    : current.presetFilters;
+  if (effectiveMode === "ai_chatbot" && !chatbotUniversityId(effectivePresetFilters)) {
+    res.status(400).json({ error: "AI chatbot widgets require exactly one universityId preset." });
+    return;
+  }
   const updates: any = {};
   if (name !== undefined) updates.name = name;
   if (slug !== undefined) updates.slug = slug.toLowerCase().replace(/[^a-z0-9-]/g, "-").replace(/-+/g, "-");
-  if (mode !== undefined) updates.mode = VALID_MODES.includes(mode) ? mode : "combined";
+  if (mode !== undefined) updates.mode = effectiveMode;
   if (presetFilters !== undefined) updates.presetFilters = presetFilters;
   if (lockedFilters !== undefined) updates.lockedFilters = lockedFilters;
   if (hiddenFilters !== undefined) updates.hiddenFilters = hiddenFilters;
   if (visibleFilters !== undefined) updates.visibleFilters = visibleFilters;
-  if (theme !== undefined) updates.theme = theme;
+  if (theme !== undefined) updates.theme = effectiveMode === "ai_chatbot" ? sanitizeTheme(theme) : theme;
   if (allowedDomains !== undefined) updates.allowedDomains = allowedDomains;
   if (isActive !== undefined) updates.isActive = isActive;
 
   // If the widget is being made restricted and doesn't yet have an API key,
   // generate one automatically.
   if (allowedDomains !== undefined && Array.isArray(allowedDomains) && allowedDomains.length > 0) {
-    const [current] = await db.select({ embedApiKey: embedWidgetsTable.embedApiKey })
-      .from(embedWidgetsTable).where(eq(embedWidgetsTable.id, id));
-    if (current && !current.embedApiKey) {
+    if (!current.embedApiKey) {
       updates.embedApiKey = generateWidgetApiKey();
     }
   }
@@ -1641,6 +1725,433 @@ router.post("/public/embed/:slug/apply", embedSubmitLimiter, embedApplyJson, asy
   });
 });
 
+type ChatScopeMetadata = {
+  widgetId: number;
+  widgetSlug: string;
+  universityId: number;
+  universityName: string;
+  sourcePageUrl: string | null;
+  sourceWebsite: string | null;
+  assistantName: string;
+};
+
+function readChatScope(metadata: unknown): ChatScopeMetadata | null {
+  if (!metadata || typeof metadata !== "object") return null;
+  const scope = (metadata as Record<string, unknown>).chatbotScope;
+  if (!scope || typeof scope !== "object") return null;
+  const row = scope as Record<string, unknown>;
+  if (
+    !Number.isInteger(row.widgetId) ||
+    !Number.isInteger(row.universityId) ||
+    typeof row.widgetSlug !== "string" ||
+    typeof row.universityName !== "string"
+  ) return null;
+  return scope as ChatScopeMetadata;
+}
+
+async function loadChatSessionConversation(slug: string, sessionToken: string | undefined) {
+  const parsed = verifyEmbedChatSessionToken(getEmbedTokenSecret(), sessionToken, slug);
+  if (!parsed) return null;
+  const [conversation] = await db
+    .select()
+    .from(conversationsTable)
+    .where(and(
+      eq(conversationsTable.id, parsed.conversationId),
+      eq(conversationsTable.channel, "web_chat"),
+      eq(conversationsTable.externalThreadId, `chat:${slug}:${parsed.sessionId}`),
+    ))
+    .limit(1);
+  if (!conversation) return null;
+  const scope = readChatScope(conversation.metadata);
+  if (!scope || scope.widgetSlug !== slug) return null;
+  const [activeWidget] = await db
+    .select({ id: embedWidgetsTable.id })
+    .from(embedWidgetsTable)
+    .where(and(
+      eq(embedWidgetsTable.id, scope.widgetId),
+      eq(embedWidgetsTable.slug, slug),
+      eq(embedWidgetsTable.mode, "ai_chatbot"),
+      eq(embedWidgetsTable.isActive, true),
+    ))
+    .limit(1);
+  if (!activeWidget) return null;
+  return { parsed, conversation, scope };
+}
+
+router.post(
+  "/public/embed/:slug/chat/session",
+  embedChatLimiter,
+  embedChatJson,
+  async (req, res): Promise<void> => {
+    const slug = String(req.params.slug);
+    const [widget] = await db
+      .select()
+      .from(embedWidgetsTable)
+      .where(and(eq(embedWidgetsTable.slug, slug), eq(embedWidgetsTable.isActive, true)));
+    if (!widget || widget.mode !== "ai_chatbot") {
+      res.status(404).json({ error: "Chat widget not found" });
+      return;
+    }
+    if (!checkEmbedAccess(widget, req.query.t as string | undefined)) {
+      res.status(403).json({ error: "Invalid or expired embed token" });
+      return;
+    }
+    setEmbedCors(res, widget, req.headers.origin as string | undefined);
+
+    const {
+      firstName,
+      lastName,
+      email,
+      phone,
+      sourcePageUrl,
+      sourceWebsite,
+      language,
+      _hp,
+    } = req.body as Record<string, unknown>;
+    if (_hp) {
+      res.status(201).json({ success: true });
+      return;
+    }
+    const cleanFirstName = sanitizeChatText(firstName, 100);
+    const cleanLastName = sanitizeChatText(lastName, 100);
+    const cleanEmail = sanitizeChatText(email, 255).toLowerCase();
+    const cleanPhone = sanitizeChatText(phone, 50);
+    if (!cleanFirstName || !cleanLastName || !cleanEmail || !cleanPhone) {
+      res.status(400).json({ error: "firstName, lastName, email and phone are required" });
+      return;
+    }
+    const badField = firstNonLatinNameField([
+      ["firstName", cleanFirstName],
+      ["lastName", cleanLastName],
+    ]);
+    if (badField) {
+      res.status(400).json({ error: `${NON_LATIN_NAME_CODE}:${badField}: Please use Latin letters.` });
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+      res.status(400).json({ error: "Invalid email format" });
+      return;
+    }
+    const phoneE164 = toE164(cleanPhone);
+    if (!phoneE164) {
+      res.status(400).json({ error: "Invalid phone number. Include the country code." });
+      return;
+    }
+
+    const preset = (widget.presetFilters || {}) as Record<string, unknown>;
+    const universityId = Number(preset.universityId);
+    if (!Number.isInteger(universityId) || universityId < 1) {
+      res.status(409).json({ error: "This chatbot is not assigned to a university." });
+      return;
+    }
+    const [university] = await db
+      .select({ id: universitiesTable.id, name: universitiesTable.name, logoUrl: universitiesTable.logoUrl })
+      .from(universitiesTable)
+      .where(and(eq(universitiesTable.id, universityId), eq(universitiesTable.isActive, true)))
+      .limit(1);
+    if (!university) {
+      res.status(409).json({ error: "Assigned university is unavailable." });
+      return;
+    }
+
+    const pageUrl = sanitizePublicUrl(sourcePageUrl) || null;
+    const website = sanitizeChatText(sourceWebsite, 255) || (
+      pageUrl ? (() => { try { return new URL(pageUrl).hostname; } catch { return null; } })() : null
+    );
+    const theme = sanitizeTheme(widget.theme);
+    const assistantName =
+      theme.assistantName || `${university.name} Yetkili Temsilci Başvuru Asistanı`;
+    const displayName = `${cleanFirstName} ${cleanLastName}`.trim();
+
+    try {
+      const identity = await resolveIdentity({ phone: phoneE164, email: cleanEmail });
+      const strong = identity.outcome === "strong"
+        ? identity.candidates.find((candidate) => candidate.type === "student" || candidate.type === "lead")
+        : null;
+      let leadId: number | null = strong?.type === "lead" ? strong.id : null;
+      const studentId: number | null = strong?.type === "student" ? strong.id : null;
+      if (!leadId && !studentId) {
+        const upsert = await findOrUpsertEmbedLead({
+          slug,
+          ip: req.ip,
+          fields: {
+            firstName: tlu(cleanFirstName, 100)!,
+            lastName: tlu(cleanLastName, 100)!,
+            email: cleanEmail,
+            phone: phoneE164,
+            phoneE164,
+            interestedUniversity: university.name,
+            sourcePageUrl: pageUrl,
+            notes: `AI chatbot source: ${website || pageUrl || slug}`,
+          },
+        });
+        leadId = upsert.lead.id;
+      }
+
+      const sessionId = crypto.randomUUID();
+      const externalId = `embed-chat:${slug}:${sessionId}`;
+      const [contact] = await db
+        .insert(externalContactsTable)
+        .values({
+          channel: "web_chat",
+          externalId,
+          displayName,
+          phone: phoneE164,
+          phoneE164,
+          email: cleanEmail,
+          leadId,
+          studentId,
+          metadata: {
+            widgetId: widget.id,
+            widgetSlug: slug,
+            sourcePageUrl: pageUrl,
+            sourceWebsite: website,
+            language: sanitizeChatText(language, 12) || null,
+          },
+        })
+        .returning();
+
+      const scope: ChatScopeMetadata = {
+        widgetId: widget.id,
+        widgetSlug: slug,
+        universityId: university.id,
+        universityName: university.name,
+        sourcePageUrl: pageUrl,
+        sourceWebsite: website,
+        assistantName,
+      };
+      const externalThreadId = `chat:${slug}:${sessionId}`;
+      const [conversation] = await db
+        .insert(conversationsTable)
+        .values({
+          type: "external",
+          title: displayName,
+          channel: "web_chat",
+          externalContactId: contact.id,
+          externalThreadId,
+          unmatched: false,
+          status: "open",
+          botEnabled: true,
+          metadata: {
+            source: "web_chat",
+            chatbotScope: scope,
+          },
+        })
+        .returning();
+
+      const greeting =
+        theme.welcomeMessage ||
+        `Merhaba ${cleanFirstName}, ${university.name} başvurunuz için size yardımcı olabilirim. Hangi bölüm ve eğitim seviyesiyle ilgileniyorsunuz?`;
+      const [greetingMessage] = await db
+        .insert(messagesTable)
+        .values({
+          conversationId: conversation.id,
+          senderId: null,
+          content: greeting,
+          channel: "web_chat",
+          direction: "outbound",
+          status: "sent",
+          sentAt: new Date(),
+          metadata: { botSent: true, botGreeting: true },
+        })
+        .returning();
+      await db
+        .update(conversationsTable)
+        .set({ lastMessageAt: new Date(), lastMessagePreview: greeting.slice(0, 200) })
+        .where(eq(conversationsTable.id, conversation.id));
+      inboxBus.publish({
+        type: "message",
+        conversationId: conversation.id,
+        channel: "web_chat",
+        assignedToId: null,
+        unmatched: false,
+        direction: "outbound",
+      });
+
+      res.status(201).json({
+        success: true,
+        sessionToken: createEmbedChatSessionToken(
+          getEmbedTokenSecret(),
+          slug,
+          sessionId,
+          conversation.id,
+        ),
+        assistantName,
+        universityName: university.name,
+        logoUrl: theme.logoUrl || university.logoUrl || null,
+        greeting: {
+          id: greetingMessage.id,
+          content: greetingMessage.content,
+          direction: greetingMessage.direction,
+          createdAt: greetingMessage.createdAt,
+        },
+      });
+    } catch (err) {
+      console.error("[EMBED CHAT] session creation failed:", err);
+      res.status(500).json({ error: "Could not start the chat." });
+    }
+  },
+);
+
+router.get(
+  "/public/embed/:slug/chat/messages",
+  embedChatLimiter,
+  async (req, res): Promise<void> => {
+    const slug = String(req.params.slug);
+    const session = await loadChatSessionConversation(slug, req.query.s as string | undefined);
+    if (!session) {
+      res.status(403).json({ error: "Invalid or expired chat session" });
+      return;
+    }
+    const afterId = Math.max(0, Number(req.query.after || 0) || 0);
+    const rows = await db
+      .select({
+        id: messagesTable.id,
+        content: messagesTable.content,
+        direction: messagesTable.direction,
+        status: messagesTable.status,
+        createdAt: messagesTable.createdAt,
+      })
+      .from(messagesTable)
+      .where(and(
+        eq(messagesTable.conversationId, session.conversation.id),
+        sql`${messagesTable.id} > ${afterId}`,
+      ))
+      .orderBy(asc(messagesTable.id))
+      .limit(100);
+    res.json({
+      data: rows,
+      botEnabled: session.conversation.botEnabled,
+      needsHuman: session.conversation.needsHuman,
+    });
+  },
+);
+
+router.post(
+  "/public/embed/:slug/chat/messages",
+  embedChatLimiter,
+  embedChatJson,
+  async (req, res): Promise<void> => {
+    const slug = String(req.params.slug);
+    const session = await loadChatSessionConversation(slug, req.query.s as string | undefined);
+    if (!session) {
+      res.status(403).json({ error: "Invalid or expired chat session" });
+      return;
+    }
+    const content = sanitizeChatText(req.body?.content, 2000);
+    if (!content) {
+      res.status(400).json({ error: "Message is required" });
+      return;
+    }
+    const [contact] = session.conversation.externalContactId
+      ? await db
+          .select()
+          .from(externalContactsTable)
+          .where(eq(externalContactsTable.id, session.conversation.externalContactId))
+      : [null];
+    if (!contact) {
+      res.status(409).json({ error: "Chat contact no longer exists" });
+      return;
+    }
+    try {
+      const externalMessageId = `webchat:${crypto.randomUUID()}`;
+      const inbound = await processInboundMessage({
+        channel: "web_chat",
+        channelAccountId: null,
+        contact: {
+          externalId: contact.externalId,
+          displayName: contact.displayName,
+          phone: contact.phoneE164 || contact.phone,
+          email: contact.email,
+        },
+        message: {
+          externalMessageId,
+          externalThreadId: session.conversation.externalThreadId,
+          text: content,
+          receivedAt: new Date(),
+          metadata: {
+            widgetId: session.scope.widgetId,
+            widgetSlug: slug,
+            sourcePageUrl: session.scope.sourcePageUrl,
+            sourceWebsite: session.scope.sourceWebsite,
+          },
+        },
+      });
+      const outcome = await maybeAutoReply({
+        conversationId: inbound.conversationId,
+        inboundMessageId: inbound.messageId,
+      });
+      const rows = await db
+        .select({
+          id: messagesTable.id,
+          content: messagesTable.content,
+          direction: messagesTable.direction,
+          status: messagesTable.status,
+          createdAt: messagesTable.createdAt,
+        })
+        .from(messagesTable)
+        .where(and(
+          eq(messagesTable.conversationId, session.conversation.id),
+          sql`${messagesTable.id} >= ${inbound.messageId}`,
+        ))
+        .orderBy(asc(messagesTable.id))
+        .limit(20);
+      res.status(201).json({ data: rows, outcome });
+    } catch (err) {
+      console.error("[EMBED CHAT] message failed:", err);
+      res.status(500).json({ error: "Message could not be sent." });
+    }
+  },
+);
+
+router.post(
+  "/public/embed/:slug/chat/handoff",
+  embedChatLimiter,
+  embedChatJson,
+  async (req, res): Promise<void> => {
+    const slug = String(req.params.slug);
+    const session = await loadChatSessionConversation(slug, req.query.s as string | undefined);
+    if (!session) {
+      res.status(403).json({ error: "Invalid or expired chat session" });
+      return;
+    }
+    await db
+      .update(conversationsTable)
+      .set({ botEnabled: false, needsHuman: true, status: "open" })
+      .where(eq(conversationsTable.id, session.conversation.id));
+    const [message] = await db
+      .insert(messagesTable)
+      .values({
+        conversationId: session.conversation.id,
+        senderId: null,
+        content: "Ziyaretçi bir insan danışmanla görüşmek istiyor.",
+        channel: "web_chat",
+        direction: "inbound",
+        status: "received",
+        sentAt: new Date(),
+        metadata: { handoffRequested: true, systemEvent: true },
+      })
+      .returning();
+    await db
+      .update(conversationsTable)
+      .set({
+        lastMessageAt: new Date(),
+        lastMessagePreview: message.content,
+        lastInboundAt: new Date(),
+      })
+      .where(eq(conversationsTable.id, session.conversation.id));
+    inboxBus.publish({
+      type: "message",
+      conversationId: session.conversation.id,
+      channel: "web_chat",
+      assignedToId: session.conversation.assignedToId ?? null,
+      unmatched: session.conversation.unmatched,
+      direction: "inbound",
+    });
+    res.json({ success: true });
+  },
+);
+
 router.get("/public/embed/:slug/widget", async (req, res): Promise<void> => {
   const slug = String(req.params.slug);
   const [widget] = await db.select().from(embedWidgetsTable).where(and(eq(embedWidgetsTable.slug, slug), eq(embedWidgetsTable.isActive, true)));
@@ -1653,6 +2164,35 @@ router.get("/public/embed/:slug/widget", async (req, res): Promise<void> => {
   // and requires a valid HMAC session token (obtained via /token with the widget
   // API key header — see the backend-mediated token issuance endpoint).
   const baseUrl = getBaseUrl(req);
+  if (widget.mode === "ai_chatbot") {
+    const preset = (widget.presetFilters || {}) as Record<string, unknown>;
+    const universityId = Number(preset.universityId);
+    const [university] = Number.isInteger(universityId) && universityId > 0
+      ? await db
+          .select({ id: universitiesTable.id, name: universitiesTable.name, logoUrl: universitiesTable.logoUrl })
+          .from(universitiesTable)
+          .where(and(eq(universitiesTable.id, universityId), eq(universitiesTable.isActive, true)))
+          .limit(1)
+      : [null];
+    if (!university) {
+      res.status(409).send("Chatbot university is not configured");
+      return;
+    }
+    let chatHtml = generateChatbotWidgetHTML(slug, baseUrl, widget, university);
+    chatHtml = chatHtml.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "");
+    try {
+      const script = chatHtml.match(/<script[^>]*>([\s\S]*?)<\/script>/)?.[1];
+      if (script) new Function(script);
+    } catch (err) {
+      console.error("[EMBED CHAT] inline script invalid:", err);
+      res.status(500).send("Chat widget is temporarily unavailable");
+      return;
+    }
+    res.setHeader("Content-Type", "text/html");
+    res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+    res.send(chatHtml);
+    return;
+  }
   const docMeta = await loadDocCatalogForEmbed();
   // Source phone dial codes from the country catalog (active + dial-coded only)
   // so admins control them centrally. Tuples are [dialCode, isoAlpha2, name].
@@ -1838,10 +2378,24 @@ function generateEmbedScript(baseUrl: string): string {
       }, 1500);
     }
     window.addEventListener('message', function(e) {
+      if (e.source !== iframe.contentWindow) return;
       var d = e.data;
       if (!d || d.slug !== slug) return;
       if (d.type === 'edcons-resize') {
         iframe.style.height = d.height + 'px';
+      } else if (d.type === 'edcons-chatbot-ready' || d.type === 'edcons-chatbot-layout') {
+        var open = !!d.open;
+        iframe.style.position = 'fixed';
+        iframe.style.right = open ? '10px' : '12px';
+        iframe.style.bottom = open ? '10px' : '12px';
+        iframe.style.zIndex = '2147483000';
+        iframe.style.background = 'transparent';
+        iframe.style.width = open ? 'min(410px, 100vw)' : '84px';
+        iframe.style.height = open ? 'min(640px, 100vh)' : '84px';
+        iframe.style.maxWidth = '100vw';
+        iframe.style.maxHeight = '100vh';
+        iframe.style.colorScheme = 'light';
+        iframe.setAttribute('title', 'University application chat assistant');
       } else if (d.type === 'edcons-modal-open') {
         try{
           // Always scroll the iframe top to the top of the host viewport
@@ -1874,6 +2428,240 @@ function generateEmbedScript(baseUrl: string): string {
     });
   });
 })();`;
+}
+
+function htmlEscape(value: unknown): string {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+export function generateChatbotWidgetHTML(
+  slug: string,
+  baseUrl: string,
+  widget: any,
+  university: { id: number; name: string; logoUrl: string | null },
+): string {
+  const theme = sanitizeTheme(widget.theme);
+  const primaryColor = theme.primaryColor || "#123f9c";
+  const buttonColor = theme.buttonColor || primaryColor;
+  const radius = theme.borderRadius || "18px";
+  const logoUrl = theme.logoUrl || sanitizePublicUrl(university.logoUrl) || "";
+  const assistantName =
+    theme.assistantName || `${university.name} Yetkili Temsilci Başvuru Asistanı`;
+  const safeConfig = JSON.stringify({
+    slug,
+    baseUrl,
+    universityName: university.name,
+    assistantName,
+    logoUrl,
+  }).replace(/</g, "\\u003c");
+
+  return `<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+  <title>${htmlEscape(assistantName)}</title>
+  <style>
+    :root{--primary:${primaryColor};--button:${buttonColor};--radius:${radius};--ink:#101828;--muted:#667085;--line:#e4e7ec;--soft:#f6f8fc}
+    *{box-sizing:border-box}
+    html,body{margin:0;background:transparent;font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:var(--ink)}
+    body{min-height:76px}
+    button,input,textarea{font:inherit}
+    #root{position:fixed;right:8px;bottom:8px;width:min(390px,calc(100vw - 16px));z-index:10}
+    .launcher{margin-left:auto;width:62px;height:62px;border:0;border-radius:50%;background:var(--button);color:#fff;display:grid;place-items:center;cursor:pointer;box-shadow:0 14px 34px rgba(16,24,40,.28)}
+    .launcher svg{width:28px;height:28px}
+    .panel{display:none;height:min(620px,calc(100vh - 18px));background:#fff;border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;box-shadow:0 22px 60px rgba(16,24,40,.24);grid-template-rows:auto 1fr auto}
+    .panel.open{display:grid}
+    .header{background:linear-gradient(135deg,var(--primary),var(--button));padding:14px 14px 13px;color:#fff;display:grid;grid-template-columns:44px 1fr auto;gap:10px;align-items:center}
+    .brand-logo{width:44px;height:44px;border-radius:12px;background:#fff;object-fit:contain;padding:4px}
+    .brand-fallback{width:44px;height:44px;border-radius:12px;background:rgba(255,255,255,.2);display:grid;place-items:center;font-weight:800;font-size:19px}
+    .header-title{font-weight:750;font-size:14px;line-height:1.25}
+    .header-sub{font-size:11px;opacity:.86;margin-top:3px}
+    .header-actions{display:flex;gap:4px}
+    .icon-btn{border:0;background:rgba(255,255,255,.16);color:#fff;width:34px;height:34px;border-radius:10px;cursor:pointer;display:grid;place-items:center}
+    .content{min-height:0;overflow-y:auto;background:var(--soft);padding:14px}
+    .intro{background:#fff;border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:12px}
+    .intro h3{font-size:15px;margin:0 0 5px}
+    .intro p{font-size:12px;color:var(--muted);margin:0;line-height:1.5}
+    .form{display:grid;gap:9px}
+    .form-row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+    label{font-size:11px;font-weight:700;color:#344054}
+    input{width:100%;border:1px solid #d0d5dd;border-radius:10px;padding:10px 11px;margin-top:4px;outline:none;background:#fff}
+    input:focus,textarea:focus{border-color:var(--primary);box-shadow:0 0 0 3px color-mix(in srgb,var(--primary) 14%,transparent)}
+    .primary-btn{border:0;border-radius:11px;background:var(--button);color:#fff;font-weight:750;padding:11px 15px;cursor:pointer}
+    .primary-btn:disabled{opacity:.55;cursor:wait}
+    .privacy{font-size:10px;color:var(--muted);line-height:1.4}
+    #messages{display:none;flex-direction:column;gap:8px}
+    .message{max-width:84%;border-radius:14px;padding:10px 12px;font-size:13px;line-height:1.45;white-space:pre-wrap;word-break:break-word}
+    .message.inbound{align-self:flex-end;background:var(--primary);color:#fff;border-bottom-right-radius:4px}
+    .message.outbound{align-self:flex-start;background:#fff;border:1px solid var(--line);border-bottom-left-radius:4px}
+    .message-time{font-size:9px;opacity:.65;margin-top:4px;text-align:right}
+    .typing{display:none;align-self:flex-start;background:#fff;border:1px solid var(--line);border-radius:14px;padding:9px 12px;font-size:11px;color:var(--muted)}
+    .composer{display:none;background:#fff;border-top:1px solid var(--line);padding:10px;grid-template-columns:1fr auto;gap:8px;align-items:end}
+    textarea{resize:none;min-height:42px;max-height:94px;border:1px solid #d0d5dd;border-radius:12px;padding:10px 11px;outline:none}
+    .send{width:42px;height:42px;border:0;border-radius:12px;background:var(--button);color:#fff;cursor:pointer;font-size:18px}
+    .status{font-size:11px;color:var(--muted);text-align:center;padding:5px}
+    .error{font-size:11px;color:#b42318;background:#fef3f2;border-radius:8px;padding:8px;display:none}
+    @media(max-width:520px){#root{right:0;bottom:0;width:100vw}.panel{height:100dvh;border-radius:0;border:0}.launcher{margin-right:12px;margin-bottom:12px}}
+  </style>
+</head>
+<body>
+  <div id="root">
+    <button id="launcher" class="launcher" aria-label="Başvuru asistanını aç">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"/></svg>
+    </button>
+    <section id="panel" class="panel" aria-label="${htmlEscape(assistantName)}">
+      <header class="header">
+        ${logoUrl
+          ? `<img class="brand-logo" src="${htmlEscape(logoUrl)}" alt="${htmlEscape(university.name)}">`
+          : `<div class="brand-fallback">${htmlEscape(university.name.slice(0, 1).toUpperCase())}</div>`}
+        <div><div class="header-title">${htmlEscape(assistantName)}</div><div class="header-sub">Çevrimiçi • Güvenli başvuru desteği</div></div>
+        <div class="header-actions">
+          <button id="handoff" class="icon-btn" title="İnsan danışman iste" aria-label="İnsan danışman iste">♙</button>
+          <button id="close" class="icon-btn" title="Kapat" aria-label="Kapat">×</button>
+        </div>
+      </header>
+      <main id="content" class="content">
+        <div id="lead">
+          <div class="intro"><h3>Merhaba 👋</h3><p>Size doğru başvuru desteğini verebilmemiz için iletişim bilgilerinizi girin. Bilgileriniz mevcut kaydınızla otomatik eşleştirilir.</p></div>
+          <form id="leadForm" class="form">
+            <div class="form-row">
+              <label>Ad<input name="firstName" required maxlength="100" autocomplete="given-name"></label>
+              <label>Soyad<input name="lastName" required maxlength="100" autocomplete="family-name"></label>
+            </div>
+            <label>E-posta<input name="email" type="email" required maxlength="255" autocomplete="email"></label>
+            <label>Telefon (ülke koduyla)<input name="phone" type="tel" required maxlength="50" placeholder="+90..." autocomplete="tel"></label>
+            <input name="_hp" tabindex="-1" autocomplete="off" style="position:absolute;left:-9999px" aria-hidden="true">
+            <div id="formError" class="error"></div>
+            <button class="primary-btn" type="submit">Sohbeti başlat</button>
+            <div class="privacy">Verdiğiniz bilgiler başvuru desteği için mevcut CRM kaydınızla güvenli biçimde eşleştirilir.</div>
+          </form>
+        </div>
+        <div id="messages"></div>
+        <div id="typing" class="typing">Asistan yazıyor…</div>
+        <div id="status" class="status"></div>
+      </main>
+      <footer id="composer" class="composer">
+        <textarea id="messageInput" maxlength="2000" rows="1" placeholder="Mesajınızı yazın..."></textarea>
+        <button id="send" class="send" aria-label="Gönder">➤</button>
+      </footer>
+    </section>
+  </div>
+  <script>
+  (function(){
+    'use strict';
+    var cfg=${safeConfig};
+    var accessToken=new URLSearchParams(location.search).get('t')||'';
+    var storageKey='edcons-chat-session:'+cfg.slug;
+    var sessionToken=sessionStorage.getItem(storageKey)||'';
+    var panel=document.getElementById('panel');
+    var launcher=document.getElementById('launcher');
+    var lead=document.getElementById('lead');
+    var messages=document.getElementById('messages');
+    var composer=document.getElementById('composer');
+    var content=document.getElementById('content');
+    var typing=document.getElementById('typing');
+    var status=document.getElementById('status');
+    var seen={};
+    var lastId=0;
+    var polling=false;
+    function parentMessage(type,extra){
+      try{parent.postMessage(Object.assign({type:type,slug:cfg.slug},extra||{}),'*')}catch(e){}
+    }
+    parentMessage('edcons-chatbot-ready',{open:false});
+    function setOpen(open){
+      panel.classList.toggle('open',open);
+      launcher.style.display=open?'none':'grid';
+      parentMessage('edcons-chatbot-layout',{open:open});
+      if(open&&sessionToken) poll();
+    }
+    launcher.onclick=function(){setOpen(true)};
+    document.getElementById('close').onclick=function(){setOpen(false)};
+    function appendMessage(row){
+      if(!row||seen[row.id])return;
+      seen[row.id]=true;lastId=Math.max(lastId,Number(row.id)||0);
+      var el=document.createElement('div');
+      el.className='message '+(row.direction==='inbound'?'inbound':'outbound');
+      var text=document.createElement('div');text.textContent=row.content||'';el.appendChild(text);
+      var tm=document.createElement('div');tm.className='message-time';
+      try{tm.textContent=new Date(row.createdAt).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}catch(e){}
+      el.appendChild(tm);messages.appendChild(el);content.scrollTop=content.scrollHeight;
+    }
+    function showChat(){
+      lead.style.display='none';messages.style.display='flex';composer.style.display='grid';
+    }
+    async function request(path,options){
+      var response=await fetch(cfg.baseUrl+path,options||{});
+      var data=await response.json().catch(function(){return{}});
+      if(!response.ok)throw new Error(data.error||'İşlem tamamlanamadı');
+      return data;
+    }
+    document.getElementById('leadForm').onsubmit=async function(e){
+      e.preventDefault();
+      var form=e.currentTarget;var button=form.querySelector('button[type=submit]');
+      var error=document.getElementById('formError');error.style.display='none';button.disabled=true;
+      try{
+        var fd=new FormData(form);var ref=document.referrer||'';
+        var payload={
+          firstName:fd.get('firstName'),lastName:fd.get('lastName'),email:fd.get('email'),phone:fd.get('phone'),_hp:fd.get('_hp'),
+          sourcePageUrl:ref,sourceWebsite:(function(){try{return new URL(ref).hostname}catch(e){return''}})(),
+          language:(navigator.language||'').slice(0,12)
+        };
+        var data=await request('/api/public/embed/'+encodeURIComponent(cfg.slug)+'/chat/session?t='+encodeURIComponent(accessToken),{
+          method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)
+        });
+        sessionToken=data.sessionToken;sessionStorage.setItem(storageKey,sessionToken);showChat();
+        if(data.greeting)appendMessage(data.greeting);
+        poll();
+      }catch(err){error.textContent=err.message||'Sohbet başlatılamadı';error.style.display='block'}
+      finally{button.disabled=false}
+    };
+    async function poll(){
+      if(!sessionToken||polling)return;polling=true;
+      try{
+        var data=await request('/api/public/embed/'+encodeURIComponent(cfg.slug)+'/chat/messages?s='+encodeURIComponent(sessionToken)+'&after='+lastId);
+        (data.data||[]).forEach(appendMessage);
+        if(data.needsHuman){status.textContent='Bir insan danışman bilgilendirildi.'}
+      }catch(err){
+        if(/expired|Invalid/.test(err.message)){sessionStorage.removeItem(storageKey);sessionToken='';location.reload()}
+      }finally{polling=false}
+    }
+    async function send(){
+      var input=document.getElementById('messageInput');var text=input.value.trim();if(!text||!sessionToken)return;
+      input.value='';typing.style.display='block';content.scrollTop=content.scrollHeight;
+      try{
+        var data=await request('/api/public/embed/'+encodeURIComponent(cfg.slug)+'/chat/messages?s='+encodeURIComponent(sessionToken),{
+          method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({content:text})
+        });
+        (data.data||[]).forEach(appendMessage);
+        if(data.outcome&&['globally_disabled','outside_working_hours','handoff','escalated'].indexOf(data.outcome.reason)>=0){
+          status.textContent='Mesajınız ekibe iletildi. Bir danışman yanıtlayacak.';
+        }
+      }catch(err){status.textContent=err.message||'Mesaj gönderilemedi'}
+      finally{typing.style.display='none';poll()}
+    }
+    document.getElementById('send').onclick=send;
+    document.getElementById('messageInput').onkeydown=function(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send()}};
+    document.getElementById('handoff').onclick=async function(){
+      if(!sessionToken){status.textContent='Önce iletişim bilgilerinizi girin.';return}
+      try{
+        await request('/api/public/embed/'+encodeURIComponent(cfg.slug)+'/chat/handoff?s='+encodeURIComponent(sessionToken),{
+          method:'POST',headers:{'Content-Type':'application/json'},body:'{}'
+        });
+        status.textContent='İnsan danışman talebiniz ekibe iletildi.';
+      }catch(err){status.textContent=err.message||'Talep iletilemedi'}
+    };
+    if(sessionToken){showChat();poll()}
+    setInterval(function(){if(panel.classList.contains('open')&&sessionToken)poll()},3000);
+  })();
+  </script>
+</body>
+</html>`;
 }
 
 function generateWidgetHTML(slug: string, baseUrl: string, widget: any, docMeta: Record<string, DocCatalogEntry>, dialCodes: [string, string, string][] = []): string {

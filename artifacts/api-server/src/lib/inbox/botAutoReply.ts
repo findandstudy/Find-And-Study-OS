@@ -4,6 +4,7 @@ import {
   messagesTable,
   externalContactsTable,
 } from "@workspace/db";
+import crypto from "node:crypto";
 import { and, asc, eq, sql } from "drizzle-orm";
 import { getAnthropicClient } from "@workspace/integrations-anthropic-ai";
 import {
@@ -41,6 +42,7 @@ import {
 } from "./programSearchTool";
 import { isProgramSearchToolEnabled } from "./knowledgeSources";
 import { retrieveKnowledgeChunks } from "./knowledgeRetrieval";
+import { requestsEmbedHumanHandoff } from "../embedChatSession";
 
 // Faz 2 handoff hook: fire-and-forget so we never delay the webhook response
 // or the bot-reply flow on assignment work. Errors are logged, not thrown.
@@ -131,6 +133,7 @@ export interface BotReplyInput {
   model: string;
   temperature: number;
   messages: Array<{ direction: string; content: string }>;
+  enforcedUniversityId?: number;
 }
 let __botReplyOverride: ((input: BotReplyInput) => Promise<string>) | null = null;
 export function __setBotReplyOverrideForTests(
@@ -212,7 +215,10 @@ async function generateBotReply(input: BotReplyInput): Promise<string> {
             try {
               resultPayload =
                 block.name === SEARCH_PROGRAMS_TOOL_NAME
-                  ? await executeSearchProgramsTool(block.input || {})
+                  ? await executeSearchProgramsTool(
+                      block.input || {},
+                      input.enforcedUniversityId,
+                    )
                   : { error: `unknown_tool:${block.name}` };
             } catch (err) {
               console.error("[bot] tool execution failed:", block.name, err);
@@ -312,6 +318,12 @@ export async function runBotReplyTest(input: BotTestInput): Promise<BotTestResul
 // slotted in here without touching the engine logic.
 async function sendBotReply(input: BotSendInput): Promise<BotSendResult> {
   if (__botSendOverride) return __botSendOverride(input);
+  // Browser chat has no external transport: the outbound message row written
+  // by maybeAutoReply is the delivery source. The embedded client polls that
+  // same conversation, so marking it sent is the complete transport action.
+  if (input.channel === "web_chat") {
+    return { ok: true, externalMessageId: `web-chat:${crypto.randomUUID()}` };
+  }
   // Zernio-hosted conversations: unified send path shared with manual replies.
   if (input.zernio) {
     const z = await sendViaZernio({
@@ -489,6 +501,34 @@ export async function maybeAutoReply(opts: {
   }
   if (msg.direction !== "inbound" || !msg.content || !msg.content.trim()) {
     return { acted: false, reason: "not_inbound_text" };
+  }
+
+  const conversationMetadata = conv.metadata && typeof conv.metadata === "object"
+    ? conv.metadata as Record<string, unknown>
+    : {};
+  const hasEmbedChatbotScope =
+    conversationMetadata.chatbotScope !== null &&
+    typeof conversationMetadata.chatbotScope === "object";
+
+  // Embedded assistants hand control to staff immediately when the visitor
+  // explicitly requests a person or expresses distrust. This is deliberately
+  // deterministic instead of relying on the language model to interpret the
+  // request correctly.
+  if (hasEmbedChatbotScope && requestsEmbedHumanHandoff(msg.content)) {
+    await db
+      .update(conversationsTable)
+      .set({ botEnabled: false, needsHuman: true, botLastHandledMessageId: inboundMessageId })
+      .where(eq(conversationsTable.id, conversationId));
+    triggerStuckConversationAssignment(conversationId);
+    inboxBus.publish({
+      type: "message",
+      conversationId,
+      channel: conv.channel,
+      assignedToId: conv.assignedToId ?? null,
+      unmatched: conv.unmatched,
+      direction: "inbound",
+    });
+    return { acted: true, reason: "handoff" };
   }
 
   // Escalation gate (code layer): never auto-reply on sensitive topics. Flag
@@ -725,9 +765,59 @@ export async function maybeAutoReply(opts: {
     .orderBy(asc(messagesTable.createdAt));
   const history = recent.slice(-BOT_HISTORY_LIMIT);
 
+  // University-scoped embedded assistants are deliberately narrower than the
+  // global inbox agent. The scope is server-owned conversation metadata set
+  // when the signed widget session is created; visitor text can never change
+  // it. This prevents a Beykent landing-page assistant, for example, from
+  // recommending a different university even though the global knowledge
+  // base and program-search tool know about the entire catalog.
+  const rawScope = conversationMetadata.chatbotScope;
+  let scopedUniversityId: number | undefined;
+  let scopedUniversityName = "";
+  let scopedAssistantName = "";
+  if (rawScope && typeof rawScope === "object") {
+    const scope = rawScope as Record<string, unknown>;
+    const universityName = typeof scope.universityName === "string"
+      ? scope.universityName.trim()
+      : "";
+    const assistantName = typeof scope.assistantName === "string"
+      ? scope.assistantName.trim()
+      : "";
+    const universityId = Number(scope.universityId);
+    if (universityName && Number.isInteger(universityId) && universityId > 0) {
+      scopedUniversityId = universityId;
+      scopedUniversityName = universityName;
+      scopedAssistantName = assistantName;
+    }
+  }
+
   const language = detectLanguage(msg.content);
-  const ragChunks = await retrieveKnowledgeChunks(msg.content);
-  let systemPrompt = buildBotSystemPrompt(language, config.knowledgeBase, ragChunks);
+  // University widgets fail closed: global free-form knowledge sources and the
+  // global knowledgeBase are intentionally excluded because they may contain
+  // other universities. The live program tool is independently hard-filtered
+  // by scopedUniversityId below.
+  const ragChunks = scopedUniversityId
+    ? []
+    : await retrieveKnowledgeChunks(msg.content);
+  let systemPrompt = buildBotSystemPrompt(
+    language,
+    scopedUniversityId ? "" : config.knowledgeBase,
+    ragChunks,
+  );
+
+  if (scopedUniversityId && scopedUniversityName) {
+    systemPrompt = [
+      systemPrompt,
+      "",
+      "## Mandatory landing-page scope (highest priority)",
+      `- Your public title is "${scopedAssistantName || `${scopedUniversityName} Yetkili Temsilci Başvuru Asistanı`}".`,
+      `- You are the authorized representative application assistant for ${scopedUniversityName}.`,
+      `- Discuss, recommend, search and present ONLY ${scopedUniversityName}. Never name, compare, suggest or redirect the visitor to another university.`,
+      `- If the answer for ${scopedUniversityName} is unavailable, say you will ask the team; never fill the gap with another university.`,
+      "- Do not claim to be the university's official internal office. If directly asked, state transparently that you are the university's authorized representative application assistant.",
+      "- A visitor request for a human advisor, distrust of the AI, or uncertainty about representation requires a human handoff.",
+    ].join("\n");
+  }
 
   // FAZ 3 — nudge the bot to collect any still-missing level-appropriate
   // documents for the captured lead/student.
@@ -749,6 +839,7 @@ export async function maybeAutoReply(opts: {
     model: config.model,
     temperature: config.temperature,
     messages: history.map((m) => ({ direction: m.direction, content: m.content })),
+    enforcedUniversityId: scopedUniversityId,
   });
   if (!rawReplyText) return { acted: false, reason: "send_failed" };
   // Strip any Markdown that WhatsApp renders as literal characters (**, ##, ---, etc.)

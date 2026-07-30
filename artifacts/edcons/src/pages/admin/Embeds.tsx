@@ -21,7 +21,7 @@ import {
   Tabs, TabsContent, TabsList, TabsTrigger
 } from "@/components/ui/tabs";
 import {
-  Plus, Copy, Trash2, Edit2, Eye, Code2, ExternalLink, Globe, ChevronLeft, ChevronRight, FileText
+  Plus, Copy, Trash2, Edit2, Eye, Code2, ExternalLink, Globe, ChevronLeft, ChevronRight, FileText, Bot, ShieldCheck
 } from "lucide-react";
 import { useI18n } from "@/hooks/use-i18n";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -405,6 +405,9 @@ function WidgetFormDialog({ open, onClose, widget, onSaved }: {
   const [primaryColor, setPrimaryColor] = useState("#2563eb");
   const [buttonColor, setButtonColor] = useState("#2563eb");
   const [borderRadius, setBorderRadius] = useState("8px");
+  const [logoUrl, setLogoUrl] = useState("");
+  const [assistantName, setAssistantName] = useState("");
+  const [welcomeMessage, setWelcomeMessage] = useState("");
   const [isActive, setIsActive] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -431,12 +434,16 @@ function WidgetFormDialog({ open, onClose, widget, onSaved }: {
       setPrimaryColor(th.primaryColor || "#2563eb");
       setButtonColor(th.buttonColor || "#2563eb");
       setBorderRadius(th.borderRadius || "8px");
+      setLogoUrl(th.logoUrl || "");
+      setAssistantName(th.assistantName || "");
+      setWelcomeMessage(th.welcomeMessage || "");
       setIsActive(widget.isActive);
     } else {
       setName(""); setSlug(""); setMode("combined");
       setPresetCountry(""); setPresetCity(""); setPresetUniversityType(""); setPresetUniversityId(""); setPresetLevel(""); setPresetLanguage(""); setPresetField("");
       setLocked([]); setHidden([]); setDomains("");
       setPrimaryColor("#2563eb"); setButtonColor("#2563eb"); setBorderRadius("8px");
+      setLogoUrl(""); setAssistantName(""); setWelcomeMessage("");
       setIsActive(true);
     }
   }, [open, widget]);
@@ -444,6 +451,14 @@ function WidgetFormDialog({ open, onClose, widget, onSaved }: {
   const handleSave = async () => {
     if (!name.trim() || !slug.trim()) {
       toast({ title: "Name and slug are required", variant: "destructive" });
+      return;
+    }
+    if (mode === "ai_chatbot" && !presetUniversityId) {
+      toast({
+        title: "AI Chatbot requires exactly one university",
+        description: "Select the university in the Filters tab. The AI is fail-closed and cannot answer without a university scope.",
+        variant: "destructive",
+      });
       return;
     }
     setSaving(true);
@@ -464,7 +479,14 @@ function WidgetFormDialog({ open, onClose, widget, onSaved }: {
       lockedFilters: locked,
       hiddenFilters: hidden,
       visibleFilters: FILTER_KEYS.filter(k => !hidden.includes(k)),
-      theme: { primaryColor, buttonColor, borderRadius },
+      theme: {
+        primaryColor,
+        buttonColor,
+        borderRadius,
+        ...(logoUrl.trim() ? { logoUrl: logoUrl.trim() } : {}),
+        ...(assistantName.trim() ? { assistantName: assistantName.trim() } : {}),
+        ...(welcomeMessage.trim() ? { welcomeMessage: welcomeMessage.trim() } : {}),
+      },
       allowedDomains: domains.split(",").map(d => d.trim()).filter(Boolean),
       isActive,
     };
@@ -521,8 +543,21 @@ function WidgetFormDialog({ open, onClose, widget, onSaved }: {
                   <SelectItem value="combined">Combined (Course Finder + Application Form)</SelectItem>
                   <SelectItem value="course_finder">Course Finder Only</SelectItem>
                   <SelectItem value="application_only">Application Form Only</SelectItem>
+                  <SelectItem value="ai_chatbot">AI Chatbot (Messages + Lead)</SelectItem>
                 </SelectContent>
               </Select>
+              {mode === "ai_chatbot" && (
+                <div className="mt-3 rounded-xl border border-cyan-200 bg-cyan-50/70 p-3 text-sm text-cyan-950">
+                  <div className="flex items-center gap-2 font-semibold">
+                    <Bot className="h-4 w-4" />
+                    University-scoped AI assistant
+                  </div>
+                  <p className="mt-1 text-xs leading-5 text-cyan-900/80">
+                    Collects the visitor's contact details, matches or creates a lead, appears in Messages,
+                    and can hand the conversation to a human. It is restricted to the selected university.
+                  </p>
+                </div>
+              )}
             </div>
             <div className="flex items-center gap-2">
               <input type="checkbox" id="isActive" checked={isActive} onChange={e => setIsActive(e.target.checked)} className="rounded" />
@@ -531,6 +566,17 @@ function WidgetFormDialog({ open, onClose, widget, onSaved }: {
           </TabsContent>
 
           <TabsContent value="filters" className="space-y-4 mt-4">
+            {mode === "ai_chatbot" && (
+              <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-3 text-sm text-amber-950">
+                <div className="flex items-center gap-2 font-semibold">
+                  <ShieldCheck className="h-4 w-4" />
+                  One chatbot, one university
+                </div>
+                <p className="mt-1 text-xs leading-5 text-amber-900/80">
+                  University is mandatory. The chatbot will not suggest, compare, or answer about another university.
+                </p>
+              </div>
+            )}
             <div>
               <h4 className="text-sm font-semibold mb-2">Preset Filters</h4>
               <p className="text-xs text-muted-foreground mb-3">Set default filter values for this widget. Only matching programs will be shown.</p>
@@ -572,7 +618,9 @@ function WidgetFormDialog({ open, onClose, widget, onSaved }: {
                   </Select>
                 </div>
                 <div>
-                  <label className="text-xs font-medium">University</label>
+                  <label className="text-xs font-medium">
+                    University {mode === "ai_chatbot" ? "*" : ""}
+                  </label>
                   <Select value={presetUniversityId || "__none__"} onValueChange={v => setPresetUniversityId(v === "__none__" ? "" : v)}>
                     <SelectTrigger><SelectValue placeholder="All Universities" /></SelectTrigger>
                     <SelectContent>
@@ -670,6 +718,41 @@ function WidgetFormDialog({ open, onClose, widget, onSaved }: {
                 <Input value={borderRadius} onChange={e => setBorderRadius(e.target.value)} placeholder="8px" />
               </div>
             </div>
+            {mode === "ai_chatbot" && (
+              <div className="space-y-3 rounded-xl border bg-muted/20 p-4">
+                <div>
+                  <label className="text-sm font-medium">Logo URL</label>
+                  <Input
+                    value={logoUrl}
+                    onChange={e => setLogoUrl(e.target.value)}
+                    placeholder="Leave empty to use the selected university logo"
+                  />
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    HTTPS only. If empty, the university logo from Catalog is used automatically.
+                  </p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Assistant Name</label>
+                  <Input
+                    value={assistantName}
+                    onChange={e => setAssistantName(e.target.value)}
+                    placeholder="X Üniversitesi Yetkili Temsilci Başvuru Asistanı"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Welcome Message</label>
+                  <textarea
+                    value={welcomeMessage}
+                    onChange={e => setWelcomeMessage(e.target.value)}
+                    rows={4}
+                    maxLength={400}
+                    className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    placeholder="Leave empty to generate the university-specific welcome message automatically"
+                  />
+                  <p className="mt-1 text-right text-xs text-muted-foreground">{welcomeMessage.length}/400</p>
+                </div>
+              </div>
+            )}
           </TabsContent>
 
           <TabsContent value="security" className="space-y-4 mt-4">

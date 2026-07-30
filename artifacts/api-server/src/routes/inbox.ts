@@ -2031,6 +2031,47 @@ router.post(
       return;
     }
 
+    if (conv.channel === "web_chat") {
+      if (hasAttachments) {
+        res.status(400).json({ error: "Web chat attachments are not supported yet." });
+        return;
+      }
+      const [msg] = await db
+        .insert(messagesTable)
+        .values({
+          conversationId: id,
+          senderId: req.user!.id,
+          content,
+          channel: "web_chat",
+          direction: "outbound",
+          status: "sent",
+          sentAt: new Date(),
+          metadata: { humanSent: true },
+          ...(replyToId ? { replyToId } : {}),
+        })
+        .returning();
+      await db
+        .update(conversationsTable)
+        .set({
+          lastMessageAt: new Date(),
+          lastMessagePreview: content.slice(0, 200),
+          botEnabled: false,
+          botReplyCount: 0,
+          needsHuman: false,
+        })
+        .where(eq(conversationsTable.id, id));
+      inboxBus.publish({
+        type: "message",
+        conversationId: id,
+        channel: "web_chat",
+        assignedToId: conv.assignedToId ?? null,
+        unmatched: conv.unmatched,
+        direction: "outbound",
+      });
+      res.status(201).json({ message: msg });
+      return;
+    }
+
     if (conv.channel === "web_form") {
       const [msg] = await db
         .insert(messagesTable)
