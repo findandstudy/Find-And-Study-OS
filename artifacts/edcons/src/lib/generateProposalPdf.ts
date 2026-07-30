@@ -20,6 +20,7 @@ export type ProposalProgramData = {
   universityCountry?: string | null;
   universityCity?: string | null;
   universityType?: string | null;
+  universityStatus?: string | null;
 };
 
 export type ProposalOptions = {
@@ -48,7 +49,24 @@ const LIGHT_BG: Rgb = [248, 250, 252];
 const WHITE: Rgb = [255, 255, 255];
 const EMERALD: Rgb = [5, 150, 105];
 const EMERALD_BG: Rgb = [236, 253, 245];
+const RED: Rgb = [220, 38, 38];
+const RED_BG: Rgb = [254, 242, 242];
 const DEFAULT_ACCENT: Rgb = [30, 64, 175];
+
+type Column = {
+  key: "program" | "degree" | "location" | "language" | "fees" | "availability";
+  label: string;
+  width: number;
+};
+
+const COLUMNS: Column[] = [
+  { key: "program", label: "PROGRAM DETAILS", width: 54 },
+  { key: "degree", label: "DEGREE", width: 21 },
+  { key: "location", label: "LOCATION", width: 27 },
+  { key: "language", label: "LANGUAGE", width: 19 },
+  { key: "fees", label: "FEES", width: 39 },
+  { key: "availability", label: "INTAKE / STATUS", width: 26 },
+];
 
 function hexToRgb(hex: string): Rgb | null {
   const clean = hex.replace(/^#/, "");
@@ -91,6 +109,11 @@ function fmt(amount: number | null | undefined, currency = "USD"): string {
   } catch {
     return `$${Math.round(amount).toLocaleString("en-US")}`;
   }
+}
+
+function feeOrFree(amount: number | null | undefined, currency: string): string {
+  if (amount == null || amount <= 0) return "Free";
+  return fmt(amount, currency);
 }
 
 export function getProposalServiceFee(
@@ -136,9 +159,9 @@ async function blobAsDataUrl(blob: Blob): Promise<string | null> {
 }
 
 /**
- * Normalise every remote logo into a small square JPEG before it reaches
- * jsPDF. A 2000px PNG used to be embedded at full resolution even when drawn
- * at 12mm, which made otherwise tiny proposals several megabytes.
+ * Normalise the only bitmap in the proposal - the preparing organisation's
+ * logo - before it reaches jsPDF. University logos are deliberately omitted
+ * from the comparison table to keep multi-page WhatsApp attachments small.
  */
 async function compressLogoBlob(blob: Blob, maxSide: number, quality: number): Promise<string | null> {
   if (typeof document === "undefined" || typeof createImageBitmap === "undefined") {
@@ -166,16 +189,6 @@ async function compressLogoBlob(blob: Blob, maxSide: number, quality: number): P
     return canvas.toDataURL("image/jpeg", quality);
   } catch {
     return blobAsDataUrl(blob);
-  }
-}
-
-async function loadCompressedLogo(url: string, maxSide = 180, quality = 0.72): Promise<string | null> {
-  try {
-    const response = await fetch(url);
-    if (!response.ok) return null;
-    return compressLogoBlob(await response.blob(), maxSide, quality);
-  } catch {
-    return null;
   }
 }
 
@@ -218,165 +231,209 @@ export async function buildProposalPdf(options: ProposalOptions): Promise<jsPDF>
   const pageH = 297;
   const marginX = 12;
   const contentW = pageW - marginX * 2;
+  const tableStartY = 51;
+  const tableHeaderH = 9;
   const footerLineY = pageH - 11;
-  const contentStartY = 54;
-  const cardGap = 3;
+  const rowBottomLimit = footerLineY - 3;
   const { date: dateStr, time: timeStr } = getProposalDateTime(generatedAt);
 
   const companyLogo = logoDataUrl
     ? await (async () => {
         try {
           const response = await fetch(logoDataUrl);
-          if (response.ok) return compressLogoBlob(await response.blob(), 320, 0.82);
-        } catch {}
+          if (response.ok) return compressLogoBlob(await response.blob(), 240, 0.78);
+        } catch {
+          // A data URL can still be passed directly if browser compression fails.
+        }
         return logoDataUrl;
       })()
     : null;
 
-  const universityLogos = new Map<string, string | null>();
-  const universityLogoUrls = [
-    ...new Set(programs.map((program) => program.universityLogoUrl).filter(Boolean) as string[]),
-  ];
-  await Promise.all(
-    universityLogoUrls.map(async (url) => {
-      universityLogos.set(url, await loadCompressedLogo(url));
-    }),
-  );
-
   function setText(color: Rgb) {
     doc.setTextColor(color[0], color[1], color[2]);
   }
+
   function setFill(color: Rgb) {
     doc.setFillColor(color[0], color[1], color[2]);
   }
+
   function setDraw(color: Rgb) {
     doc.setDrawColor(color[0], color[1], color[2]);
   }
-  function fitText(value: string, maxWidth: number): string {
+
+  function fitText(value: unknown, maxWidth: number): string {
     const safe = proposalPdfText(value);
     if (doc.getTextWidth(safe) <= maxWidth) return safe;
     let result = safe;
     while (result.length > 1 && doc.getTextWidth(`${result}...`) > maxWidth) result = result.slice(0, -1);
     return `${result.trimEnd()}...`;
   }
-  function addLogo(dataUrl: string | null, x: number, y: number, size: number, alias: string) {
+
+  function split(value: unknown, maxWidth: number, maxLines: number): string[] {
+    const lines = doc.splitTextToSize(proposalPdfText(value), maxWidth) as string[];
+    if (lines.length <= maxLines) return lines;
+    const visible = lines.slice(0, maxLines);
+    visible[maxLines - 1] = fitText(`${visible[maxLines - 1]}...`, maxWidth);
+    return visible;
+  }
+
+  function drawCompanyLogo(x: number, y: number, size: number) {
     setFill(WHITE);
     setDraw(BORDER);
     doc.setLineWidth(0.2);
-    doc.roundedRect(x, y, size, size, 1.6, 1.6, "FD");
-    if (!dataUrl) return;
+    doc.roundedRect(x, y, size, size, 1.8, 1.8, "FD");
+    if (!companyLogo) {
+      setFill(accentSoft);
+      doc.roundedRect(x + 1.2, y + 1.2, size - 2.4, size - 2.4, 1.2, 1.2, "F");
+      setText(accent);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(11);
+      doc.text(
+        proposalPdfText(companyName).trim().slice(0, 1).toUpperCase() || "F",
+        x + size / 2,
+        y + size / 2 + 2,
+        { align: "center" },
+      );
+      return;
+    }
     try {
-      doc.addImage(dataUrl, dataUrlFormat(dataUrl), x + 0.7, y + 0.7, size - 1.4, size - 1.4, alias, "FAST");
+      doc.addImage(
+        companyLogo,
+        dataUrlFormat(companyLogo),
+        x + 0.7,
+        y + 0.7,
+        size - 1.4,
+        size - 1.4,
+        "proposal-company-logo",
+        "FAST",
+      );
     } catch {
-      // A missing or malformed remote logo must never block proposal creation.
+      // A malformed remote logo must never block proposal creation.
     }
   }
 
-  function drawHeader(continued: boolean) {
-    setFill(WHITE);
-    doc.rect(0, 0, pageW, 36, "F");
-    setFill(accent);
-    doc.rect(0, 0, 4, 36, "F");
-
-    const logoSize = 18;
+  function drawHeader() {
+    const logoSize = 16;
     const logoX = marginX;
     const logoY = 8;
-    addLogo(companyLogo, logoX, logoY, logoSize, "proposal-company-logo");
+    drawCompanyLogo(logoX, logoY, logoSize);
 
-    const titleX = logoX + logoSize + 5;
+    const titleX = logoX + logoSize + 4;
     setText(NAVY);
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(14);
-    doc.text(fitText(proposalPdfText(companyName), 92), titleX, 14);
+    doc.setFontSize(12.5);
+    doc.text(fitText(companyName, 87), titleX, 13.5);
 
     setText(MUTED);
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(8);
-    doc.text(continued ? "PROGRAM PROPOSAL - CONTINUED" : "PROGRAM PROPOSAL", titleX, 20);
+    doc.setFontSize(7);
+    doc.text("Comprehensive Programs Proposal", titleX, 19);
     setText(SUBTLE);
-    doc.setFontSize(6.5);
-    doc.text("Prepared for student review", titleX, 25);
-
-    const rightX = pageW - marginX;
-    setText(MUTED);
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(6.5);
-    doc.text("PREPARED ON", rightX, 11, { align: "right" });
-    setText(NAVY);
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(9);
-    doc.text(`${dateStr}  ${timeStr}`, rightX, 17, { align: "right" });
-    setText(SUBTLE);
-    doc.setFont("helvetica", "normal");
     doc.setFontSize(6.2);
-    doc.text("Europe/Istanbul", rightX, 22, { align: "right" });
+    doc.text(`${programs.length} selected program${programs.length === 1 ? "" : "s"}`, titleX, 23);
 
+    const stampW = 52;
+    const stampH = 17;
+    const stampX = pageW - marginX - stampW;
+    const stampY = 8;
     setFill(LIGHT_BG);
-    doc.rect(4, 30, pageW - 4, 10, "F");
+    doc.roundedRect(stampX, stampY, stampW, stampH, 2, 2, "F");
+    setText(MUTED);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(5.8);
+    doc.text("PREPARED", stampX + 4, stampY + 5);
+    setText(NAVY);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8.2);
+    doc.text(`${dateStr}  ${timeStr}`, stampX + 4, stampY + 10.5);
+    setText(SUBTLE);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(5.4);
+    doc.text("Europe/Istanbul", stampX + 4, stampY + 14.5);
+
+    setDraw(BORDER);
+    doc.setLineWidth(0.25);
+    doc.line(marginX, 29, pageW - marginX, 29);
+
     const contacts = [
       companyPhone ? `Phone  ${proposalPdfText(companyPhone)}` : "",
       companyEmail ? `Email  ${proposalPdfText(companyEmail)}` : "",
       companyWebsite ? `Web  ${compactWebsite(companyWebsite)}` : "",
     ].filter(Boolean);
+    setFill(LIGHT_BG);
+    doc.roundedRect(marginX, 33, contentW, 11, 2, 2, "F");
     if (contacts.length) {
       const cellW = contentW / contacts.length;
       doc.setFont("helvetica", "normal");
-      doc.setFontSize(6.5);
+      doc.setFontSize(6.4);
       contacts.forEach((contact, index) => {
         const x = marginX + index * cellW;
         if (index > 0) {
           setDraw(BORDER);
           doc.setLineWidth(0.2);
-          doc.line(x, 32, x, 38);
+          doc.line(x, 35.5, x, 41.5);
         }
         setText(BODY);
-        doc.text(fitText(contact, cellW - 6), x + 3, 36.2);
+        doc.text(fitText(contact, cellW - 6), x + 3, 39.8);
       });
+    } else {
+      setText(MUTED);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(6.4);
+      doc.text("Prepared for student review", marginX + 3, 39.8);
     }
+  }
+
+  function drawTableHeader() {
     setFill(accent);
-    doc.rect(4, 40, pageW - 4, 0.7, "F");
-  }
-
-  function drawSectionIntro() {
-    setText(NAVY);
+    doc.roundedRect(marginX, tableStartY, contentW, tableHeaderH, 2, 2, "F");
+    // Square the lower corners so rows join the header cleanly.
+    doc.rect(marginX, tableStartY + tableHeaderH - 2, contentW, 2, "F");
+    let x = marginX;
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(11);
-    doc.text("Selected programs", marginX, 48);
-    setText(MUTED);
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(7);
-    doc.text(
-      `${programs.length} option${programs.length === 1 ? "" : "s"} selected for comparison`,
-      pageW - marginX,
-      48,
-      { align: "right" },
-    );
+    doc.setFontSize(5.4);
+    COLUMNS.forEach((column) => {
+      setText(WHITE);
+      doc.text(column.label, x + 2.4, tableStartY + 5.7);
+      x += column.width;
+    });
   }
 
-  function cardHeight(program: ProposalProgramData): number {
+  function programRowHeight(program: ProposalProgramData): number {
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(9.5);
-    const titleLines = Math.min(
-      (doc.splitTextToSize(proposalPdfText(program.name), 91) as string[]).length,
-      2,
-    );
-    return titleLines > 1 ? 43 : 40;
+    doc.setFontSize(7.2);
+    const titleLines = Math.min(split(program.name, COLUMNS[0].width - 5, 2).length, 2);
+    const feeLines =
+      2 +
+      (program.discountedFee != null &&
+      program.tuitionFee != null &&
+      program.discountedFee < program.tuitionFee
+        ? 1
+        : 0) +
+      1 +
+      (getProposalServiceFee(program, serviceFeeMarkup, hideServiceFee) != null ? 1 : 0);
+    return Math.max(22, 9 + titleLines * 3.7, 8 + feeLines * 3.2);
   }
 
-  function drawBadge(text: string, x: number, y: number, maxX: number): number {
-    const safe = proposalPdfText(text);
+  function drawPill(
+    text: string,
+    x: number,
+    y: number,
+    maxWidth: number,
+    foreground: Rgb,
+    background: Rgb,
+  ) {
+    const safe = fitText(text, maxWidth - 4);
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(5.6);
-    const width = Math.min(doc.getTextWidth(safe) + 4, maxX - x);
-    if (width < 8) return x;
-    setFill(accentSoft);
-    doc.roundedRect(x, y, width, 4.6, 1.4, 1.4, "F");
-    setText(accent);
-    doc.text(fitText(safe, width - 3), x + 2, y + 3.2);
-    return x + width + 1.5;
+    doc.setFontSize(5.4);
+    const width = Math.min(maxWidth, Math.max(10, doc.getTextWidth(safe) + 4));
+    setFill(background);
+    doc.roundedRect(x, y, width, 4.8, 1.6, 1.6, "F");
+    setText(foreground);
+    doc.text(safe, x + width / 2, y + 3.25, { align: "center" });
   }
 
-  function drawProgramCard(program: ProposalProgramData, index: number, x: number, y: number, height: number) {
+  function drawProgramRow(program: ProposalProgramData, rowIndex: number, y: number, height: number) {
     const currency = program.currency || "USD";
     const effectiveTuition = program.discountedFee ?? program.tuitionFee;
     const hasDiscount =
@@ -385,142 +442,134 @@ export async function buildProposalPdf(options: ProposalOptions): Promise<jsPDF>
       program.discountedFee < program.tuitionFee;
     const serviceFee = getProposalServiceFee(program, serviceFeeMarkup, hideServiceFee);
 
-    setFill(WHITE);
+    setFill(rowIndex % 2 === 0 ? WHITE : LIGHT_BG);
+    doc.rect(marginX, y, contentW, height, "F");
+
+    let x = marginX;
     setDraw(BORDER);
-    doc.setLineWidth(0.25);
-    doc.roundedRect(x, y, contentW, height, 2.5, 2.5, "FD");
+    doc.setLineWidth(0.15);
+    COLUMNS.slice(0, -1).forEach((column) => {
+      x += column.width;
+      doc.line(x, y + 2, x, y + height - 2);
+    });
+    doc.line(marginX, y + height, marginX + contentW, y + height);
+
+    // Program and university.
+    x = marginX;
     setFill(accent);
-    doc.roundedRect(x, y, 3, height, 1.5, 1.5, "F");
-    doc.rect(x + 1.5, y, 1.5, height, "F");
-
-    const logoX = x + 7;
-    const logoY = y + 6;
-    const logoSize = 13;
-    const logoData = program.universityLogoUrl
-      ? universityLogos.get(program.universityLogoUrl) || null
-      : null;
-    addLogo(logoData, logoX, logoY, logoSize, `university-logo-${index}`);
-
-    const infoX = logoX + logoSize + 4;
-    const feePanelW = 48;
-    const feePanelX = x + contentW - feePanelW - 4;
-    const infoMaxW = feePanelX - infoX - 5;
-
-    setText(MUTED);
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(6.5);
-    doc.text(fitText(program.universityName, infoMaxW - 12), infoX, y + 8);
-
-    setFill(accent);
-    doc.roundedRect(infoX + infoMaxW - 10, y + 4.7, 10, 4.5, 1.2, 1.2, "F");
-    setText(WHITE);
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(5.8);
-    doc.text(String(index + 1).padStart(2, "0"), infoX + infoMaxW - 5, y + 7.8, { align: "center" });
-
+    doc.circle(x + 3.1, y + 6.2, 1.2, "F");
     setText(NAVY);
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(9.5);
-    const titleLines = (doc.splitTextToSize(proposalPdfText(program.name), infoMaxW) as string[]).slice(0, 2);
-    titleLines.forEach((line, lineIndex) => doc.text(line, infoX, y + 14 + lineIndex * 4.5));
-
-    let badgeX = infoX;
-    const badgeY = y + (titleLines.length > 1 ? 25 : 21);
-    const badges = [
-      program.degree,
-      program.language,
-      program.duration,
-      program.universityType,
-      [program.universityCity, program.universityCountry].filter(Boolean).join(", "),
-    ].filter(Boolean) as string[];
-    for (const badge of badges) {
-      const nextX = drawBadge(badge, badgeX, badgeY, feePanelX - 4);
-      if (nextX === badgeX) break;
-      badgeX = nextX;
-    }
-
-    setFill(accentSoft);
-    doc.roundedRect(feePanelX, y + 4, feePanelW, height - 8, 2, 2, "F");
+    doc.setFontSize(7.2);
+    const titleLines = split(program.name, COLUMNS[0].width - 8, 2);
+    titleLines.forEach((line, index) => doc.text(line, x + 6, y + 5.4 + index * 3.7));
+    const universityY = y + 7.1 + titleLines.length * 3.7;
     setText(MUTED);
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(6);
-    doc.text(proposalPdfText(`TUITION ${program.feeType ? `- ${program.feeType}` : ""}`), feePanelX + 4, y + 9);
-
-    if (hasDiscount) {
+    doc.setFontSize(5.9);
+    doc.text(fitText(program.universityName, COLUMNS[0].width - 8), x + 6, universityY);
+    if (program.duration) {
       setText(SUBTLE);
-      doc.setFontSize(6.2);
-      const original = fmt(program.tuitionFee, currency);
-      doc.text(original, feePanelX + feePanelW - 4, y + 14, { align: "right" });
-      const originalWidth = doc.getTextWidth(original);
-      setDraw(SUBTLE);
-      doc.setLineWidth(0.25);
-      doc.line(feePanelX + feePanelW - 4 - originalWidth, y + 12.7, feePanelX + feePanelW - 4, y + 12.7);
+      doc.setFontSize(5.3);
+      doc.text(fitText(program.duration, COLUMNS[0].width - 8), x + 6, universityY + 3.3);
     }
 
-    setText(hasDiscount ? EMERALD : NAVY);
+    // Degree.
+    x += COLUMNS[0].width;
+    drawPill(program.degree || "-", x + 2.3, y + 4, COLUMNS[1].width - 4.6, accent, accentSoft);
+
+    // Location.
+    x += COLUMNS[1].width;
+    setText(NAVY);
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(12);
-    doc.text(fmt(effectiveTuition, currency), feePanelX + feePanelW - 4, y + (hasDiscount ? 20 : 17), {
-      align: "right",
+    doc.setFontSize(6.2);
+    const city = program.universityCity || "-";
+    doc.text(fitText(city, COLUMNS[2].width - 5), x + 2.4, y + 6);
+    setText(MUTED);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(5.8);
+    split(program.universityCountry || "-", COLUMNS[2].width - 5, 2).forEach((line, index) => {
+      doc.text(line, x + 2.4, y + 10 + index * 3);
+    });
+    if (program.universityType) {
+      setText(SUBTLE);
+      doc.setFontSize(5.3);
+      doc.text(fitText(program.universityType, COLUMNS[2].width - 5), x + 2.4, y + height - 3);
+    }
+
+    // Language.
+    x += COLUMNS[2].width;
+    setText(NAVY);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(6.2);
+    split(program.language || "-", COLUMNS[3].width - 5, 3).forEach((line, index) => {
+      doc.text(line, x + 2.4, y + 6 + index * 3.3);
     });
 
-    if (hasDiscount && program.tuitionFee) {
-      const discount = Math.round(((program.tuitionFee - program.discountedFee!) / program.tuitionFee) * 100);
-      setFill(EMERALD_BG);
-      doc.roundedRect(feePanelX + 4, y + 23, 18, 4.8, 1.2, 1.2, "F");
-      setText(EMERALD);
-      doc.setFontSize(5.8);
-      doc.text(`${discount}% SAVING`, feePanelX + 13, y + 26.3, { align: "center" });
-    }
-
-    if (program.intakes) {
-      setText(MUTED);
+    // Fees. Commission remains intentionally absent from student proposals.
+    x += COLUMNS[3].width;
+    setText(MUTED);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(5.1);
+    doc.text("TUITION", x + 2.4, y + 4.5);
+    setText(hasDiscount ? EMERALD : NAVY);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7.8);
+    doc.text(fitText(fmt(effectiveTuition, currency), COLUMNS[4].width - 5), x + 2.4, y + 8.5);
+    let feeY = y + 12;
+    if (hasDiscount) {
+      const original = fmt(program.tuitionFee, currency);
+      setText(SUBTLE);
       doc.setFont("helvetica", "normal");
-      doc.setFontSize(5.8);
-      doc.text("INTAKE", feePanelX + 4, y + height - 8);
-      setText(accent);
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(6.5);
+      doc.setFontSize(5.3);
+      doc.text(`Was ${original}`, x + 2.4, feeY);
+      feeY += 3.1;
+    }
+    setText(BODY);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(5.3);
+    doc.text(
+      fitText(`Application  ${feeOrFree(program.applicationFee, currency)}`, COLUMNS[4].width - 5),
+      x + 2.4,
+      feeY,
+    );
+    feeY += 3.1;
+    if (serviceFee != null) {
       doc.text(
-        fitText(proposalPdfText(program.intakes), feePanelW - 21),
-        feePanelX + feePanelW - 4,
-        y + height - 8,
-        { align: "right" },
+        fitText(`Service  ${fmt(serviceFee, currency)}`, COLUMNS[4].width - 5),
+        x + 2.4,
+        feeY,
       );
     }
 
-    const detailY = y + height - 8;
-    setDraw(BORDER);
-    doc.setLineWidth(0.2);
-    doc.line(infoX, detailY - 4.5, feePanelX - 5, detailY - 4.5);
-
-    const detailCells: Array<{ label: string; value: string }> = [
-      { label: "Application fee", value: fmt(program.applicationFee ?? 0, currency) },
-    ];
-    if (serviceFee != null) {
-      detailCells.push({ label: "Service fee", value: fmt(serviceFee, currency) });
-    }
-    if (program.scholarship != null && program.scholarship > 0 && !hasDiscount) {
-      detailCells.push({ label: "Scholarship", value: fmt(program.scholarship, currency) });
-    }
-
-    const availableW = feePanelX - infoX - 5;
-    const detailCellW = availableW / detailCells.length;
-    detailCells.forEach((detail, detailIndex) => {
-      const detailX = infoX + detailIndex * detailCellW;
-      if (detailIndex > 0) {
-        setDraw(BORDER);
-        doc.line(detailX - 2, detailY - 2.8, detailX - 2, detailY + 4);
-      }
-      setText(SUBTLE);
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(5.6);
-      doc.text(detail.label.toUpperCase(), detailX, detailY);
-      setText(NAVY);
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(7);
-      doc.text(fitText(detail.value, detailCellW - 4), detailX, detailY + 4);
+    // Intake and status.
+    x += COLUMNS[4].width;
+    setText(MUTED);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(5.1);
+    doc.text("INTAKE", x + 2.4, y + 4.5);
+    setText(NAVY);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(6.1);
+    split(program.intakes || "-", COLUMNS[5].width - 5, 2).forEach((line, index) => {
+      doc.text(line, x + 2.4, y + 8.5 + index * 3.2);
     });
+    const status = proposalPdfText(program.universityStatus || "Open").toUpperCase();
+    const isClosed = /CLOSED|INACTIVE/.test(status);
+    drawPill(
+      isClosed ? "CLOSED" : "OPEN",
+      x + 2.4,
+      y + height - 7.2,
+      COLUMNS[5].width - 4.8,
+      isClosed ? RED : EMERALD,
+      isClosed ? RED_BG : EMERALD_BG,
+    );
+  }
+
+  function closeTable(lastY: number) {
+    setDraw(BORDER);
+    doc.setLineWidth(0.25);
+    doc.roundedRect(marginX, tableStartY, contentW, Math.max(tableHeaderH, lastY - tableStartY), 2, 2, "S");
   }
 
   function drawFooter(pageNumber: number, totalPages: number) {
@@ -529,31 +578,46 @@ export async function buildProposalPdf(options: ProposalOptions): Promise<jsPDF>
     doc.line(marginX, footerLineY, pageW - marginX, footerLineY);
     setText(SUBTLE);
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(6);
-    doc.text(fitText(proposalPdfText(companyName), 62), marginX, footerLineY + 4);
+    doc.setFontSize(5.7);
+    const companyFooter = companyEmail
+      ? `${proposalPdfText(companyName)}  |  ${proposalPdfText(companyEmail)}`
+      : proposalPdfText(companyName);
+    doc.text(fitText(companyFooter, 69), marginX, footerLineY + 4);
     doc.text("Fees and availability are subject to university confirmation.", pageW / 2, footerLineY + 4, {
       align: "center",
     });
     setText(accent);
     doc.setFont("helvetica", "bold");
-    doc.text(`${pageNumber} / ${totalPages}`, pageW - marginX, footerLineY + 4, { align: "right" });
+    doc.text(`Page ${pageNumber} of ${totalPages}`, pageW - marginX, footerLineY + 4, { align: "right" });
   }
 
-  drawHeader(false);
-  drawSectionIntro();
-  let y = contentStartY;
+  drawHeader();
+  drawTableHeader();
+  let y = tableStartY + tableHeaderH;
+  let rowIndex = 0;
 
-  programs.forEach((program, index) => {
-    const height = cardHeight(program);
-    if (y + height > footerLineY - 3) {
-      doc.addPage();
-      drawHeader(true);
-      drawSectionIntro();
-      y = contentStartY;
+  if (!programs.length) {
+    setText(MUTED);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.text("No programs were selected.", marginX + 5, y + 12);
+    y += 20;
+  } else {
+    for (const program of programs) {
+      const height = programRowHeight(program);
+      if (y + height > rowBottomLimit) {
+        closeTable(y);
+        doc.addPage();
+        drawHeader();
+        drawTableHeader();
+        y = tableStartY + tableHeaderH;
+      }
+      drawProgramRow(program, rowIndex, y, height);
+      y += height;
+      rowIndex += 1;
     }
-    drawProgramCard(program, index, marginX, y, height);
-    y += height + cardGap;
-  });
+  }
+  closeTable(y);
 
   const totalPages = doc.getNumberOfPages();
   for (let page = 1; page <= totalPages; page++) {
@@ -567,9 +631,10 @@ export async function buildProposalPdf(options: ProposalOptions): Promise<jsPDF>
 export async function generateProposalPdf(options: ProposalOptions): Promise<void> {
   const doc = await buildProposalPdf(options);
   const { date, time } = getProposalDateTime(options.generatedAt);
-  const safeName = proposalPdfText(options.companyName || "Find And Study")
-    .trim()
-    .replace(/\s+/g, "_")
-    .replace(/[^A-Za-z0-9_-]/g, "") || "Proposal";
+  const safeName =
+    proposalPdfText(options.companyName || "Find And Study")
+      .trim()
+      .replace(/\s+/g, "_")
+      .replace(/[^A-Za-z0-9_-]/g, "") || "Proposal";
   doc.save(`${safeName}_Program_Proposal_${date.replace(/\./g, "-")}_${time.replace(":", "-")}.pdf`);
 }

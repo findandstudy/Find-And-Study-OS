@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { generateProposalPdf } from "@/lib/generateProposalPdf";
+import { resolveProposalBranding } from "@/lib/proposalBranding";
 import { uploadDocumentFile } from "@/lib/uploadDocumentFile";
 import { PdfMarkupModal } from "@/components/course-finder/PdfMarkupModal";
 import * as XLSX from "xlsx";
@@ -404,16 +405,11 @@ export default function CourseFinder() {
         const allData = await apiFetch(`${BASE_URL}/api/course-finder?${allParams.toString()}`) as { data: Program[] };
         selected = allData.data.filter(p => selectedIds.has(p.id));
       }
+      const proposalBranding = resolveProposalBranding(user?.role, settings, agentProfile);
       let logoDataUrl: string | null = null;
-      // Agency-side PDFs must carry the exact agency/sub-agency identity that
-      // prepared them. Agent staff inherit the managing agency returned by
-      // /agents/me. Tenant users prefer the PDF-specific branding asset.
-      const logoSrc = isAgentSide
-        ? (agentProfile?.logoUrl || settings?.pdfLogoUrl || settings?.logoSquareUrl || settings?.logoUrl)
-        : (settings?.pdfLogoUrl || settings?.logoSquareUrl || settings?.logoUrl);
-      if (logoSrc) {
+      if (proposalBranding.logoSrc) {
         try {
-          const resp = await fetch(logoSrc);
+          const resp = await fetch(proposalBranding.logoSrc);
           const blob = await resp.blob();
           logoDataUrl = await new Promise<string>((resolve) => {
             const reader = new FileReader();
@@ -424,26 +420,13 @@ export default function CourseFinder() {
         } catch {}
       }
 
-      const name = isAgentSide
-        ? (agentProfile?.businessName || agentProfile?.companyName || settings?.publicBrandName || settings?.companyName || "Find And Study")
-        : (settings?.publicBrandName || settings?.companyName || "Find And Study");
-      const email = isAgentSide
-        ? (agentProfile?.email || settings?.companyEmail)
-        : settings?.companyEmail;
-      const phone = isAgentSide
-        ? (agentProfile?.phoneE164 || agentProfile?.phone || settings?.companyPhone)
-        : settings?.companyPhone;
-      const website = isAgentSide
-        ? (agentProfile?.website || settings?.companyWebsite)
-        : settings?.companyWebsite;
-
       await generateProposalPdf({
         programs: selected,
         logoDataUrl,
-        companyName: name,
-        companyEmail: email || undefined,
-        companyPhone: phone || undefined,
-        companyWebsite: website || undefined,
+        companyName: proposalBranding.companyName,
+        companyEmail: proposalBranding.companyEmail,
+        companyPhone: proposalBranding.companyPhone,
+        companyWebsite: proposalBranding.companyWebsite,
         showCommission: !!showCommission,
         agentShareRate: agentShareRate ?? null,
         serviceFeeMarkup: pdfMarkup !== 0 ? pdfMarkup : undefined,
