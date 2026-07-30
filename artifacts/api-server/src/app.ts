@@ -105,7 +105,11 @@ app.use((req, res, next) => {
         ) {
           return callback(null, true);
         }
-        return callback(new Error(`CORS: origin ${origin} not allowed`));
+        const corsError = new Error(`CORS: origin ${origin} not allowed`) as Error & {
+          status: number;
+        };
+        corsError.status = 403;
+        return callback(corsError);
       },
     })(req, res, next);
   }

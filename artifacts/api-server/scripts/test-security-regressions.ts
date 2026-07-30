@@ -52,6 +52,7 @@ test("portal lifecycle planning can never authorize a portal mutation", () => {
 });
 
 test("credentialed CORS is fail-closed in production", () => {
+  assert.match(appSource, /corsError\.status = 403/);
   const sameOrigin = "https://apply.findandstudy.com";
   assert.equal(
     isCredentialedCorsOriginAllowed(undefined, sameOrigin, [], "production"),
