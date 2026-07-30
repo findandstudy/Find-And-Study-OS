@@ -71,7 +71,7 @@ export interface StudentProfileResult {
 }
 
 export interface ApplicationPreflightSnapshot {
-  applicationId: number;
+  applicationId: number | null;
   studentId: number;
   profile: SubmitProfile;
   documentTypes: string[];
@@ -90,7 +90,7 @@ type ApplicationRow = typeof applicationsTable.$inferSelect;
  */
 export function buildSubmitProfileFromRecords(
   student: StudentRow,
-  app: ApplicationRow,
+  app: Pick<ApplicationRow, "level" | "programName" | "programId" | "universityName">,
   options: {
     allowMissingProgramId?: boolean;
     allowIncompleteProfile?: boolean;
@@ -131,6 +131,71 @@ export function buildSubmitProfileFromRecords(
     passportIssueDate:  student.passportIssueDate ?? undefined,
     passportExpiryDate: student.passportExpiry    ?? undefined,
   }, options);
+}
+
+export interface DraftApplicationPreflightInput {
+  studentId: number;
+  programId: number | null;
+  level: string | null;
+  programName: string | null;
+  universityName: string | null;
+}
+
+async function buildPreflightSnapshotFromRecords(
+  applicationId: number | null,
+  student: StudentRow,
+  app: Pick<ApplicationRow, "level" | "programName" | "programId" | "universityName">,
+  adapterKey: string,
+): Promise<ApplicationPreflightSnapshot> {
+  const [detailed, current, documents] = await Promise.all([
+    db.select().from(educationRecordsTable)
+      .where(eq(educationRecordsTable.studentId, student.id)),
+    db.select().from(studentEducationRecordsTable)
+      .where(and(
+        eq(studentEducationRecordsTable.studentId, student.id),
+        isNull(studentEducationRecordsTable.deletedAt),
+      )),
+    db.select({ type: documentsTable.type })
+      .from(documentsTable)
+      .where(and(
+        eq(documentsTable.studentId, student.id),
+        isNull(documentsTable.deletedAt),
+        or(
+          isNotNull(documentsTable.fileUrl),
+          isNotNull(documentsTable.fileKey),
+          isNotNull(documentsTable.fileData),
+        ),
+      )),
+  ]);
+
+  const merged = mergePortalEducationRecords(detailed, current);
+  const profile = buildSubmitProfileFromRecords(student, app, {
+    // Portal rows must be matched against the portal's live catalogue by
+    // university/program/level labels. CRM catalogue ids are mutable and can
+    // disappear after a yearly programme refresh; they are optional evidence,
+    // never the only identity proof.
+    allowMissingProgramId: true,
+    allowIncompleteProfile: true,
+  });
+  applyEducationFallbacks(profile, merged);
+  const legacyAddressCity = resolveLegacyAddressCity({
+    universityKey: adapterKey,
+    addressCity: student.addressCity,
+    address: student.address,
+    nationality: student.nationality,
+  });
+  if (!profile.addressCity && legacyAddressCity) {
+    profile.addressCity = legacyAddressCity;
+  }
+  if (merged.length > 0) profile.educationRecords = merged as any;
+  if (student.photoUrl?.trim()) profile.photoUrl = student.photoUrl.trim();
+
+  return {
+    applicationId,
+    studentId: student.id,
+    profile,
+    documentTypes: documents.map((row) => row.type),
+  };
 }
 
 type LegacyEducationRow = typeof educationRecordsTable.$inferSelect;
@@ -258,55 +323,43 @@ export async function buildApplicationPreflightSnapshot(
     ));
   if (!student) throw new Error(`Student ${app.studentId} not found`);
 
-  const [detailed, current, documents] = await Promise.all([
-    db.select().from(educationRecordsTable)
-      .where(eq(educationRecordsTable.studentId, app.studentId)),
-    db.select().from(studentEducationRecordsTable)
-      .where(and(
-        eq(studentEducationRecordsTable.studentId, app.studentId),
-        isNull(studentEducationRecordsTable.deletedAt),
-      )),
-    db.select({ type: documentsTable.type })
-      .from(documentsTable)
-      .where(and(
-        eq(documentsTable.studentId, app.studentId),
-        isNull(documentsTable.deletedAt),
-        or(
-          isNotNull(documentsTable.fileUrl),
-          isNotNull(documentsTable.fileKey),
-          isNotNull(documentsTable.fileData),
-        ),
-      )),
-  ]);
-
-  const merged = mergePortalEducationRecords(detailed, current);
-  const profile = buildSubmitProfileFromRecords(student, app, {
-    // Portal rows must be matched against the portal's live catalogue by
-    // university/program/level labels. CRM catalogue ids are mutable and can
-    // disappear after a yearly programme refresh; they are optional evidence,
-    // never the only identity proof.
-    allowMissingProgramId: true,
-    allowIncompleteProfile: true,
-  });
-  applyEducationFallbacks(profile, merged);
-  const legacyAddressCity = resolveLegacyAddressCity({
-    universityKey: options.adapterKey ?? "",
-    addressCity: student.addressCity,
-    address: student.address,
-    nationality: student.nationality,
-  });
-  if (!profile.addressCity && legacyAddressCity) {
-    profile.addressCity = legacyAddressCity;
-  }
-  if (merged.length > 0) profile.educationRecords = merged as any;
-  if (student.photoUrl?.trim()) profile.photoUrl = student.photoUrl.trim();
-
-  return {
+  return buildPreflightSnapshotFromRecords(
     applicationId,
-    studentId: app.studentId,
-    profile,
-    documentTypes: documents.map((row) => row.type),
-  };
+    student,
+    app,
+    options.adapterKey ?? "",
+  );
+}
+
+/**
+ * Portal readiness before an application row exists. Creation endpoints use
+ * this to enrich/validate the student first, so an incomplete application
+ * never enters Inquiry and then fails silently in the automation queue.
+ */
+export async function buildDraftApplicationPreflightSnapshot(
+  input: DraftApplicationPreflightInput,
+  options: { adapterKey?: string } = {},
+): Promise<ApplicationPreflightSnapshot> {
+  const [student] = await db
+    .select()
+    .from(studentsTable)
+    .where(and(
+      eq(studentsTable.id, input.studentId),
+      isNull(studentsTable.deletedAt),
+    ));
+  if (!student) throw new Error(`Student ${input.studentId} not found`);
+
+  return buildPreflightSnapshotFromRecords(
+    null,
+    student,
+    {
+      programId: input.programId,
+      level: input.level,
+      programName: input.programName,
+      universityName: input.universityName,
+    },
+    options.adapterKey ?? "",
+  );
 }
 
 // ---------------------------------------------------------------------------

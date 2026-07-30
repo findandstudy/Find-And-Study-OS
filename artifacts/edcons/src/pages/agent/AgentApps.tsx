@@ -51,13 +51,17 @@ import {
 import { useDroppable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import { useI18n } from "@/hooks/use-i18n";
+import { applicationCreationErrorMessage } from "@/lib/applicationCreationError";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 const VIEW_KEY = "edcons_applications_view";
 
 async function apiFetch(url: string, opts?: RequestInit) {
   const r = await fetch(url, { credentials: "include", ...opts });
-  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  if (!r.ok) {
+    const text = await r.text().catch(() => "");
+    throw new Error(text || `HTTP ${r.status}`);
+  }
   if (r.status === 204) return undefined;
   return r.json();
 }
@@ -734,17 +738,7 @@ function AddApplicationModal({ open, onClose, onSuccess, defaultStage }: { open:
     mutationFn: (payload: Record<string, unknown>) => apiFetch(`${BASE_URL}/api/applications`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }),
     onSuccess: () => { toast({ title: "Application created" }); handleClose(); onSuccess(); },
     onError: (err: any) => {
-      let desc = err?.message || "Failed";
-      try {
-        const parsed = JSON.parse(desc);
-        if (parsed?.missingFields) {
-          desc = `Student is missing required fields: ${parsed.missingFields.join(", ")}. Please complete the student profile first.`;
-        } else if (parsed?.code === "STUDENT_DOCS_REQUIRED" && Array.isArray(parsed?.missingDocTypes)) {
-          desc = `Missing required documents: ${parsed.missingDocTypes.join(", ")}. Please upload them to the student profile first.`;
-        } else if (parsed?.error) {
-          desc = parsed.error;
-        }
-      } catch {}
+      const desc = applicationCreationErrorMessage(err, "Failed");
       toast({ title: "Failed", description: desc, variant: "destructive" });
     },
   });

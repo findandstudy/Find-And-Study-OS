@@ -105,6 +105,7 @@
     "test:ai-extract-compat": "tsx --test ./scripts/test-ai-extract-compat.ts",
     "test:portal-readiness": "tsx --test ./scripts/test-portal-readiness.ts",
     "test:portal-address-extract": "DATABASE_URL=postgres://test:test@127.0.0.1:5432/test tsx --test ./scripts/test-portal-address-auto-extract.ts",
+    "test:portal-draft-preflight": "DATABASE_URL=postgres://test:test@127.0.0.1:5432/test tsx --test ./scripts/test-portal-draft-preflight.ts",
     "test:portal-ai-guardian": "tsx --test ./scripts/test-portal-ai-guardian.ts",
     "test:portal-lifecycle": "tsx --test ./scripts/test-portal-lifecycle-contract.ts",
     "test:security-regressions": "tsx --test ./scripts/test-security-regressions.ts",

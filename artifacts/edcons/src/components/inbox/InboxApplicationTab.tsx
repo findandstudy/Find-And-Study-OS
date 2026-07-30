@@ -4,6 +4,7 @@ import { customFetch } from "@workspace/api-client-react";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { useI18n } from "@/hooks/use-i18n";
 import { useToast } from "@/hooks/use-toast";
+import { applicationCreationErrorMessage } from "@/lib/applicationCreationError";
 import type { InboxConversationDetailResponse } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -232,30 +233,7 @@ export function InboxApplicationTab({
       onProgramSelected?.(null);
       onUpdated?.();
     } catch (err: any) {
-      // Human-readable missing-docs 422: prefer backend-provided labels
-      const errData = err?.data ?? err?.body ?? null;
-      const labels: string[] | undefined = errData?.missingDocLabels;
-      let msg = String(
-        errData?.error ?? err?.message ?? ""
-      );
-      if (Array.isArray(labels) && labels.length > 0) {
-        msg = t("inbox.applicationTab.missingDocsWarning", {
-          docs: labels.join(", "),
-        });
-      } else {
-        try {
-          const parsed = JSON.parse(msg);
-          if (parsed?.missingDocLabels?.length)
-            msg = t("inbox.applicationTab.missingDocsWarning", {
-              docs: (parsed.missingDocLabels as string[]).join(", "),
-            });
-          else if (parsed?.missingFields)
-            msg = `Missing fields: ${(parsed.missingFields as string[]).join(", ")}`;
-          else if (parsed?.error) msg = parsed.error;
-        } catch {
-          /* not JSON */
-        }
-      }
+      const msg = applicationCreationErrorMessage(err, "");
       toast({
         title: t("inbox.applicationTab.addFailed"),
         description: msg || undefined,

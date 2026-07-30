@@ -8,6 +8,10 @@ import { resolveAgentCommission } from "../lib/agentCommission";
 import { getCurrentSeason } from "../lib/season";
 import { checkMandatoryDocsForStudent } from "../lib/mandatoryDocs.js";
 import { enqueueOnStageChange, maybeEnqueuePortalSubmission } from "../lib/portalAutoTrigger.js";
+import {
+  buildPortalDraftPreflightError,
+  prepareRoutedPortalDraftPreflight,
+} from "../lib/portalDraftPreflight.js";
 import { getAgentVisibleIds } from "../lib/agentVisibility";
 import { getVisibleBranchIds } from "../lib/branchScope";
 import { getDocLabel } from "../lib/docNaming";
@@ -795,6 +799,31 @@ router.post("/course-finder/apply", requireAuth, requireRole(...STAFF_ROLES, ...
       missingDocTypes: docStatus.missing,
       missingDocLabels,
     });
+    return;
+  }
+
+  // Portal-aware readiness runs before INSERT. It combines the destination
+  // adapter's actual field/document contract with safe enrichment from the
+  // student's existing files. This prevents an apparently-valid CRM
+  // application from entering Inquiry only to fail silently in the worker.
+  const routedPreflight = await prepareRoutedPortalDraftPreflight({
+    universityId: program.universityId,
+    universityName: program.universityName,
+    draft: {
+      studentId: student.id,
+      programId: program.id,
+      level: program.degree ?? null,
+      programName: program.name,
+      universityName: program.universityName,
+    },
+    actorUserId: req.user!.id,
+    ip: req.ip,
+  });
+  if (
+    routedPreflight?.preflight.supported &&
+    !routedPreflight.preflight.ready
+  ) {
+    res.status(422).json(buildPortalDraftPreflightError(routedPreflight));
     return;
   }
 

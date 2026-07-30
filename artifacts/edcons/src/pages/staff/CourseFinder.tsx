@@ -25,6 +25,7 @@ import { cn } from "@/lib/utils";
 import { generateProposalPdf } from "@/lib/generateProposalPdf";
 import { resolveProposalBranding } from "@/lib/proposalBranding";
 import { uploadDocumentFile } from "@/lib/uploadDocumentFile";
+import { applicationCreationErrorMessage } from "@/lib/applicationCreationError";
 import { PdfMarkupModal } from "@/components/course-finder/PdfMarkupModal";
 import * as XLSX from "xlsx";
 import { useI18n } from "@/hooks/use-i18n";
@@ -2110,7 +2111,14 @@ function ApplyDialog({ program: p, onClose, currentUser, agentShareRate, hideSer
       toast({ title: t("courseFinderPage.applicationCreated"), description: t("courseFinderPage.applicationCreatedDesc", { student: `${selectedStudent.firstName} ${selectedStudent.lastName}`, program: p.name, docs: docMsg }) });
       setTimeout(() => handleClose(), 1500);
     } catch (err: any) {
-      toast({ title: t("common.error"), description: err.message || t("courseFinderPage.failedToCreateApplication"), variant: "destructive" });
+      toast({
+        title: t("common.error"),
+        description: applicationCreationErrorMessage(
+          err,
+          t("courseFinderPage.failedToCreateApplication"),
+        ),
+        variant: "destructive",
+      });
     } finally {
       setSubmitting(false);
     }

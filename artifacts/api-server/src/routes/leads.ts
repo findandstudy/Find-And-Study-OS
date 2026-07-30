@@ -27,6 +27,10 @@ import { buildDocNameFromParts } from "../lib/docNaming";
 import { callerOwnsObject } from "../lib/objectAuthz";
 import { checkMandatoryDocs, checkMandatoryDocsForStudent } from "../lib/mandatoryDocs";
 import { getDocLabel } from "../lib/docNaming";
+import {
+  buildPortalDraftPreflightError,
+  prepareRoutedPortalDraftPreflight,
+} from "../lib/portalDraftPreflight.js";
 
 const router: IRouter = Router();
 
@@ -1429,6 +1433,30 @@ async function createApplicationFromSubmission(studentId: number, submission: an
       originType: studentsTable.originType, originEntityType: studentsTable.originEntityType,
       originEntityId: studentsTable.originEntityId, originDisplayName: studentsTable.originDisplayName,
     }).from(studentsTable).where(eq(studentsTable.id, studentId));
+
+    const routedPreflight = await prepareRoutedPortalDraftPreflight({
+      universityId: program.universityId,
+      universityName: university?.name || submission.universityName || null,
+      draft: {
+        studentId,
+        programId: program.id,
+        level: program.degree || null,
+        programName: program.name,
+        universityName: university?.name || submission.universityName || null,
+      },
+      actorUserId,
+    });
+    if (
+      routedPreflight?.preflight.supported &&
+      !routedPreflight.preflight.ready
+    ) {
+      const detail = buildPortalDraftPreflightError(routedPreflight);
+      console.warn(
+        `[LEAD-CONVERT] Portal application blocked for student #${studentId}` +
+        ` adapter=${detail.adapterKey}: ${detail.error}`,
+      );
+      return;
+    }
 
     const [app] = await db.insert(applicationsTable).values({
       studentId,

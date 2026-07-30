@@ -11,6 +11,7 @@
     "test:inbox-education-payload": "tsx --test ./scripts/test-inbox-education-payload.ts",
     "test:proposal-pdf": "tsx --test ./scripts/test-proposal-pdf.ts ./scripts/test-proposal-branding.ts",
     "test:voice-recorder": "tsx --test ./scripts/test-voice-recorder-errors.ts",
+    "test:application-creation-error": "tsx --test ./scripts/test-application-creation-error.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {

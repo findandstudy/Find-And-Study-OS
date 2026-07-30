@@ -25,6 +25,10 @@ import { enqueuePortalSubmissions } from "../lib/portalManualEnqueue.js";
 import { getDocLabel } from "../lib/docNaming";
 import { checkMandatoryDocsForStudent } from "../lib/mandatoryDocs";
 import { resolveApplicationIntakeSnapshot } from "../lib/applicationIntake";
+import {
+  buildPortalDraftPreflightError,
+  prepareRoutedPortalDraftPreflight,
+} from "../lib/portalDraftPreflight.js";
 
 const router: IRouter = Router();
 
@@ -670,6 +674,32 @@ router.post("/applications", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_R
         }
       }
     }
+  }
+
+  // Final destination-aware intake gate. Unlike the generic required-document
+  // configuration above, this also knows that e.g. SIT needs addressCity and
+  // Topkapı needs its four core files. Safe values are recovered from existing
+  // documents first; unresolved items block creation before an Inquiry row is
+  // written.
+  const routedPreflight = await prepareRoutedPortalDraftPreflight({
+    universityId: snapshotUniversityId ? Number(snapshotUniversityId) : null,
+    universityName: snapshotUniversityName,
+    draft: {
+      studentId: parseInt(String(studentId), 10),
+      programId: programId ? parseInt(String(programId), 10) : null,
+      level: snapshotLevel,
+      programName: snapshotProgramName,
+      universityName: snapshotUniversityName,
+    },
+    actorUserId: req.user!.id,
+    ip: req.ip,
+  });
+  if (
+    routedPreflight?.preflight.supported &&
+    !routedPreflight.preflight.ready
+  ) {
+    res.status(422).json(buildPortalDraftPreflightError(routedPreflight));
+    return;
   }
 
   // -------- Campaign price adjustment --------
