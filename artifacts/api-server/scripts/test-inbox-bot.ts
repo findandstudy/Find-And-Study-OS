@@ -38,8 +38,17 @@ import {
   __setBotSendOverrideForTests,
   type BotSendInput,
 } from "../src/lib/inbox/botAutoReply";
+import { __setAiAgentConfigOverrideForTests } from "../src/lib/inbox/aiAgentConfig";
 
 const RUN_ID = `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+
+// Keep the engine regression suite independent from the live tenant's master
+// switch and working-hours schedule. The tests exercise those gates separately;
+// the scenarios below must be deterministic at every hour of the day.
+__setAiAgentConfigOverrideForTests({
+  enabled: true,
+  scheduleEnabled: false,
+});
 
 // ---------------------------------------------------------------------------
 // Mock send: record every call so tests can assert on count/text.
@@ -358,6 +367,7 @@ test("cleanup seeded rows", async () => {
   }
   __setBotReplyOverrideForTests(null);
   __setBotSendOverrideForTests(null);
+  __setAiAgentConfigOverrideForTests(null);
   // The inboxBus LISTEN client keeps the pool open; exit cleanly after tests.
   setTimeout(() => process.exit(0), 100);
 });
