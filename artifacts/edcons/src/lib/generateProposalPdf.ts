@@ -1044,8 +1044,10 @@ export async function buildProposalPdf(options: ProposalOptions): Promise<jsPDF>
     drawHeader(pageNumber);
     if (pageNumber === 1) {
       drawOverview();
-      drawProgramsLabel(108);
-      let rowY = 111;
+      // Quick-pick cards end at 107.8 mm. Keep a deliberate section gap so
+      // the letter-spaced heading does not visually sit on the card border.
+      drawProgramsLabel(111.5);
+      let rowY = 115;
       pagePrograms.forEach((program, index) => {
         drawProgramRow(program, index + 1, rowY, index === 0, compactSinglePage);
         rowY += compactSinglePage ? 13.25 : 19.2;
