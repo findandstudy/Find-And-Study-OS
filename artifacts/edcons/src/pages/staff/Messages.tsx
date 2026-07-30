@@ -995,13 +995,16 @@ function InboxTab() {
       const { uploadURL, objectPath } = urlRes;
       const uploadResp = await fetch(uploadURL, { method: "PUT", body: file, headers: { "Content-Type": file.type } });
       if (!uploadResp.ok) throw new Error("Upload failed");
-      const publicUrl = `${window.location.origin}/api/storage/public-objects/${objectPath}`;
+      const storageKey = String(objectPath)
+        .replace(/^\/+/, "")
+        .replace(/^(?:objects\/)+/, "");
+      const privateUrl = `${window.location.origin}/api/storage/objects/${storageKey}`;
       const type = file.type.startsWith("image/") ? "image"
         : file.type.startsWith("video/") ? "video"
         : file.type.startsWith("audio/") ? "audio"
         : "file";
       const isVoiceNote = type === "audio" && file.name.startsWith("voice-note-");
-      return { url: publicUrl, type, name: file.name, ...(isVoiceNote ? { voiceNote: true } : {}) };
+      return { url: privateUrl, type, name: file.name, ...(isVoiceNote ? { voiceNote: true } : {}) };
     } catch (err: any) {
       toast({ title: t("inbox.error.sendMediaFailed"), description: err?.message, variant: "destructive" });
       return null;
@@ -2241,7 +2244,16 @@ function InboxTab() {
                                 const rawUrl = a.url ?? a.fileUrl ?? "";
                                 // Zernio media URLs require a Bearer apiKey — load them
                                 // through our authenticated server proxy instead.
-                                const url = rawUrl.startsWith("https://zernio.com/")
+                                const isStoredInboxObject = (() => {
+                                  try {
+                                    const parsed = new URL(rawUrl, window.location.origin);
+                                    return parsed.origin === window.location.origin
+                                      && /^\/api\/storage\/(?:public-objects|objects)\//.test(parsed.pathname);
+                                  } catch {
+                                    return false;
+                                  }
+                                })();
+                                const url = rawUrl.startsWith("https://zernio.com/") || isStoredInboxObject
                                   ? `/api/inbox/media/${m.id}/${i}`
                                   : rawUrl;
                                 const type = a.type ?? a.fileType ?? "file";

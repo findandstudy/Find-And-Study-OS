@@ -2,6 +2,10 @@ import { db, channelAccountsTable, integrationsTable } from "@workspace/db";
 import { and, eq } from "drizzle-orm";
 import { decryptConfig } from "../encryption";
 import { ObjectStorageService } from "../objectStorage";
+import {
+  configuredInboxMediaHosts,
+  resolveLocalInboxStorageKey,
+} from "./mediaSource";
 
 /**
  * Single source of truth for Zernio outbound sends.
@@ -438,31 +442,23 @@ function getStorage(): ObjectStorageService {
  * both artifacts here so we resolve to the same key the storage layer
  * actually used when writing the file.
  */
-function normalizePublicObjectKey(raw: string): string {
-  let key = raw.replace(/^\/+/, "");
-  key = key.replace(/^objects\//, "");
-  key = key.replace(/\/{2,}/g, "/");
-  return key;
-}
-
 /**
  * Load the attachment bytes. Attachments uploaded from the inbox composer have
- * URLs of the form `${origin}/api/storage/public-objects/<objectPath>`; we
- * read those straight from our own storage (no HTTP round-trip). Anything else
- * is fetched over HTTP as a best effort.
+ * legacy public-object URLs or the authenticated object URL; we read those
+ * straight from our own storage (no HTTP round-trip). Anything else is fetched
+ * over HTTP as a best effort.
  */
 async function downloadAttachmentBytes(
   attUrl: string,
   apiKey?: string,
 ): Promise<{ buf: Buffer; contentType: string } | null> {
   try {
-    const withoutQuery = attUrl.split("?")[0];
-    const match = withoutQuery.match(/\/api\/storage\/public-objects\/(.+)$/);
-    if (match) {
-      const rawFilePath = decodeURIComponent(match[1]);
-      const filePath = normalizePublicObjectKey(rawFilePath);
-      if (filePath.includes("..") || filePath.includes("\\")) return null;
-      console.log("[ZERNIO] resolving attachment storage key:", { rawFilePath, filePath });
+    const filePath = resolveLocalInboxStorageKey(
+      attUrl,
+      configuredInboxMediaHosts(["apply.findandstudy.com"]),
+    );
+    if (filePath) {
+      console.log("[ZERNIO] resolving attachment storage key:", { filePath });
       const file = await getStorage().searchPublicObject(filePath);
       if (!file) {
         console.warn("[ZERNIO] attachment object not found in storage:", filePath);

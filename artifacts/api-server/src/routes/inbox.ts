@@ -77,6 +77,11 @@ import {
   reprocessRagSource,
 } from "../lib/inbox/knowledgeSourcesAdmin";
 import { ObjectStorageService } from "../lib/objectStorage";
+import {
+  configuredInboxMediaHosts,
+  isZernioMediaUrl,
+  resolveLocalInboxStorageKey,
+} from "../lib/inbox/mediaSource";
 import { validateUploadedFile, validateUploadedFileBuffer, sanitizeFileName } from "../lib/fileUploadValidation";
 import { buildDocNameFromParts } from "../lib/docNaming";
 import { normalizeInboxStudentExtraction } from "../lib/inboxStudentExtraction";
@@ -99,6 +104,7 @@ import {
 } from "../lib/inboxConversationIndicators";
 
 const router: IRouter = Router();
+const inboxMediaStorage = new ObjectStorageService();
 
 // Channels governed by Meta's 24h messaging window: free-form replies are only
 // allowed within 24h of the last inbound message. WhatsApp, Messenger and
@@ -346,18 +352,49 @@ router.get(
     const att = allAtts[index];
     const rawUrl = att?.url ?? att?.fileUrl ?? "";
 
-    // SSRF guard: only proxy Zernio-hosted media.
-    let parsed: URL;
-    try {
-      parsed = new URL(rawUrl);
-    } catch {
-      res.status(404).json({ error: "Attachment not found" });
+    // Outbound composer uploads stay in our own object storage. Historical
+    // rows contain a double-prefixed public URL; new rows use the authenticated
+    // object route. Resolve both through this message-authorized proxy so every
+    // staff member who can read the conversation can preview/download it.
+    const localKey = resolveLocalInboxStorageKey(
+      rawUrl,
+      configuredInboxMediaHosts([req.hostname]),
+    );
+    if (localKey) {
+      try {
+        const file = await inboxMediaStorage.searchPublicObject(localKey);
+        if (!file) {
+          res.status(404).json({ error: "File not found" });
+          return;
+        }
+        const response = await inboxMediaStorage.downloadObject(file, 300);
+        res.status(response.status);
+        response.headers.forEach((value, key) => res.setHeader(key, value));
+        res.setHeader("X-Content-Type-Options", "nosniff");
+        if (response.body) {
+          const { Readable } = await import("node:stream");
+          Readable.fromWeb(
+            response.body as unknown as Parameters<typeof Readable.fromWeb>[0],
+          ).pipe(res);
+        } else {
+          res.end();
+        }
+      } catch (err: any) {
+        console.error(
+          `[INBOX] local media proxy error for message ${messageId}[${index}]:`,
+          err?.message || err,
+        );
+        res.status(500).json({ error: "Failed to serve media" });
+      }
       return;
     }
-    if (parsed.protocol !== "https:" || parsed.hostname !== "zernio.com") {
+
+    // SSRF guard: external proxying is limited to the exact Zernio host.
+    if (!isZernioMediaUrl(rawUrl)) {
       res.status(404).json({ error: "Attachment not proxied" });
       return;
     }
+    const parsed = new URL(rawUrl);
 
     const apiKey = await getZernioApiKey();
     if (!apiKey) {

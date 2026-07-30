@@ -4,6 +4,10 @@ import {
   ensureAttachmentFilenameExtension,
   readNestedZernioAttachmentMetadata,
 } from "../src/lib/inboxAttachmentMetadata";
+import {
+  isZernioMediaUrl,
+  resolveLocalInboxStorageKey,
+} from "../src/lib/inbox/mediaSource";
 
 test("reads the real Zernio WhatsApp image metadata shape", () => {
   const metadata = {
@@ -38,4 +42,54 @@ test("adds Office extensions for generic document placeholders", () => {
     ),
     "document.docx",
   );
+});
+
+test("recovers historical double-prefixed outbound inbox object URLs", () => {
+  assert.equal(
+    resolveLocalInboxStorageKey(
+      "https://apply.findandstudy.com/api/storage/public-objects//objects/inbox/6b57aa65-7818-4e2b-a677-af1f8c76c175",
+      ["apply.findandstudy.com"],
+    ),
+    "inbox/6b57aa65-7818-4e2b-a677-af1f8c76c175",
+  );
+});
+
+test("accepts new authenticated inbox object URLs", () => {
+  assert.equal(
+    resolveLocalInboxStorageKey(
+      "https://apply.findandstudy.com/api/storage/objects/inbox/file-id",
+      ["apply.findandstudy.com"],
+    ),
+    "inbox/file-id",
+  );
+});
+
+test("local media resolver rejects foreign hosts, traversal and non-inbox objects", () => {
+  assert.equal(
+    resolveLocalInboxStorageKey(
+      "https://evil.example/api/storage/objects/inbox/file-id",
+      ["apply.findandstudy.com"],
+    ),
+    null,
+  );
+  assert.equal(
+    resolveLocalInboxStorageKey(
+      "/api/storage/objects/inbox/%2e%2e/passport.pdf",
+      [],
+    ),
+    null,
+  );
+  assert.equal(
+    resolveLocalInboxStorageKey(
+      "/api/storage/objects/staff-documents/1/contract.pdf",
+      [],
+    ),
+    null,
+  );
+});
+
+test("external media proxy accepts only the exact HTTPS Zernio host", () => {
+  assert.equal(isZernioMediaUrl("https://zernio.com/api/v1/media/1"), true);
+  assert.equal(isZernioMediaUrl("http://zernio.com/api/v1/media/1"), false);
+  assert.equal(isZernioMediaUrl("https://zernio.com.evil.example/media/1"), false);
 });
