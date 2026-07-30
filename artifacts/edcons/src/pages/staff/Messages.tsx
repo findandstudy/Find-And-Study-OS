@@ -62,6 +62,8 @@ interface Conversation {
   participants: Array<{ userId: number; firstName: string; lastName: string; avatarUrl: string | null; role: string; lastReadAt?: string | null }>;
   unreadCount: number;
   readReceiptsEnabled?: boolean;
+  botEnabled?: boolean;
+  needsHuman?: boolean;
 }
 
 interface MessageAttachment {
@@ -83,7 +85,13 @@ interface Message {
   status: string;
   direction?: string;
   createdAt: string;
-  metadata?: { attachment?: MessageAttachment; attachments?: MessageAttachment[] };
+  metadata?: {
+    attachment?: MessageAttachment;
+    attachments?: MessageAttachment[];
+    botSent?: boolean;
+    model?: string;
+    language?: string;
+  };
   senderFirstName: string | null;
   senderLastName: string | null;
   senderAvatarUrl: string | null;
@@ -174,6 +182,17 @@ interface InboxChannelAccountSummary {
   displayName: string;
   externalAccountId?: string | null;
   isDefault: boolean;
+  provider?: string | null;
+}
+
+function isExternalAutoReplyAvailable(
+  channel: string | null | undefined,
+  account: InboxChannelAccountSummary | null | undefined,
+): boolean {
+  if (!channel) return false;
+  if (channel === "web_chat") return true;
+  if (account?.provider === "zernio") return true;
+  return channel === "whatsapp" || channel === "messenger" || channel === "instagram";
 }
 
 // This is Zernio's stable account identity for the second WhatsApp line.
@@ -1635,6 +1654,10 @@ function InboxTab() {
   // Safe non-null assertion: `conv` is only read inside the `!detail ? loader : (...)` JSX branch below.
   const conv = detail?.conversation!;
   const activeLineBrand = whatsappLineBrand(conv?.channel, conv?.channelAccount);
+  const externalAutoReplyAvailable = isExternalAutoReplyAvailable(
+    conv?.channel,
+    conv?.channelAccount,
+  );
   const metaReplyWindowClosed = Boolean(
     detail &&
     (conv?.channel === "whatsapp" || conv?.channel === "messenger" || conv?.channel === "instagram") &&
@@ -2103,7 +2126,7 @@ function InboxTab() {
                       <AlertTriangle className="w-3 h-3" /> {t("messagesPage.needsHuman")}
                     </span>
                   )}
-                  {conv.channel === "whatsapp" && (
+                  {externalAutoReplyAvailable && (
                     <Button
                       size="sm"
                       variant={conv.botEnabled ? "default" : "outline"}
@@ -3495,6 +3518,9 @@ function MessageThread({
   const [participants, setParticipants] = useState<Array<{ userId: number; firstName: string; lastName: string; avatarUrl: string | null; role: string; lastReadAt?: string | null }>>([]);
   const [readReceiptsEnabled, setReadReceiptsEnabled] = useState(true);
   const [togglingReceipts, setTogglingReceipts] = useState(false);
+  const [botEnabled, setBotEnabled] = useState(false);
+  const [needsHuman, setNeedsHuman] = useState(false);
+  const [togglingBot, setTogglingBot] = useState(false);
   const [summary, setSummary] = useState<ConversationAiSummary | null>(null);
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -3511,6 +3537,12 @@ function MessageThread({
       if (typeof (res as any)?.readReceiptsEnabled === "boolean") {
         setReadReceiptsEnabled((res as any).readReceiptsEnabled);
       }
+      if (typeof (res as any)?.botEnabled === "boolean") {
+        setBotEnabled((res as any).botEnabled);
+      }
+      if (typeof (res as any)?.needsHuman === "boolean") {
+        setNeedsHuman((res as any).needsHuman);
+      }
     } catch {}
   }, [conversationId]);
 
@@ -3524,6 +3556,8 @@ function MessageThread({
     // from the summarize response below.
     setSummary(null);
     setReadReceiptsEnabled(true);
+    setBotEnabled(false);
+    setNeedsHuman(false);
     Promise.all([
       fetchMessages(),
       customFetch(`/api/conversations/${conversationId}/participants`).then((r: any) => setParticipants(r?.data || r || [])),
@@ -3688,6 +3722,30 @@ function MessageThread({
     }
   }
 
+  async function toggleInternalBot(enabled: boolean) {
+    if (togglingBot) return;
+    setTogglingBot(true);
+    try {
+      const response: any = await customFetch(`/api/inbox/conversations/${conversationId}/bot`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled }),
+      });
+      setBotEnabled(Boolean(response?.data?.botEnabled));
+      setNeedsHuman(Boolean(response?.data?.needsHuman));
+      toast({
+        title: enabled ? t("messagesPage.aiOn") : t("messagesPage.aiOff"),
+      });
+    } catch (error: any) {
+      toast({
+        title: error?.body?.error || error?.data?.error || t("messagesPage.aiToggleFailed"),
+        variant: "destructive",
+      });
+    } finally {
+      setTogglingBot(false);
+    }
+  }
+
   const ChannelIcon = channelIcon[channel] || MessageSquare;
 
   return (
@@ -3701,6 +3759,24 @@ function MessageThread({
           <p className="font-semibold text-sm truncate">{threadTitle}</p>
           <p className="text-xs text-muted-foreground">{participants.length} participants</p>
         </div>
+        {needsHuman && (
+          <Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-800 gap-1">
+            <AlertTriangle className="w-3 h-3" />
+            {t("messagesPage.needsHuman")}
+          </Badge>
+        )}
+        <Button
+          size="sm"
+          variant={botEnabled ? "default" : "outline"}
+          onClick={() => toggleInternalBot(!botEnabled)}
+          disabled={togglingBot}
+          className="h-8 gap-1.5"
+          title={botEnabled ? t("messagesPage.aiOnHint") : t("messagesPage.aiOffHint")}
+          data-testid="button-toggle-internal-bot"
+        >
+          {togglingBot ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Bot className="w-3.5 h-3.5" />}
+          {botEnabled ? t("messagesPage.aiOn") : t("messagesPage.aiOff")}
+        </Button>
         <Tooltip>
           <TooltipTrigger asChild>
             <button
@@ -3746,8 +3822,11 @@ function MessageThread({
           </div>
         ) : (
           messages.map(msg => {
-            const isMe = msg.senderId === user?.id;
-            const initials = `${msg.senderFirstName?.[0] || ""}${msg.senderLastName?.[0] || ""}`;
+            const isBot = msg.metadata?.botSent === true;
+            const isMe = !isBot && msg.senderId === user?.id;
+            const initials = isBot
+              ? "AI"
+              : `${msg.senderFirstName?.[0] || ""}${msg.senderLastName?.[0] || ""}`;
             const att = (msg.metadata as any)?.attachment as MessageAttachment | undefined;
             const hasTextContent = msg.content && !msg.content.startsWith("\u{1F4CE}");
             return (
@@ -3756,16 +3835,28 @@ function MessageThread({
                   msg.senderAvatarUrl ? (
                     <img src={msg.senderAvatarUrl} alt={initials} className="w-8 h-8 rounded-full object-cover shrink-0" />
                   ) : (
-                    <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-primary/30 to-accent/30 flex items-center justify-center text-xs font-bold shrink-0">
-                      {initials}
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
+                      isBot
+                        ? "bg-primary/10 text-primary ring-1 ring-primary/20"
+                        : "bg-gradient-to-tr from-primary/30 to-accent/30"
+                    }`}>
+                      {isBot ? <Bot className="w-4 h-4" /> : initials}
                     </div>
                   )
                 )}
                 <div className={`max-w-[70%] ${isMe ? "items-end" : ""}`}>
                   {!isMe && (
-                    <p className="text-xs text-muted-foreground mb-1">{msg.senderFirstName} {msg.senderLastName}</p>
+                    <p className="text-xs text-muted-foreground mb-1">
+                      {isBot ? "AI Assistant" : `${msg.senderFirstName ?? ""} ${msg.senderLastName ?? ""}`.trim()}
+                    </p>
                   )}
-                  <div className={`rounded-2xl px-4 py-2.5 ${isMe ? "bg-primary text-white rounded-tr-sm" : "bg-secondary rounded-tl-sm"}`}>
+                  <div className={`rounded-2xl px-4 py-2.5 ${
+                    isMe
+                      ? "bg-primary text-white rounded-tr-sm"
+                      : isBot
+                        ? "bg-primary/10 border border-primary/20 rounded-tl-sm"
+                        : "bg-secondary rounded-tl-sm"
+                  }`}>
                     {att && isImage(att.fileType!) && (
                       <div className="mb-1 group/att relative">
                         <img src={att.fileUrl!} alt={att.fileName!} className="max-w-full max-h-48 rounded-lg object-cover" />

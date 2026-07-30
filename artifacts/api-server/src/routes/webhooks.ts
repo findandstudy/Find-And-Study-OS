@@ -473,9 +473,10 @@ router.post("/webhooks/meta", webhookLimiter, rawJson, async (req: Request, res:
     : await ensureChannelAccount(channel, displayName, externalAccountId ?? fallbackExternalId);
 
   let processed = 0;
+  const botCandidates: Array<{ conversationId: number; inboundMessageId: number }> = [];
   for (const m of messages) {
     try {
-      await processInboundMessage({
+      const result = await processInboundMessage({
         channel,
         channelAccountId,
         contact: {
@@ -493,13 +494,25 @@ router.post("/webhooks/meta", webhookLimiter, rawJson, async (req: Request, res:
         },
       });
       processed++;
+      if (!result.duplicate && m.text && m.text.trim()) {
+        botCandidates.push({
+          conversationId: result.conversationId,
+          inboundMessageId: result.messageId,
+        });
+      }
     } catch (err) {
       console.error("[WEBHOOK] Meta process error:", err);
     }
   }
   res.status(200).json({ ok: true, processed });
 
-  // Outbound replies / AI bot routing for Meta channels arrive in Faz 3.
+  // Acknowledge Meta before any AI/provider work. The engine is idempotent and
+  // short-circuits when the global or per-conversation switch is off.
+  for (const candidate of botCandidates) {
+    void maybeAutoReply(candidate).catch((err) => {
+      console.error(`[WEBHOOK] Meta ${channel} auto-reply error:`, err);
+    });
+  }
 });
 
 function timingSafeEq(a: string | undefined, b: string | undefined): boolean {

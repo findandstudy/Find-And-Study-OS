@@ -26,6 +26,7 @@ import { resolveZernioWhatsAppAccount } from "../lib/inbox/zernioTemplates";
 import { isWithin24hWindow } from "../lib/inbox/channels/whatsapp";
 import { toE164 } from "../lib/inbox/phone";
 import { isAgentSourcedAndBlockedForStaff } from "../lib/rbac/agentSourceScope";
+import { maybeAutoReply } from "../lib/inbox/botAutoReply";
 
 const router: IRouter = Router();
 
@@ -97,6 +98,8 @@ router.get("/conversations", requireAuth, requireRole(...STAFF_ROLES, ...ADMIN_R
       lastMessageAt: conversationsTable.lastMessageAt,
       lastMessagePreview: conversationsTable.lastMessagePreview,
       createdAt: conversationsTable.createdAt,
+      botEnabled: conversationsTable.botEnabled,
+      needsHuman: conversationsTable.needsHuman,
     })
     .from(conversationsTable)
     .where(
@@ -405,12 +408,21 @@ router.get("/conversations/:id/messages", requireAuth, requireRole(...STAFF_ROLE
   }
 
   const [convMeta] = await db
-    .select({ readReceiptsEnabled: conversationsTable.readReceiptsEnabled })
+    .select({
+      readReceiptsEnabled: conversationsTable.readReceiptsEnabled,
+      botEnabled: conversationsTable.botEnabled,
+      needsHuman: conversationsTable.needsHuman,
+    })
     .from(conversationsTable)
     .where(eq(conversationsTable.id, conversationId))
     .limit(1);
 
-  res.json({ data: reversed, readReceiptsEnabled: convMeta?.readReceiptsEnabled ?? true });
+  res.json({
+    data: reversed,
+    readReceiptsEnabled: convMeta?.readReceiptsEnabled ?? true,
+    botEnabled: convMeta?.botEnabled ?? false,
+    needsHuman: convMeta?.needsHuman ?? false,
+  });
 });
 
 router.post("/conversations/:id/messages", requireAuth, requireRole(...STAFF_ROLES, ...ADMIN_ROLES), async (req, res): Promise<void> => {
@@ -544,6 +556,14 @@ router.post("/conversations/:id/messages", requireAuth, requireRole(...STAFF_ROL
   }
 
   res.status(201).json(message);
+  if (content?.trim()) {
+    void maybeAutoReply({
+      conversationId,
+      inboundMessageId: message.id,
+    }).catch((error) => {
+      console.error(`[MESSAGES] internal AI reply failed for conversation #${conversationId}:`, error);
+    });
+  }
 });
 
 router.get("/conversations/:id/participants", requireAuth, requireRole(...STAFF_ROLES, ...ADMIN_ROLES), async (req, res): Promise<void> => {
@@ -1282,7 +1302,10 @@ router.get("/student/conversations/:id/messages", requireAuth, async (req, res):
     senderRole: usersTable.role, senderAvatarUrl: usersTable.avatarUrl,
   })
     .from(messagesTable)
-    .innerJoin(usersTable, eq(messagesTable.senderId, usersTable.id))
+    // AI-authored internal replies intentionally have senderId=null. A left
+    // join keeps those rows visible to the student instead of silently
+    // dropping them from the thread.
+    .leftJoin(usersTable, eq(messagesTable.senderId, usersTable.id))
     .where(eq(messagesTable.conversationId, conversationId))
     .orderBy(asc(messagesTable.createdAt));
 
@@ -1379,6 +1402,14 @@ router.post("/student/conversations/:id/messages", requireAuth, async (req, res)
   }
 
   res.status(201).json(message);
+  if (content?.trim()) {
+    void maybeAutoReply({
+      conversationId,
+      inboundMessageId: message.id,
+    }).catch((error) => {
+      console.error(`[MESSAGES] student internal AI reply failed for conversation #${conversationId}:`, error);
+    });
+  }
 });
 
 const AGENT_ROLE_LIST = ["agent", "sub_agent", "agent_staff"];
@@ -1481,7 +1512,8 @@ router.get("/agent/conversations/:id/messages", requireAuth, requireAgentStaffPe
     senderRole: usersTable.role, senderAvatarUrl: usersTable.avatarUrl,
   })
     .from(messagesTable)
-    .innerJoin(usersTable, eq(messagesTable.senderId, usersTable.id))
+    // AI-authored internal replies intentionally have senderId=null.
+    .leftJoin(usersTable, eq(messagesTable.senderId, usersTable.id))
     .where(eq(messagesTable.conversationId, conversationId))
     .orderBy(asc(messagesTable.createdAt));
 
@@ -1601,6 +1633,14 @@ router.post("/agent/conversations/:id/messages", requireAuth, requireAgentStaffP
   }
 
   res.status(201).json(message);
+  if (content?.trim()) {
+    void maybeAutoReply({
+      conversationId,
+      inboundMessageId: message.id,
+    }).catch((error) => {
+      console.error(`[MESSAGES] agent internal AI reply failed for conversation #${conversationId}:`, error);
+    });
+  }
 });
 
 export default router;

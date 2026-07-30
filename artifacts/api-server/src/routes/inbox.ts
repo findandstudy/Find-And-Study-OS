@@ -65,7 +65,10 @@ import {
   aiAgentConfigPatchSchema,
 } from "../lib/inbox/aiAgentConfig";
 import { loadAnthropicModelOptions } from "../lib/inbox/aiAgentModels";
-import { runBotReplyTest } from "../lib/inbox/botAutoReply";
+import {
+  isAutoReplyChannelSupported,
+  runBotReplyTest,
+} from "../lib/inbox/botAutoReply";
 import {
   getProgramScopeSource,
   writeProgramScopeSource,
@@ -819,6 +822,7 @@ router.get(
       displayName: string;
       externalAccountId: string | null;
       isDefault: boolean;
+      provider: string;
     };
 
     const contactsMap = new Map<number, ExternalContact>();
@@ -845,6 +849,7 @@ router.get(
           displayName: channelAccountsTable.displayName,
           externalAccountId: channelAccountsTable.externalAccountId,
           isDefault: channelAccountsTable.isDefault,
+          provider: channelAccountsTable.provider,
         })
         .from(channelAccountsTable)
         .where(inArray(channelAccountsTable.id, channelAccountIds));
@@ -887,6 +892,7 @@ router.get(
             displayName: channelAccountsTable.displayName,
             externalAccountId: channelAccountsTable.externalAccountId,
             isDefault: channelAccountsTable.isDefault,
+            provider: channelAccountsTable.provider,
           })
           .from(channelAccountsTable)
           .where(eq(channelAccountsTable.id, conv.channelAccountId))
@@ -1305,6 +1311,53 @@ router.patch(
       res.status(400).json({ error: "enabled (boolean) is required" });
       return;
     }
+    const [conversation] = await db
+      .select({
+        id: conversationsTable.id,
+        channel: conversationsTable.channel,
+        channelAccountId: conversationsTable.channelAccountId,
+      })
+      .from(conversationsTable)
+      .where(eq(conversationsTable.id, id))
+      .limit(1);
+    if (!conversation) {
+      res.status(404).json({ error: "Not found" });
+      return;
+    }
+
+    // Internal conversations can include students, agents and staff. Merely
+    // knowing a conversation id must never grant control of its AI assistant.
+    if (conversation.channel === "internal") {
+      const [membership] = await db
+        .select({ id: conversationParticipantsTable.id })
+        .from(conversationParticipantsTable)
+        .where(and(
+          eq(conversationParticipantsTable.conversationId, id),
+          eq(conversationParticipantsTable.userId, req.user!.id),
+        ))
+        .limit(1);
+      if (!membership) {
+        res.status(403).json({ error: "Not a participant" });
+        return;
+      }
+    }
+
+    let provider: string | null = null;
+    if (conversation.channelAccountId) {
+      const [account] = await db
+        .select({ provider: channelAccountsTable.provider })
+        .from(channelAccountsTable)
+        .where(eq(channelAccountsTable.id, conversation.channelAccountId))
+        .limit(1);
+      provider = account?.provider ?? null;
+    }
+    if (enabled && !isAutoReplyChannelSupported(conversation.channel, provider)) {
+      res.status(409).json({
+        error: "AI auto-reply is unavailable because this channel has no configured reply transport",
+      });
+      return;
+    }
+
     // Re-enabling the bot clears the needs-human flag: staff have acknowledged
     // any escalation and are handing the conversation back to the assistant.
     // Re-enabling resets the consecutive-reply counter so the handoff threshold

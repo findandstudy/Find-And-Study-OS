@@ -32,6 +32,7 @@ import { and, eq } from "drizzle-orm";
 import {
   detectEscalation,
   detectLanguage,
+  isAutoReplyChannelSupported,
   maybeAutoReply,
   __setBotReplyOverrideForTests,
   __setBotSendOverrideForTests,
@@ -136,6 +137,41 @@ async function outboundCount(conversationId: number): Promise<number> {
   return rows.length;
 }
 
+async function seedInternalConversation(): Promise<number> {
+  const suffix = `${RUN_ID}_internal_${seedCounter++}`;
+  const [conv] = await db
+    .insert(conversationsTable)
+    .values({
+      type: "direct",
+      title: `Internal AI ${suffix}`,
+      channel: "internal",
+      status: "open",
+      botEnabled: true,
+    })
+    .returning({ id: conversationsTable.id });
+  createdConvIds.push(conv.id);
+  return conv.id;
+}
+
+async function seedInternalMessage(
+  conversationId: number,
+  content: string,
+  metadata: Record<string, unknown> = {},
+): Promise<number> {
+  const [msg] = await db
+    .insert(messagesTable)
+    .values({
+      conversationId,
+      content,
+      channel: "internal",
+      direction: "internal",
+      status: "sent",
+      metadata,
+    })
+    .returning({ id: messagesTable.id });
+  return msg.id;
+}
+
 // ---------------------------------------------------------------------------
 // Escalation detection
 // ---------------------------------------------------------------------------
@@ -179,6 +215,17 @@ test("detectLanguage picks the student's language", () => {
   assert.equal(detectLanguage("مرحبا أريد الدراسة في تركيا"), "ar");
   assert.equal(detectLanguage("Здравствуйте, я хочу учиться"), "ru");
   assert.equal(detectLanguage("Bonjour, je veux étudier en Turquie"), "fr");
+});
+
+test("auto-reply transport capability is fail-closed and Zernio-aware", () => {
+  assert.equal(isAutoReplyChannelSupported("internal"), true);
+  assert.equal(isAutoReplyChannelSupported("web_chat"), true);
+  assert.equal(isAutoReplyChannelSupported("instagram"), true);
+  assert.equal(isAutoReplyChannelSupported("messenger"), true);
+  assert.equal(isAutoReplyChannelSupported("telegram"), false);
+  assert.equal(isAutoReplyChannelSupported("telegram", "zernio"), true);
+  assert.equal(isAutoReplyChannelSupported("email"), false);
+  assert.equal(isAutoReplyChannelSupported("sms"), false);
 });
 
 // ---------------------------------------------------------------------------
@@ -251,6 +298,49 @@ test("maybeAutoReply: outside 24h window → no send", async () => {
   assert.equal(outcome.reason, "outside_window");
   assert.equal(sentCalls.length, 0);
   assert.equal(await outboundCount(conversationId), 0);
+});
+
+test("maybeAutoReply: internal human message gets one internal AI reply without recursion", async () => {
+  resetMocks();
+  const conversationId = await seedInternalConversation();
+  const humanMessageId = await seedInternalMessage(
+    conversationId,
+    "Please summarize the next action for this application.",
+  );
+
+  const outcome = await maybeAutoReply({
+    conversationId,
+    inboundMessageId: humanMessageId,
+  });
+  assert.equal(outcome.reason, "sent");
+  assert.equal(sentCalls.length, 1);
+  assert.equal(sentCalls[0].channel, "internal");
+
+  const internalRows = await db
+    .select({
+      id: messagesTable.id,
+      direction: messagesTable.direction,
+      senderId: messagesTable.senderId,
+      metadata: messagesTable.metadata,
+    })
+    .from(messagesTable)
+    .where(eq(messagesTable.conversationId, conversationId));
+  const botRows = internalRows.filter((row) => {
+    const metadata = row.metadata && typeof row.metadata === "object"
+      ? row.metadata as Record<string, unknown>
+      : {};
+    return metadata.botSent === true;
+  });
+  assert.equal(botRows.length, 1);
+  assert.equal(botRows[0].direction, "internal");
+  assert.equal(botRows[0].senderId, null);
+
+  const recursiveOutcome = await maybeAutoReply({
+    conversationId,
+    inboundMessageId: botRows[0].id,
+  });
+  assert.equal(recursiveOutcome.reason, "not_inbound_text");
+  assert.equal(sentCalls.length, 1);
 });
 
 // ---------------------------------------------------------------------------
