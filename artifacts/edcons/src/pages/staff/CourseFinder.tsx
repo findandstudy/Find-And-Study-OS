@@ -329,8 +329,12 @@ export default function CourseFinder() {
     companyName?: string;
     publicBrandName?: string;
     companyEmail?: string;
+    supportEmail?: string;
+    salesEmail?: string;
     companyPhone?: string;
+    whatsappNumber?: string;
     companyWebsite?: string;
+    canonicalBaseUrl?: string;
     logoUrl?: string | null;
     logoSquareUrl?: string | null;
     pdfLogoUrl?: string | null;
@@ -411,27 +415,22 @@ export default function CourseFinder() {
         selected = allData.data.filter(p => selectedIds.has(p.id));
       }
       const proposalBranding = resolveProposalBranding(user?.role, settings, agentProfile);
-      let logoDataUrl: string | null = null;
-      if (proposalBranding.logoSrc) {
-        try {
-          const resp = await fetch(proposalBranding.logoSrc);
-          const blob = await resp.blob();
-          logoDataUrl = await new Promise<string>((resolve) => {
-            const reader = new FileReader();
-            reader.onloadend = () => resolve(reader.result as string);
-            reader.onerror = () => resolve("");
-            reader.readAsDataURL(blob);
-          });
-        } catch {}
-      }
+      const agencyBrandedProposal =
+        user?.role === "agent" || user?.role === "sub_agent" || user?.role === "agent_staff";
 
       await generateProposalPdf({
         programs: selected,
-        logoDataUrl,
+        // The PDF generator owns URL normalisation, authenticated fetching,
+        // rasterisation and compression for both tenant and agency logos.
+        // Tenant PDFs use the stable branding endpoint so a private object URL
+        // or later object replacement cannot break the downloaded proposal.
+        logoDataUrl: agencyBrandedProposal
+          ? proposalBranding.logoSrc
+          : `${BASE_URL}/api/settings/branding/logo?variant=pdf`,
         companyName: proposalBranding.companyName,
         companyEmail: proposalBranding.companyEmail,
         companyPhone: proposalBranding.companyPhone,
-        companyWebsite: proposalBranding.companyWebsite,
+        companyWebsite: proposalBranding.companyWebsite || window.location.origin,
         showCommission: !!showCommission,
         agentShareRate: agentShareRate ?? null,
         serviceFeeMarkup: pdfMarkup !== 0 ? pdfMarkup : undefined,

@@ -7,6 +7,7 @@ import {
   getProposalDateTime,
   getProposalFirstYearTotal,
   getProposalServiceFee,
+  normalizeProposalLogoUrl,
   proposalPdfText,
   type ProposalProgramData,
 } from "../src/lib/generateProposalPdf";
@@ -52,6 +53,18 @@ test("proposal date and time are rendered in Europe/Istanbul", () => {
 test("unsupported PDF glyphs are normalised without changing ASCII data", () => {
   assert.equal(proposalPdfText("İŞ GÜÇ — 2026"), "Is Guc - 2026");
   assert.equal(proposalPdfText("info@example.com"), "info@example.com");
+});
+
+test("storage logo paths are normalised without changing data URLs", () => {
+  assert.equal(
+    normalizeProposalLogoUrl("/api/storage/objects/objects/branding/logo-id"),
+    "/api/storage/objects/branding/logo-id",
+  );
+  assert.equal(
+    normalizeProposalLogoUrl("data:image/png;base64,AAAA"),
+    "data:image/png;base64,AAAA",
+  );
+  assert.equal(normalizeProposalLogoUrl("  "), null);
 });
 
 test("seven-program visual proposal stays on one page and remains lightweight", async () => {
@@ -124,5 +137,32 @@ test("long comparison repeats cleanly across pages without inflating the file", 
   if (previewPath) {
     await mkdir(dirname(previewPath), { recursive: true });
     await writeFile(previewPath, bytes);
+  }
+});
+
+test("eleven selected programs use the adaptive one-page comparison layout", async () => {
+  const programs = Array.from({ length: 11 }, (_, index) => ({
+    ...sampleProgram,
+    id: index + 1,
+    name: `${sampleProgram.name} ${index + 1}`,
+    universityName: `University ${index + 1}`,
+    applicationFee: index % 3 === 0 ? 100 : 0,
+    serviceFeeAmount: index % 4 === 0 ? 250 : 0,
+  }));
+  const document = await buildProposalPdf({
+    programs,
+    companyName: "Find And Study",
+    companyPhone: "+90 552 689 85 15",
+    companyWebsite: "https://findandstudy.com",
+    primaryColor: "#143591",
+    secondaryColor: "#143591",
+    generatedAt: new Date("2026-07-30T04:24:00.000Z"),
+  });
+  assert.equal(document.getNumberOfPages(), 1);
+
+  const visualPath = process.env.PROPOSAL_ELEVEN_VISUAL_PATH;
+  if (visualPath) {
+    await mkdir(dirname(visualPath), { recursive: true });
+    await writeFile(visualPath, new Uint8Array(document.output("arraybuffer")));
   }
 });

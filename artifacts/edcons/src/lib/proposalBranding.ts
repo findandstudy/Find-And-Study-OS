@@ -2,8 +2,12 @@ export type ProposalBrandingSettings = {
   companyName?: string;
   publicBrandName?: string;
   companyEmail?: string;
+  supportEmail?: string;
+  salesEmail?: string;
   companyPhone?: string;
+  whatsappNumber?: string;
   companyWebsite?: string;
+  canonicalBaseUrl?: string;
   logoUrl?: string | null;
   logoSquareUrl?: string | null;
   pdfLogoUrl?: string | null;
@@ -44,14 +48,18 @@ export function resolveProposalBranding(
 ): ProposalBranding {
   const agencySide = role === "agent" || role === "sub_agent" || role === "agent_staff";
   const tenantLogo = settings?.pdfLogoUrl || settings?.logoSquareUrl || settings?.logoUrl || null;
+  const tenantEmail =
+    settings?.companyEmail || settings?.salesEmail || settings?.supportEmail || undefined;
+  const tenantPhone = settings?.companyPhone || settings?.whatsappNumber || undefined;
+  const tenantWebsite = settings?.companyWebsite || settings?.canonicalBaseUrl || undefined;
 
   if (!agencySide) {
     return {
       logoSrc: tenantLogo,
       companyName: settings?.publicBrandName || settings?.companyName || "Find And Study",
-      companyEmail: settings?.companyEmail || undefined,
-      companyPhone: settings?.companyPhone || undefined,
-      companyWebsite: settings?.companyWebsite || undefined,
+      companyEmail: tenantEmail,
+      companyPhone: tenantPhone,
+      companyWebsite: tenantWebsite,
     };
   }
 
@@ -63,8 +71,8 @@ export function resolveProposalBranding(
       settings?.publicBrandName ||
       settings?.companyName ||
       "Find And Study",
-    companyEmail: agency?.email || settings?.companyEmail || undefined,
-    companyPhone: agency?.phoneE164 || agency?.phone || settings?.companyPhone || undefined,
-    companyWebsite: agency?.website || settings?.companyWebsite || undefined,
+    companyEmail: agency?.email || tenantEmail,
+    companyPhone: agency?.phoneE164 || agency?.phone || tenantPhone,
+    companyWebsite: agency?.website || tenantWebsite,
   };
 }

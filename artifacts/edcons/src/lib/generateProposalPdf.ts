@@ -77,6 +77,14 @@ function mix(color: Rgb, target: Rgb, amount: number): Rgb {
   ];
 }
 
+function colorDistance(left: Rgb, right: Rgb): number {
+  return Math.sqrt(
+    (left[0] - right[0]) ** 2 +
+      (left[1] - right[1]) ** 2 +
+      (left[2] - right[2]) ** 2,
+  );
+}
+
 /**
  * jsPDF's compact built-in Helvetica font keeps proposals small enough for
  * WhatsApp and email. Transliteration prevents unsupported glyphs from
@@ -174,32 +182,76 @@ async function blobAsDataUrl(blob: Blob): Promise<string | null> {
 }
 
 async function compressLogoBlob(blob: Blob, maxSide: number, quality: number): Promise<string | null> {
-  if (typeof document === "undefined" || typeof createImageBitmap === "undefined") {
+  if (typeof document === "undefined") {
     return blobAsDataUrl(blob);
   }
 
+  let drawable: CanvasImageSource | null = null;
+  let drawableWidth = 0;
+  let drawableHeight = 0;
+  let releaseDrawable = () => {};
+
   try {
-    const bitmap = await createImageBitmap(blob);
+    if (typeof createImageBitmap !== "undefined") {
+      try {
+        const bitmap = await createImageBitmap(blob);
+        drawable = bitmap;
+        drawableWidth = bitmap.width;
+        drawableHeight = bitmap.height;
+        releaseDrawable = () => bitmap.close();
+      } catch {
+        // SVG files and some very large image exports are decoded more
+        // reliably by an HTMLImageElement than createImageBitmap.
+      }
+    }
+
+    if (!drawable && typeof Image !== "undefined" && typeof URL !== "undefined") {
+      const objectUrl = URL.createObjectURL(blob);
+      const image = new Image();
+      try {
+        await new Promise<void>((resolve, reject) => {
+          image.onload = () => resolve();
+          image.onerror = () => reject(new Error("Logo image could not be decoded"));
+          image.src = objectUrl;
+        });
+        drawable = image;
+        drawableWidth = image.naturalWidth || image.width;
+        drawableHeight = image.naturalHeight || image.height;
+        releaseDrawable = () => URL.revokeObjectURL(objectUrl);
+      } catch {
+        URL.revokeObjectURL(objectUrl);
+      }
+    }
+
+    if (!drawable || !drawableWidth || !drawableHeight) return blobAsDataUrl(blob);
+
     const canvas = document.createElement("canvas");
     canvas.width = maxSide;
     canvas.height = maxSide;
     const context = canvas.getContext("2d");
     if (!context) {
-      bitmap.close();
+      releaseDrawable();
       return null;
     }
 
     context.fillStyle = "#ffffff";
     context.fillRect(0, 0, maxSide, maxSide);
-    const scale = Math.min((maxSide * 0.88) / bitmap.width, (maxSide * 0.88) / bitmap.height);
-    const drawW = Math.max(1, Math.round(bitmap.width * scale));
-    const drawH = Math.max(1, Math.round(bitmap.height * scale));
-    context.drawImage(bitmap, (maxSide - drawW) / 2, (maxSide - drawH) / 2, drawW, drawH);
-    bitmap.close();
+    const scale = Math.min((maxSide * 0.88) / drawableWidth, (maxSide * 0.88) / drawableHeight);
+    const drawW = Math.max(1, Math.round(drawableWidth * scale));
+    const drawH = Math.max(1, Math.round(drawableHeight * scale));
+    context.drawImage(drawable, (maxSide - drawW) / 2, (maxSide - drawH) / 2, drawW, drawH);
+    releaseDrawable();
     return canvas.toDataURL("image/jpeg", quality);
   } catch {
-    return null;
+    releaseDrawable();
+    return blobAsDataUrl(blob);
   }
+}
+
+export function normalizeProposalLogoUrl(source: string | null | undefined): string | null {
+  const value = source?.trim();
+  if (!value) return null;
+  return value.replace(/\/api\/storage\/objects\/objects\//, "/api/storage/objects/");
 }
 
 async function loadCompressedLogo(
@@ -207,9 +259,10 @@ async function loadCompressedLogo(
   maxSide: number,
   quality: number,
 ): Promise<string | null> {
-  if (!source) return null;
+  const normalizedSource = normalizeProposalLogoUrl(source);
+  if (!normalizedSource) return null;
   try {
-    const response = await fetch(source);
+    const response = await fetch(normalizedSource, { credentials: "same-origin" });
     if (!response.ok) return null;
     return compressLogoBlob(await response.blob(), maxSide, quality);
   } catch {
@@ -272,6 +325,8 @@ export async function buildProposalPdf(options: ProposalOptions): Promise<jsPDF>
 
   const primary = (primaryColor && hexToRgb(primaryColor)) || DEFAULT_PRIMARY;
   const secondary = (secondaryColor && hexToRgb(secondaryColor)) || DEFAULT_SECONDARY;
+  const headerSecondary =
+    colorDistance(primary, secondary) < 70 ? mix(primary, WHITE, 0.28) : secondary;
   const accent = (accentColor && hexToRgb(accentColor)) || DEFAULT_ACCENT;
   const success = (successColor && hexToRgb(successColor)) || DEFAULT_SUCCESS;
   const primarySoft = mix(primary, WHITE, 0.92);
@@ -303,11 +358,12 @@ export async function buildProposalPdf(options: ProposalOptions): Promise<jsPDF>
   const universityLogoAliases = new Map(
     uniqueLogoUrls.map((url, index) => [url, `proposal-university-logo-${index + 1}`]),
   );
-  await Promise.all(
-    uniqueLogoUrls.map(async (url) => {
-      universityLogos.set(url, await loadCompressedLogo(url, 72, 0.7));
-    }),
-  );
+  // University logo data URLs can be several hundred kilobytes each. Decode
+  // them sequentially to avoid a short-lived memory spike that made every
+  // logo fall back to initials for larger selections.
+  for (const url of uniqueLogoUrls) {
+    universityLogos.set(url, await loadCompressedLogo(url, 72, 0.7));
+  }
 
   function setText(color: Rgb) {
     doc.setTextColor(color[0], color[1], color[2]);
@@ -412,9 +468,9 @@ export async function buildProposalPdf(options: ProposalOptions): Promise<jsPDF>
     const height = compact ? 28 : 39;
     setFill(primary);
     doc.rect(0, 0, pageW, height, "F");
-    setFill(mix(primary, secondary, 0.55));
+    setFill(mix(primary, headerSecondary, 0.55));
     doc.triangle(145, 0, pageW, 0, pageW, height, "F");
-    setFill(secondary);
+    setFill(headerSecondary);
     doc.triangle(182, 0, pageW, 0, pageW, height, "F");
 
     const logoSize = compact ? 12 : 14;
@@ -600,6 +656,11 @@ export async function buildProposalPdf(options: ProposalOptions): Promise<jsPDF>
     const firstYearLowest = hideServiceFee
       ? null
       : [...programs]
+          .filter(
+            (program) =>
+              (program.applicationFee ?? 0) > 0 ||
+              getProposalServiceFee(program, serviceFeeMarkup, false) != null,
+          )
           .map((program) => ({
             program,
             total: getProposalFirstYearTotal(program, serviceFeeMarkup, false),
@@ -673,13 +734,22 @@ export async function buildProposalPdf(options: ProposalOptions): Promise<jsPDF>
     });
   }
 
-  function drawProgramRow(program: ProposalProgramData, rank: number, y: number, featured: boolean) {
-    const height = 17.4;
+  function drawProgramRow(
+    program: ProposalProgramData,
+    rank: number,
+    y: number,
+    featured: boolean,
+    compact = false,
+  ) {
+    const height = compact ? 11.75 : 17.4;
     const currency = program.currency || "USD";
     const tuition = effectiveTuition(program);
     const discount = discountData(program);
     const serviceFee = getProposalServiceFee(program, serviceFeeMarkup, hideServiceFee);
-    const firstYearTotal = getProposalFirstYearTotal(program, serviceFeeMarkup, hideServiceFee);
+    const hasVisibleExtras = serviceFee != null || (program.applicationFee ?? 0) > 0;
+    const firstYearTotal = hasVisibleExtras
+      ? getProposalFirstYearTotal(program, serviceFeeMarkup, hideServiceFee)
+      : null;
     const status = proposalPdfText(program.universityStatus || "Open").toLowerCase();
     const isClosed = /closed|inactive/.test(status);
     const type = normaliseType(program.universityType);
@@ -695,14 +765,17 @@ export async function buildProposalPdf(options: ProposalOptions): Promise<jsPDF>
 
     const middleY = y + height / 2;
     setFill(primary);
-    doc.circle(marginX + 6, middleY, 3.25, "F");
+    doc.circle(marginX + (compact ? 4.6 : 6), middleY, compact ? 2.25 : 3.25, "F");
     setText(WHITE);
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(6.1);
-    doc.text(String(rank), marginX + 6, middleY + 1.4, { align: "center" });
+    doc.setFontSize(compact ? 4.8 : 6.1);
+    doc.text(String(rank), marginX + (compact ? 4.6 : 6), middleY + (compact ? 1.1 : 1.4), {
+      align: "center",
+    });
 
-    const logoX = marginX + 12.2;
-    const logoY = y + 2;
+    const logoX = marginX + (compact ? 8.4 : 12.2);
+    const logoY = y + (compact ? 1.35 : 2);
+    const logoSize = compact ? 8.55 : 13.4;
     const logo = program.universityLogoUrl
       ? universityLogos.get(program.universityLogoUrl) ?? null
       : null;
@@ -710,57 +783,91 @@ export async function buildProposalPdf(options: ProposalOptions): Promise<jsPDF>
       logo,
       logoX,
       logoY,
-      13.4,
+      logoSize,
       program.universityName,
       (program.universityLogoUrl && universityLogoAliases.get(program.universityLogoUrl)) ||
         `proposal-university-${program.id}`,
       primary,
     );
 
-    const textX = logoX + 16;
-    const textMax = 99;
+    const textX = logoX + logoSize + (compact ? 2.3 : 2.6);
+    const textMax = compact ? 102 : 99;
     setText(primary);
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(7);
-    doc.text(fitText(program.name, textMax), textX, y + 5.2);
+    doc.setFontSize(compact ? 5.8 : 7);
+    doc.text(fitText(program.name, textMax), textX, y + (compact ? 3.15 : 5.2));
     setText(BODY);
-    doc.setFontSize(5.8);
-    doc.text(fitText(program.universityName, textMax), textX, y + 8.7);
+    doc.setFontSize(compact ? 4.85 : 5.8);
+    doc.text(fitText(program.universityName, textMax), textX, y + (compact ? 6.1 : 8.7));
 
     setText(MUTED);
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(4.9);
+    doc.setFontSize(compact ? 4.1 : 4.9);
     const location = [program.universityCity, program.universityCountry].filter(Boolean).join(", ") || "-";
-    doc.text(fitText(location, 34), textX, y + 13.4);
-
-    let chipX = textX + Math.min(37, doc.getTextWidth(fitText(location, 34)) + 3);
-    if (type !== "other") {
-      chipX += drawPill(
-        type,
-        chipX,
-        y + 10.2,
-        19,
-        type === "public" ? secondary : accent,
-        type === "public" ? secondarySoft : accentSoft,
-        4.3,
-      ) + 1.2;
-    }
-    if (featured) {
-      drawPill("LOWEST TOTAL", chipX, y + 10.2, 24, success, successSoft, 4.3);
-    } else if (discount) {
-      drawPill(`${discount.percent}% DISCOUNT`, chipX, y + 10.2, 26, success, successSoft, 4.3);
+    if (compact) {
+      const meta = [
+        location,
+        type === "other" ? "" : titleCase(type),
+        discount ? `${discount.percent}% off` : "",
+      ].filter(Boolean).join("  |  ");
+      doc.text(fitText(meta, textMax), textX, y + 9.15);
+    } else {
+      doc.text(fitText(location, 34), textX, y + 13.4);
+      let chipX = textX + Math.min(37, doc.getTextWidth(fitText(location, 34)) + 3);
+      if (type !== "other") {
+        chipX += drawPill(
+          type,
+          chipX,
+          y + 10.2,
+          19,
+          type === "public" ? secondary : accent,
+          type === "public" ? secondarySoft : accentSoft,
+          4.3,
+        ) + 1.2;
+      }
+      if (featured) {
+        drawPill("LOWEST TOTAL", chipX, y + 10.2, 24, success, successSoft, 4.3);
+      } else if (discount) {
+        drawPill(`${discount.percent}% DISCOUNT`, chipX, y + 10.2, 26, success, successSoft, 4.3);
+      }
     }
 
     const feeRight = pageW - marginX - 30;
     setText(primary);
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(10.2);
-    doc.text(fitText(fmt(tuition, currency), 31), feeRight, y + 6.2, { align: "right" });
+    doc.setFontSize(compact ? 7.6 : 10.2);
+    doc.text(fitText(fmt(tuition, currency), 31), feeRight, y + (compact ? 4.25 : 6.2), {
+      align: "right",
+    });
     setText(MUTED);
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(4.7);
-    doc.text("/ year", feeRight + 1.5, y + 6.2);
-    if (discount) {
+    doc.setFontSize(compact ? 3.7 : 4.7);
+    doc.text("/ year", feeRight + 1.5, y + (compact ? 4.25 : 6.2));
+
+    if (compact) {
+      if (discount) {
+        setText(SUBTLE);
+        doc.setFontSize(3.7);
+        doc.text(`Was ${fmt(program.tuitionFee, currency)}`, feeRight, y + 7, {
+          align: "right",
+        });
+      }
+      if (firstYearTotal != null) {
+        setText(BODY);
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(3.8);
+        doc.text(`First year ${fmt(firstYearTotal, currency)}`, feeRight, y + 9.65, {
+          align: "right",
+        });
+      } else if (serviceFee != null) {
+        setText(MUTED);
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(3.8);
+        doc.text(`Service ${fmt(serviceFee, currency)}`, feeRight, y + 9.65, {
+          align: "right",
+        });
+      }
+    } else if (discount) {
       setText(SUBTLE);
       doc.setFontSize(4.4);
       doc.text(`Was ${fmt(program.tuitionFee, currency)}`, feeRight, y + 9.3, { align: "right" });
@@ -775,6 +882,13 @@ export async function buildProposalPdf(options: ProposalOptions): Promise<jsPDF>
         doc.setFont("helvetica", "normal");
         doc.setFontSize(4.3);
         doc.text(`Service fee ${fmt(serviceFee, currency)}`, feeRight, y + 15, { align: "right" });
+      } else if (firstYearTotal != null) {
+        setText(BODY);
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(4.3);
+        doc.text(`First year ${fmt(firstYearTotal, currency)}`, feeRight, y + 15, {
+          align: "right",
+        });
       }
     } else if (serviceFee != null) {
       setText(MUTED);
@@ -782,41 +896,39 @@ export async function buildProposalPdf(options: ProposalOptions): Promise<jsPDF>
       doc.setFontSize(4.5);
       doc.text(`Service fee ${fmt(serviceFee, currency)}`, feeRight, y + 9.4, { align: "right" });
     }
-    if (firstYearTotal != null && !discount) {
+    if (!compact && firstYearTotal != null && !discount) {
       setText(BODY);
       doc.setFont("helvetica", "bold");
       doc.setFontSize(4.6);
       doc.text(`First year ${fmt(firstYearTotal, currency)}`, feeRight, y + 15, { align: "right" });
-    } else if (serviceFee == null) {
-      setText(MUTED);
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(4.4);
-      doc.text(`Application ${feeOrFree(program.applicationFee, currency)}`, feeRight, y + 15, {
-        align: "right",
-      });
     }
 
     const statusX = pageW - marginX - 19.5;
     drawPill(
       isClosed ? "CLOSED" : "OPEN",
       statusX,
-      y + 2.5,
+      y + (compact ? 1.1 : 2.5),
       11.5,
       isClosed ? DANGER : success,
       isClosed ? mix(DANGER, WHITE, 0.9) : successSoft,
-      4.2,
+      compact ? 3.4 : 4.2,
     );
     setText(primary);
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(5.3);
-    doc.text(fitText(program.intakes || "-", 19), statusX + 5.7, y + 10, { align: "center" });
+    doc.setFontSize(compact ? 4.4 : 5.3);
+    doc.text(
+      fitText(program.intakes || "-", 19),
+      statusX + 5.7,
+      y + (compact ? 6.8 : 10),
+      { align: "center" },
+    );
     setText(MUTED);
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(4.2);
+    doc.setFontSize(compact ? 3.65 : 4.2);
     doc.text(
-      `Application ${feeOrFree(program.applicationFee, currency)}`,
+      `${compact ? "App" : "Application"} ${feeOrFree(program.applicationFee, currency)}`,
       statusX + 5.7,
-      y + 13.9,
+      y + (compact ? 9.75 : 13.9),
       { align: "center" },
     );
   }
@@ -880,11 +992,21 @@ export async function buildProposalPdf(options: ProposalOptions): Promise<jsPDF>
     return left - right;
   });
 
-  const firstPagePrograms = sortedPrograms.slice(0, 7);
-  const remainingPrograms = sortedPrograms.slice(7);
+  const compactSinglePage = sortedPrograms.length > 7 && sortedPrograms.length <= 11;
+  const firstPageCapacity = compactSinglePage ? 11 : 7;
+  const firstPagePrograms = sortedPrograms.slice(0, firstPageCapacity);
+  const remainingPrograms = sortedPrograms.slice(firstPageCapacity);
   const pages: ProposalProgramData[][] = [firstPagePrograms];
-  for (let index = 0; index < remainingPrograms.length; index += 11) {
-    pages.push(remainingPrograms.slice(index, index + 11));
+  const continuationPageCount = Math.ceil(remainingPrograms.length / 11);
+  if (continuationPageCount > 0) {
+    const basePageSize = Math.floor(remainingPrograms.length / continuationPageCount);
+    const largerPages = remainingPrograms.length % continuationPageCount;
+    let offset = 0;
+    for (let index = 0; index < continuationPageCount; index += 1) {
+      const pageSize = basePageSize + (index < largerPages ? 1 : 0);
+      pages.push(remainingPrograms.slice(offset, offset + pageSize));
+      offset += pageSize;
+    }
   }
 
   pages.forEach((pagePrograms, pageIndex) => {
@@ -896,15 +1018,18 @@ export async function buildProposalPdf(options: ProposalOptions): Promise<jsPDF>
       drawProgramsLabel(108);
       let rowY = 111;
       pagePrograms.forEach((program, index) => {
-        drawProgramRow(program, index + 1, rowY, index === 0);
-        rowY += 19.2;
+        drawProgramRow(program, index + 1, rowY, index === 0, compactSinglePage);
+        rowY += compactSinglePage ? 13.25 : 19.2;
       });
-      if (pages.length === 1) drawCallToAction(Math.min(266, rowY + 1.5));
+      if (pages.length === 1) {
+        drawCallToAction(compactSinglePage ? 266 : Math.min(266, rowY + 1.5));
+      }
     } else {
       drawProgramsLabel(35, true);
       let rowY = 38;
       pagePrograms.forEach((program, index) => {
-        const absoluteRank = 7 + (pageIndex - 1) * 11 + index + 1;
+        const absoluteRank =
+          pages.slice(0, pageIndex).reduce((total, page) => total + page.length, 0) + index + 1;
         drawProgramRow(program, absoluteRank, rowY, false);
         rowY += 19.2;
       });

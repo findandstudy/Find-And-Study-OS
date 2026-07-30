@@ -54,3 +54,21 @@ test("an agency with an incomplete profile falls back safely to tenant assets", 
     companyWebsite: "https://findandstudy.com",
   });
 });
+
+test("tenant contact aliases fill incomplete primary contact fields", () => {
+  assert.deepEqual(
+    resolveProposalBranding("super_admin", {
+      companyName: "White Label",
+      supportEmail: "support@example.com",
+      whatsappNumber: "+905551112233",
+      canonicalBaseUrl: "https://portal.example.com",
+    }, undefined),
+    {
+      logoSrc: null,
+      companyName: "White Label",
+      companyEmail: "support@example.com",
+      companyPhone: "+905551112233",
+      companyWebsite: "https://portal.example.com",
+    },
+  );
+});
