@@ -11,8 +11,8 @@ import { useToast } from "@/hooks/use-toast";
 import { useI18n } from "@/hooks/use-i18n";
 import { customFetch } from "@workspace/api-client-react";
 import type { InboxConversationDetailResponse } from "@workspace/api-client-react";
-import { PipelineStageBadge } from "./PipelineStageBadge";
 import { AiSummaryCard } from "./AiSummaryCard";
+import { InboxStatusControl } from "./InboxStatusControl";
 import { PhoneInput } from "@/components/ui/phone-input";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { useCountrySearch } from "@/hooks/use-countries";
@@ -299,15 +299,23 @@ export function LeadDetailSidebar({
           {tabBar}
           <div className="flex-1 overflow-y-auto p-4 space-y-4">
             <div>
-              <div className="flex items-start justify-between gap-2 mb-2">
+              <div className="mb-2">
                 <h3 className="font-semibold text-base leading-tight break-words">
                   {studentForTab.firstName} {studentForTab.lastName}
                 </h3>
-                <PipelineStageBadge stage={detail.stage} size="md" />
               </div>
               <Badge variant="secondary" className="text-[10px]">
                 {t("inbox.sidebar.typeStudent")}
               </Badge>
+            </div>
+            <div className="border-t pt-3">
+              <InboxStatusControl
+                entityType="student"
+                entityId={studentForTab.id}
+                status={studentForTab.status}
+                label={`${t("inbox.sidebar.tabs.student")} · ${t("common.status")}`}
+                onUpdated={onUpdated}
+              />
             </div>
             <div className="space-y-2.5 border-t pt-3">
               {studentForTab.email && <Field label={t("inbox.sidebar.email")} value={studentForTab.email} />}
@@ -591,12 +599,6 @@ export function LeadDetailSidebar({
     else if (linkedType === "agent" && agent) navigate(`/staff/agents/${agent.id}`);
   };
 
-  const entityProfileUrl = linkedType === "lead" && lead
-    ? `/staff/leads/${lead.id}`
-    : linkedType === "student" && student
-      ? `/staff/students/${student.id}`
-      : null;
-
   const editProps = { editingKey, setEditingKey, onSave: saveField, saving };
 
   return (
@@ -605,16 +607,38 @@ export function LeadDetailSidebar({
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {/* Header */}
         <div>
-          <div className="flex items-start justify-between gap-2 mb-2">
+          <div className="mb-2">
             <h3 className="font-semibold text-base leading-tight break-words">
               {entity.firstName} {entity.lastName}
             </h3>
-            <PipelineStageBadge stage={detail.stage} size="md" />
           </div>
           <Badge variant="secondary" className="text-[10px]">
             {typeLabel}
           </Badge>
         </div>
+
+        {(lead || student) && (
+          <div className="grid grid-cols-1 gap-2.5 border-t pt-3">
+            {lead && (
+              <InboxStatusControl
+                entityType="lead"
+                entityId={lead.id}
+                status={lead.status}
+                label={`${t("inbox.sidebar.tabs.lead")} · ${t("common.status")}`}
+                onUpdated={onUpdated}
+              />
+            )}
+            {student && (
+              <InboxStatusControl
+                entityType="student"
+                entityId={student.id}
+                status={student.status}
+                label={`${t("inbox.sidebar.tabs.student")} · ${t("common.status")}`}
+                onUpdated={onUpdated}
+              />
+            )}
+          </div>
+        )}
 
         {/* AI Summary */}
         <AiSummaryCard

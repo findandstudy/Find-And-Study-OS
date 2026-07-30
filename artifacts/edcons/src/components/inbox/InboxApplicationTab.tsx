@@ -15,6 +15,7 @@ import {
   UserPlus,
   Lock,
 } from "lucide-react";
+import { InboxStatusControl } from "./InboxStatusControl";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
@@ -447,10 +448,25 @@ export function InboxApplicationTab({
                       .join(" · ")}
                   </p>
                 )}
-                <p className="text-[10px] text-muted-foreground mt-0.5">
-                  {app.stage ?? "inquiry"}
-                  {app.season ? ` · ${app.season}` : ""}
-                </p>
+                {app.season && (
+                  <p className="text-[10px] text-muted-foreground mt-0.5">
+                    {app.season}
+                  </p>
+                )}
+                <div className="mt-2">
+                  <InboxStatusControl
+                    entityType="application"
+                    entityId={app.id}
+                    status={app.stage ?? "inquiry"}
+                    label={t("common.status")}
+                    onUpdated={async () => {
+                      await queryClient.invalidateQueries({
+                        queryKey: ["inbox-student-apps", studentId],
+                      });
+                      onUpdated?.();
+                    }}
+                  />
+                </div>
               </div>
               <button
                 type="button"
