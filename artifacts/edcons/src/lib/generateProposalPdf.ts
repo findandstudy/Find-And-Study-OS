@@ -181,6 +181,26 @@ async function blobAsDataUrl(blob: Blob): Promise<string | null> {
   });
 }
 
+function dataUrlAsBlob(dataUrl: string): Blob | null {
+  const match = dataUrl.match(/^data:([^;,]+)?(;base64)?,(.*)$/s);
+  if (!match) return null;
+
+  try {
+    const mimeType = match[1] || "application/octet-stream";
+    const payload = match[3] || "";
+    const decoded = match[2]
+      ? atob(payload.replace(/\s/g, ""))
+      : decodeURIComponent(payload);
+    const bytes = new Uint8Array(decoded.length);
+    for (let index = 0; index < decoded.length; index += 1) {
+      bytes[index] = decoded.charCodeAt(index);
+    }
+    return new Blob([bytes], { type: mimeType });
+  } catch {
+    return null;
+  }
+}
+
 async function compressLogoBlob(blob: Blob, maxSide: number, quality: number): Promise<string | null> {
   if (typeof document === "undefined") {
     return blobAsDataUrl(blob);
@@ -262,6 +282,15 @@ async function loadCompressedLogo(
   const normalizedSource = normalizeProposalLogoUrl(source);
   if (!normalizedSource) return null;
   try {
+    // University logos are frequently returned as very large data URLs.
+    // Browsers can render those URLs in an <img>, but fetch(data:...) is not
+    // consistently available under stricter CSP/sandbox settings. Decode the
+    // payload locally so the PDF does not silently fall back to initials.
+    if (/^data:image\//i.test(normalizedSource)) {
+      const inlineBlob = dataUrlAsBlob(normalizedSource);
+      if (!inlineBlob) return null;
+      return compressLogoBlob(inlineBlob, maxSide, quality);
+    }
     const response = await fetch(normalizedSource, { credentials: "same-origin" });
     if (!response.ok) return null;
     return compressLogoBlob(await response.blob(), maxSide, quality);
