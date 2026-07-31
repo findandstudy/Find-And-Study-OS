@@ -17,11 +17,13 @@ const publicPrograms = read("../../edcons/src/pages/public/Programs.tsx");
 const leadsRoute = read("../src/routes/leads.ts");
 const studentsRoute = read("../src/routes/students.ts");
 const applicationsRoute = read("../src/routes/applications.ts");
+const universitiesRoute = read("../src/routes/universities.ts");
 const apiApp = read("../src/app.ts");
 const apiIndex = read("../src/index.ts");
 const leadsPage = read("../../edcons/src/pages/staff/Leads.tsx");
 const studentsPage = read("../../edcons/src/pages/staff/Students.tsx");
 const applicationsPage = read("../../edcons/src/pages/staff/Applications.tsx");
+const catalogPage = read("../../edcons/src/pages/admin/Catalog.tsx");
 
 test("public catalogue uses an explicit public scope for programs and facets", () => {
   assert.match(publicPrograms, /p\.set\("scope", "public"\)/);
@@ -96,10 +98,16 @@ test("lead and student pages no longer request 100000 records", () => {
 
 test("applications list is server-paginated and keeps pipeline loading bounded", () => {
   assert.doesNotMatch(applicationsPage, /limit=100000/);
-  assert.match(applicationsPage, /viewMode === "list" \? pg\.pageSize : 2000/);
-  assert.match(applicationsPage, /viewMode === "list" \? sortedApps : pipelinePage\.paged/);
+  assert.doesNotMatch(applicationsPage, /:\s*2000/);
+  assert.match(applicationsPage, /PIPELINE_BATCH_SIZE\s*=\s*25/);
+  assert.match(applicationsPage, /useQueries\(\{/);
+  assert.match(applicationsPage, /params\.set\("stage", stageDef\.key\)/);
+  assert.match(applicationsPage, /params\.set\("includeFacets", shouldIncludeFacets \? "1" : "0"\)/);
+  assert.match(applicationsPage, /onLoadMore/);
+  assert.match(applicationsPage, /Load more/);
   assert.match(applicationsPage, /applicationsResp\?\.meta\?\.total/);
   assert.match(applicationsRoute, /maxLimit: 5000/);
+  assert.match(applicationsRoute, /const includeFacets = query\.includeFacets !== "0"/);
 });
 
 test("applications API owns list filtering, sorting, and cross-page facets", () => {
@@ -114,6 +122,18 @@ test("applications API owns list filtering, sorting, and cross-page facets", () 
   assert.match(applicationsRoute, /countries:\s*countryRows/);
   assert.match(applicationsRoute, /universities:\s*universityRows/);
   assert.match(applicationsRoute, /agents:\s*agentRows/);
+});
+
+test("catalog university lists use a lightweight summary and lazy logo endpoint", () => {
+  assert.match(catalogPage, /summary:\s*"1"/);
+  assert.match(catalogPage, /const university = await api\(`\/api\/universities\/\$\{id\}`\)/);
+  assert.match(universitiesRoute, /const \{[^}]*summary[^}]*\} = req\.query/);
+  assert.match(universitiesRoute, /hasLogo:\s*sql<boolean>/);
+  assert.match(universitiesRoute, /delete masked\.hasLogo/);
+  assert.match(universitiesRoute, /router\.get\("\/universities\/:id\/logo"/);
+  assert.match(universitiesRoute, /Cache-Control", "public, max-age=86400"/);
+  assert.match(universitiesRoute, /X-Content-Type-Options", "nosniff"/);
+  assert.match(universitiesRoute, /Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; sandbox"/);
 });
 
 test("API logs slow requests without query strings or payload data", () => {

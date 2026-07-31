@@ -941,7 +941,7 @@ function UniversitiesTab() {
   const { data } = useQuery({
     queryKey: ["universities", page, dSearch, dfName, fCountry, dfCity, fType, dfQs, fStatus],
     queryFn: () => {
-      const params = new URLSearchParams({ page: String(page), limit: "30" });
+      const params = new URLSearchParams({ page: String(page), limit: "30", summary: "1" });
       if (dSearch) params.set("search", dSearch);
       if (dfName) params.set("name", dfName);
       if (fCountry) params.set("country", fCountry);
@@ -1001,7 +1001,7 @@ function UniversitiesTab() {
   async function selectAllMatching() {
     setSelectingAll(true);
     try {
-      const params = new URLSearchParams({ limit: "5000" });
+      const params = new URLSearchParams({ limit: "5000", summary: "1" });
       if (dSearch) params.set("search", dSearch);
       if (dfName) params.set("name", dfName);
       if (fCountry) params.set("country", fCountry);
@@ -1095,6 +1095,20 @@ function UniversitiesTab() {
 
   const setF = (updates: Partial<University>) => setForm(f => ({ ...f, ...updates } as Partial<University>));
 
+  const openEditUniversity = async (id: number) => {
+    try {
+      const university = await api(`/api/universities/${id}`);
+      setForm(university);
+      setSelCountryId(allCountries.find(c => c.name === university.country)?.id ?? null);
+    } catch (error: any) {
+      toast({
+        title: t("common.error"),
+        description: String(error?.message || error),
+        variant: "destructive",
+      });
+    }
+  };
+
   const templateRows = [
     { name: "Istanbul University", country: "Turkey", city: "Istanbul", website: "https://www.istanbul.edu.tr", description: "Leading state university", ranking: 351, universityType: "Public", taxType: "KDV", taxPercent: 18, qsRanking: 501, timesRanking: 601, shanghaiRanking: 401, cwtsLeidenRanking: 0, address: "Beyazıt, 34452 Fatih/İstanbul", logoUrl: "", onlinePaymentUrl: "", cricosLink: "", documentsLink: "", currentFeeListLink: "", initialDepositOptions: "Bank Transfer", admissionProcess: "Online application via portal", contactPersonName: "Ahmet Yılmaz", contactPersonPhone: "+90 212 440 0000", contactPersonEmail: "intl@istanbul.edu.tr", status: "open", isActive: "Yes" },
     { name: "Middle East Technical University", country: "Turkey", city: "Ankara", website: "https://www.metu.edu.tr", description: "Top technical university", ranking: 601, universityType: "Public", taxType: "KDV", taxPercent: 18, qsRanking: 336, timesRanking: 401, shanghaiRanking: 501, cwtsLeidenRanking: 0, address: "Üniversiteler Mah. Dumlupınar Blv. No:1, 06800 Çankaya/Ankara", logoUrl: "", onlinePaymentUrl: "", cricosLink: "", documentsLink: "", currentFeeListLink: "", initialDepositOptions: "Credit Card, Bank Transfer", admissionProcess: "Apply through international office", contactPersonName: "Elif Demir", contactPersonPhone: "+90 312 210 2000", contactPersonEmail: "intl@metu.edu.tr", status: "open", isActive: "Yes" },
@@ -1168,7 +1182,7 @@ function UniversitiesTab() {
                 <td className="px-4 py-2.5">
                   <div className="flex items-center gap-2">
                     {u.logoUrl
-                      ? <img src={u.logoUrl} alt={u.name} className="w-7 h-7 rounded object-contain border bg-white" />
+                      ? <img src={u.logoUrl} alt={u.name} loading="lazy" decoding="async" className="w-7 h-7 rounded object-contain border bg-white" />
                       : <div className="w-7 h-7 rounded border bg-muted flex items-center justify-center"><Building2 className="h-3.5 w-3.5 text-muted-foreground" /></div>
                     }
                     <div>
@@ -1199,7 +1213,7 @@ function UniversitiesTab() {
                 </td>
                 <td className="px-4 py-2.5">
                   <div className="flex gap-1 justify-end">
-                    <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => { setForm(u); setSelCountryId(allCountries.find(c => c.name === u.country)?.id ?? null); }}><Pencil className="h-3.5 w-3.5" /></Button>
+                    <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => openEditUniversity(u.id)}><Pencil className="h-3.5 w-3.5" /></Button>
                     <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => setDelId(u.id)}><Trash2 className="h-3.5 w-3.5" /></Button>
                   </div>
                 </td>

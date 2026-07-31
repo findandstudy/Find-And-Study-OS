@@ -153,6 +153,7 @@ router.get("/applications", requireAuth, requireAgentStaffPermission("applicatio
     country, universityId, universityType, createdSource, assignment,
     dateRange, name, program, level, intake, sortKey = "date", sortDir = "desc",
   } = query;
+  const includeFacets = query.includeFacets !== "0";
   const pageParams = parsePaginationParams(req, { defaultLimit: 20, maxLimit: 5000 });
   const pageNum = pageParams.page;
   const limitNum = pageParams.limit;
@@ -385,19 +386,19 @@ router.get("/applications", requireAuth, requireAgentStaffPermission("applicatio
       .leftJoin(universitiesTable, eq(applicationsTable.universityId, universitiesTable.id))
       .where(whereClause),
     rowsQuery,
-    db.selectDistinct({ country: applicationsTable.country })
+    includeFacets ? db.selectDistinct({ country: applicationsTable.country })
       .from(applicationsTable)
       .where(and(scopeWhereClause, isNotNull(applicationsTable.country)))
-      .orderBy(applicationsTable.country),
-    db.selectDistinct({ id: applicationsTable.universityId, name: applicationsTable.universityName })
+      .orderBy(applicationsTable.country) : Promise.resolve([] as { country: string | null }[]),
+    includeFacets ? db.selectDistinct({ id: applicationsTable.universityId, name: applicationsTable.universityName })
       .from(applicationsTable)
       .where(and(scopeWhereClause, isNotNull(applicationsTable.universityId), isNotNull(applicationsTable.universityName)))
-      .orderBy(applicationsTable.universityName),
-    db.selectDistinct({ id: applicationsTable.agentId, name: agentsTable.companyName })
+      .orderBy(applicationsTable.universityName) : Promise.resolve([] as { id: number | null; name: string | null }[]),
+    includeFacets ? db.selectDistinct({ id: applicationsTable.agentId, name: agentsTable.companyName })
       .from(applicationsTable)
       .innerJoin(agentsTable, eq(applicationsTable.agentId, agentsTable.id))
       .where(scopeWhereClause)
-      .orderBy(agentsTable.companyName),
+      .orderBy(agentsTable.companyName) : Promise.resolve([] as { id: number | null; name: string | null }[]),
   ]);
   const count = countRows[0]?.count ?? 0;
 
@@ -430,15 +431,17 @@ router.get("/applications", requireAuth, requireAgentStaffPermission("applicatio
       page: pageNum,
       limit: limitNum,
       totalPages: Math.ceil(Number(count) / limitNum),
-      facets: {
-        countries: countryRows.map(r => r.country).filter((v): v is string => Boolean(v)),
-        universities: universityRows
-          .filter((r): r is { id: number; name: string } => Number.isFinite(r.id) && Boolean(r.name))
-          .map(r => ({ id: r.id, name: r.name })),
-        agents: agentRows
-          .filter((r): r is { id: number; name: string } => Number.isFinite(r.id) && Boolean(r.name))
-          .map(r => ({ id: r.id, name: r.name })),
-      },
+      ...(includeFacets ? {
+        facets: {
+          countries: countryRows.map(r => r.country).filter((v): v is string => Boolean(v)),
+          universities: universityRows
+            .filter((r): r is { id: number; name: string } => Number.isFinite(r.id) && Boolean(r.name))
+            .map(r => ({ id: r.id, name: r.name })),
+          agents: agentRows
+            .filter((r): r is { id: number; name: string } => Number.isFinite(r.id) && Boolean(r.name))
+            .map(r => ({ id: r.id, name: r.name })),
+        },
+      } : {}),
     },
   });
 });

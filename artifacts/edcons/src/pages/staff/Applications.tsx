@@ -10,7 +10,7 @@ import { requestStageChange, type MissingDocEntry } from "@/lib/stageTransition"
 import { useSeason } from "@/contexts/SeasonContext";
 import { useAuth } from "@/hooks/use-auth";
 import { isStaffRole, isAgentRole } from "@workspace/roles";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueries, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -68,6 +68,7 @@ import { useDateFormat } from "@/hooks/use-date-format";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 const VIEW_KEY = "edcons_applications_view";
+const PIPELINE_BATCH_SIZE = 25;
 
 // Full (base-prefixed) URL to an application's detail page, used so middle-click
 // and ctrl/cmd/right-click open the detail in a new browser tab as a real link.
@@ -666,8 +667,9 @@ function DraggableAppCard({ app, onView, variant, assignedUserName, onAssign, st
 }
 
 /* ── DroppableAppColumn ──────────────────────────────────── */
-function DroppableAppColumn({ stage, label, variant, apps, onView, staffUsersMap, onAssign, staffUsersList, currentUserId, canSeeCommission, canAssign, canReassign, canMoveCards }: {
+function DroppableAppColumn({ stage, label, variant, apps, totalCount, isLoading, onLoadMore, onView, staffUsersMap, onAssign, staffUsersList, currentUserId, canSeeCommission, canAssign, canReassign, canMoveCards }: {
   stage: string; label: string; variant?: string | null; apps: any[]; onView: (id: number) => void;
+  totalCount?: number; isLoading?: boolean; onLoadMore?: () => void;
   staffUsersMap?: Record<number, string>; onAssign?: (entityId: number, userId: number) => void;
   staffUsersList?: { id: number; name: string }[]; currentUserId?: number; canSeeCommission?: boolean; canAssign?: boolean; canReassign?: boolean; canMoveCards?: boolean;
 }) {
@@ -714,7 +716,7 @@ function DroppableAppColumn({ stage, label, variant, apps, onView, staffUsersMap
             {icon}
             <h3 className={`font-display font-bold text-sm ${v === "won" ? "text-emerald-800" : v === "lost" ? "text-rose-700" : "text-foreground"}`}>{label}</h3>
           </div>
-          <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold border ${badgeBg}`}>{apps.length}</span>
+          <span className={`min-w-6 h-6 px-1.5 rounded-full flex items-center justify-center text-xs font-bold border ${badgeBg}`}>{totalCount ?? apps.length}</span>
         </div>
         {canSeeCommission && totalRevenue > 0 && (
           <div className="mt-2 flex items-center gap-1.5 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 rounded-lg px-2.5 py-1">
@@ -728,10 +730,27 @@ function DroppableAppColumn({ stage, label, variant, apps, onView, staffUsersMap
           {apps.map((app: any) => (
             <DraggableAppCard key={app.id} app={app} onView={onView} variant={v} assignedUserName={app.assignedToId && staffUsersMap ? staffUsersMap[app.assignedToId] : undefined} onAssign={onAssign} staffUsersList={staffUsersList} currentUserId={currentUserId} canSeeCommission={canSeeCommission} canAssign={canAssign} canReassign={canReassign} canMoveCards={canMoveCards} />
           ))}
-          {apps.length === 0 && (
+          {!isLoading && apps.length === 0 && (
             <div className={`h-20 border-2 border-dashed rounded-xl flex items-center justify-center text-sm font-medium ${emptyBorder}`}>
               Drop here
             </div>
+          )}
+          {isLoading && apps.length === 0 && (
+            <div className="h-20 rounded-xl flex items-center justify-center text-sm text-muted-foreground">
+              Loading…
+            </div>
+          )}
+          {onLoadMore && apps.length < (totalCount ?? apps.length) && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="w-full mt-1"
+              disabled={isLoading}
+              onClick={onLoadMore}
+            >
+              {isLoading ? "Loading…" : `Load more (${apps.length}/${totalCount})`}
+            </Button>
           )}
         </SortableContext>
       </div>
@@ -1530,6 +1549,7 @@ export default function ApplicationsPage() {
   const [deleteInProgress, setDeleteInProgress] = useState(false);
   const [runConfirmOpen, setRunConfirmOpen] = useState(false);
   const [runInProgress, setRunInProgress] = useState(false);
+  const [pipelineLimits, setPipelineLimits] = useState<Record<string, number>>({});
   const pg = useTablePagination(25);
   const [activeId, setActiveId] = useState<number | null>(null);
   const [docUploadDialog, setDocUploadDialog] = useState<{ appId: number; uploadStage: string; targetStage: string; targetStageLabel: string; documentNameOverride?: string | null; moveAfterUpload?: boolean; quickMode?: boolean } | null>(null);
@@ -1560,8 +1580,8 @@ export default function ApplicationsPage() {
   const applicationListParams = useMemo(() => {
     const params = new URLSearchParams({
       season,
-      page: String(viewMode === "list" ? pg.page : 1),
-      limit: String(viewMode === "list" ? pg.pageSize : 2000),
+      page: String(pg.page),
+      limit: String(pg.pageSize),
       sortKey: sort.key,
       sortDir: sort.dir,
     });
@@ -1584,16 +1604,55 @@ export default function ApplicationsPage() {
     setIf("intake", colFilters.intake);
     return params.toString();
   }, [
-    season, viewMode, pg.page, pg.pageSize, sort, debouncedSearch,
+    season, pg.page, pg.pageSize, sort, debouncedSearch,
     filters, colFilters,
   ]);
 
   const { data: applicationsResp, isLoading } = useQuery({
     queryKey: ["applications", applicationListParams],
     queryFn: () => apiFetch(`${BASE_URL}/api/applications?${applicationListParams}`),
+    enabled: viewMode === "list",
   });
-  const allApps: any[] = applicationsResp?.data || [];
-  const applicationFacets = applicationsResp?.meta?.facets as ApplicationFilterFacets | undefined;
+
+  const pipelineStageQueries = useQueries({
+    queries: pipelineStages.map((stageDef, index) => {
+      const limit = pipelineLimits[stageDef.key] ?? PIPELINE_BATCH_SIZE;
+      const shouldIncludeFacets =
+        filters.stage === "all" ? index === 0 : filters.stage === stageDef.key;
+      const params = new URLSearchParams(applicationListParams);
+      params.set("page", "1");
+      params.set("limit", String(limit));
+      params.set("stage", stageDef.key);
+      params.set("includeFacets", shouldIncludeFacets ? "1" : "0");
+      return {
+        queryKey: ["applications", "pipeline", stageDef.key, params.toString()],
+        queryFn: () => apiFetch(`${BASE_URL}/api/applications?${params.toString()}`),
+        enabled: viewMode === "pipeline" && (filters.stage === "all" || filters.stage === stageDef.key),
+      };
+    }),
+  });
+
+  const pipelineStageData = useMemo(() => {
+    const entries = pipelineStages.map((stageDef, index) => {
+      const query = pipelineStageQueries[index];
+      return [stageDef.key, {
+        apps: (query?.data?.data || []) as any[],
+        total: Number(query?.data?.meta?.total || 0),
+        isLoading: Boolean(query?.isLoading || query?.isFetching),
+      }] as const;
+    });
+    return new Map(entries);
+  }, [pipelineStages, pipelineStageQueries]);
+
+  const pipelineApps = useMemo(
+    () => Array.from(pipelineStageData.values()).flatMap(stageData => stageData.apps),
+    [pipelineStageData],
+  );
+  const allApps: any[] = viewMode === "list" ? (applicationsResp?.data || []) : pipelineApps;
+  const pipelineFacets = pipelineStageQueries
+    .map(query => query.data?.meta?.facets)
+    .find(Boolean);
+  const applicationFacets = (viewMode === "list" ? applicationsResp?.meta?.facets : pipelineFacets) as ApplicationFilterFacets | undefined;
 
   const uniqueAppCountries = useMemo(() => {
     const set = new Set<string>(applicationFacets?.countries || []);
@@ -1715,13 +1774,13 @@ export default function ApplicationsPage() {
     return arr;
   }, [filteredApps, sort, stageOrder]);
 
-  const pipelinePage = pg.paginate(sortedApps);
-  const pagedApps = viewMode === "list" ? sortedApps : pipelinePage.paged;
+  const pagedApps = sortedApps;
   const totalAppsCount = viewMode === "list"
     ? Number(applicationsResp?.meta?.total ?? sortedApps.length)
-    : pipelinePage.total;
+    : Array.from(pipelineStageData.values()).reduce((sum, stageData) => sum + stageData.total, 0);
 
   useEffect(() => { pg.setPage(1); setSelectedIds(new Set()); }, [search, filters, colFilters, sort]);
+  useEffect(() => { setPipelineLimits({}); }, [season, debouncedSearch, filters, colFilters, sort]);
 
   const pagedIds = useMemo(() => new Set(pagedApps.map((a: any) => a.id)), [pagedApps]);
   const allPageSelected = pagedApps.length > 0 && pagedApps.every((a: any) => selectedIds.has(a.id));
@@ -2074,8 +2133,30 @@ export default function ApplicationsPage() {
                 onDragEnd={handleDragEnd}
               >
                 {pipelineStages.map(s => {
-                  const stageApps = filteredApps.filter((a: any) => a.stage === s.key).sort((a: any, b: any) => new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime());
-                  return <DroppableAppColumn key={s.key} stage={s.key} label={s.label} variant={s.variant} apps={stageApps} onView={id => setLocation(`/staff/applications/${id}`)} staffUsersMap={staffUsersMap} onAssign={handleAssign} staffUsersList={staffUsersList} currentUserId={user?.id} canSeeCommission={canSeeCommission} canAssign={canAssign} canReassign={canReassign} canMoveCards={canMoveCards} />;
+                  const stageData = pipelineStageData.get(s.key);
+                  const stageApps = [...(stageData?.apps || [])].sort((a: any, b: any) => new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime());
+                  return <DroppableAppColumn
+                    key={s.key}
+                    stage={s.key}
+                    label={s.label}
+                    variant={s.variant}
+                    apps={stageApps}
+                    totalCount={stageData?.total || 0}
+                    isLoading={stageData?.isLoading}
+                    onLoadMore={() => setPipelineLimits(current => ({
+                      ...current,
+                      [s.key]: (current[s.key] ?? PIPELINE_BATCH_SIZE) + PIPELINE_BATCH_SIZE,
+                    }))}
+                    onView={id => setLocation(`/staff/applications/${id}`)}
+                    staffUsersMap={staffUsersMap}
+                    onAssign={handleAssign}
+                    staffUsersList={staffUsersList}
+                    currentUserId={user?.id}
+                    canSeeCommission={canSeeCommission}
+                    canAssign={canAssign}
+                    canReassign={canReassign}
+                    canMoveCards={canMoveCards}
+                  />;
                 })}
 
                 <DragOverlay>

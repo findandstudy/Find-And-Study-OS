@@ -64,7 +64,7 @@ router.get("/universities/cities", async (_req, res): Promise<void> => {
 });
 
 router.get("/universities", async (req, res): Promise<void> => {
-  const { country, city, type, status, qs, search, name, page = "1", limit = "20" } = req.query as Record<string, string>;
+  const { country, city, type, status, qs, search, name, page = "1", limit = "20", summary } = req.query as Record<string, string>;
   const safeInt = (v: string, fallback: number) => /^\d+$/.test(v) ? parseInt(v, 10) : fallback;
   const pageNum = Math.max(1, safeInt(page, 1));
   const limitNum = Math.min(100, Math.max(1, safeInt(limit, 20)));
@@ -82,12 +82,61 @@ router.get("/universities", async (req, res): Promise<void> => {
   }
   const where = conditions.length > 0 ? and(...conditions) : undefined;
 
-  const [{ count }] = await db.select({ count: sql<number>`count(*)` }).from(universitiesTable).where(where);
-  const rows = await db.select().from(universitiesTable).where(where).limit(limitNum).offset(offset).orderBy(universitiesTable.name);
+  const countQuery = db.select({ count: sql<number>`count(*)` }).from(universitiesTable).where(where);
+  const rowsQuery = summary === "1"
+    ? db.select({
+        id: universitiesTable.id,
+        name: universitiesTable.name,
+        country: universitiesTable.country,
+        city: universitiesTable.city,
+        website: universitiesTable.website,
+        universityType: universitiesTable.universityType,
+        qsRanking: universitiesTable.qsRanking,
+        status: universitiesTable.status,
+        isActive: universitiesTable.isActive,
+        hasLogo: sql<boolean>`${universitiesTable.logoUrl} IS NOT NULL
+          AND length(trim(${universitiesTable.logoUrl})) > 0`.as("has_logo"),
+      }).from(universitiesTable).where(where).limit(limitNum).offset(offset).orderBy(universitiesTable.name)
+    : db.select().from(universitiesTable).where(where).limit(limitNum).offset(offset).orderBy(universitiesTable.name);
+  const [[{ count }], rows] = await Promise.all([countQuery, rowsQuery]);
   const userRole = (req as any).user?.role;
-  const data = rows.map(u => maskContacts(u as any, userRole));
+  const data = rows.map(u => {
+    const masked = maskContacts(u as any, userRole);
+    if (summary === "1") {
+      masked.logoUrl = masked.hasLogo ? `/api/universities/${masked.id}/logo` : null;
+      delete masked.hasLogo;
+    }
+    return masked;
+  });
 
   res.json({ data, meta: { total: Number(count), page: pageNum, limit: limitNum, totalPages: Math.ceil(Number(count) / limitNum) } });
+});
+
+router.get("/universities/:id/logo", async (req, res): Promise<void> => {
+  const id = parseInt(String(req.params.id), 10);
+  if (!Number.isFinite(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const [uni] = await db.select({ logoUrl: universitiesTable.logoUrl })
+    .from(universitiesTable)
+    .where(eq(universitiesTable.id, id));
+  const logoUrl = uni?.logoUrl?.trim();
+  if (!logoUrl) { res.status(404).json({ error: "University logo not found" }); return; }
+
+  const dataUrl = logoUrl.match(/^data:(image\/(?:png|jpe?g|gif|webp|svg\+xml));base64,([A-Za-z0-9+/=\s]+)$/i);
+  if (dataUrl) {
+    res.setHeader("Content-Type", dataUrl[1].toLowerCase());
+    res.setHeader("Cache-Control", "public, max-age=86400");
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; sandbox");
+    res.send(Buffer.from(dataUrl[2].replace(/\s/g, ""), "base64"));
+    return;
+  }
+
+  if (/^https?:\/\//i.test(logoUrl) || logoUrl.startsWith("/")) {
+    res.redirect(302, logoUrl);
+    return;
+  }
+
+  res.status(404).json({ error: "University logo is not available" });
 });
 
 router.post("/universities", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
