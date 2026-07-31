@@ -128,10 +128,11 @@ export function isExperimentalAdapterKey(adapterKey: string): boolean {
 
 /**
  * Auto-graduation threshold: an adapter whose family is experimental stops
- * being treated as experimental once it has this many `submitted` portal
- * submissions (counted live per adapter_key — no persisted flag). The count
- * itself lives in the DB layer (api-server / worker); this registry stays
- * pure, so only the shared constant is exported here.
+ * being treated as experimental once it has this many portal submissions with
+ * durable success proof (counted live per adapter_key — no persisted flag).
+ * A submitted status without an external reference or explicit verified proof
+ * does not count. The count itself lives in the shared runner DB layer; this
+ * registry stays pure, so only the shared constant is exported here.
  */
 export const GRADUATION_THRESHOLD = 3;
 

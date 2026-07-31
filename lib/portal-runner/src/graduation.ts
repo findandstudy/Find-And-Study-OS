@@ -3,8 +3,10 @@
  *
  * An adapter whose family is statically experimental (EXPERIMENTAL_FAMILIES
  * in @workspace/portal-adapters) "graduates" once it has GRADUATION_THRESHOLD
- * portal submissions with status='submitted'. Graduation is computed LIVE
- * from the DB per adapter_key — no persisted flag:
+ * portal submissions with a durable success proof. A submitted status alone
+ * is intentionally insufficient: historical adapters could report submitted
+ * before the portal outcome was positively verified. Graduation is computed
+ * LIVE from the DB per adapter_key — no persisted flag:
  *
  *   experimental(key) = staticExperimentalFamily(key)
  *                       && successCount(key) < GRADUATION_THRESHOLD
@@ -27,9 +29,51 @@ import {
 
 export { GRADUATION_THRESHOLD };
 
+export interface GraduationProofCandidate {
+  externalRef?: unknown;
+  resultJson?: unknown;
+}
+
 /**
- * Live 'submitted' counts per adapter key (one GROUP BY query). Every
- * requested key is present in the map (0 when no successful rows).
+ * Pure mirror of the SQL graduation predicate. Kept exported so regression
+ * tests and audit tooling can validate persisted result shapes without a DB.
+ */
+export function hasDurableGraduationProof(
+  candidate: GraduationProofCandidate,
+): boolean {
+  if (
+    typeof candidate.externalRef === "string" &&
+    candidate.externalRef.trim() !== ""
+  ) {
+    return true;
+  }
+
+  if (!candidate.resultJson || typeof candidate.resultJson !== "object") {
+    return false;
+  }
+  const root = candidate.resultJson as Record<string, unknown>;
+  const topLevelProof = root.successProof;
+  const nestedResult =
+    root.result && typeof root.result === "object"
+      ? (root.result as Record<string, unknown>)
+      : null;
+  const nestedMeta =
+    nestedResult?.meta && typeof nestedResult.meta === "object"
+      ? (nestedResult.meta as Record<string, unknown>)
+      : null;
+  const nestedProof = nestedMeta?.successProof;
+
+  return [topLevelProof, nestedProof].some(
+    (proof) =>
+      proof != null &&
+      typeof proof === "object" &&
+      (proof as Record<string, unknown>).verified === true,
+  );
+}
+
+/**
+ * Live verified-success counts per adapter key (one GROUP BY query). Every
+ * requested key is present in the map (0 when no proven successful rows).
  */
 export async function getAdapterSuccessCounts(
   adapterKeys: string[],
@@ -44,6 +88,11 @@ export async function getAdapterSuccessCounts(
      WHERE adapter_key = ANY($1::text[])
        AND status = 'submitted'
        AND deleted_at IS NULL
+       AND (
+         NULLIF(BTRIM(external_ref), '') IS NOT NULL
+         OR result_json #>> '{successProof,verified}' = 'true'
+         OR result_json #>> '{result,meta,successProof,verified}' = 'true'
+       )
      GROUP BY adapter_key`,
     [unique],
   );

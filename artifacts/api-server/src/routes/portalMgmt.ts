@@ -408,7 +408,7 @@ router.patch(
     }
 
     // Auto-graduation guard: an experimental adapter that has NOT yet reached
-    // GRADUATION_THRESHOLD 'submitted' successes may not enable auto-process.
+    // GRADUATION_THRESHOLD verified successes may not enable auto-process.
     // (Manual single-submission remains allowed regardless.)
     if (autoProcess && await isExperimentalDynamic(row.adapterKey)) {
       res.status(409).json({
@@ -1164,8 +1164,8 @@ router.get(
     // hasCredentials: DB-first by adapterKey (canonical), then env fallback.
     const dbCredKeys = await batchPortalCredentialKeys();
     // Auto-graduation: live success counts for statically-experimental keys —
-    // an adapter with >= GRADUATION_THRESHOLD 'submitted' rows is no longer
-    // experimental (one GROUP BY query, no N+1).
+    // an adapter with >= GRADUATION_THRESHOLD durable success proofs is no
+    // longer experimental (one GROUP BY query, no N+1).
     const staticMeta = adapterMetadata();
     const staticExperimentalKeys = staticMeta
       .filter((m) => m.experimental)

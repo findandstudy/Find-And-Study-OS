@@ -5,7 +5,7 @@
  *   experimental(key) = staticExperimentalFamily(key)
  *                       && successCount(key) < GRADUATION_THRESHOLD
  * where successCount = live COUNT of portal_submissions rows with
- * status='submitted' AND deleted_at IS NULL per adapter_key.
+ * status='submitted', deleted_at IS NULL and durable portal proof per key.
  *
  * G1  GRADUATION_THRESHOLD === 3, consistently re-exported
  * G2  getAdapterSuccessCounts — counts only submitted+non-deleted, 0 for unknown
@@ -43,6 +43,7 @@ import {
   getAdapterSuccessCounts,
   getNonGraduatedExperimentalAdapterKeys,
   getExperimentalExcludedUniversityKeys,
+  hasDurableGraduationProof,
   claimNext,
 } from "@workspace/portal-runner";
 import {
@@ -117,6 +118,8 @@ async function seedSubmission(opts: {
   universityKey?: string;
   deleted?: boolean;
   manual?: boolean;
+  externalRef?: string;
+  successProof?: boolean;
 }): Promise<number> {
   const [row] = await db
     .insert(portalSubmissionsTable)
@@ -127,6 +130,20 @@ async function seedSubmission(opts: {
       adapterKey:     opts.adapterKey,
       mode:           "dry",
       status:         opts.status,
+      externalRef:    opts.externalRef,
+      resultJson:     opts.successProof
+        ? {
+            result: {
+              meta: {
+                successProof: {
+                  verified: true,
+                  kind: "test_proof",
+                  schemaVersion: 1,
+                },
+              },
+            },
+          }
+        : null,
       deletedAt:      opts.deleted ? new Date() : null,
       meta:           opts.manual ? { manual: true } : null,
     })
@@ -147,22 +164,49 @@ test("G1: GRADUATION_THRESHOLD is 3 and consistently re-exported", () => {
   assert.ok(!isExperimentalAdapterKey(NON_EXP_KEY), `${NON_EXP_KEY} must NOT be experimental`);
 });
 
+test("G1b: durable proof rejects submitted-only and accepts ref/verified marker", () => {
+  assert.equal(hasDurableGraduationProof({}), false);
+  assert.equal(hasDurableGraduationProof({ externalRef: "   " }), false);
+  assert.equal(
+    hasDurableGraduationProof({
+      resultJson: { result: { meta: { successProof: { verified: false } } } },
+    }),
+    false,
+  );
+  assert.equal(hasDurableGraduationProof({ externalRef: "APP-123" }), true);
+  assert.equal(
+    hasDurableGraduationProof({
+      resultJson: {
+        result: { meta: { successProof: { verified: true } } },
+      },
+    }),
+    true,
+  );
+  assert.equal(
+    hasDurableGraduationProof({
+      resultJson: { successProof: { verified: true } },
+    }),
+    true,
+  );
+});
+
 // ---------------------------------------------------------------------------
 // G2 — success counting semantics
 // ---------------------------------------------------------------------------
-test("G2: getAdapterSuccessCounts counts only submitted+non-deleted rows", async () => {
+test("G2: getAdapterSuccessCounts requires durable proof", async () => {
   const appId = await createAppId();
   const before = (await getAdapterSuccessCounts([EXP_KEY])).get(EXP_KEY) ?? 0;
 
-  await seedSubmission({ appId, adapterKey: EXP_KEY, status: "submitted" });
-  await seedSubmission({ appId, adapterKey: EXP_KEY, status: "submitted" });
+  await seedSubmission({ appId, adapterKey: EXP_KEY, status: "submitted" }); // no proof
+  await seedSubmission({ appId, adapterKey: EXP_KEY, status: "submitted", externalRef: "APP-G2" });
+  await seedSubmission({ appId, adapterKey: EXP_KEY, status: "submitted", successProof: true });
   await seedSubmission({ appId, adapterKey: EXP_KEY, status: "queued" });                 // not counted
   await seedSubmission({ appId, adapterKey: EXP_KEY, status: "failed" });                 // not counted
-  await seedSubmission({ appId, adapterKey: EXP_KEY, status: "submitted", deleted: true }); // not counted
+  await seedSubmission({ appId, adapterKey: EXP_KEY, status: "submitted", externalRef: "DELETED", deleted: true }); // not counted
   await seedSubmission({ appId, adapterKey: null,    status: "submitted" });              // null key ignored
 
   const after1 = (await getAdapterSuccessCounts([EXP_KEY])).get(EXP_KEY) ?? 0;
-  assert.equal(after1, before + 2, "only the 2 live submitted rows count");
+  assert.equal(after1, before + 2, "only the 2 live, proven submitted rows count");
 
   // Unknown key still present in the map with 0.
   const unknown = await getAdapterSuccessCounts([`nope_${RUN_ID}`]);
@@ -201,7 +245,12 @@ test("G4: experimental key graduates at >= threshold submitted rows", async () =
 
   // Top up to exactly the threshold.
   for (let i = count; i < GRADUATION_THRESHOLD; i++) {
-    await seedSubmission({ appId, adapterKey: EXP_KEY_2, status: "submitted" });
+    await seedSubmission({
+      appId,
+      adapterKey: EXP_KEY_2,
+      status: "submitted",
+      externalRef: `${RUN_ID}_${i}`,
+    });
   }
 
   const setAfter = await getNonGraduatedExperimentalAdapterKeys([EXP_KEY_2]);

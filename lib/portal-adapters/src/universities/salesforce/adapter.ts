@@ -24,6 +24,21 @@ import {
   type SalesforceStage,
 } from "./portalState.js";
 
+function markSalesforceVerifiedSuccess(
+  result: SubmitResult,
+  kind: "completed_stage" | "exact_application_row",
+): void {
+  result.submitted = true;
+  result.meta = {
+    ...result.meta,
+    successProof: {
+      verified: true,
+      kind,
+      schemaVersion: 1,
+    },
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Factory — one UniversityAdapter per SALESFORCE_SCHOOLS entry
 //
@@ -1479,11 +1494,14 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
                   activeStage: completionStage,
                 })
               ) {
-                result.submitted = true;
+                markSalesforceVerifiedSuccess(result, "completed_stage");
               } else {
                 const trackProof = await verifyTrackCompletion();
                 if (trackProof.verified) {
-                  result.submitted = true;
+                  markSalesforceVerifiedSuccess(
+                    result,
+                    "exact_application_row",
+                  );
                   if (trackProof.externalRef) {
                     result.externalRef = trackProof.externalRef;
                   }

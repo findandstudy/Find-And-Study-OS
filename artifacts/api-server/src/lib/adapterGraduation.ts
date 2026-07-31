@@ -20,7 +20,7 @@ import { isExperimentalAdapterKey } from "@workspace/portal-adapters";
 
 export { GRADUATION_THRESHOLD };
 
-/** Batched live 'submitted' counts per adapter key (one GROUP BY query). */
+/** Batched live verified-success counts per adapter key (one GROUP BY query). */
 export async function getSuccessCounts(
   adapterKeys: string[],
 ): Promise<Map<string, number>> {

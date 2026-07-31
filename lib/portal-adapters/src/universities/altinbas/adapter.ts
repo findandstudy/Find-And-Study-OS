@@ -158,6 +158,27 @@ function isAcceptedLevel(level: string): boolean {
   return ACCEPTED_LEVELS.has(normLevel(level));
 }
 
+/**
+ * Mark a terminal Altınbaş outcome only after the portal supplied a durable,
+ * positively-read-back proof. The structured marker is consumed by adapter
+ * auto-graduation; `submitted=true` on its own deliberately does not graduate
+ * an experimental adapter.
+ */
+function markAltinbasVerifiedSuccess(
+  result: SubmitResult,
+  kind: "exact_application_row" | "external_reference" | "aura_finish",
+): void {
+  result.submitted = true;
+  result.meta = {
+    ...result.meta,
+    successProof: {
+      verified: true,
+      kind,
+      schemaVersion: 1,
+    },
+  };
+}
+
 /** Snapshot the current screen. Returns the /tmp path or null. */
 async function captureScreen(
   page: any,
@@ -3173,7 +3194,7 @@ async function completeApplicationUI(
       expectedTrack,
     );
     if (existingApplication.outcome === "submitted") {
-      result.submitted = true;
+      markAltinbasVerifiedSuccess(result, "exact_application_row");
       result.detail =
         "Altınbaş[ui]: hedef başvuru portalda Evaluation durumunda doğrulandı";
       logger.info(`[altinbas][ui] ${result.detail}`);
@@ -3615,7 +3636,7 @@ async function completeApplicationUI(
     /Evaluation|Offer|Accepted|View Application/i.test(rows[movedIdx]) &&
     !/Signed Up|Complete Application/i.test(rows[movedIdx]);
   if (moved) {
-    result.submitted = true;
+    markAltinbasVerifiedSuccess(result, "exact_application_row");
     result.detail =
       "Altınbaş[ui]: Submit sonrası tekil ad+program satırı Signed Up dışına geçti (doğrulandı)";
     logger.info(`[altinbas][ui] ${result.detail}`);
@@ -4219,7 +4240,7 @@ async function runFlowReplay(
     );
     if (lwsMatch) {
       const externalRef = lwsMatch![1].replace(/\\/g, "");
-      result.submitted = true;
+      markAltinbasVerifiedSuccess(result, "external_reference");
       result.externalRef = externalRef || rt.ids.applicationId;
       result.detail =
         `Altınbaş: FINISH — EduhubNavigateToURL LWS nav-blocked başarı (FIX-15A); externalRef=${result.externalRef ?? "?"}`;
@@ -4239,7 +4260,7 @@ async function runFlowReplay(
     return;
   }
 
-  result.submitted = true;
+  markAltinbasVerifiedSuccess(result, "aura_finish");
   if (rt.ids.applicationId) result.externalRef = rt.ids.applicationId;
   result.detail = `Altınbaş: FINISH gönderildi, aura state:SUCCESS (flow replay)${rt.ids.applicationId ? ` — applicationId=${rt.ids.applicationId}` : ""}`;
   logger.info(`[altinbas] ${result.detail}`);
