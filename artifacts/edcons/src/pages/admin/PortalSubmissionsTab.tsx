@@ -69,11 +69,26 @@ interface SubmissionResultJson {
     detail?: string;
   };
   aiGuardian?: {
-    status?: "processing" | "proposed" | "error";
+    status?:
+      | "processing"
+      | "proposed"
+      | "staging_failed"
+      | "deploy_proposed"
+      | "deploy_approved"
+      | "deploy_rejected"
+      | "proposal_rejected"
+      | "error";
     fingerprint?: string;
     diagnosedAt?: string;
     runId?: number;
     actionId?: number;
+    deployActionId?: number;
+    staging?: {
+      status?: "passed" | "failed";
+      mode?: "offline_structural";
+      reportHash?: string;
+      canaryRequired?: boolean;
+    };
     error?: string;
     diagnosis?: {
       classification: string;
@@ -563,7 +578,7 @@ function SubmissionRow({
                   </span>
                 </>
               )}
-              {guardian.actionId && (
+              {(guardian.deployActionId || guardian.actionId) && (
                 <a
                   href={`${BASE_URL}/admin/ai-action-queue`}
                   className="ml-auto text-primary hover:underline"

@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./declarative/schema": "./src/declarative/schema.ts"
   },
   "scripts": {
     "test:program-match": "tsx --test ./scripts/test-program-match.ts",

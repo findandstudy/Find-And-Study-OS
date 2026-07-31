@@ -10,15 +10,17 @@ import {
   portalAdapterSpecsTable,
 } from "@workspace/db";
 import { and, eq, desc, sql } from "drizzle-orm";
-import {
-  invalidateSpecAdapterCache,
-  parseAdapterSpec,
-} from "@workspace/portal-adapters";
 import { requireAuth, requireRole, logAudit } from "../lib/auth";
 import { ADMIN_ROLES } from "../lib/roles";
 import { listScopes } from "../lib/scopeRegistry";
 import { listTools, TOOL_REGISTRY } from "../lib/toolRegistry";
 import { runPersona } from "../lib/personaService";
+import { portalDiagnosisSchema } from "../lib/portalAiGuardianContract";
+import {
+  stagingReportsMatch,
+  validateGuardianStagingPatch,
+} from "../lib/portalAiGuardianStaging";
+import { buildPortalDeployProposalPayload } from "../lib/portalAiGuardianApproval";
 
 const router: IRouter = Router();
 
@@ -59,29 +61,6 @@ function guardToolsForType(
     if (def?.sideEffect) return { ok: false, offending: t };
   }
   return { ok: true };
-}
-
-function guardianDraftUsesExecutablePrivileges(spec: unknown): boolean {
-  if (!spec || typeof spec !== "object") return false;
-  const row = spec as {
-    steps?: unknown[];
-    auth?: { loginSteps?: unknown[] };
-    workflow?: { states?: Array<{ steps?: unknown[] }> };
-  };
-  const privileged = (steps: unknown[] | undefined) =>
-    (steps ?? []).some(
-      (step) =>
-        Boolean(step) &&
-        typeof step === "object" &&
-        ["http", "graphql", "jsHook"].includes(
-          String((step as { action?: unknown }).action ?? ""),
-        ),
-    );
-  return (
-    privileged(row.steps) ||
-    privileged(row.auth?.loginSteps) ||
-    (row.workflow?.states ?? []).some((state) => privileged(state.steps))
-  );
 }
 
 // Registry endpoints
@@ -390,10 +369,17 @@ const reviewActionSchema = z.object({
   decision: z.enum(["approved", "rejected"]),
 });
 
-// Guardian approval may promote only the already-created, schema-valid,
-// non-privileged disabled selector patch named in the stale-checked proposal.
-// It never retries a student, runs portal mutations, changes code, or approves
-// http/graphql/jsHook capabilities.
+function reviewRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+// Two human gates, both deliberately non-executing:
+// 1) approving a staged fix creates a deploy proposal;
+// 2) approving that deploy proposal records readiness for a manual deploy.
+// Neither gate enables a spec, retries a student, runs a canary, restarts a
+// process, writes production code, or performs a portal mutation.
 router.post(
   "/ai-personas/queue/actions/:id/review",
   requireAuth,
@@ -416,113 +402,307 @@ router.post(
       });
       return;
     }
+    const payload = reviewRecord(current.payload);
+    const context = reviewRecord(payload.context);
+    const isPortalAction = [
+      "portal_fix_proposal",
+      "portal_deploy_proposal",
+    ].includes(current.actionType);
+
+    if (
+      parsed.data.decision === "approved" &&
+      isPortalAction &&
+      req.user!.role !== "super_admin"
+    ) {
+      res.status(403).json({
+        error: "SUPER_ADMIN_REQUIRED",
+        message: "Portal patch and deploy proposals require super-admin approval",
+      });
+      return;
+    }
+
     if (
       parsed.data.decision === "approved" &&
       current.actionType === "portal_fix_proposal"
     ) {
-      const payload =
-        current.payload && typeof current.payload === "object"
-          ? (current.payload as Record<string, unknown>)
-          : {};
-      const context =
-        payload.context && typeof payload.context === "object"
-          ? (payload.context as Record<string, unknown>)
-          : {};
       const submissionId = Number(context.submissionId);
-      const fingerprint =
-        typeof context.fingerprint === "string" ? context.fingerprint : "";
+      const baseSpecId = Number(context.baseSpecId);
       const draftSpecId = Number(context.draftSpecId);
-      const [submission] = Number.isFinite(submissionId)
-        ? await db
-            .select({ resultJson: portalSubmissionsTable.resultJson })
-            .from(portalSubmissionsTable)
-            .where(eq(portalSubmissionsTable.id, submissionId))
-        : [];
-      const result =
-        submission?.resultJson && typeof submission.resultJson === "object"
-          ? (submission.resultJson as Record<string, unknown>)
-          : {};
-      const guardian =
-        result.aiGuardian && typeof result.aiGuardian === "object"
-          ? (result.aiGuardian as Record<string, unknown>)
-          : {};
+      const fingerprint = String(context.fingerprint ?? "");
+      const diagnosis = portalDiagnosisSchema.safeParse(payload.diagnosis);
+      if (
+        !Number.isFinite(submissionId) ||
+        !Number.isFinite(baseSpecId) ||
+        !Number.isFinite(draftSpecId) ||
+        !fingerprint ||
+        !diagnosis.success
+      ) {
+        res.status(409).json({
+          error: "PORTAL_STAGING_ARTIFACT_INVALID",
+          message: "The proposal is missing a complete staged patch artifact",
+        });
+        return;
+      }
+      const [[submission], [base], [draft]] = await Promise.all([
+        db
+          .select({ resultJson: portalSubmissionsTable.resultJson })
+          .from(portalSubmissionsTable)
+          .where(eq(portalSubmissionsTable.id, submissionId)),
+        db
+          .select()
+          .from(portalAdapterSpecsTable)
+          .where(eq(portalAdapterSpecsTable.id, baseSpecId)),
+        db
+          .select()
+          .from(portalAdapterSpecsTable)
+          .where(eq(portalAdapterSpecsTable.id, draftSpecId)),
+      ]);
+      const guardian = reviewRecord(reviewRecord(submission?.resultJson).aiGuardian);
+      const regenerated =
+        base && draft
+          ? validateGuardianStagingPatch({
+              baseSpec: base.spec,
+              patchedSpec: draft.spec,
+              operations: diagnosis.data.proposedSpecPatch,
+              testedAt: String(reviewRecord(payload.staging).testedAt || new Date().toISOString()),
+            })
+          : null;
       if (
         !submission ||
-        guardian.status !== "proposed" ||
-        guardian.fingerprint !== fingerprint ||
-        guardian.actionId !== id
-      ) {
-        res.status(409).json({
-          error: "STALE_PORTAL_PROPOSAL",
-          message:
-            "The portal outcome changed after this proposal was created; run a new diagnosis",
-        });
-        return;
-      }
-      if (
-        req.user!.role !== "super_admin" ||
-        !Number.isFinite(draftSpecId) ||
-        draftSpecId <= 0
-      ) {
-        res.status(409).json({
-          error: "PORTAL_DRAFT_NOT_PROMOTABLE",
-          message:
-            "This proposal has no promotable disabled spec draft or requires super-admin review",
-        });
-        return;
-      }
-      const [draft] = await db
-        .select()
-        .from(portalAdapterSpecsTable)
-        .where(eq(portalAdapterSpecsTable.id, draftSpecId));
-      const parsedSpec = draft ? parseAdapterSpec(draft.spec) : null;
-      if (
+        !base ||
         !draft ||
+        !base.enabled ||
         draft.enabled ||
         draft.source !== "uploaded" ||
-        !parsedSpec?.ok ||
-        guardianDraftUsesExecutablePrivileges(draft.spec)
+        base.key !== draft.key ||
+        guardian.status !== "proposed" ||
+        guardian.fingerprint !== fingerprint ||
+        guardian.actionId !== id ||
+        !regenerated ||
+        regenerated.status !== "passed" ||
+        !stagingReportsMatch(payload.staging, regenerated)
       ) {
         res.status(409).json({
-          error: "PORTAL_DRAFT_NOT_PROMOTABLE",
+          error: "STALE_OR_FAILED_PORTAL_STAGING",
           message:
-            "The draft is missing, stale, already active, invalid, or requests privileged capabilities",
+            "The active base, disabled draft, fingerprint or staging proof changed; run a new diagnosis",
         });
         return;
       }
-      await db.transaction(async (tx) => {
-        await tx
-          .update(portalAdapterSpecsTable)
-          .set({ enabled: false, updatedAt: new Date() })
-          .where(eq(portalAdapterSpecsTable.key, draft.key));
-        await tx
-          .update(portalAdapterSpecsTable)
-          .set({
-            enabled: true,
-            // Human super-admin approval is the explicit override trust gate.
-            privilegedApproved: true,
-            updatedAt: new Date(),
-          })
-          .where(eq(portalAdapterSpecsTable.id, draft.id));
+
+      const deployPayload = buildPortalDeployProposalPayload({
+        sourceActionId: id,
+        submissionId,
+        universityKey:
+          typeof context.universityKey === "string" ? context.universityKey : null,
+        adapterKey:
+          typeof context.adapterKey === "string" ? context.adapterKey : null,
+        fingerprint,
+        baseSpecId: base.id,
+        baseSpecVersion: base.version,
+        draftSpecId: draft.id,
+        draftSpecVersion: draft.version,
+        diagnosis: diagnosis.data,
+        staging: regenerated,
       });
-      invalidateSpecAdapterCache();
-      await db
-        .update(portalSubmissionsTable)
-        .set({
-          resultJson: sql`coalesce(${portalSubmissionsTable.resultJson}, '{}'::jsonb) || jsonb_build_object(
-            'aiGuardian',
-            coalesce(${portalSubmissionsTable.resultJson}->'aiGuardian', '{}'::jsonb)
-              || jsonb_build_object(
-                'status', 'promoted',
-                'promotedAt', ${new Date().toISOString()},
-                'promotedSpecId', ${draft.id},
-                'promotedSpecVersion', ${draft.version}
-              )
-          )`,
-        })
-        .where(eq(portalSubmissionsTable.id, submissionId));
+      const transactionResult = await db.transaction(async (tx) => {
+        const [reviewed] = await tx
+          .update(aiActionQueueTable)
+          .set({
+            status: "approved",
+            reviewedBy: req.user!.id,
+            reviewedAt: new Date(),
+          })
+          .where(
+            and(
+              eq(aiActionQueueTable.id, id),
+              eq(aiActionQueueTable.status, "pending_approval"),
+            ),
+          )
+          .returning();
+        if (!reviewed) return null;
+        const [deployAction] = await tx
+          .insert(aiActionQueueTable)
+          .values({
+            personaId: current.personaId,
+            runId: current.runId,
+            actionType: "portal_deploy_proposal",
+            payload: deployPayload,
+            preview: `Deploy staged ${draft.key} spec v${draft.version} after the required manual checks.`,
+            status: "pending_approval",
+          })
+          .returning();
+        await tx
+          .update(portalSubmissionsTable)
+          .set({
+            resultJson: sql`coalesce(${portalSubmissionsTable.resultJson}, '{}'::jsonb) || jsonb_build_object(
+              'aiGuardian',
+              coalesce(${portalSubmissionsTable.resultJson}->'aiGuardian', '{}'::jsonb)
+                || jsonb_build_object(
+                  'status', 'deploy_proposed',
+                  'deployActionId', ${deployAction.id},
+                  'deployProposedAt', ${new Date().toISOString()}
+                )
+            )`,
+          })
+          .where(eq(portalSubmissionsTable.id, submissionId));
+        return { reviewed, deployAction };
+      });
+      if (!transactionResult) {
+        res.status(409).json({
+          error: "ACTION_NOT_PENDING",
+          message: "This action was already reviewed or does not exist",
+        });
+        return;
+      }
+      await logAudit(
+        req.user!.id,
+        "approve_ai_action",
+        "ai_action_queue",
+        id,
+        {
+          actionType: current.actionType,
+          executionMode: "create_non_executing_deploy_proposal",
+          deployActionId: transactionResult.deployAction.id,
+          productionChanged: false,
+        },
+        req.ip,
+      );
+      res.json({
+        action: transactionResult.reviewed,
+        deployProposal: transactionResult.deployAction,
+        executed: false,
+        productionChanged: false,
+        message:
+          "Staged patch approved. A separate non-executing deploy proposal was created; no spec, student, process or portal state changed.",
+      });
+      return;
     }
-    const [updated] = await db
+
+    if (
+      parsed.data.decision === "approved" &&
+      current.actionType === "portal_deploy_proposal"
+    ) {
+      const submissionId = Number(context.submissionId);
+      const baseSpecId = Number(context.baseSpecId);
+      const draftSpecId = Number(context.draftSpecId);
+      const fingerprint = String(context.fingerprint ?? "");
+      const diagnosis = portalDiagnosisSchema.safeParse(payload.diagnosis);
+      const [[submission], [base], [draft]] = await Promise.all([
+        Number.isFinite(submissionId)
+          ? db
+              .select({ resultJson: portalSubmissionsTable.resultJson })
+              .from(portalSubmissionsTable)
+              .where(eq(portalSubmissionsTable.id, submissionId))
+          : Promise.resolve([]),
+        Number.isFinite(baseSpecId)
+          ? db
+              .select()
+              .from(portalAdapterSpecsTable)
+              .where(eq(portalAdapterSpecsTable.id, baseSpecId))
+          : Promise.resolve([]),
+        Number.isFinite(draftSpecId)
+          ? db
+              .select()
+              .from(portalAdapterSpecsTable)
+              .where(eq(portalAdapterSpecsTable.id, draftSpecId))
+          : Promise.resolve([]),
+      ]);
+      const guardian = reviewRecord(reviewRecord(submission?.resultJson).aiGuardian);
+      const regenerated =
+        diagnosis.success && base && draft
+          ? validateGuardianStagingPatch({
+              baseSpec: base.spec,
+              patchedSpec: draft.spec,
+              operations: diagnosis.data.proposedSpecPatch,
+              testedAt: String(reviewRecord(payload.staging).testedAt || new Date().toISOString()),
+            })
+          : null;
+      if (
+        !submission ||
+        !base ||
+        !draft ||
+        !base.enabled ||
+        draft.enabled ||
+        draft.source !== "uploaded" ||
+        base.key !== draft.key ||
+        guardian.status !== "deploy_proposed" ||
+        guardian.fingerprint !== fingerprint ||
+        guardian.deployActionId !== id ||
+        !regenerated ||
+        regenerated.status !== "passed" ||
+        !stagingReportsMatch(payload.staging, regenerated)
+      ) {
+        res.status(409).json({
+          error: "STALE_PORTAL_DEPLOY_PROPOSAL",
+          message:
+            "The staged artifact is no longer deploy-ready; create a fresh diagnosis and staging report",
+        });
+        return;
+      }
+      const updatedRows = await db.transaction(async (tx) => {
+        const reviewed = await tx
+          .update(aiActionQueueTable)
+          .set({
+            status: "approved",
+            reviewedBy: req.user!.id,
+            reviewedAt: new Date(),
+          })
+          .where(
+            and(
+              eq(aiActionQueueTable.id, id),
+              eq(aiActionQueueTable.status, "pending_approval"),
+            ),
+          )
+          .returning();
+        if (!reviewed[0]) return [];
+        await tx
+          .update(portalSubmissionsTable)
+          .set({
+            resultJson: sql`coalesce(${portalSubmissionsTable.resultJson}, '{}'::jsonb) || jsonb_build_object(
+              'aiGuardian',
+              coalesce(${portalSubmissionsTable.resultJson}->'aiGuardian', '{}'::jsonb)
+                || jsonb_build_object(
+                  'status', 'deploy_approved',
+                  'deployApprovedAt', ${new Date().toISOString()},
+                  'productionChanged', false
+                )
+            )`,
+          })
+          .where(eq(portalSubmissionsTable.id, submissionId));
+        return reviewed;
+      });
+      const updated = updatedRows[0];
+      if (!updated) {
+        res.status(409).json({
+          error: "ACTION_NOT_PENDING",
+          message: "This action was already reviewed or does not exist",
+        });
+        return;
+      }
+      await logAudit(
+        req.user!.id,
+        "approve_ai_action",
+        "ai_action_queue",
+        id,
+        {
+          actionType: current.actionType,
+          executionMode: "manual_deploy_readiness_recorded",
+          productionChanged: false,
+        },
+        req.ip,
+      );
+      res.json({
+        action: updated,
+        executed: false,
+        productionChanged: false,
+        message:
+          "Deploy readiness was recorded. Deployment, canary, spec activation and process restarts remain manual and were not executed.",
+      });
+      return;
+    }
+
+    const updatedRows = await db
       .update(aiActionQueueTable)
       .set({
         status: parsed.data.decision,
@@ -536,12 +716,37 @@ router.post(
         ),
       )
       .returning();
+    const updated = updatedRows[0];
     if (!updated) {
       res.status(409).json({
         error: "ACTION_NOT_PENDING",
         message: "This action was already reviewed or does not exist",
       });
       return;
+    }
+    if (isPortalAction) {
+      const submissionId = Number(context.submissionId);
+      const fingerprint = String(context.fingerprint ?? "");
+      if (Number.isFinite(submissionId) && fingerprint) {
+        await db
+          .update(portalSubmissionsTable)
+          .set({
+            resultJson: sql`coalesce(${portalSubmissionsTable.resultJson}, '{}'::jsonb) || jsonb_build_object(
+              'aiGuardian',
+              coalesce(${portalSubmissionsTable.resultJson}->'aiGuardian', '{}'::jsonb)
+                || jsonb_build_object(
+                  'status', ${current.actionType === "portal_deploy_proposal" ? "deploy_rejected" : "proposal_rejected"},
+                  'reviewedAt', ${new Date().toISOString()}
+                )
+            )`,
+          })
+          .where(
+            and(
+              eq(portalSubmissionsTable.id, submissionId),
+              sql`coalesce(${portalSubmissionsTable.resultJson}->'aiGuardian'->>'fingerprint', '') = ${fingerprint}`,
+            ),
+          );
+      }
     }
     await logAudit(
       req.user!.id,
@@ -550,25 +755,16 @@ router.post(
       id,
       {
         actionType: updated.actionType,
-        executionMode:
-          updated.actionType === "portal_fix_proposal" &&
-          parsed.data.decision === "approved"
-            ? "disabled_spec_promotion"
-            : "review_only",
+        executionMode: "review_only",
+        productionChanged: false,
       },
       req.ip,
     );
     res.json({
       action: updated,
-      executed:
-        updated.actionType === "portal_fix_proposal" &&
-        parsed.data.decision === "approved",
-      message:
-        updated.actionType === "portal_fix_proposal"
-          ? parsed.data.decision === "approved"
-            ? "The reviewed selector-only draft was promoted. No student retry or portal mutation was executed."
-            : "Proposal rejected; its disabled draft was not promoted."
-          : "Action reviewed; execution is not enabled in this phase",
+      executed: false,
+      productionChanged: false,
+      message: "Action reviewed. No code, spec, process, student or portal state was changed.",
     });
   },
 );
