@@ -2299,6 +2299,16 @@ function generateEmbedScript(baseUrl: string): string {
     var iframe = document.createElement('iframe');
     iframe.style.width = '100%';
     iframe.style.border = 'none';
+    iframe.style.background = 'transparent';
+    iframe.style.boxShadow = 'none';
+    iframe.style.filter = 'none';
+    iframe.style.display = 'block';
+    iframe.setAttribute('allowtransparency', 'true');
+    // The collapsed chatbot iframe is intentionally larger than the circular
+    // launcher so its focus/click target remains accessible. Keep that host
+    // canvas transparent instead of showing a square tile behind the button.
+    el.style.background = 'transparent';
+    el.style.boxShadow = 'none';
     // No artificial minimum: the iframe must size itself to the widget's
     // actual content. The widget's own resizeParent() reports a height that
     // already includes any open modal or dropdown overlays, so a fixed
@@ -2453,6 +2463,8 @@ function generateEmbedScript(baseUrl: string): string {
         iframe.style.bottom = open ? '10px' : '12px';
         iframe.style.zIndex = '2147483000';
         iframe.style.background = 'transparent';
+        iframe.style.boxShadow = 'none';
+        iframe.style.filter = 'none';
         iframe.style.width = open ? 'min(410px, 100vw)' : '84px';
         iframe.style.height = open ? 'min(640px, 100vh)' : '84px';
         iframe.style.maxWidth = '100vw';
@@ -2550,7 +2562,7 @@ export function generateChatbotWidgetHTML(
     body{min-height:76px}
     button,input,textarea{font:inherit}
     #root{position:fixed;right:8px;bottom:8px;width:min(390px,calc(100vw - 16px));z-index:10}
-    .launcher{margin-left:auto;width:62px;height:62px;border:0;border-radius:50%;background:var(--button);color:#fff;display:grid;place-items:center;cursor:pointer;box-shadow:0 14px 34px rgba(16,24,40,.28)}
+    .launcher{margin-left:auto;width:62px;height:62px;border:0;border-radius:50%;background:var(--button);color:#fff;display:grid;place-items:center;cursor:pointer;box-shadow:none;filter:none}
     .launcher svg{width:28px;height:28px}
     .panel{display:none;height:min(620px,calc(100vh - 18px));background:#fff;border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;box-shadow:0 22px 60px rgba(16,24,40,.24);grid-template-rows:auto 1fr auto}
     .panel.open{display:grid}

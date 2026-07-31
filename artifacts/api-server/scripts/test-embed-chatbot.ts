@@ -91,6 +91,14 @@ test("chatbot route keeps identity, authorization and XSS guards server-owned", 
   assert.match(routeSource, /if \(script\) new Function\(script\)/);
 });
 
+test("collapsed chatbot launcher has a transparent, shadow-free host canvas", () => {
+  assert.match(routeSource, /iframe\.style\.background = 'transparent'/);
+  assert.match(routeSource, /iframe\.style\.boxShadow = 'none'/);
+  assert.match(routeSource, /iframe\.setAttribute\('allowtransparency', 'true'\)/);
+  assert.match(routeSource, /el\.style\.background = 'transparent'/);
+  assert.match(routeSource, /\.launcher\{[^}]*box-shadow:none;filter:none\}/);
+});
+
 test("embedded assistant resolves all ten public-site languages", () => {
   assert.deepEqual(
     EMBED_CHAT_LOCALES,
