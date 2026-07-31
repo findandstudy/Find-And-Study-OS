@@ -26,6 +26,7 @@ import {
   isEducationTriggerDocType,
   EDUCATION_SOURCE_DOC_TYPES,
   EDUCATION_FUZZY_KEYWORDS,
+  AI_EDUCATION_RECORD_SOURCE,
   type EducationRecordOutput,
 } from "../src/lib/educationExtraction.js";
 import { isPassportExpired } from "../src/lib/passportValidity.js";
@@ -35,6 +36,11 @@ const mockAll = [
   { level: "bachelor", institution: "Bilkent University", program: "Computer Science", graduationYear: 2023, gpa: "3.5/4", languageScore: "IELTS 7.0" },
   { level: "master", institution: "METU", program: "AI", graduationYear: 2025, gpa: "3.8/4", languageScore: "TOEFL 100" },
 ];
+
+it("AI detailed education rows use the live DB-allowed source", () => {
+  assert.equal(AI_EDUCATION_RECORD_SOURCE, "ai_extracted");
+  assert.ok(["manual", "ai_extracted", "migrated"].includes(AI_EDUCATION_RECORD_SOURCE));
+});
 
 describe("mapExtractionToEducation — level mapping", () => {
   it("AE-1 Bachelor apply (group A) → only high_school", () => {

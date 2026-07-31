@@ -23,6 +23,9 @@ import { normalizeGpaEvidenceTo100 } from "./gpaNormalize";
 
 export const EDUCATION_LEVEL_VALUES = ["high_school", "bachelor", "master"] as const;
 
+/** Canonical value accepted by education_records_source_check for AI output. */
+export const AI_EDUCATION_RECORD_SOURCE = "ai_extracted" as const;
+
 /** Loose shape the AI is asked to return per education record. */
 export const aiEducationRecordSchema = z.object({
   level: z.enum(EDUCATION_LEVEL_VALUES),

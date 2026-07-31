@@ -33,6 +33,7 @@ import { logAudit } from "./auth";
 import { loadDocumentBytes } from "./documentBytes";
 import { EXTRACT_PROMPT } from "./extractPrompt";
 import {
+  AI_EDUCATION_RECORD_SOURCE,
   buildEducationPromptSection,
   decideEducationExtraction,
   EDUCATION_FUZZY_KEYWORDS,
@@ -358,7 +359,12 @@ export async function runEducationExtraction(
           gpa: rec.gpa ?? rec.gpaRaw,
           gpaType: rec.gpaScale != null ? String(rec.gpaScale) : null,
           languageScore: rec.languageScore,
-          source: "portal_preflight_ai",
+          // The live education_records table deliberately restricts source to
+          // manual | ai_extracted | migrated.  Keep the portal preflight
+          // provenance in the audit/meta layer and use the canonical DB value
+          // here so a successful extraction cannot be discarded by the check
+          // constraint.
+          source: AI_EDUCATION_RECORD_SOURCE,
         };
         const detailedSet = opts.mergeMissingOnly
           ? {
