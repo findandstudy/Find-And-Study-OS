@@ -80,6 +80,7 @@ import {
   isDiagnosablePortalStatus,
 } from "../lib/portalAiGuardian.js";
 import { queuePortalLifecycleReview } from "../lib/portalLifecycleGuardian.js";
+import { resolveCanonicalPortalUniversity } from "../lib/portalUniversityResolver.js";
 
 const router: IRouter = Router();
 
@@ -140,51 +141,55 @@ router.post(
       return;
     }
 
-    const meta = adapterMetadata();
-    let finalUniversityKey = universityKey;
-    let finalUniversityName =
-      meta.find((m) => m.key === universityKey)?.label ?? universityKey;
+    const portalResolution = await resolveCanonicalPortalUniversity(universityKey);
+    if (!portalResolution.ok) {
+      const status = portalResolution.reason === "unknown" ? 404 : 409;
+      const error = portalResolution.reason === "inactive"
+        ? "PORTAL_UNIVERSITY_INACTIVE"
+        : portalResolution.reason === "ambiguous"
+          ? "AMBIGUOUS_PORTAL_ADAPTER"
+          : "UNKNOWN_PORTAL_UNIVERSITY";
+      res.status(status).json({
+        error,
+        message: portalResolution.reason === "ambiguous"
+          ? "The adapter key matches multiple portals; submit the canonical university key."
+          : "No unique active portal university matches the requested key.",
+        matches: portalResolution.matches,
+      });
+      return;
+    }
 
-    // Stamp the adapter this row will run on (multi-portal routing aware) —
-    // feeds the per-adapter auto-graduation success count.
-    let { adapterKey: routedAdapterKey } = await resolveAdapterKey(universityKey);
+    const selectedPortalUni = portalResolution.portalUniversity;
+    let finalUniversityKey = selectedPortalUni.universityKey;
+    let finalUniversityName = selectedPortalUni.universityName;
+
+    // Stamp the canonical adapter this row will run on (multi-portal routing
+    // aware). Raw adapter aliases never become queue identities.
+    let routedAdapterKey = selectedPortalUni.adapterKey;
     let routingMeta:
       | {
           exclusiveNationalityRoute: "multico";
           routedFromUniversityKey: string;
         }
       | undefined;
-    const [selectedPortalUni] = await db
-      .select()
-      .from(portalUniversitiesTable)
-      .where(
-        and(
-          eq(portalUniversitiesTable.universityKey, universityKey),
-          eq(portalUniversitiesTable.isActive, true),
-          isNull(portalUniversitiesTable.deletedAt),
-        ),
-      )
-      .limit(1);
-    if (selectedPortalUni) {
-      const studentRouting = await resolveStudentPortalRouting({
-        routing: { portalUni: selectedPortalUni, target: null },
-        studentId: app.studentId,
-        applicationId: app.id,
+    const studentRouting = await resolveStudentPortalRouting({
+      routing: { portalUni: selectedPortalUni, target: null },
+      studentId: app.studentId,
+      applicationId: app.id,
+    });
+    if (!studentRouting) {
+      res.status(409).json({
+        error: "PORTAL_ROUTE_UNAVAILABLE",
+        message: "The required exclusive portal route is not available.",
       });
-      if (!studentRouting) {
-        res.status(409).json({
-          error: "PORTAL_ROUTE_UNAVAILABLE",
-          message: "The required exclusive portal route is not available.",
-        });
-        return;
-      }
-      finalUniversityKey = studentRouting.portalUni.universityKey;
-      finalUniversityName =
-        studentRouting.submissionUniversityName ??
-        studentRouting.portalUni.universityName;
-      routedAdapterKey = studentRouting.portalUni.adapterKey;
-      routingMeta = studentRouting.routingMeta;
+      return;
     }
+    finalUniversityKey = studentRouting.portalUni.universityKey;
+    finalUniversityName =
+      studentRouting.submissionUniversityName ??
+      studentRouting.portalUni.universityName;
+    routedAdapterKey = studentRouting.portalUni.adapterKey;
+    routingMeta = studentRouting.routingMeta;
     const preflight = await prepareApplicationPortalPreflight({
       applicationId: app.id,
       adapterKey: routedAdapterKey,

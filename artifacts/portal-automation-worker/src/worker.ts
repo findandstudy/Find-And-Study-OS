@@ -17,6 +17,7 @@ import { and, eq, isNull } from "drizzle-orm";
 import { db, portalUniversitiesTable, portalAutomationSettingsTable } from "@workspace/db";
 import {
   claimNext,
+  cancelStaleIneligibleQueued,
   releaseStale,
   buildStudentProfile,
   runSubmission,
@@ -36,7 +37,21 @@ import { resolvePortalCreds } from "./credResolver.js";
 
 const POLL_MS   = parseInt(process.env.WORKER_POLL_MS   ?? "5000",   10);
 const STALE_MS  = parseInt(process.env.WORKER_STALE_MS  ?? "300000", 10);
+function positiveInt(value: string | undefined, fallback: number): number {
+  const parsed = Number.parseInt(value ?? "", 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+const QUEUE_RECONCILE_MS = positiveInt(
+  process.env.WORKER_QUEUE_RECONCILE_MS,
+  86_400_000,
+);
+const QUEUE_RECONCILE_INTERVAL_MS = positiveInt(
+  process.env.WORKER_QUEUE_RECONCILE_INTERVAL_MS,
+  300_000,
+);
 const WORKER_ID = `${os.hostname()}-${process.pid}`;
+let nextQueueReconcileAt = 0;
 
 // ---------------------------------------------------------------------------
 // Safety-net /tmp sweeper — removes stale portal temp files left by crashes or
@@ -98,7 +113,10 @@ console.log(`[portal-worker] Starting — id=${WORKER_ID} poll=${POLL_MS}ms stal
  * never in a burst. This mirrors the identical fix in
  * api-server/scripts/drain-once.ts.
  */
-async function loadAutoProcessKeys(): Promise<string[]> {
+async function loadAutoProcessTargets(): Promise<{
+  claimKeys: string[];
+  reconcileKeys: string[];
+}> {
   const unis = await db
     .select({
       universityKey: portalUniversitiesTable.universityKey,
@@ -119,9 +137,13 @@ async function loadAutoProcessKeys(): Promise<string[]> {
     unis.map((u) => u.adapterKey),
   );
 
-  return unis
-    .filter((u) => !nonGraduated.has(u.adapterKey))
-    .map((u) => u.universityKey);
+  const eligible = unis.filter((u) => !nonGraduated.has(u.adapterKey));
+  return {
+    claimKeys: eligible.map((u) => u.universityKey),
+    // Legacy queue rows sometimes stored the adapter alias as university_key.
+    // Reconciliation may retire those rows, but claimNext stays canonical.
+    reconcileKeys: [...new Set(eligible.flatMap((u) => [u.universityKey, u.adapterKey]))],
+  };
 }
 
 /**
@@ -149,14 +171,29 @@ async function tick(): Promise<void> {
 
   // Only claim submissions for autoProcess+active+non-experimental universities.
   // An empty allowlist means there is nothing to auto-process this tick.
-  const autoProcessKeys = await loadAutoProcessKeys();
-  if (autoProcessKeys.length === 0) return;
+  const autoProcessTargets = await loadAutoProcessTargets();
+  if (autoProcessTargets.claimKeys.length === 0) return;
 
   // Gate on configured trigger stages: only claim submissions whose application
   // is currently in one of those stages (mirrors the enqueue scan).
   const triggerStages = await loadTriggerStages();
 
-  const sub = await claimNext(WORKER_ID, autoProcessKeys, triggerStages);
+  if (Date.now() >= nextQueueReconcileAt) {
+    nextQueueReconcileAt = Date.now() + Math.max(POLL_MS, QUEUE_RECONCILE_INTERVAL_MS);
+    const reconciled = await cancelStaleIneligibleQueued(
+      autoProcessTargets.reconcileKeys,
+      triggerStages,
+      QUEUE_RECONCILE_MS,
+    );
+    if (reconciled.length > 0) {
+      console.log(
+        `[portal-worker] Reconciled ${reconciled.length} stale automatic queue row(s)` +
+        ` as canceled (stage no longer eligible)`,
+      );
+    }
+  }
+
+  const sub = await claimNext(WORKER_ID, autoProcessTargets.claimKeys, triggerStages);
   if (!sub) return; // Nothing to do
 
   console.log(

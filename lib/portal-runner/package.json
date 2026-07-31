@@ -10,7 +10,8 @@
     "test:fallback": "tsx --test ./scripts/test-fallback.ts",
     "test:exclusions": "tsx --test ./scripts/test-exclusions.ts",
     "test:portal-evidence": "tsx --test ./scripts/test-portal-evidence.ts",
-    "test:legacy-address-city": "tsx --test ./scripts/test-legacy-address-city.ts"
+    "test:legacy-address-city": "tsx --test ./scripts/test-legacy-address-city.ts",
+    "test:queue-reconcile-policy": "tsx --test ./scripts/test-queue-reconcile-policy.ts"
   },
   "dependencies": {
     "@workspace/db": "workspace:*",

@@ -161,10 +161,11 @@ async function createTestStudentAndApp(): Promise<{ studentId: number; appId: nu
 
 async function createTestPortalUniversity(): Promise<{ id: number; universityKey: string; adapterKey: string }> {
   const key = `tpa_portal_${RUN}`;
+  const adapterKey = `tpa_adapter_${RUN}`;
   const [uni] = await db.insert(portalUniversitiesTable).values({
     universityKey: key,
     universityName: "TPA Portal University",
-    adapterKey: key,
+    adapterKey,
     isActive: true,
   }).returning({ id: portalUniversitiesTable.id, universityKey: portalUniversitiesTable.universityKey, adapterKey: portalUniversitiesTable.adapterKey });
   cleanupUniIds.push(uni.id);
@@ -177,7 +178,6 @@ async function createTestPortalUniversity(): Promise<{ id: number; universityKey
 // ---------------------------------------------------------------------------
 let srv: http.Server;
 let testAppId: number;
-let testUniKey: string;
 let portalUniKey: string;
 let portalAdapterKey: string;
 
@@ -185,7 +185,6 @@ test("setup", async () => {
   srv = await listen(buildApp());
   const fixture = await createTestStudentAndApp();
   testAppId = fixture.appId;
-  testUniKey = fixture.uniKey;
 
   const portalUni = await createTestPortalUniversity();
   portalUniKey = portalUni.universityKey;
@@ -197,7 +196,7 @@ test("setup", async () => {
 // TPA1 — enqueue dry → 201
 test("TPA1: enqueue dry-mode → 201 with status=queued", async () => {
   const r = await req(srv, "POST", `/api/applications/${testAppId}/portal-submissions`, {
-    universityKey: testUniKey,
+    universityKey: portalAdapterKey,
     mode: "dry",
   });
   if (r.status === 201) {
@@ -205,15 +204,17 @@ test("TPA1: enqueue dry-mode → 201 with status=queued", async () => {
     cleanupSubmissionIds.push(b.id);
   }
   assert.equal(r.status, 201, `Expected 201, got ${r.status}: ${JSON.stringify(r.body)}`);
-  const body = r.body as { mode: string; status: string };
+  const body = r.body as { mode: string; status: string; universityKey: string; adapterKey: string };
   assert.equal(body.mode, "dry");
   assert.equal(body.status, "queued");
+  assert.equal(body.universityKey, portalUniKey, "adapter alias must be stored as the canonical portal key");
+  assert.equal(body.adapterKey, portalAdapterKey);
 });
 
 // TPA2 — real mode without confirm → 422
 test("TPA2: real mode without confirm → 422 CONFIRM_REQUIRED", async () => {
   const r = await req(srv, "POST", `/api/applications/${testAppId}/portal-submissions`, {
-    universityKey: testUniKey,
+    universityKey: portalUniKey,
     mode: "real",
   });
   assert.equal(r.status, 422, `Expected 422, got ${r.status}: ${JSON.stringify(r.body)}`);
@@ -227,7 +228,7 @@ test("TPA3: agent role cannot enqueue → 403", async () => {
   currentUser = { id: 999, role: "agent", isActive: true, emailVerified: true };
   try {
     const r = await req(srv, "POST", `/api/applications/${testAppId}/portal-submissions`, {
-      universityKey: testUniKey,
+      universityKey: portalUniKey,
       mode: "dry",
     });
     assert.equal(r.status, 403, `Expected 403 for agent role, got ${r.status}: ${JSON.stringify(r.body)}`);

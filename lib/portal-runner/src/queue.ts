@@ -17,12 +17,17 @@
  * releaseStale() — resets submissions that have been running longer than
  *                  thresholdMs back to "queued" (crash-recovery).
  *
+ * cancelStaleIneligibleQueued() — terminally reconciles old automatic rows
+ *                  whose application has already left the configured trigger
+ *                  stages. Manual Run rows are never touched.
+ *
  * NOTE: raw pg `SELECT *` returns snake_case column names. All three
  * claim queries use explicit AS aliases to produce camelCase keys that
  * match the ClaimedSubmission TypeScript type.
  */
 
 import { pool } from "@workspace/db";
+import { buildStaleIneligibleQueueStatement } from "./queueReconcilePolicy.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -247,6 +252,40 @@ export async function claimById(
   } finally {
     client.release();
   }
+}
+
+// ---------------------------------------------------------------------------
+// cancelStaleIneligibleQueued
+// ---------------------------------------------------------------------------
+
+/**
+ * Cancels old AUTOMATIC queue rows that can no longer be claimed because the
+ * application has moved beyond the configured trigger stages.
+ *
+ * This is queue hygiene, not a portal action: no browser is opened and no
+ * application stage is changed. The age threshold prevents a concurrent stage
+ * transition from immediately cancelling a freshly-enqueued row. Explicit
+ * user Run rows (`meta.manual=true`) are permanently excluded.
+ *
+ * `universityKeys` may include both canonical portal keys and legacy adapter
+ * aliases. Including aliases lets the reconciler retire historical rows that
+ * were enqueued before canonical portal-key enforcement was added.
+ */
+export async function cancelStaleIneligibleQueued(
+  universityKeys: string[],
+  triggerStages: string[],
+  thresholdMs: number,
+): Promise<number[]> {
+  const statement = buildStaleIneligibleQueueStatement(
+    universityKeys,
+    triggerStages,
+    thresholdMs,
+  );
+  if (!statement) return [];
+
+  const res = await pool.query<{ id: number }>(statement.text, statement.values);
+
+  return (res.rows ?? []).map((row) => row.id);
 }
 
 // ---------------------------------------------------------------------------
