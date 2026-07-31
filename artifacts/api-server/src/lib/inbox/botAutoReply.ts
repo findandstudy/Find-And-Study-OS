@@ -44,6 +44,7 @@ import { isProgramSearchToolEnabled } from "./knowledgeSources";
 import { retrieveKnowledgeChunks } from "./knowledgeRetrieval";
 import { requestsEmbedHumanHandoff } from "../embedChatSession";
 import { normalizeEmbedChatLocale } from "../embedChatI18n";
+import { buildKnownEmbedContactInstruction } from "./embedChatIdentityPrompt";
 
 // Faz 2 handoff hook: fire-and-forget so we never delay the webhook response
 // or the bot-reply flow on assignment work. Errors are logged, not thrown.
@@ -892,6 +893,11 @@ export async function maybeAutoReply(opts: {
       "- Do not claim to be the university's official internal office. If directly asked, state transparently that you are the university's authorized representative application assistant.",
       "- A visitor request for a human advisor, distrust of the AI, or uncertainty about representation requires a human handoff.",
     ].join("\n");
+
+    const knownContactInstruction = buildKnownEmbedContactInstruction(contact);
+    if (knownContactInstruction) {
+      systemPrompt = `${systemPrompt}\n\n${knownContactInstruction}`;
+    }
   }
 
   // FAZ 3 — nudge the bot to collect any still-missing level-appropriate

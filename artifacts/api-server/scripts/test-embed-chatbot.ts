@@ -13,6 +13,7 @@ import {
   normalizeEmbedChatLocale,
   resolveEmbedChatLocale,
 } from "../src/lib/embedChatI18n";
+import { buildKnownEmbedContactInstruction } from "../src/lib/inbox/embedChatIdentityPrompt";
 
 const secret = "embed-chatbot-regression-secret";
 const sessionId = "12345678-1234-4abc-8def-1234567890ab";
@@ -75,6 +76,32 @@ test("embedded assistant hands explicit human and distrust requests to staff", (
   assert.equal(requestsEmbedHumanHandoff("Je ne vous fais pas confiance."), true);
   assert.equal(requestsEmbedHumanHandoff("لا أثق، أريد التحدث مع شخص"), true);
   assert.equal(requestsEmbedHumanHandoff("Beykent ücretleri nedir?"), false);
+});
+
+test("embedded assistant does not re-ask identity collected by the pre-chat form", () => {
+  const instruction = buildKnownEmbedContactInstruction({
+    displayName: "Ada Lovelace",
+    email: "ADA@EXAMPLE.COM",
+    phone: "5551112233",
+    phoneE164: "+905551112233",
+  });
+
+  assert.match(instruction, /Full name: "Ada Lovelace"/);
+  assert.match(instruction, /Email: "ada@example\.com"/);
+  assert.match(instruction, /Phone: "\+905551112233"/);
+  assert.match(instruction, /Never ask the visitor to provide, repeat or confirm it/);
+  assert.match(instruction, /Ask only for application information that is still missing/);
+
+  const partial = buildKnownEmbedContactInstruction({
+    displayName: "Ada",
+    email: null,
+    phone: null,
+    phoneE164: null,
+  });
+  assert.match(partial, /Full name: "Ada"/);
+  assert.doesNotMatch(partial, /Email:/);
+  assert.doesNotMatch(partial, /Phone:/);
+  assert.equal(buildKnownEmbedContactInstruction(null), "");
 });
 
 test("chatbot route keeps identity, authorization and XSS guards server-owned", () => {
@@ -165,6 +192,10 @@ test("university scope is enforced below the prompt layer", () => {
   );
   assert.match(botSource, /enforcedUniversityId: scopedUniversityId/);
   assert.match(botSource, /requestsEmbedHumanHandoff\(msg\.content\)/);
+  assert.match(
+    botSource,
+    /scopedUniversityId && scopedUniversityName[\s\S]*buildKnownEmbedContactInstruction\(contact\)/,
+  );
   assert.match(
     programToolSource,
     /Number\.isInteger\(enforcedUniversityId\)[\s\S]*String\(enforcedUniversityId\)/,
