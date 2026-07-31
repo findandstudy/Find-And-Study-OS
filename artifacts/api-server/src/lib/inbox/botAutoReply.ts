@@ -43,6 +43,7 @@ import {
 import { isProgramSearchToolEnabled } from "./knowledgeSources";
 import { retrieveKnowledgeChunks } from "./knowledgeRetrieval";
 import { requestsEmbedHumanHandoff } from "../embedChatSession";
+import { normalizeEmbedChatLocale } from "../embedChatI18n";
 
 // Faz 2 handoff hook: fire-and-forget so we never delay the webhook response
 // or the bot-reply flow on assignment work. Errors are logged, not thrown.
@@ -106,7 +107,7 @@ export function detectEscalation(
 
 // ---------------------------------------------------------------------------
 // Language detection (heuristic) — picks the reply language for the brain.
-// Supported intake languages: TR / EN / AR / RU / FR.
+// Supported intake languages: EN / TR / AR / FA / FR / ES / RU / ZH / HI / ID.
 // ---------------------------------------------------------------------------
 
 const TR_HINTS = [
@@ -119,13 +120,28 @@ const FR_HINTS = [
   "bourse", "je veux", "comment", "s'il vous plaît", "étudier", "etudier",
   "licence", "master",
 ];
+const FA_HINTS = [
+  "سلام", "دانشگاه", "رشته", "تحصیل", "درخواست", "شهریه", "ممنون",
+  "میخواهم", "می‌خواهم", "کارشناسی", "کارشناسی ارشد",
+];
+const ES_HINTS = [
+  "hola", "universidad", "carrera", "solicitud", "admisión", "admision",
+  "beca", "quiero", "estudiar", "gracias", "licenciatura", "maestría", "maestria",
+];
+const ID_HINTS = [
+  "halo", "universitas", "jurusan", "pendaftaran", "beasiswa", "kuliah",
+  "saya ingin", "terima kasih", "sarjana", "magister",
+];
 
 /**
  * Detect the student's language from their message text. Script ranges decide
  * Arabic/Cyrillic; Turkish-specific characters and common Turkish/French words
  * disambiguate the Latin-script cases. Falls back to English.
  */
-export function detectLanguage(text: string): BotLanguage {
+export function detectLanguage(text: string, fallback: BotLanguage = "en"): BotLanguage {
+  if (/[\u4E00-\u9FFF]/.test(text)) return "zh";
+  if (/[\u0900-\u097F]/.test(text)) return "hi";
+  if (/[پچژگک‌ی]/.test(text) || FA_HINTS.some((h) => text.includes(h))) return "fa";
   if (/[\u0600-\u06FF]/.test(text)) return "ar";
   if (/[\u0400-\u04FF]/.test(text)) return "ru";
   const lower = text.toLowerCase();
@@ -135,7 +151,9 @@ export function detectLanguage(text: string): BotLanguage {
   }
   if (TR_HINTS.some((h) => lower.includes(h))) return "tr";
   if (FR_HINTS.some((h) => lower.includes(h))) return "fr";
-  return "en";
+  if (ES_HINTS.some((h) => lower.includes(h))) return "es";
+  if (ID_HINTS.some((h) => lower.includes(h))) return "id";
+  return fallback;
 }
 
 // ---------------------------------------------------------------------------
@@ -817,6 +835,7 @@ export async function maybeAutoReply(opts: {
   let scopedUniversityId: number | undefined;
   let scopedUniversityName = "";
   let scopedAssistantName = "";
+  let scopedLanguage: BotLanguage | null = null;
   if (rawScope && typeof rawScope === "object") {
     const scope = rawScope as Record<string, unknown>;
     const universityName = typeof scope.universityName === "string"
@@ -826,6 +845,7 @@ export async function maybeAutoReply(opts: {
       ? scope.assistantName.trim()
       : "";
     const universityId = Number(scope.universityId);
+    scopedLanguage = normalizeEmbedChatLocale(scope.language);
     if (universityName && Number.isInteger(universityId) && universityId > 0) {
       scopedUniversityId = universityId;
       scopedUniversityName = universityName;
@@ -833,7 +853,7 @@ export async function maybeAutoReply(opts: {
     }
   }
 
-  const language = detectLanguage(msg.content);
+  const language = detectLanguage(msg.content, scopedLanguage ?? "en");
   // University widgets fail closed: global free-form knowledge sources and the
   // global knowledgeBase are intentionally excluded because they may contain
   // other universities. The live program tool is independently hard-filtered

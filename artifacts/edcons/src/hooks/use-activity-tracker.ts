@@ -17,7 +17,6 @@ export function useActivityTracker(isAuthenticated: boolean) {
   const pageActiveStartRef = useRef(Date.now());
   const pageIdleAccumRef = useRef(0);
   const pageActiveAccumRef = useRef(0);
-  const lastHeartbeatRef = useRef(Date.now());
   const mountedRef = useRef(true);
 
   const post = useCallback(async (url: string, body?: any) => {
@@ -121,19 +120,12 @@ export function useActivityTracker(isAuthenticated: boolean) {
   }, [post]);
 
   const sendHeartbeat = useCallback(() => {
-    if (!sessionIdRef.current) return;
-    const now = Date.now();
-    const elapsed = (now - lastHeartbeatRef.current) / 1000;
-    lastHeartbeatRef.current = now;
-    const activeDelta = isActiveRef.current ? elapsed : 0;
-    const idleDelta = isActiveRef.current ? 0 : elapsed;
+    if (!sessionIdRef.current || document.hidden) return;
 
     post("/activity/heartbeat", {
       sessionId: sessionIdRef.current,
       status: isActiveRef.current ? "active" : "idle",
       route: currentRouteRef.current,
-      activeDelta,
-      idleDelta,
     });
   }, [post]);
 
@@ -159,49 +151,26 @@ export function useActivityTracker(isAuthenticated: boolean) {
         markIdle();
       } else {
         post("/activity/event", { sessionId: sessionIdRef.current, eventType: "app_visible", route: currentRouteRef.current });
-        // Tab woke up — fire an immediate heartbeat so the server slides
-        // session expiry forward BEFORE the user clicks anything (otherwise
-        // the next mutation can race and hit a stale-session 401).
-        sendHeartbeat();
         resetIdleTimer();
+        // Mark the visible tab active before refreshing presence. The server
+        // derives elapsed time from its own last_seen_at and caps sleep gaps.
+        sendHeartbeat();
       }
     };
 
     const handleFocus = () => {
       post("/activity/event", { sessionId: sessionIdRef.current, eventType: "window_focus", route: currentRouteRef.current });
-      // Slide the session forward immediately on focus regain — same reason
-      // as visibilitychange above. Cheap (one tiny POST) and prevents the
-      // long-tail "Authentication required" toast on file uploads.
-      sendHeartbeat();
       resetIdleTimer();
+      sendHeartbeat();
     };
 
     const handleBlur = () => {
       post("/activity/event", { sessionId: sessionIdRef.current, eventType: "window_blur", route: currentRouteRef.current });
     };
 
-    const handleBeforeUnload = () => {
-      if (sessionIdRef.current) {
-        const data = JSON.stringify({ sessionId: sessionIdRef.current, reason: "browser_closed_assumed" });
-        // Use keepalive fetch instead of navigator.sendBeacon: sendBeacon cannot
-        // set the x-csrf-token header, so the request fails the server's CSRF
-        // check (403) and the session never ends. A keepalive fetch survives
-        // page unload AND passes through the csrf fetch wrapper, which attaches
-        // the header (and credentials carry the auth + csrf cookies).
-        void fetch(`/api/activity/session/end`, {
-          method: "POST",
-          keepalive: true,
-          headers: { "content-type": "application/json" },
-          body: data,
-          credentials: "include",
-        }).catch(() => {});
-      }
-    };
-
     document.addEventListener("visibilitychange", handleVisibilityChange);
     window.addEventListener("focus", handleFocus);
     window.addEventListener("blur", handleBlur);
-    window.addEventListener("beforeunload", handleBeforeUnload);
 
     heartbeatTimerRef.current = setInterval(sendHeartbeat, HEARTBEAT_INTERVAL_MS);
     idleTimerRef.current = setTimeout(markIdle, IDLE_THRESHOLD_MS);
@@ -221,7 +190,6 @@ export function useActivityTracker(isAuthenticated: boolean) {
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       window.removeEventListener("focus", handleFocus);
       window.removeEventListener("blur", handleBlur);
-      window.removeEventListener("beforeunload", handleBeforeUnload);
       if (heartbeatTimerRef.current) clearInterval(heartbeatTimerRef.current);
       if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
       clearInterval(routeObserver);

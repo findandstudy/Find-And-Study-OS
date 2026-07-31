@@ -142,6 +142,31 @@ export function educationRecordHasData(rec: EducationRecordOutput): boolean {
 }
 
 /**
+ * A record under the wrong historic level is not sufficient. For example,
+ * after Associate → Master changes, a populated high_school row must not stop
+ * extraction of the now-required bachelor evidence.
+ */
+export function hasRequiredEducationCoverage(
+  levelKey: string,
+  records: EducationRecordOutput[],
+): boolean {
+  const hasText = (value: unknown): boolean =>
+    value !== undefined &&
+    value !== null &&
+    String(value).trim() !== "";
+  const required = requiredEducationLevels(levelKey);
+  return required.every((level) =>
+    records.some(
+      (record) =>
+        record.level === level &&
+        hasText(record.institution) &&
+        record.graduationYear != null &&
+        (hasText(record.gpa) || hasText(record.gpaRaw)),
+    ),
+  );
+}
+
+/**
  * Document types loaded as AI input for education extraction. Must cover
  * every type that can trigger the automatic run (transcript/diploma/degree)
  * plus "other" (mixed uploads often land there).

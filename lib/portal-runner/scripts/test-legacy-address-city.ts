@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { resolveLegacyAddressCity } from "../src/altinbasLegacyPolicy.js";
+import {
+  resolveLegacyAddressCity,
+  resolvePortalResidenceDefaults,
+} from "../src/altinbasLegacyPolicy.js";
 
 test("legacy City, street shape remains supported", () => {
   assert.equal(
@@ -43,5 +46,27 @@ test("explicit structured city always wins", () => {
       nationality: "Pakistan",
     }),
     "Faisalabad",
+  );
+});
+
+test("portal residence derives modern address values", () => {
+  assert.deepEqual(
+    resolvePortalResidenceDefaults({
+      universityKey: "sit",
+      address: "12 Sadi Street, Khujand, Tajikistan 735700",
+      nationality: "Tajikistan",
+    }),
+    { addressCity: "Khujand", postalCode: "735700" },
+  );
+});
+
+test("portal residence uses requested defaults when evidence is absent", () => {
+  assert.deepEqual(
+    resolvePortalResidenceDefaults({
+      universityKey: "altinbas",
+      address: "AL BARSHA 1",
+      nationality: "Jordan",
+    }),
+    { addressCity: "city", postalCode: "10000" },
   );
 });

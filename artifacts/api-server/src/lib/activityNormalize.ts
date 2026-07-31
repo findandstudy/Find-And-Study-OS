@@ -110,3 +110,110 @@ export function clampSessionMetrics<T extends { activeDurationSeconds?: number |
   const clampedIdle = Math.max(0, Math.min(idle, clampedTotal - active));
   return { ...s, totalDurationSeconds: clampedTotal, idleDurationSeconds: clampedIdle };
 }
+
+export const MAX_TRACKED_SESSION_SECONDS = 8 * 60 * 60;
+export const MAX_HEARTBEAT_DELTA_SECONDS = 45;
+
+export type ActivitySessionLike = {
+  startedAt: Date | string | null;
+  endedAt?: Date | string | null;
+  lastSeenAt: Date | string | null;
+  activeDurationSeconds?: number | null;
+  idleDurationSeconds?: number | null;
+  totalDurationSeconds?: number | null;
+};
+
+export type NormalizedActivitySession = {
+  activeDurationSeconds: number;
+  idleDurationSeconds: number;
+  totalDurationSeconds: number;
+  overlapDurationSeconds: number;
+};
+
+function safeTimestamp(value: Date | string | null | undefined): number | null {
+  if (!value) return null;
+  const timestamp = new Date(value).getTime();
+  return Number.isFinite(timestamp) ? timestamp : null;
+}
+
+/**
+ * Normalizes client-reported session counters against server-observed wall time.
+ *
+ * Historical clients could report a browser sleep interval (or the same shared
+ * session from multiple tabs) as active/idle time. A 53-second session could
+ * therefore contain many hours of counters. The wall clock is the hard upper
+ * bound, and partial date-range overlap is allocated proportionally because old
+ * rows do not contain per-heartbeat buckets.
+ */
+export function normalizeActivitySession(
+  session: ActivitySessionLike,
+  rangeFrom?: Date | string,
+  rangeTo?: Date | string,
+): NormalizedActivitySession {
+  const startedAt = safeTimestamp(session.startedAt);
+  const endedAt = safeTimestamp(session.endedAt) ?? safeTimestamp(session.lastSeenAt);
+  if (startedAt === null || endedAt === null || endedAt <= startedAt) {
+    return {
+      activeDurationSeconds: 0,
+      idleDurationSeconds: 0,
+      totalDurationSeconds: 0,
+      overlapDurationSeconds: 0,
+    };
+  }
+
+  const wallClockSeconds = Math.max(
+    0,
+    Math.min(MAX_TRACKED_SESSION_SECONDS, Math.floor((endedAt - startedAt) / 1000)),
+  );
+  if (wallClockSeconds === 0) {
+    return {
+      activeDurationSeconds: 0,
+      idleDurationSeconds: 0,
+      totalDurationSeconds: 0,
+      overlapDurationSeconds: 0,
+    };
+  }
+
+  const rawActive = Math.max(0, Number(session.activeDurationSeconds) || 0);
+  const rawIdle = Math.max(0, Number(session.idleDurationSeconds) || 0);
+  const rawTotal = Math.max(0, Number(session.totalDurationSeconds) || 0, rawActive + rawIdle);
+  const boundedTotal = Math.min(rawTotal, wallClockSeconds);
+
+  // Preserve valid active seconds first; inflated idle time must not dilute a
+  // legitimate active counter merely because an old client reported a sleep.
+  const boundedActive = Math.min(rawActive, boundedTotal);
+
+  const fromMs = safeTimestamp(rangeFrom) ?? startedAt;
+  const toMs = safeTimestamp(rangeTo) ?? endedAt;
+  const overlapStart = Math.max(startedAt, fromMs);
+  const overlapEnd = Math.min(endedAt, toMs);
+  const overlapDurationSeconds = Math.max(
+    0,
+    Math.min(wallClockSeconds, Math.floor((overlapEnd - overlapStart) / 1000)),
+  );
+  if (overlapDurationSeconds === 0) {
+    return {
+      activeDurationSeconds: 0,
+      idleDurationSeconds: 0,
+      totalDurationSeconds: 0,
+      overlapDurationSeconds: 0,
+    };
+  }
+
+  const overlapRatio = overlapDurationSeconds / wallClockSeconds;
+  const totalDurationSeconds = Math.min(
+    overlapDurationSeconds,
+    Math.round(boundedTotal * overlapRatio),
+  );
+  const activeDurationSeconds = Math.min(
+    totalDurationSeconds,
+    Math.round(boundedActive * overlapRatio),
+  );
+
+  return {
+    activeDurationSeconds,
+    idleDurationSeconds: Math.max(0, totalDurationSeconds - activeDurationSeconds),
+    totalDurationSeconds,
+    overlapDurationSeconds,
+  };
+}

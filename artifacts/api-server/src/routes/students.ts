@@ -28,6 +28,15 @@ import {
   cleanStudentEducationRecords,
   toLegacyEducationRecord,
 } from "../lib/studentEducationInput";
+import { resolveResidenceAddress } from "../lib/studentAddressDefaults";
+import {
+  buildStudentEducationRecordsFromLegacy,
+  hydrateStudentEducationRecords,
+} from "../lib/studentEducationHydration";
+import {
+  maybeTriggerAutoEducationExtractForStudent,
+  resolveAppliedLevelKey,
+} from "../lib/educationAutoExtract";
 
 const router: IRouter = Router();
 
@@ -181,17 +190,28 @@ router.put("/students/me", requireAuth, async (req, res): Promise<void> => {
 
   const [existing] = await db.select().from(studentsTable).where(eq(studentsTable.userId, userId));
   if (existing) {
+    const residence = resolveResidenceAddress({
+      address: data.address ?? existing.address,
+      addressCity: data.addressCity ?? existing.addressCity,
+      postalCode: data.postalCode ?? existing.postalCode,
+      nationality: data.nationality ?? existing.nationality,
+    });
+    data.addressCity = residence.addressCity;
+    data.postalCode = residence.postalCode;
     const [updated] = await db.update(studentsTable).set(data).where(eq(studentsTable.id, existing.id)).returning();
     res.json(updated);
   } else {
     const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
     if (!user) { res.status(404).json({ error: "User not found" }); return; }
+    const residence = resolveResidenceAddress(data);
     const [created] = await db.insert(studentsTable).values({
       userId,
       firstName: (data.firstName as string) || user.firstName || "",
       lastName: (data.lastName as string) || user.lastName || "",
       email: user.email || "",
       ...data,
+      addressCity: residence.addressCity,
+      postalCode: residence.postalCode,
     }).returning();
     res.json(created);
   }
@@ -487,6 +507,24 @@ router.post("/students", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES
     res.status(400).json({ error: educationInput.error });
     return;
   }
+  const resolvedEducationRecords = buildStudentEducationRecordsFromLegacy(
+    interestedLevel || "Bachelor",
+    {
+      highSchool: normBody.highSchool,
+      universityBachelor: normBody.universityBachelor,
+      universityMaster: normBody.universityMaster,
+      graduationYear,
+      gpa,
+      languageScore,
+    },
+    educationInput.records,
+  );
+  const residence = resolveResidenceAddress({
+    address: normBody.address,
+    addressCity,
+    postalCode,
+    nationality,
+  });
 
   if (passportNumber && passportNumber.trim()) {
     const [dupPassport] = await db.select({ id: studentsTable.id }).from(studentsTable)
@@ -549,8 +587,8 @@ router.post("/students", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES
       fatherName: normBody.fatherName ? (normBody.fatherName as string) : null,
       address: normBody.address ? (normBody.address as string) : null,
       cityOfBirth: typeof cityOfBirth === "string" && cityOfBirth.trim() ? cityOfBirth.trim() : null,
-      addressCity: typeof addressCity === "string" && addressCity.trim() ? addressCity.trim() : null,
-      postalCode: typeof postalCode === "string" && postalCode.trim() ? postalCode.trim() : null,
+      addressCity: residence.addressCity,
+      postalCode: residence.postalCode,
       needsVisaSupport: typeof needsVisaSupport === "boolean" ? needsVisaSupport : null,
       agentId: resolvedAgentId,
       userId: userId || null,
@@ -566,15 +604,15 @@ router.post("/students", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES
       ...origin,
     }).returning();
 
-    if (educationInput.records.length > 0) {
+    if (resolvedEducationRecords.length > 0) {
       await tx.insert(studentEducationRecordsTable).values(
-        educationInput.records.map(({ country: _country, ...record }) => ({
+        resolvedEducationRecords.map(({ country: _country, ...record }) => ({
           ...record,
           studentId: insertedStudent.id,
         })),
       );
       await tx.insert(educationRecordsTable).values(
-        educationInput.records.map((record) =>
+        resolvedEducationRecords.map((record) =>
           toLegacyEducationRecord(insertedStudent.id, record),
         ),
       );
@@ -621,6 +659,12 @@ router.post("/students/bulk", requireAuth, requireRole(...STAFF_ROLES, "agent" a
       continue;
     }
     const normBulkPhone = s.phone ? normalizePhoneField(s.phone) : null;
+    const residence = resolveResidenceAddress({
+      address: (ns.address as string) || s.address,
+      addressCity: s.addressCity,
+      postalCode: s.postalCode,
+      nationality: s.nationality,
+    });
     try {
       const [student] = await db.insert(studentsTable).values({
         firstName: ns.firstName as string,
@@ -638,6 +682,8 @@ router.post("/students/bulk", requireAuth, requireRole(...STAFF_ROLES, "agent" a
         motherName: ns.motherName ? (ns.motherName as string) : null,
         fatherName: ns.fatherName ? (ns.fatherName as string) : null,
         address: (ns.address as string) || s.address || null,
+        addressCity: residence.addressCity,
+        postalCode: residence.postalCode,
         notes: s.notes || null,
         highSchool: (ns.highSchool as string) || s.highSchool || null,
         graduationYear: s.graduationYear ? parseInt(String(s.graduationYear), 10) : null,
@@ -659,7 +705,8 @@ router.get("/students/:id", requireAuth, requireAgentStaffPermission("students")
   const id = parseInt(String(req.params.id), 10);
   const access = await assertCanAccessStudent(req, id);
   if (!access.ok) { res.status(access.status).json({ error: access.error }); return; }
-  res.json(access.student);
+  const residence = resolveResidenceAddress(access.student);
+  res.json({ ...access.student, ...residence });
 });
 
 // --- Education records (FAZ 2) -------------------------------------------
@@ -672,7 +719,16 @@ router.get("/students/:id/education", requireAuth, requireAgentStaffPermission("
   const records = await db.select().from(studentEducationRecordsTable)
     .where(and(eq(studentEducationRecordsTable.studentId, id), isNull(studentEducationRecordsTable.deletedAt)))
     .orderBy(asc(studentEducationRecordsTable.sortOrder), asc(studentEducationRecordsTable.id));
-  res.json({ records });
+  const levelKey =
+    (await resolveAppliedLevelKey(id)) ||
+    access.student.interestedLevel ||
+    "Bachelor";
+  const hydrated = hydrateStudentEducationRecords(
+    levelKey,
+    access.student,
+    records,
+  );
+  res.json({ records: hydrated });
 });
 
 // --- Portal Uyumluluk Katmanı Faz 3 — soft readiness gate (read-only) -----
@@ -911,6 +967,20 @@ router.patch("/students/:id", requireAuth, requireAgentStaffPermission("students
       updates[key] = (updates[key] as string).trim() || null;
     }
   }
+  if (
+    ["address", "addressCity", "postalCode", "nationality"].some((key) =>
+      Object.prototype.hasOwnProperty.call(updates, key),
+    )
+  ) {
+    const residence = resolveResidenceAddress({
+      address: updates.address ?? existing.address,
+      addressCity: updates.addressCity ?? existing.addressCity,
+      postalCode: updates.postalCode ?? existing.postalCode,
+      nationality: updates.nationality ?? existing.nationality,
+    });
+    updates.addressCity = residence.addressCity;
+    updates.postalCode = residence.postalCode;
+  }
   if (updates.email && typeof updates.email === "string") {
     const normalizedEmail = (updates.email as string).toLowerCase().trim();
     updates.email = normalizedEmail;
@@ -956,6 +1026,17 @@ router.patch("/students/:id", requireAuth, requireAgentStaffPermission("students
     }
   }
   await logAudit(req.user!.id, "update_student", "student", id, Object.keys(studentDiff).length ? studentDiff : updates, req.ip);
+
+  if (
+    Object.prototype.hasOwnProperty.call(normUpdates, "interestedLevel") &&
+    student.interestedLevel !== existing.interestedLevel
+  ) {
+    maybeTriggerAutoEducationExtractForStudent({
+      studentId: id,
+      actorUserId: req.user!.id,
+      ip: req.ip,
+    });
+  }
 
   // T4: Cross-sync contact info back to source lead(s) (best-effort)
   const studentSyncFields: Record<string, unknown> = {};

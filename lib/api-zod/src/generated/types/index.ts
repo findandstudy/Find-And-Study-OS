@@ -127,6 +127,8 @@ export * from "./knowledgeSourceProgramScopeResponse";
 export * from "./knowledgeSourceProgramScopeUpdate";
 export * from "./kommoSummary";
 export * from "./kommoSummaryChannelsItem";
+export * from "./kommoSummaryFollowUps";
+export * from "./kommoSummaryTasks";
 export * from "./lead";
 export * from "./leadExistsConflict";
 export * from "./leadExistsConflictCandidate";

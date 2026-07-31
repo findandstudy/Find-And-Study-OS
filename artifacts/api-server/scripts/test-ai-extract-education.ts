@@ -22,6 +22,7 @@ import {
   decideEducationExtraction,
   decideLegacyEducationAutoUpsert,
   decideAutoEducationTrigger,
+  hasRequiredEducationCoverage,
   isEducationTriggerDocType,
   EDUCATION_SOURCE_DOC_TYPES,
   EDUCATION_FUZZY_KEYWORDS,
@@ -53,6 +54,62 @@ describe("mapExtractionToEducation — level mapping", () => {
   it("AE-3 PhD apply (group C) → bachelor + master ordered", () => {
     const out = mapExtractionToEducation(mockAll, "PhD");
     assert.deepEqual(out.map((r) => r.level), ["bachelor", "master"]);
+  });
+});
+
+describe("hasRequiredEducationCoverage — current level aware", () => {
+  it("does not accept an old high-school row for a Master application", () => {
+    assert.equal(
+      hasRequiredEducationCoverage("Master", [
+        {
+          level: "high_school",
+          institution: "OLD SCHOOL",
+          program: null,
+          graduationYear: 2019,
+          gpa: "75",
+          gpaRaw: "75 / 100",
+          gpaScale: 100,
+          languageScore: null,
+        },
+      ]),
+      false,
+    );
+  });
+
+  it("does not accept a partial bachelor row for a Master application", () => {
+    assert.equal(
+      hasRequiredEducationCoverage("Master", [
+        {
+          level: "bachelor",
+          institution: "UNIVERSITY",
+          program: null,
+          graduationYear: null,
+          gpa: null,
+          gpaRaw: null,
+          gpaScale: null,
+          languageScore: null,
+        },
+      ]),
+      false,
+    );
+  });
+
+  it("accepts a complete bachelor row for a Master application", () => {
+    assert.equal(
+      hasRequiredEducationCoverage("Master", [
+        {
+          level: "bachelor",
+          institution: "UNIVERSITY",
+          program: null,
+          graduationYear: 2020,
+          gpa: "75",
+          gpaRaw: "75 / 100",
+          gpaScale: 100,
+          languageScore: null,
+        },
+      ]),
+      true,
+    );
   });
 });
 

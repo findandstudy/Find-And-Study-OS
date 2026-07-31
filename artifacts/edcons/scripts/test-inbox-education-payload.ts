@@ -1,6 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildInboxEducationPayload } from "../src/components/inbox/inboxEducationPayload";
+import {
+  buildInboxEducationPayload,
+  findMissingInboxAcademicFields,
+} from "../src/components/inbox/inboxEducationPayload";
 
 const base = {
   school1: "KABUL POLYTECHNIC UNIVERSITY",
@@ -64,4 +67,27 @@ test("empty school does not manufacture an education record", () => {
   });
   assert.deepEqual(payload.educationRecords, []);
   assert.equal(payload.universityBachelor, null);
+});
+
+test("student creation gate identifies unverified academic fields", () => {
+  assert.deepEqual(
+    findMissingInboxAcademicFields({
+      selectedLevel: "Master",
+      school1: "",
+      school2: "",
+      graduationYear: "",
+      gpa: "",
+    }),
+    ["Bachelor university", "Graduation year", "GPA"],
+  );
+  assert.deepEqual(
+    findMissingInboxAcademicFields({
+      selectedLevel: "Ph.D",
+      school1: "UNIVERSITY A",
+      school2: "",
+      graduationYear: "2020",
+      gpa: "3.2",
+    }),
+    ["Master university"],
+  );
 });

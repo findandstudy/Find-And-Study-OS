@@ -2061,18 +2061,72 @@ export type KommoSummaryChannelsItem = {
   connected: boolean;
 };
 
+export type KommoSummaryTasks = {
+  /** Tasks created in the selected period */
+  created: number;
+  /** Tasks completed in the selected period */
+  completed: number;
+  /** Tasks currently open */
+  open: number;
+  /** Open tasks currently overdue */
+  overdue: number;
+  /**
+   * Percent of tasks due in the selected period that were completed
+   * @minimum 0
+   * @maximum 100
+   */
+  completionRate: number;
+  /**
+   * Percent of completed due tasks finished on time
+   * @minimum 0
+   * @maximum 100
+   */
+  onTimeRate: number;
+};
+
+export type KommoSummaryFollowUps = {
+  /** Follow-ups scheduled in the selected period */
+  scheduled: number;
+  /** Follow-ups completed in the selected period */
+  completed: number;
+  /** Follow-ups currently pending */
+  pending: number;
+  /** Pending follow-ups currently overdue */
+  overdue: number;
+  /**
+   * Percent of follow-ups scheduled in the selected period that were completed
+   * @minimum 0
+   * @maximum 100
+   */
+  completionRate: number;
+  /**
+   * Percent of completed follow-ups finished by their scheduled time
+   * @minimum 0
+   * @maximum 100
+   */
+  onTimeRate: number;
+};
+
 export interface KommoSummary {
   /** Average reply time in seconds (0 if no data) */
   avgReplyTime: number;
   /** Median reply time in seconds (0 if no data) */
   medianReplyTime: number;
+  /** Longest currently unanswered customer turn in seconds */
+  longestAwaiting: number;
+  /** Open conversations currently awaiting a human reply */
+  awaitingReplyCount: number;
+  /** Customer turns with a sender-attributed human reply in the selected period */
+  replySamples: number;
   activeLeads: number;
   wonLeads: number;
   lostLeads: number;
   incomingMessages: number;
   outgoingMessages: number;
   /** Per-channel message breakdown over the same date range as incoming/outgoing totals */
-  channels?: KommoSummaryChannelsItem[];
+  channels: KommoSummaryChannelsItem[];
+  tasks: KommoSummaryTasks;
+  followUps: KommoSummaryFollowUps;
 }
 
 export type RecordEntityViewBodyEntityType =
@@ -2568,6 +2622,8 @@ export type GetActivitySummaryParams = {
    * @minimum 1
    */
   staffId?: number;
+  from?: string;
+  to?: string;
 };
 
 export type GetActivitySummaryRange =

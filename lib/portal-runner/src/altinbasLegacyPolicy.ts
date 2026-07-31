@@ -203,3 +203,66 @@ export function resolveLegacyAddressCity(input: {
   }
   return candidate;
 }
+
+/**
+ * Final portal-facing guarantee for residence fields. New records should
+ * already carry structured values; this keeps historical rows runnable
+ * without writing guessed values back to the CRM.
+ */
+export function resolvePortalResidenceDefaults(input: {
+  universityKey: string;
+  addressCity?: string | null;
+  postalCode?: string | null;
+  address?: string | null;
+  nationality?: string | null;
+}): { addressCity: string; postalCode: string } {
+  const explicitPostal = input.postalCode?.trim();
+  const address = input.address?.trim() ?? "";
+  const nationality = input.nationality?.trim() ?? "";
+  const legacyCity = resolveLegacyAddressCity(input);
+
+  const labelledCity = address.match(
+    /(?:residence\s*city|city|district|şehir|ilçe)\s*[:#-]?\s*([^,;\n|]+)/i,
+  )?.[1]?.trim();
+  const parts = address
+    .split(/[\n,;|]+/)
+    .map((part) =>
+      part
+        .replace(/\b\d{5,10}\b/g, "")
+        .trim(),
+    )
+    .filter(Boolean);
+  const structuredCity =
+    parts.length >= 2
+      ? [...parts].reverse().find((candidate) => {
+          if (!/[A-Za-zÀ-ž]/.test(candidate)) return false;
+          return !nationality ||
+            candidate.localeCompare(nationality, undefined, {
+              sensitivity: "base",
+            }) !== 0;
+        })
+      : undefined;
+  const validLabelledCity =
+    labelledCity &&
+    (!nationality ||
+      labelledCity.localeCompare(nationality, undefined, {
+        sensitivity: "base",
+      }) !== 0)
+      ? labelledCity
+      : undefined;
+  const postalFromAddress =
+    address.match(
+      /(?:postal\s*code|postcode|zip\s*code|zip|posta\s*kodu)\s*[:#-]?\s*([A-Z0-9][A-Z0-9 -]{2,10})/i,
+    )?.[1]?.trim() ||
+    address.match(/(?:^|[\s,;])(\d{5,10})(?=$|[\s,;])/)?.[1];
+
+  return {
+    addressCity:
+      input.addressCity?.trim() ||
+      legacyCity ||
+      validLabelledCity ||
+      structuredCity ||
+      "city",
+    postalCode: explicitPostal || postalFromAddress || "10000",
+  };
+}

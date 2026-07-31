@@ -1,6 +1,6 @@
 import { Router, type IRouter, type Request, type Response, json } from "express";
 import crypto from "crypto";
-import { db, usersTable, studentsTable, applicationsTable, programsTable, universitiesTable, commissionsTable, serviceFeesTable, leadsTable, documentsTable, pipelineStagesTable, programDocumentRequirementsTable, settingsTable } from "@workspace/db";
+import { db, usersTable, studentsTable, applicationsTable, programsTable, universitiesTable, commissionsTable, serviceFeesTable, leadsTable, documentsTable, pipelineStagesTable, programDocumentRequirementsTable, settingsTable, educationRecordsTable } from "@workspace/db";
 import { eq, and, isNotNull, inArray, isNull, sql, desc } from "drizzle-orm";
 import { getAnthropicClient, getClaudeConfig } from "@workspace/integrations-anthropic-ai";
 import { getDocEquivalenceGroup, getRelevantGroupsForLevel, type DocEquivalenceGroupId } from "@workspace/doc-equivalence";
@@ -25,6 +25,15 @@ import { studentEducationRecordsTable } from "@workspace/db";
 import { findOrUpsertPublicLead } from "../lib/leadDedup";
 import { directOrigin } from "../lib/originHelper";
 import { getDocLabel } from "../lib/docNaming";
+import { resolveResidenceAddress } from "../lib/studentAddressDefaults";
+import {
+  buildStudentEducationRecordsFromLegacy,
+} from "../lib/studentEducationHydration";
+import {
+  cleanStudentEducationRecords,
+  toLegacyEducationRecord,
+} from "../lib/studentEducationInput";
+import { resolveAppliedLevelKey } from "../lib/educationAutoExtract";
 
 const router: IRouter = Router();
 
@@ -341,7 +350,13 @@ export async function createApplicationForStudent(studentId: number, programId: 
 
 router.post("/public/apply", applyLimiter, applyJson, async (req: Request, res: Response): Promise<void> => {
   let { firstName, lastName, motherName, fatherName } = req.body;
-  const { email, phone, phoneCode, nationality, programId, programName, universityName, notes, passportNumber, passportIssueDate, passportExpiry, dateOfBirth, gender, address, highSchool, graduationYear, gpa, languageScore, documents, reuseDocumentIds, transferStudent, hasTcId, hasBlueCard, education } = req.body;
+  const { email, phone, phoneCode, nationality, programId, programName, universityName, notes, passportNumber, passportIssueDate, passportExpiry, dateOfBirth, gender, address, addressCity, postalCode, highSchool, graduationYear, gpa, languageScore, documents, reuseDocumentIds, transferStudent, hasTcId, hasBlueCard, education } = req.body;
+  const residence = resolveResidenceAddress({
+    address,
+    addressCity,
+    postalCode,
+    nationality,
+  });
   let leadId: number | null = null;
 
   if (!firstName || !lastName || !email || !phone || !motherName || !fatherName || !nationality || !gender) {
@@ -641,8 +656,19 @@ router.post("/public/apply", applyLimiter, applyJson, async (req: Request, res: 
 
       let newStudent: any;
       if (archivedByEmail) {
-        await db.update(studentsTable).set({ deletedAt: null, userId: newUser.id }).where(eq(studentsTable.id, archivedByEmail.id));
-        newStudent = { ...archivedByEmail, deletedAt: null, userId: newUser.id };
+        await db.update(studentsTable).set({
+          deletedAt: null,
+          userId: newUser.id,
+          addressCity: residence.addressCity,
+          postalCode: residence.postalCode,
+        }).where(eq(studentsTable.id, archivedByEmail.id));
+        newStudent = {
+          ...archivedByEmail,
+          deletedAt: null,
+          userId: newUser.id,
+          addressCity: residence.addressCity,
+          postalCode: residence.postalCode,
+        };
         console.log(`[PUBLIC-APPLY] Restored archived student #${archivedByEmail.id} for new user ${normalizedEmail}`);
       } else {
         [newStudent] = await db.insert(studentsTable).values({
@@ -660,6 +686,8 @@ router.post("/public/apply", applyLimiter, applyJson, async (req: Request, res: 
           passportIssueDate: s(passportIssueDate, 20),
           passportExpiry: s(passportExpiry, 20),
           address: s(address, 300),
+          addressCity: residence.addressCity,
+          postalCode: residence.postalCode,
           highSchool: s(highSchool, 200),
           graduationYear: graduationYear ? parseInt(String(graduationYear), 10) || null : null,
           gpa: s(gpa, 20),
@@ -708,36 +736,56 @@ router.post("/public/apply", applyLimiter, applyJson, async (req: Request, res: 
         if (Object.keys(toggleUpdates).length > 0) {
           await db.update(studentsTable).set(toggleUpdates).where(eq(studentsTable.id, resultStudentId));
         }
-        if (Array.isArray(education) && education.length > 0) {
-          const validLevels = new Set(["high_school", "bachelor", "master"]);
-          const seen = new Set<string>();
-          const cleaned = education
-            .filter((r: any) => r && validLevels.has(String(r.level)) && !seen.has(String(r.level)) && seen.add(String(r.level)))
-            .slice(0, 3)
-            .map((r: any, i: number) => ({
+        const cleanedInput = cleanStudentEducationRecords(
+          Array.isArray(education) ? education : [],
+        );
+        const appliedLevelKey =
+          (await resolveAppliedLevelKey(resultStudentId)) || "Bachelor";
+        const resolvedEducation = buildStudentEducationRecordsFromLegacy(
+          appliedLevelKey,
+          { highSchool, graduationYear, gpa, languageScore },
+          cleanedInput.ok ? cleanedInput.records : [],
+        );
+        if (resolvedEducation.length > 0) {
+          const studentRows = resolvedEducation.map(
+            ({ country: _country, ...record }) => ({
+              ...record,
               studentId: resultStudentId!,
-              level: String(r.level),
-              institution: s(r.institution, 300),
-              program: String(r.level) === "high_school" ? null : s(r.program, 300),
-              graduationYear: r.graduationYear ? parseInt(String(r.graduationYear), 10) || null : null,
-              gpa: s(r.gpa, 20),
-              gpaRaw: s(r.gpaRaw, 50),
-              gpaScale: r.gpaScale ? parseInt(String(r.gpaScale), 10) || null : null,
-              languageScore: s(r.languageScore, 50),
-              sortOrder: i,
-            }));
-          if (cleaned.length > 0) {
-            await db.transaction(async (tx) => {
-              await tx.update(studentEducationRecordsTable)
-                .set({ deletedAt: new Date() })
-                .where(and(
-                  eq(studentEducationRecordsTable.studentId, resultStudentId!),
-                  isNull(studentEducationRecordsTable.deletedAt),
-                  inArray(studentEducationRecordsTable.level, cleaned.map((r) => r.level)),
-                ));
-              await tx.insert(studentEducationRecordsTable).values(cleaned);
-            });
-          }
+            }),
+          );
+          const levels = resolvedEducation.map((record) => record.level);
+          await db.transaction(async (tx) => {
+            await tx.update(studentEducationRecordsTable)
+              .set({ deletedAt: new Date() })
+              .where(and(
+                eq(studentEducationRecordsTable.studentId, resultStudentId!),
+                isNull(studentEducationRecordsTable.deletedAt),
+                inArray(studentEducationRecordsTable.level, levels),
+              ));
+            await tx.insert(studentEducationRecordsTable).values(studentRows);
+
+            for (const record of resolvedEducation) {
+              const legacy = toLegacyEducationRecord(resultStudentId!, record);
+              await tx.insert(educationRecordsTable)
+                .values(legacy)
+                .onConflictDoUpdate({
+                  target: [
+                    educationRecordsTable.studentId,
+                    educationRecordsTable.level,
+                  ],
+                  set: {
+                    schoolName: legacy.schoolName,
+                    country: legacy.country,
+                    fieldOfStudy: legacy.fieldOfStudy,
+                    endYear: legacy.endYear,
+                    languageScore: legacy.languageScore,
+                    gpa: legacy.gpa,
+                    gpaType: legacy.gpaType,
+                    updatedAt: new Date(),
+                  },
+                });
+            }
+          });
         }
       } catch (err) {
         console.error("[PUBLIC-APPLY] education/toggle persist failed:", err);

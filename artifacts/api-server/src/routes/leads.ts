@@ -31,6 +31,7 @@ import {
   buildPortalDraftPreflightError,
   prepareRoutedPortalDraftPreflight,
 } from "../lib/portalDraftPreflight.js";
+import { resolveResidenceAddress } from "../lib/studentAddressDefaults";
 
 const router: IRouter = Router();
 
@@ -1295,6 +1296,12 @@ router.post("/leads/:id/convert", requireAuth, requireRole(...STAFF_ROLES, ...AG
   }
 
   const s = (v: any) => (v && v !== "null" && v !== "N/A") ? String(v) : null;
+  const residence = resolveResidenceAddress({
+    address: s(aiData.address),
+    addressCity: s(aiData.addressCity),
+    postalCode: s(aiData.postalCode),
+    nationality: lead.nationality || s(aiData.nationality),
+  });
 
   const studentValues: any = {
     firstName: lead.firstName,
@@ -1313,6 +1320,8 @@ router.post("/leads/:id/convert", requireAuth, requireRole(...STAFF_ROLES, ...AG
     passportExpiry: s(aiData.passportExpiry) || null,
     dateOfBirth: s(aiData.dateOfBirth) || null,
     address: s(aiData.address) || null,
+    addressCity: residence.addressCity,
+    postalCode: residence.postalCode,
     highSchool: s(aiData.highSchool) || null,
     graduationYear: aiData.graduationYear ? parseInt(String(aiData.graduationYear), 10) || null : null,
     gpa: s(aiData.gpa) || null,
@@ -1337,6 +1346,18 @@ router.post("/leads/:id/convert", requireAuth, requireRole(...STAFF_ROLES, ...AG
       if (!existingByEmail.passportExpiry && studentValues.passportExpiry) mergeUpdates.passportExpiry = studentValues.passportExpiry;
       if (!existingByEmail.dateOfBirth && studentValues.dateOfBirth) mergeUpdates.dateOfBirth = studentValues.dateOfBirth;
       if (!existingByEmail.address && studentValues.address) mergeUpdates.address = studentValues.address;
+      const mergedResidence = resolveResidenceAddress({
+        address: studentValues.address || existingByEmail.address,
+        addressCity: existingByEmail.addressCity || studentValues.addressCity,
+        postalCode: existingByEmail.postalCode || studentValues.postalCode,
+        nationality: existingByEmail.nationality || studentValues.nationality,
+      });
+      if (existingByEmail.addressCity !== mergedResidence.addressCity) {
+        mergeUpdates.addressCity = mergedResidence.addressCity;
+      }
+      if (existingByEmail.postalCode !== mergedResidence.postalCode) {
+        mergeUpdates.postalCode = mergedResidence.postalCode;
+      }
       if (!existingByEmail.highSchool && studentValues.highSchool) mergeUpdates.highSchool = studentValues.highSchool;
       if (!existingByEmail.gpa && studentValues.gpa) mergeUpdates.gpa = studentValues.gpa;
       if (!existingByEmail.languageScore && studentValues.languageScore) mergeUpdates.languageScore = studentValues.languageScore;

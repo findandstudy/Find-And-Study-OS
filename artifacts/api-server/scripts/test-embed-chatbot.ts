@@ -6,6 +6,13 @@ import {
   requestsEmbedHumanHandoff,
   verifyEmbedChatSessionToken,
 } from "../src/lib/embedChatSession";
+import {
+  EMBED_CHAT_LOCALES,
+  getEmbedChatCopy,
+  localeFromPublicUrl,
+  normalizeEmbedChatLocale,
+  resolveEmbedChatLocale,
+} from "../src/lib/embedChatI18n";
 
 const secret = "embed-chatbot-regression-secret";
 const sessionId = "12345678-1234-4abc-8def-1234567890ab";
@@ -16,6 +23,14 @@ const botSource = readFileSync(
 );
 const programToolSource = readFileSync(
   new URL("../src/lib/inbox/programSearchTool.ts", import.meta.url),
+  "utf8",
+);
+const storageSource = readFileSync(
+  new URL("../src/routes/storage.ts", import.meta.url),
+  "utf8",
+);
+const embedsAdminSource = readFileSync(
+  new URL("../../edcons/src/pages/admin/Embeds.tsx", import.meta.url),
   "utf8",
 );
 
@@ -70,8 +85,51 @@ test("chatbot route keeps identity, authorization and XSS guards server-owned", 
   assert.match(routeSource, /e\.source !== iframe\.contentWindow/);
   assert.match(routeSource, /text\.textContent=row\.content\|\|''/);
   assert.match(routeSource, /chat\/handoff/);
-  assert.match(routeSource, /CRM kaydınızla güvenli biçimde eşleştirilir/);
+  assert.doesNotMatch(routeSource, /CRM kaydınızla güvenli biçimde eşleştirilir/);
+  assert.match(routeSource, /data-edcons-lang/);
+  assert.match(routeSource, /language:cfg\.locale/);
   assert.match(routeSource, /if \(script\) new Function\(script\)/);
+});
+
+test("embedded assistant resolves all ten public-site languages", () => {
+  assert.deepEqual(
+    EMBED_CHAT_LOCALES,
+    ["en", "tr", "ar", "fa", "fr", "es", "ru", "zh", "hi", "id"],
+  );
+  assert.equal(normalizeEmbedChatLocale("tr-TR"), "tr");
+  assert.equal(normalizeEmbedChatLocale("fa_IR"), "fa");
+  assert.equal(normalizeEmbedChatLocale("zh-CN,zh;q=0.9"), "zh");
+  assert.equal(localeFromPublicUrl("https://example.com/es/programs"), "es");
+  assert.equal(resolveEmbedChatLocale("de-DE", "fr-FR"), "fr");
+  assert.equal(resolveEmbedChatLocale("de-DE"), "en");
+});
+
+test("localized widget copy is complete, directional and contains no CRM disclosure", () => {
+  for (const locale of EMBED_CHAT_LOCALES) {
+    const copy = getEmbedChatCopy(locale);
+    assert.ok(copy.hello);
+    assert.ok(copy.firstName);
+    assert.ok(copy.startChat);
+    assert.ok(copy.greeting("Ada", "Example University").includes("Ada"));
+    assert.doesNotMatch(
+      Object.values(copy).filter((value) => typeof value === "string").join(" "),
+      /CRM|mevcut kaydınızla/i,
+    );
+    assert.equal(copy.dir, locale === "ar" || locale === "fa" ? "rtl" : "ltr");
+  }
+});
+
+test("assistant logos use an admin-only, image-only upload flow", () => {
+  assert.match(storageSource, /prefix === "branding\/embed-widget"/);
+  assert.match(storageSource, /Embed branding uploads are admin-only/);
+  assert.match(storageSource, /"image\/jpeg"[\s\S]*"image\/png"[\s\S]*"image\/webp"/);
+  assert.match(storageSource, /storage\/public-branding/);
+  assert.match(storageSource, /!filePath\.startsWith\("embed-widget\/"\)/);
+  assert.match(embedsAdminSource, /type="file"/);
+  assert.match(embedsAdminSource, /prefix: "branding\/embed-widget"/);
+  assert.match(embedsAdminSource, /Use university logo/);
+  assert.doesNotMatch(embedsAdminSource, /Logo URL/);
+  assert.doesNotMatch(embedsAdminSource, /image\/svg\+xml/);
 });
 
 test("university scope is enforced below the prompt layer", () => {

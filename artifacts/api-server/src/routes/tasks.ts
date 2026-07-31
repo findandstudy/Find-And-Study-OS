@@ -115,6 +115,7 @@ router.post("/tasks", requireAuth, requireRole(...ADMIN_ROLES), async (req, res)
     }
   }
 
+  const initialStatus = (status as Status) || "todo";
   const [created] = await db.insert(tasksTable).values({
     title: title.trim(),
     description: description?.toString().trim() || null,
@@ -122,7 +123,8 @@ router.post("/tasks", requireAuth, requireRole(...ADMIN_ROLES), async (req, res)
     assignedToName: resolvedAssignedToName,
     dueDate: dueDate || null,
     priority: (priority as Priority) || "medium",
-    status: (status as Status) || "todo",
+    status: initialStatus,
+    completedAt: initialStatus === "done" ? new Date() : null,
     taskNotes: [],
     createdBy: req.user!.id,
   }).returning();
@@ -188,6 +190,13 @@ router.put("/tasks/:id", requireAuth, requireRole(...STAFF_ROLES), async (req, r
       return;
     }
     updates.status = status;
+    if (status === "done") {
+      updates.completedAt = existing.status === "done" && existing.completedAt
+        ? existing.completedAt
+        : new Date();
+    } else {
+      updates.completedAt = null;
+    }
   }
   if (assignedTo !== undefined) {
     if (!isAdmin(me.role)) {

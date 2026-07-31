@@ -224,6 +224,12 @@ test("detectLanguage picks the student's language", () => {
   assert.equal(detectLanguage("مرحبا أريد الدراسة في تركيا"), "ar");
   assert.equal(detectLanguage("Здравствуйте, я хочу учиться"), "ru");
   assert.equal(detectLanguage("Bonjour, je veux étudier en Turquie"), "fr");
+  assert.equal(detectLanguage("سلام، می‌خواهم در دانشگاه تحصیل کنم"), "fa");
+  assert.equal(detectLanguage("Hola, quiero estudiar en la universidad"), "es");
+  assert.equal(detectLanguage("你好，我想申请大学"), "zh");
+  assert.equal(detectLanguage("नमस्ते, मैं विश्वविद्यालय में पढ़ना चाहता हूँ"), "hi");
+  assert.equal(detectLanguage("Halo, saya ingin kuliah di universitas"), "id");
+  assert.equal(detectLanguage("Business administration", "es"), "es");
 });
 
 test("auto-reply transport capability is fail-closed and Zernio-aware", () => {

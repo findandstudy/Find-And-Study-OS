@@ -199,23 +199,109 @@ export async function sendViaZernio(params: ZernioSendParams): Promise<ZernioSen
 //   2. POST /api/v1/broadcasts/{id}/recipients { phones: [E.164] }
 //   3. POST /api/v1/broadcasts/{id}/send → { sent, failed }
 
-/** In-memory cache for the resolved Zernio profile id (broadcasts need it). */
-let _profileIdCache: { id: string; fetchedAt: number } | null = null;
+/** In-memory cache for resolved Zernio profile ids (broadcasts need them). */
+const _profileIdCache = new Map<string, { id: string; fetchedAt: number }>();
 const PROFILE_ID_TTL_MS = 60 * 60 * 1000; // 1h — profiles virtually never change
 
 export function __clearZernioProfileCacheForTests(): void {
-  _profileIdCache = null;
+  _profileIdCache.clear();
 }
 
 /**
- * Resolve the Zernio profile id via GET /api/v1/profiles.
- * Picks the profile with isDefault: true, else the first one. Cached in
- * memory with a TTL so we don't hit the endpoint on every send.
+ * Resolve the Zernio profile that OWNS the selected WhatsApp account.
+ *
+ * A Zernio broadcast requires a matching profileId + accountId pair. Picking
+ * the default profile is unsafe when the tenant has WhatsApp accounts under
+ * multiple Zernio profiles: the template may be approved on the shared WABA,
+ * yet Zernio rejects the broadcast because accountId belongs to another
+ * profile.
+ *
+ * When externalAccountId is supplied we resolve its populated profileId from
+ * GET /api/v1/accounts and fail closed if that exact relationship cannot be
+ * proven. The legacy default-profile lookup remains available only for callers
+ * that do not have an account id.
  */
-export async function resolveZernioProfileId(apiKey: string): Promise<{ id: string | null; error?: string }> {
-  if (_profileIdCache && Date.now() - _profileIdCache.fetchedAt < PROFILE_ID_TTL_MS) {
-    return { id: _profileIdCache.id };
+export async function resolveZernioProfileId(
+  apiKey: string,
+  externalAccountId?: string | null,
+): Promise<{ id: string | null; error?: string }> {
+  const requestedAccountId = externalAccountId?.trim() || null;
+  // Zernio is configured through one tenant-wide API key. Keep credentials
+  // out of cache keys; the account id alone is the stable ownership key.
+  const cacheKey = requestedAccountId || "__default__";
+  const cached = _profileIdCache.get(cacheKey);
+  if (cached && Date.now() - cached.fetchedAt < PROFILE_ID_TTL_MS) {
+    return { id: cached.id };
   }
+
+  if (requestedAccountId) {
+    const accountsUrl = "https://zernio.com/api/v1/accounts?platform=whatsapp&includeOverLimit=true";
+    try {
+      console.log("[ZERNIO] resolve account profile request:", JSON.stringify({
+        url: accountsUrl,
+        accountId: requestedAccountId,
+        auth: `Bearer ${maskApiKey(apiKey)}`,
+      }));
+      const resp = await fetch(accountsUrl, { headers: { Authorization: `Bearer ${apiKey}` } });
+      const bodyText = await resp.text().catch(() => "");
+      if (!resp.ok) {
+        console.error(`[ZERNIO] resolve account profile failed (${resp.status})`);
+        return { id: null, error: `Zernio hesabının bağlı olduğu profil çözümlenemedi (HTTP ${resp.status})` };
+      }
+
+      let data: any = {};
+      try { data = JSON.parse(bodyText); } catch { /* non-JSON */ }
+      const accounts: any[] = Array.isArray(data)
+        ? data
+        : Array.isArray(data?.accounts)
+          ? data.accounts
+          : Array.isArray(data?.data?.accounts)
+            ? data.data.accounts
+            : Array.isArray(data?.data)
+              ? data.data
+              : [];
+      console.log("[ZERNIO] resolve account profile response:", JSON.stringify({
+        status: resp.status,
+        accountCount: accounts.length,
+        requestedAccountFound: accounts.some((account) =>
+          String(account?._id ?? account?.id ?? account?.accountId ?? "") === requestedAccountId),
+      }));
+
+      const account = accounts.find((candidate) =>
+        String(candidate?._id ?? candidate?.id ?? candidate?.accountId ?? "") === requestedAccountId);
+      if (!account) {
+        return {
+          id: null,
+          error: "Zernio hesabının bağlı olduğu profil çözümlenemedi (seçilen WhatsApp hesabı bulunamadı)",
+        };
+      }
+
+      const rawProfile = account?.profileId ?? account?.profile;
+      const id =
+        typeof rawProfile === "string"
+          ? rawProfile
+          : rawProfile?._id
+            ? String(rawProfile._id)
+            : rawProfile?.id
+              ? String(rawProfile.id)
+              : null;
+      if (!id) {
+        return {
+          id: null,
+          error: "Zernio hesabının bağlı olduğu profil çözümlenemedi (hesapta profileId alanı yok)",
+        };
+      }
+
+      _profileIdCache.set(cacheKey, { id, fetchedAt: Date.now() });
+      return { id };
+    } catch (err: any) {
+      return {
+        id: null,
+        error: `Zernio hesabının bağlı olduğu profil çözümlenemedi: ${err?.message || "bilinmeyen hata"}`,
+      };
+    }
+  }
+
   const url = "https://zernio.com/api/v1/profiles";
   try {
     console.log("[ZERNIO] resolve profile request:", JSON.stringify({ url, auth: `Bearer ${maskApiKey(apiKey)}` }));
@@ -234,7 +320,7 @@ export async function resolveZernioProfileId(apiKey: string): Promise<{ id: stri
     const chosen = profiles.find((p) => p?.isDefault === true) || profiles[0];
     const id = chosen?._id ? String(chosen._id) : chosen?.id ? String(chosen.id) : null;
     if (!id) return { id: null, error: "Zernio profili çözümlenemedi (profil id alanı yok)" };
-    _profileIdCache = { id, fetchedAt: Date.now() };
+    _profileIdCache.set(cacheKey, { id, fetchedAt: Date.now() });
     return { id };
   } catch (err: any) {
     return { id: null, error: `Zernio profili çözümlenemedi: ${err?.message || "bilinmeyen hata"}` };
@@ -303,7 +389,7 @@ export async function sendZernioTemplate(params: ZernioTemplateSendParams): Prom
     return { ok: false, error: "Template gönderilemedi: alıcının E.164 formatında telefon numarası yok." };
   }
 
-  const profile = await resolveZernioProfileId(apiKey);
+  const profile = await resolveZernioProfileId(apiKey, params.externalAccountId);
   if (!profile.id) {
     return { ok: false, error: `Template gönderilemedi: ${profile.error || "Zernio profili çözümlenemedi"}` };
   }
@@ -337,6 +423,7 @@ export async function sendZernioTemplate(params: ZernioTemplateSendParams): Prom
     };
     console.log("[ZERNIO] broadcast create request:", JSON.stringify({
       url: baseUrl,
+      profileId: profile.id,
       accountId: params.externalAccountId,
       templateName: params.templateName,
       language: params.language,

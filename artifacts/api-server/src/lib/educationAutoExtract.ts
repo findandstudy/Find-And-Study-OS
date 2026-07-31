@@ -36,7 +36,7 @@ import {
   buildEducationPromptSection,
   decideEducationExtraction,
   EDUCATION_FUZZY_KEYWORDS,
-  educationRecordHasData,
+  hasRequiredEducationCoverage,
   isEducationTriggerDocType,
   type EducationRecordOutput,
 } from "./educationExtraction";
@@ -111,8 +111,9 @@ export interface RunEducationExtractionOptions {
   auditAction?: string;
 }
 
-/** true when the student already has a data-bearing education record. */
-async function hasFilledEducation(studentId: number): Promise<boolean> {
+async function getExistingEducation(
+  studentId: number,
+): Promise<EducationRecordOutput[]> {
   const rows = await db.select({
     level: studentEducationRecordsTable.level,
     institution: studentEducationRecordsTable.institution,
@@ -128,7 +129,7 @@ async function hasFilledEducation(studentId: number): Promise<boolean> {
       eq(studentEducationRecordsTable.studentId, studentId),
       isNull(studentEducationRecordsTable.deletedAt),
     ));
-  return rows.some((r) => educationRecordHasData(r as EducationRecordOutput));
+  return rows as EducationRecordOutput[];
 }
 
 /**
@@ -147,10 +148,6 @@ export async function runEducationExtraction(
     .where(and(eq(studentsTable.id, studentId), isNull(studentsTable.deletedAt)));
   if (!student) return { status: "not_found" };
 
-  if (opts.skipIfFilled && (await hasFilledEducation(studentId))) {
-    return { status: "skipped_filled", upserted: 0 };
-  }
-
   // Level is resolved SERVER-side; without it we cannot build the
   // level-based prompt section, so return early with a stable warning.
   const levelKey = await resolveAppliedLevelKey(studentId);
@@ -160,6 +157,16 @@ export async function runEducationExtraction(
       levelKey: null, documentCount: 0, upserted: 0, warnings: decision.warnings,
     }, ip);
     return { status: "ok", ...decision, upserted: 0 };
+  }
+
+  if (
+    opts.skipIfFilled &&
+    hasRequiredEducationCoverage(
+      levelKey,
+      await getExistingEducation(studentId),
+    )
+  ) {
+    return { status: "skipped_filled", upserted: 0 };
   }
 
   // Education-related documents only — photo/passport are never sent.
@@ -424,6 +431,7 @@ export function maybeTriggerAutoEducationExtract(input: AutoEducationTriggerInpu
         actorUserId,
         ip,
         skipIfFilled: true,
+        mergeMissingOnly: true,
         auditAction: "auto_education_extract",
       });
       if (result.status === "ok") {
@@ -499,6 +507,7 @@ export function maybeTriggerAutoEducationExtractForStudent(
         actorUserId,
         ip,
         skipIfFilled: true,
+        mergeMissingOnly: true,
         auditAction: "auto_education_extract_lead_convert",
       });
       if (result.status === "ok") {

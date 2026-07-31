@@ -7,14 +7,29 @@
 // (see aiAgentConfig.ts); at runtime the engine reads the live config so an
 // admin can edit the brain and the escalation rules without a code change.
 
-export type BotLanguage = "tr" | "en" | "ar" | "ru" | "fr";
+export type BotLanguage =
+  | "tr"
+  | "en"
+  | "ar"
+  | "fa"
+  | "fr"
+  | "es"
+  | "ru"
+  | "zh"
+  | "hi"
+  | "id";
 
 const LANGUAGE_NAME: Record<BotLanguage, string> = {
   tr: "Turkish",
   en: "English",
   ar: "Arabic",
+  fa: "Persian",
   ru: "Russian",
   fr: "French",
+  es: "Spanish",
+  zh: "Chinese",
+  hi: "Hindi",
+  id: "Indonesian",
 };
 
 export type EscalationTopic = "contract" | "payment" | "commission" | "partner";
@@ -27,6 +42,8 @@ export const DEFAULT_ESCALATION_KEYWORDS: Record<EscalationTopic, string[]> = {
   contract: [
     "contract", "agreement", "sözleşme", "sozlesme", "anlaşma", "anlasma",
     "عقد", "اتفاقية", "контракт", "договор", "contrat",
+    "قرارداد", "توافق", "contrato", "acuerdo", "合同", "协议",
+    "अनुबंध", "समझौता", "kontrak", "perjanjian",
   ],
   payment: [
     "payment", "pay ", "refund", "invoice", "fee", "fees", "deposit",
@@ -34,9 +51,15 @@ export const DEFAULT_ESCALATION_KEYWORDS: Record<EscalationTopic, string[]> = {
     "دفع", "رسوم", "رسم", "استرداد", "فاتورة",
     "оплат", "платеж", "платёж", "возврат", "счет", "счёт",
     "paiement", "payer", "frais", "remboursement", "facture",
+    "پرداخت", "هزینه", "بازپرداخت", "فاکتور", "سپرده",
+    "pago", "tarifa", "reembolso", "factura", "depósito",
+    "付款", "费用", "退款", "发票", "定金",
+    "भुगतान", "शुल्क", "वापसी", "चालान", "जमा",
+    "pembayaran", "biaya", "pengembalian dana", "faktur", "deposit",
   ],
   commission: [
     "commission", "komisyon", "عمولة", "комисси", "коммисси",
+    "کمیسیون", "comisión", "佣金", "कमीशन", "komisi",
   ],
   partner: [
     "partner", "partnership", "agency", "agent", "sub-agent", "subagent",
@@ -44,6 +67,9 @@ export const DEFAULT_ESCALATION_KEYWORDS: Record<EscalationTopic, string[]> = {
     "شريك", "شراكة", "وكالة", "وكيل",
     "партнер", "партнёр", "агентств", "агент",
     "partenaire", "partenariat", "agence",
+    "شریک", "نمایندگی", "آژانس", "socio", "sociedad", "agencia", "agente",
+    "合作伙伴", "代理", "भागीदार", "एजेंसी", "एजेंट",
+    "mitra", "kemitraan", "agen",
   ],
 };
 
@@ -160,7 +186,7 @@ export function buildBotSystemPrompt(
   const retrievedBlock = buildRetrievedKnowledgeBlock(retrievedChunks ?? []);
   return [
     "You are the first-line intake assistant for \"find-and-study\", an official representative that helps international students study in Turkey.",
-    `Always reply in ${langName} (the student's language). If the student clearly switches language, follow them. Supported languages: Turkish, English, Arabic, Russian, French.`,
+    `Always reply in ${langName} (the student's language). If the student clearly switches language, follow them. Supported languages: Turkish, English, Arabic, Persian, French, Spanish, Russian, Chinese, Hindi, Indonesian.`,
     "",
     kb,
     "",

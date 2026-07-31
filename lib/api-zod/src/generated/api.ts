@@ -2109,6 +2109,18 @@ export const GetKommoSummaryQueryParams = zod.object({
   staffId: zod.coerce.number().min(1).optional(),
 });
 
+export const getKommoSummaryResponseTasksCompletionRateMin = 0;
+export const getKommoSummaryResponseTasksCompletionRateMax = 100;
+
+export const getKommoSummaryResponseTasksOnTimeRateMin = 0;
+export const getKommoSummaryResponseTasksOnTimeRateMax = 100;
+
+export const getKommoSummaryResponseFollowUpsCompletionRateMin = 0;
+export const getKommoSummaryResponseFollowUpsCompletionRateMax = 100;
+
+export const getKommoSummaryResponseFollowUpsOnTimeRateMin = 0;
+export const getKommoSummaryResponseFollowUpsOnTimeRateMax = 100;
+
 export const GetKommoSummaryResponse = zod.object({
   avgReplyTime: zod
     .number()
@@ -2116,6 +2128,17 @@ export const GetKommoSummaryResponse = zod.object({
   medianReplyTime: zod
     .number()
     .describe("Median reply time in seconds (0 if no data)"),
+  longestAwaiting: zod
+    .number()
+    .describe("Longest currently unanswered customer turn in seconds"),
+  awaitingReplyCount: zod
+    .number()
+    .describe("Open conversations currently awaiting a human reply"),
+  replySamples: zod
+    .number()
+    .describe(
+      "Customer turns with a sender-attributed human reply in the selected period",
+    ),
   activeLeads: zod.number(),
   wonLeads: zod.number(),
   lostLeads: zod.number(),
@@ -2130,10 +2153,51 @@ export const GetKommoSummaryResponse = zod.object({
         connected: zod.boolean(),
       }),
     )
-    .optional()
     .describe(
       "Per-channel message breakdown over the same date range as incoming\/outgoing totals",
     ),
+  tasks: zod.object({
+    created: zod.number().describe("Tasks created in the selected period"),
+    completed: zod.number().describe("Tasks completed in the selected period"),
+    open: zod.number().describe("Tasks currently open"),
+    overdue: zod.number().describe("Open tasks currently overdue"),
+    completionRate: zod
+      .number()
+      .min(getKommoSummaryResponseTasksCompletionRateMin)
+      .max(getKommoSummaryResponseTasksCompletionRateMax)
+      .describe(
+        "Percent of tasks due in the selected period that were completed",
+      ),
+    onTimeRate: zod
+      .number()
+      .min(getKommoSummaryResponseTasksOnTimeRateMin)
+      .max(getKommoSummaryResponseTasksOnTimeRateMax)
+      .describe("Percent of completed due tasks finished on time"),
+  }),
+  followUps: zod.object({
+    scheduled: zod
+      .number()
+      .describe("Follow-ups scheduled in the selected period"),
+    completed: zod
+      .number()
+      .describe("Follow-ups completed in the selected period"),
+    pending: zod.number().describe("Follow-ups currently pending"),
+    overdue: zod.number().describe("Pending follow-ups currently overdue"),
+    completionRate: zod
+      .number()
+      .min(getKommoSummaryResponseFollowUpsCompletionRateMin)
+      .max(getKommoSummaryResponseFollowUpsCompletionRateMax)
+      .describe(
+        "Percent of follow-ups scheduled in the selected period that were completed",
+      ),
+    onTimeRate: zod
+      .number()
+      .min(getKommoSummaryResponseFollowUpsOnTimeRateMin)
+      .max(getKommoSummaryResponseFollowUpsOnTimeRateMax)
+      .describe(
+        "Percent of completed follow-ups finished by their scheduled time",
+      ),
+  }),
 });
 
 /**
@@ -2160,6 +2224,8 @@ export const GetActivitySummaryQueryParams = zod.object({
     .enum(["daily", "weekly", "monthly", "yearly"])
     .default(getActivitySummaryQueryRangeDefault),
   staffId: zod.coerce.number().min(1).optional(),
+  from: zod.date().optional(),
+  to: zod.date().optional(),
 });
 
 export const GetActivitySummaryResponse = zod.object({

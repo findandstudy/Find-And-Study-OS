@@ -71,6 +71,50 @@ test("resolveZernioProfileId falls back to first profile and reports empty list"
   assert.match(r2.error || "", /profil bulunamadı/);
 });
 
+test("resolveZernioProfileId resolves and caches the profile that owns each WhatsApp account", async () => {
+  let accountCalls = 0;
+  responders.push((url) => {
+    if (url.includes("/api/v1/accounts?")) {
+      accountCalls++;
+      return json(200, {
+        accounts: [
+          { _id: "acct-old", profileId: { _id: "profile-default", name: "Default" } },
+          { _id: "acct-new", profileId: { _id: "profile-second", name: "Find And Study WhatsApp 2" } },
+        ],
+      });
+    }
+    return null;
+  });
+
+  const oldAccount = await resolveZernioProfileId("key", "acct-old");
+  const newAccount = await resolveZernioProfileId("key", "acct-new");
+  const newAccountCached = await resolveZernioProfileId("key", "acct-new");
+
+  assert.equal(oldAccount.id, "profile-default");
+  assert.equal(newAccount.id, "profile-second");
+  assert.equal(newAccountCached.id, "profile-second");
+  assert.equal(accountCalls, 2, "each account is resolved once, then cached independently");
+});
+
+test("resolveZernioProfileId supports string profileId and fails closed for an unknown account", async () => {
+  responders.push((url) => {
+    if (url.includes("/api/v1/accounts?")) {
+      return json(200, { data: [{ id: "acct-new", profileId: "profile-second" }] });
+    }
+    if (url.endsWith("/profiles")) {
+      assert.fail("account-aware resolution must not fall back to the default profile");
+    }
+    return null;
+  });
+
+  const resolved = await resolveZernioProfileId("key", "acct-new");
+  assert.equal(resolved.id, "profile-second");
+
+  const unknown = await resolveZernioProfileId("key", "acct-missing");
+  assert.equal(unknown.id, null);
+  assert.match(unknown.error || "", /WhatsApp hesabı bulunamadı/);
+});
+
 // sendZernioTemplate reads the API key from the DB — test the broadcast flow
 // through a local reimplementation harness is NOT acceptable; instead we
 // import the module and monkey-patch the DB read is not exposed. So the flow
@@ -87,10 +131,18 @@ test("broadcast flow: create → recipients → send, ok on sent=1", async () =>
   __setZernioApiKeyOverrideForTests("test-key");
   try {
     responders.push((url, init) => {
-      if (url.endsWith("/profiles")) return json(200, { profiles: [{ _id: "prof1", isDefault: true }] });
+      if (url.includes("/api/v1/accounts?")) {
+        return json(200, {
+          accounts: [
+            { _id: "acct1", profileId: { _id: "prof1" } },
+            { _id: "acct2", profileId: { _id: "prof2" } },
+          ],
+        });
+      }
       if (url.endsWith("/api/v1/broadcasts")) {
         const body = JSON.parse(String(init?.body));
-        assert.equal(body.profileId, "prof1");
+        assert.equal(body.profileId, "prof2");
+        assert.equal(body.accountId, "acct2");
         assert.equal(body.platform, "whatsapp");
         assert.equal(body.template.name, "welcome");
         assert.equal(body.template.language, "en");
@@ -106,7 +158,7 @@ test("broadcast flow: create → recipients → send, ok on sent=1", async () =>
       return null;
     });
     const r = await sendZernioTemplate({
-      externalAccountId: "acct1",
+      externalAccountId: "acct2",
       templateName: "welcome",
       language: "en",
       toPhoneE164: "+905551112233",
@@ -125,7 +177,9 @@ test("sent:0 failed:1 is NOT ok", async () => {
   __setZernioApiKeyOverrideForTests("test-key");
   try {
     responders.push((url) => {
-      if (url.endsWith("/profiles")) return json(200, { profiles: [{ _id: "prof1" }] });
+      if (url.includes("/api/v1/accounts?")) {
+        return json(200, { accounts: [{ _id: "acct1", profileId: { _id: "prof1" } }] });
+      }
       if (url.endsWith("/api/v1/broadcasts")) return json(200, { broadcast: { id: "bc2" } });
       if (url.endsWith("/recipients")) return json(200, {});
       if (url.endsWith("/send")) return json(200, { sent: 0, failed: 1 });
@@ -149,7 +203,9 @@ test("create failure surfaces friendly error, no recipients call", async () => {
   __setZernioApiKeyOverrideForTests("test-key");
   try {
     responders.push((url) => {
-      if (url.endsWith("/profiles")) return json(200, { profiles: [{ _id: "prof1" }] });
+      if (url.includes("/api/v1/accounts?")) {
+        return json(200, { accounts: [{ _id: "acct1", profileId: { _id: "prof1" } }] });
+      }
       if (url.endsWith("/api/v1/broadcasts")) return json(400, { error: "Template not found" });
       return null;
     });

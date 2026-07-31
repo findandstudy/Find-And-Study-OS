@@ -19,6 +19,8 @@ import {
   deriveModuleName,
   normalizeModuleBreakdown,
   clampSessionMetrics,
+  normalizeActivitySession,
+  MAX_HEARTBEAT_DELTA_SECONDS,
 } from "../lib/activityNormalize";
 import {
   loadBrandedPdfSettings,
@@ -27,8 +29,6 @@ import {
   buildBrandedFooterTemplate,
   buildDailyBarChartSvg,
 } from "../lib/pdf/brandedBase";
-
-const MAX_SESSION_SEC = 8 * 3600;
 
 // Map the app's i18n language codes to BCP-47 tags so PDF dates format per the
 // viewer's selected locale (no hardcoded date locale).
@@ -48,27 +48,13 @@ function capSessionWallClock<T extends {
   activeDurationSeconds: number | null;
   idleDurationSeconds: number | null;
 }>(s: T): T {
-  const active = s.activeDurationSeconds || 0;
-  const rawTotal = s.totalDurationSeconds || 0;
-  const rawIdle = s.idleDurationSeconds || 0;
-
-  const startMs = s.startedAt ? new Date(s.startedAt).getTime() : null;
-  const endMs = s.endedAt
-    ? new Date(s.endedAt).getTime()
-    : s.lastSeenAt
-      ? new Date(s.lastSeenAt).getTime()
-      : null;
-  const wallClockSec =
-    startMs && endMs && endMs > startMs
-      ? Math.round((endMs - startMs) / 1000)
-      : rawTotal;
-
-  const capSec = Math.min(MAX_SESSION_SEC, wallClockSec);
-  const cappedTotal = Math.min(rawTotal, capSec);
-  const cappedActive = Math.min(active, cappedTotal);
-  const cappedIdle = Math.max(0, Math.min(rawIdle, cappedTotal - cappedActive));
-
-  return { ...s, totalDurationSeconds: cappedTotal, activeDurationSeconds: cappedActive, idleDurationSeconds: cappedIdle };
+  const normalized = normalizeActivitySession(s);
+  return {
+    ...s,
+    totalDurationSeconds: normalized.totalDurationSeconds,
+    activeDurationSeconds: normalized.activeDurationSeconds,
+    idleDurationSeconds: normalized.idleDurationSeconds,
+  };
 }
 
 const router: IRouter = Router();
@@ -140,21 +126,40 @@ router.post("/activity/session/start", requireAuth, async (req, res): Promise<vo
 
 router.post("/activity/heartbeat", requireAuth, async (req, res): Promise<void> => {
   const userId = req.user!.id;
-  const { sessionId, status, route, activeDelta = 0, idleDelta = 0 } = req.body;
+  const { sessionId, status, route } = req.body;
 
   if (!sessionId) { res.status(400).json({ error: "sessionId required" }); return; }
 
   const now = new Date();
-  const aDelta = Math.round(activeDelta);
-  const iDelta = Math.round(idleDelta);
-  await db.update(userSessionsTable).set({
-    lastSeenAt: now,
-    activeDurationSeconds: sql`${userSessionsTable.activeDurationSeconds} + ${aDelta}`,
-    idleDurationSeconds: sql`${userSessionsTable.idleDurationSeconds} + ${iDelta}`,
-    totalDurationSeconds: sql`${userSessionsTable.activeDurationSeconds} + ${userSessionsTable.idleDurationSeconds} + ${aDelta} + ${iDelta}`,
-  }).where(and(eq(userSessionsTable.id, sessionId), eq(userSessionsTable.userId, userId)));
-
   const presenceStatus = status === "idle" ? "idle" : "active";
+  // Never trust elapsed seconds reported by the browser. Sleeping tabs and
+  // multiple tabs previously turned a sub-minute session into 20+ hours. The
+  // database's previous last_seen_at is the atomic source of elapsed time, and
+  // the accepted interval is capped slightly above the 30-second heartbeat.
+  const elapsedSeconds = sql<number>`least(
+    greatest(extract(epoch from (now() - ${userSessionsTable.lastSeenAt})), 0),
+    ${MAX_HEARTBEAT_DELTA_SECONDS}
+  )::integer`;
+  const [updated] = await db.update(userSessionsTable).set({
+    lastSeenAt: now,
+    activeDurationSeconds: presenceStatus === "active"
+      ? sql`${userSessionsTable.activeDurationSeconds} + ${elapsedSeconds}`
+      : userSessionsTable.activeDurationSeconds,
+    idleDurationSeconds: presenceStatus === "idle"
+      ? sql`${userSessionsTable.idleDurationSeconds} + ${elapsedSeconds}`
+      : userSessionsTable.idleDurationSeconds,
+    totalDurationSeconds: sql`${userSessionsTable.totalDurationSeconds} + ${elapsedSeconds}`,
+  }).where(and(
+    eq(userSessionsTable.id, sessionId),
+    eq(userSessionsTable.userId, userId),
+    eq(userSessionsTable.isActive, true),
+  )).returning({ id: userSessionsTable.id });
+
+  if (!updated) {
+    res.status(409).json({ error: "Activity session is no longer active" });
+    return;
+  }
+
   await db.insert(userPresenceTable).values({
     userId, status: presenceStatus, lastActiveAt: presenceStatus === "active" ? now : undefined, currentRoute: route, sessionId, updatedAt: now,
   }).onConflictDoUpdate({
@@ -264,23 +269,28 @@ router.get("/activity/analytics", requireAuth, requireRole(...ADMIN_ROLES), asyn
 
   const dateFrom = from ? new Date(from) : new Date(new Date().setHours(0, 0, 0, 0));
   const dateTo = to ? new Date(to) : new Date();
+  if (!Number.isFinite(dateFrom.getTime()) || !Number.isFinite(dateTo.getTime()) || dateFrom >= dateTo) {
+    res.status(400).json({ error: "Invalid activity date range" });
+    return;
+  }
 
   const conditions: any[] = [
-    gte(userSessionsTable.startedAt, dateFrom),
     lte(userSessionsTable.startedAt, dateTo),
+    sql`coalesce(${userSessionsTable.endedAt}, ${userSessionsTable.lastSeenAt}) >= ${dateFrom}`,
     // Internal team only — exclude agent roles (Job H).
     inArray(usersTable.role, STAFF_ROLES),
   ];
   if (targetUserId) conditions.push(eq(userSessionsTable.userId, parseInt(targetUserId)));
 
-  const sessions = await db.select({
+  const sessionRows = await db.select({
+    id: userSessionsTable.id,
     userId: userSessionsTable.userId,
-    totalDuration: sql<number>`sum(${userSessionsTable.totalDurationSeconds})`,
-    activeDuration: sql<number>`sum(${userSessionsTable.activeDurationSeconds})`,
-    idleDuration: sql<number>`sum(${userSessionsTable.idleDurationSeconds})`,
-    sessionCount: sql<number>`count(*)`,
-    firstLogin: sql<string>`min(${userSessionsTable.startedAt})`,
-    lastSeen: sql<string>`max(${userSessionsTable.lastSeenAt})`,
+    startedAt: userSessionsTable.startedAt,
+    endedAt: userSessionsTable.endedAt,
+    lastSeenAt: userSessionsTable.lastSeenAt,
+    totalDurationSeconds: userSessionsTable.totalDurationSeconds,
+    activeDurationSeconds: userSessionsTable.activeDurationSeconds,
+    idleDurationSeconds: userSessionsTable.idleDurationSeconds,
     firstName: usersTable.firstName,
     lastName: usersTable.lastName,
     email: usersTable.email,
@@ -288,24 +298,66 @@ router.get("/activity/analytics", requireAuth, requireRole(...ADMIN_ROLES), asyn
   })
   .from(userSessionsTable)
   .innerJoin(usersTable, eq(userSessionsTable.userId, usersTable.id))
-  .where(and(...conditions))
-  .groupBy(userSessionsTable.userId, usersTable.firstName, usersTable.lastName, usersTable.email, usersTable.role);
+  .where(and(...conditions));
 
   const presences = await db.select().from(userPresenceTable);
   const presenceMap: Record<number, string> = {};
   for (const p of presences) presenceMap[p.userId] = p.status;
 
-  const data = sessions.map(s => {
-    const totalDuration = Number(s.totalDuration) || 0;
-    const activeDuration = Number(s.activeDuration) || 0;
-    const idleDuration = Math.max(0, Math.min(Number(s.idleDuration) || 0, totalDuration - activeDuration));
+  type UserAggregate = {
+    userId: number;
+    firstName: string | null;
+    lastName: string | null;
+    email: string | null;
+    role: string;
+    totalDuration: number;
+    activeDuration: number;
+    idleDuration: number;
+    sessionCount: number;
+    firstLogin: Date;
+    lastSeen: Date;
+  };
+  const byUser = new Map<number, UserAggregate>();
+  for (const row of sessionRows) {
+    const normalized = normalizeActivitySession(row, dateFrom, dateTo);
+    if (normalized.overlapDurationSeconds <= 0) continue;
+    const existing = byUser.get(row.userId);
+    if (existing) {
+      existing.totalDuration += normalized.totalDurationSeconds;
+      existing.activeDuration += normalized.activeDurationSeconds;
+      existing.idleDuration += normalized.idleDurationSeconds;
+      existing.sessionCount += 1;
+      if (row.startedAt < existing.firstLogin) existing.firstLogin = row.startedAt;
+      if (row.lastSeenAt > existing.lastSeen) existing.lastSeen = row.lastSeenAt;
+    } else {
+      byUser.set(row.userId, {
+        userId: row.userId,
+        firstName: row.firstName,
+        lastName: row.lastName,
+        email: row.email,
+        role: row.role,
+        totalDuration: normalized.totalDurationSeconds,
+        activeDuration: normalized.activeDurationSeconds,
+        idleDuration: normalized.idleDurationSeconds,
+        sessionCount: 1,
+        firstLogin: row.startedAt,
+        lastSeen: row.lastSeenAt,
+      });
+    }
+  }
+
+  const periodSeconds = Math.max(0, Math.floor((dateTo.getTime() - dateFrom.getTime()) / 1000));
+  const data = Array.from(byUser.values()).map((row) => {
+    // Multiple historical sessions may overlap. One person cannot contribute
+    // more time than the selected wall-clock period.
+    const totalDuration = Math.min(row.totalDuration, periodSeconds);
+    const activeDuration = Math.min(row.activeDuration, totalDuration);
     return {
-      ...s,
+      ...row,
       totalDuration,
       activeDuration,
-      idleDuration,
-      sessionCount: Number(s.sessionCount) || 0,
-      status: presenceMap[s.userId] || "offline",
+      idleDuration: Math.min(row.idleDuration, Math.max(0, totalDuration - activeDuration)),
+      status: presenceMap[row.userId] || "offline",
     };
   });
 
@@ -333,11 +385,19 @@ router.get("/activity/user/:userId", requireAuth, requireRole(...ADMIN_ROLES), a
 
   const dateFrom = from ? new Date(from) : new Date(new Date().setHours(0, 0, 0, 0));
   const dateTo = to ? new Date(to) : new Date();
+  if (!Number.isFinite(dateFrom.getTime()) || !Number.isFinite(dateTo.getTime()) || dateFrom >= dateTo) {
+    res.status(400).json({ error: "Invalid activity date range" });
+    return;
+  }
 
   const sessions = await db.select().from(userSessionsTable)
-    .where(and(eq(userSessionsTable.userId, targetUserId), gte(userSessionsTable.startedAt, dateFrom), lte(userSessionsTable.startedAt, dateTo)))
+    .where(and(
+      eq(userSessionsTable.userId, targetUserId),
+      lte(userSessionsTable.startedAt, dateTo),
+      sql`coalesce(${userSessionsTable.endedAt}, ${userSessionsTable.lastSeenAt}) >= ${dateFrom}`,
+    ))
     .orderBy(desc(userSessionsTable.startedAt))
-    .limit(100);
+    .limit(500);
 
   const pageVisits = await db.select().from(userPageVisitsTable)
     .where(and(eq(userPageVisitsTable.userId, targetUserId), gte(userPageVisitsTable.enteredAt, dateFrom), lte(userPageVisitsTable.enteredAt, dateTo)))
@@ -361,22 +421,31 @@ router.get("/activity/user/:userId", requireAuth, requireRole(...ADMIN_ROLES), a
     .orderBy(desc(userActivityEventsTable.createdAt))
     .limit(200);
 
-  const dailyBreakdown = await db.select({
-    day: sql<string>`date(${userSessionsTable.startedAt})`,
-    totalDuration: sql<number>`sum(${userSessionsTable.totalDurationSeconds})`,
-    activeDuration: sql<number>`sum(${userSessionsTable.activeDurationSeconds})`,
-    sessionCount: sql<number>`count(*)`,
-  })
-  .from(userSessionsTable)
-  .where(and(eq(userSessionsTable.userId, targetUserId), gte(userSessionsTable.startedAt, dateFrom), lte(userSessionsTable.startedAt, dateTo)))
-  .groupBy(sql`date(${userSessionsTable.startedAt})`)
-  .orderBy(sql`date(${userSessionsTable.startedAt})`);
-
   const [presence] = await db.select().from(userPresenceTable).where(eq(userPresenceTable.userId, targetUserId));
   const [user] = await db.select({ firstName: usersTable.firstName, lastName: usersTable.lastName, email: usersTable.email, role: usersTable.role })
     .from(usersTable).where(eq(usersTable.id, targetUserId));
 
-  const normalizedSessions = sessions.map(s => capSessionWallClock(s));
+  const normalizedSessions = sessions.map((session) => {
+    const normalized = normalizeActivitySession(session, dateFrom, dateTo);
+    return {
+      ...session,
+      totalDurationSeconds: normalized.totalDurationSeconds,
+      activeDurationSeconds: normalized.activeDurationSeconds,
+      idleDurationSeconds: normalized.idleDurationSeconds,
+    };
+  });
+  const dailyMap = new Map<string, { day: string; totalDuration: number; activeDuration: number; sessionCount: number }>();
+  for (const session of normalizedSessions) {
+    if (session.totalDurationSeconds <= 0) continue;
+    const clippedStart = new Date(Math.max(session.startedAt.getTime(), dateFrom.getTime()));
+    const day = clippedStart.toISOString().slice(0, 10);
+    const existing = dailyMap.get(day) ?? { day, totalDuration: 0, activeDuration: 0, sessionCount: 0 };
+    existing.totalDuration += session.totalDurationSeconds;
+    existing.activeDuration += session.activeDurationSeconds;
+    existing.sessionCount += 1;
+    dailyMap.set(day, existing);
+  }
+  const dailyBreakdown = Array.from(dailyMap.values()).sort((a, b) => a.day.localeCompare(b.day));
 
   res.json({
     user,
@@ -385,7 +454,7 @@ router.get("/activity/user/:userId", requireAuth, requireRole(...ADMIN_ROLES), a
     pageVisits,
     moduleBreakdown: normalizeModuleBreakdown(moduleBreakdown.map(m => ({ ...m, visitCount: Number(m.visitCount), totalDuration: Number(m.totalDuration), activeDuration: Number(m.activeDuration), idleDuration: Number(m.idleDuration) }))),
     events,
-    dailyBreakdown: dailyBreakdown.map(d => ({ ...d, totalDuration: Number(d.totalDuration), activeDuration: Number(d.activeDuration), sessionCount: Number(d.sessionCount) })),
+    dailyBreakdown,
   });
 });
 

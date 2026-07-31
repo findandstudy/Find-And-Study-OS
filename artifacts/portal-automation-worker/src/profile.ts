@@ -14,7 +14,7 @@ import { db, portalSubmissionsTable, applicationsTable, studentsTable, documents
 import { eq, and, isNull, desc } from "drizzle-orm";
 import { buildProfile, mapDocType, REQUIRED_DOCS, extractStudentDocumentRefs, selectPriorSchoolName, buildSignedStudentPhotoPath, buildSignedDocumentPath, docFetchUrl } from "@workspace/portal-adapters";
 import type { SubmitProfile, SubmitFiles } from "@workspace/portal-adapters";
-import { resolveLegacyAddressCity } from "@workspace/portal-runner";
+import { resolvePortalResidenceDefaults } from "@workspace/portal-runner";
 
 // ---------------------------------------------------------------------------
 // Result shape
@@ -187,19 +187,21 @@ export async function buildStudentProfile(
   // university + programme readback before accepting the existing profile.
   profile.portalSubmissionExternalRef =
     sub.externalRef?.trim() || undefined;
-  const legacyAddressCity = resolveLegacyAddressCity({
+  const residence = resolvePortalResidenceDefaults({
     universityKey: sub.universityKey,
     addressCity: student.addressCity,
+    postalCode: student.postalCode,
     address: student.address,
     nationality: student.nationality,
   });
-  if (!profile.addressCity && legacyAddressCity) {
-    profile.addressCity = legacyAddressCity;
+  if (!profile.addressCity) {
+    profile.addressCity = residence.addressCity;
     console.warn(
-      `[portal-profile] #${submissionId} audited legacy address fallback` +
-      ` (field=addressCity, source=comma_prefix)`,
+      `[portal-profile] #${submissionId} residence fallback` +
+      ` (field=addressCity, value=${residence.addressCity === "city" ? "default" : "derived"})`,
     );
   }
+  profile.addressZip ||= residence.postalCode;
 
   // FIX-15D: attach education_records after buildProfile (buildProfile ignores unknown fields).
   profile.educationRecords = eduRows.map((r) => ({

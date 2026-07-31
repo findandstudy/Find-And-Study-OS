@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
@@ -21,7 +21,7 @@ import {
   Tabs, TabsContent, TabsList, TabsTrigger
 } from "@/components/ui/tabs";
 import {
-  Plus, Copy, Trash2, Edit2, Eye, Code2, ExternalLink, Globe, ChevronLeft, ChevronRight, FileText, Bot, ShieldCheck
+  Plus, Copy, Trash2, Edit2, Eye, Code2, ExternalLink, Globe, ChevronLeft, ChevronRight, FileText, Bot, ShieldCheck, Upload, Loader2, X
 } from "lucide-react";
 import { useI18n } from "@/hooks/use-i18n";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -406,6 +406,8 @@ function WidgetFormDialog({ open, onClose, widget, onSaved }: {
   const [buttonColor, setButtonColor] = useState("#2563eb");
   const [borderRadius, setBorderRadius] = useState("8px");
   const [logoUrl, setLogoUrl] = useState("");
+  const [logoUploading, setLogoUploading] = useState(false);
+  const logoInputRef = useRef<HTMLInputElement>(null);
   const [assistantName, setAssistantName] = useState("");
   const [welcomeMessage, setWelcomeMessage] = useState("");
   const [isActive, setIsActive] = useState(true);
@@ -503,6 +505,47 @@ function WidgetFormDialog({ open, onClose, widget, onSaved }: {
       toast({ title: err.message || "Failed to save widget", variant: "destructive" });
     } finally {
       setSaving(false);
+    }
+  };
+
+  const uploadLogo = async (file: File) => {
+    if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) {
+      toast({ title: "Please upload a PNG, JPG or WebP logo", variant: "destructive" });
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast({ title: "Logo must be smaller than 5 MB", variant: "destructive" });
+      return;
+    }
+    setLogoUploading(true);
+    try {
+      const upload = await customFetch("/api/storage/uploads/request-url", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: file.name,
+          size: file.size,
+          contentType: file.type,
+          prefix: "branding/embed-widget",
+        }),
+      }) as { uploadURL?: string; objectPath?: string };
+      if (!upload.uploadURL || !upload.objectPath) throw new Error("Upload URL could not be created");
+      const result = await fetch(upload.uploadURL, {
+        method: "PUT",
+        body: file,
+        headers: { "Content-Type": file.type },
+      });
+      if (!result.ok) throw new Error("Logo upload failed");
+      const relativePath = upload.objectPath.replace(/^\/objects\/branding\//, "");
+      if (relativePath === upload.objectPath || !relativePath.startsWith("embed-widget/")) {
+        throw new Error("Unexpected uploaded logo path");
+      }
+      setLogoUrl(`${window.location.origin}${API_BASE}/storage/public-branding/${relativePath}`);
+      toast({ title: "Logo uploaded" });
+    } catch (err: any) {
+      toast({ title: err?.message || "Logo upload failed", variant: "destructive" });
+    } finally {
+      setLogoUploading(false);
     }
   };
 
@@ -721,14 +764,51 @@ function WidgetFormDialog({ open, onClose, widget, onSaved }: {
             {mode === "ai_chatbot" && (
               <div className="space-y-3 rounded-xl border bg-muted/20 p-4">
                 <div>
-                  <label className="text-sm font-medium">Logo URL</label>
-                  <Input
-                    value={logoUrl}
-                    onChange={e => setLogoUrl(e.target.value)}
-                    placeholder="Leave empty to use the selected university logo"
+                  <label className="text-sm font-medium">Assistant Logo</label>
+                  <div className="mt-2 flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => logoInputRef.current?.click()}
+                      disabled={logoUploading}
+                      className="flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-xl border-2 border-dashed bg-background text-muted-foreground transition-colors hover:border-primary/60 hover:text-primary disabled:cursor-wait disabled:opacity-60"
+                    >
+                      {logoUploading ? (
+                        <Loader2 className="h-6 w-6 animate-spin" />
+                      ) : logoUrl ? (
+                        <img src={logoUrl} alt="Assistant logo" className="h-full w-full object-contain p-2" />
+                      ) : (
+                        <span className="flex flex-col items-center gap-1 text-xs">
+                          <Upload className="h-5 w-5" />
+                          Upload
+                        </span>
+                      )}
+                    </button>
+                    <div className="space-y-2">
+                      <Button type="button" variant="outline" size="sm" onClick={() => logoInputRef.current?.click()} disabled={logoUploading}>
+                        <Upload className="mr-2 h-4 w-4" />
+                        {logoUploading ? "Uploading..." : logoUrl ? "Replace logo" : "Upload logo"}
+                      </Button>
+                      {logoUrl && (
+                        <Button type="button" variant="ghost" size="sm" className="text-destructive" onClick={() => setLogoUrl("")}>
+                          <X className="mr-2 h-4 w-4" />
+                          Use university logo
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                  <input
+                    ref={logoInputRef}
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    className="hidden"
+                    onChange={event => {
+                      const file = event.target.files?.[0];
+                      if (file) void uploadLogo(file);
+                      event.target.value = "";
+                    }}
                   />
                   <p className="mt-1 text-xs text-muted-foreground">
-                    HTTPS only. If empty, the university logo from Catalog is used automatically.
+                    PNG, JPG or WebP, up to 5 MB. If empty, the selected university logo from Catalog is used automatically.
                   </p>
                 </div>
                 <div>

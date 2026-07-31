@@ -5,6 +5,8 @@ import {
   normalizeStoredModuleName,
   normalizeModuleBreakdown,
   clampSessionMetrics,
+  normalizeActivitySession,
+  MAX_HEARTBEAT_DELTA_SECONDS,
 } from "../src/lib/activityNormalize";
 
 test("deriveModuleName: known routes resolve to labels", () => {
@@ -118,4 +120,58 @@ test("clampSessionMetrics: consistent values pass through unchanged", () => {
   const r = clampSessionMetrics(s);
   assert.equal(r.totalDurationSeconds, 100);
   assert.equal(r.idleDurationSeconds, 40);
+});
+
+test("normalizeActivitySession: browser sleep cannot turn 53 seconds into 20 hours", () => {
+  const start = new Date("2026-07-31T05:26:14.000Z");
+  const end = new Date("2026-07-31T05:27:07.000Z");
+  const result = normalizeActivitySession({
+    startedAt: start,
+    endedAt: end,
+    lastSeenAt: end,
+    activeDurationSeconds: 74_090,
+    idleDurationSeconds: 0,
+    totalDurationSeconds: 74_090,
+  });
+
+  assert.equal(result.totalDurationSeconds, 53);
+  assert.equal(result.activeDurationSeconds, 53);
+  assert.equal(result.idleDurationSeconds, 0);
+});
+
+test("normalizeActivitySession: inflated idle does not erase valid active time", () => {
+  const start = new Date("2026-07-31T05:00:00.000Z");
+  const end = new Date("2026-07-31T06:00:00.000Z");
+  const result = normalizeActivitySession({
+    startedAt: start,
+    endedAt: end,
+    lastSeenAt: end,
+    activeDurationSeconds: 1_200,
+    idleDurationSeconds: 50_000,
+    totalDurationSeconds: 51_200,
+  });
+
+  assert.equal(result.totalDurationSeconds, 3_600);
+  assert.equal(result.activeDurationSeconds, 1_200);
+  assert.equal(result.idleDurationSeconds, 2_400);
+});
+
+test("normalizeActivitySession: partial date range is allocated without exceeding overlap", () => {
+  const result = normalizeActivitySession({
+    startedAt: new Date("2026-07-31T08:00:00.000Z"),
+    endedAt: new Date("2026-07-31T10:00:00.000Z"),
+    lastSeenAt: new Date("2026-07-31T10:00:00.000Z"),
+    activeDurationSeconds: 3_600,
+    idleDurationSeconds: 3_600,
+    totalDurationSeconds: 7_200,
+  }, new Date("2026-07-31T09:00:00.000Z"), new Date("2026-07-31T10:00:00.000Z"));
+
+  assert.equal(result.overlapDurationSeconds, 3_600);
+  assert.equal(result.totalDurationSeconds, 3_600);
+  assert.equal(result.activeDurationSeconds, 1_800);
+  assert.equal(result.idleDurationSeconds, 1_800);
+});
+
+test("heartbeat safety window stays close to the 30-second client interval", () => {
+  assert.equal(MAX_HEARTBEAT_DELTA_SECONDS, 45);
 });

@@ -12,12 +12,14 @@ export const tasksTable = pgTable("tasks", {
   taskNotes: jsonb("task_notes"),
   createdBy: integer("created_by"),
   archivedAt: timestamp("archived_at", { withTimezone: true }),
+  completedAt: timestamp("completed_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 }, (table) => [
   index("tasks_status_idx").on(table.status),
   index("tasks_assigned_to_idx").on(table.assignedTo),
   index("tasks_archived_at_idx").on(table.archivedAt),
+  index("tasks_completed_at_idx").on(table.completedAt),
 ]);
 
 export type TaskNote = {

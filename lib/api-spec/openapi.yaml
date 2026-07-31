@@ -1870,6 +1870,8 @@ paths:
           schema:
             type: integer
             minimum: 1
+        - { name: from, in: query, schema: { type: string, format: date-time } }
+        - { name: to, in: query, schema: { type: string, format: date-time } }
       responses:
         "200":
           description: Activity summary
@@ -6360,6 +6362,9 @@ components:
       properties:
         avgReplyTime: { type: integer, description: "Average reply time in seconds (0 if no data)" }
         medianReplyTime: { type: integer, description: "Median reply time in seconds (0 if no data)" }
+        longestAwaiting: { type: integer, description: "Longest currently unanswered customer turn in seconds" }
+        awaitingReplyCount: { type: integer, description: "Open conversations currently awaiting a human reply" }
+        replySamples: { type: integer, description: "Customer turns with a sender-attributed human reply in the selected period" }
         activeLeads: { type: integer }
         wonLeads: { type: integer }
         lostLeads: { type: integer }
@@ -6376,7 +6381,27 @@ components:
               outgoing: { type: integer }
               connected: { type: boolean }
             required: [channel, incoming, outgoing, connected]
-      required: [avgReplyTime, medianReplyTime, activeLeads, wonLeads, lostLeads, incomingMessages, outgoingMessages]
+        tasks:
+          type: object
+          properties:
+            created: { type: integer, description: "Tasks created in the selected period" }
+            completed: { type: integer, description: "Tasks completed in the selected period" }
+            open: { type: integer, description: "Tasks currently open" }
+            overdue: { type: integer, description: "Open tasks currently overdue" }
+            completionRate: { type: integer, minimum: 0, maximum: 100, description: "Percent of tasks due in the selected period that were completed" }
+            onTimeRate: { type: integer, minimum: 0, maximum: 100, description: "Percent of completed due tasks finished on time" }
+          required: [created, completed, open, overdue, completionRate, onTimeRate]
+        followUps:
+          type: object
+          properties:
+            scheduled: { type: integer, description: "Follow-ups scheduled in the selected period" }
+            completed: { type: integer, description: "Follow-ups completed in the selected period" }
+            pending: { type: integer, description: "Follow-ups currently pending" }
+            overdue: { type: integer, description: "Pending follow-ups currently overdue" }
+            completionRate: { type: integer, minimum: 0, maximum: 100, description: "Percent of follow-ups scheduled in the selected period that were completed" }
+            onTimeRate: { type: integer, minimum: 0, maximum: 100, description: "Percent of completed follow-ups finished by their scheduled time" }
+          required: [scheduled, completed, pending, overdue, completionRate, onTimeRate]
+      required: [avgReplyTime, medianReplyTime, longestAwaiting, awaitingReplyCount, replySamples, activeLeads, wonLeads, lostLeads, incomingMessages, outgoingMessages, channels, tasks, followUps]
 
     RecordEntityViewBody:
       type: object

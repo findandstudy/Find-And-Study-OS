@@ -54,6 +54,23 @@ function applicationGroup(level: string): "high_school" | "master" | "phd" {
   return "high_school";
 }
 
+export function findMissingInboxAcademicFields(
+  input: Pick<
+    InboxEducationFormInput,
+    "selectedLevel" | "school1" | "school2" | "graduationYear" | "gpa"
+  >,
+): string[] {
+  const group = applicationGroup(input.selectedLevel);
+  return [
+    !clean(input.school1)
+      ? (group === "high_school" ? "High school" : "Bachelor university")
+      : null,
+    group === "phd" && !clean(input.school2) ? "Master university" : null,
+    !parseYear(input.graduationYear) ? "Graduation year" : null,
+    !clean(input.gpa) ? "GPA" : null,
+  ].filter((value): value is string => Boolean(value));
+}
+
 /**
  * Maps the Inbox form's application level to the applicant's required prior
  * education. In particular, a Master's applicant's university must never be

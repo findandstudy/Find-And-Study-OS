@@ -110,7 +110,18 @@ export interface ProgramScope {
   universityTypes: string[] | "all";
 }
 
-const SUPPORTED_LANGUAGES: BotLanguage[] = ["tr", "en", "ar", "ru", "fr"];
+const SUPPORTED_LANGUAGES: BotLanguage[] = [
+  "tr",
+  "en",
+  "ar",
+  "fa",
+  "fr",
+  "es",
+  "ru",
+  "zh",
+  "hi",
+  "id",
+];
 
 export const DEFAULT_PROGRAM_SCOPE: ProgramScope = {
   enabled: true,

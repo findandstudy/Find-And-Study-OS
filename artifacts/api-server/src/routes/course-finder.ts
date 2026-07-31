@@ -23,6 +23,7 @@ import {
   publicCatalogPolicyCacheKey,
   type PublicCatalogPolicy,
 } from "../lib/publicCatalogPolicy";
+import { resolveResidenceAddress } from "../lib/studentAddressDefaults";
 
 const router: IRouter = Router();
 
@@ -702,6 +703,7 @@ router.post("/course-finder/apply", requireAuth, requireRole(...STAFF_ROLES, ...
         lastName: me.lastName || "",
         email: me.email || "",
         phone: me.phone || null,
+        ...resolveResidenceAddress({}),
       }).returning();
     }
     resolvedStudentId = myStudent.id;

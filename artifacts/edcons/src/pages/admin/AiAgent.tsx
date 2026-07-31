@@ -67,7 +67,7 @@ const ESCALATION_TOPICS: EscalationTopicKey[] = [
   "commission",
   "partner",
 ];
-const TEST_LANGUAGES = ["tr", "en", "ar", "ru", "fr"] as const;
+const TEST_LANGUAGES = ["tr", "en", "ar", "fa", "fr", "es", "ru", "zh", "hi", "id"] as const;
 type TestLanguage = (typeof TEST_LANGUAGES)[number];
 type AiAgentModelOption = {
   id: string;

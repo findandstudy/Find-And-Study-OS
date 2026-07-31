@@ -11,7 +11,10 @@ import { Loader2, Sparkles } from "lucide-react";
 import { toLatinUpper } from "@/lib/latin-utils";
 import type { SubmitReadyData } from "./InboxStudentTab";
 import { findMissingMandatoryTypes } from "@workspace/doc-equivalence";
-import { buildInboxEducationPayload } from "./inboxEducationPayload";
+import {
+  buildInboxEducationPayload,
+  findMissingInboxAcademicFields,
+} from "./inboxEducationPayload";
 
 interface InboxSubmitTabProps {
   conversationId: number;
@@ -80,6 +83,21 @@ export function InboxSubmitTab({
     }
     if (!form.firstName.trim() || !form.lastName.trim()) {
       toast({ title: t("inbox.studentTab.fillRequired"), variant: "destructive" });
+      return;
+    }
+    const missingAcademic = findMissingInboxAcademicFields({
+      selectedLevel: data.selectedLevel,
+      school1: form.school1,
+      school2: form.school2,
+      graduationYear: form.graduationYear,
+      gpa: form.gpa,
+    });
+    if (missingAcademic.length > 0) {
+      toast({
+        title: "Academic information is incomplete",
+        description: `AI could not verify: ${missingAcademic.join(", ")}. Review the uploaded education documents or enter these fields manually.`,
+        variant: "destructive",
+      });
       return;
     }
     if (!data.leadId) {
@@ -151,6 +169,8 @@ export function InboxSubmitTab({
           nationality: form.nationality.trim() || null,
           dateOfBirth: form.dateOfBirth.trim() || null,
           address: form.address.trim() || null,
+          addressCity: form.addressCity.trim() || null,
+          postalCode: form.postalCode.trim() || null,
           motherName: form.motherName.trim() || null,
           fatherName: form.fatherName.trim() || null,
           passportNumber: form.passportNumber.trim() || null,
@@ -340,10 +360,32 @@ export function InboxSubmitTab({
               onChange={(e) => latinField("fatherName")(e.target.value)} />
           </div>
           <div className="space-y-1">
-            <Label className="text-xs">{t("apply.address")}</Label>
+            <Label className="text-xs flex items-center">
+              {t("apply.address")}
+              <AiTag field="address" aiFields={data.aiFields} />
+            </Label>
             <Input className="h-7 text-sm uppercase" value={form.address}
               placeholder={t("apply.addressPlaceholder")}
               onChange={(e) => latinField("address")(e.target.value)} />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2">
+          <div className="space-y-1">
+            <Label className="text-xs flex items-center">
+              Residence City
+              <AiTag field="addressCity" aiFields={data.aiFields} />
+            </Label>
+            <Input className="h-7 text-sm uppercase" value={form.addressCity}
+              onChange={(e) => latinField("addressCity")(e.target.value)} />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs flex items-center">
+              Postal Code
+              <AiTag field="postalCode" aiFields={data.aiFields} />
+            </Label>
+            <Input className="h-7 text-sm" value={form.postalCode}
+              onChange={(e) => field("postalCode")(e.target.value)} />
           </div>
         </div>
 

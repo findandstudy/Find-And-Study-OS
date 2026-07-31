@@ -67,6 +67,13 @@ import {
   EMBED_FILTER_KEYS as EMBED_FILTER_KEYS_FROM_LIB,
   type EmbedFilterCatalog,
 } from "../lib/exportImportExcel";
+import { resolveResidenceAddress } from "../lib/studentAddressDefaults";
+import {
+  getEmbedChatCopy,
+  localeFromPublicUrl,
+  resolveEmbedChatLocale,
+  type EmbedChatLocale,
+} from "../lib/embedChatI18n";
 
 const TR_MAP: Record<string, string> = { "ç":"C","Ç":"C","ğ":"G","Ğ":"G","ı":"I","İ":"I","ö":"O","Ö":"O","ş":"S","Ş":"S","ü":"U","Ü":"U" };
 function tlu(v: any, max: number): string | null {
@@ -1191,7 +1198,7 @@ router.post("/public/embed/:slug/apply", embedSubmitLimiter, embedApplyJson, asy
   }
   setEmbedCors(res, widget, origin);
 
-  const { firstName, lastName, email, phone, countryCode, nationality, desiredLevel, desiredProgram, preferredUniversity, message, programId, programName, universityName, sourcePageUrl, utmSource, utmMedium, utmCampaign, utmTerm, utmContent, _hp, documents, aiExtractedData, motherName, fatherName, gender, dateOfBirth, passportNumber, passportIssueDate, passportExpiry, address, highSchool, graduationYear, gpa, languageScore } = req.body;
+  const { firstName, lastName, email, phone, countryCode, nationality, desiredLevel, desiredProgram, preferredUniversity, message, programId, programName, universityName, sourcePageUrl, utmSource, utmMedium, utmCampaign, utmTerm, utmContent, _hp, documents, aiExtractedData, motherName, fatherName, gender, dateOfBirth, passportNumber, passportIssueDate, passportExpiry, address, addressCity, postalCode, highSchool, graduationYear, gpa, languageScore } = req.body;
 
   if (_hp) { res.json({ success: true }); return; }
 
@@ -1227,6 +1234,12 @@ router.post("/public/embed/:slug/apply", embedSubmitLimiter, embedApplyJson, asy
   try { sourceWebsite = origin || (req.headers.referer ? new URL(req.headers.referer as string).origin : null) || null; } catch {}
 
   const s = (v: any, max: number) => v ? String(v).slice(0, max) : null;
+  const residence = resolveResidenceAddress({
+    address,
+    addressCity: addressCity || aiExtractedData?.addressCity,
+    postalCode: postalCode || aiExtractedData?.postalCode,
+    nationality,
+  });
 
   const rawDocs = Array.isArray(documents) ? documents.slice(0, 4) : [];
   const docArray = rawDocs.filter((d: any) => d && typeof d === 'object' && d.label && d.data && typeof d.data === 'string');
@@ -1472,8 +1485,19 @@ router.post("/public/embed/:slug/apply", embedSubmitLimiter, embedApplyJson, asy
 
       let newStudent: typeof studentsTable.$inferSelect;
       if (archivedByEmail) {
-        await db.update(studentsTable).set({ deletedAt: null, userId }).where(eq(studentsTable.id, archivedByEmail.id));
-        newStudent = { ...archivedByEmail, deletedAt: null, userId };
+        await db.update(studentsTable).set({
+          deletedAt: null,
+          userId,
+          addressCity: residence.addressCity,
+          postalCode: residence.postalCode,
+        }).where(eq(studentsTable.id, archivedByEmail.id));
+        newStudent = {
+          ...archivedByEmail,
+          deletedAt: null,
+          userId,
+          addressCity: residence.addressCity,
+          postalCode: residence.postalCode,
+        };
       } else {
         const normalizedGender = gender ? String(gender).toLowerCase() : null;
         const safeGender = (normalizedGender === "female" || normalizedGender === "male") ? normalizedGender : null;
@@ -1493,6 +1517,8 @@ router.post("/public/embed/:slug/apply", embedSubmitLimiter, embedApplyJson, asy
           passportIssueDate: s(passportIssueDate, 20),
           passportExpiry: s(passportExpiry, 20),
           address: tlu(address, 300),
+          addressCity: residence.addressCity,
+          postalCode: residence.postalCode,
           highSchool: tlu(highSchool, 200),
           graduationYear: graduationYear ? parseInt(String(graduationYear), 10) || null : null,
           gpa: s(gpa, 20),
@@ -1733,6 +1759,7 @@ type ChatScopeMetadata = {
   sourcePageUrl: string | null;
   sourceWebsite: string | null;
   assistantName: string;
+  language: EmbedChatLocale;
 };
 
 function readChatScope(metadata: unknown): ChatScopeMetadata | null {
@@ -1746,7 +1773,10 @@ function readChatScope(metadata: unknown): ChatScopeMetadata | null {
     typeof row.widgetSlug !== "string" ||
     typeof row.universityName !== "string"
   ) return null;
-  return scope as ChatScopeMetadata;
+  return {
+    ...(scope as Omit<ChatScopeMetadata, "language">),
+    language: resolveEmbedChatLocale(row.language),
+  };
 }
 
 async function loadChatSessionConversation(slug: string, sessionToken: string | undefined) {
@@ -1859,8 +1889,10 @@ router.post(
       pageUrl ? (() => { try { return new URL(pageUrl).hostname; } catch { return null; } })() : null
     );
     const theme = sanitizeTheme(widget.theme);
+    const chatLocale = resolveEmbedChatLocale(language);
+    const chatCopy = getEmbedChatCopy(chatLocale);
     const assistantName =
-      theme.assistantName || `${university.name} Yetkili Temsilci Başvuru Asistanı`;
+      theme.assistantName || chatCopy.assistantName(university.name);
     const displayName = `${cleanFirstName} ${cleanLastName}`.trim();
 
     try {
@@ -1906,7 +1938,7 @@ router.post(
             widgetSlug: slug,
             sourcePageUrl: pageUrl,
             sourceWebsite: website,
-            language: sanitizeChatText(language, 12) || null,
+            language: chatLocale,
           },
         })
         .returning();
@@ -1919,6 +1951,7 @@ router.post(
         sourcePageUrl: pageUrl,
         sourceWebsite: website,
         assistantName,
+        language: chatLocale,
       };
       const externalThreadId = `chat:${slug}:${sessionId}`;
       const [conversation] = await db
@@ -1941,7 +1974,7 @@ router.post(
 
       const greeting =
         theme.welcomeMessage ||
-        `Merhaba ${cleanFirstName}, ${university.name} başvurunuz için size yardımcı olabilirim. Hangi bölüm ve eğitim seviyesiyle ilgileniyorsunuz?`;
+        chatCopy.greeting(cleanFirstName, university.name);
       const [greetingMessage] = await db
         .insert(messagesTable)
         .values({
@@ -2124,7 +2157,7 @@ router.post(
       .values({
         conversationId: session.conversation.id,
         senderId: null,
-        content: "Ziyaretçi bir insan danışmanla görüşmek istiyor.",
+        content: getEmbedChatCopy(session.scope.language || "en").handoffStaffEvent,
         channel: "web_chat",
         direction: "inbound",
         status: "received",
@@ -2178,7 +2211,18 @@ router.get("/public/embed/:slug/widget", async (req, res): Promise<void> => {
       res.status(409).send("Chatbot university is not configured");
       return;
     }
-    let chatHtml = generateChatbotWidgetHTML(slug, baseUrl, widget, university);
+    const chatLocale = resolveEmbedChatLocale(
+      req.query.lang,
+      localeFromPublicUrl(req.headers.referer),
+      req.headers["accept-language"],
+    );
+    let chatHtml = generateChatbotWidgetHTML(
+      slug,
+      baseUrl,
+      widget,
+      university,
+      chatLocale,
+    );
     chatHtml = chatHtml.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "");
     try {
       const script = chatHtml.match(/<script[^>]*>([\s\S]*?)<\/script>/)?.[1];
@@ -2262,6 +2306,23 @@ function generateEmbedScript(baseUrl: string): string {
     iframe.style.minHeight = '0';
     iframe.setAttribute('loading', 'lazy');
     iframe.setAttribute('allowfullscreen', 'true');
+    var supportedLanguages=['en','tr','ar','fa','fr','es','ru','zh','hi','id'];
+    function normalizePageLanguage(raw) {
+      if (!raw || typeof raw !== 'string') return '';
+      var first=raw.trim().toLowerCase().replace(/_/g,'-').split(',')[0].split(';')[0];
+      var base=(first||'').split('-')[0];
+      return supportedLanguages.indexOf(base)>=0?base:'';
+    }
+    function detectPageLanguage() {
+      var pathLanguage='';
+      try { pathLanguage=location.pathname.split('/').filter(Boolean)[0]||''; } catch(e) {}
+      return normalizePageLanguage(el.getAttribute('data-edcons-lang')) ||
+        normalizePageLanguage(pathLanguage) ||
+        normalizePageLanguage(document.documentElement.lang) ||
+        normalizePageLanguage(navigator.language) ||
+        'en';
+    }
+    var pageLanguage=detectPageLanguage();
     // Fetch a short-lived HMAC session token for this widget.  For restricted
     // widgets the token is obtained via the partner's own backend endpoint
     // (data-edcons-token-url), which holds the long-lived API key and exchanges
@@ -2270,8 +2331,10 @@ function generateEmbedScript(baseUrl: string): string {
     // on all data endpoints.
     function mountIframe(token) {
       var src = '${baseUrl}/api/public/embed/' + slug + '/widget';
-      if (token) src += '?t=' + encodeURIComponent(token);
-      iframe.src = src;
+      var query=['lang='+encodeURIComponent(pageLanguage)];
+      if (token) query.push('t='+encodeURIComponent(token));
+      iframe.src = src+'?'+query.join('&');
+      iframe.lang = pageLanguage;
       el.appendChild(iframe);
     }
     try {
@@ -2444,24 +2507,38 @@ export function generateChatbotWidgetHTML(
   baseUrl: string,
   widget: any,
   university: { id: number; name: string; logoUrl: string | null },
+  locale: EmbedChatLocale = "en",
 ): string {
   const theme = sanitizeTheme(widget.theme);
+  const copy = getEmbedChatCopy(locale);
   const primaryColor = theme.primaryColor || "#123f9c";
   const buttonColor = theme.buttonColor || primaryColor;
   const radius = theme.borderRadius || "18px";
   const logoUrl = theme.logoUrl || sanitizePublicUrl(university.logoUrl) || "";
   const assistantName =
-    theme.assistantName || `${university.name} Yetkili Temsilci Başvuru Asistanı`;
+    theme.assistantName || copy.assistantName(university.name);
   const safeConfig = JSON.stringify({
     slug,
     baseUrl,
     universityName: university.name,
     assistantName,
     logoUrl,
+    locale,
+    dir: copy.dir,
+    copy: {
+      genericError: copy.genericError,
+      startError: copy.startError,
+      sendError: copy.sendError,
+      enterContactFirst: copy.enterContactFirst,
+      humanNotified: copy.humanNotified,
+      sentToTeam: copy.sentToTeam,
+      handoffSent: copy.handoffSent,
+      handoffError: copy.handoffError,
+    },
   }).replace(/</g, "\\u003c");
 
   return `<!doctype html>
-<html lang="tr">
+<html lang="${locale}" dir="${copy.dir}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
@@ -2495,7 +2572,6 @@ export function generateChatbotWidgetHTML(
     input:focus,textarea:focus{border-color:var(--primary);box-shadow:0 0 0 3px color-mix(in srgb,var(--primary) 14%,transparent)}
     .primary-btn{border:0;border-radius:11px;background:var(--button);color:#fff;font-weight:750;padding:11px 15px;cursor:pointer}
     .primary-btn:disabled{opacity:.55;cursor:wait}
-    .privacy{font-size:10px;color:var(--muted);line-height:1.4}
     #messages{display:none;flex-direction:column;gap:8px}
     .message{max-width:84%;border-radius:14px;padding:10px 12px;font-size:13px;line-height:1.45;white-space:pre-wrap;word-break:break-word}
     .message.inbound{align-self:flex-end;background:var(--primary);color:#fff;border-bottom-right-radius:4px}
@@ -2512,7 +2588,7 @@ export function generateChatbotWidgetHTML(
 </head>
 <body>
   <div id="root">
-    <button id="launcher" class="launcher" aria-label="Başvuru asistanını aç">
+    <button id="launcher" class="launcher" aria-label="${htmlEscape(copy.launcherLabel)}">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"/></svg>
     </button>
     <section id="panel" class="panel" aria-label="${htmlEscape(assistantName)}">
@@ -2520,35 +2596,34 @@ export function generateChatbotWidgetHTML(
         ${logoUrl
           ? `<img class="brand-logo" src="${htmlEscape(logoUrl)}" alt="${htmlEscape(university.name)}">`
           : `<div class="brand-fallback">${htmlEscape(university.name.slice(0, 1).toUpperCase())}</div>`}
-        <div><div class="header-title">${htmlEscape(assistantName)}</div><div class="header-sub">Çevrimiçi • Güvenli başvuru desteği</div></div>
+        <div><div class="header-title">${htmlEscape(assistantName)}</div><div class="header-sub">${htmlEscape(copy.headerSub)}</div></div>
         <div class="header-actions">
-          <button id="handoff" class="icon-btn" title="İnsan danışman iste" aria-label="İnsan danışman iste">♙</button>
-          <button id="close" class="icon-btn" title="Kapat" aria-label="Kapat">×</button>
+          <button id="handoff" class="icon-btn" title="${htmlEscape(copy.handoffLabel)}" aria-label="${htmlEscape(copy.handoffLabel)}">♙</button>
+          <button id="close" class="icon-btn" title="${htmlEscape(copy.closeLabel)}" aria-label="${htmlEscape(copy.closeLabel)}">×</button>
         </div>
       </header>
       <main id="content" class="content">
         <div id="lead">
-          <div class="intro"><h3>Merhaba 👋</h3><p>Size doğru başvuru desteğini verebilmemiz için iletişim bilgilerinizi girin. Bilgileriniz mevcut kaydınızla otomatik eşleştirilir.</p></div>
+          <div class="intro"><h3>${htmlEscape(copy.hello)}</h3><p>${htmlEscape(copy.intro)}</p></div>
           <form id="leadForm" class="form">
             <div class="form-row">
-              <label>Ad<input name="firstName" required maxlength="100" autocomplete="given-name"></label>
-              <label>Soyad<input name="lastName" required maxlength="100" autocomplete="family-name"></label>
+              <label>${htmlEscape(copy.firstName)}<input name="firstName" required maxlength="100" autocomplete="given-name"></label>
+              <label>${htmlEscape(copy.lastName)}<input name="lastName" required maxlength="100" autocomplete="family-name"></label>
             </div>
-            <label>E-posta<input name="email" type="email" required maxlength="255" autocomplete="email"></label>
-            <label>Telefon (ülke koduyla)<input name="phone" type="tel" required maxlength="50" placeholder="+90..." autocomplete="tel"></label>
+            <label>${htmlEscape(copy.email)}<input name="email" type="email" required maxlength="255" autocomplete="email"></label>
+            <label>${htmlEscape(copy.phone)}<input name="phone" type="tel" required maxlength="50" placeholder="+90..." autocomplete="tel"></label>
             <input name="_hp" tabindex="-1" autocomplete="off" style="position:absolute;left:-9999px" aria-hidden="true">
             <div id="formError" class="error"></div>
-            <button class="primary-btn" type="submit">Sohbeti başlat</button>
-            <div class="privacy">Verdiğiniz bilgiler başvuru desteği için mevcut CRM kaydınızla güvenli biçimde eşleştirilir.</div>
+            <button class="primary-btn" type="submit">${htmlEscape(copy.startChat)}</button>
           </form>
         </div>
         <div id="messages"></div>
-        <div id="typing" class="typing">Asistan yazıyor…</div>
+        <div id="typing" class="typing">${htmlEscape(copy.typing)}</div>
         <div id="status" class="status"></div>
       </main>
       <footer id="composer" class="composer">
-        <textarea id="messageInput" maxlength="2000" rows="1" placeholder="Mesajınızı yazın..."></textarea>
-        <button id="send" class="send" aria-label="Gönder">➤</button>
+        <textarea id="messageInput" maxlength="2000" rows="1" placeholder="${htmlEscape(copy.messagePlaceholder)}"></textarea>
+        <button id="send" class="send" aria-label="${htmlEscape(copy.send)}">➤</button>
       </footer>
     </section>
   </div>
@@ -2589,7 +2664,7 @@ export function generateChatbotWidgetHTML(
       el.className='message '+(row.direction==='inbound'?'inbound':'outbound');
       var text=document.createElement('div');text.textContent=row.content||'';el.appendChild(text);
       var tm=document.createElement('div');tm.className='message-time';
-      try{tm.textContent=new Date(row.createdAt).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}catch(e){}
+      try{tm.textContent=new Date(row.createdAt).toLocaleTimeString(cfg.locale,{hour:'2-digit',minute:'2-digit'})}catch(e){}
       el.appendChild(tm);messages.appendChild(el);content.scrollTop=content.scrollHeight;
     }
     function showChat(){
@@ -2598,7 +2673,7 @@ export function generateChatbotWidgetHTML(
     async function request(path,options){
       var response=await fetch(cfg.baseUrl+path,options||{});
       var data=await response.json().catch(function(){return{}});
-      if(!response.ok)throw new Error(data.error||'İşlem tamamlanamadı');
+      if(!response.ok)throw new Error(data.error||cfg.copy.genericError);
       return data;
     }
     document.getElementById('leadForm').onsubmit=async function(e){
@@ -2610,7 +2685,7 @@ export function generateChatbotWidgetHTML(
         var payload={
           firstName:fd.get('firstName'),lastName:fd.get('lastName'),email:fd.get('email'),phone:fd.get('phone'),_hp:fd.get('_hp'),
           sourcePageUrl:ref,sourceWebsite:(function(){try{return new URL(ref).hostname}catch(e){return''}})(),
-          language:(navigator.language||'').slice(0,12)
+          language:cfg.locale
         };
         var data=await request('/api/public/embed/'+encodeURIComponent(cfg.slug)+'/chat/session?t='+encodeURIComponent(accessToken),{
           method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)
@@ -2618,7 +2693,7 @@ export function generateChatbotWidgetHTML(
         sessionToken=data.sessionToken;sessionStorage.setItem(storageKey,sessionToken);showChat();
         if(data.greeting)appendMessage(data.greeting);
         poll();
-      }catch(err){error.textContent=err.message||'Sohbet başlatılamadı';error.style.display='block'}
+      }catch(err){error.textContent=cfg.copy.startError;error.style.display='block'}
       finally{button.disabled=false}
     };
     async function poll(){
@@ -2626,7 +2701,7 @@ export function generateChatbotWidgetHTML(
       try{
         var data=await request('/api/public/embed/'+encodeURIComponent(cfg.slug)+'/chat/messages?s='+encodeURIComponent(sessionToken)+'&after='+lastId);
         (data.data||[]).forEach(appendMessage);
-        if(data.needsHuman){status.textContent='Bir insan danışman bilgilendirildi.'}
+        if(data.needsHuman){status.textContent=cfg.copy.humanNotified}
       }catch(err){
         if(/expired|Invalid/.test(err.message)){sessionStorage.removeItem(storageKey);sessionToken='';location.reload()}
       }finally{polling=false}
@@ -2640,21 +2715,21 @@ export function generateChatbotWidgetHTML(
         });
         (data.data||[]).forEach(appendMessage);
         if(data.outcome&&['globally_disabled','outside_working_hours','handoff','escalated'].indexOf(data.outcome.reason)>=0){
-          status.textContent='Mesajınız ekibe iletildi. Bir danışman yanıtlayacak.';
+          status.textContent=cfg.copy.sentToTeam;
         }
-      }catch(err){status.textContent=err.message||'Mesaj gönderilemedi'}
+      }catch(err){status.textContent=cfg.copy.sendError}
       finally{typing.style.display='none';poll()}
     }
     document.getElementById('send').onclick=send;
     document.getElementById('messageInput').onkeydown=function(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send()}};
     document.getElementById('handoff').onclick=async function(){
-      if(!sessionToken){status.textContent='Önce iletişim bilgilerinizi girin.';return}
+      if(!sessionToken){status.textContent=cfg.copy.enterContactFirst;return}
       try{
         await request('/api/public/embed/'+encodeURIComponent(cfg.slug)+'/chat/handoff?s='+encodeURIComponent(sessionToken),{
           method:'POST',headers:{'Content-Type':'application/json'},body:'{}'
         });
-        status.textContent='İnsan danışman talebiniz ekibe iletildi.';
-      }catch(err){status.textContent=err.message||'Talep iletilemedi'}
+        status.textContent=cfg.copy.handoffSent;
+      }catch(err){status.textContent=cfg.copy.handoffError}
     };
     if(sessionToken){showChat();poll()}
     setInterval(function(){if(panel.classList.contains('open')&&sessionToken)poll()},3000);

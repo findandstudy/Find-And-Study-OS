@@ -34,7 +34,7 @@ import { buildProfile, mapDocType, REQUIRED_DOCS, extractStudentDocumentRefs, se
 import type { SubmitProfile, SubmitFiles, StudentDocumentRef } from "@workspace/portal-adapters";
 import {
   resolveAltinbasPassportDates,
-  resolveLegacyAddressCity,
+  resolvePortalResidenceDefaults,
   selectFirstDocumentPerMappedSlot,
   shouldDeduplicateDocumentSlots,
 } from "./altinbasLegacyPolicy.js";
@@ -178,15 +178,15 @@ async function buildPreflightSnapshotFromRecords(
     allowIncompleteProfile: true,
   });
   applyEducationFallbacks(profile, merged);
-  const legacyAddressCity = resolveLegacyAddressCity({
+  const residence = resolvePortalResidenceDefaults({
     universityKey: adapterKey,
     addressCity: student.addressCity,
+    postalCode: student.postalCode,
     address: student.address,
     nationality: student.nationality,
   });
-  if (!profile.addressCity && legacyAddressCity) {
-    profile.addressCity = legacyAddressCity;
-  }
+  profile.addressCity ||= residence.addressCity;
+  profile.addressZip ||= residence.postalCode;
   if (merged.length > 0) profile.educationRecords = merged as any;
   if (student.photoUrl?.trim()) profile.photoUrl = student.photoUrl.trim();
 
@@ -952,19 +952,21 @@ export async function buildStudentProfile(
       portalPreflightManifest(sub.adapterKey ?? "") !== null,
   });
   applyEducationFallbacks(profile, mergedEducationRecords);
-  const legacyAddressCity = resolveLegacyAddressCity({
+  const residence = resolvePortalResidenceDefaults({
     universityKey: sub.universityKey,
     addressCity: student.addressCity,
+    postalCode: student.postalCode,
     address: student.address,
     nationality: student.nationality,
   });
-  if (!profile.addressCity && legacyAddressCity) {
-    profile.addressCity = legacyAddressCity;
+  if (!profile.addressCity) {
+    profile.addressCity = residence.addressCity;
     console.warn(
-      `[portal-profile] #${submissionId} audited legacy address fallback` +
-      ` (field=addressCity, source=comma_prefix)`,
+      `[portal-profile] #${submissionId} residence fallback` +
+      ` (field=addressCity, value=${residence.addressCity === "city" ? "default" : "derived"})`,
     );
   }
+  profile.addressZip ||= residence.postalCode;
   const isAltinbas = /altinbas/i.test(sub.universityKey);
   const deduplicateDocumentSlots =
     shouldDeduplicateDocumentSlots(sub.universityKey);

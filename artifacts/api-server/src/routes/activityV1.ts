@@ -1,12 +1,12 @@
 import { Router, type IRouter } from "express";
 import { db, entityViewEventsTable, userSessionsTable, agentsTable, usersTable } from "@workspace/db";
-import { eq, and, gte, isNull, inArray, sql } from "drizzle-orm";
+import { eq, and, gte, lte, isNull, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { validate, getValidated } from "../middlewares/validate";
 import { requireAuth, requireRole, requireAgentStaffPermission } from "../lib/auth";
 import { STAFF_ROLES, ADMIN_ROLES } from "../lib/roles";
 import { getAgentVisibleIds } from "../lib/agentVisibility";
-import { clampSessionMetrics } from "../lib/activityNormalize";
+import { normalizeActivitySession } from "../lib/activityNormalize";
 
 const router: IRouter = Router();
 
@@ -20,6 +20,10 @@ const viewBodySchema = z.object({
 const summaryQuerySchema = z.object({
   range: z.enum(["daily", "weekly", "monthly", "yearly"]).default("daily"),
   staffId: z.coerce.number().int().positive().optional(),
+  from: z.string().datetime().optional(),
+  to: z.string().datetime().optional(),
+}).refine((value) => Boolean(value.from) === Boolean(value.to), {
+  message: "from and to must be provided together",
 });
 
 function getRangeBounds(range: "daily" | "weekly" | "monthly" | "yearly"): { from: Date; to: Date } {
@@ -107,8 +111,19 @@ router.get(
   validate({ query: summaryQuerySchema }),
   async (req, res): Promise<void> => {
     const user = req.user!;
-    const { range, staffId: rawStaffId } = getValidated<{ query: typeof summaryQuerySchema }>(req).query;
-    const { from, to } = getRangeBounds(range);
+    const {
+      range,
+      staffId: rawStaffId,
+      from: rawFrom,
+      to: rawTo,
+    } = getValidated<{ query: typeof summaryQuerySchema }>(req).query;
+    const fallbackBounds = getRangeBounds(range);
+    const from = rawFrom ? new Date(rawFrom) : fallbackBounds.from;
+    const to = rawTo ? new Date(rawTo) : fallbackBounds.to;
+    if (from >= to) {
+      res.status(400).json({ error: "from must be before to" });
+      return;
+    }
     const periodSeconds = Math.max(0, (to.getTime() - from.getTime()) / 1000);
     const isAdmin = (ADMIN_ROLES as readonly string[]).includes(user.role);
     const isAgentStaff = user.role === "agent_staff";
@@ -160,32 +175,49 @@ router.get(
     }
 
     const sessionBaseConditions = [
-      gte(userSessionsTable.startedAt, from),
-      sql`${userSessionsTable.startedAt} <= ${to.toISOString()}`,
+      lte(userSessionsTable.startedAt, to),
+      sql`coalesce(${userSessionsTable.endedAt}, ${userSessionsTable.lastSeenAt}) >= ${from}`,
+      inArray(usersTable.role, STAFF_ROLES),
     ];
     if (targetUserIds !== null) {
       sessionBaseConditions.push(inArray(userSessionsTable.userId, targetUserIds));
     }
 
-    const [sessionAgg] = await db
+    const sessionRows = await db
       .select({
-        activeDurationSeconds: sql<number>`coalesce(sum(active_duration_seconds), 0)`,
-        idleDurationSeconds: sql<number>`coalesce(sum(idle_duration_seconds), 0)`,
-        totalDurationSeconds: sql<number>`coalesce(sum(total_duration_seconds), 0)`,
+        userId: userSessionsTable.userId,
+        startedAt: userSessionsTable.startedAt,
+        endedAt: userSessionsTable.endedAt,
+        lastSeenAt: userSessionsTable.lastSeenAt,
+        activeDurationSeconds: userSessionsTable.activeDurationSeconds,
+        idleDurationSeconds: userSessionsTable.idleDurationSeconds,
+        totalDurationSeconds: userSessionsTable.totalDurationSeconds,
       })
       .from(userSessionsTable)
+      .innerJoin(usersTable, eq(userSessionsTable.userId, usersTable.id))
       .where(and(...sessionBaseConditions));
 
-    const clamped = clampSessionMetrics({
-      activeDurationSeconds: Number(sessionAgg?.activeDurationSeconds) || 0,
-      idleDurationSeconds: Number(sessionAgg?.idleDurationSeconds) || 0,
-      totalDurationSeconds: Number(sessionAgg?.totalDurationSeconds) || 0,
-    });
+    const byUser = new Map<number, { active: number; idle: number; total: number }>();
+    for (const session of sessionRows) {
+      const normalized = normalizeActivitySession(session, from, to);
+      const aggregate = byUser.get(session.userId) ?? { active: 0, idle: 0, total: 0 };
+      aggregate.active += normalized.activeDurationSeconds;
+      aggregate.idle += normalized.idleDurationSeconds;
+      aggregate.total += normalized.totalDurationSeconds;
+      byUser.set(session.userId, aggregate);
+    }
 
-    // Clamp against period wall-clock: no metric can exceed elapsed time in range
-    const totalSeconds = Math.min(clamped.totalDurationSeconds, periodSeconds);
-    const activeSeconds = Math.min(clamped.activeDurationSeconds, totalSeconds);
-    const idleSeconds = Math.min(clamped.idleDurationSeconds, totalSeconds - activeSeconds);
+    let totalSeconds = 0;
+    let activeSeconds = 0;
+    let idleSeconds = 0;
+    for (const aggregate of byUser.values()) {
+      const userTotal = Math.min(aggregate.total, periodSeconds);
+      const userActive = Math.min(aggregate.active, userTotal);
+      const userIdle = Math.min(aggregate.idle, Math.max(0, userTotal - userActive));
+      totalSeconds += userTotal;
+      activeSeconds += userActive;
+      idleSeconds += userIdle;
+    }
 
     res.json({
       range,

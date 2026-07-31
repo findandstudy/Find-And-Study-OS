@@ -1,5 +1,16 @@
 import { Router, type IRouter } from "express";
-import { db, leadsTable, studentsTable, applicationsTable, agentsTable, documentsTable, commissionsTable, pipelineStagesTable, messagesTable, conversationsTable, channelAccountsTable } from "@workspace/db";
+import {
+  db,
+  leadsTable,
+  studentsTable,
+  applicationsTable,
+  agentsTable,
+  documentsTable,
+  commissionsTable,
+  pipelineStagesTable,
+  channelAccountsTable,
+  usersTable,
+} from "@workspace/db";
 import { sql, eq, and, isNull, inArray, or, gte, ne, notInArray } from "drizzle-orm";
 import { requireAuth, requireRole } from "../lib/auth";
 import { STAFF_ROLES, ADMIN_ROLES, AGENT_ROLES } from "../lib/roles";
@@ -237,6 +248,17 @@ const kommoQuerySchema = z.object({
   staffId: z.coerce.number().int().positive().optional(),
 });
 
+const emptyWorkMetrics = () => ({
+  created: 0,
+  scheduled: 0,
+  completed: 0,
+  open: 0,
+  pending: 0,
+  overdue: 0,
+  completionRate: 0,
+  onTimeRate: 0,
+});
+
 router.get("/stats/kommo-summary", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), validate({ query: kommoQuerySchema }), async (req, res): Promise<void> => {
   const user = req.user!;
   const { from: fromStr, to: toStr, staffId: rawStaffId } = getValidated<{ query: typeof kommoQuerySchema }>(req).query;
@@ -247,23 +269,56 @@ router.get("/stats/kommo-summary", requireAuth, requireRole(...STAFF_ROLES, ...A
     res.status(400).json({ error: "Invalid from/to date" });
     return;
   }
+  if (from >= to) {
+    res.status(400).json({ error: "from must be before to" });
+    return;
+  }
 
   const isAdmin = isAdminRole(user.role);
   const isAgent = isAgentRole(user.role);
 
   let staffFilter: number | null = null;
   let agentIds: number[] = [];
+  let visibleMessageUserIds: number[] = [];
 
   if (isAdmin) {
     staffFilter = rawStaffId ?? null;
   } else if (isAgent) {
     agentIds = await getAgentVisibleIds(user.id, user.role);
     if (agentIds.length === 0) {
-      res.json({ avgReplyTime: 0, medianReplyTime: 0, activeLeads: 0, wonLeads: 0, lostLeads: 0, incomingMessages: 0, outgoingMessages: 0, channels: [] });
+      res.json({
+        avgReplyTime: 0,
+        medianReplyTime: 0,
+        longestAwaiting: 0,
+        awaitingReplyCount: 0,
+        replySamples: 0,
+        activeLeads: 0,
+        wonLeads: 0,
+        lostLeads: 0,
+        incomingMessages: 0,
+        outgoingMessages: 0,
+        channels: [],
+        tasks: emptyWorkMetrics(),
+        followUps: emptyWorkMetrics(),
+      });
       return;
     }
+    const [agentUsers, agentStaffUsers] = await Promise.all([
+      db
+        .select({ id: agentsTable.userId })
+        .from(agentsTable)
+        .where(inArray(agentsTable.id, agentIds)),
+      db
+        .select({ id: usersTable.id })
+        .from(usersTable)
+        .where(inArray(usersTable.managingAgentId, agentIds)),
+    ]);
+    visibleMessageUserIds = Array.from(new Set([
+      ...agentUsers.map((row) => row.id).filter((id): id is number => id !== null),
+      ...agentStaffUsers.map((row) => row.id),
+    ]));
   } else {
-    staffFilter = rawStaffId && isAdmin ? rawStaffId : user.id;
+    staffFilter = user.id;
   }
 
   const dateFrom = from.toISOString();
@@ -296,33 +351,61 @@ router.get("/stats/kommo-summary", requireAuth, requireRole(...STAFF_ROLES, ...A
     db.select({ lost: sql<number>`count(*)` }).from(leadsTable).where(leadWhereLost),
   ]);
 
-  let msgConvWhere: any = sql`created_at >= ${dateFrom} AND created_at <= ${dateTo}`;
-  if (staffFilter !== null) {
-    msgConvWhere = and(sql`created_at >= ${dateFrom} AND created_at <= ${dateTo}`, eq(messagesTable.senderId, staffFilter));
-  }
+  // Staff attribution model:
+  //   - incoming = conversations currently assigned to that staff member;
+  //   - outgoing = messages actually authored by that staff member;
+  //   - All Staff excludes sender-less AI/system outbound messages so the
+  //     performance panel cannot credit automation to humans.
+  const messageScopeSql = staffFilter !== null
+    ? sql`AND (
+        (m.direction = 'inbound' AND c.assigned_to_id = ${staffFilter})
+        OR (m.direction = 'outbound' AND m.sender_id = ${staffFilter})
+      )`
+    : isAgent
+      ? visibleMessageUserIds.length > 0
+        ? sql`AND (
+            (m.direction = 'inbound' AND (
+              c.assigned_to_id IN (${sql.join(visibleMessageUserIds.map((id) => sql`${id}`), sql`, `)})
+              OR c.created_by_id IN (${sql.join(visibleMessageUserIds.map((id) => sql`${id}`), sql`, `)})
+            ))
+            OR (m.direction = 'outbound' AND m.sender_id IN (${sql.join(visibleMessageUserIds.map((id) => sql`${id}`), sql`, `)}))
+          )`
+        : sql`AND false`
+      : sql`AND (m.direction = 'inbound' OR (m.direction = 'outbound' AND m.sender_id IS NOT NULL))`;
 
-  const convDateFilter = sql`last_message_at >= ${dateFrom} AND last_message_at <= ${dateTo}`;
-  let convWhere: any = convDateFilter;
-  if (staffFilter !== null) {
-    convWhere = and(convDateFilter, eq(conversationsTable.assignedToId, staffFilter));
-  } else if (isAgent && agentIds.length > 0) {
-    convWhere = and(convDateFilter, inArray(conversationsTable.createdById, agentIds));
-  }
+  const msgCountResult = await db.execute<{
+    incoming: string | number | null;
+    outgoing: string | number | null;
+  }>(sql`
+    SELECT
+      COALESCE(SUM(CASE WHEN m.direction = 'inbound' THEN 1 ELSE 0 END), 0) AS incoming,
+      COALESCE(SUM(CASE WHEN m.direction = 'outbound' THEN 1 ELSE 0 END), 0) AS outgoing
+    FROM messages m
+    JOIN conversations c ON c.id = m.conversation_id
+    WHERE m.created_at >= ${dateFrom}
+      AND m.created_at <= ${dateTo}
+      ${messageScopeSql}
+  `);
+  const msgCounts = (((msgCountResult as any).rows ?? msgCountResult) as any[])?.[0] ?? {};
 
-  const [msgCounts] = await db.select({
-    incoming: sql<number>`coalesce(sum(case when direction='inbound' then 1 else 0 end),0)`,
-    outgoing: sql<number>`coalesce(sum(case when direction='outbound' then 1 else 0 end),0)`,
-  }).from(messagesTable).where(sql`created_at >= ${dateFrom} AND created_at <= ${dateTo}`);
-
-  // Per-channel breakdown over the SAME filter as the totals above so the
-  // section 4b cards always sum to the top MESSAGES card.
-  const channelRows = await db.select({
-    channel: messagesTable.channel,
-    incoming: sql<number>`coalesce(sum(case when direction='inbound' then 1 else 0 end),0)`,
-    outgoing: sql<number>`coalesce(sum(case when direction='outbound' then 1 else 0 end),0)`,
-  }).from(messagesTable)
-    .where(sql`created_at >= ${dateFrom} AND created_at <= ${dateTo}`)
-    .groupBy(messagesTable.channel);
+  // Per-channel breakdown uses the exact same ownership predicate as totals.
+  const channelResult = await db.execute<{
+    channel: string | null;
+    incoming: string | number | null;
+    outgoing: string | number | null;
+  }>(sql`
+    SELECT
+      COALESCE(m.channel, 'other') AS channel,
+      COALESCE(SUM(CASE WHEN m.direction = 'inbound' THEN 1 ELSE 0 END), 0) AS incoming,
+      COALESCE(SUM(CASE WHEN m.direction = 'outbound' THEN 1 ELSE 0 END), 0) AS outgoing
+    FROM messages m
+    JOIN conversations c ON c.id = m.conversation_id
+    WHERE m.created_at >= ${dateFrom}
+      AND m.created_at <= ${dateTo}
+      ${messageScopeSql}
+    GROUP BY COALESCE(m.channel, 'other')
+  `);
+  const channelRows = (((channelResult as any).rows ?? channelResult) as any[]) ?? [];
 
   // "Connected" = an active channel_accounts row exists for that channel.
   const connectedRows = await db.select({ channel: channelAccountsTable.channel })
@@ -344,40 +427,259 @@ router.get("/stats/kommo-summary", requireAuth, requireRole(...STAFF_ROLES, ...A
     }
   }
 
-  const replyRows = await db.execute<{ reply_seconds: string | null }>(sql`
-    WITH reply_pairs AS (
+  const replyOwnerSql = staffFilter !== null
+    ? sql`AND p.first_reply_sender_id = ${staffFilter}`
+    : isAgent
+      ? visibleMessageUserIds.length > 0
+        ? sql`AND p.first_reply_sender_id IN (${sql.join(visibleMessageUserIds.map((id) => sql`${id}`), sql`, `)})`
+        : sql`AND false`
+      : sql`AND p.first_reply_sender_id IS NOT NULL`;
+  const awaitingOwnerSql = staffFilter !== null
+    ? sql`AND c.assigned_to_id = ${staffFilter}`
+    : isAgent
+      ? visibleMessageUserIds.length > 0
+        ? sql`AND (
+            c.assigned_to_id IN (${sql.join(visibleMessageUserIds.map((id) => sql`${id}`), sql`, `)})
+            OR c.created_by_id IN (${sql.join(visibleMessageUserIds.map((id) => sql`${id}`), sql`, `)})
+          )`
+        : sql`AND false`
+      : sql``;
+
+  // One response sample per sender-backed human reply. It is paired with the
+  // first inbound message received after that conversation's previous human
+  // reply. This treats consecutive customer messages as one turn and prevents
+  // sender-less bot/system messages from ending that turn or being credited to
+  // a staff member. Current waiting conversations use the same human-only rule.
+  const replyRows = await db.execute<{
+    avg_reply_seconds: string | null;
+    median_reply_seconds: string | null;
+    reply_samples: string | number | null;
+    longest_awaiting_seconds: string | null;
+    awaiting_reply_count: string | number | null;
+  }>(sql`
+    WITH human_replies AS (
       SELECT
-        m_in.id AS inbound_id,
-        EXTRACT(EPOCH FROM (MIN(m_out.created_at) - m_in.created_at)) AS reply_seconds
-      FROM messages m_in
-      JOIN messages m_out
-        ON m_out.conversation_id = m_in.conversation_id
-        AND m_out.created_at > m_in.created_at
-        AND m_out.direction = 'outbound'
-      WHERE m_in.direction = 'inbound'
-        AND m_in.created_at >= ${from}
-        AND m_in.created_at <= ${to}
-      GROUP BY m_in.id, m_in.created_at
+        m.id,
+        m.conversation_id,
+        m.sender_id,
+        m.created_at,
+        LAG(m.created_at) OVER (
+          PARTITION BY m.conversation_id
+          ORDER BY m.created_at, m.id
+        ) AS previous_reply_at,
+        LAG(m.id) OVER (
+          PARTITION BY m.conversation_id
+          ORDER BY m.created_at, m.id
+        ) AS previous_reply_id
+      FROM messages m
+      WHERE m.direction = 'outbound'
+        AND m.sender_id IS NOT NULL
+    ),
+    pairs AS (
+      SELECT
+        hr.conversation_id,
+        inbound.created_at AS inbound_at,
+        hr.created_at AS first_reply_at,
+        hr.sender_id AS first_reply_sender_id,
+        EXTRACT(EPOCH FROM (hr.created_at - inbound.created_at)) AS reply_seconds
+      FROM human_replies hr
+      JOIN LATERAL (
+        SELECT mi.created_at
+        FROM messages mi
+        WHERE mi.conversation_id = hr.conversation_id
+          AND mi.direction = 'inbound'
+          AND (mi.created_at, mi.id) < (hr.created_at, hr.id)
+          AND (
+            hr.previous_reply_at IS NULL
+            OR (mi.created_at, mi.id) > (hr.previous_reply_at, hr.previous_reply_id)
+          )
+        ORDER BY mi.created_at ASC, mi.id ASC
+        LIMIT 1
+      ) inbound ON true
+      WHERE hr.created_at >= ${from}
+        AND hr.created_at <= ${to}
+    ),
+    reply_stats AS (
+      SELECT
+        AVG(p.reply_seconds) AS avg_reply_seconds,
+        PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY p.reply_seconds) AS median_reply_seconds,
+        COUNT(*) AS reply_samples
+      FROM pairs p
+      WHERE p.first_reply_at IS NOT NULL ${replyOwnerSql}
+    ),
+    current_conversation_turns AS (
+      SELECT
+        c.id AS conversation_id,
+        c.assigned_to_id,
+        c.created_by_id,
+        last_human.created_at AS human_reply_at,
+        last_human.id AS human_reply_id,
+        first_unanswered.created_at AS inbound_at,
+        first_unanswered.id AS inbound_id
+      FROM conversations c
+      LEFT JOIN LATERAL (
+        SELECT mo.id, mo.created_at
+        FROM messages mo
+        WHERE mo.conversation_id = c.id
+          AND mo.direction = 'outbound'
+          AND mo.sender_id IS NOT NULL
+        ORDER BY mo.created_at DESC, mo.id DESC
+        LIMIT 1
+      ) last_human ON true
+      LEFT JOIN LATERAL (
+        SELECT mi.id, mi.created_at
+        FROM messages mi
+        WHERE mi.conversation_id = c.id
+          AND mi.direction = 'inbound'
+          AND (
+            last_human.created_at IS NULL
+            OR (mi.created_at, mi.id) > (last_human.created_at, last_human.id)
+          )
+        ORDER BY mi.created_at ASC, mi.id ASC
+        LIMIT 1
+      ) first_unanswered ON true
+      WHERE COALESCE(c.status, 'open') = 'open'
+    ),
+    awaiting_stats AS (
+      SELECT
+        MAX(EXTRACT(EPOCH FROM (now() - c.inbound_at))) AS longest_awaiting_seconds,
+        COUNT(*) AS awaiting_reply_count
+      FROM current_conversation_turns c
+      WHERE c.inbound_at IS NOT NULL
+        ${awaitingOwnerSql}
     )
-    SELECT
-      AVG(reply_seconds) AS avg_reply_seconds,
-      PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY reply_seconds) AS median_reply_seconds
-    FROM reply_pairs
+    SELECT *
+    FROM reply_stats
+    CROSS JOIN awaiting_stats
   `);
 
   const replyRow = ((replyRows as any).rows ?? (replyRows as any))?.[0] ?? {};
   const avgReplyTime = replyRow.avg_reply_seconds != null ? Math.round(Number(replyRow.avg_reply_seconds)) : 0;
   const medianReplyTime = replyRow.median_reply_seconds != null ? Math.round(Number(replyRow.median_reply_seconds)) : 0;
+  const longestAwaiting = replyRow.longest_awaiting_seconds != null
+    ? Math.max(0, Math.round(Number(replyRow.longest_awaiting_seconds)))
+    : 0;
+  const replySamples = Number(replyRow.reply_samples ?? 0);
+  const awaitingReplyCount = Number(replyRow.awaiting_reply_count ?? 0);
+
+  const workOwnerIds = staffFilter !== null
+    ? [staffFilter]
+    : isAgent
+      ? visibleMessageUserIds
+      : [];
+  const taskOwnerSql = workOwnerIds.length > 0
+    ? sql`AND t.assigned_to IN (${sql.join(workOwnerIds.map((id) => sql`${id}`), sql`, `)})`
+    : isAgent
+      ? sql`AND false`
+      : sql``;
+  const followUpOwnerSql = workOwnerIds.length > 0
+    ? sql`AND COALESCE(f.assigned_to_id, f.created_by_id) IN (${sql.join(workOwnerIds.map((id) => sql`${id}`), sql`, `)})`
+    : isAgent
+      ? sql`AND false`
+      : sql``;
+
+  const [taskResult, followUpResult] = await Promise.all([
+    db.execute(sql`
+      WITH scoped_tasks AS (
+        SELECT
+          t.*,
+          CASE
+            WHEN t.due_date ~ '^\\d{4}-\\d{2}-\\d{2}$' THEN t.due_date::date
+            ELSE NULL
+          END AS due_on
+        FROM tasks t
+        WHERE t.archived_at IS NULL
+          ${taskOwnerSql}
+      )
+      SELECT
+        COUNT(*) FILTER (WHERE created_at >= ${from} AND created_at <= ${to}) AS created,
+        COUNT(*) FILTER (WHERE completed_at >= ${from} AND completed_at <= ${to}) AS completed,
+        COUNT(*) FILTER (WHERE status <> 'done') AS open,
+        COUNT(*) FILTER (WHERE status <> 'done' AND due_on < (now() AT TIME ZONE 'Europe/Istanbul')::date) AS overdue,
+        COUNT(*) FILTER (
+          WHERE due_on >= (${dateFrom}::timestamptz AT TIME ZONE 'Europe/Istanbul')::date
+            AND due_on <= (${dateTo}::timestamptz AT TIME ZONE 'Europe/Istanbul')::date
+        ) AS due_in_period,
+        COUNT(*) FILTER (
+          WHERE status = 'done'
+            AND due_on >= (${dateFrom}::timestamptz AT TIME ZONE 'Europe/Istanbul')::date
+            AND due_on <= (${dateTo}::timestamptz AT TIME ZONE 'Europe/Istanbul')::date
+        ) AS completed_due,
+        COUNT(*) FILTER (
+          WHERE status = 'done'
+            AND completed_at IS NOT NULL
+            AND completed_at < ((due_on + 1)::timestamp AT TIME ZONE 'Europe/Istanbul')
+            AND due_on >= (${dateFrom}::timestamptz AT TIME ZONE 'Europe/Istanbul')::date
+            AND due_on <= (${dateTo}::timestamptz AT TIME ZONE 'Europe/Istanbul')::date
+        ) AS on_time
+      FROM scoped_tasks
+    `),
+    db.execute(sql`
+      WITH scoped_followups AS (
+        SELECT f.*
+        FROM follow_ups f
+        WHERE true
+          ${followUpOwnerSql}
+      )
+      SELECT
+        COUNT(*) FILTER (WHERE scheduled_at >= ${from} AND scheduled_at <= ${to}) AS scheduled,
+        COUNT(*) FILTER (WHERE completed_at >= ${from} AND completed_at <= ${to}) AS completed,
+        COUNT(*) FILTER (WHERE completed = false) AS pending,
+        COUNT(*) FILTER (WHERE completed = false AND scheduled_at < now()) AS overdue,
+        COUNT(*) FILTER (
+          WHERE completed = true
+            AND scheduled_at >= ${from}
+            AND scheduled_at <= ${to}
+        ) AS completed_scheduled,
+        COUNT(*) FILTER (
+          WHERE completed = true
+            AND completed_at IS NOT NULL
+            AND completed_at <= scheduled_at
+            AND scheduled_at >= ${from}
+            AND scheduled_at <= ${to}
+        ) AS on_time
+      FROM scoped_followups
+    `),
+  ]);
+
+  const taskRow = (((taskResult as any).rows ?? taskResult) as any[])?.[0] ?? {};
+  const followUpRow = (((followUpResult as any).rows ?? followUpResult) as any[])?.[0] ?? {};
+  const percentage = (numerator: unknown, denominator: unknown): number => {
+    const n = Number(numerator ?? 0);
+    const d = Number(denominator ?? 0);
+    return d > 0 ? Math.round((n / d) * 100) : 0;
+  };
+  const tasks = {
+    created: Number(taskRow.created ?? 0),
+    completed: Number(taskRow.completed ?? 0),
+    open: Number(taskRow.open ?? 0),
+    overdue: Number(taskRow.overdue ?? 0),
+    completionRate: percentage(taskRow.completed_due, taskRow.due_in_period),
+    onTimeRate: percentage(taskRow.on_time, taskRow.completed_due),
+  };
+  const followUps = {
+    scheduled: Number(followUpRow.scheduled ?? 0),
+    completed: Number(followUpRow.completed ?? 0),
+    pending: Number(followUpRow.pending ?? 0),
+    overdue: Number(followUpRow.overdue ?? 0),
+    completionRate: percentage(followUpRow.completed_scheduled, followUpRow.scheduled),
+    onTimeRate: percentage(followUpRow.on_time, followUpRow.completed_scheduled),
+  };
 
   res.json({
     avgReplyTime,
     medianReplyTime,
+    longestAwaiting,
+    awaitingReplyCount,
+    replySamples,
     activeLeads: Number(active),
     wonLeads: Number(won),
     lostLeads: Number(lost),
-    incomingMessages: Number(msgCounts?.incoming ?? 0),
-    outgoingMessages: Number(msgCounts?.outgoing ?? 0),
+    incomingMessages: Number(msgCounts.incoming ?? 0),
+    outgoingMessages: Number(msgCounts.outgoing ?? 0),
     channels,
+    tasks,
+    followUps,
   });
 });
 

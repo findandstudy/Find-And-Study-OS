@@ -13,4 +13,6 @@ export type GetActivitySummaryParams = {
    * @minimum 1
    */
   staffId?: number;
+  from?: Date;
+  to?: Date;
 };

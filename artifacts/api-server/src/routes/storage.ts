@@ -46,6 +46,13 @@ const INBOX_MEDIA_RULES: Record<string, { extensions: Set<string>; maxBytes: num
   "audio/mp4": { extensions: new Set(["m4a"]), maxBytes: 16 * 1024 * 1024 },
 };
 
+const EMBED_LOGO_RULES: Record<string, Set<string>> = {
+  "image/jpeg": new Set(["jpg", "jpeg"]),
+  "image/png": new Set(["png"]),
+  "image/webp": new Set(["webp"]),
+};
+const EMBED_LOGO_MAX_BYTES = 5 * 1024 * 1024;
+
 router.post("/storage/uploads/request-url", requireAuth, async (req: Request, res: Response) => {
   const userId = req.user!.id;
   const allowed = await checkAndIncrementRateLimit(`upload:${userId}`, UPLOAD_LIMIT, UPLOAD_WINDOW_MS);
@@ -68,6 +75,7 @@ router.post("/storage/uploads/request-url", requireAuth, async (req: Request, re
     // Generic uploads still go through the global validateUploadedFile policy.
     const isStaffDoc = !!prefix && /^staff-documents\/\d+\/?$/.test(prefix);
     const isInboxUpload = prefix === "inbox" || prefix?.startsWith("inbox/");
+    const isEmbedLogo = prefix === "branding/embed-widget";
     if (isStaffDoc) {
       const role = (req.user as { role?: string } | undefined)?.role;
       if (role !== "super_admin" && role !== "admin") {
@@ -88,6 +96,23 @@ router.post("/storage/uploads/request-url", requireAuth, async (req: Request, re
       }
       if (size > STAFF_DOC_MAX) {
         res.status(413).json({ error: "Dosya boyutu 25MB sınırını aşıyor." });
+        return;
+      }
+    } else if (isEmbedLogo) {
+      const role = (req.user as { role?: string } | undefined)?.role;
+      if (role !== "super_admin" && role !== "admin") {
+        res.status(403).json({ error: "Embed branding uploads are admin-only" });
+        return;
+      }
+      const normalizedContentType = contentType.toLowerCase();
+      const extensions = EMBED_LOGO_RULES[normalizedContentType];
+      const extension = nodePath.extname(name).slice(1).toLowerCase();
+      if (!extensions || !extension || !extensions.has(extension)) {
+        res.status(400).json({ error: "Logo must be a PNG, JPG or WebP image" });
+        return;
+      }
+      if (size <= 0 || size > EMBED_LOGO_MAX_BYTES) {
+        res.status(413).json({ error: "Logo must be smaller than 5 MB" });
         return;
       }
     } else if (isInboxUpload && INBOX_MEDIA_RULES[contentType.toLowerCase()]) {
@@ -258,6 +283,54 @@ router.get("/storage/public-objects/*filePath", async (req: Request, res: Respon
   } catch (error) {
     console.error("Error serving public object:", error);
     res.status(500).json({ error: "Failed to serve public object" });
+  }
+});
+
+// Logos uploaded for public embed widgets must be readable by visitors who do
+// not have a CRM session. Keep this route deliberately narrow: it can expose
+// only objects written under branding/embed-widget/.
+router.get("/storage/public-branding/*filePath", async (req: Request, res: Response) => {
+  try {
+    const raw = req.params.filePath;
+    const filePath = Array.isArray(raw) ? raw.join("/") : raw;
+
+    if (
+      !filePath.startsWith("embed-widget/") ||
+      filePath.includes("..") ||
+      filePath.includes("\\")
+    ) {
+      res.status(400).json({ error: "Invalid branding path" });
+      return;
+    }
+
+    const objectFile = await objectStorageService.getObjectEntityFile(
+      `/objects/branding/${filePath}`,
+    );
+    const response = await objectStorageService.downloadObject(objectFile, 86_400);
+    const contentType = response.headers.get("content-type") ?? "";
+    if (!EMBED_LOGO_RULES[contentType.toLowerCase()]) {
+      res.status(415).json({ error: "Branding asset is not a supported image" });
+      return;
+    }
+
+    res.status(response.status);
+    response.headers.forEach((value, key) => res.setHeader(key, value));
+    res.setHeader("Cache-Control", "public, max-age=86400, immutable");
+    res.setHeader("X-Content-Type-Options", "nosniff");
+
+    if (response.body) {
+      const nodeStream = Readable.fromWeb(response.body as unknown as Parameters<typeof Readable.fromWeb>[0]);
+      nodeStream.pipe(res);
+    } else {
+      res.end();
+    }
+  } catch (error) {
+    console.error("Error serving public embed branding:", error);
+    if (error instanceof ObjectNotFoundError) {
+      res.status(404).json({ error: "File not found" });
+      return;
+    }
+    res.status(500).json({ error: "Failed to serve branding asset" });
   }
 });
 

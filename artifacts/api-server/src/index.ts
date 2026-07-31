@@ -2507,6 +2507,22 @@ async function seedClaudeIntegration() {
     console.error("[migrate] altinbas structured student fields:", err);
   }
 
+  // Step 2b25: stable task completion timestamps for Activity performance
+  // metrics. The one-time backfill is the best available historical truth;
+  // every new status transition is recorded exactly by routes/tasks.ts.
+  try {
+    await pool.query(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS completed_at TIMESTAMPTZ`);
+    await pool.query(`
+      UPDATE tasks
+      SET completed_at = updated_at
+      WHERE status = 'done'
+        AND completed_at IS NULL
+    `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS tasks_completed_at_idx ON tasks (completed_at)`);
+  } catch (err) {
+    console.error("[migrate] task completion metrics:", err);
+  }
+
   // Steps 3–5: Only instance 0 runs seeds, backfills, and background workers.
   const isWorkerZero = !process.env.NODE_APP_INSTANCE || process.env.NODE_APP_INSTANCE === "0";
   if (isWorkerZero) {

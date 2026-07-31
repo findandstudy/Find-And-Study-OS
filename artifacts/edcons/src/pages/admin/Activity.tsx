@@ -123,8 +123,8 @@ function getPanelKommoRange(preset: PanelPreset, customFrom: string, customTo: s
     }
     case "custom":
       return {
-        from: customFrom ? new Date(customFrom) : todayStart,
-        to: customTo ? new Date(customTo) : now,
+        from: customFrom ? new Date(`${customFrom}T00:00:00`) : todayStart,
+        to: customTo ? new Date(`${customTo}T23:59:59.999`) : now,
       };
   }
 }
@@ -233,7 +233,12 @@ function PanelPage({ staffId, setStaffId, staffList }: StaffFilterProps) {
   );
   const activityRange = useMemo(() => getPanelActivityRange(preset), [preset]);
 
-  const activityQuery = useGetActivitySummary({ range: activityRange, staffId });
+  const activityQuery = useGetActivitySummary({
+    range: activityRange,
+    staffId,
+    from: from.toISOString(),
+    to: to.toISOString(),
+  });
   const kommoQuery = useGetKommoSummary({ from: from.toISOString(), to: to.toISOString(), staffId });
 
   const act = activityQuery.data;
@@ -337,8 +342,16 @@ function PanelPage({ staffId, setStaffId, staffList }: StaffFilterProps) {
             </div>
             <div className="flex items-center justify-between">
               <span className="text-sm text-muted-foreground">{t("adminActivity.longestAwaiting")}</span>
-              <span className="text-sm font-semibold text-muted-foreground">—</span>
+              <span className="text-sm font-semibold font-mono">
+                {loadingKom ? "..." : fmtSeconds(kom?.longestAwaiting ?? 0)}
+              </span>
             </div>
+            {!loadingKom && (
+              <div className="pt-3 border-t border-border/60 text-[11px] text-muted-foreground flex flex-wrap gap-x-4 gap-y-1">
+                <span><strong className="text-foreground">{kom?.replySamples ?? 0}</strong> {t("adminActivity.answeredTurns")}</span>
+                <span><strong className="text-foreground">{kom?.awaitingReplyCount ?? 0}</strong> {t("adminActivity.awaitingReplies")}</span>
+              </div>
+            )}
           </div>
         </Card>
 
@@ -450,12 +463,82 @@ function PanelPage({ staffId, setStaffId, staffList }: StaffFilterProps) {
         </div>
       </div>
 
-      {/* Section 5: Tasks/Follow-ups placeholder */}
-      <Card className="p-5 border-none shadow-md shadow-black/5 border-dashed border border-border/40">
-        <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-2">
+      {/* Section 5: Tasks/Follow-ups performance */}
+      <Card className="p-5 border-none shadow-md shadow-black/5">
+        <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-4 flex items-center gap-2">
           <CalendarClock className="w-3.5 h-3.5 text-violet-500" /> {t("adminActivity.tasksSection")}
         </h3>
-        <p className="text-sm text-muted-foreground">{t("adminActivity.noDataAvailable")}</p>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {[
+            {
+              key: "tasks",
+              title: t("adminActivity.taskMetricsTitle"),
+              periodLabel: t("adminActivity.createdInPeriod"),
+              periodValue: kom?.tasks?.created ?? 0,
+              currentLabel: t("adminActivity.openNow"),
+              currentValue: kom?.tasks?.open ?? 0,
+              completed: kom?.tasks?.completed ?? 0,
+              overdue: kom?.tasks?.overdue ?? 0,
+              completionRate: kom?.tasks?.completionRate ?? 0,
+              onTimeRate: kom?.tasks?.onTimeRate ?? 0,
+            },
+            {
+              key: "followUps",
+              title: t("adminActivity.followUpMetricsTitle"),
+              periodLabel: t("adminActivity.scheduledInPeriod"),
+              periodValue: kom?.followUps?.scheduled ?? 0,
+              currentLabel: t("adminActivity.pendingNow"),
+              currentValue: kom?.followUps?.pending ?? 0,
+              completed: kom?.followUps?.completed ?? 0,
+              overdue: kom?.followUps?.overdue ?? 0,
+              completionRate: kom?.followUps?.completionRate ?? 0,
+              onTimeRate: kom?.followUps?.onTimeRate ?? 0,
+            },
+          ].map((metric) => (
+            <div key={metric.key} className="rounded-xl border border-border/70 bg-secondary/20 p-4">
+              <div className="flex items-center justify-between gap-3 mb-4">
+                <p className="text-sm font-semibold">{metric.title}</p>
+                <CheckSquare className="w-4 h-4 text-violet-500" />
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+                {[
+                  [metric.periodLabel, metric.periodValue],
+                  [t("adminActivity.completedInPeriod"), metric.completed],
+                  [metric.currentLabel, metric.currentValue],
+                  [t("adminActivity.overdueNow"), metric.overdue],
+                ].map(([label, value]) => (
+                  <div key={String(label)}>
+                    <p className="text-[10px] leading-tight text-muted-foreground min-h-6">{label}</p>
+                    <p className="text-lg font-bold font-mono">{loadingKom ? "..." : value}</p>
+                  </div>
+                ))}
+              </div>
+              <div className="space-y-3">
+                {[
+                  [t("adminActivity.completionRate"), metric.completionRate, "bg-violet-500"],
+                  [t("adminActivity.onTimeRate"), metric.onTimeRate, "bg-emerald-500"],
+                ].map(([label, value, color]) => {
+                  const numericValue = Number(value);
+                  const width = Math.max(0, Math.min(100, numericValue));
+                  return (
+                    <div key={String(label)}>
+                      <div className="flex items-center justify-between text-xs mb-1">
+                        <span className="text-muted-foreground">{label}</span>
+                        <span className="font-semibold font-mono">{loadingKom ? "..." : `${numericValue}%`}</span>
+                      </div>
+                      <div className="h-1.5 rounded-full bg-secondary overflow-hidden">
+                        <div className={`h-full rounded-full ${color}`} style={{ width: `${loadingKom ? 0 : width}%` }} />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+        <p className="text-[11px] text-muted-foreground mt-4 leading-relaxed">
+          {t("adminActivity.measurementNote")}
+        </p>
       </Card>
     </div>
   );
