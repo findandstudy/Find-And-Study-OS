@@ -1164,10 +1164,16 @@ function InboxTab() {
       setConvs(prev => prev.map(c => c.id === selectedId ? { ...c, awaitingReply: false } : c));
       fetchDetail(selectedId);
     } catch (err: any) {
-      const body = err?.body;
+      const body = err?.body ?? err?.data;
       if (body?.error === "outside_24h_window") {
         toast({ title: t("messagesPage.outsideWindow"), description: t("messagesPage.useTemplateInstead"), variant: "destructive" });
         await openTemplateDialog();
+      } else if (body?.error === "template_variables_missing") {
+        toast({
+          title: t("messagesPage.failedToSendTemplate"),
+          description: body?.message || body?.missingVariables?.join(", "),
+          variant: "destructive",
+        });
       } else {
         toast({ title: body?.error || "Failed to send", variant: "destructive" });
       }
@@ -1328,13 +1334,31 @@ function InboxTab() {
     setTplOpen(true);
   }
 
-  function chooseComposerTemplate(template: ComposerTemplate) {
+  async function chooseComposerTemplate(template: ComposerTemplate) {
     if (template.externalTemplateName) {
       setReply("");
       setTplInitialId(template.id);
       setTplOpen(true);
     } else {
-      setReply(template.content);
+      if (!selectedId) return;
+      try {
+        const rendered: any = await customFetch(
+          `/api/inbox/conversations/${selectedId}/template-preview`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ content: template.content }),
+          },
+        );
+        setReply(rendered.content);
+      } catch (err: any) {
+        const body = err?.body ?? err?.data;
+        toast({
+          title: t("messagesPage.failedToSendTemplate"),
+          description: body?.message || body?.missingVariables?.join(", "),
+          variant: "destructive",
+        });
+      }
     }
     setSlashActiveIndex(0);
   }
