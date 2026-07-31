@@ -13,6 +13,10 @@ import { Search, FileText, Send, Loader2 } from "lucide-react";
 interface WhatsAppTemplatePickerProps {
   open: boolean;
   onClose: () => void;
+  /** Exact conversation line wins; otherwise the entity's latest/default line is resolved. */
+  conversationId?: number | null;
+  entityType?: "lead" | "student" | "application";
+  entityId?: number | null;
   /** Optional approved template to preselect (used by the composer slash menu). */
   initialTemplateId?: number | null;
   /**
@@ -27,6 +31,9 @@ interface WhatsAppTemplatePickerProps {
 export function WhatsAppTemplatePicker({
   open,
   onClose,
+  conversationId,
+  entityType,
+  entityId,
   initialTemplateId,
   onSend,
   sending,
@@ -39,6 +46,7 @@ export function WhatsAppTemplatePicker({
   const [tplId, setTplId] = useState<string>("");
   const [tplVars, setTplVars] = useState<string[]>([]);
   const [templateQuery, setTemplateQuery] = useState("");
+  const [targetAccount, setTargetAccount] = useState<{ displayName: string; isDefault: boolean } | null>(null);
 
   async function loadTemplates() {
     setTplId("");
@@ -46,11 +54,16 @@ export function WhatsAppTemplatePicker({
     setTemplateQuery("");
     setTplLoading(true);
     try {
-      // Use /api/message-templates (DB) instead of /api/inbox/whatsapp-templates
-      // (which calls Zernio API and fails with 400/502 outside of Templates tab context).
-      const r = await customFetch(`/api/message-templates?channel=whatsapp&activeOnly=true`);
+      let endpoint = `/api/message-templates?channel=whatsapp&activeOnly=true`;
+      if (conversationId) {
+        endpoint = `/api/inbox/whatsapp-templates/available?conversationId=${conversationId}`;
+      } else if (entityType && entityId) {
+        endpoint = `/api/inbox/whatsapp-templates/available?entityType=${encodeURIComponent(entityType)}&entityId=${entityId}`;
+      }
+      const r = await customFetch(endpoint);
       const loaded = (r as any)?.data || [];
       setTemplates(loaded);
+      setTargetAccount((r as any)?.channelAccount || null);
       if (initialTemplateId != null) {
         const initial = loaded.find((tpl: any) =>
           tpl.id === initialTemplateId &&
@@ -66,8 +79,13 @@ export function WhatsAppTemplatePicker({
           setTplVars(Array.from({ length: count }, () => ""));
         }
       }
-    } catch {
-      toast({ title: t("messagesPage.failedToLoadTemplates"), variant: "destructive" });
+    } catch (err: any) {
+      const detail = err?.data?.detail || err?.body?.detail || err?.data?.error || err?.body?.error;
+      toast({
+        title: t("messagesPage.failedToLoadTemplates"),
+        description: typeof detail === "string" ? detail : undefined,
+        variant: "destructive",
+      });
     } finally {
       setTplLoading(false);
     }
@@ -83,9 +101,10 @@ export function WhatsAppTemplatePicker({
       setTplId("");
       setTplVars([]);
       setTemplateQuery("");
+      setTargetAccount(null);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, initialTemplateId]);
+  }, [open, initialTemplateId, conversationId, entityType, entityId]);
 
   function handleOpenChange(isOpen: boolean) {
     // Only reached via Dialog's own close gestures (Escape / overlay click).
@@ -101,7 +120,7 @@ export function WhatsAppTemplatePicker({
     try {
       await onSend(parseInt(tplId, 10), tplVars.map(v => v.trim()));
     } catch (err: any) {
-      const realErr = err?.data?.error || err?.body?.error || err?.message;
+      const realErr = err?.data?.detail || err?.body?.detail || err?.data?.error || err?.body?.error || err?.message;
       toast({
         title: t("messagesPage.failedToSendTemplate"),
         description: typeof realErr === "string" ? realErr : undefined,
@@ -159,6 +178,14 @@ export function WhatsAppTemplatePicker({
               onChange={(e) => setTemplateQuery(e.target.value)}
             />
           </div>
+
+          {targetAccount?.displayName && (
+            <div className="flex justify-end">
+              <Badge variant="outline" className="max-w-full truncate" title={targetAccount.displayName}>
+                {targetAccount.displayName}
+              </Badge>
+            </div>
+          )}
 
           {tplLoading ? (
             <div className="flex items-center justify-center py-8">

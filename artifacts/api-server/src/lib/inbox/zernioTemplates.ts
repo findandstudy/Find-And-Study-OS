@@ -34,6 +34,52 @@ export interface NormalizedZernioTemplate {
   variableCount: number;
 }
 
+function normalizeLanguage(value: string | undefined | null): string {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/-/g, "_");
+}
+
+/**
+ * Resolve the exact provider-side approved template that may be sent.
+ *
+ * The local message_templates table is a cross-account cache, so its
+ * approvalStatus cannot prove that a template exists on a particular
+ * WhatsApp number. Zernio/Meta is the source of truth. Prefer an exact
+ * language match; only accept a base-language match when it is unique, and
+ * return the provider language so callers do not send `en` to an `en_US`
+ * template (or vice versa).
+ */
+export function findApprovedZernioTemplate(
+  templates: NormalizedZernioTemplate[],
+  templateName: string,
+  preferredLanguage?: string | null,
+): NormalizedZernioTemplate | null {
+  const normalizedName = String(templateName || "").trim().toLowerCase();
+  if (!normalizedName) return null;
+
+  const approved = templates.filter((template) =>
+    template.status === "approved" &&
+    String(template.name || "").trim().toLowerCase() === normalizedName
+  );
+  if (approved.length === 0) return null;
+
+  const requestedLanguage = normalizeLanguage(preferredLanguage);
+  if (requestedLanguage) {
+    const exact = approved.find((template) => normalizeLanguage(template.language) === requestedLanguage);
+    if (exact) return exact;
+
+    const requestedBase = requestedLanguage.split("_")[0];
+    const baseMatches = approved.filter(
+      (template) => normalizeLanguage(template.language).split("_")[0] === requestedBase,
+    );
+    if (baseMatches.length === 1) return baseMatches[0];
+  }
+
+  return approved.length === 1 ? approved[0] : null;
+}
+
 function extractBodyText(components: any[]): string {
   const body = components?.find((c) => String(c?.type).toUpperCase() === "BODY");
   return body?.text || "";
@@ -79,7 +125,12 @@ function normalizeTemplate(raw: any): NormalizedZernioTemplate {
  */
 export async function resolveZernioWhatsAppAccount(
   channelAccountId?: number | null,
-): Promise<{ id: number; externalAccountId: string } | null> {
+): Promise<{
+  id: number;
+  externalAccountId: string;
+  displayName: string;
+  isDefault: boolean;
+} | null> {
   const conditions = [
     eq(channelAccountsTable.provider, "zernio"),
     eq(channelAccountsTable.channel, "whatsapp"),
@@ -93,7 +144,12 @@ export async function resolveZernioWhatsAppAccount(
     .orderBy(desc(channelAccountsTable.isDefault), asc(channelAccountsTable.id))
     .limit(1);
   if (!acct || !acct.externalAccountId) return null;
-  return { id: acct.id, externalAccountId: acct.externalAccountId };
+  return {
+    id: acct.id,
+    externalAccountId: acct.externalAccountId,
+    displayName: acct.displayName,
+    isDefault: acct.isDefault,
+  };
 }
 
 export interface ZernioTemplateListOutcome {
@@ -127,6 +183,34 @@ export async function listZernioWhatsAppTemplates(externalAccountId: string): Pr
     console.error("[ZERNIO] list templates error:", err?.message || err);
     return { ok: false, templates: [], error: `Zernio template list error: ${err?.message || "Unknown"}` };
   }
+}
+
+export type ZernioTemplateAvailabilityOutcome =
+  | { ok: true; template: NormalizedZernioTemplate }
+  | { ok: false; reason: "provider_unavailable" | "not_approved"; error?: string };
+
+/** Fail-closed provider proof for one template on one WhatsApp account. */
+export async function resolveApprovedZernioTemplate(params: {
+  externalAccountId: string;
+  templateName: string;
+  preferredLanguage?: string | null;
+}): Promise<ZernioTemplateAvailabilityOutcome> {
+  const outcome = await listZernioWhatsAppTemplates(params.externalAccountId);
+  if (!outcome.ok) {
+    return {
+      ok: false,
+      reason: "provider_unavailable",
+      error: outcome.error || "whatsapp_template_list_failed",
+    };
+  }
+
+  const template = findApprovedZernioTemplate(
+    outcome.templates,
+    params.templateName,
+    params.preferredLanguage,
+  );
+  if (!template) return { ok: false, reason: "not_approved" };
+  return { ok: true, template };
 }
 
 export interface ZernioTemplateCreateParams {

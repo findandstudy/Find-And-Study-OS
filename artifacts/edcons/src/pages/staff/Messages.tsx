@@ -3187,6 +3187,7 @@ function InboxTab() {
 
       <WhatsAppTemplatePicker
         open={tplOpen}
+        conversationId={selectedId}
         initialTemplateId={tplInitialId}
         onClose={() => {
           setTplOpen(false);
@@ -3263,6 +3264,10 @@ function InboxTab() {
       {/* ── "Yeni sohbet" template picker (after person selected) ── */}
       <WhatsAppTemplatePicker
         open={newWaConvTplOpen}
+        entityType={newWaConvSelected?.entityType === "lead" || newWaConvSelected?.entityType === "student"
+          ? newWaConvSelected.entityType
+          : undefined}
+        entityId={newWaConvSelected?.entityId}
         onClose={() => { setNewWaConvTplOpen(false); setNewWaConvSelected(null); }}
         onSend={handleNewWaConvSend}
         sending={newWaConvSending}

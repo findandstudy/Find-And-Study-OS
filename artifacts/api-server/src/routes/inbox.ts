@@ -9,6 +9,7 @@ import {
   externalContactsTable,
   leadsTable,
   studentsTable,
+  applicationsTable,
   agentsTable,
   usersTable,
   messageTemplatesTable,
@@ -51,13 +52,16 @@ import { toE164 } from "../lib/inbox/phone";
 import { parseContentDispositionFilename, persistAttachmentMeta, backfillConversationAttachmentNames } from "../lib/inbox/attachmentNames";
 import { getChainOwner, syncConversationOwner, loadLink } from "../lib/inbox/assignmentSync";
 import {
+  findApprovedZernioTemplate,
   listZernioWhatsAppTemplates,
   createZernioWhatsAppTemplate,
   deleteZernioWhatsAppTemplate,
   decideWhatsAppTemplateDeletion,
+  resolveApprovedZernioTemplate,
   resolveZernioWhatsAppAccount,
 } from "../lib/inbox/zernioTemplates";
 import { sendZernioConversationMessage } from "../lib/inbox/outboundMessage";
+import { resolveApplicationMessageTarget } from "../lib/inbox/quickContactTarget";
 import { loadConversationTemplateVariableContext } from "../lib/inbox/templateVariableContext";
 import {
   extractNamedMessageTemplateVariables,
@@ -114,6 +118,63 @@ import {
 
 const router: IRouter = Router();
 const inboxMediaStorage = new ObjectStorageService();
+
+interface EntityWhatsAppTarget {
+  id: number;
+  externalAccountId: string;
+  displayName: string;
+  isDefault: boolean;
+  conversationId: number | null;
+}
+
+/**
+ * Keep a linked contact on the WhatsApp line where the conversation arrived.
+ * Only brand-new outbound contacts use the configured default line.
+ */
+async function resolveEntityWhatsAppTarget(
+  contactCondition: SQL,
+): Promise<EntityWhatsAppTarget | null> {
+  const contacts = await db
+    .select({ id: externalContactsTable.id })
+    .from(externalContactsTable)
+    .where(and(eq(externalContactsTable.channel, "whatsapp"), contactCondition));
+  const contactIds = contacts.map((contact) => contact.id);
+
+  if (contactIds.length > 0) {
+    const [existing] = await db
+      .select({
+        conversationId: conversationsTable.id,
+        id: channelAccountsTable.id,
+        externalAccountId: channelAccountsTable.externalAccountId,
+        displayName: channelAccountsTable.displayName,
+        isDefault: channelAccountsTable.isDefault,
+      })
+      .from(conversationsTable)
+      .innerJoin(channelAccountsTable, eq(conversationsTable.channelAccountId, channelAccountsTable.id))
+      .where(and(
+        inArray(conversationsTable.externalContactId, contactIds),
+        eq(conversationsTable.channel, "whatsapp"),
+        eq(channelAccountsTable.provider, "zernio"),
+        eq(channelAccountsTable.isActive, true),
+        isNotNull(conversationsTable.externalThreadId),
+      ))
+      .orderBy(desc(conversationsTable.lastMessageAt))
+      .limit(1);
+
+    if (existing?.externalAccountId) {
+      return {
+        id: existing.id,
+        externalAccountId: existing.externalAccountId,
+        displayName: existing.displayName,
+        isDefault: existing.isDefault,
+        conversationId: existing.conversationId,
+      };
+    }
+  }
+
+  const account = await resolveZernioWhatsAppAccount();
+  return account ? { ...account, conversationId: null } : null;
+}
 
 // Channels governed by Meta's 24h messaging window: free-form replies are only
 // allowed within 24h of the last inbound message. WhatsApp, Messenger and
@@ -2567,6 +2628,140 @@ router.post(
   },
 );
 
+/**
+ * Account-aware template picker source. A global DB row is only a cache; the
+ * provider-side approved template list of the target WhatsApp line is the
+ * authority. This endpoint is read-only and never syncs/mutates the cache.
+ */
+router.get(
+  "/inbox/whatsapp-templates/available",
+  requireAuth,
+  requireRole(...STAFF_ROLES, ...ADMIN_ROLES),
+  async (req, res): Promise<void> => {
+    const conversationId = req.query.conversationId
+      ? parseInt(String(req.query.conversationId), 10)
+      : 0;
+    const entityType = String(req.query.entityType || "");
+    const entityId = req.query.entityId ? parseInt(String(req.query.entityId), 10) : 0;
+
+    let account: EntityWhatsAppTarget | null = null;
+
+    if (conversationId) {
+      const [conv] = await db
+        .select({ channel: conversationsTable.channel, channelAccountId: conversationsTable.channelAccountId })
+        .from(conversationsTable)
+        .where(eq(conversationsTable.id, conversationId));
+      if (!conv || conv.channel !== "whatsapp") {
+        res.status(404).json({ error: "whatsapp_conversation_not_found" });
+        return;
+      }
+      if (await isConversationEntityBlocked(req.user!, conversationId)) {
+        res.status(404).json({ error: "whatsapp_conversation_not_found" });
+        return;
+      }
+      const resolved = await resolveZernioWhatsAppAccount(conv.channelAccountId);
+      account = resolved ? { ...resolved, conversationId } : null;
+    } else if ((entityType === "lead" || entityType === "student" || entityType === "application") && entityId) {
+      let entityAgentId: number | null | undefined;
+      let contactCondition: SQL;
+      if (entityType === "lead") {
+        const [lead] = await db
+          .select({ agentId: leadsTable.agentId })
+          .from(leadsTable)
+          .where(eq(leadsTable.id, entityId));
+        if (!lead) { res.status(404).json({ error: "entity_not_found" }); return; }
+        entityAgentId = lead.agentId;
+        contactCondition = eq(externalContactsTable.leadId, entityId);
+      } else if (entityType === "student") {
+        const [student] = await db
+          .select({ agentId: studentsTable.agentId })
+          .from(studentsTable)
+          .where(eq(studentsTable.id, entityId));
+        if (!student) { res.status(404).json({ error: "entity_not_found" }); return; }
+        entityAgentId = student.agentId;
+        contactCondition = eq(externalContactsTable.studentId, entityId);
+      } else {
+        const [application] = await db
+          .select({ studentId: applicationsTable.studentId, agentId: applicationsTable.agentId })
+          .from(applicationsTable)
+          .where(eq(applicationsTable.id, entityId));
+        if (!application?.studentId) { res.status(404).json({ error: "entity_not_found" }); return; }
+        const [student] = await db
+          .select({
+            agentId: studentsTable.agentId,
+            phoneE164: studentsTable.phoneE164,
+            phone: studentsTable.phone,
+            firstName: studentsTable.firstName,
+            lastName: studentsTable.lastName,
+          })
+          .from(studentsTable)
+          .where(eq(studentsTable.id, application.studentId));
+        const target = resolveApplicationMessageTarget(application, student);
+        if (!target) { res.status(404).json({ error: "entity_not_found" }); return; }
+        entityAgentId = target.agentId;
+        contactCondition = eq(externalContactsTable.studentId, target.studentId);
+      }
+      if (entityAgentId !== undefined && isAgentSourcedAndBlockedForStaff(req.user!, entityAgentId)) {
+        res.status(404).json({ error: "entity_not_found" });
+        return;
+      }
+      account = await resolveEntityWhatsAppTarget(contactCondition);
+    } else {
+      res.status(400).json({ error: "conversationId or entityType/entityId is required" });
+      return;
+    }
+
+    if (!account) {
+      res.status(409).json({ error: "no_zernio_account", detail: "No active WhatsApp line is available for this recipient." });
+      return;
+    }
+
+    const provider = await listZernioWhatsAppTemplates(account.externalAccountId);
+    if (!provider.ok) {
+      res.status(502).json({
+        error: "template_availability_check_failed",
+        detail: `Approved templates for WhatsApp line “${account.displayName}” could not be verified.`,
+      });
+      return;
+    }
+
+    const localTemplates = await db
+      .select()
+      .from(messageTemplatesTable)
+      .where(and(
+        eq(messageTemplatesTable.isActive, true),
+        or(eq(messageTemplatesTable.channel, "whatsapp"), eq(messageTemplatesTable.channel, "all")),
+        isNotNull(messageTemplatesTable.externalTemplateName),
+      ))
+      .orderBy(messageTemplatesTable.category, messageTemplatesTable.name);
+
+    const data = localTemplates.flatMap((template) => {
+      const remote = findApprovedZernioTemplate(
+        provider.templates,
+        template.externalTemplateName || "",
+        template.language,
+      );
+      if (!remote) return [];
+      return [{
+        ...template,
+        content: remote.bodyText || template.content,
+        language: remote.language,
+        approvalStatus: "approved",
+        variables: Array.from({ length: remote.variableCount }, (_, index) => `{{${index + 1}}}`),
+      }];
+    });
+
+    res.json({
+      data,
+      channelAccount: {
+        id: account.id,
+        displayName: account.displayName,
+        isDefault: account.isDefault,
+      },
+    });
+  },
+);
+
 router.post(
   "/inbox/conversations/:id/templates",
   requireAuth,
@@ -2581,6 +2776,10 @@ router.post(
     const [conv] = await db.select().from(conversationsTable).where(eq(conversationsTable.id, id));
     if (!conv || conv.channel !== "whatsapp") {
       res.status(400).json({ error: "Templates are only supported on WhatsApp conversations" });
+      return;
+    }
+    if (await isConversationEntityBlocked(req.user!, id)) {
+      res.status(404).json({ error: "Conversation not found" });
       return;
     }
     if (!conv.externalContactId) {
@@ -2625,10 +2824,29 @@ router.post(
         res.status(400).json({ error: "Template gönderilemedi: alıcının telefon numarası E.164 formatına çevrilemedi." });
         return;
       }
+      const availability = await resolveApprovedZernioTemplate({
+        externalAccountId: zernioAcctForTpl.externalAccountId,
+        templateName: tpl.externalTemplateName,
+        preferredLanguage: tpl.language,
+      });
+      if (!availability.ok) {
+        if (availability.reason === "provider_unavailable") {
+          res.status(502).json({
+            error: "template_availability_check_failed",
+            detail: "The approved-template list for this WhatsApp line could not be verified. Nothing was sent.",
+          });
+        } else {
+          res.status(409).json({
+            error: "template_not_approved_for_whatsapp_account",
+            detail: `Template “${tpl.externalTemplateName}” is not approved for the WhatsApp line used by this conversation.`,
+          });
+        }
+        return;
+      }
       const zr = await sendZernioTemplate({
         externalAccountId: zernioAcctForTpl.externalAccountId,
         templateName: tpl.externalTemplateName,
-        language: tpl.language || "en",
+        language: availability.template.language,
         toPhoneE164: phoneE164,
         parameters: providedParams,
         recipientLabel: contact.displayName || phoneE164,
@@ -4315,6 +4533,7 @@ router.post(
       let entityAgentId: number | null | undefined;
       let entityPhoneE164: string | null = null;
       let entityDisplayName = "";
+      let resolvedStudentId: number | null = null;
 
       if (entityType === "lead") {
         const [row] = await db
@@ -4335,9 +4554,33 @@ router.post(
         entityAgentId = row.agentId;
         entityPhoneE164 = row.phoneE164 || (row.phone ? toE164(String(row.phone)) : null);
         entityDisplayName = `${row.firstName || ""} ${row.lastName || ""}`.trim();
+        resolvedStudentId = entityId;
         contactConds.push(eq(externalContactsTable.studentId, entityId));
+      } else if (entityType === "application") {
+        const [application] = await db
+          .select({ studentId: applicationsTable.studentId, agentId: applicationsTable.agentId })
+          .from(applicationsTable)
+          .where(eq(applicationsTable.id, entityId));
+        if (!application?.studentId) { res.status(404).json({ error: "entity_not_found" }); return; }
+        const [student] = await db
+          .select({
+            agentId: studentsTable.agentId,
+            phoneE164: studentsTable.phoneE164,
+            phone: studentsTable.phone,
+            firstName: studentsTable.firstName,
+            lastName: studentsTable.lastName,
+          })
+          .from(studentsTable)
+          .where(eq(studentsTable.id, application.studentId));
+        const target = resolveApplicationMessageTarget(application, student);
+        if (!target) { res.status(404).json({ error: "entity_not_found" }); return; }
+        entityAgentId = target.agentId;
+        entityPhoneE164 = target.phoneE164;
+        entityDisplayName = target.displayName;
+        resolvedStudentId = target.studentId;
+        contactConds.push(eq(externalContactsTable.studentId, target.studentId));
       } else {
-        res.status(400).json({ error: "entityType must be lead or student" });
+        res.status(400).json({ error: "entityType must be lead, student or application" });
         return;
       }
 
@@ -4374,51 +4617,44 @@ router.post(
         return;
       }
 
-      // ── 3. Check for existing WhatsApp conversation ────────────────────────
-      let existingConvId: number | null = null;
-      let existingConvExternalAccountId: string | null = null;
-      let existingConvChannelAccountId: number | null = null;
-
-      if (contactConds.length > 0) {
-        const contacts = await db
-          .select({ id: externalContactsTable.id })
-          .from(externalContactsTable)
-          .where(and(
-            eq(externalContactsTable.channel, "whatsapp"),
-            contactConds.length === 1 ? contactConds[0] : or(...contactConds),
-          ));
-        const contactIds = contacts.map(c => c.id);
-        if (contactIds.length > 0) {
-          const rows = await db
-            .select({
-              id: conversationsTable.id,
-              externalAccountId: channelAccountsTable.externalAccountId,
-              channelAccountId: channelAccountsTable.id,
-            })
-            .from(conversationsTable)
-            .innerJoin(channelAccountsTable, eq(conversationsTable.channelAccountId, channelAccountsTable.id))
-            .where(and(
-              inArray(conversationsTable.externalContactId, contactIds),
-              eq(conversationsTable.channel, "whatsapp"),
-              eq(channelAccountsTable.provider, "zernio"),
-              sql`${conversationsTable.externalThreadId} IS NOT NULL`,
-            ))
-            .orderBy(desc(conversationsTable.lastMessageAt))
-            .limit(1);
-          if (rows.length > 0) {
-            existingConvId = rows[0].id;
-            existingConvExternalAccountId = rows[0].externalAccountId;
-            existingConvChannelAccountId = rows[0].channelAccountId;
-          }
-        }
+      // ── 3. Resolve recipient line + provider proof ─────────────────────────
+      // Existing contacts stay on the line where they wrote to us. New contacts
+      // use the configured default line. Never infer approval from the global
+      // message_templates cache.
+      const account = await resolveEntityWhatsAppTarget(contactConds[0]);
+      if (!account) {
+        res.status(409).json({ error: "no_zernio_account", detail: "No active WhatsApp line is available for this recipient." });
+        return;
       }
 
+      const availability = await resolveApprovedZernioTemplate({
+        externalAccountId: account.externalAccountId,
+        templateName: tpl.externalTemplateName,
+        preferredLanguage: tpl.language,
+      });
+      if (!availability.ok) {
+        if (availability.reason === "provider_unavailable") {
+          res.status(502).json({
+            error: "template_availability_check_failed",
+            detail: `Approved templates for WhatsApp line “${account.displayName}” could not be verified. Nothing was sent.`,
+          });
+        } else {
+          res.status(409).json({
+            error: "template_not_approved_for_whatsapp_account",
+            detail: `Template “${tpl.externalTemplateName}” is not approved for WhatsApp line “${account.displayName}”.`,
+          });
+        }
+        return;
+      }
+      const providerLanguage = availability.template.language;
+
       // ── 4a. Existing conversation → send template on it, return ───────────
-      if (existingConvId && existingConvExternalAccountId) {
+      if (account.conversationId) {
+        const existingConvId = account.conversationId;
         const zr = await sendZernioTemplate({
-          externalAccountId: existingConvExternalAccountId,
+          externalAccountId: account.externalAccountId,
           templateName: tpl.externalTemplateName,
-          language: tpl.language || "en",
+          language: providerLanguage,
           toPhoneE164: phoneE164,
           parameters: providedParams,
           recipientLabel: entityDisplayName || phoneE164,
@@ -4467,12 +4703,6 @@ router.post(
       }
 
       // ── 4b. No existing conversation → create one + send template ─────────
-      const account = await resolveZernioWhatsAppAccount();
-      if (!account) {
-        res.status(400).json({ error: "no_zernio_account", detail: "No Zernio WhatsApp account configured" });
-        return;
-      }
-
       // Find or create external_contact by phone.
       // We use a stable externalId derived from the phone so that repeated calls
       // don't create duplicate contacts. When the contact replies, processInbound
@@ -4493,7 +4723,7 @@ router.post(
         externalContactId = existingContact.id;
         // Keep the entity link up-to-date.
         const updates: Record<string, number | null> = {};
-        if (entityType === "student") updates.studentId = entityId;
+        if (resolvedStudentId != null) updates.studentId = resolvedStudentId;
         else if (entityType === "lead") updates.leadId = entityId;
         if (Object.keys(updates).length > 0) {
           await db.update(externalContactsTable).set(updates).where(eq(externalContactsTable.id, externalContactId));
@@ -4507,7 +4737,7 @@ router.post(
             phoneE164,
             displayName: entityDisplayName || phoneE164,
             leadId: entityType === "lead" ? entityId : null,
-            studentId: entityType === "student" ? entityId : null,
+            studentId: resolvedStudentId,
           })
           .onConflictDoNothing({ target: [externalContactsTable.channel, externalContactsTable.externalId] })
           .returning({ id: externalContactsTable.id });
@@ -4562,7 +4792,7 @@ router.post(
       const zr = await sendZernioTemplate({
         externalAccountId: account.externalAccountId,
         templateName: tpl.externalTemplateName,
-        language: tpl.language || "en",
+        language: providerLanguage,
         toPhoneE164: phoneE164,
         parameters: providedParams,
         recipientLabel: entityDisplayName || phoneE164,

@@ -366,6 +366,9 @@ export function QuickContactDialog({
       <WhatsAppTemplatePicker
         open={tplOpen}
         onClose={() => setTplOpen(false)}
+        conversationId={windowStatus?.conversationId ?? null}
+        entityType={entityType === "lead" || entityType === "student" || entityType === "application" ? entityType : undefined}
+        entityId={entityType === "lead" || entityType === "student" || entityType === "application" ? entityId : null}
         onSend={handleTemplateSend}
         sending={tplSending}
       />
