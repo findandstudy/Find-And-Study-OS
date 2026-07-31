@@ -44,11 +44,13 @@ import {
 } from "@workspace/db";
 import {
   educationRecordHasData,
+  hasRequiredEducationCoverage,
   type EducationRecordOutput,
 } from "../src/lib/educationExtraction";
 import {
   runEducationExtraction,
   educationDocTypeCondition,
+  resolveAppliedLevelKey,
 } from "../src/lib/educationAutoExtract";
 
 // ---------------------------------------------------------------------------
@@ -70,7 +72,10 @@ function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-async function hasFilledEducationRecord(studentId: number): Promise<boolean> {
+async function hasRequiredEducationRecord(studentId: number): Promise<boolean> {
+  const levelKey = await resolveAppliedLevelKey(studentId);
+  if (!levelKey) return false;
+
   const rows = await db
     .select({
       level: studentEducationRecordsTable.level,
@@ -89,7 +94,10 @@ async function hasFilledEducationRecord(studentId: number): Promise<boolean> {
         isNull(studentEducationRecordsTable.deletedAt),
       ),
     );
-  return rows.some((r) => educationRecordHasData(r as EducationRecordOutput));
+  const dataBearingRows = rows.filter((r) =>
+    educationRecordHasData(r as EducationRecordOutput),
+  ) as EducationRecordOutput[];
+  return hasRequiredEducationCoverage(levelKey, dataBearingRows);
 }
 
 // ---------------------------------------------------------------------------
@@ -149,7 +157,7 @@ async function main() {
   console.log(`[backfill-education-extract] Checking for already-filled education records…`);
   const eligible: number[] = [];
   for (const studentId of candidateStudentIds) {
-    const filled = await hasFilledEducationRecord(studentId);
+    const filled = await hasRequiredEducationRecord(studentId);
     if (!filled) eligible.push(studentId);
   }
   console.log(
