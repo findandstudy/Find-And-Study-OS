@@ -58,6 +58,11 @@ import {
   resolveZernioWhatsAppAccount,
 } from "../lib/inbox/zernioTemplates";
 import { sendZernioConversationMessage } from "../lib/inbox/outboundMessage";
+import { loadConversationTemplateVariableContext } from "../lib/inbox/templateVariableContext";
+import {
+  extractNamedMessageTemplateVariables,
+  resolveNamedMessageTemplateVariables,
+} from "../lib/inbox/templateVariables";
 import { inboxBus, type InboxBusEvent } from "../lib/inbox/eventBus";
 import {
   getAiAgentConfig,
@@ -114,6 +119,18 @@ const inboxMediaStorage = new ObjectStorageService();
 // allowed within 24h of the last inbound message. WhatsApp, Messenger and
 // Instagram all share this policy.
 const CHANNELS_WITH_24H_WINDOW = new Set(["whatsapp", "messenger", "instagram"]);
+
+async function renderConversationTemplateContent(
+  conversationId: number,
+  content: string,
+) {
+  const variables = extractNamedMessageTemplateVariables(content);
+  if (variables.length === 0) {
+    return { content, resolvedVariables: [], missingVariables: [] };
+  }
+  const context = await loadConversationTemplateVariableContext(conversationId);
+  return resolveNamedMessageTemplateVariables(content, context);
+}
 
 // ---------------------------------------------------------------------------
 // Inbox AI / notes / tasks helpers (Phase 2)
@@ -305,6 +322,29 @@ async function loadConversationLink(id: number): Promise<ConversationLink | null
     leadId: liveLeadId,
     studentId: liveStudentId,
   };
+}
+
+async function isConversationEntityBlocked(
+  actor: Parameters<typeof isAgentSourcedAndBlockedForStaff>[0],
+  conversationId: number,
+): Promise<boolean> {
+  const link = await loadConversationLink(conversationId);
+  if (!link) return true;
+  if (link.studentId != null) {
+    const [student] = await db
+      .select({ agentId: studentsTable.agentId })
+      .from(studentsTable)
+      .where(eq(studentsTable.id, link.studentId));
+    return Boolean(student && isAgentSourcedAndBlockedForStaff(actor, student.agentId));
+  }
+  if (link.leadId != null) {
+    const [lead] = await db
+      .select({ agentId: leadsTable.agentId })
+      .from(leadsTable)
+      .where(eq(leadsTable.id, link.leadId));
+    return Boolean(lead && isAgentSourcedAndBlockedForStaff(actor, lead.agentId));
+  }
+  return false;
 }
 
 router.get("/inbox/live-mode", requireAuth, async (_req, res): Promise<void> => {
@@ -1814,6 +1854,48 @@ router.post(
 );
 
 /**
+ * Resolve named CRM placeholders before inserting a local quick reply into the
+ * composer. The send endpoint repeats this check so clients cannot bypass it.
+ */
+router.post(
+  "/inbox/conversations/:id/template-preview",
+  requireAuth,
+  requireRole(...STAFF_ROLES, ...ADMIN_ROLES),
+  async (req, res): Promise<void> => {
+    const id = parseInt(String(req.params.id), 10);
+    const content = typeof req.body?.content === "string" ? req.body.content : "";
+    if (!id || !content.trim()) {
+      res.status(400).json({ error: "content is required" });
+      return;
+    }
+    const [conv] = await db
+      .select({ id: conversationsTable.id })
+      .from(conversationsTable)
+      .where(eq(conversationsTable.id, id))
+      .limit(1);
+    if (!conv) {
+      res.status(404).json({ error: "Not found" });
+      return;
+    }
+    if (await isConversationEntityBlocked(req.user!, id)) {
+      res.status(404).json({ error: "Not found" });
+      return;
+    }
+
+    const rendered = await renderConversationTemplateContent(id, content);
+    if (rendered.missingVariables.length > 0) {
+      res.status(422).json({
+        error: "template_variables_missing",
+        missingVariables: rendered.missingVariables,
+        message: `Template information is missing: ${rendered.missingVariables.join(", ")}`,
+      });
+      return;
+    }
+    res.json(rendered);
+  },
+);
+
+/**
  * Send an outbound message on a non-internal channel conversation.
  * Body: { content: string }
  */
@@ -1823,13 +1905,14 @@ router.post(
   requireRole(...STAFF_ROLES, ...ADMIN_ROLES),
   async (req, res): Promise<void> => {
     const id = parseInt(String(req.params.id), 10);
-    const { content, attachments: bodyAttachments, replyToMessageId } = req.body as {
-      content: string;
+    const { content: rawContent, attachments: bodyAttachments, replyToMessageId } = req.body as {
+      content?: string;
       attachments?: Array<{ url: string; type?: string; name?: string; voiceNote?: boolean }>;
       replyToMessageId?: number;
     };
     const replyToId: number | null = (typeof replyToMessageId === "number" && replyToMessageId > 0) ? replyToMessageId : null;
-    const hasContent = Boolean(content && content.trim());
+    let content = rawContent ?? "";
+    const hasContent = Boolean(content.trim());
     const hasAttachments = Array.isArray(bodyAttachments) && bodyAttachments.length > 0;
     if (!id || (!hasContent && !hasAttachments)) {
       res.status(400).json({ error: "content or attachments is required" });
@@ -1839,6 +1922,19 @@ router.post(
     if (!conv) {
       res.status(404).json({ error: "Not found" });
       return;
+    }
+
+    if (hasContent) {
+      const rendered = await renderConversationTemplateContent(id, content);
+      if (rendered.missingVariables.length > 0) {
+        res.status(422).json({
+          error: "template_variables_missing",
+          missingVariables: rendered.missingVariables,
+          message: `Template information is missing: ${rendered.missingVariables.join(", ")}`,
+        });
+        return;
+      }
+      content = rendered.content;
     }
 
     // Human takeover: a staff member manually replying disables the intake bot
