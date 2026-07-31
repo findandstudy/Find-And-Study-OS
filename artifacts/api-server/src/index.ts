@@ -1709,9 +1709,11 @@ async function seedClaudeIntegration() {
     console.error("[migrate] example ai_personas seed:", err);
   }
 
-  // Step 2b6a: review-only Portal Automation Guardian. It is deliberately
+  // Step 2b6a: fail-closed Portal Automation Guardian. It is deliberately
   // inactive on install; an admin must review its scope, event trigger and cost
-  // cap before activation. Conflict never overwrites admin configuration.
+  // cap before activation. It may create a disabled staged spec and a separate
+  // deploy proposal, but never activates or deploys either one automatically.
+  // Conflict never overwrites admin configuration.
   try {
     await pool.query(`
       INSERT INTO ai_personas
@@ -1724,16 +1726,16 @@ async function seedClaudeIntegration() {
           'Portal Automation Guardian',
           'portal-automation-guardian',
           'operator',
-          'Diagnoses Playwright portal failures and coordinates review-only application lifecycle proposals from PII-safe, deterministic evidence.',
+          'Diagnoses Playwright portal failures, stages selector-only spec patches, runs offline safety checks and creates non-executing deploy proposals after two human approvals.',
           'anthropic', 'claude-sonnet-4-6',
-          E'You are the Portal Automation Guardian for an international education platform. Diagnose deterministic Playwright failures using only supplied evidence. Return exactly one JSON object matching the requested contract. Your output is a proposal for human review, never an executed change.',
+          E'You are the Portal Automation Guardian for an international education platform. Diagnose deterministic Playwright failures using only supplied evidence. Return exactly one JSON object matching the requested contract. Your output may be validated as a disabled staging artifact, but it is never an executed production change.',
           E'- Be evidence-bound and fail closed when uncertain\n- Prefer reusable adapter/spec fixes over student-specific workarounds\n- Set retrySafe=false when deduplication or remote portal state is unknown\n- Proposed JSON patches must use explicit JSON Pointer paths\n- Never include student PII, credentials, cookies, tokens, or signed URLs',
           E'Do not operate the browser. Do not retry submissions. Do not claim a submission succeeded. Do not edit code or activate a spec. Do not invent selectors, portal responses, student data, or validation rules.',
           '["portal_automation"]'::jsonb,
           '["portal_fix_proposal"]'::jsonb,
           'event_driven', NULL,
           '["portal_submission.failed","portal_status.changed"]'::jsonb,
-          '["portal_diagnosis","portal_lifecycle","approval_queue"]'::jsonb,
+          '["portal_diagnosis","staging_patch","deploy_proposal","portal_lifecycle","approval_queue"]'::jsonb,
           25.00,
           false
         )
@@ -1745,9 +1747,9 @@ async function seedClaudeIntegration() {
     await pool.query(`
       UPDATE ai_personas
       SET
-        description = 'Diagnoses Playwright portal failures and coordinates review-only application lifecycle proposals from PII-safe, deterministic evidence.',
+        description = 'Diagnoses Playwright portal failures, stages selector-only spec patches, runs offline safety checks and creates non-executing deploy proposals after two human approvals.',
         event_subscriptions = '["portal_submission.failed","portal_status.changed"]'::jsonb,
-        output_targets = '["portal_diagnosis","portal_lifecycle","approval_queue"]'::jsonb,
+        output_targets = '["portal_diagnosis","staging_patch","deploy_proposal","portal_lifecycle","approval_queue"]'::jsonb,
         updated_at = now()
       WHERE slug = 'portal-automation-guardian'
         AND tools_enabled = '["portal_fix_proposal"]'::jsonb

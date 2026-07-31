@@ -1,4 +1,4 @@
-import { parseAdapterSpec } from "@workspace/portal-adapters";
+import { parseAdapterSpec } from "@workspace/portal-adapters/declarative/schema";
 import type { PortalDiagnosis } from "./portalAiGuardianContract";
 
 type JsonRecord = Record<string, unknown>;

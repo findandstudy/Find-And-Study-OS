@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
   isDiagnosablePortalStatus,
@@ -7,6 +8,11 @@ import {
   sanitizePortalEvidence,
 } from "../src/lib/portalAiGuardianContract";
 import { applyGuardianSpecPatch } from "../src/lib/portalAiGuardianPatch";
+import {
+  stagingReportsMatch,
+  validateGuardianStagingPatch,
+} from "../src/lib/portalAiGuardianStaging";
+import { buildPortalDeployProposalPayload } from "../src/lib/portalAiGuardianApproval";
 
 const validDiagnosis = {
   classification: "selector_changed",
@@ -221,4 +227,128 @@ test("Guardian refuses medium-risk or weak-evidence automatic drafts", () => {
     accepted: false,
     reason: "CONFIDENCE_OR_RISK_GATE",
   });
+});
+
+test("offline staging passes an exact selector-only patch and requires a canary", () => {
+  const diagnosis = {
+    ...validDiagnosis,
+    risk: "low" as const,
+  } as Parameters<typeof applyGuardianSpecPatch>[1];
+  const decision = applyGuardianSpecPatch(selectorOnlyBaseSpec, diagnosis);
+  assert.equal(decision.accepted, true);
+  if (!decision.accepted) return;
+  const report = validateGuardianStagingPatch({
+    baseSpec: selectorOnlyBaseSpec,
+    patchedSpec: decision.patchedSpec,
+    operations: decision.operations,
+    testedAt: "2026-07-31T00:00:00.000Z",
+  });
+  assert.equal(report.status, "passed");
+  assert.equal(report.mode, "offline_structural");
+  assert.equal(report.canaryRequired, true);
+  assert.deepEqual(report.changedPaths, ["/steps/0/selector"]);
+  assert.equal(stagingReportsMatch(report, report), true);
+});
+
+test("offline staging rejects undeclared protected-surface changes", () => {
+  const diagnosis = {
+    ...validDiagnosis,
+    risk: "low" as const,
+  } as Parameters<typeof applyGuardianSpecPatch>[1];
+  const decision = applyGuardianSpecPatch(selectorOnlyBaseSpec, diagnosis);
+  assert.equal(decision.accepted, true);
+  if (!decision.accepted) return;
+  const tampered = structuredClone(decision.patchedSpec);
+  (tampered.meta as Record<string, unknown>).baseUrl =
+    "https://attacker.example.com";
+  const report = validateGuardianStagingPatch({
+    baseSpec: selectorOnlyBaseSpec,
+    patchedSpec: tampered,
+    operations: decision.operations,
+  });
+  assert.equal(report.status, "failed");
+  assert.equal(
+    report.checks.find((check) => check.key === "changed_paths_exact")?.passed,
+    false,
+  );
+  assert.equal(
+    report.checks.find(
+      (check) => check.key === "protected_surfaces_unchanged",
+    )?.passed,
+    false,
+  );
+});
+
+test("staging report hashes are tamper evident", () => {
+  const diagnosis = {
+    ...validDiagnosis,
+    risk: "low" as const,
+  } as Parameters<typeof applyGuardianSpecPatch>[1];
+  const decision = applyGuardianSpecPatch(selectorOnlyBaseSpec, diagnosis);
+  assert.equal(decision.accepted, true);
+  if (!decision.accepted) return;
+  const report = validateGuardianStagingPatch({
+    baseSpec: selectorOnlyBaseSpec,
+    patchedSpec: decision.patchedSpec,
+    operations: decision.operations,
+  });
+  assert.equal(
+    stagingReportsMatch(
+      { ...report, patchedSpecHash: "tampered" },
+      report,
+    ),
+    false,
+  );
+});
+
+test("deploy proposal is explicitly non-executing and rollback-aware", () => {
+  const diagnosis = {
+    ...validDiagnosis,
+    risk: "low" as const,
+  } as Parameters<typeof applyGuardianSpecPatch>[1];
+  const decision = applyGuardianSpecPatch(selectorOnlyBaseSpec, diagnosis);
+  assert.equal(decision.accepted, true);
+  if (!decision.accepted) return;
+  const staging = validateGuardianStagingPatch({
+    baseSpec: selectorOnlyBaseSpec,
+    patchedSpec: decision.patchedSpec,
+    operations: decision.operations,
+  });
+  const payload = buildPortalDeployProposalPayload({
+    sourceActionId: 10,
+    submissionId: 20,
+    universityKey: "fixture-university",
+    adapterKey: "guardian_fixture",
+    fingerprint: "fingerprint",
+    baseSpecId: 30,
+    baseSpecVersion: 4,
+    draftSpecId: 31,
+    draftSpecVersion: 5,
+    diagnosis,
+    staging,
+  });
+  assert.equal(payload.deployment.automaticExecution, false);
+  assert.equal(payload.deployment.productionChanged, false);
+  assert.equal(payload.deployment.requiresAuthorizedCanary, true);
+  assert.deepEqual(payload.deployment.rollback, {
+    specId: 30,
+    specVersion: 4,
+  });
+});
+
+test("review endpoint contains no spec activation or privileged approval side effect", () => {
+  const source = readFileSync(
+    new URL("../src/routes/ai-personas.ts", import.meta.url),
+    "utf8",
+  );
+  const reviewSection = source.slice(
+    source.indexOf('"/ai-personas/queue/actions/:id/review"'),
+    source.indexOf("export default router"),
+  );
+  assert.doesNotMatch(reviewSection, /privilegedApproved\s*:\s*true/);
+  assert.doesNotMatch(
+    reviewSection,
+    /update\(portalAdapterSpecsTable\)[\s\S]{0,300}enabled\s*:\s*true/,
+  );
+  assert.match(reviewSection, /productionChanged:\s*false/);
 });

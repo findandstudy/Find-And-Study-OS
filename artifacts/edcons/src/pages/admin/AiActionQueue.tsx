@@ -3,7 +3,14 @@ import { customFetch } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Check, Loader2, ListChecks, ShieldAlert, X } from "lucide-react";
+import {
+  Check,
+  Loader2,
+  ListChecks,
+  ShieldAlert,
+  ShieldCheck,
+  X,
+} from "lucide-react";
 import { useI18n } from "@/hooks/use-i18n";
 import { useToast } from "@/hooks/use-toast";
 
@@ -33,9 +40,33 @@ type ActionItem = {
       universityKey?: string;
       adapterKey?: string;
       reviewOnly?: boolean;
+      baseSpecId?: number;
+      baseSpecVersion?: number;
+      draftSpecId?: number;
+      draftSpecVersion?: number;
     };
     diagnosis?: PortalDiagnosis;
     structuredOutputValid?: boolean;
+    staging?: {
+      status?: "passed" | "failed";
+      mode?: string;
+      baseSpecHash?: string;
+      patchedSpecHash?: string;
+      reportHash?: string;
+      changedPaths?: string[];
+      checks?: Array<{ key: string; passed: boolean; detail: string }>;
+      canaryRequired?: boolean;
+      limitations?: string[];
+    };
+    deployment?: {
+      automaticExecution?: boolean;
+      productionChanged?: boolean;
+      requiresManualDeployment?: boolean;
+      requiresFreshReadOnlyProbe?: boolean;
+      requiresAuthorizedCanary?: boolean;
+      checklist?: string[];
+      rollback?: { specId?: number; specVersion?: number };
+    };
   } | null;
   preview: string | null;
   status: string;
@@ -69,7 +100,7 @@ export default function AiActionQueue() {
   const review = async (id: number, decision: "approved" | "rejected") => {
     setReviewingId(id);
     try {
-      await customFetch(`/api/ai-personas/queue/actions/${id}/review`, {
+      const result = await customFetch<{ message?: string }>(`/api/ai-personas/queue/actions/${id}/review`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ decision }),
@@ -79,7 +110,7 @@ export default function AiActionQueue() {
           decision === "approved"
             ? t("aiActionQueue.approvedToast")
             : t("aiActionQueue.rejectedToast"),
-        description: t("aiActionQueue.reviewOnlyNotice"),
+        description: result.message ?? t("aiActionQueue.reviewOnlyNotice"),
       });
       await load();
     } catch (error) {
@@ -139,17 +170,27 @@ export default function AiActionQueue() {
                   </Button>
                   <Button
                     size="sm"
-                    disabled={reviewingId === a.id}
+                    disabled={
+                      reviewingId === a.id ||
+                      (a.actionType === "portal_fix_proposal" &&
+                        a.payload?.staging?.status !== "passed")
+                    }
                     onClick={() => void review(a.id, "approved")}
                   >
                     {reviewingId === a.id
                       ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
                       : <Check className="h-3.5 w-3.5" />}
-                    {t("aiActionQueue.approve")}
+                    {a.actionType === "portal_fix_proposal"
+                      ? t("aiActionQueue.approveStaging")
+                      : a.actionType === "portal_deploy_proposal"
+                        ? t("aiActionQueue.approveDeployProposal")
+                        : t("aiActionQueue.approve")}
                   </Button>
                 </div>
               </div>
-              {a.actionType === "portal_fix_proposal" && a.payload?.diagnosis ? (
+              {["portal_fix_proposal", "portal_deploy_proposal"].includes(
+                a.actionType,
+              ) && a.payload?.diagnosis ? (
                 <div className="rounded-lg border border-indigo-200 bg-indigo-50/50 p-3 dark:border-indigo-900 dark:bg-indigo-950/20 space-y-2">
                   <div className="flex flex-wrap items-center gap-2">
                     <ShieldAlert className="h-4 w-4 text-indigo-600" />
@@ -179,6 +220,64 @@ export default function AiActionQueue() {
                     </span>{" "}
                     {a.payload.diagnosis.recommendedAction}
                   </div>
+                  {a.payload.staging && (
+                    <div className="rounded border bg-background/80 p-2 space-y-2">
+                      <div className="flex flex-wrap items-center gap-2 text-xs font-medium">
+                        <ShieldCheck className="h-4 w-4 text-emerald-600" />
+                        {t("aiActionQueue.stagingReport")}
+                        <Badge
+                          variant={
+                            a.payload.staging.status === "passed"
+                              ? "secondary"
+                              : "destructive"
+                          }
+                        >
+                          {a.payload.staging.status ?? "—"}
+                        </Badge>
+                        <span className="text-muted-foreground">
+                          {a.payload.staging.mode ?? "—"}
+                        </span>
+                      </div>
+                      <ul className="grid gap-1 text-xs sm:grid-cols-2">
+                        {a.payload.staging.checks?.map((check) => (
+                          <li key={`${a.id}-${check.key}`} className="flex gap-1.5">
+                            <span
+                              className={
+                                check.passed ? "text-emerald-600" : "text-destructive"
+                              }
+                            >
+                              {check.passed ? "✓" : "✕"}
+                            </span>
+                            <span title={check.detail}>{check.key}</span>
+                          </li>
+                        ))}
+                      </ul>
+                      {!!a.payload.staging.changedPaths?.length && (
+                        <div className="text-xs text-muted-foreground">
+                          {t("aiActionQueue.changedPaths")}: {a.payload.staging.changedPaths.join(", ")}
+                        </div>
+                      )}
+                      <div className="text-xs text-amber-700 dark:text-amber-400">
+                        {t("aiActionQueue.offlineStagingLimitation")}
+                      </div>
+                    </div>
+                  )}
+                  {a.actionType === "portal_deploy_proposal" &&
+                    a.payload.deployment && (
+                      <div className="rounded border border-amber-300 bg-amber-50/70 p-2 text-xs dark:border-amber-900 dark:bg-amber-950/20">
+                        <div className="font-medium">
+                          {t("aiActionQueue.manualDeployChecklist")}
+                        </div>
+                        <ol className="mt-1 list-decimal space-y-1 pl-5">
+                          {a.payload.deployment.checklist?.map((item, index) => (
+                            <li key={`${a.id}-deploy-${index}`}>{item}</li>
+                          ))}
+                        </ol>
+                        <div className="mt-2 font-medium text-amber-800 dark:text-amber-300">
+                          {t("aiActionQueue.deployApprovalNotice")}
+                        </div>
+                      </div>
+                    )}
                   {(a.payload.diagnosis.evidence?.length ||
                     a.payload.diagnosis.selectorCandidates?.length ||
                     a.payload.diagnosis.proposedSpecPatch?.length) && (
@@ -216,7 +315,9 @@ export default function AiActionQueue() {
                     </details>
                   )}
                   <div className="text-xs text-amber-700 dark:text-amber-400">
-                    {t("aiActionQueue.reviewOnlyNotice")}
+                    {a.actionType === "portal_fix_proposal"
+                      ? t("aiActionQueue.stagingApprovalNotice")
+                      : t("aiActionQueue.deployApprovalNotice")}
                   </div>
                 </div>
               ) : a.preview ? (

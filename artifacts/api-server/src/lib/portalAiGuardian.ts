@@ -17,6 +17,10 @@ import {
   type PortalDiagnosis,
 } from "./portalAiGuardianContract";
 import { applyGuardianSpecPatch } from "./portalAiGuardianPatch";
+import {
+  validateGuardianStagingPatch,
+  type GuardianStagingReport,
+} from "./portalAiGuardianStaging";
 
 export {
   isDiagnosablePortalStatus,
@@ -38,11 +42,15 @@ type GuardianState = {
   startedAt?: string;
   runId?: number;
   actionId?: number;
+  deployActionId?: number;
+  baseSpecId?: number;
+  baseSpecVersion?: number;
   draftSpecId?: number;
   draftSpecVersion?: number;
   draftStatus?: "created" | "not_created";
   draftReason?: string;
   diagnosis?: PortalDiagnosis;
+  staging?: GuardianStagingReport;
   error?: string;
 };
 
@@ -213,9 +221,12 @@ async function createGuardianSpecDraft(
   diagnosis: PortalDiagnosis,
 ): Promise<{
   draftStatus: "created" | "not_created";
+  baseSpecId?: number;
+  baseSpecVersion?: number;
   draftSpecId?: number;
   draftSpecVersion?: number;
   draftReason?: string;
+  staging?: GuardianStagingReport;
 }> {
   if (!enabledSpec) {
     return {
@@ -228,6 +239,21 @@ async function createGuardianSpecDraft(
     return {
       draftStatus: "not_created",
       draftReason: decision.reason,
+    };
+  }
+
+  const staging = validateGuardianStagingPatch({
+    baseSpec: enabledSpec.spec,
+    patchedSpec: decision.patchedSpec,
+    operations: decision.operations,
+  });
+  if (staging.status !== "passed") {
+    return {
+      draftStatus: "not_created",
+      draftReason: "STAGING_VALIDATION_FAILED",
+      baseSpecId: enabledSpec.id,
+      baseSpecVersion: enabledSpec.version,
+      staging,
     };
   }
 
@@ -263,8 +289,11 @@ async function createGuardianSpecDraft(
       });
     return {
       draftStatus: "created" as const,
+      baseSpecId: enabledSpec.id,
+      baseSpecVersion: enabledSpec.version,
       draftSpecId: draft.id,
       draftSpecVersion: draft.version,
+      staging,
     };
   });
 }
@@ -334,7 +363,14 @@ export async function diagnosePortalSubmission(
   const current = guardianFromResult(submission.resultJson);
   if (
     current.fingerprint === fingerprint &&
-    current.status === "proposed" &&
+    [
+      "proposed",
+      "staging_failed",
+      "deploy_proposed",
+      "deploy_approved",
+      "deploy_rejected",
+      "proposal_rejected",
+    ].includes(current.status ?? "") &&
     current.diagnosis
   ) {
     return { reused: true, ...current };
@@ -386,7 +422,7 @@ export async function diagnosePortalSubmission(
     }
 
     const parsed = parsePortalDiagnosis(run.output);
-    const draft = parsed.parseError
+    const draft: Awaited<ReturnType<typeof createGuardianSpecDraft>> = parsed.parseError
       ? {
           draftStatus: "not_created" as const,
           draftReason: "STRUCTURED_OUTPUT_INVALID",
@@ -396,8 +432,12 @@ export async function diagnosePortalSubmission(
       (tool) =>
         tool.tool === "portal_fix_proposal" && tool.queued && tool.actionId,
     );
+    const proposalReady =
+      draft.draftStatus === "created" &&
+      draft.staging?.status === "passed" &&
+      Boolean(queuedProposal?.actionId);
     const state: GuardianState = {
-      status: "proposed",
+      status: proposalReady ? "proposed" : "staging_failed",
       fingerprint,
       diagnosedAt: new Date().toISOString(),
       runId: run.runId,
@@ -418,6 +458,12 @@ export async function diagnosePortalSubmission(
               adapterKey: submission.adapterKey,
               fingerprint,
               reviewOnly: true,
+              ...(draft.baseSpecId
+                ? {
+                    baseSpecId: draft.baseSpecId,
+                    baseSpecVersion: draft.baseSpecVersion,
+                  }
+                : {}),
               ...(draft.draftSpecId
                 ? {
                     draftSpecId: draft.draftSpecId,
@@ -428,8 +474,10 @@ export async function diagnosePortalSubmission(
             diagnosis: parsed.diagnosis,
             structuredOutputValid: !parsed.parseError,
             specDraft: draft,
+            staging: draft.staging,
           },
           preview: parsed.diagnosis.summary.slice(0, 400),
+          status: proposalReady ? "pending_approval" : "failed",
         })
         .where(eq(aiActionQueueTable.id, queuedProposal.actionId));
     }
@@ -465,7 +513,7 @@ export async function runPortalAiGuardianTick(): Promise<void> {
         inArray(portalSubmissionsTable.status, [...AUTOMATIC_STATUSES]),
         gte(portalSubmissionsTable.updatedAt, persona.updatedAt),
         sql`(
-          coalesce(${portalSubmissionsTable.resultJson}->'aiGuardian'->>'status', '') not in ('processing', 'proposed', 'error')
+          coalesce(${portalSubmissionsTable.resultJson}->'aiGuardian'->>'status', '') not in ('processing', 'proposed', 'staging_failed', 'deploy_proposed', 'deploy_approved', 'deploy_rejected', 'proposal_rejected', 'error')
           or (
             ${portalSubmissionsTable.resultJson}->'aiGuardian'->>'status' = 'processing'
             and coalesce(
@@ -496,7 +544,15 @@ export async function runPortalAiGuardianTick(): Promise<void> {
       const state = guardianFromResult(submission.resultJson);
       if (
         state.fingerprint === fingerprint &&
-        ["processing", "proposed"].includes(state.status ?? "")
+        [
+          "processing",
+          "proposed",
+          "staging_failed",
+          "deploy_proposed",
+          "deploy_approved",
+          "deploy_rejected",
+          "proposal_rejected",
+        ].includes(state.status ?? "")
       ) {
         continue;
       }
