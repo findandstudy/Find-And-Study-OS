@@ -112,8 +112,10 @@ export async function checkOfferLetterExpiries(): Promise<void> {
 
       const stageLabel = stageLabels.get(doc.stage) || doc.stage;
       const validUntilStr = formatDate(validUntil, lang, { day: "2-digit", month: "long", year: "numeric" });
-      const title = `${stageLabel} ${daysLeft} gün içinde geçerliliğini yitiriyor`;
-      const body = `${studentName ? studentName + " — " : ""}${app.universityName || ""}${app.programName ? " / " + app.programName : ""} için yüklenen ${stageLabel.toLowerCase()} belgesinin son geçerlilik tarihi: ${validUntilStr} (${daysLeft} gün kaldı).`;
+      // English is only a storage/fallback language. The browser renders this
+      // event from structured data in the user's currently selected UI language.
+      const title = `${stageLabel} expires in ${daysLeft} day${daysLeft === 1 ? "" : "s"}`;
+      const body = `${studentName ? studentName + " — " : ""}${app.universityName || ""}${app.programName ? " / " + app.programName : ""}: the ${stageLabel.toLowerCase()} document is valid until ${validUntilStr} (${daysLeft} day${daysLeft === 1 ? "" : "s"} left).`;
 
       await dispatchNotification({
         event: "application.offer_letter_expiring",
@@ -128,6 +130,10 @@ export async function checkOfferLetterExpiries(): Promise<void> {
           documentId: doc.id,
           validUntil: validUntil.toISOString(),
           daysLeft,
+          studentName,
+          universityName: app.universityName || "",
+          programName: app.programName || "",
+          stageLabel,
         },
         templateVars: {
           studentName,

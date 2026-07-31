@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
+import { useI18n } from "@/hooks/use-i18n";
+import { localizeNotification } from "@/lib/notificationLocalization";
 import {
   Bell, Check, CheckCheck, X, MessageCircle, FileText,
   Users, DollarSign, AlertCircle, Megaphone, Mail, ChevronRight,
@@ -20,6 +22,7 @@ interface NotificationItem {
   actionUrl: string | null;
   isRead: boolean;
   createdAt: string;
+  data?: Record<string, unknown> | null;
 }
 
 const typeIcons: Record<string, any> = {
@@ -82,6 +85,7 @@ export function NotificationCenter() {
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
   const { user } = useAuth(true);
+  const { lang } = useI18n();
   const panelRef = useRef<HTMLDivElement>(null);
 
   const fetchUnreadCount = useCallback(async () => {
@@ -126,9 +130,10 @@ export function NotificationCenter() {
           // Surface a toast so the user sees the new notification even when
           // the bell panel is closed. Throttled by the toast hook itself.
           try {
-            const data = JSON.parse((ev as MessageEvent).data || "{}") as { title?: string; type?: string };
-            if (data.title) {
-              toast({ title: data.title });
+            const data = JSON.parse((ev as MessageEvent).data || "{}") as NotificationItem;
+            const localized = localizeNotification(data, lang);
+            if (localized.title) {
+              toast({ title: localized.title });
             }
           } catch { /* ignore malformed payload */ }
         });
@@ -149,7 +154,7 @@ export function NotificationCenter() {
       try { es?.close(); } catch { /* ignore */ }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fetchUnreadCount, fetchNotifications]);
+  }, [fetchUnreadCount, fetchNotifications, lang, toast]);
 
   useEffect(() => {
     if (open) fetchNotifications();
@@ -223,6 +228,7 @@ export function NotificationCenter() {
               ) : (
                 notifications.map(n => {
                   const Icon = getIcon(n.type);
+                  const localized = localizeNotification(n, lang);
                   return (
                     <div
                       key={n.id}
@@ -237,8 +243,8 @@ export function NotificationCenter() {
                         <Icon className="w-4 h-4" />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className={`text-sm ${!n.isRead ? "font-semibold text-foreground" : "text-foreground/80"}`}>{n.title}</p>
-                        {n.body && <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{n.body}</p>}
+                        <p className={`text-sm ${!n.isRead ? "font-semibold text-foreground" : "text-foreground/80"}`}>{localized.title}</p>
+                        {localized.body && <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{localized.body}</p>}
                         <p className="text-[10px] text-muted-foreground mt-1">{timeAgo(n.createdAt)}</p>
                       </div>
                       <div className="flex flex-col items-center gap-1 shrink-0 mt-1">

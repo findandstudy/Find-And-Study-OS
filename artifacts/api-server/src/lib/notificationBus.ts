@@ -6,6 +6,8 @@ export interface NotificationBusEvent {
   notificationId?: number;
   type: string;
   title: string;
+  body?: string | null;
+  data?: Record<string, unknown>;
 }
 
 const CHANNEL = "notification_events";

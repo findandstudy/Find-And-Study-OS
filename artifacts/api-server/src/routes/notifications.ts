@@ -3,6 +3,9 @@ import {
   db,
   notificationsTable,
   notificationRulesTable,
+  applicationsTable,
+  studentsTable,
+  pipelineStagesTable,
 } from "@workspace/db";
 import { eq, and, desc, sql, isNull, inArray } from "drizzle-orm";
 import { requireAuth, requireRole, logAudit } from "../lib/auth";
@@ -67,6 +70,77 @@ function bucketSection(type: string, url: string, resourceType: string): "leads"
   if (type.startsWith("application.") || resourceType === "application" || url.includes("/applications/")) return "applications";
   if (type.startsWith("task.") || resourceType === "task" || url.includes("/tasks")) return "tasks";
   return null;
+}
+
+type NotificationRow = typeof notificationsTable.$inferSelect;
+
+function dataRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+}
+
+/**
+ * Older offer-expiry notifications only stored applicationId/stage/date.
+ * Enrich them at read time so the browser can render both old and new rows in
+ * the language currently selected by the user. This stays batched (at most two
+ * extra queries for the notification page), avoiding an N+1 query path.
+ */
+async function enrichOfferExpiryNotifications(rows: NotificationRow[]): Promise<NotificationRow[]> {
+  const offerRows = rows.filter(row => row.type === "application.offer_letter_expiring");
+  if (offerRows.length === 0) return rows;
+
+  const applicationIds = Array.from(new Set(offerRows
+    .map(row => Number(dataRecord(row.data).applicationId))
+    .filter(id => Number.isInteger(id) && id > 0)));
+  const stageKeys = Array.from(new Set(offerRows
+    .map(row => String(dataRecord(row.data).stage || "").trim())
+    .filter(Boolean)));
+
+  const applicationRows = applicationIds.length > 0
+    ? await db.select({
+        id: applicationsTable.id,
+        universityName: applicationsTable.universityName,
+        programName: applicationsTable.programName,
+        studentFirstName: studentsTable.firstName,
+        studentLastName: studentsTable.lastName,
+      })
+      .from(applicationsTable)
+      .leftJoin(studentsTable, eq(applicationsTable.studentId, studentsTable.id))
+      .where(inArray(applicationsTable.id, applicationIds))
+    : [];
+  const stageRows = stageKeys.length > 0
+    ? await db.select({ key: pipelineStagesTable.key, label: pipelineStagesTable.label })
+      .from(pipelineStagesTable)
+      .where(and(
+        eq(pipelineStagesTable.entityType, "application"),
+        inArray(pipelineStagesTable.key, stageKeys),
+      ))
+    : [];
+
+  const applicationsById = new Map(applicationRows.map(app => [app.id, app]));
+  const stageLabels = new Map(stageRows.map(stage => [stage.key, stage.label]));
+
+  return rows.map(row => {
+    if (row.type !== "application.offer_letter_expiring") return row;
+    const currentData = dataRecord(row.data);
+    const applicationId = Number(currentData.applicationId);
+    const app = applicationsById.get(applicationId);
+    const stage = String(currentData.stage || "");
+    const studentName = app
+      ? [app.studentFirstName, app.studentLastName].filter(Boolean).join(" ").trim()
+      : "";
+    return {
+      ...row,
+      data: {
+        ...currentData,
+        studentName: currentData.studentName || studentName,
+        universityName: currentData.universityName || app?.universityName || "",
+        programName: currentData.programName || app?.programName || "",
+        stageLabel: currentData.stageLabel || stageLabels.get(stage) || stage || "Offer Letter",
+      },
+    };
+  });
 }
 
 /**
@@ -148,7 +222,7 @@ router.get("/notifications", requireAuth, async (req, res): Promise<void> => {
     .orderBy(desc(notificationsTable.createdAt))
     .limit(parseInt(limit, 10));
 
-  res.json({ data: notifications });
+  res.json({ data: await enrichOfferExpiryNotifications(notifications) });
 });
 
 router.get("/notifications/unread-count", requireAuth, async (req, res): Promise<void> => {

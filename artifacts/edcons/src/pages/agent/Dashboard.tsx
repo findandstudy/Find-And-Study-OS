@@ -24,6 +24,7 @@ import { OfferDeadlinesWidget } from "@/components/OfferDeadlinesWidget";
 import { useSeason } from "@/contexts/SeasonContext";
 import { usePipelineStages } from "@/hooks/use-pipeline-stages";
 import SignContract from "@/pages/agent/SignContract";
+import { localizeNotification } from "@/lib/notificationLocalization";
 
 const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
@@ -263,6 +264,7 @@ export default function AgentDashboard() {
               ) : (
                 latestNotifications.map((n: any) => {
                   const NIcon = NOTIFICATION_ICONS[n.type] || Bell;
+                  const localized = localizeNotification(n, lang);
                   return (
                     <div key={n.id} className={`p-3 rounded-xl border transition-colors ${n.isRead ? "bg-secondary/20 border-border/50" : "bg-primary/5 border-primary/20"}`}>
                       <div className="flex items-start gap-2.5">
@@ -271,10 +273,10 @@ export default function AgentDashboard() {
                         </div>
                         <div className="min-w-0 flex-1">
                           <p className={`text-sm font-medium line-clamp-1 ${n.isRead ? "text-muted-foreground" : "text-foreground"}`}>
-                            {n.title}
+                            {localized.title}
                           </p>
-                          {n.body && (
-                            <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">{n.body}</p>
+                          {localized.body && (
+                            <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">{localized.body}</p>
                           )}
                         </div>
                         <span className="text-[10px] text-muted-foreground whitespace-nowrap shrink-0 mt-0.5">

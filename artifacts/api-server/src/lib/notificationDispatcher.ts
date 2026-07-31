@@ -256,6 +256,8 @@ export async function dispatchNotification(ctx: DispatchContext): Promise<void> 
             notificationId: row.id,
             type: ctx.event,
             title: ctx.title,
+            body: ctx.body || null,
+            data: ctx.data || {},
           });
         }
       } catch (err) {
