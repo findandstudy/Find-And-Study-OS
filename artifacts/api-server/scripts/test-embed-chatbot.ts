@@ -91,6 +91,19 @@ test("chatbot route keeps identity, authorization and XSS guards server-owned", 
   assert.match(routeSource, /if \(script\) new Function\(script\)/);
 });
 
+test("chatbot uses the shared country-code catalog and stores verified E.164 phones", () => {
+  assert.match(routeSource, /const dialRows = await db[\s\S]*countriesTable\.dialCode/);
+  assert.match(routeSource, /generateChatbotWidgetHTML\([\s\S]*chatLocale,[\s\S]*dialCodes/);
+  assert.match(routeSource, /name="countryCode"/);
+  assert.match(routeSource, /countryCode:fd\.get\('countryCode'\)/);
+  assert.match(routeSource, /const combinedPhone = cleanCountryCode[\s\S]*pn\(cleanPhone, cleanCountryCode, 50\)/);
+  assert.match(routeSource, /const phoneE164 = toE164\(combinedPhone\)/);
+  assert.match(routeSource, /phone: phoneE164,[\s\S]*phoneE164,/);
+  assert.match(routeSource, /id="dialSearch"/);
+  assert.match(routeSource, /phoneInput\.value=raw\.replace\(\/\\\\D\/g,''\)\.slice\(0,15\)/);
+  assert.doesNotMatch(routeSource, /name="phone"[^>]*placeholder="\+90\.\.\."/);
+});
+
 test("collapsed chatbot launcher has a transparent, shadow-free host canvas", () => {
   assert.match(routeSource, /iframe\.style\.background = 'transparent'/);
   assert.match(routeSource, /iframe\.style\.boxShadow = 'none'/);
@@ -118,6 +131,11 @@ test("localized widget copy is complete, directional and contains no CRM disclos
     assert.ok(copy.hello);
     assert.ok(copy.firstName);
     assert.ok(copy.startChat);
+    assert.ok(copy.countryCode);
+    assert.ok(copy.countrySearch);
+    assert.ok(copy.countryNoMatches);
+    assert.ok(copy.phonePlaceholder);
+    assert.ok(copy.phoneInvalid);
     assert.ok(copy.greeting("Ada", "Example University").includes("Ada"));
     assert.doesNotMatch(
       Object.values(copy).filter((value) => typeof value === "string").join(" "),

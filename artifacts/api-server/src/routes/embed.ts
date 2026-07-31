@@ -1833,6 +1833,7 @@ router.post(
       lastName,
       email,
       phone,
+      countryCode,
       sourcePageUrl,
       sourceWebsite,
       language,
@@ -1846,6 +1847,7 @@ router.post(
     const cleanLastName = sanitizeChatText(lastName, 100);
     const cleanEmail = sanitizeChatText(email, 255).toLowerCase();
     const cleanPhone = sanitizeChatText(phone, 50);
+    const cleanCountryCode = sanitizeChatText(countryCode, 8);
     if (!cleanFirstName || !cleanLastName || !cleanEmail || !cleanPhone) {
       res.status(400).json({ error: "firstName, lastName, email and phone are required" });
       return;
@@ -1862,7 +1864,17 @@ router.post(
       res.status(400).json({ error: "Invalid email format" });
       return;
     }
-    const phoneE164 = toE164(cleanPhone);
+    if (cleanCountryCode && !/^\+\d{1,4}$/.test(cleanCountryCode)) {
+      res.status(400).json({ error: "Invalid country calling code." });
+      return;
+    }
+    // New widgets submit the calling code and national number separately.
+    // Keep accepting a complete international number from an already-open
+    // pre-deploy widget, but never assume a default country.
+    const combinedPhone = cleanCountryCode
+      ? pn(cleanPhone, cleanCountryCode, 50)
+      : pnOnly(cleanPhone, 50);
+    const phoneE164 = toE164(combinedPhone);
     if (!phoneE164) {
       res.status(400).json({ error: "Invalid phone number. Include the country code." });
       return;
@@ -2197,6 +2209,16 @@ router.get("/public/embed/:slug/widget", async (req, res): Promise<void> => {
   // and requires a valid HMAC session token (obtained via /token with the widget
   // API key header — see the backend-mediated token issuance endpoint).
   const baseUrl = getBaseUrl(req);
+  // Source phone dial codes from the active country catalog so the AI chatbot
+  // and the application widgets use one centrally managed picker.
+  const dialRows = await db
+    .select({ code: countriesTable.code, name: countriesTable.name, dialCode: countriesTable.dialCode })
+    .from(countriesTable)
+    .where(and(eq(countriesTable.isActive, true), isNotNull(countriesTable.dialCode)))
+    .orderBy(countriesTable.name);
+  const dialCodes: [string, string, string][] = dialRows
+    .filter((row) => row.dialCode)
+    .map((row) => [row.dialCode as string, row.code, row.name]);
   if (widget.mode === "ai_chatbot") {
     const preset = (widget.presetFilters || {}) as Record<string, unknown>;
     const universityId = Number(preset.universityId);
@@ -2222,6 +2244,7 @@ router.get("/public/embed/:slug/widget", async (req, res): Promise<void> => {
       widget,
       university,
       chatLocale,
+      dialCodes,
     );
     chatHtml = chatHtml.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "");
     try {
@@ -2238,16 +2261,6 @@ router.get("/public/embed/:slug/widget", async (req, res): Promise<void> => {
     return;
   }
   const docMeta = await loadDocCatalogForEmbed();
-  // Source phone dial codes from the country catalog (active + dial-coded only)
-  // so admins control them centrally. Tuples are [dialCode, isoAlpha2, name].
-  const dialRows = await db
-    .select({ code: countriesTable.code, name: countriesTable.name, dialCode: countriesTable.dialCode })
-    .from(countriesTable)
-    .where(and(eq(countriesTable.isActive, true), isNotNull(countriesTable.dialCode)))
-    .orderBy(countriesTable.name);
-  const dialCodes: [string, string, string][] = dialRows
-    .filter(r => r.dialCode)
-    .map(r => [r.dialCode as string, r.code, r.name]);
   let html = generateWidgetHTML(slug, baseUrl, widget, docMeta, dialCodes);
     // SAFETY GUARD (widget fragility): strip control chars the HTML parser rewrites, which
     // can corrupt the inline widget <script> - a stray NUL (U+0000) becomes U+FFFD and yields
@@ -2520,6 +2533,7 @@ export function generateChatbotWidgetHTML(
   widget: any,
   university: { id: number; name: string; logoUrl: string | null },
   locale: EmbedChatLocale = "en",
+  dialCodes: [string, string, string][] = [],
 ): string {
   const theme = sanitizeTheme(widget.theme);
   const copy = getEmbedChatCopy(locale);
@@ -2537,9 +2551,14 @@ export function generateChatbotWidgetHTML(
     logoUrl,
     locale,
     dir: copy.dir,
+    dialCodes,
     copy: {
       genericError: copy.genericError,
       startError: copy.startError,
+      countryCode: copy.countryCode,
+      countrySearch: copy.countrySearch,
+      countryNoMatches: copy.countryNoMatches,
+      phoneInvalid: copy.phoneInvalid,
       sendError: copy.sendError,
       enterContactFirst: copy.enterContactFirst,
       humanNotified: copy.humanNotified,
@@ -2582,6 +2601,25 @@ export function generateChatbotWidgetHTML(
     label{font-size:11px;font-weight:700;color:#344054}
     input{width:100%;border:1px solid #d0d5dd;border-radius:10px;padding:10px 11px;margin-top:4px;outline:none;background:#fff}
     input:focus,textarea:focus{border-color:var(--primary);box-shadow:0 0 0 3px color-mix(in srgb,var(--primary) 14%,transparent)}
+    .phone-label{display:block;font-size:11px;font-weight:700;color:#344054}
+    .phone-group{display:grid;grid-template-columns:minmax(116px,132px) 1fr;gap:8px;margin-top:4px}
+    .phone-group>input{margin-top:0;min-width:0}
+    .dial-picker{position:relative;min-width:0}
+    .dial-trigger{width:100%;height:39px;border:1px solid #d0d5dd;border-radius:10px;background:#fff;color:#344054;padding:0 9px;display:flex;align-items:center;gap:6px;cursor:pointer;text-align:start}
+    .dial-trigger:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px color-mix(in srgb,var(--primary) 14%,transparent)}
+    .dial-flag{width:20px;height:15px;border-radius:2px;object-fit:cover;box-shadow:0 0 0 1px rgba(16,24,40,.08);flex:0 0 auto}
+    .dial-current{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;font-weight:650}
+    .dial-chevron{margin-inline-start:auto;color:#667085;font-size:10px}
+    .dial-menu{display:none;position:absolute;z-index:30;inset-inline-start:0;top:44px;width:min(290px,calc(100vw - 48px));background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 14px 32px rgba(16,24,40,.18);padding:8px}
+    .dial-menu.open{display:block}
+    .dial-search{margin:0 0 7px;padding:9px 10px}
+    .dial-options{max-height:190px;overflow:auto;display:grid;gap:2px}
+    .dial-option{border:0;background:#fff;border-radius:8px;padding:8px;display:grid;grid-template-columns:22px 1fr auto;gap:7px;align-items:center;cursor:pointer;color:#344054;text-align:start}
+    .dial-option:hover,.dial-option:focus{outline:none;background:#f2f4f7}
+    .dial-name{font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .dial-code{font-size:11px;font-weight:750;color:var(--primary)}
+    .dial-empty{display:none;padding:10px;text-align:center;color:var(--muted);font-size:11px}
+    .field-error{display:none;color:#b42318;font-size:10px;margin-top:5px}
     .primary-btn{border:0;border-radius:11px;background:var(--button);color:#fff;font-weight:750;padding:11px 15px;cursor:pointer}
     .primary-btn:disabled{opacity:.55;cursor:wait}
     #messages{display:none;flex-direction:column;gap:8px}
@@ -2595,7 +2633,7 @@ export function generateChatbotWidgetHTML(
     .send{width:42px;height:42px;border:0;border-radius:12px;background:var(--button);color:#fff;cursor:pointer;font-size:18px}
     .status{font-size:11px;color:var(--muted);text-align:center;padding:5px}
     .error{font-size:11px;color:#b42318;background:#fef3f2;border-radius:8px;padding:8px;display:none}
-    @media(max-width:520px){#root{right:0;bottom:0;width:100vw}.panel{height:100dvh;border-radius:0;border:0}.launcher{margin-right:12px;margin-bottom:12px}}
+    @media(max-width:520px){#root{right:0;bottom:0;width:100vw}.panel{height:100dvh;border-radius:0;border:0}.launcher{margin-right:12px;margin-bottom:12px}.phone-group{grid-template-columns:116px 1fr}}
   </style>
 </head>
 <body>
@@ -2623,7 +2661,24 @@ export function generateChatbotWidgetHTML(
               <label>${htmlEscape(copy.lastName)}<input name="lastName" required maxlength="100" autocomplete="family-name"></label>
             </div>
             <label>${htmlEscape(copy.email)}<input name="email" type="email" required maxlength="255" autocomplete="email"></label>
-            <label>${htmlEscape(copy.phone)}<input name="phone" type="tel" required maxlength="50" placeholder="+90..." autocomplete="tel"></label>
+            <div class="phone-label"><span>${htmlEscape(copy.phone)}</span>
+              <div class="phone-group">
+                <div class="dial-picker">
+                  <input id="countryCode" name="countryCode" type="hidden">
+                  <button id="dialTrigger" class="dial-trigger" type="button" aria-haspopup="listbox" aria-expanded="false">
+                    <span id="dialCurrent" class="dial-current">${htmlEscape(copy.countryCode)}</span>
+                    <span class="dial-chevron">⌄</span>
+                  </button>
+                  <div id="dialMenu" class="dial-menu">
+                    <input id="dialSearch" class="dial-search" type="search" placeholder="${htmlEscape(copy.countrySearch)}" autocomplete="off">
+                    <div id="dialOptions" class="dial-options" role="listbox"></div>
+                    <div id="dialEmpty" class="dial-empty">${htmlEscape(copy.countryNoMatches)}</div>
+                  </div>
+                </div>
+                <input id="phone" name="phone" type="tel" required maxlength="18" placeholder="${htmlEscape(copy.phonePlaceholder)}" aria-label="${htmlEscape(copy.phonePlaceholder)}" autocomplete="tel-national" inputmode="tel">
+              </div>
+              <span id="phoneError" class="field-error">${htmlEscape(copy.phoneInvalid)}</span>
+            </div>
             <input name="_hp" tabindex="-1" autocomplete="off" style="position:absolute;left:-9999px" aria-hidden="true">
             <div id="formError" class="error"></div>
             <button class="primary-btn" type="submit">${htmlEscape(copy.startChat)}</button>
@@ -2657,6 +2712,70 @@ export function generateChatbotWidgetHTML(
     var seen={};
     var lastId=0;
     var polling=false;
+    var countryCode=document.getElementById('countryCode');
+    var dialTrigger=document.getElementById('dialTrigger');
+    var dialCurrent=document.getElementById('dialCurrent');
+    var dialMenu=document.getElementById('dialMenu');
+    var dialSearch=document.getElementById('dialSearch');
+    var dialOptions=document.getElementById('dialOptions');
+    var dialEmpty=document.getElementById('dialEmpty');
+    var phoneInput=document.getElementById('phone');
+    var phoneError=document.getElementById('phoneError');
+    var phoneCodes=(cfg.dialCodes||[]).map(function(row){
+      return{code:String(row[0]||''),iso:String(row[1]||'').toUpperCase(),name:String(row[2]||'')};
+    }).filter(function(row){return /^\\+\\d{1,4}$/.test(row.code)&&/^[A-Z]{2}$/.test(row.iso)});
+    function fold(value){
+      try{return String(value||'').normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').toLowerCase()}
+      catch(e){return String(value||'').toLowerCase()}
+    }
+    function flagUrl(iso){return 'https://flagcdn.com/24x18/'+encodeURIComponent(iso.toLowerCase())+'.png'}
+    function selectDial(row){
+      countryCode.value=row.code;
+      dialCurrent.textContent='';
+      var img=document.createElement('img');img.className='dial-flag';img.src=flagUrl(row.iso);img.alt=row.iso;dialCurrent.appendChild(img);
+      dialCurrent.appendChild(document.createTextNode(' '+row.code));
+      dialMenu.classList.remove('open');dialTrigger.setAttribute('aria-expanded','false');
+      phoneError.style.display='none';phoneInput.focus();
+    }
+    function renderDialOptions(query){
+      var q=fold(query);dialOptions.textContent='';
+      var rows=phoneCodes.filter(function(row){
+        return !q||fold(row.name+' '+row.iso+' '+row.code).indexOf(q)>=0;
+      });
+      rows.forEach(function(row){
+        var button=document.createElement('button');button.type='button';button.className='dial-option';button.setAttribute('role','option');
+        var img=document.createElement('img');img.className='dial-flag';img.src=flagUrl(row.iso);img.alt=row.iso;
+        var name=document.createElement('span');name.className='dial-name';name.textContent=row.name;
+        var code=document.createElement('span');code.className='dial-code';code.textContent=row.code;
+        button.appendChild(img);button.appendChild(name);button.appendChild(code);
+        button.onclick=function(){selectDial(row)};dialOptions.appendChild(button);
+      });
+      dialEmpty.style.display=rows.length?'none':'block';
+    }
+    dialTrigger.onclick=function(){
+      var open=!dialMenu.classList.contains('open');dialMenu.classList.toggle('open',open);dialTrigger.setAttribute('aria-expanded',String(open));
+      if(open){dialSearch.value='';renderDialOptions('');setTimeout(function(){dialSearch.focus()},0)}
+    };
+    dialSearch.oninput=function(){renderDialOptions(dialSearch.value)};
+    document.addEventListener('click',function(event){
+      if(!dialMenu.contains(event.target)&&!dialTrigger.contains(event.target)){dialMenu.classList.remove('open');dialTrigger.setAttribute('aria-expanded','false')}
+    });
+    document.addEventListener('keydown',function(event){
+      if(event.key==='Escape'){dialMenu.classList.remove('open');dialTrigger.setAttribute('aria-expanded','false')}
+    });
+    phoneInput.oninput=function(){
+      var raw=phoneInput.value;
+      if(raw.trim().charAt(0)==='+'){
+        var internationalDigits=raw.replace(/\\D/g,'');
+        var match=phoneCodes.slice().sort(function(a,b){return b.code.length-a.code.length}).find(function(row){
+          return internationalDigits.indexOf(row.code.replace(/\\D/g,''))===0;
+        });
+        if(match){selectDial(match);raw=internationalDigits.slice(match.code.replace(/\\D/g,'').length)}
+      }
+      phoneInput.value=raw.replace(/\\D/g,'').slice(0,15);
+      phoneError.style.display='none';
+    };
+    renderDialOptions('');
     function parentMessage(type,extra){
       try{parent.postMessage(Object.assign({type:type,slug:cfg.slug},extra||{}),'*')}catch(e){}
     }
@@ -2694,8 +2813,11 @@ export function generateChatbotWidgetHTML(
       var error=document.getElementById('formError');error.style.display='none';button.disabled=true;
       try{
         var fd=new FormData(form);var ref=document.referrer||'';
+        if(!fd.get('countryCode')||String(fd.get('phone')||'').replace(/\\D/g,'').length<4){
+          phoneError.style.display='block';button.disabled=false;return;
+        }
         var payload={
-          firstName:fd.get('firstName'),lastName:fd.get('lastName'),email:fd.get('email'),phone:fd.get('phone'),_hp:fd.get('_hp'),
+          firstName:fd.get('firstName'),lastName:fd.get('lastName'),email:fd.get('email'),phone:fd.get('phone'),countryCode:fd.get('countryCode'),_hp:fd.get('_hp'),
           sourcePageUrl:ref,sourceWebsite:(function(){try{return new URL(ref).hostname}catch(e){return''}})(),
           language:cfg.locale
         };
@@ -2705,7 +2827,10 @@ export function generateChatbotWidgetHTML(
         sessionToken=data.sessionToken;sessionStorage.setItem(storageKey,sessionToken);showChat();
         if(data.greeting)appendMessage(data.greeting);
         poll();
-      }catch(err){error.textContent=cfg.copy.startError;error.style.display='block'}
+      }catch(err){
+        if(/phone|calling code/i.test(String(err&&err.message||''))){phoneError.style.display='block'}
+        else{error.textContent=cfg.copy.startError;error.style.display='block'}
+      }
       finally{button.disabled=false}
     };
     async function poll(){
