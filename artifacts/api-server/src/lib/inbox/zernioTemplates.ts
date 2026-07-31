@@ -1,5 +1,5 @@
 import { db, channelAccountsTable } from "@workspace/db";
-import { and, eq } from "drizzle-orm";
+import { and, asc, desc, eq } from "drizzle-orm";
 import { getZernioApiKey } from "./zernioSend";
 
 /**
@@ -70,13 +70,28 @@ function normalizeTemplate(raw: any): NormalizedZernioTemplate {
   };
 }
 
-/** Resolve a Zernio-hosted WhatsApp channel account (first active one, or by id). */
+/**
+ * Resolve an active Zernio-hosted WhatsApp channel account.
+ *
+ * Explicit account ids always win for existing conversations. When callers do
+ * not have an account id (for example, a brand-new outbound conversation), use
+ * the configured default and then a stable id fallback.
+ */
 export async function resolveZernioWhatsAppAccount(
   channelAccountId?: number | null,
 ): Promise<{ id: number; externalAccountId: string } | null> {
-  const conditions = [eq(channelAccountsTable.provider, "zernio"), eq(channelAccountsTable.channel, "whatsapp")];
+  const conditions = [
+    eq(channelAccountsTable.provider, "zernio"),
+    eq(channelAccountsTable.channel, "whatsapp"),
+    eq(channelAccountsTable.isActive, true),
+  ];
   if (channelAccountId != null) conditions.push(eq(channelAccountsTable.id, channelAccountId));
-  const [acct] = await db.select().from(channelAccountsTable).where(and(...conditions));
+  const [acct] = await db
+    .select()
+    .from(channelAccountsTable)
+    .where(and(...conditions))
+    .orderBy(desc(channelAccountsTable.isDefault), asc(channelAccountsTable.id))
+    .limit(1);
   if (!acct || !acct.externalAccountId) return null;
   return { id: acct.id, externalAccountId: acct.externalAccountId };
 }
