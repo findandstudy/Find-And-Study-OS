@@ -114,8 +114,15 @@ export function sitPassportIdentityProofFromDocument(input: {
   }
   if (!extracted) return null;
 
+  const identityConfidence = String(
+    extracted.identityConfidence ?? "",
+  ).toLowerCase();
   const confidence = String(extracted.confidence ?? "").toLowerCase();
-  if (confidence !== "high" && (input.confidenceScore ?? 0) < 0.9) return null;
+  if (
+    identityConfidence !== "high" &&
+    confidence !== "high" &&
+    (input.confidenceScore ?? 0) < 0.9
+  ) return null;
 
   const firstName = readExtractedText(extracted, [
     "firstName",

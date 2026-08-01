@@ -141,6 +141,37 @@ test("IDENTITY4 — document proof requires complete high-confidence identity", 
     }),
     null,
   );
+  assert.deepEqual(
+    sitPassportIdentityProofFromDocument({
+      extractedData: {
+        firstName: "Aisha",
+        lastName: "Khan",
+        passportNumber: "AB123",
+        identityConfidence: "high",
+        confidence: "medium",
+      },
+      confidenceScore: 0.6,
+    }),
+    {
+      firstName: "Aisha",
+      lastName: "Khan",
+      passportNumber: "AB123",
+      confidence: "high",
+    },
+  );
+  assert.equal(
+    sitPassportIdentityProofFromDocument({
+      extractedData: {
+        firstName: "Aisha",
+        lastName: "Khan",
+        passportNumber: "AB123",
+        identityConfidence: "medium",
+        confidence: "medium",
+      },
+      confidenceScore: 0.6,
+    }),
+    null,
+  );
   assert.equal(
     sitPassportIdentityProofFromDocument({
       extractedData: {

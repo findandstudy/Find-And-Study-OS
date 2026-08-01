@@ -17,6 +17,11 @@ import { loadDocumentBytes } from "./documentBytes.js";
 import { normalizeInboxStudentExtraction } from "./inboxStudentExtraction.js";
 import { logAudit } from "./auth.js";
 import { buildPassportDateRepairDecision } from "./portalPassportDateRepair.js";
+import {
+  hasHighConfidencePassportIdentityExtraction,
+  shouldRefreshPassportIdentityExtraction,
+  stampPassportIdentityExtraction,
+} from "./portalPassportExtractionPolicy.js";
 
 export interface PortalProfileAutoExtractResult {
   status:
@@ -67,9 +72,14 @@ Return ONLY one JSON object with these keys:
   "passportExpiry": "YYYY-MM-DD or null",
   "motherName": "exact text or null",
   "fatherName": "exact text or null",
+  "identityConfidence": "high|medium|low",
   "confidence": "high|medium|low"
 }
 Never guess. Passport number must be cross-checked against the MRZ when present.
+identityConfidence applies ONLY to firstName, lastName and passportNumber. Set it
+to high only when all three are clearly legible and the passport number agrees
+with the MRZ when an MRZ is present. General confidence may remain medium when a
+non-identity field (for example a parent name) is unclear.
 If any character or date is uncertain, use null.`;
 
 const FIELD_MAP = {
@@ -168,17 +178,6 @@ function parseExtractedData(
   }
 }
 
-function hasCompletePassportIdentity(
-  extracted: Record<string, unknown> | null,
-): boolean {
-  if (!extracted) return false;
-  return Boolean(
-    has(extracted.firstName ?? extracted.givenNames ?? extracted.givenName) &&
-    has(extracted.lastName ?? extracted.surname ?? extracted.familyName) &&
-    has(extracted.passportNumber ?? extracted.passportNo),
-  );
-}
-
 async function findLatestPassportDocument(
   studentId: number,
 ): Promise<PassportDocument | null> {
@@ -209,10 +208,10 @@ async function loadPassportExtraction(
   let extracted = parseExtractedData(document.extractedData);
   let confidenceScore = document.confidenceScore ?? 0;
 
-  // Historical extraction payloads did not include the passport holder's
-  // name. They cannot prove identity, so re-read the document once rather
-  // than treating the stale payload as sufficient.
-  if (!hasCompletePassportIdentity(extracted)) {
+  // Legacy payloads either omitted identity or stored only a document-wide
+  // medium score. Re-read once with identity-specific confidence, then stamp
+  // the payload so an unclear source does not cause an AI request per click.
+  if (shouldRefreshPassportIdentityExtraction(extracted, confidenceScore)) {
     const bytes = await loadDocumentBytes(document);
     if (!bytes) return { status: "unreadable", document };
     const mime = bytes.mimeType.toLowerCase();
@@ -256,8 +255,10 @@ async function loadPassportExtraction(
         ? textBlock.text.match(/\{[\s\S]*\}/)?.[0]
         : null;
       if (!json) return { status: "unreadable", document };
-      extracted = normalizeInboxStudentExtraction(
-        JSON.parse(json) as Record<string, unknown>,
+      extracted = stampPassportIdentityExtraction(
+        normalizeInboxStudentExtraction(
+          JSON.parse(json) as Record<string, unknown>,
+        ),
       );
       confidenceScore =
         extracted.confidence === "high"
@@ -312,8 +313,10 @@ export async function verifyStudentIdentityAgainstPassport(opts: {
     documentId: loaded.document.id,
   });
   if (!proof) {
-    const highConfidence =
-      loaded.extracted.confidence === "high" || loaded.confidenceScore >= 0.9;
+    const highConfidence = hasHighConfidencePassportIdentityExtraction(
+      loaded.extracted,
+      loaded.confidenceScore,
+    );
     return {
       status: highConfidence ? "unreadable" : "low_confidence",
       fields: [],
