@@ -19,6 +19,7 @@ import {
   clearCredsOverride,
   validateIdentityFields,
   formatIdentityErrors,
+  evaluateSitIdentity,
 } from "@workspace/portal-adapters";
 import type { SubmitResult, SubmitProfile, SubmitFiles } from "@workspace/portal-adapters";
 import type { ClaimedSubmission } from "./queue.js";
@@ -95,6 +96,20 @@ export async function runSubmission(
     throw new Error(
       `IDENTITY_VALIDATION_FAILED: ${formatIdentityErrors(idErrors)}`,
     );
+  }
+
+  if (adapter.key === "sit") {
+    const identity = evaluateSitIdentity(profile, profile.passportIdentityProof);
+    if (!identity.matched) {
+      await cleanup(tempDir);
+      const fields = [...new Set([
+        ...identity.missingFields,
+        ...identity.mismatchedFields,
+      ])];
+      throw new Error(
+        `SIT_IDENTITY_PROOF_FAILED: fields=${fields.join(",") || "passportIdentityProof"}`,
+      );
+    }
   }
 
   // ----- 3. Real mode — resolve credentials (DB-first, env fallback) ------

@@ -8,7 +8,11 @@ import {
   getAnthropicClient,
   getClaudeConfig,
 } from "@workspace/integrations-anthropic-ai";
-import { validatePassportNumber } from "@workspace/portal-adapters";
+import {
+  evaluateSitIdentity,
+  sitPassportIdentityProofFromDocument,
+  validatePassportNumber,
+} from "@workspace/portal-adapters";
 import { loadDocumentBytes } from "./documentBytes.js";
 import { normalizeInboxStudentExtraction } from "./inboxStudentExtraction.js";
 import { logAudit } from "./auth.js";
@@ -24,9 +28,23 @@ export interface PortalProfileAutoExtractResult {
   fields: string[];
 }
 
+export interface PortalPassportIdentityVerificationResult {
+  status:
+    | "verified"
+    | "mismatch"
+    | "no_passport_document"
+    | "low_confidence"
+    | "unreadable"
+    | "ai_unavailable";
+  fields: string[];
+  documentId?: number;
+}
+
 const PROMPT = `You extract identity data from an official passport for a university application.
 Return ONLY one JSON object with these keys:
 {
+  "firstName": "all given names exactly as printed, or null",
+  "lastName": "surname exactly as printed, or null",
   "dateOfBirth": "YYYY-MM-DD or null",
   "gender": "male|female or null",
   "nationality": "full English country name or null",
@@ -66,6 +84,23 @@ const EXTRACT_ALIASES: Record<ExtractField, string[]> = {
   motherName: ["motherName"],
   fatherName: ["fatherName"],
 };
+
+type PassportDocument = typeof documentsTable.$inferSelect;
+
+type PassportExtractionResult =
+  | {
+      status: "ok";
+      document: PassportDocument;
+      extracted: Record<string, unknown>;
+      confidenceScore: number;
+    }
+  | {
+      status:
+        | "no_passport_document"
+        | "unreadable"
+        | "ai_unavailable";
+      document?: PassportDocument;
+    };
 
 function readExtractedField(
   extracted: Record<string, unknown>,
@@ -108,39 +143,36 @@ function safeExtractedValue(
   return text.slice(0, 255);
 }
 
-export async function autoFillMissingProfileFromPassport(opts: {
-  studentId: number;
-  actorUserId: number | null;
-  ip?: string;
-  requiredFields?: readonly string[];
-}): Promise<PortalProfileAutoExtractResult> {
-  const [student] = await db
-    .select()
-    .from(studentsTable)
-    .where(and(
-      eq(studentsTable.id, opts.studentId),
-      isNull(studentsTable.deletedAt),
-    ));
-  if (!student) return { status: "unreadable", fields: [] };
-
-  const requested = opts.requiredFields
-    ? new Set(opts.requiredFields)
-    : null;
-  const isRequested = (field: ExtractField): boolean =>
-    !requested ||
-    requested.has(field) ||
-    (field === "passportExpiry" && requested.has("passportExpiryDate"));
-  const missing = (Object.keys(FIELD_MAP) as ExtractField[])
-    .filter((field) => isRequested(field) && !has(student[field]));
-  if (missing.length === 0) {
-    return { status: "no_missing_fields", fields: [] };
+function parseExtractedData(
+  value: string | null | undefined,
+): Record<string, unknown> | null {
+  if (!value) return null;
+  try {
+    return JSON.parse(value) as Record<string, unknown>;
+  } catch {
+    return null;
   }
+}
 
+function hasCompletePassportIdentity(
+  extracted: Record<string, unknown> | null,
+): boolean {
+  if (!extracted) return false;
+  return Boolean(
+    has(extracted.firstName ?? extracted.givenNames ?? extracted.givenName) &&
+    has(extracted.lastName ?? extracted.surname ?? extracted.familyName) &&
+    has(extracted.passportNumber ?? extracted.passportNo),
+  );
+}
+
+async function findLatestPassportDocument(
+  studentId: number,
+): Promise<PassportDocument | null> {
   const [document] = await db
     .select()
     .from(documentsTable)
     .where(and(
-      eq(documentsTable.studentId, opts.studentId),
+      eq(documentsTable.studentId, studentId),
       isNull(documentsTable.deletedAt),
       or(
         ilike(documentsTable.type, "%passport%"),
@@ -151,20 +183,24 @@ export async function autoFillMissingProfileFromPassport(opts: {
     ))
     .orderBy(desc(documentsTable.createdAt), desc(documentsTable.id))
     .limit(1);
-  if (!document) return { status: "no_passport_document", fields: [] };
+  return document ?? null;
+}
 
-  let extracted: Record<string, unknown> | null = null;
-  if (document.extractedData) {
-    try {
-      extracted = JSON.parse(document.extractedData) as Record<string, unknown>;
-    } catch {
-      extracted = null;
-    }
-  }
+async function loadPassportExtraction(
+  studentId: number,
+): Promise<PassportExtractionResult> {
+  const document = await findLatestPassportDocument(studentId);
+  if (!document) return { status: "no_passport_document" };
 
-  if (!extracted) {
+  let extracted = parseExtractedData(document.extractedData);
+  let confidenceScore = document.confidenceScore ?? 0;
+
+  // Historical extraction payloads did not include the passport holder's
+  // name. They cannot prove identity, so re-read the document once rather
+  // than treating the stale payload as sufficient.
+  if (!hasCompletePassportIdentity(extracted)) {
     const bytes = await loadDocumentBytes(document);
-    if (!bytes) return { status: "unreadable", fields: [] };
+    if (!bytes) return { status: "unreadable", document };
     const mime = bytes.mimeType.toLowerCase();
     const isPdf = mime === "application/pdf";
     const supportedImage = [
@@ -174,7 +210,7 @@ export async function autoFillMissingProfileFromPassport(opts: {
       "image/webp",
     ].includes(mime);
     if (!isPdf && !supportedImage) {
-      return { status: "unreadable", fields: [] };
+      return { status: "unreadable", document };
     }
 
     try {
@@ -205,27 +241,133 @@ export async function autoFillMissingProfileFromPassport(opts: {
       const json = textBlock?.type === "text"
         ? textBlock.text.match(/\{[\s\S]*\}/)?.[0]
         : null;
-      if (!json) return { status: "unreadable", fields: [] };
+      if (!json) return { status: "unreadable", document };
       extracted = normalizeInboxStudentExtraction(
         JSON.parse(json) as Record<string, unknown>,
       );
+      confidenceScore =
+        extracted.confidence === "high"
+          ? 1
+          : extracted.confidence === "medium" ? 0.6 : 0.3;
       await db.update(documentsTable)
         .set({
           extractedData: JSON.stringify(extracted),
-          confidenceScore:
-            extracted.confidence === "high"
-              ? 1
-              : extracted.confidence === "medium" ? 0.6 : 0.3,
+          confidenceScore,
         })
         .where(eq(documentsTable.id, document.id));
     } catch {
-      return { status: "ai_unavailable", fields: [] };
+      return { status: "ai_unavailable", document };
     }
   }
 
+  if (!extracted) return { status: "unreadable", document };
+  return { status: "ok", document, extracted, confidenceScore };
+}
+
+/**
+ * Independently verify CRM name + passport number against the latest passport
+ * document. This never repairs a populated identity field: disagreement is a
+ * hard, PII-safe fail-closed result that must be reviewed by a human.
+ */
+export async function verifyStudentIdentityAgainstPassport(opts: {
+  studentId: number;
+  actorUserId: number | null;
+  ip?: string;
+}): Promise<PortalPassportIdentityVerificationResult> {
+  const [student] = await db
+    .select()
+    .from(studentsTable)
+    .where(and(
+      eq(studentsTable.id, opts.studentId),
+      isNull(studentsTable.deletedAt),
+    ));
+  if (!student) return { status: "unreadable", fields: [] };
+
+  const loaded = await loadPassportExtraction(opts.studentId);
+  if (loaded.status !== "ok") {
+    return {
+      status: loaded.status,
+      fields: [],
+      ...(loaded.document ? { documentId: loaded.document.id } : {}),
+    };
+  }
+
+  const proof = sitPassportIdentityProofFromDocument({
+    extractedData: loaded.extracted,
+    confidenceScore: loaded.confidenceScore,
+    documentId: loaded.document.id,
+  });
+  if (!proof) {
+    const highConfidence =
+      loaded.extracted.confidence === "high" || loaded.confidenceScore >= 0.9;
+    return {
+      status: highConfidence ? "unreadable" : "low_confidence",
+      fields: [],
+      documentId: loaded.document.id,
+    };
+  }
+
+  const evaluation = evaluateSitIdentity(
+    {
+      firstName: student.firstName ?? "",
+      lastName: student.lastName ?? "",
+      passportNumber: student.passportNumber ?? "",
+    },
+    proof,
+  );
+  const fields = [...new Set([
+    ...evaluation.missingFields,
+    ...evaluation.mismatchedFields,
+  ])];
+  const status = evaluation.matched ? "verified" : "mismatch";
+  await logAudit(
+    opts.actorUserId,
+    `portal_preflight_identity_${status}`,
+    "student",
+    opts.studentId,
+    { documentId: loaded.document.id, fields, confidence: "high" },
+    opts.ip,
+  );
+  return { status, fields, documentId: loaded.document.id };
+}
+
+export async function autoFillMissingProfileFromPassport(opts: {
+  studentId: number;
+  actorUserId: number | null;
+  ip?: string;
+  requiredFields?: readonly string[];
+}): Promise<PortalProfileAutoExtractResult> {
+  const [student] = await db
+    .select()
+    .from(studentsTable)
+    .where(and(
+      eq(studentsTable.id, opts.studentId),
+      isNull(studentsTable.deletedAt),
+    ));
+  if (!student) return { status: "unreadable", fields: [] };
+
+  const requested = opts.requiredFields
+    ? new Set(opts.requiredFields)
+    : null;
+  const isRequested = (field: ExtractField): boolean =>
+    !requested ||
+    requested.has(field) ||
+    (field === "passportExpiry" && requested.has("passportExpiryDate"));
+  const missing = (Object.keys(FIELD_MAP) as ExtractField[])
+    .filter((field) => isRequested(field) && !has(student[field]));
+  if (missing.length === 0) {
+    return { status: "no_missing_fields", fields: [] };
+  }
+
+  const loaded = await loadPassportExtraction(opts.studentId);
+  if (loaded.status !== "ok") {
+    return { status: loaded.status, fields: [] };
+  }
+  const { document, extracted, confidenceScore } = loaded;
+
   const highConfidence =
     extracted.confidence === "high" ||
-    (document.confidenceScore ?? 0) >= 0.9;
+    confidenceScore >= 0.9;
   if (!highConfidence) return { status: "low_confidence", fields: [] };
 
   const patch: Record<string, string> = {};

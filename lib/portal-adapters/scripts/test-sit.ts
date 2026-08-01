@@ -35,6 +35,9 @@ import {
   hasSitProgramSubjectAnchor,
   buildSitProgramMissingContext,
   matchSitProgramExactFormatting,
+  evaluateSitIdentity,
+  normalizeSitPassport,
+  sitPassportIdentityProofFromDocument,
 } from "../src/universities/sit/helpers.js";
 import {
   SIT_URLS,
@@ -49,6 +52,7 @@ import {
   extractAnonJwt,
   selectBundleUrls,
   runSitAuthExclusive,
+  resolveSitStudentLookup,
 } from "../src/universities/sit/graphql.js";
 import {
   buildSignedStudentPhotoPath,
@@ -59,6 +63,148 @@ import {
   verifyDocumentSignature,
 } from "../src/documentSigning.js";
 import { extractStudentDocumentRefs } from "../src/profile.js";
+
+// ---------------------------------------------------------------------------
+// SIT identity safety — passport document proof + existing-student reuse
+// ---------------------------------------------------------------------------
+
+test("IDENTITY1 — passport normalization is separator/case agnostic", () => {
+  assert.equal(normalizeSitPassport(" ab-12 34 "), "AB1234");
+});
+
+test("IDENTITY2 — complete name tokens may swap passport given/surname order", () => {
+  const result = evaluateSitIdentity(
+    { firstName: "ŞEYMA", lastName: "DEMİRCAN", passportNumber: "U-123456" },
+    {
+      firstName: "DEMIRCAN",
+      lastName: "SEYMA",
+      passportNumber: "u123456",
+      confidence: "high",
+    },
+  );
+  assert.equal(result.matched, true);
+  assert.deepEqual(result.mismatchedFields, []);
+});
+
+test("IDENTITY3 — name or passport disagreement fails closed", () => {
+  const passportMismatch = evaluateSitIdentity(
+    { firstName: "Aisha", lastName: "Khan", passportNumber: "AB123" },
+    {
+      firstName: "Aisha",
+      lastName: "Khan",
+      passportNumber: "AB124",
+      confidence: "high",
+    },
+  );
+  assert.deepEqual(passportMismatch.mismatchedFields, ["passportNumber"]);
+
+  const nameMismatch = evaluateSitIdentity(
+    { firstName: "Aisha", lastName: "Khan", passportNumber: "AB123" },
+    {
+      firstName: "Fatima",
+      lastName: "Khan",
+      passportNumber: "AB123",
+      confidence: "high",
+    },
+  );
+  assert.deepEqual(nameMismatch.mismatchedFields, ["firstName", "lastName"]);
+});
+
+test("IDENTITY4 — document proof requires complete high-confidence identity", () => {
+  assert.deepEqual(
+    sitPassportIdentityProofFromDocument({
+      extractedData: {
+        firstName: "Aisha",
+        lastName: "Khan",
+        passportNumber: "AB123",
+        confidence: "high",
+      },
+      documentId: 7,
+    }),
+    {
+      firstName: "Aisha",
+      lastName: "Khan",
+      passportNumber: "AB123",
+      confidence: "high",
+      documentId: 7,
+    },
+  );
+  assert.equal(
+    sitPassportIdentityProofFromDocument({
+      extractedData: {
+        firstName: "Aisha",
+        lastName: "Khan",
+        passportNumber: "AB123",
+        confidence: "medium",
+      },
+      confidenceScore: 0.6,
+    }),
+    null,
+  );
+  assert.equal(
+    sitPassportIdentityProofFromDocument({
+      extractedData: {
+        firstName: "Aisha",
+        passportNumber: "AB123",
+        confidence: "high",
+      },
+    }),
+    null,
+  );
+});
+
+test("IDENTITY5 — existing SIT student reuse requires one passport+name match", () => {
+  const requested = {
+    email: "aisha@example.com",
+    firstName: "Aisha",
+    lastName: "Khan",
+    passportNumber: "AB123",
+  };
+  assert.deepEqual(resolveSitStudentLookup(requested, []), { status: "not_found" });
+  assert.equal(
+    resolveSitStudentLookup(requested, [{
+      id: "1",
+      email: "aisha@example.com",
+      firstName: "Aisha",
+      lastName: "Khan",
+      passportNumber: "AB123",
+    }]).status,
+    "found",
+  );
+  assert.equal(
+    resolveSitStudentLookup(requested, [{
+      id: "2",
+      email: "aisha@example.com",
+      firstName: "Fatima",
+      lastName: "Khan",
+      passportNumber: "ZZ999",
+    }]).status,
+    "conflict",
+  );
+  assert.equal(
+    resolveSitStudentLookup(requested, [
+      {
+        id: "1",
+        email: "aisha@example.com",
+        firstName: "Aisha",
+        lastName: "Khan",
+        passportNumber: "AB123",
+      },
+      {
+        id: "2",
+        email: "other@example.com",
+        firstName: "Aisha",
+        lastName: "Khan",
+        passportNumber: "AB123",
+      },
+    ]).status,
+    "conflict",
+  );
+  assert.deepEqual(
+    resolveSitStudentLookup({ email: requested.email }, []),
+    { status: "unknown" },
+  );
+});
 
 // ---------------------------------------------------------------------------
 // GPA normalization

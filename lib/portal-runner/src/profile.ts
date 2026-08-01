@@ -30,7 +30,7 @@ import {
   studentEducationRecordsTable,
 } from "@workspace/db";
 import { eq, and, isNull, isNotNull, or, desc } from "drizzle-orm";
-import { buildProfile, mapDocType, REQUIRED_DOCS, extractStudentDocumentRefs, selectPriorSchoolName, buildSignedStudentPhotoPath, buildSignedDocumentPath, docFetchUrl, validateIdentityFields, formatIdentityErrors, portalPreflightManifest } from "@workspace/portal-adapters";
+import { buildProfile, mapDocType, REQUIRED_DOCS, extractStudentDocumentRefs, selectPriorSchoolName, buildSignedStudentPhotoPath, buildSignedDocumentPath, docFetchUrl, validateIdentityFields, formatIdentityErrors, portalPreflightManifest, sitPassportIdentityProofFromDocument } from "@workspace/portal-adapters";
 import type { SubmitProfile, SubmitFiles, StudentDocumentRef } from "@workspace/portal-adapters";
 import {
   resolveAltinbasPassportDates,
@@ -378,6 +378,8 @@ interface DownloadedDocs {
   documentRefs: StudentDocumentRef[];
   /** See StudentProfileResult.hasContentBearingDocs. */
   hasContentBearingDocs: boolean;
+  /** High-confidence identity extracted independently from the passport. */
+  passportIdentityProof?: SubmitProfile["passportIdentityProof"];
 }
 
 /**
@@ -708,6 +710,8 @@ async function downloadStudentDocuments(
       name:      documentsTable.name,
       sizeBytes: documentsTable.sizeBytes,
       mimeType:  documentsTable.mimeType,
+      extractedData: documentsTable.extractedData,
+      confidenceScore: documentsTable.confidenceScore,
     })
     .from(documentsTable)
     .where(
@@ -727,6 +731,17 @@ async function downloadStudentDocuments(
     const bc = hasContent(b) ? 0 : 1;
     return ac - bc;
   });
+  const passportDocument = sortedDocs.find((doc) =>
+    hasContent(doc) &&
+    mapDocType(`${doc.type ?? ""} ${doc.name ?? ""}`) === "passport"
+  );
+  const passportIdentityProof = passportDocument
+    ? sitPassportIdentityProofFromDocument({
+        extractedData: passportDocument.extractedData,
+        confidenceScore: passportDocument.confidenceScore,
+        documentId: passportDocument.id,
+      }) ?? undefined
+    : undefined;
 
   const files: SubmitFiles = {};
   const downloadErrors: Record<string, string> = {};
@@ -874,7 +889,7 @@ async function downloadStudentDocuments(
     (documentRefs.length ? ` [${documentRefs.map((d) => d.type).join(", ")}]` : ""),
   );
 
-  return { files, tempDir, filledSlots, missingSlots, downloadErrors, photoUrl, documentRefs, hasContentBearingDocs };
+  return { files, tempDir, filledSlots, missingSlots, downloadErrors, photoUrl, documentRefs, hasContentBearingDocs, passportIdentityProof };
 }
 
 // ---------------------------------------------------------------------------
@@ -1044,6 +1059,7 @@ export async function buildStudentProfile(
   // Carry document/photo URLs on the profile for URL-fetching create webhooks.
   if (dl.photoUrl) profile.photoUrl = dl.photoUrl;
   if (dl.documentRefs.length) profile.studentDocuments = dl.documentRefs;
+  profile.passportIdentityProof = dl.passportIdentityProof;
 
   // Expose the CRM application id so adapters can query prior portal_submissions
   // (e.g. Altınbaş pre-flight dangling-record check). Optional — not set in the
@@ -1122,6 +1138,7 @@ export async function buildProfileFromApplication(
   // Carry document/photo URLs on the profile for URL-fetching create webhooks.
   if (dl.photoUrl) profile.photoUrl = dl.photoUrl;
   if (dl.documentRefs.length) profile.studentDocuments = dl.documentRefs;
+  profile.passportIdentityProof = dl.passportIdentityProof;
 
   return { profile, ...dl };
 }

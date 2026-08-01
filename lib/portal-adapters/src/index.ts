@@ -179,6 +179,13 @@ export {
   type IdentityFieldsInput,
   type DateConsistencyInput,
 } from "./identityValidation.js";
+export {
+  evaluateSitIdentity,
+  normalizeSitPassport,
+  sitPassportIdentityProofFromDocument,
+  type SitIdentityEvaluation,
+  type SitIdentityField,
+} from "./universities/sit/helpers.js";
 
 export {
   portalPreflightManifest,

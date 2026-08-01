@@ -5,7 +5,10 @@ import {
 import { buildApplicationPreflightSnapshot } from "@workspace/portal-runner";
 import { runEducationExtraction } from "./educationAutoExtract.js";
 import { autoFillMissingAddressCity } from "./portalAddressAutoExtract.js";
-import { autoFillMissingProfileFromPassport } from "./portalProfileAutoExtract.js";
+import {
+  autoFillMissingProfileFromPassport,
+  verifyStudentIdentityAgainstPassport,
+} from "./portalProfileAutoExtract.js";
 import { logAudit } from "./auth.js";
 
 export interface PreparedPortalPreflight extends PortalPreflightResult {
@@ -104,6 +107,33 @@ export async function prepareApplicationPortalPreflight(opts: {
         profile: snapshot.profile,
         documentTypes: snapshot.documentTypes,
       });
+    }
+  }
+
+  // SIT creates/reuses a portal-level student identity before creating the
+  // application. Syntax-valid CRM text is not enough: require independent,
+  // high-confidence proof from the student's latest passport document on
+  // every preflight, including profiles whose fields are already populated.
+  if (result.adapterKey === "sit") {
+    const identityProof = await verifyStudentIdentityAgainstPassport({
+      studentId: snapshot.studentId,
+      actorUserId: opts.actorUserId,
+      ip: opts.ip,
+    });
+    if (identityProof.status !== "verified") {
+      enrichmentWarnings.push(`passportIdentity:${identityProof.status}`);
+      const fields = identityProof.fields.length > 0
+        ? identityProof.fields
+        : ["passportIdentityProof"];
+      const incompatibleFields = [...result.incompatibleFields];
+      const existing = new Set(incompatibleFields.map((issue) => issue.field));
+      for (const field of fields) {
+        if (!existing.has(field)) {
+          incompatibleFields.push({ field, reason: "invalid" });
+          existing.add(field);
+        }
+      }
+      result = { ...result, ready: false, incompatibleFields };
     }
   }
 

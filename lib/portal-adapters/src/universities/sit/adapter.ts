@@ -1699,7 +1699,7 @@ async function performLogin(page: Page, creds: ResolvedCreds): Promise<void> {
  */
 async function resolveCreatedStudentId(
   page: Page,
-  by: { email?: string; passportNumber?: string },
+  by: { email?: string; passportNumber?: string; firstName?: string; lastName?: string },
 ): Promise<string | null> {
   // ~1+2+3+4+5+5+5+8+10+12 = ~55s across 10 attempts — tolerant of Zoho/SIT
   // indexing lag (25s previously proved too short in production: the create
@@ -1710,29 +1710,23 @@ async function resolveCreatedStudentId(
   for (let i = 0; i < backoffMs.length; i++) {
     await sleep(page, backoffMs[i]);
     const elapsedS = () => Math.round((Date.now() - started) / 1000);
-    if (by.email) {
-      const r = await findStudent(page, { email: by.email });
+    const r = await findStudent(page, by);
+    logger.info(
+      `[sit] resolve poll attempt=${i + 1} identityStatus=${r.status} ~${elapsedS()}s`,
+    );
+    if (r.status === "found") {
       logger.info(
-        `[sit] resolve poll attempt=${i + 1} field=email status=${r.status} ~${elapsedS()}s`,
+        `[sit] id poll: kimlik doğrulandı (deneme=${i + 1}, ~${elapsedS()}s, id=${r.ref.id})`,
       );
-      if (r.status === "found") {
-        logger.info(
-          `[sit] id poll: email ile bulundu (deneme=${i + 1}, ~${elapsedS()}s, id=${r.ref.id})`,
-        );
-        return r.ref.id;
-      }
+      return r.ref.id;
     }
-    if (by.passportNumber) {
-      const r = await findStudent(page, { passportNumber: by.passportNumber });
-      logger.info(
-        `[sit] resolve poll attempt=${i + 1} field=passport status=${r.status} ~${elapsedS()}s`,
+    if (r.status === "conflict" || r.status === "unknown") {
+      logger.warn(
+        `[sit] id poll güvenli biçimde durdu (status=${r.status}, fields=${
+          r.status === "conflict" ? r.fields.join(",") : "lookup"
+        })`,
       );
-      if (r.status === "found") {
-        logger.info(
-          `[sit] id poll: passport ile bulundu (deneme=${i + 1}, ~${elapsedS()}s, id=${r.ref.id})`,
-        );
-        return r.ref.id;
-      }
+      return null;
     }
   }
   logger.warn(
@@ -1885,6 +1879,8 @@ export const sitAdapter: SitAdapter = {
     const existing = await findStudent(page, {
       email: profile.email,
       passportNumber: profile.passportNumber,
+      firstName: profile.firstName,
+      lastName: profile.lastName,
     });
     if (existing.status === "unknown") {
       // Fail closed: we could not confirm whether the student already exists, so
@@ -1898,6 +1894,18 @@ export const sitAdapter: SitAdapter = {
         alreadyExists: false,
         createdViaWebhook: false,
         detail: "öğrenci oluşturulamadı: mükerrer kontrolü doğrulanamadı",
+      };
+    }
+    if (existing.status === "conflict") {
+      logger.warn(
+        `[sit] mevcut öğrenci kimliği çelişkili — portal yazımı engellendi (fields=${existing.fields.join(",")})`,
+      );
+      return {
+        studentId: null,
+        created: false,
+        alreadyExists: false,
+        createdViaWebhook: false,
+        detail: `öğrenci kimliği çelişkili: ${existing.fields.join(",")}`,
       };
     }
     if (existing.status === "found") {
@@ -3076,6 +3084,8 @@ export const sitAdapter: SitAdapter = {
         const quick = await resolveCreatedStudentId(page, {
           email: profile.email,
           passportNumber: profile.passportNumber,
+          firstName: profile.firstName,
+          lastName: profile.lastName,
         }).catch(() => null);
         if (quick) {
           saved = true;
@@ -3113,6 +3123,8 @@ export const sitAdapter: SitAdapter = {
     const resolvedId = await resolveCreatedStudentId(page, {
       email: profile.email,
       passportNumber: profile.passportNumber,
+      firstName: profile.firstName,
+      lastName: profile.lastName,
     });
     if (resolvedId) {
       logger.info(`[sit] öğrenci wizard ile oluşturuldu (id=${resolvedId})`);

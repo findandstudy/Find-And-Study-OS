@@ -141,6 +141,19 @@ export interface SubmitProfile {
   programId: string;
   universityName?: string;
   /**
+   * High-confidence identity read directly from the student's passport
+   * document. SIT requires this independent proof before any real portal
+   * mutation; CRM fields alone are not sufficient because they may have been
+   * typed incorrectly or copied from another student.
+   */
+  passportIdentityProof?: {
+    firstName: string;
+    lastName: string;
+    passportNumber: string;
+    confidence: "high";
+    documentId?: number;
+  };
+  /**
    * External reference already stored on the portal submission currently
    * being retried. Adapters may use this only as scoped dedup/repair evidence;
    * it is not proof that the requested target was submitted successfully.

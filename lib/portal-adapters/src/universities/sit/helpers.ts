@@ -9,6 +9,138 @@
 // ---------------------------------------------------------------------------
 
 import { expandProgramTokens, fold } from "../../programMatch.js";
+import type { SubmitProfile } from "../../types.js";
+
+export type SitIdentityField = "firstName" | "lastName" | "passportNumber";
+
+export interface SitIdentityEvaluation {
+  matched: boolean;
+  missingFields: SitIdentityField[];
+  mismatchedFields: SitIdentityField[];
+}
+
+/** Normalize only for equality checks; never log or persist this value. */
+export function normalizeSitPassport(value: string | null | undefined): string {
+  return String(value ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
+
+function normalizedNameTokens(
+  firstName: string | null | undefined,
+  lastName: string | null | undefined,
+): string[] {
+  return fold(`${firstName ?? ""} ${lastName ?? ""}`)
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean)
+    .sort();
+}
+
+/**
+ * Compare CRM identity with an independently extracted passport identity.
+ * Names are token-order agnostic (passport surname/given-name order differs
+ * by country), but the complete token multiset and passport number must match.
+ */
+export function evaluateSitIdentity(
+  expected: Pick<SubmitProfile, "firstName" | "lastName" | "passportNumber">,
+  proof: SubmitProfile["passportIdentityProof"] | null | undefined,
+): SitIdentityEvaluation {
+  const missingFields: SitIdentityField[] = [];
+  const mismatchedFields: SitIdentityField[] = [];
+
+  if (!proof) {
+    return {
+      matched: false,
+      missingFields: ["firstName", "lastName", "passportNumber"],
+      mismatchedFields,
+    };
+  }
+  if (!proof?.firstName?.trim()) missingFields.push("firstName");
+  if (!proof?.lastName?.trim()) missingFields.push("lastName");
+  if (!proof?.passportNumber?.trim()) missingFields.push("passportNumber");
+  if (missingFields.length > 0) {
+    return { matched: false, missingFields, mismatchedFields };
+  }
+
+  const expectedPassport = normalizeSitPassport(expected.passportNumber);
+  const proofPassport = normalizeSitPassport(proof.passportNumber);
+  if (!expectedPassport || expectedPassport !== proofPassport) {
+    mismatchedFields.push("passportNumber");
+  }
+
+  const expectedName = normalizedNameTokens(expected.firstName, expected.lastName);
+  const proofName = normalizedNameTokens(proof.firstName, proof.lastName);
+  if (
+    expectedName.length === 0 ||
+    expectedName.length !== proofName.length ||
+    expectedName.some((token, index) => token !== proofName[index])
+  ) {
+    // Keep first/last together: the proof intentionally permits their order to
+    // differ, so a combined-name mismatch cannot safely identify one side.
+    mismatchedFields.push("firstName", "lastName");
+  }
+
+  return {
+    matched: missingFields.length === 0 && mismatchedFields.length === 0,
+    missingFields,
+    mismatchedFields,
+  };
+}
+
+const readExtractedText = (
+  extracted: Record<string, unknown>,
+  aliases: readonly string[],
+): string => {
+  for (const key of aliases) {
+    const value = extracted[key];
+    if (value != null && String(value).trim()) return String(value).trim();
+  }
+  return "";
+};
+
+/** Build a proof only from complete, high-confidence document extraction. */
+export function sitPassportIdentityProofFromDocument(input: {
+  extractedData: string | Record<string, unknown> | null | undefined;
+  confidenceScore?: number | null;
+  documentId?: number;
+}): NonNullable<SubmitProfile["passportIdentityProof"]> | null {
+  let extracted: Record<string, unknown> | null = null;
+  if (typeof input.extractedData === "string") {
+    try {
+      extracted = JSON.parse(input.extractedData) as Record<string, unknown>;
+    } catch {
+      return null;
+    }
+  } else if (input.extractedData && typeof input.extractedData === "object") {
+    extracted = input.extractedData;
+  }
+  if (!extracted) return null;
+
+  const confidence = String(extracted.confidence ?? "").toLowerCase();
+  if (confidence !== "high" && (input.confidenceScore ?? 0) < 0.9) return null;
+
+  const firstName = readExtractedText(extracted, [
+    "firstName",
+    "givenNames",
+    "givenName",
+  ]);
+  const lastName = readExtractedText(extracted, [
+    "lastName",
+    "surname",
+    "familyName",
+  ]);
+  const passportNumber = readExtractedText(extracted, [
+    "passportNumber",
+    "passportNo",
+  ]);
+  if (!firstName || !lastName || !normalizeSitPassport(passportNumber)) return null;
+
+  return {
+    firstName,
+    lastName,
+    passportNumber,
+    confidence: "high",
+    ...(input.documentId != null ? { documentId: input.documentId } : {}),
+  };
+}
 
 /**
  * Build the structured, fail-closed context consumed by the runner's configured

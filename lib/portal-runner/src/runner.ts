@@ -36,6 +36,7 @@ import {
   clearCredsOverride,
   isSitMember,
   evaluatePortalPreflight,
+  evaluateSitIdentity,
 } from "@workspace/portal-adapters";
 import type { SubmitResult, SubmitProfile, SubmitFiles } from "@workspace/portal-adapters";
 import {
@@ -230,6 +231,20 @@ export async function runSubmission(
       ` incompatible=${preflight.incompatibleFields.map((issue) => issue.field).join(",") || "-"}` +
       ` documents=${preflight.missingDocuments.join(",") || "-"}`,
     );
+  }
+
+  if (adapter.key === "sit") {
+    const identity = evaluateSitIdentity(profile, profile.passportIdentityProof);
+    if (!identity.matched) {
+      await cleanup(tempDir);
+      const fields = [...new Set([
+        ...identity.missingFields,
+        ...identity.mismatchedFields,
+      ])];
+      throw new Error(
+        `SIT_IDENTITY_PROOF_FAILED: fields=${fields.join(",") || "passportIdentityProof"}`,
+      );
+    }
   }
 
   // ----- 3. Creds required for real mode; optional for dry (browser dry run) --

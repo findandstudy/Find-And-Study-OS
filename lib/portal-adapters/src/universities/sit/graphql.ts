@@ -37,7 +37,11 @@ import type { Page } from "playwright-core";
 import { logger } from "../../browser.js";
 import { fold } from "../../programMatch.js";
 import type { ProgramCandidate } from "../../programMatch.js";
-import { distinctiveTokens } from "./helpers.js";
+import {
+  distinctiveTokens,
+  evaluateSitIdentity,
+  normalizeSitPassport,
+} from "./helpers.js";
 import { SIT_URLS } from "./selectors.js";
 
 const GRAPHQL_PATH = "/api/graphql";
@@ -1565,6 +1569,8 @@ async function logPgGraphqlIntrospectionOnce(page: Page): Promise<void> {
 // ---------------------------------------------------------------------------
 export interface SitStudentRef {
   id: string;
+  firstName?: string;
+  lastName?: string;
   email?: string;
   passportNumber?: string;
 }
@@ -1593,6 +1599,8 @@ const studentSearchSchema = z.object({
   zoho_studentsCollection: connection(
     z.object({
       id: z.union([z.string(), z.number()]).transform((v) => String(v)),
+      first_name: z.string().nullish(),
+      last_name: z.string().nullish(),
       email: z.string().nullish(),
       passport_number: z.string().nullish(),
     }),
@@ -1607,36 +1615,114 @@ const studentSearchSchema = z.object({
 export type SitStudentLookup =
   | { status: "found"; ref: SitStudentRef }
   | { status: "not_found" }
+  | { status: "conflict"; fields: string[] }
   | { status: "unknown" };
+
+function normalizeEmail(value: string | null | undefined): string {
+  return String(value ?? "").trim().toLowerCase();
+}
+
+/** Pure fail-closed decision used by the network lookup and regression tests. */
+export function resolveSitStudentLookup(
+  by: { email?: string; passportNumber?: string; firstName?: string; lastName?: string },
+  candidates: readonly SitStudentRef[],
+): SitStudentLookup {
+  if (
+    !normalizeEmail(by.email) ||
+    !normalizeSitPassport(by.passportNumber) ||
+    !by.firstName?.trim() ||
+    !by.lastName?.trim()
+  ) {
+    return { status: "unknown" };
+  }
+
+  const relevant = candidates.filter((candidate) =>
+    normalizeEmail(candidate.email) === normalizeEmail(by.email) ||
+    normalizeSitPassport(candidate.passportNumber) === normalizeSitPassport(by.passportNumber),
+  );
+  if (relevant.length === 0) return { status: "not_found" };
+
+  const exact = relevant.filter((candidate) => {
+    if (
+      normalizeSitPassport(candidate.passportNumber) !==
+      normalizeSitPassport(by.passportNumber)
+    ) return false;
+    return evaluateSitIdentity(
+      {
+        firstName: by.firstName ?? "",
+        lastName: by.lastName ?? "",
+        passportNumber: by.passportNumber ?? "",
+      },
+      {
+        firstName: candidate.firstName ?? "",
+        lastName: candidate.lastName ?? "",
+        passportNumber: candidate.passportNumber ?? "",
+        confidence: "high",
+      },
+    ).matched;
+  });
+  // A verified passport+name row is still unsafe when the email/passport
+  // search resolves to another portal record as well. Reuse requires one and
+  // only one relevant portal identity.
+  if (exact.length === 1 && relevant.length === 1) {
+    return { status: "found", ref: exact[0] };
+  }
+
+  const fields = new Set<string>();
+  if (exact.length > 1 || relevant.length > 1) fields.add("multipleStudents");
+  for (const candidate of relevant) {
+    if (
+      normalizeSitPassport(candidate.passportNumber) !==
+      normalizeSitPassport(by.passportNumber)
+    ) fields.add("passportNumber");
+    const identity = evaluateSitIdentity(
+      {
+        firstName: by.firstName ?? "",
+        lastName: by.lastName ?? "",
+        passportNumber: by.passportNumber ?? "",
+      },
+      {
+        firstName: candidate.firstName ?? "",
+        lastName: candidate.lastName ?? "",
+        passportNumber: candidate.passportNumber ?? "",
+        confidence: "high",
+      },
+    );
+    identity.missingFields.forEach((field) => fields.add(field));
+    identity.mismatchedFields.forEach((field) => fields.add(field));
+  }
+  return { status: "conflict", fields: [...fields].sort() };
+}
 
 export async function findStudent(
   page: Page,
-  by: { email?: string; passportNumber?: string },
+  by: { email?: string; passportNumber?: string; firstName?: string; lastName?: string },
 ): Promise<SitStudentLookup> {
   // One-shot pg_graphql introspection (insert/filter field names) to de-risk the
   // create mutations in a later turn — logged once per page, best-effort.
   await logPgGraphqlIntrospectionOnce(page).catch(() => {});
 
-  const q = (by.email || by.passportNumber || "").trim();
-  // No search key → nothing to dedup on. Treat as unknown (fail-closed) so the
-  // caller never creates without having actually checked for an existing record.
-  if (!q) {
+  const searchTerms = [by.email, by.passportNumber]
+    .map((value) => String(value ?? "").trim())
+    .filter(Boolean);
+  // SIT reuse requires both independent search keys and full-name proof.
+  if (searchTerms.length !== 2 || !by.firstName?.trim() || !by.lastName?.trim()) {
     logger.warn(
       "[sit:graphql] findStudent: arama anahtarı yok — mükerrer durumu doğrulanamadı (fail-closed)",
     );
     return { status: "unknown" };
   }
 
-  const data = await gqlRequest(
-    page,
-    STUDENT_SEARCH_QUERY,
-    // pg_graphql `ilike` is a SQL ILIKE — wrap the term so it matches
-    // case-insensitively even with surrounding whitespace/format differences.
-    { search: `%${q}%` },
-    studentSearchSchema,
-    "studentSearch",
-  );
-  if (!data) {
+  const results = await Promise.all(searchTerms.map((search, index) =>
+    gqlRequest(
+      page,
+      STUDENT_SEARCH_QUERY,
+      { search: `%${search}%` },
+      studentSearchSchema,
+      `studentSearch:${index === 0 ? "email" : "passport"}`,
+    ),
+  ));
+  if (results.some((data) => !data)) {
     // Could not confirm — fail closed so the caller does not create a possible
     // duplicate on a transient GraphQL outage / response-shape drift.
     logger.warn(
@@ -1645,26 +1731,19 @@ export async function findStudent(
     return { status: "unknown" };
   }
 
-  const email = by.email?.trim().toLowerCase();
-  const passport = by.passportNumber?.trim().toLowerCase();
-
-  for (const node of data.zoho_studentsCollection.nodes) {
-    const nodeEmail = node.email?.trim().toLowerCase();
-    const nodePassport = node.passport_number?.trim().toLowerCase();
-    if (email && nodeEmail && nodeEmail === email) {
-      return {
-        status: "found",
-        ref: { id: node.id, email: node.email ?? undefined, passportNumber: node.passport_number ?? undefined },
-      };
-    }
-    if (passport && nodePassport && nodePassport === passport) {
-      return {
-        status: "found",
-        ref: { id: node.id, email: node.email ?? undefined, passportNumber: node.passport_number ?? undefined },
-      };
+  const merged = new Map<string, SitStudentRef>();
+  for (const data of results) {
+    for (const node of data!.zoho_studentsCollection.nodes) {
+      merged.set(node.id, {
+        id: node.id,
+        firstName: node.first_name ?? undefined,
+        lastName: node.last_name ?? undefined,
+        email: node.email ?? undefined,
+        passportNumber: node.passport_number ?? undefined,
+      });
     }
   }
-  return { status: "not_found" };
+  return resolveSitStudentLookup(by, [...merged.values()]);
 }
 
 // ---------------------------------------------------------------------------

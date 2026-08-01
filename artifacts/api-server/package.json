@@ -117,6 +117,7 @@
     "test:json-canonical": "tsx --test ./scripts/test-json-canonical.ts",
     "test:altinbas-flow-fields": "tsx --test ./scripts/test-altinbas-flow-fields.ts",
     "backfill:education-extract": "tsx scripts/backfill-education-extract.ts",
+    "audit:sit-passport-identity": "tsx scripts/audit-sit-passport-identity.ts",
     "test:program-import-headers": "tsx --test ./scripts/test-program-import-headers.ts"
   },
   "dependencies": {

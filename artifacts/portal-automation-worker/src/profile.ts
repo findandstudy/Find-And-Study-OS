@@ -12,7 +12,7 @@ import os from "node:os";
 import path from "node:path";
 import { db, portalSubmissionsTable, applicationsTable, studentsTable, documentsTable, educationRecordsTable } from "@workspace/db";
 import { eq, and, isNull, desc } from "drizzle-orm";
-import { buildProfile, mapDocType, REQUIRED_DOCS, extractStudentDocumentRefs, selectPriorSchoolName, buildSignedStudentPhotoPath, buildSignedDocumentPath, docFetchUrl } from "@workspace/portal-adapters";
+import { buildProfile, mapDocType, REQUIRED_DOCS, extractStudentDocumentRefs, selectPriorSchoolName, buildSignedStudentPhotoPath, buildSignedDocumentPath, docFetchUrl, sitPassportIdentityProofFromDocument } from "@workspace/portal-adapters";
 import type { SubmitProfile, SubmitFiles } from "@workspace/portal-adapters";
 import { resolvePortalResidenceDefaults } from "@workspace/portal-runner";
 
@@ -244,6 +244,8 @@ export async function buildStudentProfile(
       name:      documentsTable.name,
       sizeBytes: documentsTable.sizeBytes,
       mimeType:  documentsTable.mimeType,
+      extractedData: documentsTable.extractedData,
+      confidenceScore: documentsTable.confidenceScore,
     })
     .from(documentsTable)
     .where(
@@ -282,6 +284,19 @@ export async function buildStudentProfile(
     const bc = hasContent(b) ? 0 : 1;
     return ac - bc;
   });
+
+  const passportDocument = sortedDocs.find((doc) =>
+    hasContent(doc) &&
+    mapDocType(`${doc.type ?? ""} ${doc.name ?? ""}`) === "passport"
+  );
+  if (passportDocument) {
+    profile.passportIdentityProof =
+      sitPassportIdentityProofFromDocument({
+        extractedData: passportDocument.extractedData,
+        confidenceScore: passportDocument.confidenceScore,
+        documentId: passportDocument.id,
+      }) ?? undefined;
+  }
 
   const hasContentBearingDocs = docs.some(hasContent);
 
