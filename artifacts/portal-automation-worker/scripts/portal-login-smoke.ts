@@ -5,11 +5,11 @@ import {
 } from "@workspace/portal-adapters";
 import { resolvePortalCreds } from "../src/credResolver.js";
 
-const ALLOWED = new Set(["united", "multico", "okan", "uskudar", "beykent", "isik"]);
+const ALLOWED = new Set(["united", "multico", "okan", "uskudar", "beykent", "isik", "altinbas"]);
 const keys = process.argv.slice(2);
 
 if (keys.length === 0 || keys.some((key) => !ALLOWED.has(key))) {
-  console.error("Usage: pnpm smoke:portal-login united multico okan uskudar beykent isik");
+  console.error("Usage: pnpm smoke:portal-login united multico okan uskudar beykent isik altinbas");
   process.exit(2);
 }
 

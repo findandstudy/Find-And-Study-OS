@@ -38,6 +38,7 @@
 // flag permits only the explicitly approved Personal fill + one Next boundary.
 // ---------------------------------------------------------------------------
 
+import { createHash } from "node:crypto";
 import { appendFileSync } from "node:fs";
 import { basename } from "node:path";
 
@@ -115,6 +116,10 @@ import {
   isAltinbasKnownLiveBachelorProgram,
   selectAltinbasProgram,
 } from "./altinbasProgram.js";
+import {
+  classifyAltinbasLoginFailure,
+  type AltinbasLoginFailureKind,
+} from "./altinbasLogin.js";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -139,6 +144,19 @@ const ACCEPTED_LEVELS = new Set([
 // Salesforce LWC hydration is slow — never use networkidle on SF pages.
 const SF_HYDRATION_MS = 8000;
 
+// Process-scoped login circuit breaker. Invalid stored credentials get a
+// longer pause than a transient CAPTCHA/rate-limit response. A credential
+// change produces a new one-way fingerprint and bypasses the old cooldown
+// immediately; neither the credential nor the fingerprint is logged.
+const ALTINBAS_LOGIN_COOLDOWN_MS: Record<AltinbasLoginFailureKind, number> = {
+  invalid_credentials: 60 * 60_000,
+  captcha_or_rate_limit: 15 * 60_000,
+  unknown: 10 * 60_000,
+};
+let altinbasLoginCooldownUntil = 0;
+let altinbasLoginCooldownFingerprint = "";
+let altinbasLoginCooldownKind: AltinbasLoginFailureKind | null = null;
+
 // ALTINBAS_CAPTURE=1 → TÜM /sfsites/aura request+response gövdeleri logger'a
 // (kırpılmış) ve /tmp/altinbas-capture.json'a (tam, JSON-lines) dökülür.
 const CAPTURE = process.env.ALTINBAS_CAPTURE === "1";
@@ -156,6 +174,42 @@ function normLevel(level: string): string {
 /** True when this level is accepted by Altınbaş adapter. */
 function isAcceptedLevel(level: string): boolean {
   return ACCEPTED_LEVELS.has(normLevel(level));
+}
+
+function altinbasCredentialFingerprint(user: string, password: string): string {
+  return createHash("sha256").update(user).update("\0").update(password).digest("hex");
+}
+
+function altinbasLoginFailureMessage(kind: AltinbasLoginFailureKind): string {
+  if (kind === "invalid_credentials") {
+    return "[altinbas] login failed — stored portal credentials rejected by Altınbaş; update the portal credential";
+  }
+  if (kind === "captcha_or_rate_limit") {
+    return "[altinbas] login failed — CAPTCHA or rate limit detected; automatic login is temporarily paused";
+  }
+  return "[altinbas] login failed — authenticated portal state could not be verified; automatic login is temporarily paused";
+}
+
+function activateAltinbasLoginCooldown(
+  kind: AltinbasLoginFailureKind,
+  credentialFingerprint: string,
+): void {
+  altinbasLoginCooldownKind = kind;
+  altinbasLoginCooldownFingerprint = credentialFingerprint;
+  altinbasLoginCooldownUntil = Date.now() + ALTINBAS_LOGIN_COOLDOWN_MS[kind];
+}
+
+function assertAltinbasLoginCooldown(credentialFingerprint: string): void {
+  if (credentialFingerprint !== altinbasLoginCooldownFingerprint) {
+    altinbasLoginCooldownUntil = 0;
+    altinbasLoginCooldownFingerprint = credentialFingerprint;
+    altinbasLoginCooldownKind = null;
+    return;
+  }
+  if (Date.now() >= altinbasLoginCooldownUntil || !altinbasLoginCooldownKind) return;
+  throw new Error(
+    `${altinbasLoginFailureMessage(altinbasLoginCooldownKind)} (cooldown active)`,
+  );
 }
 
 /**
@@ -4701,6 +4755,8 @@ export const altinbasAdapter: UniversityAdapter = {
   // -------------------------------------------------------------------------
   async login(opts?: LoginOpts): Promise<AdapterSession> {
     const { user, password } = opts?.credentials ?? portalCreds(ADAPTER_KEY);
+    const credentialFingerprint = altinbasCredentialFingerprint(user, password);
+    assertAltinbasLoginCooldown(credentialFingerprint);
     logger.info(`[altinbas] login → ${PORTAL_URL}`);
 
     const session = await launchPortal({
@@ -4718,36 +4774,63 @@ export const altinbasAdapter: UniversityAdapter = {
       // Already logged in?
       const url: string = page.url();
       if (url.includes("/partner/s/") && !url.includes("/login") && !url.includes("/Login")) {
-        await page.goto(PORTAL_URL, { waitUntil: "domcontentloaded", timeout: 60000 }).catch(() => {});
-      await page.waitForTimeout(SF_HYDRATION_MS);
-      const _stale = page.url().toLowerCase().includes("login") || (await page.locator("input[type=password]").first().isVisible().catch(() => false));
-      if (!_stale) { logger.info("[altinbas] login: session reused (already authenticated)"); return session; }
-      logger.info("[altinbas] login: stored session stale - re-authenticating via form");
+        await page
+          .goto(PORTAL_URL, { waitUntil: "domcontentloaded", timeout: 60000 })
+          .catch(() => {});
+        await page.waitForTimeout(SF_HYDRATION_MS);
+        const stale =
+          page.url().toLowerCase().includes("login") ||
+          (await page
+            .locator("input[type=password]")
+            .first()
+            .isVisible()
+            .catch(() => false));
+        if (!stale) {
+          logger.info("[altinbas] login: session reused (already authenticated)");
+          return session;
+        }
+        logger.info("[altinbas] login: stored session stale - re-authenticating via form");
       }
 
-      // Fill email
+      // Fill username/email. Do not guess an unrelated text input.
+      let usernameFilled = false;
       for (const sel of [
         "input[type=email]",
+        "input[name*=username i]",
+        "input[id*=username i]",
         "input[name*=email i]",
         "input[id*=email i]",
         "input[type=text]",
       ]) {
         const el = page.locator(sel).first();
         if ((await el.count()) && (await el.isVisible().catch(() => false))) {
-          await el.fill(user).catch(() => {});
+          await el.fill(user);
+          usernameFilled = true;
           break;
         }
       }
+      if (!usernameFilled) {
+        activateAltinbasLoginCooldown("unknown", credentialFingerprint);
+        throw new Error("[altinbas] login failed — username field not found");
+      }
 
       // Fill password
-      await page.locator("input[type=password]").first().fill(password);
+      const passwordInput = page.locator("input[type=password]").first();
+      if (!(await passwordInput.isVisible().catch(() => false))) {
+        activateAltinbasLoginCooldown("unknown", credentialFingerprint);
+        throw new Error("[altinbas] login failed — password field not found");
+      }
+      await passwordInput.fill(password);
 
       // Click login button
-      await page
+      const loginButton = page
         .getByRole("button", { name: /log\s*in|sign\s*in|giris|giriş/i })
-        .first()
-        .click({ timeout: 10000 })
-        .catch(() => {});
+        .first();
+      if (!(await loginButton.isVisible().catch(() => false))) {
+        activateAltinbasLoginCooldown("unknown", credentialFingerprint);
+        throw new Error("[altinbas] login failed — login button not found");
+      }
+      await loginButton.click({ timeout: 10000 });
 
       // Wait up to 30s for redirect away from login
       for (let t = 0; t < 30; t++) {
@@ -4756,16 +4839,30 @@ export const altinbasAdapter: UniversityAdapter = {
         if (!u.includes("/login") && !u.includes("/Login")) break;
       }
 
-      const stillLogin = await page
-        .locator("input[type=password]")
-        .first()
-        .isVisible()
-        .catch(() => false);
-      if (stillLogin) {
-        throw new Error("[altinbas] login failed — password field still visible (wrong credentials or captcha)");
+      const stillLogin = await passwordInput.isVisible().catch(() => false);
+      const loginUrlVisible = /(?:agency-)?login/i.test(page.url());
+      const captchaDetected =
+        (await page
+          .locator(
+            "iframe[src*='captcha' i], iframe[title*='captcha' i], [id*='captcha' i], [class*='captcha' i], [data-sitekey]",
+          )
+          .count()
+          .catch(() => 0)) > 0;
+      const bodyText = await page.locator("body").innerText().catch(() => "");
+      const failureKind = classifyAltinbasLoginFailure({
+        bodyText,
+        captchaDetected,
+        passwordVisible: stillLogin,
+        loginUrlVisible,
+      });
+      if (failureKind) {
+        activateAltinbasLoginCooldown(failureKind, credentialFingerprint);
+        throw new Error(altinbasLoginFailureMessage(failureKind));
       }
 
       logger.info(`[altinbas] login successful → ${page.url()}`);
+      altinbasLoginCooldownUntil = 0;
+      altinbasLoginCooldownKind = null;
 
       // Save session for reuse
       try {
