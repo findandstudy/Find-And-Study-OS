@@ -15,6 +15,7 @@ export * from "./pipeline";
 export * from "./wishlists";
 export * from "./roles";
 export * from "./messages";
+export * from "./messageCampaigns";
 export * from "./notifications";
 export * from "./integrations";
 export * from "./activity";

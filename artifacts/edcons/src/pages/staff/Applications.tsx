@@ -44,6 +44,7 @@ import { StageBadgeWithDocs } from "@/components/StageBadgeWithDocs";
 import { useToast } from "@/hooks/use-toast";
 import { usePipelineStages, type PipelineStage, type StageAction } from "@/hooks/use-pipeline-stages";
 import { BulkActionBar } from "@/components/BulkActionBar";
+import { BulkMessageDialog } from "@/components/BulkMessageDialog";
 import {
   DndContext,
   DragOverlay,
@@ -1541,6 +1542,7 @@ export default function ApplicationsPage() {
   }, [filters.assignedTo]);
   const [colFilters, setColFilters] = useState({ student: "", program: "", level: "all", intake: "" });
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [messageCampaignOpen, setMessageCampaignOpen] = useState(false);
   const [sort, setSort] = useState<{ key: SortKey; dir: SortDir }>({ key: "date", dir: "desc" });
   const [editApp, setEditApp] = useState<any>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -2086,6 +2088,7 @@ export default function ApplicationsPage() {
               onDelete={(isAdmin || hasPermission("applications.delete")) ? () => setDeleteOpen(true) : undefined}
               onAssign={handleBulkAssign}
               onMove={handleBulkMoveStage}
+              onSendMessage={() => setMessageCampaignOpen(true)}
               stages={pipelineStages.map(s => ({ key: s.key, label: s.label }))}
               staffUsers={canReassign ? staffUsersList : []}
               entityLabel="applications"
@@ -2550,6 +2553,13 @@ export default function ApplicationsPage() {
       <EditApplicationDialog open={!!editApp} onClose={() => setEditApp(null)} app={editApp} stages={pipelineStages} />
       <DeleteConfirmDialog open={deleteOpen} onClose={() => setDeleteOpen(false)} count={selectedIds.size} onConfirm={handleBulkDelete} isPending={deleteInProgress} />
       <RunConfirmDialog open={runConfirmOpen} onClose={() => setRunConfirmOpen(false)} count={selectedIds.size} onConfirm={handleBulkRun} isPending={runInProgress} />
+      <BulkMessageDialog
+        open={messageCampaignOpen}
+        onOpenChange={setMessageCampaignOpen}
+        entityType="application"
+        entityIds={Array.from(selectedIds)}
+        onCreated={() => setSelectedIds(new Set())}
+      />
       <AddApplicationModal open={addOpen} onClose={() => setAddOpen(false)} onSuccess={() => queryClient.invalidateQueries({ queryKey: ["applications"] })} defaultStage={pipelineStages[0]?.key} />
       {docUploadDialog && (
         <StageDocUploadDialog

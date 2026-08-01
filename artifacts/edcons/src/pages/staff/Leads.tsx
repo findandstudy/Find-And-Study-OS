@@ -58,6 +58,7 @@ import { isNonLatinNameError } from "@/lib/latinNameError";
 import { usePipelineStages, type PipelineStage } from "@/hooks/use-pipeline-stages";
 import { usePersistedFilterValue } from "@/hooks/use-table-prefs";
 import { BulkActionBar } from "@/components/BulkActionBar";
+import { BulkMessageDialog } from "@/components/BulkMessageDialog";
 import { useI18n } from "@/hooks/use-i18n";
 import { useDateFormat } from "@/hooks/use-date-format";
 
@@ -1284,6 +1285,7 @@ export default function LeadsPage() {
   });
 
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [messageCampaignOpen, setMessageCampaignOpen] = useState(false);
   const [sort, setSort] = useState<{ key: SortKey; dir: SortDir }>({ key: "date", dir: "desc" });
   const [editLead, setEditLead] = useState<any>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -1726,6 +1728,7 @@ export default function LeadsPage() {
               onDelete={(isAdmin || hasPermission("leads.delete")) ? () => setDeleteOpen(true) : undefined}
               onAssign={handleBulkAssign}
               onMove={handleBulkMove}
+              onSendMessage={() => setMessageCampaignOpen(true)}
               stages={pipelineStages.map(s => ({ key: s.key, label: s.label }))}
               staffUsers={canReassign ? staffUsersList : []}
               entityLabel={t("leadsPage.entityLeads")}
@@ -2064,6 +2067,13 @@ export default function LeadsPage() {
         count={selectedIds.size}
         onConfirm={handleBulkDelete}
         isPending={deleteInProgress}
+      />
+      <BulkMessageDialog
+        open={messageCampaignOpen}
+        onOpenChange={setMessageCampaignOpen}
+        entityType="lead"
+        entityIds={Array.from(selectedIds)}
+        onCreated={() => setSelectedIds(new Set())}
       />
 
       {/* ── Create Lead Dialog ─────────────────────────────── */}

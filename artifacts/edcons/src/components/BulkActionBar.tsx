@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Trash2, UserPlus, ArrowRightLeft } from "lucide-react";
+import { Trash2, UserPlus, ArrowRightLeft, MessageCircle } from "lucide-react";
 import {
   Popover, PopoverContent, PopoverTrigger,
 } from "@/components/ui/popover";
@@ -23,6 +23,7 @@ interface BulkActionBarProps {
   onDelete?: () => void;
   onAssign: (userId: number) => void;
   onMove: (stageKey: string) => void;
+  onSendMessage?: () => void;
   stages: StageOption[];
   staffUsers: StaffOption[];
   entityLabel?: string;
@@ -34,6 +35,7 @@ export function BulkActionBar({
   onDelete,
   onAssign,
   onMove,
+  onSendMessage,
   stages,
   staffUsers,
   entityLabel = "items",
@@ -53,6 +55,17 @@ export function BulkActionBar({
       {onDelete && (
         <Button variant="destructive" size="sm" className="rounded-full h-8 gap-1.5" onClick={onDelete}>
           <Trash2 className="w-3.5 h-3.5" /> Delete
+        </Button>
+      )}
+
+      {onSendMessage && (
+        <Button
+          variant="outline"
+          size="sm"
+          className="rounded-full h-8 gap-1.5 border-emerald-300 text-emerald-700 hover:bg-emerald-50"
+          onClick={onSendMessage}
+        >
+          <MessageCircle className="w-3.5 h-3.5" /> Send Template
         </Button>
       )}
 

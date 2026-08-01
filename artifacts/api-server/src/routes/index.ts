@@ -61,6 +61,7 @@ import portalUniversityExclusionsRouter from "./portalUniversityExclusions";
 import personFeedRouter from "./personFeed";
 import academySsoRouter from "./academySso";
 import educationRecordsRouter from "./education-records";
+import messageCampaignsRouter from "./messageCampaigns";
 import { tokenScopeGuard } from "../middlewares/tokenScopeGuard";
 
 const router: IRouter = Router();
@@ -166,6 +167,7 @@ router.use(pipelineRouter);
 router.use(courseFinderRouter);
 router.use(rolesRouter);
 router.use(messagesRouter);
+router.use(messageCampaignsRouter);
 router.use(notificationsRouter);
 router.use(integrationsRouter);
 router.use(channelAccountsRouter);

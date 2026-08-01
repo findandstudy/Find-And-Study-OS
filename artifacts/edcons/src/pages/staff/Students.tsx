@@ -8,6 +8,7 @@ import { QuickContactDialog } from "@/components/QuickContact";
 import { AssignPopover } from "@/components/AssignPopover";
 import { RowActionsMenu } from "@/components/RowActionsMenu";
 import { BulkActionBar } from "@/components/BulkActionBar";
+import { BulkMessageDialog } from "@/components/BulkMessageDialog";
 import { useListStudents, useCreateStudent, customFetch } from "@workspace/api-client-react";
 import { uploadDocumentFile } from "@/lib/uploadDocumentFile";
 import { useAuth } from "@/hooks/use-auth";
@@ -1353,6 +1354,7 @@ export default function StudentsPage() {
   }, [filters.assignment]);
   const [colFilters, setColFilters] = useState({ name: "", email: "", passport: "" });
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [messageCampaignOpen, setMessageCampaignOpen] = useState(false);
   const [sort, setSort] = useState<{ key: StuSortKey; dir: StuSortDir }>({ key: "date", dir: "desc" });
   const [editStudent, setEditStudent] = useState<any>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -1638,6 +1640,7 @@ export default function StudentsPage() {
               onDelete={(isAdmin || hasPermission("students.delete")) ? () => setDeleteOpen(true) : undefined}
               onAssign={handleBulkAssign}
               onMove={handleBulkMoveStatus}
+              onSendMessage={() => setMessageCampaignOpen(true)}
               stages={pipelineStages.map(s => ({ key: s.key, label: s.label }))}
               staffUsers={canReassign ? staffUsersList : []}
               entityLabel="students"
@@ -1858,6 +1861,13 @@ export default function StudentsPage() {
 
       <EditStudentDialog open={!!editStudent} onClose={() => setEditStudent(null)} student={editStudent} stages={pipelineStages} />
       <StuDeleteConfirmDialog open={deleteOpen} onClose={() => setDeleteOpen(false)} count={selectedIds.size} onConfirm={handleBulkDelete} isPending={deleteInProgress} />
+      <BulkMessageDialog
+        open={messageCampaignOpen}
+        onOpenChange={setMessageCampaignOpen}
+        entityType="student"
+        entityIds={Array.from(selectedIds)}
+        onCreated={() => setSelectedIds(new Set())}
+      />
       <AddStudentModal open={addOpen} onClose={() => setAddOpen(false)} onSuccess={invalidate} defaultStatus={pipelineStages[0]?.key} />
       <BulkImportModal open={bulkOpen} onClose={() => setBulkOpen(false)} onSuccess={invalidate} />
     </>

@@ -3938,14 +3938,20 @@ function MessageThread({
 function BroadcastTab() {
   const { t } = useI18n();
   const { toast } = useToast();
+  const [, setLocation] = useLocation();
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
-  const [channel, setChannel] = useState("internal");
   const [targetAudience, setTargetAudience] = useState("all");
   const [targetRoles, setTargetRoles] = useState<string[]>([]);
   const [sending, setSending] = useState(false);
   const [broadcasts, setBroadcasts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [campaigns, setCampaigns] = useState<any[]>([]);
+  const [campaignsLoading, setCampaignsLoading] = useState(true);
+  const [expandedCampaignId, setExpandedCampaignId] = useState<number | null>(null);
+  const [campaignDetails, setCampaignDetails] = useState<Record<number, any>>({});
+  const [campaignDetailLoading, setCampaignDetailLoading] = useState<number | null>(null);
+  const [retryingCampaignId, setRetryingCampaignId] = useState<number | null>(null);
 
   const availableRoles = [
     { value: "super_admin", label: "Super Admin" }, { value: "admin", label: "Admin" },
@@ -3961,6 +3967,30 @@ function BroadcastTab() {
     }).catch(() => {}).finally(() => setLoading(false));
   }, []);
 
+  const loadCampaigns = useCallback(async (quiet = false) => {
+    if (!quiet) setCampaignsLoading(true);
+    try {
+      const response = await customFetch("/api/message-campaigns") as any;
+      setCampaigns(response?.data || response || []);
+    } catch (error: any) {
+      if (!quiet) {
+        toast({
+          title: "CRM campaigns could not be loaded",
+          description: error?.message || "Campaign history is temporarily unavailable.",
+          variant: "destructive",
+        });
+      }
+    } finally {
+      if (!quiet) setCampaignsLoading(false);
+    }
+  }, [toast]);
+
+  useEffect(() => {
+    void loadCampaigns();
+    const timer = window.setInterval(() => void loadCampaigns(true), 10_000);
+    return () => window.clearInterval(timer);
+  }, [loadCampaigns]);
+
   const sendBroadcast = async () => {
     if (!title.trim() || !content.trim()) {
       toast({ title: t("messagesPage.titleAndMessageRequired"), variant: "destructive" });
@@ -3974,12 +4004,12 @@ function BroadcastTab() {
         body: JSON.stringify({
           title: title.trim(),
           content: content.trim(),
-          channel,
+          channel: "internal",
           targetAudience,
           targetRoles: targetAudience === "role" ? targetRoles : [],
         }),
       });
-      toast({ title: `Broadcast sent to ${(res as any).recipientCount} users` });
+      toast({ title: `Internal announcement sent to ${(res as any).recipientCount} users` });
       setTitle("");
       setContent("");
       setBroadcasts(prev => [res as any, ...prev]);
@@ -3994,13 +4024,86 @@ function BroadcastTab() {
     setTargetRoles(prev => prev.includes(role) ? prev.filter(r => r !== role) : [...prev, role]);
   };
 
+  const loadCampaignDetails = async (campaignId: number) => {
+    setCampaignDetailLoading(campaignId);
+    try {
+      const response = await customFetch(`/api/message-campaigns/${campaignId}`) as any;
+      setCampaignDetails((current) => ({ ...current, [campaignId]: response?.data || response }));
+      return true;
+    } catch (error: any) {
+      toast({
+        title: "Recipient history could not be loaded",
+        description: error?.message,
+        variant: "destructive",
+      });
+      return false;
+    } finally {
+      setCampaignDetailLoading(null);
+    }
+  };
+
+  const toggleCampaignDetails = async (campaignId: number) => {
+    if (expandedCampaignId === campaignId) {
+      setExpandedCampaignId(null);
+      return;
+    }
+    setExpandedCampaignId(campaignId);
+    if (campaignDetails[campaignId]) return;
+    if (!(await loadCampaignDetails(campaignId))) {
+      setExpandedCampaignId(null);
+    }
+  };
+
+  const retryFailedCampaign = async (campaignId: number) => {
+    setRetryingCampaignId(campaignId);
+    try {
+      const response = await customFetch(`/api/message-campaigns/${campaignId}/retry-failed`, {
+        method: "POST",
+      }) as any;
+      toast({
+        title: `${response?.retried || 0} safe failure(s) queued again`,
+        description: "Recipients with an unknown provider outcome remain blocked for manual review.",
+      });
+      setCampaignDetails((current) => {
+        const next = { ...current };
+        delete next[campaignId];
+        return next;
+      });
+      await loadCampaigns(true);
+      if (expandedCampaignId === campaignId) await loadCampaignDetails(campaignId);
+    } catch (error: any) {
+      toast({ title: "Retry failed", description: error?.message, variant: "destructive" });
+    } finally {
+      setRetryingCampaignId(null);
+    }
+  };
+
+  const campaignStatusClass = (status: string) => {
+    if (status === "completed") return "bg-emerald-100 text-emerald-700";
+    if (status === "failed") return "bg-red-100 text-red-700";
+    if (status === "running") return "bg-blue-100 text-blue-700";
+    return "bg-amber-100 text-amber-700";
+  };
+
+  const maskCampaignPhone = (phone: string | null | undefined) => {
+    if (!phone) return "No phone";
+    const visible = phone.replace(/\D/g, "");
+    if (visible.length < 5) return "***";
+    return `+${visible.slice(0, 2)}••••${visible.slice(-3)}`;
+  };
+
   return (
     <>
     <div className="space-y-6">
       <Card className="p-6 border-none shadow-lg shadow-black/5">
-        <h3 className="font-semibold text-foreground flex items-center gap-2 mb-4">
-          <Megaphone className="w-5 h-5 text-primary" /> New Broadcast
-        </h3>
+        <div className="mb-4">
+          <h3 className="font-semibold text-foreground flex items-center gap-2">
+            <Megaphone className="w-5 h-5 text-primary" /> Internal Announcements
+          </h3>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Send an in-app announcement to Find And Study OS users. This does not contact CRM leads or students.
+          </p>
+        </div>
         <div className="space-y-4">
           <div className="space-y-2">
             <Label>{t("messagesPage.title")}</Label>
@@ -4012,17 +4115,10 @@ function BroadcastTab() {
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label>{t("messagesPage.channel")}</Label>
-              <Select value={channel} onValueChange={setChannel}>
-                <SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="internal">{t("messagesPage.internalInApp")}</SelectItem>
-                  <SelectItem value="email">{t("messagesPage.email")}</SelectItem>
-                  <SelectItem value="whatsapp">{t("messagesPage.whatsapp")}</SelectItem>
-                  <SelectItem value="telegram">{t("messagesPage.telegram")}</SelectItem>
-                  <SelectItem value="sms">{t("messagesPage.sms")}</SelectItem>
-                </SelectContent>
-              </Select>
+              <Label>Delivery</Label>
+              <div className="flex h-10 items-center gap-2 rounded-xl border bg-muted/30 px-3 text-sm">
+                <MessageSquare className="h-4 w-4 text-primary" /> Internal · in app
+              </div>
             </div>
             <div className="space-y-2">
               <Label>{t("messagesPage.targetAudience")}</Label>
@@ -4049,14 +4145,14 @@ function BroadcastTab() {
             </div>
           )}
           <Button onClick={sendBroadcast} disabled={sending} className="rounded-xl gap-2">
-            <Send className="w-4 h-4" /> {sending ? "Sending..." : "Send Broadcast"}
+            <Send className="w-4 h-4" /> {sending ? "Sending..." : "Send Internal Announcement"}
           </Button>
         </div>
       </Card>
 
       <Card className="border-none shadow-lg shadow-black/5 overflow-hidden">
         <div className="px-6 py-4 border-b border-border/50">
-          <h3 className="font-semibold text-foreground">{t("messagesPage.broadcastHistory")}</h3>
+          <h3 className="font-semibold text-foreground">Internal Announcement History</h3>
         </div>
         {loading ? (
           <div className="p-8 text-center"><div className="w-6 h-6 border-2 border-primary/30 border-t-primary rounded-full animate-spin mx-auto" /></div>
@@ -4085,6 +4181,112 @@ function BroadcastTab() {
                   <p className="text-[11px] text-muted-foreground mt-2">
                     Sent by {b.senderFirstName} {b.senderLastName} • {new Date(b.sentAt || b.createdAt).toLocaleString()}
                   </p>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </Card>
+
+      <Card className="border-none shadow-lg shadow-black/5 overflow-hidden">
+        <div className="flex flex-col gap-4 border-b border-border/50 px-6 py-5 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <h3 className="flex items-center gap-2 font-semibold text-foreground">
+              <MessageCircle className="h-5 w-5 text-emerald-600" /> CRM Campaigns
+            </h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Approved WhatsApp templates sent to snapshotted Leads, Students or Applications, with one delivery record per recipient.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" size="sm" onClick={() => setLocation("/staff/leads")}>Select Leads</Button>
+            <Button variant="outline" size="sm" onClick={() => setLocation("/staff/students")}>Select Students</Button>
+            <Button variant="outline" size="sm" onClick={() => setLocation("/staff/applications")}>Select Applications</Button>
+            <Button variant="ghost" size="icon" onClick={() => void loadCampaigns()} aria-label="Refresh campaigns">
+              <RefreshCw className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+
+        {campaignsLoading ? (
+          <div className="p-8 text-center"><Loader2 className="mx-auto h-6 w-6 animate-spin text-primary" /></div>
+        ) : campaigns.length === 0 ? (
+          <div className="p-8 text-center">
+            <p className="text-sm font-medium">No CRM campaign yet</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Select records on Leads, Students or Applications and choose “Send Template”.
+            </p>
+          </div>
+        ) : (
+          <div className="divide-y divide-border/50">
+            {campaigns.map((campaign: any) => {
+              const detail = campaignDetails[campaign.id];
+              const recipients = detail?.recipients || [];
+              const processed = Number(campaign.sentCount || 0) + Number(campaign.failedCount || 0) + Number(campaign.skippedCount || 0);
+              const total = Math.max(1, Number(campaign.totalCount || 0));
+              const progress = Math.min(100, Math.round((processed / total) * 100));
+              return (
+                <div key={campaign.id} className="px-6 py-4">
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="truncate text-sm font-semibold text-foreground">{campaign.name}</p>
+                        <Badge className={`border-0 text-[10px] ${campaignStatusClass(campaign.status)}`}>{campaign.status}</Badge>
+                        <Badge variant="outline" className="text-[10px] capitalize">{campaign.sourceEntityType}</Badge>
+                      </div>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Template: {campaign.externalTemplateName || campaign.templateName} · Created {new Date(campaign.createdAt).toLocaleString()}
+                      </p>
+                      <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-muted">
+                        <div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${progress}%` }} />
+                      </div>
+                      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                        <span>{campaign.totalCount || 0} total</span>
+                        <span className="text-emerald-700">{campaign.sentCount || 0} sent</span>
+                        <span>{campaign.queuedCount || 0} queued</span>
+                        <span className={campaign.failedCount ? "text-destructive" : ""}>{campaign.failedCount || 0} failed</span>
+                        <span>{campaign.skippedCount || 0} skipped</span>
+                      </div>
+                    </div>
+                    <div className="flex shrink-0 gap-2">
+                      <Button variant="outline" size="sm" onClick={() => void toggleCampaignDetails(campaign.id)}>
+                        {campaignDetailLoading === campaign.id
+                          ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                          : <Eye className="mr-2 h-3.5 w-3.5" />}
+                        {expandedCampaignId === campaign.id ? "Hide recipients" : "View recipients"}
+                      </Button>
+                      {Number(campaign.failedCount || 0) > 0 && (
+                        <Button variant="outline" size="sm" onClick={() => void retryFailedCampaign(campaign.id)} disabled={retryingCampaignId === campaign.id}>
+                          {retryingCampaignId === campaign.id ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="mr-2 h-3.5 w-3.5" />}
+                          Retry safe failures
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+
+                  {expandedCampaignId === campaign.id && (
+                    <div className="mt-4 overflow-hidden rounded-xl border bg-muted/15">
+                      {campaignDetailLoading === campaign.id ? (
+                        <div className="p-5 text-center"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></div>
+                      ) : recipients.length === 0 ? (
+                        <div className="p-4 text-sm text-muted-foreground">No recipient record found.</div>
+                      ) : (
+                        <div className="max-h-72 divide-y overflow-y-auto">
+                          {recipients.map((recipient: any) => (
+                            <div key={recipient.id} className="grid grid-cols-[minmax(0,1fr)_auto] gap-3 px-4 py-3 text-xs sm:grid-cols-[minmax(0,1fr)_120px_100px]">
+                              <div className="min-w-0">
+                                <p className="truncate font-medium text-foreground">{recipient.displayName || `${recipient.entityType} #${recipient.entityId}`}</p>
+                                <p className="mt-0.5 text-muted-foreground">{maskCampaignPhone(recipient.phoneE164)}</p>
+                                {recipient.errorDetail && <p className="mt-1 text-destructive">{recipient.errorDetail}</p>}
+                              </div>
+                              <span className="hidden self-start text-muted-foreground sm:block">Attempt {recipient.attempts || 0}/3</span>
+                              <Badge variant="outline" className="h-fit justify-self-end capitalize">{recipient.status}</Badge>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               );
             })}
