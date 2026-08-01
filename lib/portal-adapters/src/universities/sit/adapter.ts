@@ -235,14 +235,83 @@ async function firstVisible(
   return null;
 }
 
-/** Click a button by accessible name. Returns true when a click was issued. */
+/**
+ * Click an actionable button/link by accessible name.
+ *
+ * SIT has rendered primary actions as both `<button>` and styled `<a>` across
+ * builds. A swallowed click error must never be reported as success: doing so
+ * advances the state machine while the page is unchanged and masks overlays or
+ * disabled controls as downstream validation failures.
+ */
 async function clickButton(page: Page, nameRe: RegExp): Promise<boolean> {
-  const btn = page.getByRole("button", { name: nameRe }).first();
-  if (await btn.count()) {
-    await btn.click({ timeout: 8000 }).catch(() => {});
-    return true;
+  const candidates = [
+    page.getByRole("button", { name: nameRe }),
+    page.getByRole("link", { name: nameRe }),
+  ];
+  for (const candidate of candidates) {
+    const count = Math.min(await candidate.count().catch(() => 0), 5);
+    for (let index = 0; index < count; index += 1) {
+      const control = candidate.nth(index);
+      if (!(await control.isVisible().catch(() => false))) continue;
+      if (!(await control.isEnabled().catch(() => false))) continue;
+      try {
+        await control.click({ timeout: 8000 });
+        return true;
+      } catch {
+        // Another matching control may still be actionable.
+      }
+    }
   }
   return false;
+}
+
+/**
+ * Open the SIT student list with a verified SPA session.
+ *
+ * GraphQL bearer auth and browser SPA auth are separate. A valid GraphQL token
+ * can coexist with a page redirected to `/auth/login`; in that case force one
+ * serialized token refresh, seed the new full session before navigation, and
+ * verify the recovery. This keeps authentication failures from being
+ * misreported as selector drift.
+ */
+async function openSitStudentsPage(
+  page: Page,
+  creds: { user: string; password: string },
+): Promise<void> {
+  const navigate = async (): Promise<void> => {
+    await page.goto(SIT_URLS.base + SIT_URLS.studentsPath, {
+      waitUntil: "domcontentloaded",
+      timeout: 60_000,
+    });
+    await sleep(page, 3500);
+    await dismissInactivityModal(page);
+  };
+
+  await navigate();
+  if (!SIT_LOGIN.loginUrlMarker.test(page.url())) return;
+
+  logger.warn(
+    "[sit] /students UI oturumu /auth/login'e düştü — token tek-sıra yenilenip SPA oturumu yeniden kuruluyor",
+  );
+  const bearerReady = await mintSupabaseBearer(page, creds, true).catch(
+    () => false,
+  );
+  const sessionSeeded = bearerReady
+    ? await seedSpaSession(page, creds).catch(() => false)
+    : false;
+  if (!bearerReady || !sessionSeeded) {
+    throw new Error(
+      "SIT: UI oturumu yenilenemedi (/auth/login) — Add Student aranmadı, tekrar denenecek",
+    );
+  }
+
+  await navigate();
+  if (SIT_LOGIN.loginUrlMarker.test(page.url())) {
+    throw new Error(
+      "SIT: UI oturumu doğrulanamadı (/auth/login) — Add Student aranmadı, tekrar denenecek",
+    );
+  }
+  logger.info("[sit] UI oturumu yenilendi ve /students doğrulandı");
 }
 
 /** Read document.body.innerText (best-effort; "" on failure). */
@@ -1895,12 +1964,8 @@ export const sitAdapter: SitAdapter = {
     // reach the card is the wizard's browser file-choosers at create time. We walk
     // the multi-step wizard, fill every field on screen, upload each local file
     // into its own slot, then save. Session-seed auth is already live/verified.
-    await page.goto(SIT_URLS.base + SIT_URLS.studentsPath, {
-      waitUntil: "domcontentloaded",
-      timeout: 60_000,
-    });
-    await sleep(page, 3500);
-    await dismissInactivityModal(page);
+    const creds = portalCreds(PORTAL_KEY);
+    await openSitStudentsPage(page, creds);
     if (!(await clickButton(page, SIT_NAV.addStudentName))) {
       // Diagnose + one recovery attempt. This branch was previously a SILENT
       // early return — on retries it produced "search ran but wizard never
@@ -1914,12 +1979,8 @@ export const sitAdapter: SitAdapter = {
       logger.warn(
         `[sit] Add Student düğmesi bulunamadı — url=${page.url()} başlık="${diagHeading}" — sayfa yeniden yükleniyor (kurtarma denemesi)`,
       );
-      await page.goto(SIT_URLS.base + SIT_URLS.studentsPath, {
-        waitUntil: "domcontentloaded",
-        timeout: 60_000,
-      });
-      await sleep(page, 5000);
-      await dismissInactivityModal(page);
+      await openSitStudentsPage(page, creds);
+      await sleep(page, 1500);
       if (!(await clickButton(page, SIT_NAV.addStudentName))) {
         const diagHeading2 = await page
           .evaluate(() =>

@@ -46,6 +46,7 @@ import {
   sitCanAuthWithoutPage,
   extractAnonJwt,
   selectBundleUrls,
+  runSitAuthExclusive,
 } from "../src/universities/sit/graphql.js";
 import {
   buildSignedStudentPhotoPath,
@@ -591,6 +592,34 @@ test("AUTH3 — injected access token → no page needed", () => {
       assert.equal(sitCanAuthWithoutPage({ user: "auth3@example.com" }), true);
     },
   );
+});
+
+test("AUTH4 — refresh/cache mutations are serialized per SIT account", async () => {
+  let active = 0;
+  let maxActive = 0;
+  const order: string[] = [];
+  const run = (id: number) =>
+    runSitAuthExclusive("Batch@Example.com", async () => {
+      active += 1;
+      maxActive = Math.max(maxActive, active);
+      order.push(`start:${id}`);
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      order.push(`end:${id}`);
+      active -= 1;
+      return id;
+    });
+
+  const results = await Promise.all([run(1), run(2), run(3)]);
+  assert.deepEqual(results, [1, 2, 3]);
+  assert.equal(maxActive, 1, "same-account token mutations must not overlap");
+  assert.deepEqual(order, [
+    "start:1",
+    "end:1",
+    "start:2",
+    "end:2",
+    "start:3",
+    "end:3",
+  ]);
 });
 
 // ---------------------------------------------------------------------------

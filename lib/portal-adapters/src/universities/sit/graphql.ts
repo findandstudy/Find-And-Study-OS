@@ -234,12 +234,49 @@ interface CachedSitSession {
   raw?: Record<string, unknown>;
 }
 const sitSessionByAccount = new Map<string, CachedSitSession>();
+// Supabase rotates refresh tokens. When a batch starts several SIT submissions
+// at once, two pages can otherwise refresh the same token concurrently: the
+// first request rotates it and the second receives HTTP 400, leaving that
+// page's SPA session stale and sending `/students` back to `/auth/login`.
+// Serialize every token-cache mutation per account while still allowing
+// different SIT accounts to authenticate independently.
+const sitAuthTailByAccount = new Map<string, Promise<void>>();
 // The public anon apikey, cached once observed (from env or a page capture) so
 // later pages/submissions can mint without re-capturing. Public value; not a
 // secret, but still never logged.
 let cachedAnonKey: string | null = null;
 // Refresh a token this many ms BEFORE its reported expiry (clock-skew guard).
 const SIT_TOKEN_SKEW_MS = 60_000;
+
+/**
+ * Run a token-cache operation exclusively for one SIT account.
+ *
+ * Exported for a deterministic concurrency regression test; callers outside
+ * this module should normally use `getSitAccessToken` instead.
+ */
+export async function runSitAuthExclusive<T>(
+  account: string,
+  task: () => Promise<T>,
+): Promise<T> {
+  const key = account.trim().toLowerCase();
+  const previous = sitAuthTailByAccount.get(key) ?? Promise.resolve();
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const tail = previous.catch(() => {}).then(() => gate);
+  sitAuthTailByAccount.set(key, tail);
+
+  await previous.catch(() => {});
+  try {
+    return await task();
+  } finally {
+    release();
+    if (sitAuthTailByAccount.get(key) === tail) {
+      sitAuthTailByAccount.delete(key);
+    }
+  }
+}
 
 /** The Supabase auth origin — env override or the hard-coded project URL. */
 function sitSupabaseUrl(): string {
@@ -451,15 +488,18 @@ export function sitCanAuthWithoutPage(creds: { user: string }): boolean {
  * apikey when it is not provided via env. Returns null when no token could be
  * obtained (the caller may fall back to the UI login as a last resort).
  */
-export async function getSitAccessToken(
+async function getSitAccessTokenUnlocked(
   creds: { user: string; password: string },
   page?: Page,
+  forceRefresh = false,
 ): Promise<string | null> {
   const email = creds.user.toLowerCase();
 
   // 1) Reuse a still-fresh cached session — no network, no re-login.
   const cached = sitSessionByAccount.get(email);
-  if (cached && isFreshSitSession(cached)) return cached.accessToken;
+  if (!forceRefresh && cached && isFreshSitSession(cached)) {
+    return cached.accessToken;
+  }
 
   // Resolve the public anon apikey deterministically, WITHOUT logging in:
   //   env > process cache > SPA-boot capture (page) > JS-bundle regex.
@@ -537,23 +577,41 @@ export async function getSitAccessToken(
 }
 
 /**
+ * Resolve a usable SIT access token with account-level refresh serialization.
+ * `forceRefresh` is reserved for verified UI-session loss: it skips the fresh
+ * cache fast-path, rotates the refresh token once (or falls back to a password
+ * grant), and gives the affected page a new full Supabase session to seed.
+ */
+export async function getSitAccessToken(
+  creds: { user: string; password: string },
+  page?: Page,
+  forceRefresh = false,
+): Promise<string | null> {
+  return runSitAuthExclusive(creds.user, () =>
+    getSitAccessTokenUnlocked(creds, page, forceRefresh),
+  );
+}
+
+/**
  * PRIMARY auth path — ensure a Supabase Bearer is available for the given page,
  * delegating to the process-level token manager (getSitAccessToken). Stores the
  * token in capturedBearerByPage (so collectAuth picks it up as the primary
  * Bearer) plus the full grant body in capturedSessionByPage (for the throwaway
- * probe page that learns the route's real query shape). Idempotent: returns
- * early if a Bearer is already held for the page. Non-fatal — on any failure it
- * logs diagnostics (never a secret) and returns false so the caller falls back
- * to the passive capture / storage read / UI scan.
+ * probe page that learns the route's real query shape). The process cache makes
+ * this idempotent without trusting a page's older captured bearer: a long-lived
+ * page may still hold an expired token after another page refreshes the shared
+ * session. Non-fatal — on any failure it logs diagnostics (never a secret) and
+ * returns false so the caller falls back to the passive capture / storage read /
+ * UI scan.
  */
 export async function mintSupabaseBearer(
   page: Page,
   creds: { user: string; password: string },
+  forceRefresh = false,
 ): Promise<boolean> {
-  if (capturedBearerByPage.has(page)) return true;
   installSpaAuthCapture(page);
 
-  const token = await getSitAccessToken(creds, page);
+  const token = await getSitAccessToken(creds, page, forceRefresh);
   if (!token) {
     await logSitLoginDiagnostics(page);
     return false;
