@@ -2517,7 +2517,7 @@ router.post(
   },
 );
 
-// ─── Bulk conversation management (archive / restore / permanent delete) ────
+// ─── Bulk conversation management (reversible archive / restore only) ────
 const bulkIdsSchema = z.object({ ids: z.array(z.number().int().positive()).min(1).max(500) });
 
 /** Internal (user-DM) conversations require participant membership for non-admins. */
@@ -2592,39 +2592,6 @@ router.post(
       .where(inArray(conversationsTable.id, ids))
       .returning({ id: conversationsTable.id });
     res.json({ restored: updated.length });
-  },
-);
-
-// Permanent delete — irreversible; the client shows a double confirmation.
-router.post(
-  "/inbox/conversations/bulk-delete",
-  requireAuth,
-  requireRole(...STAFF_ROLES, ...ADMIN_ROLES),
-  async (req, res): Promise<void> => {
-    const parsed = bulkIdsSchema.safeParse(req.body);
-    if (!parsed.success) {
-      res.status(400).json({ error: "ids array required" });
-      return;
-    }
-    const isAdmin = (ADMIN_ROLES as readonly string[]).includes(req.user!.role);
-    const ids = await filterBulkAccessibleIds(req.user!.id, isAdmin, parsed.data.ids);
-    if (ids.length === 0) {
-      res.json({ deleted: 0 });
-      return;
-    }
-    const deleted = await db.transaction(async (tx) => {
-      await tx.delete(messagesTable).where(inArray(messagesTable.conversationId, ids));
-      await tx
-        .delete(conversationParticipantsTable)
-        .where(inArray(conversationParticipantsTable.conversationId, ids));
-      const rows = await tx
-        .delete(conversationsTable)
-        .where(inArray(conversationsTable.id, ids))
-        .returning({ id: conversationsTable.id });
-      return rows.length;
-    });
-    await logAudit(req.user!.id, "inbox_bulk_delete", "conversation", undefined, { ids, deleted }, req.ip);
-    res.json({ deleted });
   },
 );
 

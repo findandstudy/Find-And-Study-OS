@@ -24,6 +24,14 @@ const agentAccountSource = readFileSync(
   new URL("../../edcons/src/pages/agent/Account.tsx", import.meta.url),
   "utf8",
 );
+const inboxRouteSource = readFileSync(
+  new URL("../src/routes/inbox.ts", import.meta.url),
+  "utf8",
+);
+const messagesUiSource = readFileSync(
+  new URL("../../edcons/src/pages/staff/Messages.tsx", import.meta.url),
+  "utf8",
+);
 
 test("authenticated course-finder writes are not exempt from CSRF", () => {
   assert.doesNotMatch(
@@ -92,6 +100,13 @@ test("generated form previews execute in sandboxed iframes", () => {
     assert.match(source, /sandbox=""/);
     assert.match(source, /referrerPolicy="no-referrer"/);
   }
+});
+
+test("staff conversations support reversible archiving but not permanent deletion", () => {
+  assert.match(inboxRouteSource, /\/inbox\/conversations\/bulk-archive/);
+  assert.match(inboxRouteSource, /\/inbox\/conversations\/bulk-unarchive/);
+  assert.doesNotMatch(inboxRouteSource, /\/inbox\/conversations\/bulk-delete/);
+  assert.doesNotMatch(messagesUiSource, /button-(?:internal-)?bulk-delete/);
 });
 
 test("E2E database mutations accept only explicit test database names", () => {

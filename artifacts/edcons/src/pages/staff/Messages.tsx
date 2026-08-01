@@ -583,10 +583,11 @@ function InboxTab() {
   const [showTests, setShowTests] = useState<boolean>(() => {
     try { return localStorage.getItem("inbox_show_tests") === "true"; } catch { return false; }
   });
-  // Multi-select + bulk archive / restore / permanent delete
+  // Multi-select + reversible archive / restore only. Conversations are never
+  // permanently deleted from the inbox UI.
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
-  const [bulkConfirm, setBulkConfirm] = useState<null | { type: "archive" | "unarchive" | "delete"; step: 1 | 2 }>(null);
+  const [bulkConfirm, setBulkConfirm] = useState<"archive" | "unarchive" | null>(null);
   const [bulkBusy, setBulkBusy] = useState(false);
   // WhatsApp-style thread: windowed history + smart auto-scroll
   const [olderMsgs, setOlderMsgs] = useState<any[]>([]);
@@ -1636,12 +1637,12 @@ function InboxTab() {
     setSelectedIds(new Set());
   };
 
-  async function runBulk(type: "archive" | "unarchive" | "delete") {
+  async function runBulk(type: "archive" | "unarchive") {
     const ids = Array.from(selectedIds);
     if (ids.length === 0) return;
     setBulkBusy(true);
     try {
-      const path = type === "archive" ? "bulk-archive" : type === "unarchive" ? "bulk-unarchive" : "bulk-delete";
+      const path = type === "archive" ? "bulk-archive" : "bulk-unarchive";
       await customFetch(`/api/inbox/conversations/${path}`, {
         method: "POST",
         body: JSON.stringify({ ids }),
@@ -1650,9 +1651,7 @@ function InboxTab() {
         title:
           type === "archive"
             ? t("inbox.bulk.archivedToast", { count: ids.length })
-            : type === "unarchive"
-              ? t("inbox.bulk.restoredToast", { count: ids.length })
-              : t("inbox.bulk.deletedToast", { count: ids.length }),
+            : t("inbox.bulk.restoredToast", { count: ids.length }),
       });
       setBulkConfirm(null);
       exitSelectMode();
@@ -1908,7 +1907,7 @@ function InboxTab() {
                     variant="outline"
                     className="h-6 px-2 text-[11px] gap-1"
                     disabled={selectedIds.size === 0 || bulkBusy}
-                    onClick={() => setBulkConfirm({ type: "unarchive", step: 1 })}
+                    onClick={() => setBulkConfirm("unarchive")}
                     data-testid="button-bulk-unarchive"
                   >
                     <ArchiveRestore className="w-3 h-3" /> {t("inbox.bulk.restore")}
@@ -1919,22 +1918,12 @@ function InboxTab() {
                     variant="outline"
                     className="h-6 px-2 text-[11px] gap-1"
                     disabled={selectedIds.size === 0 || bulkBusy}
-                    onClick={() => setBulkConfirm({ type: "archive", step: 1 })}
+                    onClick={() => setBulkConfirm("archive")}
                     data-testid="button-bulk-archive"
                   >
                     <Archive className="w-3 h-3" /> {t("inbox.bulk.archive")}
                   </Button>
                 )}
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-6 px-2 text-[11px] gap-1 border-red-300 text-red-600 hover:bg-red-50 hover:text-red-700"
-                  disabled={selectedIds.size === 0 || bulkBusy}
-                  onClick={() => setBulkConfirm({ type: "delete", step: 1 })}
-                  data-testid="button-bulk-delete"
-                >
-                  <Trash2 className="w-3 h-3" /> {t("inbox.bulk.delete")}
-                </Button>
               </div>
             )}
           </div>
@@ -3277,67 +3266,34 @@ function InboxTab() {
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              {bulkConfirm?.type === "delete" ? (
-                <Trash2 className="w-4 h-4 text-red-600" />
-              ) : bulkConfirm?.type === "unarchive" ? (
+              {bulkConfirm === "unarchive" ? (
                 <ArchiveRestore className="w-4 h-4" />
               ) : (
                 <Archive className="w-4 h-4" />
               )}
-              {bulkConfirm?.type === "delete"
-                ? bulkConfirm.step === 2
-                  ? t("inbox.bulk.deleteConfirmTitle2")
-                  : t("inbox.bulk.deleteConfirmTitle")
-                : bulkConfirm?.type === "unarchive"
-                  ? t("inbox.bulk.restoreConfirmTitle")
-                  : t("inbox.bulk.archiveConfirmTitle")}
+              {bulkConfirm === "unarchive"
+                ? t("inbox.bulk.restoreConfirmTitle")
+                : t("inbox.bulk.archiveConfirmTitle")}
             </DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground">
-            {bulkConfirm?.type === "delete"
-              ? bulkConfirm.step === 2
-                ? t("inbox.bulk.deleteConfirmBody2", { count: selectedIds.size })
-                : t("inbox.bulk.deleteConfirmBody", { count: selectedIds.size })
-              : bulkConfirm?.type === "unarchive"
-                ? t("inbox.bulk.restoreConfirmBody", { count: selectedIds.size })
-                : t("inbox.bulk.archiveConfirmBody", { count: selectedIds.size })}
+            {bulkConfirm === "unarchive"
+              ? t("inbox.bulk.restoreConfirmBody", { count: selectedIds.size })
+              : t("inbox.bulk.archiveConfirmBody", { count: selectedIds.size })}
           </p>
           <DialogFooter>
             <Button variant="outline" disabled={bulkBusy} onClick={() => setBulkConfirm(null)}>
               {t("messagesPage.cancel")}
             </Button>
-            {bulkConfirm?.type === "delete" ? (
-              bulkConfirm.step === 1 ? (
-                <Button
-                  variant="destructive"
-                  onClick={() => setBulkConfirm({ type: "delete", step: 2 })}
-                  data-testid="button-bulk-delete-step1"
-                >
-                  {t("inbox.bulk.deleteContinue")}
-                </Button>
-              ) : (
-                <Button
-                  variant="destructive"
-                  disabled={bulkBusy}
-                  onClick={() => runBulk("delete")}
-                  className="gap-1"
-                  data-testid="button-bulk-delete-step2"
-                >
-                  {bulkBusy && <Loader2 className="w-3 h-3 animate-spin" />}
-                  {t("inbox.bulk.deleteForever")}
-                </Button>
-              )
-            ) : (
-              <Button
-                disabled={bulkBusy}
-                onClick={() => runBulk(bulkConfirm?.type === "unarchive" ? "unarchive" : "archive")}
-                className="gap-1"
-                data-testid="button-bulk-confirm"
-              >
-                {bulkBusy && <Loader2 className="w-3 h-3 animate-spin" />}
-                {bulkConfirm?.type === "unarchive" ? t("inbox.bulk.restore") : t("inbox.bulk.archive")}
-              </Button>
-            )}
+            <Button
+              disabled={bulkBusy}
+              onClick={() => runBulk(bulkConfirm === "unarchive" ? "unarchive" : "archive")}
+              className="gap-1"
+              data-testid="button-bulk-confirm"
+            >
+              {bulkBusy && <Loader2 className="w-3 h-3 animate-spin" />}
+              {bulkConfirm === "unarchive" ? t("inbox.bulk.restore") : t("inbox.bulk.archive")}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -3349,7 +3305,7 @@ function InboxTab() {
 function ConversationList({
   conversations, selectedId, onSelect, onNewConversation, search, setSearch,
   sortOrder, onToggleSort, selectMode, onToggleSelectMode, selectedIds,
-  onToggleSelected, onSelectAll, onBulkArchive, onBulkDelete, bulkBusy
+  onToggleSelected, onSelectAll, onBulkArchive, bulkBusy
 }: {
   conversations: Conversation[];
   selectedId: number | null;
@@ -3365,7 +3321,6 @@ function ConversationList({
   onToggleSelected: (id: number) => void;
   onSelectAll: () => void;
   onBulkArchive: () => void;
-  onBulkDelete: () => void;
   bulkBusy: boolean;
 }) {
   const { user } = useAuth();
@@ -3433,16 +3388,6 @@ function ConversationList({
               data-testid="button-internal-bulk-archive"
             >
               <Archive className="w-3 h-3" /> {t("inbox.bulk.archive")}
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-6 px-2 text-[11px] gap-1 border-red-300 text-red-600 hover:bg-red-50 hover:text-red-700"
-              disabled={selectedIds.size === 0 || bulkBusy}
-              onClick={onBulkDelete}
-              data-testid="button-internal-bulk-delete"
-            >
-              <Trash2 className="w-3 h-3" /> {t("inbox.bulk.delete")}
             </Button>
           </div>
         )}
@@ -4938,7 +4883,7 @@ export default function MessagesPage() {
   });
   const [internalSelectMode, setInternalSelectMode] = useState(false);
   const [internalSelectedIds, setInternalSelectedIds] = useState<Set<number>>(new Set());
-  const [internalBulkConfirm, setInternalBulkConfirm] = useState<null | { type: "archive" | "delete"; step: 1 | 2 }>(null);
+  const [internalBulkConfirm, setInternalBulkConfirm] = useState(false);
   const [internalBulkBusy, setInternalBulkBusy] = useState(false);
   const [internalListWidth, setInternalListWidth] = useState<number>(() => readStoredListWidth(INTERNAL_LIST_WIDTH_STORAGE_KEY));
   const internalListResizeCleanupRef = useRef<(() => void) | null>(null);
@@ -5003,22 +4948,17 @@ export default function MessagesPage() {
     });
   };
 
-  async function runInternalBulk(type: "archive" | "delete") {
+  async function runInternalBulk() {
     const ids = Array.from(internalSelectedIds);
     if (ids.length === 0) return;
     setInternalBulkBusy(true);
     try {
-      const path = type === "archive" ? "bulk-archive" : "bulk-delete";
-      await customFetch(`/api/inbox/conversations/${path}`, {
+      await customFetch("/api/inbox/conversations/bulk-archive", {
         method: "POST",
         body: JSON.stringify({ ids }),
       });
-      toast({
-        title: type === "archive"
-          ? t("inbox.bulk.archivedToast", { count: ids.length })
-          : t("inbox.bulk.deletedToast", { count: ids.length }),
-      });
-      setInternalBulkConfirm(null);
+      toast({ title: t("inbox.bulk.archivedToast", { count: ids.length }) });
+      setInternalBulkConfirm(false);
       setInternalSelectMode(false);
       setInternalSelectedIds(new Set());
       if (selectedConv && ids.includes(selectedConv)) setSelectedConv(null);
@@ -5140,8 +5080,7 @@ export default function MessagesPage() {
                           : new Set(conversations.map((c) => c.id)),
                       )
                     }
-                    onBulkArchive={() => setInternalBulkConfirm({ type: "archive", step: 1 })}
-                    onBulkDelete={() => setInternalBulkConfirm({ type: "delete", step: 1 })}
+                    onBulkArchive={() => setInternalBulkConfirm(true)}
                     bulkBusy={internalBulkBusy}
                   />
                 </div>
@@ -5240,65 +5179,30 @@ export default function MessagesPage() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={internalBulkConfirm !== null} onOpenChange={(open) => { if (!open && !internalBulkBusy) setInternalBulkConfirm(null); }}>
+      <Dialog open={internalBulkConfirm} onOpenChange={(open) => { if (!open && !internalBulkBusy) setInternalBulkConfirm(false); }}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              {internalBulkConfirm?.type === "delete" ? (
-                <Trash2 className="w-4 h-4 text-red-600" />
-              ) : (
-                <Archive className="w-4 h-4" />
-              )}
-              {internalBulkConfirm?.type === "delete"
-                ? internalBulkConfirm.step === 2
-                  ? t("inbox.bulk.deleteConfirmTitle2")
-                  : t("inbox.bulk.deleteConfirmTitle")
-                : t("inbox.bulk.archiveConfirmTitle")}
+              <Archive className="w-4 h-4" />
+              {t("inbox.bulk.archiveConfirmTitle")}
             </DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground">
-            {internalBulkConfirm?.type === "delete"
-              ? internalBulkConfirm.step === 2
-                ? t("inbox.bulk.deleteConfirmBody2", { count: internalSelectedIds.size })
-                : t("inbox.bulk.deleteConfirmBody", { count: internalSelectedIds.size })
-              : t("inbox.bulk.archiveConfirmBody", { count: internalSelectedIds.size })}
+            {t("inbox.bulk.archiveConfirmBody", { count: internalSelectedIds.size })}
           </p>
           <DialogFooter>
-            <Button variant="outline" disabled={internalBulkBusy} onClick={() => setInternalBulkConfirm(null)}>
+            <Button variant="outline" disabled={internalBulkBusy} onClick={() => setInternalBulkConfirm(false)}>
               {t("messagesPage.cancel")}
             </Button>
-            {internalBulkConfirm?.type === "delete" ? (
-              internalBulkConfirm.step === 1 ? (
-                <Button
-                  variant="destructive"
-                  onClick={() => setInternalBulkConfirm({ type: "delete", step: 2 })}
-                  data-testid="button-internal-bulk-delete-step1"
-                >
-                  {t("inbox.bulk.deleteContinue")}
-                </Button>
-              ) : (
-                <Button
-                  variant="destructive"
-                  disabled={internalBulkBusy}
-                  onClick={() => runInternalBulk("delete")}
-                  className="gap-1"
-                  data-testid="button-internal-bulk-delete-step2"
-                >
-                  {internalBulkBusy && <Loader2 className="w-3 h-3 animate-spin" />}
-                  {t("inbox.bulk.deleteForever")}
-                </Button>
-              )
-            ) : (
-              <Button
-                disabled={internalBulkBusy}
-                onClick={() => runInternalBulk("archive")}
-                className="gap-1"
-                data-testid="button-internal-bulk-confirm"
-              >
-                {internalBulkBusy && <Loader2 className="w-3 h-3 animate-spin" />}
-                {t("inbox.bulk.archive")}
-              </Button>
-            )}
+            <Button
+              disabled={internalBulkBusy}
+              onClick={runInternalBulk}
+              className="gap-1"
+              data-testid="button-internal-bulk-confirm"
+            >
+              {internalBulkBusy && <Loader2 className="w-3 h-3 animate-spin" />}
+              {t("inbox.bulk.archive")}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
