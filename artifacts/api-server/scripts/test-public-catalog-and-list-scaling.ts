@@ -136,6 +136,16 @@ test("catalog university lists use a lightweight summary and lazy logo endpoint"
   assert.match(universitiesRoute, /Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; sandbox"/);
 });
 
+test("program catalog resolves every university without paginated truncation", () => {
+  assert.match(universitiesRoute, /router\.get\("\/universities\/options", requireAuth/);
+  assert.match(universitiesRoute, /getTableColumns\(programsTable\)/);
+  assert.match(universitiesRoute, /universityName:\s*universitiesTable\.name/);
+  assert.match(universitiesRoute, /\.leftJoin\(universitiesTable/);
+  assert.match(catalogPage, /api\("\/api\/universities\/options"\)/);
+  assert.doesNotMatch(catalogPage, /api\("\/api\/universities\?limit=500"\)/);
+  assert.match(catalogPage, /p\.universityName \?\? uniMap\[p\.universityId\]\?\.name/);
+});
+
 test("API logs slow requests without query strings or payload data", () => {
   assert.match(apiApp, /\[slow-request\]/);
   assert.match(apiApp, /durationMs < 1_500/);

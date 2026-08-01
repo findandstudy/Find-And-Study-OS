@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db, universitiesTable, programsTable, applicationsTable, pipelineStagesTable, programDocumentRequirementsTable } from "@workspace/db";
-import { eq, ilike, sql, and, inArray, isNull } from "drizzle-orm";
+import { eq, ilike, sql, and, inArray, isNull, getTableColumns } from "drizzle-orm";
 import { requireAuth, requireRole, logAudit } from "../lib/auth";
 import { MANAGER_ROLES, STAFF_ROLES } from "../lib/roles";
 import { getCurrentSeason } from "../lib/season";
@@ -110,6 +110,22 @@ router.get("/universities", async (req, res): Promise<void> => {
   });
 
   res.json({ data, meta: { total: Number(count), page: pageNum, limit: limitNum, totalPages: Math.ceil(Number(count) / limitNum) } });
+});
+
+router.get("/universities/options", requireAuth, async (_req, res): Promise<void> => {
+  try {
+    const data = await db
+      .select({
+        id: universitiesTable.id,
+        name: universitiesTable.name,
+      })
+      .from(universitiesTable)
+      .orderBy(universitiesTable.name);
+    res.json({ data });
+  } catch (error) {
+    console.error("Get university options error:", error);
+    res.status(500).json({ error: "Failed to get university options" });
+  }
 });
 
 router.get("/universities/:id/logo", async (req, res): Promise<void> => {
@@ -243,7 +259,17 @@ router.get("/programs", async (req, res): Promise<void> => {
   const where = conditions.length > 0 ? and(...conditions) : undefined;
 
   const [{ count }] = await db.select({ count: sql<number>`count(*)` }).from(programsTable).where(where);
-  const rows = await db.select().from(programsTable).where(where).limit(limitNum).offset(offset).orderBy(programsTable.name);
+  const rows = await db
+    .select({
+      ...getTableColumns(programsTable),
+      universityName: universitiesTable.name,
+    })
+    .from(programsTable)
+    .leftJoin(universitiesTable, eq(programsTable.universityId, universitiesTable.id))
+    .where(where)
+    .limit(limitNum)
+    .offset(offset)
+    .orderBy(programsTable.name);
 
   let data: any[] = rows;
   if (rows.length > 0) {

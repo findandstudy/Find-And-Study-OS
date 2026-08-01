@@ -151,7 +151,8 @@ type University = {
   contactPersonName?: string | null; contactPersonPhone?: string | null; contactPersonEmail?: string | null;
   status: string;
 };
-type Program = { id: number; universityId: number; name: string; degree?: string | null; field?: string | null; language?: string | null; duration?: string | null; tuitionFee?: number | null; currency?: string | null; scholarship?: number | null; intakes?: string | null; requirements?: string | null; commissionRate?: number | null; applicationFee?: number | null; advancedFee?: number | null; depositFee?: number | null; serviceFeeAmount?: number | null; discountedFee?: number | null; languageFee?: number | null; feeType?: string | null; minGpa?: number | null; minLanguageScore?: number | null; quota?: number | null; isActive: boolean };
+type UniversityOption = Pick<University, "id" | "name">;
+type Program = { id: number; universityId: number; universityName?: string | null; name: string; degree?: string | null; field?: string | null; language?: string | null; duration?: string | null; tuitionFee?: number | null; currency?: string | null; scholarship?: number | null; intakes?: string | null; requirements?: string | null; commissionRate?: number | null; applicationFee?: number | null; advancedFee?: number | null; depositFee?: number | null; serviceFeeAmount?: number | null; discountedFee?: number | null; languageFee?: number | null; feeType?: string | null; minGpa?: number | null; minLanguageScore?: number | null; quota?: number | null; isActive: boolean };
 
 /* ─── BulkImportModal ─────────────────────────────────────── */
 
@@ -1518,11 +1519,11 @@ function ProgramsTab() {
   const [delAllInProgress, setDelAllInProgress] = useState(false);
 
   const { data: unisData } = useQuery({
-    queryKey: ["universities", 1, ""],
-    queryFn: () => api("/api/universities?limit=500"),
+    queryKey: ["university-options"],
+    queryFn: () => api("/api/universities/options"),
   });
-  const universities: University[] = unisData?.data ?? [];
-  const uniMap: Record<number, University> = Object.fromEntries(universities.map(u => [u.id, u]));
+  const universities: UniversityOption[] = unisData?.data ?? [];
+  const uniMap: Record<number, UniversityOption> = Object.fromEntries(universities.map(u => [u.id, u]));
 
   const { data: catOptsResp } = useQuery({ queryKey: ["catalog-options"], queryFn: () => api("/api/catalog-options") });
   const catOpts: Record<string, CatalogOption[]> = (catOptsResp as any)?.grouped || {};
@@ -1566,8 +1567,8 @@ function ProgramsTab() {
   const sorted = useMemo(() => {
     return [...programs].sort((a, b) => {
       if (sort.col === "university") {
-        const an = uniMap[a.universityId]?.name ?? "";
-        const bn = uniMap[b.universityId]?.name ?? "";
+        const an = a.universityName ?? uniMap[a.universityId]?.name ?? "";
+        const bn = b.universityName ?? uniMap[b.universityId]?.name ?? "";
         const cmp = an.localeCompare(bn, "tr", { sensitivity: "base" });
         return sort.dir === "asc" ? cmp : -cmp;
       }
@@ -1646,7 +1647,7 @@ function ProgramsTab() {
       let list = await fetchAllRows<Program>(exportUrl);
       if (onlySelected) list = list.filter(p => selected.has(p.id));
       const rows = list.map((p: Program) => ({
-        Program: p.name, University: uniMap[p.universityId]?.name ?? "",
+        Program: p.name, University: p.universityName ?? uniMap[p.universityId]?.name ?? "",
         Degree: p.degree ?? "", Field: p.field ?? "", Language: p.language ?? "",
         Duration: p.duration ?? "", "Fee Type": p.feeType ?? "",
         "Tuition Fee": p.tuitionFee ?? "", Currency: p.currency ?? "",
@@ -1960,7 +1961,7 @@ function ProgramsTab() {
                   <div className="font-medium">{p.name}</div>
                   {p.language && <span className="text-xs text-muted-foreground">{p.language} {p.duration ? `· ${p.duration}` : ""}</span>}
                 </td>
-                <td className="px-4 py-2.5 text-muted-foreground text-xs">{uniMap[p.universityId]?.name ?? `#${p.universityId}`}</td>
+                <td className="px-4 py-2.5 text-muted-foreground text-xs">{p.universityName ?? uniMap[p.universityId]?.name ?? `#${p.universityId}`}</td>
                 <td className="px-4 py-2.5 text-muted-foreground text-xs">{p.degree || "—"}</td>
                 <td className="px-4 py-2.5 text-muted-foreground text-xs">{p.field || "—"}</td>
                 <td className="px-4 py-2.5 text-xs">{p.tuitionFee ? `${p.tuitionFee.toLocaleString()} ${p.currency ?? "USD"}` : "—"}</td>
