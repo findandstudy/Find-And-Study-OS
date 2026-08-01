@@ -33,6 +33,8 @@ import {
   resolveSitAcademicHistory,
   isSitContactStepLabels,
   hasSitProgramSubjectAnchor,
+  buildSitProgramMissingContext,
+  matchSitProgramExactFormatting,
 } from "../src/universities/sit/helpers.js";
 import {
   SIT_URLS,
@@ -776,6 +778,56 @@ test("PHONE4 — DEEP_FILL_INPUT_JS tel-visibility guard: isTel bypasses offsetP
   assert.ok(!shouldSkip("tel", true), "tel input with offsetParent must NOT be skipped");
   // text with offsetParent → must NOT skip
   assert.ok(!shouldSkip("text", true), "text input with offsetParent must NOT be skipped");
+});
+
+test("FALLBACK1 — SIT emits only scoped, deduplicated live candidates", () => {
+  assert.deepEqual(
+    buildSitProgramMissingContext("Old CRM Program", [
+      { id: "p1", name: "New Program (English)" },
+      { id: "p1", name: "Duplicate Program" },
+      { id: " ", name: "Invalid" },
+      { id: "p2", name: "Second Program (English)" },
+    ]),
+    {
+      requestedProgram: { name: "Old CRM Program" },
+      availablePrograms: [
+        { value: "p1", name: "New Program (English)", enabled: true },
+        { value: "p2", name: "Second Program (English)", enabled: true },
+      ],
+      resolution: "not_in_dropdown",
+    },
+  );
+});
+
+test("MATCHFMT1 — joined language suffix resolves only as an exact compact identity", () => {
+  const candidates = [
+    { id: "p1", name: "Bachelor of Industrial Engineering (English)" },
+    { id: "p2", name: "Bachelor of Industrial Product DesignEnglish" },
+  ];
+  assert.deepEqual(
+    matchSitProgramExactFormatting(
+      "Bachelor of Industrial Product Design (English)",
+      candidates,
+    ),
+    candidates[1],
+  );
+  assert.equal(
+    matchSitProgramExactFormatting(
+      "Bachelor of Industrial Product Design (Turkish)",
+      candidates,
+    ),
+    null,
+  );
+});
+
+test("MATCHFMT2 — ambiguous compact identities remain fail-closed", () => {
+  assert.equal(
+    matchSitProgramExactFormatting("Bachelor of Law (English)", [
+      { id: "p1", name: "Bachelor of LawEnglish" },
+      { id: "p2", name: "Bachelor of Law (English)" },
+    ]),
+    null,
+  );
 });
 
 test("BUNDLE3 — a deep chunk (19th) is included; low cap would drop it", () => {

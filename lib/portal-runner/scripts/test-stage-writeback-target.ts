@@ -2,7 +2,10 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import type { SubmitResult } from "@workspace/portal-adapters";
-import { resolveWritebackTarget } from "../src/stageWritebackTarget.js";
+import {
+  resolveWritebackError,
+  resolveWritebackTarget,
+} from "../src/stageWritebackTarget.js";
 
 function result(overrides: Partial<SubmitResult>): SubmitResult {
   return {
@@ -56,5 +59,21 @@ test("SWT5: structural quota result wins over dry-run status", () => {
       dryRun: true,
     }),
     { submissionStatus: "program_full", stageKey: "quota_full" },
+  );
+});
+
+test("SWT6: failed adapter detail is preserved for the operator", () => {
+  const failed = result({ detail: "webhook create başarısız" });
+  assert.equal(
+    resolveWritebackError(failed, "failed"),
+    "webhook create başarısız",
+  );
+});
+
+test("SWT7: thrown worker error takes precedence over adapter detail", () => {
+  const failed = result({ detail: "adapter detail" });
+  assert.equal(
+    resolveWritebackError(failed, "failed", "browser crashed"),
+    "browser crashed",
   );
 });

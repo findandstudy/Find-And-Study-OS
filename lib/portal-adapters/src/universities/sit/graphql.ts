@@ -2523,6 +2523,10 @@ export interface SitWebhookPayload {
   crm_id: string;
 }
 
+export type SitApplicationWebhookResult =
+  | { ok: true; id: string }
+  | { ok: false; detail: string };
+
 /**
  * POST the create payload to the n8n webhook. On `{ status: true, id }` returns
  * { id } (the Zoho-assigned application id); on any non-200, non-true status,
@@ -2531,7 +2535,7 @@ export interface SitWebhookPayload {
 export async function createApplicationViaWebhook(
   page: Page,
   payload: SitWebhookPayload,
-): Promise<{ id: string } | null> {
+): Promise<SitApplicationWebhookResult> {
   const url = createWebhookUrl();
   try {
     const res = await page.request.post(url, {
@@ -2545,11 +2549,18 @@ export async function createApplicationViaWebhook(
       logger.warn(
         `[sit:webhook] create başarısız (status=${status}) body=${rawForLog(bodyText)}`,
       );
-      return null;
+      return {
+        ok: false,
+        detail: `SIT webhook HTTP ${status}: ${rawForLog(bodyText) || "boş yanıt"}`,
+      };
     }
-    let json: { status?: unknown; id?: unknown } | null = null;
+    let json: { status?: unknown; id?: unknown; message?: unknown } | null = null;
     try {
-      json = JSON.parse(bodyText) as { status?: unknown; id?: unknown };
+      json = JSON.parse(bodyText) as {
+        status?: unknown;
+        id?: unknown;
+        message?: unknown;
+      };
     } catch {
       json = null;
     }
@@ -2562,17 +2573,25 @@ export async function createApplicationViaWebhook(
       logger.info(
         `[sit:webhook] create OK (status=${status}, id=${String(id)})`,
       );
-      return { id: String(id) };
+      return { ok: true, id: String(id) };
     }
     logger.warn(
       `[sit:webhook] create beklenmeyen yanıt (status=${status}) body=${rawForLog(bodyText)}`,
     );
-    return null;
+    const message =
+      typeof json?.message === "string" ? rawForLog(json.message) : "";
+    return {
+      ok: false,
+      detail:
+        `SIT webhook HTTP ${status}, status=${String(json?.status ?? "unknown")}` +
+        (message ? `: ${message}` : ": açıklama verilmedi"),
+    };
   } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
     logger.warn(
-      `[sit:webhook] create hata: ${e instanceof Error ? e.message : String(e)}`,
+      `[sit:webhook] create hata: ${message}`,
     );
-    return null;
+    return { ok: false, detail: `SIT webhook ağ hatası: ${message}` };
   }
 }
 

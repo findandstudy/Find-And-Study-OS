@@ -61,3 +61,27 @@ export function resolveWritebackTarget(
   }
   return { submissionStatus: "failed", stageKey: null };
 }
+
+/** Preserve the adapter's concrete portal failure when the run completed but
+ * returned submitted=false. A thrown worker error still takes precedence. */
+export function resolveWritebackError(
+  result: SubmitResult | null,
+  submissionStatus: SubmissionStatus,
+  errorMessage?: string,
+): string | null {
+  if (result?.skippedNotMember) {
+    return (
+      result.detail ??
+      "SIT üyesi değil — doğrudan üniversite panelinden başvurulmalı"
+    );
+  }
+  if (submissionStatus === "exclusive_region") {
+    return result?.exclusiveAgency
+      ? `Exclusive bölge — ${result.exclusiveAgency} üzerinden başvurulmalı`
+      : "Exclusive bölge — acenta üzerinden başvurulmalı";
+  }
+  if (submissionStatus === "failed") {
+    return errorMessage ?? result?.detail ?? "submission failed";
+  }
+  return null;
+}

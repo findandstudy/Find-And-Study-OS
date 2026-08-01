@@ -61,6 +61,8 @@ import {
   resolveSitAcademicHistory,
   isSitContactStepLabels,
   hasSitProgramSubjectAnchor,
+  buildSitProgramMissingContext,
+  matchSitProgramExactFormatting,
 } from "./helpers.js";
 import {
   findStudent,
@@ -474,6 +476,47 @@ function formItemByLabel(page: Page, labelRe: RegExp) {
 }
 
 /**
+ * SIT occasionally renders a required native select before its option list is
+ * hydrated. Wait only while the list has zero usable options; a populated list
+ * with no matching value fails immediately and remains fail-closed.
+ */
+async function findHydratedNativeSelectValue(
+  page: Page,
+  readState: () => Promise<{ value: string | null; usableCount: number }>,
+  timeoutMs = 8000,
+): Promise<string | null> {
+  const deadline = Date.now() + timeoutMs;
+  while (true) {
+    const state = await readState().catch(() => ({
+      value: null,
+      usableCount: 0,
+    }));
+
+    if (state.value != null) return state.value;
+    if (state.usableCount > 0 || Date.now() >= deadline) return null;
+    await sleep(page, 400);
+  }
+}
+
+function readNativeSelectState(
+  el: HTMLElement,
+  reSrc: string,
+): { value: string | null; usableCount: number } {
+  const native = el as HTMLSelectElement;
+  const re = new RegExp(reSrc, "i");
+  const usable = Array.from(native.options).filter((option) => {
+    if (option.disabled) return false;
+    const text = (option.textContent || "").trim();
+    return Boolean(option.value || text);
+  });
+  const match = usable.find((option) => {
+    const text = (option.textContent || "").trim();
+    return re.test(text) || re.test(option.value);
+  });
+  return { value: match?.value ?? null, usableCount: usable.length };
+}
+
+/**
  * Select a value in a dropdown matching `labelRe`. Handles (in order) a native
  * <select> (selectOption by option text matching `optionRe`), SIT's custom
  * role=button combobox (open + click matching option), and a searchable
@@ -493,17 +536,10 @@ async function selectField(
   const scopedSel = formItemByLabel(page, labelRe).locator("select").first();
   if (await scopedSel.count().catch(() => 0)) {
     try {
-      const value = await scopedSel.evaluate((el, reSrc) => {
-        const s = el as unknown as HTMLSelectElement;
-        const re = new RegExp(reSrc, "i");
-        const opt = Array.from(s.options).find((o) => {
-          if (o.disabled) return false;
-          const txt = (o.textContent || "").trim();
-          if (!o.value && !txt) return false; // skip empty placeholder
-          return re.test(txt) || re.test(o.value);
-        });
-        return opt ? opt.value : null;
-      }, optionRe.source);
+      const value = await findHydratedNativeSelectValue(
+        page,
+        () => scopedSel.evaluate(readNativeSelectState, optionRe.source),
+      );
       if (value != null) {
         await scopedSel.selectOption(value).catch(() => {});
         const ok = await scopedSel
@@ -522,18 +558,10 @@ async function selectField(
   const sel = await resolveControl(page, labelRe, "select");
   if (sel) {
     try {
-      const value = await sel.evaluate((el, reSrc) => {
-        const s = el as unknown as HTMLSelectElement;
-        const re = new RegExp(reSrc, "i");
-        const opt = Array.from(s.options).find((o) => {
-          if (o.disabled) return false;
-          const txt = (o.textContent || "").trim();
-          // Skip empty/placeholder options ("", "Select...") that lack a value.
-          if (!o.value && !txt) return false;
-          return re.test(txt) || re.test(o.value);
-        });
-        return opt ? opt.value : null;
-      }, optionRe.source);
+      const value = await findHydratedNativeSelectValue(
+        page,
+        () => sel.evaluate(readNativeSelectState, optionRe.source),
+      );
       if (value != null) {
         await sel.selectOption(value).catch(() => {});
         // Assert the intended option is now selected (not merely non-empty).
@@ -2030,6 +2058,8 @@ export const sitAdapter: SitAdapter = {
       transferStudent: true,
       haveTc: true,
       blueCard: true,
+      firstName: !!profile.firstName.trim(),
+      lastName: !!profile.lastName.trim(),
       email: !!profile.email,
       gender: !!(profile.gender || "").trim(),
       dob: !!dob,
@@ -2059,6 +2089,7 @@ export const sitAdapter: SitAdapter = {
     // Consecutive same-step validation failures → cap in-step retries (item 5:
     // 1-2 retries, then a clear FAIL + screenshot instead of 7× generic noise).
     let validationRetries = 0;
+    let lastValidationLabels: string[] = [];
 
     // --- Walk up to 6 wizard steps, filling whatever is on screen ---
     for (let step = 0; step < 9; step++) {
@@ -2086,8 +2117,14 @@ export const sitAdapter: SitAdapter = {
       await dumpWizardForm(page, step + 1, heading);
 
       // Personal
-      await fillField(page, SIT_STUDENT_FIELDS.firstName, profile.firstName);
-      await fillField(page, SIT_STUDENT_FIELDS.lastName, profile.lastName);
+      mark(
+        "firstName",
+        await fillField(page, SIT_STUDENT_FIELDS.firstName, profile.firstName),
+      );
+      mark(
+        "lastName",
+        await fillField(page, SIT_STUDENT_FIELDS.lastName, profile.lastName),
+      );
       if (dob) {
         mark(
           "dob",
@@ -2808,6 +2845,9 @@ export const sitAdapter: SitAdapter = {
               return results;
             }).catch(() => [] as string[]);
             if (emptyLabels.length) {
+              lastValidationLabels = [...new Set(emptyLabels.map((label) =>
+                label.replace(/\s*\*+\s*$/, "").trim(),
+              ).filter(Boolean))];
               logger.warn(`[sit] boş alanlar (adım ${step + 1}): ${emptyLabels.join(" | ")}`);
               // Re-fill contact fields if we're on the Contact step
               const isContactStep = emptyLabels.some((l) => /email|mobile|phone|residence|country/i.test(l));
@@ -2861,7 +2901,11 @@ export const sitAdapter: SitAdapter = {
             throw new Error(
               `SIT: wizard adım=${step + 1} doğrulamadan geçemedi` +
                 `${inline ? ` (${inline})` : ""}` +
-                `${unset.length ? ` — ayarlanamayan alanlar: ${unset.join(", ")}` : ""}` +
+                `${lastValidationLabels.length
+                  ? ` — portalda hata işaretli alanlar: ${lastValidationLabels.join(", ")}`
+                  : unset.length
+                    ? ` — ayarlanamayan alanlar: ${unset.join(", ")}`
+                    : ""}` +
                 " — tekrar denenecek",
             );
           }
@@ -3136,6 +3180,8 @@ export const sitAdapter: SitAdapter = {
       dob: "doğum tarihi",
       nationality: "uyruk",
       passportNo: "pasaport no",
+      firstName: "ad",
+      lastName: "soyad",
       issueDate: "pasaport veriliş tarihi",
       expiryDate: "pasaport bitiş tarihi",
       phone: "telefon",
@@ -3298,11 +3344,23 @@ export const sitAdapter: SitAdapter = {
         };
       }
       const pool = langFiltered;
-      const found = matchProgram(profile.programName, pool, {
-        nameMap: profile.programNameMap,
-        nameMapGeneral: profile.programNameMapGeneral,
-        synonyms: profile.programSynonyms,
-      });
+      const formattingExact = matchSitProgramExactFormatting(
+        profile.programName,
+        pool,
+      );
+      const found = formattingExact
+        ? { match: formattingExact, conf: 1.0 }
+        : matchProgram(profile.programName, pool, {
+            nameMap: profile.programNameMap,
+            nameMapGeneral: profile.programNameMapGeneral,
+            synonyms: profile.programSynonyms,
+          });
+
+      if (formattingExact) {
+        logger.info(
+          `[sit] program biçim farkı güvenli tam eşleşmeyle çözüldü: "${profile.programName}" → "${formattingExact.name}"`,
+        );
+      }
 
       if (!found) {
         logger.warn(
@@ -3312,6 +3370,7 @@ export const sitAdapter: SitAdapter = {
         return {
           ...base,
           programMissing: true,
+          ...buildSitProgramMissingContext(profile.programName, pool),
           detail: `Program bulunamadı: "${profile.programName}" — ${pool.length} aday arasında güvenli eşleşme yok`,
         };
       }
@@ -3350,6 +3409,7 @@ export const sitAdapter: SitAdapter = {
         return {
           ...base,
           programMissing: true,
+          ...buildSitProgramMissingContext(profile.programName, pool),
           detail:
             `Program bulunamadı: "${profile.programName}" — en yakın aday güvenli eşleşme şartlarını sağlamadı`,
         };
@@ -3480,10 +3540,35 @@ export const sitAdapter: SitAdapter = {
       agency_id: identity.agencyId,
       crm_id: identity.crmId,
     });
-    if (!webhookResult) {
+    if (!webhookResult.ok) {
+      // The external n8n workflow can finish creating the record but still
+      // return status=false (or time out) under load. Never POST a second time:
+      // wait briefly and repeat only the read-only dedup proof. A newly visible
+      // record means the requested outcome exists and is safe to accept.
+      await sleep(page, 1200).catch(() => {});
+      const afterFailureDedup = await dedupApplication(page, {
+        student: studentId,
+        university: progIds.universityId,
+        degree: progIds.degreeId,
+        academicYear: ay.id,
+        semester: sem.id,
+      });
+      if (afterFailureDedup.status === "found") {
+        logger.warn(
+          `[sit] webhook başarısız yanıt verdi ancak başvuru dedup ile doğrulandı (id=${afterFailureDedup.id})`,
+        );
+        return {
+          ...base,
+          submitted: true,
+          externalRef: afterFailureDedup.id,
+          detail: "webhook yanıtı başarısızdı; başvuru portalda sonradan doğrulandı",
+        };
+      }
       return {
         ...base,
-        detail: `başvuru oluşturulamadı: webhook create başarısız ("${matched.name}")`,
+        detail:
+          `başvuru oluşturulamadı: webhook create başarısız ("${matched.name}") — ` +
+          webhookResult.detail,
       };
     }
     logger.info(`[sit] başvuru webhook ile oluşturuldu (id=${webhookResult.id})`);
@@ -3549,6 +3634,9 @@ export const sitAdapter: SitAdapter = {
       detail,
     };
     if (app.externalRef) result.externalRef = app.externalRef;
+    if (app.requestedProgram) result.requestedProgram = app.requestedProgram;
+    if (app.availablePrograms) result.availablePrograms = app.availablePrograms;
+    if (app.resolution) result.resolution = app.resolution;
     logger.info("[sit] submit " + JSON.stringify(result));
     return result;
   },

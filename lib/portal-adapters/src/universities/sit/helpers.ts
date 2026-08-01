@@ -10,6 +10,60 @@
 
 import { expandProgramTokens, fold } from "../../programMatch.js";
 
+/**
+ * Build the structured, fail-closed context consumed by the runner's configured
+ * program-fallback engine. The caller must pass only candidates that already
+ * passed university, level and language scoping; this helper never broadens the
+ * candidate set or chooses an alternative by itself.
+ */
+export function buildSitProgramMissingContext(
+  requestedProgram: string,
+  candidates: readonly { id: string; name: string }[],
+): {
+  requestedProgram: { name: string };
+  availablePrograms: Array<{ value: string; name: string; enabled: true }>;
+  resolution: "not_in_dropdown";
+} {
+  const seen = new Set<string>();
+  const availablePrograms = candidates.flatMap((candidate) => {
+    const value = candidate.id.trim();
+    const name = candidate.name.trim();
+    if (!value || !name || seen.has(value)) return [];
+    seen.add(value);
+    return [{ value, name, enabled: true as const }];
+  });
+
+  return {
+    requestedProgram: { name: requestedProgram.trim() },
+    availablePrograms,
+    resolution: "not_in_dropdown",
+  };
+}
+
+/**
+ * Resolve formatting-only drift in SIT program labels without fuzzy guessing.
+ *
+ * The live catalog occasionally joins the language suffix to the subject
+ * (for example `DesignEnglish`) while CRM stores `(English)`. Removing only
+ * non-alphanumeric spacing makes those labels identical, but still keeps the
+ * degree, subject, thesis mode and language in the comparison. A match is
+ * accepted only when exactly one candidate has the same compact identity.
+ */
+export function matchSitProgramExactFormatting<T extends { name: string }>(
+  requestedProgram: string,
+  candidates: readonly T[],
+): T | null {
+  const compactIdentity = (value: string): string =>
+    fold(value).replace(/[^a-z0-9]+/g, "");
+  const requestedIdentity = compactIdentity(requestedProgram);
+  if (!requestedIdentity) return null;
+
+  const matches = candidates.filter(
+    (candidate) => compactIdentity(candidate.name) === requestedIdentity,
+  );
+  return matches.length === 1 ? matches[0] : null;
+}
+
 // ---------------------------------------------------------------------------
 // SIT allowlist — EXACTLY 11 universities (do not add/remove without sign-off).
 //

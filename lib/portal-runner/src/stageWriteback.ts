@@ -28,7 +28,10 @@ import {
 import { and, eq } from "drizzle-orm";
 import type { RunResult } from "./runner.js";
 import type { PortalRunEvidence } from "./portalEvidence.js";
-import { resolveWritebackTarget } from "./stageWritebackTarget.js";
+import {
+  resolveWritebackError,
+  resolveWritebackTarget,
+} from "./stageWritebackTarget.js";
 
 // ---------------------------------------------------------------------------
 // writebackResult
@@ -150,16 +153,11 @@ export async function writebackResult(
             },
           }
         : {}),
-      error:          result?.skippedNotMember
-                        ? (result.detail ??
-                            "SIT üyesi değil — doğrudan üniversite panelinden başvurulmalı")
-                        : submissionStatus === "exclusive_region"
-                          ? (result?.exclusiveAgency
-                              ? `Exclusive bölge — ${result.exclusiveAgency} üzerinden başvurulmalı`
-                              : "Exclusive bölge — acenta üzerinden başvurulmalı")
-                          : submissionStatus === "failed"
-                            ? (errorMessage ?? "submission failed")
-                            : null,
+      error:          resolveWritebackError(
+                        result,
+                        submissionStatus,
+                        errorMessage,
+                      ),
       lockedAt:       null,
       lockedBy:       null,
       updatedAt:      new Date(),
