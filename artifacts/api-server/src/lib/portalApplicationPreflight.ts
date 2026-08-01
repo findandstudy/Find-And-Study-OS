@@ -7,6 +7,7 @@ import { runEducationExtraction } from "./educationAutoExtract.js";
 import { autoFillMissingAddressCity } from "./portalAddressAutoExtract.js";
 import {
   autoFillMissingProfileFromPassport,
+  autoRepairInvalidProfileDatesFromPassport,
   verifyStudentIdentityAgainstPassport,
 } from "./portalProfileAutoExtract.js";
 import { logAudit } from "./auth.js";
@@ -107,6 +108,42 @@ export async function prepareApplicationPortalPreflight(opts: {
         profile: snapshot.profile,
         documentTypes: snapshot.documentTypes,
       });
+    }
+  }
+
+  const invalidPassportDates = result.incompatibleFields
+    .map((issue) => issue.field)
+    .filter((field) =>
+      field === "dateOfBirth" ||
+      field === "passportIssueDate" ||
+      field === "passportExpiryDate");
+  // Keep the first rollout scoped to SIT: this repair relies on SIT's
+  // independently verified passport-identity contract.
+  if (result.adapterKey === "sit" && invalidPassportDates.length > 0) {
+    const repair = await autoRepairInvalidProfileDatesFromPassport({
+      studentId: snapshot.studentId,
+      actorUserId: opts.actorUserId,
+      ip: opts.ip,
+      invalidFields: invalidPassportDates,
+    });
+    if (repair.status === "updated") {
+      autoFilledFields.push(...repair.fields);
+      snapshot = await buildApplicationPreflightSnapshot(
+        opts.applicationId,
+        { adapterKey: opts.adapterKey },
+      );
+      result = evaluatePortalPreflight({
+        adapterKey: opts.adapterKey,
+        profile: snapshot.profile,
+        documentTypes: snapshot.documentTypes,
+      });
+    } else if (
+      repair.status === "identity_mismatch" ||
+      repair.status === "low_confidence" ||
+      repair.status === "unreadable" ||
+      repair.status === "ai_unavailable"
+    ) {
+      enrichmentWarnings.push(`passportDateRepair:${repair.status}`);
     }
   }
 

@@ -16,6 +16,7 @@ import {
 import { loadDocumentBytes } from "./documentBytes.js";
 import { normalizeInboxStudentExtraction } from "./inboxStudentExtraction.js";
 import { logAudit } from "./auth.js";
+import { buildPassportDateRepairDecision } from "./portalPassportDateRepair.js";
 
 export interface PortalProfileAutoExtractResult {
   status:
@@ -33,6 +34,19 @@ export interface PortalPassportIdentityVerificationResult {
     | "verified"
     | "mismatch"
     | "no_passport_document"
+    | "low_confidence"
+    | "unreadable"
+    | "ai_unavailable";
+  fields: string[];
+  documentId?: number;
+}
+
+export interface PortalProfileDateRepairResult {
+  status:
+    | "updated"
+    | "no_invalid_fields"
+    | "no_passport_document"
+    | "identity_mismatch"
     | "low_confidence"
     | "unreadable"
     | "ai_unavailable";
@@ -399,4 +413,76 @@ export async function autoFillMissingProfileFromPassport(opts: {
     opts.ip,
   );
   return { status: "updated", fields };
+}
+
+export async function autoRepairInvalidProfileDatesFromPassport(opts: {
+  studentId: number;
+  actorUserId: number | null;
+  ip?: string;
+  invalidFields: readonly string[];
+}): Promise<PortalProfileDateRepairResult> {
+  const [student] = await db
+    .select()
+    .from(studentsTable)
+    .where(and(
+      eq(studentsTable.id, opts.studentId),
+      isNull(studentsTable.deletedAt),
+    ));
+  if (!student) return { status: "unreadable", fields: [] };
+
+  const requested = opts.invalidFields.filter((field) =>
+    field === "dateOfBirth" ||
+    field === "passportIssueDate" ||
+    field === "passportExpiryDate");
+  if (requested.length === 0) {
+    return { status: "no_invalid_fields", fields: [] };
+  }
+
+  const loaded = await loadPassportExtraction(opts.studentId);
+  if (loaded.status !== "ok") {
+    return {
+      status: loaded.status,
+      fields: [],
+      ...(loaded.document ? { documentId: loaded.document.id } : {}),
+    };
+  }
+
+  const decision = buildPassportDateRepairDecision({
+    student,
+    extracted: loaded.extracted,
+    confidenceScore: loaded.confidenceScore,
+    documentId: loaded.document.id,
+    invalidFields: requested,
+  });
+  if (decision.status !== "repairable") {
+    return {
+      status: decision.status,
+      fields: decision.fields,
+      documentId: loaded.document.id,
+    };
+  }
+
+  await db.update(studentsTable)
+    .set(decision.patch)
+    .where(and(
+      eq(studentsTable.id, opts.studentId),
+      isNull(studentsTable.deletedAt),
+    ));
+  await logAudit(
+    opts.actorUserId,
+    "portal_preflight_auto_repair_identity_dates",
+    "student",
+    opts.studentId,
+    {
+      documentId: loaded.document.id,
+      fields: decision.fields,
+      confidence: "high",
+    },
+    opts.ip,
+  );
+  return {
+    status: "updated",
+    fields: decision.fields,
+    documentId: loaded.document.id,
+  };
 }
