@@ -290,10 +290,6 @@ function PublicRoutes({ lang }: { lang: string }) {
 }
 
 function StaffAdminShell() {
-  useEffect(() => {
-    console.log("[StaffAdminShell] MOUNTED");
-    return () => console.log("[StaffAdminShell] UNMOUNTED");
-  }, []);
   return (
     <ProtectedRoute allowedRoles={STAFF_ROLES}>
       <DashboardLayout>

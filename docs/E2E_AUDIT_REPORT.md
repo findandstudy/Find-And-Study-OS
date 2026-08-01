@@ -42,20 +42,9 @@ Bu denetimde EduConsult OS (FAS-OS) pnpm monorepo uygulaması, tüm roller için
 
 ### Test Hesapları
 
-| Rol | E-posta | Şifre |
-|-----|---------|-------|
-| super_admin | en@findandstudy.com | En9881274! |
-| admin | audit-admin@audit.test | TestAudit2026! |
-| manager | audit-manager@audit.test | TestAudit2026! |
-| staff | audit-staff@audit.test | TestAudit2026! |
-| consultant | audit-consultant@audit.test | TestAudit2026! |
-| editor | audit-editor@audit.test | TestAudit2026! |
-| accountant | audit-accountant@audit.test | TestAudit2026! |
-| agent | audit-agent@audit.test | TestAudit2026! |
-| sub_agent | audit-subagent@audit.test | TestAudit2026! |
-| agent_staff | audit-agentstaff@audit.test | TestAudit2026! |
-| student | audit-student@audit.test | TestAudit2026! |
-| super_admin (audit) | audit-superadmin@audit.test | TestAudit2026! |
+RBAC test hesapları yalnız izole E2E veritabanında fixture olarak oluşturulur.
+Parolalar repoda tutulmaz; koşum sırasında `RBAC_E2E_PASSWORD` ortam
+değişkeninden alınır. Canlı kullanıcı bilgileri E2E raporlarına yazılmaz.
 
 ### Rol Hiyerarşisi
 - **ADMIN_ROLES**: `super_admin`, `admin`, `manager`

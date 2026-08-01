@@ -8,15 +8,17 @@
     "./declarative/schema": "./src/declarative/schema.ts"
   },
   "scripts": {
-    "test:program-match": "tsx --test ./scripts/test-program-match.ts",
-    "test:registry": "tsx --test ./scripts/test-registry.ts",
-    "test:declarative": "tsx --test ./scripts/test-declarative.ts",
-    "test:declarative-adapter": "tsx --test ./scripts/test-declarative-adapter.ts",
-    "test:db-loader": "tsx --test ./scripts/test-db-loader.ts",
-    "test:portal-spec-bundle": "tsx --test ./scripts/test-portal-spec-bundle.ts",
-    "test:sit": "tsx --test ./scripts/test-sit.ts",
-    "test:step3": "tsx --test ./scripts/test-step3-normalize.ts",
-    "test:adapters": "tsx --test ./scripts/test-*.ts",
+    "test:program-match": "DATABASE_URL=${DATABASE_URL:-postgres://test:test@127.0.0.1:5432/portal_adapters_test} tsx --test ./scripts/test-program-match.ts",
+    "test:registry": "DATABASE_URL=${DATABASE_URL:-postgres://test:test@127.0.0.1:5432/portal_adapters_test} tsx --test ./scripts/test-registry.ts",
+    "test:declarative": "DATABASE_URL=${DATABASE_URL:-postgres://test:test@127.0.0.1:5432/portal_adapters_test} tsx --test ./scripts/test-declarative.ts",
+    "test:declarative-adapter": "DATABASE_URL=${DATABASE_URL:-postgres://test:test@127.0.0.1:5432/portal_adapters_test} tsx --test ./scripts/test-declarative-adapter.ts",
+    "test:db-loader": "DATABASE_URL=${DATABASE_URL:-postgres://test:test@127.0.0.1:5432/portal_adapters_test} tsx --test ./scripts/test-db-loader.ts",
+    "test:portal-spec-bundle": "DATABASE_URL=${DATABASE_URL:-postgres://test:test@127.0.0.1:5432/portal_adapters_test} tsx --test ./scripts/test-portal-spec-bundle.ts",
+    "test:sit": "DATABASE_URL=${DATABASE_URL:-postgres://test:test@127.0.0.1:5432/portal_adapters_test} tsx --test ./scripts/test-sit.ts",
+    "test:step3": "DATABASE_URL=${DATABASE_URL:-postgres://test:test@127.0.0.1:5432/portal_adapters_test} tsx --test ./scripts/test-step3-normalize.ts",
+    "test:adapters": "DATABASE_URL=${DATABASE_URL:-postgres://test:test@127.0.0.1:5432/portal_adapters_test} tsx --test ./scripts/test-*.ts",
+    "test:colocated": "DATABASE_URL=${DATABASE_URL:-postgres://test:test@127.0.0.1:5432/portal_adapters_test} tsx --test ./src/declarative/*.test.ts ./src/universities/*/*.test.ts",
+    "test:all": "pnpm run test:adapters && pnpm run test:colocated",
     "smoke:sit": "tsx ./scripts/sit-smoke.ts"
   },
   "dependencies": {

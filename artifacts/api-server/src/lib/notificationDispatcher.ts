@@ -301,7 +301,7 @@ export async function dispatchNotification(ctx: DispatchContext): Promise<void> 
               }
               await sendEmail(user.email, emailContent);
             } catch (err) {
-              console.error(`[NOTIFY] Failed to send email to ${user.email}:`, err);
+              console.error("[NOTIFY] Failed to send user email:", err);
             }
           }
         } catch (err) {
@@ -386,7 +386,7 @@ export async function dispatchNotification(ctx: DispatchContext): Promise<void> 
           }
           await sendEmail(externalEmailAddr, emailContent);
         } catch (err) {
-          console.error(`[NOTIFY] External email dispatch error for ${ctx.event} to ${externalEmailAddr}:`, err);
+          console.error(`[NOTIFY] External email dispatch error for ${ctx.event}:`, err);
         }
       })();
     }

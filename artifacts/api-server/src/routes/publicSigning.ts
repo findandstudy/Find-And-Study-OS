@@ -435,7 +435,7 @@ router.post("/public/sign/:token/intake", signLimiter, async (req, res): Promise
 router.post("/public/sign/:token/sign", signLimiter, async (req, res): Promise<void> => {
   const signStart = Date.now();
   const startRss = Math.round(process.memoryUsage().rss / (1024 * 1024));
-  console.log(`[public-sign] start token=${String(req.params.token).slice(0, 8)}… rss=${startRss}MB`);
+  console.log(`[public-sign] start rss=${startRss}MB`);
   try {
     const r = await resolveByToken(String(req.params.token));
     if ("error" in r) { res.status(r.status).json({ error: r.error }); return; }

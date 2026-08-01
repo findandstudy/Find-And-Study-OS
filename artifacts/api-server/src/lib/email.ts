@@ -910,7 +910,7 @@ export async function sendEmail(
   email: { subject: string; html: string; text: string },
   opts?: { attachments?: EmailAttachment[] },
 ): Promise<void> {
-  console.log(`[EMAIL] Queuing email to ${to}: ${email.subject}`);
+  console.log(`[EMAIL] Queuing email: ${email.subject}`);
 
   let queueId: number | undefined;
   try {

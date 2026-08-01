@@ -449,7 +449,7 @@ export async function sendZernioTemplate(params: ZernioTemplateSendParams): Prom
 
     // ── Step 2: add recipient ────────────────────────────────────────────
     const recUrl = `${baseUrl}/${encodeURIComponent(String(broadcastId))}/recipients`;
-    console.log("[ZERNIO] broadcast recipients request:", JSON.stringify({ url: recUrl, phones: [params.toPhoneE164] }));
+    console.log("[ZERNIO] broadcast recipients request:", JSON.stringify({ url: recUrl, recipientCount: 1 }));
     const recResp = await fetch(recUrl, { method: "POST", headers, body: JSON.stringify({ phones: [params.toPhoneE164] }) });
     const recText = await recResp.text().catch(() => "");
     console.log(`[ZERNIO] broadcast recipients response (${recResp.status}):`, recText.slice(0, 600));

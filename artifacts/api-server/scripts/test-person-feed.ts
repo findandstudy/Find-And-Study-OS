@@ -22,7 +22,10 @@ import { eq, and, isNull, inArray, sql } from "drizzle-orm";
 // Config
 // ---------------------------------------------------------------------------
 const API = "http://localhost:8080/api";
-const PASS = "TestAudit2026!";
+const PASS = process.env.RBAC_E2E_PASSWORD;
+if (!PASS) {
+  throw new Error("RBAC_E2E_PASSWORD is required for person-feed tests");
+}
 const ADMIN_EMAIL = "audit-admin@audit.test";
 const RUN = `pf${Date.now().toString(36).slice(-5)}`;
 

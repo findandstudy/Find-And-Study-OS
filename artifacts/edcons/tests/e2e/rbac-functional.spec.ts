@@ -26,7 +26,7 @@ import {
 
 const BASE_URL = process.env.PLAYWRIGHT_BASE_URL || "http://localhost:25197";
 const API = "http://localhost:8080/api";
-const PASS = "TestAudit2026!";
+const PASS = process.env.RBAC_E2E_PASSWORD || "";
 
 const A = {
   superadmin:  "audit-superadmin@audit.test",
@@ -50,6 +50,9 @@ async function loginAs(
   email: string,
   password: string,
 ): Promise<void> {
+  if (!password) {
+    throw new Error("RBAC_E2E_PASSWORD is required for RBAC functional E2E tests");
+  }
   await request.get(`${API}/auth/me`);
   const state = await request.storageState();
   const csrf = state.cookies.find((c) => c.name === "csrf_token")?.value ?? "";

@@ -67,15 +67,12 @@ channel = "stable-25_05"
 [userenv]
 
 [userenv.development]
-SEED_ADMIN_PASSWORD = "En9881274!"
-SEED_AGENT_PASSWORD = "findandstudy123"
 PLAYWRIGHT_BASE_URL = "http://localhost:25197"
 PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH = "/nix/store/qa9cnw4v5xkxyip6mb9kxqfq1z4x2dx1-chromium-138.0.7204.100/bin/chromium"
 PLAYWRIGHT_STAFF_EMAIL = "en@findandstudy.com"
-PLAYWRIGHT_STAFF_PASS = "En9881274!"
 
 [userenv.production]
 APP_BASE_URL = "https://portal.masterstudyinturkey.com"
 
 [userenv.shared]
-SSO_SHARED_SECRET = "dc4e34371257f5eae85d2343e92b6a5df118cbd97a07235246b2ae7fbb57ace0e87865a4bc303bf1413fa414e15788b9"
+# Passwords and shared secrets must be configured through Replit Secrets.

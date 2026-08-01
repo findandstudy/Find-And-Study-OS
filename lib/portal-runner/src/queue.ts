@@ -320,9 +320,9 @@ export async function releaseStale(thresholdMs: number): Promise<number[]> {
     `UPDATE portal_submissions
      SET status     = CASE
                          WHEN COALESCE((meta->>'crash_recoveries')::int, 0) + 1 >= 3
-                           THEN 'failed'
-                         ELSE 'queued'
-                       END::portal_submission_status,
+                           THEN 'failed'::portal_submission_status
+                         ELSE 'queued'::portal_submission_status
+                       END,
          attempts   = CASE
                          WHEN COALESCE((meta->>'crash_recoveries')::int, 0) + 1 >= 3
                            THEN attempts

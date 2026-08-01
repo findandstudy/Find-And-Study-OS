@@ -9,12 +9,16 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import bcrypt from "bcryptjs";
 import { pool } from "@workspace/db";
 import { assertSafeE2eDatabase } from "./e2e-database-safety";
 
 assertSafeE2eDatabase();
 
-const HASH = "$2b$10$Qx/oEqGzMqoQGvizNRuTK.u8jff4.rbnMfPkLttmmrYDIL2u2OsXi"; // TestAudit2026!
+const PASSWORD = process.env.RBAC_E2E_PASSWORD;
+if (!PASSWORD) {
+  throw new Error("RBAC_E2E_PASSWORD is required for RBAC E2E setup");
+}
 const ALL_PERMS = ["leads", "students", "applications", "documents", "course_finder", "messages", "commissions"];
 
 const USERS = [
@@ -42,6 +46,7 @@ interface RbacState {
 }
 
 async function main() {
+  const passwordHash = await bcrypt.hash(PASSWORD, 10);
   const client = await pool.connect();
   const state: RbacState = { createdUserEmails: [], createdAgentIds: [] };
   try {
@@ -68,7 +73,7 @@ async function main() {
            email_verified = true,
            updated_at = NOW()
          RETURNING id`,
-        [email, HASH, role, lastName],
+        [email, passwordHash, role, lastName],
       );
       userIds.set(email, result.rows[0].id);
     }

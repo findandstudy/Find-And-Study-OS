@@ -5,7 +5,10 @@
  */
 
 const API = "http://localhost:8080/api";
-const PASS = "TestAudit2026!";
+const PASS = process.env.RBAC_E2E_PASSWORD;
+if (!PASS) {
+  throw new Error("RBAC_E2E_PASSWORD is required for the RBAC audit runner");
+}
 
 const USERS: Record<string, string> = {
   superadmin:  "audit-superadmin@audit.test",
