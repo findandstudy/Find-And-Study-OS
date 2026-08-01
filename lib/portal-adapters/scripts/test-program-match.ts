@@ -22,7 +22,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { fold, matchProgram, type ProgramCandidate } from "../src/programMatch.js";
+import { fold, matchProgram, parseTrack, type ProgramCandidate } from "../src/programMatch.js";
 import { mapDocType } from "../src/profile.js";
 
 // ---------------------------------------------------------------------------
@@ -43,6 +43,18 @@ test("fold — Turkish chars mapped correctly before toLower", () => {
   assert.equal(fold("A  B--C"),      "a b c");
   // Key test from spec: İletişim → iletisim (no combining marks remain)
   assert.equal(fold("İletişim"),     "iletisim");
+});
+
+test("fold — repairs only a glued terminal language marker", () => {
+  assert.equal(
+    fold("Bachelor of Engineering ManagementEnglish"),
+    "bachelor of engineering management english",
+  );
+  assert.equal(
+    fold("Bachelor of Industrial Product DesignTurkish"),
+    "bachelor of industrial product design turkish",
+  );
+  assert.equal(fold("English Language and Literature"), "english language and literature");
 });
 
 // ---------------------------------------------------------------------------
@@ -293,6 +305,41 @@ test("LANG5 — Turkish query + only English-medium candidates → null", () => 
   const result = matchProgram("Business Administration (Turkish)", candidates);
 
   assert.equal(result, null, "Must NOT cross-match a Turkish query to an English option");
+});
+
+// ---------------------------------------------------------------------------
+// LANG6/7 — live SIT/Beykoz regression. The portal currently returns some
+// labels with the final language marker glued to the subject name. Treat that
+// suffix as a structured track marker without weakening opposite-track safety.
+// ---------------------------------------------------------------------------
+
+test("LANG6 — glued English suffix is parsed and matches the intended programme", () => {
+  const candidates: ProgramCandidate[] = [
+    { id: "eng-mgmt", name: "Bachelor of Engineering ManagementEnglish" },
+    { id: "industrial", name: "Bachelor of Industrial Product DesignEnglish" },
+    { id: "psychology", name: "Bachelor of Psychology (English)" },
+  ];
+
+  assert.equal(parseTrack(candidates[0].name), "en");
+  const result = matchProgram("Bachelor of Engineering Management (English)", candidates);
+
+  assert.ok(result !== null, "Glued English suffix must remain matchable");
+  assert.equal(result.match.id, "eng-mgmt");
+  assert.equal(result.conf, 1.0);
+});
+
+test("LANG7 — glued language suffix still rejects the opposite track", () => {
+  const candidates: ProgramCandidate[] = [
+    { id: "en", name: "Bachelor of Engineering ManagementEnglish" },
+    { id: "tr", name: "Bachelor of Engineering ManagementTurkish" },
+  ];
+
+  const result = matchProgram("Bachelor of Engineering Management (Turkish)", candidates);
+
+  assert.ok(result !== null, "Expected the Turkish-track sibling");
+  assert.equal(result.match.id, "tr");
+  assert.equal(parseTrack(candidates[0].name), "en");
+  assert.equal(parseTrack(candidates[1].name), "tr");
 });
 
 // ---------------------------------------------------------------------------

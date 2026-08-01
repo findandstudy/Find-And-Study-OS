@@ -2,17 +2,27 @@
 // fold — canonical string normalisation for program-name matching
 //
 // Order of operations (CRITICAL — do NOT reorder):
-//   1. Turkish-specific char replacements BEFORE toLowerCase
-//   2. toLowerCase
-//   3. NFKD Unicode normalisation
-//   4. Strip combining diacritics (0300-036F)
-//   5. Replace any non-alphanumeric run with a single space
-//   6. Trim & collapse interior whitespace
-//   7. Compound-word normalisation (runs on clean ASCII from step 6)
+//   1. Repair a known portal defect where a trailing language marker is glued
+//      to the programme name ("ManagementEnglish")
+//   2. Turkish-specific char replacements BEFORE toLowerCase
+//   3. toLowerCase
+//   4. NFKD Unicode normalisation
+//   5. Strip combining diacritics (0300-036F)
+//   6. Replace any non-alphanumeric run with a single space
+//   7. Trim & collapse interior whitespace
+//   8. Compound-word normalisation (runs on clean ASCII from step 7)
 // ---------------------------------------------------------------------------
+function separateGluedTrailingTrack(s: string): string {
+  // Some SIT/Salesforce catalog labels omit the separator before their final
+  // language marker, e.g. "Industrial Product DesignEnglish". Keep this
+  // deliberately narrow: only a terminal English/Turkish marker is repaired;
+  // interior words and other programme-name compounds are never split.
+  return s.replace(/([a-z])(?=(?:english|turkish)\s*(?:\)|$))/gi, "$1 ");
+}
+
 export function fold(s: string): string {
-  return s
-    // --- Step 1: Turkish chars → ASCII equivalents (must be BEFORE toLowerCase) ---
+  return separateGluedTrailingTrack(s)
+    // --- Step 2: Turkish chars → ASCII equivalents (must be BEFORE toLowerCase) ---
     .replace(/İ/g, "i")   // capital dotted I  → i
     .replace(/I/g,  "i")  // capital I (undotted, Turkish uppercase of ı) → i
     .replace(/ı/g,  "i")  // lowercase dotless i → i
@@ -21,18 +31,18 @@ export function fold(s: string): string {
     .replace(/Ö/g,  "o").replace(/ö/g, "o")
     .replace(/Ü/g,  "u").replace(/ü/g, "u")
     .replace(/Ğ/g,  "g").replace(/ğ/g, "g")
-    // --- Step 2: to lower ---
+    // --- Step 3: to lower ---
     .toLowerCase()
-    // --- Step 3: NFKD decomposition ---
+    // --- Step 4: NFKD decomposition ---
     .normalize("NFKD")
-    // --- Step 4: strip combining diacritics ---
+    // --- Step 5: strip combining diacritics ---
     .replace(/[\u0300-\u036f]/g, "")
-    // --- Step 5: non-alphanumeric → space ---
+    // --- Step 6: non-alphanumeric → space ---
     .replace(/[^a-z0-9]+/g, " ")
-    // --- Step 6: trim & collapse ---
+    // --- Step 7: trim & collapse ---
     .trim()
     .replace(/\s+/g, " ")
-    // --- Step 7: Compound-word normalisation ---
+    // --- Step 8: Compound-word normalisation ---
     // "yuksek lisans" is the Turkish two-word spelling of "Yüksek Lisans"
     // (master's degree). Without merging, the token "lisans" maps to the
     // ["lisans", "bachelor", "undergraduate"] synonym group, causing master's
@@ -422,7 +432,7 @@ export function expandProgramTokens(
 // track is present OR when both are present (ambiguous → don't hard-filter).
 // ---------------------------------------------------------------------------
 function normLang(s: string): string {
-  return s
+  return separateGluedTrailingTrack(s)
     .replace(/İ/g, "i").replace(/I/g, "i").replace(/ı/g, "i")
     .replace(/[şŞ]/g, "s").replace(/[çÇ]/g, "c").replace(/[öÖ]/g, "o")
     .replace(/[üÜ]/g, "u").replace(/[ğĞ]/g, "g")
