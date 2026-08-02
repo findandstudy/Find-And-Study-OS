@@ -669,15 +669,16 @@ function DraggableAppCard({ app, onView, variant, assignedUserName, onAssign, st
 }
 
 /* ── DroppableAppColumn ──────────────────────────────────── */
-function DroppableAppColumn({ stage, label, variant, apps, totalCount, isLoading, onLoadMore, onView, staffUsersMap, onAssign, staffUsersList, currentUserId, canSeeCommission, canAssign, canReassign, canMoveCards }: {
+function DroppableAppColumn({ stage, label, variant, apps, totalCount, totalRevenue, isLoading, onLoadMore, onView, staffUsersMap, onAssign, staffUsersList, currentUserId, canSeeCommission, canAssign, canReassign, canMoveCards }: {
   stage: string; label: string; variant?: string | null; apps: any[]; onView: (id: number) => void;
-  totalCount?: number; isLoading?: boolean; onLoadMore?: () => void;
+  totalCount?: number; totalRevenue?: number; isLoading?: boolean; onLoadMore?: () => void;
   staffUsersMap?: Record<number, string>; onAssign?: (entityId: number, userId: number) => void;
   staffUsersList?: { id: number; name: string }[]; currentUserId?: number; canSeeCommission?: boolean; canAssign?: boolean; canReassign?: boolean; canMoveCards?: boolean;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: stage });
   const v = variant as ColVariant;
-  const totalRevenue = apps.reduce((sum, a) => sum + (parseFloat(a.commissionAmount) || 0), 0);
+  const loadedRevenue = apps.reduce((sum, a) => sum + (parseFloat(a.commissionAmount) || 0), 0);
+  const resolvedTotalRevenue = totalRevenue ?? loadedRevenue;
 
   const colBg =
     v === "won" ? "bg-emerald-50/60 border-emerald-200/50 dark:bg-emerald-900/20 dark:border-emerald-700/30" :
@@ -720,10 +721,10 @@ function DroppableAppColumn({ stage, label, variant, apps, totalCount, isLoading
           </div>
           <span className={`min-w-6 h-6 px-1.5 rounded-full flex items-center justify-center text-xs font-bold border ${badgeBg}`}>{totalCount ?? apps.length}</span>
         </div>
-        {canSeeCommission && totalRevenue > 0 && (
+        {canSeeCommission && resolvedTotalRevenue > 0 && (
           <div className="mt-2 flex items-center gap-1.5 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 rounded-lg px-2.5 py-1">
             <TrendingUp className="w-3.5 h-3.5 text-emerald-600" />
-            <span className="text-xs font-bold text-emerald-700">{formatCurrency(totalRevenue)}</span>
+            <span className="text-xs font-bold text-emerald-700">{formatCurrency(resolvedTotalRevenue)}</span>
           </div>
         )}
       </div>
@@ -1641,6 +1642,9 @@ export default function ApplicationsPage() {
       return [stageDef.key, {
         apps: (query?.data?.data || []) as any[],
         total: Number(query?.data?.meta?.total || 0),
+        totalCommission: query?.data?.meta?.totalCommission == null
+          ? undefined
+          : Number(query.data.meta.totalCommission),
         isLoading: Boolean(query?.isLoading || query?.isFetching),
       }] as const;
     });
@@ -2142,6 +2146,7 @@ export default function ApplicationsPage() {
                     variant={s.variant}
                     apps={stageApps}
                     totalCount={stageData?.total || 0}
+                    totalRevenue={stageData?.totalCommission}
                     isLoading={stageData?.isLoading}
                     onLoadMore={() => setPipelineLimits(current => ({
                       ...current,

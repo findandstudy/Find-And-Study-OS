@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import type { InboxConversationDetailResponse } from "@workspace/api-client-react";
 import type { AddDocTarget } from "./AddAsDocumentModal";
+import { resolveInboxStudentContactPrefill } from "./studentDraftContact";
 
 type DocType = "diploma" | "transcript" | "passport" | "photograph";
 type Step = "select" | "analyzing" | "form";
@@ -90,13 +91,14 @@ export function CreateStudentAndAddDocumentModal({
     const conv = (detail as any).conversation ?? null;
     const displayName: string = (ext?.displayName || conv?.title || "").trim();
     const parts = displayName.split(/\s+/).filter(Boolean);
+    const existingContact = resolveInboxStudentContactPrefill(detail);
 
     const initial: typeof EMPTY_FORM = {
       ...EMPTY_FORM,
       firstName: parts[0] || "",
       lastName: parts.slice(1).join(" ") || "",
-      email: ext?.email || "",
-      phone: ext?.phone || "",
+      email: existingContact.email,
+      phone: existingContact.phone,
     };
     const extracted = new Set<string>();
 
@@ -114,8 +116,6 @@ export function CreateStudentAndAddDocumentModal({
         const MAPPING: Array<[keyof typeof EMPTY_FORM, string]> = [
           ["firstName", "firstName"],
           ["lastName", "lastName"],
-          ["email", "email"],
-          ["phone", "phone"],
           ["nationality", "nationality"],
           ["dateOfBirth", "dateOfBirth"],
           ["passportNumber", "passportNumber"],
@@ -141,6 +141,11 @@ export function CreateStudentAndAddDocumentModal({
           initial.highSchool = initial.highSchool || "";
           extracted.add("graduationYear");
         }
+        const resolvedContact = resolveInboxStudentContactPrefill(detail, data);
+        initial.email = resolvedContact.email;
+        initial.phone = resolvedContact.phone;
+        if (!existingContact.email && resolvedContact.email) extracted.add("email");
+        if (!existingContact.phone && resolvedContact.phone) extracted.add("phone");
       }
     } catch {
       /* AI failed — contact prefill still applied */

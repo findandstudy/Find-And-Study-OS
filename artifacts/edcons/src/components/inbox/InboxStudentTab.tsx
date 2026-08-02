@@ -39,6 +39,7 @@ import {
   normalizeInboxGender,
   normalizeInboxGpaForForm,
 } from "./inboxExtractionNormalization";
+import { resolveInboxStudentContactPrefill } from "./studentDraftContact";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
@@ -537,6 +538,7 @@ export function InboxStudentTab({
       extracted.gpa,
       extracted.gpaScale,
     );
+    const contactPrefill = resolveInboxStudentContactPrefill(detail, extracted);
     if (extracted.institutionName || extracted.schoolName || extracted.highSchool) {
       extractedFieldsSet.add("school1");
     }
@@ -548,8 +550,8 @@ export function InboxStudentTab({
       form: {
         firstName: toLatinUpper(extracted.firstName || parts[0] || ""),
         lastName: toLatinUpper(extracted.lastName || parts.slice(1).join(" ") || ""),
-        email: extracted.email || String(ext?.email ?? ""),
-        phone: extracted.phone || String(ext?.phone ?? ""),
+        email: contactPrefill.email,
+        phone: contactPrefill.phone,
         gender: normalizeInboxGender(extracted.gender),
         motherName: toLatinUpper(extracted.motherName || ""),
         fatherName: toLatinUpper(extracted.fatherName || ""),

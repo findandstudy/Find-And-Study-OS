@@ -1102,7 +1102,26 @@ router.get(
     const studentId = externalContact?.studentId ?? null;
     const agentId = externalContact?.agentId ?? null;
 
-    const [lead] = leadId
+    // Older lead -> student conversions cleared external_contacts.lead_id. Recover
+    // that relationship through converted_student_id so lead preferences (country,
+    // university, program and level) remain available in the inbox after conversion.
+    let resolvedLeadId = leadId;
+    if (!resolvedLeadId && studentId) {
+      const [convertedLeadRef] = await db
+        .select({ id: leadsTable.id })
+        .from(leadsTable)
+        .where(
+          and(
+            eq(leadsTable.convertedStudentId, studentId),
+            isNull(leadsTable.deletedAt),
+          ),
+        )
+        .orderBy(desc(leadsTable.createdAt), desc(leadsTable.id))
+        .limit(1);
+      resolvedLeadId = convertedLeadRef?.id ?? null;
+    }
+
+    const [lead] = resolvedLeadId
       ? await db
           .select({
             id: leadsTable.id,
@@ -1127,7 +1146,9 @@ router.get(
             convertedStudentId: leadsTable.convertedStudentId,
           })
           .from(leadsTable)
-          .where(and(eq(leadsTable.id, leadId), isNull(leadsTable.deletedAt)))
+          .where(
+            and(eq(leadsTable.id, resolvedLeadId), isNull(leadsTable.deletedAt)),
+          )
       : [null];
 
     const [student] = studentId
@@ -1502,15 +1523,16 @@ router.post(
     if (type === "student") updates.studentId = entityId;
     if (type === "agent") updates.agentId = entityId;
 
-    // When re-matching a lead-linked conversation to a student, the previous
-    // lead link is dropped below — adopt the lead's staged documents onto the
-    // student first so the application mandatory-doc gate keeps seeing them.
+    // When re-matching a lead-linked conversation to a student, retain the lead
+    // relationship and adopt its staged documents. The lead keeps the original
+    // university/program intent while the student becomes the active entity.
     if (type === "student") {
       const [contact] = await db
         .select({ leadId: externalContactsTable.leadId })
         .from(externalContactsTable)
         .where(eq(externalContactsTable.id, conv.externalContactId));
       if (contact?.leadId != null) {
+        updates.leadId = contact.leadId;
         await db
           .update(documentsTable)
           .set({ studentId: entityId })

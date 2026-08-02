@@ -29,6 +29,7 @@ import {
   buildPortalDraftPreflightError,
   prepareRoutedPortalDraftPreflight,
 } from "../lib/portalDraftPreflight.js";
+import { resolveApplicationCommissionTotal } from "../lib/applicationCommissionTotals";
 
 const router: IRouter = Router();
 
@@ -200,14 +201,14 @@ router.get("/applications", requireAuth, requireAgentStaffPermission("applicatio
   } else if (user.role === "student") {
     const [studentRec] = await db.select().from(studentsTable).where(eq(studentsTable.userId, user.id));
     if (!studentRec) {
-      res.json({ data: [], meta: { total: 0, page: pageNum, limit: limitNum, totalPages: 0 } });
+      res.json({ data: [], meta: { total: 0, totalCommission: 0, page: pageNum, limit: limitNum, totalPages: 0 } });
       return;
     }
     conditions.push(eq(applicationsTable.studentId, studentRec.id));
   } else if (isAgentRole(user.role)) {
     const visibleIds = await getAgentVisibleIds(user.id, user.role);
     if (visibleIds.length === 0) {
-      res.json({ data: [], meta: { total: 0, page: pageNum, limit: limitNum, totalPages: 0 } });
+      res.json({ data: [], meta: { total: 0, totalCommission: 0, page: pageNum, limit: limitNum, totalPages: 0 } });
       return;
     }
     conditions.push(inArray(applicationsTable.agentId, visibleIds));
@@ -380,11 +381,29 @@ router.get("/applications", requireAuth, requireAgentStaffPermission("applicatio
     .offset(offset)
     .orderBy(...orderBy, desc(applicationsTable.id));
 
+  // Keep the cards paginated, but calculate the column summary over every
+  // application matching the current scope and filters.  The derived table
+  // prevents commission joins from inflating the application count.
+  const filteredApplicationIds = db
+    .select({ id: applicationsTable.id })
+    .from(applicationsTable)
+    .leftJoin(studentsTable, eq(applicationsTable.studentId, studentsTable.id))
+    .leftJoin(universitiesTable, eq(applicationsTable.universityId, universitiesTable.id))
+    .where(whereClause)
+    .as("filtered_application_ids");
+
+  const applicationTotalsQuery = db
+    .select({
+      count: sql<number>`count(DISTINCT ${filteredApplicationIds.id})`,
+      universityCommissionTotal: sql<string>`COALESCE(SUM(COALESCE(${commissionsTable.universityCommissionAmount}::numeric, 0)), 0)`,
+      agentCommissionTotal: sql<string>`COALESCE(SUM(COALESCE(${commissionsTable.agentCommissionAmount}::numeric, 0)), 0)`,
+      subAgentCommissionTotal: sql<string>`COALESCE(SUM(COALESCE(${commissionsTable.subAgentCommissionAmount}::numeric, 0)), 0)`,
+    })
+    .from(filteredApplicationIds)
+    .leftJoin(commissionsTable, eq(filteredApplicationIds.id, commissionsTable.applicationId));
+
   const [countRows, rows, countryRows, universityRows, agentRows] = await Promise.all([
-    db.select({ count: sql<number>`count(*)` }).from(applicationsTable)
-      .leftJoin(studentsTable, eq(applicationsTable.studentId, studentsTable.id))
-      .leftJoin(universitiesTable, eq(applicationsTable.universityId, universitiesTable.id))
-      .where(whereClause),
+    applicationTotalsQuery,
     rowsQuery,
     includeFacets ? db.selectDistinct({ country: applicationsTable.country })
       .from(applicationsTable)
@@ -408,6 +427,13 @@ router.get("/applications", requireAuth, requireAgentStaffPermission("applicatio
     const agentRec = await getAgentRecord(req.user!.id, req.user!.role);
     isSubAgentUser = req.user!.role === "sub_agent" || !!agentRec?.parentAgentId;
   }
+  const totalCommission = resolveApplicationCommissionTotal({
+    universityCommissionTotal: countRows[0]?.universityCommissionTotal,
+    agentCommissionTotal: countRows[0]?.agentCommissionTotal,
+    subAgentCommissionTotal: countRows[0]?.subAgentCommissionTotal,
+    isAgentUser: Boolean(isAgentUser),
+    isSubAgentUser,
+  });
   const mappedRows = rows.map(r => {
     const { agentCommissionAmount, subAgentCommissionAmount, commissionAmount: uniAmt, ...rest } = r;
     const uniNum = parseFloat(String(uniAmt ?? "0")) || 0;
@@ -428,6 +454,7 @@ router.get("/applications", requireAuth, requireAgentStaffPermission("applicatio
     data: mappedRows,
     meta: {
       total: Number(count),
+      totalCommission,
       page: pageNum,
       limit: limitNum,
       totalPages: Math.ceil(Number(count) / limitNum),

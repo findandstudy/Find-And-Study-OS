@@ -1,7 +1,12 @@
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import {
-  ArrowRight, Building, Check, Loader2, Pencil, X,
+  ArrowRight,
+  Building,
+  Check,
+  Loader2,
+  Pencil,
+  X,
   Plus,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -40,7 +45,9 @@ type SidebarTab = "lead" | "documents" | "student" | "application";
 function Field({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <div className="text-[11px] text-muted-foreground uppercase tracking-wide">{label}</div>
+      <div className="text-[11px] text-muted-foreground uppercase tracking-wide">
+        {label}
+      </div>
       <div className="text-sm break-words">{value}</div>
     </div>
   );
@@ -70,7 +77,9 @@ function EditableField({
 
   return (
     <div className="group" data-testid={`sidebar-field-${fieldKey}`}>
-      <div className="text-[11px] text-muted-foreground uppercase tracking-wide">{label}</div>
+      <div className="text-[11px] text-muted-foreground uppercase tracking-wide">
+        {label}
+      </div>
       {isEditing ? (
         <div className="flex items-center gap-1 mt-0.5">
           <Input
@@ -93,7 +102,11 @@ function EditableField({
             onClick={() => void onSave(fieldKey, draft)}
             data-testid={`sidebar-save-${fieldKey}`}
           >
-            {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5 text-emerald-600" />}
+            {saving ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <Check className="w-3.5 h-3.5 text-emerald-600" />
+            )}
           </Button>
           <Button
             size="icon"
@@ -107,7 +120,9 @@ function EditableField({
         </div>
       ) : (
         <div className="flex items-center gap-1 min-w-0">
-          <span className="text-sm break-words min-w-0">{value?.trim() ? value : "—"}</span>
+          <span className="text-sm break-words min-w-0">
+            {value?.trim() ? value : "—"}
+          </span>
           <button
             type="button"
             className="opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity shrink-0 text-muted-foreground hover:text-foreground"
@@ -160,7 +175,10 @@ export function LeadDetailSidebar({
   const [pendingStudentId, setPendingStudentId] = useState<number | null>(null);
   // Program selected in the APPLICATION tab — shared with the DOCUMENTS tab so
   // the requirements list reflects the merged program+degree set.
-  const [selectedProgram, setSelectedProgram] = useState<{ id: number; name: string } | null>(null);
+  const [selectedProgram, setSelectedProgram] = useState<{
+    id: number;
+    name: string;
+  } | null>(null);
 
   // Reset shared program selection when switching conversations
   useEffect(() => {
@@ -175,7 +193,10 @@ export function LeadDetailSidebar({
   }, [detail.student, pendingStudentId]);
 
   const { data: countries = [] } = useCountrySearch("");
-  const countryOptions = countries.map((c) => ({ value: c.name, label: c.name }));
+  const countryOptions = countries.map((c) => ({
+    value: c.name,
+    label: c.name,
+  }));
 
   // Student wins over lead: if a person has been converted (lead → student),
   // the student record is the canonical identity. Lead is kept for history only.
@@ -198,7 +219,10 @@ export function LeadDetailSidebar({
     if (!autoEmail && Array.isArray((detail as any).messages)) {
       for (const m of (detail as any).messages) {
         const match = (m as any).content?.match(EMAIL_RE);
-        if (match) { autoEmail = match[0]; break; }
+        if (match) {
+          autoEmail = match[0];
+          break;
+        }
       }
     }
 
@@ -211,7 +235,7 @@ export function LeadDetailSidebar({
       interestedProgram: "",
       interestedUniversity: "",
     });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [conversationId]);
 
   const TABS: SidebarTab[] = ["lead", "documents", "student", "application"];
@@ -237,13 +261,18 @@ export function LeadDetailSidebar({
 
   const placeholder = (
     <div className="flex-1 flex items-center justify-center p-8 text-center">
-      <p className="text-sm text-muted-foreground">{t("inbox.sidebar.tabs.comingSoon")}</p>
+      <p className="text-sm text-muted-foreground">
+        {t("inbox.sidebar.tabs.comingSoon")}
+      </p>
     </div>
   );
 
   if (activeTab === "documents") {
     return (
-      <div className="flex flex-col h-full overflow-hidden" data-testid="lead-detail-sidebar">
+      <div
+        className="flex flex-col h-full overflow-hidden"
+        data-testid="lead-detail-sidebar"
+      >
         {tabBar}
         {conversationId ? (
           <InboxStudentTab
@@ -276,7 +305,10 @@ export function LeadDetailSidebar({
     if (conversationId && submitData) {
       // New-student creation draft is ready — show the submit form.
       return (
-        <div className="flex flex-col h-full overflow-hidden" data-testid="lead-detail-sidebar">
+        <div
+          className="flex flex-col h-full overflow-hidden"
+          data-testid="lead-detail-sidebar"
+        >
           {tabBar}
           <InboxSubmitTab
             conversationId={conversationId}
@@ -295,7 +327,10 @@ export function LeadDetailSidebar({
     if (studentForTab) {
       // Person is already a student — show their existing profile card.
       return (
-        <div className="flex flex-col h-full overflow-hidden" data-testid="lead-detail-sidebar">
+        <div
+          className="flex flex-col h-full overflow-hidden"
+          data-testid="lead-detail-sidebar"
+        >
           {tabBar}
           <div className="flex-1 overflow-y-auto p-4 space-y-4">
             <div>
@@ -318,10 +353,30 @@ export function LeadDetailSidebar({
               />
             </div>
             <div className="space-y-2.5 border-t pt-3">
-              {studentForTab.email && <Field label={t("inbox.sidebar.email")} value={studentForTab.email} />}
-              {studentForTab.phone && <Field label={t("inbox.sidebar.phone")} value={studentForTab.phone} />}
-              {studentForTab.interestedLevel && <Field label={t("inbox.sidebar.interestedLevel")} value={studentForTab.interestedLevel} />}
-              {studentForTab.originDisplayName && <Field label={t("inbox.sidebar.origin")} value={studentForTab.originDisplayName} />}
+              {studentForTab.email && (
+                <Field
+                  label={t("inbox.sidebar.email")}
+                  value={studentForTab.email}
+                />
+              )}
+              {studentForTab.phone && (
+                <Field
+                  label={t("inbox.sidebar.phone")}
+                  value={studentForTab.phone}
+                />
+              )}
+              {studentForTab.interestedLevel && (
+                <Field
+                  label={t("inbox.sidebar.interestedLevel")}
+                  value={studentForTab.interestedLevel}
+                />
+              )}
+              {studentForTab.originDisplayName && (
+                <Field
+                  label={t("inbox.sidebar.origin")}
+                  value={studentForTab.originDisplayName}
+                />
+              )}
             </div>
             <div className="pt-3 border-t">
               <Button
@@ -340,10 +395,15 @@ export function LeadDetailSidebar({
     }
     // No student yet and no draft — prompt to analyse documents first.
     return (
-      <div className="flex flex-col h-full overflow-hidden" data-testid="lead-detail-sidebar">
+      <div
+        className="flex flex-col h-full overflow-hidden"
+        data-testid="lead-detail-sidebar"
+      >
         {tabBar}
         <div className="flex-1 flex items-center justify-center p-8 text-center">
-          <p className="text-sm text-muted-foreground">{t("inbox.studentTab.submitEmpty")}</p>
+          <p className="text-sm text-muted-foreground">
+            {t("inbox.studentTab.submitEmpty")}
+          </p>
         </div>
       </div>
     );
@@ -351,7 +411,10 @@ export function LeadDetailSidebar({
 
   if (activeTab === "application") {
     return (
-      <div className="flex flex-col h-full overflow-hidden" data-testid="lead-detail-sidebar">
+      <div
+        className="flex flex-col h-full overflow-hidden"
+        data-testid="lead-detail-sidebar"
+      >
         {tabBar}
         {conversationId ? (
           <InboxApplicationTab
@@ -370,7 +433,10 @@ export function LeadDetailSidebar({
 
   if (activeTab !== "lead") {
     return (
-      <div className="flex flex-col h-full overflow-hidden" data-testid="lead-detail-sidebar">
+      <div
+        className="flex flex-col h-full overflow-hidden"
+        data-testid="lead-detail-sidebar"
+      >
         {tabBar}
         {placeholder}
       </div>
@@ -383,12 +449,17 @@ export function LeadDetailSidebar({
     const firstName = unmF.firstName.trim();
     const lastName = unmF.lastName.trim();
     const fullNameForApi = [firstName, lastName].filter(Boolean).join(" ");
-    const fieldCls = "w-full h-8 text-sm rounded-md border border-input bg-background px-2 py-1 focus:outline-none focus:ring-1 focus:ring-ring";
-    const labelCls = "text-[11px] text-muted-foreground uppercase tracking-wide mb-0.5";
+    const fieldCls =
+      "w-full h-8 text-sm rounded-md border border-input bg-background px-2 py-1 focus:outline-none focus:ring-1 focus:ring-ring";
+    const labelCls =
+      "text-[11px] text-muted-foreground uppercase tracking-wide mb-0.5";
 
     async function handleAddAsLead() {
       if (!firstName) {
-        toast({ title: t("inbox.sidebar.unlinked.nameRequired"), variant: "destructive" });
+        toast({
+          title: t("inbox.sidebar.unlinked.nameRequired"),
+          variant: "destructive",
+        });
         return;
       }
       if (!conversationId) return;
@@ -404,15 +475,18 @@ export function LeadDetailSidebar({
               email: unmF.email.trim() || null,
               phone: unmF.phone.trim() || null,
             }),
-          }
+          },
         );
         // Bug A fix: endpoint returns { ok, leadId } not { id }
         const leadId = res?.leadId ?? res?.id;
         if (leadId) {
           const patch: Record<string, unknown> = {};
-          if (unmF.country.trim()) patch.interestedCountry = unmF.country.trim();
-          if (unmF.interestedProgram.trim()) patch.interestedProgram = unmF.interestedProgram.trim();
-          if (unmF.interestedUniversity.trim()) patch.interestedUniversity = unmF.interestedUniversity.trim();
+          if (unmF.country.trim())
+            patch.interestedCountry = unmF.country.trim();
+          if (unmF.interestedProgram.trim())
+            patch.interestedProgram = unmF.interestedProgram.trim();
+          if (unmF.interestedUniversity.trim())
+            patch.interestedUniversity = unmF.interestedUniversity.trim();
           const convAssignedToId = (detail as any).conversation?.assignedToId;
           if (convAssignedToId) patch.assignedToId = convAssignedToId;
           if (Object.keys(patch).length > 0) {
@@ -438,7 +512,10 @@ export function LeadDetailSidebar({
     }
 
     return (
-      <div className="flex flex-col h-full overflow-hidden" data-testid="lead-detail-sidebar-unmatched">
+      <div
+        className="flex flex-col h-full overflow-hidden"
+        data-testid="lead-detail-sidebar-unmatched"
+      >
         {tabBar}
         <div className="flex-1 overflow-y-auto p-3 space-y-2.5">
           <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide pb-1 border-b">
@@ -449,20 +526,28 @@ export function LeadDetailSidebar({
             {/* First Name + Last Name */}
             <div className="grid grid-cols-2 gap-1.5">
               <div>
-                <div className={labelCls}>{t("inbox.sidebar.unlinked.firstName")} *</div>
+                <div className={labelCls}>
+                  {t("inbox.sidebar.unlinked.firstName")} *
+                </div>
                 <input
                   className={fieldCls}
                   value={unmF.firstName}
-                  onChange={(e) => setUnmF((f) => ({ ...f, firstName: e.target.value }))}
+                  onChange={(e) =>
+                    setUnmF((f) => ({ ...f, firstName: e.target.value }))
+                  }
                   placeholder={t("inbox.sidebar.unlinked.firstName")}
                 />
               </div>
               <div>
-                <div className={labelCls}>{t("inbox.sidebar.unlinked.lastName")}</div>
+                <div className={labelCls}>
+                  {t("inbox.sidebar.unlinked.lastName")}
+                </div>
                 <input
                   className={fieldCls}
                   value={unmF.lastName}
-                  onChange={(e) => setUnmF((f) => ({ ...f, lastName: e.target.value }))}
+                  onChange={(e) =>
+                    setUnmF((f) => ({ ...f, lastName: e.target.value }))
+                  }
                   placeholder={t("inbox.sidebar.unlinked.lastName")}
                 />
               </div>
@@ -470,7 +555,9 @@ export function LeadDetailSidebar({
 
             {/* Phone with dial-code picker */}
             <div>
-              <div className={labelCls}>{t("inbox.sidebar.unlinked.waNumber")}</div>
+              <div className={labelCls}>
+                {t("inbox.sidebar.unlinked.waNumber")}
+              </div>
               <PhoneInput
                 value={unmF.phone}
                 onChange={(v) => setUnmF((f) => ({ ...f, phone: v }))}
@@ -479,19 +566,25 @@ export function LeadDetailSidebar({
 
             {/* Email */}
             <div>
-              <div className={labelCls}>{t("inbox.sidebar.unlinked.email")}</div>
+              <div className={labelCls}>
+                {t("inbox.sidebar.unlinked.email")}
+              </div>
               <input
                 type="email"
                 className={fieldCls}
                 value={unmF.email}
-                onChange={(e) => setUnmF((f) => ({ ...f, email: e.target.value }))}
+                onChange={(e) =>
+                  setUnmF((f) => ({ ...f, email: e.target.value }))
+                }
                 placeholder={t("inbox.sidebar.unlinked.email")}
               />
             </div>
 
             {/* Interested Country — searchable dropdown */}
             <div>
-              <div className={labelCls}>{t("inbox.sidebar.unlinked.country")}</div>
+              <div className={labelCls}>
+                {t("inbox.sidebar.unlinked.country")}
+              </div>
               <SearchableSelect
                 value={unmF.country}
                 onChange={(v) => setUnmF((f) => ({ ...f, country: v }))}
@@ -504,26 +597,36 @@ export function LeadDetailSidebar({
 
             {/* Interested Program */}
             <div>
-              <div className={labelCls}>{t("inbox.sidebar.unlinked.interestedProgram")}</div>
+              <div className={labelCls}>
+                {t("inbox.sidebar.unlinked.interestedProgram")}
+              </div>
               <input
                 className={fieldCls}
                 value={unmF.interestedProgram}
-                onChange={(e) => setUnmF((f) => ({ ...f, interestedProgram: e.target.value }))}
+                onChange={(e) =>
+                  setUnmF((f) => ({ ...f, interestedProgram: e.target.value }))
+                }
                 placeholder={t("inbox.sidebar.unlinked.interestedProgram")}
               />
             </div>
 
             {/* Interested University */}
             <div>
-              <div className={labelCls}>{t("inbox.sidebar.unlinked.interestedUniversity")}</div>
+              <div className={labelCls}>
+                {t("inbox.sidebar.unlinked.interestedUniversity")}
+              </div>
               <input
                 className={fieldCls}
                 value={unmF.interestedUniversity}
-                onChange={(e) => setUnmF((f) => ({ ...f, interestedUniversity: e.target.value }))}
+                onChange={(e) =>
+                  setUnmF((f) => ({
+                    ...f,
+                    interestedUniversity: e.target.value,
+                  }))
+                }
                 placeholder={t("inbox.sidebar.unlinked.interestedUniversity")}
               />
             </div>
-
           </div>
 
           {/* Action button */}
@@ -573,14 +676,20 @@ export function LeadDetailSidebar({
       await customFetch(patchUrl, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ [fieldKey]: newValue.trim() === "" ? null : newValue.trim() }),
+        body: JSON.stringify({
+          [fieldKey]: newValue.trim() === "" ? null : newValue.trim(),
+        }),
       });
       setEditingKey(null);
       toast({ title: t("inbox.sidebar.updateSaved") });
       onUpdated?.();
     } catch (err: any) {
       const msg = err?.data?.error || err?.body?.error || err?.message;
-      toast({ title: t("inbox.sidebar.updateFailed"), description: typeof msg === "string" ? msg : undefined, variant: "destructive" });
+      toast({
+        title: t("inbox.sidebar.updateFailed"),
+        description: typeof msg === "string" ? msg : undefined,
+        variant: "destructive",
+      });
     } finally {
       setSaving(false);
     }
@@ -595,14 +704,19 @@ export function LeadDetailSidebar({
 
   const onViewFullDetail = () => {
     if (linkedType === "lead" && lead) navigate(`/staff/leads/${lead.id}`);
-    else if (linkedType === "student" && student) navigate(`/staff/students/${student.id}`);
-    else if (linkedType === "agent" && agent) navigate(`/staff/agents/${agent.id}`);
+    else if (linkedType === "student" && student)
+      navigate(`/staff/students/${student.id}`);
+    else if (linkedType === "agent" && agent)
+      navigate(`/staff/agents/${agent.id}`);
   };
 
   const editProps = { editingKey, setEditingKey, onSave: saveField, saving };
 
   return (
-    <div className="flex flex-col h-full overflow-hidden" data-testid="lead-detail-sidebar">
+    <div
+      className="flex flex-col h-full overflow-hidden"
+      data-testid="lead-detail-sidebar"
+    >
       {tabBar}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {/* Header */}
@@ -652,16 +766,44 @@ export function LeadDetailSidebar({
         {/* Contact / identity info */}
         {editable ? (
           <div className="space-y-2.5 border-t pt-3">
-            <EditableField label={t("inbox.sidebar.firstName")} value={entity.firstName} fieldKey="firstName" {...editProps} />
-            <EditableField label={t("inbox.sidebar.lastName")} value={entity.lastName} fieldKey="lastName" {...editProps} />
-            <EditableField label={t("inbox.sidebar.email")} value={entity.email} fieldKey="email" type="email" {...editProps} />
-            <EditableField label={t("inbox.sidebar.phone")} value={entity.phone} fieldKey="phone" {...editProps} />
+            <EditableField
+              label={t("inbox.sidebar.firstName")}
+              value={entity.firstName}
+              fieldKey="firstName"
+              {...editProps}
+            />
+            <EditableField
+              label={t("inbox.sidebar.lastName")}
+              value={entity.lastName}
+              fieldKey="lastName"
+              {...editProps}
+            />
+            <EditableField
+              label={t("inbox.sidebar.email")}
+              value={entity.email}
+              fieldKey="email"
+              type="email"
+              {...editProps}
+            />
+            <EditableField
+              label={t("inbox.sidebar.phone")}
+              value={entity.phone}
+              fieldKey="phone"
+              {...editProps}
+            />
           </div>
         ) : (
           (entity.email || entity.phone) && (
             <div className="space-y-2 text-sm border-t pt-3">
-              {entity.email && <Field label={t("inbox.sidebar.email")} value={entity.email} />}
-              {entity.phone && <Field label={t("inbox.sidebar.phone")} value={entity.phone ?? ""} />}
+              {entity.email && (
+                <Field label={t("inbox.sidebar.email")} value={entity.email} />
+              )}
+              {entity.phone && (
+                <Field
+                  label={t("inbox.sidebar.phone")}
+                  value={entity.phone ?? ""}
+                />
+              )}
             </div>
           )
         )}
@@ -669,18 +811,66 @@ export function LeadDetailSidebar({
         {/* Lead-specific */}
         {linkedType === "lead" && lead && (
           <div className="space-y-3 border-t pt-3">
-            {lead.interestedProgram && <Field label={t("inbox.sidebar.interestedProgram")} value={lead.interestedProgram} />}
-            {lead.interestedUniversity && <Field label={t("inbox.sidebar.interestedUniversity")} value={lead.interestedUniversity} />}
-            {lead.interestedCountry && <Field label={t("inbox.sidebar.interestedCountry")} value={lead.interestedCountry} />}
-            {lead.originDisplayName && <Field label={t("inbox.sidebar.origin")} value={lead.originDisplayName} />}
+            {lead.interestedProgram && (
+              <Field
+                label={t("inbox.sidebar.interestedProgram")}
+                value={lead.interestedProgram}
+              />
+            )}
+            {lead.interestedUniversity && (
+              <Field
+                label={t("inbox.sidebar.interestedUniversity")}
+                value={lead.interestedUniversity}
+              />
+            )}
+            {lead.interestedCountry && (
+              <Field
+                label={t("inbox.sidebar.interestedCountry")}
+                value={lead.interestedCountry}
+              />
+            )}
+            {lead.originDisplayName && (
+              <Field
+                label={t("inbox.sidebar.origin")}
+                value={lead.originDisplayName}
+              />
+            )}
           </div>
         )}
 
         {/* Student-specific */}
         {linkedType === "student" && student && (
           <div className="space-y-3 border-t pt-3">
-            {student.interestedLevel && <Field label={t("inbox.sidebar.interestedLevel")} value={student.interestedLevel} />}
-            {student.originDisplayName && <Field label={t("inbox.sidebar.origin")} value={student.originDisplayName} />}
+            {lead?.interestedProgram && (
+              <Field
+                label={t("inbox.sidebar.interestedProgram")}
+                value={lead.interestedProgram}
+              />
+            )}
+            {lead?.interestedUniversity && (
+              <Field
+                label={t("inbox.sidebar.interestedUniversity")}
+                value={lead.interestedUniversity}
+              />
+            )}
+            {lead?.interestedCountry && (
+              <Field
+                label={t("inbox.sidebar.interestedCountry")}
+                value={lead.interestedCountry}
+              />
+            )}
+            {student.interestedLevel && (
+              <Field
+                label={t("inbox.sidebar.interestedLevel")}
+                value={student.interestedLevel}
+              />
+            )}
+            {student.originDisplayName && (
+              <Field
+                label={t("inbox.sidebar.origin")}
+                value={student.originDisplayName}
+              />
+            )}
           </div>
         )}
 
@@ -693,7 +883,12 @@ export function LeadDetailSidebar({
                 <span className="break-words">{agent.companyName}</span>
               </div>
             )}
-            {agent.entityType && <Field label={t("inbox.sidebar.entityType")} value={agent.entityType} />}
+            {agent.entityType && (
+              <Field
+                label={t("inbox.sidebar.entityType")}
+                value={agent.entityType}
+              />
+            )}
           </div>
         )}
 
