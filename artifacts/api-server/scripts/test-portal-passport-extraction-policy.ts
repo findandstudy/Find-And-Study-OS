@@ -37,6 +37,16 @@ test("identity-specific high confidence is accepted independently", () => {
   assert.equal(shouldRefreshPassportIdentityExtraction(extracted, 0.6), false);
 });
 
+test("explicit medium identity confidence cannot be upgraded by general confidence", () => {
+  const extracted = {
+    ...mediumIdentity,
+    identityConfidence: "medium",
+    confidence: "high",
+  };
+  assert.equal(hasHighConfidencePassportIdentityExtraction(extracted, 1), false);
+  assert.equal(shouldRefreshPassportIdentityExtraction(extracted, 1), false);
+});
+
 test("missing extraction is eligible for a first read", () => {
   assert.equal(shouldRefreshPassportIdentityExtraction(null, 0), true);
 });

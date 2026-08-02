@@ -142,11 +142,17 @@ export async function checkMandatoryDocsForApplication(
  */
 export async function parkApplicationInMissingDocsStage(
   applicationId: number,
-): Promise<void> {
-  await db
+): Promise<boolean> {
+  const rows = await db
     .update(applicationsTable)
     .set({ stage: "missing_docs", updatedAt: new Date() })
-    .where(eq(applicationsTable.id, applicationId));
+    .where(and(
+      eq(applicationsTable.id, applicationId),
+      eq(applicationsTable.stage, "inquiry"),
+      isNull(applicationsTable.deletedAt),
+    ))
+    .returning({ id: applicationsTable.id });
+  return rows.length > 0;
 }
 
 /**

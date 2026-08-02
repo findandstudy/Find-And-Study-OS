@@ -65,6 +65,7 @@ import { useDroppable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import { useI18n } from "@/hooks/use-i18n";
 import { applicationCreationErrorMessage } from "@/lib/applicationCreationError";
+import { collectPortalPreflightIssueLabels } from "@/lib/portalBulkRunFeedback";
 import { useDateFormat } from "@/hooks/use-date-format";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
@@ -2035,15 +2036,11 @@ export default function ApplicationsPage() {
         );
       }
       if (preflightBlocked.length > 0) {
-        const fields = Array.from(new Set(
-          preflightBlocked.flatMap((s: any) =>
-            Array.isArray(s.missingFields) ? s.missingFields : [],
-          ),
-        ));
+        const fields = collectPortalPreflightIssueLabels(preflightBlocked);
         descParts.push(
           t("portalAutomation.bulkRun.preflightNote", {
             count: preflightBlocked.length,
-            fields: fields.join(", ") || "—",
+            fields: fields.join(", "),
           }),
         );
       }

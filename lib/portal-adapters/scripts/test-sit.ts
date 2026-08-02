@@ -176,6 +176,19 @@ test("IDENTITY4 — document proof requires complete high-confidence identity", 
     sitPassportIdentityProofFromDocument({
       extractedData: {
         firstName: "Aisha",
+        lastName: "Khan",
+        passportNumber: "AB123",
+        identityConfidence: "medium",
+        confidence: "high",
+      },
+      confidenceScore: 1,
+    }),
+    null,
+  );
+  assert.equal(
+    sitPassportIdentityProofFromDocument({
+      extractedData: {
+        firstName: "Aisha",
         passportNumber: "AB123",
         confidence: "high",
       },

@@ -43,7 +43,10 @@ import {
   validateIdentityFields,
   formatIdentityErrors,
 } from "@workspace/portal-adapters";
-import { checkMandatoryDocsForApplication } from "./mandatoryDocs.js";
+import {
+  checkMandatoryDocsForApplication,
+  parkApplicationInMissingDocsStage,
+} from "./mandatoryDocs.js";
 import { prepareApplicationPortalPreflight } from "./portalApplicationPreflight.js";
 
 // ---------------------------------------------------------------------------
@@ -392,6 +395,9 @@ export async function enqueueIfEligible(
         `[portal-enqueue] mandatory documents missing for app=${applicationId}: ${docStatus.missing.join(",")}`,
       );
     }
+    if (docStatus?.missing.length) {
+      await parkApplicationInMissingDocsStage(applicationId);
+    }
     return { status: "skipped", reason: "missing_mandatory_documents" };
   }
 
@@ -437,6 +443,7 @@ export async function enqueueIfEligible(
       ` missing=${preflight.missingFields.join(",") || "-"}` +
       ` docs=${preflight.missingDocuments.join(",") || "-"}`,
     );
+    await parkApplicationInMissingDocsStage(applicationId);
     return { status: "skipped", reason: "preflight_not_ready" };
   }
 
@@ -477,6 +484,7 @@ export async function enqueueIfEligible(
         console.warn(
           `[portal-enqueue] identity validation FAILED for student=${studentId} app=${applicationId} uni=${portalUni.universityKey}: ${formatIdentityErrors(idErrors)}`,
         );
+        await parkApplicationInMissingDocsStage(applicationId);
         return { status: "skipped", reason: "invalid_identity_fields" };
       }
     }

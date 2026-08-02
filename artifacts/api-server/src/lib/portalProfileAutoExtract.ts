@@ -1,8 +1,10 @@
-import { and, desc, eq, ilike, isNull, or } from "drizzle-orm";
+import { and, asc, desc, eq, ilike, isNull, ne, or, sql } from "drizzle-orm";
 import {
+  auditLogsTable,
   db,
   documentsTable,
   studentsTable,
+  usersTable,
 } from "@workspace/db";
 import {
   getAnthropicClient,
@@ -22,6 +24,11 @@ import {
   shouldRefreshPassportIdentityExtraction,
   stampPassportIdentityExtraction,
 } from "./portalPassportExtractionPolicy.js";
+import {
+  buildPassportIdentitySyncDecision,
+  PASSPORT_IDENTITY_FIELDS,
+  type PassportIdentityField,
+} from "./portalPassportIdentitySync.js";
 
 export interface PortalProfileAutoExtractResult {
   status:
@@ -43,6 +50,21 @@ export interface PortalPassportIdentityVerificationResult {
     | "unreadable"
     | "ai_unavailable";
   fields: string[];
+  documentId?: number;
+}
+
+export interface PortalPassportIdentitySyncResult {
+  status:
+    | "updated"
+    | "already_matches"
+    | "manual_override"
+    | "passport_conflict"
+    | "no_passport_document"
+    | "low_confidence"
+    | "unreadable"
+    | "ai_unavailable";
+  fields: string[];
+  lockedFields: string[];
   documentId?: number;
 }
 
@@ -279,10 +301,186 @@ async function loadPassportExtraction(
   return { status: "ok", document, extracted, confidenceScore };
 }
 
+async function findHumanLockedPassportIdentityFields(
+  studentId: number,
+): Promise<Set<PassportIdentityField>> {
+  const rows = await db
+    .select({
+      id: auditLogsTable.id,
+      action: auditLogsTable.action,
+      changes: auditLogsTable.changes,
+      role: usersTable.role,
+      createdAt: auditLogsTable.createdAt,
+    })
+    .from(auditLogsTable)
+    .leftJoin(usersTable, eq(auditLogsTable.userId, usersTable.id))
+    .where(and(
+      eq(auditLogsTable.resource, "student"),
+      eq(auditLogsTable.resourceId, studentId),
+      or(
+        eq(auditLogsTable.action, "update_student"),
+        eq(
+          auditLogsTable.action,
+          "portal_preflight_identity_sync_updated",
+        ),
+        eq(
+          auditLogsTable.action,
+          "portal_preflight_auto_fill_identity",
+        ),
+      ),
+    ))
+    .orderBy(asc(auditLogsTable.createdAt), asc(auditLogsTable.id));
+
+  const locked = new Set<PassportIdentityField>();
+  const aiSynced = new Set<PassportIdentityField>();
+  for (const row of rows) {
+    try {
+      const changes = JSON.parse(row.changes ?? "{}") as Record<string, unknown>;
+      if (
+        row.action === "portal_preflight_identity_sync_updated" ||
+        row.action === "portal_preflight_auto_fill_identity"
+      ) {
+        const fields = Array.isArray(changes.fields) ? changes.fields : [];
+        for (const field of PASSPORT_IDENTITY_FIELDS) {
+          if (fields.includes(field)) aiSynced.add(field);
+        }
+        continue;
+      }
+
+      // Student-entered values and staff edits made before the first passport
+      // synchronization do not outrank the passport. A later staff/admin/agent
+      // correction does, and is locked field-by-field from that point onward.
+      if (
+        row.action !== "update_student" ||
+        !row.role ||
+        row.role === "student"
+      ) continue;
+      for (const field of PASSPORT_IDENTITY_FIELDS) {
+        if (
+          aiSynced.has(field) &&
+          Object.prototype.hasOwnProperty.call(changes, field)
+        ) {
+          locked.add(field);
+        }
+      }
+    } catch {
+      // Old malformed audit payloads cannot safely prove a field-level edit.
+    }
+  }
+  return locked;
+}
+
+/**
+ * Synchronize populated CRM identity fields from a complete, high-confidence
+ * passport proof before portal submission. Only staff/admin edits recorded
+ * after an AI passport synchronization remain authoritative and are never
+ * overwritten by a later preflight.
+ */
+export async function autoSyncProfileIdentityFromPassport(opts: {
+  studentId: number;
+  actorUserId: number | null;
+  ip?: string;
+}): Promise<PortalPassportIdentitySyncResult> {
+  const [student] = await db
+    .select({
+      id: studentsTable.id,
+      firstName: studentsTable.firstName,
+      lastName: studentsTable.lastName,
+      passportNumber: studentsTable.passportNumber,
+    })
+    .from(studentsTable)
+    .where(and(
+      eq(studentsTable.id, opts.studentId),
+      isNull(studentsTable.deletedAt),
+    ));
+  if (!student) {
+    return { status: "unreadable", fields: [], lockedFields: [] };
+  }
+
+  const loaded = await loadPassportExtraction(opts.studentId);
+  if (loaded.status !== "ok") {
+    return {
+      status: loaded.status,
+      fields: [],
+      lockedFields: [],
+      ...(loaded.document ? { documentId: loaded.document.id } : {}),
+    };
+  }
+
+  const proof = sitPassportIdentityProofFromDocument({
+    extractedData: loaded.extracted,
+    confidenceScore: loaded.confidenceScore,
+    documentId: loaded.document.id,
+  });
+  if (!proof) {
+    return {
+      status: hasHighConfidencePassportIdentityExtraction(
+        loaded.extracted,
+        loaded.confidenceScore,
+      ) ? "unreadable" : "low_confidence",
+      fields: [],
+      lockedFields: [],
+      documentId: loaded.document.id,
+    };
+  }
+
+  const locked = await findHumanLockedPassportIdentityFields(opts.studentId);
+  const normalizedPassport = proof.passportNumber
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "");
+  const [duplicate] = await db
+    .select({ id: studentsTable.id })
+    .from(studentsTable)
+    .where(and(
+      ne(studentsTable.id, opts.studentId),
+      isNull(studentsTable.deletedAt),
+      sql`upper(regexp_replace(coalesce(${studentsTable.passportNumber}, ''), '[^A-Z0-9]', '', 'g')) = ${normalizedPassport}`,
+    ))
+    .limit(1);
+
+  const decision = buildPassportIdentitySyncDecision({
+    student,
+    proof,
+    lockedFields: locked,
+    passportConflict: Boolean(duplicate),
+  });
+  const fields = Object.keys(decision.patch);
+
+  if (decision.status === "updated") {
+    await db.update(studentsTable)
+      .set(decision.patch)
+      .where(and(
+        eq(studentsTable.id, opts.studentId),
+        isNull(studentsTable.deletedAt),
+      ));
+  }
+
+  await logAudit(
+    opts.actorUserId,
+    `portal_preflight_identity_sync_${decision.status}`,
+    "student",
+    opts.studentId,
+    {
+      documentId: loaded.document.id,
+      fields,
+      mismatchedFields: decision.mismatchedFields,
+      lockedFields: decision.lockedFields,
+      confidence: "high",
+    },
+    opts.ip,
+  );
+  return {
+    status: decision.status,
+    fields,
+    lockedFields: decision.lockedFields,
+    documentId: loaded.document.id,
+  };
+}
+
 /**
  * Independently verify CRM name + passport number against the latest passport
- * document. This never repairs a populated identity field: disagreement is a
- * hard, PII-safe fail-closed result that must be reviewed by a human.
+ * document. Synchronization is deliberately performed by the separate helper
+ * above; this final verifier stays read-only and fail-closed.
  */
 export async function verifyStudentIdentityAgainstPassport(opts: {
   studentId: number;
@@ -382,9 +580,10 @@ export async function autoFillMissingProfileFromPassport(opts: {
   }
   const { document, extracted, confidenceScore } = loaded;
 
-  const highConfidence =
-    extracted.confidence === "high" ||
-    confidenceScore >= 0.9;
+  const highConfidence = hasHighConfidencePassportIdentityExtraction(
+    extracted,
+    confidenceScore,
+  );
   if (!highConfidence) return { status: "low_confidence", fields: [] };
 
   const patch: Record<string, string> = {};

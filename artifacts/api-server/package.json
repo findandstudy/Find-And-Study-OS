@@ -114,6 +114,8 @@
     "test:portal-draft-preflight": "DATABASE_URL=postgres://test:test@127.0.0.1:5432/test tsx --test ./scripts/test-portal-draft-preflight.ts",
     "test:portal-passport-date-repair": "DATABASE_URL=postgres://test:test@127.0.0.1:5432/test tsx --test ./scripts/test-portal-passport-date-repair.ts",
     "test:portal-passport-extraction-policy": "tsx --test ./scripts/test-portal-passport-extraction-policy.ts",
+    "test:portal-passport-identity-sync": "tsx --test ./scripts/test-portal-passport-identity-sync.ts",
+    "test:portal-passport-preflight-contract": "tsx --test ./scripts/test-portal-passport-preflight-contract.ts",
     "test:portal-ai-guardian": "tsx --test ./scripts/test-portal-ai-guardian.ts",
     "test:portal-lifecycle": "tsx --test ./scripts/test-portal-lifecycle-contract.ts",
     "test:security-regressions": "tsx --test ./scripts/test-security-regressions.ts",
@@ -121,6 +123,7 @@
     "test:altinbas-flow-fields": "tsx --test ./scripts/test-altinbas-flow-fields.ts",
     "backfill:education-extract": "tsx scripts/backfill-education-extract.ts",
     "audit:sit-passport-identity": "tsx scripts/audit-sit-passport-identity.ts",
+    "reconcile:portal-passport-identities": "tsx scripts/reconcile-portal-passport-identities.ts",
     "test:program-import-headers": "tsx --test ./scripts/test-program-import-headers.ts"
   },
   "dependencies": {

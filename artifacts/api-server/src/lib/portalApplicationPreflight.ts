@@ -8,6 +8,7 @@ import { autoFillMissingAddressCity } from "./portalAddressAutoExtract.js";
 import {
   autoFillMissingProfileFromPassport,
   autoRepairInvalidProfileDatesFromPassport,
+  autoSyncProfileIdentityFromPassport,
   verifyStudentIdentityAgainstPassport,
 } from "./portalProfileAutoExtract.js";
 import { logAudit } from "./auth.js";
@@ -43,6 +44,8 @@ export async function prepareApplicationPortalPreflight(opts: {
   });
   const autoFilledFields: string[] = [];
   const enrichmentWarnings: string[] = [];
+  let passportIdentityLockedFields = new Set<string>();
+  let passportIdentitySyncStatus: string | null = null;
 
   if (opts.autoEnrich !== false && result.supported && !result.ready) {
     const identity = await autoFillMissingProfileFromPassport({
@@ -111,6 +114,34 @@ export async function prepareApplicationPortalPreflight(opts: {
     }
   }
 
+  // Every university portal identity is passport-backed. Before creating or
+  // reusing a portal student, synchronize the CRM name and passport number
+  // from a complete high-confidence passport. A staff/admin correction made
+  // after an earlier AI synchronization remains locked and authoritative.
+  if (result.supported) {
+    const identitySync = await autoSyncProfileIdentityFromPassport({
+      studentId: snapshot.studentId,
+      actorUserId: opts.actorUserId,
+      ip: opts.ip,
+    });
+    passportIdentitySyncStatus = identitySync.status;
+    passportIdentityLockedFields = new Set(identitySync.lockedFields);
+    if (identitySync.status === "updated") {
+      autoFilledFields.push(...identitySync.fields);
+      snapshot = await buildApplicationPreflightSnapshot(
+        opts.applicationId,
+        { adapterKey: opts.adapterKey },
+      );
+      result = evaluatePortalPreflight({
+        adapterKey: opts.adapterKey,
+        profile: snapshot.profile,
+        documentTypes: snapshot.documentTypes,
+      });
+    } else if (identitySync.status !== "already_matches") {
+      enrichmentWarnings.push(`passportIdentitySync:${identitySync.status}`);
+    }
+  }
+
   const invalidPassportDates = result.incompatibleFields
     .map((issue) => issue.field)
     .filter((field) =>
@@ -147,20 +178,41 @@ export async function prepareApplicationPortalPreflight(opts: {
     }
   }
 
-  // SIT creates/reuses a portal-level student identity before creating the
-  // application. Syntax-valid CRM text is not enough: require independent,
-  // high-confidence proof from the student's latest passport document on
-  // every preflight, including profiles whose fields are already populated.
-  if (result.adapterKey === "sit") {
+  // Syntax-valid CRM text is not enough: every real portal submission must
+  // have independent, high-confidence proof from the latest passport,
+  // including profiles whose fields are already populated.
+  if (result.supported) {
     const identityProof = await verifyStudentIdentityAgainstPassport({
       studentId: snapshot.studentId,
       actorUserId: opts.actorUserId,
       ip: opts.ip,
     });
-    if (identityProof.status !== "verified") {
+    const blockingIdentityFields = identityProof.status === "mismatch"
+      ? identityProof.fields.filter(
+          (field) => !passportIdentityLockedFields.has(field),
+        )
+      : identityProof.fields;
+    const isFullyHumanOverriddenMismatch =
+      identityProof.status === "mismatch" &&
+      identityProof.fields.length > 0 &&
+      blockingIdentityFields.length === 0;
+
+    if (passportIdentitySyncStatus === "passport_conflict") {
+      enrichmentWarnings.push("passportIdentity:passport_conflict");
+      const incompatibleFields = [...result.incompatibleFields];
+      if (!incompatibleFields.some((issue) => issue.field === "passportNumber")) {
+        incompatibleFields.push({ field: "passportNumber", reason: "invalid" });
+      }
+      result = { ...result, ready: false, incompatibleFields };
+    } else if (isFullyHumanOverriddenMismatch) {
+      // A staff/admin correction recorded after the last AI passport sync is
+      // intentionally authoritative. Keep the non-sensitive warning for audit
+      // visibility, but do not let the read-only verifier undo that decision.
+      enrichmentWarnings.push("passportIdentity:manual_override");
+    } else if (identityProof.status !== "verified") {
       enrichmentWarnings.push(`passportIdentity:${identityProof.status}`);
-      const fields = identityProof.fields.length > 0
-        ? identityProof.fields
+      const fields = blockingIdentityFields.length > 0
+        ? blockingIdentityFields
         : ["passportIdentityProof"];
       const incompatibleFields = [...result.incompatibleFields];
       const existing = new Set(incompatibleFields.map((issue) => issue.field));

@@ -14,7 +14,10 @@ import {
   resolvePortalRouting,
   resolveStudentPortalRouting,
 } from "./portalAutoTrigger.js";
-import { checkMandatoryDocsForApplication } from "./mandatoryDocs.js";
+import {
+  checkMandatoryDocsForApplication,
+  parkApplicationInMissingDocsStage,
+} from "./mandatoryDocs.js";
 import { getDocLabel } from "./docNaming.js";
 import {
   prepareApplicationPortalPreflight,
@@ -95,6 +98,7 @@ export async function enqueuePortalSubmissions(opts: {
 
     const docStatus = await checkMandatoryDocsForApplication(appId);
     if (docStatus && docStatus.missing.length > 0) {
+      await parkApplicationInMissingDocsStage(appId);
       skipped.push({
         applicationId: appId,
         reason: "MISSING_MANDATORY_DOCUMENTS",
@@ -128,6 +132,7 @@ export async function enqueuePortalSubmissions(opts: {
       actorUserId: opts.userId,
     });
     if (preflight.supported && !preflight.ready) {
+      await parkApplicationInMissingDocsStage(appId);
       skipped.push({
         applicationId: appId,
         reason: "PREFLIGHT_NOT_READY",
