@@ -1,9 +1,9 @@
 /**
- * test-portal-queue.ts — TQ1 / TQ2 / TQ3
+ * test-portal-queue.ts — canonical queue integration checks
  *
  * TQ1: claimNext() transitions a queued submission → running, sets lockedBy/lockedAt, increments attempts
- * TQ2: claimNext() skips a submission whose attempts >= max_attempts
- * TQ3: releaseStale() resets a running submission whose locked_at is older than threshold → queued
+ * TQ2: claimById() supports an explicit manual retry even at max_attempts
+ * TQ3: releaseStale() crash-recovers a stale running submission → queued
  *
  * Run:
  *   pnpm --filter @workspace/portal-automation-worker test:queue
@@ -13,7 +13,7 @@ import { after, test } from "node:test";
 import assert from "node:assert/strict";
 import { db, portalSubmissionsTable, applicationsTable, studentsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
-import { claimNext, releaseStale } from "../src/queue.js";
+import { claimById, claimNext, releaseStale } from "../src/queue.js";
 
 type InsertPortalSubmission = typeof portalSubmissionsTable.$inferInsert;
 
@@ -22,6 +22,7 @@ type InsertPortalSubmission = typeof portalSubmissionsTable.$inferInsert;
 // ---------------------------------------------------------------------------
 
 const RUN = `tq_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 5)}`;
+const UNIVERSITY_KEY = `tq_uni_${RUN}`;
 
 const cleanupSubIds: number[] = [];
 const cleanupAppIds: number[] = [];
@@ -61,7 +62,7 @@ async function seedSubmission(opts: {
   const values: InsertPortalSubmission = {
     applicationId: app.id,
     studentId:     student.id,
-    universityKey: `tq_uni_${RUN}`,
+    universityKey: UNIVERSITY_KEY,
     universityName: `TQ_Uni_${RUN}`,
     mode:          "dry",
     status:        (opts.status ?? "queued") as InsertPortalSubmission["status"],
@@ -82,23 +83,10 @@ async function seedSubmission(opts: {
 test("TQ1: claimNext() claims a queued submission → running + increments attempts", async () => {
   const subId = await seedSubmission({ status: "queued", attempts: 0 });
 
-  const claimed = await claimNext(`worker-tq1-${RUN}`);
+  const claimed = await claimNext(`worker-tq1-${RUN}`, [UNIVERSITY_KEY]);
 
-  // We may have claimed any queued row; find ours
-  let row = claimed?.id === subId ? claimed : null;
-  if (!row) {
-    // Re-query to confirm our specific row was claimed by some concurrent call
-    const [dbRow] = await db.select().from(portalSubmissionsTable).where(eq(portalSubmissionsTable.id, subId));
-    // If someone else claimed it first that's fine for isolation — just verify the state
-    if (dbRow.status === "running") {
-      row = dbRow as typeof claimed;
-    }
-  }
-
-  // If we claimed it ourselves, verify the returned struct
-  if (claimed?.id === subId) {
-    assert.equal(claimed.status, "queued", "returned row has pre-update status (SELECT before UPDATE)");
-  }
+  assert.equal(claimed?.id, subId, "university-scoped claim returns the seeded submission");
+  assert.equal(claimed?.status, "queued", "returned row has pre-update status (SELECT before UPDATE)");
 
   // Either way, verify DB state
   const [dbRow] = await db.select().from(portalSubmissionsTable).where(eq(portalSubmissionsTable.id, subId));
@@ -109,20 +97,19 @@ test("TQ1: claimNext() claims a queued submission → running + increments attem
 });
 
 // ---------------------------------------------------------------------------
-// TQ2 — claimNext skips exhausted rows
+// TQ2 — an explicit manual retry remains claimable
 // ---------------------------------------------------------------------------
 
-test("TQ2: claimNext() skips a queued submission where attempts >= maxAttempts", async () => {
-  // Insert a submission that has already hit its max
+test("TQ2: claimById() allows an explicit manual retry at maxAttempts", async () => {
   const subId = await seedSubmission({ status: "queued", attempts: 3, maxAttempts: 3 });
 
-  const claimed = await claimNext(`worker-tq2-${RUN}`);
+  const claimed = await claimById(subId, `worker-tq2-${RUN}`);
 
-  // The row we inserted must NOT have been claimed
+  assert.equal(claimed?.id, subId, "manual retry claims the requested submission");
+  assert.equal(claimed?.status, "queued", "claim returns the pre-update status");
   const [dbRow] = await db.select().from(portalSubmissionsTable).where(eq(portalSubmissionsTable.id, subId));
-  assert.notEqual(claimed?.id, subId, "exhausted row not returned");
-  assert.equal(dbRow.status, "queued",  "exhausted row stays queued");
-  assert.equal(dbRow.attempts, 3,       "attempts unchanged");
+  assert.equal(dbRow.status, "running", "manual retry transitions the row to running");
+  assert.equal(dbRow.attempts, 4, "manual retry increments attempts for auditability");
 });
 
 // ---------------------------------------------------------------------------
@@ -141,10 +128,13 @@ test("TQ3: releaseStale() resets running submissions older than threshold → qu
 
   const released = await releaseStale(5 * 60 * 1000); // 5-min threshold
 
-  assert.ok(released >= 1, `at least 1 row released (got ${released})`);
+  assert.ok(released.includes(subId), `seeded stale row released (${released.join(",")})`);
 
   const [dbRow] = await db.select().from(portalSubmissionsTable).where(eq(portalSubmissionsTable.id, subId));
   assert.equal(dbRow.status,   "queued", "stale row reset to queued");
   assert.equal(dbRow.lockedAt, null,     "lockedAt cleared");
   assert.equal(dbRow.lockedBy, null,     "lockedBy cleared");
+  assert.equal(dbRow.attempts, 0,        "attempts reset after crash recovery");
+  assert.equal(Number((dbRow.meta as Record<string, unknown> | null)?.crash_recoveries), 1,
+    "crash recovery count recorded in submission metadata");
 });

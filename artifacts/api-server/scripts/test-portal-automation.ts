@@ -12,13 +12,28 @@
  * Run:
  *   pnpm --filter @workspace/api-server run test:portal-automation
  */
-import { after, test } from "node:test";
+import { after, before, test } from "node:test";
 import assert from "node:assert/strict";
 import http from "http";
 import express, { type Express } from "express";
 import { and, eq, isNull } from "drizzle-orm";
-import { db, applicationsTable, portalSubmissionsTable, studentsTable } from "@workspace/db";
+import {
+  db,
+  applicationsTable,
+  portalSubmissionsTable,
+  portalUniversitiesTable,
+  studentsTable,
+} from "@workspace/db";
 import portalAutomationRouter from "../src/routes/portalAutomation.js";
+
+const RUN_ID = `pa_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+
+// Queue-lifecycle coverage intentionally uses an adapter without a strict
+// submission-readiness manifest. Strict preflight behavior is covered by its
+// own regression suite; these tests exercise enqueue/cancel/retry semantics.
+// The portal account is created for this run so production configuration does
+// not affect the API contract test.
+const QUEUE_TEST_UNIVERSITY = `${RUN_ID}_queue`;
 
 // ---------------------------------------------------------------------------
 // Cleanup registry
@@ -26,6 +41,20 @@ import portalAutomationRouter from "../src/routes/portalAutomation.js";
 const cleanupSubmissionIds: number[] = [];
 const cleanupAppIds: number[] = [];
 const cleanupStudentIds: number[] = [];
+let cleanupPortalUniversityId: number | null = null;
+
+before(async () => {
+  const [portalUniversity] = await db
+    .insert(portalUniversitiesTable)
+    .values({
+      universityKey: QUEUE_TEST_UNIVERSITY,
+      universityName: `Portal queue test ${RUN_ID}`,
+      adapterKey: "medipol",
+      isActive: true,
+    })
+    .returning({ id: portalUniversitiesTable.id });
+  cleanupPortalUniversityId = portalUniversity.id;
+});
 
 after(async () => {
   if (cleanupSubmissionIds.length) {
@@ -52,10 +81,14 @@ after(async () => {
       .where(eq(studentsTable.id, id))
       .catch(() => {});
   }
+  if (cleanupPortalUniversityId !== null) {
+    await db
+      .delete(portalUniversitiesTable)
+      .where(eq(portalUniversitiesTable.id, cleanupPortalUniversityId))
+      .catch(() => {});
+  }
   setImmediate(() => process.exit(process.exitCode ?? 0));
 });
-
-const RUN_ID = `pa_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
 
 // ---------------------------------------------------------------------------
 // Auth stub
@@ -154,7 +187,7 @@ test("T1: dry enqueue returns 201 with status=queued", async () => {
   const server = await listen(app);
   try {
     const res = await sendReq(server, "POST", `/api/applications/${appId}/portal-submissions`, {
-      universityKey: "uskudar",
+      universityKey: QUEUE_TEST_UNIVERSITY,
       mode: "dry",
     });
     assert.equal(res.status, 201, `Expected 201 got ${res.status}: ${JSON.stringify(res.body)}`);
@@ -177,7 +210,7 @@ test("T2: real mode without confirm returns 422 CONFIRM_REQUIRED", async () => {
   const server = await listen(app);
   try {
     const res = await sendReq(server, "POST", `/api/applications/${appId}/portal-submissions`, {
-      universityKey: "uskudar",
+      universityKey: QUEUE_TEST_UNIVERSITY,
       mode: "real",
     });
     assert.equal(res.status, 422);
@@ -197,7 +230,7 @@ test("T3: real mode with confirm:true returns 201", async () => {
   const server = await listen(app);
   try {
     const res = await sendReq(server, "POST", `/api/applications/${appId}/portal-submissions`, {
-      universityKey: "uskudar",
+      universityKey: QUEUE_TEST_UNIVERSITY,
       mode: "real",
       confirm: true,
     });
@@ -223,14 +256,14 @@ test("T4: list filtered by applicationId returns only that application's submiss
   try {
     // Enqueue one submission for each application
     const r1 = await sendReq(server, "POST", `/api/applications/${app1Id}/portal-submissions`, {
-      universityKey: "uskudar",
+      universityKey: QUEUE_TEST_UNIVERSITY,
       mode: "dry",
     });
     assert.equal(r1.status, 201);
     cleanupSubmissionIds.push(r1.body.id);
 
     const r2 = await sendReq(server, "POST", `/api/applications/${app2Id}/portal-submissions`, {
-      universityKey: "uskudar",
+      universityKey: QUEUE_TEST_UNIVERSITY,
       mode: "dry",
     });
     assert.equal(r2.status, 201);
@@ -268,14 +301,14 @@ test("T4b: step-1 attempts are labeled X1 (original) and Y1 (fan-out)", async ()
   const server = await listen(app);
   try {
     const rOrig = await sendReq(server, "POST", `/api/applications/${originalAppId}/portal-submissions`, {
-      universityKey: "uskudar",
+      universityKey: QUEUE_TEST_UNIVERSITY,
       mode: "dry",
     });
     assert.equal(rOrig.status, 201);
     cleanupSubmissionIds.push(rOrig.body.id);
 
     const rFan = await sendReq(server, "POST", `/api/applications/${fanOut.id}/portal-submissions`, {
-      universityKey: "uskudar",
+      universityKey: QUEUE_TEST_UNIVERSITY,
       mode: "dry",
     });
     assert.equal(rFan.status, 201);
@@ -303,7 +336,7 @@ test("T5: cancel queued submission, then 409 on second cancel", async () => {
   const server = await listen(app);
   try {
     const enq = await sendReq(server, "POST", `/api/applications/${appId}/portal-submissions`, {
-      universityKey: "uskudar",
+      universityKey: QUEUE_TEST_UNIVERSITY,
       mode: "dry",
     });
     assert.equal(enq.status, 201);
@@ -341,7 +374,7 @@ test("T6: retry canceled submission sets status back to queued", async () => {
   const server = await listen(app);
   try {
     const enq = await sendReq(server, "POST", `/api/applications/${appId}/portal-submissions`, {
-      universityKey: "uskudar",
+      universityKey: QUEUE_TEST_UNIVERSITY,
       mode: "dry",
     });
     assert.equal(enq.status, 201);

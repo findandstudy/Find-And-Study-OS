@@ -251,15 +251,16 @@ test("PM5: resolveAdapterKey junction member → company adapter + member id", a
 
 test("PM6: loadProgramMapping member row wins; 1:1 row isolated", async () => {
   const member = await loadProgramMapping(COMPANY, catA);
-  assert.deepEqual(member.programOverrides, { "101": "company-value" });
+  assert.equal(member.programIdOverrides?.["101"], "company-value");
 
-  // The company's 1:1 slot (member NULL) is empty — must NOT leak the member row.
+  // The company's 1:1 slot may contain unrelated live mappings, but must not
+  // leak the member-specific test key.
   const company1to1 = await loadProgramMapping(COMPANY, null);
-  assert.equal(company1to1.programOverrides, undefined);
+  assert.equal(company1to1.programIdOverrides?.["101"], undefined);
 
   // Topkapı-style 1:1 university keeps its own row, untouched by membership.
   const own = await loadProgramMapping(MEMBER_A_KEY, null);
-  assert.deepEqual(own.programOverrides, { "101": "own-1to1-value" });
+  assert.equal(own.programIdOverrides?.["101"], "own-1to1-value");
 });
 
 test("PM7: reduced member list removes dropped members from junction", async () => {
