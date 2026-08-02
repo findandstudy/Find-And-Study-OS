@@ -61,6 +61,11 @@ import { BulkActionBar } from "@/components/BulkActionBar";
 import { BulkMessageDialog } from "@/components/BulkMessageDialog";
 import { useI18n } from "@/hooks/use-i18n";
 import { useDateFormat } from "@/hooks/use-date-format";
+import {
+  DEFAULT_LEAD_SOURCE_OPTIONS,
+  buildLeadSourceFilterOptions,
+  type LeadSourceOption,
+} from "@/lib/leadSourceOptions";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
@@ -88,7 +93,7 @@ function useCountries() {
   });
 }
 
-const SOURCES = ["website", "referral", "social_media", "walk_in", "partner", "other"];
+const SOURCES = DEFAULT_LEAD_SOURCE_OPTIONS.map((option) => option.value);
 
 type ColVariant = "default" | "won" | "lost";
 
@@ -430,7 +435,7 @@ function leadIsDateInRange(dateStr: string, range: string): boolean {
 
 function FilterPopoverInner(props: any) { const { t } = useI18n(); return <FilterPopoverBody {...props} t={t} />; }
 const FilterPopover = FilterPopoverInner;
-function FilterPopoverBody({ filters, onChange, columns, staffUsers, currentUserId, leads, facetNationalities, facetAgents, t }: {
+function FilterPopoverBody({ filters, onChange, columns, staffUsers, currentUserId, leads, sourceOptions, facetNationalities, facetAgents, t }: {
   filters: LeadFilters;
   onChange: (f: LeadFilters) => void;
   columns: ColDef[];
@@ -438,6 +443,7 @@ function FilterPopoverBody({ filters, onChange, columns, staffUsers, currentUser
   t: (k: string) => string;
   currentUserId?: number;
   leads: any[];
+  sourceOptions: LeadSourceOption[];
   facetNationalities?: string[];
   facetAgents?: Array<{ id: number; name: string }>;
 }) {
@@ -479,8 +485,8 @@ function FilterPopoverBody({ filters, onChange, columns, staffUsers, currentUser
             <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">{t("leadsPage.all")}</SelectItem>
-              {SOURCES.map(s => (
-                <SelectItem key={s} value={s} className="capitalize">{s.replace(/_/g, " ")}</SelectItem>
+              {sourceOptions.map(option => (
+                <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -1359,6 +1365,15 @@ export default function LeadsPage() {
     queryFn: () => customFetch("/api/users?roles=super_admin,admin,manager,staff,consultant,accountant,editor&limit=100") as Promise<any>,
     staleTime: 5 * 60 * 1000,
   });
+  const { data: leadSourcesData } = useQuery<{ data: LeadSourceOption[] }>({
+    queryKey: ["lead-distinct-sources"],
+    queryFn: () => customFetch("/api/leads/distinct-sources") as Promise<{ data: LeadSourceOption[] }>,
+    staleTime: 5 * 60 * 1000,
+  });
+  const sourceFilterOptions = useMemo(
+    () => buildLeadSourceFilterOptions(leadSourcesData?.data, filters.source),
+    [leadSourcesData?.data, filters.source],
+  );
   const staffUsers = staffUsersData
     ? (Array.isArray(staffUsersData) ? staffUsersData : staffUsersData?.data || []).filter((u: any) => ["super_admin", "admin", "manager", "staff", "consultant", "accountant", "editor"].includes(u.role))
     : [];
@@ -1702,6 +1717,7 @@ export default function LeadsPage() {
               staffUsers={staffUsers}
               currentUserId={user?.id}
               leads={allLeads}
+              sourceOptions={sourceFilterOptions}
               facetNationalities={leadFacets?.nationalities}
               facetAgents={leadFacets?.agents}
             />
@@ -1848,7 +1864,7 @@ export default function LeadsPage() {
                     <ColumnHeader
                       label={t("leadsPage.source")}
                       sort={{ sortKey: "source", current: sort, onSort: handleSort }}
-                      filter={{ type: "select", value: filters.source, onChange: v => setFilters(f => ({ ...f, source: v })), options: SOURCES.map(s => ({ value: s, label: s.replace(/_/g, " ") })), label: t("leadsPage.source") }}
+                      filter={{ type: "select", value: filters.source, onChange: v => setFilters(f => ({ ...f, source: v })), options: sourceFilterOptions, label: t("leadsPage.source") }}
                     />
                     <ColumnHeader
                       label={t("leadsPage.program")}
