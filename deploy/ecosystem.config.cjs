@@ -65,7 +65,7 @@ module.exports = {
     {
       name: PORTAL_WORKER_PROCESS_NAME,
       script: "./artifacts/portal-automation-worker/src/worker.ts",
-      interpreter: "./node_modules/.bin/tsx",
+      interpreter: "./artifacts/portal-automation-worker/node_modules/.bin/tsx",
 
       exec_mode: "fork",
       instances: 1,

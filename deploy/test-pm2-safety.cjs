@@ -50,6 +50,11 @@ test("authoritative config uses canonical fork/1 topology", () => {
     assert.equal(app.exec_mode, "fork");
     assert.equal(app.instances, 1);
   }
+  const portalWorker = config.apps.find((app) => app.name === config.processNames.portalWorker);
+  assert.equal(
+    portalWorker?.interpreter,
+    "./artifacts/portal-automation-worker/node_modules/.bin/tsx",
+  );
 });
 
 test("valid existing canonical topology passes", () => {
