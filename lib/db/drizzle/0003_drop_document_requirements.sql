@@ -5,4 +5,8 @@
 
 DROP TABLE IF EXISTS "document_requirements" CASCADE;
 
-DELETE FROM "system_flags" WHERE "key" = 'program_doc_requirements_backfill_v1';
+DO $$ BEGIN
+  IF to_regclass('public.system_flags') IS NOT NULL THEN
+    DELETE FROM "system_flags" WHERE "key" = 'program_doc_requirements_backfill_v1';
+  END IF;
+END $$;

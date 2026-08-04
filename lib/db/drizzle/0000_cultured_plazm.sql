@@ -978,4 +978,417 @@ CREATE INDEX "app_stage_docs_application_id_idx" ON "application_stage_documents
 CREATE INDEX "app_stage_docs_stage_idx" ON "application_stage_documents" USING btree ("stage");--> statement-breakpoint
 CREATE INDEX "embed_submissions_widget_id_idx" ON "embed_submissions" USING btree ("widget_id");--> statement-breakpoint
 CREATE INDEX "embed_submissions_created_at_idx" ON "embed_submissions" USING btree ("created_at");--> statement-breakpoint
-CREATE INDEX "embed_submissions_lead_id_idx" ON "embed_submissions" USING btree ("lead_id");
+CREATE INDEX "embed_submissions_lead_id_idx" ON "embed_submissions" USING btree ("lead_id");--> statement-breakpoint
+-- Runtime tables that existed outside the original base snapshot. Keeping their
+-- additive definitions in the base migration makes a fresh database bootstrap
+-- possible; migration 0038 adopts the same structures for established databases.
+DO $$ BEGIN
+  CREATE TYPE "public"."ai_action_queue_status" AS ENUM('pending_approval', 'approved', 'rejected', 'executed', 'failed');
+EXCEPTION WHEN duplicate_object THEN null; END $$;
+--> statement-breakpoint
+DO $$ BEGIN
+  CREATE TYPE "public"."ai_persona_message_role" AS ENUM('user', 'assistant', 'tool');
+EXCEPTION WHEN duplicate_object THEN null; END $$;
+--> statement-breakpoint
+DO $$ BEGIN
+  CREATE TYPE "public"."ai_persona_provider" AS ENUM('anthropic', 'openai');
+EXCEPTION WHEN duplicate_object THEN null; END $$;
+--> statement-breakpoint
+DO $$ BEGIN
+  CREATE TYPE "public"."ai_persona_run_status" AS ENUM('success', 'error', 'rate_limited', 'blocked_by_cap');
+EXCEPTION WHEN duplicate_object THEN null; END $$;
+--> statement-breakpoint
+DO $$ BEGIN
+  CREATE TYPE "public"."ai_persona_run_triggered_by" AS ENUM('manual', 'cron', 'event');
+EXCEPTION WHEN duplicate_object THEN null; END $$;
+--> statement-breakpoint
+DO $$ BEGIN
+  CREATE TYPE "public"."ai_persona_trigger_mode" AS ENUM('manual', 'scheduled', 'event_driven');
+EXCEPTION WHEN duplicate_object THEN null; END $$;
+--> statement-breakpoint
+DO $$ BEGIN
+  CREATE TYPE "public"."ai_persona_type" AS ENUM('advisor', 'operator');
+EXCEPTION WHEN duplicate_object THEN null; END $$;
+--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS "ai_personas" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"name" text NOT NULL,
+	"slug" text NOT NULL,
+	"persona_type" "ai_persona_type" DEFAULT 'advisor' NOT NULL,
+	"description" text,
+	"avatar_url" text,
+	"provider" "ai_persona_provider" DEFAULT 'anthropic' NOT NULL,
+	"model" text NOT NULL,
+	"system_prompt" text DEFAULT '' NOT NULL,
+	"guidelines" text DEFAULT '' NOT NULL,
+	"negative_prompt" text DEFAULT '' NOT NULL,
+	"temperature" numeric(4, 2) DEFAULT '0.70' NOT NULL,
+	"max_tokens" integer DEFAULT 2048 NOT NULL,
+	"allowed_data_scopes" jsonb DEFAULT '[]'::jsonb NOT NULL,
+	"tools_enabled" jsonb DEFAULT '[]'::jsonb NOT NULL,
+	"trigger_mode" "ai_persona_trigger_mode" DEFAULT 'manual' NOT NULL,
+	"schedule_cron" text,
+	"event_subscriptions" jsonb,
+	"output_targets" jsonb DEFAULT '[]'::jsonb NOT NULL,
+	"monthly_cost_cap_usd" numeric(10, 2),
+	"is_active" boolean DEFAULT false NOT NULL,
+	"created_by" integer,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "ai_personas_slug_key" UNIQUE("slug")
+);
+--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS "ai_action_queue" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"persona_id" integer NOT NULL,
+	"run_id" integer,
+	"action_type" text NOT NULL,
+	"payload" jsonb DEFAULT '{}'::jsonb NOT NULL,
+	"preview" text,
+	"status" "ai_action_queue_status" DEFAULT 'pending_approval' NOT NULL,
+	"reviewed_by" integer,
+	"reviewed_at" timestamp with time zone,
+	"executed_at" timestamp with time zone,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS "contract_templates" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"name" text NOT NULL,
+	"language" text DEFAULT 'en' NOT NULL,
+	"entity_type" text DEFAULT 'company' NOT NULL,
+	"version" integer DEFAULT 1 NOT NULL,
+	"body_html" text DEFAULT '' NOT NULL,
+	"intake_schema" jsonb,
+	"is_active" boolean DEFAULT true NOT NULL,
+	"deleted_at" timestamp with time zone,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"signing_page_config" jsonb,
+	"title" text DEFAULT '' NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS "ai_persona_messages" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"persona_id" integer NOT NULL,
+	"conversation_id" text NOT NULL,
+	"role" "ai_persona_message_role" NOT NULL,
+	"content" text NOT NULL,
+	"tool_calls" jsonb,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS "ai_persona_runs" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"persona_id" integer NOT NULL,
+	"triggered_by" "ai_persona_run_triggered_by" DEFAULT 'manual' NOT NULL,
+	"trigger_actor" integer,
+	"input_payload" jsonb,
+	"output_payload" jsonb,
+	"model" text,
+	"prompt_tokens" integer,
+	"completion_tokens" integer,
+	"cost_usd" numeric(10, 6),
+	"latency_ms" integer,
+	"status" "ai_persona_run_status" NOT NULL,
+	"error_message" text,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS "branches" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"name" text NOT NULL,
+	"country" text,
+	"city" text,
+	"contact_name" text,
+	"contact_email" text,
+	"contact_phone" text,
+	"logo_url" text,
+	"notes" text,
+	"archived_at" timestamp with time zone,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"contact_user_id" integer
+);
+--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS "degree_document_requirements" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"catalog_option_id" integer NOT NULL,
+	"document_type" text NOT NULL,
+	"mandatory" boolean DEFAULT false NOT NULL,
+	"sort_order" integer DEFAULT 0 NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS "lead_assignment_rules" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"name" text NOT NULL,
+	"priority" integer DEFAULT 0 NOT NULL,
+	"is_active" boolean DEFAULT true NOT NULL,
+	"countries" jsonb DEFAULT '[]'::jsonb NOT NULL,
+	"university_ids" jsonb DEFAULT '[]'::jsonb NOT NULL,
+	"cities" jsonb DEFAULT '[]'::jsonb NOT NULL,
+	"phone_codes" jsonb DEFAULT '[]'::jsonb NOT NULL,
+	"sources" jsonb DEFAULT '[]'::jsonb NOT NULL,
+	"staff_user_ids" jsonb DEFAULT '[]'::jsonb NOT NULL,
+	"strategy" text DEFAULT 'first' NOT NULL,
+	"last_assigned_index" integer DEFAULT 0 NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS "object_owners_backfill" (
+	"id" integer PRIMARY KEY DEFAULT 1 NOT NULL,
+	"completed_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS "pg_rate_limits" (
+	"key" text PRIMARY KEY NOT NULL,
+	"count" integer DEFAULT 0 NOT NULL,
+	"reset_at" timestamp with time zone NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS "pipeline_migrations" (
+	"name" text PRIMARY KEY NOT NULL,
+	"applied_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS "popups" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"title" text NOT NULL,
+	"content" text NOT NULL,
+	"image_url" text,
+	"link_url" text,
+	"link_text" text,
+	"target_audience" text DEFAULT 'all_agents' NOT NULL,
+	"target_agent_ids" integer[] DEFAULT '{}' NOT NULL,
+	"frequency" text DEFAULT 'every_session' NOT NULL,
+	"status" text DEFAULT 'active' NOT NULL,
+	"starts_at" timestamp with time zone,
+	"expires_at" timestamp with time zone,
+	"created_by" integer,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS "popup_dismissals" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"popup_id" integer NOT NULL,
+	"user_id" integer NOT NULL,
+	"permanent" boolean DEFAULT false NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS "portal_program_cache" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"university_key" text NOT NULL,
+	"level" text DEFAULT '' NOT NULL,
+	"options" jsonb DEFAULT '[]'::jsonb NOT NULL,
+	"fetched_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS "program_document_requirements" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"program_id" integer NOT NULL,
+	"document_type" text NOT NULL,
+	"mandatory" boolean DEFAULT false NOT NULL,
+	"sort_order" integer DEFAULT 0 NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS "signed_contracts" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"signing_session_id" integer NOT NULL,
+	"agent_id" integer,
+	"template_id" integer NOT NULL,
+	"pdf_object_key" text,
+	"signature_image_object_key" text,
+	"evidence_hash" text,
+	"signer_email" text NOT NULL,
+	"signer_name" text,
+	"signer_ip" text,
+	"signer_user_agent" text,
+	"signed_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"emailed_at" timestamp with time zone,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"delivery_claimed_at" timestamp with time zone,
+	"signature_image_base64" text
+);
+--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS "system_flags" (
+	"key" text PRIMARY KEY NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now()
+);
+--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS "system_kv" (
+	"key" text PRIMARY KEY NOT NULL,
+	"value" text NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS "portal_program_mapping" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"university_key" text NOT NULL,
+	"mappings" jsonb DEFAULT '{}'::jsonb NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"program_overrides" jsonb DEFAULT '{}'::jsonb NOT NULL,
+	"synonyms" jsonb DEFAULT '[]'::jsonb NOT NULL,
+	"country_overrides" jsonb DEFAULT '{}'::jsonb NOT NULL,
+	"member_university_id" integer
+);
+--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS "entity_view_events" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"user_id" integer NOT NULL,
+	"entity_type" text NOT NULL,
+	"entity_id" integer NOT NULL,
+	"viewed_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"agent_id" integer,
+	"deleted_at" timestamp with time zone
+);
+--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS "object_owners" (
+	"object_key" text PRIMARY KEY NOT NULL,
+	"uploaded_by" integer,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"source_priority" integer DEFAULT 0 NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS "signing_sessions" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"template_id" integer NOT NULL,
+	"agent_id" integer,
+	"token_hash" text NOT NULL,
+	"mode" text DEFAULT 'admin_driven' NOT NULL,
+	"status" text DEFAULT 'review_pending' NOT NULL,
+	"intake_data" jsonb,
+	"signer_email" text NOT NULL,
+	"signer_name" text,
+	"expires_at" timestamp with time zone NOT NULL,
+	"created_by_user_id" integer,
+	"opened_at" timestamp with time zone,
+	"signed_at" timestamp with time zone,
+	"revoked_at" timestamp with time zone,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"is_primary_onboarding" boolean DEFAULT false NOT NULL,
+	"verified_email" text,
+	"expected_email" text
+);
+--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS "staff_countries" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"user_id" integer NOT NULL,
+	"country" text NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS "knowledge_chunks" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"source_id" integer NOT NULL,
+	"content" text NOT NULL,
+	"embedding" jsonb DEFAULT '[]'::jsonb NOT NULL,
+	"token_count" integer DEFAULT 0 NOT NULL,
+	"chunk_index" integer DEFAULT 0 NOT NULL,
+	"metadata" jsonb DEFAULT '{}'::jsonb NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS "company_contracts" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"company_name" text NOT NULL,
+	"country" text,
+	"year" integer,
+	"effective_date" timestamp with time zone,
+	"expiry_date" timestamp with time zone,
+	"file_object_key" text,
+	"file_name" text,
+	"file_mime" text,
+	"file_size" integer,
+	"notes" text,
+	"last_warning_30_sent_at" timestamp with time zone,
+	"last_warning_14_sent_at" timestamp with time zone,
+	"last_warning_7_sent_at" timestamp with time zone,
+	"last_warning_1_sent_at" timestamp with time zone,
+	"expiry_notice_sent_at" timestamp with time zone,
+	"uploaded_by_user_id" integer,
+	"assigned_user_ids" jsonb DEFAULT '[]'::jsonb NOT NULL,
+	"deleted_at" timestamp with time zone,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS "message_reactions" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"message_id" integer NOT NULL,
+	"user_id" integer NOT NULL,
+	"emoji" text NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS "conversation_quality_scores" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"conversation_id" integer NOT NULL,
+	"user_id" integer NOT NULL,
+	"accuracy" integer NOT NULL,
+	"completeness" integer NOT NULL,
+	"speed" integer NOT NULL,
+	"tone" integer NOT NULL,
+	"outcome" integer NOT NULL,
+	"overall" integer NOT NULL,
+	"rationales" jsonb DEFAULT '{}'::jsonb NOT NULL,
+	"topic" text,
+	"language" text,
+	"staff_message_count" integer DEFAULT 0 NOT NULL,
+	"avg_reply_seconds" integer,
+	"content_hash" text NOT NULL,
+	"model" text,
+	"scored_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS "education_records" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"student_id" integer NOT NULL,
+	"level" text NOT NULL,
+	"school_name" text,
+	"country" text,
+	"field_of_study" text,
+	"start_month" text,
+	"start_year" integer,
+	"end_month" text,
+	"end_year" integer,
+	"gpa" text,
+	"gpa_type" text,
+	"source" text DEFAULT 'manual' NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"city" text,
+	"language_score" text,
+	CONSTRAINT "education_records_student_id_level_key" UNIQUE("student_id","level"),
+	CONSTRAINT "education_records_level_check" CHECK (level = ANY (ARRAY['high_school'::text, 'bachelor'::text, 'master'::text])),
+	CONSTRAINT "education_records_source_check" CHECK (source = ANY (ARRAY['manual'::text, 'ai_extracted'::text, 'migrated'::text]))
+);
+--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS "knowledge_sources" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"type" text NOT NULL,
+	"name" text NOT NULL,
+	"config" jsonb DEFAULT '{}'::jsonb NOT NULL,
+	"is_active" boolean DEFAULT true NOT NULL,
+	"status" text,
+	"last_synced_at" timestamp with time zone,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS "agent_branches" (
+	"agent_id" integer NOT NULL,
+	"branch_id" integer NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "agent_branches_agent_id_branch_id_pk" PRIMARY KEY("agent_id","branch_id")
+);

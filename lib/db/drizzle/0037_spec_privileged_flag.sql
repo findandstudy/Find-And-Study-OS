@@ -1,4 +1,4 @@
--- Migration 0020: spec_privileged_flag
+-- Migration 0037: spec_privileged_flag
 --
 -- Adds privileged_approved column to portal_adapter_specs.
 -- A privileged spec (contains http, graphql, or jsHook steps) cannot be

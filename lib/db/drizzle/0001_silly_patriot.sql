@@ -322,25 +322,25 @@ CREATE TABLE "external_contacts" (
 );
 --> statement-breakpoint
 CREATE TABLE "rate_limits" (
-	"key" text PRIMARY KEY NOT NULL,
-	"count" integer DEFAULT 0 NOT NULL,
-	"reset_at" timestamp with time zone NOT NULL
+	"key" varchar(255) PRIMARY KEY NOT NULL,
+	"points" integer DEFAULT 0 NOT NULL,
+	"expire" bigint
 );
 --> statement-breakpoint
 DROP INDEX "students_email_uniq";--> statement-breakpoint
 ALTER TABLE "users" ALTER COLUMN "first_name" SET DEFAULT '';--> statement-breakpoint
 ALTER TABLE "users" ALTER COLUMN "last_name" SET DEFAULT '';--> statement-breakpoint
 ALTER TABLE "commissions" ALTER COLUMN "season" SET DEFAULT '2026';--> statement-breakpoint
-ALTER TABLE "commissions" ALTER COLUMN "confirmed_at" SET DATA TYPE timestamp with time zone;--> statement-breakpoint
-ALTER TABLE "financial_transactions" ALTER COLUMN "transaction_date" SET DATA TYPE timestamp with time zone;--> statement-breakpoint
+ALTER TABLE "commissions" ALTER COLUMN "confirmed_at" SET DATA TYPE timestamp with time zone USING "confirmed_at"::timestamp with time zone;--> statement-breakpoint
+ALTER TABLE "financial_transactions" ALTER COLUMN "transaction_date" SET DATA TYPE timestamp with time zone USING "transaction_date"::timestamp with time zone;--> statement-breakpoint
 ALTER TABLE "financial_transactions" ALTER COLUMN "transaction_date" DROP NOT NULL;--> statement-breakpoint
-ALTER TABLE "invoices" ALTER COLUMN "due_date" SET DATA TYPE timestamp with time zone;--> statement-breakpoint
-ALTER TABLE "invoices" ALTER COLUMN "paid_at" SET DATA TYPE timestamp with time zone;--> statement-breakpoint
+ALTER TABLE "invoices" ALTER COLUMN "due_date" SET DATA TYPE timestamp with time zone USING "due_date"::timestamp with time zone;--> statement-breakpoint
+ALTER TABLE "invoices" ALTER COLUMN "paid_at" SET DATA TYPE timestamp with time zone USING "paid_at"::timestamp with time zone;--> statement-breakpoint
 ALTER TABLE "service_fees" ALTER COLUMN "season" SET DEFAULT '2026';--> statement-breakpoint
-ALTER TABLE "service_fees" ALTER COLUMN "first_installment_paid_at" SET DATA TYPE timestamp with time zone;--> statement-breakpoint
-ALTER TABLE "service_fees" ALTER COLUMN "second_installment_paid_at" SET DATA TYPE timestamp with time zone;--> statement-breakpoint
-ALTER TABLE "email_queue" ALTER COLUMN "sent_at" SET DATA TYPE timestamp with time zone;--> statement-breakpoint
-ALTER TABLE "email_queue" ALTER COLUMN "created_at" SET DATA TYPE timestamp with time zone;--> statement-breakpoint
+ALTER TABLE "service_fees" ALTER COLUMN "first_installment_paid_at" SET DATA TYPE timestamp with time zone USING "first_installment_paid_at"::timestamp with time zone;--> statement-breakpoint
+ALTER TABLE "service_fees" ALTER COLUMN "second_installment_paid_at" SET DATA TYPE timestamp with time zone USING "second_installment_paid_at"::timestamp with time zone;--> statement-breakpoint
+ALTER TABLE "email_queue" ALTER COLUMN "sent_at" SET DATA TYPE timestamp with time zone USING "sent_at"::timestamp with time zone;--> statement-breakpoint
+ALTER TABLE "email_queue" ALTER COLUMN "created_at" SET DATA TYPE timestamp with time zone USING "created_at"::timestamp with time zone;--> statement-breakpoint
 ALTER TABLE "email_queue" ALTER COLUMN "created_at" SET DEFAULT now();--> statement-breakpoint
 ALTER TABLE "users" ADD COLUMN "phone_e164" text;--> statement-breakpoint
 ALTER TABLE "users" ADD COLUMN "deleted_at" timestamp with time zone;--> statement-breakpoint

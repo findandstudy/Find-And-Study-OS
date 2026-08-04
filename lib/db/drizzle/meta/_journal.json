@@ -33,57 +33,260 @@
     {
       "idx": 4,
       "version": "7",
+      "when": 1778100000000,
+      "tag": "0004_university_contracts",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1778200000000,
+      "tag": "0005_university_contracts_assigned_users",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1778300000000,
+      "tag": "0006_universities_assigned_staff",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1778400000000,
+      "tag": "0007_agency_assigned_staff",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1778500000000,
+      "tag": "0008_dynamic_stage_behaviors",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1778600000000,
+      "tag": "0009_soft_delete_consistency",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
       "when": 1778852662806,
       "tag": "0010_staff_cards",
       "breakpoints": true
     },
     {
-      "idx": 5,
+      "idx": 11,
       "version": "7",
       "when": 1779205500000,
       "tag": "0011_pipeline_stage_actions",
       "breakpoints": true
     },
     {
-      "idx": 6,
+      "idx": 12,
       "version": "7",
       "when": 1779624000000,
       "tag": "0012_ai_extractors",
       "breakpoints": true
     },
     {
-      "idx": 7,
+      "idx": 13,
       "version": "7",
       "when": 1780000000000,
       "tag": "0013_api_tokens",
       "breakpoints": true
     },
     {
-      "idx": 8,
+      "idx": 14,
       "version": "7",
-      "when": 1749600000000,
+      "when": 1780100000000,
       "tag": "0014_finance_staff_columns",
       "breakpoints": true
     },
     {
-      "idx": 9,
+      "idx": 15,
       "version": "7",
-      "when": 1749686400000,
+      "when": 1780200000000,
       "tag": "0015_ai_default_configs",
       "breakpoints": true
     },
     {
-      "idx": 10,
+      "idx": 16,
       "version": "7",
-      "when": 1749772800000,
+      "when": 1780300000000,
       "tag": "0016_portal_submissions",
       "breakpoints": true
     },
     {
-      "idx": 11,
+      "idx": 17,
       "version": "7",
-      "when": 1749859200000,
+      "when": 1780400000000,
       "tag": "0017_portal_automation_settings",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1780500000000,
+      "tag": "0018_portal_credentials",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1780600000000,
+      "tag": "0019_portal_schema_align",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1780700000000,
+      "tag": "0020_ai_agent_bot_reply_count",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1780800000000,
+      "tag": "0021_multi_account_channel",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1780900000000,
+      "tag": "0022_portal_program_mapping_data",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1781000000000,
+      "tag": "0023_portal_multi_routing",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1781100000000,
+      "tag": "0024_portal_adapter_specs",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1781200000000,
+      "tag": "0025_portal_account_universities",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1781300000000,
+      "tag": "0026_program_fallback_supersession",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1781400000000,
+      "tag": "0027_submission_status_program_full",
+      "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1781500000000,
+      "tag": "0028_fallback_enabled",
+      "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1781600000000,
+      "tag": "0029_university_exclusions",
+      "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1781700000000,
+      "tag": "0030_submission_status_exclusive_region",
+      "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1781800000000,
+      "tag": "0031_application_main_link",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1781900000000,
+      "tag": "0032_adapter_key_on_submissions",
+      "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1782000000000,
+      "tag": "0033_student_education_records",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1782100000000,
+      "tag": "0034_altinbas_structured_address",
+      "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1782200000000,
+      "tag": "0035_task_completion_metrics",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1782300000000,
+      "tag": "0036_message_campaigns",
+      "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1782400000000,
+      "tag": "0037_spec_privileged_flag",
+      "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1782500000000,
+      "tag": "0038_adopt_runtime_schema",
+      "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1782600000000,
+      "tag": "0039_portal_submission_terminal_statuses",
+      "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1782700000000,
+      "tag": "0040_adopt_runtime_columns_indexes",
       "breakpoints": true
     }
   ]

@@ -10,6 +10,8 @@
   "scripts": {
     "pre-migrate": "node ./pre-migrate.mjs",
     "validate:migrations": "node ./validate-migrations.mjs",
+    "verify:migration-state": "node ./verify-migration-state.mjs",
+    "baseline:migrations": "node ./baseline-migrations.mjs",
     "migrate:reviewed": "node ./run-migrations.mjs",
     "push": "node ./guard-push.mjs",
     "push-force": "node ./guard-push.mjs"

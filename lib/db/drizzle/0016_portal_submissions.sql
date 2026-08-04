@@ -1,6 +1,6 @@
 CREATE TYPE "public"."portal_submission_mode" AS ENUM('dry', 'real');
 --> statement-breakpoint
-CREATE TYPE "public"."portal_submission_status" AS ENUM('queued', 'running', 'submitted', 'already_exists', 'program_missing', 'failed', 'canceled');
+CREATE TYPE "public"."portal_submission_status" AS ENUM('queued', 'running', 'submitted', 'already_exists', 'program_missing', 'failed', 'canceled', 'dry_run');
 --> statement-breakpoint
 CREATE TABLE IF NOT EXISTS "portal_submissions" (
 	"id" serial PRIMARY KEY NOT NULL,

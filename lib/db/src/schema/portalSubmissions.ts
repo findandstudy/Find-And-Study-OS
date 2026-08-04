@@ -57,7 +57,7 @@ export const portalSubmissionsTable = pgTable(
       onDelete: "set null",
     }),
 
-    universityKey:  text("university_key").notNull(),
+    universityKey: text("university_key").notNull(),
     universityName: text("university_name").notNull(),
 
     /**
@@ -66,21 +66,21 @@ export const portalSubmissionsTable = pgTable(
      * and are backfilled best-effort from portal_universities. Drives
      * adapter auto-graduation (live COUNT of status='submitted' per key).
      */
-    adapterKey:     text("adapter_key"),
+    adapterKey: text("adapter_key"),
 
     mode: portalSubmissionModeEnum("mode").notNull().default("dry"),
 
     status: portalSubmissionStatusEnum("status").notNull().default("queued"),
 
-    externalRef:    text("external_ref"),
-    resultJson:     jsonb("result_json"),
+    externalRef: text("external_ref"),
+    resultJson: jsonb("result_json"),
     screenshotUrls: jsonb("screenshot_urls"),
-    error:          text("error"),
+    error: text("error"),
 
     /** Free-form metadata (e.g. supersession context, fallback chain). */
-    meta:           jsonb("meta"),
+    meta: jsonb("meta"),
 
-    attempts:    integer("attempts").notNull().default(0),
+    attempts: integer("attempts").notNull().default(0),
     maxAttempts: integer("max_attempts").notNull().default(3),
 
     lockedAt: timestamp("locked_at", { withTimezone: true }),
@@ -125,10 +125,10 @@ export const portalSubmissionsTable = pgTable(
 export const insertPortalSubmissionSchema = createInsertSchema(
   portalSubmissionsTable,
   {
-    universityKey:  z.string().min(1),
+    universityKey: z.string().min(1),
     universityName: z.string().min(1),
   },
 );
 
-export type PortalSubmission    = typeof portalSubmissionsTable.$inferSelect;
+export type PortalSubmission = typeof portalSubmissionsTable.$inferSelect;
 export type NewPortalSubmission = typeof portalSubmissionsTable.$inferInsert;
