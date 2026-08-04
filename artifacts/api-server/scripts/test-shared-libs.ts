@@ -20,6 +20,10 @@ import {
   MAX_LIMIT_BY_SIZE,
 } from "@workspace/pagination";
 import { formatDate, formatRelativeTime } from "@workspace/i18n";
+import {
+  APPLICATION_DOCUMENT_MAX_SIZE,
+  validateApplicationDocumentFile,
+} from "@workspace/file-upload-validation";
 
 test("@workspace/roles: STAFF_ROLES contains the canonical set", () => {
   assert.ok(STAFF_ROLES.includes("super_admin"));
@@ -120,4 +124,26 @@ test("@workspace/i18n: formatRelativeTime handles future days", () => {
   const inFiveDays = new Date(now.getTime() + 5 * 86_400_000);
   const out = formatRelativeTime(inFiveDays, "en", now);
   assert.match(out, /day/);
+});
+
+test("application documents accept supported files up to exactly 5 MB", () => {
+  assert.equal(
+    validateApplicationDocumentFile("passport.pdf", "application/pdf", APPLICATION_DOCUMENT_MAX_SIZE),
+    null,
+  );
+  assert.equal(
+    validateApplicationDocumentFile("photo.jpg", "image/jpeg", APPLICATION_DOCUMENT_MAX_SIZE),
+    null,
+  );
+});
+
+test("application documents reject files over 5 MB and mismatched extensions", () => {
+  assert.equal(
+    validateApplicationDocumentFile("passport.pdf", "application/pdf", APPLICATION_DOCUMENT_MAX_SIZE + 1)?.type,
+    "size_exceeded",
+  );
+  assert.equal(
+    validateApplicationDocumentFile("passport.jpg", "application/pdf", 1024)?.type,
+    "mime_extension_mismatch",
+  );
 });

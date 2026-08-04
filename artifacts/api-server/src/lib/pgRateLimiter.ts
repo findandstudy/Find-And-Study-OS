@@ -2,7 +2,8 @@ import { pool } from "@workspace/db";
 import type { Store, Options, ClientRateLimitInfo } from "express-rate-limit";
 
 /**
- * Ensures the rate_limits table exists. Called once at startup.
+ * Legacy compatibility helper. API boot must not call this; the reviewed
+ * migration ledger owns creation of pg_rate_limits.
  */
 export async function ensureRateLimitsTable(): Promise<void> {
   await pool.query(`

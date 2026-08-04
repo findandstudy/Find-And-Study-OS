@@ -19,6 +19,7 @@ import {
   channelAccountsTable,
   integrationsTable,
   documentsTable,
+  auditLogsTable,
 } from "@workspace/db";
 import type { ConversationAiSummary } from "@workspace/db";
 import { and, asc, desc, eq, inArray, isNotNull, isNull, or, sql, type SQL } from "drizzle-orm";
@@ -472,18 +473,8 @@ router.get(
           res.status(404).json({ error: "File not found" });
           return;
         }
-        const response = await inboxMediaStorage.downloadObject(file, 300);
-        res.status(response.status);
-        response.headers.forEach((value, key) => res.setHeader(key, value));
         res.setHeader("X-Content-Type-Options", "nosniff");
-        if (response.body) {
-          const { Readable } = await import("node:stream");
-          Readable.fromWeb(
-            response.body as unknown as Parameters<typeof Readable.fromWeb>[0],
-          ).pipe(res);
-        } else {
-          res.end();
-        }
+        await inboxMediaStorage.streamObjectToResponse(req, res, file, { cacheTtlSec: 300 });
       } catch (err: any) {
         console.error(
           `[INBOX] local media proxy error for message ${messageId}[${index}]:`,
@@ -618,58 +609,79 @@ router.get(
     ];
     const rawUrl = allAtts[index]?.url ?? allAtts[index]?.fileUrl ?? "";
 
-    let parsed: URL;
-    try {
-      parsed = new URL(rawUrl);
-    } catch {
-      res.status(404).json({ error: "Attachment not found" });
-      return;
-    }
-    if (parsed.protocol !== "https:" || parsed.hostname !== "zernio.com") {
-      res.status(404).json({ error: "Attachment not proxied" });
-      return;
-    }
-    const apiKey = await getZernioApiKey();
-    if (!apiKey) {
-      res.status(502).json({ error: "Zernio API key not configured" });
-      return;
-    }
-
     let tmpPdf: string | null = null;
     let tmpOutBase: string | null = null;
     try {
-      // Follow redirects manually so every hop stays on https://zernio.com (SSRF guard).
-      let hopUrl = parsed;
-      let upstream: Response | null = null;
-      for (let hop = 0; hop < 4; hop++) {
-        const r = await fetch(hopUrl.toString(), {
-          headers: { Authorization: `Bearer ${apiKey}` },
-          redirect: "manual",
-        });
-        if (r.status >= 300 && r.status < 400) {
-          const loc = r.headers.get("location");
-          if (!loc) break;
-          let next: URL;
-          try {
-            next = new URL(loc, hopUrl);
-          } catch {
-            break;
-          }
-          if (next.protocol !== "https:" || next.hostname !== "zernio.com") {
-            res.status(404).json({ error: "Attachment not proxied" });
-            return;
-          }
-          hopUrl = next;
-          continue;
+      let buf: Buffer;
+      const localKey = resolveLocalInboxStorageKey(
+        rawUrl,
+        configuredInboxMediaHosts([req.hostname]),
+      );
+      if (localKey) {
+        const file = await inboxMediaStorage.searchPublicObject(localKey);
+        if (!file) {
+          res.status(404).json({ error: "File not found" });
+          return;
         }
-        upstream = r;
-        break;
+        const [metadata] = await file.getMetadata();
+        const storedSize = Number(metadata.size);
+        if (Number.isFinite(storedSize) && storedSize > 25 * 1024 * 1024) {
+          res.status(404).json({ error: "PDF is too large to preview" });
+          return;
+        }
+        [buf] = await file.download();
+      } else {
+        let parsed: URL;
+        try {
+          parsed = new URL(rawUrl);
+        } catch {
+          res.status(404).json({ error: "Attachment not found" });
+          return;
+        }
+        if (parsed.protocol !== "https:" || parsed.hostname !== "zernio.com") {
+          res.status(404).json({ error: "Attachment not proxied" });
+          return;
+        }
+        const apiKey = await getZernioApiKey();
+        if (!apiKey) {
+          res.status(502).json({ error: "Zernio API key not configured" });
+          return;
+        }
+
+        // Follow redirects manually so every hop stays on https://zernio.com
+        // (SSRF guard).
+        let hopUrl = parsed;
+        let upstream: Response | null = null;
+        for (let hop = 0; hop < 4; hop++) {
+          const r = await fetch(hopUrl.toString(), {
+            headers: { Authorization: `Bearer ${apiKey}` },
+            redirect: "manual",
+          });
+          if (r.status >= 300 && r.status < 400) {
+            const loc = r.headers.get("location");
+            if (!loc) break;
+            let next: URL;
+            try {
+              next = new URL(loc, hopUrl);
+            } catch {
+              break;
+            }
+            if (next.protocol !== "https:" || next.hostname !== "zernio.com") {
+              res.status(404).json({ error: "Attachment not proxied" });
+              return;
+            }
+            hopUrl = next;
+            continue;
+          }
+          upstream = r;
+          break;
+        }
+        if (!upstream || !upstream.ok) {
+          res.status(404).json({ error: "Failed to fetch media" });
+          return;
+        }
+        buf = Buffer.from(await upstream.arrayBuffer());
       }
-      if (!upstream || !upstream.ok) {
-        res.status(404).json({ error: "Failed to fetch media" });
-        return;
-      }
-      const buf = Buffer.from(await upstream.arrayBuffer());
       // Only render actual PDFs (magic check) and cap at 25 MB.
       if (buf.length > 25 * 1024 * 1024 || !buf.subarray(0, 5).toString("latin1").startsWith("%PDF")) {
         res.status(404).json({ error: "Not a renderable PDF" });
@@ -2539,8 +2551,18 @@ router.post(
   },
 );
 
-// ─── Bulk conversation management (reversible archive / restore only) ────
+// ─── Bulk conversation management ─────────────────────────────────────────
 const bulkIdsSchema = z.object({ ids: z.array(z.number().int().positive()).min(1).max(500) });
+const bulkDeleteSchema = z
+  .object({
+    ids: z.array(z.number().int().positive()).min(1).max(100),
+    confirm: z.literal("DELETE_CONVERSATIONS"),
+  })
+  .strict()
+  .refine((body) => new Set(body.ids).size === body.ids.length, {
+    message: "Duplicate conversation ids are not allowed",
+    path: ["ids"],
+  });
 
 /** Internal (user-DM) conversations require participant membership for non-admins. */
 async function filterBulkAccessibleIds(userId: number, isAdmin: boolean, ids: number[]): Promise<number[]> {
@@ -2614,6 +2636,83 @@ router.post(
       .where(inArray(conversationsTable.id, ids))
       .returning({ id: conversationsTable.id });
     res.json({ restored: updated.length });
+  },
+);
+
+router.post(
+  "/inbox/conversations/bulk-delete",
+  requireAuth,
+  requireRole("super_admin", "admin"),
+  async (req, res): Promise<void> => {
+    const parsed = bulkDeleteSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "Explicit delete confirmation and a unique ids array are required" });
+      return;
+    }
+
+    const requestedIds = [...parsed.data.ids].sort((a, b) => a - b);
+    const outcome = await db.transaction(async (tx) => {
+      const existing = await tx
+        .select({ id: conversationsTable.id })
+        .from(conversationsTable)
+        .where(inArray(conversationsTable.id, requestedIds))
+        .for("update");
+      const existingIds = existing.map((row) => row.id).sort((a, b) => a - b);
+
+      if (
+        existingIds.length !== requestedIds.length ||
+        existingIds.some((id, index) => id !== requestedIds[index])
+      ) {
+        return { conflict: true as const };
+      }
+
+      const [messageStats] = await tx
+        .select({ count: sql<number>`count(*)::int` })
+        .from(messagesTable)
+        .where(inArray(messagesTable.conversationId, requestedIds));
+
+      // Documents copied from inbox attachments are business records and must
+      // survive conversation deletion. Only their now-dangling source pointers
+      // are cleared; stored files are deliberately not deleted here.
+      await tx
+        .update(documentsTable)
+        .set({
+          sourceConversationId: null,
+          sourceMessageId: null,
+          sourceAttachmentId: null,
+        })
+        .where(inArray(documentsTable.sourceConversationId, requestedIds));
+
+      const deleted = await tx
+        .delete(conversationsTable)
+        .where(inArray(conversationsTable.id, requestedIds))
+        .returning({ id: conversationsTable.id });
+
+      await tx.insert(auditLogsTable).values({
+        userId: req.user!.id,
+        action: "delete_inbox_conversations",
+        resource: "conversation",
+        changes: JSON.stringify({
+          conversationIds: deleted.map((row) => row.id).sort((a, b) => a - b),
+          conversationCount: deleted.length,
+          messageCount: Number(messageStats?.count ?? 0),
+        }),
+        ipAddress: req.ip || null,
+      });
+
+      return {
+        conflict: false as const,
+        deleted: deleted.length,
+        deletedIds: deleted.map((row) => row.id),
+      };
+    });
+
+    if (outcome.conflict) {
+      res.status(409).json({ error: "Conversation selection changed; refresh and select again" });
+      return;
+    }
+
+    res.json({ deleted: outcome.deleted, deletedIds: outcome.deletedIds });
   },
 );
 

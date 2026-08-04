@@ -643,8 +643,6 @@ router.get("/contracts/me/pdf", requireAuth, async (req: Request, res: Response)
     if (normalizedPath.startsWith("/objects/")) normalizedPath = normalizedPath.slice("/objects/".length);
     if (normalizedPath.startsWith("objects/")) normalizedPath = normalizedPath.slice("objects/".length);
     const file = await svc.getObjectEntityFile(`/objects/${normalizedPath}`);
-    const [meta] = await file.getMetadata();
-    res.setHeader("Content-Type", (meta.contentType as string) || "application/pdf");
     // Same contractNumber() source as the document body's {{contract_number}}
     // (e.g. FAS-2026-00025_signed.pdf), shared with the admin + public download
     // paths. Fallback order (signedAt -> createdAt) is identical everywhere so
@@ -654,11 +652,10 @@ router.get("/contracts/me/pdf", requireAuth, async (req: Request, res: Response)
       signed.signedAt ? new Date(signed.signedAt) : (signed.createdAt ? new Date(signed.createdAt) : undefined),
     );
     res.setHeader("Content-Disposition", `attachment; filename="${filename}"; filename*=UTF-8''${encodeURIComponent(filename)}`);
-    res.setHeader("Cache-Control", "private, no-store");
-    if (meta.size) res.setHeader("Content-Length", String(meta.size));
-    file.createReadStream()
-      .on("error", (err) => { console.error("[contracts/me/pdf] stream:", err); if (!res.headersSent) res.status(500).end(); })
-      .pipe(res);
+    await svc.streamObjectToResponse(req, res, file, {
+      contentType: "application/pdf",
+      cacheControl: "private, no-store",
+    });
   } catch (err) {
     console.error("[contracts/me/pdf]:", err);
     if (!res.headersSent) res.status(500).json({ error: "Failed to download signed contract" });

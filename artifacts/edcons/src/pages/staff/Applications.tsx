@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from "react";
-import { useLocation } from "wouter";
+import { Link, useLocation } from "wouter";
 import { QuickContactDialog } from "@/components/QuickContact";
 import { AssignPopover } from "@/components/AssignPopover";
 import { RowActionsMenu } from "@/components/RowActionsMenu";
@@ -67,6 +67,7 @@ import { useI18n } from "@/hooks/use-i18n";
 import { applicationCreationErrorMessage } from "@/lib/applicationCreationError";
 import { collectPortalPreflightIssueLabels } from "@/lib/portalBulkRunFeedback";
 import { useDateFormat } from "@/hooks/use-date-format";
+import { LinkedTableCell } from "@/components/LinkedTableCell";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 const VIEW_KEY = "edcons_applications_view";
@@ -2332,62 +2333,72 @@ export default function ApplicationsPage() {
                   switch (id) {
                     case "student":
                       return (
-                        <TableCell key={id} className="font-medium">
+                        <LinkedTableCell
+                          key={id}
+                          href={`/staff/applications/${app.id}`}
+                          linkLabel={`Open application for ${app.studentFirstName} ${app.studentLastName}`}
+                          primary
+                          className="font-medium"
+                        >
                           <div className="flex items-center gap-2">
                             <AppStudentAvatar app={app} />
                             <div className="flex items-center gap-1.5 min-w-0">
-                              <span className="hover:text-primary hover:underline cursor-pointer transition-colors" onClick={(e) => { e.stopPropagation(); if (app.studentId) setLocation(`/staff/students/${app.studentId}`); }}>
-                                {app.studentFirstName} {app.studentLastName}
-                              </span>
+                              {app.studentId ? (
+                                <Link href={`/staff/students/${app.studentId}`} className="hover:text-primary hover:underline cursor-pointer transition-colors">
+                                  {app.studentFirstName} {app.studentLastName}
+                                </Link>
+                              ) : (
+                                <span>{app.studentFirstName} {app.studentLastName}</span>
+                              )}
                               <OriginBadge originType={app.originType} originDisplayName={app.originDisplayName} />
                             </div>
                           </div>
-                        </TableCell>
+                        </LinkedTableCell>
                       );
                     case "stage":
                       return (
-                        <TableCell key={id}>
+                        <LinkedTableCell key={id} href={`/staff/applications/${app.id}`} linkLabel={`Open application for ${app.studentFirstName} ${app.studentLastName}`}>
                           <StageBadgeWithDocs app={app} stageLabel={stageLabel} stageColor={stageColor} baseUrl={BASE_URL} />
-                        </TableCell>
+                        </LinkedTableCell>
                       );
                     case "country":
-                      return <TableCell key={id} className="text-muted-foreground">{app.country || "-"}</TableCell>;
+                      return <LinkedTableCell key={id} href={`/staff/applications/${app.id}`} linkLabel={`Open application for ${app.studentFirstName} ${app.studentLastName}`} className="text-muted-foreground">{app.country || "-"}</LinkedTableCell>;
                     case "university":
                       return (
-                        <TableCell key={id} className="max-w-[250px]">
+                        <LinkedTableCell key={id} href={`/staff/applications/${app.id}`} linkLabel={`Open application for ${app.studentFirstName} ${app.studentLastName}`} className="max-w-[250px]">
                           {app.universityId ? (
-                            <span className="hover:text-primary hover:underline cursor-pointer transition-colors line-clamp-2" title={app.universityName || ""} onClick={(e) => { e.stopPropagation(); setTableUniInfoId(app.universityId); }}>
+                            <button type="button" className="text-left hover:text-primary hover:underline cursor-pointer transition-colors line-clamp-2" title={app.universityName || ""} onClick={() => setTableUniInfoId(app.universityId)}>
                               {app.universityName || "-"}
-                            </span>
+                            </button>
                           ) : (
                             <span className="line-clamp-2" title={app.universityName || ""}>{app.universityName || "-"}</span>
                           )}
-                        </TableCell>
+                        </LinkedTableCell>
                       );
                     case "program":
                       return (
-                        <TableCell key={id} className="max-w-[250px]">
+                        <LinkedTableCell key={id} href={`/staff/applications/${app.id}`} linkLabel={`Open application for ${app.studentFirstName} ${app.studentLastName}`} className="max-w-[250px]">
                           {app.programId ? (
-                            <span className="hover:text-primary hover:underline cursor-pointer transition-colors line-clamp-2" title={app.programName || ""} onClick={(e) => { e.stopPropagation(); setTableProgInfoId(app.programId); }}>
+                            <button type="button" className="text-left hover:text-primary hover:underline cursor-pointer transition-colors line-clamp-2" title={app.programName || ""} onClick={() => setTableProgInfoId(app.programId)}>
                               {app.programName || "-"}
-                            </span>
+                            </button>
                           ) : (
                             <span className="line-clamp-2" title={app.programName || ""}>{app.programName || "-"}</span>
                           )}
-                        </TableCell>
+                        </LinkedTableCell>
                       );
                     case "level":
-                      return <TableCell key={id}>{levelLabel}</TableCell>;
+                      return <LinkedTableCell key={id} href={`/staff/applications/${app.id}`} linkLabel={`Open application for ${app.studentFirstName} ${app.studentLastName}`}>{levelLabel}</LinkedTableCell>;
                     case "intake":
-                      return <TableCell key={id}>{app.intake || "-"}</TableCell>;
+                      return <LinkedTableCell key={id} href={`/staff/applications/${app.id}`} linkLabel={`Open application for ${app.studentFirstName} ${app.studentLastName}`}>{app.intake || "-"}</LinkedTableCell>;
                     case "commission":
                       return (
                         canSeeCommission ? (
-                        <TableCell key={id}>
+                        <LinkedTableCell key={id} href={`/staff/applications/${app.id}`} linkLabel={`Open application for ${app.studentFirstName} ${app.studentLastName}`}>
                           {app.commissionAmount && parseFloat(app.commissionAmount) > 0
                             ? <span className="text-emerald-600 font-medium">{formatCurrency(parseFloat(app.commissionAmount))}</span>
                             : "-"}
-                        </TableCell>
+                        </LinkedTableCell>
                         ) : null
                       );
                     case "assigned":
@@ -2425,7 +2436,7 @@ export default function ApplicationsPage() {
                         </TableCell>
                       );
                     case "created":
-                      return <TableCell key={id} className="text-muted-foreground text-xs">{formatDate(app.createdAt, dateFormat)}</TableCell>;
+                      return <LinkedTableCell key={id} href={`/staff/applications/${app.id}`} linkLabel={`Open application for ${app.studentFirstName} ${app.studentLastName}`} className="text-muted-foreground text-xs">{formatDate(app.createdAt, dateFormat)}</LinkedTableCell>;
                     case "button1":
                     case "button2": {
                       const slot = id === "button1" ? 0 : 1;
@@ -2508,8 +2519,6 @@ export default function ApplicationsPage() {
                           <TableRow
                             key={app.id}
                             className={`hover:bg-muted/30 transition-colors cursor-pointer ${selectedIds.has(app.id) ? "bg-primary/5" : ""}`}
-                            onClick={(e) => { if (wantsNewTab(e)) { window.open(appDetailHref(app.id), "_blank", "noopener"); } else { setLocation(`/staff/applications/${app.id}`); } }}
-                            onAuxClick={(e) => { if (e.button === 1) { e.preventDefault(); window.open(appDetailHref(app.id), "_blank", "noopener"); } }}
                           >
                             <TableCell onClick={e => e.stopPropagation()}><Checkbox checked={selectedIds.has(app.id)} onCheckedChange={() => toggleSelect(app.id)} /></TableCell>
                             {visibleAppCols.map((id) => renderBodyCell(id as AppColId, app, stageLabel, stageColor, levelLabel))}

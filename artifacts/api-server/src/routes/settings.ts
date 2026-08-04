@@ -1,5 +1,4 @@
 import { Router, type IRouter } from "express";
-import { Readable } from "stream";
 import { db, settingsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { requireAuth, requireRole } from "../lib/auth";
@@ -213,18 +212,9 @@ router.get("/settings/branding/logo", async (req, res): Promise<void> => {
 
     const objectPath = `/objects/${match[1]}`;
     const objectFile = await objectStorageService.getObjectEntityFile(objectPath);
-    const response = await objectStorageService.downloadObject(objectFile);
-
-    res.status(response.status);
-    response.headers.forEach((value, key) => res.setHeader(key, value));
-    res.setHeader("Cache-Control", "public, max-age=3600");
-
-    if (response.body) {
-      const nodeStream = Readable.fromWeb(response.body as unknown as Parameters<typeof Readable.fromWeb>[0]);
-      nodeStream.pipe(res);
-    } else {
-      res.end();
-    }
+    await objectStorageService.streamObjectToResponse(req, res, objectFile, {
+      cacheControl: "public, max-age=3600",
+    });
   } catch (error) {
     if (error instanceof ObjectNotFoundError) {
       res.status(404).json({ error: "Logo not found" });

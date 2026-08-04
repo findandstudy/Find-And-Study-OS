@@ -20,6 +20,7 @@ import {
   Mail, Phone, User, Award, Calendar, Check, Loader2, UserSearch,
   Download, CheckSquare, Square, FileDown, LayoutGrid, List, ArrowUpDown,
   ArrowUp, ArrowDown, CheckCircle2, AlertCircle, Upload, UserPlus, Shield,
+  Camera,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { generateProposalPdf } from "@/lib/generateProposalPdf";
@@ -29,6 +30,11 @@ import { applicationCreationErrorMessage } from "@/lib/applicationCreationError"
 import { PdfMarkupModal } from "@/components/course-finder/PdfMarkupModal";
 import * as XLSX from "xlsx";
 import { useI18n } from "@/hooks/use-i18n";
+import { DocumentScanner } from "@/components/DocumentScanner";
+import {
+  APPLICATION_DOCUMENT_HELP_TEXT,
+  validateApplicationDocumentFileObj,
+} from "@/lib/fileUploadValidation";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
@@ -1834,8 +1840,16 @@ function ApplyDropZone({ docType, uploaded, onFile, onUpload, onRemove }: {
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
+  const [scannerOpen, setScannerOpen] = useState(false);
+  const { t } = useI18n();
+  const { toast } = useToast();
 
   async function handleFile(file: File) {
+    const validation = validateApplicationDocumentFileObj(file);
+    if (!validation.valid) {
+      toast({ title: t("apply.fileError"), description: validation.message, variant: "destructive" });
+      return;
+    }
     const { file: prepared, mediaType, isImage } = await prepareDocFile(file);
     onUpload({ key: docType.key, label: docType.label, file: prepared, mediaType, isImage });
   }
@@ -1881,6 +1895,19 @@ function ApplyDropZone({ docType, uploaded, onFile, onUpload, onRemove }: {
       <div className="mt-0.5">{requiredBadge}</div>
       <input ref={inputRef} type="file" accept={docType.accept} className="hidden"
         onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); e.target.value = ""; }}
+      />
+      <button
+        type="button"
+        onClick={(e) => { e.stopPropagation(); setScannerOpen(true); }}
+        className="mt-0.5 inline-flex items-center gap-1 text-[9px] font-medium text-primary hover:underline"
+      >
+        <Camera className="w-3 h-3" /> {t("scanner.scanWithCamera")}
+      </button>
+      <DocumentScanner
+        open={scannerOpen}
+        onClose={() => setScannerOpen(false)}
+        baseName={docType.key}
+        onCapture={handleFile}
       />
     </div>
     </>
@@ -2364,6 +2391,10 @@ function ApplyDialog({ program: p, onClose, currentUser, agentShareRate, hideSer
                   <div className="flex items-center justify-between mb-2">
                     <p className="text-sm font-semibold text-foreground">{t("courseFinderPage.requiredDocuments")}</p>
                     <p className="text-xs text-muted-foreground">{t("courseFinderPage.uploadedCount", { n: uploadedCount, total: currentDocs.length })}</p>
+                  </div>
+                  <div className="mb-2 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 dark:border-amber-900/60 dark:bg-amber-950/20">
+                    <p className="text-[11px] text-amber-900 dark:text-amber-200">{APPLICATION_DOCUMENT_HELP_TEXT}</p>
+                    <Badge variant="outline" className="border-amber-500 bg-background text-[10px] font-bold text-amber-800 dark:text-amber-200">MAX 5 MB / FILE</Badge>
                   </div>
                   <div className={cn(
                     "grid gap-2",

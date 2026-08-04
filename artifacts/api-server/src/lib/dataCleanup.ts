@@ -1,13 +1,11 @@
 import { pool } from "@workspace/db";
 
 /**
- * One-shot data cleanup that runs on api-server boot (Worker Zero).
+ * Destructive one-shot data cleanup retained for explicit manual tooling only.
  *
- * Mirrors `lib/db/cleanup-data.mjs` so that Replit autoscale deploys
- * (which do NOT execute `deploy/deploy.sh`) still get the cleanup the
- * first time the new build boots in production. Both entry points
- * gate on the same `system_flags` row, so whichever runs first wins
- * and the other becomes a no-op.
+ * It is intentionally not called from API boot or deployment. The explicit
+ * environment gate below is a second line of defence in case a future caller
+ * imports this function directly.
  *
  * Wipes student/lead/application/document/message/audit data and
  * trims the users table to one user per privileged role (plus an
@@ -15,6 +13,7 @@ import { pool } from "@workspace/db";
  */
 
 const VERSION_FLAG = "cleanup_data_v1_done";
+const CLEANUP_FLAG = "ALLOW_DESTRUCTIVE_DATA_CLEANUP";
 
 const KEEP_EMAILS = [
   "en@findandstudy.com",
@@ -64,6 +63,15 @@ const DATA_TABLES = [
 ];
 
 export async function runDataCleanupOnce(): Promise<void> {
+  if (process.env[CLEANUP_FLAG] !== "true") {
+    const message = `[cleanup-data] BLOCKED: ${CLEANUP_FLAG}=true is required for this destructive manual operation.`;
+    if (process.env.NODE_ENV === "production") {
+      throw new Error(message);
+    }
+    console.warn(message);
+    return;
+  }
+
   const client = await pool.connect();
   try {
     const flag = await client.query("SELECT 1 FROM system_flags WHERE key = $1", [VERSION_FLAG]);

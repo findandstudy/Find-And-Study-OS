@@ -8,6 +8,10 @@ import {
   decideWhatsAppTemplateDeletion,
   deleteZernioWhatsAppTemplate,
 } from "../src/lib/inbox/zernioTemplates";
+import {
+  configuredInboxMediaHosts,
+  resolveLocalInboxStorageKey,
+} from "../src/lib/inbox/mediaSource";
 
 type FetchCall = { url: string; init?: RequestInit };
 const realFetch = globalThis.fetch;
@@ -108,6 +112,18 @@ test("document attachments preserve their visible filename", async () => {
 
   assert.equal(outcome.ok, true);
   assert.equal(outcome.externalMessageId, "msg-document");
+});
+
+test("historical production inbox media resolves to the canonical storage key", () => {
+  const hosts = configuredInboxMediaHosts();
+  assert.equal(hosts.has("apply.findandstudy.com"), true);
+  assert.equal(
+    resolveLocalInboxStorageKey(
+      "https://apply.findandstudy.com/api/storage/objects/inbox/document-id",
+      hosts,
+    ),
+    "inbox/document-id",
+  );
 });
 
 test("a missing remote template is a successful stale-cache cleanup", async () => {

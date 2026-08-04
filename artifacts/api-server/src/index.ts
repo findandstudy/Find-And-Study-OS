@@ -580,6 +580,10 @@ async function seedClaudeIntegration() {
 }
 
 (async () => {
+  // Retained temporarily for migration archaeology only. Normal API boot must
+  // never mutate schema, seed data or run backfills. Reviewed SQL under
+  // lib/db/drizzle is the sole migration authority.
+  if (false) {
   // Step 1: Create system_flags table — runs on all processes, idempotent.
   await pool.query(`
     CREATE TABLE IF NOT EXISTS system_flags (
@@ -3049,115 +3053,95 @@ async function seedClaudeIntegration() {
       console.error("[migrate] role assign_button backfill:", err);
     }
 
-    // One-shot data cleanup (idempotent via system_flags). Runs on every
-    // boot but exits early once the version flag is set. This ensures
-    // Replit autoscale publishes — which don't execute deploy/deploy.sh —
-    // still apply the cleanup the first time the new build comes up.
-    const { runDataCleanupOnce } = await import("./lib/dataCleanup");
-    await runDataCleanupOnce();
+  }
+  }
 
-    console.log("[Worker] Background workers started on instance", process.env.NODE_APP_INSTANCE ?? "0-solo");
-    // Stagger background-worker startup so their periodic queries don't all
-    // fire in the same tick and exhaust the shared DB connection pool. Each
-    // worker keeps its own interval; only the START moment is offset (fixed
-    // spacing + small random jitter so multiple autoscale instances also
-    // de-align from each other). Behavior of each worker is unchanged.
-    const staggerStart = (name: string, offsetMs: number, fn: () => void | Promise<void>): void => {
-      const delay = offsetMs + Math.floor(Math.random() * 5_000);
-      setTimeout(() => {
-        try {
-          const r = fn();
-          if (r instanceof Promise) r.catch((err) => console.error(`[boot] ${name} start error:`, err));
-        } catch (err: any) {
-          console.error(`[boot] ${name} start error:`, err?.message || err);
-        }
-      }, delay);
-    };
-    staggerStart("emailWorker", 1_000, async () => {
+  const { BackgroundJobCoordinator } = await import("./lib/backgroundJobs");
+  const backgroundJobs = new BackgroundJobCoordinator(pool, [
+    { name: "emailWorker", offsetMs: 1_000, start: async () => {
       const { startEmailWorker } = await import("./lib/email");
       startEmailWorker();
-    });
-    staggerStart("contractChecker", 4_000, async () => {
+    } },
+    { name: "contractChecker", offsetMs: 4_000, start: async () => {
       const { startContractChecker } = await import("./lib/contractChecker");
       startContractChecker();
-    });
-    staggerStart("offerExpiryChecker", 7_000, async () => {
+    } },
+    { name: "offerExpiryChecker", offsetMs: 7_000, start: async () => {
       const { startOfferExpiryChecker } = await import("./lib/offerExpiryChecker");
       startOfferExpiryChecker();
-    });
-    staggerStart("universityContractChecker", 10_000, async () => {
+    } },
+    { name: "universityContractChecker", offsetMs: 10_000, start: async () => {
       const { startUniversityContractChecker } = await import("./lib/universityContractChecker");
       startUniversityContractChecker();
-    });
-    staggerStart("companyContractChecker", 13_000, async () => {
+    } },
+    { name: "companyContractChecker", offsetMs: 13_000, start: async () => {
       const { startCompanyContractChecker } = await import("./lib/companyContractChecker");
       startCompanyContractChecker();
-    });
-    staggerStart("signedContractDelivery", 16_000, async () => {
+    } },
+    { name: "signedContractDelivery", offsetMs: 16_000, start: async () => {
       const { startSignedContractDeliveryWorker } = await import("./lib/signedContractDelivery");
       startSignedContractDeliveryWorker();
-    });
-    staggerStart("assignmentConsistencyChecker", 19_000, async () => {
+    } },
+    { name: "assignmentConsistencyChecker", offsetMs: 19_000, start: async () => {
       const { startAssignmentConsistencyChecker } = await import("./lib/assignmentConsistencyChecker");
       startAssignmentConsistencyChecker();
-    });
-    // Null-fill backfill: runs on every boot but is idempotent — only touches
-    // records where assignedToId IS NULL, so a second run is always a no-op.
-    staggerStart("backfillNullAssignments", 22_000, async () => {
-      const { backfillNullAssignments } = await import("./lib/leadAssignment");
-      await backfillNullAssignments(null);
-      // Then pull every linked inbox conversation onto its CRM chain owner
-      // (chain wins). Pure idempotent SQL — a second run is a no-op.
-      const { reconcileConversationOwners } = await import("./lib/inbox/assignmentSync");
-      await reconcileConversationOwners(pool);
-    });
-    staggerStart("followUpChecker", 25_000, async () => {
+    } },
+    { name: "followUpChecker", offsetMs: 25_000, start: async () => {
       const { startFollowUpChecker } = await import("./lib/followUpChecker");
       startFollowUpChecker();
-    });
-    staggerStart("portalStuckReset+autoDrain", 28_000, async () => {
-      const { startPortalStuckReset, startPortalAutoDrain, startPortalStatusSync } = await import("./routes/portalAutomation");
+    } },
+    { name: "portalMaintenance", offsetMs: 28_000, start: async () => {
+      const { startPortalStuckReset, startPortalStatusSync } = await import("./routes/portalAutomation");
       startPortalStuckReset();
-      startPortalAutoDrain();
       startPortalStatusSync();
-    });
-    staggerStart("portalUniversityLinker", 31_000, async () => {
+    } },
+    { name: "portalUniversityLinker", offsetMs: 31_000, start: async () => {
       const { startPortalUniversityLinker } = await import("./lib/portalUniversityLinker");
       startPortalUniversityLinker();
-    });
-    staggerStart("stuckConversationSweep", 34_000, async () => {
+    } },
+    { name: "stuckConversationSweep", offsetMs: 34_000, start: async () => {
       const { startStuckConversationSweep } = await import("./lib/stuckConversationAssigner");
       startStuckConversationSweep();
-    });
-    staggerStart("qualityScoringWorker", 37_000, async () => {
+    } },
+    { name: "qualityScoringWorker", offsetMs: 37_000, start: async () => {
       const { startQualityScoringWorker } = await import("./lib/inbox/qualityScoring");
       startQualityScoringWorker();
-    });
-    staggerStart("portalAiGuardian", 40_000, async () => {
+    } },
+    { name: "portalAiGuardian", offsetMs: 40_000, start: async () => {
       const { startPortalAiGuardianScanner } = await import("./lib/portalAiGuardian");
       startPortalAiGuardianScanner();
-    });
-    staggerStart("academyKnowledgeSync", 43_000, async () => {
+    } },
+    { name: "academyKnowledgeSync", offsetMs: 43_000, start: async () => {
       const { startAcademyKnowledgeSync } = await import("./lib/inbox/academyKnowledgeSync");
       startAcademyKnowledgeSync();
-    });
-    staggerStart("messageCampaignWorker", 46_000, async () => {
+    } },
+    { name: "messageCampaignWorker", offsetMs: 46_000, start: async () => {
       const { startMessageCampaignWorker } = await import("./lib/inbox/messageCampaignWorker");
       startMessageCampaignWorker();
-    });
-  }
+    } },
+  ]);
+  await backgroundJobs.start();
 
   serveStaticFrontend();
 
   const { feedBus } = await import("./lib/feedBus");
+  let shuttingDown = false;
+  let httpServer: ReturnType<typeof app.listen> | null = null;
   const shutdown = async (signal: string) => {
-    console.log(`[shutdown] ${signal} received — releasing feedBus LISTEN connection`);
+    if (shuttingDown) return;
+    shuttingDown = true;
+    console.log(`[shutdown] ${signal} received — stopping background jobs and feedBus`);
+    if (httpServer) {
+      await new Promise<void>((resolve) => httpServer!.close(() => resolve()));
+    }
+    try { await backgroundJobs.shutdown(); } catch { /* ignore */ }
     try { await feedBus.shutdown(); } catch { /* ignore */ }
+    process.exit(0);
   };
   process.once("SIGTERM", () => { void shutdown("SIGTERM"); });
   process.once("SIGINT",  () => { void shutdown("SIGINT"); });
 
-  app.listen(port, () => {
+  httpServer = app.listen(port, () => {
     console.log(`Server listening on port ${port} (${isProd ? "production" : "development"})`);
     if (typeof process.send === "function") {
       process.send("ready");

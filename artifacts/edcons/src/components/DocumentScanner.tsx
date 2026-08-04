@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Camera, X, RotateCcw, Plus, Check, Loader2, AlertTriangle, FileText, Sun, Hand, Crop } from "lucide-react";
+import { Camera, X, RotateCcw, Plus, Check, Loader2, AlertTriangle, FileText, Sun, Hand, Crop, Upload } from "lucide-react";
 import { useI18n } from "@/hooks/use-i18n";
 import * as VisuallyHidden from "@radix-ui/react-visually-hidden";
 
@@ -104,6 +104,7 @@ export function DocumentScanner({ open, onClose, onCapture, baseName = "scan", a
   const { t } = useI18n();
   const videoRef = useRef<HTMLVideoElement>(null);
   const overlayRef = useRef<HTMLCanvasElement>(null);
+  const fallbackInputRef = useRef<HTMLInputElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const rafRef = useRef<number | null>(null);
   const scannerRef = useRef<any>(null);
@@ -396,6 +397,19 @@ export function DocumentScanner({ open, onClose, onCapture, baseName = "scan", a
     onClose();
   }
 
+  function openDeviceCapture() {
+    fallbackInputRef.current?.click();
+  }
+
+  function handleDeviceCapture(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    stopCamera();
+    onCapture(file);
+    handleClose();
+  }
+
   // Cleanup on unmount
   useEffect(() => () => stopCamera(), []);
 
@@ -404,6 +418,15 @@ export function DocumentScanner({ open, onClose, onCapture, baseName = "scan", a
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) handleClose(); }}>
       <DialogContent className="max-w-3xl w-[96vw] p-0 overflow-hidden bg-black border-0 sm:rounded-2xl h-[92vh] sm:h-auto sm:max-h-[92vh] flex flex-col">
+        <input
+          ref={fallbackInputRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          className="hidden"
+          tabIndex={-1}
+          onChange={handleDeviceCapture}
+        />
         <VisuallyHidden.Root>
           <DialogTitle>{t("scanner.title")}</DialogTitle>
         </VisuallyHidden.Root>
@@ -467,20 +490,29 @@ export function DocumentScanner({ open, onClose, onCapture, baseName = "scan", a
               <Loader2 className="w-10 h-10 animate-spin" />
               <p className="text-sm font-semibold">{t("scanner.loading")}</p>
               <p className="text-xs text-white/70 max-w-xs">{t("scanner.loadingHint")}</p>
+              <Button variant="secondary" size="sm" onClick={openDeviceCapture} className="gap-2">
+                <Upload className="w-4 h-4" /> {t("common.upload")}
+              </Button>
             </div>
           )}
           {libStatus === "error" && (
             <div className="absolute inset-0 flex flex-col items-center justify-center text-white gap-3 p-6 text-center">
               <AlertTriangle className="w-10 h-10 text-amber-400" />
               <p className="text-sm font-semibold">{t("scanner.libError")}</p>
-              <Button variant="secondary" size="sm" onClick={handleClose}>{t("scanner.close")}</Button>
+              <div className="flex flex-wrap justify-center gap-2">
+                <Button variant="secondary" size="sm" onClick={openDeviceCapture} className="gap-2"><Upload className="w-4 h-4" /> {t("common.upload")}</Button>
+                <Button variant="secondary" size="sm" onClick={handleClose}>{t("scanner.close")}</Button>
+              </div>
             </div>
           )}
           {libStatus === "ready" && cameraError && !previewPage && !adjust && (
             <div className="absolute inset-0 flex flex-col items-center justify-center text-white gap-3 p-6 text-center">
               <AlertTriangle className="w-10 h-10 text-amber-400" />
               <p className="text-sm font-semibold max-w-sm">{cameraError}</p>
-              <Button variant="secondary" size="sm" onClick={handleClose}>{t("scanner.close")}</Button>
+              <div className="flex flex-wrap justify-center gap-2">
+                <Button variant="secondary" size="sm" onClick={openDeviceCapture} className="gap-2"><Upload className="w-4 h-4" /> {t("common.upload")}</Button>
+                <Button variant="secondary" size="sm" onClick={handleClose}>{t("scanner.close")}</Button>
+              </div>
             </div>
           )}
 
@@ -561,14 +593,19 @@ export function DocumentScanner({ open, onClose, onCapture, baseName = "scan", a
         {/* Controls */}
         <div className="bg-black/90 p-3 shrink-0 flex flex-wrap items-center justify-center gap-2">
           {libStatus === "ready" && !cameraError && !previewPage && !adjust && (
-            <Button
-              onClick={handleCapture}
-              disabled={processing}
-              className="bg-white text-black hover:bg-white/90 gap-2 h-12 px-6 rounded-full font-semibold"
-            >
-              <Camera className="w-5 h-5" />
-              {t("scanner.capture")}
-            </Button>
+            <>
+              <Button
+                onClick={handleCapture}
+                disabled={processing}
+                className="bg-white text-black hover:bg-white/90 gap-2 h-12 px-6 rounded-full font-semibold"
+              >
+                <Camera className="w-5 h-5" />
+                {t("scanner.capture")}
+              </Button>
+              <Button variant="secondary" onClick={openDeviceCapture} className="gap-2 h-12 rounded-full">
+                <Upload className="w-4 h-4" /> {t("common.upload")}
+              </Button>
+            </>
           )}
           {adjust && !processing && (
             <>

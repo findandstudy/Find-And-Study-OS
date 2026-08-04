@@ -15,7 +15,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { customFetch } from "@workspace/api-client-react";
 import { findEquivalentDoc, getDocEquivalenceGroup } from "@workspace/doc-equivalence";
 import { useAuth } from "@/hooks/use-auth";
-import { validateFileObj as validateFile, sanitizeFileName, FILE_UPLOAD_HELP_TEXT } from "@/lib/fileUploadValidation";
+import {
+  APPLICATION_DOCUMENT_HELP_TEXT,
+  sanitizeFileName,
+  validateApplicationDocumentFileObj as validateFile,
+} from "@/lib/fileUploadValidation";
 import { PHONE_CODES, normalizeNationality, FALLBACK_COUNTRIES } from "@/lib/nationalities";
 import { PhoneCodePicker } from "@/components/ui/phone-code-picker";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
@@ -949,7 +953,10 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
               <span className="text-xs text-muted-foreground">{t("apply.uploaded", { count: uploadedCount, total: totalCount })}</span>
             </div>
 
-            <p className="text-[11px] text-muted-foreground">{FILE_UPLOAD_HELP_TEXT}</p>
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 dark:border-amber-900/60 dark:bg-amber-950/20">
+              <p className="text-[11px] text-amber-900 dark:text-amber-200">{APPLICATION_DOCUMENT_HELP_TEXT}</p>
+              <Badge variant="outline" className="border-amber-500 bg-background text-[10px] font-bold text-amber-800 dark:text-amber-200">MAX 5 MB / FILE</Badge>
+            </div>
             {programReqsError && (
               <div className="bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-800 rounded-xl p-3 text-xs text-rose-700 dark:text-rose-300">
                 Document requirements could not be verified. Please retry.

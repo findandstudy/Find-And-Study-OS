@@ -185,6 +185,7 @@ export function InboxSubmitTab({
           educationRecords: education.educationRecords,
           notes: form.notes.trim() || null,
           interestedLevel: data.selectedLevel || null,
+          sourceLeadId: data.leadId,
           status: "active",
         } as any,
       })) as any;

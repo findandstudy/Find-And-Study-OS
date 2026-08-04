@@ -9,6 +9,9 @@ export {
   IMAGE_MAX_SIZE_MB,
   OFFICE_MAX_SIZE_MB,
   FILE_UPLOAD_HELP_TEXT,
+  APPLICATION_DOCUMENT_MAX_SIZE,
+  APPLICATION_DOCUMENT_MAX_SIZE_MB,
+  APPLICATION_DOCUMENT_HELP_TEXT,
   getExtension,
   isAllowedMimeType,
   isAllowedExtension,
@@ -19,6 +22,7 @@ export {
   getMaxSizeLabelForType,
   sanitizeFileName,
   validateUploadedFile,
+  validateApplicationDocumentFile,
   validateUploadedFileBuffer,
   validateFile,
 } from "@workspace/file-upload-validation";

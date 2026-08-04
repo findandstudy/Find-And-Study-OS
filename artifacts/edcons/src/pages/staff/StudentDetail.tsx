@@ -873,7 +873,7 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
 
   return (
     <>
-      <div className="space-y-6 max-w-4xl">
+      <div className="w-full space-y-6">
         <div className="flex items-center gap-4">
           <Button variant="ghost" size="icon" onClick={() => setLocation(`${basePath}/students`)}>
             <ArrowLeft className="w-4 h-4" />
@@ -1032,28 +1032,37 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
                 {t("studentDetailPage.editProfile")}
               </Button>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="bg-card rounded-2xl border shadow-sm p-6 space-y-4">
-                <h2 className="font-semibold text-foreground">{t("studentDetailPage.personalInformation")}</h2>
-                {isLoading ? (
-                  <div className="space-y-3">
-                    {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-5 w-full" />)}
-                  </div>
-                ) : (
-                  <div className="space-y-3 text-sm">
-                    <InfoRow icon={<Calendar className="w-4 h-4" />} label={t("studentDetailPage.dateOfBirth")} value={fmtDate(student?.dateOfBirth, dateFormat) || undefined} />
-                    <InfoRow icon={<User className="w-4 h-4" />} label={t("studentDetailPage.gender")} value={student?.gender === "female" ? t("studentDetailPage.female") : student?.gender === "male" ? t("studentDetailPage.male") : null} />
-                    <InfoRow icon={<Globe className="w-4 h-4" />} label={t("studentDetailPage.nationality")} value={student?.nationality} />
-                    <InfoRow icon={<Mail className="w-4 h-4" />} label={t("studentDetailPage.email")} value={student?.email} />
-                    <InfoRow icon={<Phone className="w-4 h-4" />} label={t("studentDetailPage.phone")} value={student?.phone} />
-                    <InfoRow icon={<User className="w-4 h-4" />} label={t("studentDetailPage.mothersName")} value={student?.motherName} />
-                    <InfoRow icon={<User className="w-4 h-4" />} label={t("studentDetailPage.fathersName")} value={student?.fatherName} />
-                    <InfoRow icon={<Home className="w-4 h-4" />} label={t("studentDetailPage.address")} value={student?.address} />
-                  </div>
-                )}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+              <div className="min-w-0 space-y-4">
+                <div className="bg-card rounded-2xl border shadow-sm p-6 space-y-4">
+                  <h2 className="font-semibold text-foreground">{t("studentDetailPage.personalInformation")}</h2>
+                  {isLoading ? (
+                    <div className="space-y-3">
+                      {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-5 w-full" />)}
+                    </div>
+                  ) : (
+                    <div className="space-y-3 text-sm">
+                      <InfoRow icon={<Calendar className="w-4 h-4" />} label={t("studentDetailPage.dateOfBirth")} value={fmtDate(student?.dateOfBirth, dateFormat) || undefined} />
+                      <InfoRow icon={<User className="w-4 h-4" />} label={t("studentDetailPage.gender")} value={student?.gender === "female" ? t("studentDetailPage.female") : student?.gender === "male" ? t("studentDetailPage.male") : null} />
+                      <InfoRow icon={<Globe className="w-4 h-4" />} label={t("studentDetailPage.nationality")} value={student?.nationality} />
+                      <InfoRow icon={<Mail className="w-4 h-4" />} label={t("studentDetailPage.email")} value={student?.email} />
+                      <InfoRow icon={<Phone className="w-4 h-4" />} label={t("studentDetailPage.phone")} value={student?.phone} />
+                      <InfoRow icon={<User className="w-4 h-4" />} label={t("studentDetailPage.mothersName")} value={student?.motherName} />
+                      <InfoRow icon={<User className="w-4 h-4" />} label={t("studentDetailPage.fathersName")} value={student?.fatherName} />
+                      <InfoRow icon={<Home className="w-4 h-4" />} label={t("studentDetailPage.address")} value={student?.address} />
+                    </div>
+                  )}
+                </div>
+
+                <AcademicInfoCard
+                  studentId={Number(id)}
+                  interestedLevel={student?.interestedLevel}
+                  applications={applications}
+                  isLoading={isLoading}
+                />
               </div>
 
-              <div className="space-y-4">
+              <div className="min-w-0 space-y-4">
                 <div className="bg-card rounded-2xl border shadow-sm p-6 space-y-4">
                   <h2 className="font-semibold text-foreground">Passport / ID</h2>
                   {isLoading ? (
@@ -1068,13 +1077,6 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
                     </div>
                   )}
                 </div>
-
-                <AcademicInfoCard
-                  studentId={Number(id)}
-                  interestedLevel={student?.interestedLevel}
-                  applications={applications}
-                  isLoading={isLoading}
-                />
 
                 <div className="bg-card rounded-2xl border shadow-sm p-6 space-y-4">
                   <h2 className="font-semibold text-foreground">{t("studentAcademic.studentInformation")}</h2>

@@ -1,9 +1,11 @@
 import { type File } from "@google-cloud/storage";
 import { Readable } from "stream";
+import { pipeline } from "node:stream/promises";
 import { randomUUID } from "crypto";
 import * as fsPromises from "node:fs/promises";
 import { createReadStream as fsCreateReadStream } from "node:fs";
 import * as nodePath from "node:path";
+import type { Request, Response as ExpressResponse } from "express";
 import {
   createGcsClient,
   ObjectUploadTimeoutError,
@@ -61,6 +63,35 @@ function getLocalStorageDir(): string {
     );
   }
   return dir;
+}
+
+function isWithinRoot(root: string, candidate: string): boolean {
+  const relative = nodePath.relative(root, candidate);
+  return relative === "" || (!relative.startsWith(`..${nodePath.sep}`) && relative !== ".." && !nodePath.isAbsolute(relative));
+}
+
+async function resolveExistingLocalPath(relativePath: string): Promise<string> {
+  if (
+    !relativePath ||
+    relativePath.includes("\0") ||
+    relativePath.includes("\\") ||
+    nodePath.isAbsolute(relativePath) ||
+    relativePath.split("/").some((part) => part === "" || part === "." || part === "..")
+  ) {
+    throw new ObjectNotFoundError();
+  }
+  const root = await fsPromises.realpath(getLocalStorageDir());
+  const candidate = nodePath.resolve(root, relativePath);
+  if (!isWithinRoot(root, candidate)) throw new ObjectNotFoundError();
+  let realCandidate: string;
+  try {
+    realCandidate = await fsPromises.realpath(candidate);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") throw new ObjectNotFoundError();
+    throw error;
+  }
+  if (!isWithinRoot(root, realCandidate)) throw new ObjectNotFoundError();
+  return realCandidate;
 }
 
 // ── LocalStorageFile ──────────────────────────────────────────────────────────
@@ -162,6 +193,40 @@ export class ObjectNotFoundError extends Error {
   }
 }
 
+export class InvalidObjectRangeError extends Error {
+  constructor(public readonly size: number) {
+    super("Requested range is not satisfiable");
+    this.name = "InvalidObjectRangeError";
+  }
+}
+
+type ByteRange = { start: number; end: number };
+
+export function parseObjectRange(rangeHeader: string | undefined, size: number): ByteRange | null {
+  if (!rangeHeader) return null;
+  const match = /^bytes=(\d*)-(\d*)$/.exec(rangeHeader.trim());
+  if (!match || size === 0) throw new InvalidObjectRangeError(size);
+  const [, rawStart, rawEnd] = match;
+  if (!rawStart && !rawEnd) throw new InvalidObjectRangeError(size);
+
+  let start: number;
+  let end: number;
+  if (!rawStart) {
+    const suffixLength = Number(rawEnd);
+    if (!Number.isSafeInteger(suffixLength) || suffixLength <= 0) throw new InvalidObjectRangeError(size);
+    start = Math.max(0, size - suffixLength);
+    end = size - 1;
+  } else {
+    start = Number(rawStart);
+    end = rawEnd ? Number(rawEnd) : size - 1;
+    if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start < 0 || end < start || start >= size) {
+      throw new InvalidObjectRangeError(size);
+    }
+    end = Math.min(end, size - 1);
+  }
+  return { start, end };
+}
+
 // ── ObjectStorageService ──────────────────────────────────────────────────────
 
 export class ObjectStorageService {
@@ -203,8 +268,6 @@ export class ObjectStorageService {
 
   async searchPublicObject(filePath: string): Promise<ObjectFileHandle | null> {
     if (isLocalDriver()) {
-      if (filePath.includes("..") || filePath.includes("\\")) return null;
-      const localDir = getLocalStorageDir();
       // Local-driver uploads (getObjectEntityUploadURL / local-upload route)
       // are written flat under `${STORAGE_LOCAL_DIR}/${prefix}/${objectId}` —
       // there is no separate "public" subdirectory anywhere in this app's
@@ -212,16 +275,14 @@ export class ObjectStorageService {
       // Try the bare path first since that's how every local-driver upload is
       // actually stored; keep the legacy "public/" join as a fallback in case
       // some deployment did place files there.
-      const bareLocalPath = nodePath.join(localDir, filePath);
       try {
-        await fsPromises.access(bareLocalPath);
+        const bareLocalPath = await resolveExistingLocalPath(filePath);
         return new LocalStorageFile(bareLocalPath, filePath);
       } catch {
         // fall through to legacy "public/" location below
       }
-      const publicLocalPath = nodePath.join(localDir, "public", filePath);
       try {
-        await fsPromises.access(publicLocalPath);
+        const publicLocalPath = await resolveExistingLocalPath(nodePath.posix.join("public", filePath));
         return new LocalStorageFile(publicLocalPath, nodePath.join("public", filePath));
       } catch {
         return null;
@@ -272,6 +333,75 @@ export class ObjectStorageService {
     };
     if (metadata.size) headers["Content-Length"] = String(metadata.size);
     return new Response(webStream, { headers });
+  }
+
+  async streamObjectToResponse(
+    req: Request,
+    res: ExpressResponse,
+    file: ObjectFileHandle,
+    options: {
+      cacheTtlSec?: number;
+      contentType?: string;
+      cacheControl?: string;
+    } = {},
+  ): Promise<void> {
+    const [metadata] = await file.getMetadata();
+    const size = Number(metadata.size);
+    if (!Number.isSafeInteger(size) || size < 0) {
+      throw new Error("Object metadata has an invalid size");
+    }
+
+    res.setHeader("Accept-Ranges", "bytes");
+    res.setHeader("Content-Type", options.contentType ?? metadata.contentType ?? "application/octet-stream");
+    res.setHeader("Cache-Control", options.cacheControl ?? `private, max-age=${options.cacheTtlSec ?? 3600}`);
+
+    let range: ByteRange | null;
+    try {
+      range = parseObjectRange(req.headers.range, size);
+    } catch (error) {
+      if (error instanceof InvalidObjectRangeError) {
+        res.status(416);
+        res.setHeader("Content-Range", `bytes */${size}`);
+        res.setHeader("Content-Length", "0");
+        res.end();
+        return;
+      }
+      throw error;
+    }
+
+    if (range) {
+      res.status(206);
+      res.setHeader("Content-Range", `bytes ${range.start}-${range.end}/${size}`);
+      res.setHeader("Content-Length", String(range.end - range.start + 1));
+    } else {
+      res.status(200);
+      res.setHeader("Content-Length", String(size));
+    }
+    if (size === 0) {
+      res.end();
+      return;
+    }
+
+    const stream = file.createReadStream(range ?? undefined);
+    let disconnected = false;
+    const closeStream = () => {
+      if (!res.writableEnded) {
+        disconnected = true;
+        stream.destroy();
+      }
+    };
+    req.once("aborted", closeStream);
+    try {
+      await pipeline(stream, res);
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (!disconnected || (code !== "ERR_STREAM_PREMATURE_CLOSE" && code !== "ECONNRESET")) {
+        throw error;
+      }
+    } finally {
+      req.off("aborted", closeStream);
+      if (!stream.destroyed) stream.destroy();
+    }
   }
 
   // ── uploadBuffer ──────────────────────────────────────────────────────────
@@ -366,14 +496,8 @@ export class ObjectStorageService {
 
     if (isLocalDriver()) {
       const relPath = objectPath.slice("/objects/".length);
-      if (relPath.includes("..") || relPath.includes("\\")) {
-        throw new ObjectNotFoundError();
-      }
-      const localDir = getLocalStorageDir();
-      const localPath = nodePath.join(localDir, relPath);
+      const localPath = await resolveExistingLocalPath(relPath);
       const localFile = new LocalStorageFile(localPath, relPath);
-      const [exists] = await localFile.exists();
-      if (!exists) throw new ObjectNotFoundError();
       return localFile;
     }
 

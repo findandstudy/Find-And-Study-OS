@@ -51,6 +51,11 @@ import { AddStudentModal } from "@/components/AddStudentModal";
 import type { AddDocTarget } from "@/components/inbox/AddAsDocumentModal";
 import { AssignDocumentFromMessageModal } from "@/components/inbox/AssignDocumentFromMessageModal";
 import PdfAttachmentCard from "@/components/inbox/PdfAttachmentCard";
+import {
+  getInboxAttachmentPreviewKind,
+  inboxAttachmentMediaUrl,
+  shouldProxyInboxAttachment,
+} from "@/components/inbox/attachmentMediaUrl";
 import { WhatsAppTemplatePicker } from "@/components/inbox/WhatsAppTemplatePicker";
 
 interface Conversation {
@@ -419,6 +424,7 @@ function readPinnedInboxTab(): InboxTabKey | null {
 function InboxTab() {
   const { t, isRTL } = useI18n();
   const { user } = useAuth();
+  const canDeleteConversations = ["super_admin", "admin"].includes(user?.role || "");
   const { toast } = useToast();
   const [, setLocation] = useLocation();
   const [tab, setTab] = useState<InboxTabKey>(() => readPinnedInboxTab() ?? "mine");
@@ -583,11 +589,11 @@ function InboxTab() {
   const [showTests, setShowTests] = useState<boolean>(() => {
     try { return localStorage.getItem("inbox_show_tests") === "true"; } catch { return false; }
   });
-  // Multi-select + reversible archive / restore only. Conversations are never
-  // permanently deleted from the inbox UI.
+  // Multi-select actions. Permanent deletion is guarded by two confirmations
+  // in the UI and a separate admin-only server authorization check.
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
-  const [bulkConfirm, setBulkConfirm] = useState<"archive" | "unarchive" | null>(null);
+  const [bulkConfirm, setBulkConfirm] = useState<"archive" | "unarchive" | "delete" | "delete-final" | null>(null);
   const [bulkBusy, setBulkBusy] = useState(false);
   // WhatsApp-style thread: windowed history + smart auto-scroll
   const [olderMsgs, setOlderMsgs] = useState<any[]>([]);
@@ -1637,21 +1643,23 @@ function InboxTab() {
     setSelectedIds(new Set());
   };
 
-  async function runBulk(type: "archive" | "unarchive") {
+  async function runBulk(type: "archive" | "unarchive" | "delete") {
     const ids = Array.from(selectedIds);
     if (ids.length === 0) return;
     setBulkBusy(true);
     try {
-      const path = type === "archive" ? "bulk-archive" : "bulk-unarchive";
+      const path = type === "archive" ? "bulk-archive" : type === "unarchive" ? "bulk-unarchive" : "bulk-delete";
       await customFetch(`/api/inbox/conversations/${path}`, {
         method: "POST",
-        body: JSON.stringify({ ids }),
+        body: JSON.stringify(type === "delete" ? { ids, confirm: "DELETE_CONVERSATIONS" } : { ids }),
       });
       toast({
         title:
           type === "archive"
             ? t("inbox.bulk.archivedToast", { count: ids.length })
-            : t("inbox.bulk.restoredToast", { count: ids.length }),
+            : type === "unarchive"
+              ? t("inbox.bulk.restoredToast", { count: ids.length })
+              : t("inbox.bulk.deletedToast", { count: ids.length }),
       });
       setBulkConfirm(null);
       exitSelectMode();
@@ -1697,10 +1705,17 @@ function InboxTab() {
 
   return (
     <>
-    <Card className="border-none shadow-lg shadow-black/5 overflow-hidden" style={{ height: "calc(100vh - 120px)" }}>
+    <Card
+      className="overflow-hidden rounded-2xl border border-border/60 bg-card shadow-sm"
+      style={{
+        height: "calc(100dvh - 150px)",
+        maxHeight: "calc(100dvh - 150px)",
+        minHeight: "32rem",
+      }}
+    >
       <div className="flex h-full min-h-0">
         <div
-          className={`h-full min-h-0 min-w-0 overflow-hidden w-full lg:w-[var(--inbox-list-w)] lg:shrink-0 ${selectedId !== null ? "hidden lg:flex lg:flex-col" : "flex flex-col"}`}
+          className={`h-full min-h-0 min-w-0 overflow-hidden w-full lg:w-[var(--inbox-list-w)] lg:shrink-0 ${selectedId !== null ? "hidden min-[1180px]:flex min-[1180px]:!w-[220px] min-[1180px]:flex-col min-[1440px]:!w-[var(--inbox-list-w)]" : "flex flex-col"}`}
           style={{ "--inbox-list-w": `${listWidth}px` } as React.CSSProperties}
         >
           <div className="p-3 border-b border-border/50 space-y-2">
@@ -1924,6 +1939,18 @@ function InboxTab() {
                     <Archive className="w-3 h-3" /> {t("inbox.bulk.archive")}
                   </Button>
                 )}
+                {canDeleteConversations && (
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    className="h-6 px-2 text-[11px] gap-1"
+                    disabled={selectedIds.size === 0 || bulkBusy}
+                    onClick={() => setBulkConfirm("delete")}
+                    data-testid="button-bulk-delete"
+                  >
+                    <Trash2 className="w-3 h-3" /> {t("inbox.bulk.delete")}
+                  </Button>
+                )}
               </div>
             )}
           </div>
@@ -1977,7 +2004,7 @@ function InboxTab() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-1.5 min-w-0">
+                      <div className="flex min-w-0 flex-1 items-center gap-1.5">
                         <p className={`text-sm truncate ${isUnread ? "font-extrabold text-foreground" : "font-medium"}`}>
                           {displayName}
                         </p>
@@ -1986,23 +2013,25 @@ function InboxTab() {
                             {t("inbox.tabs.unread")}
                           </span>
                         )}
-                        {lineBrand && (
-                          <span
-                            className={cn(
-                              "inline-flex h-4 shrink-0 items-center gap-1 rounded-full border px-1.5 text-[9px] font-bold leading-none",
-                              lineBrand.badgeClassName,
-                            )}
-                            title={`Gelen hat: ${lineBrand.label}`}
-                            data-testid={`line-badge-${c.id}`}
-                          >
-                            <span className={cn("h-1.5 w-1.5 rounded-full", lineBrand.dotClassName)} />
-                            {lineBrand.label}
-                          </span>
-                        )}
                       </div>
                       {c.unmatched && <Badge variant="outline" className="text-[9px] h-4 border-amber-300 text-amber-700 px-1">unmatched</Badge>}
                     </div>
-                    <p className={`text-xs truncate ${isUnread ? "text-foreground font-bold" : "text-muted-foreground"}`}>{c.lastMessagePreview || "—"}</p>
+                    <div className="mt-0.5 flex min-w-0 items-center gap-1.5">
+                      {lineBrand && (
+                        <span
+                          className={cn(
+                            "inline-flex h-4 max-w-[7.5rem] shrink-0 items-center gap-1 rounded-full border px-1.5 text-[9px] font-bold leading-none",
+                            lineBrand.badgeClassName,
+                          )}
+                          title={`Gelen hat: ${lineBrand.label}`}
+                          data-testid={`line-badge-${c.id}`}
+                        >
+                          <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", lineBrand.dotClassName)} />
+                          <span className="truncate">{lineBrand.label}</span>
+                        </span>
+                      )}
+                      <p className={`min-w-0 flex-1 truncate text-xs ${isUnread ? "text-foreground font-bold" : "text-muted-foreground"}`}>{c.lastMessagePreview || "—"}</p>
+                    </div>
                   </div>
                   {!selectMode && (c.awaitingReply || isUnread) && (
                     <div className="flex items-center gap-1.5 shrink-0">
@@ -2059,7 +2088,7 @@ function InboxTab() {
           onPointerDown={startListResize}
           onDoubleClick={resetListWidth}
           title={t("inbox.resizer.resetHint")}
-          className="hidden lg:flex shrink-0 w-[7px] -mx-[3px] z-10 cursor-col-resize items-stretch justify-center group touch-none"
+          className="hidden min-[1440px]:flex shrink-0 w-[7px] -mx-[3px] z-10 cursor-col-resize items-stretch justify-center group touch-none"
         >
           <div className="w-px bg-border/50 group-hover:bg-primary/60 group-active:bg-primary transition-colors" />
         </div>
@@ -2074,8 +2103,8 @@ function InboxTab() {
             <div className="flex items-center justify-center w-full h-full"><Loader2 className="w-5 h-5 animate-spin text-primary" /></div>
           ) : (
             <>
-              <div className="px-3 py-2.5 border-b border-border/50 flex flex-wrap items-start gap-x-3 gap-y-2 shrink-0">
-                <Button size="icon" variant="ghost" className="lg:hidden" onClick={() => setSelectedId(null)}>
+              <div className="flex shrink-0 flex-wrap items-start gap-x-3 gap-y-2 border-b border-border/60 bg-background/95 px-3 py-2.5 sm:px-4">
+                <Button size="icon" variant="ghost" className="h-8 w-8 min-[1180px]:hidden" onClick={() => setSelectedId(null)}>
                   <ArrowLeft className="w-4 h-4" />
                 </Button>
                 <div className="flex-1 basis-[18rem] min-w-0">
@@ -2192,7 +2221,7 @@ function InboxTab() {
                   <Button
                     size="icon"
                     variant="ghost"
-                    className="h-8 w-8 min-[1800px]:hidden"
+                    className="h-8 w-8 lg:hidden"
                     onClick={() => setSidebarSheetOpen(true)}
                     aria-label={t("inbox.sidebar.openLeadInfo")}
                     data-testid="button-open-lead-info"
@@ -2242,7 +2271,7 @@ function InboxTab() {
                   </div>
                 </div>
               )}
-              <div ref={msgScrollRef} onScroll={handleMsgScroll} className="flex-1 min-h-0 overflow-y-auto p-4 space-y-3" data-testid="inbox-message-scroll">
+              <div ref={msgScrollRef} onScroll={handleMsgScroll} className="flex-1 min-h-0 space-y-3 overflow-y-auto bg-gradient-to-b from-muted/15 via-background to-background p-3 sm:p-4 xl:px-6" data-testid="inbox-message-scroll">
                 {hasMoreOlder && (
                   <div className="flex justify-center">
                     <Button
@@ -2346,7 +2375,7 @@ function InboxTab() {
                           )}
                         </div>
                       </div>
-                      <div className="flex flex-col max-w-[75%]">
+                      <div className="flex max-w-[min(82%,42rem)] flex-col">
                       <div className={`rounded-2xl px-3 py-2 text-sm ${out ? "bg-primary text-primary-foreground" : "bg-secondary"}`}>
                         {(m.metadata as any)?.forwarded && (
                           <div className={`flex items-center gap-1 text-[10px] italic mb-1 ${out ? "text-primary-foreground/70" : "text-muted-foreground"}`}>
@@ -2374,20 +2403,12 @@ function InboxTab() {
                             <div className="mt-1.5 space-y-1.5">
                               {allAtts.map((a: MessageAttachment, i: number) => {
                                 const rawUrl = a.url ?? a.fileUrl ?? "";
-                                // Zernio media URLs require a Bearer apiKey — load them
-                                // through our authenticated server proxy instead.
-                                const isStoredInboxObject = (() => {
-                                  try {
-                                    const parsed = new URL(rawUrl, window.location.origin);
-                                    return parsed.origin === window.location.origin
-                                      && /^\/api\/storage\/(?:public-objects|objects)\//.test(parsed.pathname);
-                                  } catch {
-                                    return false;
-                                  }
-                                })();
-                                const url = rawUrl.startsWith("https://zernio.com/") || isStoredInboxObject
-                                  ? `/api/inbox/media/${m.id}/${i}`
-                                  : rawUrl;
+                                // Provider media and historical inbox-storage URLs are
+                                // normalized through the authenticated API. This avoids
+                                // exposing provider credentials and lets pdfjs preview
+                                // absolute URLs saved under an older app origin.
+                                const usesInboxMediaProxy = shouldProxyInboxAttachment(rawUrl);
+                                const url = inboxAttachmentMediaUrl(rawUrl, m.id, i);
                                 const type = a.type ?? a.fileType ?? "file";
                                 const rawMeta = (m.metadata as any)?.raw;
                                 const waRawType = rawMeta?.type;
@@ -2421,6 +2442,11 @@ function InboxTab() {
                                   (v) => typeof v === "string" && v.trim() && v.trim().toLowerCase() !== "file",
                                 ) as string | undefined;
                                 const name = explicitName ?? typedName;
+                                const previewKind = getInboxAttachmentPreviewKind({
+                                  type,
+                                  mimeType: (a as any).mimeType ?? a.fileType,
+                                  name,
+                                });
                                 // "Add" is always available on inbound attachments: with a
                                 // linked student/lead it saves directly; otherwise it opens
                                 // the create-and-assign flow (unmatched fallback modal).
@@ -2442,7 +2468,7 @@ function InboxTab() {
                                       <button
                                         type="button"
                                         title={t("inbox.addAsDoc.button")}
-                                        onClick={() => setAddDocTarget({ msgId: m.id, attachIdx: i, attachUrl: url, attachName: name, isImage: type === "image" })}
+                                        onClick={() => setAddDocTarget({ msgId: m.id, attachIdx: i, attachUrl: url, attachName: name, isImage: previewKind === "image" })}
                                         className={_btnCls}
                                       >
                                         <FilePlus2 className="w-3 h-3" />
@@ -2451,7 +2477,7 @@ function InboxTab() {
                                     )}
                                   </div>
                                 );
-                                if (type === "image") return (
+                                if (previewKind === "image") return (
                                   <div key={i} className="space-y-1">
                                     <button type="button" onClick={() => setAttachPreview({ url, name, isImage: true, isPdf: false })}>
                                       <img src={url} alt={name} className="max-w-[240px] rounded-lg cursor-pointer hover:opacity-90 transition-opacity" loading="lazy" draggable={false} />
@@ -2459,25 +2485,24 @@ function InboxTab() {
                                     {actionRow}
                                   </div>
                                 );
-                                if (type === "video") return (
+                                if (previewKind === "video") return (
                                   <div key={i} className="space-y-1">
                                     <video src={url} controls className="max-w-[240px] rounded-lg" />
                                     {actionRow}
                                   </div>
                                 );
-                                if (type === "audio") return (
+                                if (previewKind === "audio") return (
                                   <div key={i} className="space-y-1">
                                     <audio src={url} controls className="w-full" />
                                     {actionRow}
                                   </div>
                                 );
                                 const fileExt = name.includes(".") ? (name.split(".").pop() ?? "").toUpperCase() : "";
-                                const isPdfFile = fileExt === "PDF" || String(a.fileType ?? "").includes("pdf") || (type === "document" && fileExt === "");
-                                if (isPdfFile) return (
+                                if (previewKind === "pdf") return (
                                   <div key={i} className="space-y-1">
                                     <PdfAttachmentCard
                                       url={url}
-                                      serverThumbUrl={rawUrl.startsWith("https://zernio.com/") ? `/api/inbox/media/${m.id}/${i}/pdf-thumb` : null}
+                                      serverThumbUrl={usesInboxMediaProxy ? `/api/inbox/media/${m.id}/${i}/pdf-thumb` : null}
                                       name={name}
                                       fileSize={a.fileSize ?? null}
                                       outbound={out}
@@ -2592,7 +2617,7 @@ function InboxTab() {
                 activeTab={composeTab}
                 onTabChange={setComposeTab}
                 chatSlot={
-                  <div className="p-3 flex flex-col gap-2">
+                  <div className="flex flex-col gap-2 p-2.5 sm:p-3">
                     {replyToMsg && (
                       <div className="flex items-center gap-2 rounded-lg bg-muted/60 border border-border px-2.5 py-1.5 text-xs">
                         <CornerUpLeft className="w-3.5 h-3.5 shrink-0 text-muted-foreground" />
@@ -2630,7 +2655,7 @@ function InboxTab() {
                         e.target.value = "";
                       }}
                     />
-                    <div className="flex items-end gap-2">
+                    <div className="flex items-end gap-1.5 sm:gap-2">
                       <div className="relative flex-1 min-w-0">
                         {slashQuery !== null && (
                           <div className="absolute bottom-[calc(100%+0.4rem)] left-0 right-0 z-30 max-h-72 overflow-y-auto rounded-xl border border-border bg-popover p-1.5 shadow-xl">
@@ -2750,10 +2775,10 @@ function InboxTab() {
                         size="sm"
                         onClick={sendReply}
                         disabled={sending || uploading || voiceRecorder.isRecording || (reply.trim() === "" && pendingFiles.length === 0) || metaReplyWindowClosed}
-                        className="h-9 gap-1"
+                        className="h-9 shrink-0 gap-1 px-3"
                       >
                         {(sending || uploading) ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
-                        {t("inbox.send") || "Send"}
+                        <span className="hidden sm:inline">{t("inbox.send") || "Send"}</span>
                       </Button>
                     </div>
                     <div className="flex items-center justify-between gap-2">
@@ -2793,7 +2818,10 @@ function InboxTab() {
         </div>
 
         {selectedId !== null && detail && (
-          <div className="hidden min-[1800px]:flex min-[1800px]:w-[340px] min-[1800px]:shrink-0 min-[1800px]:flex-col h-full min-h-0 overflow-hidden border-l border-border/50 bg-muted/20">
+          <div
+            className="hidden h-full min-h-0 overflow-hidden border-l border-border/50 bg-muted/20 lg:flex lg:shrink-0 lg:flex-col"
+            style={{ width: 238 }}
+          >
             <LeadDetailSidebar
               detail={detail}
               conversationId={selectedId}
@@ -2817,7 +2845,7 @@ function InboxTab() {
         <Sheet open={sidebarSheetOpen} onOpenChange={setSidebarSheetOpen}>
           <SheetContent
             side={isRTL ? "left" : "right"}
-            className="w-[90vw] max-w-md p-0 min-[1800px]:hidden flex flex-col"
+            className="flex w-[92vw] max-w-md flex-col p-0 lg:hidden"
           >
             <SheetHeader className="px-4 py-3 border-b border-border/50 text-start">
               <SheetTitle className="text-sm">{t("inbox.sidebar.leadInfoTitle")}</SheetTitle>
@@ -3266,20 +3294,30 @@ function InboxTab() {
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              {bulkConfirm === "unarchive" ? (
+              {bulkConfirm === "delete" || bulkConfirm === "delete-final" ? (
+                <Trash2 className="w-4 h-4 text-destructive" />
+              ) : bulkConfirm === "unarchive" ? (
                 <ArchiveRestore className="w-4 h-4" />
               ) : (
                 <Archive className="w-4 h-4" />
               )}
-              {bulkConfirm === "unarchive"
-                ? t("inbox.bulk.restoreConfirmTitle")
-                : t("inbox.bulk.archiveConfirmTitle")}
+              {bulkConfirm === "delete-final"
+                ? t("inbox.bulk.deleteConfirmTitle2")
+                : bulkConfirm === "delete"
+                  ? t("inbox.bulk.deleteConfirmTitle")
+                  : bulkConfirm === "unarchive"
+                    ? t("inbox.bulk.restoreConfirmTitle")
+                    : t("inbox.bulk.archiveConfirmTitle")}
             </DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground">
-            {bulkConfirm === "unarchive"
-              ? t("inbox.bulk.restoreConfirmBody", { count: selectedIds.size })
-              : t("inbox.bulk.archiveConfirmBody", { count: selectedIds.size })}
+            {bulkConfirm === "delete-final"
+              ? t("inbox.bulk.deleteConfirmBody2", { count: selectedIds.size })
+              : bulkConfirm === "delete"
+                ? t("inbox.bulk.deleteConfirmBody", { count: selectedIds.size })
+                : bulkConfirm === "unarchive"
+                  ? t("inbox.bulk.restoreConfirmBody", { count: selectedIds.size })
+                  : t("inbox.bulk.archiveConfirmBody", { count: selectedIds.size })}
           </p>
           <DialogFooter>
             <Button variant="outline" disabled={bulkBusy} onClick={() => setBulkConfirm(null)}>
@@ -3287,12 +3325,23 @@ function InboxTab() {
             </Button>
             <Button
               disabled={bulkBusy}
-              onClick={() => runBulk(bulkConfirm === "unarchive" ? "unarchive" : "archive")}
+              variant={bulkConfirm === "delete" || bulkConfirm === "delete-final" ? "destructive" : "default"}
+              onClick={() => {
+                if (bulkConfirm === "delete") setBulkConfirm("delete-final");
+                else if (bulkConfirm === "delete-final") void runBulk("delete");
+                else void runBulk(bulkConfirm === "unarchive" ? "unarchive" : "archive");
+              }}
               className="gap-1"
               data-testid="button-bulk-confirm"
             >
               {bulkBusy && <Loader2 className="w-3 h-3 animate-spin" />}
-              {bulkConfirm === "unarchive" ? t("inbox.bulk.restore") : t("inbox.bulk.archive")}
+              {bulkConfirm === "delete-final"
+                ? t("inbox.bulk.deleteForever")
+                : bulkConfirm === "delete"
+                  ? t("inbox.bulk.deleteContinue")
+                  : bulkConfirm === "unarchive"
+                    ? t("inbox.bulk.restore")
+                    : t("inbox.bulk.archive")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -3305,7 +3354,7 @@ function InboxTab() {
 function ConversationList({
   conversations, selectedId, onSelect, onNewConversation, search, setSearch,
   sortOrder, onToggleSort, selectMode, onToggleSelectMode, selectedIds,
-  onToggleSelected, onSelectAll, onBulkArchive, bulkBusy
+  onToggleSelected, onSelectAll, onBulkArchive, onBulkDelete, bulkBusy
 }: {
   conversations: Conversation[];
   selectedId: number | null;
@@ -3321,10 +3370,12 @@ function ConversationList({
   onToggleSelected: (id: number) => void;
   onSelectAll: () => void;
   onBulkArchive: () => void;
+  onBulkDelete: () => void;
   bulkBusy: boolean;
 }) {
   const { user } = useAuth();
   const { t } = useI18n();
+  const canDeleteConversations = ["super_admin", "admin"].includes(user?.role || "");
 
   return (
     <>
@@ -3389,6 +3440,18 @@ function ConversationList({
             >
               <Archive className="w-3 h-3" /> {t("inbox.bulk.archive")}
             </Button>
+            {canDeleteConversations && (
+              <Button
+                size="sm"
+                variant="destructive"
+                className="h-6 px-2 text-[11px] gap-1"
+                disabled={selectedIds.size === 0 || bulkBusy}
+                onClick={onBulkDelete}
+                data-testid="button-internal-bulk-delete"
+              >
+                <Trash2 className="w-3 h-3" /> {t("inbox.bulk.delete")}
+              </Button>
+            )}
           </div>
         )}
       </div>
@@ -5085,7 +5148,7 @@ export default function MessagesPage() {
   });
   const [internalSelectMode, setInternalSelectMode] = useState(false);
   const [internalSelectedIds, setInternalSelectedIds] = useState<Set<number>>(new Set());
-  const [internalBulkConfirm, setInternalBulkConfirm] = useState(false);
+  const [internalBulkConfirm, setInternalBulkConfirm] = useState<"archive" | "delete" | "delete-final" | null>(null);
   const [internalBulkBusy, setInternalBulkBusy] = useState(false);
   const [internalListWidth, setInternalListWidth] = useState<number>(() => readStoredListWidth(INTERNAL_LIST_WIDTH_STORAGE_KEY));
   const internalListResizeCleanupRef = useRef<(() => void) | null>(null);
@@ -5150,17 +5213,22 @@ export default function MessagesPage() {
     });
   };
 
-  async function runInternalBulk() {
+  async function runInternalBulk(type: "archive" | "delete") {
     const ids = Array.from(internalSelectedIds);
     if (ids.length === 0) return;
     setInternalBulkBusy(true);
     try {
-      await customFetch("/api/inbox/conversations/bulk-archive", {
+      const path = type === "delete" ? "bulk-delete" : "bulk-archive";
+      await customFetch(`/api/inbox/conversations/${path}`, {
         method: "POST",
-        body: JSON.stringify({ ids }),
+        body: JSON.stringify(type === "delete" ? { ids, confirm: "DELETE_CONVERSATIONS" } : { ids }),
       });
-      toast({ title: t("inbox.bulk.archivedToast", { count: ids.length }) });
-      setInternalBulkConfirm(false);
+      toast({
+        title: type === "delete"
+          ? t("inbox.bulk.deletedToast", { count: ids.length })
+          : t("inbox.bulk.archivedToast", { count: ids.length }),
+      });
+      setInternalBulkConfirm(null);
       setInternalSelectMode(false);
       setInternalSelectedIds(new Set());
       if (selectedConv && ids.includes(selectedConv)) setSelectedConv(null);
@@ -5229,21 +5297,21 @@ export default function MessagesPage() {
 
   return (
     <>
-      <div>
-        <Tabs defaultValue="inbox" className="space-y-4">
-          <TabsList className="h-10">
-            <TabsTrigger value="inbox" className="gap-2 px-4">
+      <div className="min-h-0">
+        <Tabs defaultValue="inbox" className="space-y-3">
+          <TabsList className="h-10 max-w-full justify-start overflow-x-auto rounded-xl p-1 sm:w-fit">
+            <TabsTrigger value="inbox" className="shrink-0 gap-2 px-3 sm:px-4">
               <InboxIcon className="w-4 h-4" /> Inbox
             </TabsTrigger>
-            <TabsTrigger value="messages" className="gap-2 px-4">
+            <TabsTrigger value="messages" className="shrink-0 gap-2 px-3 sm:px-4">
               <MessageCircle className="w-4 h-4" /> Internal
             </TabsTrigger>
             {canBroadcast && (
-              <TabsTrigger value="broadcast" className="gap-2 px-4">
+              <TabsTrigger value="broadcast" className="shrink-0 gap-2 px-3 sm:px-4">
                 <Megaphone className="w-4 h-4" /> Broadcast
               </TabsTrigger>
             )}
-            <TabsTrigger value="templates" className="gap-2 px-4">
+            <TabsTrigger value="templates" className="shrink-0 gap-2 px-3 sm:px-4">
               <FileText className="w-4 h-4" /> Templates
             </TabsTrigger>
           </TabsList>
@@ -5253,7 +5321,14 @@ export default function MessagesPage() {
           </TabsContent>
 
           <TabsContent value="messages">
-            <Card className="border-none shadow-lg shadow-black/5 overflow-hidden" style={{ height: "calc(100vh - 120px)" }}>
+            <Card
+              className="overflow-hidden rounded-2xl border border-border/60 bg-card shadow-sm"
+              style={{
+                height: "calc(100dvh - 150px)",
+                maxHeight: "calc(100dvh - 150px)",
+                minHeight: "32rem",
+              }}
+            >
               <div className="flex h-full min-h-0">
                 <div
                   className={`h-full min-h-0 min-w-0 overflow-hidden w-full lg:w-[var(--internal-list-w)] lg:shrink-0 ${selectedConv !== null ? "hidden lg:block" : ""}`}
@@ -5282,7 +5357,8 @@ export default function MessagesPage() {
                           : new Set(conversations.map((c) => c.id)),
                       )
                     }
-                    onBulkArchive={() => setInternalBulkConfirm(true)}
+                    onBulkArchive={() => setInternalBulkConfirm("archive")}
+                    onBulkDelete={() => setInternalBulkConfirm("delete")}
                     bulkBusy={internalBulkBusy}
                   />
                 </div>
@@ -5381,29 +5457,50 @@ export default function MessagesPage() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={internalBulkConfirm} onOpenChange={(open) => { if (!open && !internalBulkBusy) setInternalBulkConfirm(false); }}>
+      <Dialog open={internalBulkConfirm !== null} onOpenChange={(open) => { if (!open && !internalBulkBusy) setInternalBulkConfirm(null); }}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Archive className="w-4 h-4" />
-              {t("inbox.bulk.archiveConfirmTitle")}
+              {internalBulkConfirm === "delete" || internalBulkConfirm === "delete-final" ? (
+                <Trash2 className="w-4 h-4 text-destructive" />
+              ) : (
+                <Archive className="w-4 h-4" />
+              )}
+              {internalBulkConfirm === "delete-final"
+                ? t("inbox.bulk.deleteConfirmTitle2")
+                : internalBulkConfirm === "delete"
+                  ? t("inbox.bulk.deleteConfirmTitle")
+                  : t("inbox.bulk.archiveConfirmTitle")}
             </DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground">
-            {t("inbox.bulk.archiveConfirmBody", { count: internalSelectedIds.size })}
+            {internalBulkConfirm === "delete-final"
+              ? t("inbox.bulk.deleteConfirmBody2", { count: internalSelectedIds.size })
+              : internalBulkConfirm === "delete"
+                ? t("inbox.bulk.deleteConfirmBody", { count: internalSelectedIds.size })
+                : t("inbox.bulk.archiveConfirmBody", { count: internalSelectedIds.size })}
           </p>
           <DialogFooter>
-            <Button variant="outline" disabled={internalBulkBusy} onClick={() => setInternalBulkConfirm(false)}>
+            <Button variant="outline" disabled={internalBulkBusy} onClick={() => setInternalBulkConfirm(null)}>
               {t("messagesPage.cancel")}
             </Button>
             <Button
               disabled={internalBulkBusy}
-              onClick={runInternalBulk}
+              variant={internalBulkConfirm === "delete" || internalBulkConfirm === "delete-final" ? "destructive" : "default"}
+              onClick={() => {
+                if (internalBulkConfirm === "delete") setInternalBulkConfirm("delete-final");
+                else if (internalBulkConfirm === "delete-final") void runInternalBulk("delete");
+                else void runInternalBulk("archive");
+              }}
               className="gap-1"
               data-testid="button-internal-bulk-confirm"
             >
               {internalBulkBusy && <Loader2 className="w-3 h-3 animate-spin" />}
-              {t("inbox.bulk.archive")}
+              {internalBulkConfirm === "delete-final"
+                ? t("inbox.bulk.deleteForever")
+                : internalBulkConfirm === "delete"
+                  ? t("inbox.bulk.deleteContinue")
+                  : t("inbox.bulk.archive")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -5457,7 +5554,7 @@ function AssignStaffDropdown({
       <DropdownMenuTrigger asChild>
         <Button size="sm" variant="outline" className="h-7 text-xs gap-1" data-testid="button-assign-staff">
           <UserCheck className="w-3 h-3" />
-          <span className="max-w-[140px] truncate">
+          <span className="hidden max-w-[140px] truncate sm:inline">
             {currentId != null && currentName ? currentName : t("messagesPage.assignOwner")}
           </span>
           <ChevronDown className="w-3 h-3" />

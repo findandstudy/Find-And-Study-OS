@@ -68,6 +68,8 @@ import {
   Bot,
   ExternalLink,
   Gauge,
+  Maximize2,
+  Minimize2,
 } from "lucide-react";
 import { PopupRenderer } from "@/components/PopupRenderer";
 import { Button } from "@/components/ui/button";
@@ -294,6 +296,16 @@ const ROLE_COLORS: Record<string, string> = {
   agent_staff: "bg-teal-500/10 text-teal-600",
 };
 
+type PanelDensity = "compact" | "comfortable";
+const PANEL_DENSITY_STORAGE_KEY = "edcons:panel-density";
+
+function getInitialPanelDensity(): PanelDensity {
+  if (typeof window === "undefined") return "compact";
+  return window.localStorage.getItem(PANEL_DENSITY_STORAGE_KEY) === "comfortable"
+    ? "comfortable"
+    : "compact";
+}
+
 export function DashboardLayout({ children }: { children: ReactNode }) {
   // useAuth returns liveUser ?? getStickyUser() — never undefined after first
   // authentication. prevUserRef adds one more layer of defense.
@@ -304,6 +316,7 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
 
   const [location, setLocation] = useLocation();
   const [navPending, startNavTransition] = useTransition();
+  const [panelDensity, setPanelDensity] = useState<PanelDensity>(getInitialPanelDensity);
   const navigate = (url: string) => startNavTransition(() => setLocation(url));
   const navigateAndRefresh = (url: string) => {
     startNavTransition(() => setLocation(url));
@@ -327,6 +340,15 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
   const { season, setSeason, availableYears } = useSeason();
   const { mode, setMode, resolvedTheme, settings: themeSettings } = useTheme();
   const isAgentRole = !!user && (user.role === "agent" || user.role === "sub_agent" || user.role === "agent_staff");
+
+  useEffect(() => {
+    const root = document.documentElement;
+    root.dataset.panelDensity = panelDensity;
+    window.localStorage.setItem(PANEL_DENSITY_STORAGE_KEY, panelDensity);
+    return () => {
+      delete root.dataset.panelDensity;
+    };
+  }, [panelDensity]);
 
   const { data: agentProfile } = useQuery({
     queryKey: ["agent-me"],
@@ -534,7 +556,10 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
   const sidebarSquareLogo = agentLogoSrc ?? tenantSquareLogoSrc;
 
   return (
-    <SidebarProvider style={{ "--sidebar-width": "16rem" } as React.CSSProperties}>
+    <SidebarProvider
+      data-panel-density={panelDensity}
+      style={{ "--sidebar-width": panelDensity === "compact" ? "15rem" : "16rem" } as React.CSSProperties}
+    >
       <div className="flex min-h-screen w-full bg-secondary/20">
         <Sidebar collapsible="icon" className="border-r border-border/60 shadow-sm">
           <SidebarContent className="bg-card">
@@ -827,6 +852,18 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
                 </div>
               )}
               <NotificationCenter />
+              <Button
+                size="icon"
+                variant="ghost"
+                className="w-8 h-8 rounded-lg"
+                onClick={() => setPanelDensity(current => current === "compact" ? "comfortable" : "compact")}
+                title={panelDensity === "compact" ? "Switch to comfortable view" : "Switch to compact view"}
+                aria-label="Compact panel view"
+                aria-pressed={panelDensity === "compact"}
+                data-testid="panel-density-toggle"
+              >
+                {panelDensity === "compact" ? <Maximize2 className="w-4 h-4" /> : <Minimize2 className="w-4 h-4" />}
+              </Button>
               <Button size="icon" variant="ghost" className="w-8 h-8 rounded-lg"
                 onClick={() => setMode(resolvedTheme === "dark" ? "light" : "dark")}
                 title={resolvedTheme === "dark" ? t("dashboard.switchToLight") : t("dashboard.switchToDark")}>

@@ -449,6 +449,12 @@ export const CreateStudentBody = zod.object({
   gpa: zod.string().nullish(),
   languageScore: zod.string().nullish(),
   notes: zod.string().nullish(),
+  sourceLeadId: zod
+    .number()
+    .nullish()
+    .describe(
+      "Existing accessible lead whose branch, owner, and origin are inherited by the new student.",
+    ),
 });
 
 /**

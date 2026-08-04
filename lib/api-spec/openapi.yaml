@@ -4216,6 +4216,9 @@ components:
           type: ["string", "null"]
         notes:
           type: ["string", "null"]
+        sourceLeadId:
+          type: ["integer", "null"]
+          description: Existing accessible lead whose branch, owner, and origin are inherited by the new student.
       required:
         - firstName
         - lastName

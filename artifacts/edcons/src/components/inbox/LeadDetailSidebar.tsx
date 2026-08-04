@@ -247,7 +247,7 @@ export function LeadDetailSidebar({
           key={tab}
           type="button"
           onClick={() => setActiveTab(tab)}
-          className={`flex-1 px-1 py-2 text-[11px] font-semibold uppercase tracking-wide transition-colors border-b-2 -mb-px ${
+          className={`flex-auto whitespace-nowrap px-1 py-2 text-[10px] font-semibold uppercase tracking-normal transition-colors border-b-2 -mb-px ${
             activeTab === tab
               ? "border-primary text-primary bg-background"
               : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/40"

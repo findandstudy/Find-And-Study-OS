@@ -8,11 +8,10 @@ import { clearStageFinanceCache } from "../lib/stageFinance";
 
 const router: IRouter = Router();
 
-// One-shot startup tasks: dedup + ensure unique index. The behavior-flag
-// backfill (Task #134) is gated on a marker row in `pipeline_migrations`
-// so it runs exactly once per database — admin-configured behavior is
-// never overwritten on subsequent boots.
-(async () => {
+// Legacy migration archaeology only. This function is intentionally not
+// invoked by API boot. Its DDL and data repairs must be reconciled into the
+// reviewed Drizzle migration ledger or a bounded manual operation first.
+async function legacyPipelineBootMigration(): Promise<void> {
   try {
     await db.execute(sql`
       DELETE FROM pipeline_stages
@@ -177,7 +176,7 @@ const router: IRouter = Router();
   } catch (err) {
     console.error("[PIPELINE] Backfill failed:", err);
   }
-})();
+}
 
 const MANAGER_ROLES = ["super_admin", "admin", "manager"] as const;
 

@@ -71,7 +71,10 @@ export function configuredInboxMediaHosts(
   extraHosts: Iterable<string> = [],
 ): Set<string> {
   const hosts = new Set(
-    Array.from(extraHosts, (host) => String(host).trim().toLowerCase()).filter(Boolean),
+    [
+      "apply.findandstudy.com",
+      ...Array.from(extraHosts, (host) => String(host).trim().toLowerCase()),
+    ].filter(Boolean),
   );
   for (const raw of [
     process.env.BASE_URL,

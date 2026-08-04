@@ -3,7 +3,7 @@
 # Find & Study — Database Migration Script
 # =============================================================================
 # Exports SOURCE_DB_URL → timestamped backup, restores to TARGET_DB_URL,
-# then runs drizzle-kit push to apply schema changes.
+# then runs the reviewed migration ledger through the explicit migration command.
 #
 # Usage:
 #   SOURCE_DB_URL="postgresql://..." TARGET_DB_URL="postgresql://..." \
@@ -11,7 +11,38 @@
 #
 # Or export vars in your shell / .env first, then: bash scripts/db-migrate.sh
 # =============================================================================
-set -e
+set -eo pipefail
+
+TARGET_ENV="${MIGRATION_TARGET_ENV:-}"
+SOURCE_ENV="${MIGRATION_SOURCE_ENV:-}"
+case "$TARGET_ENV" in
+  local|development|test) ;;
+  production|prod|staging|stage)
+    echo "[ERR] This restore helper is forbidden for production/staging targets." >&2
+    exit 1
+    ;;
+  *)
+    echo "[ERR] MIGRATION_TARGET_ENV must be local, development or test." >&2
+    exit 1
+    ;;
+esac
+if [ "${ALLOW_LOCAL_DB_MIGRATION:-}" != "true" ]; then
+  echo "[ERR] ALLOW_LOCAL_DB_MIGRATION=true is required." >&2
+  exit 1
+fi
+case "$SOURCE_ENV" in
+  production|prod|staging|stage)
+    if [ "${ALLOW_PRODUCTION_DB_READ:-}" != "true" ]; then
+      echo "[ERR] Production/staging source requires ALLOW_PRODUCTION_DB_READ=true." >&2
+      exit 1
+    fi
+    ;;
+  local|development|test) ;;
+  *)
+    echo "[ERR] MIGRATION_SOURCE_ENV must explicitly classify the source." >&2
+    exit 1
+    ;;
+esac
 
 # --- Colours -----------------------------------------------------------------
 RED='\033[0;31m'
@@ -117,35 +148,27 @@ if pg_restore \
     "$BACKUP_FILE" 2>&1 | sed "s/^/  /"; then
   log_ok "Restore complete."
 else
-  # pg_restore exits non-zero on warnings (e.g. missing objects to drop)
-  # Only treat it as fatal if the file is empty or connection failed
-  log_warn "pg_restore exited with warnings (usually safe — check output above)."
+  log_error "pg_restore failed. Refusing to run migrations against a partial or unverified restore."
+  exit 1
 fi
 
-# --- Step 3: Apply Drizzle schema --------------------------------------------
-log_section "Step 3/3 — Applying Drizzle schema (drizzle-kit push)"
+# --- Step 3: Apply reviewed migrations ---------------------------------------
+log_section "Step 3/3 — Applying reviewed Drizzle migrations"
 
-log_info "Setting DATABASE_URL to target and running drizzle-kit push..."
+log_info "Setting DATABASE_URL to target and running the canonical migration ledger..."
 cd "$ROOT_DIR"
-
-if DATABASE_URL="$TARGET_DB_URL" pnpm --filter @workspace/db run push 2>&1 | sed "s/^/  /"; then
-  log_ok "Schema push complete."
+if DATABASE_URL="$TARGET_DB_URL" ALLOW_REVIEWED_MIGRATIONS=true pnpm --filter @workspace/db run migrate:reviewed 2>&1 | sed "s/^/  /"; then
+  log_ok "Reviewed migrations complete."
 else
-  # Fall back to drizzle-kit directly
-  log_warn "Package push script not found — trying drizzle-kit directly..."
-  if DATABASE_URL="$TARGET_DB_URL" pnpm dlx drizzle-kit push 2>&1 | sed "s/^/  /"; then
-    log_ok "Schema push complete (via drizzle-kit)."
-  else
-    log_error "drizzle-kit push failed. Schema may be out of sync."
-    exit 1
-  fi
+  log_error "Reviewed migration command failed. No schema push fallback is permitted."
+  exit 1
 fi
 
 # --- Done --------------------------------------------------------------------
 log_section "Migration complete"
 log_ok "Source DB exported  → $BACKUP_FILE"
 log_ok "Target DB restored  → $(mask_url "$TARGET_DB_URL")"
-log_ok "Schema up to date   → drizzle-kit push succeeded"
+log_ok "Schema up to date   → reviewed migration ledger succeeded"
 echo ""
 echo -e "  ${CYAN}Tip:${NC} Keep the backup file for at least 48h before deleting."
 echo -e "  ${CYAN}Path:${NC} $BACKUP_FILE"

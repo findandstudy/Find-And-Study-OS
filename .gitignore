@@ -57,3 +57,23 @@ e2e-embed-state.json
 # User-uploaded chat attachments — never commit, can grow to hundreds of MB
 attached_assets/
 e2e-fixtures.json
+
+# Runtime data — never commit or include in a code release
+storage/
+uploads/
+logs/
+backups/
+backup/
+dumps/
+dump/
+*.dump
+*.dump.*
+*.backup
+*.bak
+*.log
+
+# Environment secrets. Explicitly keep secret-free templates trackable.
+.env
+.env.*
+!.env.example
+!**/.env.example

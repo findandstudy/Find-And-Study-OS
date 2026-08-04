@@ -22,7 +22,17 @@ import { eq, ilike, sql, and, or, asc, desc, inArray, isNotNull, isNull } from "
 import { requireAuth, requireRole, logAudit } from "../lib/auth";
 import { ADMIN_ROLES, STAFF_ROLES } from "../lib/roles";
 import rateLimit from "express-rate-limit";
-import { sanitizeFileName, isAllowedMimeType, isPdf, validateUploadedFile, validateUploadedFileBuffer } from "../lib/fileUploadValidation";
+import {
+  APPLICATION_DOCUMENT_HELP_TEXT,
+  APPLICATION_DOCUMENT_MAX_SIZE,
+  APPLICATION_DOCUMENT_MAX_SIZE_MB,
+  sanitizeFileName,
+  isAllowedMimeType,
+  isPdf,
+  validateApplicationDocumentFile,
+  validateUploadedFile,
+  validateUploadedFileBuffer,
+} from "../lib/fileUploadValidation";
 import { processUpload, UploadTooLargeError } from "../lib/uploads/processUpload";
 import { buildDocNameFromParts } from "../lib/docNaming";
 import { recomputeStudentPhoto } from "../lib/studentPhoto";
@@ -46,6 +56,10 @@ import {
   createEmbedChatSessionToken,
   verifyEmbedChatSessionToken,
 } from "../lib/embedChatSession";
+import {
+  createEmbedLeadDocumentSessionToken,
+  verifyEmbedLeadDocumentSessionToken,
+} from "../lib/embedLeadDocumentSession";
 import { rejectInvalidPhone } from "../lib/phoneValidation";
 import { containsNonLatinLetter, NON_LATIN_NAME_CODE } from "../lib/textNormalize";
 import {
@@ -133,7 +147,7 @@ const router: IRouter = Router();
 // never pay the parse cost) and per-widget allowed-domains validation.
 // /lead carries only personal-info text fields, so it keeps a tight limit;
 // only /apply needs the larger envelope for documents.
-const embedApplyJson = json({ limit: "20mb" });
+const embedApplyJson = json({ limit: "30mb" });
 const embedLeadJson = json({ limit: "256kb" });
 const embedChatJson = json({ limit: "64kb" });
 
@@ -256,6 +270,151 @@ function checkEmbedAccess(widget: any, token: string | undefined): boolean {
   const domains = widget.allowedDomains as string[];
   if (!domains || domains.length === 0) return true;
   return verifyEmbedToken(token, String(widget.slug));
+}
+
+type PreparedEmbedDocument = {
+  label: string;
+  data: string;
+  mediaType: string;
+  sizeBytes?: number | null;
+};
+
+async function prepareEmbedDocuments(rawDocuments: unknown): Promise<{
+  validDocs: PreparedEmbedDocument[];
+  warnings: string[];
+  inputCount: number;
+}> {
+  const rawDocs = Array.isArray(rawDocuments) ? rawDocuments.slice(0, 4) : [];
+  const docArray = rawDocs
+    .filter((d: any) => d && typeof d === "object" && d.label && d.data && typeof d.data === "string")
+    .map((d: any) => ({ ...d }));
+
+  for (const doc of docArray) {
+    const rawData = String(doc.data || "");
+    if (/^data:/i.test(rawData) && rawData.includes(",")) {
+      const commaIdx = rawData.indexOf(",");
+      doc.data = rawData.slice(commaIdx + 1);
+      if (!doc.mediaType) {
+        const match = /^data:([^;,]+)/i.exec(rawData.slice(0, commaIdx));
+        if (match?.[1]) doc.mediaType = match[1].trim().toLowerCase();
+      }
+    }
+    doc.data = String(doc.data || "").replace(/\s/g, "");
+  }
+
+  const validDocs: PreparedEmbedDocument[] = [];
+  const warnings: string[] = [];
+  for (const doc of docArray) {
+    const mime = String(doc.mediaType || "");
+    const label = String(doc.label || "document");
+    if (!mime || !isAllowedMimeType(mime)) {
+      warnings.push(`${label}: Sadece PDF, JPG, JPEG ve PNG dosyaları yükleyebilirsiniz.`);
+      continue;
+    }
+    const syntheticExt = isPdf(mime) ? ".pdf" : mime === "image/png" ? ".png" : ".jpg";
+    const syntheticFileName = `document${syntheticExt}`;
+    let buffer: Buffer;
+    try {
+      buffer = Buffer.from(doc.data || "", "base64");
+    } catch {
+      warnings.push(`${label}: Invalid base64 file data`);
+      continue;
+    }
+    const intakeValidationError = validateApplicationDocumentFile(syntheticFileName, mime, buffer.length);
+    if (intakeValidationError) {
+      warnings.push(`${label}: ${intakeValidationError.message}`);
+      continue;
+    }
+    const validationError = await validateUploadedFileBuffer(syntheticFileName, mime, buffer);
+    if (validationError) {
+      warnings.push(`${label}: ${validationError.message}`);
+      continue;
+    }
+    try {
+      const processed = await processUpload(buffer, syntheticFileName, mime);
+      if (processed.meta.compressed) {
+        doc.data = processed.buffer.toString("base64");
+        doc.mediaType = processed.mime;
+        doc.sizeBytes = processed.buffer.length;
+      } else if (!doc.sizeBytes) {
+        doc.sizeBytes = buffer.length;
+      }
+    } catch (err) {
+      if (err instanceof UploadTooLargeError) {
+        warnings.push(`${label}: ${err.message}`);
+        continue;
+      }
+      console.error("[EMBED-APPLY] processUpload failed, keeping original:", err);
+      if (!doc.sizeBytes) doc.sizeBytes = buffer.length;
+    }
+    validDocs.push({
+      label,
+      data: doc.data,
+      mediaType: doc.mediaType,
+      sizeBytes: Number(doc.sizeBytes) || buffer.length,
+    });
+  }
+
+  const totalDocSize = validDocs.reduce((sum, doc) => sum + (doc.sizeBytes || 0), 0);
+  if (totalDocSize > APPLICATION_DOCUMENT_MAX_SIZE * 4) {
+    warnings.push("Documents too large. Maximum total size is 20 MB.");
+    validDocs.length = 0;
+  }
+
+  return { validDocs, warnings, inputCount: docArray.length };
+}
+
+async function persistEmbedLeadDocuments(params: {
+  leadId: number;
+  firstName: string;
+  lastName: string;
+  documents: PreparedEmbedDocument[];
+}): Promise<number> {
+  let saved = 0;
+  for (const doc of params.documents) {
+    const docType = String(doc.label || "other").toLowerCase();
+    const docName = buildDocNameFromParts(params.firstName, params.lastName, docType, doc.mediaType);
+    const existing = await db.select({ id: documentsTable.id })
+      .from(documentsTable)
+      .where(and(
+        eq(documentsTable.leadId, params.leadId),
+        eq(documentsTable.type, docType),
+        isNull(documentsTable.studentId),
+        isNull(documentsTable.applicationId),
+        isNull(documentsTable.deletedAt),
+      ))
+      .orderBy(desc(documentsTable.createdAt), desc(documentsTable.id));
+
+    if (existing[0]) {
+      await db.update(documentsTable).set({
+        name: docName,
+        status: "pending",
+        fileKey: null,
+        fileUrl: null,
+        fileData: doc.data,
+        mimeType: doc.mediaType || null,
+        sizeBytes: doc.sizeBytes ? Number(doc.sizeBytes) : null,
+        updatedAt: new Date(),
+      }).where(eq(documentsTable.id, existing[0].id));
+      if (existing.length > 1) {
+        await db.update(documentsTable)
+          .set({ deletedAt: new Date() })
+          .where(inArray(documentsTable.id, existing.slice(1).map((row) => row.id)));
+      }
+    } else {
+      await db.insert(documentsTable).values({
+        leadId: params.leadId,
+        name: docName,
+        type: docType,
+        status: "pending",
+        fileData: doc.data,
+        mimeType: doc.mediaType || null,
+        sizeBytes: doc.sizeBytes ? Number(doc.sizeBytes) : null,
+      });
+    }
+    saved += 1;
+  }
+  return saved;
 }
 
 const EMBED_TOKEN_WINDOW_MS = 15 * 60 * 1000;
@@ -1176,14 +1335,97 @@ router.post("/public/embed/:slug/lead", embedSubmitLimiter, embedLeadJson, async
       },
     });
     // SECURITY (Public Intake): only disclose the numeric lead ID for a
-    // freshly created lead, never for a deduped existing one — /apply
-    // re-derives the lead server-side, so the client never needs an
-    // existing lead's ID.
-    res.status(201).json({ success: true, leadId: created ? lead.id : null });
+    // freshly created lead, never for a deduped existing one. The opaque,
+    // signed document session can be returned for both paths because it is
+    // accepted only by the slug-bound draft-document endpoint.
+    let documentSessionToken: string | null = null;
+    try {
+      documentSessionToken = createEmbedLeadDocumentSessionToken(
+        getEmbedTokenSecret(),
+        widget.slug,
+        lead.id,
+      );
+    } catch (tokenError) {
+      // Preserve the original lead-capture behaviour in a misconfigured local
+      // environment. Draft persistence stays disabled until a signing secret
+      // is configured; final /apply still saves the documents server-side.
+      console.error("[embed/lead] document session could not be issued:", tokenError);
+    }
+    res.status(201).json({
+      success: true,
+      leadId: created ? lead.id : null,
+      documentSessionToken,
+    });
   } catch (err: any) {
     console.error("[embed/lead] failed:", err?.message || err);
     res.status(500).json({ error: "Failed to save lead" });
   }
+});
+
+// Persist documents as soon as the visitor leaves the Upload Documents step.
+// The session token is opaque, short-lived, slug-bound and HMAC-signed; the
+// endpoint never accepts a public numeric lead id. Final /apply promotes these
+// draft rows to the resulting student/application instead of inserting copies.
+router.post("/public/embed/:slug/lead-documents", embedSubmitLimiter, embedApplyJson, async (req, res): Promise<void> => {
+  const slug = String(req.params.slug);
+  const [widget] = await db.select().from(embedWidgetsTable).where(and(
+    eq(embedWidgetsTable.slug, slug),
+    eq(embedWidgetsTable.isActive, true),
+  ));
+  if (!widget) { res.status(404).json({ error: "Widget not found" }); return; }
+
+  const origin = req.headers.origin as string | undefined;
+  if (!checkEmbedAccess(widget, req.query.t as string | undefined)) {
+    res.status(403).json({ error: "Invalid or expired embed token" });
+    return;
+  }
+  setEmbedCors(res, widget, origin);
+
+  const session = verifyEmbedLeadDocumentSessionToken(
+    getEmbedTokenSecret(),
+    req.body?.documentSessionToken,
+    slug,
+  );
+  if (!session) {
+    res.status(403).json({ error: "Invalid or expired document session" });
+    return;
+  }
+
+  const [lead] = await db.select({
+    id: leadsTable.id,
+    firstName: leadsTable.firstName,
+    lastName: leadsTable.lastName,
+    source: leadsTable.source,
+    convertedStudentId: leadsTable.convertedStudentId,
+  }).from(leadsTable).where(and(
+    eq(leadsTable.id, session.leadId),
+    isNull(leadsTable.deletedAt),
+  ));
+  if (!lead || lead.source !== `embed:${slug}`) {
+    res.status(404).json({ error: "Lead not found" });
+    return;
+  }
+  if (lead.convertedStudentId) {
+    res.status(409).json({ error: "This lead has already been converted" });
+    return;
+  }
+
+  const prepared = await prepareEmbedDocuments(req.body?.documents);
+  if (prepared.validDocs.length === 0) {
+    res.status(400).json({
+      error: "No valid documents provided",
+      documentWarnings: prepared.warnings,
+    });
+    return;
+  }
+
+  const saved = await persistEmbedLeadDocuments({
+    leadId: lead.id,
+    firstName: lead.firstName,
+    lastName: lead.lastName,
+    documents: prepared.validDocs,
+  });
+  res.json({ saved, documentWarnings: prepared.warnings });
 });
 
 router.post("/public/embed/:slug/apply", embedSubmitLimiter, embedApplyJson, async (req, res): Promise<void> => {
@@ -1241,84 +1483,12 @@ router.post("/public/embed/:slug/apply", embedSubmitLimiter, embedApplyJson, asy
     nationality,
   });
 
-  const rawDocs = Array.isArray(documents) ? documents.slice(0, 4) : [];
-  const docArray = rawDocs.filter((d: any) => d && typeof d === 'object' && d.label && d.data && typeof d.data === 'string');
+  const preparedDocuments = await prepareEmbedDocuments(documents);
+  const validDocs = preparedDocuments.validDocs;
+  const documentWarnings = preparedDocuments.warnings;
 
-  // Normalize document payloads: accept BOTH bare base64 AND full data-URLs
-  // ("data:<mime>;base64,<b64>"). Stale cached widgets (and some third-party
-  // callers) send the FileReader data-URL verbatim; decoding that with
-  // Buffer.from(..., "base64") silently produces garbage bytes, which then
-  // failed the magic-byte check with 400 "Dosya içeriği tanınamadı" — and
-  // because that check used to run BEFORE the lead transaction, the lead was
-  // never created. Strip the prefix (and whitespace) here so every downstream
-  // consumer — validation, documents.fileData storage — sees clean base64.
-  for (const doc of docArray) {
-    const rawData = String(doc.data || "");
-    if (/^data:/i.test(rawData) && rawData.includes(",")) {
-      const commaIdx = rawData.indexOf(",");
-      doc.data = rawData.slice(commaIdx + 1);
-      if (!doc.mediaType) {
-        // Fall back to the mime embedded in the data-URL header so
-        // isAllowedMimeType still works when the caller omitted mediaType.
-        const m = /^data:([^;,]+)/i.exec(rawData.slice(0, commaIdx));
-        if (m && m[1]) doc.mediaType = m[1].trim().toLowerCase();
-      }
-    }
-    doc.data = String(doc.data || "").replace(/\s/g, "");
-  }
-
-  // Validate documents WITHOUT ever dropping the lead: an invalid/unreadable
-  // file must never 400 the whole submission (that used to lose the contact
-  // entirely). Invalid docs are dropped with a warning; the lead + submission
-  // below are always created from the contact fields.
-  const validDocs: any[] = [];
-  const documentWarnings: string[] = [];
-  for (const doc of docArray) {
-    const mime = doc.mediaType || "";
-    const label = String(doc.label || "document");
-    if (!mime || !isAllowedMimeType(mime)) {
-      documentWarnings.push(`${label}: Sadece PDF, JPG, JPEG ve PNG dosyalar\u0131 y\u00fckleyebilirsiniz.`);
-      continue;
-    }
-    const syntheticExt = isPdf(mime) ? ".pdf" : mime === "image/png" ? ".png" : ".jpg";
-    const syntheticFileName = `document${syntheticExt}`;
-    let buffer: Buffer;
-    try {
-      buffer = Buffer.from(doc.data || "", "base64");
-    } catch {
-      documentWarnings.push(`${label}: Invalid base64 file data`);
-      continue;
-    }
-    const validationError = await validateUploadedFileBuffer(syntheticFileName, mime, buffer);
-    if (validationError) {
-      documentWarnings.push(`${label}: ${validationError.message}`);
-      continue;
-    }
-    // System-wide document size policy chokepoint: shrink anything over the
-    // portal-ready target before it's stored as base64 in documentsTable.
-    try {
-      const processed = await processUpload(buffer, syntheticFileName, mime);
-      if (processed.meta.compressed) {
-        doc.data = processed.buffer.toString("base64");
-        doc.mediaType = processed.mime;
-      }
-    } catch (err) {
-      if (err instanceof UploadTooLargeError) {
-        documentWarnings.push(`${label}: ${err.message}`);
-        continue;
-      }
-      console.error("[EMBED-APPLY] processUpload failed, keeping original:", err);
-    }
-    validDocs.push(doc);
-  }
-
-  const totalDocSize = validDocs.reduce((sum: number, d: any) => sum + (d.data?.length || 0), 0);
-  if (totalDocSize > 20_000_000) {
-    documentWarnings.push("Documents too large. Maximum total size is ~15MB.");
-    validDocs.length = 0;
-  }
   if (documentWarnings.length > 0) {
-    console.warn(`[EMBED-APPLY] Dropped ${docArray.length - validDocs.length} invalid document(s) (slug=${widget.slug}):`, documentWarnings.join(" | "));
+    console.warn(`[EMBED-APPLY] Dropped ${preparedDocuments.inputCount - validDocs.length} invalid document(s) (slug=${widget.slug}):`, documentWarnings.join(" | "));
   }
 
   // SECURITY (Public Intake / IDOR): the embed apply NEVER trusts a
@@ -1380,6 +1550,18 @@ router.post("/public/embed/:slug/apply", embedSubmitLimiter, embedApplyJson, asy
 
     return { leadId: lead.id, submissionId: submission.id };
   });
+
+  // Save valid files on the lead before any mandatory-document rejection or
+  // downstream student/application work. This guarantees that a failed final
+  // submit still leaves the documents visible to staff on the lead detail.
+  if (validDocs.length > 0) {
+    await persistEmbedLeadDocuments({
+      leadId: result.leadId,
+      firstName: tlu(firstName, 100)!,
+      lastName: tlu(lastName, 100)!,
+      documents: validDocs,
+    });
+  }
 
   // ─── Server-side mandatory-document enforcement ──────────────────────────
   // The widget blocks submit client-side when required documents are missing,
@@ -1547,17 +1729,39 @@ router.post("/public/embed/:slug/apply", embedSubmitLimiter, embedApplyJson, asy
         if (!doc.label || !doc.data) continue;
         const docType = String(doc.label || "other").toLowerCase();
         const docName = buildDocNameFromParts(firstName, lastName, docType, doc.mediaType);
-        await db.insert(documentsTable).values({
-          studentId: resultStudentId,
-          applicationId: resultAppId,
-          leadId: result.leadId,
-          name: docName,
-          type: docType,
-          status: "pending",
-          fileData: doc.data,
-          mimeType: doc.mediaType || null,
-          sizeBytes: doc.sizeBytes || null,
-        });
+        const [draftDoc] = await db.select({ id: documentsTable.id })
+          .from(documentsTable)
+          .where(and(
+            eq(documentsTable.leadId, result.leadId),
+            eq(documentsTable.type, docType),
+            isNull(documentsTable.studentId),
+            isNull(documentsTable.applicationId),
+            isNull(documentsTable.deletedAt),
+          ))
+          .orderBy(desc(documentsTable.createdAt), desc(documentsTable.id));
+        if (draftDoc) {
+          await db.update(documentsTable).set({
+            studentId: resultStudentId,
+            applicationId: resultAppId,
+            name: docName,
+            fileData: doc.data,
+            mimeType: doc.mediaType || null,
+            sizeBytes: doc.sizeBytes || null,
+            updatedAt: new Date(),
+          }).where(eq(documentsTable.id, draftDoc.id));
+        } else {
+          await db.insert(documentsTable).values({
+            studentId: resultStudentId,
+            applicationId: resultAppId,
+            leadId: result.leadId,
+            name: docName,
+            type: docType,
+            status: "pending",
+            fileData: doc.data,
+            mimeType: doc.mediaType || null,
+            sizeBytes: doc.sizeBytes || null,
+          });
+        }
         // Mirror to the student's own (profile-level) documents when the doc was
         // attached to an application AND the student has no active profile-level
         // doc of that type yet. Mirrors the staff upload rule (documents.ts): an
@@ -1589,23 +1793,6 @@ router.post("/public/embed/:slug/apply", embedSubmitLimiter, embedApplyJson, asy
             });
           }
         }
-      }
-    } else if (validDocs.length > 0) {
-      // Fallback: attach to the lead only (legacy behavior) so files are
-      // not lost when student/app creation could not be performed.
-      for (const doc of validDocs) {
-        if (!doc.label || !doc.data) continue;
-        const docType = String(doc.label || "other").toLowerCase();
-        const docName = buildDocNameFromParts(firstName, lastName, docType, doc.mediaType);
-        await db.insert(documentsTable).values({
-          leadId: result.leadId,
-          name: docName,
-          type: docType,
-          status: "pending",
-          fileData: doc.data,
-          mimeType: doc.mediaType || null,
-          sizeBytes: doc.sizeBytes || null,
-        });
       }
     }
 
@@ -2329,6 +2516,9 @@ function generateEmbedScript(baseUrl: string): string {
     iframe.style.minHeight = '0';
     iframe.setAttribute('loading', 'lazy');
     iframe.setAttribute('allowfullscreen', 'true');
+    // Camera access must be explicitly delegated to a cross-origin widget
+    // iframe. Native file/camera capture remains available as a fallback.
+    iframe.setAttribute('allow', 'camera; fullscreen');
     var supportedLanguages=['en','tr','ar','fa','fr','es','ru','zh','hi','id'];
     function normalizePageLanguage(raw) {
       if (!raw || typeof raw !== 'string') return '';
@@ -3036,7 +3226,8 @@ body{font-family:${fontFamily};background:transparent;color:#1f2937;line-height:
 .ew-doc-slot{border:2px dashed #d1d5db;border-radius:8px;padding:14px;text-align:center;cursor:pointer;transition:all .2s;position:relative;min-height:90px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
 .ew-doc-slot:hover{border-color:${primaryColor};background:${primaryColor}08}
 .ew-doc-slot.uploaded{border-color:#22c55e;border-style:solid;background:#f0fdf4}
-.ew-doc-slot input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;z-index:1}
+.ew-doc-slot input[data-doc-input]{position:absolute;inset:0;opacity:0;cursor:pointer;z-index:1}
+.ew-doc-camera-input{display:none}
 .ew-doc-scan-btn{position:absolute;bottom:4px;right:4px;z-index:2;background:#fff;border:1px solid ${primaryColor}40;color:${primaryColor};border-radius:6px;padding:3px 6px;font-size:0.65rem;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:3px}
 .ew-doc-scan-btn:hover{background:${primaryColor}10}
 .ew-scan-overlay{position:fixed;inset:0;background:#000;z-index:10000;display:flex;flex-direction:column}
@@ -3061,7 +3252,9 @@ body{font-family:${fontFamily};background:transparent;color:#1f2937;line-height:
 .ew-doc-status{font-size:0.7rem;color:#22c55e;font-weight:600}
 .ew-doc-required{color:#ef4444;font-size:0.65rem}
 .ew-btn:disabled,.ew-btn-outline:disabled{opacity:.5;cursor:not-allowed;box-shadow:none}
-.ew-doc-warning{background:#fef3c7;border:1px solid #fcd34d;color:#92400e;border-radius:10px;padding:10px 12px;margin-top:14px;font-size:0.78rem;line-height:1.4}
+.ew-doc-guidance{display:flex;align-items:center;justify-content:space-between;gap:10px;background:#fef3c7;border:1px solid #fcd34d;color:#92400e;border-radius:10px;padding:10px 12px;margin-top:14px;font-size:0.78rem;line-height:1.4}
+.ew-doc-guidance.size-only{justify-content:flex-end;background:#f8fafc;border-color:#e2e8f0;color:#475569}
+.ew-doc-size-badge{display:inline-flex;align-items:center;justify-content:center;white-space:nowrap;border-radius:999px;background:#fff;border:1px solid #f59e0b;color:#92400e;padding:4px 9px;font-size:0.68rem;font-weight:800;letter-spacing:.02em}
 .ew-doc-header{display:flex;align-items:center;gap:8px;margin-bottom:4px}
 .ew-doc-header span:first-child{font-size:0.9rem;font-weight:600;color:#1f2937}
 .ew-doc-header span:last-child{font-size:0.75rem;color:#64748b}
@@ -3115,6 +3308,7 @@ body{font-family:${fontFamily};background:transparent;color:#1f2937;line-height:
   .ew-modal{padding:20px}
   .ew-form-actions{flex-direction:column}
   .ew-doc-grid{grid-template-columns:1fr}
+  .ew-doc-guidance{align-items:flex-start;flex-direction:column}
   .ew-steps{gap:0}
   .ew-step-label{display:none}
 }
@@ -3311,8 +3505,8 @@ var modalNotified=false;
 
 var ALLOWED_MIMES=['application/pdf','image/jpeg','image/png'];
 var ALLOWED_EXTS=['.pdf','.jpg','.jpeg','.png'];
-var PDF_MAX=10*1024*1024;
-var IMG_MAX=5*1024*1024;
+var APPLICATION_DOC_MAX=${APPLICATION_DOCUMENT_MAX_SIZE};
+var APPLICATION_DOC_MAX_MB=${APPLICATION_DOCUMENT_MAX_SIZE_MB};
 
 function validateFileUpload(file){
   var ext=(file.name||'').toLowerCase().replace(/.*\\./,'.');
@@ -3320,10 +3514,8 @@ function validateFileUpload(file){
   if(ALLOWED_MIMES.indexOf(file.type)<0||ALLOWED_EXTS.indexOf(ext)<0){
     return 'Sadece PDF, JPG, JPEG ve PNG dosyalar\\u0131 y\\u00fckleyebilirsiniz.';
   }
-  var maxSize=file.type==='application/pdf'?PDF_MAX:IMG_MAX;
-  if(file.size>maxSize){
-    if(file.type==='application/pdf')return 'PDF dosyalar\\u0131 en fazla 10 MB olabilir.';
-    return 'JPG, JPEG ve PNG dosyalar\\u0131 en fazla 5 MB olabilir.';
+  if(file.size>APPLICATION_DOC_MAX){
+    return 'Each file may be a maximum of '+APPLICATION_DOC_MAX_MB+' MB.';
   }
   return null;
 }
@@ -3384,6 +3576,10 @@ function loadScanLibs(){
         var start=Date.now();
         (function poll(){
           if(window.cv&&window.cv.Mat)return res();
+          if(window.cv&&typeof window.cv.then==='function'){
+            window.cv.then(function(){res();}).catch(rej);
+            return;
+          }
           if(Date.now()-start>30000)return rej(new Error('cv timeout'));
           setTimeout(poll,150);
         })();
@@ -3430,7 +3626,23 @@ function canvasToBlob(canvas,type,quality){
   });
 }
 
-function openScanner(baseName,onCapture){
+function prefersNativeCameraCapture(){
+  var ua=navigator.userAgent||'';
+  var mobileUa=/Android|iPhone|iPad|iPod|Mobile/i.test(ua);
+  var coarse=false;
+  try{coarse=!!(window.matchMedia&&window.matchMedia('(pointer: coarse)').matches);}catch(e){}
+  return mobileUa||coarse;
+}
+
+function findNativeCameraInput(key){
+  var inputs=$$('[data-doc-camera]');
+  for(var i=0;i<inputs.length;i++){
+    if(inputs[i].getAttribute('data-doc-camera')===key)return inputs[i];
+  }
+  return null;
+}
+
+function openScanner(baseName,onCapture,onFallback){
   var ov=document.createElement('div');
   ov.className='ew-scan-overlay';
   ov.innerHTML='<div class="ew-scan-header"><h4>Document Scanner</h4><button type="button" class="ew-scan-close">\\u00d7</button></div>'+
@@ -3448,7 +3660,17 @@ function openScanner(baseName,onCapture){
   }
   function destroy(){stop();if(ov.parentNode)ov.parentNode.removeChild(ov);}
   ov.querySelector('.ew-scan-close').addEventListener('click',destroy);
-  function showErr(msg){stage.innerHTML='<div class="ew-scan-loading" style="color:#fca5a5">'+esc(msg)+'</div>';}
+  function showErr(msg){
+    stop();
+    stage.innerHTML='<div class="ew-scan-loading" style="color:#fca5a5">'+esc(msg)+'</div>';
+    bar.style.display='flex';bar.innerHTML='';
+    if(onFallback){
+      var fallback=document.createElement('button');fallback.className='primary';fallback.textContent='Use device camera / choose image';
+      fallback.addEventListener('click',function(){destroy();onFallback();});
+      bar.appendChild(fallback);
+    }
+    var close=document.createElement('button');close.textContent='Close';close.addEventListener('click',destroy);bar.appendChild(close);
+  }
   function startLive(){
     stage.innerHTML='';
     video=document.createElement('video');
@@ -3463,8 +3685,8 @@ function openScanner(baseName,onCapture){
       .then(function(s){
         stream=s;video.srcObject=s;
         video.onloadedmetadata=function(){
-          video.play();
-          try{scanner=new window.jscanify();}catch(e){}
+          video.play().catch(function(){showErr('Camera preview could not be started.');});
+          try{scanner=new window.jscanify();}catch(e){showErr('Scanner engine could not be initialized.');return;}
           function loop(){
             if(!video||video.readyState<2){rafId=requestAnimationFrame(loop);return;}
             overlayCv.width=video.videoWidth;overlayCv.height=video.videoHeight;
@@ -3507,15 +3729,18 @@ function openScanner(baseName,onCapture){
     });
   }
   function capture(){
-    if(!video||!scanner)return;
+    if(!video||video.readyState<2)return;
     try{
       var tmp=document.createElement('canvas');
       tmp.width=video.videoWidth;tmp.height=video.videoHeight;
       tmp.getContext('2d').drawImage(video,0,0);
-      var extracted=scanner.extractPaper(tmp,Math.min(1240,tmp.width),Math.min(1754,tmp.height));
+      var extracted=tmp;
+      if(scanner){
+        try{extracted=scanner.extractPaper(tmp,Math.min(1240,tmp.width),Math.min(1754,tmp.height));}catch(e){extracted=tmp;}
+      }
       enhanceContrast(extracted);
       showReview(extracted);
-    }catch(e){alert('Capture failed: '+e.message);}
+    }catch(e){showErr('Capture failed. Use the device camera or choose an image instead.');}
   }
   function showReview(canvas){
     stop();
@@ -3566,6 +3791,9 @@ function openScanner(baseName,onCapture){
 }
 
 function handleScanForKey(key){
+  var nativeInput=findNativeCameraInput(key);
+  function openNative(){if(nativeInput)nativeInput.click();}
+  if(prefersNativeCameraCapture()&&nativeInput){openNative();return;}
   openScanner(key,function(file){
     var vErr=validateFileUpload(file);
     if(vErr){alert(vErr);return;}
@@ -3573,7 +3801,7 @@ function handleScanForKey(key){
       uploadedDocs[key]={label:key,base64:result.base64,mediaType:result.mediaType,sizeBytes:result.size,isImage:result.isImage};
       if(formOpen)showModal();else render(false);
     });
-  });
+  },openNative);
 }
 
 function fileToBase64(file){
@@ -3971,6 +4199,7 @@ function renderFormContent(prog){
       var isUploaded=!!uploadedDocs[d.key];
       h+='<div class="ew-doc-slot'+(isUploaded?' uploaded':'')+'" data-doc-key="'+esc(d.key)+'">';
       h+='<input type="file" accept="'+esc(safeAccept(d.accept))+'" data-doc-input="'+esc(d.key)+'">';
+      h+='<input type="file" accept="image/*" capture="environment" class="ew-doc-camera-input" data-doc-camera="'+esc(d.key)+'" tabindex="-1">';
       h+='<div class="ew-doc-icon">'+esc(d.icon)+'</div>';
       h+='<div class="ew-doc-label">'+esc(d.label)+'</div>';
       if(isUploaded){
@@ -3985,9 +4214,10 @@ function renderFormContent(prog){
     h+='</div>';
     var _missReq=missingRequiredDocs();
     var _gate=_missReq.length>0;
-    if(_gate){
-      h+='<div class="ew-doc-warning">'+esc(REQUIRED_DOCS_MSG.replace('{docs}',_missReq.map(function(d){return d.label;}).join(', ')))+'</div>';
-    }
+    h+='<div class="ew-doc-guidance'+(_gate?'':' size-only')+'">';
+    if(_gate)h+='<span>'+esc(REQUIRED_DOCS_MSG.replace('{docs}',_missReq.map(function(d){return d.label;}).join(', ')))+'</span>';
+    h+='<span class="ew-doc-size-badge">'+esc(${JSON.stringify(APPLICATION_DOCUMENT_HELP_TEXT)})+'</span>';
+    h+='</div>';
     h+='<div class="ew-form-actions" style="margin-top:16px">';
     h+='<button type="button" class="ew-btn" id="ew-analyze-btn"'+(_gate?' disabled':'')+' style="background:linear-gradient(135deg,${primaryColor},${secondaryColor})">\\u2728 Analyze with AI & Continue</button>';
     h+='<button type="button" class="ew-btn ew-btn-outline" id="ew-skip-btn"'+(_gate?' disabled':'')+'>Skip & Continue</button>';
@@ -4372,6 +4602,19 @@ function bindModalEvents(modal,overlay){
       });
     });
   });
+  $$('[data-doc-camera]',modal).forEach(function(input){
+    input.addEventListener('change',function(e){
+      var key=input.getAttribute('data-doc-camera');
+      var file=e.target.files[0];
+      if(!file)return;
+      var vErr=validateFileUpload(file);
+      if(vErr){alert(vErr);input.value='';return;}
+      fileToBase64(file).then(function(result){
+        uploadedDocs[key]={label:key,base64:result.base64,mediaType:result.mediaType,sizeBytes:result.size,isImage:result.isImage};
+        if(formOpen)showModal();else render(false);
+      });
+    });
+  });
   $$('[data-doc-scan]',modal).forEach(function(btn){
     btn.addEventListener('click',function(e){
       e.preventDefault();e.stopPropagation();
@@ -4382,7 +4625,17 @@ function bindModalEvents(modal,overlay){
   if(analyzeBtn)analyzeBtn.addEventListener('click',handleAnalyze);
   var skipBtn=$('#ew-skip-btn',modal);
   // Skip the AI extract and go straight to the review step.
-  if(skipBtn)skipBtn.addEventListener('click',function(){if(!enforceDocGate())return;formStep='review';if(formOpen)showModal();else render(false)});
+  if(skipBtn)skipBtn.addEventListener('click',function(){
+    if(!enforceDocGate())return;
+    var payload=ewBuildDocumentPayload();
+    formStep='analyzing';if(formOpen)showModal();else render(false);
+    ewPersistLeadDocuments(payload).then(function(){
+      formStep='review';if(formOpen)showModal();else render(false);
+    }).catch(function(err){
+      formStep='documents';if(formOpen)showModal();else render(false);
+      alert(err.message||'Documents could not be saved. Please try again.');
+    });
+  });
   var backUploadBtn=$('#ew-back-upload',modal);
   // From review step → back to documents. Snapshot any review-form edits
   // first so they survive the round-trip.
@@ -4400,6 +4653,10 @@ var savedFormData={};
 // back on the final /apply call so the server reuses (instead of
 // duplicating) the existing "new" lead and can flip it to "converted".
 var leadId=null;
+// Opaque, signed token issued with the Step-1 lead capture. It allows the
+// Documents step to persist draft files without exposing or trusting a numeric
+// lead id, including when the backend deduplicates onto an existing lead.
+var leadDocumentSessionToken=null;
 var leadCreating=false;
 // True while handleNextPersonal is executing to prevent concurrent/double-click
 // invocations from firing multiple lead creates or racing showModal calls.
@@ -4623,6 +4880,7 @@ function ewFireEarlyLead(){
   }).then(function(d){
     leadCreating=false;
     if(d&&d.leadId)leadId=d.leadId;
+    if(d&&d.documentSessionToken)leadDocumentSessionToken=d.documentSessionToken;
   }).catch(function(){leadCreating=false});
 }
 // Capture the personal-info form values into savedFormData and advance to
@@ -4660,7 +4918,7 @@ function handleNextPersonal(scope){
   // If a lead was already issued during this session (user clicked Next,
   // came back, edited, clicked Next again) skip the create call and just
   // advance — the final /apply will update that same row.
-  if(leadId||leadCreating){
+  if(leadId||leadDocumentSessionToken||leadCreating){
     // If the early basics-only capture ran without a phone, re-fire once
     // now that the phone is filled — the backend dedups by email+source
     // and refreshes the same row, so this adds the phone, not a new lead.
@@ -4691,6 +4949,7 @@ function handleNextPersonal(scope){
     leadCreating=false;
     handleNextPersonalInFlight=false;
     if(res.ok&&res.data&&res.data.leadId)leadId=res.data.leadId;
+    if(res.ok&&res.data&&res.data.documentSessionToken)leadDocumentSessionToken=res.data.documentSessionToken;
     if(MODE==='lead_form'){
       // Lead-form widgets only collect contact info — show success now.
       formSubmitted=true;formLoading=false;
@@ -4715,21 +4974,40 @@ function handleNextPersonal(scope){
   });
 }
 
-function handleAnalyze(){
-  if(!enforceDocGate())return;
-  var docKeys=Object.keys(uploadedDocs);
-  if(docKeys.length===0){formStep='review';if(formOpen)showModal();else render(false);return;}
-  formStep='analyzing';
-  if(formOpen)showModal();else render(false);
-  var docPayload=docKeys.map(function(k){
+function ewBuildDocumentPayload(){
+  return Object.keys(uploadedDocs).map(function(k){
     var d=uploadedDocs[k];
-    return {type:d.isImage?'image':'pdf',data:d.base64,mediaType:d.mediaType,label:d.label};
+    return {type:d.isImage?'image':'pdf',data:d.base64,mediaType:d.mediaType,label:d.label,sizeBytes:d.sizeBytes};
   });
-  var apiBase=API.replace('/public/embed/'+SLUG,'');
-  fetch(apiBase+'/public/ai/extract-document',{
+}
+function ewPersistLeadDocuments(docPayload){
+  if(!leadDocumentSessionToken||!docPayload||docPayload.length===0)return Promise.resolve();
+  return fetch(addToken(API+'/lead-documents'),{
     method:'POST',
     headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({documents:docPayload,scope:'embed'})
+    body:JSON.stringify({documentSessionToken:leadDocumentSessionToken,documents:docPayload})
+  }).then(function(r){
+    if(r.ok)return r.json();
+    return r.json().catch(function(){return {}}).then(function(d){
+      var err=new Error(d.error||'Documents could not be saved');
+      err.isDocumentSaveError=true;
+      throw err;
+    });
+  });
+}
+function handleAnalyze(){
+  if(!enforceDocGate())return;
+  var docPayload=ewBuildDocumentPayload();
+  if(docPayload.length===0){formStep='review';if(formOpen)showModal();else render(false);return;}
+  formStep='analyzing';
+  if(formOpen)showModal();else render(false);
+  var apiBase=API.replace('/public/embed/'+SLUG,'');
+  ewPersistLeadDocuments(docPayload).then(function(){
+    return fetch(apiBase+'/public/ai/extract-document',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({documents:docPayload,scope:'embed'})
+    });
   }).then(function(r){
     if(r.ok)return r.json();
     throw new Error('AI analysis failed');
@@ -4779,8 +5057,12 @@ function handleAnalyze(){
         }
       }
     }
-  }).catch(function(){
+  }).catch(function(err){
     aiResult=null;
+    if(err&&err.isDocumentSaveError){
+      analyzeNextStep='documents';
+      alert(err.message||'Documents could not be saved. Please try again.');
+    }
   }).finally(function(){
     formStep=analyzeNextStep||'review';
     analyzeNextStep=null;
@@ -4902,7 +5184,14 @@ function bindEvents(){
   var inlineAnalyzeBtn=$('#ew-analyze-btn');
   if(inlineAnalyzeBtn&&!formOpen)inlineAnalyzeBtn.addEventListener('click',handleAnalyze);
   var inlineSkipBtn=$('#ew-skip-btn');
-  if(inlineSkipBtn&&!formOpen)inlineSkipBtn.addEventListener('click',function(){if(!enforceDocGate())return;formStep='review';render(false)});
+  if(inlineSkipBtn&&!formOpen)inlineSkipBtn.addEventListener('click',function(){
+    if(!enforceDocGate())return;
+    var payload=ewBuildDocumentPayload();
+    formStep='analyzing';render(false);
+    ewPersistLeadDocuments(payload).then(function(){formStep='review';render(false);}).catch(function(err){
+      formStep='documents';render(false);alert(err.message||'Documents could not be saved. Please try again.');
+    });
+  });
   var inlineBackUploadBtn=$('#ew-back-upload');
   if(inlineBackUploadBtn&&!formOpen)inlineBackUploadBtn.addEventListener('click',function(){snapshotForm(null);formStep='documents';render(false)});
   var inlineBackPersonalBtn=$('#ew-back-personal');
@@ -4919,6 +5208,20 @@ function bindEvents(){
       if(!file)return;
       var vErr2=validateFileUpload(file);
       if(vErr2){alert(vErr2);return;}
+      fileToBase64(file).then(function(result){
+        uploadedDocs[key]={label:key,base64:result.base64,mediaType:result.mediaType,sizeBytes:result.size,isImage:result.isImage};
+        render(false);
+      });
+    });
+  });
+  $$('[data-doc-camera]').forEach(function(input){
+    if(formOpen)return;
+    input.addEventListener('change',function(e){
+      var key=input.getAttribute('data-doc-camera');
+      var file=e.target.files[0];
+      if(!file)return;
+      var vErr3=validateFileUpload(file);
+      if(vErr3){alert(vErr3);input.value='';return;}
       fileToBase64(file).then(function(result){
         uploadedDocs[key]={label:key,base64:result.base64,mediaType:result.mediaType,sizeBytes:result.size,isImage:result.isImage};
         render(false);

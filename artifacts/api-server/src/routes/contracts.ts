@@ -235,15 +235,15 @@ router.get("/contracts/signed/:id/pdf", requireAuth, requirePermission("contract
     const { ObjectStorageService } = await import("../lib/objectStorage");
     const svc = new ObjectStorageService();
     const file = await svc.getObjectEntityFile(pdfKey);
-    const [meta] = await file.getMetadata();
-    res.setHeader("Content-Type", (meta.contentType as string) || "application/pdf");
     // Meaningful, deterministic filename derived from the SAME contractNumber()
     // source as the document body's {{contract_number}} (e.g.
     // FAS-2026-00025_signed.pdf). The storage object key keeps its uuid.
     const filename = signedContractFilename(row.signingSessionId, row.signedAt ? new Date(row.signedAt) : (row.createdAt ? new Date(row.createdAt) : undefined));
     res.setHeader("Content-Disposition", `attachment; filename="${filename}"; filename*=UTF-8''${encodeURIComponent(filename)}`);
-    if (meta.size) res.setHeader("Content-Length", String(meta.size));
-    file.createReadStream().on("error", (e) => { console.error("[contracts] stream:", e); try { res.end(); } catch {} }).pipe(res);
+    await svc.streamObjectToResponse(req, res, file, {
+      contentType: "application/pdf",
+      cacheControl: "private, no-store",
+    });
   } catch (err) {
     console.error("[contracts] signed pdf:", err);
     if (!res.headersSent) res.status(500).json({ error: "Failed to download" });

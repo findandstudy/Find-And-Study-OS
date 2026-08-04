@@ -1,22 +1,23 @@
-// PM2 ecosystem config — EduConsult OS (yetkili kaynak)
-// Kullanım:
-//   pm2 start deploy/ecosystem.config.cjs --env production
-//   pm2 reload deploy/ecosystem.config.cjs --update-env
-//   pm2 save
+// PM2 ecosystem config — Find And Study OS (tek yetkili kaynak)
+// Production güncellemeleri yalnızca preflight korumalı deploy/deploy.sh
+// üzerinden yapılır. Config'i doğrudan `pm2 start` ile çalıştırmayın.
 //
 // NOT: Root dizinindeki ecosystem.config.cjs bu dosyayı referans alır.
 
 "use strict";
 
+const API_PROCESS_NAME = "fasos-apply-api";
+const PORTAL_WORKER_PROCESS_NAME = "findandstudy-portal-worker";
+
 module.exports = {
   apps: [
     {
-      name: "edconsult-os-api",
+      name: API_PROCESS_NAME,
       script: "./artifacts/api-server/dist/index.cjs",
 
-      // Cluster mode: CPU çekirdek sayısı kadar process
-      exec_mode: "cluster",
-      instances: "max",
+      // Worker tekilleştirme tamamlanana kadar API de tek process çalışır.
+      exec_mode: "fork",
+      instances: 1,
 
       // Heap 512 MB'ı geçince yeniden başlat
       max_memory_restart: "512M",
@@ -62,7 +63,7 @@ module.exports = {
     // tsx yorumlayıcısı sayesinde TypeScript kaynak dosyasını doğrudan çalıştırır
     // (workspace deps'in TS source export ettiği monorepo yapısıyla uyumlu).
     {
-      name: "findandstudy-portal-worker",
+      name: PORTAL_WORKER_PROCESS_NAME,
       script: "./artifacts/portal-automation-worker/src/worker.ts",
       interpreter: "./node_modules/.bin/tsx",
 
@@ -97,4 +98,8 @@ module.exports = {
       min_uptime: "10s",
     },
   ],
+  processNames: {
+    api: API_PROCESS_NAME,
+    portalWorker: PORTAL_WORKER_PROCESS_NAME,
+  },
 };

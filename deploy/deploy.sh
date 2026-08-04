@@ -19,6 +19,10 @@ set -a
 source .env
 set +a
 
+# Must run before install/build/restart. It validates paths only and never
+# creates, copies, removes or prints persistent-data contents.
+node deploy/data-path-preflight.cjs
+
 echo ""
 echo "[1/5] Installing production dependencies..."
 pnpm install --frozen-lockfile
@@ -28,31 +32,28 @@ echo "[2/5] Running production build..."
 bash deploy/build-production.sh
 
 echo ""
-echo "[3/6] Database migration check..."
+echo "[3/5] Database migration check..."
 # UYARI: 'drizzle push' burada KULLANILMAZ — production tablolarını silebilir.
-#
-# Şema değişikliklerini production'a uygulamak için:
-#   1. lib/db dizininde: pnpm drizzle-kit generate
-#   2. Oluşan SQL dosyasını gözden geçir (lib/db/drizzle/)
-#   3. Production'da uygula: psql "$DATABASE_URL" < lib/db/drizzle/<migration>.sql
-#
-# api-server ilk açılışta boot DDL'i idempotent olarak çalıştırır
-# (artifacts/api-server/src/index.ts). Bu; yeni sütun/tablo eklemelerini
-# deployment sırasında otomatik uygular.
-echo "  Skipping — apply migrations manually if schema changed (see deploy/DEPLOYMENT.md)"
+# Normal API boot da DDL, seed veya backfill çalıştırmaz. Deploy yalnızca
+# migration geçmişinin tutarlı olduğunu doğrular; hiçbir migration uygulamaz.
+node lib/db/validate-migrations.mjs
+echo "  Ledger valid; no migration was applied"
 
 echo ""
-echo "[4/6] Running one-shot data cleanups (idempotent)..."
-node lib/db/cleanup-data.mjs
-
-echo ""
-echo "[5/6] Creating log directory..."
+echo "[4/5] Creating log directory..."
 mkdir -p logs
 
 echo ""
-echo "[6/6] Starting/restarting PM2..."
+echo "[5/5] Starting/restarting PM2..."
 if command -v pm2 &> /dev/null; then
-  pm2 startOrRestart deploy/ecosystem.config.cjs --env production
+  node deploy/pm2-preflight.cjs
+  API_PROCESS_NAME="$(node -p "require('./deploy/ecosystem.config.cjs').processNames.api")"
+  PORTAL_WORKER_PROCESS_NAME="$(node -p "require('./deploy/ecosystem.config.cjs').processNames.portalWorker")"
+
+  # Restart exact, preflight-verified names. `pm2 restart` cannot create a
+  # missing process; worker first keeps the old API available during its boot.
+  pm2 restart "$PORTAL_WORKER_PROCESS_NAME" --update-env
+  pm2 restart "$API_PROCESS_NAME" --update-env
   pm2 save
 
   if ! pm2 describe pm2-logrotate > /dev/null 2>&1; then
@@ -63,17 +64,15 @@ if command -v pm2 &> /dev/null; then
     pm2 set pm2-logrotate:compress true
   fi
   echo ""
-  echo " PM2 process started. Useful commands:"
+  echo " PM2 processes safely updated. Useful commands:"
   echo "   pm2 status           — View process status"
   echo "   pm2 logs             — View logs"
   echo "   pm2 monit            — Monitor dashboard"
-  echo "   pm2 restart all      — Restart all processes"
+  echo "   pm2 restart $API_PROCESS_NAME"
+  echo "   pm2 restart $PORTAL_WORKER_PROCESS_NAME"
 else
-  echo "[warn] PM2 not found. Install it with: npm install -g pm2"
-  echo "       Then run: pm2 start deploy/ecosystem.config.cjs --env production"
-  echo ""
-  echo "       Or run directly with:"
-  echo "       NODE_ENV=production PORT=5000 node artifacts/api-server/dist/index.cjs"
+  echo "[error] PM2 not found; refusing to start unmanaged production processes."
+  exit 1
 fi
 
 echo ""

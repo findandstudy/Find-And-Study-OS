@@ -361,12 +361,12 @@ router.get("/company-contracts/:id/file", requireAuth, requirePermission("compan
     const { ObjectStorageService } = await import("../lib/objectStorage");
     const svc = new ObjectStorageService();
     const file = await svc.getObjectEntityFile(row.fileObjectKey);
-    const [meta] = await file.getMetadata();
-    res.setHeader("Content-Type", (meta.contentType as string) || row.fileMime || "application/octet-stream");
     const safeName = (row.fileName || `contract-${id}`).replace(/[^A-Za-z0-9._-]/g, "_");
     res.setHeader("Content-Disposition", `attachment; filename="${safeName}"`);
-    if (meta.size) res.setHeader("Content-Length", String(meta.size));
-    file.createReadStream().on("error", (e) => { console.error("[company-contracts] stream:", e); try { res.end(); } catch {} }).pipe(res);
+    await svc.streamObjectToResponse(req, res, file, {
+      contentType: row.fileMime || undefined,
+      cacheControl: "private, no-store",
+    });
   } catch (err) {
     console.error("[company-contracts] download:", err);
     if (!res.headersSent) res.status(500).json({ error: "Failed to download file" });

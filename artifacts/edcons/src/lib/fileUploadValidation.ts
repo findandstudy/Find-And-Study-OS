@@ -1,4 +1,7 @@
-import { validateUploadedFile as _validateUploadedFile } from "@workspace/file-upload-validation";
+import {
+  validateApplicationDocumentFile as _validateApplicationDocumentFile,
+  validateUploadedFile as _validateUploadedFile,
+} from "@workspace/file-upload-validation";
 
 export {
   ALLOWED_MIME_TYPES,
@@ -9,6 +12,9 @@ export {
   PDF_MAX_SIZE_MB,
   IMAGE_MAX_SIZE_MB,
   FILE_UPLOAD_HELP_TEXT,
+  APPLICATION_DOCUMENT_MAX_SIZE,
+  APPLICATION_DOCUMENT_MAX_SIZE_MB,
+  APPLICATION_DOCUMENT_HELP_TEXT,
   getExtension,
   isAllowedMimeType,
   isAllowedExtension,
@@ -18,6 +24,7 @@ export {
   getMaxSizeLabelForType,
   sanitizeFileName,
   validateUploadedFile,
+  validateApplicationDocumentFile,
   validateFile,
 } from "@workspace/file-upload-validation";
 
@@ -28,6 +35,12 @@ export type {
 
 export function validateFileObj(file: File): { valid: true } | { valid: false; message: string } {
   const error = _validateUploadedFile(file.name, file.type, file.size);
+  if (error) return { valid: false, message: error.message };
+  return { valid: true };
+}
+
+export function validateApplicationDocumentFileObj(file: File): { valid: true } | { valid: false; message: string } {
+  const error = _validateApplicationDocumentFile(file.name, file.type, file.size);
   if (error) return { valid: false, message: error.message };
   return { valid: true };
 }

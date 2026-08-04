@@ -268,8 +268,8 @@ export async function cascadeStudentAssignment(opts: {
  *
  * Priority: student.assignedToId > lead.assignedToId
  *
- * Safe to call on every boot — it only touches rows where assignedToId IS NULL,
- * so a second run is a no-op once everything is consistent.
+ * Explicit administrative backfill only. It only touches rows where
+ * assignedToId IS NULL, so a repeated manual run is a no-op once consistent.
  */
 export async function backfillNullAssignments(actorUserId: number | null = null, ipAddress?: string): Promise<{ studentsFixed: number; leadsFixed: number; appsFixed: number }> {
   let studentsFixed = 0;

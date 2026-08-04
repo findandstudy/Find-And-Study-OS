@@ -264,7 +264,7 @@ pm2 startup
 
 # Durumu kontrol et
 pm2 status
-pm2 logs findandstudy-api --lines 30
+pm2 logs fasos-apply-api --lines 30
 ```
 
 ---
@@ -367,7 +367,7 @@ git push origin hotfix/<ACIKLAMA>
 
 ```bash
 # API sunucusu logları (canlı)
-pm2 logs findandstudy-api
+pm2 logs fasos-apply-api
 
 # Nginx erişim logları
 sudo tail -f /var/log/nginx/findandstudy.access.log
@@ -379,7 +379,7 @@ sudo tail -f /var/log/nginx/findandstudy.error.log
 pm2 status
 
 # API'yi manuel yeniden başlat
-pm2 restart findandstudy-api
+pm2 restart fasos-apply-api
 
 # Nginx'i test et ve yenile
 sudo nginx -t && sudo systemctl reload nginx

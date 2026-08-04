@@ -122,8 +122,8 @@ export async function syncConversationOwner(
 }
 
 /**
- * Boot-time reconcile: pull every linked conversation onto its chain owner
- * (chain wins). Pure SQL, idempotent — safe on every boot.
+ * Explicit operational reconcile: pull every linked conversation onto its
+ * chain owner (chain wins). Pure SQL and idempotent, but never run at API boot.
  */
 export async function reconcileConversationOwners(pool: { query: (sql: string) => Promise<{ rowCount: number | null }> }): Promise<void> {
   try {

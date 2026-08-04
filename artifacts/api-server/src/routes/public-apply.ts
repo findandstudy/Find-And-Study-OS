@@ -9,7 +9,14 @@ import { generateSecureToken, buildWelcomeEmail, buildExistingAccountEmail, send
 import { getCommissionFinanceStatus, getServiceFeeFinanceStatus } from "../lib/stageFinance";
 import { resolveAgentCommission } from "../lib/agentCommission";
 import { recomputeStudentPhoto } from "../lib/studentPhoto";
-import { isAllowedMimeType, isPdf, validateUploadedFile, validateUploadedFileBuffer } from "../lib/fileUploadValidation";
+import {
+  APPLICATION_DOCUMENT_MAX_SIZE,
+  isAllowedMimeType,
+  isPdf,
+  validateApplicationDocumentFile,
+  validateUploadedFile,
+  validateUploadedFileBuffer,
+} from "../lib/fileUploadValidation";
 import { buildDocNameFromParts } from "../lib/docNaming";
 import { PgRateLimitStore } from "../lib/pgRateLimiter";
 import { getRateLimitIp } from "../lib/clientIp";
@@ -488,7 +495,7 @@ router.post("/public/apply", applyLimiter, applyJson, async (req: Request, res: 
     // student or application.
     if (programIdNum) {
       const MAX_DOCS = 10;
-      const MAX_DOC_SIZE = 5 * 1024 * 1024;
+      const MAX_DOC_SIZE = APPLICATION_DOCUMENT_MAX_SIZE;
       const ALLOWED_MIME = new Set([
         "application/pdf",
         "image/jpeg",
@@ -798,7 +805,7 @@ router.post("/public/apply", applyLimiter, applyJson, async (req: Request, res: 
 
     if (Array.isArray(documents) && documents.length > 0 && resultStudentId && resultAppId) {
       const MAX_DOCS = 10;
-      const MAX_DOC_SIZE = 5 * 1024 * 1024;
+      const MAX_DOC_SIZE = APPLICATION_DOCUMENT_MAX_SIZE;
       const ALLOWED_MIME = ["application/pdf", "image/jpeg", "image/png", "image/webp", "image/gif"];
       try {
         const validDocs = documents.slice(0, MAX_DOCS);
@@ -1294,6 +1301,12 @@ router.post("/public/ai/extract-document", aiExtractLimiter, applyJson, async (r
         buffer = Buffer.from(doc.data || "", "base64");
       } catch {
         res.status(400).json({ error: "Invalid base64 file data" });
+        return;
+      }
+      const intakeValidationError = validateApplicationDocumentFile(syntheticFileName, mime, buffer.length);
+      if (intakeValidationError) {
+        const statusCode = intakeValidationError.type === "size_exceeded" ? 413 : 400;
+        res.status(statusCode).json({ error: intakeValidationError.message });
         return;
       }
       const validationError = await validateUploadedFileBuffer(syntheticFileName, mime, buffer);

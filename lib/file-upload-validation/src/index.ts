@@ -41,6 +41,26 @@ export const OFFICE_MAX_SIZE_MB = 20;
 export const FILE_UPLOAD_HELP_TEXT =
   "PDF (maks. 15 MB), JPG/PNG (maks. 15 MB), Word/Excel/PowerPoint (maks. 20 MB)";
 
+// Public/application intake is intentionally stricter than the general staff
+// document pipeline. Keep this value shared by widget, web and API guards so
+// the limit shown to applicants is the limit the server actually enforces.
+export const APPLICATION_DOCUMENT_MAX_SIZE = 5 * 1024 * 1024;
+export const APPLICATION_DOCUMENT_MAX_SIZE_MB = 5;
+export const APPLICATION_DOCUMENT_HELP_TEXT = "PDF, JPG, JPEG or PNG \u2022 Max 5 MB per file";
+
+const APPLICATION_DOCUMENT_MIME_TYPES = new Set<string>([
+  "application/pdf",
+  "image/jpeg",
+  "image/png",
+]);
+
+const APPLICATION_DOCUMENT_EXTENSIONS = new Set<string>([
+  ".pdf",
+  ".jpg",
+  ".jpeg",
+  ".png",
+]);
+
 const OFFICE_MIME_TYPES = new Set<string>([
   "application/msword",
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -184,6 +204,37 @@ export function validateUploadedFile(
     };
   }
 
+  return null;
+}
+
+export function validateApplicationDocumentFile(
+  fileName: string,
+  mimeType: string,
+  sizeBytes: number,
+): FileValidationError | null {
+  const ext = getExtension(fileName);
+  if (!APPLICATION_DOCUMENT_MIME_TYPES.has(mimeType) || !APPLICATION_DOCUMENT_EXTENSIONS.has(ext)) {
+    return {
+      type: "invalid_type",
+      message: "Sadece PDF, JPG, JPEG ve PNG dosyalar\u0131 y\u00fckleyebilirsiniz.",
+    };
+  }
+  if (
+    (mimeType === "application/pdf" && ext !== ".pdf") ||
+    (mimeType === "image/jpeg" && ![".jpg", ".jpeg"].includes(ext)) ||
+    (mimeType === "image/png" && ext !== ".png")
+  ) {
+    return {
+      type: "mime_extension_mismatch",
+      message: "Dosya tipi ile uzant\u0131s\u0131 uyu\u015fmuyor.",
+    };
+  }
+  if (sizeBytes > APPLICATION_DOCUMENT_MAX_SIZE) {
+    return {
+      type: "size_exceeded",
+      message: `Dosya boyutu en fazla ${APPLICATION_DOCUMENT_MAX_SIZE_MB} MB olabilir.`,
+    };
+  }
   return null;
 }
 

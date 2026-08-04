@@ -148,7 +148,7 @@ bash deploy/deploy.sh
 Bu işlem:
 1. Bağımlılıkları yükler
 2. Frontend ve backend'i derler
-3. Veritabanı şemasını kontrol eder (boot DDL idempotent çalışır)
+3. Migration ledger bütünlüğünü doğrular; migration uygulamaz
 4. Uygulamayı PM2 ile başlatır
 
 **Çalıştığını doğrulayın:**
@@ -270,10 +270,10 @@ bash deploy/deploy.sh
 
 > ⚠️ **`drizzle push` production'da KULLANILMAZ** — mevcut tabloları silebilir.
 
-**api-server boot DDL (otomatik):**
-`api-server` açılışında `artifacts/api-server/src/index.ts` içindeki boot DDL bloğu
-idempotent olarak çalışır. Yeni `CREATE TABLE IF NOT EXISTS` / `ADD COLUMN IF NOT EXISTS`
-ifadeleri otomatik uygulanır — normal deploy sırasında ekstra adım gerekmez.
+**API boot davranışı:**
+`api-server` açılışında DDL, seed, cleanup veya backfill çalışmaz. Eksik şema
+normal API başlangıcında otomatik düzeltilmez; migration ayrı ve açıkça
+onaylanmış bir operasyon olmalıdır.
 
 **Manuel şema değişikliği (Drizzle migration):**
 ```bash
@@ -374,7 +374,7 @@ sudo tail -f /var/log/postgresql/postgresql-16-main.log
 ### App not starting
 ```bash
 # PM2 log'larını kontrol edin
-pm2 logs edconsult-os-api --lines 50
+pm2 logs fasos-apply-api --lines 50
 
 # Port kullanımda mı?
 sudo lsof -i :5000

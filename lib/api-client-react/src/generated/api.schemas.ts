@@ -585,6 +585,11 @@ export interface CreateStudentBody {
   languageScore?: string | null;
   /** @nullable */
   notes?: string | null;
+  /**
+   * Existing accessible lead whose branch, owner, and origin are inherited by the new student.
+   * @nullable
+   */
+  sourceLeadId?: number | null;
 }
 
 export interface UpdateStudentBody {

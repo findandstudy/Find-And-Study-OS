@@ -1,5 +1,4 @@
 import { Router, type IRouter, type Request, type Response } from "express";
-import { Readable } from "stream";
 import { z } from "zod";
 import * as fsPromises from "node:fs/promises";
 import * as nodePath from "node:path";
@@ -269,17 +268,7 @@ router.get("/storage/public-objects/*filePath", async (req: Request, res: Respon
       return;
     }
 
-    const response = await objectStorageService.downloadObject(file);
-
-    res.status(response.status);
-    response.headers.forEach((value, key) => res.setHeader(key, value));
-
-    if (response.body) {
-      const nodeStream = Readable.fromWeb(response.body as unknown as Parameters<typeof Readable.fromWeb>[0]);
-      nodeStream.pipe(res);
-    } else {
-      res.end();
-    }
+    await objectStorageService.streamObjectToResponse(req, res, file);
   } catch (error) {
     console.error("Error serving public object:", error);
     res.status(500).json({ error: "Failed to serve public object" });
@@ -306,24 +295,17 @@ router.get("/storage/public-branding/*filePath", async (req: Request, res: Respo
     const objectFile = await objectStorageService.getObjectEntityFile(
       `/objects/branding/${filePath}`,
     );
-    const response = await objectStorageService.downloadObject(objectFile, 86_400);
-    const contentType = response.headers.get("content-type") ?? "";
+    const [metadata] = await objectFile.getMetadata();
+    const contentType = metadata.contentType ?? "";
     if (!EMBED_LOGO_RULES[contentType.toLowerCase()]) {
       res.status(415).json({ error: "Branding asset is not a supported image" });
       return;
     }
 
-    res.status(response.status);
-    response.headers.forEach((value, key) => res.setHeader(key, value));
-    res.setHeader("Cache-Control", "public, max-age=86400, immutable");
     res.setHeader("X-Content-Type-Options", "nosniff");
-
-    if (response.body) {
-      const nodeStream = Readable.fromWeb(response.body as unknown as Parameters<typeof Readable.fromWeb>[0]);
-      nodeStream.pipe(res);
-    } else {
-      res.end();
-    }
+    await objectStorageService.streamObjectToResponse(req, res, objectFile, {
+      cacheControl: "public, max-age=86400, immutable",
+    });
   } catch (error) {
     console.error("Error serving public embed branding:", error);
     if (error instanceof ObjectNotFoundError) {
@@ -362,22 +344,12 @@ router.get("/storage/objects/*path", requireAuth, async (req: Request, res: Resp
     const objectPath = `/objects/${wildcardPath}`;
     const objectFile = await objectStorageService.getObjectEntityFile(objectPath);
 
-    const response = await objectStorageService.downloadObject(objectFile);
-
-    res.status(response.status);
-    response.headers.forEach((value, key) => res.setHeader(key, value));
-
     const downloadName = req.query.download as string | undefined;
     if (downloadName) {
       res.setHeader("Content-Disposition", `attachment; filename="${encodeURIComponent(downloadName)}"`);
     }
 
-    if (response.body) {
-      const nodeStream = Readable.fromWeb(response.body as unknown as Parameters<typeof Readable.fromWeb>[0]);
-      nodeStream.pipe(res);
-    } else {
-      res.end();
-    }
+    await objectStorageService.streamObjectToResponse(req, res, objectFile);
   } catch (error) {
     console.error("Error serving object:", error);
     if (error instanceof ObjectNotFoundError) {

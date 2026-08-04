@@ -527,17 +527,14 @@ router.get("/public/sign/:token/pdf", signLimiter, async (req, res): Promise<voi
     if (normalizedPath.startsWith("/objects/")) normalizedPath = normalizedPath.slice("/objects/".length);
     if (normalizedPath.startsWith("objects/")) normalizedPath = normalizedPath.slice("objects/".length);
     const file = await objectStorage.getObjectEntityFile(`/objects/${normalizedPath}`);
-    const [metadata] = await file.getMetadata();
     // Same contractNumber() source as the document body's {{contract_number}}
     // (e.g. FAS-2026-00025_signed.pdf), shared with the admin download path.
     const filename = signedContractFilename(r.session.id, signed.signedAt ? new Date(signed.signedAt) : (signed.createdAt ? new Date(signed.createdAt) : undefined));
-    res.setHeader("Content-Type", (metadata.contentType as string) || "application/pdf");
     res.setHeader("Content-Disposition", `attachment; filename="${filename}"; filename*=UTF-8''${encodeURIComponent(filename)}`);
-    res.setHeader("Cache-Control", "private, no-store");
-    if (metadata.size) res.setHeader("Content-Length", String(metadata.size));
-    file.createReadStream()
-      .on("error", (err) => { console.error("[public-sign] pdf stream error:", err); if (!res.headersSent) res.status(500).end(); })
-      .pipe(res);
+    await objectStorage.streamObjectToResponse(req, res, file, {
+      contentType: "application/pdf",
+      cacheControl: "private, no-store",
+    });
   } catch (err) {
     console.error("[public-sign] pdf download:", err);
     if (!res.headersSent) res.status(500).json({ error: "Failed to download PDF" });

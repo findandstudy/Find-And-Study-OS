@@ -15,6 +15,7 @@
     "test:notification-localization": "tsx --test ./scripts/test-notification-localization.ts",
     "test:portal-bulk-run-feedback": "tsx --test ./scripts/test-portal-bulk-run-feedback.ts",
     "test:dynamic-lead-sources": "tsx --test ./scripts/test-dynamic-lead-sources.ts",
+    "test:table-pagination": "tsx --test ./scripts/test-table-pagination.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {

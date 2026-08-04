@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react";
+import { clampClientPaginationPage } from "@/lib/tablePagination";
 
 interface TablePaginationProps {
   currentPage: number;
@@ -67,6 +68,7 @@ export function TablePagination({
 
         <div className="flex items-center gap-1">
           <Button
+            type="button"
             variant="outline"
             size="icon"
             className="h-8 w-8"
@@ -76,6 +78,7 @@ export function TablePagination({
             <ChevronsLeft className="h-4 w-4" />
           </Button>
           <Button
+            type="button"
             variant="outline"
             size="icon"
             className="h-8 w-8"
@@ -90,6 +93,7 @@ export function TablePagination({
               <span key={`e${i}`} className="px-1 text-muted-foreground text-sm">...</span>
             ) : (
               <Button
+                type="button"
                 key={p}
                 variant={p === currentPage ? "default" : "outline"}
                 size="icon"
@@ -102,6 +106,7 @@ export function TablePagination({
           )}
 
           <Button
+            type="button"
             variant="outline"
             size="icon"
             className="h-8 w-8"
@@ -111,6 +116,7 @@ export function TablePagination({
             <ChevronRight className="h-4 w-4" />
           </Button>
           <Button
+            type="button"
             variant="outline"
             size="icon"
             className="h-8 w-8"
@@ -128,7 +134,13 @@ export function TablePagination({
 export function useTablePagination(defaultPageSize = 25) {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSizeRaw] = useState(defaultPageSize);
-  const totalRef = useRef(0);
+  const totalRef = useRef<number | null>(null);
+
+  // `paginate()` is optional: server-side lists pass page/limit to the API and
+  // render the returned page directly. Reset this marker on every render so
+  // only a client-side `paginate()` call from the current render enables the
+  // out-of-range clamp below.
+  totalRef.current = null;
 
   function setPageSize(size: number) {
     setPageSizeRaw(size);
@@ -157,8 +169,8 @@ export function useTablePagination(defaultPageSize = 25) {
   // range) while staying loop-safe: once page is within range the condition is
   // false and no further update is scheduled.
   useEffect(() => {
-    const totalPages = Math.max(1, Math.ceil(totalRef.current / pageSize));
-    if (page > totalPages) setPage(totalPages);
+    const safePage = clampClientPaginationPage(page, pageSize, totalRef.current);
+    if (safePage !== page) setPage(safePage);
   });
 
   return { page, pageSize, setPage, setPageSize, resetPage, paginate };

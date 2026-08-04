@@ -102,11 +102,17 @@ test("generated form previews execute in sandboxed iframes", () => {
   }
 });
 
-test("staff conversations support reversible archiving but not permanent deletion", () => {
+test("permanent conversation deletion is admin-only and explicitly confirmed", () => {
   assert.match(inboxRouteSource, /\/inbox\/conversations\/bulk-archive/);
   assert.match(inboxRouteSource, /\/inbox\/conversations\/bulk-unarchive/);
-  assert.doesNotMatch(inboxRouteSource, /\/inbox\/conversations\/bulk-delete/);
-  assert.doesNotMatch(messagesUiSource, /button-(?:internal-)?bulk-delete/);
+  assert.match(inboxRouteSource, /\/inbox\/conversations\/bulk-delete/);
+  assert.match(inboxRouteSource, /requireRole\("super_admin", "admin"\)/);
+  assert.match(inboxRouteSource, /z\.literal\("DELETE_CONVERSATIONS"\)/);
+  assert.match(inboxRouteSource, /delete_inbox_conversations/);
+  assert.match(messagesUiSource, /button-bulk-delete/);
+  assert.match(messagesUiSource, /button-internal-bulk-delete/);
+  assert.match(messagesUiSource, /confirm: "DELETE_CONVERSATIONS"/);
+  assert.match(messagesUiSource, /"delete-final"/);
 });
 
 test("E2E database mutations accept only explicit test database names", () => {

@@ -8,7 +8,7 @@ import { getEffectivePermissionSet, canAccessAssignedRecord, userHasPermission }
 import { cascadeStudentAssignment } from "../lib/leadAssignment";
 import { resolveAgentCommission } from "../lib/agentCommission";
 import { getAgencyMemberAgentIds } from "../lib/agencyStaff";
-import { getVisibleBranchIds, resolveCreateBranchId } from "../lib/branchScope";
+import { getVisibleBranchIds, isInBranchScope, resolveCreateBranchId } from "../lib/branchScope";
 import { assertCanAccessStudent } from "../lib/studentAccess";
 import { streamDocumentToResponse } from "../lib/documentBytes";
 import { isNull } from "drizzle-orm";
@@ -37,6 +37,7 @@ import {
   maybeTriggerAutoEducationExtractForStudent,
   resolveAppliedLevelKey,
 } from "../lib/educationAutoExtract";
+import { authorizeStudentCreationSourceLead } from "../lib/studentCreationSource";
 
 const router: IRouter = Router();
 
@@ -479,7 +480,9 @@ router.post("/students", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES
     highSchool, graduationYear, gpa, languageScore, season,
     interestedLevel,
     educationRecords: rawEducationRecords,
+    sourceLeadId: rawSourceLeadId,
   } = req.body;
+  const user = req.user!;
 
   if (!firstName || !lastName) {
     res.status(400).json({ error: "firstName and lastName are required" });
@@ -526,6 +529,91 @@ router.post("/students", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES
     nationality,
   });
 
+  let sourceLead: {
+    id: number;
+    branchId: number | null;
+    assignedToId: number | null;
+    agentId: number | null;
+    season: string;
+    convertedStudentId: number | null;
+    originType: string;
+    originEntityType: string | null;
+    originEntityId: number | null;
+    originDisplayName: string | null;
+  } | null = null;
+  if (rawSourceLeadId !== undefined && rawSourceLeadId !== null) {
+    const sourceLeadId = Number(rawSourceLeadId);
+    if (!Number.isInteger(sourceLeadId) || sourceLeadId < 1) {
+      res.status(400).json({ error: "sourceLeadId must be a positive integer" });
+      return;
+    }
+
+    [sourceLead] = await db
+      .select({
+        id: leadsTable.id,
+        branchId: leadsTable.branchId,
+        assignedToId: leadsTable.assignedToId,
+        agentId: leadsTable.agentId,
+        season: leadsTable.season,
+        convertedStudentId: leadsTable.convertedStudentId,
+        originType: leadsTable.originType,
+        originEntityType: leadsTable.originEntityType,
+        originEntityId: leadsTable.originEntityId,
+        originDisplayName: leadsTable.originDisplayName,
+      })
+      .from(leadsTable)
+      .where(and(eq(leadsTable.id, sourceLeadId), isNull(leadsTable.deletedAt)));
+
+    if (!sourceLead) {
+      res.status(404).json({ error: "Lead not found" });
+      return;
+    }
+    if (sourceLead.convertedStudentId != null) {
+      res.status(409).json({
+        error: "This lead has already been converted to a student",
+        studentId: sourceLead.convertedStudentId,
+      });
+      return;
+    }
+
+    const actorIsAgent = isAgentRole(user.role);
+    const actorIsAdmin = (ADMIN_ROLES as readonly string[]).includes(user.role);
+    const visibleAgentIds = actorIsAgent
+      ? await getAgentVisibleIds(user.id, user.role)
+      : [];
+    const permissionSet = !actorIsAgent && !actorIsAdmin
+      ? await getEffectivePermissionSet({ id: user.id, role: user.role })
+      : new Set<string>();
+    const [agentStaffUser] = user.role === "agent_staff"
+      ? await db
+          .select({ agentStaffPermissions: usersTable.agentStaffPermissions })
+          .from(usersTable)
+          .where(eq(usersTable.id, user.id))
+      : [null];
+    const access = authorizeStudentCreationSourceLead({
+      actorUserId: user.id,
+      actorIsAdmin,
+      actorIsAgent,
+      actorIsAgentStaff: user.role === "agent_staff",
+      agentStaffCanAccessLeads:
+        user.role !== "agent_staff" ||
+        ((agentStaffUser?.agentStaffPermissions as string[] | null) ?? []).includes("leads"),
+      visibleAgentIds,
+      canViewOthers: permissionSet.has("records.view_others"),
+      sourceLeadAgentId: sourceLead.agentId,
+      sourceLeadAssignedToId: sourceLead.assignedToId,
+      sourceLeadWithinBranchScope: await isInBranchScope(
+        user.id,
+        user.role,
+        sourceLead.branchId,
+      ),
+    });
+    if (!access.allowed) {
+      res.status(access.status).json({ error: access.error });
+      return;
+    }
+  }
+
   if (passportNumber && passportNumber.trim()) {
     const [dupPassport] = await db.select({ id: studentsTable.id }).from(studentsTable)
       .where(and(eq(studentsTable.passportNumber, passportNumber.trim()), isNull(studentsTable.deletedAt)));
@@ -535,7 +623,7 @@ router.post("/students", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES
     }
   }
 
-  let resolvedAgentId = agentId || null;
+  let resolvedAgentId = sourceLead?.agentId ?? agentId ?? null;
   if (isAgentRole(req.user!.role)) {
     const agentRec = await getAgentRecord(req.user!.id, req.user!.role);
     if (!agentRec) {
@@ -560,16 +648,26 @@ router.post("/students", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES
   }
 
   if (rejectInvalidPhone(res, phone)) return;
-  const user = req.user!;
-  const origin = resolvedAgentId
-    ? await inferOriginFromAgentId(resolvedAgentId)
-    : await inferOriginFromUser(user);
-  const inheritedBranchId = await resolveCreateBranchId(user.id, user.role, req.body.branchId ?? null);
-  if (inheritedBranchId == null && user.role !== "super_admin" && user.role !== "student" && !isAgentRole(user.role)) {
+  const origin = sourceLead
+    ? {
+        originType: sourceLead.originType || "direct",
+        originEntityType: sourceLead.originEntityType,
+        originEntityId: sourceLead.originEntityId,
+        originDisplayName: sourceLead.originDisplayName || "Find And Study",
+        originLocked: true,
+        originLeadId: sourceLead.id,
+      }
+    : resolvedAgentId
+      ? await inferOriginFromAgentId(resolvedAgentId)
+      : await inferOriginFromUser(user);
+  const inheritedBranchId = sourceLead
+    ? sourceLead.branchId
+    : await resolveCreateBranchId(user.id, user.role, req.body.branchId ?? null);
+  if (inheritedBranchId == null && !sourceLead && user.role !== "super_admin" && user.role !== "student" && !isAgentRole(user.role)) {
     res.status(403).json({ error: "No accessible branch — cannot create student" });
     return;
   }
-  const resolvedSeason = season || (await getCurrentSeason());
+  const resolvedSeason = season || sourceLead?.season || (await getCurrentSeason());
   const student = await db.transaction(async (tx) => {
     const [insertedStudent] = await tx.insert(studentsTable).values({
       branchId: inheritedBranchId,
@@ -591,6 +689,7 @@ router.post("/students", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES
       postalCode: residence.postalCode,
       needsVisaSupport: typeof needsVisaSupport === "boolean" ? needsVisaSupport : null,
       agentId: resolvedAgentId,
+      assignedToId: sourceLead?.assignedToId ?? null,
       userId: userId || null,
       notes: notes || null,
       highSchool: normBody.highSchool ? (normBody.highSchool as string) : null,

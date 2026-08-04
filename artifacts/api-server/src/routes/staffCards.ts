@@ -417,11 +417,12 @@ router.get("/staff-cards/:userId/documents/:docId/download", requireAuth, requir
   if (!doc) { res.status(404).json({ error: "Document not found" }); return; }
   try {
     const file = await objectStorage.getObjectEntityFile(doc.objectPath);
-    res.setHeader("Content-Type", doc.mimeType || "application/octet-stream");
     res.setHeader("Content-Disposition", `attachment; filename="${doc.filename.replace(/"/g, "")}"`);
-    res.setHeader("Cache-Control", "private, no-store");
     logAudit(req.user!.id, "staff_card.document.download", "user", userId, { docId, docType: doc.docType }, req.ip);
-    file.createReadStream().pipe(res);
+    await objectStorage.streamObjectToResponse(req, res, file, {
+      contentType: doc.mimeType || undefined,
+      cacheControl: "private, no-store",
+    });
   } catch (err) {
     if (err instanceof ObjectNotFoundError) { res.status(404).json({ error: "File no longer exists in storage" }); return; }
     console.error("[staff-cards] download error:", err);

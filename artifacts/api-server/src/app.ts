@@ -118,9 +118,10 @@ app.use((req, res, next) => {
 app.use((_req, res, next) => {
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
-  // Voice notes are an intentional first-party inbox feature. Keep camera and
-  // geolocation disabled, and grant microphone access only to this origin.
-  res.setHeader("Permissions-Policy", "camera=(), microphone=(self), geolocation=()");
+  // Document scanning and voice notes are intentional first-party features.
+  // Camera/microphone stay restricted to this origin; embed.js separately
+  // delegates camera access to the cross-origin widget iframe it creates.
+  res.setHeader("Permissions-Policy", "camera=(self), microphone=(self), geolocation=()");
   next();
 });
 

@@ -163,6 +163,16 @@
   }
 }
 
+/* Dashboard density is a layout preference, not browser zoom. Keeping the
+ * scale on the root preserves normal reflow and crisp rendering while making
+ * data-heavy staff/admin screens usable at 100% browser zoom. Public and
+ * mobile pages retain the standard 16px root size. */
+@media (min-width: 768px) {
+  html[data-panel-density="compact"] {
+    font-size: 13px;
+  }
+}
+
 /* Glassmorphism utilities */
 .glass {
   @apply bg-white/70 dark:bg-black/50 backdrop-blur-md border border-white/20 dark:border-white/10;

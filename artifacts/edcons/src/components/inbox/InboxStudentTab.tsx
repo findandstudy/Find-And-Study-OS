@@ -32,6 +32,7 @@ import {
   CheckCircle2,
   Circle,
   Paperclip,
+  Trash2,
   X as XIcon,
 } from "lucide-react";
 import { inboxDocumentLabel } from "./documentPresentation";
@@ -66,6 +67,14 @@ interface EffectiveDocReqsResponse {
   level: string | null;
   programSpecific: boolean;
   requirements: DocReq[];
+}
+
+interface PersistedDocument {
+  id: number;
+  type: string;
+  name?: string | null;
+  fileName?: string | null;
+  sourceAttachmentId?: string | null;
 }
 
 // ── Icon map ──────────────────────────────────────────────────────────────────
@@ -266,6 +275,8 @@ export function InboxStudentTab({
     docType: string;
     incomingAtt: ChatAttachment;
   } | null>(null);
+  const [documentToDelete, setDocumentToDelete] = useState<PersistedDocument | null>(null);
+  const [deletingDocumentId, setDeletingDocumentId] = useState<number | null>(null);
   // extracting state for analyze button
   const [extracting, setExtracting] = useState(false);
 
@@ -281,7 +292,7 @@ export function InboxStudentTab({
     ? `${BASE_URL}/api/leads/${leadId}/documents`
     : null;
 
-  const { data: backendDocs = [] } = useQuery<Array<{ type: string; sourceAttachmentId?: string | null }>>({
+  const { data: backendDocs = [], refetch: refetchBackendDocs } = useQuery<PersistedDocument[]>({
     queryKey: ["inbox-staging-docs", ownerKey],
     queryFn: () =>
       fetch(docsEndpoint!, { credentials: "include" }).then((r) =>
@@ -384,6 +395,21 @@ export function InboxStudentTab({
     [docReqs]
   );
 
+  const unmatchedBackendDocs = useMemo(
+    () =>
+      backendDocs.filter(
+        (doc) =>
+          !sortedDocReqs.some(
+            (req) =>
+              findMissingMandatoryTypes(
+                [req.documentType],
+                new Set([doc.type]),
+              ).length === 0,
+          ),
+      ),
+    [backendDocs, sortedDocReqs],
+  );
+
   const stagedCount = Object.keys(staging).length;
   const mandatoryDocumentTypes = useMemo(
     () => sortedDocReqs.filter((req) => req.mandatory).map((req) => req.documentType),
@@ -447,6 +473,40 @@ export function InboxStudentTab({
       delete next[docType];
       return next;
     });
+  }
+
+  async function handleDeletePersistedDocument() {
+    if (!documentToDelete || deletingDocumentId !== null) return;
+    const target = documentToDelete;
+    setDeletingDocumentId(target.id);
+    try {
+      await customFetch(`/api/documents/${target.id}`, { method: "DELETE" });
+      setStaging((prev) => {
+        const staged = prev[target.type];
+        if (
+          !staged ||
+          !target.sourceAttachmentId ||
+          `${staged.msgId}:${staged.attachIdx}` !== target.sourceAttachmentId
+        ) {
+          return prev;
+        }
+        const next = { ...prev };
+        delete next[target.type];
+        return next;
+      });
+      await refetchBackendDocs();
+      setDocumentToDelete(null);
+      onUpdated?.();
+      toast({ title: t("appDocsPanel.documentDeleted") });
+    } catch (error) {
+      toast({
+        title: t("studentDetailPage.deleteTooltip"),
+        description: error instanceof Error ? error.message : "Failed to delete document",
+        variant: "destructive",
+      });
+    } finally {
+      setDeletingDocumentId(null);
+    }
   }
 
   async function handleAnalyzeAndCreate() {
@@ -598,6 +658,16 @@ export function InboxStudentTab({
     return inboxDocumentLabel(t, docType, fromBackend);
   };
 
+  const persistedDocLabel = (docType: string) => {
+    const fromRequirements = docReqs.find(
+      (r) => r.documentType.toLowerCase() === docType.toLowerCase()
+    )?.label;
+    if (fromRequirements) return fromRequirements;
+    return docType
+      .replace(/[_-]+/g, " ")
+      .replace(/\b\w/g, (character) => character.toUpperCase());
+  };
+
   const school1Label = isHigherLevel
     ? t("inbox.studentTab.bachelorUni")
     : t("inbox.studentTab.highSchool");
@@ -672,6 +742,21 @@ export function InboxStudentTab({
                 const Icon = getDocIcon(req.documentType);
                 // staged: a ChatAttachment linked via this conversation (has a name + removable)
                 const staged = staging[req.documentType];
+                const persistedDocsForRequirement = backendDocs.filter(
+                  (doc) =>
+                    findMissingMandatoryTypes(
+                      [req.documentType],
+                      new Set([doc.type]),
+                    ).length === 0,
+                );
+                const stagedSourceAttachmentId = staged
+                  ? `${staged.msgId}:${staged.attachIdx}`
+                  : null;
+                const stagedAlreadyPersisted =
+                  !!stagedSourceAttachmentId &&
+                  persistedDocsForRequirement.some(
+                    (doc) => doc.sourceAttachmentId === stagedSourceAttachmentId,
+                  );
                 // isDone: "tamamlandı" — either a chat attachment staged OR already in the
                 // student/lead profile from any upload path (incl. sourceAttachmentId: null)
                 const isDone =
@@ -680,52 +765,86 @@ export function InboxStudentTab({
                 return (
                   <div
                     key={req.documentType}
-                    className="flex items-center gap-2 py-0.5 group"
+                    className="group py-0.5"
                   >
-                    <Icon
-                      className={`w-3.5 h-3.5 shrink-0 ${
-                        isDone
-                          ? "text-emerald-600"
-                          : "text-muted-foreground/50"
-                      }`}
-                    />
-                    <div className="flex-1 min-w-0">
-                      <span
-                        className={`text-xs ${
+                    <div className="flex items-center gap-2">
+                      <Icon
+                        className={`w-3.5 h-3.5 shrink-0 ${
                           isDone
-                            ? "text-foreground font-medium"
-                            : req.mandatory
-                              ? "text-rose-600 font-medium"
-                              : "text-muted-foreground"
+                            ? "text-emerald-600"
+                            : "text-muted-foreground/50"
                         }`}
-                      >
-                        {docLabel(req.documentType)}
-                      </span>
-                      {req.mandatory && !isDone && (
-                        <span className="ms-1.5 text-[10px] bg-rose-100 text-rose-600 px-1 py-0.5 rounded-full">
-                          {t("inbox.studentTab.required")}
+                      />
+                      <div className="flex-1 min-w-0">
+                        <span
+                          className={`text-xs ${
+                            isDone
+                              ? "text-foreground font-medium"
+                              : req.mandatory
+                                ? "text-rose-600 font-medium"
+                                : "text-muted-foreground"
+                          }`}
+                        >
+                          {docLabel(req.documentType)}
                         </span>
-                      )}
-                      {staged && (
-                        <span className="ms-1.5 text-[10px] text-emerald-600 truncate">
-                          {staged.name}
-                        </span>
+                        {req.mandatory && !isDone && (
+                          <span className="ms-1.5 text-[10px] bg-rose-100 text-rose-600 px-1 py-0.5 rounded-full">
+                            {t("inbox.studentTab.required")}
+                          </span>
+                        )}
+                        {staged && !stagedAlreadyPersisted && (
+                          <span className="ms-1.5 text-[10px] text-emerald-600 truncate">
+                            {staged.name}
+                          </span>
+                        )}
+                      </div>
+                      {staged && !stagedAlreadyPersisted ? (
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveStaged(req.documentType)}
+                          className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                          aria-label="Remove"
+                        >
+                          <XIcon className="w-3 h-3 text-muted-foreground hover:text-destructive" />
+                        </button>
+                      ) : null}
+                      {isDone ? (
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                      ) : (
+                        <Circle className="w-3.5 h-3.5 text-muted-foreground/40 shrink-0" />
                       )}
                     </div>
-                    {staged ? (
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveStaged(req.documentType)}
-                        className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
-                        aria-label="Remove"
-                      >
-                        <XIcon className="w-3 h-3 text-muted-foreground hover:text-destructive" />
-                      </button>
-                    ) : null}
-                    {isDone ? (
-                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-                    ) : (
-                      <Circle className="w-3.5 h-3.5 text-muted-foreground/40 shrink-0" />
+                    {persistedDocsForRequirement.length > 0 && (
+                      <div className="ms-5 mt-1 space-y-1">
+                        {persistedDocsForRequirement.map((doc) => {
+                          const fileName =
+                            doc.fileName || doc.name || persistedDocLabel(doc.type);
+                          return (
+                            <div
+                              key={doc.id}
+                              className="flex min-w-0 items-center gap-1.5 rounded-md bg-muted/50 px-1.5 py-1"
+                            >
+                              <FileText className="h-3 w-3 shrink-0 text-emerald-600" />
+                              <span
+                                className="min-w-0 flex-1 truncate text-[10px] text-muted-foreground"
+                                title={fileName}
+                              >
+                                {fileName}
+                              </span>
+                              <button
+                                type="button"
+                                className="shrink-0 rounded p-0.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive focus-visible:text-destructive"
+                                onClick={() => setDocumentToDelete(doc)}
+                                title={t("studentDetailPage.deleteTooltip")}
+                                aria-label={`${t("studentDetailPage.deleteTooltip")}: ${fileName}`}
+                                data-testid={`delete-inbox-document-${doc.id}`}
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
                     )}
                   </div>
                 );
@@ -740,6 +859,42 @@ export function InboxStudentTab({
               </p>
             </div>
           )
+        )}
+
+        {/* Persisted profile documents. Deleting here removes only the linked
+            document record; the original conversation attachment remains. */}
+        {unmatchedBackendDocs.length > 0 && (
+          <div className="border-t px-3 py-3 space-y-2">
+            <div className="text-[11px] text-muted-foreground uppercase tracking-wide">
+              {t("studentDetailPage.documents")}
+            </div>
+            {unmatchedBackendDocs.map((doc) => {
+              const fileName = doc.fileName || doc.name || persistedDocLabel(doc.type);
+              return (
+                <div key={doc.id} className="group flex min-w-0 items-center gap-2">
+                  <FileText className="h-3.5 w-3.5 shrink-0 text-emerald-600" />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-xs font-medium" title={fileName}>
+                      {fileName}
+                    </p>
+                    <p className="truncate text-[10px] text-muted-foreground">
+                      {persistedDocLabel(doc.type)}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    className="shrink-0 rounded-md p-1 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive focus-visible:text-destructive"
+                    onClick={() => setDocumentToDelete(doc)}
+                    title={t("studentDetailPage.deleteTooltip")}
+                    aria-label={`${t("studentDetailPage.deleteTooltip")}: ${fileName}`}
+                    data-testid={`delete-inbox-document-${doc.id}`}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              );
+            })}
+          </div>
         )}
 
         {/* Chat attachments */}
@@ -892,6 +1047,53 @@ export function InboxStudentTab({
               onClick={() => setAddingAtt(null)}
             >
               {t("inbox.studentTab.cancel")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Persisted document delete confirmation ────────────────────────── */}
+      <Dialog
+        open={documentToDelete !== null}
+        onOpenChange={(open) => {
+          if (!open && deletingDocumentId === null) setDocumentToDelete(null);
+        }}
+      >
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="text-sm">
+              {t("studentDetailPage.deleteTooltip")}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2 py-1">
+            <p className="text-sm text-muted-foreground">
+              {t("studentDetailPage.deleteConfirm")}
+            </p>
+            {documentToDelete && (
+              <p className="truncate text-sm font-medium" title={documentToDelete.fileName || documentToDelete.name || undefined}>
+                {documentToDelete.fileName || documentToDelete.name || persistedDocLabel(documentToDelete.type)}
+              </p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={deletingDocumentId !== null}
+              onClick={() => setDocumentToDelete(null)}
+            >
+              {t("inbox.studentTab.cancel")}
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              className="gap-1.5"
+              disabled={deletingDocumentId !== null}
+              onClick={() => void handleDeletePersistedDocument()}
+              data-testid="confirm-delete-inbox-document"
+            >
+              {deletingDocumentId !== null && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+              {t("studentDetailPage.deleteTooltip")}
             </Button>
           </DialogFooter>
         </DialogContent>
