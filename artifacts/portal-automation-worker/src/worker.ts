@@ -7,6 +7,10 @@
  * Environment variables:
  *   WORKER_POLL_MS        Polling interval when queue is empty (default: 5000)
  *   WORKER_STALE_MS       Stale lock threshold for crash recovery (default: 300000 = 5 min)
+ *   WORKER_GLOBAL_CONCURRENCY       Maximum simultaneous portal jobs (default: 1)
+ *   WORKER_DEFAULT_LANE_CONCURRENCY Per-portal-account slots (default: 1)
+ *   WORKER_LANE_CONCURRENCY         Overrides, e.g. "sit=2,topkapi=1"
+ *   WORKER_HEARTBEAT_MS             Active claim heartbeat interval (default: 30000)
  *   DATABASE_URL          Required — PostgreSQL connection string
  */
 
@@ -15,51 +19,33 @@ import fs from "node:fs";
 import path from "node:path";
 import { and, eq, isNull } from "drizzle-orm";
 import { db, pool, portalUniversitiesTable, portalAutomationSettingsTable } from "@workspace/db";
-import {
-  claimNext,
-  cancelStaleIneligibleQueued,
-  releaseStale,
-  buildStudentProfile,
-  runSubmission,
-  writebackResult,
-  handleNeedsFallback,
-  resolveAdapterKey,
-  getNonGraduatedExperimentalAdapterKeys,
-  portalEvidenceFromError,
-  getApplicationMandatoryDocumentStatus,
-} from "@workspace/portal-runner";
+import { claimNextWithLaneLease, type ClaimedSubmission, type ClaimedSubmissionLease, cancelStaleIneligibleQueued, releaseStale, requeueStuck, buildStudentProfile, runSubmission, writebackResult, handleNeedsFallback, resolveAdapterKey, getNonGraduatedExperimentalAdapterKeys, portalEvidenceFromError, getApplicationMandatoryDocumentStatus } from "@workspace/portal-runner";
 import { isSitFamilyKey } from "@workspace/portal-adapters";
 import { resolvePortalCreds } from "./credResolver.js";
+import { loadPortalLanePolicy } from "./portalLanePolicy.js";
 
 // ---------------------------------------------------------------------------
 // Config
 // ---------------------------------------------------------------------------
 
-const POLL_MS   = parseInt(process.env.WORKER_POLL_MS   ?? "5000",   10);
-const STALE_MS  = parseInt(process.env.WORKER_STALE_MS  ?? "300000", 10);
 function positiveInt(value: string | undefined, fallback: number): number {
   const parsed = Number.parseInt(value ?? "", 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
-const QUEUE_RECONCILE_MS = positiveInt(
-  process.env.WORKER_QUEUE_RECONCILE_MS,
-  86_400_000,
-);
-const QUEUE_RECONCILE_INTERVAL_MS = positiveInt(
-  process.env.WORKER_QUEUE_RECONCILE_INTERVAL_MS,
-  300_000,
-);
+const POLL_MS = positiveInt(process.env.WORKER_POLL_MS, 5_000);
+const STALE_MS = positiveInt(process.env.WORKER_STALE_MS, 300_000);
+const LANE_POLICY = loadPortalLanePolicy(process.env, STALE_MS);
+
+const QUEUE_RECONCILE_MS = positiveInt(process.env.WORKER_QUEUE_RECONCILE_MS, 86_400_000);
+const QUEUE_RECONCILE_INTERVAL_MS = positiveInt(process.env.WORKER_QUEUE_RECONCILE_INTERVAL_MS, 300_000);
 const WORKER_ID = `${os.hostname()}-${process.pid}`;
 let nextQueueReconcileAt = 0;
-const SHUTDOWN_TIMEOUT_MS = positiveInt(
-  process.env.WORKER_SHUTDOWN_TIMEOUT_MS,
-  120_000,
-);
+const SHUTDOWN_TIMEOUT_MS = positiveInt(process.env.WORKER_SHUTDOWN_TIMEOUT_MS, 120_000);
 let stopping = false;
 let shutdownPromise: Promise<void> | null = null;
-let activeTick: Promise<void> | null = null;
-let activeSubmissionId: number | null = null;
+let schedulerTick: Promise<void> | null = null;
+const activeJobs = new Map<number, { laneKey: string; slot: number; promise: Promise<void> }>();
 let wakeSleep: (() => void) | null = null;
 
 // ---------------------------------------------------------------------------
@@ -68,12 +54,7 @@ let wakeSleep: (() => void) | null = null;
 // (topkapi-portal-state.json, sit-login-state.png), DB dumps, or Node caches.
 // Called at the top of every tick (cheap — synchronous readdir, no await).
 // ---------------------------------------------------------------------------
-const SWEEP_PATTERNS = [
-  /^portal-sub-/,
-  /^portal-shot-/,
-  /-step\d*\.png$/i,
-  /^playwright_chromiumdev_profile-/,
-];
+const SWEEP_PATTERNS = [/^portal-sub-/, /^portal-shot-/, /-step\d*\.png$/i, /^playwright_chromiumdev_profile-/];
 
 function sweepTmp(maxAgeMin = 180): void {
   const dir = os.tmpdir();
@@ -101,7 +82,7 @@ function sweepTmp(maxAgeMin = 180): void {
 // Main loop
 // ---------------------------------------------------------------------------
 
-console.log(`[portal-worker] Starting — id=${WORKER_ID} poll=${POLL_MS}ms stale=${STALE_MS}ms`);
+console.log(`[portal-worker] Starting — id=${WORKER_ID} poll=${POLL_MS}ms stale=${STALE_MS}ms` + ` globalConcurrency=${LANE_POLICY.globalConcurrency}` + ` defaultLaneConcurrency=${LANE_POLICY.defaultLaneConcurrency}` + ` laneOverrides=${[...LANE_POLICY.laneConcurrency.entries()].map(([key, slots]) => `${key}=${slots}`).join(",") || "none"}` + ` heartbeat=${LANE_POLICY.heartbeatMs}ms`);
 
 /**
  * Loads the allowlist of university keys eligible for auto-processing:
@@ -129,22 +110,16 @@ async function loadAutoProcessTargets(): Promise<{
   const unis = await db
     .select({
       universityKey: portalUniversitiesTable.universityKey,
-      adapterKey:    portalUniversitiesTable.adapterKey,
+      adapterKey: portalUniversitiesTable.adapterKey,
     })
     .from(portalUniversitiesTable)
-    .where(and(
-      eq(portalUniversitiesTable.autoProcess, true),
-      eq(portalUniversitiesTable.isActive, true),
-      isNull(portalUniversitiesTable.deletedAt),
-    ));
+    .where(and(eq(portalUniversitiesTable.autoProcess, true), eq(portalUniversitiesTable.isActive, true), isNull(portalUniversitiesTable.deletedAt)));
 
   // Adapter auto-graduation: exclude universities whose adapter is still
   // experimental (non-graduated). Belt-and-suspenders — the panel's
   // auto-process toggle is already 409-guarded, but a graduation can be
   // "un-earned" (submissions soft-deleted) after the toggle was enabled.
-  const nonGraduated = await getNonGraduatedExperimentalAdapterKeys(
-    unis.map((u) => u.adapterKey),
-  );
+  const nonGraduated = await getNonGraduatedExperimentalAdapterKeys(unis.map((u) => u.adapterKey));
 
   const eligible = unis.filter((u) => !nonGraduated.has(u.adapterKey));
   return {
@@ -161,64 +136,19 @@ async function loadAutoProcessTargets(): Promise<{
  * candidate selection). An empty array means nothing is auto-processed.
  */
 async function loadTriggerStages(): Promise<string[]> {
-  const [settings] = await db
-    .select({ triggerStages: portalAutomationSettingsTable.triggerStages })
-    .from(portalAutomationSettingsTable)
-    .limit(1);
+  const [settings] = await db.select({ triggerStages: portalAutomationSettingsTable.triggerStages }).from(portalAutomationSettingsTable).limit(1);
   return settings?.triggerStages ?? [];
 }
 
-async function tick(): Promise<void> {
-  // Sweep stale /tmp artifacts from crashes or leaks (cheap, sync, non-fatal)
-  sweepTmp();
-
-  // Reset stale locks on every tick (cheap, idempotent)
-  const released = await releaseStale(STALE_MS);
-  if (released.length > 0) {
-    console.log(`[portal-worker] Released ${released.length} stale submission(s)`);
-  }
-
-  // Only claim submissions for autoProcess+active+non-experimental universities.
-  // An empty allowlist means there is nothing to auto-process this tick.
-  const autoProcessTargets = await loadAutoProcessTargets();
-  if (autoProcessTargets.claimKeys.length === 0) return;
-
-  // Gate on configured trigger stages: only claim submissions whose application
-  // is currently in one of those stages (mirrors the enqueue scan).
-  const triggerStages = await loadTriggerStages();
-
-  if (Date.now() >= nextQueueReconcileAt) {
-    nextQueueReconcileAt = Date.now() + Math.max(POLL_MS, QUEUE_RECONCILE_INTERVAL_MS);
-    const reconciled = await cancelStaleIneligibleQueued(
-      autoProcessTargets.reconcileKeys,
-      triggerStages,
-      QUEUE_RECONCILE_MS,
-    );
-    if (reconciled.length > 0) {
-      console.log(
-        `[portal-worker] Reconciled ${reconciled.length} stale automatic queue row(s)` +
-        ` as canceled (stage no longer eligible)`,
-      );
-    }
-  }
-
-  const sub = await claimNext(WORKER_ID, autoProcessTargets.claimKeys, triggerStages);
-  if (!sub) return; // Nothing to do
-  activeSubmissionId = sub.id;
-
-  console.log(
-    `[portal-worker] Claimed submission #${sub.id} (attempt ${sub.attempts}/${sub.maxAttempts})` +
-    ` app=${sub.applicationId} uni=${sub.universityKey} mode=${sub.mode}`,
-  );
+async function processClaimedSubmission(sub: ClaimedSubmission): Promise<void> {
+  console.log(`[portal-worker] Claimed submission #${sub.id} (attempt ${sub.attempts}/${sub.maxAttempts})` + ` app=${sub.applicationId} uni=${sub.universityKey} mode=${sub.mode}`);
 
   let runResult = null;
 
   try {
     const mandatoryDocs = await getApplicationMandatoryDocumentStatus(sub.applicationId);
     if (!mandatoryDocs || mandatoryDocs.missing.length > 0) {
-      const reason = mandatoryDocs
-        ? `MISSING_MANDATORY_DOCUMENTS: ${mandatoryDocs.missing.join(", ")}`
-        : `MISSING_MANDATORY_DOCUMENTS: application ${sub.applicationId} not found`;
+      const reason = mandatoryDocs ? `MISSING_MANDATORY_DOCUMENTS: ${mandatoryDocs.missing.join(", ")}` : `MISSING_MANDATORY_DOCUMENTS: application ${sub.applicationId} not found`;
       console.error(`[portal-worker] Submission #${sub.id} blocked before portal access: ${reason}`);
       await writebackResult(sub.id, null, reason, WORKER_ID);
       return;
@@ -250,45 +180,20 @@ async function tick(): Promise<void> {
     // Students who truly have zero CRM documents are NOT blocked here — that
     // is separate, pre-existing behaviour (including SIT's own zero-doc
     // guard, which this does not touch).
-    if (
-      !isSitFamilyKey(adapterKey) &&
-      profileResult.hasContentBearingDocs &&
-      profileResult.filledSlots.length === 0
-    ) {
-      const reason =
-        `document-bearing student has 0 filled upload slots for adapter=${adapterKey}` +
-        ` (uni=${sub.universityKey}) — refusing to submit with empty document fields;` +
-        ` missing=[${profileResult.missingSlots.join(", ")}]`;
+    if (!isSitFamilyKey(adapterKey) && profileResult.hasContentBearingDocs && profileResult.filledSlots.length === 0) {
+      const reason = `document-bearing student has 0 filled upload slots for adapter=${adapterKey}` + ` (uni=${sub.universityKey}) — refusing to submit with empty document fields;` + ` missing=[${profileResult.missingSlots.join(", ")}]`;
       console.error(`[portal-worker] Submission #${sub.id} blocked: ${reason}`);
       await writebackResult(sub.id, null, reason);
       return;
     }
 
-    runResult = await runSubmission(
-      sub,
-      profileResult.profile,
-      profileResult.files,
-      profileResult.tempDir,
-      creds,
-    );
+    runResult = await runSubmission(sub, profileResult.profile, profileResult.files, profileResult.tempDir, creds);
 
-    console.log(
-      `[portal-worker] Submission #${sub.id} run complete —` +
-      ` submitted=${runResult.result.submitted}` +
-      ` alreadyExists=${runResult.result.alreadyExists}` +
-      ` programMissing=${runResult.result.programMissing}` +
-      ` programFull=${runResult.result.programFull ?? false}`,
-    );
+    console.log(`[portal-worker] Submission #${sub.id} run complete —` + ` submitted=${runResult.result.submitted}` + ` alreadyExists=${runResult.result.alreadyExists}` + ` programMissing=${runResult.result.programMissing}` + ` programFull=${runResult.result.programFull ?? false}`);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error(`[portal-worker] Submission #${sub.id} failed: ${msg}`);
-    await writebackResult(
-      sub.id,
-      null,
-      msg,
-      undefined,
-      portalEvidenceFromError(err),
-    );
+    await writebackResult(sub.id, null, msg, undefined, portalEvidenceFromError(err));
     return;
   }
 
@@ -300,37 +205,114 @@ async function tick(): Promise<void> {
   // try to supersede it with a configured fallback. Fully self-gating
   // (kill-switch, mode=real, idempotency, loop guard) and best-effort — a
   // failure here must never break the worker loop.
-  const needsFallback =
-    runResult?.result?.programFull === true ||
-    (runResult?.result?.programMissing === true &&
-      runResult?.result?.resolution === "not_in_dropdown" &&
-      (runResult?.result?.availablePrograms?.length ?? 0) > 0);
+  const needsFallback = runResult?.result?.programFull === true || (runResult?.result?.programMissing === true && runResult?.result?.resolution === "not_in_dropdown" && (runResult?.result?.availablePrograms?.length ?? 0) > 0);
   if (needsFallback) {
     try {
       const outcome = await handleNeedsFallback(sub.id);
       const trigger = runResult?.result?.programFull ? "program_full" : "program_missing";
-      console.log(
-        `[portal-worker] Submission #${sub.id} ${trigger} → fallback outcome=${outcome.status}`,
-      );
+      console.log(`[portal-worker] Submission #${sub.id} ${trigger} → fallback outcome=${outcome.status}`);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      console.error(
-        `[portal-worker] Submission #${sub.id} fallback orchestrator failed (non-fatal): ${msg}`,
-      );
+      console.error(`[portal-worker] Submission #${sub.id} fallback orchestrator failed (non-fatal): ${msg}`);
     }
+  }
+}
+
+async function processLease(lease: ClaimedSubmissionLease): Promise<void> {
+  let processing = true;
+  let heartbeatChain = Promise.resolve();
+  const heartbeatTimer = setInterval(() => {
+    if (!processing) return;
+    heartbeatChain = heartbeatChain.then(async () => {
+      try {
+        const stillOwned = await lease.heartbeat();
+        if (!stillOwned && processing) {
+          console.error(`[portal-worker] Lost claim ownership for submission #${lease.submission.id}` + ` lane=${lease.laneKey} slot=${lease.slot}`);
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.error(`[portal-worker] Heartbeat failed for submission #${lease.submission.id}` + ` lane=${lease.laneKey} slot=${lease.slot}: ${message}`);
+      }
+    });
+  }, LANE_POLICY.heartbeatMs);
+  heartbeatTimer.unref?.();
+
+  try {
+    await processClaimedSubmission(lease.submission);
+  } finally {
+    processing = false;
+    clearInterval(heartbeatTimer);
+    await heartbeatChain;
+    await lease.release();
+  }
+}
+
+function startLease(lease: ClaimedSubmissionLease): void {
+  const submissionId = lease.submission.id;
+  console.log(`[portal-worker] Starting lane=${lease.laneKey} slot=${lease.slot}` + ` submission #${submissionId}`);
+  const promise = processLease(lease)
+    .catch((error) => {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(`[portal-worker] Lane execution failed for submission #${submissionId}` + ` lane=${lease.laneKey} slot=${lease.slot}: ${message}`);
+    })
+    .finally(() => {
+      activeJobs.delete(submissionId);
+      wakeSleep?.();
+      console.log(`[portal-worker] Released lane=${lease.laneKey} slot=${lease.slot}` + ` submission #${submissionId}`);
+    });
+  activeJobs.set(submissionId, {
+    laneKey: lease.laneKey,
+    slot: lease.slot,
+    promise,
+  });
+}
+
+async function tick(): Promise<void> {
+  sweepTmp();
+
+  const released = await releaseStale(STALE_MS);
+  if (released.length > 0) {
+    console.log(`[portal-worker] Released ${released.length} stale submission(s)`);
+  }
+
+  const autoProcessTargets = await loadAutoProcessTargets();
+  if (autoProcessTargets.claimKeys.length === 0 || stopping) return;
+  const triggerStages = await loadTriggerStages();
+
+  if (Date.now() >= nextQueueReconcileAt) {
+    nextQueueReconcileAt = Date.now() + Math.max(POLL_MS, QUEUE_RECONCILE_INTERVAL_MS);
+    const reconciled = await cancelStaleIneligibleQueued(autoProcessTargets.reconcileKeys, triggerStages, QUEUE_RECONCILE_MS);
+    if (reconciled.length > 0) {
+      console.log(`[portal-worker] Reconciled ${reconciled.length} stale automatic queue row(s)` + ` as canceled (stage no longer eligible)`);
+    }
+  }
+
+  while (!stopping && activeJobs.size < LANE_POLICY.globalConcurrency) {
+    const lease = await claimNextWithLaneLease(WORKER_ID, {
+      universityKeys: autoProcessTargets.claimKeys,
+      triggerStages,
+      defaultLaneConcurrency: LANE_POLICY.defaultLaneConcurrency,
+      laneConcurrency: LANE_POLICY.laneConcurrency,
+    });
+    if (!lease) break;
+    if (stopping) {
+      await requeueStuck(lease.submission.id, WORKER_ID);
+      await lease.release();
+      break;
+    }
+    startLease(lease);
   }
 }
 
 async function loop(): Promise<void> {
   while (!stopping) {
     try {
-      activeTick = tick();
-      await activeTick;
+      schedulerTick = tick();
+      await schedulerTick;
     } catch (err) {
       console.error("[portal-worker] Unexpected tick error:", err);
     } finally {
-      activeTick = null;
-      activeSubmissionId = null;
+      schedulerTick = null;
     }
     if (!stopping) await sleep(POLL_MS);
   }
@@ -355,17 +337,18 @@ async function beginShutdown(signal: string, exitCode: number): Promise<void> {
   shutdownPromise = (async () => {
     stopping = true;
     wakeSleep?.();
-    console.log(
-      `[portal-worker] ${signal} received — polling stopped; draining` +
-      (activeSubmissionId ? ` submission #${activeSubmissionId}` : " current tick"),
-    );
+    const activeIds = [...activeJobs.keys()];
+    console.log(`[portal-worker] ${signal} received — polling stopped; draining` + (activeIds.length > 0 ? ` submissions [${activeIds.join(", ")}]` : " current scheduler tick"));
 
     let timedOut = false;
-    if (activeTick) {
+    if (schedulerTick || activeJobs.size > 0) {
       let drainTimer: ReturnType<typeof setTimeout> | null = null;
       try {
         await Promise.race([
-          activeTick.catch(() => undefined),
+          (async () => {
+            await schedulerTick?.catch(() => undefined);
+            await Promise.allSettled([...activeJobs.values()].map((job) => job.promise));
+          })(),
           new Promise<void>((resolve) => {
             drainTimer = setTimeout(() => {
               timedOut = true;
@@ -380,11 +363,7 @@ async function beginShutdown(signal: string, exitCode: number): Promise<void> {
     }
 
     if (timedOut) {
-      console.error(
-        `[portal-worker] Drain timed out after ${SHUTDOWN_TIMEOUT_MS}ms` +
-        (activeSubmissionId ? ` for submission #${activeSubmissionId}` : "") +
-        "; claim remains for stale-recovery review",
-      );
+      console.error(`[portal-worker] Drain timed out after ${SHUTDOWN_TIMEOUT_MS}ms` + (activeIds.length > 0 ? ` for submissions [${activeIds.join(", ")}]` : "") + "; claim remains for stale-recovery review");
       exitCode = 1;
     }
     await pool.end().catch((error) => {
@@ -396,8 +375,12 @@ async function beginShutdown(signal: string, exitCode: number): Promise<void> {
   return shutdownPromise;
 }
 
-process.once("SIGTERM", () => { void beginShutdown("SIGTERM", 0); });
-process.once("SIGINT", () => { void beginShutdown("SIGINT", 0); });
+process.once("SIGTERM", () => {
+  void beginShutdown("SIGTERM", 0);
+});
+process.once("SIGINT", () => {
+  void beginShutdown("SIGINT", 0);
+});
 process.once("unhandledRejection", (reason) => {
   console.error("[portal-worker] Fatal unhandled promise rejection:", reason);
   void beginShutdown("unhandledRejection", 1);

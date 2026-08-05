@@ -6,6 +6,7 @@
   "scripts": {
     "start": "NODE_OPTIONS=--max-old-space-size=512 tsx ./src/worker.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test:lane-policy": "tsx --test ./scripts/test-portal-lane-policy.ts",
     "test:queue": "tsx --test ./scripts/test-portal-queue.ts",
     "test:writeback": "tsx --test ./scripts/test-portal-writeback.ts",
     "run-once": "NODE_OPTIONS=--max-old-space-size=512 tsx ./scripts/run-once.ts",

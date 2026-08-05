@@ -39,6 +39,7 @@ export interface ClaimedSubmission {
   studentId: number;
   universityKey: string;
   universityName: string;
+  adapterKey: string | null;
   mode: "dry" | "real";
   status: string;
   attempts: number;
@@ -59,6 +60,7 @@ const CLAIM_COLS = `
   student_id        AS "studentId",
   university_key    AS "universityKey",
   university_name   AS "universityName",
+  adapter_key       AS "adapterKey",
   mode,
   status,
   attempts,
@@ -68,6 +70,66 @@ const CLAIM_COLS = `
   enqueued_by       AS "enqueuedBy",
   created_at        AS "createdAt"
 `;
+
+const PORTAL_LANE_LOCK_NAMESPACE = 4_602_020;
+const PORTAL_LANE_SQL = "LOWER(COALESCE(NULLIF(adapter_key, ''), university_key))";
+
+interface ClaimFilters {
+  universityKeys?: string[];
+  triggerStages?: string[];
+  excludeUniversityKeys?: string[];
+  excludeLaneKeys?: string[];
+}
+
+function buildClaimConditions(filters: ClaimFilters): {
+  conditions: string[];
+  params: unknown[];
+} {
+  const conditions: string[] = ["status = 'queued'", "deleted_at IS NULL"];
+  const params: unknown[] = [];
+  const isManualCond = `(meta->>'manual')::boolean IS TRUE`;
+  const gatedConditions: string[] = [];
+
+  if (filters.universityKeys && filters.universityKeys.length > 0) {
+    params.push(filters.universityKeys);
+    gatedConditions.push(`university_key = ANY($${params.length}::text[])`);
+  }
+
+  if (filters.triggerStages !== undefined) {
+    params.push(filters.triggerStages);
+    gatedConditions.push(
+      `EXISTS (
+        SELECT 1 FROM applications a
+        WHERE a.id = portal_submissions.application_id
+          AND a.deleted_at IS NULL
+          AND a.stage = ANY($${params.length}::text[])
+      )`,
+    );
+  }
+
+  if (filters.excludeUniversityKeys && filters.excludeUniversityKeys.length > 0) {
+    params.push(filters.excludeUniversityKeys);
+    gatedConditions.push(`university_key <> ALL($${params.length}::text[])`);
+  }
+
+  if (gatedConditions.length > 0) {
+    conditions.push(`(${isManualCond} OR (${gatedConditions.join(" AND ")}))`);
+  }
+
+  // Capacity is an execution safety boundary, not an automatic-processing
+  // gate. Manual jobs must not bypass it or they could create a second browser
+  // session against a portal account whose configured slots are already full.
+  if (filters.excludeLaneKeys && filters.excludeLaneKeys.length > 0) {
+    params.push(filters.excludeLaneKeys.map((key) => key.toLowerCase()));
+    conditions.push(`${PORTAL_LANE_SQL} <> ALL($${params.length}::text[])`);
+  }
+
+  return { conditions, params };
+}
+
+export function executionLaneKey(submission: Pick<ClaimedSubmission, "adapterKey" | "universityKey">): string {
+  return (submission.adapterKey?.trim() || submission.universityKey.trim()).toLowerCase();
+}
 
 // ---------------------------------------------------------------------------
 // claimNext
@@ -101,12 +163,7 @@ const CLAIM_COLS = `
  *
  * Returns null when the queue is empty or all rows are locked by other workers.
  */
-export async function claimNext(
-  workerId: string,
-  universityKeys?: string[],
-  triggerStages?: string[],
-  excludeUniversityKeys?: string[],
-): Promise<ClaimedSubmission | null> {
+export async function claimNext(workerId: string, universityKeys?: string[], triggerStages?: string[], excludeUniversityKeys?: string[]): Promise<ClaimedSubmission | null> {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
@@ -119,46 +176,16 @@ export async function claimNext(
     // auto-retry loop is instead capped at the enqueue side (max_failures gate
     // in enqueueIfEligible / aggregator fan-out) — new rows stop being created
     // after MAX_AUTO_FAILED_SUBMISSIONS failures per application × university.
-    const conds: string[] = ["status = 'queued'", "deleted_at IS NULL"];
-    const params: unknown[] = [];
-    const isManualCond = `(meta->>'manual')::boolean IS TRUE`;
-
-    const gatedConds: string[] = [];
-
-    if (universityKeys && universityKeys.length > 0) {
-      params.push(universityKeys);
-      gatedConds.push(`university_key = ANY($${params.length}::text[])`);
-    }
-
-    if (triggerStages !== undefined) {
-      params.push(triggerStages);
-      gatedConds.push(
-        `EXISTS (
-          SELECT 1 FROM applications a
-          WHERE a.id = portal_submissions.application_id
-            AND a.deleted_at IS NULL
-            AND a.stage = ANY($${params.length}::text[])
-        )`,
-      );
-    }
-
-    // Adapter auto-graduation: scheduled/automatic drains exclude submissions
-    // targeting still-experimental (non-graduated) adapters. Gated — manual
-    // (meta.manual) rows bypass this like every other automatic-only gate,
-    // because manual single-submission of experimental adapters is allowed.
-    if (excludeUniversityKeys && excludeUniversityKeys.length > 0) {
-      params.push(excludeUniversityKeys);
-      gatedConds.push(`university_key <> ALL($${params.length}::text[])`);
-    }
-
-    if (gatedConds.length > 0) {
-      conds.push(`(${isManualCond} OR (${gatedConds.join(" AND ")}))`);
-    }
+    const { conditions, params } = buildClaimConditions({
+      universityKeys,
+      triggerStages,
+      excludeUniversityKeys,
+    });
 
     const sel = await client.query<ClaimedSubmission>(
       `SELECT ${CLAIM_COLS}
        FROM portal_submissions
-       WHERE ${conds.join("\n         AND ")}
+       WHERE ${conditions.join("\n         AND ")}
        ORDER BY created_at ASC
        LIMIT 1
        FOR UPDATE SKIP LOCKED`,
@@ -194,6 +221,165 @@ export async function claimNext(
 }
 
 // ---------------------------------------------------------------------------
+// claimNextWithLaneLease
+// ---------------------------------------------------------------------------
+
+export interface PortalLaneClaimOptions {
+  universityKeys?: string[];
+  triggerStages?: string[];
+  excludeUniversityKeys?: string[];
+  defaultLaneConcurrency: number;
+  laneConcurrency?: ReadonlyMap<string, number>;
+}
+
+export interface ClaimedSubmissionLease {
+  submission: ClaimedSubmission;
+  laneKey: string;
+  slot: number;
+  heartbeat(): Promise<boolean>;
+  release(): Promise<void>;
+}
+
+function laneSlotCount(laneKey: string, options: PortalLaneClaimOptions): number {
+  const configured = options.laneConcurrency?.get(laneKey) ?? options.defaultLaneConcurrency;
+  if (!Number.isSafeInteger(configured) || configured < 1 || configured > 8) {
+    throw new Error(`Invalid concurrency ${configured} for portal lane ${laneKey}`);
+  }
+  return configured;
+}
+
+/**
+ * Claims the oldest runnable row whose portal-account lane has an available
+ * distributed slot. The slot is a PostgreSQL session advisory lock held on a
+ * dedicated pool client until release() is called. This keeps lane capacity
+ * safe even if an accidental second worker process starts.
+ *
+ * Rows belonging to a full lane are skipped without changing their status or
+ * attempt counter; the function can therefore continue to a different portal
+ * instead of allowing a long SIT queue to block every other university.
+ */
+export async function claimNextWithLaneLease(workerId: string, options: PortalLaneClaimOptions): Promise<ClaimedSubmissionLease | null> {
+  const client = await pool.connect();
+  const excludedLaneKeys: string[] = [];
+  let heldLockKey: string | null = null;
+  let clientReleased = false;
+
+  const releaseClient = (error?: Error): void => {
+    if (clientReleased) return;
+    clientReleased = true;
+    client.release(error);
+  };
+
+  try {
+    while (true) {
+      await client.query("BEGIN");
+      const { conditions, params } = buildClaimConditions({
+        universityKeys: options.universityKeys,
+        triggerStages: options.triggerStages,
+        excludeUniversityKeys: options.excludeUniversityKeys,
+        excludeLaneKeys: excludedLaneKeys,
+      });
+
+      const selected = await client.query<ClaimedSubmission>(
+        `SELECT ${CLAIM_COLS}
+         FROM portal_submissions
+         WHERE ${conditions.join("\n           AND ")}
+         ORDER BY created_at ASC
+         LIMIT 1
+         FOR UPDATE SKIP LOCKED`,
+        params,
+      );
+
+      if (selected.rows.length === 0) {
+        await client.query("COMMIT");
+        releaseClient();
+        return null;
+      }
+
+      const submission = selected.rows[0];
+      const laneKey = executionLaneKey(submission);
+      const slots = laneSlotCount(laneKey, options);
+      let acquiredSlot: number | null = null;
+
+      for (let slot = 1; slot <= slots; slot += 1) {
+        const lockKey = `${laneKey}:${slot}`;
+        const lockResult = await client.query<{ acquired: boolean }>(`SELECT pg_try_advisory_lock($1::int, hashtext($2)) AS acquired`, [PORTAL_LANE_LOCK_NAMESPACE, lockKey]);
+        if (lockResult.rows[0]?.acquired) {
+          acquiredSlot = slot;
+          heldLockKey = lockKey;
+          break;
+        }
+      }
+
+      if (acquiredSlot === null) {
+        await client.query("ROLLBACK");
+        excludedLaneKeys.push(laneKey);
+        continue;
+      }
+      if (!heldLockKey) {
+        throw new Error(`Portal lane slot acquired without a lock key: ${laneKey}`);
+      }
+      const leaseLockKey = heldLockKey;
+
+      await client.query(
+        `UPDATE portal_submissions
+         SET status     = 'running',
+             locked_at  = NOW(),
+             locked_by  = $1,
+             attempts   = attempts + 1,
+             updated_at = NOW()
+         WHERE id = $2`,
+        [workerId, submission.id],
+      );
+      await client.query("COMMIT");
+
+      let released = false;
+      return {
+        submission,
+        laneKey,
+        slot: acquiredSlot,
+        async heartbeat(): Promise<boolean> {
+          if (released) return false;
+          const result = await client.query(
+            `UPDATE portal_submissions
+             SET locked_at = NOW(), updated_at = NOW()
+             WHERE id = $1
+               AND status = 'running'
+               AND locked_by = $2`,
+            [submission.id, workerId],
+          );
+          return (result.rowCount ?? 0) === 1;
+        },
+        async release(): Promise<void> {
+          if (released) return;
+          released = true;
+          let releaseError: Error | undefined;
+          try {
+            const result = await client.query<{ released: boolean }>(`SELECT pg_advisory_unlock($1::int, hashtext($2)) AS released`, [PORTAL_LANE_LOCK_NAMESPACE, leaseLockKey]);
+            if (!result.rows[0]?.released) {
+              throw new Error(`Portal lane advisory lock was not held: ${leaseLockKey}`);
+            }
+          } catch (error) {
+            releaseError = error instanceof Error ? error : new Error(String(error));
+            throw releaseError;
+          } finally {
+            releaseClient(releaseError);
+          }
+        },
+      };
+    }
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    if (heldLockKey) {
+      await client.query(`SELECT pg_advisory_unlock($1::int, hashtext($2))`, [PORTAL_LANE_LOCK_NAMESPACE, heldLockKey]).catch(() => {});
+    }
+    const claimError = error instanceof Error ? error : new Error(String(error));
+    releaseClient(claimError);
+    throw claimError;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // claimById
 // ---------------------------------------------------------------------------
 
@@ -208,15 +394,13 @@ export async function claimNext(
  * Note: attempt count is NOT checked — any queued row is claimable.
  * If status='queued' it was explicitly authorised for (re-)processing.
  */
-export async function claimById(
-  id: number,
-  workerId: string,
-): Promise<ClaimedSubmission | null> {
+export async function claimById(id: number, workerId: string): Promise<ClaimedSubmission | null> {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
 
-    const sel = await client.query<ClaimedSubmission>(`
+    const sel = await client.query<ClaimedSubmission>(
+      `
       SELECT ${CLAIM_COLS}
       FROM portal_submissions
       WHERE id = $1
@@ -224,7 +408,9 @@ export async function claimById(
         AND deleted_at IS NULL
       LIMIT 1
       FOR UPDATE SKIP LOCKED
-    `, [id]);
+    `,
+      [id],
+    );
 
     if (sel.rows.length === 0) {
       await client.query("COMMIT");
@@ -271,16 +457,8 @@ export async function claimById(
  * aliases. Including aliases lets the reconciler retire historical rows that
  * were enqueued before canonical portal-key enforcement was added.
  */
-export async function cancelStaleIneligibleQueued(
-  universityKeys: string[],
-  triggerStages: string[],
-  thresholdMs: number,
-): Promise<number[]> {
-  const statement = buildStaleIneligibleQueueStatement(
-    universityKeys,
-    triggerStages,
-    thresholdMs,
-  );
+export async function cancelStaleIneligibleQueued(universityKeys: string[], triggerStages: string[], thresholdMs: number): Promise<number[]> {
+  const statement = buildStaleIneligibleQueueStatement(universityKeys, triggerStages, thresholdMs);
   if (!statement) return [];
 
   const res = await pool.query<{ id: number }>(statement.text, statement.values);

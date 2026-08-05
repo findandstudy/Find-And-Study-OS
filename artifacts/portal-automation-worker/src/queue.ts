@@ -5,13 +5,6 @@
  * implementation here caused the worker tests and production behaviour to
  * drift (filtering, manual retries and stale-run recovery all differed).
  */
-export {
-  claimNext,
-  claimById,
-  cancelStaleIneligibleQueued,
-  releaseStale,
-  heartbeat,
-  requeueStuck,
-} from "@workspace/portal-runner";
+export { claimNext, claimNextWithLaneLease, claimById, cancelStaleIneligibleQueued, releaseStale, heartbeat, requeueStuck } from "@workspace/portal-runner";
 
-export type { ClaimedSubmission } from "@workspace/portal-runner";
+export type { ClaimedSubmission, ClaimedSubmissionLease, PortalLaneClaimOptions } from "@workspace/portal-runner";
