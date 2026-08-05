@@ -44,6 +44,8 @@ type Widget = {
   theme: Record<string, any>;
   allowedDomains: string[];
   embedApiKey?: string | null;
+  aiConnectionKey: string;
+  aiExtractorId?: number | null;
   isActive: boolean;
   createdAt: string;
 };
@@ -411,9 +413,21 @@ function WidgetFormDialog({ open, onClose, widget, onSaved }: {
   const [assistantName, setAssistantName] = useState("");
   const [welcomeMessage, setWelcomeMessage] = useState("");
   const [isActive, setIsActive] = useState(true);
+  const [aiConnectionKey, setAiConnectionKey] = useState("claude");
+  const [aiExtractorId, setAiExtractorId] = useState<string>("__default__");
   const [saving, setSaving] = useState(false);
 
   const isEdit = !!widget;
+
+  const { data: aiOptions } = useQuery({
+    queryKey: ["embed-ai-options"],
+    queryFn: () => customFetch("/api/embed/widgets/ai-options") as Promise<{
+      connections: Array<{ key: string; name: string }>;
+      extractors: Array<{ id: number; name: string }>;
+    }>,
+    enabled: open,
+    staleTime: 60_000,
+  });
 
   useEffect(() => {
     if (!open) return;
@@ -440,6 +454,8 @@ function WidgetFormDialog({ open, onClose, widget, onSaved }: {
       setAssistantName(th.assistantName || "");
       setWelcomeMessage(th.welcomeMessage || "");
       setIsActive(widget.isActive);
+      setAiConnectionKey(widget.aiConnectionKey || "claude");
+      setAiExtractorId(widget.aiExtractorId ? String(widget.aiExtractorId) : "__default__");
     } else {
       setName(""); setSlug(""); setMode("combined");
       setPresetCountry(""); setPresetCity(""); setPresetUniversityType(""); setPresetUniversityId(""); setPresetLevel(""); setPresetLanguage(""); setPresetField("");
@@ -447,6 +463,7 @@ function WidgetFormDialog({ open, onClose, widget, onSaved }: {
       setPrimaryColor("#2563eb"); setButtonColor("#2563eb"); setBorderRadius("8px");
       setLogoUrl(""); setAssistantName(""); setWelcomeMessage("");
       setIsActive(true);
+      setAiConnectionKey("claude"); setAiExtractorId("__default__");
     }
   }, [open, widget]);
 
@@ -490,6 +507,8 @@ function WidgetFormDialog({ open, onClose, widget, onSaved }: {
         ...(welcomeMessage.trim() ? { welcomeMessage: welcomeMessage.trim() } : {}),
       },
       allowedDomains: domains.split(",").map(d => d.trim()).filter(Boolean),
+      aiConnectionKey,
+      aiExtractorId: aiExtractorId === "__default__" ? null : Number(aiExtractorId),
       isActive,
     };
 
@@ -561,10 +580,11 @@ function WidgetFormDialog({ open, onClose, widget, onSaved }: {
         </DialogHeader>
 
         <Tabs defaultValue="general" className="mt-2">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="general">{t("adminEmbeds.tabGeneral")}</TabsTrigger>
             <TabsTrigger value="filters">{t("adminEmbeds.tabFilters")}</TabsTrigger>
             <TabsTrigger value="theme">{t("adminEmbeds.tabTheme")}</TabsTrigger>
+            <TabsTrigger value="ai">AI</TabsTrigger>
             <TabsTrigger value="security">{t("adminEmbeds.tabSecurity")}</TabsTrigger>
           </TabsList>
 
@@ -841,6 +861,39 @@ function WidgetFormDialog({ open, onClose, widget, onSaved }: {
               <Input value={domains} onChange={e => setDomains(e.target.value)}
                 placeholder="e.g., example.com, masterstudyinturkey.com" />
               <p className="text-xs text-muted-foreground mt-1">Comma-separated. Leave empty to allow all domains.</p>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="ai" className="space-y-4 mt-4">
+            <div className="rounded-xl border border-blue-200 bg-blue-50/70 p-3 text-sm text-blue-950">
+              Each widget has its own processing lane. Select a dedicated Anthropic connection when this widget needs isolated provider capacity. If that connection is unavailable, the default Claude connection is used safely.
+            </div>
+            <div>
+              <label className="text-sm font-medium">AI Connection</label>
+              <Select value={aiConnectionKey} onValueChange={setAiConnectionKey}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {(aiOptions?.connections || [{ key: "claude", name: "Default Claude connection" }]).map(connection => (
+                    <SelectItem key={connection.key} value={connection.key}>{connection.name} ({connection.key})</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground mt-1">Secrets stay in Settings → Integrations and are never exposed here.</p>
+            </div>
+            <div>
+              <label className="text-sm font-medium">Document Extractor</label>
+              <Select value={aiExtractorId} onValueChange={setAiExtractorId}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__default__">Default embed extractor</SelectItem>
+                  {(aiOptions?.extractors || []).map(extractor => (
+                    <SelectItem key={extractor.id} value={String(extractor.id)}>{extractor.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="text-xs text-muted-foreground">
+              Lane: <code>widget:{widget?.id || "new"}</code> · Per-widget concurrency is controlled by the API scheduler.
             </div>
           </TabsContent>
         </Tabs>

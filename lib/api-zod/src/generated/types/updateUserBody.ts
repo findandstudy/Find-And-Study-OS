@@ -21,4 +21,6 @@ export interface UpdateUserBody {
   language?: string | null;
   /** @nullable */
   isActive?: boolean | null;
+  /** @nullable */
+  branchId?: number | null;
 }

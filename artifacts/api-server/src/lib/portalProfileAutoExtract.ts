@@ -7,10 +7,6 @@ import {
   usersTable,
 } from "@workspace/db";
 import {
-  getAnthropicClient,
-  getClaudeConfig,
-} from "@workspace/integrations-anthropic-ai";
-import {
   evaluateSitIdentity,
   sitPassportIdentityProofFromDocument,
   validatePassportNumber,
@@ -29,6 +25,8 @@ import {
   PASSPORT_IDENTITY_FIELDS,
   type PassportIdentityField,
 } from "./portalPassportIdentitySync.js";
+import { documentAiScheduler } from "./aiLaneScheduler.js";
+import { getDocumentAiConnection } from "./documentAiConnection.js";
 
 export interface PortalProfileAutoExtractResult {
   status:
@@ -249,10 +247,9 @@ async function loadPassportExtraction(
     }
 
     try {
-      const [anthropic, config] = await Promise.all([
-        getAnthropicClient(),
-        getClaudeConfig(),
-      ]);
+      const connection = await getDocumentAiConnection("claude", { fallbackToDefault: false });
+      const anthropic = connection.client;
+      const config = { model: connection.model };
       const source = {
         type: "base64" as const,
         media_type: mime,
@@ -267,11 +264,14 @@ async function loadPassportExtraction(
             { type: "text" as const, text: PROMPT },
             { type: "image" as const, source },
           ];
-      const message = await anthropic.messages.create({
-        model: config.model || "claude-sonnet-4-6",
-        max_tokens: 2048,
-        messages: [{ role: "user", content: content as never }],
-      });
+      const message = await documentAiScheduler.run(
+        { laneKey: "portal-document", connectionKey: "claude" },
+        () => anthropic.messages.create({
+          model: config.model || "claude-sonnet-4-6",
+          max_tokens: 2048,
+          messages: [{ role: "user", content: content as never }],
+        }),
+      );
       const textBlock = message.content.find((block) => block.type === "text");
       const json = textBlock?.type === "text"
         ? textBlock.text.match(/\{[\s\S]*\}/)?.[0]

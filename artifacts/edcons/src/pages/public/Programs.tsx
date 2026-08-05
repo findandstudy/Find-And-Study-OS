@@ -383,6 +383,9 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
   const [existingDocs, setExistingDocs] = useState<ExistingDocInfo[]>([]);
   const [replacedTypes, setReplacedTypes] = useState<Set<string>>(new Set());
   const [profileLoaded, setProfileLoaded] = useState(false);
+  const applicationSessionRef = useRef(
+    globalThis.crypto?.randomUUID?.() || `app-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+  );
 
   useEffect(() => {
     if (open && allCountries.length === 0) {
@@ -504,6 +507,7 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
   const stepIndex = step === "personal" ? 0 : step === "documents" || step === "analyzing" ? 1 : step === "review" ? 2 : 2;
 
   function reset() {
+    applicationSessionRef.current = globalThis.crypto?.randomUUID?.() || `app-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     setStep("personal");
     setDocs({});
     setForm({ ...EMPTY_FORM });
@@ -589,8 +593,11 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
 
     setStep("analyzing");
     setAiError(null);
+    let timeout: number | undefined;
 
     try {
+      const controller = new AbortController();
+      timeout = window.setTimeout(() => controller.abort(), 60_000);
       const docPayload = uploadedDocs.map((d) => ({
         type: d.isImage ? "image" as const : "pdf" as const,
         data: d.base64,
@@ -600,10 +607,13 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
 
       const resp = await fetch(`${BASE_URL}/api/public/ai/extract-document`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "X-Application-Session": applicationSessionRef.current,
+        },
         body: JSON.stringify({ documents: docPayload }),
+        signal: controller.signal,
       });
-
       if (!resp.ok) {
         const err = await resp.json().catch(() => ({ error: "AI extraction failed" }));
         throw new Error(err.error || "AI extraction failed");
@@ -625,8 +635,12 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
       mergeAiData(data);
       setStep("review");
     } catch (err: any) {
-      setAiError(err.message || "AI extraction failed");
+      setAiError(err?.name === "AbortError"
+        ? "AI analysis is taking longer than expected. Please continue manually."
+        : (err.message || "AI extraction failed"));
       setStep("review");
+    } finally {
+      if (timeout !== undefined) window.clearTimeout(timeout);
     }
   }
 

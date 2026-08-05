@@ -12,6 +12,7 @@ export {
   CONTENT_ROLES,
   AGENT_ROLES,
   STUDENT_ROLES,
+  DIRECT_BRANCH_ROLES,
   isAgentRole,
   isStaffRole,
   isAdminRole,
@@ -19,4 +20,5 @@ export {
   isFinanceRole,
   isContentRole,
   isStudentRole,
+  requiresDirectBranch,
 } from "@workspace/roles";

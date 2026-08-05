@@ -4,7 +4,6 @@ import { z } from "zod";
 import { requireAuth, requireRole, requireAgentStaffPermission, logAudit } from "../lib/auth";
 import { STAFF_ROLES } from "../lib/roles";
 import { validate, getValidated } from "../middlewares/validate";
-import { getAnthropicClient, getClaudeConfig } from "@workspace/integrations-anthropic-ai";
 import { normalizeGpaEvidenceTo100 } from "../lib/gpaNormalize";
 import { canonicalCountry, cleanCity } from "@workspace/db";
 import {
@@ -29,6 +28,8 @@ import {
 } from "../lib/educationExtraction";
 import { EXTRACT_PROMPT } from "../lib/extractPrompt";
 import { runEducationExtraction } from "../lib/educationAutoExtract";
+import { AiLaneQueueError, documentAiScheduler } from "../lib/aiLaneScheduler";
+import { getDocumentAiConnection } from "../lib/documentAiConnection";
 
 // AI extraction endpoints accept base64-encoded PDF/image documents in the
 // JSON body. Base64 inflates payload size by ~33%, and the route itself
@@ -124,8 +125,9 @@ router.post("/ai/extract-document", requireAuth, aiRateLimit(10, 15 * 60 * 1000)
     let anthropic;
     let claudeConfig;
     try {
-      anthropic = await getAnthropicClient();
-      claudeConfig = await getClaudeConfig();
+      const connection = await getDocumentAiConnection("claude", { fallbackToDefault: false });
+      anthropic = connection.client;
+      claudeConfig = { model: connection.model };
     } catch (err: any) {
       res.status(503).json({ error: err.message || "AI integration not configured" });
       return;
@@ -216,11 +218,14 @@ router.post("/ai/extract-document", requireAuth, aiRateLimit(10, 15 * 60 * 1000)
       ? (claudeConfig.model || DEFAULT_VISION_MODEL)
       : (extractor.model || claudeConfig.model || DEFAULT_VISION_MODEL);
     const maxTokens = useLegacy ? 8192 : (extractor.maxTokens || 8192);
-    const message = await anthropic.messages.create({
-      model,
-      max_tokens: maxTokens,
-      messages: [{ role: "user", content: contentBlocks }],
-    });
+    const message = await documentAiScheduler.run(
+      { laneKey: scope === "agent" ? "agent-document" : "staff-document", connectionKey: "claude" },
+      () => anthropic.messages.create({
+        model,
+        max_tokens: maxTokens,
+        messages: [{ role: "user", content: contentBlocks }],
+      }),
+    );
 
     const textBlock = message.content.find((b) => b.type === "text");
     if (!textBlock || textBlock.type !== "text") {
@@ -428,7 +433,11 @@ router.post("/ai/extract-document", requireAuth, aiRateLimit(10, 15 * 60 * 1000)
     });
   } catch (err: any) {
     console.error("AI extraction error:", err);
-    res.status(500).json({ error: "AI extraction failed" });
+    res.status(err instanceof AiLaneQueueError ? 503 : 500).json({
+      error: err instanceof AiLaneQueueError
+        ? "AI analysis is busy. Your documents remain available; please retry shortly."
+        : "AI extraction failed",
+    });
     await recordExtractorRun({
       extractorId: extractor.id,
       scope: "staff",
@@ -561,18 +570,22 @@ router.post("/ai/extract-bulk-csv", requireAuth, aiRateLimit(20, 15 * 60 * 1000)
         .filter((i) => i >= 0 && headers[i]);
       if (unmappedIdx.length > 0) {
         try {
-          const anthropic = await getAnthropicClient();
-          const claudeConfig = await getClaudeConfig();
-          const msg = await anthropic.messages.create({
-            model: claudeConfig.model || DEFAULT_CSV_MODEL,
-            max_tokens: 1024,
-            messages: [{
-              role: "user",
-              content: `Map each CSV column header to exactly one of these canonical field names, or null if none fit. Canonical fields: ${fields.join(", ")}.
+          const connection = await getDocumentAiConnection("claude", { fallbackToDefault: false });
+          const anthropic = connection.client;
+          const claudeConfig = { model: connection.model };
+          const msg = await documentAiScheduler.run(
+            { laneKey: "staff-csv", connectionKey: "claude" },
+            () => anthropic.messages.create({
+              model: claudeConfig.model || DEFAULT_CSV_MODEL,
+              max_tokens: 1024,
+              messages: [{
+                role: "user",
+                content: `Map each CSV column header to exactly one of these canonical field names, or null if none fit. Canonical fields: ${fields.join(", ")}.
 Return ONLY a JSON object whose keys are the EXACT header strings and whose values are a canonical field name or null. No explanation.
 Headers: ${JSON.stringify(unmappedIdx.map((i) => headers[i]))}`,
-            }],
-          });
+              }],
+            }),
+          );
           const tb = msg.content.find((b) => b.type === "text");
           if (tb && tb.type === "text") {
             const m = tb.text.match(/\{[\s\S]*\}/);

@@ -30,6 +30,8 @@ export const GetMeResponse = zod.object({
   isActive: zod.boolean(),
   emailVerified: zod.boolean(),
   agentStaffPermissions: zod.array(zod.string()).nullish(),
+  branchId: zod.number().nullish(),
+  branchName: zod.string().nullish(),
   createdAt: zod.date(),
 });
 
@@ -46,6 +48,7 @@ export const LogoutResponse = zod.object({
  */
 export const ListUsersQueryParams = zod.object({
   role: zod.coerce.string().optional(),
+  roles: zod.coerce.string().optional().describe("Comma-separated role names."),
   search: zod.coerce.string().optional(),
   page: zod.coerce.number().optional(),
   limit: zod.coerce.number().optional(),
@@ -66,6 +69,8 @@ export const ListUsersResponse = zod.object({
       isActive: zod.boolean(),
       emailVerified: zod.boolean(),
       agentStaffPermissions: zod.array(zod.string()).nullish(),
+      branchId: zod.number().nullish(),
+      branchName: zod.string().nullish(),
       createdAt: zod.date(),
     }),
   ),
@@ -87,6 +92,7 @@ export const CreateUserBody = zod.object({
   role: zod.string(),
   phone: zod.string().nullish(),
   language: zod.string(),
+  branchId: zod.number().nullish(),
 });
 
 /**
@@ -109,6 +115,8 @@ export const GetUserResponse = zod.object({
   isActive: zod.boolean(),
   emailVerified: zod.boolean(),
   agentStaffPermissions: zod.array(zod.string()).nullish(),
+  branchId: zod.number().nullish(),
+  branchName: zod.string().nullish(),
   createdAt: zod.date(),
 });
 
@@ -127,6 +135,7 @@ export const UpdateUserBody = zod.object({
   phone: zod.string().nullish(),
   language: zod.string().nullish(),
   isActive: zod.boolean().nullish(),
+  branchId: zod.number().nullish(),
 });
 
 export const UpdateUserResponse = zod.object({
@@ -142,6 +151,8 @@ export const UpdateUserResponse = zod.object({
   isActive: zod.boolean(),
   emailVerified: zod.boolean(),
   agentStaffPermissions: zod.array(zod.string()).nullish(),
+  branchId: zod.number().nullish(),
+  branchName: zod.string().nullish(),
   createdAt: zod.date(),
 });
 

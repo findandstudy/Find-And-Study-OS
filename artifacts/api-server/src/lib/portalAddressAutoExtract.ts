@@ -1,10 +1,8 @@
 import { and, eq, isNull, or } from "drizzle-orm";
 import { db, studentsTable } from "@workspace/db";
-import {
-  getAnthropicClient,
-  getClaudeConfig,
-} from "@workspace/integrations-anthropic-ai";
 import { logAudit } from "./auth.js";
+import { documentAiScheduler } from "./aiLaneScheduler.js";
+import { getDocumentAiConnection } from "./documentAiConnection.js";
 
 export interface PortalAddressAutoExtractResult {
   status:
@@ -202,22 +200,24 @@ export async function autoFillMissingAddressCity(opts: {
   if (!city) {
     source = "ai";
     try {
-      const [anthropic, config] = await Promise.all([
-        getAnthropicClient(),
-        getClaudeConfig(),
-      ]);
-      const message = await anthropic.messages.create({
-        model: config.model || "claude-sonnet-4-6",
-        max_tokens: 512,
-        messages: [{
-          role: "user",
-          content:
-            `${PROMPT}\n\nInput:\n${JSON.stringify({
-              address,
-              nationality: student.nationality ?? null,
-            })}`,
-        }],
-      });
+      const connection = await getDocumentAiConnection("claude", { fallbackToDefault: false });
+      const anthropic = connection.client;
+      const config = { model: connection.model };
+      const message = await documentAiScheduler.run(
+        { laneKey: "portal-data-extraction", connectionKey: "claude" },
+        () => anthropic.messages.create({
+          model: config.model || "claude-sonnet-4-6",
+          max_tokens: 512,
+          messages: [{
+            role: "user",
+            content:
+              `${PROMPT}\n\nInput:\n${JSON.stringify({
+                address,
+                nationality: student.nationality ?? null,
+              })}`,
+          }],
+        }),
+      );
       const block = message.content.find((item) => item.type === "text");
       const json = block?.type === "text"
         ? block.text.match(/\{[\s\S]*\}/)?.[0]

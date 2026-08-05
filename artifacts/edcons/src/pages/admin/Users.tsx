@@ -27,6 +27,7 @@ import { CountryFlag } from "@/components/CountryFlag";
 import { PhoneCodePicker } from "@/components/ui/phone-code-picker";
 import { QuickContactButtons } from "@/components/QuickContact";
 import { useI18n } from "@/hooks/use-i18n";
+import { requiresDirectBranch } from "@workspace/roles";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
@@ -111,6 +112,11 @@ interface RoleData {
   updatedAt: string;
 }
 
+interface BranchOption {
+  id: number;
+  name: string;
+}
+
 interface PermCategory {
   label: string;
   permissions: Record<string, string>;
@@ -159,15 +165,16 @@ function UsersTab() {
   );
   const users: any[] = (usersResp as any)?.data || usersResp || [];
   const [roles, setRoles] = useState<RoleData[]>([]);
+  const [branches, setBranches] = useState<BranchOption[]>([]);
   const [createOpen, setCreateOpen] = useState(false);
-  const [createForm, setCreateForm] = useState({ firstName: "", lastName: "", email: "", role: "staff", phoneCode: "+90", phone: "", language: "en", password: "", avatarUrl: "" });
+  const [createForm, setCreateForm] = useState({ firstName: "", lastName: "", email: "", role: "staff", branchId: "", phoneCode: "+90", phone: "", language: "en", password: "", avatarUrl: "" });
   const [creating, setCreating] = useState(false);
   const [createAvatarUploading, setCreateAvatarUploading] = useState(false);
   const createAvatarInputRef = useRef<HTMLInputElement>(null);
   const createOpenRef = useRef(false);
   const [editOpen, setEditOpen] = useState(false);
   const [editUser, setEditUser] = useState<any>(null);
-  const [editForm, setEditForm] = useState({ firstName: "", lastName: "", email: "", role: "staff", phoneCode: "+90", phone: "", language: "en", isActive: true, avatarUrl: "" });
+  const [editForm, setEditForm] = useState({ firstName: "", lastName: "", email: "", role: "staff", branchId: "", phoneCode: "+90", phone: "", language: "en", isActive: true, avatarUrl: "" });
   const [editOverrides, setEditOverrides] = useState<Record<string, boolean>>({});
   const [saving, setSaving] = useState(false);
   const [editAvatarUploading, setEditAvatarUploading] = useState(false);
@@ -181,15 +188,21 @@ function UsersTab() {
   const pg = useTablePagination(25);
 
   useEffect(() => {
-    customFetch("/api/roles").then((res: any) => {
-      setRoles(res?.data || res || []);
-    }).catch(() => {});
-  }, []);
+    Promise.all([
+      customFetch("/api/roles"),
+      customFetch("/api/branches?archived=0"),
+    ]).then(([rolesRes, branchesRes]: any[]) => {
+      setRoles(rolesRes?.data || rolesRes || []);
+      setBranches(branchesRes?.data || branchesRes || []);
+    }).catch((err: Error) => {
+      toast({ title: "Failed to load user settings", description: err.message, variant: "destructive" });
+    });
+  }, [toast]);
 
   useEffect(() => {
     createOpenRef.current = createOpen;
     if (!createOpen) {
-      setCreateForm({ firstName: "", lastName: "", email: "", role: "staff", phoneCode: "+90", phone: "", language: "en", password: "", avatarUrl: "" });
+      setCreateForm({ firstName: "", lastName: "", email: "", role: "staff", branchId: "", phoneCode: "+90", phone: "", language: "en", password: "", avatarUrl: "" });
     }
   }, [createOpen]);
 
@@ -246,10 +259,18 @@ function UsersTab() {
       toast({ title: "Please fill in all required fields", variant: "destructive" });
       return;
     }
+    if (requiresDirectBranch(createForm.role) && !createForm.branchId) {
+      toast({ title: "Please select a branch for this staff user", variant: "destructive" });
+      return;
+    }
     setCreating(true);
     try {
-      const { phoneCode, phone, password, avatarUrl, ...rest } = createForm;
-      const payload: Record<string, string> = { ...rest, phone: phone ? `${phoneCode}${phone}` : "" };
+      const { phoneCode, phone, password, avatarUrl, branchId, ...rest } = createForm;
+      const payload: Record<string, unknown> = {
+        ...rest,
+        phone: phone ? `${phoneCode}${phone}` : "",
+        branchId: requiresDirectBranch(createForm.role) ? Number(branchId) : null,
+      };
       if (password) payload.password = password;
       if (avatarUrl) payload.avatarUrl = avatarUrl;
       await customFetch("/api/users", {
@@ -259,7 +280,7 @@ function UsersTab() {
       });
       toast({ title: "User created successfully" });
       setCreateOpen(false);
-      setCreateForm({ firstName: "", lastName: "", email: "", role: "staff", phoneCode: "+90", phone: "", language: "en", password: "", avatarUrl: "" });
+      setCreateForm({ firstName: "", lastName: "", email: "", role: "staff", branchId: "", phoneCode: "+90", phone: "", language: "en", password: "", avatarUrl: "" });
       refetch();
     } catch (err: any) {
       toast({ title: "Failed to create user", description: err.message, variant: "destructive" });
@@ -341,6 +362,7 @@ function UsersTab() {
       lastName: user.lastName || "",
       email: user.email || "",
       role: user.role || "staff",
+      branchId: user.branchId != null ? String(user.branchId) : "",
       phoneCode: parsed.phoneCode,
       phone: parsed.phone,
       language: user.language || "en",
@@ -381,13 +403,23 @@ function UsersTab() {
       toast({ title: "Please fill in all required fields", variant: "destructive" });
       return;
     }
+    if (requiresDirectBranch(editForm.role) && !editForm.branchId) {
+      toast({ title: "Please select a branch for this staff user", variant: "destructive" });
+      return;
+    }
     setSaving(true);
     try {
-      const { phoneCode, phone, avatarUrl, ...rest } = editForm;
+      const { phoneCode, phone, avatarUrl, branchId, ...rest } = editForm;
       await customFetch(`/api/users/${editUser.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...rest, phone: phone ? `${phoneCode}${phone}` : "", avatarUrl: avatarUrl || null, permissionOverrides: editOverrides }),
+        body: JSON.stringify({
+          ...rest,
+          branchId: requiresDirectBranch(editForm.role) ? Number(branchId) : null,
+          phone: phone ? `${phoneCode}${phone}` : "",
+          avatarUrl: avatarUrl || null,
+          permissionOverrides: editOverrides,
+        }),
       });
       toast({ title: "User updated successfully" });
       setEditOpen(false);
@@ -470,6 +502,7 @@ function UsersTab() {
                 <UserSortHeader label="User" sortKey="user" currentSort={sort} onSort={handleSort} />
                 <UserSortHeader label="Email" sortKey="email" currentSort={sort} onSort={handleSort} />
                 <UserSortHeader label="Role" sortKey="role" currentSort={sort} onSort={handleSort} />
+                <th className="px-6 py-4 text-xs font-bold text-muted-foreground uppercase tracking-wider">Branch</th>
                 <UserSortHeader label="Status" sortKey="status" currentSort={sort} onSort={handleSort} />
                 <th className="px-6 py-4 text-xs font-bold text-muted-foreground uppercase tracking-wider">Actions</th>
               </tr>
@@ -478,7 +511,7 @@ function UsersTab() {
               {isLoading ? (
                 [...Array(5)].map((_, i) => (
                   <tr key={i}>
-                    {[...Array(5)].map((_, j) => (
+                    {[...Array(6)].map((_, j) => (
                       <td key={j} className="px-6 py-4">
                         <div className="h-4 bg-secondary animate-pulse rounded-full" />
                       </td>
@@ -486,7 +519,7 @@ function UsersTab() {
                   </tr>
                 ))
               ) : pagedUsers.length === 0 ? (
-                <tr><td colSpan={5} className="px-6 py-16 text-center text-muted-foreground">No users found</td></tr>
+                <tr><td colSpan={6} className="px-6 py-16 text-center text-muted-foreground">No users found</td></tr>
               ) : pagedUsers.map(user => {
                 const badge = {
                   color: roleBadgeColors[user.role] || "bg-secondary text-foreground border-border",
@@ -527,6 +560,15 @@ function UsersTab() {
                     </td>
                     <td className="px-6 py-4">
                       <Badge className={`text-xs border ${badge.color}`}>{badge.label}</Badge>
+                    </td>
+                    <td className="px-6 py-4 text-sm">
+                      {requiresDirectBranch(user.role) ? (
+                        user.branchName
+                          ? <span className="text-foreground">{user.branchName}</span>
+                          : <Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-700">Unassigned</Badge>
+                      ) : (
+                        <span className="text-muted-foreground">{user.role === "super_admin" ? "Global" : "Managed separately"}</span>
+                      )}
                     </td>
                     <td className="px-6 py-4">
                       <Badge variant={user.isActive ? "default" : "secondary"}
@@ -641,7 +683,7 @@ function UsersTab() {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Role</Label>
-                <Select value={createForm.role} onValueChange={v => setCreateForm(f => ({ ...f, role: v }))}>
+                <Select value={createForm.role} onValueChange={v => setCreateForm(f => ({ ...f, role: v, branchId: requiresDirectBranch(v) ? f.branchId : "" }))}>
                   <SelectTrigger className="rounded-xl">
                     <SelectValue />
                   </SelectTrigger>
@@ -665,6 +707,22 @@ function UsersTab() {
                 </Select>
               </div>
             </div>
+            {requiresDirectBranch(createForm.role) && (
+              <div className="space-y-2">
+                <Label>Branch *</Label>
+                <Select value={createForm.branchId} onValueChange={branchId => setCreateForm(f => ({ ...f, branchId }))}>
+                  <SelectTrigger className="rounded-xl">
+                    <SelectValue placeholder="Select the staff user's branch" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {branches.map(branch => (
+                      <SelectItem key={branch.id} value={String(branch.id)}>{branch.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {branches.length === 0 && <p className="text-xs text-destructive">No assignable active branch is available.</p>}
+              </div>
+            )}
             <div className="space-y-2">
               <Label>Phone</Label>
               <div className="flex gap-2">
@@ -739,7 +797,7 @@ function UsersTab() {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Role</Label>
-                <Select value={editForm.role} onValueChange={v => setEditForm(f => ({ ...f, role: v }))}>
+                <Select value={editForm.role} onValueChange={v => setEditForm(f => ({ ...f, role: v, branchId: requiresDirectBranch(v) ? f.branchId : "" }))}>
                   <SelectTrigger className="rounded-xl">
                     <SelectValue />
                   </SelectTrigger>
@@ -763,6 +821,24 @@ function UsersTab() {
                 </Select>
               </div>
             </div>
+            {requiresDirectBranch(editForm.role) && (
+              <div className="space-y-2">
+                <Label>Branch *</Label>
+                <Select value={editForm.branchId} onValueChange={branchId => setEditForm(f => ({ ...f, branchId }))}>
+                  <SelectTrigger className="rounded-xl">
+                    <SelectValue placeholder="Select the staff user's branch" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {branches.map(branch => (
+                      <SelectItem key={branch.id} value={String(branch.id)}>{branch.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {!editForm.branchId && (
+                  <p className="text-xs text-amber-700">This user cannot create branch-scoped records until a branch is assigned.</p>
+                )}
+              </div>
+            )}
             <div className="space-y-2">
               <Label>Phone</Label>
               <div className="flex gap-2">

@@ -112,7 +112,7 @@ test("repository migration history is complete, ordered and duplicate-free", () 
     },
   );
   assert.equal(result.status, 0, result.stderr);
-  assert.match(result.stdout, /OK: 41 files, 41 journal entries/);
+  assert.match(result.stdout, /OK: 42 files, 42 journal entries/);
 });
 
 test("migration validator rejects duplicate ids and non-monotonic journal timestamps", () => {

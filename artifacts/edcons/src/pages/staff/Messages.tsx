@@ -267,6 +267,14 @@ interface InboxConversation {
   awaitingReply?: boolean;
 }
 
+interface InboxStaffOption {
+  id: number;
+  firstName: string | null;
+  lastName: string | null;
+  email?: string | null;
+  isActive?: boolean;
+}
+
 // If no event/heartbeat arrives within this window, the indicator switches
 // from "Live" (green) to "Stalled" (amber) even though the EventSource is
 // still technically open. Heartbeats fire every 25s, so 60s gives a 2x+
@@ -443,6 +451,11 @@ function InboxTab() {
   }, []);
   const [assignedNotice, setAssignedNotice] = useState(false);
   const [channel, setChannel] = useState<string>("all");
+  const [inboxSearch, setInboxSearch] = useState("");
+  const [debouncedInboxSearch, setDebouncedInboxSearch] = useState("");
+  const [assignedStaffId, setAssignedStaffId] = useState<number | null>(null);
+  const [inboxStaff, setInboxStaff] = useState<InboxStaffOption[]>([]);
+  const [inboxStaffLoading, setInboxStaffLoading] = useState(true);
   const [convs, setConvs] = useState<InboxConversation[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -612,6 +625,37 @@ function InboxTab() {
   useEffect(() => { try { localStorage.setItem("inbox_sort_order", sortOrder); } catch {} }, [sortOrder]);
   useEffect(() => { try { localStorage.setItem("inbox_show_tests", String(showTests)); } catch {} }, [showTests]);
 
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedInboxSearch(inboxSearch.trim()), 300);
+    return () => window.clearTimeout(timer);
+  }, [inboxSearch]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setInboxStaffLoading(true);
+    void customFetch("/api/users?roles=super_admin,admin,manager,staff,consultant,editor,accountant&limit=200")
+      .then((res: any) => {
+        if (cancelled) return;
+        const list = Array.isArray(res?.data) ? res.data : [];
+        setInboxStaff(
+          list
+            .filter((staffUser: InboxStaffOption) => staffUser.isActive !== false)
+            .sort((a: InboxStaffOption, b: InboxStaffOption) => {
+              const aName = `${a.firstName ?? ""} ${a.lastName ?? ""}`.trim() || a.email || `#${a.id}`;
+              const bName = `${b.firstName ?? ""} ${b.lastName ?? ""}`.trim() || b.email || `#${b.id}`;
+              return aName.localeCompare(bName);
+            }),
+        );
+      })
+      .catch(() => {
+        if (!cancelled) setInboxStaff([]);
+      })
+      .finally(() => {
+        if (!cancelled) setInboxStaffLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, []);
+
   // Close the mobile lead-info drawer whenever the selected conversation changes
   useEffect(() => {
     setSidebarSheetOpen(false);
@@ -651,7 +695,12 @@ function InboxTab() {
   const fetchInbox = useCallback(async () => {
     setLoading(true);
     try {
-      const url = `/api/inbox/conversations?tab=${tab}${channel !== "all" ? `&channel=${channel}` : ""}&order=${sortOrder}${showTests ? "&showTests=true" : ""}`;
+      const params = new URLSearchParams({ tab, order: sortOrder });
+      if (channel !== "all") params.set("channel", channel);
+      if (showTests) params.set("showTests", "true");
+      if (debouncedInboxSearch) params.set("search", debouncedInboxSearch);
+      if (assignedStaffId !== null) params.set("assignedToId", String(assignedStaffId));
+      const url = `/api/inbox/conversations?${params.toString()}`;
       const res = await customFetch(url);
       setConvs((res as any)?.data || []);
     } catch {
@@ -659,7 +708,7 @@ function InboxTab() {
     } finally {
       setLoading(false);
     }
-  }, [tab, channel, sortOrder, showTests]);
+  }, [tab, channel, sortOrder, showTests, debouncedInboxSearch, assignedStaffId]);
 
   useEffect(() => { fetchInbox(); }, [fetchInbox]);
 
@@ -1539,6 +1588,12 @@ function InboxTab() {
     { key: "unmatched", label: t("messagesPage.unmatched"), icon: AlertTriangle },
     { key: "archived", label: t("inbox.tabs.archived"), icon: Archive },
   ];
+  const selectedStaff = assignedStaffId === null
+    ? null
+    : inboxStaff.find((staffUser) => staffUser.id === assignedStaffId) ?? null;
+  const selectedStaffName = selectedStaff
+    ? `${selectedStaff.firstName ?? ""} ${selectedStaff.lastName ?? ""}`.trim() || selectedStaff.email || `#${selectedStaff.id}`
+    : null;
 
   // ── Thread helpers: windowed history, smart auto-scroll, retry ──────────
 
@@ -1746,6 +1801,28 @@ function InboxTab() {
               </div>
             </div>
 
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={inboxSearch}
+                onChange={(event) => setInboxSearch(event.target.value)}
+                placeholder={t("messagesPage.searchConversations")}
+                className="h-8 pl-8 pr-8 text-xs"
+                data-testid="input-inbox-search"
+              />
+              {inboxSearch && (
+                <button
+                  type="button"
+                  onClick={() => setInboxSearch("")}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+                  aria-label={t("messagesPage.cancel")}
+                  data-testid="button-clear-inbox-search"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
@@ -1756,6 +1833,14 @@ function InboxTab() {
                 >
                   <span className="flex items-center gap-2 min-w-0">
                     {(() => {
+                      if (selectedStaffName) {
+                        return (
+                          <>
+                            <UserCheck className="w-3.5 h-3.5 shrink-0" />
+                            <span className="truncate">{selectedStaffName}</span>
+                          </>
+                        );
+                      }
                       const current = tabs.find((tb) => tb.key === tab) ?? tabs[0];
                       const Icon = current.icon;
                       return (
@@ -1780,12 +1865,15 @@ function InboxTab() {
                   return (
                     <DropdownMenuItem
                       key={tb.key}
-                      onClick={() => setTab(tb.key)}
-                      className={cn("flex items-center gap-2", active && "bg-accent")}
+                      onClick={() => {
+                        setAssignedStaffId(null);
+                        setTab(tb.key);
+                      }}
+                      className={cn("flex items-center gap-2", assignedStaffId === null && active && "bg-accent")}
                     >
                       <Icon className={cn("w-3.5 h-3.5 shrink-0", !active && "opacity-60")} />
                       <span className="flex-1 truncate">{tb.label}</span>
-                      {active && <Check className="w-3.5 h-3.5 shrink-0 opacity-70" />}
+                      {assignedStaffId === null && active && <Check className="w-3.5 h-3.5 shrink-0 opacity-70" />}
                       <button
                         type="button"
                         aria-pressed={pinned}
@@ -1805,6 +1893,39 @@ function InboxTab() {
                     </DropdownMenuItem>
                   );
                 })}
+                <div className="my-1 h-px bg-border" />
+                {inboxStaffLoading && (
+                  <div className="flex items-center gap-1.5 px-2 py-2 text-xs text-muted-foreground">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    {t("common.loading")}
+                  </div>
+                )}
+                {!inboxStaffLoading && inboxStaff.length === 0 && (
+                  <div className="px-2 py-2 text-xs text-muted-foreground">
+                    {t("messagesPage.noStaffFound")}
+                  </div>
+                )}
+                <div className="max-h-56 overflow-y-auto">
+                  {inboxStaff.map((staffUser) => {
+                    const staffName = `${staffUser.firstName ?? ""} ${staffUser.lastName ?? ""}`.trim() || staffUser.email || `#${staffUser.id}`;
+                    const active = staffUser.id === assignedStaffId;
+                    return (
+                      <DropdownMenuItem
+                        key={`staff-${staffUser.id}`}
+                        onClick={() => {
+                          setTab("all");
+                          setAssignedStaffId(staffUser.id);
+                        }}
+                        className={cn("flex items-center gap-2", active && "bg-accent")}
+                        data-testid={`option-inbox-staff-${staffUser.id}`}
+                      >
+                        <UserCheck className={cn("h-3.5 w-3.5 shrink-0", !active && "opacity-60")} />
+                        <span className="flex-1 truncate">{staffName}</span>
+                        {active && <Check className="h-3.5 w-3.5 shrink-0 opacity-70" />}
+                      </DropdownMenuItem>
+                    );
+                  })}
+                </div>
               </DropdownMenuContent>
             </DropdownMenu>
 

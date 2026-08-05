@@ -3,6 +3,7 @@ import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { programsTable } from "./universities";
 import { leadsTable } from "./leads";
+import { aiExtractorsTable } from "./aiExtractors";
 
 export const embedWidgetsTable = pgTable("embed_widgets", {
   id: serial("id").primaryKey(),
@@ -16,10 +17,14 @@ export const embedWidgetsTable = pgTable("embed_widgets", {
   theme: jsonb("theme").notNull().default({}),
   allowedDomains: jsonb("allowed_domains").notNull().default([]),
   embedApiKey: text("embed_api_key"),
+  aiConnectionKey: text("ai_connection_key").notNull().default("claude"),
+  aiExtractorId: integer("ai_extractor_id").references(() => aiExtractorsTable.id, { onDelete: "set null" }),
   isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
-});
+}, (table) => [
+  index("embed_widgets_ai_extractor_idx").on(table.aiExtractorId),
+]);
 
 export const embedSubmissionsTable = pgTable("embed_submissions", {
   id: serial("id").primaryKey(),

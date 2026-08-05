@@ -238,6 +238,10 @@ export interface UserProfile {
   emailVerified: boolean;
   /** @nullable */
   agentStaffPermissions?: string[] | null;
+  /** @nullable */
+  branchId?: number | null;
+  /** @nullable */
+  branchName?: string | null;
   createdAt: string;
 }
 
@@ -249,6 +253,8 @@ export interface CreateUserBody {
   /** @nullable */
   phone?: string | null;
   language: string;
+  /** @nullable */
+  branchId?: number | null;
 }
 
 export interface UpdateUserBody {
@@ -266,6 +272,8 @@ export interface UpdateUserBody {
   language?: string | null;
   /** @nullable */
   isActive?: boolean | null;
+  /** @nullable */
+  branchId?: number | null;
 }
 
 export interface UsersListResponse {
@@ -2467,6 +2475,10 @@ export interface UpdatePortalProgramMappingBody {
 
 export type ListUsersParams = {
   role?: string;
+  /**
+   * Comma-separated role names.
+   */
+  roles?: string;
   search?: string;
   page?: number;
   limit?: number;

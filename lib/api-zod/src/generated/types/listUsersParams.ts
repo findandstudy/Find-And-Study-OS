@@ -8,6 +8,10 @@
 
 export type ListUsersParams = {
   role?: string;
+  /**
+   * Comma-separated role names.
+   */
+  roles?: string;
   search?: string;
   page?: number;
   limit?: number;

@@ -403,6 +403,10 @@ export function embedWidgetColumns(
       note: arrayNote },
     { key: "allowedDomains", header: "Allowed domains (JSON)", kind: "json", width: 36,
       note: 'Array of hostnames permitted to embed, e.g. ["example.com"]' },
+    { key: "aiConnectionKey", header: "AI connection key", kind: "string", width: 24,
+      note: "Secret-free integrations.key reference. Defaults to claude." },
+    { key: "aiExtractorId", header: "AI extractor ID", kind: "number", width: 18,
+      note: "Optional active embed-scope extractor ID. Leave blank for the default." },
   ];
 }
 
@@ -888,6 +892,18 @@ export function toEmbedInsertValues(
     visibleFilters: (row.visibleFilters as unknown[]) ?? [],
     theme: (row.theme as Record<string, unknown>) ?? {},
     allowedDomains: (row.allowedDomains as unknown[]) ?? [],
+    aiConnectionKey:
+      typeof row.aiConnectionKey === "string" && row.aiConnectionKey.trim()
+        ? row.aiConnectionKey.trim().toLowerCase()
+        : "claude",
+    aiExtractorId: (() => {
+      if (row.aiExtractorId === null || row.aiExtractorId === undefined || row.aiExtractorId === "") return null;
+      const value = Number(row.aiExtractorId);
+      if (!Number.isInteger(value) || value <= 0) {
+        throw new ImportValidationError("AI extractor ID must be a positive integer.");
+      }
+      return value;
+    })(),
     // Blank cells default to `true` so admins can leave the column empty
     // when creating widgets from the template; explicit FALSE still wins.
     isActive: row.isActive === false ? false : true,

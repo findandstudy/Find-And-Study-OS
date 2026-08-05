@@ -28,7 +28,6 @@ import {
   studentEducationRecordsTable,
   educationRecordsTable,
 } from "@workspace/db";
-import { getAnthropicClient, getClaudeConfig } from "@workspace/integrations-anthropic-ai";
 import { logAudit } from "./auth";
 import { loadDocumentBytes } from "./documentBytes";
 import { EXTRACT_PROMPT } from "./extractPrompt";
@@ -41,6 +40,8 @@ import {
   isEducationTriggerDocType,
   type EducationRecordOutput,
 } from "./educationExtraction";
+import { documentAiScheduler } from "./aiLaneScheduler";
+import { getDocumentAiConnection } from "./documentAiConnection";
 
 /**
  * Drizzle OR condition that matches any education-related document type
@@ -230,8 +231,9 @@ export async function runEducationExtraction(
   let anthropic;
   let claudeConfig;
   try {
-    anthropic = await getAnthropicClient();
-    claudeConfig = await getClaudeConfig();
+    const connection = await getDocumentAiConnection("claude", { fallbackToDefault: false });
+    anthropic = connection.client;
+    claudeConfig = { model: connection.model };
   } catch (err) {
     return {
       status: "ai_unavailable",
@@ -268,11 +270,14 @@ export async function runEducationExtraction(
 
   let extracted: Record<string, unknown> = {};
   try {
-    const message = await anthropic.messages.create({
-      model: claudeConfig.model || DEFAULT_VISION_MODEL,
-      max_tokens: 8192,
-      messages: [{ role: "user", content: contentBlocks as never }],
-    });
+    const message = await documentAiScheduler.run(
+      { laneKey: "automatic-education", connectionKey: "claude" },
+      () => anthropic.messages.create({
+        model: claudeConfig.model || DEFAULT_VISION_MODEL,
+        max_tokens: 8192,
+        messages: [{ role: "user", content: contentBlocks as never }],
+      }),
+    );
     const textBlock = message.content.find((b) => b.type === "text");
     if (!textBlock || textBlock.type !== "text") {
       return { status: "ai_failed", error: "No response from AI" };

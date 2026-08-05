@@ -126,6 +126,7 @@
     "test:destructive-cleanup-guard": "tsx --test ./scripts/test-destructive-cleanup-guard.ts",
     "test:object-storage-streaming": "tsx --test ./scripts/test-object-storage-streaming.ts",
     "test:background-jobs": "tsx --test ./scripts/test-background-jobs.ts",
+    "test:ai-lanes": "tsx --test ./scripts/test-ai-lane-scheduler.ts",
     "test:migration-authority": "tsx --test ./scripts/test-migration-authority.ts",
     "test:json-canonical": "tsx --test ./scripts/test-json-canonical.ts",
     "test:altinbas-flow-fields": "tsx --test ./scripts/test-altinbas-flow-fields.ts",

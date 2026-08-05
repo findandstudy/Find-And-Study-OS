@@ -1,10 +1,11 @@
 import { Router, type IRouter } from "express";
-import { db, usersTable, rolesTable, studentsTable, softDelete, agentsTable } from "@workspace/db";
+import { db, usersTable, rolesTable, studentsTable, softDelete, agentsTable, branchesTable } from "@workspace/db";
 import { eq, ilike, or, sql, and, isNull, desc, inArray } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import { requireAuth, requireRole, logAudit } from "../lib/auth";
 import { writeAudit } from "../lib/auditLog";
-import { ADMIN_ROLES, MANAGER_ROLES, STAFF_ROLES, AGENT_ROLES } from "../lib/roles";
+import { ADMIN_ROLES, MANAGER_ROLES, STAFF_ROLES, AGENT_ROLES, requiresDirectBranch } from "../lib/roles";
+import { getVisibleBranchIds } from "../lib/branchScope";
 import { toE164 } from "../lib/inbox/phone";
 import { dispatchAgentProfileChangedNotif } from "../lib/agentProfileNotif";
 import { createSession, deleteSessionsForUser, getSessionId, SESSION_TTL, SESSION_COOKIE, type SessionData } from "../lib/replitAuth";
@@ -23,12 +24,26 @@ const createUserBodySchema = z.object({
   language: z.string().trim().optional(),
   password: z.string().optional(),
   avatarUrl: z.string().trim().optional().nullable(),
+  branchId: z.number().int().positive().optional().nullable(),
 });
+
+const branchIdBodySchema = z.number().int().positive().nullable();
 
 const router: IRouter = Router();
 
 const ALLOWED_PATCH_FIELDS = ["email", "firstName", "lastName", "phone", "language", "avatarUrl", "startDate", "homeAddress", "passportNumber", "contractUrl", "passportUrl", "emergencyContactName", "emergencyContactPhone"];
 const ADMIN_PATCH_FIELDS = [...ALLOWED_PATCH_FIELDS, "role", "isActive", "permissionOverrides", "branchId"];
+
+async function canAssignActiveBranch(actorId: number, actorRole: string, branchId: number): Promise<boolean> {
+  const [branch] = await db
+    .select({ id: branchesTable.id })
+    .from(branchesTable)
+    .where(and(eq(branchesTable.id, branchId), isNull(branchesTable.archivedAt)));
+  if (!branch) return false;
+  if (actorRole === "super_admin") return true;
+  const visibleBranchIds = await getVisibleBranchIds(actorId, actorRole);
+  return visibleBranchIds !== null && visibleBranchIds.includes(branchId);
+}
 
 router.get("/users", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
   const asStr = (v: unknown): string => (Array.isArray(v) ? v.join(",") : v == null ? "" : String(v));
@@ -72,10 +87,13 @@ router.get("/users", requireAuth, requireRole(...STAFF_ROLES), async (req, res):
           language: usersTable.language,
           isActive: usersTable.isActive,
           avatarUrl: usersTable.avatarUrl,
+          branchId: usersTable.branchId,
+          branchName: branchesTable.name,
           permissionOverrides: usersTable.permissionOverrides,
           createdAt: usersTable.createdAt,
         })
         .from(usersTable)
+        .leftJoin(branchesTable, eq(usersTable.branchId, branchesTable.id))
         .where(whereClause)
         .orderBy(desc(usersTable.createdAt), desc(usersTable.id))
         .limit(pageParams.limit)
@@ -100,7 +118,7 @@ router.get("/users", requireAuth, requireRole(...STAFF_ROLES), async (req, res):
 });
 
 router.post("/users", requireAuth, requireRole(...ADMIN_ROLES), validate({ body: createUserBodySchema }), async (req, res): Promise<void> => {
-  const { email: normalizedEmail, firstName, lastName, role, phone, language, password, avatarUrl } =
+  const { email: normalizedEmail, firstName, lastName, role, phone, language, password, avatarUrl, branchId } =
     getValidated<{ body: typeof createUserBodySchema }>(req).body;
 
   const BUILTIN_ROLES = ["super_admin", "admin", "manager", "staff", "consultant", "editor", "accountant", "student", "agent", "sub_agent", "pending"];
@@ -108,6 +126,21 @@ router.post("/users", requireAuth, requireRole(...ADMIN_ROLES), validate({ body:
   const validRoles = [...new Set([...BUILTIN_ROLES, ...dbRoles.map(r => r.name)])];
   if (!validRoles.includes(role)) {
     res.status(400).json({ error: "Invalid role" });
+    return;
+  }
+
+  if (requiresDirectBranch(role) && branchId == null) {
+    res.status(400).json({
+      code: "USER_BRANCH_REQUIRED",
+      error: "A branch is required for this staff role.",
+    });
+    return;
+  }
+  if (branchId != null && !(await canAssignActiveBranch(req.user!.id, req.user!.role, branchId))) {
+    res.status(403).json({
+      code: "BRANCH_ASSIGNMENT_FORBIDDEN",
+      error: "The selected branch is unavailable or outside your branch scope.",
+    });
     return;
   }
 
@@ -139,12 +172,13 @@ router.post("/users", requireAuth, requireRole(...ADMIN_ROLES), validate({ body:
       phone: phone || null,
       language: language || "en",
       avatarUrl: avatarUrl || null,
+      branchId: branchId ?? null,
       isActive: true,
       emailVerified: true,
       passwordHash: passwordHash || null,
     })
     .returning();
-  await logAudit(req.user!.id, "create_user", "user", user.id, { role }, req.ip);
+  await logAudit(req.user!.id, "create_user", "user", user.id, { role, branchId: branchId ?? null }, req.ip);
   const { passwordHash: _ph, replitId: _ri, ...safeNewUser } = user as any;
   res.status(201).json(safeNewUser);
 });
@@ -168,9 +202,14 @@ router.patch("/users/:id", requireAuth, async (req, res): Promise<void> => {
   }
 
   // SEC-002: prevent non-super_admin from modifying a super_admin account
+  const [targetCheck] = await db.select({ role: usersTable.role, branchId: usersTable.branchId })
+    .from(usersTable).where(eq(usersTable.id, id));
+  if (!targetCheck) {
+    res.status(404).json({ error: "User not found" });
+    return;
+  }
+
   if (req.user!.role !== "super_admin") {
-    const [targetCheck] = await db.select({ role: usersTable.role })
-      .from(usersTable).where(eq(usersTable.id, id));
     if (targetCheck?.role === "super_admin") {
       res.status(403).json({ error: "Only a super administrator may modify another super administrator account." });
       return;
@@ -211,6 +250,39 @@ router.patch("/users/:id", requireAuth, async (req, res): Promise<void> => {
     const valid = [...new Set([...BUILTIN, ...dbR.map(r => r.name)])];
     if (!valid.includes(updates.role as string)) {
       res.status(400).json({ error: "Invalid role" });
+      return;
+    }
+  }
+
+
+  if (updates.branchId !== undefined) {
+    const parsedBranchId = branchIdBodySchema.safeParse(updates.branchId);
+    if (!parsedBranchId.success) {
+      res.status(400).json({ error: "branchId must be a positive integer or null" });
+      return;
+    }
+    updates.branchId = parsedBranchId.data;
+  }
+
+  const branchAssignmentChanged = updates.role !== undefined || updates.branchId !== undefined;
+  if (branchAssignmentChanged) {
+    const finalRole = (updates.role as string | undefined) ?? targetCheck.role;
+    const finalBranchId = updates.branchId !== undefined
+      ? updates.branchId as number | null
+      : targetCheck.branchId;
+    if (requiresDirectBranch(finalRole) && finalBranchId == null) {
+      res.status(400).json({
+        code: "USER_BRANCH_REQUIRED",
+        error: "A branch is required for this staff role.",
+      });
+      return;
+    }
+    if (finalBranchId != null && updates.branchId !== undefined &&
+        !(await canAssignActiveBranch(req.user!.id, req.user!.role, finalBranchId))) {
+      res.status(403).json({
+        code: "BRANCH_ASSIGNMENT_FORBIDDEN",
+        error: "The selected branch is unavailable or outside your branch scope.",
+      });
       return;
     }
   }

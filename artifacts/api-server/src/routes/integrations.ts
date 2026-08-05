@@ -12,6 +12,7 @@ import { resolveZernioWhatsAppAccount, listZernioWhatsAppTemplates } from "../li
 import { encryptConfig, decryptConfig } from "../lib/encryption";
 import { maskSecrets, mergeConfig } from "../lib/configMasking";
 import { META_API_VERSION } from "../lib/inbox/channels/meta-shared";
+import { clearDocumentAiConnectionCache, isAnthropicConnectionKey } from "../lib/documentAiConnection";
 
 const router: IRouter = Router();
 
@@ -53,11 +54,20 @@ router.get("/integrations/:key", requireAuth, requireRole(...ADMIN_ROLES), async
 });
 
 router.put("/integrations/:key", requireAuth, requireRole(...ADMIN_ROLES), async (req, res): Promise<void> => {
-  const key = String(req.params.key);
+  const key = String(req.params.key).trim().toLowerCase();
   const { name, category, isEnabled, config } = req.body;
 
   if (!name || !category) {
     res.status(400).json({ error: "Name and category are required" });
+    return;
+  }
+
+  if ((key.startsWith("claude:") || key.startsWith("anthropic:")) && !isAnthropicConnectionKey(key)) {
+    res.status(400).json({ error: "Invalid Anthropic connection key" });
+    return;
+  }
+  if (isAnthropicConnectionKey(key) && category !== "ai") {
+    res.status(400).json({ error: "Anthropic connections must use the ai category" });
     return;
   }
 
@@ -123,17 +133,21 @@ router.put("/integrations/:key", requireAuth, requireRole(...ADMIN_ROLES), async
       .returning();
   }
 
-  if (key === "claude") clearConfigCache();
+  if (isAnthropicConnectionKey(key)) {
+    clearConfigCache();
+    clearDocumentAiConnectionCache();
+  }
   if (key === "smtp") invalidateSmtpCache();
   await logAudit(req.user!.id, "update_integration", "integration", result.id, { key, isEnabled: result.isEnabled }, req.ip);
   res.json({ ...result, config: maskSecrets(decryptConfig(result.config as Record<string, any>)) });
 });
 
 router.patch("/integrations/:key/toggle", requireAuth, requireRole(...ADMIN_ROLES), async (req, res): Promise<void> => {
+  const integrationKey = String(req.params.key).trim().toLowerCase();
   const [existing] = await db
     .select()
     .from(integrationsTable)
-    .where(eq(integrationsTable.key, String(req.params.key)));
+    .where(eq(integrationsTable.key, integrationKey));
 
   if (!existing) {
     res.status(404).json({ error: "Integration not found" });
@@ -165,12 +179,15 @@ router.patch("/integrations/:key/toggle", requireAuth, requireRole(...ADMIN_ROLE
   const [result] = await db
     .update(integrationsTable)
     .set({ isEnabled: willEnable })
-    .where(eq(integrationsTable.key, String(req.params.key)))
+    .where(eq(integrationsTable.key, integrationKey))
     .returning();
 
-  if (String(req.params.key) === "claude") clearConfigCache();
-  if (String(req.params.key) === "smtp") invalidateSmtpCache();
-  await logAudit(req.user!.id, "toggle_integration", "integration", result.id, { key: String(req.params.key), isEnabled: result.isEnabled }, req.ip);
+  if (isAnthropicConnectionKey(integrationKey)) {
+    clearConfigCache();
+    clearDocumentAiConnectionCache();
+  }
+  if (integrationKey === "smtp") invalidateSmtpCache();
+  await logAudit(req.user!.id, "toggle_integration", "integration", result.id, { key: integrationKey, isEnabled: result.isEnabled }, req.ip);
   res.json({ ...result, config: maskSecrets(decryptConfig(result.config as Record<string, any>)) });
 });
 
@@ -187,13 +204,13 @@ router.post("/integrations/:key/test", requireAuth, requireRole(...ADMIN_ROLES),
 
   const config = decryptConfig(integration.config as Record<string, any>);
 
-  if (String(req.params.key) === "claude") {
+  if (isAnthropicConnectionKey(String(req.params.key).trim().toLowerCase())) {
     if (!config.apiKey) {
       res.json({ success: false, message: "API key is not configured" });
       return;
     }
     try {
-      const client = new Anthropic({ apiKey: config.apiKey });
+      const client = new Anthropic({ apiKey: config.apiKey, timeout: 15_000, maxRetries: 0 });
       await client.messages.create({
         model: config.model || "claude-sonnet-4-6",
         max_tokens: 5,

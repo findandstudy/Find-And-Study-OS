@@ -20,6 +20,9 @@ export const FINANCE_ROLES: string[] = ["super_admin", "admin", "accountant"];
 export const CONTENT_ROLES: string[] = ["super_admin", "admin", "manager", "editor"];
 export const AGENT_ROLES: string[] = ["agent", "sub_agent", "agent_staff"];
 export const STUDENT_ROLES: string[] = ["student"];
+export const DIRECT_BRANCH_ROLES: string[] = [
+  "admin", "manager", "staff", "consultant", "editor", "accountant",
+];
 
 export type AdminRole = "super_admin" | "admin" | "manager";
 export type ManagerRole = "super_admin" | "admin" | "manager";
@@ -51,4 +54,9 @@ export function isContentRole(role: string): role is ContentRole {
 }
 export function isStudentRole(role: string): role is StudentRole {
   return STUDENT_ROLES.includes(role);
+}
+
+/** Roles whose record access is derived directly from users.branch_id. */
+export function requiresDirectBranch(role: string): boolean {
+  return DIRECT_BRANCH_ROLES.includes(role);
 }

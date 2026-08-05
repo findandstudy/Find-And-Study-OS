@@ -294,6 +294,27 @@ const CATEGORIES = [
 
 const LIVE_GATED_KEYS = new Set(["whatsapp", "web_form", "facebook_messenger", "instagram"]);
 
+const ANTHROPIC_CONNECTION_FIELDS: FieldDef[] = [
+  { key: "apiKey", label: "API Key", type: "password", placeholder: "sk-ant-...", required: true },
+  { key: "model", label: "Default Model", type: "text", placeholder: "claude-sonnet-4-6" },
+];
+
+function isNamedAnthropicConnection(key: string): boolean {
+  return /^(?:claude|anthropic):[a-z0-9][a-z0-9_-]{0,63}$/.test(key);
+}
+
+function namedAnthropicDef(data: IntegrationData): IntegrationDef {
+  return {
+    key: data.key,
+    name: data.name,
+    category: "ai",
+    icon: Bot,
+    color: "bg-amber-500/10 text-amber-700 border-amber-200",
+    description: "Dedicated Anthropic connection for an isolated document-analysis lane.",
+    fields: ANTHROPIC_CONNECTION_FIELDS,
+  };
+}
+
 export function IntegrationsManager() {
   const { toast } = useToast();
   const { t } = useI18n();
@@ -309,6 +330,7 @@ export function IntegrationsManager() {
   const [showPasswords, setShowPasswords] = useState<Set<string>>(new Set());
   const [liveMode, setLiveMode] = useState<{ live: boolean; reason: string } | null>(null);
   const [accountsDef, setAccountsDef] = useState<IntegrationDef | null>(null);
+  const [connectionName, setConnectionName] = useState("");
 
   useEffect(() => {
     fetchIntegrations();
@@ -355,23 +377,39 @@ export function IntegrationsManager() {
     setEditConfig(existing?.config || {});
     setEditEnabled(existing?.isEnabled || false);
     setShowPasswords(new Set());
+    setConnectionName(def.name);
+  }
+
+  function openNewAnthropicConnection() {
+    const suffix = globalThis.crypto?.randomUUID?.().replace(/-/g, "").slice(0, 10) || Date.now().toString(36);
+    openEdit(namedAnthropicDef({
+      key: `claude:${suffix}`,
+      name: "Anthropic Document Lane",
+      category: "ai",
+      isEnabled: false,
+      config: {},
+    }));
   }
 
   async function handleSave() {
     if (!editDef) return;
+    if (isNamedAnthropicConnection(editDef.key) && !connectionName.trim()) {
+      toast({ title: "Connection name is required", variant: "destructive" });
+      return;
+    }
     setSaving(true);
     try {
       await customFetch(`/api/integrations/${editDef.key}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: editDef.name,
+          name: isNamedAnthropicConnection(editDef.key) ? connectionName.trim() : editDef.name,
           category: editDef.category,
           isEnabled: editEnabled,
           config: editConfig,
         }),
       });
-      toast({ title: `${editDef.name} settings saved` });
+      toast({ title: `${isNamedAnthropicConnection(editDef.key) ? connectionName.trim() : editDef.name} settings saved` });
       setEditDef(null);
       fetchIntegrations();
     } catch (err: any) {
@@ -425,7 +463,10 @@ export function IntegrationsManager() {
     });
   }
 
-  const filtered = INTEGRATION_DEFS.filter((d) => {
+  const dynamicAnthropicDefs = integrations
+    .filter((item) => isNamedAnthropicConnection(item.key))
+    .map(namedAnthropicDef);
+  const filtered = [...INTEGRATION_DEFS, ...dynamicAnthropicDefs].filter((d) => {
     if (category !== "all" && d.category !== category) return false;
     if (search && !defName(d).toLowerCase().includes(search.toLowerCase()) && !defDesc(d).toLowerCase().includes(search.toLowerCase())) return false;
     return true;
@@ -455,9 +496,14 @@ export function IntegrationsManager() {
               Connect external services, APIs, and third-party platforms.
             </p>
           </div>
-          <Badge className="bg-primary/10 text-primary border-primary/20">
-            {integrations.filter((i) => i.isEnabled).length} active
-          </Badge>
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="outline" className="gap-1" onClick={openNewAnthropicConnection}>
+              <Plus className="w-4 h-4" /> Add Anthropic connection
+            </Button>
+            <Badge className="bg-primary/10 text-primary border-primary/20">
+              {integrations.filter((i) => i.isEnabled).length} active
+            </Badge>
+          </div>
         </div>
 
         <div className="flex items-center gap-3 mb-6">
@@ -585,6 +631,20 @@ export function IntegrationsManager() {
               </DialogHeader>
 
               <div className="space-y-4 py-2">
+                {isNamedAnthropicConnection(editDef.key) && (
+                  <div>
+                    <Label className="text-xs">Connection name <span className="text-red-500">*</span></Label>
+                    <Input
+                      value={connectionName}
+                      onChange={(event) => setConnectionName(event.target.value)}
+                      className="h-9 rounded-xl mt-1"
+                      placeholder="Website AI connection"
+                    />
+                    <p className="text-[11px] text-muted-foreground mt-1">
+                      Internal key: <code>{editDef.key}</code>. API keys remain encrypted and are never sent to widgets.
+                    </p>
+                  </div>
+                )}
                 <div className="flex items-center justify-between p-3 rounded-xl bg-secondary/30 border border-border/50">
                   <div>
                     <p className="text-sm font-medium">Enable Integration</p>

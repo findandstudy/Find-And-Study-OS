@@ -98,6 +98,11 @@ paths:
           in: query
           schema:
             type: string
+        - name: roles
+          in: query
+          description: Comma-separated role names.
+          schema:
+            type: string
         - name: search
           in: query
           schema:
@@ -3726,6 +3731,10 @@ components:
           type: ["array", "null"]
           items:
             type: string
+        branchId:
+          type: ["integer", "null"]
+        branchName:
+          type: ["string", "null"]
         createdAt:
           type: string
           format: date-time
@@ -3752,6 +3761,8 @@ components:
           type: ["string", "null"]
         language:
           type: string
+        branchId:
+          type: ["integer", "null"]
       required:
         - email
         - firstName
@@ -3776,6 +3787,8 @@ components:
           type: ["string", "null"]
         isActive:
           type: ["boolean", "null"]
+        branchId:
+          type: ["integer", "null"]
 
     UsersListResponse:
       type: object

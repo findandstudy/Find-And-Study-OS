@@ -809,9 +809,19 @@ router.post("/applications", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_R
       ?? (await resolveCreateBranchId(user.id, user.role, req.body.branchId ?? null));
   } else {
     const callerVisible = await getVisibleBranchIds(user.id, user.role);
-    if (!isAgentRole(user.role) && callerVisible !== null && (callerVisible.length === 0 ||
-        (studentFull.branchId != null && !callerVisible.includes(studentFull.branchId)))) {
-      res.status(403).json({ error: "Student not in your branch scope" });
+    if (!isAgentRole(user.role) && callerVisible !== null && callerVisible.length === 0) {
+      res.status(403).json({
+        code: "USER_BRANCH_REQUIRED",
+        error: "Your account is not assigned to a branch. Ask an administrator to assign your branch.",
+      });
+      return;
+    }
+    if (!isAgentRole(user.role) && callerVisible !== null && studentFull.branchId != null &&
+        !callerVisible.includes(studentFull.branchId)) {
+      res.status(403).json({
+        code: "STUDENT_BRANCH_SCOPE_MISMATCH",
+        error: "This student belongs to a branch outside your access scope.",
+      });
       return;
     }
     inheritedBranchId = studentFull.branchId

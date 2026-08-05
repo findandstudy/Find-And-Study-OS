@@ -1,8 +1,7 @@
 import { Router, type IRouter, type Request, type Response, json } from "express";
 import crypto from "crypto";
-import { db, usersTable, studentsTable, applicationsTable, programsTable, universitiesTable, commissionsTable, serviceFeesTable, leadsTable, documentsTable, pipelineStagesTable, programDocumentRequirementsTable, settingsTable, educationRecordsTable } from "@workspace/db";
+import { db, usersTable, studentsTable, applicationsTable, programsTable, universitiesTable, commissionsTable, serviceFeesTable, leadsTable, documentsTable, pipelineStagesTable, programDocumentRequirementsTable, settingsTable, educationRecordsTable, embedWidgetsTable } from "@workspace/db";
 import { eq, and, isNotNull, inArray, isNull, sql, desc } from "drizzle-orm";
-import { getAnthropicClient, getClaudeConfig } from "@workspace/integrations-anthropic-ai";
 import { getDocEquivalenceGroup, getRelevantGroupsForLevel, type DocEquivalenceGroupId } from "@workspace/doc-equivalence";
 import rateLimit from "express-rate-limit";
 import { generateSecureToken, buildWelcomeEmail, buildExistingAccountEmail, sendEmail } from "../lib/email";
@@ -41,6 +40,10 @@ import {
   toLegacyEducationRecord,
 } from "../lib/studentEducationInput";
 import { resolveAppliedLevelKey } from "../lib/educationAutoExtract";
+import { AiLaneQueueError, documentAiScheduler } from "../lib/aiLaneScheduler";
+import { getDocumentAiConnection } from "../lib/documentAiConnection";
+import { getEmbedSigningSecret } from "../lib/embedSigningSecret";
+import { verifyEmbedLeadDocumentSessionToken } from "../lib/embedLeadDocumentSession";
 
 const router: IRouter = Router();
 
@@ -78,14 +81,35 @@ const applyLimiter = rateLimit({
   keyGenerator: (req) => getRateLimitIp(req),
 });
 
-const aiExtractLimiter = rateLimit({
+// Public AI requests use two complementary buckets:
+//  - a broad IP abuse ceiling, which does not punish a normal school/office NAT;
+//  - a narrow application-session ceiling, which follows one browser/form.
+// Provider protection is owned by the bounded lane scheduler below, not by
+// collapsing every visitor behind the same public IP into a five-request pool.
+const aiExtractIpLimiter = rateLimit({
   windowMs: APPLY_WINDOW_MS,
-  max: 5,
+  max: 60,
   message: { error: "Too many AI extraction requests. Please try again later." },
   standardHeaders: true,
   legacyHeaders: false,
-  store: new PgRateLimitStore(APPLY_WINDOW_MS, "ai-extract"),
+  store: new PgRateLimitStore(APPLY_WINDOW_MS, "ai-extract-ip"),
   keyGenerator: (req) => getRateLimitIp(req),
+});
+
+const aiExtractSessionLimiter = rateLimit({
+  windowMs: APPLY_WINDOW_MS,
+  max: 5,
+  message: { error: "Too many analysis attempts for this application. Please continue manually or try again later." },
+  standardHeaders: true,
+  legacyHeaders: false,
+  store: new PgRateLimitStore(APPLY_WINDOW_MS, "ai-extract-session"),
+  keyGenerator: (req) => {
+    const raw = String(req.get("x-application-session") || "").trim();
+    const session = /^[A-Za-z0-9._:-]{16,512}$/.test(raw)
+      ? crypto.createHash("sha256").update(raw).digest("hex")
+      : "no-session";
+    return `${getRateLimitIp(req)}:${session}`;
+  },
 });
 
 /**
@@ -1246,7 +1270,7 @@ Rules:
 - Return ONLY the JSON object, no other text
 - Set null for fields you cannot find or are not sure about`;
 
-router.post("/public/ai/extract-document", aiExtractLimiter, applyJson, async (req: Request, res: Response): Promise<void> => {
+router.post("/public/ai/extract-document", aiExtractIpLimiter, aiExtractSessionLimiter, applyJson, async (req: Request, res: Response): Promise<void> => {
   try {
     const { documents } = req.body as {
       documents: Array<{
@@ -1320,23 +1344,48 @@ router.post("/public/ai/extract-document", aiExtractLimiter, applyJson, async (r
       return;
     }
 
-    let anthropic;
-    let claudeConfig;
-    try {
-      anthropic = await getAnthropicClient();
-      claudeConfig = await getClaudeConfig();
-    } catch (err: any) {
-      res.status(503).json({ error: err.message || "AI integration not configured" });
-      return;
-    }
-
     const requestedLang = ((req as any).body?.lang || req.headers["accept-language"] || "en").toString().slice(0, 2);
     // The public extract endpoint is shared between the public apply form and
     // the embed widget. Clients pass a `scope` so admins can wire a separate
     // extractor per audience (e.g. shorter prompt for embed).
     const requestedScope = ((req as any).body?.scope || "public_apply").toString();
     const scope: "public_apply" | "embed" = requestedScope === "embed" ? "embed" : "public_apply";
-    const extractor = await getActiveExtractor(scope);
+    let laneKey = "public-web";
+    let requestedConnectionKey = process.env.PUBLIC_DOCUMENT_AI_CONNECTION_KEY || "claude";
+    let preferredExtractorId: number | null = null;
+    if (scope === "embed") {
+      const widgetSlug = String((req.body as any)?.widgetSlug || "").trim();
+      if (widgetSlug) {
+        const [widget] = await db.select({
+          id: embedWidgetsTable.id,
+          aiConnectionKey: embedWidgetsTable.aiConnectionKey,
+          aiExtractorId: embedWidgetsTable.aiExtractorId,
+        }).from(embedWidgetsTable).where(and(
+          eq(embedWidgetsTable.slug, widgetSlug),
+          eq(embedWidgetsTable.isActive, true),
+        ));
+        if (!widget) {
+          res.status(404).json({ error: "Widget not found" });
+          return;
+        }
+        const documentSession = verifyEmbedLeadDocumentSessionToken(
+          getEmbedSigningSecret(),
+          req.get("x-application-session"),
+          widgetSlug,
+        );
+        if (!documentSession) {
+          res.status(403).json({ error: "Invalid or expired widget document session" });
+          return;
+        }
+        laneKey = `widget:${widget.id}`;
+        requestedConnectionKey = widget.aiConnectionKey || "claude";
+        preferredExtractorId = widget.aiExtractorId;
+      } else {
+        laneKey = "widget:legacy";
+      }
+    }
+
+    const extractor = await getActiveExtractor(scope, preferredExtractorId);
     if (extractor.provider !== "anthropic") {
       res.status(503).json({
         error: "Configured AI provider is not yet supported on the runtime. Please contact support.",
@@ -1345,6 +1394,22 @@ router.post("/public/ai/extract-document", aiExtractLimiter, applyJson, async (r
     }
     const useLegacy = isFallbackExtractor(extractor);
     const promptText = useLegacy ? EXTRACT_PROMPT : buildExtractionPrompt(extractor, { lang: requestedLang });
+
+    let anthropic;
+    let claudeConfig;
+    let resolvedConnectionKey: string;
+    try {
+      const connection = await getDocumentAiConnection(requestedConnectionKey, { fallbackToDefault: true });
+      anthropic = connection.client;
+      claudeConfig = { model: connection.model };
+      resolvedConnectionKey = connection.resolvedConnectionKey;
+      if (connection.usedFallback) {
+        console.warn(`[public-ai] lane=${laneKey} requested connection unavailable; using default fallback`);
+      }
+    } catch (err: any) {
+      res.status(503).json({ error: err.message || "AI integration not configured" });
+      return;
+    }
     const contentBlocks: any[] = [
       { type: "text", text: promptText },
     ];
@@ -1383,11 +1448,14 @@ router.post("/public/ai/extract-document", aiExtractLimiter, applyJson, async (r
       : (extractor.model || claudeConfig.model || "claude-sonnet-4-6");
     const maxTokens = useLegacy ? 4096 : (extractor.maxTokens || 4096);
     const runStart = Date.now();
-    const message = await anthropic.messages.create({
-      model,
-      max_tokens: maxTokens,
-      messages: [{ role: "user", content: contentBlocks }],
-    });
+    const message = await documentAiScheduler.run(
+      { laneKey, connectionKey: resolvedConnectionKey },
+      () => anthropic.messages.create({
+        model,
+        max_tokens: maxTokens,
+        messages: [{ role: "user", content: contentBlocks }],
+      }),
+    );
 
     const textBlock = message.content.find((b) => b.type === "text");
     if (!textBlock || textBlock.type !== "text") {
@@ -1461,6 +1529,13 @@ router.post("/public/ai/extract-document", aiExtractLimiter, applyJson, async (r
     });
   } catch (err: any) {
     console.error("Public AI extraction error:", err);
+    if (err instanceof AiLaneQueueError) {
+      res.status(503).json({
+        error: "AI analysis is busy. Your documents are safe; please continue manually or try again shortly.",
+        code: err.code,
+      });
+      return;
+    }
     res.status(500).json({ error: "AI extraction failed. Please try again." });
   }
 });

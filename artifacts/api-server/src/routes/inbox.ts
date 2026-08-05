@@ -22,11 +22,13 @@ import {
   auditLogsTable,
 } from "@workspace/db";
 import type { ConversationAiSummary } from "@workspace/db";
-import { and, asc, desc, eq, inArray, isNotNull, isNull, or, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, ilike, inArray, isNotNull, isNull, or, sql, type SQL } from "drizzle-orm";
 import type { ExternalContact } from "@workspace/db";
 import { z } from "zod";
 import { RateLimiterPostgres } from "rate-limiter-flexible";
 import { getAnthropicClient } from "@workspace/integrations-anthropic-ai";
+import { documentAiScheduler } from "../lib/aiLaneScheduler";
+import { getDocumentAiConnection } from "../lib/documentAiConnection";
 import { validate, getValidated } from "../middlewares/validate";
 import { requireAuth, requireRole, requireAgentStaffPermission, logAudit } from "../lib/auth";
 import { toLatinUpper, normalizePhoneField, containsNonLatinLetter, NON_LATIN_NAME_CODE } from "../lib/textNormalize";
@@ -809,6 +811,14 @@ router.get(
     const channel = req.query.channel ? String(req.query.channel) : null;
     const order = String(req.query.order || "desc") === "asc" ? "asc" : "desc";
     const showTests = String(req.query.showTests || "") === "true";
+    const search = String(req.query.search || "").trim().slice(0, 120);
+    const assignedToRaw = req.query.assignedToId == null ? "" : String(req.query.assignedToId).trim();
+    const assignedToId = assignedToRaw ? Number(assignedToRaw) : null;
+
+    if (assignedToRaw && (!Number.isInteger(assignedToId) || (assignedToId ?? 0) <= 0)) {
+      res.status(400).json({ error: "Invalid assignedToId" });
+      return;
+    }
 
     const where: SQL[] = [
       tab === "archived"
@@ -835,6 +845,29 @@ router.get(
       where.push(eq(conversationsTable.channel, channel));
     } else {
       where.push(sql`${conversationsTable.channel} != 'internal'`);
+    }
+
+    if (assignedToId !== null) {
+      where.push(eq(conversationsTable.assignedToId, assignedToId));
+    }
+
+    if (search) {
+      const pattern = `%${search}%`;
+      const searchCondition = or(
+        ilike(conversationsTable.title, pattern),
+        ilike(conversationsTable.lastMessagePreview, pattern),
+        sql`EXISTS (
+          SELECT 1
+          FROM ${externalContactsTable}
+          WHERE ${externalContactsTable.id} = ${conversationsTable.externalContactId}
+          AND (
+            COALESCE(${externalContactsTable.displayName}, '') ILIKE ${pattern}
+            OR COALESCE(${externalContactsTable.phone}, '') ILIKE ${pattern}
+            OR COALESCE(${externalContactsTable.email}, '') ILIKE ${pattern}
+          )
+        )`,
+      );
+      if (searchCondition) where.push(searchCondition);
     }
 
     if (tab === "mine") where.push(eq(conversationsTable.assignedToId, userId));
@@ -4445,7 +4478,7 @@ router.post(
 
     // ── Run AI extraction ───────────────────────────────────────────────────
     try {
-      const anthropic = await getAnthropicClient();
+      const anthropic = (await getDocumentAiConnection("claude", { fallbackToDefault: false })).client;
       const isImage = resolvedMimeType.startsWith("image/");
       const base64 = fileBuffer.toString("base64");
       const label = docType && EXTRACT_FOR_STUDENT_ALLOWED_TYPES.includes(docType as any) ? docType : "document";
@@ -4469,11 +4502,14 @@ router.post(
         });
       }
 
-      const message = await anthropic.messages.create({
-        model: "claude-sonnet-4-6",
-        max_tokens: 4096,
-        messages: [{ role: "user", content: contentBlocks }],
-      });
+      const message = await documentAiScheduler.run(
+        { laneKey: "inbox-document", connectionKey: "claude" },
+        () => anthropic.messages.create({
+          model: "claude-sonnet-4-6",
+          max_tokens: 4096,
+          messages: [{ role: "user", content: contentBlocks }],
+        }),
+      );
 
       const textBlock = message.content.find((b) => b.type === "text");
       if (!textBlock || textBlock.type !== "text") {

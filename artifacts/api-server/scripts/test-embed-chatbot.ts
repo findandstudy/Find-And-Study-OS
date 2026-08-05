@@ -115,7 +115,8 @@ test("chatbot route keeps identity, authorization and XSS guards server-owned", 
   assert.doesNotMatch(routeSource, /CRM kaydınızla güvenli biçimde eşleştirilir/);
   assert.match(routeSource, /data-edcons-lang/);
   assert.match(routeSource, /language:cfg\.locale/);
-  assert.match(routeSource, /if \(script\) new Function\(script\)/);
+  assert.match(routeSource, /parseJavaScript\(script/);
+  assert.doesNotMatch(routeSource, /new Function\(/);
 });
 
 test("chatbot uses the shared country-code catalog and stores verified E.164 phones", () => {

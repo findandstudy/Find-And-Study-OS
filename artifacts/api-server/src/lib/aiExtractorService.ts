@@ -58,8 +58,24 @@ async function getFallbackExtractor(): Promise<AiExtractor> {
  * Extractors that do not list the scope are NEVER applied to that scope —
  * this avoids leaking, say, a "staff" extractor onto "public_apply" traffic.
  */
-export async function getActiveExtractor(scope: ExtractorScope): Promise<AiExtractor> {
+export async function getActiveExtractor(scope: ExtractorScope, preferredId?: number | null): Promise<AiExtractor> {
   try {
+    if (preferredId && Number.isInteger(preferredId) && preferredId > 0) {
+      const [preferred] = await db
+        .select()
+        .from(aiExtractorsTable)
+        .where(and(
+          eq(aiExtractorsTable.id, preferredId),
+          eq(aiExtractorsTable.isActive, true),
+        ));
+      if (
+        preferred &&
+        Array.isArray(preferred.scopes) &&
+        (preferred.scopes as string[]).includes(scope)
+      ) {
+        return preferred;
+      }
+    }
     const rows = await db
       .select()
       .from(aiExtractorsTable)

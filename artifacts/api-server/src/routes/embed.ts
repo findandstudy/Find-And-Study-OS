@@ -18,6 +18,8 @@ import {
   externalContactsTable,
   conversationsTable,
   messagesTable,
+  integrationsTable,
+  aiExtractorsTable,
 } from "@workspace/db";
 import { eq, ilike, sql, and, or, asc, desc, inArray, isNotNull, isNull } from "drizzle-orm";
 import { requireAuth, requireRole, logAudit } from "../lib/auth";
@@ -63,6 +65,8 @@ import {
   createEmbedLeadDocumentSessionToken,
   verifyEmbedLeadDocumentSessionToken,
 } from "../lib/embedLeadDocumentSession";
+import { isAnthropicConnectionKey } from "../lib/documentAiConnection";
+import { getEmbedSigningSecret } from "../lib/embedSigningSecret";
 import { rejectInvalidPhone } from "../lib/phoneValidation";
 import { containsNonLatinLetter, NON_LATIN_NAME_CODE } from "../lib/textNormalize";
 import {
@@ -202,23 +206,12 @@ const embedChatLimiter = rateLimit({
 //    passes it as ?t=<token> to all JSON data endpoints.  Open widgets (empty
 //    allowedDomains) get a free session token — no API key required.
 //
-// Fail-closed: getEmbedTokenSecret() throws if SESSION_SECRET is absent.
+// Fail-closed: getEmbedSigningSecret() throws if SESSION_SECRET is absent.
 // Restricted operations propagate this as HTTP 500 — no known-literal fallback.
 //
 // Session token format: base64url(JSON{slug,exp,jti}) + "." + base64url(HMAC)
 
 const EMBED_TOKEN_TTL_MS = 60 * 60 * 1000; // 1 hour — session token lifetime
-
-function getEmbedTokenSecret(): string {
-  const s = process.env.SESSION_SECRET || process.env.EMBED_TOKEN_SECRET;
-  if (!s) {
-    // Fail closed: never fall back to a known literal.  Without a real secret,
-    // restricted widget operations return HTTP 500 rather than using a forgeable
-    // key.  Configure SESSION_SECRET (or EMBED_TOKEN_SECRET) to fix this.
-    throw new Error("[EMBED] SESSION_SECRET or EMBED_TOKEN_SECRET must be configured for embed widget security");
-  }
-  return `edcons-embed:${s}`;
-}
 
 /**
  * Generates a fresh random widget API key (64 hex chars / 256 bits).
@@ -234,7 +227,7 @@ function createEmbedToken(slug: string): string {
   const exp = Date.now() + EMBED_TOKEN_TTL_MS;
   const jti = crypto.randomBytes(8).toString("hex");
   const payload = Buffer.from(JSON.stringify({ slug, exp, jti })).toString("base64url");
-  const sig = crypto.createHmac("sha256", getEmbedTokenSecret()).update(payload).digest("base64url");
+  const sig = crypto.createHmac("sha256", getEmbedSigningSecret()).update(payload).digest("base64url");
   return `${payload}.${sig}`;
 }
 
@@ -246,7 +239,7 @@ function verifyEmbedToken(token: string | undefined, slug: string): boolean {
     const payload = token.slice(0, dot);
     const sig = token.slice(dot + 1);
     if (!sig) return false;
-    const expectedSig = crypto.createHmac("sha256", getEmbedTokenSecret()).update(payload).digest("base64url");
+    const expectedSig = crypto.createHmac("sha256", getEmbedSigningSecret()).update(payload).digest("base64url");
     const sigBuf = Buffer.from(sig, "base64url");
     const expBuf = Buffer.from(expectedSig, "base64url");
     // Constant-time comparison prevents timing-oracle attacks.
@@ -518,6 +511,17 @@ function sanitizeWidget(widget: Record<string, any>, userRole: string): Record<s
   return rest;
 }
 
+function normalizeAiConnectionKey(value: unknown): string | null {
+  const key = String(value || "claude").trim().toLowerCase();
+  return isAnthropicConnectionKey(key) ? key : null;
+}
+
+function normalizeAiExtractorId(value: unknown): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  const id = Number(value);
+  return Number.isInteger(id) && id > 0 ? id : null;
+}
+
 router.get("/embed/widgets", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
   const { page = "1", limit = "20" } = req.query as Record<string, string>;
   const pageNum = Math.max(1, parseInt(page, 10));
@@ -528,6 +532,36 @@ router.get("/embed/widgets", requireAuth, requireRole(...STAFF_ROLES), async (re
   const rows = await db.select().from(embedWidgetsTable).orderBy(desc(embedWidgetsTable.createdAt)).limit(limitNum).offset(offset);
   const role = req.user!.role;
   res.json({ data: rows.map(w => sanitizeWidget(w, role)), meta: { total: Number(count), page: pageNum, limit: limitNum, totalPages: Math.ceil(Number(count) / limitNum) } });
+});
+
+// Secret-free choices for the widget editor. API keys remain inside the
+// integrations table and are never serialized to the browser.
+router.get("/embed/widgets/ai-options", requireAuth, requireRole(...ADMIN_ROLES), async (_req, res): Promise<void> => {
+  const [integrations, extractors] = await Promise.all([
+    db.select({
+      key: integrationsTable.key,
+      name: integrationsTable.name,
+      isEnabled: integrationsTable.isEnabled,
+    }).from(integrationsTable),
+    db.select({
+      id: aiExtractorsTable.id,
+      name: aiExtractorsTable.name,
+      scopes: aiExtractorsTable.scopes,
+      isActive: aiExtractorsTable.isActive,
+    }).from(aiExtractorsTable),
+  ]);
+  const connections = integrations
+    .filter((row) => row.isEnabled && (row.key === "claude" || row.key.startsWith("claude:") || row.key.startsWith("anthropic:")))
+    .map(({ key, name }) => ({ key, name }));
+  if (!connections.some((row) => row.key === "claude")) {
+    connections.unshift({ key: "claude", name: "Default Claude connection" });
+  }
+  res.json({
+    connections,
+    extractors: extractors
+      .filter((row) => row.isActive && Array.isArray(row.scopes) && (row.scopes as string[]).includes("embed"))
+      .map(({ id, name }) => ({ id, name })),
+  });
 });
 
 // Non-numeric ids fall through to sibling string paths like
@@ -542,7 +576,7 @@ router.get("/embed/widgets/:id", requireAuth, requireRole(...STAFF_ROLES), async
 });
 
 router.post("/embed/widgets", requireAuth, requireRole(...ADMIN_ROLES), async (req, res): Promise<void> => {
-  const { name, slug, mode, presetFilters, lockedFilters, hiddenFilters, visibleFilters, theme, allowedDomains } = req.body;
+  const { name, slug, mode, presetFilters, lockedFilters, hiddenFilters, visibleFilters, theme, allowedDomains, aiConnectionKey, aiExtractorId } = req.body;
   if (!name || !slug) { res.status(400).json({ error: "name and slug are required" }); return; }
   const validMode = VALID_MODES.includes(mode) ? mode : "combined";
   if (validMode === "ai_chatbot" && !chatbotUniversityId(presetFilters)) {
@@ -550,6 +584,13 @@ router.post("/embed/widgets", requireAuth, requireRole(...ADMIN_ROLES), async (r
     return;
   }
   const cleanSlug = slug.toLowerCase().replace(/[^a-z0-9-]/g, "-").replace(/-+/g, "-");
+  const cleanAiConnectionKey = normalizeAiConnectionKey(aiConnectionKey);
+  if (!cleanAiConnectionKey) { res.status(400).json({ error: "Invalid AI connection key" }); return; }
+  const cleanAiExtractorId = normalizeAiExtractorId(aiExtractorId);
+  if (aiExtractorId != null && aiExtractorId !== "" && !cleanAiExtractorId) {
+    res.status(400).json({ error: "Invalid AI extractor" });
+    return;
+  }
   try {
     const isRestricted = Array.isArray(allowedDomains) && allowedDomains.length > 0;
     const [widget] = await db.insert(embedWidgetsTable).values({
@@ -562,6 +603,8 @@ router.post("/embed/widgets", requireAuth, requireRole(...ADMIN_ROLES), async (r
       visibleFilters: visibleFilters || [],
       theme: validMode === "ai_chatbot" ? sanitizeTheme(theme) : (theme || {}),
       allowedDomains: allowedDomains || [],
+      aiConnectionKey: cleanAiConnectionKey,
+      aiExtractorId: cleanAiExtractorId,
       // Auto-generate an API key for restricted widgets so it's ready immediately.
       // Open widgets (no allowedDomains) don't need one.
       embedApiKey: isRestricted ? generateWidgetApiKey() : null,
@@ -585,7 +628,7 @@ router.post("/embed/widgets", requireAuth, requireRole(...ADMIN_ROLES), async (r
 router.patch("/embed/widgets/:id", requireAuth, requireRole(...ADMIN_ROLES), async (req, res, next): Promise<void> => {
   if (!/^\d+$/.test(String(req.params.id))) { next(); return; }
   const id = parseInt(String(req.params.id), 10);
-  const { name, slug, mode, presetFilters, lockedFilters, hiddenFilters, visibleFilters, theme, allowedDomains, isActive } = req.body;
+  const { name, slug, mode, presetFilters, lockedFilters, hiddenFilters, visibleFilters, theme, allowedDomains, isActive, aiConnectionKey, aiExtractorId } = req.body;
   const [current] = await db
     .select()
     .from(embedWidgetsTable)
@@ -613,6 +656,19 @@ router.patch("/embed/widgets/:id", requireAuth, requireRole(...ADMIN_ROLES), asy
   if (theme !== undefined) updates.theme = effectiveMode === "ai_chatbot" ? sanitizeTheme(theme) : theme;
   if (allowedDomains !== undefined) updates.allowedDomains = allowedDomains;
   if (isActive !== undefined) updates.isActive = isActive;
+  if (aiConnectionKey !== undefined) {
+    const cleanAiConnectionKey = normalizeAiConnectionKey(aiConnectionKey);
+    if (!cleanAiConnectionKey) { res.status(400).json({ error: "Invalid AI connection key" }); return; }
+    updates.aiConnectionKey = cleanAiConnectionKey;
+  }
+  if (aiExtractorId !== undefined) {
+    const cleanAiExtractorId = normalizeAiExtractorId(aiExtractorId);
+    if (aiExtractorId !== null && aiExtractorId !== "" && !cleanAiExtractorId) {
+      res.status(400).json({ error: "Invalid AI extractor" });
+      return;
+    }
+    updates.aiExtractorId = cleanAiExtractorId;
+  }
 
   // If the widget is being made restricted and doesn't yet have an API key,
   // generate one automatically.
@@ -659,6 +715,7 @@ function embedExportRows(rows: Array<Record<string, unknown>>): Array<Record<str
     theme: r.theme, presetFilters: r.presetFilters,
     lockedFilters: r.lockedFilters, hiddenFilters: r.hiddenFilters,
     visibleFilters: r.visibleFilters, allowedDomains: r.allowedDomains,
+    aiConnectionKey: r.aiConnectionKey, aiExtractorId: r.aiExtractorId,
   }));
 }
 
@@ -1344,7 +1401,7 @@ router.post("/public/embed/:slug/lead", embedSubmitLimiter, embedLeadJson, async
     let documentSessionToken: string | null = null;
     try {
       documentSessionToken = createEmbedLeadDocumentSessionToken(
-        getEmbedTokenSecret(),
+        getEmbedSigningSecret(),
         widget.slug,
         lead.id,
       );
@@ -1385,7 +1442,7 @@ router.post("/public/embed/:slug/lead-documents", embedSubmitLimiter, embedApply
   setEmbedCors(res, widget, origin);
 
   const session = verifyEmbedLeadDocumentSessionToken(
-    getEmbedTokenSecret(),
+    getEmbedSigningSecret(),
     req.body?.documentSessionToken,
     slug,
   );
@@ -1701,10 +1758,10 @@ router.post("/public/embed/:slug/apply", embedSubmitLimiter, embedApplyJson, asy
           passportNumber: s(passportNumber, 50),
           passportIssueDate: s(passportIssueDate, 20),
           passportExpiry: s(passportExpiry, 20),
-          address: tlu(address, 300),
+          address: s(address, 300),
           addressCity: residence.addressCity,
           postalCode: residence.postalCode,
-          highSchool: tlu(highSchool, 200),
+          highSchool: s(highSchool, 200),
           graduationYear: graduationYear ? parseInt(String(graduationYear), 10) || null : null,
           gpa: s(gpa, 20),
           languageScore: s(languageScore, 20),
@@ -1970,7 +2027,7 @@ function readChatScope(metadata: unknown): ChatScopeMetadata | null {
 }
 
 async function loadChatSessionConversation(slug: string, sessionToken: string | undefined) {
-  const parsed = verifyEmbedChatSessionToken(getEmbedTokenSecret(), sessionToken, slug);
+  const parsed = verifyEmbedChatSessionToken(getEmbedSigningSecret(), sessionToken, slug);
   if (!parsed) return null;
   const [conversation] = await db
     .select()
@@ -2206,7 +2263,7 @@ router.post(
       res.status(201).json({
         success: true,
         sessionToken: createEmbedChatSessionToken(
-          getEmbedTokenSecret(),
+          getEmbedSigningSecret(),
           slug,
           sessionId,
           conversation.id,
@@ -4664,6 +4721,10 @@ var leadId=null;
 // Documents step to persist draft files without exposing or trusting a numeric
 // lead id, including when the backend deduplicates onto an existing lead.
 var leadDocumentSessionToken=null;
+// Per-form identifier used by the public AI rate limiter. It prevents visitors
+// behind the same school/office NAT from consuming one shared five-request
+// bucket while remaining independent from any database identifier.
+var applicationSessionId=(window.crypto&&window.crypto.randomUUID)?window.crypto.randomUUID():('app-'+Date.now()+'-'+Math.random().toString(36).slice(2));
 var leadCreating=false;
 // True while handleNextPersonal is executing to prevent concurrent/double-click
 // invocations from firing multiple lead creates or racing showModal calls.
@@ -5006,14 +5067,17 @@ function handleAnalyze(){
   if(!enforceDocGate())return;
   var docPayload=ewBuildDocumentPayload();
   if(docPayload.length===0){formStep='review';if(formOpen)showModal();else render(false);return;}
+  var analyzeController=typeof AbortController!=='undefined'?new AbortController():null;
+  var analyzeTimer=analyzeController?setTimeout(function(){analyzeController.abort();},60000):null;
   formStep='analyzing';
   if(formOpen)showModal();else render(false);
   var apiBase=API.replace('/public/embed/'+SLUG,'');
   ewPersistLeadDocuments(docPayload).then(function(){
     return fetch(apiBase+'/public/ai/extract-document',{
       method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({documents:docPayload,scope:'embed'})
+      headers:{'Content-Type':'application/json','X-Application-Session':leadDocumentSessionToken||applicationSessionId},
+      body:JSON.stringify({documents:docPayload,scope:'embed',widgetSlug:SLUG}),
+      signal:analyzeController?analyzeController.signal:undefined
     });
   }).then(function(r){
     if(r.ok)return r.json();
@@ -5071,6 +5135,7 @@ function handleAnalyze(){
       alert(err.message||'Documents could not be saved. Please try again.');
     }
   }).finally(function(){
+    if(analyzeTimer)clearTimeout(analyzeTimer);
     formStep=analyzeNextStep||'review';
     analyzeNextStep=null;
     if(formOpen)showModal();else render(false);
@@ -5168,6 +5233,7 @@ function bindEvents(){
     btn.addEventListener('click',function(){
       var pid=parseInt(btn.getAttribute('data-apply'));
       formProgram=programs.find(function(p){return p.id===pid})||null;
+      applicationSessionId=(window.crypto&&window.crypto.randomUUID)?window.crypto.randomUUID():('app-'+Date.now()+'-'+Math.random().toString(36).slice(2));
       formOpen=true;formSubmitted=false;formStep='personal';phoneError=false;uploadedDocs={};aiResult=null;extractedFields={};savedFormData={};leadId=null;leadCreating=false;handleNextPersonalInFlight=false;
       loadProgramDocs(pid,function(){if(formOpen)showModal();else render(false);});
       showModal();

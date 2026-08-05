@@ -14,4 +14,6 @@ export interface CreateUserBody {
   /** @nullable */
   phone?: string | null;
   language: string;
+  /** @nullable */
+  branchId?: number | null;
 }

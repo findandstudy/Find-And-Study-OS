@@ -26,5 +26,9 @@ export interface UserProfile {
   emailVerified: boolean;
   /** @nullable */
   agentStaffPermissions?: string[] | null;
+  /** @nullable */
+  branchId?: number | null;
+  /** @nullable */
+  branchName?: string | null;
   createdAt: Date;
 }
