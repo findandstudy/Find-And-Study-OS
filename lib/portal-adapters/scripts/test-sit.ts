@@ -4,7 +4,7 @@
  * GPA1  — normalizeGpa: decimal rounding (dot & comma)
  * GPA2  — normalizeGpa: Cambridge letters A*=90…E=40 (case-insensitive)
  * GPA3  — normalizeGpa: number input rounds; empty/garbage → undefined
- * AL1   — allowlist length is exactly 11
+ * AL1   — allowlist length is exactly 12
  * AL2   — allowlist includes Beykoz, excludes İstanbul Yeni Yüzyıl
  * AL3   — matchAllowedUniversity resolves the canonical entry
  * AL4   — exact-name guards: Cyprus Aydın / Beykent / İstanbul Medipol rejected
@@ -30,6 +30,7 @@ import {
   isLanguageCompatible,
   isSitDocumentsStep,
   sitAcademicHistoryLevelFromCountryLabel,
+  sitAcademicSchoolNameLabelPattern,
   resolveSitAcademicHistory,
   isSitContactStepLabels,
   hasSitProgramSubjectAnchor,
@@ -318,6 +319,10 @@ test("AL3 — matchAllowedUniversity resolves the canonical entry", () => {
     matchAllowedUniversity("Istanbul Aydin University"),
     "İstanbul Aydın Üniversitesi",
   );
+  assert.equal(
+    matchAllowedUniversity("Istanbul Galata University"),
+    "Galata Üniversitesi",
+  );
   assert.ok(isAllowedUniversity("TED Üniversitesi"));
 });
 
@@ -336,6 +341,7 @@ test("AL4 — exact-name guards reject look-alikes", () => {
   // tokens is a DIFFERENT institution and must be rejected (no subset match).
   assert.equal(matchAllowedUniversity("Beykoz Lojistik Üniversitesi"), null);
   assert.equal(matchAllowedUniversity("Galata Meslek Yüksekokulu"), null);
+  assert.equal(matchAllowedUniversity("Istanbul Galata Technical University"), null);
   assert.equal(matchAllowedUniversity("TED Ankara Koleji"), null);
 });
 
@@ -394,6 +400,13 @@ test("EDU2 — live SIT academic country labels resolve the required prior level
     "master",
   );
   assert.equal(sitAcademicHistoryLevelFromCountryLabel("Nationality *"), null);
+});
+
+test("EDU2B — high-school name selector matches the live label", () => {
+  const pattern = sitAcademicSchoolNameLabelPattern("high_school");
+  assert.equal(pattern.test("High School Name *"), true);
+  assert.equal(pattern.test("High School School Name *"), true);
+  assert.equal(pattern.test("Bachelor School Name *"), false);
 });
 
 test("EDU3 — Master applicant uses the explicit Bachelor education record", () => {

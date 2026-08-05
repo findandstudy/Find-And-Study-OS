@@ -203,7 +203,7 @@ export function matchSitProgramExactFormatting<T extends { name: string }>(
 }
 
 // ---------------------------------------------------------------------------
-// SIT allowlist — EXACTLY 11 universities (do not add/remove without sign-off).
+// SIT allowlist — EXACTLY 12 universities (do not add/remove without sign-off).
 //
 // Agreed list. Note vs. the old stub:
 //   + Beykoz Üniversitesi          (ADDED)
@@ -368,6 +368,15 @@ export function hasSitProgramSubjectAnchor(
 }
 
 export type SitAcademicHistoryLevel = "high_school" | "bachelor" | "master";
+
+/** Match SIT's school-name label without producing "High School School Name". */
+export function sitAcademicSchoolNameLabelPattern(
+  level: SitAcademicHistoryLevel,
+): RegExp {
+  if (level === "high_school") return /^\s*High School(?:\s+School)?\s+Name\b/i;
+  const prefix = level === "bachelor" ? "Bachelor" : "Master";
+  return new RegExp(`^\\s*${prefix}\\s+School Name\\b`, "i");
+}
 
 export interface SitAcademicHistoryInput {
   educationRecords?: Array<{
@@ -626,9 +635,22 @@ export function distinctiveTokens(name: string): string[] {
 const SIT_ALLOWLIST_TOKENS: ReadonlyArray<{ name: string; tokens: string[] }> =
   SIT_ALLOWLIST.map((name) => ({ name, tokens: distinctiveTokens(name) }));
 
+function distinctiveTokenKey(tokens: readonly string[]): string {
+  return [...tokens].sort().join("\u0000");
+}
+
+// Explicit catalog/CRM aliases only. Keep this exact-token map narrow instead
+// of weakening the allowlist subset guard: extra tokens must still fail closed.
+const SIT_UNIVERSITY_ALIASES: ReadonlyMap<string, string> = new Map([
+  [
+    distinctiveTokenKey(distinctiveTokens("Istanbul Galata University")),
+    "Galata Üniversitesi",
+  ],
+]);
+
 /**
  * Resolve a free-form university name to its canonical allowlist entry, or
- * null when the name is not one of the 11 agreed universities.
+ * null when the name is not one of the 12 agreed universities.
  *
  * Two tiers, both operating on Turkish-folded distinctive tokens:
  *
@@ -649,7 +671,13 @@ const SIT_ALLOWLIST_TOKENS: ReadonlyArray<{ name: string; tokens: string[] }> =
  *   medipol}).
  */
 export function matchAllowedUniversity(name: string): string | null {
-  const queryTokens = new Set(distinctiveTokens(name));
+  const rawQueryTokens = distinctiveTokens(name);
+  const explicitAlias = SIT_UNIVERSITY_ALIASES.get(
+    distinctiveTokenKey(rawQueryTokens),
+  );
+  if (explicitAlias) return explicitAlias;
+
+  const queryTokens = new Set(rawQueryTokens);
   if (queryTokens.size === 0) return null;
 
   // Tier 1 — exact token-set equality: same size AND every entry token present.

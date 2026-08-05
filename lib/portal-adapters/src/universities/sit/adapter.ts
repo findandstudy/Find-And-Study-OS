@@ -1,7 +1,7 @@
 // ---------------------------------------------------------------------------
 // SIT portal adapter (partners.sitconnect.net)
 //
-// Production-grade Playwright adapter covering the 11 agreed universities.
+// Production-grade Playwright adapter covering the 12 agreed universities.
 // Capabilities:
 //   - login + ensureLoggedIn (re-auth on /auth/login redirect)
 //   - createStudent (idempotent; GraphQL email/passport precheck, then create)
@@ -58,6 +58,7 @@ import {
   distinctiveTokens,
   toEnglishCountryName,
   sitAcademicHistoryLevelFromCountryLabel,
+  sitAcademicSchoolNameLabelPattern,
   resolveSitAcademicHistory,
   isSitContactStepLabels,
   hasSitProgramSubjectAnchor,
@@ -604,6 +605,98 @@ async function selectField(
     }
   }
   return false;
+}
+
+/**
+ * Select and verify SIT's education-level combobox before filling the dependent
+ * academic fields. Changing this value re-renders those fields in the live
+ * wizard, so callers must fill country/school/GPA only after this succeeds.
+ */
+async function selectSitApplyingFor(
+  page: Page,
+  profile: SubmitProfile,
+): Promise<boolean> {
+  const formItem = page
+    .locator('div[data-slot="form-item"]')
+    .filter({
+      has: page.locator('label[data-slot="form-label"]', {
+        hasText: /student\s+will\s+apply\s+for|apply\s+for/i,
+      }),
+    })
+    .first();
+  const button = formItem.locator('button[role="combobox"]').first();
+  if (!(await button.count().catch(() => 0))) return false;
+
+  const rawLevel = String(
+    (profile as any).applyingFor ||
+      (profile as any).degreeLevel ||
+      (profile as any).educationLevel ||
+      (profile as any).degree ||
+      profile.level ||
+      "",
+  );
+  const expected = mapEducationLevel(rawLevel);
+  if (!expected) {
+    throw new Error(
+      "SIT: eğitim seviyesi bilinmiyor — sessiz Bachelor varsayımı yapılmadı",
+    );
+  }
+
+  const current = ((await button.textContent().catch(() => "")) || "").trim();
+  if (mapEducationLevel(current) === expected) return true;
+
+  await button.scrollIntoViewIfNeeded().catch(() => {});
+  await button.click().catch(() => {});
+  await page.waitForTimeout(350);
+  if ((await button.getAttribute("aria-expanded").catch(() => null)) !== "true") {
+    await button.focus().catch(() => {});
+    await page.keyboard.press("Enter").catch(() => {});
+    await page.waitForTimeout(300);
+  }
+
+  const commandInput = page
+    .locator('[cmdk-input], [data-slot="command-input"]')
+    .last();
+  if (
+    (await commandInput.count().catch(() => 0)) &&
+    (await commandInput.isVisible().catch(() => false))
+  ) {
+    await commandInput.fill(expected).catch(() => {});
+  } else {
+    await page.keyboard.type(expected, { delay: 45 }).catch(() => {});
+  }
+  await page.waitForTimeout(450);
+
+  const exactOption = new RegExp(`^\\s*${escapeRe(expected)}\\s*$`, "i");
+  let option = page.getByRole("option", { name: exactOption }).first();
+  if (!(await option.count().catch(() => 0))) {
+    option = page
+      .locator('[cmdk-item], [data-slot="command-item"]')
+      .filter({ hasText: exactOption })
+      .first();
+  }
+
+  let clicked = false;
+  if (
+    (await option.count().catch(() => 0)) &&
+    (await option.isVisible().catch(() => false))
+  ) {
+    clicked = await option
+      .click({ timeout: 2500 })
+      .then(() => true)
+      .catch(() => false);
+  }
+  if (!clicked) await page.keyboard.press("Enter").catch(() => {});
+
+  await page.waitForTimeout(650);
+  const selectedText = (
+    (await button.textContent().catch(() => "")) || ""
+  ).trim();
+  const selected = mapEducationLevel(selectedText) === expected;
+  logger.info(
+    `[sit] APPLYPICK label=${expected} clicked=${clicked} selected=${selected}`,
+  );
+  return selected;
 }
 
 /**
@@ -2173,6 +2266,13 @@ export const sitAdapter: SitAdapter = {
           everSet.add("phone");
         }
       }
+      // Select this first: SIT rebuilds the academic controls when the level
+      // changes, which otherwise clears country/school/GPA values just filled.
+      try {
+        mark("educationLevel", await selectSitApplyingFor(page, profile));
+      } catch (e) {
+        logger.info("[sit] APPLYFOR handler err " + (e as any)?.message);
+      }
       // Educational Background is level-dependent in SIT:
       // Bachelor/Associate -> High School, Master -> Bachelor, PhD -> Master.
       // The former implementation only recognized "High School Country", so a
@@ -2231,7 +2331,7 @@ export const sitAdapter: SitAdapter = {
             !!academic.schoolName &&
             (await fillField(
               page,
-              new RegExp(`^\\s*${prefix}\\s+School Name\\b`, "i"),
+              sitAcademicSchoolNameLabelPattern(requirement.level),
               academic.schoolName,
             ));
           mark("schoolName", schoolNameOk);
@@ -2254,72 +2354,6 @@ export const sitAdapter: SitAdapter = {
         }
       } catch (e) {
         logger.info("[sit] ACADEMICFIX err " + (e as any)?.message);
-      }
-      // STEP5 handler v5: cmdk education-level combobox (opts: Associate/Bachelor/Master/PhD).
-      try {
-        const cbIdx = await page.evaluate(() => {
-          const btns = Array.from(document.querySelectorAll('button[role="combobox"]'));
-          for (let k = 0; k < btns.length; k++) {
-            const fi = (btns[k] as HTMLElement).closest('[data-slot="form-item"]');
-            const lab = fi ? (fi.querySelector("label")?.textContent || "").toLowerCase() : "";
-            if (lab.includes("apply for")) return k;
-          }
-          return -1;
-        });
-        if (cbIdx >= 0) {
-          const btn = page.locator('button[role="combobox"]').nth(cbIdx);
-          const cur = ((await btn.textContent().catch(() => "")) || "").trim();
-          if (!cur || /select education level/i.test(cur)) {
-            const lvlRaw = String(
-              (profile as any).applyingFor ||
-                (profile as any).degreeLevel ||
-                (profile as any).educationLevel ||
-                (profile as any).degree ||
-                (profile as any).level ||
-                "",
-            ).toLowerCase();
-            const label = mapEducationLevel(lvlRaw);
-            if (!label) {
-              throw new Error(
-                "SIT: eğitim seviyesi bilinmiyor — sessiz Bachelor varsayımı yapılmadı",
-              );
-            }
-            await btn.scrollIntoViewIfNeeded().catch(() => {});
-            await btn.click().catch(() => {});
-            await page.waitForTimeout(350);
-            let expanded = await btn.getAttribute("aria-expanded").catch(() => null);
-            if (expanded !== "true") {
-              await btn.focus().catch(() => {});
-              await page.keyboard.press("Enter").catch(() => {});
-              await page.waitForTimeout(300);
-              expanded = await btn.getAttribute("aria-expanded").catch(() => null);
-            }
-            await page.waitForTimeout(400);
-            // The open dropdown is a cmdk palette: type into its search to filter, then click the option.
-            await page.keyboard.type(label, { delay: 45 }).catch(() => {});
-            await page.waitForTimeout(500);
-            let clicked = false;
-            try {
-              await page.getByText(label, { exact: true }).first().click({ timeout: 2500 });
-              clicked = true;
-            } catch {}
-            if (!clicked) {
-              await page.keyboard.press("Enter").catch(() => {});
-            }
-            await page.waitForTimeout(400);
-            const after = ((await btn.textContent().catch(() => "")) || "").trim();
-            if (after.toLowerCase().includes(label.toLowerCase())) {
-              everSet.add("educationLevel");
-            }
-            logger.info(
-              "[sit] APPLYPICK v5 label=" + label + " clicked=" + clicked + " after='" + after + "'",
-            );
-          } else if (mapEducationLevel(cur)) {
-            everSet.add("educationLevel");
-          }
-        }
-      } catch (e) {
-        logger.info("[sit] APPLYFOR handler err " + (e as any)?.message);
       }
       // AGGRESSIVE Contact fixer v5 — Contact step only (residence select present); ignores everSet.
       try {
