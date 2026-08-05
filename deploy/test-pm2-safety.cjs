@@ -58,7 +58,12 @@ test("authoritative config uses canonical fork/1 topology", () => {
   assert.equal(portalWorker?.env_production.PORT, "");
   assert.equal(
     portalWorker?.interpreter,
-    "./artifacts/portal-automation-worker/node_modules/.bin/tsx",
+    path.join(
+      process.env.CURRENT_RELEASE_LINK
+        ? path.resolve(process.env.CURRENT_RELEASE_LINK)
+        : path.resolve(__dirname, ".."),
+      "artifacts/portal-automation-worker/node_modules/.bin/tsx",
+    ),
   );
 });
 
