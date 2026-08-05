@@ -93,7 +93,7 @@ router.get("/agents/contract-alerts", requireAuth, requireRole(...STAFF_ROLES), 
       sql`${agentsTable.contractEndDate} <= ${sixtyDaysFromNow.toISOString().split("T")[0]}`,
     ];
     // Branch scoping: restrict to agents the caller is allowed to see.
-    const visible = await getVisibleBranchIds(req.user!.id, req.user!.role);
+    const visible = await getVisibleBranchIds(req.user!.id, req.user!.role, req.user!);
     if (visible !== null) {
       if (visible.length === 0) { res.json([]); return; }
       // Use inArray with a subquery — raw sql `ANY(${visible})` does not
@@ -171,7 +171,7 @@ async function loadAgentCatalog(visible: number[] | null): Promise<AgentCatalog>
 
 router.post("/agents/export", requireAuth, requireRole(...MANAGER_ROLES), json({ limit: "64kb" }), async (req, res): Promise<void> => {
   const { ids } = (req.body || {}) as { ids?: unknown };
-  const visible = await getVisibleBranchIds(req.user!.id, req.user!.role);
+  const visible = await getVisibleBranchIds(req.user!.id, req.user!.role, req.user!);
   const conditions: SQL[] = [isNull(agentsTable.deletedAt)];
   if (visible !== null) {
     conditions.push(visible.length === 0
@@ -199,7 +199,7 @@ router.post("/agents/export", requireAuth, requireRole(...MANAGER_ROLES), json({
 });
 
 router.get("/agents/template", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
-  const visible = await getVisibleBranchIds(req.user!.id, req.user!.role);
+  const visible = await getVisibleBranchIds(req.user!.id, req.user!.role, req.user!);
   const catalog = await loadAgentCatalog(visible);
   const exampleRows = [
     {
@@ -257,7 +257,7 @@ router.post(
     // restrict which existing agents an import may match/overwrite, and (b)
     // assign a default branch link so created agents appear in scoped lists —
     // mirroring POST /agents.
-    const visible = await getVisibleBranchIds(req.user!.id, req.user!.role);
+    const visible = await getVisibleBranchIds(req.user!.id, req.user!.role, req.user!);
     const defaultBranchIds: number[] = visible && visible.length > 0 ? [visible[0]] : [];
     const scopeSql = visible !== null
       ? (visible.length === 0
@@ -1058,7 +1058,7 @@ router.get("/agents", requireAuth, requireRole(...STAFF_ROLES), async (req, res)
 
   // Branch scoping: super_admin sees all (or filtered by ?branchId=).
   // Other staff are restricted to agents linked to their visible branches.
-  const visible = await getVisibleBranchIds(req.user!.id, req.user!.role);
+  const visible = await getVisibleBranchIds(req.user!.id, req.user!.role, req.user!);
   const requestedBranchId = branchId && branchId !== "all" ? parseInt(branchId, 10) : null;
   if (visible !== null) {
     if (visible.length === 0) {
@@ -1393,7 +1393,7 @@ router.post("/agents", requireAuth, requireRole(...MANAGER_ROLES), async (req, r
     : [];
   // Authorization: non-super_admin may only assign visible branches.
   if (req.user!.role !== "super_admin" && finalBranchIds.length > 0) {
-    const visible = await getVisibleBranchIds(req.user!.id, req.user!.role);
+    const visible = await getVisibleBranchIds(req.user!.id, req.user!.role, req.user!);
     const allowed = new Set(visible || []);
     const bad = finalBranchIds.filter(b => !allowed.has(b));
     if (bad.length > 0) {
@@ -1402,7 +1402,7 @@ router.post("/agents", requireAuth, requireRole(...MANAGER_ROLES), async (req, r
     }
   }
   if (finalBranchIds.length === 0) {
-    const visible = await getVisibleBranchIds(req.user!.id, req.user!.role);
+    const visible = await getVisibleBranchIds(req.user!.id, req.user!.role, req.user!);
     if (visible && visible.length > 0) finalBranchIds = [visible[0]];
   }
   if (finalBranchIds.length > 0) {
@@ -1572,7 +1572,7 @@ router.patch("/agents/:id", requireAuth, requireRole(...MANAGER_ROLES), async (r
       .filter((n: number) => !isNaN(n));
     // Authorization: non-super_admin may only assign visible branches.
     if (req.user!.role !== "super_admin" && newIds.length > 0) {
-      const visible = await getVisibleBranchIds(req.user!.id, req.user!.role);
+      const visible = await getVisibleBranchIds(req.user!.id, req.user!.role, req.user!);
       const allowed = new Set(visible || []);
       const bad = newIds.filter(b => !allowed.has(b));
       if (bad.length > 0) {

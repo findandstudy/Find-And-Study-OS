@@ -7,7 +7,7 @@ import { STAFF_ROLES, ADMIN_ROLES, AGENT_ROLES, isAgentRole } from "../lib/roles
 import { assertCanAccessStudent } from "../lib/studentAccess";
 import { getAgentVisibleIds, getAgentRecord } from "../lib/agentVisibility";
 import { isAgentSourcedAndBlockedForStaff } from "../lib/rbac/agentSourceScope";
-import { getEffectivePermissionSet, canAccessAssignedRecord, userHasPermission } from "../lib/permissions";
+import { getAssignmentVisibility, getEffectivePermissionSet, canAccessAssignedRecord, userHasPermission } from "../lib/permissions";
 import { cascadeApplicationAssignment } from "../lib/leadAssignment";
 import { getAgencyMemberAgentIds } from "../lib/agencyStaff";
 import { getVisibleBranchIds, resolveCreateBranchId, isInBranchScope } from "../lib/branchScope";
@@ -179,24 +179,26 @@ router.get("/applications", requireAuth, requireAgentStaffPermission("applicatio
       // view_unassigned adds the unassigned pool; view_others adds
       // teammates' records. Task #128: also include applications for
       // agencies where this staff is listed as agency-assigned staff.
-      const perms = await getEffectivePermissionSet({ id: user.id, role: user.role });
+      const perms = await getEffectivePermissionSet(user);
       // KURAL 1: non-admin staff cannot see agent-sourced applications
       // unless they have records.view_others (Task #494)
       if (!perms.has("records.view_others")) {
         conditions.push(isNull(applicationsTable.agentId));
       }
-      const agencyAgentIds = await getAgencyMemberAgentIds(user.id);
-      const orParts: any[] = [eq(applicationsTable.assignedToId, user.id)];
-      if (perms.has("records.view_unassigned")) {
-        orParts.push(isNull(applicationsTable.assignedToId));
+      const assignmentVisibility = getAssignmentVisibility(perms);
+      if (assignmentVisibility !== "all") {
+        const agencyAgentIds = await getAgencyMemberAgentIds(user.id);
+        const orParts: any[] = assignmentVisibility === "assigned"
+          ? [isNotNull(applicationsTable.assignedToId)]
+          : [eq(applicationsTable.assignedToId, user.id)];
+        if (assignmentVisibility === "own_or_unassigned") {
+          orParts.push(isNull(applicationsTable.assignedToId));
+        }
+        if (agencyAgentIds.length > 0) {
+          orParts.push(inArray(applicationsTable.agentId, agencyAgentIds));
+        }
+        conditions.push(orFn(...orParts)!);
       }
-      if (perms.has("records.view_others")) {
-        orParts.push(and(isNotNull(applicationsTable.assignedToId), ne(applicationsTable.assignedToId, user.id))!);
-      }
-      if (agencyAgentIds.length > 0) {
-        orParts.push(inArray(applicationsTable.agentId, agencyAgentIds));
-      }
-      conditions.push(orFn(...orParts)!);
     }
   } else if (user.role === "student") {
     const [studentRec] = await db.select().from(studentsTable).where(eq(studentsTable.userId, user.id));
@@ -217,7 +219,7 @@ router.get("/applications", requireAuth, requireAgentStaffPermission("applicatio
 
   // Branch scoping (super_admin: null = all). Applies to staff AND agents.
   if (user.role !== "student") {
-    const visibleBranchIds = await getVisibleBranchIds(user.id, user.role);
+    const visibleBranchIds = await getVisibleBranchIds(user.id, user.role, user);
     if (visibleBranchIds !== null) {
       if (visibleBranchIds.length === 0) {
         conditions.push(isNull(applicationsTable.branchId));
@@ -806,9 +808,9 @@ router.post("/applications", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_R
   let inheritedBranchId: number | null;
   if (user.role === "super_admin") {
     inheritedBranchId = studentFull.branchId
-      ?? (await resolveCreateBranchId(user.id, user.role, req.body.branchId ?? null));
+      ?? (await resolveCreateBranchId(user.id, user.role, req.body.branchId ?? null, user));
   } else {
-    const callerVisible = await getVisibleBranchIds(user.id, user.role);
+    const callerVisible = await getVisibleBranchIds(user.id, user.role, user);
     if (!isAgentRole(user.role) && callerVisible !== null && callerVisible.length === 0) {
       res.status(403).json({
         code: "USER_BRANCH_REQUIRED",
@@ -825,7 +827,7 @@ router.post("/applications", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_R
       return;
     }
     inheritedBranchId = studentFull.branchId
-      ?? (await resolveCreateBranchId(user.id, user.role, req.body.branchId ?? null));
+      ?? (await resolveCreateBranchId(user.id, user.role, req.body.branchId ?? null, user));
     if (inheritedBranchId == null && !isAgentRole(user.role)) {
       res.status(403).json({ error: "No accessible branch — cannot create application" });
       return;
@@ -1027,11 +1029,11 @@ router.get("/applications/:id", requireAuth, requireAgentStaffPermission("applic
   // KURAL 1: non-admin staff cannot access agent-sourced application detail
   // unless they have records.view_others (Task #494) — within branch scope only
   if (isAgentSourcedAndBlockedForStaff(user, row.agentId)) {
-    const p = await getEffectivePermissionSet({ id: user.id, role: user.role });
+    const p = await getEffectivePermissionSet(user);
     if (!p.has("records.view_others")) {
       res.status(404).json({ error: "Application not found" }); return;
     }
-    if (!(await isInBranchScope(user.id, user.role, row.branchId))) {
+    if (!(await isInBranchScope(user.id, user.role, row.branchId, user))) {
       res.status(404).json({ error: "Application not found" }); return;
     }
   }
@@ -1079,7 +1081,7 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, ...AG
   const isAdmin = (ADMIN_ROLES as readonly string[]).includes(user.role);
   const perms = isAdmin || !isStaff
     ? new Set<string>()
-    : await getEffectivePermissionSet({ id: user.id, role: user.role });
+    : await getEffectivePermissionSet(user);
   const AGENT_PATCH_FIELDS: string[] = [];
   let allowedFields = isStaff ? [...APP_PATCH_FIELDS] : [...AGENT_PATCH_FIELDS];
   // Task #167 — admin-tier (super_admin/admin/manager) can always move stage.
@@ -1134,7 +1136,7 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, ...AG
   // applications.change_student_app_stage permission (Task #564 — replaces the
   // old agentCanChangeStudentAppStage Settings toggle).
   if (!isStaff && isAgentRole(user.role) && stageGovernedAllowed) {
-    const agentPerms = await getEffectivePermissionSet({ id: user.id, role: user.role });
+    const agentPerms = await getEffectivePermissionSet(user);
     if (agentPerms.has("applications.change_student_app_stage")) {
       allowedFields = ["stage"];
     }
@@ -1348,7 +1350,7 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, ...AG
   if (isAgentSourcedAndBlockedForStaff(user, preUpdateApp?.agentId ?? null) && !perms.has("records.view_others")) {
     res.status(404).json({ error: "Application not found" }); return;
   }
-  if (perms.has("records.view_others") && !(await isInBranchScope(user.id, user.role, preUpdateApp?.branchId ?? null))) {
+  if (perms.has("records.view_others") && !(await isInBranchScope(user.id, user.role, preUpdateApp?.branchId ?? null, user))) {
     res.status(404).json({ error: "Application not found" }); return;
   }
 
@@ -1909,11 +1911,11 @@ router.get("/applications/:id/notes", requireAuth, requireRole(...STAFF_ROLES, .
   const [noteApp] = await db.select({ agentId: applicationsTable.agentId, branchId: applicationsTable.branchId }).from(applicationsTable).where(and(eq(applicationsTable.id, id), isNull(applicationsTable.deletedAt)));
   if (!noteApp) { res.status(404).json({ error: "Application not found" }); return; }
   if (isAgentSourcedAndBlockedForStaff(req.user!, noteApp.agentId)) {
-    const notePerms = await getEffectivePermissionSet({ id: req.user!.id, role: req.user!.role });
+    const notePerms = await getEffectivePermissionSet(req.user!);
     if (!notePerms.has("records.view_others")) {
       res.status(404).json({ error: "Application not found" }); return;
     }
-    if (!(await isInBranchScope(req.user!.id, req.user!.role, noteApp.branchId))) {
+    if (!(await isInBranchScope(req.user!.id, req.user!.role, noteApp.branchId, req.user!))) {
       res.status(404).json({ error: "Application not found" }); return;
     }
   }

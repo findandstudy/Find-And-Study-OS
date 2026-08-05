@@ -1,6 +1,7 @@
 import { pgTable, text, serial, timestamp, integer, boolean, index, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
+import { sql } from "drizzle-orm";
 import { usersTable } from "./users";
 import { agentsTable } from "./agents";
 
@@ -64,6 +65,9 @@ export const studentsTable = pgTable("students", {
   index("students_user_id_idx").on(table.userId),
   index("students_origin_type_idx").on(table.originType),
   index("students_phone_e164_idx").on(table.phoneE164),
+  index("students_staff_scope_idx")
+    .on(table.branchId, table.assignedToId, table.createdAt)
+    .where(sql`${table.deletedAt} IS NULL`),
 ]);
 
 export const insertStudentSchema = createInsertSchema(studentsTable).omit({ id: true, createdAt: true, updatedAt: true, deletedAt: true });

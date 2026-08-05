@@ -13,6 +13,7 @@ import { UploadTooLargeError } from "../lib/uploads/processUpload";
 import { verifyDocumentSignature } from "@workspace/portal-adapters";
 import { ObjectStorageService, ObjectNotFoundError } from "../lib/objectStorage";
 import { handleMissingDocFulfillment } from "../lib/missingDocsFulfillment";
+import { reEvaluateMandatoryDocs, reEvaluateMandatoryDocsForStudent } from "../lib/mandatoryDocs";
 import { recomputeStudentPhoto } from "../lib/studentPhoto";
 import { maybeTriggerAutoEducationExtract } from "../lib/educationAutoExtract";
 import { callerOwnsObject } from "../lib/objectAuthz";
@@ -427,6 +428,19 @@ router.post("/documents", requireAuth, requireAgentStaffPermission("documents"),
         templateVars: { documentName: doc.name, documentType: doc.type },
       });
     } catch {}
+
+    // A profile-level upload is shared evidence for every application owned by
+    // this student. Re-check only applications parked in `missing_docs`; an
+    // application-scoped upload remains isolated to its explicit application.
+    try {
+      if (targetApplicationId) {
+        await reEvaluateMandatoryDocs(targetApplicationId);
+      } else {
+        await reEvaluateMandatoryDocsForStudent(doc.studentId);
+      }
+    } catch (e) {
+      console.error("[DOCUMENTS] mandatory-document re-evaluation failed:", e);
+    }
   }
 
   // Task #187 — auto-match against open missing-doc requests, scoped to

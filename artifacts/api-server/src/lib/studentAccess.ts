@@ -47,10 +47,10 @@ export async function assertCanAccessStudent(
   }
 
   if (isStaff && !isAdmin) {
-    const perms = await getEffectivePermissionSet({ id: user.id, role: user.role });
+    const perms = await getEffectivePermissionSet(user);
     // view_others grants full record visibility within the same branch scope (Task #494)
     if (perms.has("records.view_others")) {
-      const inScope = await isInBranchScope(user.id, user.role, student.branchId);
+      const inScope = await isInBranchScope(user.id, user.role, student.branchId, user);
       if (!inScope) return { ok: false, status: 404, error: "Student not found" };
       return { ok: true, student };
     }
@@ -60,7 +60,7 @@ export async function assertCanAccessStudent(
         const agencyAgentIds = await getAgencyMemberAgentIds(user.id);
         if (agencyAgentIds.includes(student.agentId)) {
           // isInBranchScope handles null branch (globally visible) + super_admin + visible set
-          if (await isInBranchScope(user.id, user.role, student.branchId)) {
+          if (await isInBranchScope(user.id, user.role, student.branchId, user)) {
             allowed = true;
           }
         }

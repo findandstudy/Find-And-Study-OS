@@ -12,6 +12,7 @@ import {
 } from "../lib/replitAuth";
 import { getSessionCookieOptions } from "../lib/cookieOptions";
 import { extractBearerToken, lookupApiToken } from "../lib/apiTokenAuth";
+import { applyPermissionOverrides } from "../lib/permissions";
 
 declare global {
   namespace Express {
@@ -33,37 +34,31 @@ declare global {
   }
 }
 
-// ─── Role-permission cache ────────────────────────────────────────────────────
-// Roles change rarely; cache the rolesTable lookup per role name for 60 s so
-// every authenticated request does not incur an extra DB round-trip.
-const PERM_CACHE_TTL = 60_000;
-const rolePermCache = new Map<string, { perms: string[]; exp: number }>();
-
 // admin / super_admin already have isAdmin=true on the frontend → canSee is
 // always true for them, so there is no need to populate agentStaffPermissions.
 const ADMINISH_ROLES = new Set(["admin", "super_admin"]);
 
-async function resolveRolePerms(role: string): Promise<string[]> {
-  const now = Date.now();
-  const cached = rolePermCache.get(role);
-  if (cached && cached.exp > now) return cached.perms;
+async function resolveRolePerms(
+  role: string,
+  permissionsFromAuthQuery?: unknown,
+): Promise<string[]> {
+  if (permissionsFromAuthQuery !== undefined) {
+    return permissionsFromAuthQuery === null
+      ? ((DEFAULT_ROLE_PERMISSIONS as Record<string, string[]>)[role] ?? [])
+      : ((permissionsFromAuthQuery as string[] | null) ?? []);
+  }
 
-  const [row] = await db
-    .select({ permissions: rolesTable.permissions })
+  const [row] = await db.select({ permissions: rolesTable.permissions })
     .from(rolesTable)
     .where(eq(rolesTable.name, role));
-
-  const perms: string[] = row
+  return row
     ? ((row.permissions as string[] | null) ?? [])
     : ((DEFAULT_ROLE_PERMISSIONS as Record<string, string[]>)[role] ?? []);
-
-  rolePermCache.set(role, { perms, exp: now + PERM_CACHE_TTL });
-  return perms;
 }
 
 /**
  * Populate `user.agentStaffPermissions` with the effective permission set for
- * the user's role (sourced from rolesTable, cached per role) unioned with any
+ * the user's role (sourced from the request's fresh auth query) unioned with any
  * per-user agent_staff permissions already stored on the DB row.
  *
  * This is what the frontend `canSee(perm)` check consults for sidebar menu
@@ -76,10 +71,29 @@ async function resolveRolePerms(role: string): Promise<string[]> {
 async function enrichWithEffectivePerms(
   user: SessionUser,
   dbUser: typeof usersTable.$inferSelect,
+  permissionsFromAuthQuery?: unknown,
 ): Promise<void> {
+  // Reuse authorization fields from the users row that fetchDbUser already
+  // loaded for this request. Keeping them non-enumerable prevents accidental
+  // expansion of the public session/auth response contract.
+  Object.defineProperties(user, {
+    branchId: { value: dbUser.branchId, enumerable: false, configurable: true },
+    managingAgentId: { value: dbUser.managingAgentId, enumerable: false, configurable: true },
+  });
+
   if (ADMINISH_ROLES.has(user.role)) return;
   try {
-    const rolePerms = await resolveRolePerms(user.role);
+    const rolePerms = await resolveRolePerms(user.role, permissionsFromAuthQuery);
+    const effective = applyPermissionOverrides(
+      rolePerms,
+      dbUser.permissionOverrides as Record<string, boolean> | null,
+    );
+    Object.defineProperty(user, "effectivePermissions", {
+      value: Array.from(effective),
+      enumerable: false,
+      configurable: true,
+    });
+
     // Union: role-level perms ∪ per-user agent_staff column (for agent_staff rows)
     const own = Array.isArray(dbUser.agentStaffPermissions)
       ? (dbUser.agentStaffPermissions as string[])
@@ -92,9 +106,24 @@ async function enrichWithEffectivePerms(
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-async function fetchDbUser(id: number): Promise<typeof usersTable.$inferSelect | null> {
-  const [dbUser] = await db.select().from(usersTable).where(eq(usersTable.id, id));
-  return dbUser ?? null;
+async function fetchDbUser(id: number): Promise<{
+  dbUser: typeof usersTable.$inferSelect;
+  rolePermissions: unknown;
+} | null> {
+  const [row] = await db
+    .select({
+      dbUser: usersTable,
+      rolePermissions: rolesTable.permissions,
+    })
+    .from(usersTable)
+    .leftJoin(rolesTable, eq(usersTable.role, rolesTable.name))
+    .where(eq(usersTable.id, id));
+  if (!row) return null;
+  return {
+    dbUser: row.dbUser,
+    // null means there is no stored role row and the static default applies.
+    rolePermissions: row.rolePermissions ?? null,
+  };
 }
 
 function buildSessionUser(dbUser: typeof usersTable.$inferSelect): SessionUser {
@@ -162,12 +191,13 @@ export async function authMiddleware(
     return;
   }
 
-  const dbUser = await fetchDbUser(session.user.id);
-  if (!dbUser) {
+  const authUserRow = await fetchDbUser(session.user.id);
+  if (!authUserRow) {
     await clearSession(res, sid, req);
     next();
     return;
   }
+  const { dbUser, rolePermissions } = authUserRow;
 
   // a) Soft-deleted account
   if (dbUser.deletedAt !== null) {
@@ -194,7 +224,7 @@ export async function authMiddleware(
   }
 
   req.user = buildSessionUser(dbUser);
-  await enrichWithEffectivePerms(req.user, dbUser);
+  await enrichWithEffectivePerms(req.user, dbUser, rolePermissions);
 
   // The helper throttles PostgreSQL writes to once per session per five
   // minutes while user status/role remains checked on every request.

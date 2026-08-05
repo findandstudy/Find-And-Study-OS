@@ -1033,7 +1033,16 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
           onClose={() => setUploadOpen(false)}
           leadId={id}
           docOptions={docCatalogOptions}
-          onUploaded={() => queryClient.invalidateQueries({ queryKey: [`/api/leads/${id}/documents`] })}
+          onUploaded={() => queryClient.invalidateQueries({
+            predicate: (query) => query.queryKey.some((key) =>
+              typeof key === "string" && (
+                key.includes("document") ||
+                key.includes("student") ||
+                key.includes("application") ||
+                key.includes(`/api/leads/${id}`)
+              )
+            ),
+          })}
         />
       )}
     </>

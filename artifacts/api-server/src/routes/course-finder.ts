@@ -644,7 +644,7 @@ router.get("/course-finder/students", requireAuth, requireAgentStaffPermission("
 
   // Branch scoping for staff and agents (super_admin → null = all).
   if (user.role !== "student") {
-    const visibleBranchIds = await getVisibleBranchIds(user.id, user.role);
+    const visibleBranchIds = await getVisibleBranchIds(user.id, user.role, user);
     if (visibleBranchIds !== null) {
       if (visibleBranchIds.length === 0) {
         conditions.push(isNull(studentsTable.branchId));
@@ -747,7 +747,7 @@ router.post("/course-finder/apply", requireAuth, requireRole(...STAFF_ROLES, ...
     // Returning a blanket 403 when the list is empty would deny legitimate
     // access to null-branch students that ARE visible in the picker,
     // breaking the listing/apply consistency contract.
-    const visibleBranchIds = await getVisibleBranchIds(req.user!.id, req.user!.role);
+    const visibleBranchIds = await getVisibleBranchIds(req.user!.id, req.user!.role, req.user!);
     if (visibleBranchIds !== null) {
       const studentBranchId = student.branchId;
       const allowed = studentBranchId == null

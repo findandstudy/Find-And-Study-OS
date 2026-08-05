@@ -3,6 +3,15 @@ import { eq, inArray } from "drizzle-orm";
 
 const SUPER_ROLES = new Set(["super_admin"]);
 
+type BranchContext = {
+  branchId?: number | null;
+  managingAgentId?: number | null;
+};
+
+function hasRequestBranchContext(context: BranchContext | undefined): context is BranchContext {
+  return !!context && Object.prototype.hasOwnProperty.call(context, "branchId");
+}
+
 /**
  * Returns the list of branch IDs the user is allowed to see.
  * - super_admin → null (means: no scoping, see everything)
@@ -11,13 +20,19 @@ const SUPER_ROLES = new Set(["super_admin"]);
  *   via the agent_branches join table (plus their direct branchId if any)
  * - users with no branch assigned → [] (sees nothing branch-scoped)
  */
-export async function getVisibleBranchIds(userId: number, role: string): Promise<number[] | null> {
+export async function getVisibleBranchIds(
+  userId: number,
+  role: string,
+  context?: BranchContext,
+): Promise<number[] | null> {
   if (SUPER_ROLES.has(role)) return null;
 
-  const [user] = await db
-    .select({ branchId: usersTable.branchId, managingAgentId: usersTable.managingAgentId })
-    .from(usersTable)
-    .where(eq(usersTable.id, userId));
+  const user = hasRequestBranchContext(context)
+    ? { branchId: context.branchId ?? null, managingAgentId: context.managingAgentId ?? null }
+    : (await db
+        .select({ branchId: usersTable.branchId, managingAgentId: usersTable.managingAgentId })
+        .from(usersTable)
+        .where(eq(usersTable.id, userId)))[0];
 
   const ids = new Set<number>();
   if (user?.branchId) ids.add(user.branchId);
@@ -53,11 +68,12 @@ export async function resolveCreateBranchId(
   userId: number,
   role: string,
   explicitBranchId?: number | null,
+  context?: BranchContext,
 ): Promise<number | null> {
   if (SUPER_ROLES.has(role)) {
     return explicitBranchId ?? null;
   }
-  const visible = await getVisibleBranchIds(userId, role);
+  const visible = await getVisibleBranchIds(userId, role, context);
   if (!visible || visible.length === 0) return null;
   if (explicitBranchId != null && visible.includes(explicitBranchId)) {
     return explicitBranchId;
@@ -79,9 +95,10 @@ export async function isInBranchScope(
   userId: number,
   userRole: string,
   recordBranchId: number | null,
+  context?: BranchContext,
 ): Promise<boolean> {
   if (recordBranchId == null) return true; // null-branch records are globally visible
-  const visibleBranchIds = await getVisibleBranchIds(userId, userRole);
+  const visibleBranchIds = await getVisibleBranchIds(userId, userRole, context);
   if (visibleBranchIds === null) return true; // super_admin sees everything
   if (visibleBranchIds.length === 0) return false; // user has no branch assignments
   return visibleBranchIds.includes(recordBranchId);
@@ -91,8 +108,9 @@ export async function isAgentInScope(
   callerUserId: number,
   callerRole: string,
   agentId: number,
+  context?: BranchContext,
 ): Promise<boolean> {
-  const visible = await getVisibleBranchIds(callerUserId, callerRole);
+  const visible = await getVisibleBranchIds(callerUserId, callerRole, context);
   if (visible === null) return true; // super_admin
   if (visible.length === 0) return false;
   const links = await db

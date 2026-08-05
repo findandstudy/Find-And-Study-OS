@@ -1607,6 +1607,7 @@ export default function ApplicationsPage() {
     setIf("program", colFilters.program);
     setIf("level", colFilters.level);
     setIf("intake", colFilters.intake);
+    params.set("includeFacets", pg.page === 1 ? "1" : "0");
     return params.toString();
   }, [
     season, pg.page, pg.pageSize, sort, debouncedSearch,
@@ -1618,6 +1619,29 @@ export default function ApplicationsPage() {
     queryFn: () => apiFetch(`${BASE_URL}/api/applications?${applicationListParams}`),
     enabled: viewMode === "list",
   });
+  const applicationFacetScopeKey = useMemo(() => {
+    const params = new URLSearchParams(applicationListParams);
+    params.delete("page");
+    params.delete("limit");
+    params.delete("includeFacets");
+    params.sort();
+    return params.toString();
+  }, [applicationListParams]);
+  const applicationFacetCache = useRef<{
+    key: string;
+    facets: ApplicationFilterFacets;
+  } | null>(null);
+  const listApplicationFacets = useMemo(() => {
+    const facets = applicationsResp?.meta?.facets as ApplicationFilterFacets | undefined;
+    if (facets) {
+      const next = { key: applicationFacetScopeKey, facets };
+      applicationFacetCache.current = next;
+      return facets;
+    }
+    return applicationFacetCache.current?.key === applicationFacetScopeKey
+      ? applicationFacetCache.current.facets
+      : undefined;
+  }, [applicationsResp, applicationFacetScopeKey]);
 
   const pipelineStageQueries = useQueries({
     queries: pipelineStages.map((stageDef, index) => {
@@ -1660,7 +1684,7 @@ export default function ApplicationsPage() {
   const pipelineFacets = pipelineStageQueries
     .map(query => query.data?.meta?.facets)
     .find(Boolean);
-  const applicationFacets = (viewMode === "list" ? applicationsResp?.meta?.facets : pipelineFacets) as ApplicationFilterFacets | undefined;
+  const applicationFacets = (viewMode === "list" ? listApplicationFacets : pipelineFacets) as ApplicationFilterFacets | undefined;
 
   const uniqueAppCountries = useMemo(() => {
     const set = new Set<string>(applicationFacets?.countries || []);

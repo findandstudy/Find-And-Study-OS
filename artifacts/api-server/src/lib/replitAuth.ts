@@ -37,6 +37,15 @@ export interface SessionUser {
   emailVerified: boolean;
   phone?: string | null;
   agentStaffPermissions?: string[];
+  /**
+   * Request-local authorization context populated from the already-fetched
+   * users row. These properties are defined as non-enumerable by the auth
+   * middleware, so they are available to server-side guards without becoming
+   * part of session or API response payloads.
+   */
+  effectivePermissions?: string[];
+  branchId?: number | null;
+  managingAgentId?: number | null;
 }
 
 export interface SessionData {

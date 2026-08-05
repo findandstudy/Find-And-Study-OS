@@ -63,7 +63,7 @@ router.get("/branches", requireAuth, requireRole(...STAFF_ROLES), async (req, re
   if (!includeArchived) conditions.push(isNull(branchesTable.archivedAt));
 
   // Non-super_admin staff only see their visible branches.
-  const visible = await getVisibleBranchIds(req.user!.id, req.user!.role);
+  const visible = await getVisibleBranchIds(req.user!.id, req.user!.role, req.user!);
   if (visible !== null) {
     if (visible.length === 0) {
       res.json({ data: [] });

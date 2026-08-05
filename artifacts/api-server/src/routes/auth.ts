@@ -123,14 +123,10 @@ router.get("/auth/me", async (req: Request, res: Response) => {
     res.status(401).json({ error: "Not authenticated" });
     return;
   }
-  const [freshUser] = await db.select().from(usersTable).where(eq(usersTable.id, req.user.id));
-  const userData = freshUser ? buildSessionUser(freshUser) : req.user;
-  // The local buildSessionUser above does not resolve role-level permissions; carry over the
-  // effective agentStaffPermissions that authMiddleware already resolved onto req.user, so the
-  // frontend sidebar gates menus for staff/consultant/etc (not just agent_staff).
-  if (userData && Array.isArray((req.user as any).agentStaffPermissions)) {
-    (userData as any).agentStaffPermissions = (req.user as any).agentStaffPermissions;
-  }
+  // authMiddleware has already refreshed the user row and effective permission
+  // context for this request. Rebuilding the public shape from that value avoids
+  // a second users-table lookup on every /auth/me poll.
+  const userData = buildSessionUser(req.user as unknown as Record<string, unknown>);
 
   const sid = req.cookies?.sid;
   let isImpersonating = false;
@@ -148,7 +144,7 @@ router.get("/auth/me", async (req: Request, res: Response) => {
   }
 
   const permissions = Array.from(
-    await getEffectivePermissionSet({ id: userData.id, role: userData.role })
+    await getEffectivePermissionSet(req.user)
   );
 
   res.json({ ...userData, permissions, isImpersonating, originalUserId });

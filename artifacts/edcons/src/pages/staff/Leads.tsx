@@ -1358,8 +1358,33 @@ export default function LeadsPage() {
     minValue: colFilters.value || undefined,
     sortKey: sort.key,
     sortDir: sort.dir,
+    includeFacets: pg.page === 1 ? 1 : 0,
   }), [debouncedSearch, season, viewMode, pg.page, pg.pageSize, filters, colFilters, sort]);
   const { data, isLoading } = useListLeads(leadListParams as any);
+  const leadFacetScopeKey = useMemo(() => {
+    const { page: _page, limit: _limit, includeFacets: _includeFacets, ...scope } = leadListParams as any;
+    return JSON.stringify(scope);
+  }, [leadListParams]);
+  const leadAggregateCache = useRef<{
+    key: string;
+    statusCounts: Record<string, number>;
+    facets?: { nationalities?: string[]; agents?: Array<{ id: number; name: string }> };
+  } | null>(null);
+  const leadAggregates = useMemo(() => {
+    const meta = (data as any)?.meta;
+    if (meta?.facets) {
+      const next = {
+        key: leadFacetScopeKey,
+        statusCounts: (meta.statusCounts || {}) as Record<string, number>,
+        facets: meta.facets as { nationalities?: string[]; agents?: Array<{ id: number; name: string }> },
+      };
+      leadAggregateCache.current = next;
+      return next;
+    }
+    return leadAggregateCache.current?.key === leadFacetScopeKey
+      ? leadAggregateCache.current
+      : { key: leadFacetScopeKey, statusCounts: {}, facets: undefined };
+  }, [data, leadFacetScopeKey]);
 
   const { data: staffUsersData } = useQuery({
     queryKey: ["staff-users-list"],
@@ -1484,10 +1509,8 @@ export default function LeadsPage() {
 
   const pagedLeads = sortedLeads;
   const totalLeadsCount = Number((data as any)?.meta?.total ?? sortedLeads.length);
-  const leadStatusCounts = ((data as any)?.meta?.statusCounts || {}) as Record<string, number>;
-  const leadFacets = (data as any)?.meta?.facets as
-    | { nationalities?: string[]; agents?: Array<{ id: number; name: string }> }
-    | undefined;
+  const leadStatusCounts = leadAggregates.statusCounts;
+  const leadFacets = leadAggregates.facets;
 
   useEffect(() => { pg.setPage(1); setSelectedIds(new Set()); }, [search, filters, colFilters, sort]);
 

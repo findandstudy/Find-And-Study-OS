@@ -4,7 +4,7 @@ import { eq, ilike, or, sql, and, lt, lte, gte, desc, asc, inArray, isNotNull, n
 import { requireAuth, requireRole, requireAgentStaffPermission, logAudit } from "../lib/auth";
 import { STAFF_ROLES, ADMIN_ROLES, AGENT_ROLES, isAgentRole } from "../lib/roles";
 import { getAgentVisibleIds, getAgentRecord } from "../lib/agentVisibility";
-import { getEffectivePermissionSet, canAccessAssignedRecord, userHasPermission } from "../lib/permissions";
+import { getAssignmentVisibility, getEffectivePermissionSet, canAccessAssignedRecord, userHasPermission } from "../lib/permissions";
 import { cascadeStudentAssignment } from "../lib/leadAssignment";
 import { resolveAgentCommission } from "../lib/agentCommission";
 import { getAgencyMemberAgentIds } from "../lib/agencyStaff";
@@ -279,6 +279,7 @@ router.get("/students/:id/photo", photoAccessGuard, async (req, res): Promise<vo
 router.get("/students", requireAuth, requireRole(...STAFF_ROLES, "student", ...AGENT_ROLES), requireAgentStaffPermission("students"), async (req, res): Promise<void> => {
   const user = req.user!;
   const query = req.query as Record<string, string>;
+  const includeFacets = query.includeFacets !== "0";
   const {
     agentId, status, search, season, originType: originFilter,
     appSource, assignment, nationality, name, email, passport,
@@ -306,25 +307,27 @@ router.get("/students", requireAuth, requireRole(...STAFF_ROLES, "student", ...A
     // records; view_unassigned adds the unassigned pool; view_others adds
     // teammates' records. Plus (Task #128) students of an agency where the
     // user is listed as assigned staff are always visible.
-    const perms = await getEffectivePermissionSet({ id: user.id, role: user.role });
-    const agencyAgentIds = await getAgencyMemberAgentIds(user.id);
-    const orParts: any[] = [eq(studentsTable.assignedToId, user.id)];
-    if (perms.has("records.view_unassigned")) {
-      orParts.push(isNull(studentsTable.assignedToId));
+    const perms = await getEffectivePermissionSet(user);
+    const assignmentVisibility = getAssignmentVisibility(perms);
+    if (assignmentVisibility !== "all") {
+      const agencyAgentIds = await getAgencyMemberAgentIds(user.id);
+      const orParts: any[] = assignmentVisibility === "assigned"
+        ? [isNotNull(studentsTable.assignedToId)]
+        : [eq(studentsTable.assignedToId, user.id)];
+      if (assignmentVisibility === "own_or_unassigned") {
+        orParts.push(isNull(studentsTable.assignedToId));
+      }
+      if (agencyAgentIds.length > 0) {
+        orParts.push(inArray(studentsTable.agentId, agencyAgentIds));
+      }
+      conditions.push(or(...orParts)!);
     }
-    if (perms.has("records.view_others")) {
-      orParts.push(and(isNotNull(studentsTable.assignedToId), ne(studentsTable.assignedToId, user.id))!);
-    }
-    if (agencyAgentIds.length > 0) {
-      orParts.push(inArray(studentsTable.agentId, agencyAgentIds));
-    }
-    conditions.push(or(...orParts)!);
   }
   // Branch scoping (super_admin: null = all). Applies to staff AND agents.
   // Null-branch students (created via public apply popup, embed widgets) are
   // visible to any branch-scoped user so they can be claimed and assigned.
   if (user.role !== "student") {
-    const visibleBranchIds = await getVisibleBranchIds(user.id, user.role);
+    const visibleBranchIds = await getVisibleBranchIds(user.id, user.role, user);
     if (visibleBranchIds !== null) {
       if (visibleBranchIds.length === 0) {
         conditions.push(isNull(studentsTable.branchId));
@@ -439,13 +442,19 @@ router.get("/students", requireAuth, requireRole(...STAFF_ROLES, "student", ...A
     .limit(limitNum)
     .offset(offset)
     .orderBy(order, desc(studentsTable.id)),
-    db.select({ status: studentsTable.status, count: sql<number>`count(*)` })
-      .from(studentsTable).where(whereClause).groupBy(studentsTable.status),
-    db.selectDistinct({ value: studentsTable.nationality })
-      .from(studentsTable).where(and(whereClause, isNotNull(studentsTable.nationality))).orderBy(studentsTable.nationality),
-    db.selectDistinct({ id: agentsTable.id, name: agentsTable.companyName })
-      .from(studentsTable).innerJoin(agentsTable, eq(studentsTable.agentId, agentsTable.id))
-      .where(whereClause).orderBy(agentsTable.companyName),
+    includeFacets
+      ? db.select({ status: studentsTable.status, count: sql<number>`count(*)` })
+          .from(studentsTable).where(whereClause).groupBy(studentsTable.status)
+      : Promise.resolve([] as Array<{ status: string; count: number }>),
+    includeFacets
+      ? db.selectDistinct({ value: studentsTable.nationality })
+          .from(studentsTable).where(and(whereClause, isNotNull(studentsTable.nationality))).orderBy(studentsTable.nationality)
+      : Promise.resolve([] as Array<{ value: string | null }>),
+    includeFacets
+      ? db.selectDistinct({ id: agentsTable.id, name: agentsTable.companyName })
+          .from(studentsTable).innerJoin(agentsTable, eq(studentsTable.agentId, agentsTable.id))
+          .where(whereClause).orderBy(agentsTable.companyName)
+      : Promise.resolve([] as Array<{ id: number | null; name: string | null }>),
   ]);
   const count = countRows[0]?.count ?? 0;
 
@@ -461,11 +470,13 @@ router.get("/students", requireAuth, requireRole(...STAFF_ROLES, "student", ...A
       page: pageNum,
       limit: limitNum,
       totalPages: Math.ceil(Number(count) / limitNum),
-      statusCounts: Object.fromEntries(statusRows.map((row) => [row.status, Number(row.count)])),
-      facets: {
-        nationalities: nationalityRows.map((row) => row.value).filter(Boolean),
-        agents: agentRows.filter((row) => row.id != null && row.name).map((row) => ({ id: row.id, name: row.name })),
-      },
+      ...(includeFacets ? {
+        statusCounts: Object.fromEntries(statusRows.map((row) => [row.status, Number(row.count)])),
+        facets: {
+          nationalities: nationalityRows.map((row) => row.value).filter(Boolean),
+          agents: agentRows.filter((row) => row.id != null && row.name).map((row) => ({ id: row.id, name: row.name })),
+        },
+      } : {}),
     },
   });
 });
@@ -582,7 +593,7 @@ router.post("/students", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES
       ? await getAgentVisibleIds(user.id, user.role)
       : [];
     const permissionSet = !actorIsAgent && !actorIsAdmin
-      ? await getEffectivePermissionSet({ id: user.id, role: user.role })
+      ? await getEffectivePermissionSet(user)
       : new Set<string>();
     const [agentStaffUser] = user.role === "agent_staff"
       ? await db
@@ -606,6 +617,7 @@ router.post("/students", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES
         user.id,
         user.role,
         sourceLead.branchId,
+        user,
       ),
     });
     if (!access.allowed) {
@@ -662,7 +674,7 @@ router.post("/students", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES
       : await inferOriginFromUser(user);
   const inheritedBranchId = sourceLead
     ? sourceLead.branchId
-    : await resolveCreateBranchId(user.id, user.role, req.body.branchId ?? null);
+    : await resolveCreateBranchId(user.id, user.role, req.body.branchId ?? null, user);
   if (inheritedBranchId == null && !sourceLead && user.role !== "super_admin" && user.role !== "student" && !isAgentRole(user.role)) {
     res.status(403).json({ error: "No accessible branch — cannot create student" });
     return;
@@ -990,7 +1002,7 @@ router.patch("/students/:id", requireAuth, requireAgentStaffPermission("students
   const isAdmin = (ADMIN_ROLES as readonly string[]).includes(role);
   const perms = isAgent || isStudent || isAdmin
     ? new Set<string>()
-    : await getEffectivePermissionSet({ id: req.user!.id, role });
+    : await getEffectivePermissionSet(req.user!);
 
   if (!isStudent && !isAgent && !isAdmin) {
     if (!canAccessAssignedRecord(perms, existing.assignedToId, req.user!.id)) {
@@ -1016,7 +1028,7 @@ router.patch("/students/:id", requireAuth, requireAgentStaffPermission("students
   // old agentCanChangeStudentAppStage Settings toggle). Agents resolve their
   // effective permission set here since `perms` is empty for the agent branch.
   if (isAgent && req.body.status !== undefined) {
-    const agentPerms = await getEffectivePermissionSet({ id: req.user!.id, role });
+    const agentPerms = await getEffectivePermissionSet(req.user!);
     if (agentPerms.has("applications.change_student_app_stage")) {
       allowedFields = [...allowedFields, "status"];
     }

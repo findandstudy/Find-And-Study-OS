@@ -54,6 +54,9 @@ export const leadsTable = pgTable("leads", {
   index("leads_season_idx").on(table.season),
   index("leads_origin_type_idx").on(table.originType),
   index("leads_phone_e164_idx").on(table.phoneE164),
+  index("leads_staff_scope_idx")
+    .on(table.branchId, table.assignedToId, table.createdAt)
+    .where(sql`${table.deletedAt} IS NULL`),
   // NOTE: Partial unique indexes for public-lead dedup are managed by
   // `artifacts/api-server/scripts/cleanup-{embed,public-lead}-duplicates.ts`
   // (run from post-merge.sh) because drizzle-kit cannot express the

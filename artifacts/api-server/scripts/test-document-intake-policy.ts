@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { PDFDocument } from "pdf-lib";
 import {
   APPLICATION_DOCUMENT_MAX_SIZE,
@@ -50,4 +51,31 @@ test("AI intake prompt keeps document safety rules outside editable knowledge", 
   assert.match(prompt, /passport-style photo must be JPG, JPEG or PNG/i);
   assert.match(prompt, /one PDF appears to contain multiple document types/i);
   assert.match(prompt, /Do not treat a mere attachment as a completed document/i);
+});
+
+test("staff profile upload surfaces use canonical types and downstream lifecycle hooks", () => {
+  const studentDetail = readFileSync(
+    new URL("../../edcons/src/pages/staff/StudentDetail.tsx", import.meta.url),
+    "utf8",
+  );
+  const studentDocumentsRoute = readFileSync(
+    new URL("../src/routes/documents.ts", import.meta.url),
+    "utf8",
+  );
+  const leadDocumentsRoute = readFileSync(
+    new URL("../src/routes/leads.ts", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(studentDetail, /queryFn:\s*\(\)\s*=>\s*customFetch\("\/api\/catalog-options"\)/);
+  assert.match(studentDetail, /key:\s*"diploma_certificate"/);
+  assert.match(studentDetail, /key:\s*"diploma_transcript"/);
+  assert.doesNotMatch(studentDetail, /key:\s*"diploma"\s*,/);
+  assert.doesNotMatch(studentDetail, /key:\s*"transcript"\s*,/);
+
+  assert.match(studentDocumentsRoute, /reEvaluateMandatoryDocsForStudent\(doc\.studentId\)/);
+  assert.match(leadDocumentsRoute, /recompressStoredObjectIfNeeded\(fileKey, mimeType\)/);
+  assert.match(leadDocumentsRoute, /db\.transaction\(async \(tx\) =>/);
+  assert.match(leadDocumentsRoute, /recomputeStudentPhoto\(doc\.studentId\)/);
+  assert.match(leadDocumentsRoute, /reEvaluateMandatoryDocsForStudent\(doc\.studentId\)/);
 });

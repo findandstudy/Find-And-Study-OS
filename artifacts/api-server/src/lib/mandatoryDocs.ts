@@ -193,3 +193,34 @@ export async function reEvaluateMandatoryDocs(
 
   return true;
 }
+
+/**
+ * Re-evaluate every active application that is waiting for profile-level
+ * documents for the same student.
+ *
+ * A passport/diploma uploaded from the student or converted-lead profile is a
+ * shared student document, not an application-only upload. Consequently all
+ * of the student's `missing_docs` applications must see the new evidence.
+ * Application-scoped uploads still call `reEvaluateMandatoryDocs()` for only
+ * their explicit application and do not use this helper.
+ */
+export async function reEvaluateMandatoryDocsForStudent(
+  studentId: number,
+): Promise<number[]> {
+  const applications = await db
+    .select({ id: applicationsTable.id })
+    .from(applicationsTable)
+    .where(and(
+      eq(applicationsTable.studentId, studentId),
+      eq(applicationsTable.stage, "missing_docs"),
+      isNull(applicationsTable.deletedAt),
+    ));
+
+  const advanced: number[] = [];
+  for (const application of applications) {
+    if (await reEvaluateMandatoryDocs(application.id)) {
+      advanced.push(application.id);
+    }
+  }
+  return advanced;
+}

@@ -1,6 +1,7 @@
 import { pgTable, text, serial, timestamp, integer, real, boolean, index, type AnyPgColumn } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
+import { sql } from "drizzle-orm";
 import { studentsTable } from "./students";
 import { programsTable, universitiesTable } from "./universities";
 import { agentsTable } from "./agents";
@@ -85,6 +86,9 @@ export const applicationsTable = pgTable("applications", {
   index("applications_season_idx").on(table.season),
   index("applications_origin_type_idx").on(table.originType),
   index("applications_main_application_id_idx").on(table.mainApplicationId),
+  index("applications_staff_scope_idx")
+    .on(table.branchId, table.assignedToId, table.createdAt)
+    .where(sql`${table.deletedAt} IS NULL`),
 ]);
 
 export const insertApplicationSchema = createInsertSchema(applicationsTable).omit({ id: true, createdAt: true, updatedAt: true, deletedAt: true });

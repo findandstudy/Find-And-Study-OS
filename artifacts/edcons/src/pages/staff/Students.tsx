@@ -1429,13 +1429,36 @@ export default function StudentsPage() {
     passport: colFilters.passport || undefined,
     sortKey: sort.key,
     sortDir: sort.dir,
+    includeFacets: pg.page === 1 ? 1 : 0,
   }), [debouncedSearch, season, viewMode, pg.page, pg.pageSize, filters, colFilters, sort]);
   const { data, isLoading } = useListStudents(studentListParams as any);
   const allStudents: any[] = data?.data ?? [];
-  const studentFacets = (data as any)?.meta?.facets as
-    | { nationalities?: string[]; agents?: Array<{ id: number; name: string }> }
-    | undefined;
-  const studentStatusCounts = ((data as any)?.meta?.statusCounts || {}) as Record<string, number>;
+  const studentFacetScopeKey = useMemo(() => {
+    const { page: _page, limit: _limit, includeFacets: _includeFacets, ...scope } = studentListParams as any;
+    return JSON.stringify(scope);
+  }, [studentListParams]);
+  const studentAggregateCache = useRef<{
+    key: string;
+    statusCounts: Record<string, number>;
+    facets?: { nationalities?: string[]; agents?: Array<{ id: number; name: string }> };
+  } | null>(null);
+  const studentAggregates = useMemo(() => {
+    const meta = (data as any)?.meta;
+    if (meta?.facets) {
+      const next = {
+        key: studentFacetScopeKey,
+        statusCounts: (meta.statusCounts || {}) as Record<string, number>,
+        facets: meta.facets as { nationalities?: string[]; agents?: Array<{ id: number; name: string }> },
+      };
+      studentAggregateCache.current = next;
+      return next;
+    }
+    return studentAggregateCache.current?.key === studentFacetScopeKey
+      ? studentAggregateCache.current
+      : { key: studentFacetScopeKey, statusCounts: {}, facets: undefined };
+  }, [data, studentFacetScopeKey]);
+  const studentFacets = studentAggregates.facets;
+  const studentStatusCounts = studentAggregates.statusCounts;
 
   const uniqueNationalities = useMemo(() => {
     if (studentFacets?.nationalities?.length) return studentFacets.nationalities;

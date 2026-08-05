@@ -7,7 +7,7 @@ import { STAFF_ROLES, ADMIN_ROLES, AGENT_ROLES, isAgentRole } from "../lib/roles
 import { getAgentVisibleIds, getAgentRecord } from "../lib/agentVisibility";
 import { isAgentSourcedAndBlockedForStaff } from "../lib/rbac/agentSourceScope";
 import { assertCanAccessStudent } from "../lib/studentAccess";
-import { getEffectivePermissionSet, canAccessAssignedRecord, userHasPermission } from "../lib/permissions";
+import { getAssignmentVisibility, getEffectivePermissionSet, canAccessAssignedRecord, userHasPermission } from "../lib/permissions";
 import { getVisibleBranchIds, resolveCreateBranchId, isInBranchScope } from "../lib/branchScope";
 import { normalizeAndValidateNames, normalizePhoneField, toLatinUpper } from "../lib/textNormalize";
 import { dispatchNotification } from "../lib/notificationDispatcher";
@@ -25,8 +25,10 @@ import { validateStudentDocumentFile, validateStudentDocumentBuffer, sanitizeFil
 import { ObjectStorageService, ObjectNotFoundError } from "../lib/objectStorage";
 import { buildDocNameFromParts } from "../lib/docNaming";
 import { callerOwnsObject } from "../lib/objectAuthz";
-import { checkMandatoryDocs, checkMandatoryDocsForStudent } from "../lib/mandatoryDocs";
+import { checkMandatoryDocs, checkMandatoryDocsForStudent, reEvaluateMandatoryDocsForStudent } from "../lib/mandatoryDocs";
 import { getDocLabel } from "../lib/docNaming";
+import { recompressStoredObjectIfNeeded } from "../lib/documentBytes";
+import { UploadTooLargeError } from "../lib/uploads/processUpload";
 import {
   buildPortalDraftPreflightError,
   prepareRoutedPortalDraftPreflight,
@@ -253,6 +255,7 @@ router.post("/public/lead/:token", publicLeadLimiter, async (req, res): Promise<
 router.get("/leads", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), requireAgentStaffPermission("leads"), async (req, res): Promise<void> => {
   const user = req.user!;
   const query = req.query as Record<string, string>;
+  const includeFacets = query.includeFacets !== "0";
   const {
     status, search, season, agentId: agentIdFilter, originType: originFilter,
     source, appSource, assignment, nationality, name, email, program, country,
@@ -266,11 +269,16 @@ router.get("/leads", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), r
   const conditions = [isNull(leadsTable.deletedAt)];
   if (season) conditions.push(eq(leadsTable.season, season));
 
+  const isNonAdminStaff = !isAgentRole(user.role)
+    && !(ADMIN_ROLES as readonly string[]).includes(user.role);
+  const staffPerms = isNonAdminStaff
+    ? await getEffectivePermissionSet(user)
+    : null;
+
   // KURAL 1: non-admin staff cannot see agent-sourced leads
   // unless they have records.view_others (Task #494)
-  if (!isAgentRole(user.role) && !(ADMIN_ROLES as readonly string[]).includes(user.role)) {
-    const listPerms = await getEffectivePermissionSet({ id: user.id, role: user.role });
-    if (!listPerms.has("records.view_others")) {
+  if (staffPerms) {
+    if (!staffPerms.has("records.view_others")) {
       conditions.push(isNull(leadsTable.agentId));
     }
   }
@@ -288,7 +296,7 @@ router.get("/leads", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), r
   // branch, so excluding nulls would hide every web inbox lead from
   // branch-scoped staff. Treat null-branch as "global / unassigned to a
   // branch — visible to any branch's staff so they can pick it up".
-  const visibleBranchIds = await getVisibleBranchIds(user.id, user.role);
+  const visibleBranchIds = await getVisibleBranchIds(user.id, user.role, user);
   if (visibleBranchIds !== null) {
     if (visibleBranchIds.length === 0) {
       conditions.push(isNull(leadsTable.branchId));
@@ -296,18 +304,19 @@ router.get("/leads", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), r
       conditions.push(or(inArray(leadsTable.branchId, visibleBranchIds), isNull(leadsTable.branchId))!);
     }
   }
-  if (!isAgentRole(user.role) && !(ADMIN_ROLES as readonly string[]).includes(user.role)) {
+  const staffAssignmentVisibility = staffPerms
+    ? getAssignmentVisibility(staffPerms)
+    : null;
+  if (staffPerms && staffAssignmentVisibility !== "all") {
     // Non-admin staff: visibility is driven by the records.* permission keys.
     // They always see their own records; records.view_unassigned adds the
     // unassigned pool; records.view_others adds records assigned to teammates.
     // Origin (direct vs agent vs sub_agent) is intentionally NOT a filter here.
-    const perms = await getEffectivePermissionSet({ id: user.id, role: user.role });
-    const orParts: any[] = [eq(leadsTable.assignedToId, user.id)];
-    if (perms.has("records.view_unassigned")) {
+    const orParts: any[] = staffAssignmentVisibility === "assigned"
+      ? [isNotNull(leadsTable.assignedToId)]
+      : [eq(leadsTable.assignedToId, user.id)];
+    if (staffAssignmentVisibility === "own_or_unassigned") {
       orParts.push(isNull(leadsTable.assignedToId));
-    }
-    if (perms.has("records.view_others")) {
-      orParts.push(and(isNotNull(leadsTable.assignedToId), ne(leadsTable.assignedToId, user.id))!);
     }
     conditions.push(or(...orParts)!);
   }
@@ -468,13 +477,19 @@ router.get("/leads", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), r
     .limit(limitNum)
     .offset(offset)
     .orderBy(order, desc(leadsTable.id)),
-    db.select({ status: leadsTable.status, count: sql<number>`count(*)` })
-      .from(leadsTable).where(whereClause).groupBy(leadsTable.status),
-    db.selectDistinct({ value: leadsTable.nationality })
-      .from(leadsTable).where(and(whereClause, isNotNull(leadsTable.nationality))).orderBy(leadsTable.nationality),
-    db.selectDistinct({ id: agentsTable.id, name: agentsTable.companyName })
-      .from(leadsTable).innerJoin(agentsTable, eq(leadsTable.agentId, agentsTable.id))
-      .where(whereClause).orderBy(agentsTable.companyName),
+    includeFacets
+      ? db.select({ status: leadsTable.status, count: sql<number>`count(*)` })
+          .from(leadsTable).where(whereClause).groupBy(leadsTable.status)
+      : Promise.resolve([] as Array<{ status: string; count: number }>),
+    includeFacets
+      ? db.selectDistinct({ value: leadsTable.nationality })
+          .from(leadsTable).where(and(whereClause, isNotNull(leadsTable.nationality))).orderBy(leadsTable.nationality)
+      : Promise.resolve([] as Array<{ value: string | null }>),
+    includeFacets
+      ? db.selectDistinct({ id: agentsTable.id, name: agentsTable.companyName })
+          .from(leadsTable).innerJoin(agentsTable, eq(leadsTable.agentId, agentsTable.id))
+          .where(whereClause).orderBy(agentsTable.companyName)
+      : Promise.resolve([] as Array<{ id: number | null; name: string | null }>),
   ]);
   const count = countRows[0]?.count ?? 0;
 
@@ -509,11 +524,13 @@ router.get("/leads", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), r
       page: pageNum,
       limit: limitNum,
       totalPages: Math.ceil(Number(count) / limitNum),
-      statusCounts: Object.fromEntries(statusRows.map((row) => [row.status, Number(row.count)])),
-      facets: {
-        nationalities: nationalityRows.map((row) => row.value).filter(Boolean),
-        agents: agentRows.filter((row) => row.id != null && row.name).map((row) => ({ id: row.id, name: row.name })),
-      },
+      ...(includeFacets ? {
+        statusCounts: Object.fromEntries(statusRows.map((row) => [row.status, Number(row.count)])),
+        facets: {
+          nationalities: nationalityRows.map((row) => row.value).filter(Boolean),
+          agents: agentRows.filter((row) => row.id != null && row.name).map((row) => ({ id: row.id, name: row.name })),
+        },
+      } : {}),
     },
   });
 });
@@ -539,7 +556,7 @@ router.post("/leads", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), 
   const origin = resolvedAgentId
     ? await inferOriginFromAgentId(resolvedAgentId)
     : await inferOriginFromUser(user);
-  const inheritedBranchId = await resolveCreateBranchId(user.id, user.role, req.body.branchId ?? null);
+  const inheritedBranchId = await resolveCreateBranchId(user.id, user.role, req.body.branchId ?? null, user);
   if (inheritedBranchId == null && user.role !== "super_admin" && !isAgentRole(user.role)) {
     res.status(403).json({ error: "No accessible branch — cannot create lead" });
     return;
@@ -602,7 +619,7 @@ router.post("/leads/bulk", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROL
   const origin = resolvedAgentId
     ? await inferOriginFromAgentId(resolvedAgentId)
     : await inferOriginFromUser(user);
-  const inheritedBranchId = await resolveCreateBranchId(user.id, user.role, null);
+  const inheritedBranchId = await resolveCreateBranchId(user.id, user.role, null, user);
   if (inheritedBranchId == null && user.role !== "super_admin" && !isAgentRole(user.role)) {
     res.status(403).json({ error: "No accessible branch — cannot create leads" });
     return;
@@ -674,14 +691,14 @@ router.get("/leads/:id", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES
       return;
     }
   } else if (!(ADMIN_ROLES as readonly string[]).includes(user.role)) {
-    const perms = await getEffectivePermissionSet({ id: user.id, role: user.role });
+    const perms = await getEffectivePermissionSet(user);
     const viewOthers = perms.has("records.view_others");
     // KURAL 1: non-admin staff cannot access agent-sourced lead detail
     // unless they have records.view_others (Task #494) — within branch scope only
     if (lead.agentId !== null && !viewOthers) {
       res.status(404).json({ error: "Lead not found" }); return;
     }
-    if (viewOthers && !(await isInBranchScope(user.id, user.role, lead.branchId))) {
+    if (viewOthers && !(await isInBranchScope(user.id, user.role, lead.branchId, user))) {
       res.status(404).json({ error: "Lead not found" }); return;
     }
     if (!viewOthers && lead.assignedToId !== null && lead.assignedToId !== user.id) {
@@ -711,14 +728,14 @@ router.get("/leads/:id/documents", requireAuth, requireRole(...STAFF_ROLES, ...A
       return;
     }
   } else if (!(ADMIN_ROLES as readonly string[]).includes(user.role)) {
-    const docPerms = await getEffectivePermissionSet({ id: user.id, role: user.role });
+    const docPerms = await getEffectivePermissionSet(user);
     const docViewOthers = docPerms.has("records.view_others");
     // KURAL 1: non-admin staff cannot access documents of agent-sourced leads
     // unless they have records.view_others (Task #494) — within branch scope only
     if (lead.agentId !== null && !docViewOthers) {
       res.status(404).json({ error: "Lead not found" }); return;
     }
-    if (docViewOthers && !(await isInBranchScope(user.id, user.role, lead.branchId))) {
+    if (docViewOthers && !(await isInBranchScope(user.id, user.role, lead.branchId, user))) {
       res.status(404).json({ error: "Lead not found" }); return;
     }
     if (!docViewOthers && lead.assignedToId !== null && lead.assignedToId !== user.id) {
@@ -841,19 +858,78 @@ router.post("/leads/:id/documents", requireAuth, requireRole(...STAFF_ROLES, ...
     }
   }
 
-  const safeName = buildDocNameFromParts(lead.firstName, lead.lastName, type, mimeType);
+  let storedMimeType = mimeType;
+  let storedSizeBytes = sizeBytes ? Number(sizeBytes) : null;
+  try {
+    const recompressed = await recompressStoredObjectIfNeeded(fileKey, mimeType);
+    if (recompressed?.recompressed) {
+      storedMimeType = recompressed.mimeType;
+      storedSizeBytes = recompressed.sizeBytes;
+    }
+  } catch (err) {
+    if (err instanceof UploadTooLargeError) {
+      res.status(413).json({ error: err.message });
+      return;
+    }
+    console.error("[LEADS] recompressStoredObjectIfNeeded failed, keeping original:", err);
+  }
 
-  const [doc] = await db.insert(documentsTable).values({
-    name: safeName,
-    type,
-    status: "pending",
-    leadId: id,
-    studentId: lead.convertedStudentId ?? null,
-    fileKey,
-    mimeType: mimeType || null,
-    sizeBytes: sizeBytes ? Number(sizeBytes) : null,
-  }).returning();
+  const safeName = buildDocNameFromParts(lead.firstName, lead.lastName, type, storedMimeType);
+
+  // Match the canonical student upload semantics: a new content-bearing file
+  // replaces the previous active document of the same type in the same
+  // profile scope. Validation and storage verification have already succeeded,
+  // so a rejected/abandoned upload can never retire the existing document.
+  const previousScope = lead.convertedStudentId
+    ? and(
+        eq(documentsTable.studentId, lead.convertedStudentId),
+        eq(documentsTable.type, type),
+        isNull(documentsTable.applicationId),
+        isNull(documentsTable.deletedAt),
+      )
+    : and(
+        eq(documentsTable.leadId, id),
+        isNull(documentsTable.studentId),
+        eq(documentsTable.type, type),
+        isNull(documentsTable.deletedAt),
+      );
+  const doc = await db.transaction(async (tx) => {
+    await tx.update(documentsTable)
+      .set({ deletedAt: new Date() })
+      .where(previousScope);
+
+    const [inserted] = await tx.insert(documentsTable).values({
+      name: safeName,
+      type,
+      status: "pending",
+      leadId: id,
+      studentId: lead.convertedStudentId ?? null,
+      fileKey,
+      mimeType: storedMimeType || null,
+      sizeBytes: storedSizeBytes,
+    }).returning();
+    return inserted;
+  });
   await logAudit(user.id, "create_document", "document", doc.id, { name: safeName, type, leadId: id, studentId: lead.convertedStudentId ?? null }, req.ip);
+
+  // Converted-lead uploads are student profile documents too. Run the same
+  // downstream lifecycle as POST /documents so avatars, education extraction,
+  // portal/mandatory checks and every linked application see the new file.
+  if (doc.studentId) {
+    if (type === "photo" || type === "photograph") {
+      await recomputeStudentPhoto(doc.studentId);
+    }
+    maybeTriggerAutoEducationExtractForStudent({
+      studentId: doc.studentId,
+      actorUserId: user.id,
+      ip: req.ip,
+    });
+    try {
+      await reEvaluateMandatoryDocsForStudent(doc.studentId);
+    } catch (err) {
+      console.error("[LEADS] mandatory-document re-evaluation failed:", err);
+    }
+  }
   res.status(201).json(doc);
 });
 
@@ -878,7 +954,7 @@ router.patch("/leads/:id", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROL
   const isAdmin = (ADMIN_ROLES as readonly string[]).includes(user.role);
   const perms = isAgent || isAdmin
     ? new Set<string>()
-    : await getEffectivePermissionSet({ id: user.id, role: user.role });
+    : await getEffectivePermissionSet(user);
 
   let agentVisibleIds: number[] = [];
   if (isAgent) {
@@ -893,7 +969,7 @@ router.patch("/leads/:id", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROL
     if (existing.agentId !== null && !perms.has("records.view_others")) {
       res.status(404).json({ error: "Lead not found" }); return;
     }
-    if (perms.has("records.view_others") && !(await isInBranchScope(user.id, user.role, existing.branchId))) {
+    if (perms.has("records.view_others") && !(await isInBranchScope(user.id, user.role, existing.branchId, user))) {
       res.status(404).json({ error: "Lead not found" }); return;
     }
     if (!canAccessAssignedRecord(perms, existing.assignedToId, user.id)) {
@@ -908,7 +984,7 @@ router.patch("/leads/:id", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROL
   // Settings toggle for agents). Agents resolve their effective permission set
   // here since `perms` is intentionally empty for the agent branch above.
   if (isAgent && req.body.status !== undefined) {
-    const agentPerms = await getEffectivePermissionSet({ id: user.id, role: user.role });
+    const agentPerms = await getEffectivePermissionSet(user);
     if (agentPerms.has("leads.change_stage")) {
       allowedFields = [...allowedFields, "status"];
     }
@@ -1535,11 +1611,11 @@ router.get("/leads/:id/notes", requireAuth, requireRole(...STAFF_ROLES, ...AGENT
   const [noteLeadRow] = await db.select({ agentId: leadsTable.agentId, branchId: leadsTable.branchId }).from(leadsTable).where(and(eq(leadsTable.id, id), isNull(leadsTable.deletedAt)));
   if (!noteLeadRow) { res.status(404).json({ error: "Lead not found" }); return; }
   if (isAgentSourcedAndBlockedForStaff(req.user!, noteLeadRow.agentId)) {
-    const notePerms = await getEffectivePermissionSet({ id: req.user!.id, role: req.user!.role });
+    const notePerms = await getEffectivePermissionSet(req.user!);
     if (!notePerms.has("records.view_others")) {
       res.status(404).json({ error: "Lead not found" }); return;
     }
-    if (!(await isInBranchScope(req.user!.id, req.user!.role, noteLeadRow.branchId))) {
+    if (!(await isInBranchScope(req.user!.id, req.user!.role, noteLeadRow.branchId, req.user!))) {
       res.status(404).json({ error: "Lead not found" }); return;
     }
   }

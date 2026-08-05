@@ -46,12 +46,12 @@ const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
 const LazyPdfPhotoAvatar = lazy(() => import("@/components/PdfPhotoAvatar"));
 
-const DOC_TYPES = [
-  { key: "passport", label: "Passport" },
-  { key: "diploma", label: "Diploma" },
-  { key: "transcript", label: "Transcript" },
-  { key: "photo", label: "Photo" },
-  { key: "other", label: "Other" },
+const FALLBACK_DOC_TYPES = [
+  { key: "passport", label: "Passport", accept: ".pdf,.jpg,.jpeg,.png" },
+  { key: "diploma_certificate", label: "Diploma Certificate", accept: ".pdf,.jpg,.jpeg,.png" },
+  { key: "diploma_transcript", label: "Diploma Transcript", accept: ".pdf,.jpg,.jpeg,.png" },
+  { key: "photo", label: "Photograph", accept: ".jpg,.jpeg,.png" },
+  { key: "other_certificates_documents", label: "Other Certificates", accept: ".pdf,.jpg,.jpeg,.png" },
 ];
 
 interface Props {
@@ -385,6 +385,31 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
   const isStudent = user?.role === "student";
   const canSelfAssign = !isAdmin && !isStudent && !isCurrentStudentAssignee && hasPermission("records.assign_button") && !student?.assignedToId;
   const isStaffUser = user && ["super_admin", "admin", "manager", "staff"].includes(user.role);
+  const { data: catalogResp } = useQuery<any>({
+    queryKey: ["catalog-options"],
+    queryFn: () => customFetch("/api/catalog-options"),
+    enabled: !!user,
+    staleTime: 5 * 60_000,
+  });
+  const documentTypeOptions = useMemo(() => {
+    const rows: any[] = (catalogResp as any)?.grouped?.documents || [];
+    const options = rows
+      .filter((row: any) => row.isActive !== false)
+      .map((row: any) => {
+        const metadata = row.metadata || {};
+        const label = typeof metadata.label === "string" && metadata.label.trim()
+          ? metadata.label.trim()
+          : String(row.value).replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase());
+        return {
+          key: String(row.value),
+          label,
+          accept: typeof metadata.accept === "string" && metadata.accept.trim()
+            ? metadata.accept.trim()
+            : ".pdf,.jpg,.jpeg,.png",
+        };
+      });
+    return options.length > 0 ? options : FALLBACK_DOC_TYPES;
+  }, [catalogResp]);
   const [assigning, setAssigning] = useState(false);
   const [photoLoadError, setPhotoLoadError] = useState(false);
 
@@ -767,7 +792,8 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
   }
 
   function getAcceptForType(t: string) {
-    return t === "photo" ? ".jpg,.jpeg,.png" : ".jpg,.jpeg,.png,.pdf";
+    return documentTypeOptions.find((option) => option.key === t)?.accept
+      || (t === "photo" ? ".jpg,.jpeg,.png" : ".jpg,.jpeg,.png,.pdf");
   }
 
   function handleFileSelect(file: File) {
@@ -781,7 +807,7 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
     }
     setUploadFile(file);
     if (!uploadName) {
-      const type = (DOC_TYPES.find(d => d.key === uploadType)?.label ?? "document").toLowerCase();
+      const type = (documentTypeOptions.find(d => d.key === uploadType)?.label ?? "document").toLowerCase();
       const first = (student?.firstName ?? "").toLowerCase();
       const last = (student?.lastName ?? "").toLowerCase();
       setUploadName(`${type}-${first}-${last}`);
@@ -793,7 +819,7 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
     setUploading(true);
     try {
       const { fileKey, mimeType, sizeBytes } = await uploadDocumentFile(uploadFile);
-      const type = (DOC_TYPES.find(d => d.key === uploadType)?.label ?? "document").toLowerCase();
+      const type = (documentTypeOptions.find(d => d.key === uploadType)?.label ?? "document").toLowerCase();
       const first = (student?.firstName ?? "").toLowerCase();
       const last = (student?.lastName ?? "").toLowerCase();
       const docName = uploadName.trim() || `${type}-${first}-${last}`;
@@ -814,13 +840,19 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
       });
 
       if (!resp.ok) {
-        const err = await resp.text().catch(() => "Upload failed");
-        alert(err);
-        return;
+        const err = await resp.json().catch(() => ({ error: "Upload failed" }));
+        throw new Error(err?.error || "Upload failed");
       }
 
       await qc.invalidateQueries({ predicate: q => q.queryKey.some(k => typeof k === "string" && (k.includes("document") || k.includes("student") || k.includes(`/api/students`))) });
       setUploadOpen(false);
+      toast({ title: "Document uploaded" });
+    } catch (err: any) {
+      toast({
+        title: "Upload failed",
+        description: err?.message || "The document could not be uploaded.",
+        variant: "destructive",
+      });
     } finally {
       setUploading(false);
     }
@@ -1607,7 +1639,7 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
               <Select value={uploadType} onValueChange={v => {
                 setUploadType(v);
                 setUploadFile(null);
-                const type = (DOC_TYPES.find(d => d.key === v)?.label ?? "document").toLowerCase();
+                const type = (documentTypeOptions.find(d => d.key === v)?.label ?? "document").toLowerCase();
                 const first = (student?.firstName ?? "").toLowerCase();
                 const last = (student?.lastName ?? "").toLowerCase();
                 setUploadName(`${type}-${first}-${last}`);
@@ -1616,7 +1648,7 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {DOC_TYPES.map(d => (
+                  {documentTypeOptions.map(d => (
                     <SelectItem key={d.key} value={d.key}>{d.label}</SelectItem>
                   ))}
                 </SelectContent>
@@ -1668,7 +1700,7 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
                   <>
                     <Upload className="w-8 h-8 mx-auto mb-2 text-muted-foreground opacity-50" />
                     <p className="text-sm font-medium text-muted-foreground">Drag & drop or click</p>
-                    <p className="text-xs text-muted-foreground mt-1">{uploadType === "photo" ? "JPG, PNG — max 10 MB" : "PDF, JPG, PNG — max 10 MB"}</p>
+                    <p className="text-xs text-muted-foreground mt-1">{uploadType === "photo" ? "JPG, PNG — max 5 MB" : "PDF, JPG, PNG — max 5 MB"}</p>
                   </>
                 )}
               </div>

@@ -67,7 +67,7 @@ router.get("/contracts/sessions", requireAuth, gateSessionList, async (req, res)
     if (mode === "self_fill" || mode === "admin_driven") filters.push(eq(signingSessionsTable.mode, mode));
     // Branch-scope: non-super_admin users only see sessions whose agent is in
     // their visible branches. agentId=null (self_fill with no agent) is always visible.
-    const visible = await getVisibleBranchIds(me.id, me.role);
+    const visible = await getVisibleBranchIds(me.id, me.role, me);
     if (visible !== null) {
       if (visible.length > 0) {
         const scopedAgents = await db
@@ -142,7 +142,7 @@ router.get("/contracts/sessions", requireAuth, gateSessionList, async (req, res)
 router.get("/contracts/signed", requireAuth, requirePermission("contracts.view"), async (req, res): Promise<void> => {
   try {
     const me = (req as any).user!;
-    const visible = await getVisibleBranchIds(me.id, me.role);
+    const visible = await getVisibleBranchIds(me.id, me.role, me);
     const cols = {
       ...getTableColumns(signedContractsTable),
       templateTitle: contractTemplatesTable.title,
