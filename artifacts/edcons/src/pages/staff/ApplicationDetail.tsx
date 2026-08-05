@@ -280,7 +280,7 @@ export default function ApplicationDetail({ id, basePath = "/staff" }: Props) {
 
   return (
     <>
-      <div className="space-y-6 max-w-5xl">
+      <div className="w-full space-y-6">
         <div className="flex items-center gap-4">
           <Button variant="ghost" size="icon" onClick={() => setLocation(`${basePath}/applications`)}>
             <ArrowLeft className="w-4 h-4" />
@@ -323,8 +323,8 @@ export default function ApplicationDetail({ id, basePath = "/staff" }: Props) {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="md:col-span-2 space-y-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-start">
+          <div className="min-w-0 space-y-4 md:col-span-2">
             <div className="bg-card rounded-2xl border shadow-sm p-6 space-y-5">
               <div className="flex items-center justify-between">
                 <h2 className="font-semibold text-foreground">{t("applicationDetailPage.applicationDetails")}</h2>
@@ -620,7 +620,7 @@ export default function ApplicationDetail({ id, basePath = "/staff" }: Props) {
 
           </div>
 
-          <div className="space-y-4">
+          <div className="min-w-0 space-y-4">
             <div className="bg-card rounded-2xl border shadow-sm p-6 space-y-3">
               <h2 className="font-semibold text-foreground">{t("applicationDetailPage.stageProgress")}</h2>
               {isLoading ? (
