@@ -1675,27 +1675,18 @@ export const topkapiAdapter: UniversityAdapter = {
     await page.fill("input[name=email]",          profile.email);
     await page.fill("input[name=passportNumber]", profile.passportNumber);
 
-    // Debug: verify actual field values after fill
-    const filledEmail = await page.$eval("input[name=email]", (el) => (el as HTMLInputElement).value).catch(() => "NOT_FOUND");
-    const filledPP    = await page.$eval("input[name=passportNumber]", (el) => (el as HTMLInputElement).value).catch(() => "NOT_FOUND");
-    logger.info("[topkapi] Step 1 field values — email:", filledEmail || "(empty)", "passport:", filledPP || "(empty)");
-
-    // Intercept the outgoing check request to log its POST body
-    let checkRequestBody = "";
-    const reqHandler = (req: import("playwright-core").Request) => {
-      if (req.url().includes("application-check-student-exists.php")) {
-        checkRequestBody = req.postData() ?? "(no body)";
-      }
-    };
-    page.on("request", reqHandler);
+    // Verify presence without logging applicant values or request bodies.
+    const fieldsPopulated = await page.evaluate(() => ({
+      email: Boolean((document.querySelector("input[name=email]") as HTMLInputElement | null)?.value),
+      passport: Boolean((document.querySelector("input[name=passportNumber]") as HTMLInputElement | null)?.value),
+    }));
+    logger.info("[topkapi] Step 1 fields populated:", fieldsPopulated);
 
     const checkRespPromise = page.waitForResponse(
       (r) => r.url().includes("application-check-student-exists.php"),
     );
     await clickNext(page, logger);
     const checkRespObj = await checkRespPromise;
-    page.off("request", reqHandler);
-    logger.info("[topkapi] check-student-exists request body:", checkRequestBody.slice(0, 300));
 
     // Read response body to detect existing-student status directly
     let checkBody = "";

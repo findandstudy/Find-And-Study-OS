@@ -11,15 +11,15 @@ echo "============================================"
 cd "$PROJECT_ROOT"
 
 echo ""
-echo "[1/4] Installing dependencies..."
+echo "[1/5] Installing dependencies..."
 pnpm install --frozen-lockfile
 
 echo ""
-echo "[2/4] Building shared libraries..."
+echo "[2/5] Building shared libraries..."
 pnpm run typecheck:libs
 
 echo ""
-echo "[3/4] Building frontend..."
+echo "[3/5] Building frontend..."
 cd artifacts/edcons
 BASE_PATH="/" PORT=3000 NODE_ENV=production pnpm run build
 cd "$PROJECT_ROOT"
@@ -36,11 +36,15 @@ echo "[5/5] Portal automation worker..."
 echo "  [5a] Typechecking portal worker..."
 pnpm --filter @workspace/portal-automation-worker run typecheck
 
-echo "  [5b] Installing Playwright Chromium (first-time or version upgrade)..."
-# --with-deps installs OS-level libraries (libnss, libatk, etc.) needed on
-# bare VPS / CI environments. Safe to re-run — skipped if already current.
-pnpm --filter @workspace/portal-automation-worker exec \
-  playwright install chromium --with-deps
+echo "  [5b] Verifying pre-provisioned Playwright Chromium..."
+# OS packages and browser binaries are infrastructure dependencies. Installing
+# them during a release mutates the host and makes rollback non-deterministic.
+# Provision them separately, then point PLAYWRIGHT_BROWSERS_PATH at that cache.
+if [ "${SKIP_PLAYWRIGHT_BROWSER_CHECK:-0}" = "1" ]; then
+  echo "  [warn] Browser verification explicitly skipped"
+else
+  node deploy/verify-playwright-browser.cjs
+fi
 
 echo ""
 echo "============================================"

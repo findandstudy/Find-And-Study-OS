@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useI18n } from "@/hooks/use-i18n";
-import { validateFileObj as validateFile, sanitizeFileName, ACCEPT_ATTRIBUTE, FILE_UPLOAD_HELP_TEXT } from "@/lib/fileUploadValidation";
+import { validateApplicationDocumentFileObj as validateFile, sanitizeFileName, APPLICATION_DOCUMENT_ACCEPT_ATTRIBUTE, APPLICATION_DOCUMENT_HELP_TEXT } from "@/lib/fileUploadValidation";
 import { DocumentScanner } from "@/components/DocumentScanner";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
@@ -454,7 +454,7 @@ function StageSection({
                 type="file"
                 className="hidden"
                 onChange={handleFileSelect}
-                accept={ACCEPT_ATTRIBUTE}
+                accept={APPLICATION_DOCUMENT_ACCEPT_ATTRIBUTE}
               />
               <DocumentScanner
                 open={scannerOpen}
@@ -501,7 +501,7 @@ function StageSection({
                 <Upload className="w-3.5 h-3.5" />
                 {uploading ? t("stageDocs.uploading") : t("stageDocs.uploadDocument")}
               </Button>
-              <p className="text-[10px] text-muted-foreground text-center">{FILE_UPLOAD_HELP_TEXT}</p>
+              <p className="text-[10px] text-muted-foreground text-center">{APPLICATION_DOCUMENT_HELP_TEXT}</p>
             </div>
           )}
         </div>

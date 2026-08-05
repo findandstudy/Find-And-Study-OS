@@ -201,10 +201,11 @@ Mandatory rules:
 - Dump/restore pipelines MUST use `pipefail`; a failed or partial restore MUST
   stop before migrations.
 
-Known adoption-time release gate: the migration ledger currently contains two
-`0020` files and SQL/journal inconsistencies. Production deployment remains
-blocked until applied history is inspected, reconciled without breaking past
-deployments, and validation passes. Update this note only with recorded evidence.
+Adoption-time migration gate: the duplicate `0020` identity and SQL/journal
+inconsistencies were reconciled into the contiguous reviewed history through
+`0040`; repository validation records that history as coherent. Every later
+migration MUST preserve that sequence and pass ledger plus database-state
+validation before deployment.
 
 ## 9. Background Worker Rules
 

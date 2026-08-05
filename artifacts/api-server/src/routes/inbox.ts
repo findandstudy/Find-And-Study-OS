@@ -96,7 +96,7 @@ import {
   isZernioMediaUrl,
   resolveLocalInboxStorageKey,
 } from "../lib/inbox/mediaSource";
-import { validateUploadedFile, validateUploadedFileBuffer, sanitizeFileName } from "../lib/fileUploadValidation";
+import { validateStudentDocumentFile, validateStudentDocumentBuffer, sanitizeFileName } from "../lib/fileUploadValidation";
 import { buildDocNameFromParts } from "../lib/docNaming";
 import { normalizeInboxStudentExtraction } from "../lib/inboxStudentExtraction";
 import { writeAudit } from "../lib/auditLog";
@@ -4182,16 +4182,26 @@ router.post(
     let fileKey: string;
     let finalSizeBytes: number;
     if (reusedFileKey) {
-      fileKey = reusedFileKey;
-      finalSizeBytes = reusedSizeBytes ?? 0;
-    } else {
-      const buf = fileBuffer!;
-      const validationError = validateUploadedFile(resolvedFilename, resolvedMimeType, buf.length);
+      const validationError = validateStudentDocumentFile(
+        documentType,
+        resolvedFilename,
+        resolvedMimeType,
+        reusedSizeBytes ?? 0,
+      );
       if (validationError) {
         res.status(validationError.type === "size_exceeded" ? 413 : 400).json({ error: validationError.message });
         return;
       }
-      const bufferError = await validateUploadedFileBuffer(resolvedFilename, resolvedMimeType, buf.slice(0, 4100));
+      fileKey = reusedFileKey;
+      finalSizeBytes = reusedSizeBytes ?? 0;
+    } else {
+      const buf = fileBuffer!;
+      const validationError = validateStudentDocumentFile(documentType, resolvedFilename, resolvedMimeType, buf.length);
+      if (validationError) {
+        res.status(validationError.type === "size_exceeded" ? 413 : 400).json({ error: validationError.message });
+        return;
+      }
+      const bufferError = await validateStudentDocumentBuffer(documentType, resolvedFilename, resolvedMimeType, buf);
       if (bufferError) {
         res.status(bufferError.type === "size_exceeded" ? 413 : 400).json({ error: bufferError.message });
         return;

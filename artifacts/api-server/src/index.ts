@@ -17,16 +17,24 @@ import { seedProgramScopeSource } from "./lib/inbox/knowledgeSources";
 
 const isProd = process.env.NODE_ENV === "production";
 
-process.on("unhandledRejection", (reason) => {
-  console.error("[fatal] Unhandled promise rejection:", reason);
-});
+type FatalShutdown = (reason: string, exitCode: number) => Promise<void>;
+let fatalShutdown: FatalShutdown | null = null;
 
-// In production, log uncaught exceptions but do NOT exit. A single stray
-// exception from a background timer should not take down the entire server
-// and cause every in-flight request to receive an opaque edge-proxy 403.
-// Node.js will continue serving requests after the log.
-process.on("uncaughtException", (err) => {
-  console.error("[fatal] Uncaught exception (continuing):", err);
+function handleFatalProcessError(reason: string, error: unknown): void {
+  console.error(`[fatal] ${reason}:`, error);
+  if (fatalShutdown) {
+    void fatalShutdown(reason, 1);
+    return;
+  }
+  // Failure before HTTP/bootstrap completion cannot be drained safely.
+  process.exit(1);
+}
+
+process.once("unhandledRejection", (reason) => {
+  handleFatalProcessError("Unhandled promise rejection", reason);
+});
+process.once("uncaughtException", (err) => {
+  handleFatalProcessError("Uncaught exception", err);
 });
 
 function getSeedDir(): string {
@@ -3060,64 +3068,70 @@ async function seedClaudeIntegration() {
   const backgroundJobs = new BackgroundJobCoordinator(pool, [
     { name: "emailWorker", offsetMs: 1_000, start: async () => {
       const { startEmailWorker } = await import("./lib/email");
-      startEmailWorker();
+      return startEmailWorker();
     } },
     { name: "contractChecker", offsetMs: 4_000, start: async () => {
       const { startContractChecker } = await import("./lib/contractChecker");
-      startContractChecker();
+      return startContractChecker();
     } },
     { name: "offerExpiryChecker", offsetMs: 7_000, start: async () => {
       const { startOfferExpiryChecker } = await import("./lib/offerExpiryChecker");
-      startOfferExpiryChecker();
+      return startOfferExpiryChecker();
     } },
     { name: "universityContractChecker", offsetMs: 10_000, start: async () => {
       const { startUniversityContractChecker } = await import("./lib/universityContractChecker");
-      startUniversityContractChecker();
+      return startUniversityContractChecker();
     } },
     { name: "companyContractChecker", offsetMs: 13_000, start: async () => {
       const { startCompanyContractChecker } = await import("./lib/companyContractChecker");
-      startCompanyContractChecker();
+      return startCompanyContractChecker();
     } },
     { name: "signedContractDelivery", offsetMs: 16_000, start: async () => {
       const { startSignedContractDeliveryWorker } = await import("./lib/signedContractDelivery");
-      startSignedContractDeliveryWorker();
+      return startSignedContractDeliveryWorker();
     } },
     { name: "assignmentConsistencyChecker", offsetMs: 19_000, start: async () => {
       const { startAssignmentConsistencyChecker } = await import("./lib/assignmentConsistencyChecker");
-      startAssignmentConsistencyChecker();
+      return startAssignmentConsistencyChecker();
     } },
     { name: "followUpChecker", offsetMs: 25_000, start: async () => {
       const { startFollowUpChecker } = await import("./lib/followUpChecker");
-      startFollowUpChecker();
+      return startFollowUpChecker();
     } },
     { name: "portalMaintenance", offsetMs: 28_000, start: async () => {
       const { startPortalStuckReset, startPortalStatusSync } = await import("./routes/portalAutomation");
-      startPortalStuckReset();
-      startPortalStatusSync();
+      const stopStuckReset = startPortalStuckReset();
+      const stopStatusSync = startPortalStatusSync();
+      return async () => {
+        await Promise.allSettled([
+          Promise.resolve().then(stopStatusSync),
+          Promise.resolve().then(stopStuckReset),
+        ]);
+      };
     } },
     { name: "portalUniversityLinker", offsetMs: 31_000, start: async () => {
       const { startPortalUniversityLinker } = await import("./lib/portalUniversityLinker");
-      startPortalUniversityLinker();
+      return startPortalUniversityLinker();
     } },
     { name: "stuckConversationSweep", offsetMs: 34_000, start: async () => {
       const { startStuckConversationSweep } = await import("./lib/stuckConversationAssigner");
-      startStuckConversationSweep();
+      return startStuckConversationSweep();
     } },
     { name: "qualityScoringWorker", offsetMs: 37_000, start: async () => {
       const { startQualityScoringWorker } = await import("./lib/inbox/qualityScoring");
-      startQualityScoringWorker();
+      return startQualityScoringWorker();
     } },
     { name: "portalAiGuardian", offsetMs: 40_000, start: async () => {
       const { startPortalAiGuardianScanner } = await import("./lib/portalAiGuardian");
-      startPortalAiGuardianScanner();
+      return startPortalAiGuardianScanner();
     } },
     { name: "academyKnowledgeSync", offsetMs: 43_000, start: async () => {
       const { startAcademyKnowledgeSync } = await import("./lib/inbox/academyKnowledgeSync");
-      startAcademyKnowledgeSync();
+      return startAcademyKnowledgeSync();
     } },
     { name: "messageCampaignWorker", offsetMs: 46_000, start: async () => {
       const { startMessageCampaignWorker } = await import("./lib/inbox/messageCampaignWorker");
-      startMessageCampaignWorker();
+      return startMessageCampaignWorker();
     } },
   ]);
   await backgroundJobs.start();
@@ -3127,19 +3141,41 @@ async function seedClaudeIntegration() {
   const { feedBus } = await import("./lib/feedBus");
   let shuttingDown = false;
   let httpServer: ReturnType<typeof app.listen> | null = null;
-  const shutdown = async (signal: string) => {
+  const shutdown = async (signal: string, exitCode = 0) => {
     if (shuttingDown) return;
     shuttingDown = true;
     console.log(`[shutdown] ${signal} received — stopping background jobs and feedBus`);
     if (httpServer) {
-      await new Promise<void>((resolve) => httpServer!.close(() => resolve()));
+      let drainTimer: ReturnType<typeof setTimeout> | null = null;
+      try {
+        await Promise.race([
+          new Promise<void>((resolve) => httpServer!.close(() => resolve())),
+          new Promise<void>((resolve) => {
+            drainTimer = setTimeout(() => {
+              console.error("[shutdown] HTTP drain timed out after 10 seconds");
+              exitCode = 1;
+              resolve();
+            }, 10_000);
+            drainTimer.unref?.();
+          }),
+        ]);
+      } finally {
+        if (drainTimer) clearTimeout(drainTimer);
+      }
     }
-    try { await backgroundJobs.shutdown(); } catch { /* ignore */ }
-    try { await feedBus.shutdown(); } catch { /* ignore */ }
-    process.exit(0);
+    try { await backgroundJobs.shutdown(); } catch (error) {
+      console.error("[shutdown] Background-job shutdown failed:", error);
+      exitCode = 1;
+    }
+    try { await feedBus.shutdown(); } catch (error) {
+      console.error("[shutdown] feedBus shutdown failed:", error);
+      exitCode = 1;
+    }
+    process.exit(exitCode);
   };
-  process.once("SIGTERM", () => { void shutdown("SIGTERM"); });
-  process.once("SIGINT",  () => { void shutdown("SIGINT"); });
+  fatalShutdown = shutdown;
+  process.once("SIGTERM", () => { void shutdown("SIGTERM", 0); });
+  process.once("SIGINT",  () => { void shutdown("SIGINT", 0); });
 
   httpServer = app.listen(port, () => {
     console.log(`Server listening on port ${port} (${isProd ? "production" : "development"})`);

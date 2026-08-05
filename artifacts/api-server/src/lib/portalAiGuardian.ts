@@ -583,11 +583,17 @@ export async function runPortalAiGuardianTick(): Promise<void> {
 
 let scannerTimer: ReturnType<typeof setInterval> | null = null;
 
-export function startPortalAiGuardianScanner(intervalMs = 60_000): void {
-  if (scannerTimer) return;
+export function startPortalAiGuardianScanner(intervalMs = 60_000): () => void {
+  if (scannerTimer) return stopPortalAiGuardianScanner;
   void runPortalAiGuardianTick();
   scannerTimer = setInterval(() => {
     void runPortalAiGuardianTick();
   }, intervalMs);
   scannerTimer.unref?.();
+  return stopPortalAiGuardianScanner;
+}
+
+export function stopPortalAiGuardianScanner(): void {
+  if (scannerTimer) clearInterval(scannerTimer);
+  scannerTimer = null;
 }

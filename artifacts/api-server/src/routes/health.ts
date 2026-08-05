@@ -21,7 +21,7 @@ function getVersion(): string {
 }
 
 router.get("/healthz", (_req, res) => {
-  res.json({ status: "ok" });
+  res.json({ status: "ok", releaseId: process.env.RELEASE_ID || "unknown" });
 });
 
 // Deployment healthchecks probe GET /api directly. Keep this endpoint
@@ -48,6 +48,7 @@ router.get("/health", async (_req, res) => {
     uptime: Math.floor(process.uptime()),
     dbConnected,
     version: getVersion(),
+    releaseId: process.env.RELEASE_ID || "unknown",
   });
 });
 

@@ -177,10 +177,22 @@ export async function checkCompanyContractExpiries(): Promise<void> {
 }
 
 let intervalHandle: ReturnType<typeof setInterval> | null = null;
+let initialTimer: ReturnType<typeof setTimeout> | null = null;
 
-export function startCompanyContractChecker(): void {
-  if (intervalHandle) return;
+export function startCompanyContractChecker(): () => void {
+  if (intervalHandle || initialTimer) return stopCompanyContractChecker;
   console.log(`[COMPANY-CONTRACT] Checker started, running every ${CHECK_INTERVAL / 60000} minute(s)`);
-  setTimeout(() => { checkCompanyContractExpiries(); }, 20000);
+  initialTimer = setTimeout(() => {
+    initialTimer = null;
+    void checkCompanyContractExpiries();
+  }, 20000);
   intervalHandle = setInterval(() => { checkCompanyContractExpiries(); }, CHECK_INTERVAL);
+  return stopCompanyContractChecker;
+}
+
+export function stopCompanyContractChecker(): void {
+  if (initialTimer) clearTimeout(initialTimer);
+  if (intervalHandle) clearInterval(intervalHandle);
+  initialTimer = null;
+  intervalHandle = null;
 }

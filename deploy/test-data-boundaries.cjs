@@ -10,6 +10,7 @@ const test = require("node:test");
 
 const root = path.resolve(__dirname, "..");
 const preflight = path.join(__dirname, "data-path-preflight.cjs");
+const { validateReleaseRuntimePaths } = require(preflight);
 
 function runPreflight(releaseDir, storageDir) {
   const fixtureDir = mkdtempSync(path.join(tmpdir(), "fasos-data-preflight-"));
@@ -73,6 +74,35 @@ test("preflight rejects storage inside a release and accepts external absolute s
   }
 });
 
+test("release runtime env and logs must remain outside immutable release storage", () => {
+  const fixture = mkdtempSync(path.join(tmpdir(), "fasos-release-paths-"));
+  const releases = path.join(fixture, "releases");
+  const release = path.join(releases, "release-1");
+  const externalLogs = path.join(fixture, "logs");
+  const externalEnv = path.join(fixture, "runtime.env");
+  const unsafeLogs = path.join(releases, "logs");
+  for (const directory of [release, externalLogs, unsafeLogs]) {
+    mkdirSync(directory, { recursive: true });
+  }
+  writeFileSync(externalEnv, "fixture-only\n");
+  try {
+    assert.doesNotThrow(() => validateReleaseRuntimePaths({
+      releaseDir: release,
+      releasesDir: releases,
+      logDir: externalLogs,
+      runtimeEnvFile: externalEnv,
+    }));
+    assert.throws(() => validateReleaseRuntimePaths({
+      releaseDir: release,
+      releasesDir: releases,
+      logDir: unsafeLogs,
+      runtimeEnvFile: externalEnv,
+    }), /LOG_DIR must be outside/);
+  } finally {
+    rmSync(fixture, { recursive: true, force: true });
+  }
+});
+
 test("deploy scripts contain no destructive clean or root rsync delete", () => {
   const scripts = execFileSync("rg", ["--files", "-g", "*.sh", "-g", "*.bash"], {
     cwd: root,
@@ -84,5 +114,13 @@ test("deploy scripts contain no destructive clean or root rsync delete", () => {
     assert.doesNotMatch(source, /rsync\s+[^\n]*--delete[^\n]*(?:\s\/\s|\s\$\{?HOME\}?\s)/);
   }
   const deploy = readFileSync(path.join(root, "deploy/deploy.sh"), "utf8");
-  assert.ok(deploy.indexOf("node deploy/data-path-preflight.cjs") < deploy.indexOf("pnpm install"));
+  assert.ok(
+    deploy.indexOf("node deploy/data-path-preflight.cjs") <
+      deploy.indexOf("bash deploy/build-production.sh"),
+  );
+  assert.match(deploy, /RUNTIME_ENV_FILE/);
+  assert.doesNotMatch(deploy, /source \.env/);
+  const build = readFileSync(path.join(root, "deploy/build-production.sh"), "utf8");
+  assert.doesNotMatch(build, /playwright install[^\n]*--with-deps/);
+  assert.match(build, /verify-playwright-browser\.cjs/);
 });

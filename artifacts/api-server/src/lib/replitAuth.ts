@@ -113,13 +113,39 @@ export async function getSession(sid: string): Promise<SessionData | null> {
 
 /**
  * Slide the session expiry forward by IDLE_TIMEOUT.
- * Call this on every authenticated request (fire-and-forget via setImmediate).
+ * Calls are process-locally throttled so a busy browser does not turn every
+ * authenticated request into a PostgreSQL write. User status/role is still
+ * read on every request by authMiddleware, preserving immediate revocation.
  */
+const SESSION_TOUCH_INTERVAL = 5 * 60 * 1000;
+const MAX_TRACKED_SESSION_TOUCHES = 10_000;
+const recentSessionTouches = new Map<string, number>();
+
 export async function touchSession(sid: string): Promise<void> {
-  await db
-    .update(sessionsTable)
-    .set({ expire: new Date(Date.now() + IDLE_TIMEOUT) })
-    .where(eq(sessionsTable.sid, sid));
+  const now = Date.now();
+  const lastTouch = recentSessionTouches.get(sid) ?? 0;
+  if (now - lastTouch < SESSION_TOUCH_INTERVAL) return;
+
+  // Mark before the asynchronous write to collapse concurrent requests for
+  // the same session. A failed write is removed so the next request retries.
+  recentSessionTouches.set(sid, now);
+  if (recentSessionTouches.size > MAX_TRACKED_SESSION_TOUCHES) {
+    const cutoff = now - SESSION_TOUCH_INTERVAL;
+    for (const [trackedSid, touchedAt] of recentSessionTouches) {
+      if (touchedAt < cutoff) recentSessionTouches.delete(trackedSid);
+      if (recentSessionTouches.size <= MAX_TRACKED_SESSION_TOUCHES) break;
+    }
+  }
+
+  try {
+    await db
+      .update(sessionsTable)
+      .set({ expire: new Date(Date.now() + IDLE_TIMEOUT) })
+      .where(eq(sessionsTable.sid, sid));
+  } catch (error) {
+    recentSessionTouches.delete(sid);
+    throw error;
+  }
 }
 
 export async function updateSession(

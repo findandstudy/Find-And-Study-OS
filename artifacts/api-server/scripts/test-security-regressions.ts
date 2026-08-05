@@ -49,9 +49,56 @@ test("the SPA fallback does not issue a second conflicting CSRF cookie", () => {
 });
 
 test("browser permissions keep sensitive sensors blocked", () => {
-  assert.match(appSource, /camera=\(\)/);
+  // Scan and voice-note are intentional first-party features. They may use
+  // same-origin camera/microphone only; geolocation stays unavailable.
+  assert.match(appSource, /camera=\(self\)/);
   assert.match(appSource, /geolocation=\(\)/);
   assert.match(appSource, /microphone=\(self\)/);
+});
+
+test("database retries never classify a WITH statement as read-only", () => {
+  const dbSource = readFileSync(
+    new URL("../../../lib/db/src/index.ts", import.meta.url),
+    "utf8",
+  );
+  assert.doesNotMatch(dbSource, /\(select\|with\|/i);
+  assert.match(dbSource, /\(select\|show\|explain\|values\|table\|fetch\)/i);
+});
+
+test("generated widget JavaScript is parsed without dynamic Function compilation", () => {
+  const embedSource = readFileSync(
+    new URL("../src/routes/embed.ts", import.meta.url),
+    "utf8",
+  );
+  assert.match(embedSource, /parseJavaScript/);
+  assert.doesNotMatch(embedSource, /new Function\(/);
+});
+
+test("portal diagnostics do not log raw applicant fields or permit production capture", () => {
+  const topkapiSource = readFileSync(
+    new URL("../../../lib/portal-adapters/src/universities/topkapi/adapter.ts", import.meta.url),
+    "utf8",
+  );
+  const altinbasSource = readFileSync(
+    new URL("../../../lib/portal-adapters/src/universities/altinbas/adapter.ts", import.meta.url),
+    "utf8",
+  );
+  assert.doesNotMatch(topkapiSource, /field values — email/);
+  assert.doesNotMatch(topkapiSource, /request body:/);
+  assert.match(altinbasSource, /process\.env\.NODE_ENV !== "production"/);
+  assert.match(altinbasSource, /LOCAL_REDACTED_CAPTURE_ONLY/);
+  assert.match(altinbasSource, /safeBody = redactAltinbasLog/);
+  assert.match(altinbasSource, /bodySha256/);
+  assert.doesNotMatch(altinbasSource, /url: safeUrl, body: safeBody/);
+  assert.match(altinbasSource, /mode: 0o600/);
+});
+
+test("production frontend does not emit source maps into the public root", () => {
+  const viteSource = readFileSync(
+    new URL("../../edcons/vite.config.ts", import.meta.url),
+    "utf8",
+  );
+  assert.match(viteSource, /sourcemap: !isProd/);
 });
 
 test("portal lifecycle planning can never authorize a portal mutation", () => {

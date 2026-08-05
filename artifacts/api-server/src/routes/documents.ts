@@ -6,7 +6,7 @@ import { STAFF_ROLES, AGENT_ROLES, ADMIN_ROLES, isAgentRole } from "../lib/roles
 import { assertCanAccessStudent } from "../lib/studentAccess";
 import { getAgentVisibleIds } from "../lib/agentVisibility";
 import { dispatchNotification } from "../lib/notificationDispatcher";
-import { validateUploadedFile, validateUploadedFileBuffer, sanitizeFileName, isPdf } from "../lib/fileUploadValidation";
+import { validateStudentDocumentFile, validateStudentDocumentBuffer, sanitizeFileName, isPdf } from "../lib/fileUploadValidation";
 import { buildDocNameFromParts } from "../lib/docNaming";
 import { loadDocumentBytes, streamDocumentToResponse, recompressStoredObjectIfNeeded } from "../lib/documentBytes";
 import { UploadTooLargeError } from "../lib/uploads/processUpload";
@@ -21,9 +21,9 @@ import { PDFDocument } from "pdf-lib";
 
 const documentsObjectStorage = new ObjectStorageService();
 
-async function fetchFileKeyHeadBytes(fileKey: string, byteLen = 4100): Promise<Buffer> {
+async function fetchFileKeyBytes(fileKey: string): Promise<Buffer> {
   const file = await documentsObjectStorage.getObjectEntityFile(fileKey);
-  const [buf] = await file.download({ start: 0, end: byteLen - 1 });
+  const [buf] = await file.download();
   return buf;
 }
 
@@ -251,7 +251,7 @@ router.post("/documents", requireAuth, requireAgentStaffPermission("documents"),
           return `document${syntheticExt}`;
         })();
     const declaredSize = sizeBytes ? Number(sizeBytes) : 0;
-    const validationError = validateUploadedFile(validationFileName, mimeType, declaredSize || 1);
+    const validationError = validateStudentDocumentFile(type, validationFileName, mimeType, declaredSize);
     if (validationError) {
       const httpStatus = validationError.type === "size_exceeded" ? 413 : 400;
       res.status(httpStatus).json({ error: validationError.message });
@@ -259,7 +259,7 @@ router.post("/documents", requireAuth, requireAgentStaffPermission("documents"),
     }
     let head: Buffer;
     try {
-      head = await fetchFileKeyHeadBytes(fileKey);
+      head = await fetchFileKeyBytes(fileKey);
     } catch (err) {
       if (err instanceof ObjectNotFoundError) {
         res.status(400).json({ error: "Uploaded file could not be located in object storage." });
@@ -269,7 +269,7 @@ router.post("/documents", requireAuth, requireAgentStaffPermission("documents"),
       res.status(502).json({ error: "Failed to verify uploaded file." });
       return;
     }
-    const bufferError = await validateUploadedFileBuffer(validationFileName, mimeType, head);
+    const bufferError = await validateStudentDocumentBuffer(type, validationFileName, mimeType, head);
     if (bufferError) {
       try {
         const file = await documentsObjectStorage.getObjectEntityFile(fileKey);

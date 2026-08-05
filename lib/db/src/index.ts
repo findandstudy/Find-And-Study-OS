@@ -86,7 +86,7 @@ function isRetryablePgError(err: ErrLike): boolean {
 // decide — re-running a write whose response was lost in transit could create
 // duplicate rows or charge fees twice. Strips leading SQL comments first.
 const READ_ONLY_PREFIX_RE =
-  /^(select|with|show|explain|values|table|fetch)\b/i;
+  /^(select|show|explain|values|table|fetch)\b/i;
 
 function extractSqlText(args: unknown[]): string | null {
   const first = args[0];
@@ -98,7 +98,7 @@ function extractSqlText(args: unknown[]): string | null {
   return null;
 }
 
-function isReadOnlySql(sql: string | null): boolean {
+export function isReadOnlySql(sql: string | null): boolean {
   if (!sql) return false;
   let s = sql.trimStart();
   // Strip leading line and block comments so "-- comment\nSELECT ..." still matches.

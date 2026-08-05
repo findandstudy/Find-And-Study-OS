@@ -80,11 +80,21 @@ export async function checkFollowUpsDue(): Promise<void> {
   }
 }
 
-export function startFollowUpChecker(): void {
-  if (intervalHandle) return;
+export function startFollowUpChecker(): () => Promise<void> {
+  if (intervalHandle) return stopFollowUpChecker;
   console.log("[FOLLOW-UP] Checker started, running every 60 seconds");
   checkFollowUpsDue();
   intervalHandle = setInterval(() => {
     checkFollowUpsDue();
   }, CHECK_INTERVAL);
+  return stopFollowUpChecker;
+}
+
+export async function stopFollowUpChecker(): Promise<void> {
+  if (intervalHandle) clearInterval(intervalHandle);
+  intervalHandle = null;
+  const deadline = Date.now() + 10_000;
+  while (running && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
 }

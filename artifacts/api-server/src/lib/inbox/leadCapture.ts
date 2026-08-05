@@ -32,6 +32,7 @@ import {
   type DocEquivalenceGroupId,
 } from "@workspace/doc-equivalence";
 import { DEFAULT_BOT_MODEL } from "./aiAgentConfig";
+import { validateStudentDocumentFile } from "@workspace/file-upload-validation";
 import { resolveIdentity } from "./identityResolver";
 import { directOrigin } from "../originHelper";
 import { toLatinUpper, normalizePhoneField } from "../textNormalize";
@@ -618,10 +619,10 @@ export function parseInboundMedia(metadata: unknown): ParsedMedia[] {
 /** Best-effort canonical doc type from a filename + caption. */
 export function detectDocType(filename: string | null, caption: string | null): string {
   const hay = `${filename || ""} ${caption || ""}`;
-  for (const rule of DOC_KEYWORD_RULES) {
-    if (rule.re.test(hay)) return rule.type;
-  }
-  return "other_certificates_documents";
+  const matches = new Set(
+    DOC_KEYWORD_RULES.filter((rule) => rule.re.test(hay)).map((rule) => rule.type),
+  );
+  return matches.size === 1 ? [...matches][0] : "other_certificates_documents";
 }
 
 /**
@@ -716,7 +717,15 @@ export async function computeMissingDocGroups(opts: {
   if (!relevant) return [];
 
   const rows = await db
-    .select({ type: documentsTable.type })
+    .select({
+      type: documentsTable.type,
+      status: documentsTable.status,
+      mimeType: documentsTable.mimeType,
+      sizeBytes: documentsTable.sizeBytes,
+      fileKey: documentsTable.fileKey,
+      fileUrl: documentsTable.fileUrl,
+      fileData: documentsTable.fileData,
+    })
     .from(documentsTable)
     .where(
       and(
@@ -726,6 +735,21 @@ export async function computeMissingDocGroups(opts: {
     );
   const uploadedGroups = new Set<DocEquivalenceGroupId>();
   for (const r of rows) {
+    if (r.status === "rejected" || !r.mimeType) continue;
+    const hasStoredContent = Boolean(r.fileKey || r.fileUrl || r.fileData);
+    if (!hasStoredContent) continue;
+    const decodedBytes = r.fileData
+      ? Math.max(0, Math.floor((r.fileData.replace(/\s/g, "").length * 3) / 4))
+      : 0;
+    const sizeBytes = Number(r.sizeBytes) || decodedBytes;
+    const ext = r.mimeType === "application/pdf"
+      ? ".pdf"
+      : r.mimeType === "image/png"
+        ? ".png"
+        : r.mimeType === "image/jpeg"
+          ? ".jpg"
+          : ".bin";
+    if (validateStudentDocumentFile(r.type, `document${ext}`, r.mimeType, sizeBytes)) continue;
     const g = getDocEquivalenceGroup(r.type);
     if (g) uploadedGroups.add(g);
   }
@@ -743,7 +767,8 @@ export function buildMissingDocsInstruction(missing: DocEquivalenceGroupId[]): s
   return (
     "## Documents still needed\n" +
     `Based on the student's study level, these documents are still missing: ${labels}. ` +
-    "If the moment is appropriate, gently remind the student which documents they still need to send — " +
-    "do not repeat ones they have already provided."
+    "Ask for the first missing document, then continue one item at a time. Remind the student that every document " +
+    "must be uploaded separately in the correct slot and may be at most 5 MB. Do not repeat documents that the " +
+    "system has already validated."
   );
 }

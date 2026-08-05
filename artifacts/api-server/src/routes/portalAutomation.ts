@@ -2690,7 +2690,10 @@ router.post(
  * Call once at api-server startup (safe on every instance — releaseStale is
  * idempotent and the DB UPDATE is atomic).
  */
-export function startPortalStuckReset(intervalMs = 5 * 60_000): void {
+let portalStuckResetTimer: ReturnType<typeof setInterval> | null = null;
+
+export function startPortalStuckReset(intervalMs = 5 * 60_000): () => void {
+  if (portalStuckResetTimer) return stopPortalStuckReset;
   const run = (): void => {
     releaseStale(STUCK_THRESHOLD_MS)
       .then((ids) => {
@@ -2704,10 +2707,16 @@ export function startPortalStuckReset(intervalMs = 5 * 60_000): void {
         console.error("[portal-stuck-reset] Error:", err);
       });
   };
-  setInterval(run, intervalMs);
+  portalStuckResetTimer = setInterval(run, intervalMs);
   console.log(
     `[portal-stuck-reset] Started — interval=${intervalMs}ms threshold=${STUCK_THRESHOLD_MS}ms`,
   );
+  return stopPortalStuckReset;
+}
+
+export function stopPortalStuckReset(): void {
+  if (portalStuckResetTimer) clearInterval(portalStuckResetTimer);
+  portalStuckResetTimer = null;
 }
 
 // ---------------------------------------------------------------------------
@@ -2999,14 +3008,23 @@ export async function runPortalStatusSync(): Promise<{ checked: number; updated:
  * startup. Default interval is 10 minutes — deliberately generous to avoid
  * hammering the portal.
  */
-export function startPortalStatusSync(intervalMs = 10 * 60_000): void {
+let portalStatusSyncTimer: ReturnType<typeof setInterval> | null = null;
+
+export function startPortalStatusSync(intervalMs = 10 * 60_000): () => void {
+  if (portalStatusSyncTimer) return stopPortalStatusSync;
   const run = (): void => {
     runPortalStatusSync().catch((err) => {
       console.error("[portal-status-sync] Sweep error:", err);
     });
   };
-  setInterval(run, intervalMs);
+  portalStatusSyncTimer = setInterval(run, intervalMs);
   console.log(`[portal-status-sync] Started — interval=${intervalMs}ms`);
+  return stopPortalStatusSync;
+}
+
+export function stopPortalStatusSync(): void {
+  if (portalStatusSyncTimer) clearInterval(portalStatusSyncTimer);
+  portalStatusSyncTimer = null;
 }
 
 // ===========================================================================

@@ -7,10 +7,12 @@ type AdvisoryClient = {
 
 type AdvisoryPool = { connect(): Promise<AdvisoryClient> };
 
+export type BackgroundJobStop = () => void | Promise<void>;
+
 export type BackgroundJobDefinition = {
   name: string;
   offsetMs: number;
-  start: () => void | Promise<void> | (() => void | Promise<void>);
+  start: () => void | BackgroundJobStop | Promise<void | BackgroundJobStop>;
 };
 
 export function backgroundJobsEnabled(
@@ -29,7 +31,7 @@ export function backgroundJobsEnabled(
 export class BackgroundJobCoordinator {
   private client: AdvisoryClient | null = null;
   private timers = new Set<ReturnType<typeof setTimeout>>();
-  private stops: Array<() => void | Promise<void>> = [];
+  private stops: BackgroundJobStop[] = [];
   private stopping = false;
 
   constructor(

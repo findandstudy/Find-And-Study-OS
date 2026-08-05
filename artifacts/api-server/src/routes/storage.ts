@@ -6,7 +6,7 @@ import { ObjectStorageService, ObjectNotFoundError } from "../lib/objectStorage"
 import { requireAuth } from "../lib/auth";
 import { canAccessGenericObject, recordObjectOwner } from "../lib/objectAuthz";
 import { checkAndIncrementRateLimit } from "../lib/pgRateLimiter";
-import { validateUploadedFile } from "../lib/fileUploadValidation";
+import { validateApplicationDocumentFile, validateUploadedFile } from "../lib/fileUploadValidation";
 import { processUpload, UploadTooLargeError } from "../lib/uploads/processUpload";
 
 const RequestUploadUrlBody = z.object({
@@ -73,9 +73,16 @@ router.post("/storage/uploads/request-url", requireAuth, async (req: Request, re
     // to 25MB) — admin-only, gated by prefix `staff-documents/{userId}/`.
     // Generic uploads still go through the global validateUploadedFile policy.
     const isStaffDoc = !!prefix && /^staff-documents\/\d+\/?$/.test(prefix);
+    const isStudentDocument = prefix === "student-documents" || prefix?.startsWith("student-documents/");
     const isInboxUpload = prefix === "inbox" || prefix?.startsWith("inbox/");
     const isEmbedLogo = prefix === "branding/embed-widget";
-    if (isStaffDoc) {
+    if (isStudentDocument) {
+      const validationError = validateApplicationDocumentFile(name, contentType, size);
+      if (validationError) {
+        res.status(validationError.type === "size_exceeded" ? 413 : 400).json({ error: validationError.message });
+        return;
+      }
+    } else if (isStaffDoc) {
       const role = (req.user as { role?: string } | undefined)?.role;
       if (role !== "super_admin" && role !== "admin") {
         res.status(403).json({ error: "Staff document uploads are admin-only" });

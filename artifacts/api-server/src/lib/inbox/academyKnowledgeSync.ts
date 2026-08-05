@@ -111,8 +111,8 @@ export async function syncAcademyKnowledgeIfDue(force = false): Promise<boolean>
   }
 }
 
-export function startAcademyKnowledgeSync(): void {
-  if (timer) return;
+export function startAcademyKnowledgeSync(): () => Promise<void> {
+  if (timer) return stopAcademyKnowledgeSync;
   void syncAcademyKnowledgeIfDue().catch((error) => {
     console.error("[academy-knowledge] initial sync failed:", error);
   });
@@ -122,4 +122,14 @@ export function startAcademyKnowledgeSync(): void {
     });
   }, CHECK_INTERVAL_MS);
   timer.unref?.();
+  return stopAcademyKnowledgeSync;
+}
+
+export async function stopAcademyKnowledgeSync(): Promise<void> {
+  if (timer) clearInterval(timer);
+  timer = null;
+  const deadline = Date.now() + 10_000;
+  while (running && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
 }

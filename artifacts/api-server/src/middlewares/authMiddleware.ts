@@ -196,7 +196,8 @@ export async function authMiddleware(
   req.user = buildSessionUser(dbUser);
   await enrichWithEffectivePerms(req.user, dbUser);
 
-  // Slide session expiry on every authenticated request (fire-and-forget).
+  // The helper throttles PostgreSQL writes to once per session per five
+  // minutes while user status/role remains checked on every request.
   setImmediate(() => {
     touchSession(sid).catch(() => {});
   });

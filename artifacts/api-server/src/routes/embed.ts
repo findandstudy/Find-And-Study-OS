@@ -1,5 +1,6 @@
 import express, { Router, type IRouter, json } from "express";
 import crypto from "crypto";
+import { parse as parseJavaScript } from "acorn";
 import {
   db,
   embedWidgetsTable,
@@ -30,6 +31,8 @@ import {
   isAllowedMimeType,
   isPdf,
   validateApplicationDocumentFile,
+  validateStudentDocumentFile,
+  validateStudentDocumentBuffer,
   validateUploadedFile,
   validateUploadedFileBuffer,
 } from "../lib/fileUploadValidation";
@@ -320,12 +323,12 @@ async function prepareEmbedDocuments(rawDocuments: unknown): Promise<{
       warnings.push(`${label}: Invalid base64 file data`);
       continue;
     }
-    const intakeValidationError = validateApplicationDocumentFile(syntheticFileName, mime, buffer.length);
+    const intakeValidationError = validateStudentDocumentFile(label, syntheticFileName, mime, buffer.length);
     if (intakeValidationError) {
       warnings.push(`${label}: ${intakeValidationError.message}`);
       continue;
     }
-    const validationError = await validateUploadedFileBuffer(syntheticFileName, mime, buffer);
+    const validationError = await validateStudentDocumentBuffer(label, syntheticFileName, mime, buffer);
     if (validationError) {
       warnings.push(`${label}: ${validationError.message}`);
       continue;
@@ -2436,7 +2439,9 @@ router.get("/public/embed/:slug/widget", async (req, res): Promise<void> => {
     chatHtml = chatHtml.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "");
     try {
       const script = chatHtml.match(/<script[^>]*>([\s\S]*?)<\/script>/)?.[1];
-      if (script) new Function(script);
+      if (script) {
+        parseJavaScript(script, { ecmaVersion: "latest", sourceType: "script" });
+      }
     } catch (err) {
       console.error("[EMBED CHAT] inline script invalid:", err);
       res.status(500).send("Chat widget is temporarily unavailable");
@@ -2455,7 +2460,9 @@ router.get("/public/embed/:slug/widget", async (req, res): Promise<void> => {
     html = html.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "");
     try {
       const _m = html.match(/<script[^>]*>([\s\S]*?)<\/script>/);
-      if (_m) new Function(_m[1]);
+      if (_m) {
+        parseJavaScript(_m[1], { ecmaVersion: "latest", sourceType: "script" });
+      }
     } catch (_e) {
       console.error("[EMBED WIDGET] inline script INVALID JS after generation - widget would render blank:", (_e as Error).message);
     }

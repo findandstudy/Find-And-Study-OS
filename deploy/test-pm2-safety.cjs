@@ -19,11 +19,13 @@ function processEntry(name, script, port) {
   };
 }
 
-function runPreflight(processes) {
+function runPreflight(processes, releaseLink) {
   const directory = mkdtempSync(path.join(tmpdir(), "fasos-pm2-test-"));
   const fixture = path.join(directory, "jlist.json");
   writeFileSync(fixture, JSON.stringify(processes));
-  const result = spawnSync(process.execPath, [preflightPath, "--input", fixture], {
+  const args = [preflightPath, "--input", fixture];
+  if (releaseLink) args.push("--release-link", releaseLink);
+  const result = spawnSync(process.execPath, args, {
     cwd: root,
     encoding: "utf8",
   });
@@ -50,7 +52,10 @@ test("authoritative config uses canonical fork/1 topology", () => {
     assert.equal(app.exec_mode, "fork");
     assert.equal(app.instances, 1);
   }
+  const api = config.apps.find((app) => app.name === config.processNames.api);
   const portalWorker = config.apps.find((app) => app.name === config.processNames.portalWorker);
+  assert.equal(String(api?.env_production.PORT), process.env.PORT || "5000");
+  assert.equal(portalWorker?.env_production.PORT, "");
   assert.equal(
     portalWorker?.interpreter,
     "./artifacts/portal-automation-worker/node_modules/.bin/tsx",
@@ -93,10 +98,27 @@ test("non-fork canonical process is rejected", () => {
   assert.equal(runPreflight([clusterApi, canonical[1]]).status, 1);
 });
 
+test("release cutover rejects canonical processes outside the current symlink", () => {
+  const underCurrent = [
+    processEntry("fasos-apply-api", "/srv/fasos/current/artifacts/api-server/dist/index.cjs", 5000),
+    processEntry(
+      "findandstudy-portal-worker",
+      "/srv/fasos/current/artifacts/portal-automation-worker/src/worker.ts",
+    ),
+  ];
+  assert.equal(runPreflight(underCurrent, "/srv/fasos/current").status, 0);
+  assert.equal(runPreflight(canonical, "/srv/fasos/current").status, 1);
+});
+
 test("deploy entrypoints use preflight and contain no blind fallback", () => {
   const deploy = readFileSync(path.join(__dirname, "deploy.sh"), "utf8");
   const compatibility = readFileSync(path.join(root, "scripts/deploy.sh"), "utf8");
   assert.match(deploy, /node deploy\/pm2-preflight\.cjs/);
+  assert.match(deploy, /CANDIDATE_PORT/);
+  assert.match(deploy, /rollback_code/);
+  assert.match(deploy, /release_health_ready/);
+  assert.match(deploy, /EXPECTED_RELEASE_ID/);
+  assert.match(deploy, /git archive/);
   assert.doesNotMatch(deploy, /pm2 start|startOrRestart|pm2 restart all/);
   assert.match(deploy, /pm2 restart "\$PORTAL_WORKER_PROCESS_NAME"/);
   assert.match(deploy, /pm2 restart "\$API_PROCESS_NAME"/);

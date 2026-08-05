@@ -10,6 +10,7 @@ const STALE_RECOVERY_INTERVAL_MS = 60_000;
 let started = false;
 let busy = false;
 let lastStaleRecoveryAt = 0;
+let workerTimer: ReturnType<typeof setInterval> | null = null;
 
 interface ClaimedRecipient {
   id: number;
@@ -173,8 +174,8 @@ async function tick(): Promise<void> {
   }
 }
 
-export function startMessageCampaignWorker(): void {
-  if (started) return;
+export function startMessageCampaignWorker(): () => Promise<void> {
+  if (started) return stopMessageCampaignWorker;
   started = true;
   // We cannot prove whether the provider accepted a request if this process
   // died while a row was `processing`. Retrying it could send a duplicate
@@ -182,7 +183,18 @@ export function startMessageCampaignWorker(): void {
   // the bulk retry endpoint intentionally excludes this outcome.
   // Recovery runs periodically, not only once at boot: a row orphaned less
   // than 15 minutes before a restart must still be quarantined after it ages.
-  const timer = setInterval(() => { void tick(); }, POLL_MS);
-  timer.unref?.();
+  workerTimer = setInterval(() => { void tick(); }, POLL_MS);
+  workerTimer.unref?.();
   void tick();
+  return stopMessageCampaignWorker;
+}
+
+export async function stopMessageCampaignWorker(): Promise<void> {
+  if (workerTimer) clearInterval(workerTimer);
+  workerTimer = null;
+  started = false;
+  const deadline = Date.now() + 10_000;
+  while (busy && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
 }

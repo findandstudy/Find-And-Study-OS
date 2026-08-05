@@ -14,7 +14,7 @@ import os from "node:os";
 import fs from "node:fs";
 import path from "node:path";
 import { and, eq, isNull } from "drizzle-orm";
-import { db, portalUniversitiesTable, portalAutomationSettingsTable } from "@workspace/db";
+import { db, pool, portalUniversitiesTable, portalAutomationSettingsTable } from "@workspace/db";
 import {
   claimNext,
   cancelStaleIneligibleQueued,
@@ -52,6 +52,15 @@ const QUEUE_RECONCILE_INTERVAL_MS = positiveInt(
 );
 const WORKER_ID = `${os.hostname()}-${process.pid}`;
 let nextQueueReconcileAt = 0;
+const SHUTDOWN_TIMEOUT_MS = positiveInt(
+  process.env.WORKER_SHUTDOWN_TIMEOUT_MS,
+  120_000,
+);
+let stopping = false;
+let shutdownPromise: Promise<void> | null = null;
+let activeTick: Promise<void> | null = null;
+let activeSubmissionId: number | null = null;
+let wakeSleep: (() => void) | null = null;
 
 // ---------------------------------------------------------------------------
 // Safety-net /tmp sweeper — removes stale portal temp files left by crashes or
@@ -195,6 +204,7 @@ async function tick(): Promise<void> {
 
   const sub = await claimNext(WORKER_ID, autoProcessTargets.claimKeys, triggerStages);
   if (!sub) return; // Nothing to do
+  activeSubmissionId = sub.id;
 
   console.log(
     `[portal-worker] Claimed submission #${sub.id} (attempt ${sub.attempts}/${sub.maxAttempts})` +
@@ -312,45 +322,92 @@ async function tick(): Promise<void> {
 }
 
 async function loop(): Promise<void> {
-  while (true) {
+  while (!stopping) {
     try {
-      await tick();
+      activeTick = tick();
+      await activeTick;
     } catch (err) {
       console.error("[portal-worker] Unexpected tick error:", err);
+    } finally {
+      activeTick = null;
+      activeSubmissionId = null;
     }
-    await sleep(POLL_MS);
+    if (!stopping) await sleep(POLL_MS);
   }
 }
 
 function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => {
+      wakeSleep = null;
+      resolve();
+    }, ms);
+    wakeSleep = () => {
+      clearTimeout(timer);
+      wakeSleep = null;
+      resolve();
+    };
+  });
 }
 
-// Graceful shutdown
-process.on("SIGTERM", () => {
-  console.log("[portal-worker] SIGTERM received — shutting down");
-  process.exit(0);
-});
+async function beginShutdown(signal: string, exitCode: number): Promise<void> {
+  if (shutdownPromise) return shutdownPromise;
+  shutdownPromise = (async () => {
+    stopping = true;
+    wakeSleep?.();
+    console.log(
+      `[portal-worker] ${signal} received — polling stopped; draining` +
+      (activeSubmissionId ? ` submission #${activeSubmissionId}` : " current tick"),
+    );
 
-// Crash-loop containment: a stray async error (e.g. a Playwright fire-and-forget
-// promise, a browser subprocess hiccup, or a throw outside the tick try/catch)
-// must NOT take the whole worker down and trigger a PM2/pnpm ELIFECYCLE restart
-// loop. Log it and keep polling — per-submission failures are already handled in
-// tick() (marked as error via writebackResult), so staying up is always correct.
-process.on("unhandledRejection", (reason) => {
-  console.error(
-    "[portal-worker] Unhandled promise rejection (contained — worker stays up):",
-    reason,
-  );
+    let timedOut = false;
+    if (activeTick) {
+      let drainTimer: ReturnType<typeof setTimeout> | null = null;
+      try {
+        await Promise.race([
+          activeTick.catch(() => undefined),
+          new Promise<void>((resolve) => {
+            drainTimer = setTimeout(() => {
+              timedOut = true;
+              resolve();
+            }, SHUTDOWN_TIMEOUT_MS);
+            drainTimer.unref?.();
+          }),
+        ]);
+      } finally {
+        if (drainTimer) clearTimeout(drainTimer);
+      }
+    }
+
+    if (timedOut) {
+      console.error(
+        `[portal-worker] Drain timed out after ${SHUTDOWN_TIMEOUT_MS}ms` +
+        (activeSubmissionId ? ` for submission #${activeSubmissionId}` : "") +
+        "; claim remains for stale-recovery review",
+      );
+      exitCode = 1;
+    }
+    await pool.end().catch((error) => {
+      console.error("[portal-worker] PostgreSQL pool shutdown failed:", error);
+      exitCode = 1;
+    });
+    process.exit(exitCode);
+  })();
+  return shutdownPromise;
+}
+
+process.once("SIGTERM", () => { void beginShutdown("SIGTERM", 0); });
+process.once("SIGINT", () => { void beginShutdown("SIGINT", 0); });
+process.once("unhandledRejection", (reason) => {
+  console.error("[portal-worker] Fatal unhandled promise rejection:", reason);
+  void beginShutdown("unhandledRejection", 1);
 });
-process.on("uncaughtException", (err) => {
-  console.error(
-    "[portal-worker] Uncaught exception (contained — worker stays up):",
-    err,
-  );
+process.once("uncaughtException", (err) => {
+  console.error("[portal-worker] Fatal uncaught exception:", err);
+  void beginShutdown("uncaughtException", 1);
 });
 
 loop().catch((err) => {
   console.error("[portal-worker] Fatal loop error:", err);
-  process.exit(1);
+  void beginShutdown("fatalLoopError", 1);
 });

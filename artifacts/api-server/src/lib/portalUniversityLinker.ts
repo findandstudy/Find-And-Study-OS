@@ -392,14 +392,16 @@ export async function reconcilePortalUniversityCrmLinks(
 
 const CHECK_INTERVAL = 60 * 60 * 1000; // hourly
 let intervalHandle: ReturnType<typeof setInterval> | null = null;
+let initialTimer: ReturnType<typeof setTimeout> | null = null;
 
-export function startPortalUniversityLinker(): void {
-  if (intervalHandle) return;
+export function startPortalUniversityLinker(): () => void {
+  if (intervalHandle || initialTimer) return stopPortalUniversityLinker;
   console.log(
     `[PORTAL-LINK] Linker started, running every ${CHECK_INTERVAL / 60000} minute(s)`,
   );
   // Initial run shortly after boot (staggered from other checkers).
-  setTimeout(() => {
+  initialTimer = setTimeout(() => {
+    initialTimer = null;
     reconcilePortalUniversityCrmLinks().catch((err) =>
       console.error("[PORTAL-LINK] Initial reconcile error:", err),
     );
@@ -409,4 +411,12 @@ export function startPortalUniversityLinker(): void {
       console.error("[PORTAL-LINK] Scheduled reconcile error:", err),
     );
   }, CHECK_INTERVAL);
+  return stopPortalUniversityLinker;
+}
+
+export function stopPortalUniversityLinker(): void {
+  if (initialTimer) clearTimeout(initialTimer);
+  if (intervalHandle) clearInterval(intervalHandle);
+  initialTimer = null;
+  intervalHandle = null;
 }

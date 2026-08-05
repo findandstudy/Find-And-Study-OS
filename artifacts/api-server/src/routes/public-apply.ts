@@ -15,7 +15,7 @@ import {
   isPdf,
   validateApplicationDocumentFile,
   validateUploadedFile,
-  validateUploadedFileBuffer,
+  validateStudentDocumentBuffer,
 } from "../lib/fileUploadValidation";
 import { buildDocNameFromParts } from "../lib/docNaming";
 import { PgRateLimitStore } from "../lib/pgRateLimiter";
@@ -522,11 +522,9 @@ router.post("/public/apply", applyLimiter, applyJson, async (req: Request, res: 
 
           const buffer = Buffer.from(rawBase64, "base64");
           if (buffer.length === 0 || buffer.length > MAX_DOC_SIZE) continue;
-          const validationError = await validateUploadedFileBuffer(
-            String(doc.name),
-            mime,
-            buffer,
-          );
+          const docType = String(doc.key || doc.label || "").trim();
+          if (!docType) continue;
+          const validationError = await validateStudentDocumentBuffer(docType, String(doc.name), mime, buffer);
           if (validationError) continue;
 
           // Reuse the exact normalized bytes/mime in the persistence loop so
@@ -534,8 +532,7 @@ router.post("/public/apply", applyLimiter, applyJson, async (req: Request, res: 
           doc.base64 = rawBase64;
           doc.mediaType = mime;
           doc.sizeBytes = buffer.length;
-          const docType = String(doc.key || doc.label || "").trim();
-          if (docType) submittedDocTypes.push(docType);
+          submittedDocTypes.push(docType);
         }
       }
       const docStatus = await checkMandatoryDocs(programIdNum, submittedDocTypes);
@@ -1309,7 +1306,7 @@ router.post("/public/ai/extract-document", aiExtractLimiter, applyJson, async (r
         res.status(statusCode).json({ error: intakeValidationError.message });
         return;
       }
-      const validationError = await validateUploadedFileBuffer(syntheticFileName, mime, buffer);
+      const validationError = await validateStudentDocumentBuffer(doc.label, syntheticFileName, mime, buffer);
       if (validationError) {
         const statusCode = validationError.type === "size_exceeded" ? 413 : 400;
         res.status(statusCode).json({ error: validationError.message });

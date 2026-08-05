@@ -314,9 +314,22 @@ export async function runStuckConversationSweep(): Promise<void> {
   }
 }
 
-export function startStuckConversationSweep(): void {
-  setTimeout(async () => {
-    await runStuckConversationSweep();
-    setInterval(runStuckConversationSweep, SWEEP_INTERVAL_MS);
+let initialSweepTimer: ReturnType<typeof setTimeout> | null = null;
+let sweepInterval: ReturnType<typeof setInterval> | null = null;
+
+export function startStuckConversationSweep(): () => void {
+  if (initialSweepTimer || sweepInterval) return stopStuckConversationSweep;
+  initialSweepTimer = setTimeout(() => {
+    initialSweepTimer = null;
+    void runStuckConversationSweep();
+    sweepInterval = setInterval(runStuckConversationSweep, SWEEP_INTERVAL_MS);
   }, INITIAL_DELAY_MS);
+  return stopStuckConversationSweep;
+}
+
+export function stopStuckConversationSweep(): void {
+  if (initialSweepTimer) clearTimeout(initialSweepTimer);
+  if (sweepInterval) clearInterval(sweepInterval);
+  initialSweepTimer = null;
+  sweepInterval = null;
 }

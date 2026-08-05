@@ -21,7 +21,7 @@ import { findOrUpsertPublicLead } from "../lib/leadDedup";
 import { recomputeStudentPhoto } from "../lib/studentPhoto";
 import { maybeTriggerAutoEducationExtractForStudent } from "../lib/educationAutoExtract";
 import { parsePaginationParams, buildPageMeta } from "@workspace/pagination";
-import { validateUploadedFile, validateUploadedFileBuffer, sanitizeFileName, isPdf } from "../lib/fileUploadValidation";
+import { validateStudentDocumentFile, validateStudentDocumentBuffer, sanitizeFileName, isPdf } from "../lib/fileUploadValidation";
 import { ObjectStorageService, ObjectNotFoundError } from "../lib/objectStorage";
 import { buildDocNameFromParts } from "../lib/docNaming";
 import { callerOwnsObject } from "../lib/objectAuthz";
@@ -796,7 +796,7 @@ router.post("/leads/:id/documents", requireAuth, requireRole(...STAFF_ROLES, ...
         return `document${syntheticExt}`;
       })();
   const declaredSize = sizeBytes ? Number(sizeBytes) : 0;
-  const validationError = validateUploadedFile(validationFileName, mimeType, declaredSize || 1);
+  const validationError = validateStudentDocumentFile(type, validationFileName, mimeType, declaredSize);
   if (validationError) {
     const httpStatus = validationError.type === "size_exceeded" ? 413 : 400;
     res.status(httpStatus).json({ error: validationError.message });
@@ -806,7 +806,7 @@ router.post("/leads/:id/documents", requireAuth, requireRole(...STAFF_ROLES, ...
   let head: Buffer;
   try {
     const file = await leadDocsObjectStorage.getObjectEntityFile(fileKey);
-    const [buf] = await file.download({ start: 0, end: 4099 });
+    const [buf] = await file.download();
     head = buf;
   } catch (err) {
     if (err instanceof ObjectNotFoundError) {
@@ -817,7 +817,7 @@ router.post("/leads/:id/documents", requireAuth, requireRole(...STAFF_ROLES, ...
     res.status(502).json({ error: "Failed to verify uploaded file." });
     return;
   }
-  const bufferError = await validateUploadedFileBuffer(validationFileName, mimeType, head);
+  const bufferError = await validateStudentDocumentBuffer(type, validationFileName, mimeType, head);
   if (bufferError) {
     try {
       const file = await leadDocsObjectStorage.getObjectEntityFile(fileKey);

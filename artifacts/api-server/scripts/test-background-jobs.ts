@@ -112,3 +112,38 @@ test("API boot does not start the dedicated portal automation worker or auto-dra
   assert.doesNotMatch(index, /startPortalAutoDrain/);
   assert.doesNotMatch(index, /portal-automation-worker\/src\/worker/);
 });
+
+test("every API background registration returns a shutdown contract", () => {
+  const index = readFileSync(new URL("../src/index.ts", import.meta.url), "utf8");
+  for (const starter of [
+    "startEmailWorker",
+    "startContractChecker",
+    "startOfferExpiryChecker",
+    "startUniversityContractChecker",
+    "startCompanyContractChecker",
+    "startSignedContractDeliveryWorker",
+    "startAssignmentConsistencyChecker",
+    "startFollowUpChecker",
+    "startPortalUniversityLinker",
+    "startStuckConversationSweep",
+    "startQualityScoringWorker",
+    "startPortalAiGuardianScanner",
+    "startAcademyKnowledgeSync",
+    "startMessageCampaignWorker",
+  ]) {
+    assert.match(index, new RegExp(`return ${starter}\\(\\)`), starter);
+  }
+});
+
+test("dedicated portal worker drains an active claim and exits on fatal process errors", () => {
+  const worker = readFileSync(
+    new URL("../../portal-automation-worker/src/worker.ts", import.meta.url),
+    "utf8",
+  );
+  assert.match(worker, /while \(!stopping\)/);
+  assert.match(worker, /activeTick/);
+  assert.match(worker, /SHUTDOWN_TIMEOUT_MS/);
+  assert.match(worker, /pool\.end\(\)/);
+  assert.match(worker, /beginShutdown\("uncaughtException", 1\)/);
+  assert.doesNotMatch(worker, /contained — worker stays up/);
+});

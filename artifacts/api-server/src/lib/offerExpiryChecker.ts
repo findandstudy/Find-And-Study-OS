@@ -158,10 +158,22 @@ export async function checkOfferLetterExpiries(): Promise<void> {
 }
 
 let intervalHandle: ReturnType<typeof setInterval> | null = null;
+let initialTimer: ReturnType<typeof setTimeout> | null = null;
 
-export function startOfferExpiryChecker(): void {
-  if (intervalHandle) return;
+export function startOfferExpiryChecker(): () => void {
+  if (intervalHandle || initialTimer) return stopOfferExpiryChecker;
   console.log(`[OFFER-EXPIRY] Checker started, running every ${CHECK_INTERVAL / 60000} minute(s)`);
-  setTimeout(() => { checkOfferLetterExpiries(); }, 15000);
+  initialTimer = setTimeout(() => {
+    initialTimer = null;
+    void checkOfferLetterExpiries();
+  }, 15000);
   intervalHandle = setInterval(() => { checkOfferLetterExpiries(); }, CHECK_INTERVAL);
+  return stopOfferExpiryChecker;
+}
+
+export function stopOfferExpiryChecker(): void {
+  if (initialTimer) clearTimeout(initialTimer);
+  if (intervalHandle) clearInterval(intervalHandle);
+  initialTimer = null;
+  intervalHandle = null;
 }

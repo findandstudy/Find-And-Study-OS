@@ -1002,25 +1002,36 @@ export async function processEmailQueue(): Promise<number> {
 }
 
 let emailWorkerInterval: ReturnType<typeof setInterval> | null = null;
+let emailWorkerInFlight: Promise<void> | null = null;
 
-export function startEmailWorker(intervalMs = 30000): void {
-  if (emailWorkerInterval) return;
-  console.log(`[EMAIL] Worker started, processing queue every ${intervalMs / 1000}s`);
-
-  processEmailQueue().then(count => {
-    if (count > 0) console.log(`[EMAIL] Initial queue: sent ${count} emails`);
-  });
-
-  emailWorkerInterval = setInterval(async () => {
-    const count = await processEmailQueue();
-    if (count > 0) console.log(`[EMAIL] Queue processed: sent ${count} emails`);
-  }, intervalMs);
+function runEmailWorkerSweep(label: "Initial queue" | "Queue processed"): void {
+  if (emailWorkerInFlight) return;
+  emailWorkerInFlight = processEmailQueue()
+    .then((count) => {
+      if (count > 0) console.log(`[EMAIL] ${label}: sent ${count} emails`);
+    })
+    .finally(() => {
+      emailWorkerInFlight = null;
+    });
 }
 
-export function stopEmailWorker(): void {
+export function startEmailWorker(intervalMs = 30000): () => Promise<void> {
+  if (emailWorkerInterval) return stopEmailWorker;
+  console.log(`[EMAIL] Worker started, processing queue every ${intervalMs / 1000}s`);
+
+  runEmailWorkerSweep("Initial queue");
+
+  emailWorkerInterval = setInterval(() => {
+    runEmailWorkerSweep("Queue processed");
+  }, intervalMs);
+  return stopEmailWorker;
+}
+
+export async function stopEmailWorker(): Promise<void> {
   if (emailWorkerInterval) {
     clearInterval(emailWorkerInterval);
     emailWorkerInterval = null;
-    console.log("[EMAIL] Worker stopped");
   }
+  await emailWorkerInFlight;
+  console.log("[EMAIL] Worker stopped");
 }

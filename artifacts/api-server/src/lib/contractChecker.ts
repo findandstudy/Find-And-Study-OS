@@ -184,12 +184,14 @@ export async function sweepExpiredSigningSessions(): Promise<void> {
 }
 
 let contractCheckerInterval: ReturnType<typeof setInterval> | null = null;
+let contractCheckerInitialTimer: ReturnType<typeof setTimeout> | null = null;
 
-export function startContractChecker(): void {
-  if (contractCheckerInterval) return;
+export function startContractChecker(): () => void {
+  if (contractCheckerInterval) return stopContractChecker;
   console.log(`[CONTRACT] Checker started, running every ${CHECK_INTERVAL / 60000} minute(s)`);
 
-  setTimeout(() => {
+  contractCheckerInitialTimer = setTimeout(() => {
+    contractCheckerInitialTimer = null;
     Promise.all([checkContractExpiries(), sweepExpiredSigningSessions()]).then(() => {
       console.log("[CONTRACT] Initial check completed");
     });
@@ -199,4 +201,12 @@ export function startContractChecker(): void {
     checkContractExpiries();
     sweepExpiredSigningSessions();
   }, CHECK_INTERVAL);
+  return stopContractChecker;
+}
+
+export function stopContractChecker(): void {
+  if (contractCheckerInitialTimer) clearTimeout(contractCheckerInitialTimer);
+  if (contractCheckerInterval) clearInterval(contractCheckerInterval);
+  contractCheckerInitialTimer = null;
+  contractCheckerInterval = null;
 }

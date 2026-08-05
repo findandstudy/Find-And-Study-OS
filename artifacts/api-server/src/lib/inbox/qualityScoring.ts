@@ -440,8 +440,8 @@ const CHECK_INTERVAL_MS = 15 * 60 * 1000;
 let workerTimer: NodeJS.Timeout | null = null;
 
 /** Nightly batch: checks every 15 min; fires once per UTC day at runHourUtc. */
-export function startQualityScoringWorker(): void {
-  if (workerTimer) return;
+export function startQualityScoringWorker(): () => Promise<void> {
+  if (workerTimer) return stopQualityScoringWorker;
   const tick = async (): Promise<void> => {
     try {
       const cfg = (await getAiAgentConfig()).quality;
@@ -467,4 +467,14 @@ export function startQualityScoringWorker(): void {
   workerTimer = setInterval(() => { void tick(); }, CHECK_INTERVAL_MS);
   workerTimer.unref?.();
   console.log("[quality] nightly scoring worker started");
+  return stopQualityScoringWorker;
+}
+
+export async function stopQualityScoringWorker(): Promise<void> {
+  if (workerTimer) clearInterval(workerTimer);
+  workerTimer = null;
+  const deadline = Date.now() + 10_000;
+  while (batchRunning && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
 }

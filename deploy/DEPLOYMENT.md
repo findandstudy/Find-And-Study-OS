@@ -1,4 +1,7 @@
-# EduConsult OS — Hostinger VPS Deployment Guide
+# Find And Study OS — Controlled Release Guide
+
+This runbook never copies or rolls back the database, runtime environment or
+storage. Production actions require an approved preflight and fresh backup.
 
 ## Table of Contents
 
@@ -99,14 +102,14 @@ pm2 --version
 ## Project Setup
 
 ```bash
-# Uygulama dizini oluşturun
-sudo mkdir -p /var/www/edconsult-os
-sudo chown $USER:$USER /var/www/edconsult-os
+# Source, immutable releases and persistent runtime paths are separate.
+sudo mkdir -p /opt/findandstudy/source /opt/findandstudy/releases
+sudo mkdir -p /var/lib/findandstudy/storage /var/log/findandstudy
+sudo chown -R $USER:$USER /opt/findandstudy /var/lib/findandstudy /var/log/findandstudy
 
 # Projeyi klonlayın veya yükleyin
-cd /var/www/edconsult-os
+cd /opt/findandstudy/source
 git clone https://your-repo-url.git .
-# Or upload via SFTP/rsync
 
 # Install dependencies
 pnpm install --frozen-lockfile
@@ -117,9 +120,9 @@ pnpm install --frozen-lockfile
 ## Environment Configuration
 
 ```bash
-# Örnek dosyayı kopyalayın ve düzenleyin
-cp deploy/.env.example .env
-nano .env
+# Runtime secrets are external to source and every release.
+sudo install -m 600 /dev/null /etc/findandstudy.env
+sudo nano /etc/findandstudy.env
 ```
 
 > **deploy/.env.example** tüm desteklenen değişkenleri ve açıklamalarını içerir.
@@ -140,16 +143,28 @@ nano .env
 
 ## First Deploy
 
+The one-time PM2 bootstrap must be performed deliberately from an already built
+immutable release, after confirming that no legacy/duplicate API or portal
+worker exists. It must configure both canonical processes with
+`CURRENT_RELEASE_LINK=/opt/findandstudy/current`. The normal deploy script will
+hard-fail until this topology exists; it never creates a surprise second
+process.
+
+Normal approved releases use:
+
 ```bash
-# Tam deploy scriptini çalıştırın
-bash deploy/deploy.sh
+cd /opt/findandstudy/source
+RUNTIME_ENV_FILE=/etc/findandstudy.env bash deploy/deploy.sh
 ```
 
 Bu işlem:
-1. Bağımlılıkları yükler
-2. Frontend ve backend'i derler
-3. Migration ledger bütünlüğünü doğrular; migration uygulamaz
-4. Uygulamayı PM2 ile başlatır
+1. Reviewed Git commit'ini yeni immutable release dizinine çıkarır.
+2. Locked dependencies, typecheck ve build adımlarını release içinde çalıştırır.
+3. Migration ledger'ını doğrular; migration uygulamaz.
+4. Background jobs kapalı aday API'yi ayrı portta başlatıp HTTP+DB readiness uygular.
+5. Canonical PM2 processlerinin `current` symlink'i altında olduğunu doğrular.
+6. Symlink'i atomik değiştirir, worker/API'yi bounded drain ile yeniden başlatır.
+7. Health başarısızsa yalnız kod symlink'ini önceki release'e döndürür.
 
 **Çalıştığını doğrulayın:**
 ```bash
@@ -233,36 +248,25 @@ loglar diskinizi doldurmadan döndürülür.
 
 Sistem genelinde logrotate kullanmak istiyorsanız:
 ```bash
-sudo cp /var/www/edconsult-os/deploy/logrotate.conf /etc/logrotate.d/edconsult-os
-sudo logrotate -d /etc/logrotate.d/edconsult-os  # test (dry-run)
+sudo cp /opt/findandstudy/source/deploy/logrotate.conf /etc/logrotate.d/findandstudy
+sudo logrotate -d /etc/logrotate.d/findandstudy  # test (dry-run)
 ```
 
 ---
 
-## Zero-Downtime Updates
+## Controlled Updates
 
-Kod değişikliklerini sıfır kesinti ile yayınlamak için:
+Doğrudan `git pull + build + pm2 reload` kullanmayın. Fork/1 topolojisinde bu
+gerçek bir zero-downtime garantisi değildir ve otomatik kod rollback sağlamaz.
 
 ```bash
-cd /var/www/edconsult-os
-
-# Son kodu çekin
-git pull origin main
-
-# Derleme ve PM2 hot-reload (kesinti yok — cluster rolling restart)
-bash deploy/build-production.sh
-pm2 reload deploy/ecosystem.config.cjs --update-env
-pm2 save
+cd /opt/findandstudy/source
+RUNTIME_ENV_FILE=/etc/findandstudy.env bash deploy/deploy.sh
 ```
 
-> `pm2 reload` (restart değil) her instance'ı sırayla yeniden başlatır;
-> en az bir instance her zaman canlı kalır. Ortam değişkenleri güncellendiğinde
-> `--update-env` bayrağını mutlaka kullanın.
-
-**Tam deploy (bağımlılık güncellemesi dahil):**
-```bash
-bash deploy/deploy.sh
-```
+Candidate readiness veri tabanını değiştirmez. Trafik değişiminden sonraki
+health kontrolü başarısız olursa script database, `.env` ve storage'a dokunmadan
+önceki kod release'ini geri bağlar.
 
 ---
 
@@ -284,11 +288,10 @@ pnpm drizzle-kit generate
 # 2. Oluşan SQL dosyasını gözden geçirin
 cat drizzle/<timestamp>_migration.sql
 
-# 3. Production veritabanına uygulayın
-psql "$DATABASE_URL" < drizzle/<timestamp>_migration.sql
+# 3. Ledger doğrulamasını çalıştırın
+node validate-migrations.mjs
 
-# 4. api-server'ı yeniden başlatın
-pm2 reload deploy/ecosystem.config.cjs --update-env
+# 4. Ayrı migration runbook'u ve açık production onayı olmadan ilerlemeyin.
 ```
 
 ---
@@ -322,26 +325,12 @@ Bu bilinçli bir tasarım tercihidir — nginx rate limiting ile korunurlar.
 
 ## Rollback
 
-Deploy başarısız olursa:
-
-```bash
-# Son iyi commit'i bulun
-git log --oneline -5
-
-# O commit'e dönün
-git checkout <commit-hash> -- .
-
-# Yeniden derleyin ve başlatın
-bash deploy/build-production.sh
-pm2 reload deploy/ecosystem.config.cjs --update-env
-```
-
-> Ciddi bir sorun varsa PM2'yi tamamen yeniden başlatın:
-> ```bash
-> pm2 delete all
-> pm2 start deploy/ecosystem.config.cjs
-> pm2 save
-> ```
+`deploy/deploy.sh`, cutover sonrası health başarısızlığında `current` symlink'ini
+otomatik olarak önceki immutable release'e döndürür ve yalnız canonical API ile
+portal worker'ı yeniden başlatır. Manuel rollback gerekirse aynı doğrulanmış
+symlink işlemi ve exact process adları kullanılmalıdır. `pm2 delete all`,
+`restart all`, database restore veya storage rollback bu runbook'un parçası
+değildir.
 
 ---
 

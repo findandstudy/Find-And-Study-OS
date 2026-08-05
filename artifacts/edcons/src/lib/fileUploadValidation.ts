@@ -1,5 +1,6 @@
 import {
   validateApplicationDocumentFile as _validateApplicationDocumentFile,
+  validateStudentDocumentFile,
   validateUploadedFile as _validateUploadedFile,
 } from "@workspace/file-upload-validation";
 
@@ -14,6 +15,7 @@ export {
   FILE_UPLOAD_HELP_TEXT,
   APPLICATION_DOCUMENT_MAX_SIZE,
   APPLICATION_DOCUMENT_MAX_SIZE_MB,
+  APPLICATION_DOCUMENT_ACCEPT_ATTRIBUTE,
   APPLICATION_DOCUMENT_HELP_TEXT,
   getExtension,
   isAllowedMimeType,
@@ -25,6 +27,7 @@ export {
   sanitizeFileName,
   validateUploadedFile,
   validateApplicationDocumentFile,
+  validateStudentDocumentFile,
   validateFile,
 } from "@workspace/file-upload-validation";
 
@@ -41,6 +44,12 @@ export function validateFileObj(file: File): { valid: true } | { valid: false; m
 
 export function validateApplicationDocumentFileObj(file: File): { valid: true } | { valid: false; message: string } {
   const error = _validateApplicationDocumentFile(file.name, file.type, file.size);
+  if (error) return { valid: false, message: error.message };
+  return { valid: true };
+}
+
+export function validateStudentDocumentFileObj(documentType: string, file: File): { valid: true } | { valid: false; message: string } {
+  const error = validateStudentDocumentFile(documentType, file.name, file.type, file.size);
   if (error) return { valid: false, message: error.message };
   return { valid: true };
 }

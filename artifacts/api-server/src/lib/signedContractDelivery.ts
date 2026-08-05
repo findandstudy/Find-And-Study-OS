@@ -329,6 +329,7 @@ export async function backfillMissingSignedPdfs(): Promise<void> {
 }
 
 let deliveryInterval: ReturnType<typeof setInterval> | null = null;
+let deliveryInitialTimer: ReturnType<typeof setTimeout> | null = null;
 // Re-entrancy guard: a sweep can outlast the interval in pathological cases
 // (many SMTP calls), so never let two sweeps run concurrently on the same
 // instance.
@@ -348,9 +349,24 @@ async function runSweep(): Promise<void> {
   }
 }
 
-export function startSignedContractDeliveryWorker(intervalMs = DELIVERY_INTERVAL_MS): void {
-  if (deliveryInterval) return;
+export function startSignedContractDeliveryWorker(intervalMs = DELIVERY_INTERVAL_MS): () => Promise<void> {
+  if (deliveryInterval || deliveryInitialTimer) return stopSignedContractDeliveryWorker;
   console.log(`[SIGNED-DELIVERY] Worker started, running every ${intervalMs / 1000}s`);
-  setTimeout(() => { runSweep(); }, 15000);
+  deliveryInitialTimer = setTimeout(() => {
+    deliveryInitialTimer = null;
+    void runSweep();
+  }, 15000);
   deliveryInterval = setInterval(() => { runSweep(); }, intervalMs);
+  return stopSignedContractDeliveryWorker;
+}
+
+export async function stopSignedContractDeliveryWorker(): Promise<void> {
+  if (deliveryInitialTimer) clearTimeout(deliveryInitialTimer);
+  if (deliveryInterval) clearInterval(deliveryInterval);
+  deliveryInitialTimer = null;
+  deliveryInterval = null;
+  const deadline = Date.now() + 10_000;
+  while (sweeping && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
 }

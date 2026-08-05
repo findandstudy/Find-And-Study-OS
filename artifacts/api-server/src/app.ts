@@ -22,6 +22,20 @@ const app: Express = express();
 // between the internet and the server), update this value accordingly.
 app.set("trust proxy", 1);
 
+app.use((req, res, next) => {
+  const supplied = req.get("x-request-id")?.trim();
+  const requestId = supplied && /^[A-Za-z0-9._:-]{1,80}$/.test(supplied)
+    ? supplied
+    : crypto.randomUUID();
+  res.locals.requestId = requestId;
+  res.setHeader("X-Request-ID", requestId);
+  const releaseId = process.env.RELEASE_ID;
+  if (releaseId && /^[A-Za-z0-9._:-]{1,80}$/.test(releaseId)) {
+    res.setHeader("X-Release-ID", releaseId);
+  }
+  next();
+});
+
 const cspDirectives = {
   defaultSrc: ["'self'"],
   // TODO: switch scriptSrc/styleSrc to nonce-based CSP once template/SSR pipeline emits per-request nonces.
@@ -154,6 +168,8 @@ app.use((req, res, next) => {
     const durationMs = Number(process.hrtime.bigint() - startedAt) / 1_000_000;
     if (durationMs < 1_500) return;
     console.warn("[slow-request]", JSON.stringify({
+      requestId: res.locals.requestId,
+      releaseId: process.env.RELEASE_ID || "unknown",
       method: req.method,
       path: req.path,
       status: res.statusCode,

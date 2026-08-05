@@ -33,7 +33,12 @@ function processScript(process) {
   return String(process.pm2_env?.pm_exec_path || process.pm_exec_path || "");
 }
 
-function validate(processes) {
+function isWithin(parent, candidate) {
+  const relative = path.relative(parent, candidate);
+  return relative !== "" && !relative.startsWith("..") && !path.isAbsolute(relative);
+}
+
+function validate(processes, options = {}) {
   const { api, portalWorker } = ecosystem.processNames;
   const expected = new Set([api, portalWorker]);
   const legacy = processes.map(processName).filter((name) => LEGACY_NAMES.has(name));
@@ -68,6 +73,19 @@ function validate(processes) {
     fail(`expected one canonical portal worker; found ${workerLike.length}`);
   }
 
+  if (options.releaseLink) {
+    const releaseLink = path.resolve(options.releaseLink);
+    for (const process of [apiProcess, workerLike[0]]) {
+      const script = path.resolve(processScript(process));
+      if (!isWithin(releaseLink, script)) {
+        fail(
+          `${processName(process)} script must be owned by CURRENT_RELEASE_LINK; ` +
+          "refusing a restart that could keep running an old release",
+        );
+      }
+    }
+  }
+
   return { api, portalWorker, apiPort };
 }
 
@@ -75,7 +93,10 @@ try {
   const inputIndex = process.argv.indexOf("--input");
   const inputPath = inputIndex === -1 ? undefined : process.argv[inputIndex + 1];
   if (inputIndex !== -1 && !inputPath) fail("--input requires a JSON file");
-  const result = validate(readProcessList(inputPath));
+  const releaseLinkIndex = process.argv.indexOf("--release-link");
+  const releaseLink = releaseLinkIndex === -1 ? undefined : process.argv[releaseLinkIndex + 1];
+  if (releaseLinkIndex !== -1 && !releaseLink) fail("--release-link requires a path");
+  const result = validate(readProcessList(inputPath), { releaseLink });
   console.log(`[pm2-preflight] OK: ${result.api} (fork/1, port ${result.apiPort}); ${result.portalWorker} (fork/1)`);
 } catch (error) {
   console.error(error instanceof Error ? error.message : String(error));

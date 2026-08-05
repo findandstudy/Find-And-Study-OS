@@ -82,7 +82,9 @@ export default defineConfig({
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,
-    sourcemap: "hidden",
+    // Production maps must not be published with the static web root. Enable
+    // hidden maps only for an explicit private error-monitoring upload step.
+    sourcemap: !isProd && process.env.GENERATE_SOURCEMAPS === "1" ? "hidden" : false,
     rollupOptions: {
       output: {
         manualChunks(id) {

@@ -39,7 +39,7 @@
 // ---------------------------------------------------------------------------
 
 import { createHash } from "node:crypto";
-import { appendFileSync } from "node:fs";
+import { appendFileSync, chmodSync, rmSync } from "node:fs";
 import { basename } from "node:path";
 
 import { and, eq, isNull } from "drizzle-orm";
@@ -157,10 +157,26 @@ let altinbasLoginCooldownUntil = 0;
 let altinbasLoginCooldownFingerprint = "";
 let altinbasLoginCooldownKind: AltinbasLoginFailureKind | null = null;
 
-// ALTINBAS_CAPTURE=1 → TÜM /sfsites/aura request+response gövdeleri logger'a
-// (kırpılmış) ve /tmp/altinbas-capture.json'a (tam, JSON-lines) dökülür.
-const CAPTURE = process.env.ALTINBAS_CAPTURE === "1";
+// Capture is local-only, explicitly acknowledged, short-lived and redacted.
+// Production can never enable it, even if stale environment flags remain.
+const CAPTURE_MAX_MS = 60 * 60_000;
+const captureExpiresAt = Date.parse(process.env.ALTINBAS_CAPTURE_EXPIRES_AT ?? "");
+const captureDuration = captureExpiresAt - Date.now();
+const CAPTURE =
+  process.env.NODE_ENV !== "production" &&
+  process.env.ALTINBAS_CAPTURE === "1" &&
+  process.env.ALTINBAS_CAPTURE_ACK === "LOCAL_REDACTED_CAPTURE_ONLY" &&
+  Number.isFinite(captureExpiresAt) &&
+  captureDuration > 0 &&
+  captureDuration <= CAPTURE_MAX_MS;
 const CAPTURE_FILE = "/tmp/altinbas-capture.json";
+
+if (CAPTURE) {
+  const expiryTimer = setTimeout(() => {
+    try { rmSync(CAPTURE_FILE, { force: true }); } catch { /* best effort */ }
+  }, captureDuration);
+  expiryTimer.unref?.();
+}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -616,20 +632,30 @@ function scanIdsFromRaw(rt: FlowRuntime, raw: string, source: "flow" | "aura"): 
   }
 }
 
-/** ALTINBAS_CAPTURE=1 dump — logger (kırpılmış) + /tmp/altinbas-capture.json (tam). */
+/** Explicit local capture: redacted, permission-restricted and time-bounded. */
 function captureDump(kind: string, url: string, body: string): void {
   if (!CAPTURE) return;
+  const safeUrl = redactAltinbasLog(url);
+  const safeBody = redactAltinbasLog(body);
   try {
     appendFileSync(
       CAPTURE_FILE,
-      JSON.stringify({ ts: new Date().toISOString(), kind, url, body }) + "\n",
+      JSON.stringify({
+        ts: new Date().toISOString(),
+        kind,
+        url: safeUrl,
+        bodyLength: body.length,
+        bodySha256: createHash("sha256").update(body).digest("hex"),
+      }) + "\n",
+      { mode: 0o600 },
     );
+    chmodSync(CAPTURE_FILE, 0o600);
   } catch {
     /* capture asla akışı kırmaz */
   }
   logger.info(
-    `[altinbas][capture] ${kind} ${redactAltinbasLog(url).slice(0, 140)}` +
-    ` :: ${redactAltinbasLog(body).slice(0, 1200)}`,
+    `[altinbas][capture] ${kind} ${safeUrl.slice(0, 140)}` +
+    ` :: ${safeBody.slice(0, 1200)}`,
   );
 }
 

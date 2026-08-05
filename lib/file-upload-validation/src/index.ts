@@ -46,7 +46,10 @@ export const FILE_UPLOAD_HELP_TEXT =
 // the limit shown to applicants is the limit the server actually enforces.
 export const APPLICATION_DOCUMENT_MAX_SIZE = 5 * 1024 * 1024;
 export const APPLICATION_DOCUMENT_MAX_SIZE_MB = 5;
+export const APPLICATION_DOCUMENT_ACCEPT_ATTRIBUTE = ".pdf,.jpg,.jpeg,.png";
 export const APPLICATION_DOCUMENT_HELP_TEXT = "PDF, JPG, JPEG or PNG \u2022 Max 5 MB per file";
+
+const PHOTO_DOCUMENT_TYPES = new Set(["photo", "photograph"]);
 
 const APPLICATION_DOCUMENT_MIME_TYPES = new Set<string>([
   "application/pdf",
@@ -141,7 +144,7 @@ export function sanitizeFileName(fileName: string): string {
 }
 
 export type FileValidationError = {
-  type: "invalid_type" | "invalid_extension" | "size_exceeded" | "mime_extension_mismatch";
+  type: "invalid_type" | "invalid_extension" | "size_exceeded" | "mime_extension_mismatch" | "empty_file" | "document_type_mismatch";
   message: string;
 };
 
@@ -212,6 +215,12 @@ export function validateApplicationDocumentFile(
   mimeType: string,
   sizeBytes: number,
 ): FileValidationError | null {
+  if (!Number.isFinite(sizeBytes) || sizeBytes <= 0) {
+    return {
+      type: "empty_file",
+      message: "Bo\u015f dosya y\u00fcklenemez.",
+    };
+  }
   const ext = getExtension(fileName);
   if (!APPLICATION_DOCUMENT_MIME_TYPES.has(mimeType) || !APPLICATION_DOCUMENT_EXTENSIONS.has(ext)) {
     return {
@@ -233,6 +242,30 @@ export function validateApplicationDocumentFile(
     return {
       type: "size_exceeded",
       message: `Dosya boyutu en fazla ${APPLICATION_DOCUMENT_MAX_SIZE_MB} MB olabilir.`,
+    };
+  }
+  return null;
+}
+
+/**
+ * Canonical student/lead/application document policy. All intake documents are
+ * capped at 5 MB and limited to PDF/JPG/JPEG/PNG. A passport-style photograph
+ * is stricter: it must be an actual image, never a PDF. Other document slots
+ * continue accepting an image because the mobile scanner produces JPG/PNG.
+ */
+export function validateStudentDocumentFile(
+  documentType: string,
+  fileName: string,
+  mimeType: string,
+  sizeBytes: number,
+): FileValidationError | null {
+  const baseError = validateApplicationDocumentFile(fileName, mimeType, sizeBytes);
+  if (baseError) return baseError;
+
+  if (PHOTO_DOCUMENT_TYPES.has(documentType.trim().toLowerCase()) && !isImage(mimeType)) {
+    return {
+      type: "document_type_mismatch",
+      message: "Vesikal\u0131k foto\u011fraf yaln\u0131zca JPG, JPEG veya PNG format\u0131nda y\u00fcklenebilir.",
     };
   }
   return null;

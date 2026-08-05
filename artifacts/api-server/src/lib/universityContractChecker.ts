@@ -200,10 +200,22 @@ export async function checkUniversityContractExpiries(): Promise<void> {
 }
 
 let intervalHandle: ReturnType<typeof setInterval> | null = null;
+let initialTimer: ReturnType<typeof setTimeout> | null = null;
 
-export function startUniversityContractChecker(): void {
-  if (intervalHandle) return;
+export function startUniversityContractChecker(): () => void {
+  if (intervalHandle || initialTimer) return stopUniversityContractChecker;
   console.log(`[UNI-CONTRACT] Checker started, running every ${CHECK_INTERVAL / 60000} minute(s)`);
-  setTimeout(() => { checkUniversityContractExpiries(); }, 18000);
+  initialTimer = setTimeout(() => {
+    initialTimer = null;
+    void checkUniversityContractExpiries();
+  }, 18000);
   intervalHandle = setInterval(() => { checkUniversityContractExpiries(); }, CHECK_INTERVAL);
+  return stopUniversityContractChecker;
+}
+
+export function stopUniversityContractChecker(): void {
+  if (initialTimer) clearTimeout(initialTimer);
+  if (intervalHandle) clearInterval(intervalHandle);
+  initialTimer = null;
+  intervalHandle = null;
 }

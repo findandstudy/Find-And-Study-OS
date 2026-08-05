@@ -217,9 +217,22 @@ export async function runAssignmentConsistencyCheck(): Promise<void> {
   }
 }
 
-export function startAssignmentConsistencyChecker(): void {
-  setTimeout(async () => {
-    await runAssignmentConsistencyCheck();
-    setInterval(runAssignmentConsistencyCheck, CHECK_INTERVAL);
+let initialTimer: ReturnType<typeof setTimeout> | null = null;
+let intervalTimer: ReturnType<typeof setInterval> | null = null;
+
+export function startAssignmentConsistencyChecker(): () => void {
+  if (initialTimer || intervalTimer) return stopAssignmentConsistencyChecker;
+  initialTimer = setTimeout(() => {
+    initialTimer = null;
+    void runAssignmentConsistencyCheck();
+    intervalTimer = setInterval(runAssignmentConsistencyCheck, CHECK_INTERVAL);
   }, INITIAL_DELAY);
+  return stopAssignmentConsistencyChecker;
+}
+
+export function stopAssignmentConsistencyChecker(): void {
+  if (initialTimer) clearTimeout(initialTimer);
+  if (intervalTimer) clearInterval(intervalTimer);
+  initialTimer = null;
+  intervalTimer = null;
 }
