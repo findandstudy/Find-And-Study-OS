@@ -137,7 +137,7 @@ switch_release_link() {
 rollback_code() {
   echo "[rollback] Restoring previous code release"
   switch_release_link "$PREVIOUS_RELEASE"
-  pm2 restart "$PORTAL_WORKER_PROCESS_NAME" --update-env || true
+  PORT="" pm2 restart "$PORTAL_WORKER_PROCESS_NAME" --update-env || true
   pm2 restart "$API_PROCESS_NAME" --update-env || true
   if curl --fail --silent --show-error --max-time 5 \
     "http://127.0.0.1:$PORT/api/healthz" >/dev/null; then
@@ -149,7 +149,7 @@ rollback_code() {
 
 echo "[6/7] Atomically switching code and draining canonical processes"
 switch_release_link "$RELEASE_DIR"
-if ! pm2 restart "$PORTAL_WORKER_PROCESS_NAME" --update-env; then
+if ! PORT="" pm2 restart "$PORTAL_WORKER_PROCESS_NAME" --update-env; then
   rollback_code
   fail "portal worker restart failed; code rollback attempted"
 fi
