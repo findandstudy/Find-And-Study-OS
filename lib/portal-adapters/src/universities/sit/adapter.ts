@@ -708,6 +708,19 @@ async function selectSitApplyingFor(
     option = optionRoot.getByText(exactOption).first();
   }
 
+  // SIT's current combobox portal does not expose a stable listbox/cmdk/Radix
+  // content wrapper even though its trigger correctly reports aria-expanded.
+  // In that variant, resolve the exact visible option from the page only while
+  // this specific trigger is expanded. Using `.last()` favors the newly
+  // portalled option over any same-named static page text.
+  const pageOptions = expanded
+    ? page.getByText(exactOption)
+    : page.locator("__none__");
+  const pageOptionCount = await pageOptions.count().catch(() => 0);
+  if (!(await option.count().catch(() => 0)) && pageOptionCount > 0) {
+    option = pageOptions.last();
+  }
+
   let clicked = false;
   if (
     (await option.count().catch(() => 0)) &&
@@ -736,7 +749,8 @@ async function selectSitApplyingFor(
   const selected = mapEducationLevel(selectedText) === expected;
   logger.info(
     `[sit] APPLYPICK label=${expected} expanded=${expanded}` +
-      ` roots=${rootCount} searched=${searched} clicked=${clicked}` +
+      ` roots=${rootCount} pageOptions=${pageOptionCount}` +
+      ` searched=${searched} clicked=${clicked}` +
       ` selected=${selected}`,
   );
   return selected;
