@@ -102,15 +102,16 @@ export default function StaffDashboard() {
     },
   });
 
+  const staffDashboardRecentLimit = 20;
   const { data: latestStudentsData } = useQuery<any>({
-    queryKey: ["/api/students", "staff-dashboard-latest"],
-    queryFn: () => fetch(`${BASE}/api/students?limit=5&page=1`, { credentials: "include" }).then(r => r.json()),
+    queryKey: ["/api/students", "staff-dashboard-latest", staffDashboardRecentLimit],
+    queryFn: ({ signal }) => fetch(`${BASE}/api/students?limit=${staffDashboardRecentLimit}&page=1`, { credentials: "include", signal }).then(r => r.json()),
   });
   const latestStudents: any[] = latestStudentsData?.data || [];
 
   const { data: latestAuditData } = useQuery<any>({
-    queryKey: ["/api/audit", "staff-dashboard-latest"],
-    queryFn: () => fetch(`${BASE}/api/audit?limit=5&page=1`, { credentials: "include" }).then(r => r.json()),
+    queryKey: ["/api/audit", "staff-dashboard-latest", staffDashboardRecentLimit],
+    queryFn: ({ signal }) => fetch(`${BASE}/api/audit?limit=${staffDashboardRecentLimit}&page=1`, { credentials: "include", signal }).then(r => r.json()),
   });
   const latestUpdates: any[] = latestAuditData?.data || [];
 
@@ -270,8 +271,10 @@ export default function StaffDashboard() {
                     <div className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-secondary/50 transition-colors cursor-pointer group">
                       <div className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold shrink-0 overflow-hidden ${AVATAR_COLORS[i % AVATAR_COLORS.length]}`}>
                         <img
-                          src={`${BASE}/api/students/${s.id}/photo`}
+                          src={s.photoUrl || `${BASE}/api/students/${s.id}/photo`}
                           alt={`${s.firstName} ${s.lastName}`}
+                          loading="lazy"
+                          decoding="async"
                           className="w-full h-full object-cover"
                           onError={(e) => {
                             const el = e.target as HTMLImageElement;

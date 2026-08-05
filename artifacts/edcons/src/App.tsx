@@ -15,6 +15,7 @@ import { SeasonProvider } from "@/contexts/SeasonContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { ActivityTrackerProvider } from "@/components/ActivityTrackerProvider";
 import { PageLoader } from "@/components/ui/page-loader";
+import { DashboardSkeleton } from "@/components/ui/page-skeleton";
 import { I18nProvider } from "@/lib/i18n/context";
 import { useI18nContext } from "@/lib/i18n/use-i18n-context";
 import { isValidLanguage, DEFAULT_LANGUAGE, type Language } from "@/lib/i18n/index";
@@ -141,7 +142,7 @@ const STUDENT_ROLES = _SHARED_STUDENT_ROLES;
 const AGENT_ROLES = _SHARED_AGENT_ROLES;
 
 function ShellLoader() {
-  return <div className="flex-1 min-h-0 bg-secondary/20" />;
+  return <DashboardSkeleton />;
 }
 
 const queryClient = new QueryClient({

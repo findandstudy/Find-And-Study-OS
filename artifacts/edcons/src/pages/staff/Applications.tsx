@@ -229,13 +229,21 @@ function PipelineStageViewport({
           observer.disconnect();
         }
       },
-      { threshold: 0, rootMargin: "0px 576px" },
+      { threshold: 0, rootMargin: "0px 320px" },
     );
     observer.observe(el);
     return () => observer.disconnect();
   }, [onVisible, stageKey]);
 
-  return <div ref={ref} className="h-full shrink-0">{children}</div>;
+  return (
+    <div
+      ref={ref}
+      className="h-full shrink-0"
+      style={{ contentVisibility: "auto", containIntrinsicSize: "288px 720px" }}
+    >
+      {children}
+    </div>
+  );
 }
 
 /* ── AppStudentAvatar ────────────────────────────────────── */
@@ -1612,7 +1620,7 @@ export default function ApplicationsPage() {
   useEffect(() => {
     const initialKeys = filters.stage !== "all"
       ? pipelineStages.filter(stage => stage.key === filters.stage).map(stage => stage.key)
-      : pipelineStages.slice(0, 4).map(stage => stage.key);
+      : [];
     setVisiblePipelineStages(new Set(initialKeys));
   }, [filters.stage, pipelineStageKeys]);
   const markPipelineStageVisible = useCallback((stageKey: string) => {
@@ -1664,7 +1672,7 @@ export default function ApplicationsPage() {
 
   const { data: applicationsResp, isLoading } = useQuery({
     queryKey: ["applications", applicationListParams],
-    queryFn: () => apiFetch(`${BASE_URL}/api/applications?${applicationListParams}`),
+    queryFn: ({ signal }) => apiFetch(`${BASE_URL}/api/applications?${applicationListParams}`, { signal }),
     enabled: viewMode === "list",
   });
   const applicationFacetScopeKey = useMemo(() => {
@@ -1701,7 +1709,7 @@ export default function ApplicationsPage() {
   }, [applicationListParams]);
   const { data: pipelineSummaryResp, isLoading: isPipelineSummaryLoading } = useQuery({
     queryKey: ["applications", "pipeline-summary", pipelineSummaryParams],
-    queryFn: () => apiFetch(`${BASE_URL}/api/applications?${pipelineSummaryParams}`),
+    queryFn: ({ signal }) => apiFetch(`${BASE_URL}/api/applications?${pipelineSummaryParams}`, { signal }),
     enabled: viewMode === "pipeline",
   });
   const pipelineSummaryMap = useMemo(() => new Map<string, { total: number; totalCommission?: number }>(
@@ -1722,7 +1730,7 @@ export default function ApplicationsPage() {
       params.set("includeTotals", "0");
       return {
         queryKey: ["applications", "pipeline", stageDef.key, params.toString()],
-        queryFn: () => apiFetch(`${BASE_URL}/api/applications?${params.toString()}`),
+        queryFn: ({ signal }: { signal: AbortSignal }) => apiFetch(`${BASE_URL}/api/applications?${params.toString()}`, { signal }),
         enabled: viewMode === "pipeline"
           && visiblePipelineStages.has(stageDef.key)
           && (filters.stage === "all" || filters.stage === stageDef.key),
@@ -1774,7 +1782,7 @@ export default function ApplicationsPage() {
 
   const { data: staffUsersData } = useQuery({
     queryKey: ["staff-users-list"],
-    queryFn: () => apiFetch(`${BASE_URL}/api/users?roles=super_admin,admin,manager,staff,consultant,accountant,editor&limit=100`),
+    queryFn: ({ signal }) => apiFetch(`${BASE_URL}/api/users?roles=super_admin,admin,manager,staff,consultant,accountant,editor&limit=100`, { signal }),
     staleTime: 5 * 60 * 1000,
   });
   const staffUsers = staffUsersData

@@ -1,4 +1,4 @@
-import { ReactNode, useEffect, useRef, useState, useTransition } from "react";
+import { ReactNode, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { useI18n } from "@/hooks/use-i18n";
@@ -315,26 +315,33 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
   const user = prevUserRef.current ?? liveUser;
 
   const [location, setLocation] = useLocation();
-  const [navPending, startNavTransition] = useTransition();
+  const queryClient = useQueryClient();
+  const pendingNavigationRef = useRef<{ from: string; to: string; startedAt: number } | null>(null);
+  const [navPending, setNavPending] = useState(false);
   const [panelDensity, setPanelDensity] = useState<PanelDensity>(getInitialPanelDensity);
-  const navigate = (url: string) => startNavTransition(() => setLocation(url));
-  const navigateAndRefresh = (url: string) => {
-    startNavTransition(() => setLocation(url));
-    // Refresh data in the destination section without a full page reload.
-    // Invalidate server queries so the new section pulls fresh content, but
-    // NEVER invalidate the auth query (/api/auth/me). Doing so makes `liveUser`
-    // briefly undefined while it refetches, which — combined with the 5s
-    // agent_staff polling — can race the useAuth redirect effect and bounce
-    // an authorized agent_staff user back to "/".
-    queryClient.invalidateQueries({
-      predicate: (query) => query.queryKey?.[0] !== "/api/auth/me",
-    });
+  const navigate = (url: string) => {
+    if (url === location) return;
+
+    pendingNavigationRef.current = {
+      from: location,
+      to: url,
+      startedAt: performance.now(),
+    };
+    setNavPending(true);
+
+    // Applications is the only route that fans out into many pipeline queries.
+    // Cancel that outgoing route explicitly; mounted layout queries (auth,
+    // notifications, unread counts) must survive navigation.
+    if (location.startsWith("/staff/applications")) {
+      void queryClient.cancelQueries({ queryKey: ["applications"] });
+    }
+    setLocation(url);
   };
   const handleNavClick = (url: string) => (e: React.MouseEvent<HTMLAnchorElement>) => {
     // Allow native middle-click / ctrl+click / cmd+click / shift / alt to open in new tab/window.
     if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
     e.preventDefault();
-    navigateAndRefresh(url);
+    navigate(url);
   };
   const { t, localePath } = useI18n();
   const { season, setSeason, availableYears } = useSeason();
@@ -366,7 +373,28 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
 
   const isStaff = ["super_admin","admin","manager","staff","consultant","editor","accountant"].includes(user?.role || "");
   const isStudent = user?.role === "student";
-  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    const pending = pendingNavigationRef.current;
+    if (!pending || pending.to !== location) return;
+
+    const frame = window.requestAnimationFrame(() => {
+      try {
+        performance.measure("fasos:route-commit", {
+          start: pending.startedAt,
+          end: performance.now(),
+          detail: { from: pending.from, to: pending.to },
+        });
+      } catch {
+        // User Timing options are diagnostic only; older browsers must still
+        // complete navigation even if they do not support the options object.
+      } finally {
+        pendingNavigationRef.current = null;
+        setNavPending(false);
+      }
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [location]);
 
   const { data: unreadMsgData } = useQuery<{ total: number; mine: number }>({
     queryKey: ["unread-messages-count"],
