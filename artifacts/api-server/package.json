@@ -48,6 +48,7 @@
     "test:messaging-avatar": "tsx --test ./scripts/test-messaging-avatar.ts",
     "test:dashboard-faz1": "tsx --test ./scripts/test-dashboard-faz1.ts",
     "test:dashboard-faz2": "tsx --test ./scripts/test-dashboard-faz2.ts",
+    "test:dashboard-audit-scope": "tsx --test ./scripts/test-dashboard-audit-scope.ts",
     "test:agent-management-scope": "tsx --test ./scripts/test-agent-management-scope.ts",
     "test:doc-access-control": "tsx --test ./scripts/test-doc-access-control.ts",
     "test:activity-normalization": "tsx --test ./scripts/test-activity-normalization.ts",

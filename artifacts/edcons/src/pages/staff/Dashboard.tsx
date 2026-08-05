@@ -109,9 +109,13 @@ export default function StaffDashboard() {
   });
   const latestStudents: any[] = latestStudentsData?.data || [];
 
-  const { data: latestAuditData } = useQuery<any>({
-    queryKey: ["/api/audit", "staff-dashboard-latest", staffDashboardRecentLimit],
-    queryFn: ({ signal }) => fetch(`${BASE}/api/audit?limit=${staffDashboardRecentLimit}&page=1`, { credentials: "include", signal }).then(r => r.json()),
+  const { data: latestAuditData, isLoading: latestAuditLoading, isError: latestAuditError } = useQuery<any>({
+    queryKey: ["/api/audit/dashboard", "staff-dashboard-latest", staffDashboardRecentLimit],
+    queryFn: async ({ signal }) => {
+      const r = await fetch(`${BASE}/api/audit/dashboard?limit=${staffDashboardRecentLimit}`, { credentials: "include", signal });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      return r.json();
+    },
   });
   const latestUpdates: any[] = latestAuditData?.data || [];
 
@@ -310,16 +314,30 @@ export default function StaffDashboard() {
               <h3 className="font-display font-bold text-base">{t("staffDash.latestUpdates")}</h3>
             </div>
             <div className="space-y-3 max-h-[320px] overflow-y-auto">
-              {latestUpdates.length === 0 ? (
+              {latestAuditLoading ? (
+                <p className="text-sm text-muted-foreground">{t("common.loading")}</p>
+              ) : latestAuditError ? (
+                <p className="text-sm text-destructive">{t("common.error")}</p>
+              ) : latestUpdates.length === 0 ? (
                 <p className="text-sm text-muted-foreground">{t("staffDash.noUpdates")}</p>
               ) : (
                 latestUpdates.map((u: any, i: number) => {
-                  const detailHref = u.resource && u.resourceId
-                    ? `/staff/${u.resource === "application" ? "applications" : u.resource === "student" ? "students" : u.resource === "lead" ? "leads" : ""}/${u.resourceId}`
+                  const detailCollection = u.resource === "application" ? "applications"
+                    : u.resource === "student" ? "students"
+                    : u.resource === "lead" ? "leads"
+                    : null;
+                  const detailHref = detailCollection && u.resourceId
+                    ? `/staff/${detailCollection}/${u.resourceId}`
                     : null;
                   const actionLabel = (u.action || "").replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase());
                   const resourceLabel = (u.resource || "").replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase());
-                  const changes = u.data ? Object.entries(u.data).filter(([k]) => !["id", "updatedAt"].includes(k)).slice(0, 2).map(([k, v]) => `${k}: ${v}`).join(", ") : "";
+                  const changes = u.changes && typeof u.changes === "object"
+                    ? Object.entries(u.changes)
+                        .filter(([k]) => !["id", "updatedAt"].includes(k))
+                        .slice(0, 2)
+                        .map(([k, v]) => `${k}: ${typeof v === "object" ? JSON.stringify(v) : v}`)
+                        .join(", ")
+                    : "";
                   const Wrapper = detailHref ? Link : "div" as any;
                   const wrapperProps = detailHref ? { href: detailHref } : {};
                   return (

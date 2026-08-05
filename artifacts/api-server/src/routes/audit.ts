@@ -1,8 +1,8 @@
 import { Router, type IRouter } from "express";
 import { db, auditLogsTable, usersTable, studentsTable, leadsTable, applicationsTable, documentsTable, programsTable, agentsTable } from "@workspace/db";
-import { sql, desc, ilike, or, eq, and, inArray } from "drizzle-orm";
+import { sql, desc, ilike, or, eq, and, inArray, isNotNull, isNull } from "drizzle-orm";
 import { requireAuth, requireRole } from "../lib/auth";
-import { MANAGER_ROLES } from "../lib/roles";
+import { MANAGER_ROLES, STAFF_ROLES } from "../lib/roles";
 import { checkAssignmentConsistency } from "../lib/assignmentConsistencyChecker";
 
 const router: IRouter = Router();
@@ -190,6 +190,107 @@ function enrichChanges(changes: string | null | Record<string, any>, userNames: 
   return out;
 }
 
+async function enrichAuditRows(data: any[]) {
+  const nameMap = await resolveResourceNames(data);
+  const userNames = nameMap.get("user") || new Map<number, string>();
+  const agentNames = nameMap.get("agent") || new Map<number, string>();
+
+  return data.map((log) => {
+    const rKey = (log.resource || "").toLowerCase();
+    const resMap = nameMap.get(rKey);
+    return {
+      ...log,
+      resourceDisplayName: log.resourceId && resMap ? resMap.get(log.resourceId) || null : null,
+      changes: enrichChanges(log.changes, userNames, agentNames),
+    };
+  });
+}
+
+/**
+ * Staff dashboard activity feed.
+ *
+ * This deliberately does not reuse the manager-only global /audit feed.
+ * A staff user may only see events for records currently assigned to them.
+ * Document events are included only when the document belongs to one of those
+ * assigned leads, students, or applications.
+ */
+router.get("/audit/dashboard", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
+  const user = req.user!;
+  const requestedLimit = parseInt(String(req.query.limit ?? "20"), 10);
+  const limit = Math.min(20, Math.max(1, Number.isFinite(requestedLimit) ? requestedLimit : 20));
+
+  const ownedDocument = and(
+    isNotNull(documentsTable.id),
+    or(
+      sql<boolean>`EXISTS (
+        SELECT 1 FROM ${studentsTable} AS dashboard_document_student
+        WHERE dashboard_document_student.id = ${documentsTable.studentId}
+          AND dashboard_document_student.assigned_to_id = ${user.id}
+          AND dashboard_document_student.deleted_at IS NULL
+      )`,
+      sql<boolean>`EXISTS (
+        SELECT 1 FROM ${leadsTable} AS dashboard_document_lead
+        WHERE dashboard_document_lead.id = ${documentsTable.leadId}
+          AND dashboard_document_lead.assigned_to_id = ${user.id}
+          AND dashboard_document_lead.deleted_at IS NULL
+      )`,
+      sql<boolean>`EXISTS (
+        SELECT 1 FROM ${applicationsTable} AS dashboard_document_application
+        WHERE dashboard_document_application.id = ${documentsTable.applicationId}
+          AND dashboard_document_application.assigned_to_id = ${user.id}
+          AND dashboard_document_application.deleted_at IS NULL
+      )`,
+    ),
+  );
+
+  const data = await db
+    .select({
+      id: auditLogsTable.id,
+      userId: auditLogsTable.userId,
+      action: auditLogsTable.action,
+      resource: auditLogsTable.resource,
+      resourceId: auditLogsTable.resourceId,
+      changes: auditLogsTable.changes,
+      createdAt: auditLogsTable.createdAt,
+      userName: sql<string>`COALESCE(NULLIF(CONCAT_WS(' ', ${usersTable.firstName}, ${usersTable.lastName}), ''), 'System')`,
+    })
+    .from(auditLogsTable)
+    .leftJoin(usersTable, eq(auditLogsTable.userId, usersTable.id))
+    .leftJoin(leadsTable, and(
+      eq(auditLogsTable.resource, "lead"),
+      eq(auditLogsTable.resourceId, leadsTable.id),
+      eq(leadsTable.assignedToId, user.id),
+      isNull(leadsTable.deletedAt),
+    ))
+    .leftJoin(studentsTable, and(
+      eq(auditLogsTable.resource, "student"),
+      eq(auditLogsTable.resourceId, studentsTable.id),
+      eq(studentsTable.assignedToId, user.id),
+      isNull(studentsTable.deletedAt),
+    ))
+    .leftJoin(applicationsTable, and(
+      eq(auditLogsTable.resource, "application"),
+      eq(auditLogsTable.resourceId, applicationsTable.id),
+      eq(applicationsTable.assignedToId, user.id),
+      isNull(applicationsTable.deletedAt),
+    ))
+    .leftJoin(documentsTable, and(
+      eq(auditLogsTable.resource, "document"),
+      eq(auditLogsTable.resourceId, documentsTable.id),
+      isNull(documentsTable.deletedAt),
+    ))
+    .where(or(
+      isNotNull(leadsTable.id),
+      isNotNull(studentsTable.id),
+      isNotNull(applicationsTable.id),
+      ownedDocument,
+    ))
+    .orderBy(desc(auditLogsTable.createdAt))
+    .limit(limit);
+
+  res.json({ data: await enrichAuditRows(data) });
+});
+
 router.get("/audit", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
   const user = req.user!;
   const { search, resource, resourceId, page = "1", limit = "50" } = req.query as Record<string, string>;
@@ -247,21 +348,7 @@ router.get("/audit", requireAuth, requireRole(...MANAGER_ROLES), async (req, res
     .limit(limitNum)
     .offset(offset);
 
-  const nameMap = await resolveResourceNames(data);
-  const userNames = nameMap.get("user") || new Map<number, string>();
-  const agentNames = nameMap.get("agent") || new Map<number, string>();
-
-  const enriched = data.map((log) => {
-    const rKey = (log.resource || "").toLowerCase();
-    const resMap = nameMap.get(rKey);
-    const resourceDisplayName = log.resourceId && resMap ? resMap.get(log.resourceId) || null : null;
-    const enrichedChanges = enrichChanges(log.changes, userNames, agentNames);
-    return {
-      ...log,
-      resourceDisplayName,
-      changes: enrichedChanges,
-    };
-  });
+  const enriched = await enrichAuditRows(data);
 
   res.json({
     data: enriched,
