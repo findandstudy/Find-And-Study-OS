@@ -34,6 +34,7 @@ import {
   prepareRoutedPortalDraftPreflight,
 } from "../lib/portalDraftPreflight.js";
 import { resolveResidenceAddress } from "../lib/studentAddressDefaults";
+import { buildSignedStudentPhotoPath } from "@workspace/portal-adapters";
 
 const router: IRouter = Router();
 
@@ -515,6 +516,9 @@ router.get("/leads", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), r
     agentName: r.agentName || null,
     nextFollowup: nextFollowupMap.get(r.lead.id) || null,
     convertedStudentHasPhoto: r.studentHasPhoto ?? false,
+    convertedStudentPhotoUrl: r.studentHasPhoto && r.lead.convertedStudentId
+      ? buildSignedStudentPhotoPath(r.lead.convertedStudentId, 15 * 60)
+      : null,
   }));
 
   res.json({

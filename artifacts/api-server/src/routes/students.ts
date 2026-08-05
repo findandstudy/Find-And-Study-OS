@@ -18,7 +18,7 @@ import { inferOriginFromUser, inferOriginFromAgentId, type OriginMeta } from "..
 import { toE164 } from "../lib/inbox/phone";
 import { rejectInvalidPhone } from "../lib/phoneValidation";
 import { parsePaginationParams, buildPageMeta } from "@workspace/pagination";
-import { verifyStudentPhotoSignature } from "@workspace/portal-adapters";
+import { buildSignedStudentPhotoPath, verifyStudentPhotoSignature } from "@workspace/portal-adapters";
 import bcrypt from "bcryptjs";
 import { deleteSessionsForUser } from "../lib/replitAuth";
 import { getCurrentSeason } from "../lib/season";
@@ -461,7 +461,12 @@ router.get("/students", requireAuth, requireRole(...STAFF_ROLES, "student", ...A
   // hasPhoto is denormalized on students.has_photo; document upload/delete
   // handlers keep it in sync, so the listing query no longer needs an
   // extra SELECT against documents.
-  const data = rows.map(r => ({ ...r.student, agentName: r.agentName || null, hasPhoto: !!r.student.hasPhoto }));
+  const data = rows.map(r => ({
+    ...r.student,
+    agentName: r.agentName || null,
+    hasPhoto: !!r.student.hasPhoto,
+    photoUrl: r.student.hasPhoto ? buildSignedStudentPhotoPath(r.student.id, 15 * 60) : null,
+  }));
 
   res.json({
     data,

@@ -13,6 +13,7 @@ import {
 import { getSessionCookieOptions } from "../lib/cookieOptions";
 import { extractBearerToken, lookupApiToken } from "../lib/apiTokenAuth";
 import { applyPermissionOverrides } from "../lib/permissions";
+import { verifyStudentPhotoSignature } from "@workspace/portal-adapters";
 
 declare global {
   namespace Express {
@@ -176,6 +177,24 @@ export async function authMiddleware(
     req.apiTokenAuth = true;
     next();
     return;
+  }
+
+  // A valid HMAC-signed student-photo URL is already an auth-free bearer URL.
+  // Do not perform the session/user/permission lookup for each list avatar;
+  // the photo route independently verifies the same signature again before it
+  // reads any bytes. Unsigned or malformed paths continue through normal auth.
+  // Explicit API bearer tokens retain precedence (and their fail-closed rules).
+  const signedPhotoMatch = req.method === "GET"
+    ? req.path.match(/^\/api\/students\/(\d+)\/photo$/)
+    : null;
+  if (signedPhotoMatch) {
+    const studentId = Number(signedPhotoMatch[1]);
+    const exp = Number(req.query.exp);
+    const sig = typeof req.query.sig === "string" ? req.query.sig : "";
+    if (verifyStudentPhotoSignature(studentId, exp, sig)) {
+      next();
+      return;
+    }
   }
 
   const sid = getSessionId(req);

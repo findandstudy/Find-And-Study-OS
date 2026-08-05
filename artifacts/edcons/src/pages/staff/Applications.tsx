@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { Link, useLocation } from "wouter";
 import { QuickContactDialog } from "@/components/QuickContact";
 import { AssignPopover } from "@/components/AssignPopover";
@@ -206,6 +206,38 @@ function useInView(rootMargin = "200px") {
   return { ref, inView };
 }
 
+function PipelineStageViewport({
+  stageKey,
+  onVisible,
+  children,
+}: {
+  stageKey: string;
+  onVisible: (stageKey: string) => void;
+  children: React.ReactNode;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof IntersectionObserver === "undefined") {
+      onVisible(stageKey);
+      return;
+    }
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          onVisible(stageKey);
+          observer.disconnect();
+        }
+      },
+      { threshold: 0, rootMargin: "0px 576px" },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [onVisible, stageKey]);
+
+  return <div ref={ref} className="h-full shrink-0">{children}</div>;
+}
+
 /* ── AppStudentAvatar ────────────────────────────────────── */
 function AppStudentAvatar({ app, size = "sm" }: { app: any; size?: "sm" | "md" }) {
   const dim = size === "md" ? "w-10 h-10" : "w-8 h-8";
@@ -217,7 +249,7 @@ function AppStudentAvatar({ app, size = "sm" }: { app: any; size?: "sm" | "md" }
     <div ref={ref} className={`${dim} rounded-full shrink-0 overflow-hidden`}>
       {showPhoto ? (
         <img
-          src={`/api/students/${app.studentId}/photo`}
+          src={app.studentPhotoUrl || `/api/students/${app.studentId}/photo`}
           alt={`${app.studentFirstName} ${app.studentLastName}`}
           className={`${dim} rounded-full object-cover border border-primary/20`}
           onError={() => setImgError(true)}
@@ -1555,6 +1587,7 @@ export default function ApplicationsPage() {
   const [runConfirmOpen, setRunConfirmOpen] = useState(false);
   const [runInProgress, setRunInProgress] = useState(false);
   const [pipelineLimits, setPipelineLimits] = useState<Record<string, number>>({});
+  const [visiblePipelineStages, setVisiblePipelineStages] = useState<Set<string>>(new Set());
   const pg = useTablePagination(25);
   const [activeId, setActiveId] = useState<number | null>(null);
   const [docUploadDialog, setDocUploadDialog] = useState<{ appId: number; uploadStage: string; targetStage: string; targetStageLabel: string; documentNameOverride?: string | null; moveAfterUpload?: boolean; quickMode?: boolean } | null>(null);
@@ -1575,6 +1608,21 @@ export default function ApplicationsPage() {
   const { stages: pipelineStages } = usePipelineStages("application");
   const stageOrder = pipelineStages.map(s => s.key);
   const stageMap = Object.fromEntries(pipelineStages.map((s, i) => [s.key, { ...s, _index: i }]));
+  const pipelineStageKeys = stageOrder.join("\u001f");
+  useEffect(() => {
+    const initialKeys = filters.stage !== "all"
+      ? pipelineStages.filter(stage => stage.key === filters.stage).map(stage => stage.key)
+      : pipelineStages.slice(0, 4).map(stage => stage.key);
+    setVisiblePipelineStages(new Set(initialKeys));
+  }, [filters.stage, pipelineStageKeys]);
+  const markPipelineStageVisible = useCallback((stageKey: string) => {
+    setVisiblePipelineStages(current => {
+      if (current.has(stageKey)) return current;
+      const next = new Set(current);
+      next.add(stageKey);
+      return next;
+    });
+  }, []);
 
   const [debouncedSearch, setDebouncedSearch] = useState(search);
   useEffect(() => {
@@ -1643,20 +1691,41 @@ export default function ApplicationsPage() {
       : undefined;
   }, [applicationsResp, applicationFacetScopeKey]);
 
+  const pipelineSummaryParams = useMemo(() => {
+    const params = new URLSearchParams(applicationListParams);
+    params.delete("page");
+    params.delete("limit");
+    params.set("pipelineSummary", "1");
+    params.set("includeFacets", "1");
+    return params.toString();
+  }, [applicationListParams]);
+  const { data: pipelineSummaryResp, isLoading: isPipelineSummaryLoading } = useQuery({
+    queryKey: ["applications", "pipeline-summary", pipelineSummaryParams],
+    queryFn: () => apiFetch(`${BASE_URL}/api/applications?${pipelineSummaryParams}`),
+    enabled: viewMode === "pipeline",
+  });
+  const pipelineSummaryMap = useMemo(() => new Map<string, { total: number; totalCommission?: number }>(
+    (pipelineSummaryResp?.meta?.stages || []).map((row: any) => [String(row.stage), {
+      total: Number(row.total || 0),
+      totalCommission: row.totalCommission == null ? undefined : Number(row.totalCommission),
+    }]),
+  ), [pipelineSummaryResp]);
+
   const pipelineStageQueries = useQueries({
-    queries: pipelineStages.map((stageDef, index) => {
+    queries: pipelineStages.map((stageDef) => {
       const limit = pipelineLimits[stageDef.key] ?? PIPELINE_BATCH_SIZE;
-      const shouldIncludeFacets =
-        filters.stage === "all" ? index === 0 : filters.stage === stageDef.key;
       const params = new URLSearchParams(applicationListParams);
       params.set("page", "1");
       params.set("limit", String(limit));
       params.set("stage", stageDef.key);
-      params.set("includeFacets", shouldIncludeFacets ? "1" : "0");
+      params.set("includeFacets", "0");
+      params.set("includeTotals", "0");
       return {
         queryKey: ["applications", "pipeline", stageDef.key, params.toString()],
         queryFn: () => apiFetch(`${BASE_URL}/api/applications?${params.toString()}`),
-        enabled: viewMode === "pipeline" && (filters.stage === "all" || filters.stage === stageDef.key),
+        enabled: viewMode === "pipeline"
+          && visiblePipelineStages.has(stageDef.key)
+          && (filters.stage === "all" || filters.stage === stageDef.key),
       };
     }),
   });
@@ -1664,26 +1733,23 @@ export default function ApplicationsPage() {
   const pipelineStageData = useMemo(() => {
     const entries = pipelineStages.map((stageDef, index) => {
       const query = pipelineStageQueries[index];
+      const summary = pipelineSummaryMap.get(stageDef.key);
       return [stageDef.key, {
         apps: (query?.data?.data || []) as any[],
-        total: Number(query?.data?.meta?.total || 0),
-        totalCommission: query?.data?.meta?.totalCommission == null
-          ? undefined
-          : Number(query.data.meta.totalCommission),
-        isLoading: Boolean(query?.isLoading || query?.isFetching),
+        total: summary?.total || 0,
+        totalCommission: summary?.totalCommission,
+        isLoading: Boolean(isPipelineSummaryLoading || query?.isLoading || query?.isFetching),
       }] as const;
     });
     return new Map(entries);
-  }, [pipelineStages, pipelineStageQueries]);
+  }, [pipelineStages, pipelineStageQueries, pipelineSummaryMap, isPipelineSummaryLoading]);
 
   const pipelineApps = useMemo(
     () => Array.from(pipelineStageData.values()).flatMap(stageData => stageData.apps),
     [pipelineStageData],
   );
   const allApps: any[] = viewMode === "list" ? (applicationsResp?.data || []) : pipelineApps;
-  const pipelineFacets = pipelineStageQueries
-    .map(query => query.data?.meta?.facets)
-    .find(Boolean);
+  const pipelineFacets = pipelineSummaryResp?.meta?.facets;
   const applicationFacets = (viewMode === "list" ? listApplicationFacets : pipelineFacets) as ApplicationFilterFacets | undefined;
 
   const uniqueAppCountries = useMemo(() => {
@@ -1809,7 +1875,7 @@ export default function ApplicationsPage() {
   const pagedApps = sortedApps;
   const totalAppsCount = viewMode === "list"
     ? Number(applicationsResp?.meta?.total ?? sortedApps.length)
-    : Array.from(pipelineStageData.values()).reduce((sum, stageData) => sum + stageData.total, 0);
+    : Number(pipelineSummaryResp?.meta?.total || 0);
 
   useEffect(() => { pg.setPage(1); setSelectedIds(new Set()); }, [search, filters, colFilters, sort]);
   useEffect(() => { setPipelineLimits({}); }, [season, debouncedSearch, filters, colFilters, sort]);
@@ -2164,29 +2230,32 @@ export default function ApplicationsPage() {
                 {pipelineStages.map(s => {
                   const stageData = pipelineStageData.get(s.key);
                   const stageApps = [...(stageData?.apps || [])].sort((a: any, b: any) => new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime());
-                  return <DroppableAppColumn
-                    key={s.key}
-                    stage={s.key}
-                    label={s.label}
-                    variant={s.variant}
-                    apps={stageApps}
-                    totalCount={stageData?.total || 0}
-                    totalRevenue={stageData?.totalCommission}
-                    isLoading={stageData?.isLoading}
-                    onLoadMore={() => setPipelineLimits(current => ({
-                      ...current,
-                      [s.key]: (current[s.key] ?? PIPELINE_BATCH_SIZE) + PIPELINE_BATCH_SIZE,
-                    }))}
-                    onView={id => setLocation(`/staff/applications/${id}`)}
-                    staffUsersMap={staffUsersMap}
-                    onAssign={handleAssign}
-                    staffUsersList={staffUsersList}
-                    currentUserId={user?.id}
-                    canSeeCommission={canSeeCommission}
-                    canAssign={canAssign}
-                    canReassign={canReassign}
-                    canMoveCards={canMoveCards}
-                  />;
+                  return (
+                    <PipelineStageViewport key={s.key} stageKey={s.key} onVisible={markPipelineStageVisible}>
+                      <DroppableAppColumn
+                        stage={s.key}
+                        label={s.label}
+                        variant={s.variant}
+                        apps={stageApps}
+                        totalCount={stageData?.total || 0}
+                        totalRevenue={stageData?.totalCommission}
+                        isLoading={stageData?.isLoading}
+                        onLoadMore={() => setPipelineLimits(current => ({
+                          ...current,
+                          [s.key]: (current[s.key] ?? PIPELINE_BATCH_SIZE) + PIPELINE_BATCH_SIZE,
+                        }))}
+                        onView={id => setLocation(`/staff/applications/${id}`)}
+                        staffUsersMap={staffUsersMap}
+                        onAssign={handleAssign}
+                        staffUsersList={staffUsersList}
+                        currentUserId={user?.id}
+                        canSeeCommission={canSeeCommission}
+                        canAssign={canAssign}
+                        canReassign={canReassign}
+                        canMoveCards={canMoveCards}
+                      />
+                    </PipelineStageViewport>
+                  );
                 })}
 
                 <DragOverlay>

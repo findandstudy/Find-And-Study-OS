@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { readFileSync } from "node:fs";
 
 import {
   applyPermissionOverrides,
@@ -7,6 +8,19 @@ import {
   getEffectivePermissionSet,
 } from "../src/lib/permissions";
 import { getVisibleBranchIds } from "../src/lib/branchScope";
+
+const applicationsRouteSource = readFileSync(
+  new URL("../src/routes/applications.ts", import.meta.url),
+  "utf8",
+);
+const applicationsPageSource = readFileSync(
+  new URL("../../edcons/src/pages/staff/Applications.tsx", import.meta.url),
+  "utf8",
+);
+const authMiddlewareSource = readFileSync(
+  new URL("../src/middlewares/authMiddleware.ts", import.meta.url),
+  "utf8",
+);
 
 test("pre-resolved request permissions preserve grants and revocations without a DB lookup", async () => {
   const permissions = await getEffectivePermissionSet({
@@ -70,4 +84,18 @@ test("request branch context avoids re-reading the user row", async () => {
     [],
   );
   assert.equal(await getVisibleBranchIds(1, "super_admin"), null);
+});
+
+test("application pipeline uses one grouped summary and skips repeated totals", () => {
+  assert.match(applicationsRouteSource, /pipelineSummaryOnly/);
+  assert.match(applicationsRouteSource, /groupBy\(filteredApplications\.stage\)/);
+  assert.match(applicationsPageSource, /pipelineSummaryParams/);
+  assert.match(applicationsPageSource, /params\.set\("includeTotals", "0"\)/);
+  assert.match(applicationsPageSource, /visiblePipelineStages\.has\(stageDef\.key\)/);
+});
+
+test("list avatars use short-lived signed URLs without repeating session auth", () => {
+  assert.match(applicationsRouteSource, /studentPhotoUrl: rest\.studentHasPhoto/);
+  assert.match(authMiddlewareSource, /signedPhotoMatch/);
+  assert.match(authMiddlewareSource, /verifyStudentPhotoSignature\(studentId, exp, sig\)/);
 });

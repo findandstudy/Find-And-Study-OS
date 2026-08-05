@@ -30,6 +30,7 @@ import {
   prepareRoutedPortalDraftPreflight,
 } from "../lib/portalDraftPreflight.js";
 import { resolveApplicationCommissionTotal } from "../lib/applicationCommissionTotals";
+import { buildSignedStudentPhotoPath } from "@workspace/portal-adapters";
 
 const router: IRouter = Router();
 
@@ -155,6 +156,8 @@ router.get("/applications", requireAuth, requireAgentStaffPermission("applicatio
     dateRange, name, program, level, intake, sortKey = "date", sortDir = "desc",
   } = query;
   const includeFacets = query.includeFacets !== "0";
+  const includeTotals = query.includeTotals !== "0";
+  const pipelineSummaryOnly = query.pipelineSummary === "1";
   const pageParams = parsePaginationParams(req, { defaultLimit: 20, maxLimit: 5000 });
   const pageNum = pageParams.page;
   const limitNum = pageParams.limit;
@@ -293,6 +296,89 @@ router.get("/applications", requireAuth, requireAgentStaffPermission("applicatio
 
   const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
+  const isAgentUser = req.user && isAgentRole(req.user.role);
+  let isSubAgentUser = false;
+  if (isAgentUser) {
+    const agentRec = await getAgentRecord(req.user!.id, req.user!.role);
+    isSubAgentUser = req.user!.role === "sub_agent" || !!agentRec?.parentAgentId;
+  }
+
+  // Pipeline columns used to issue one full list request per configured stage.
+  // With 20+ stages that repeated the same count/commission scans and saturated
+  // the DB pool before the visible cards could render. Return all stage totals
+  // in one permission-scoped query; card requests can then skip totals entirely.
+  if (pipelineSummaryOnly) {
+    const filteredApplications = db
+      .select({
+        id: applicationsTable.id,
+        stage: applicationsTable.stage,
+      })
+      .from(applicationsTable)
+      .leftJoin(studentsTable, eq(applicationsTable.studentId, studentsTable.id))
+      .leftJoin(universitiesTable, eq(applicationsTable.universityId, universitiesTable.id))
+      .where(whereClause)
+      .as("pipeline_filtered_applications");
+
+    const [summaryRows, countryRows, universityRows, agentRows] = await Promise.all([
+      db
+        .select({
+          stage: filteredApplications.stage,
+          count: sql<number>`count(DISTINCT ${filteredApplications.id})`,
+          universityCommissionTotal: sql<string>`COALESCE(SUM(COALESCE(${commissionsTable.universityCommissionAmount}::numeric, 0)), 0)`,
+          agentCommissionTotal: sql<string>`COALESCE(SUM(COALESCE(${commissionsTable.agentCommissionAmount}::numeric, 0)), 0)`,
+          subAgentCommissionTotal: sql<string>`COALESCE(SUM(COALESCE(${commissionsTable.subAgentCommissionAmount}::numeric, 0)), 0)`,
+        })
+        .from(filteredApplications)
+        .leftJoin(commissionsTable, eq(filteredApplications.id, commissionsTable.applicationId))
+        .groupBy(filteredApplications.stage),
+      includeFacets ? db.selectDistinct({ country: applicationsTable.country })
+        .from(applicationsTable)
+        .where(and(scopeWhereClause, isNotNull(applicationsTable.country)))
+        .orderBy(applicationsTable.country) : Promise.resolve([] as { country: string | null }[]),
+      includeFacets ? db.selectDistinct({ id: applicationsTable.universityId, name: applicationsTable.universityName })
+        .from(applicationsTable)
+        .where(and(scopeWhereClause, isNotNull(applicationsTable.universityId), isNotNull(applicationsTable.universityName)))
+        .orderBy(applicationsTable.universityName) : Promise.resolve([] as { id: number | null; name: string | null }[]),
+      includeFacets ? db.selectDistinct({ id: applicationsTable.agentId, name: agentsTable.companyName })
+        .from(applicationsTable)
+        .innerJoin(agentsTable, eq(applicationsTable.agentId, agentsTable.id))
+        .where(scopeWhereClause)
+        .orderBy(agentsTable.companyName) : Promise.resolve([] as { id: number | null; name: string | null }[]),
+    ]);
+
+    const stages = summaryRows.map(row => ({
+      stage: row.stage,
+      total: Number(row.count ?? 0),
+      totalCommission: resolveApplicationCommissionTotal({
+        universityCommissionTotal: row.universityCommissionTotal,
+        agentCommissionTotal: row.agentCommissionTotal,
+        subAgentCommissionTotal: row.subAgentCommissionTotal,
+        isAgentUser: Boolean(isAgentUser),
+        isSubAgentUser,
+      }),
+    }));
+
+    res.json({
+      data: [],
+      meta: {
+        total: stages.reduce((sum, row) => sum + row.total, 0),
+        stages,
+        ...(includeFacets ? {
+          facets: {
+            countries: countryRows.map(r => r.country).filter((v): v is string => Boolean(v)),
+            universities: universityRows
+              .filter((r): r is { id: number; name: string } => Number.isFinite(r.id) && Boolean(r.name))
+              .map(r => ({ id: r.id, name: r.name })),
+            agents: agentRows
+              .filter((r): r is { id: number; name: string } => Number.isFinite(r.id) && Boolean(r.name))
+              .map(r => ({ id: r.id, name: r.name })),
+          },
+        } : {}),
+      },
+    });
+    return;
+  }
+
   // Application stages are admin-configurable and their keys are not ordered
   // alphabetically in workflow order. Sorting by `applications.stage` before
   // pagination caused the API to choose the wrong 25-row window; the client
@@ -405,7 +491,7 @@ router.get("/applications", requireAuth, requireAgentStaffPermission("applicatio
     .leftJoin(commissionsTable, eq(filteredApplicationIds.id, commissionsTable.applicationId));
 
   const [countRows, rows, countryRows, universityRows, agentRows] = await Promise.all([
-    applicationTotalsQuery,
+    includeTotals ? applicationTotalsQuery : Promise.resolve([]),
     rowsQuery,
     includeFacets ? db.selectDistinct({ country: applicationsTable.country })
       .from(applicationsTable)
@@ -421,21 +507,14 @@ router.get("/applications", requireAuth, requireAgentStaffPermission("applicatio
       .where(scopeWhereClause)
       .orderBy(agentsTable.companyName) : Promise.resolve([] as { id: number | null; name: string | null }[]),
   ]);
-  const count = countRows[0]?.count ?? 0;
-
-  const isAgentUser = req.user && isAgentRole(req.user.role);
-  let isSubAgentUser = false;
-  if (isAgentUser) {
-    const agentRec = await getAgentRecord(req.user!.id, req.user!.role);
-    isSubAgentUser = req.user!.role === "sub_agent" || !!agentRec?.parentAgentId;
-  }
-  const totalCommission = resolveApplicationCommissionTotal({
+  const count = includeTotals ? (countRows[0]?.count ?? 0) : rows.length;
+  const totalCommission = includeTotals ? resolveApplicationCommissionTotal({
     universityCommissionTotal: countRows[0]?.universityCommissionTotal,
     agentCommissionTotal: countRows[0]?.agentCommissionTotal,
     subAgentCommissionTotal: countRows[0]?.subAgentCommissionTotal,
     isAgentUser: Boolean(isAgentUser),
     isSubAgentUser,
-  });
+  }) : undefined;
   const mappedRows = rows.map(r => {
     const { agentCommissionAmount, subAgentCommissionAmount, commissionAmount: uniAmt, ...rest } = r;
     const uniNum = parseFloat(String(uniAmt ?? "0")) || 0;
@@ -443,13 +522,25 @@ router.get("/applications", requireAuth, requireAgentStaffPermission("applicatio
     const subNum = parseFloat(String(subAgentCommissionAmount ?? "0")) || 0;
     if (isAgentUser) {
       if (isSubAgentUser) {
-        return { ...rest, commissionAmount: subAgentCommissionAmount };
+        return {
+          ...rest,
+          commissionAmount: subAgentCommissionAmount,
+          studentPhotoUrl: rest.studentHasPhoto ? buildSignedStudentPhotoPath(rest.studentId, 15 * 60) : null,
+        };
       }
       const parentNet = agentCommissionAmount == null ? null : String(agentNum - subNum);
-      return { ...rest, commissionAmount: parentNet };
+      return {
+        ...rest,
+        commissionAmount: parentNet,
+        studentPhotoUrl: rest.studentHasPhoto ? buildSignedStudentPhotoPath(rest.studentId, 15 * 60) : null,
+      };
     }
     const netAgency = uniAmt == null ? null : String(uniNum - agentNum);
-    return { ...rest, commissionAmount: netAgency };
+    return {
+      ...rest,
+      commissionAmount: netAgency,
+      studentPhotoUrl: rest.studentHasPhoto ? buildSignedStudentPhotoPath(rest.studentId, 15 * 60) : null,
+    };
   });
 
   res.json({
