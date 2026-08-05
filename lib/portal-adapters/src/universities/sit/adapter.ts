@@ -648,32 +648,64 @@ async function selectSitApplyingFor(
   await button.scrollIntoViewIfNeeded().catch(() => {});
   await button.click().catch(() => {});
   await page.waitForTimeout(350);
-  if ((await button.getAttribute("aria-expanded").catch(() => null)) !== "true") {
+  let expanded =
+    (await button.getAttribute("aria-expanded").catch(() => null)) === "true";
+  if (!expanded) {
     await button.focus().catch(() => {});
     await page.keyboard.press("Enter").catch(() => {});
     await page.waitForTimeout(300);
+    expanded =
+      (await button.getAttribute("aria-expanded").catch(() => null)) === "true";
   }
-
-  const commandInput = page
-    .locator('[cmdk-input], [data-slot="command-input"]')
-    .last();
-  if (
-    (await commandInput.count().catch(() => 0)) &&
-    (await commandInput.isVisible().catch(() => false))
-  ) {
-    await commandInput.fill(expected).catch(() => {});
-  } else {
-    await page.keyboard.type(expected, { delay: 45 }).catch(() => {});
-  }
-  await page.waitForTimeout(450);
 
   const exactOption = new RegExp(`^\\s*${escapeRe(expected)}\\s*$`, "i");
+  // Scope searchable inputs to the OPEN dropdown only. SIT also has a global
+  // sidebar cmdk input ("Search menu items..."); the former global `.last()`
+  // lookup could type the degree into that unrelated menu and leave this
+  // required field empty on every Bachelor/Master/Associate submission.
+  const optionRoots = page
+    .locator(
+      '[role="listbox"]:visible, ' +
+        '[data-radix-popper-content-wrapper]:visible, ' +
+        '[data-slot="popover-content"]:visible, ' +
+        '[cmdk-list]:visible, ' +
+        '[data-slot="command-list"]:visible',
+    );
+  // Only trust a popup root after the target trigger reports itself expanded.
+  // The last visible root is the newly opened dropdown; older visible cmdk
+  // roots belong to the persistent sidebar.
+  const rootCount = expanded
+    ? await optionRoots.count().catch(() => 0)
+    : 0;
+  const optionRoot = optionRoots.last();
+
+  let searched = false;
+  if (rootCount > 0) {
+    const commandInput = optionRoot
+      .locator('[cmdk-input], [data-slot="command-input"], input[role="combobox"]')
+      .first();
+    if (
+      (await commandInput.count().catch(() => 0)) &&
+      (await commandInput.isVisible().catch(() => false))
+    ) {
+      await commandInput.fill(expected).catch(() => {});
+      searched = true;
+      await page.waitForTimeout(350);
+    }
+  }
+
   let option = page.getByRole("option", { name: exactOption }).first();
-  if (!(await option.count().catch(() => 0))) {
-    option = page
-      .locator('[cmdk-item], [data-slot="command-item"]')
+  if (!(await option.count().catch(() => 0)) && rootCount > 0) {
+    option = optionRoot
+      .locator(
+        '[cmdk-item], [data-slot="command-item"], ' +
+          '[data-radix-collection-item], [data-value], button',
+      )
       .filter({ hasText: exactOption })
       .first();
+  }
+  if (!(await option.count().catch(() => 0)) && rootCount > 0) {
+    option = optionRoot.getByText(exactOption).first();
   }
 
   let clicked = false;
@@ -686,7 +718,16 @@ async function selectSitApplyingFor(
       .then(() => true)
       .catch(() => false);
   }
-  if (!clicked) await page.keyboard.press("Enter").catch(() => {});
+  if (!clicked && expanded) {
+    // Radix Select supports type-ahead even when its items do not expose
+    // role=option/cmdk attributes. This fallback stays on the focused, expanded
+    // trigger and therefore cannot mutate the global sidebar search input.
+    if (!searched) {
+      await page.keyboard.type(expected, { delay: 45 }).catch(() => {});
+      await page.waitForTimeout(250);
+    }
+    await page.keyboard.press("Enter").catch(() => {});
+  }
 
   await page.waitForTimeout(650);
   const selectedText = (
@@ -694,7 +735,9 @@ async function selectSitApplyingFor(
   ).trim();
   const selected = mapEducationLevel(selectedText) === expected;
   logger.info(
-    `[sit] APPLYPICK label=${expected} clicked=${clicked} selected=${selected}`,
+    `[sit] APPLYPICK label=${expected} expanded=${expanded}` +
+      ` roots=${rootCount} searched=${searched} clicked=${clicked}` +
+      ` selected=${selected}`,
   );
   return selected;
 }
