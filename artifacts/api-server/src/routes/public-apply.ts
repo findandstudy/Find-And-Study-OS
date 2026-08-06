@@ -44,6 +44,8 @@ import { AiLaneQueueError, documentAiScheduler } from "../lib/aiLaneScheduler";
 import { getDocumentAiConnection } from "../lib/documentAiConnection";
 import { getEmbedSigningSecret } from "../lib/embedSigningSecret";
 import { verifyEmbedLeadDocumentSessionToken } from "../lib/embedLeadDocumentSession";
+import { normalizeInboxStudentExtraction } from "../lib/inboxStudentExtraction";
+import { validatePassportNumber } from "@workspace/portal-adapters/identity-validation";
 
 const router: IRouter = Router();
 
@@ -460,6 +462,14 @@ router.post("/public/apply", applyLimiter, applyJson, async (req: Request, res: 
   const loginUrl = `${baseUrl}/login`;
 
   const trimmedPassport = passportNumber ? String(passportNumber).trim() : "";
+
+  if (trimmedPassport && validatePassportNumber(trimmedPassport)) {
+    res.status(422).json({
+      error: "Passport number is not valid. Enter only the number printed on the passport; quotation marks are not allowed.",
+      code: "PASSPORT_NUMBER_INVALID",
+    });
+    return;
+  }
 
   try {
     const [existingUser] = await db.select().from(usersTable).where(eq(usersTable.email, normalizedEmail));
@@ -1261,6 +1271,7 @@ Rules:
   * When a date is ambiguous (e.g. 03/04/2025 could be March 4 or April 3), use the issuing country's convention
   * Always output dates in YYYY-MM-DD format after correctly interpreting the source format
 - CRITICAL - Passport expiry: Check if the passport expiry date has passed relative to today's date. Set passportExpired to true if expired, false if still valid.
+- CRITICAL - Passport number: Use letters and digits only. Never output apostrophes, quotation marks, backticks or OCR punctuation. If any character is ambiguous, set passportNumber to null instead of guessing or deleting the character.
 - For passport documents: extract all passport fields, name, DOB, nationality, issue/expiry dates, mother name, father name (often listed on passport identity pages)
 - For diplomas: extract school name, graduation year, GPA, student name, parent names if visible
 - For transcripts: extract school name, GPA, graduation year, student name
@@ -1500,7 +1511,14 @@ router.post("/public/ai/extract-document", aiExtractIpLimiter, aiExtractSessionL
       }
     }
 
+    extracted = normalizeInboxStudentExtraction(extracted) as Record<string, any>;
     const warnings: string[] = [];
+    if (extracted.passportNumberRejected === true) {
+      warnings.push(
+        "Passport number could not be read reliably. Please enter it manually from the passport; quotation marks are not allowed.",
+      );
+      delete extracted.passportNumberRejected;
+    }
 
     if (extracted.passportExpiry) {
       const parts = String(extracted.passportExpiry).split("-").map(Number);

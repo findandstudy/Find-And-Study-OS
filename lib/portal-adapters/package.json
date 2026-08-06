@@ -5,7 +5,8 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./declarative/schema": "./src/declarative/schema.ts"
+    "./declarative/schema": "./src/declarative/schema.ts",
+    "./identity-validation": "./src/identityValidation.ts"
   },
   "scripts": {
     "test:program-match": "DATABASE_URL=${DATABASE_URL:-postgres://test:test@127.0.0.1:5432/portal_adapters_test} tsx --test ./scripts/test-program-match.ts",

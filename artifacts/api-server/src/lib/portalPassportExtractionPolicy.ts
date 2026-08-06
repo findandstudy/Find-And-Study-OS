@@ -1,4 +1,6 @@
-export const PORTAL_PASSPORT_IDENTITY_EXTRACTION_VERSION = 1;
+import { validatePassportNumber } from "@workspace/portal-adapters/identity-validation";
+
+export const PORTAL_PASSPORT_IDENTITY_EXTRACTION_VERSION = 2;
 
 const normalizedConfidence = (value: unknown): string =>
   String(value ?? "").trim().toLowerCase();
@@ -30,6 +32,18 @@ export function shouldRefreshPassportIdentityExtraction(
   extracted: Record<string, unknown> | null,
   confidenceScore: number,
 ): boolean {
+  const passportNumber = extracted?.passportNumber ?? extracted?.passportNo;
+  if (
+    passportNumber != null &&
+    String(passportNumber).trim() &&
+    validatePassportNumber(String(passportNumber))
+  ) {
+    const version = Number(
+      extracted?.portalPassportIdentityExtractionVersion ?? 0,
+    );
+    return !Number.isFinite(version) ||
+      version < PORTAL_PASSPORT_IDENTITY_EXTRACTION_VERSION;
+  }
   if (hasHighConfidencePassportIdentityExtraction(extracted, confidenceScore)) {
     return false;
   }

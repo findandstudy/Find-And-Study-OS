@@ -142,6 +142,20 @@ test("IDENTITY4 — document proof requires complete high-confidence identity", 
     }),
     null,
   );
+
+  assert.equal(
+    sitPassportIdentityProofFromDocument({
+      extractedData: {
+        firstName: "Aisha",
+        lastName: "Khan",
+        passportNumber: "A0'0458U",
+        identityConfidence: "high",
+      },
+      confidenceScore: 1,
+    }),
+    null,
+    "quoted OCR passport numbers must never become independent identity proof",
+  );
   assert.deepEqual(
     sitPassportIdentityProofFromDocument({
       extractedData: {

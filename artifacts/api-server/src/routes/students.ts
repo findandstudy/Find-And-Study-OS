@@ -38,6 +38,7 @@ import {
   resolveAppliedLevelKey,
 } from "../lib/educationAutoExtract";
 import { authorizeStudentCreationSourceLead } from "../lib/studentCreationSource";
+import { validatePassportNumber } from "@workspace/portal-adapters/identity-validation";
 
 const router: IRouter = Router();
 
@@ -499,9 +500,22 @@ router.post("/students", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES
     sourceLeadId: rawSourceLeadId,
   } = req.body;
   const user = req.user!;
+  const normalizedPassportNumber = passportNumber == null
+    ? ""
+    : String(passportNumber).trim();
 
   if (!firstName || !lastName) {
     res.status(400).json({ error: "firstName and lastName are required" });
+    return;
+  }
+  if (
+    normalizedPassportNumber &&
+    validatePassportNumber(normalizedPassportNumber)
+  ) {
+    res.status(422).json({
+      error: "Passport number is not valid. Enter only the number printed on the passport; quotation marks are not allowed.",
+      code: "PASSPORT_NUMBER_INVALID",
+    });
     return;
   }
   if (
@@ -631,9 +645,9 @@ router.post("/students", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES
     }
   }
 
-  if (passportNumber && passportNumber.trim()) {
+  if (normalizedPassportNumber) {
     const [dupPassport] = await db.select({ id: studentsTable.id }).from(studentsTable)
-      .where(and(eq(studentsTable.passportNumber, passportNumber.trim()), isNull(studentsTable.deletedAt)));
+      .where(and(eq(studentsTable.passportNumber, normalizedPassportNumber), isNull(studentsTable.deletedAt)));
     if (dupPassport) {
       res.status(409).json({ error: "A student with this passport number already exists" });
       return;
@@ -695,7 +709,7 @@ router.post("/students", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES
       nationality: nationality || null,
       dateOfBirth: dateOfBirth || null,
       gender: gender || null,
-      passportNumber: passportNumber ? passportNumber.trim() : null,
+      passportNumber: normalizedPassportNumber || null,
       passportIssueDate: passportIssueDate || null,
       passportExpiry: passportExpiry || null,
       motherName: normBody.motherName ? (normBody.motherName as string) : null,
@@ -1107,8 +1121,18 @@ router.patch("/students/:id", requireAuth, requireAgentStaffPermission("students
       return;
     }
   }
-  if (updates.passportNumber && typeof updates.passportNumber === "string") {
-    const normPassport = (updates.passportNumber as string).trim();
+  if (Object.prototype.hasOwnProperty.call(updates, "passportNumber")) {
+    const normPassport = updates.passportNumber == null
+      ? ""
+      : String(updates.passportNumber).trim();
+    if (normPassport && validatePassportNumber(normPassport)) {
+      res.status(422).json({
+        error: "Passport number is not valid. Enter only the number printed on the passport; quotation marks are not allowed.",
+        code: "PASSPORT_NUMBER_INVALID",
+      });
+      return;
+    }
+    updates.passportNumber = normPassport || null;
     if (normPassport) {
       const [dupPassport] = await db.select({ id: studentsTable.id }).from(studentsTable)
         .where(and(eq(studentsTable.passportNumber, normPassport), isNull(studentsTable.deletedAt)));

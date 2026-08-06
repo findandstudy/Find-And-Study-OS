@@ -25,28 +25,35 @@ function readableFallback(field: string): string {
  * "—" message even though the API had returned the exact blocker.
  */
 export function collectPortalPreflightIssueLabels(rows: unknown[]): string[] {
-  const fields = new Set<string>();
+  const labels = new Set<string>();
 
   for (const raw of rows) {
     const row = raw && typeof raw === "object" ? raw as Record<string, unknown> : {};
     if (Array.isArray(row.missingFields)) {
       for (const field of row.missingFields) {
-        if (typeof field === "string" && field.trim()) fields.add(field.trim());
+        if (typeof field !== "string" || !field.trim()) continue;
+        const key = field.trim();
+        labels.add(PREFLIGHT_FIELD_LABELS[key] ?? readableFallback(key));
       }
     }
     if (Array.isArray(row.incompatibleFields)) {
       for (const issue of row.incompatibleFields) {
         if (!issue || typeof issue !== "object") continue;
         const field = (issue as Record<string, unknown>).field;
-        if (typeof field === "string" && field.trim()) fields.add(field.trim());
+        const reason = (issue as Record<string, unknown>).reason;
+        if (typeof field !== "string" || !field.trim()) continue;
+        const key = field.trim();
+        if (key === "passportIdentityProof" && reason === "verification_unavailable") {
+          labels.add("Passport verification temporarily unavailable — retry shortly");
+        } else {
+          labels.add(PREFLIGHT_FIELD_LABELS[key] ?? readableFallback(key));
+        }
       }
     }
   }
 
-  if (fields.size === 0) {
+  if (labels.size === 0) {
     return ["Passport or required profile information could not be verified"];
   }
-  return Array.from(fields, (field) =>
-    PREFLIGHT_FIELD_LABELS[field] ?? readableFallback(field)
-  );
+  return Array.from(labels);
 }

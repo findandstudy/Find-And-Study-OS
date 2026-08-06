@@ -45,3 +45,17 @@ test("unknown gender is fail-closed", () => {
     null,
   );
 });
+
+test("rejects quoted OCR passport numbers instead of auto-filling them", () => {
+  for (const passportNumber of ["A0'0458U", "A0’0458U", 'A0"0458U', "A0`0458U"]) {
+    const result = normalizeInboxStudentExtraction({ passportNumber });
+    assert.equal(result.passportNumber, null);
+    assert.equal(result.passportNumberRejected, true);
+  }
+});
+
+test("preserves a valid passport number", () => {
+  const result = normalizeInboxStudentExtraction({ passportNumber: " AB1234567 " });
+  assert.equal(result.passportNumber, "AB1234567");
+  assert.equal(result.passportNumberRejected, undefined);
+});

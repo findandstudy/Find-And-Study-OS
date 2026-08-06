@@ -12,11 +12,12 @@ test("every supported portal synchronizes and verifies passport identity", () =>
     source,
     /if \(result\.supported\) \{\s+const identitySync = await autoSyncProfileIdentityFromPassport/,
   );
-  assert.match(
-    source,
-    /if \(result\.supported\) \{\s+const identityProof = await verifyStudentIdentityAgainstPassport/,
-  );
+  assert.match(source, /verifyStudentIdentityAgainstPassport\(\{/);
   assert.match(source, /passportIdentitySyncStatus === "passport_conflict"/);
+  assert.match(source, /const reusableIdentityFailure =/);
+  assert.match(source, /const identityProof = reusableIdentityFailure/);
+  assert.match(source, /identityProof\.status === "ai_unavailable"/);
+  assert.match(source, /"verification_unavailable"/);
   assert.match(source, /result = \{ \.\.\.result, ready: false, incompatibleFields \}/);
 });
 
@@ -42,4 +43,20 @@ test("Missing Documents transition never downgrades an advanced application", ()
     /eq\(applicationsTable\.stage, "inquiry"\)/,
   );
   assert.match(source, /stage: "missing_docs"/);
+});
+
+test("student and public intake boundaries reject malformed passport numbers", () => {
+  for (const path of [
+    "src/routes/students.ts",
+    "src/routes/public-apply.ts",
+    "src/routes/embed.ts",
+  ]) {
+    const source = read(path);
+    assert.match(source, /validatePassportNumber/);
+    assert.match(source, /PASSPORT_NUMBER_INVALID/);
+  }
+
+  const leadConversion = read("src/routes/leads.ts");
+  assert.match(leadConversion, /const safeAiPassportNumber =/);
+  assert.match(leadConversion, /!validatePassportNumber\(aiPassportNumber\)/);
 });

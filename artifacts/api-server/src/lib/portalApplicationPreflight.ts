@@ -10,6 +10,7 @@ import {
   autoRepairInvalidProfileDatesFromPassport,
   autoSyncProfileIdentityFromPassport,
   verifyStudentIdentityAgainstPassport,
+  type PortalPassportIdentitySyncResult,
 } from "./portalProfileAutoExtract.js";
 import { logAudit } from "./auth.js";
 
@@ -45,7 +46,7 @@ export async function prepareApplicationPortalPreflight(opts: {
   const autoFilledFields: string[] = [];
   const enrichmentWarnings: string[] = [];
   let passportIdentityLockedFields = new Set<string>();
-  let passportIdentitySyncStatus: string | null = null;
+  let passportIdentitySyncStatus: PortalPassportIdentitySyncResult["status"] | null = null;
 
   if (opts.autoEnrich !== false && result.supported && !result.ready) {
     const identity = await autoFillMissingProfileFromPassport({
@@ -182,11 +183,25 @@ export async function prepareApplicationPortalPreflight(opts: {
   // have independent, high-confidence proof from the latest passport,
   // including profiles whose fields are already populated.
   if (result.supported) {
-    const identityProof = await verifyStudentIdentityAgainstPassport({
-      studentId: snapshot.studentId,
-      actorUserId: opts.actorUserId,
-      ip: opts.ip,
-    });
+    // The synchronization step reads the same latest passport with the same
+    // confidence contract. Reuse its fail-closed result instead of making an
+    // immediate duplicate AI request when the provider is unavailable or the
+    // document cannot produce proof. A later RUN starts a fresh preflight and
+    // may retry normally.
+    const reusableIdentityFailure =
+      passportIdentitySyncStatus === "no_passport_document" ||
+      passportIdentitySyncStatus === "low_confidence" ||
+      passportIdentitySyncStatus === "unreadable" ||
+      passportIdentitySyncStatus === "ai_unavailable"
+        ? passportIdentitySyncStatus
+        : null;
+    const identityProof = reusableIdentityFailure
+      ? { status: reusableIdentityFailure, fields: [] }
+      : await verifyStudentIdentityAgainstPassport({
+          studentId: snapshot.studentId,
+          actorUserId: opts.actorUserId,
+          ip: opts.ip,
+        });
     const blockingIdentityFields = identityProof.status === "mismatch"
       ? identityProof.fields.filter(
           (field) => !passportIdentityLockedFields.has(field),
@@ -218,7 +233,12 @@ export async function prepareApplicationPortalPreflight(opts: {
       const existing = new Set(incompatibleFields.map((issue) => issue.field));
       for (const field of fields) {
         if (!existing.has(field)) {
-          incompatibleFields.push({ field, reason: "invalid" });
+          incompatibleFields.push({
+            field,
+            reason: identityProof.status === "ai_unavailable"
+              ? "verification_unavailable"
+              : "invalid",
+          });
           existing.add(field);
         }
       }

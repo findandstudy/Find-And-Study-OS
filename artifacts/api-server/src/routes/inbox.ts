@@ -4471,6 +4471,7 @@ Rules:
 - Always normalize dates to YYYY-MM-DD format
 - For nationality: always return the full country name (e.g. "Turkey" not "Turkish")
 - For a passport, read Sex/Gender and Date of Issue explicitly. Convert M to male and F to female.
+- For a passport number, use letters and digits only. Never output apostrophes, quotation marks, backticks or OCR punctuation. If any character is ambiguous, return null instead of guessing or deleting it.
 - For a final diploma/certificate/transcript, graduationYear is the final examination or completion year. Do not use an attestation/legalization date.
 - For marks/GPA, read BOTH "Marks obtained" and "Total marks"/"out of". Never return a numerator such as "955" without its printed denominator. Do not invent a 4-point scale.
 - If multiple totals are visible, use the overall/final grand total, not one subject or one part.

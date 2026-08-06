@@ -96,6 +96,9 @@ Return ONLY one JSON object with these keys:
   "confidence": "high|medium|low"
 }
 Never guess. Passport number must be cross-checked against the MRZ when present.
+Passport numbers contain letters and digits only. Never output apostrophes,
+quotation marks, backticks or OCR punctuation. If any character is ambiguous,
+set passportNumber to null instead of guessing or removing the character.
 identityConfidence applies ONLY to firstName, lastName and passportNumber. Set it
 to high only when all three are clearly legible and the passport number agrees
 with the MRZ when an MRZ is present. General confidence may remain medium when a
@@ -292,7 +295,17 @@ async function loadPassportExtraction(
           confidenceScore,
         })
         .where(eq(documentsTable.id, document.id));
-    } catch {
+    } catch (error) {
+      const details = error && typeof error === "object"
+        ? error as { name?: unknown; code?: unknown; status?: unknown }
+        : {};
+      console.warn("[portal-passport] AI identity extraction unavailable", {
+        studentId,
+        documentId: document.id,
+        errorName: String(details.name ?? "Error").slice(0, 80),
+        errorCode: String(details.code ?? "unknown").slice(0, 80),
+        status: Number(details.status) || undefined,
+      });
       return { status: "ai_unavailable", document };
     }
   }

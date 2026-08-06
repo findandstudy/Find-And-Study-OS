@@ -13,7 +13,7 @@ export interface PortalPreflightManifest {
 
 export interface PortalPreflightIssue {
   field: string;
-  reason: "missing" | "invalid";
+  reason: "missing" | "invalid" | "verification_unavailable";
 }
 
 export interface PortalPreflightResult {

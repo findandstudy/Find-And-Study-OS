@@ -93,6 +93,10 @@ describe("validatePassportNumber", () => {
   invalid("AB/123456", "contains slash", "invalid characters");
   invalid("AB_123456", "contains underscore", "invalid characters");
   invalid("AB@123456", "contains @", "invalid characters");
+  invalid("A0'0458U", "contains ASCII apostrophe", "invalid characters");
+  invalid("A0’0458U", "contains curly apostrophe", "invalid characters");
+  invalid('A0"0458U', "contains quotation mark", "invalid characters");
+  invalid("A0`0458U", "contains backtick", "invalid characters");
 });
 
 // ---------------------------------------------------------------------------

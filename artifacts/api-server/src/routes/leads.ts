@@ -34,6 +34,7 @@ import {
   prepareRoutedPortalDraftPreflight,
 } from "../lib/portalDraftPreflight.js";
 import { resolveResidenceAddress } from "../lib/studentAddressDefaults";
+import { validatePassportNumber } from "@workspace/portal-adapters/identity-validation";
 import { buildSignedStudentPhotoPath } from "@workspace/portal-adapters";
 
 const router: IRouter = Router();
@@ -1382,6 +1383,11 @@ router.post("/leads/:id/convert", requireAuth, requireRole(...STAFF_ROLES, ...AG
     postalCode: s(aiData.postalCode),
     nationality: lead.nationality || s(aiData.nationality),
   });
+  const aiPassportNumber = s(aiData.passportNumber);
+  const safeAiPassportNumber = aiPassportNumber &&
+    !validatePassportNumber(aiPassportNumber)
+    ? aiPassportNumber.trim()
+    : null;
 
   const studentValues: any = {
     firstName: lead.firstName,
@@ -1395,7 +1401,7 @@ router.post("/leads/:id/convert", requireAuth, requireRole(...STAFF_ROLES, ...AG
     status: "active",
     motherName: s(aiData.motherName) || null,
     fatherName: s(aiData.fatherName) || null,
-    passportNumber: s(aiData.passportNumber) || null,
+    passportNumber: safeAiPassportNumber,
     passportIssueDate: s(aiData.passportIssueDate) || null,
     passportExpiry: s(aiData.passportExpiry) || null,
     dateOfBirth: s(aiData.dateOfBirth) || null,

@@ -23,3 +23,19 @@ test("never renders an empty dash for an unknown blocker", () => {
     ["Passport or required profile information could not be verified"],
   );
 });
+
+test("distinguishes temporary AI verification failure from an invalid passport", () => {
+  assert.deepEqual(
+    collectPortalPreflightIssueLabels([
+      {
+        incompatibleFields: [
+          {
+            field: "passportIdentityProof",
+            reason: "verification_unavailable",
+          },
+        ],
+      },
+    ]),
+    ["Passport verification temporarily unavailable — retry shortly"],
+  );
+});

@@ -9,6 +9,7 @@
 // ---------------------------------------------------------------------------
 
 import { expandProgramTokens, fold } from "../../programMatch.js";
+import { validatePassportNumber } from "../../identityValidation.js";
 import type { SubmitProfile } from "../../types.js";
 
 export type SitIdentityField = "firstName" | "lastName" | "passportNumber";
@@ -137,7 +138,12 @@ export function sitPassportIdentityProofFromDocument(input: {
     "passportNumber",
     "passportNo",
   ]);
-  if (!firstName || !lastName || !normalizeSitPassport(passportNumber)) return null;
+  if (
+    !firstName ||
+    !lastName ||
+    !normalizeSitPassport(passportNumber) ||
+    validatePassportNumber(passportNumber)
+  ) return null;
 
   return {
     firstName,

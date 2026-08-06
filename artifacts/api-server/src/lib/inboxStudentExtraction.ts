@@ -1,4 +1,5 @@
 import { normalizeGpaEvidenceTo100 } from "./gpaNormalize";
+import { validatePassportNumber } from "@workspace/portal-adapters/identity-validation";
 
 const MALE_VALUES = new Set(["m", "male", "man", "erkek"]);
 const FEMALE_VALUES = new Set(["f", "female", "woman", "kadın", "kadin"]);
@@ -21,6 +22,20 @@ export function normalizeInboxStudentExtraction(
   input: Record<string, unknown>,
 ): Record<string, unknown> {
   const extracted: Record<string, unknown> = { ...input };
+
+  if (extracted.passportNumber != null && extracted.passportNumber !== "") {
+    const passportNumber = String(extracted.passportNumber).trim();
+    if (validatePassportNumber(passportNumber)) {
+      // Never auto-fill a passport number containing OCR punctuation or other
+      // invalid evidence. The raw value is deliberately not returned to the
+      // browser because a quoted/ambiguous number must be re-read by a human
+      // or AI rather than copied into the student's identity record.
+      extracted.passportNumber = null;
+      extracted.passportNumberRejected = true;
+    } else {
+      extracted.passportNumber = passportNumber;
+    }
+  }
 
   if (extracted.gender != null && extracted.gender !== "") {
     extracted.gender = normalizeGender(extracted.gender);

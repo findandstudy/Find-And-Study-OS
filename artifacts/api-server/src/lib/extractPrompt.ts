@@ -55,6 +55,7 @@ Rules:
   * When the printed number and the MRZ disagree, PREFER the MRZ value and note the discrepancy in extractedNotes.
   * NEVER return placeholder, status, or pending values such as "pending", "N/A", "Applying", "Applied", "TBD", or similar. If you cannot read the number confidently, return null.
   * NEVER guess or reconstruct a partially-visible passport number. Return null if any digit or letter is unclear.
+  * Passport numbers contain letters and digits only. NEVER output apostrophes, quotation marks, backticks or OCR punctuation. Do not silently remove an uncertain character; return null instead.
   * Do NOT confuse a National ID number (e.g. Pakistan's CNIC format XX-XXXXXXX-X with two hyphens) with a passport number. Passport numbers are typically 7–12 alphanumeric characters without hyphens.
 - CRITICAL - Date logical consistency:
   * Verify that dateOfBirth < passportIssueDate < passportExpiry. If a date you have extracted violates this order, you have made a date-format error — re-read and correct it before returning.

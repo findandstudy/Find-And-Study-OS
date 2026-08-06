@@ -106,6 +106,7 @@ import {
   resolveEmbedChatLocale,
   type EmbedChatLocale,
 } from "../lib/embedChatI18n";
+import { validatePassportNumber } from "@workspace/portal-adapters/identity-validation";
 
 const TR_MAP: Record<string, string> = { "ç":"C","Ç":"C","ğ":"G","Ğ":"G","ı":"I","İ":"I","ö":"O","Ö":"O","ş":"S","Ş":"S","ü":"U","Ü":"U" };
 function tlu(v: any, max: number): string | null {
@@ -1535,6 +1536,19 @@ router.post("/public/embed/:slug/apply", embedSubmitLimiter, embedApplyJson, asy
     res.status(400).json({ error: "firstName, lastName, and email are required" });
     return;
   }
+  const normalizedPassportNumber = passportNumber == null
+    ? ""
+    : String(passportNumber).trim();
+  if (
+    normalizedPassportNumber &&
+    validatePassportNumber(normalizedPassportNumber)
+  ) {
+    res.status(422).json({
+      error: "Passport number is not valid. Enter only the number printed on the passport; quotation marks are not allowed.",
+      code: "PASSPORT_NUMBER_INVALID",
+    });
+    return;
+  }
   {
     const badField = firstNonLatinNameField([
       ["firstName", firstName], ["lastName", lastName],
@@ -1782,7 +1796,7 @@ router.post("/public/embed/:slug/apply", embedSubmitLimiter, embedApplyJson, asy
           gender: safeGender,
           motherName: tlu(motherName, 100),
           fatherName: tlu(fatherName, 100),
-          passportNumber: s(passportNumber, 50),
+          passportNumber: s(normalizedPassportNumber, 50),
           passportIssueDate: s(passportIssueDate, 20),
           passportExpiry: s(passportExpiry, 20),
           address: s(address, 300),

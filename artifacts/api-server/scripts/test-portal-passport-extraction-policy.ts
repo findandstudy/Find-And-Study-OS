@@ -50,3 +50,21 @@ test("explicit medium identity confidence cannot be upgraded by general confiden
 test("missing extraction is eligible for a first read", () => {
   assert.equal(shouldRefreshPassportIdentityExtraction(null, 0), true);
 });
+
+test("a previously accepted quoted passport number is re-read once", () => {
+  const malformed = {
+    firstName: "Aisha",
+    lastName: "Khan",
+    passportNumber: "A0'0458U",
+    identityConfidence: "high",
+    confidence: "high",
+    portalPassportIdentityExtractionVersion: 1,
+  };
+  assert.equal(shouldRefreshPassportIdentityExtraction(malformed, 1), true);
+
+  const stamped = stampPassportIdentityExtraction({
+    ...malformed,
+    passportNumber: null,
+  });
+  assert.equal(shouldRefreshPassportIdentityExtraction(stamped, 1), false);
+});

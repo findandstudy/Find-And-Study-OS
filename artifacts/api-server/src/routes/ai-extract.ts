@@ -30,6 +30,7 @@ import { EXTRACT_PROMPT } from "../lib/extractPrompt";
 import { runEducationExtraction } from "../lib/educationAutoExtract";
 import { AiLaneQueueError, documentAiScheduler } from "../lib/aiLaneScheduler";
 import { getDocumentAiConnection } from "../lib/documentAiConnection";
+import { normalizeInboxStudentExtraction } from "../lib/inboxStudentExtraction";
 
 // AI extraction endpoints accept base64-encoded PDF/image documents in the
 // JSON body. Base64 inflates payload size by ~33%, and the route itself
@@ -250,7 +251,14 @@ router.post("/ai/extract-document", requireAuth, aiRateLimit(10, 15 * 60 * 1000)
       applyExtractorNormalize(extractor, extracted);
     }
 
+    extracted = normalizeInboxStudentExtraction(extracted) as Record<string, any>;
     const warnings: string[] = [];
+    if (extracted.passportNumberRejected === true) {
+      warnings.push(
+        "Passport number could not be read reliably. Please enter it manually from the passport; quotation marks are not allowed.",
+      );
+      delete extracted.passportNumberRejected;
+    }
 
     if (extracted.passportExpiry) {
       const parts = String(extracted.passportExpiry).split("-").map(Number);
