@@ -16,6 +16,7 @@ import { eq } from "drizzle-orm";
 import { buildProgramFacetConditions } from "../../routes/course-finder";
 import { isProgramSearchToolEnabled } from "./knowledgeSources";
 import type { ProgramScope } from "./aiAgentConfig";
+import { normalizeProgramSearchInput } from "./programSearchIntent";
 
 export const SEARCH_PROGRAMS_TOOL_NAME = "searchPrograms";
 const MAX_RESULTS = 8;
@@ -131,7 +132,8 @@ export async function executeSearchProgramsTool(
     return { disabled: true, count: 0, results: [] };
   }
 
-  const params = scopedParams(input, scope, enforcedUniversityId);
+  const normalizedInput = normalizeProgramSearchInput(input, enforcedUniversityId);
+  const params = scopedParams(normalizedInput, scope, enforcedUniversityId);
   const where = buildProgramFacetConditions(params, undefined, { fuzzyField: true });
 
   const rows = await db

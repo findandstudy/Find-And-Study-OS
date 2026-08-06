@@ -14,6 +14,10 @@ import {
   resolveEmbedChatLocale,
 } from "../src/lib/embedChatI18n";
 import { buildKnownEmbedContactInstruction } from "../src/lib/inbox/embedChatIdentityPrompt";
+import {
+  expandProgramFieldIntent,
+  normalizeProgramSearchInput,
+} from "../src/lib/inbox/programSearchIntent";
 
 const secret = "embed-chatbot-regression-secret";
 const sessionId = "12345678-1234-4abc-8def-1234567890ab";
@@ -24,6 +28,14 @@ const botSource = readFileSync(
 );
 const programToolSource = readFileSync(
   new URL("../src/lib/inbox/programSearchTool.ts", import.meta.url),
+  "utf8",
+);
+const knowledgeIngestSource = readFileSync(
+  new URL("../src/lib/inbox/knowledgeIngest.ts", import.meta.url),
+  "utf8",
+);
+const knowledgeRetrievalSource = readFileSync(
+  new URL("../src/lib/inbox/knowledgeRetrieval.ts", import.meta.url),
   "utf8",
 );
 const storageSource = readFileSync(
@@ -189,8 +201,16 @@ test("assistant logos use an admin-only, image-only upload flow", () => {
 test("university scope is enforced below the prompt layer", () => {
   assert.match(
     botSource,
-    /const ragChunks = scopedUniversityId[\s\S]*\? \[\][\s\S]*: await retrieveKnowledgeChunks/,
+    /const ragChunks = scopedUniversityId[\s\S]*sourceTypes: \["academy"\][\s\S]*academyCountryCode: scopedUniversityCountryCode/,
   );
+  assert.match(
+    botSource,
+    /destination procedures and country guidance[\s\S]*Never use or mention another destination country/i,
+  );
+  assert.match(routeSource, /canonicalCountry\(university\.country\)/);
+  assert.match(routeSource, /universityCountryCode: universityCountryCode \|\| null/);
+  assert.match(knowledgeIngestSource, /academyCountryCode: document\.countryCode/);
+  assert.match(knowledgeRetrievalSource, /metadata}->>'academyCountryCode'/);
   assert.match(botSource, /enforcedUniversityId: scopedUniversityId/);
   assert.match(botSource, /requestsEmbedHumanHandoff\(msg\.content\)/);
   assert.match(
@@ -200,5 +220,23 @@ test("university scope is enforced below the prompt layer", () => {
   assert.match(
     programToolSource,
     /Number\.isInteger\(enforcedUniversityId\)[\s\S]*String\(enforcedUniversityId\)/,
+  );
+});
+
+test("vague multilingual program intent is normalized inside university scope", () => {
+  assert.match(expandProgramFieldIntent("bilgisayar bölümü") ?? "", /Computer/);
+  assert.match(expandProgramFieldIntent("mühendislik programı") ?? "", /Engineering/);
+  assert.match(expandProgramFieldIntent("psicología") ?? "", /Psychology/);
+  assert.match(expandProgramFieldIntent("هندسة الحاسوب") ?? "", /Computer/);
+  assert.doesNotMatch(expandProgramFieldIntent("multiple studies") ?? "", /Medicine/);
+  assert.doesNotMatch(expandProgramFieldIntent("flawless design") ?? "", /Law/);
+
+  assert.deepEqual(
+    normalizeProgramSearchInput({ search: "bilgisayar bölümü" }, 42),
+    { search: undefined, field: "bilgisayar bölümü,Computer" },
+  );
+  assert.deepEqual(
+    normalizeProgramSearchInput({ search: "Beykent", field: "Business" }),
+    { search: "Beykent", field: "Business" },
   );
 });

@@ -20,6 +20,7 @@ import {
   messagesTable,
   integrationsTable,
   aiExtractorsTable,
+  canonicalCountry,
 } from "@workspace/db";
 import { eq, ilike, sql, and, or, asc, desc, inArray, isNotNull, isNull } from "drizzle-orm";
 import { requireAuth, requireRole, logAudit } from "../lib/auth";
@@ -2003,6 +2004,8 @@ type ChatScopeMetadata = {
   widgetSlug: string;
   universityId: number;
   universityName: string;
+  universityCountry?: string | null;
+  universityCountryCode?: string | null;
   sourcePageUrl: string | null;
   sourceWebsite: string | null;
   assistantName: string;
@@ -2134,13 +2137,33 @@ router.post(
       return;
     }
     const [university] = await db
-      .select({ id: universitiesTable.id, name: universitiesTable.name, logoUrl: universitiesTable.logoUrl })
+      .select({
+        id: universitiesTable.id,
+        name: universitiesTable.name,
+        logoUrl: universitiesTable.logoUrl,
+        country: universitiesTable.country,
+        countryCode: countriesTable.code,
+      })
       .from(universitiesTable)
+      .leftJoin(
+        countriesTable,
+        sql`lower(${countriesTable.name}) = lower(${universitiesTable.country})`,
+      )
       .where(and(eq(universitiesTable.id, universityId), eq(universitiesTable.isActive, true)))
       .limit(1);
     if (!university) {
       res.status(409).json({ error: "Assigned university is unavailable." });
       return;
+    }
+    let universityCountryCode = university.countryCode?.trim().toUpperCase() ?? "";
+    if (!universityCountryCode && university.country) {
+      const canonicalName = canonicalCountry(university.country) ?? university.country.trim();
+      const [catalogCountry] = await db
+        .select({ code: countriesTable.code })
+        .from(countriesTable)
+        .where(sql`lower(${countriesTable.name}) = lower(${canonicalName})`)
+        .limit(1);
+      universityCountryCode = catalogCountry?.code?.trim().toUpperCase() ?? "";
     }
 
     const pageUrl = sanitizePublicUrl(sourcePageUrl) || null;
@@ -2207,6 +2230,8 @@ router.post(
         widgetSlug: slug,
         universityId: university.id,
         universityName: university.name,
+        universityCountry: university.country,
+        universityCountryCode: universityCountryCode || null,
         sourcePageUrl: pageUrl,
         sourceWebsite: website,
         assistantName,

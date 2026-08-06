@@ -13,7 +13,7 @@
 // (ILIKE keyword match). Lexical ensures rare terms, acronyms, and proper
 // nouns (e.g. "NAWA") are never missed by cosine distance alone.
 import { db, knowledgeChunksTable, knowledgeSourcesTable } from "@workspace/db";
-import { and, eq, inArray, ilike, or } from "drizzle-orm";
+import { and, eq, inArray, ilike, or, sql } from "drizzle-orm";
 import { embedQuery } from "./knowledgeEmbed";
 
 export interface RetrievedChunk {
@@ -88,13 +88,21 @@ function queryTerms(query: string): string[] {
  */
 export async function retrieveKnowledgeChunks(
   query: string,
-  options: { sourceTypes?: readonly RetrievalSourceType[] } = {},
+  options: {
+    sourceTypes?: readonly RetrievalSourceType[];
+    academyCountryCode?: string;
+  } = {},
 ): Promise<RetrievedChunk[]> {
   const trimmed = query.trim();
   if (!trimmed) return [];
   const sourceTypes = options.sourceTypes?.length
     ? [...options.sourceTypes]
     : [...RAG_SOURCE_TYPES];
+  const academyCountryCode = options.academyCountryCode?.trim().toUpperCase() ?? "";
+  if (academyCountryCode && !/^[A-Z]{2,3}$/.test(academyCountryCode)) return [];
+  // Country scoping applies only to the curated Academy source. Mixing it with
+  // admin file/url/text sources could reintroduce cross-university knowledge.
+  if (academyCountryCode && sourceTypes.some((type) => type !== "academy")) return [];
 
   try {
     const activeSourceIds = await db
@@ -111,6 +119,9 @@ export async function retrieveKnowledgeChunks(
     const idSet = new Set(activeSourceIds.map((s) => s.id));
     const nameById = new Map(activeSourceIds.map((s) => [s.id, s.name]));
     const sourceIdList = [...idSet];
+    const chunkScope = academyCountryCode
+      ? sql`upper(coalesce(${knowledgeChunksTable.metadata}->>'academyCountryCode', '')) = ${academyCountryCode}`
+      : undefined;
 
     // ── A) Vector channel ──────────────────────────────────────────────────
     // Embed the query, brute-force cosine against all active chunks, keep
@@ -125,7 +136,7 @@ export async function retrieveKnowledgeChunks(
           embedding: knowledgeChunksTable.embedding,
         })
         .from(knowledgeChunksTable)
-        .where(inArray(knowledgeChunksTable.sourceId, sourceIdList));
+        .where(and(inArray(knowledgeChunksTable.sourceId, sourceIdList), chunkScope));
 
       vectorScored = rows
         .map((r) => ({
@@ -155,7 +166,11 @@ export async function retrieveKnowledgeChunks(
           content: knowledgeChunksTable.content,
         })
         .from(knowledgeChunksTable)
-        .where(and(inArray(knowledgeChunksTable.sourceId, sourceIdList), or(...orClauses)))
+        .where(and(
+          inArray(knowledgeChunksTable.sourceId, sourceIdList),
+          chunkScope,
+          or(...orClauses),
+        ))
         .limit(LEXICAL_LIMIT);
       lexical = lexRows.map((r) => ({
         sourceId: r.sourceId,

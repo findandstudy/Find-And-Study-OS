@@ -3,6 +3,9 @@ import {
   conversationsTable,
   messagesTable,
   externalContactsTable,
+  countriesTable,
+  universitiesTable,
+  canonicalCountry,
 } from "@workspace/db";
 import crypto from "node:crypto";
 import { and, asc, eq, sql } from "drizzle-orm";
@@ -835,6 +838,8 @@ export async function maybeAutoReply(opts: {
   const rawScope = conversationMetadata.chatbotScope;
   let scopedUniversityId: number | undefined;
   let scopedUniversityName = "";
+  let scopedUniversityCountry = "";
+  let scopedUniversityCountryCode = "";
   let scopedAssistantName = "";
   let scopedLanguage: BotLanguage | null = null;
   if (rawScope && typeof rawScope === "object") {
@@ -845,22 +850,60 @@ export async function maybeAutoReply(opts: {
     const assistantName = typeof scope.assistantName === "string"
       ? scope.assistantName.trim()
       : "";
+    const universityCountry = typeof scope.universityCountry === "string"
+      ? scope.universityCountry.trim()
+      : "";
+    const universityCountryCode = typeof scope.universityCountryCode === "string"
+      ? scope.universityCountryCode.trim().toUpperCase()
+      : "";
     const universityId = Number(scope.universityId);
     scopedLanguage = normalizeEmbedChatLocale(scope.language);
     if (universityName && Number.isInteger(universityId) && universityId > 0) {
       scopedUniversityId = universityId;
       scopedUniversityName = universityName;
+      scopedUniversityCountry = universityCountry;
+      scopedUniversityCountryCode = /^[A-Z]{2,3}$/.test(universityCountryCode)
+        ? universityCountryCode
+        : "";
       scopedAssistantName = assistantName;
     }
+  }
+
+  // Backward compatibility for conversations opened before country metadata
+  // was added. Resolve from the server-owned university record and fail closed
+  // if the catalog cannot map the university country to an ISO code.
+  if (scopedUniversityId && !scopedUniversityCountryCode) {
+    const [universityScope] = await db
+      .select({ country: universitiesTable.country })
+      .from(universitiesTable)
+      .where(eq(universitiesTable.id, scopedUniversityId))
+      .limit(1);
+    scopedUniversityCountry = universityScope?.country?.trim() ?? "";
+    const canonicalName = canonicalCountry(scopedUniversityCountry) ?? scopedUniversityCountry;
+    const [catalogCountry] = canonicalName
+      ? await db
+          .select({ code: countriesTable.code })
+          .from(countriesTable)
+          .where(sql`lower(${countriesTable.name}) = lower(${canonicalName})`)
+          .limit(1)
+      : [];
+    const resolvedCode = catalogCountry?.code?.trim().toUpperCase() ?? "";
+    scopedUniversityCountryCode = /^[A-Z]{2,3}$/.test(resolvedCode) ? resolvedCode : "";
   }
 
   const language = detectLanguage(msg.content, scopedLanguage ?? "en");
   // University widgets fail closed: global free-form knowledge sources and the
   // global knowledgeBase are intentionally excluded because they may contain
-  // other universities. The live program tool is independently hard-filtered
-  // by scopedUniversityId below.
+  // other universities. Only student-safe Academy chunks for the university's
+  // own country are allowed. The live program tool is independently hard-
+  // filtered by scopedUniversityId below.
   const ragChunks = scopedUniversityId
-    ? []
+    ? scopedUniversityCountryCode
+      ? await retrieveKnowledgeChunks(msg.content, {
+          sourceTypes: ["academy"],
+          academyCountryCode: scopedUniversityCountryCode,
+        })
+      : []
     : await retrieveKnowledgeChunks(msg.content);
   let systemPrompt = isInternal
     ? [
@@ -889,6 +932,9 @@ export async function maybeAutoReply(opts: {
       `- Your public title is "${scopedAssistantName || `${scopedUniversityName} Yetkili Temsilci Başvuru Asistanı`}".`,
       `- You are the authorized representative application assistant for ${scopedUniversityName}.`,
       `- Discuss, recommend, search and present ONLY ${scopedUniversityName}. Never name, compare, suggest or redirect the visitor to another university.`,
+      scopedUniversityCountry
+        ? `- For destination procedures and country guidance, use only retrieved Academy excerpts for ${scopedUniversityCountry}. Never use or mention another destination country's procedures.`
+        : "- Destination-country guidance is unavailable for this university; ask the team instead of guessing.",
       `- If the answer for ${scopedUniversityName} is unavailable, say you will ask the team; never fill the gap with another university.`,
       "- Do not claim to be the university's official internal office. If directly asked, state transparently that you are the university's authorized representative application assistant.",
       "- A visitor request for a human advisor, distrust of the AI, or uncertainty about representation requires a human handoff.",

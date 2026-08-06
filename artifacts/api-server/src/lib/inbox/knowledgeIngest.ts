@@ -36,6 +36,10 @@ export async function ingestKnowledgeSource(sourceId: number): Promise<void> {
     const config = (source.config ?? {}) as Record<string, unknown>;
     let text = "";
     let extra: Record<string, unknown> = {};
+    let preparedChunks: Array<{
+      content: string;
+      metadata: Record<string, unknown>;
+    }> | null = null;
 
     if (source.type === "file") {
       const fileConfig = config as unknown as FileSourceConfig;
@@ -51,6 +55,23 @@ export async function ingestKnowledgeSource(sourceId: number): Promise<void> {
     } else if (source.type === "academy") {
       const result = await extractAcademyDestinations();
       text = result.text;
+      let remainingChars = MAX_SOURCE_CHARS;
+      preparedChunks = [];
+      for (const document of result.documents) {
+        if (remainingChars <= 0) break;
+        const boundedText = document.text.slice(0, remainingChars);
+        remainingChars -= boundedText.length;
+        for (const content of chunkText(boundedText)) {
+          preparedChunks.push({
+            content,
+            metadata: {
+              academyCountryCode: document.countryCode,
+              academyCountryName: document.countryName,
+              academyTitle: document.title,
+            },
+          });
+        }
+      }
       extra = {
         sourceVersion: result.sourceVersion,
         fetchedAt: result.fetchedAt,
@@ -97,7 +118,11 @@ export async function ingestKnowledgeSource(sourceId: number): Promise<void> {
       text = text.slice(0, MAX_SOURCE_CHARS);
     }
 
-    const chunks = chunkText(text);
+    const chunkRecords = preparedChunks ?? chunkText(text).map((content) => ({
+      content,
+      metadata: {},
+    }));
+    const chunks = chunkRecords.map((chunk) => chunk.content);
     if (chunks.length === 0) {
       throw new Error("Text could not be split into chunks.");
     }
@@ -113,7 +138,7 @@ export async function ingestKnowledgeSource(sourceId: number): Promise<void> {
           embedding: embeddings[i],
           tokenCount: estimateTokenCount(chunks[i]),
           chunkIndex: i,
-          metadata: {},
+          metadata: chunkRecords[i].metadata,
         });
       }
       await tx

@@ -69,12 +69,47 @@ test("Academy document includes only published lessons for active destinations",
 
   assert.equal(result.countryCount, 1);
   assert.equal(result.contentCount, 1);
+  assert.equal(result.documents.length, 1);
+  assert.equal(result.documents[0].countryCode, "TR");
+  assert.equal(result.documents[0].countryName, "Türkiye");
   assert.match(result.text, /Türkiye/);
   assert.match(result.text, /Apply with your passport/);
   assert.doesNotMatch(result.text, /Do not expose/);
   assert.doesNotMatch(result.text, /Partner-only/);
   assert.doesNotMatch(result.text, /Placeholder/);
   assert.doesNotMatch(result.text, /\.secret/);
+});
+
+test("Academy documents keep destination countries in separate records", () => {
+  const result = buildAcademyDestinationDocument(countries, {
+    success: true,
+    contents: [
+      {
+        id: "tr-residence",
+        title: "Student residence permit",
+        type: "lesson",
+        status: "published",
+        countryId: "tr",
+        content: "<p>Türkiye residence permit guidance.</p>",
+      },
+      {
+        id: "lv-residence",
+        title: "Residence permit",
+        type: "lesson",
+        status: "published",
+        countryId: "lv",
+        content: "<p>Latvia residence permit guidance.</p>",
+      },
+    ],
+  });
+
+  assert.deepEqual(result.documents.map((document) => document.countryCode), ["LV", "TR"]);
+  const turkey = result.documents.find((document) => document.countryCode === "TR");
+  const latvia = result.documents.find((document) => document.countryCode === "LV");
+  assert.match(turkey?.text ?? "", /Türkiye residence permit guidance/);
+  assert.doesNotMatch(turkey?.text ?? "", /Latvia residence permit guidance/);
+  assert.match(latvia?.text ?? "", /Latvia residence permit guidance/);
+  assert.doesNotMatch(latvia?.text ?? "", /Türkiye residence permit guidance/);
 });
 
 test("Academy document removes internal commission and credential blocks", () => {

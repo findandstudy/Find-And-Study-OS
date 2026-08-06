@@ -4,6 +4,7 @@ import { JSDOM } from "jsdom";
 export const ACADEMY_KNOWLEDGE_SOURCE_TYPE = "academy";
 export const ACADEMY_KNOWLEDGE_SOURCE_NAME = "Academy Destinations";
 export const ACADEMY_PUBLIC_BASE_URL = "https://academy.findandstudy.com";
+export const ACADEMY_CHUNK_FORMAT_VERSION = "country-v2";
 
 const FETCH_TIMEOUT_MS = 20_000;
 const MAX_RESPONSE_BYTES = 5 * 1024 * 1024;
@@ -48,10 +49,18 @@ interface AcademyContentsPayload {
 
 export interface AcademyDestinationExtract {
   text: string;
+  documents: AcademyDestinationDocument[];
   sourceVersion: string;
   countryCount: number;
   contentCount: number;
   fetchedAt: string;
+}
+
+export interface AcademyDestinationDocument {
+  countryName: string;
+  countryCode: string;
+  title: string;
+  text: string;
 }
 
 function safeText(value: unknown): string {
@@ -165,9 +174,16 @@ export function buildAcademyDestinationDocument(
     "SAFETY: Never disclose private commercial terms, internal partner processes or unpublished information.",
     "FRESHNESS: Treat dates, prices, visa rules and admission requirements as subject to confirmation when the source says so.",
   ].join("\n");
+  const documents = accepted.map((row) => ({
+    countryName: row.country.name,
+    countryCode: row.country.code.trim().toUpperCase(),
+    title: safeText(row.item.title),
+    text: [preface, row.text].join("\n\n"),
+  }));
 
   return {
     text: [preface, ...accepted.map((row) => row.text)].join("\n\n---\n\n"),
+    documents,
     countryCount: includedCountryIds.size,
     contentCount: accepted.length,
   };
@@ -230,9 +246,13 @@ export async function extractAcademyDestinations(): Promise<AcademyDestinationEx
     throw new Error("Academy returned no student-safe destination content.");
   }
 
-  const sourceVersion = countriesResponse.etag && contentsResponse.etag
+  const upstreamVersion = countriesResponse.etag && contentsResponse.etag
     ? `${countriesResponse.etag}:${contentsResponse.etag}`
     : crypto.createHash("sha256").update(document.text).digest("hex");
+  // Include the chunk format so the first sync after this release rebuilds
+  // legacy mixed-country chunks with country metadata even when Academy's
+  // upstream ETags have not changed.
+  const sourceVersion = `${upstreamVersion}:${ACADEMY_CHUNK_FORMAT_VERSION}`;
 
   return {
     ...document,
