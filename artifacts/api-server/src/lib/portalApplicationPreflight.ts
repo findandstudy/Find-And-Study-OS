@@ -224,6 +224,15 @@ export async function prepareApplicationPortalPreflight(opts: {
       // intentionally authoritative. Keep the non-sensitive warning for audit
       // visibility, but do not let the read-only verifier undo that decision.
       enrichmentWarnings.push("passportIdentity:manual_override");
+    } else if (identityProof.status === "ai_unavailable") {
+      // The deterministic preflight above has already validated the CRM
+      // identity fields and confirmed the required passport document exists.
+      // A temporary provider outage must not turn otherwise valid, previously
+      // working applications into an "invalid passport" failure across every
+      // portal lane. Keep the outage visible in the audit trail, but let the
+      // worker's independent identity validation remain the final fail-closed
+      // guard for malformed values (including OCR quotes/apostrophes).
+      enrichmentWarnings.push("passportIdentity:verification_unavailable");
     } else if (identityProof.status !== "verified") {
       enrichmentWarnings.push(`passportIdentity:${identityProof.status}`);
       const fields = blockingIdentityFields.length > 0
@@ -235,9 +244,7 @@ export async function prepareApplicationPortalPreflight(opts: {
         if (!existing.has(field)) {
           incompatibleFields.push({
             field,
-            reason: identityProof.status === "ai_unavailable"
-              ? "verification_unavailable"
-              : "invalid",
+            reason: "invalid",
           });
           existing.add(field);
         }

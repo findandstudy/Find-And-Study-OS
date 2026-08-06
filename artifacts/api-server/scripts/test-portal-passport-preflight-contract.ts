@@ -16,8 +16,14 @@ test("every supported portal synchronizes and verifies passport identity", () =>
   assert.match(source, /passportIdentitySyncStatus === "passport_conflict"/);
   assert.match(source, /const reusableIdentityFailure =/);
   assert.match(source, /const identityProof = reusableIdentityFailure/);
-  assert.match(source, /identityProof\.status === "ai_unavailable"/);
-  assert.match(source, /"verification_unavailable"/);
+  assert.match(
+    source,
+    /else if \(identityProof\.status === "ai_unavailable"\) \{[\s\S]*passportIdentity:verification_unavailable/,
+  );
+  assert.doesNotMatch(
+    source,
+    /reason: identityProof\.status === "ai_unavailable"/,
+  );
   assert.match(source, /result = \{ \.\.\.result, ready: false, incompatibleFields \}/);
 });
 
