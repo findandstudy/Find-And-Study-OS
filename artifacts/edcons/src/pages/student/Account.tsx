@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { customFetch } from "@workspace/api-client-react";
-import { uploadDocumentFile } from "@/lib/uploadDocumentFile";
+import { createDocumentRecord, uploadDocumentFile } from "@/lib/uploadDocumentFile";
 import { toLatinUpper } from "@/lib/textTransform";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
@@ -638,20 +638,16 @@ function StudentDocumentsTab({ user, studentProfile }: { user: any; studentProfi
       const last = (user?.lastName ?? "").toLowerCase();
       const docName = uploadName.trim() || `${type}-${first}-${last}`;
 
-      await customFetch("/api/documents", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: docName,
-          type: uploadType,
-          studentId: studentProfile?.id || null,
-          applicationId: pendingForApplicationId || undefined,
-          respondingToNoteId: pendingForNoteId || undefined,
-          fileKey,
-          mimeType,
-          sizeBytes,
-          originalFileName: uploadFile.name,
-        }),
+      await createDocumentRecord({
+        name: docName,
+        type: uploadType,
+        studentId: studentProfile?.id || null,
+        applicationId: pendingForApplicationId || undefined,
+        respondingToNoteId: pendingForNoteId || undefined,
+        fileKey,
+        mimeType,
+        sizeBytes,
+        originalFileName: uploadFile.name,
       });
       setPendingForApplicationId(null);
       setPendingForNoteId(null);

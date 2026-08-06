@@ -25,7 +25,7 @@ import {
 import { cn } from "@/lib/utils";
 import { generateProposalPdf } from "@/lib/generateProposalPdf";
 import { resolveProposalBranding } from "@/lib/proposalBranding";
-import { uploadDocumentFile } from "@/lib/uploadDocumentFile";
+import { createDocumentRecord, uploadDocumentFile } from "@/lib/uploadDocumentFile";
 import { applicationCreationErrorMessage } from "@/lib/applicationCreationError";
 import { PdfMarkupModal } from "@/components/course-finder/PdfMarkupModal";
 import * as XLSX from "xlsx";
@@ -2076,27 +2076,18 @@ function ApplyDialog({ program: p, onClose, currentUser, agentShareRate, hideSer
           || (d.label ? d.label.toLowerCase().replace(/\s+/g, "_") : "other");
         if (docType === "photograph") docType = "photo";
         const { fileKey, mimeType, sizeBytes } = await uploadDocumentFile(d.file);
-        const res = await fetch(`${BASE_URL}/api/documents`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify({
-            name: docName,
-            type: docType,
-            status: "pending",
-            studentId,
-            applicationId,
-            fileKey,
-            mimeType,
-            sizeBytes,
-            originalFileName: d.file?.name ?? null,
-          }),
+        await createDocumentRecord({
+          name: docName,
+          type: docType,
+          status: "pending",
+          studentId,
+          applicationId,
+          fileKey,
+          mimeType,
+          sizeBytes,
+          originalFileName: d.file?.name ?? null,
         });
-        if (res.ok) {
-          savedCount++;
-        } else {
-          console.error(`Document upload failed for ${d.label}: ${res.status} ${res.statusText}`);
-        }
+        savedCount++;
       } catch (err) {
         console.error(`Document upload error for ${d.label}:`, err);
       }

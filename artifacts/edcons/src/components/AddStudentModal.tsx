@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useCreateStudent } from "@workspace/api-client-react";
-import { uploadDocumentFile } from "@/lib/uploadDocumentFile";
+import { createDocumentRecord, uploadDocumentFile } from "@/lib/uploadDocumentFile";
 import { useStudyLevels } from "@/hooks/useStudyLevels";
 import { useCountrySearch } from "@/hooks/use-countries";
 import { useToast } from "@/hooks/use-toast";
@@ -629,20 +629,15 @@ export function AddStudentModal({
         const docName = `${firstName}-${lastName}-${label}`;
         try {
           const { fileKey, mimeType, sizeBytes } = await uploadDocumentFile(d.file);
-          return fetch(`${BASE_URL}/api/documents`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            credentials: "include",
-            body: JSON.stringify({
-              name: docName,
-              type: d.label?.toLowerCase() ?? "other",
-              status: "pending",
-              studentId,
-              fileKey,
-              mimeType,
-              sizeBytes,
-              originalFileName: d.file?.name ?? null,
-            }),
+          return createDocumentRecord({
+            name: docName,
+            type: d.label?.toLowerCase() ?? "other",
+            status: "pending",
+            studentId,
+            fileKey,
+            mimeType,
+            sizeBytes,
+            originalFileName: d.file?.name ?? null,
           });
         } catch (err) {
           console.error(`[STUDENTS] upload failed for ${label}:`, err);

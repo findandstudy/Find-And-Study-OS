@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import { useCreateStudent, customFetch } from "@workspace/api-client-react";
-import { uploadDocumentFile } from "@/lib/uploadDocumentFile";
+import { createDocumentRecord, uploadDocumentFile } from "@/lib/uploadDocumentFile";
 import { useSeason } from "@/contexts/SeasonContext";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -393,9 +393,8 @@ export function AddStudentModal({ open, onClose, onSuccess, defaultStatus }: {
       const label = docTypeLabel[d.label?.toLowerCase()] ?? d.label ?? "Document";
       try {
         const { fileKey, mimeType, sizeBytes } = await uploadDocumentFile(d.file);
-        return fetch(`${BASE_URL}/api/documents`, {
-          method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include",
-          body: JSON.stringify({ name: `${firstName}-${lastName}-${label}`, type: d.label?.toLowerCase() ?? "other", status: "pending", studentId, fileKey, mimeType, sizeBytes, originalFileName: d.file?.name ?? null }),
+        return createDocumentRecord({
+          name: `${firstName}-${lastName}-${label}`, type: d.label?.toLowerCase() ?? "other", status: "pending", studentId, fileKey, mimeType, sizeBytes, originalFileName: d.file?.name ?? null,
         });
       } catch (err) { console.error(`[AGENT_STUDENTS] upload failed for ${label}:`, err); return undefined; }
     }));

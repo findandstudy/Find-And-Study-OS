@@ -26,7 +26,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { apiFetch } from "@/lib/apiFetch";
 import { useDocumentPreview } from "@/components/DocumentPreviewDialog";
 import { getPreviewKind } from "@/components/documentPreview";
-import { uploadDocumentFile } from "@/lib/uploadDocumentFile";
+import { createDocumentRecord, uploadDocumentFile } from "@/lib/uploadDocumentFile";
 import { toLatinUpper } from "@/lib/textTransform";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { CountryFlag } from "@/components/CountryFlag";
@@ -824,25 +824,16 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
       const last = (student?.lastName ?? "").toLowerCase();
       const docName = uploadName.trim() || `${type}-${first}-${last}`;
 
-      const resp = await apiFetch(`${BASE_URL}/api/documents`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: docName,
-          type: uploadType,
-          status: "pending",
-          studentId: id,
-          fileKey,
-          mimeType,
-          sizeBytes,
-          originalFileName: uploadFile.name,
-        }),
+      await createDocumentRecord({
+        name: docName,
+        type: uploadType,
+        status: "pending",
+        studentId: id,
+        fileKey,
+        mimeType,
+        sizeBytes,
+        originalFileName: uploadFile.name,
       });
-
-      if (!resp.ok) {
-        const err = await resp.json().catch(() => ({ error: "Upload failed" }));
-        throw new Error(err?.error || "Upload failed");
-      }
 
       await qc.invalidateQueries({ predicate: q => q.queryKey.some(k => typeof k === "string" && (k.includes("document") || k.includes("student") || k.includes(`/api/students`))) });
       setUploadOpen(false);
@@ -866,26 +857,16 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
       const first = (student?.firstName ?? "").toLowerCase();
       const last = (student?.lastName ?? "").toLowerCase();
 
-      const resp = await apiFetch(`${BASE_URL}/api/documents`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: `photo-${first}-${last}`,
-          type: "photo",
-          status: "approved",
-          studentId: id,
-          fileKey,
-          mimeType,
-          sizeBytes,
-          originalFileName: file.name,
-        }),
+      await createDocumentRecord({
+        name: `photo-${first}-${last}`,
+        type: "photo",
+        status: "approved",
+        studentId: id,
+        fileKey,
+        mimeType,
+        sizeBytes,
+        originalFileName: file.name,
       });
-
-      if (!resp.ok) {
-        const err = await resp.text().catch(() => "Photo upload failed");
-        alert(err);
-        return;
-      }
 
       await qc.invalidateQueries({ predicate: q => q.queryKey.some(k => typeof k === "string" && (k.includes("document") || k.includes("student") || k.includes(`/api/students`))) });
     } finally {
