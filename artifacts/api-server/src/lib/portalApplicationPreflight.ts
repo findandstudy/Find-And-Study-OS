@@ -5,6 +5,7 @@ import {
 import { buildApplicationPreflightSnapshot } from "@workspace/portal-runner";
 import { runEducationExtraction } from "./educationAutoExtract.js";
 import { autoFillMissingAddressCity } from "./portalAddressAutoExtract.js";
+import { autoFillMissingBirthCityFromDocuments } from "./portalBirthCityAutoExtract.js";
 import {
   autoFillMissingProfileFromPassport,
   autoRepairInvalidProfileDatesFromPassport,
@@ -45,6 +46,7 @@ export async function prepareApplicationPortalPreflight(opts: {
   });
   const autoFilledFields: string[] = [];
   const enrichmentWarnings: string[] = [];
+  let passportAutoFillAiUnavailable = false;
   let passportIdentityLockedFields = new Set<string>();
   let passportIdentitySyncStatus: PortalPassportIdentitySyncResult["status"] | null = null;
 
@@ -56,6 +58,7 @@ export async function prepareApplicationPortalPreflight(opts: {
       requiredFields: result.missingFields,
     });
     autoFilledFields.push(...identity.fields);
+    passportAutoFillAiUnavailable = identity.status === "ai_unavailable";
     if (
       identity.status === "low_confidence" ||
       identity.status === "ai_unavailable"
@@ -77,6 +80,24 @@ export async function prepareApplicationPortalPreflight(opts: {
         addressCity.status === "ai_unavailable"
       ) {
         enrichmentWarnings.push(`addressCity:${addressCity.status}`);
+      }
+    }
+
+    if (result.missingFields.includes("cityOfBirth")) {
+      const birthCity = await autoFillMissingBirthCityFromDocuments({
+        studentId: snapshot.studentId,
+        actorUserId: opts.actorUserId,
+        ip: opts.ip,
+        requiredFields: result.missingFields,
+        allowAi: !passportAutoFillAiUnavailable,
+      });
+      autoFilledFields.push(...birthCity.fields);
+      if (
+        birthCity.status === "low_confidence" ||
+        birthCity.status === "unreadable" ||
+        birthCity.status === "ai_unavailable"
+      ) {
+        enrichmentWarnings.push(`cityOfBirth:${birthCity.status}`);
       }
     }
 

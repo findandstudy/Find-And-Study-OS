@@ -85,6 +85,8 @@ Return ONLY one JSON object with these keys:
   "firstName": "all given names exactly as printed, or null",
   "lastName": "surname exactly as printed, or null",
   "dateOfBirth": "YYYY-MM-DD or null",
+  "cityOfBirth": "city name exactly as printed in the place of birth field, or null",
+  "cityOfBirthConfidence": "high|medium|low",
   "gender": "male|female or null",
   "nationality": "full English country name or null",
   "passportNumber": "string or null",
@@ -103,10 +105,14 @@ identityConfidence applies ONLY to firstName, lastName and passportNumber. Set i
 to high only when all three are clearly legible and the passport number agrees
 with the MRZ when an MRZ is present. General confidence may remain medium when a
 non-identity field (for example a parent name) is unclear.
+Set cityOfBirthConfidence to high only when the passport explicitly labels a
+clearly legible place/city of birth. Never use residence, address, nationality,
+issuing place, issuing authority, province, district or country as cityOfBirth.
 If any character or date is uncertain, use null.`;
 
 const FIELD_MAP = {
   dateOfBirth: studentsTable.dateOfBirth,
+  cityOfBirth: studentsTable.cityOfBirth,
   gender: studentsTable.gender,
   nationality: studentsTable.nationality,
   passportNumber: studentsTable.passportNumber,
@@ -123,6 +129,7 @@ const has = (value: unknown): boolean =>
 
 const EXTRACT_ALIASES: Record<ExtractField, string[]> = {
   dateOfBirth: ["dateOfBirth", "birthDate", "dob"],
+  cityOfBirth: ["cityOfBirth", "placeOfBirth", "birthPlace", "birthCity"],
   gender: ["gender", "sex"],
   nationality: ["nationality", "citizenship"],
   passportNumber: ["passportNumber", "passportNo"],
@@ -186,6 +193,18 @@ function safeExtractedValue(
   }
   if (field === "passportNumber") {
     return validatePassportNumber(text) ? null : text;
+  }
+  if (field === "cityOfBirth") {
+    if (
+      text.length < 2 ||
+      text.length > 80 ||
+      /\d/u.test(text) ||
+      !/\p{L}/u.test(text) ||
+      !/^[\p{L}\p{M}.'’\-\s]+$/u.test(text)
+    ) {
+      return null;
+    }
+    return text.replace(/\s+/g, " ");
   }
   return text.slice(0, 255);
 }
@@ -601,6 +620,12 @@ export async function autoFillMissingProfileFromPassport(opts: {
 
   const patch: Record<string, string> = {};
   for (const field of missing) {
+    if (
+      field === "cityOfBirth" &&
+      String(extracted.cityOfBirthConfidence ?? "").trim().toLowerCase() !== "high"
+    ) {
+      continue;
+    }
     const value = safeExtractedValue(
       field,
       readExtractedField(extracted, field),

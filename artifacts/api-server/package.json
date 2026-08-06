@@ -117,6 +117,7 @@
     "test:ai-extract-compat": "tsx --test ./scripts/test-ai-extract-compat.ts",
     "test:portal-readiness": "tsx --test ./scripts/test-portal-readiness.ts",
     "test:portal-address-extract": "DATABASE_URL=postgres://test:test@127.0.0.1:5432/test tsx --test ./scripts/test-portal-address-auto-extract.ts",
+    "test:portal-birth-city-extract": "DATABASE_URL=postgres://test:test@127.0.0.1:5432/test tsx --test ./scripts/test-portal-birth-city-auto-extract.ts",
     "test:portal-draft-preflight": "DATABASE_URL=postgres://test:test@127.0.0.1:5432/test tsx --test ./scripts/test-portal-draft-preflight.ts",
     "test:portal-passport-date-repair": "DATABASE_URL=postgres://test:test@127.0.0.1:5432/test tsx --test ./scripts/test-portal-passport-date-repair.ts",
     "test:portal-passport-extraction-policy": "tsx --test ./scripts/test-portal-passport-extraction-policy.ts",
