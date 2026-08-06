@@ -58,6 +58,16 @@ import { resolveIdentity } from "../lib/inbox/identityResolver";
 import { maybeAutoReply } from "../lib/inbox/botAutoReply";
 import { inboxBus } from "../lib/inbox/eventBus";
 import { processInboundMessage } from "../lib/inbox/processInbound";
+import { ObjectNotFoundError, ObjectStorageService } from "../lib/objectStorage";
+import {
+  WEB_CHAT_MEDIA_MAX_BYTES,
+  WebChatMediaValidationError,
+  readWebChatAttachments,
+  validateWebChatMedia,
+  webChatMediaAcceptAttribute,
+  webChatObjectPath,
+  type WebChatAttachment,
+} from "../lib/inbox/webChatMedia";
 import {
   createEmbedChatSessionToken,
   verifyEmbedChatSessionToken,
@@ -158,6 +168,11 @@ const router: IRouter = Router();
 const embedApplyJson = json({ limit: "30mb" });
 const embedLeadJson = json({ limit: "256kb" });
 const embedChatJson = json({ limit: "64kb" });
+const embedChatMediaBody = express.raw({
+  limit: WEB_CHAT_MEDIA_MAX_BYTES,
+  type: () => true,
+});
+const embedChatMediaStorage = new ObjectStorageService();
 
 const EMBED_WINDOW_MS = 15 * 60 * 1000;
 const embedSubmitLimiter = rateLimit({
@@ -178,6 +193,17 @@ const embedChatLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: "Too many chat requests. Please wait a moment." },
   store: new PgRateLimitStore(EMBED_CHAT_WINDOW_MS, "embed-chat"),
+  keyGenerator: (req) => getRateLimitIp(req),
+});
+
+const EMBED_CHAT_UPLOAD_WINDOW_MS = 15 * 60 * 1000;
+const embedChatUploadLimiter = rateLimit({
+  windowMs: EMBED_CHAT_UPLOAD_WINDOW_MS,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many file uploads. Please try again later." },
+  store: new PgRateLimitStore(EMBED_CHAT_UPLOAD_WINDOW_MS, "embed-chat-upload"),
   keyGenerator: (req) => getRateLimitIp(req),
 });
 
@@ -2058,6 +2084,40 @@ async function loadChatSessionConversation(slug: string, sessionToken: string | 
   return { parsed, conversation, scope };
 }
 
+function publicChatMessage(row: {
+  id: number;
+  content: string;
+  direction: string;
+  status: string;
+  createdAt: Date;
+  metadata?: unknown;
+}) {
+  const attachments = readWebChatAttachments(row.metadata).map(({ url: _url, ...attachment }) => attachment);
+  return {
+    id: row.id,
+    content: row.content,
+    direction: row.direction,
+    status: row.status,
+    createdAt: row.createdAt,
+    ...(attachments.length > 0 ? { attachments } : {}),
+  };
+}
+
+function decodeChatHeader(value: unknown, maxLength: number): string {
+  const raw = typeof value === "string" ? value.slice(0, maxLength * 3) : "";
+  if (!raw) return "";
+  try {
+    return decodeURIComponent(raw).slice(0, maxLength);
+  } catch {
+    return "";
+  }
+}
+
+function privateWebChatAttachmentUrl(objectPath: string): string {
+  const key = objectPath.replace(/^\/objects\//, "");
+  return `/api/storage/objects/${key}`;
+}
+
 router.post(
   "/public/embed/:slug/chat/session",
   embedChatLimiter,
@@ -2328,6 +2388,7 @@ router.get(
         direction: messagesTable.direction,
         status: messagesTable.status,
         createdAt: messagesTable.createdAt,
+        metadata: messagesTable.metadata,
       })
       .from(messagesTable)
       .where(and(
@@ -2337,7 +2398,7 @@ router.get(
       .orderBy(asc(messagesTable.id))
       .limit(100);
     res.json({
-      data: rows,
+      data: rows.map(publicChatMessage),
       botEnabled: session.conversation.botEnabled,
       needsHuman: session.conversation.needsHuman,
     });
@@ -2405,6 +2466,7 @@ router.post(
           direction: messagesTable.direction,
           status: messagesTable.status,
           createdAt: messagesTable.createdAt,
+          metadata: messagesTable.metadata,
         })
         .from(messagesTable)
         .where(and(
@@ -2413,10 +2475,179 @@ router.post(
         ))
         .orderBy(asc(messagesTable.id))
         .limit(20);
-      res.status(201).json({ data: rows, outcome });
+      res.status(201).json({ data: rows.map(publicChatMessage), outcome });
     } catch (err) {
       console.error("[EMBED CHAT] message failed:", err);
       res.status(500).json({ error: "Message could not be sent." });
+    }
+  },
+);
+
+router.post(
+  "/public/embed/:slug/chat/media",
+  embedChatUploadLimiter,
+  embedChatMediaBody,
+  async (req, res): Promise<void> => {
+    const slug = String(req.params.slug);
+    const session = await loadChatSessionConversation(slug, req.query.s as string | undefined);
+    if (!session) {
+      res.status(403).json({ error: "Invalid or expired chat session" });
+      return;
+    }
+    const [contact] = session.conversation.externalContactId
+      ? await db
+          .select()
+          .from(externalContactsTable)
+          .where(eq(externalContactsTable.id, session.conversation.externalContactId))
+      : [null];
+    if (!contact) {
+      res.status(409).json({ error: "Chat contact no longer exists" });
+      return;
+    }
+
+    const filename = decodeChatHeader(req.headers["x-file-name"], 180);
+    const caption = sanitizeChatText(decodeChatHeader(req.headers["x-caption"], 2000), 2000);
+    const voiceNote = String(req.headers["x-voice-note"] || "") === "1";
+    const buffer = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
+    let storedPath: string | null = null;
+    try {
+      const validated = await validateWebChatMedia(
+        buffer,
+        filename,
+        String(req.headers["content-type"] || ""),
+      );
+      storedPath = await embedChatMediaStorage.uploadBuffer({
+        subdir: `inbox/web-chat/${session.conversation.id}`,
+        filename: validated.filename,
+        buffer,
+        contentType: validated.mimeType,
+      });
+      const attachment: WebChatAttachment = {
+        url: privateWebChatAttachmentUrl(storedPath),
+        type: validated.kind,
+        name: validated.filename,
+        mimeType: validated.mimeType,
+        fileType: validated.mimeType,
+        fileSize: validated.size,
+        ...(voiceNote && validated.kind === "audio" ? { voiceNote: true } : {}),
+      };
+      const inbound = await processInboundMessage({
+        channel: "web_chat",
+        channelAccountId: null,
+        contact: {
+          externalId: contact.externalId,
+          displayName: contact.displayName,
+          phone: contact.phoneE164 || contact.phone,
+          email: contact.email,
+        },
+        message: {
+          externalMessageId: `webchat:${crypto.randomUUID()}`,
+          externalThreadId: session.conversation.externalThreadId,
+          text: caption || "[attachment]",
+          receivedAt: new Date(),
+          metadata: {
+            widgetId: session.scope.widgetId,
+            widgetSlug: slug,
+            sourcePageUrl: session.scope.sourcePageUrl,
+            sourceWebsite: session.scope.sourceWebsite,
+            attachments: [attachment],
+          },
+        },
+      });
+      const outcome = caption
+        ? await maybeAutoReply({
+            conversationId: inbound.conversationId,
+            inboundMessageId: inbound.messageId,
+          })
+        : null;
+      const rows = await db
+        .select({
+          id: messagesTable.id,
+          content: messagesTable.content,
+          direction: messagesTable.direction,
+          status: messagesTable.status,
+          createdAt: messagesTable.createdAt,
+          metadata: messagesTable.metadata,
+        })
+        .from(messagesTable)
+        .where(and(
+          eq(messagesTable.conversationId, session.conversation.id),
+          sql`${messagesTable.id} >= ${inbound.messageId}`,
+        ))
+        .orderBy(asc(messagesTable.id))
+        .limit(20);
+      res.status(201).json({ data: rows.map(publicChatMessage), outcome });
+    } catch (error) {
+      if (storedPath) {
+        try {
+          const file = await embedChatMediaStorage.getObjectEntityFile(storedPath);
+          await file.delete({ ignoreNotFound: true });
+        } catch {
+          // Best-effort orphan cleanup. The original error remains authoritative.
+        }
+      }
+      if (error instanceof WebChatMediaValidationError) {
+        res.status(error.statusCode).json({ error: error.message });
+        return;
+      }
+      console.error("[EMBED CHAT] media message failed:", error);
+      res.status(500).json({ error: "The file could not be sent." });
+    }
+  },
+);
+
+router.get(
+  "/public/embed/:slug/chat/media/:messageId/:index",
+  embedChatLimiter,
+  async (req, res): Promise<void> => {
+    const slug = String(req.params.slug);
+    const session = await loadChatSessionConversation(slug, req.query.s as string | undefined);
+    if (!session) {
+      res.status(403).json({ error: "Invalid or expired chat session" });
+      return;
+    }
+    const messageId = Number(req.params.messageId);
+    const index = Number(req.params.index);
+    if (!Number.isInteger(messageId) || !Number.isInteger(index) || index < 0 || index > 20) {
+      res.status(400).json({ error: "Invalid media request" });
+      return;
+    }
+    const [message] = await db
+      .select({ metadata: messagesTable.metadata })
+      .from(messagesTable)
+      .where(and(
+        eq(messagesTable.id, messageId),
+        eq(messagesTable.conversationId, session.conversation.id),
+      ))
+      .limit(1);
+    const attachment = message ? readWebChatAttachments(message.metadata)[index] : null;
+    const objectPath = attachment
+      ? webChatObjectPath(attachment.url, session.conversation.id)
+      : null;
+    if (!attachment || !objectPath) {
+      res.status(404).json({ error: "Media not found" });
+      return;
+    }
+    try {
+      const file = await embedChatMediaStorage.getObjectEntityFile(objectPath);
+      const disposition = attachment.type === "file" && attachment.mimeType !== "application/pdf"
+        ? "attachment"
+        : "inline";
+      res.setHeader("Content-Disposition", `${disposition}; filename*=UTF-8''${encodeURIComponent(attachment.name)}`);
+      res.setHeader("Content-Security-Policy", "sandbox; default-src 'none'");
+      res.setHeader("Referrer-Policy", "no-referrer");
+      res.setHeader("X-Content-Type-Options", "nosniff");
+      await embedChatMediaStorage.streamObjectToResponse(req, res, file, {
+        contentType: attachment.mimeType,
+        cacheControl: "private, max-age=300",
+      });
+    } catch (error) {
+      if (error instanceof ObjectNotFoundError) {
+        res.status(404).json({ error: "Media not found" });
+        return;
+      }
+      console.error(`[EMBED CHAT] media read failed for ${messageId}[${index}]:`, error);
+      if (!res.headersSent) res.status(500).json({ error: "Media could not be loaded" });
     }
   },
 );
@@ -2605,9 +2836,10 @@ function generateEmbedScript(baseUrl: string): string {
     iframe.style.minHeight = '0';
     iframe.setAttribute('loading', 'lazy');
     iframe.setAttribute('allowfullscreen', 'true');
-    // Camera access must be explicitly delegated to a cross-origin widget
-    // iframe. Native file/camera capture remains available as a fallback.
-    iframe.setAttribute('allow', 'camera; fullscreen');
+    // Camera and microphone access must be explicitly delegated to a
+    // cross-origin widget iframe. Native file/camera capture remains available
+    // as a fallback when a browser declines MediaRecorder support.
+    iframe.setAttribute('allow', 'camera; microphone; fullscreen');
     var supportedLanguages=['en','tr','ar','fa','fr','es','ru','zh','hi','id'];
     function normalizePageLanguage(raw) {
       if (!raw || typeof raw !== 'string') return '';
@@ -2831,6 +3063,8 @@ export function generateChatbotWidgetHTML(
     locale,
     dir: copy.dir,
     dialCodes,
+    mediaAccept: webChatMediaAcceptAttribute(),
+    mediaMaxBytes: WEB_CHAT_MEDIA_MAX_BYTES,
     copy: {
       genericError: copy.genericError,
       startError: copy.startError,
@@ -2905,9 +3139,27 @@ export function generateChatbotWidgetHTML(
     .message{max-width:84%;border-radius:14px;padding:10px 12px;font-size:13px;line-height:1.45;white-space:pre-wrap;word-break:break-word}
     .message.inbound{align-self:flex-end;background:var(--primary);color:#fff;border-bottom-right-radius:4px}
     .message.outbound{align-self:flex-start;background:#fff;border:1px solid var(--line);border-bottom-left-radius:4px}
+    .message-media{display:grid;gap:6px;margin-top:6px;white-space:normal}
+    .message-media:first-child{margin-top:0}
+    .message-media img,.message-media video{display:block;max-width:100%;max-height:230px;border-radius:10px;background:#0b1220;object-fit:contain}
+    .message-media audio{display:block;width:240px;max-width:100%;height:36px}
+    .file-card{display:flex;align-items:center;gap:8px;min-width:190px;padding:8px;border-radius:10px;background:rgba(255,255,255,.13);color:inherit;text-decoration:none;border:1px solid rgba(127,127,127,.22)}
+    .outbound .file-card{background:var(--soft);color:var(--ink)}
+    .file-icon{width:34px;height:34px;border-radius:8px;background:rgba(255,255,255,.18);display:grid;place-items:center;font-weight:800;font-size:10px;flex:0 0 auto}
+    .file-meta{min-width:0}.file-name{font-size:11px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.file-size{font-size:9px;opacity:.7;margin-top:2px}
     .message-time{font-size:9px;opacity:.65;margin-top:4px;text-align:right}
     .typing{display:none;align-self:flex-start;background:#fff;border:1px solid var(--line);border-radius:14px;padding:9px 12px;font-size:11px;color:var(--muted)}
-    .composer{display:none;background:#fff;border-top:1px solid var(--line);padding:10px;grid-template-columns:1fr auto;gap:8px;align-items:end}
+    .composer{display:none;background:#fff;border-top:1px solid var(--line);padding:8px 10px 10px;grid-template-columns:1fr;gap:7px}
+    .composer-row{display:grid;grid-template-columns:auto auto auto minmax(0,1fr) auto;gap:5px;align-items:end}
+    .compose-tool{width:36px;height:42px;border:0;border-radius:10px;background:var(--soft);color:var(--ink);cursor:pointer;display:grid;place-items:center;font-size:17px}
+    .compose-tool.recording{background:#fee4e2;color:#b42318;animation:pulse 1.2s infinite}
+    @keyframes pulse{50%{opacity:.55}}
+    .pending-media{display:none;gap:6px;overflow-x:auto;padding-bottom:1px}
+    .pending-item{display:flex;align-items:center;gap:5px;max-width:220px;border:1px solid var(--line);background:var(--soft);border-radius:9px;padding:5px 7px;font-size:10px}
+    .pending-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.pending-remove{border:0;background:none;color:#b42318;cursor:pointer;padding:0 2px}
+    .upload-state{display:none;align-items:center;gap:7px;font-size:10px;color:var(--muted)}
+    .upload-track{height:5px;background:var(--line);border-radius:99px;overflow:hidden;flex:1}.upload-bar{height:100%;width:0;background:var(--primary);transition:width .15s}
+    .upload-cancel{border:0;background:none;color:#b42318;cursor:pointer;font-size:10px}
     textarea{resize:none;min-height:42px;max-height:94px;border:1px solid #d0d5dd;border-radius:12px;padding:10px 11px;outline:none}
     .send{width:42px;height:42px;border:0;border-radius:12px;background:var(--button);color:#fff;cursor:pointer;font-size:18px}
     .status{font-size:11px;color:var(--muted);text-align:center;padding:5px}
@@ -2968,8 +3220,17 @@ export function generateChatbotWidgetHTML(
         <div id="status" class="status"></div>
       </main>
       <footer id="composer" class="composer">
-        <textarea id="messageInput" maxlength="2000" rows="1" placeholder="${htmlEscape(copy.messagePlaceholder)}"></textarea>
-        <button id="send" class="send" aria-label="${htmlEscape(copy.send)}">➤</button>
+        <div id="pendingMedia" class="pending-media"></div>
+        <div id="uploadState" class="upload-state"><span id="uploadLabel">Uploading…</span><div class="upload-track"><div id="uploadBar" class="upload-bar"></div></div><button id="uploadCancel" class="upload-cancel" type="button">Cancel</button></div>
+        <div class="composer-row">
+          <input id="mediaInput" type="file" multiple hidden accept="${htmlEscape(webChatMediaAcceptAttribute())}">
+          <input id="cameraInput" type="file" hidden accept="image/jpeg,image/png,image/webp" capture="environment">
+          <button id="attach" class="compose-tool" type="button" aria-label="Attach file" title="Attach file (max 5 MB)">📎</button>
+          <button id="camera" class="compose-tool" type="button" aria-label="Camera" title="Camera">📷</button>
+          <button id="microphone" class="compose-tool" type="button" aria-label="Record voice message" title="Record voice message">🎤</button>
+          <textarea id="messageInput" maxlength="2000" rows="1" placeholder="${htmlEscape(copy.messagePlaceholder)}"></textarea>
+          <button id="send" class="send" aria-label="${htmlEscape(copy.send)}">➤</button>
+        </div>
       </footer>
     </section>
   </div>
@@ -3000,6 +3261,14 @@ export function generateChatbotWidgetHTML(
     var dialEmpty=document.getElementById('dialEmpty');
     var phoneInput=document.getElementById('phone');
     var phoneError=document.getElementById('phoneError');
+    var pendingFiles=[];
+    var uploadXhr=null;
+    var sending=false;
+    var recorder=null;
+    var recorderStream=null;
+    var recorderChunks=[];
+    var recorderTimer=null;
+    var discardRecording=false;
     var phoneCodes=(cfg.dialCodes||[]).map(function(row){
       return{code:String(row[0]||''),iso:String(row[1]||'').toUpperCase(),name:String(row[2]||'')};
     }).filter(function(row){return /^\\+\\d{1,4}$/.test(row.code)&&/^[A-Z]{2}$/.test(row.iso)});
@@ -3063,6 +3332,7 @@ export function generateChatbotWidgetHTML(
       panel.classList.toggle('open',open);
       launcher.style.display=open?'none':'grid';
       parentMessage('edcons-chatbot-layout',{open:open});
+      if(!open&&recorder&&recorder.state==='recording'){discardRecording=true;recorder.stop()}
       if(open&&sessionToken) poll();
     }
     launcher.onclick=function(){setOpen(true)};
@@ -3072,10 +3342,76 @@ export function generateChatbotWidgetHTML(
       seen[row.id]=true;lastId=Math.max(lastId,Number(row.id)||0);
       var el=document.createElement('div');
       el.className='message '+(row.direction==='inbound'?'inbound':'outbound');
-      var text=document.createElement('div');text.textContent=row.content||'';el.appendChild(text);
+      if(row.content&&row.content!=='[attachment]'){
+        var text=document.createElement('div');text.textContent=row.content;el.appendChild(text);
+      }
+      var atts=Array.isArray(row.attachments)?row.attachments:[];
+      if(atts.length){
+        var media=document.createElement('div');media.className='message-media';
+        atts.forEach(function(att,index){
+          var url=cfg.baseUrl+'/api/public/embed/'+encodeURIComponent(cfg.slug)+'/chat/media/'+encodeURIComponent(row.id)+'/'+index+'?s='+encodeURIComponent(sessionToken);
+          if(att.type==='image'){
+            var img=document.createElement('img');img.src=url;img.alt=att.name||'Image';img.loading='lazy';media.appendChild(img);return;
+          }
+          if(att.type==='video'){
+            var video=document.createElement('video');video.src=url;video.controls=true;video.preload='metadata';media.appendChild(video);return;
+          }
+          if(att.type==='audio'){
+            var audio=document.createElement('audio');audio.src=url;audio.controls=true;audio.preload='metadata';media.appendChild(audio);return;
+          }
+          var link=document.createElement('a');link.className='file-card';link.href=url;link.target='_blank';link.rel='noopener noreferrer';link.download=att.name||'document';
+          var icon=document.createElement('span');icon.className='file-icon';icon.textContent=(String(att.name||'').split('.').pop()||'FILE').slice(0,5).toUpperCase();
+          var meta=document.createElement('span');meta.className='file-meta';
+          var name=document.createElement('span');name.className='file-name';name.textContent=att.name||'Document';
+          var size=document.createElement('span');size.className='file-size';size.textContent=formatBytes(Number(att.fileSize)||0);
+          meta.appendChild(name);meta.appendChild(size);link.appendChild(icon);link.appendChild(meta);media.appendChild(link);
+        });
+        el.appendChild(media);
+      }
       var tm=document.createElement('div');tm.className='message-time';
       try{tm.textContent=new Date(row.createdAt).toLocaleTimeString(cfg.locale,{hour:'2-digit',minute:'2-digit'})}catch(e){}
       el.appendChild(tm);messages.appendChild(el);content.scrollTop=content.scrollHeight;
+    }
+    function formatBytes(bytes){
+      if(!bytes)return'';if(bytes<1024)return bytes+' B';if(bytes<1048576)return(bytes/1024).toFixed(1)+' KB';return(bytes/1048576).toFixed(1)+' MB';
+    }
+    function renderPending(){
+      var wrap=document.getElementById('pendingMedia');wrap.textContent='';wrap.style.display=pendingFiles.length?'flex':'none';
+      pendingFiles.forEach(function(file,index){
+        var item=document.createElement('div');item.className='pending-item';
+        var name=document.createElement('span');name.className='pending-name';name.textContent=file.name+' · '+formatBytes(file.size);
+        var remove=document.createElement('button');remove.type='button';remove.className='pending-remove';remove.textContent='×';remove.setAttribute('aria-label','Remove '+file.name);
+        remove.onclick=function(){if(sending)return;pendingFiles.splice(index,1);renderPending()};
+        item.appendChild(name);item.appendChild(remove);wrap.appendChild(item);
+      });
+    }
+    function addFiles(list){
+      Array.prototype.slice.call(list||[]).forEach(function(file){
+        if(!file||file.size<=0){status.textContent='The selected file is empty.';return}
+        if(file.size>cfg.mediaMaxBytes){status.textContent=file.name+': maximum file size is 5 MB.';return}
+        pendingFiles.push(file);
+      });
+      pendingFiles=pendingFiles.slice(0,10);renderPending();
+    }
+    function setUploadState(active,percent,label){
+      var state=document.getElementById('uploadState');state.style.display=active?'flex':'none';
+      document.getElementById('uploadBar').style.width=Math.max(0,Math.min(100,percent||0))+'%';
+      document.getElementById('uploadLabel').textContent=label||'Uploading…';
+    }
+    function uploadMedia(file,caption){
+      return new Promise(function(resolve,reject){
+        var xhr=new XMLHttpRequest();uploadXhr=xhr;
+        xhr.open('POST',cfg.baseUrl+'/api/public/embed/'+encodeURIComponent(cfg.slug)+'/chat/media?s='+encodeURIComponent(sessionToken));
+        xhr.responseType='json';xhr.setRequestHeader('Content-Type',file.type||'application/octet-stream');
+        xhr.setRequestHeader('X-File-Name',encodeURIComponent(file.name));
+        if(caption)xhr.setRequestHeader('X-Caption',encodeURIComponent(caption));
+        if(file.name.indexOf('voice-note-')===0)xhr.setRequestHeader('X-Voice-Note','1');
+        xhr.upload.onprogress=function(event){if(event.lengthComputable)setUploadState(true,(event.loaded/event.total)*100,'Uploading '+file.name)};
+        xhr.onload=function(){uploadXhr=null;var data=xhr.response||{};if(xhr.status>=200&&xhr.status<300)resolve(data);else reject(new Error(data.error||cfg.copy.sendError))};
+        xhr.onerror=function(){uploadXhr=null;reject(new Error(cfg.copy.sendError))};
+        xhr.onabort=function(){uploadXhr=null;reject(new Error('Upload cancelled.'))};
+        xhr.send(file);
+      });
     }
     function showChat(){
       lead.style.display='none';messages.style.display='flex';composer.style.display='grid';
@@ -3123,21 +3459,65 @@ export function generateChatbotWidgetHTML(
       }finally{polling=false}
     }
     async function send(){
-      var input=document.getElementById('messageInput');var text=input.value.trim();if(!text||!sessionToken)return;
-      input.value='';typing.style.display='block';content.scrollTop=content.scrollHeight;
+      var input=document.getElementById('messageInput');var text=input.value.trim();if((!text&&!pendingFiles.length)||!sessionToken||sending)return;
+      sending=true;document.getElementById('send').disabled=true;typing.style.display='block';content.scrollTop=content.scrollHeight;
       try{
-        var data=await request('/api/public/embed/'+encodeURIComponent(cfg.slug)+'/chat/messages?s='+encodeURIComponent(sessionToken),{
-          method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({content:text})
-        });
-        (data.data||[]).forEach(appendMessage);
-        if(data.outcome&&['globally_disabled','outside_working_hours','handoff','escalated'].indexOf(data.outcome.reason)>=0){
-          status.textContent=cfg.copy.sentToTeam;
+        if(pendingFiles.length){
+          var files=pendingFiles.slice();
+          for(var i=0;i<files.length;i++){
+            var mediaData=await uploadMedia(files[i],i===0?text:'');
+            (mediaData.data||[]).forEach(appendMessage);
+            if(mediaData.outcome&&['globally_disabled','outside_working_hours','handoff','escalated'].indexOf(mediaData.outcome.reason)>=0)status.textContent=cfg.copy.sentToTeam;
+            pendingFiles=pendingFiles.filter(function(file){return file!==files[i]});renderPending();
+            if(i===0&&text){input.value='';text=''}
+          }
+        }else{
+          var data=await request('/api/public/embed/'+encodeURIComponent(cfg.slug)+'/chat/messages?s='+encodeURIComponent(sessionToken),{
+            method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({content:text})
+          });
+          (data.data||[]).forEach(appendMessage);
+          if(data.outcome&&['globally_disabled','outside_working_hours','handoff','escalated'].indexOf(data.outcome.reason)>=0)status.textContent=cfg.copy.sentToTeam;
         }
-      }catch(err){status.textContent=cfg.copy.sendError}
-      finally{typing.style.display='none';poll()}
+        input.value='';
+      }catch(err){status.textContent=err&&err.message?err.message:cfg.copy.sendError}
+      finally{sending=false;document.getElementById('send').disabled=false;setUploadState(false,0);typing.style.display='none';poll()}
     }
     document.getElementById('send').onclick=send;
     document.getElementById('messageInput').onkeydown=function(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send()}};
+    document.getElementById('attach').onclick=function(){document.getElementById('mediaInput').click()};
+    document.getElementById('camera').onclick=function(){document.getElementById('cameraInput').click()};
+    document.getElementById('mediaInput').onchange=function(e){addFiles(e.target.files);e.target.value=''};
+    document.getElementById('cameraInput').onchange=function(e){addFiles(e.target.files);e.target.value=''};
+    document.getElementById('uploadCancel').onclick=function(){if(uploadXhr)uploadXhr.abort()};
+    document.getElementById('microphone').onclick=async function(){
+      var button=this;
+      if(recorder&&recorder.state==='recording'){recorder.stop();return}
+      if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia||typeof MediaRecorder==='undefined'){
+        status.textContent='Voice recording is not supported on this device.';return;
+      }
+      try{
+        recorderStream=await navigator.mediaDevices.getUserMedia({audio:true});
+        var candidates=['audio/webm;codecs=opus','audio/mp4','audio/ogg;codecs=opus'];
+        var mime=candidates.find(function(value){return MediaRecorder.isTypeSupported(value)})||'';
+        recorder=mime?new MediaRecorder(recorderStream,{mimeType:mime}):new MediaRecorder(recorderStream);
+        recorderChunks=[];
+        recorder.ondataavailable=function(event){if(event.data&&event.data.size)recorderChunks.push(event.data)};
+        recorder.onstop=function(){
+          clearTimeout(recorderTimer);button.classList.remove('recording');
+          var actual=String(recorder.mimeType||mime||'audio/webm').split(';')[0];
+          var ext=actual==='audio/mp4'?'m4a':actual==='audio/ogg'?'ogg':'webm';
+          var blob=new Blob(recorderChunks,{type:actual});
+          if(!discardRecording&&blob.size>0){addFiles([new File([blob],'voice-note-'+Date.now()+'.'+ext,{type:actual})]);status.textContent='Voice message ready to send.'}
+          discardRecording=false;
+          if(recorderStream)recorderStream.getTracks().forEach(function(track){track.stop()});recorderStream=null;recorder=null;
+        };
+        recorder.start(250);button.classList.add('recording');status.textContent='Recording… Tap the microphone again to stop.';
+        recorderTimer=setTimeout(function(){if(recorder&&recorder.state==='recording')recorder.stop()},90000);
+      }catch(err){
+        if(recorderStream)recorderStream.getTracks().forEach(function(track){track.stop()});recorderStream=null;recorder=null;button.classList.remove('recording');
+        status.textContent='Microphone access was not granted.';
+      }
+    };
     document.getElementById('handoff').onclick=async function(){
       if(!sessionToken){status.textContent=cfg.copy.enterContactFirst;return}
       try{

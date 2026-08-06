@@ -122,13 +122,26 @@ test("chatbot route keeps identity, authorization and XSS guards server-owned", 
   assert.match(routeSource, /verifyEmbedChatSessionToken\(/);
   assert.match(routeSource, /eq\(embedWidgetsTable\.isActive, true\)/);
   assert.match(routeSource, /e\.source !== iframe\.contentWindow/);
-  assert.match(routeSource, /text\.textContent=row\.content\|\|''/);
+  assert.match(routeSource, /text\.textContent=row\.content/);
+  assert.doesNotMatch(routeSource, /innerHTML=row\.content/);
   assert.match(routeSource, /chat\/handoff/);
   assert.doesNotMatch(routeSource, /CRM kaydınızla güvenli biçimde eşleştirilir/);
   assert.match(routeSource, /data-edcons-lang/);
   assert.match(routeSource, /language:cfg\.locale/);
   assert.match(routeSource, /parseJavaScript\(script/);
   assert.doesNotMatch(routeSource, /new Function\(/);
+});
+
+test("chatbot media stays private, session-scoped and device-capable", () => {
+  assert.match(routeSource, /\/public\/embed\/:slug\/chat\/media/);
+  assert.match(routeSource, /webChatObjectPath\(attachment\.url, session\.conversation\.id\)/);
+  assert.match(routeSource, /eq\(messagesTable\.conversationId, session\.conversation\.id\)/);
+  assert.match(routeSource, /X-Content-Type-Options", "nosniff"/);
+  assert.match(routeSource, /Content-Security-Policy", "sandbox; default-src 'none'"/);
+  assert.match(routeSource, /iframe\.setAttribute\('allow', 'camera; microphone; fullscreen'\)/);
+  assert.match(routeSource, /new MediaRecorder/);
+  assert.match(routeSource, /cfg\.mediaMaxBytes/);
+  assert.match(routeSource, /uploadXhr\.abort\(\)/);
 });
 
 test("chatbot uses the shared country-code catalog and stores verified E.164 phones", () => {

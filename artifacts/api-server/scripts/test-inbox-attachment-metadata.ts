@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import {
   ensureAttachmentFilenameExtension,
   readNestedZernioAttachmentMetadata,
@@ -8,6 +9,8 @@ import {
   isZernioMediaUrl,
   resolveLocalInboxStorageKey,
 } from "../src/lib/inbox/mediaSource";
+
+const inboxRouteSource = readFileSync(new URL("../src/routes/inbox.ts", import.meta.url), "utf8");
 
 test("reads the real Zernio WhatsApp image metadata shape", () => {
   const metadata = {
@@ -92,4 +95,13 @@ test("external media proxy accepts only the exact HTTPS Zernio host", () => {
   assert.equal(isZernioMediaUrl("https://zernio.com/api/v1/media/1"), true);
   assert.equal(isZernioMediaUrl("http://zernio.com/api/v1/media/1"), false);
   assert.equal(isZernioMediaUrl("https://zernio.com.evil.example/media/1"), false);
+});
+
+test("private inbox media is readable by save-as-document and extraction flows", () => {
+  const localReads = inboxRouteSource.match(
+    /getObjectEntityFile\(`\/objects\/\$\{localKey\}`\)/g,
+  ) ?? [];
+  assert.ok(localReads.length >= 3, "proxy, save-as-document and extraction should use private object storage");
+  assert.match(inboxRouteSource, /\/web-chat-media/);
+  assert.match(inboxRouteSource, /Invalid web chat attachment/);
 });

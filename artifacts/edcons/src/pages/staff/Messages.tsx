@@ -79,6 +79,8 @@ interface MessageAttachment {
   url?: string;
   type?: string;
   name?: string;
+  mimeType?: string;
+  voiceNote?: boolean;
 }
 
 interface Message {
@@ -125,9 +127,9 @@ interface ComposerTemplate {
 }
 
 const INBOX_MEDIA_ACCEPT = [
-  "image/jpeg", "image/png",
-  "video/mp4", "video/3gpp",
-  "audio/mpeg", "audio/ogg", "audio/webm", "audio/amr", "audio/aac", "audio/mp4",
+  "image/jpeg", "image/png", "image/webp",
+  "video/mp4", "video/webm", "video/quicktime", "video/3gpp",
+  "audio/mpeg", "audio/ogg", "audio/webm", "audio/wav", "audio/amr", "audio/aac", "audio/mp4",
   ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx",
 ].join(",");
 
@@ -144,7 +146,25 @@ const INBOX_MEDIA_LIMITS: Record<string, number> = {
   "audio/mp4": 16 * 1024 * 1024,
 };
 
-function inboxMediaValidationError(file: File): string | null {
+function inboxMediaValidationError(file: File, webChat = false): string | null {
+  if (webChat) {
+    if (file.size <= 0) return `${file.name}: empty file`;
+    if (file.size > 5 * 1024 * 1024) return `${file.name}: maximum 5MB`;
+    const allowedMime = new Set([
+      "image/jpeg", "image/png", "image/webp",
+      "application/pdf", "application/msword",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "application/vnd.ms-excel",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "application/vnd.ms-powerpoint",
+      "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+      "audio/mpeg", "audio/ogg", "audio/webm", "audio/mp4", "audio/wav", "audio/aac",
+      "video/mp4", "video/webm", "video/quicktime", "video/3gpp",
+    ]);
+    return allowedMime.has(file.type.toLowerCase())
+      ? null
+      : `${file.name}: unsupported file type`;
+  }
   const mediaLimit = INBOX_MEDIA_LIMITS[file.type.toLowerCase()];
   if (mediaLimit != null) {
     if (file.size <= 0) return `${file.name}: empty file`;
@@ -520,7 +540,7 @@ function InboxTab() {
     const accepted: File[] = [];
     const errors: string[] = [];
     for (const file of incoming) {
-      const error = inboxMediaValidationError(file);
+      const error = inboxMediaValidationError(file, detail?.conversation.channel === "web_chat");
       if (error) errors.push(error);
       else accepted.push(file);
     }
@@ -534,7 +554,7 @@ function InboxTab() {
         variant: "destructive",
       });
     }
-  }, [toast]);
+  }, [detail?.conversation.channel, toast]);
 
   const voiceRecorder = useOggVoiceRecorder(
     useCallback((file: File) => addPendingFiles([file]), [addPendingFiles]),
@@ -1120,8 +1140,34 @@ function InboxTab() {
     }
   }
 
-  async function uploadFileForInbox(file: File): Promise<{ url: string; type: string; name: string; voiceNote?: boolean } | null> {
+  async function uploadFileForInbox(file: File): Promise<{
+    url: string;
+    type: string;
+    name: string;
+    mimeType?: string;
+    fileType?: string;
+    fileSize?: number;
+    voiceNote?: boolean;
+  } | null> {
     try {
+      if (detail?.conversation.channel === "web_chat") {
+        if (!selectedId) throw new Error("Conversation is not selected");
+        const uploadResp = await fetch(`/api/inbox/conversations/${selectedId}/web-chat-media`, {
+          method: "POST",
+          credentials: "include",
+          headers: {
+            "Content-Type": file.type || "application/octet-stream",
+            "X-File-Name": encodeURIComponent(file.name),
+            ...(file.name.startsWith("voice-note-") ? { "X-Voice-Note": "1" } : {}),
+          },
+          body: file,
+        });
+        const payload = await uploadResp.json().catch(() => ({}));
+        if (!uploadResp.ok || !payload?.attachment) {
+          throw new Error(payload?.error || "Upload failed");
+        }
+        return payload.attachment;
+      }
       const urlRes = await customFetch("/api/storage/uploads/request-url", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -2872,7 +2918,7 @@ function InboxTab() {
                         >
                           <Paperclip className="w-4 h-4" />
                         </Button>
-                        {conv.channel === "whatsapp" && voiceRecorder.isSupported && (
+                        {(conv.channel === "whatsapp" || conv.channel === "web_chat") && voiceRecorder.isSupported && (
                           <Button
                             size="icon"
                             variant={voiceRecorder.isRecording ? "destructive" : "ghost"}

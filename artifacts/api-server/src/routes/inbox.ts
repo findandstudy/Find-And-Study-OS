@@ -1,4 +1,4 @@
-import { Router, type IRouter } from "express";
+import { Router, raw, type IRouter } from "express";
 import {
   db,
   pool,
@@ -94,6 +94,14 @@ import {
 } from "../lib/inbox/knowledgeSourcesAdmin";
 import { ObjectStorageService } from "../lib/objectStorage";
 import {
+  WEB_CHAT_MEDIA_MAX_BYTES,
+  WebChatMediaValidationError,
+  readWebChatAttachments,
+  validateWebChatMedia,
+  webChatObjectPath,
+  type WebChatAttachment,
+} from "../lib/inbox/webChatMedia";
+import {
   configuredInboxMediaHosts,
   isZernioMediaUrl,
   resolveLocalInboxStorageKey,
@@ -121,6 +129,7 @@ import {
 
 const router: IRouter = Router();
 const inboxMediaStorage = new ObjectStorageService();
+const webChatMediaBody = raw({ limit: WEB_CHAT_MEDIA_MAX_BYTES, type: () => true });
 
 interface EntityWhatsAppTarget {
   id: number;
@@ -470,7 +479,9 @@ router.get(
     );
     if (localKey) {
       try {
-        const file = await inboxMediaStorage.searchPublicObject(localKey);
+        const file = await inboxMediaStorage
+          .getObjectEntityFile(`/objects/${localKey}`)
+          .catch(() => inboxMediaStorage.searchPublicObject(localKey));
         if (!file) {
           res.status(404).json({ error: "File not found" });
           return;
@@ -2024,8 +2035,79 @@ router.post(
 );
 
 /**
+ * Upload a staff-originated web-chat attachment through the API so the actual
+ * bytes can be checked before they enter private storage. Signed direct uploads
+ * cannot provide this guarantee because the application never sees their
+ * content. The returned descriptor is accepted only by the matching
+ * conversation's send endpoint.
+ */
+router.post(
+  "/inbox/conversations/:id/web-chat-media",
+  requireAuth,
+  requireRole(...STAFF_ROLES, ...ADMIN_ROLES),
+  webChatMediaBody,
+  async (req, res): Promise<void> => {
+    const id = parseInt(String(req.params.id), 10);
+    if (!id) {
+      res.status(400).json({ error: "Invalid conversation" });
+      return;
+    }
+    const [conv] = await db
+      .select({ id: conversationsTable.id, channel: conversationsTable.channel })
+      .from(conversationsTable)
+      .where(eq(conversationsTable.id, id))
+      .limit(1);
+    if (!conv || conv.channel !== "web_chat" || await isConversationEntityBlocked(req.user!, id)) {
+      res.status(404).json({ error: "Conversation not found" });
+      return;
+    }
+    let filename = "";
+    try {
+      filename = decodeURIComponent(String(req.headers["x-file-name"] || "").slice(0, 540)).slice(0, 180);
+    } catch {
+      res.status(400).json({ error: "Invalid filename" });
+      return;
+    }
+    const buffer = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
+    try {
+      const validated = await validateWebChatMedia(
+        buffer,
+        filename,
+        String(req.headers["content-type"] || ""),
+      );
+      const objectPath = await inboxMediaStorage.uploadBuffer({
+        subdir: `inbox/web-chat/${id}`,
+        filename: validated.filename,
+        buffer,
+        contentType: validated.mimeType,
+      });
+      const key = objectPath.replace(/^\/objects\//, "");
+      const attachment: WebChatAttachment = {
+        url: `/api/storage/objects/${key}`,
+        type: validated.kind,
+        name: validated.filename,
+        mimeType: validated.mimeType,
+        fileType: validated.mimeType,
+        fileSize: validated.size,
+        ...(String(req.headers["x-voice-note"] || "") === "1" && validated.kind === "audio"
+          ? { voiceNote: true }
+          : {}),
+      };
+      res.status(201).json({ attachment });
+    } catch (error) {
+      if (error instanceof WebChatMediaValidationError) {
+        res.status(error.statusCode).json({ error: error.message });
+        return;
+      }
+      console.error(`[INBOX] web-chat media upload failed for conversation ${id}:`, error);
+      res.status(500).json({ error: "File upload failed" });
+    }
+  },
+);
+
+/**
  * Send an outbound message on a non-internal channel conversation.
- * Body: { content: string }
+ * Body: { content?: string, attachments?: Attachment[] }
  */
 router.post(
   "/inbox/conversations/:id/messages",
@@ -2035,7 +2117,15 @@ router.post(
     const id = parseInt(String(req.params.id), 10);
     const { content: rawContent, attachments: bodyAttachments, replyToMessageId } = req.body as {
       content?: string;
-      attachments?: Array<{ url: string; type?: string; name?: string; voiceNote?: boolean }>;
+      attachments?: Array<{
+        url: string;
+        type?: string;
+        name?: string;
+        mimeType?: string;
+        fileType?: string;
+        fileSize?: number;
+        voiceNote?: boolean;
+      }>;
       replyToMessageId?: number;
     };
     const replyToId: number | null = (typeof replyToMessageId === "number" && replyToMessageId > 0) ? replyToMessageId : null;
@@ -2310,21 +2400,31 @@ router.post(
     }
 
     if (conv.channel === "web_chat") {
-      if (hasAttachments) {
-        res.status(400).json({ error: "Web chat attachments are not supported yet." });
+      const attachments = hasAttachments
+        ? readWebChatAttachments({ attachments: bodyAttachments })
+        : [];
+      if (
+        attachments.length !== (bodyAttachments?.length ?? 0) ||
+        attachments.some((attachment) => !webChatObjectPath(attachment.url, id))
+      ) {
+        res.status(400).json({ error: "Invalid web chat attachment" });
         return;
       }
+      const storedContent = content.trim() || (attachments.length > 0 ? "[attachment]" : "");
       const [msg] = await db
         .insert(messagesTable)
         .values({
           conversationId: id,
           senderId: req.user!.id,
-          content,
+          content: storedContent,
           channel: "web_chat",
           direction: "outbound",
           status: "sent",
           sentAt: new Date(),
-          metadata: { humanSent: true },
+          metadata: {
+            humanSent: true,
+            ...(attachments.length > 0 ? { attachments } : {}),
+          },
           ...(replyToId ? { replyToId } : {}),
         })
         .returning();
@@ -2332,7 +2432,7 @@ router.post(
         .update(conversationsTable)
         .set({
           lastMessageAt: new Date(),
-          lastMessagePreview: content.slice(0, 200),
+          lastMessagePreview: storedContent.slice(0, 200),
           botEnabled: false,
           botReplyCount: 0,
           needsHuman: false,
@@ -4181,25 +4281,41 @@ router.post(
           resolvedMimeType,
         );
       } else {
-        // Zernio or direct URL — add Bearer auth only for zernio.com hosts
-        const fetchHeaders: Record<string, string> = {};
-        try {
-          const parsed = new URL(attachUrl!);
-          if (parsed.hostname === "zernio.com") {
-            const apiKey = await getZernioApiKey();
-            if (apiKey) fetchHeaders["Authorization"] = `Bearer ${apiKey}`;
-          }
-        } catch { /* non-parseable URL — will fail on fetch below */ }
+        const localKey = resolveLocalInboxStorageKey(
+          attachUrl!,
+          configuredInboxMediaHosts([req.hostname]),
+        );
+        if (localKey) {
+          // Web-chat and outbound composer uploads are private objects. Reading
+          // them through fetch() either rejects a relative URL or loses the
+          // authenticated request context; resolve the conversation-owned key
+          // directly through the canonical storage helper instead.
+          const file = await inboxMediaStorage.getObjectEntityFile(`/objects/${localKey}`);
+          const [metadata] = await file.getMetadata();
+          const [bytes] = await file.download();
+          fileBuffer = bytes;
+          resolvedMimeType = attachMimeType || metadata.contentType || "application/octet-stream";
+        } else {
+          // Zernio or direct URL — add Bearer auth only for zernio.com hosts.
+          const fetchHeaders: Record<string, string> = {};
+          try {
+            const parsed = new URL(attachUrl!);
+            if (parsed.hostname === "zernio.com") {
+              const apiKey = await getZernioApiKey();
+              if (apiKey) fetchHeaders["Authorization"] = `Bearer ${apiKey}`;
+            }
+          } catch { /* non-parseable URL — will fail on fetch below */ }
 
-        const mediaRes = await fetch(attachUrl!, { headers: fetchHeaders, redirect: "follow" });
-        if (!mediaRes.ok) {
-          console.error(`[INBOX save-as-doc] Attachment download failed ${mediaRes.status}: ${attachUrl}`);
-          res.status(502).json({ error: "Failed to download attachment" });
-          return;
+          const mediaRes = await fetch(attachUrl!, { headers: fetchHeaders, redirect: "follow" });
+          if (!mediaRes.ok) {
+            console.error(`[INBOX save-as-doc] Attachment download failed ${mediaRes.status}: ${attachUrl}`);
+            res.status(502).json({ error: "Failed to download attachment" });
+            return;
+          }
+          const contentType = mediaRes.headers.get("content-type") || "application/octet-stream";
+          fileBuffer = Buffer.from(await mediaRes.arrayBuffer());
+          resolvedMimeType = attachMimeType || contentType.split(";")[0].trim();
         }
-        const contentType = mediaRes.headers.get("content-type") || "application/octet-stream";
-        fileBuffer = Buffer.from(await mediaRes.arrayBuffer());
-        resolvedMimeType = attachMimeType || contentType.split(";")[0].trim();
         resolvedFilename = ensureAttachmentFilenameExtension(
           attachName || `attachment.${mimeToExt(resolvedMimeType)}`,
           resolvedMimeType,
@@ -4451,24 +4567,36 @@ router.post(
         }
         fileBuffer = Buffer.from(await mediaRes.arrayBuffer());
       } else {
-        const fetchHeaders: Record<string, string> = {};
-        try {
-          const parsed = new URL(attachUrl!);
-          if (parsed.hostname === "zernio.com") {
-            const apiKey = await getZernioApiKey();
-            if (apiKey) fetchHeaders["Authorization"] = `Bearer ${apiKey}`;
-          }
-        } catch { /* non-parseable URL */ }
+        const localKey = resolveLocalInboxStorageKey(
+          attachUrl!,
+          configuredInboxMediaHosts([req.hostname]),
+        );
+        if (localKey) {
+          const file = await inboxMediaStorage.getObjectEntityFile(`/objects/${localKey}`);
+          const [metadata] = await file.getMetadata();
+          const [bytes] = await file.download();
+          fileBuffer = bytes;
+          resolvedMimeType = attachMimeType || metadata.contentType || "application/octet-stream";
+        } else {
+          const fetchHeaders: Record<string, string> = {};
+          try {
+            const parsed = new URL(attachUrl!);
+            if (parsed.hostname === "zernio.com") {
+              const apiKey = await getZernioApiKey();
+              if (apiKey) fetchHeaders["Authorization"] = `Bearer ${apiKey}`;
+            }
+          } catch { /* non-parseable URL */ }
 
-        const mediaRes = await fetch(attachUrl!, { headers: fetchHeaders, redirect: "follow" });
-        if (!mediaRes.ok) {
-          console.warn(`[INBOX extract-for-student] Attachment download failed ${mediaRes.status}: ${attachUrl}`);
-          res.json({ extracted: {} });
-          return;
+          const mediaRes = await fetch(attachUrl!, { headers: fetchHeaders, redirect: "follow" });
+          if (!mediaRes.ok) {
+            console.warn(`[INBOX extract-for-student] Attachment download failed ${mediaRes.status}: ${attachUrl}`);
+            res.json({ extracted: {} });
+            return;
+          }
+          const contentType = mediaRes.headers.get("content-type") || "application/octet-stream";
+          fileBuffer = Buffer.from(await mediaRes.arrayBuffer());
+          resolvedMimeType = attachMimeType || contentType.split(";")[0].trim();
         }
-        const contentType = mediaRes.headers.get("content-type") || "application/octet-stream";
-        fileBuffer = Buffer.from(await mediaRes.arrayBuffer());
-        resolvedMimeType = attachMimeType || contentType.split(";")[0].trim();
       }
     } catch (err: any) {
       console.warn("[INBOX extract-for-student] media fetch error:", err?.message ?? err);

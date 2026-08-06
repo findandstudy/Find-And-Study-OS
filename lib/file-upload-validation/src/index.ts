@@ -283,6 +283,19 @@ export type BufferValidationError = FileValidationError | {
   message: string;
 };
 
+/**
+ * Expose the canonical magic-byte detector to upload surfaces that support
+ * safe media types beyond the student-document policy (for example web-chat
+ * audio/video). Keeping the dependency here avoids each API route inventing a
+ * second content-sniffing implementation.
+ */
+export async function detectUploadedFileType(
+  buffer: Buffer | Uint8Array,
+): Promise<{ ext: string; mime: string } | undefined> {
+  const { fileTypeFromBuffer } = await import("file-type");
+  return fileTypeFromBuffer(buffer);
+}
+
 export async function validateUploadedFileBuffer(
   fileName: string,
   declaredMimeType: string,
@@ -291,8 +304,7 @@ export async function validateUploadedFileBuffer(
   const baseError = validateUploadedFile(fileName, declaredMimeType, buffer.byteLength);
   if (baseError) return baseError;
 
-  const { fileTypeFromBuffer } = await import("file-type");
-  const detected = await fileTypeFromBuffer(buffer);
+  const detected = await detectUploadedFileType(buffer);
 
   // Legacy Office formats (.doc/.xls/.ppt) all share the same OLE/CFB
   // container signature, so magic-byte sniffing can't tell them apart from

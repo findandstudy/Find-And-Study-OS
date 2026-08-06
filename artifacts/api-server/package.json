@@ -14,6 +14,7 @@
     "test:student-creation-source": "tsx --test ./scripts/test-student-creation-source.ts",
     "test:inbox-student-extraction": "tsx --test ./scripts/test-inbox-student-extraction.ts",
     "test:inbox-attachment-metadata": "tsx --test ./scripts/test-inbox-attachment-metadata.ts",
+    "test:web-chat-media": "tsx --test ./scripts/test-web-chat-media.ts",
     "test:embed-chatbot": "tsx --test ./scripts/test-embed-chatbot.ts",
     "test:embed-lead-documents": "tsx --test ./scripts/test-embed-lead-document-session.ts",
     "test:inbox-conversation-indicators": "DATABASE_URL=postgres://test:test@127.0.0.1:5432/test tsx --test ./scripts/test-inbox-conversation-indicators.ts",
