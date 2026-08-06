@@ -198,3 +198,27 @@ test("TR11 — altinbas resolves as imperative adapter, family=altinbas, experim
     "isExperimentalAdapterKey('altinbas') must be true",
   );
 });
+
+test("TR12 — requested portal names resolve to their canonical adapters", () => {
+  const expected: Array<[string, string]> = [
+    ["Altinbas Univeristy", "altinbas"],
+    ["Bahcesehir Istanbul University", "bau"],
+    ["Beykent University", "beykent"],
+    ["Isik University", "isik"],
+    ["Istanbul Medipol University", "medipol"],
+    ["Istanbul Okan University", "okan"],
+    ["Sabancı University", "sabanci"],
+    ["Ozyegin_University", "ozyegin"],
+    ["Uskudar_University", "uskudar"],
+    ["Yeditepe University", "yeditepe"],
+    ["United Education", "united"],
+  ];
+
+  for (const [name, key] of expected) {
+    assert.equal(
+      adapterForUniversity(name)?.key,
+      key,
+      `${name} must resolve to ${key}`,
+    );
+  }
+});

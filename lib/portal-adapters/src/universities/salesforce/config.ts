@@ -10,6 +10,12 @@ export interface SalesforceSchoolConfig {
   /** Lower-cased, fold()-normalised fragments used by matches(). */
   namePatterns: string[];
   requiredDocs: (keyof SubmitFiles)[];
+  /**
+   * Uses exact profile/program/document/final-state proof and never substitutes
+   * guessed portal values. Enable only after the school's current flow has the
+   * shared Salesforce verification contract.
+   */
+  strictContract: boolean;
 }
 
 export const SALESFORCE_SCHOOLS: SalesforceSchoolConfig[] = [
@@ -19,6 +25,7 @@ export const SALESFORCE_SCHOOLS: SalesforceSchoolConfig[] = [
     portalUrl: "https://apply.uskudar.edu.tr/agency/s",
     namePatterns: ["uskudar"],
     requiredDocs: ["diploma", "transcript", "passport"],
+    strictContract: true,
   },
   {
     key: "aydin",
@@ -26,6 +33,7 @@ export const SALESFORCE_SCHOOLS: SalesforceSchoolConfig[] = [
     portalUrl: "https://applyonline.aydin.edu.tr/agency/s",
     namePatterns: ["aydin","istanbul aydin"],
     requiredDocs: ["diploma", "transcript", "passport"],
+    strictContract: false,
   },
   {
     key: "bau",
@@ -33,6 +41,7 @@ export const SALESFORCE_SCHOOLS: SalesforceSchoolConfig[] = [
     portalUrl: "https://applyonline.bau.edu.tr/agency/s",
     namePatterns: ["bahcesehir","bau"],
     requiredDocs: ["diploma", "transcript", "passport"],
+    strictContract: true,
   },
   {
     key: "atlas",
@@ -40,6 +49,7 @@ export const SALESFORCE_SCHOOLS: SalesforceSchoolConfig[] = [
     portalUrl: "https://apply.atlas.edu.tr/agency/s",
     namePatterns: ["atlas"],
     requiredDocs: ["diploma", "transcript", "passport"],
+    strictContract: false,
   },
   {
     key: "dogus",
@@ -47,6 +57,7 @@ export const SALESFORCE_SCHOOLS: SalesforceSchoolConfig[] = [
     portalUrl: "https://apply.dogus.edu.tr/agency/s",
     namePatterns: ["dogus"],
     requiredDocs: ["diploma", "transcript", "passport"],
+    strictContract: false,
   },
   {
     key: "ozyegin",
@@ -54,6 +65,7 @@ export const SALESFORCE_SCHOOLS: SalesforceSchoolConfig[] = [
     portalUrl: "https://apply.ozyegin.edu.tr/agency/s",
     namePatterns: ["ozyegin"],
     requiredDocs: ["diploma", "transcript", "passport"],
+    strictContract: true,
   },
   {
     key: "pirireis",
@@ -61,6 +73,7 @@ export const SALESFORCE_SCHOOLS: SalesforceSchoolConfig[] = [
     portalUrl: "https://apply.pirireis.edu.tr/partner/s",
     namePatterns: ["piri reis","pirireis"],
     requiredDocs: ["diploma", "transcript", "passport"],
+    strictContract: false,
   },
   {
     key: "sabanci",
@@ -68,6 +81,7 @@ export const SALESFORCE_SCHOOLS: SalesforceSchoolConfig[] = [
     portalUrl: "https://apply.sabanciuniv.edu/partner/s",
     namePatterns: ["sabanci"],
     requiredDocs: ["diploma", "transcript", "passport"],
+    strictContract: true,
   },
   {
     key: "yeditepe",
@@ -75,6 +89,7 @@ export const SALESFORCE_SCHOOLS: SalesforceSchoolConfig[] = [
     portalUrl: "https://apply.yeditepe.edu.tr/partner/s",
     namePatterns: ["yeditepe"],
     requiredDocs: ["diploma", "transcript", "passport"],
+    strictContract: true,
   },
   {
     key: "beykent",
@@ -82,6 +97,7 @@ export const SALESFORCE_SCHOOLS: SalesforceSchoolConfig[] = [
     portalUrl: "https://beykent.my.site.com/agency/s",
     namePatterns: ["beykent"],
     requiredDocs: ["diploma", "transcript", "passport"],
+    strictContract: true,
   },
   {
     key: "isik",
@@ -89,5 +105,6 @@ export const SALESFORCE_SCHOOLS: SalesforceSchoolConfig[] = [
     portalUrl: "https://isikuniversity.my.site.com/agency/s",
     namePatterns: ["isik"],
     requiredDocs: ["diploma", "transcript", "passport"],
+    strictContract: true,
   },
 ];

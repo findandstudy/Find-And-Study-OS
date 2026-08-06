@@ -210,6 +210,39 @@ export function inferSalesforceDocumentSlot(
   return null;
 }
 
+export interface SalesforceUploadEvidence {
+  localPath: string;
+  inputValue: string;
+  containerText: string;
+  ariaInvalid?: string | null;
+}
+
+function uploadBaseName(value: string): string {
+  return value.split(/[\\/]/).pop()?.trim().toLowerCase() ?? "";
+}
+
+/**
+ * A native file input value only proves that Playwright selected a local file;
+ * it does not prove that the Salesforce component accepted the upload. Require
+ * the exact selected basename plus portal-visible filename/success evidence.
+ */
+export function hasSalesforceUploadProof(
+  evidence: SalesforceUploadEvidence,
+): boolean {
+  if (evidence.ariaInvalid === "true") return false;
+  const expected = uploadBaseName(evidence.localPath);
+  const selected = uploadBaseName(evidence.inputValue);
+  if (!expected || selected !== expected) return false;
+
+  const container = evidence.containerText.replace(/\s+/g, " ").toLowerCase();
+  return (
+    container.includes(expected) ||
+    /\b(uploaded|upload complete|successfully uploaded|upload successful)\b/i.test(
+      container,
+    )
+  );
+}
+
 export function normalizeSalesforceStage(
   value: string | null | undefined,
 ): SalesforceStage {

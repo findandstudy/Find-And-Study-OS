@@ -47,6 +47,7 @@ function isUnitedMember(
   name: string | undefined | null,
   dynamicList?: readonly string[],
 ): boolean {
+  if (/^united\s+education$/i.test(String(name ?? "").trim())) return true;
   const strip = (s: string) =>
     fold(String(s || ""))
       .replace(/\b(university|universitesi|universite|univ|istanbul|the|of)\b/g, " ")

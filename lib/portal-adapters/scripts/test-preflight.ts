@@ -78,6 +78,23 @@ test("SIT requires its photo and structured address contract", () => {
   assert.ok(result.missingDocuments.includes("photo"));
 });
 
+test("Medipol preflight mirrors its profile and four-document contract", () => {
+  const result = evaluatePortalPreflight({
+    adapterKey: "medipol",
+    profile: {
+      ...complete,
+      passportIssueDate: undefined,
+      passportExpiryDate: undefined,
+    },
+    files: threeDocs,
+  });
+  assert.equal(result.supported, true);
+  assert.equal(result.ready, false);
+  assert.ok(result.missingFields.includes("passportIssueDate"));
+  assert.ok(result.missingFields.includes("passportExpiryDate"));
+  assert.ok(result.missingDocuments.includes("photo"));
+});
+
 test("unknown declarative adapters defer to their profilePolicy", () => {
   const result = evaluatePortalPreflight({
     adapterKey: "future-spec-adapter",

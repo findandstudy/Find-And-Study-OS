@@ -13,6 +13,7 @@ import { SALESFORCE_SCHOOLS, type SalesforceSchoolConfig } from "./config.js";
 import {
   chooseSalesforceBinaryCandidate,
   hasSalesforceCompletionProof,
+  hasSalesforceUploadProof,
   inferSalesforceDocumentSlot,
   isOwnedSalesforceApplicant,
   normalizeSalesforceStage,
@@ -95,11 +96,7 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
 
       const page: any = session.page;
       const dryRun = doSubmit === false || process.env.PORTAL_DRYRUN === "1" || process.env.SF_DRYRUN === "1";
-      const strictMappedPortal = new Set([
-        "uskudar",
-        "beykent",
-        "isik",
-      ]).has(cfg.key);
+      const strictMappedPortal = cfg.strictContract;
       if (strictMappedPortal) {
         const missingProfile = [
           ["firstName", profile.firstName],
@@ -1445,15 +1442,47 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
                 continue;
               }
               const input = controls[0];
-              await input.setInputFiles(localPath).catch(() => {});
-              await page.waitForTimeout(1800);
-              const value = await input.inputValue().catch(() => "");
-              if (
-                value &&
-                (await input.getAttribute("aria-invalid").catch(() => null)) !==
-                  "true"
-              ) {
+              try {
+                await input.setInputFiles(localPath);
+              } catch {
+                logger.warn(
+                  `[salesforce:${cfg.key}] file selection failed`,
+                  { slot },
+                );
+                continue;
+              }
+              let uploadProved = false;
+              for (let attempt = 0; attempt < 12; attempt++) {
+                await page.waitForTimeout(700);
+                const evidence = {
+                  localPath,
+                  inputValue: await input.inputValue().catch(() => ""),
+                  ariaInvalid: await input
+                    .getAttribute("aria-invalid")
+                    .catch(() => null),
+                  containerText: await input
+                    .evaluate((el: HTMLInputElement) => {
+                      const container = el.closest(
+                        "lightning-input,.slds-form-element,[data-name],[class*='upload']",
+                      );
+                      return (container?.textContent || "")
+                        .replace(/\s+/g, " ")
+                        .trim();
+                    })
+                    .catch(() => ""),
+                };
+                if (hasSalesforceUploadProof(evidence)) {
+                  uploadProved = true;
+                  break;
+                }
+              }
+              if (uploadProved) {
                 uploadedSlots.push(slot);
+              } else {
+                logger.warn(
+                  `[salesforce:${cfg.key}] portal upload proof missing`,
+                  { slot },
+                );
               }
             }
             result.uploadedSlots = uploadedSlots;

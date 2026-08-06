@@ -159,6 +159,29 @@ register(
 );
 
 register(
+  "medipol",
+  [
+    "email",
+    "firstName",
+    "lastName",
+    "passportNumber",
+    "passportIssueDate",
+    "passportExpiryDate",
+    "phone",
+    "gender",
+    "nationality",
+    "dateOfBirth",
+    "fatherName",
+    "motherName",
+    "level",
+    "schoolName",
+    "gpa",
+    "programName",
+  ],
+  FOUR_CORE_DOCUMENTS,
+);
+
+register(
   "emu",
   [...CORE_IDENTITY, ...ACADEMIC],
   FOUR_CORE_DOCUMENTS,
