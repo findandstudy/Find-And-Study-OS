@@ -19,9 +19,13 @@ import {
   clearCredsOverride,
   validateIdentityFields,
   formatIdentityErrors,
-  evaluateSitIdentity,
+  evaluateSitSubmissionIdentityGate,
 } from "@workspace/portal-adapters";
-import type { SubmitResult, SubmitProfile, SubmitFiles } from "@workspace/portal-adapters";
+import type {
+  SubmitResult,
+  SubmitProfile,
+  SubmitFiles,
+} from "@workspace/portal-adapters";
 import type { ClaimedSubmission } from "./queue.js";
 import { resolvePortalCreds } from "./credResolver.js";
 
@@ -45,7 +49,10 @@ export interface RunResult {
  * `tempDir` is cleaned up inside this function (in the finally block).
  */
 export async function runSubmission(
-  submission: Pick<ClaimedSubmission, "id" | "universityKey" | "universityName" | "mode">,
+  submission: Pick<
+    ClaimedSubmission,
+    "id" | "universityKey" | "universityName" | "mode"
+  >,
   profile: SubmitProfile,
   files: SubmitFiles,
   tempDir: string,
@@ -67,7 +74,7 @@ export async function runSubmission(
     await cleanup(tempDir);
     return {
       result: {
-        submitted:     false,
+        submitted: false,
         alreadyExists: false,
         programMissing: false,
       },
@@ -84,11 +91,11 @@ export async function runSubmission(
   // with a placeholder passport number and create a real-but-wrong application
   // that harms the student.
   const idErrors = validateIdentityFields({
-    passportNumber:     profile.passportNumber,
-    firstName:          profile.firstName,
-    lastName:           profile.lastName,
-    dateOfBirth:        profile.dateOfBirth || undefined,
-    passportIssueDate:  profile.passportIssueDate,
+    passportNumber: profile.passportNumber,
+    firstName: profile.firstName,
+    lastName: profile.lastName,
+    dateOfBirth: profile.dateOfBirth || undefined,
+    passportIssueDate: profile.passportIssueDate,
     passportExpiryDate: profile.passportExpiryDate,
   });
   if (idErrors.length > 0) {
@@ -99,15 +106,20 @@ export async function runSubmission(
   }
 
   if (adapter.key === "sit") {
-    const identity = evaluateSitIdentity(profile, profile.passportIdentityProof);
-    if (!identity.matched) {
+    const identity = evaluateSitSubmissionIdentityGate(
+      profile,
+      profile.passportIdentityProof,
+    );
+    if (!identity.allowed) {
       await cleanup(tempDir);
-      const fields = [...new Set([
-        ...identity.missingFields,
-        ...identity.mismatchedFields,
-      ])];
       throw new Error(
-        `SIT_IDENTITY_PROOF_FAILED: fields=${fields.join(",") || "passportIdentityProof"}`,
+        `SIT_IDENTITY_PROOF_FAILED: fields=${identity.fields.join(",") || "passportIdentityProof"}`,
+      );
+    }
+    if (identity.verification === "unavailable") {
+      console.warn(
+        `[portal-worker] SIT passport proof unavailable for submission #${submission.id}; ` +
+          "continuing after deterministic identity and document validation",
       );
     }
   }
@@ -144,9 +156,12 @@ export async function runSubmission(
     // Capture post-submit screenshot (debug only — gate behind PORTAL_DEBUG=1)
     if (process.env.PORTAL_DEBUG === "1") {
       try {
-        const buf = await (session as unknown as { page: { screenshot(): Promise<Buffer> } })
-          .page.screenshot();
-        screenshotUrls.push(`data:image/png;base64,${buf.toString("base64").slice(0, 64)}…`);
+        const buf = await (
+          session as unknown as { page: { screenshot(): Promise<Buffer> } }
+        ).page.screenshot();
+        screenshotUrls.push(
+          `data:image/png;base64,${buf.toString("base64").slice(0, 64)}…`,
+        );
       } catch {
         // Screenshot failure is non-fatal
       }

@@ -107,6 +107,7 @@ import {
   type EmbedChatLocale,
 } from "../lib/embedChatI18n";
 import { validatePassportNumber } from "@workspace/portal-adapters/identity-validation";
+import { resolveProgramInterestedLevel } from "../lib/programInterestedLevel";
 
 const TR_MAP: Record<string, string> = { "ç":"C","Ç":"C","ğ":"G","Ğ":"G","ı":"I","İ":"I","ö":"O","Ö":"O","ş":"S","Ş":"S","ü":"U","Ü":"U" };
 function tlu(v: any, max: number): string | null {
@@ -1577,6 +1578,7 @@ router.post("/public/embed/:slug/apply", embedSubmitLimiter, embedApplyJson, asy
   try { sourceWebsite = origin || (req.headers.referer ? new URL(req.headers.referer as string).origin : null) || null; } catch {}
 
   const s = (v: any, max: number) => v ? String(v).slice(0, max) : null;
+  const resolvedInterestedLevel = await resolveProgramInterestedLevel(programId, desiredLevel);
   const residence = resolveResidenceAddress({
     address,
     addressCity: addressCity || aiExtractedData?.addressCity,
@@ -1773,6 +1775,7 @@ router.post("/public/embed/:slug/apply", embedSubmitLimiter, embedApplyJson, asy
           userId,
           addressCity: residence.addressCity,
           postalCode: residence.postalCode,
+          interestedLevel: resolvedInterestedLevel,
         }).where(eq(studentsTable.id, archivedByEmail.id));
         newStudent = {
           ...archivedByEmail,
@@ -1780,6 +1783,7 @@ router.post("/public/embed/:slug/apply", embedSubmitLimiter, embedApplyJson, asy
           userId,
           addressCity: residence.addressCity,
           postalCode: residence.postalCode,
+          interestedLevel: resolvedInterestedLevel,
         };
       } else {
         const normalizedGender = gender ? String(gender).toLowerCase() : null;
@@ -1803,6 +1807,7 @@ router.post("/public/embed/:slug/apply", embedSubmitLimiter, embedApplyJson, asy
           addressCity: residence.addressCity,
           postalCode: residence.postalCode,
           highSchool: s(highSchool, 200),
+          interestedLevel: resolvedInterestedLevel,
           graduationYear: graduationYear ? parseInt(String(graduationYear), 10) || null : null,
           gpa: s(gpa, 20),
           languageScore: s(languageScore, 20),
@@ -3874,6 +3879,7 @@ var detailProgram=null, detailOpen=false;
 var formStep='personal';
 var phoneError=false;
 var uploadedDocs={};
+var documentMergeInFlight={};
 // Message shown when the applicant tries to advance past the Documents step
 // without uploading every document marked Required. {docs} is replaced with
 // the comma-separated list of missing required document labels.
@@ -4001,6 +4007,10 @@ function validateFileUpload(file){
     return 'Each file may be a maximum of '+APPLICATION_DOC_MAX_MB+' MB.';
   }
   return null;
+}
+function isPhotoDocumentKey(key){
+  var normalized=String(key||'').trim().toLowerCase().replace(/[\s-]+/g,'_');
+  return normalized==='photo'||normalized==='photograph'||normalized==='passport_photo';
 }
 
 var LEVEL_DOCS={
@@ -4280,10 +4290,7 @@ function handleScanForKey(key){
   openScanner(key,function(file){
     var vErr=validateFileUpload(file);
     if(vErr){alert(vErr);return;}
-    fileToBase64(file).then(function(result){
-      uploadedDocs[key]={label:key,base64:result.base64,mediaType:result.mediaType,sizeBytes:result.size,isImage:result.isImage};
-      if(formOpen)showModal();else render(false);
-    });
+    handleDocumentFiles(key,[file]);
   },openNative);
 }
 
@@ -4293,11 +4300,76 @@ function fileToBase64(file){
     reader.onload=function(){
       var result=reader.result;
       var base64=result.split(',')[1]||result;
-      resolve({base64:base64,mediaType:file.type,size:file.size,isImage:file.type.startsWith('image/')});
+      resolve({base64:base64,mediaType:file.type,size:file.size,isImage:file.type.startsWith('image/'),fileName:file.name||'document'});
     };
     reader.onerror=reject;
     reader.readAsDataURL(file);
   });
+}
+
+function handleDocumentFiles(key,files){
+  files=Array.prototype.slice.call(files||[]);
+  if(files.length===0)return Promise.resolve();
+  if(documentMergeInFlight[key])return documentMergeInFlight[key];
+  for(var i=0;i<files.length;i++){
+    var validationError=validateFileUpload(files[i]);
+    if(validationError){alert(validationError);return Promise.resolve(null);}
+  }
+  if(isPhotoDocumentKey(key)&&files.length>1){
+    var photoError='Photograph accepts only one JPG, JPEG or PNG image.';
+    alert(photoError);return Promise.resolve(null);
+  }
+  var existing=uploadedDocs[key]||null;
+  var currentPartCount=existing?(existing.partCount||1):0;
+  if(!isPhotoDocumentKey(key)&&currentPartCount+files.length>6){
+    var countError='You can combine up to 6 parts in one document box.';
+    alert(countError);return Promise.resolve(null);
+  }
+  documentMergeInFlight[key]=Promise.all(files.map(fileToBase64)).then(function(results){
+    if(isPhotoDocumentKey(key)){
+      var photo=results[results.length-1];
+      uploadedDocs[key]={label:key,base64:photo.base64,mediaType:photo.mediaType,sizeBytes:photo.size,isImage:true,fileName:photo.fileName,partCount:1};
+      return uploadedDocs[key];
+    }
+    if(!existing&&results.length===1){
+      var single=results[0];
+      uploadedDocs[key]={label:key,base64:single.base64,mediaType:single.mediaType,sizeBytes:single.size,isImage:single.isImage,fileName:single.fileName,partCount:1};
+      return uploadedDocs[key];
+    }
+    var pending=results.slice();
+    var current=existing||pending.shift();
+    var apiBase=API.replace('/public/embed/'+SLUG,'');
+    function mergeNext(){
+      if(pending.length===0)return Promise.resolve(current);
+      var next=pending.shift();
+      var pair=[
+        {data:current.base64,mediaType:current.mediaType,fileName:current.fileName||key+'.pdf'},
+        {data:next.base64,mediaType:next.mediaType,fileName:next.fileName||key+'-part'}
+      ];
+      return fetch(apiBase+'/public/documents/merge-parts',{
+        method:'POST',
+        headers:{'Content-Type':'application/json','X-Application-Session':leadDocumentSessionToken||applicationSessionId},
+        body:JSON.stringify({documentType:key,label:key,parts:pair})
+      }).then(function(response){
+        return response.json().catch(function(){return {}}).then(function(payload){
+          if(!response.ok)throw new Error(payload.error||'Document parts could not be combined.');
+          current={base64:payload.data,mediaType:payload.mediaType,sizeBytes:payload.sizeBytes,isImage:false,fileName:payload.fileName,pageCount:payload.pageCount};
+          return mergeNext();
+        });
+      });
+    }
+    return mergeNext().then(function(finalDocument){
+      uploadedDocs[key]={label:key,base64:finalDocument.base64,mediaType:finalDocument.mediaType,sizeBytes:finalDocument.sizeBytes||finalDocument.size,isImage:false,fileName:finalDocument.fileName,partCount:currentPartCount+results.length,pageCount:finalDocument.pageCount};
+      return uploadedDocs[key];
+    });
+  }).then(function(result){
+    if(formOpen)showModal();else render(false);
+    return result;
+  }).catch(function(error){
+    alert(error&&error.message?error.message:'Document parts could not be combined.');
+    return null;
+  }).finally(function(){delete documentMergeInFlight[key];});
+  return documentMergeInFlight[key];
 }
 
 function $(s,p){return (p||document).querySelector(s)}
@@ -4681,12 +4753,14 @@ function renderFormContent(prog){
       var d=docTypes[i];
       var isUploaded=!!uploadedDocs[d.key];
       h+='<div class="ew-doc-slot'+(isUploaded?' uploaded':'')+'" data-doc-key="'+esc(d.key)+'">';
-      h+='<input type="file" accept="'+esc(safeAccept(d.accept))+'" data-doc-input="'+esc(d.key)+'">';
+      h+='<input type="file" accept="'+esc(safeAccept(d.accept))+'"'+(isPhotoDocumentKey(d.key)?'':' multiple')+' data-doc-input="'+esc(d.key)+'">';
       h+='<input type="file" accept="image/*" capture="environment" class="ew-doc-camera-input" data-doc-camera="'+esc(d.key)+'" tabindex="-1">';
       h+='<div class="ew-doc-icon">'+esc(d.icon)+'</div>';
       h+='<div class="ew-doc-label">'+esc(d.label)+'</div>';
       if(isUploaded){
-        h+='<div class="ew-doc-status">\\u2713 Uploaded</div>';
+        var partCount=uploadedDocs[d.key].partCount||1;
+        h+='<div class="ew-doc-status">\\u2713 Uploaded'+(partCount>1?' \\u00b7 '+partCount+' parts':'')+'</div>';
+        if(!isPhotoDocumentKey(d.key))h+='<div class="ew-doc-hint">Click to add another part</div>';
       } else {
         h+='<div class="ew-doc-hint">Click to upload</div>';
         if(d.required)h+='<div class="ew-doc-required">Required</div>';
@@ -5074,15 +5148,8 @@ function bindModalEvents(modal,overlay){
   $$('[data-doc-input]',modal).forEach(function(input){
     input.addEventListener('change',function(e){
       var key=input.getAttribute('data-doc-input');
-      var file=e.target.files[0];
-      if(!file)return;
-      var vErr=validateFileUpload(file);
-      if(vErr){alert(vErr);return;}
-      fileToBase64(file).then(function(result){
-        uploadedDocs[key]={label:key,base64:result.base64,mediaType:result.mediaType,sizeBytes:result.size,isImage:result.isImage};
-        if(formOpen)showModal();
-        else render(false);
-      });
+      handleDocumentFiles(key,e.target.files);
+      input.value='';
     });
   });
   $$('[data-doc-camera]',modal).forEach(function(input){
@@ -5090,12 +5157,8 @@ function bindModalEvents(modal,overlay){
       var key=input.getAttribute('data-doc-camera');
       var file=e.target.files[0];
       if(!file)return;
-      var vErr=validateFileUpload(file);
-      if(vErr){alert(vErr);input.value='';return;}
-      fileToBase64(file).then(function(result){
-        uploadedDocs[key]={label:key,base64:result.base64,mediaType:result.mediaType,sizeBytes:result.size,isImage:result.isImage};
-        if(formOpen)showModal();else render(false);
-      });
+      handleDocumentFiles(key,[file]);
+      input.value='';
     });
   });
   $$('[data-doc-scan]',modal).forEach(function(btn){
@@ -5696,14 +5759,8 @@ function bindEvents(){
     if(formOpen)return;
     input.addEventListener('change',function(e){
       var key=input.getAttribute('data-doc-input');
-      var file=e.target.files[0];
-      if(!file)return;
-      var vErr2=validateFileUpload(file);
-      if(vErr2){alert(vErr2);return;}
-      fileToBase64(file).then(function(result){
-        uploadedDocs[key]={label:key,base64:result.base64,mediaType:result.mediaType,sizeBytes:result.size,isImage:result.isImage};
-        render(false);
-      });
+      handleDocumentFiles(key,e.target.files);
+      input.value='';
     });
   });
   $$('[data-doc-camera]').forEach(function(input){
@@ -5712,12 +5769,8 @@ function bindEvents(){
       var key=input.getAttribute('data-doc-camera');
       var file=e.target.files[0];
       if(!file)return;
-      var vErr3=validateFileUpload(file);
-      if(vErr3){alert(vErr3);input.value='';return;}
-      fileToBase64(file).then(function(result){
-        uploadedDocs[key]={label:key,base64:result.base64,mediaType:result.mediaType,sizeBytes:result.size,isImage:result.isImage};
-        render(false);
-      });
+      handleDocumentFiles(key,[file]);
+      input.value='';
     });
   });
   $$('[data-doc-scan]').forEach(function(btn){

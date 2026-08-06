@@ -32,6 +32,7 @@ import {
 import { DocumentScanner } from "@/components/DocumentScanner";
 import { motion, AnimatePresence } from "framer-motion";
 import { useToast } from "@/hooks/use-toast";
+import { MAX_DOCUMENT_PARTS, isSingleImageDocumentType, mergeDocumentParts } from "@/lib/documentPartMerge";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
@@ -179,7 +180,7 @@ function getDocTypesForDegree(degree: string | null | undefined): DocType[] {
   return DEFAULT_DOC_TYPES;
 }
 
-type UploadedDoc = { key: string; label: string; file: File; base64: string; mediaType: string; isImage: boolean };
+type UploadedDoc = { key: string; label: string; file: File; base64: string; mediaType: string; isImage: boolean; partCount?: number };
 
 function compressImage(file: File, maxWidth = 1600, quality = 0.78): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -218,25 +219,77 @@ async function prepareDoc(file: File): Promise<{ base64: string; mediaType: stri
   return { base64: await fileToBase64(file), mediaType: file.type || "application/pdf", isImage: false };
 }
 
-function DropZone({ docType, uploaded, onUpload, onRemove }: {
-  docType: DocType; uploaded?: UploadedDoc; onUpload: (d: UploadedDoc) => void; onRemove: () => void;
+function DropZone({ docType, uploaded, onUpload, onRemove, applicationSession }: {
+  docType: DocType;
+  uploaded?: UploadedDoc;
+  onUpload: (d: UploadedDoc) => void;
+  onRemove: () => void;
+  applicationSession: string;
 }) {
   const { t } = useI18n();
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
   const [scannerOpen, setScannerOpen] = useState(false);
+  const [merging, setMerging] = useState(false);
   const { toast } = useToast();
 
-  async function handleFile(file: File) {
-    const validation = validateFile(file);
-    if (!validation.valid) {
-      toast({ title: t("apply.fileError"), description: validation.message, variant: "destructive" });
+  async function handleFiles(files: File[]) {
+    if (files.length === 0) return;
+    const labelText = docType.label ?? t(docType.labelKey);
+    const currentPartCount = uploaded?.partCount || (uploaded ? 1 : 0);
+    if (isSingleImageDocumentType(docType.key) && (uploaded || files.length > 1)) {
+      toast({ title: "Photograph accepts one image", description: "Remove the current photograph before choosing another.", variant: "destructive" });
       return;
     }
-    const safeFile = new File([file], sanitizeFileName(file.name), { type: file.type });
-    const { base64, mediaType, isImage } = await prepareDoc(safeFile);
-    const labelText = docType.label ?? t(docType.labelKey);
-    onUpload({ key: docType.key, label: labelText, file: safeFile, base64, mediaType, isImage });
+    if (currentPartCount + files.length > MAX_DOCUMENT_PARTS) {
+      toast({ title: "Too many document parts", description: `You can combine up to ${MAX_DOCUMENT_PARTS} parts in one document box.`, variant: "destructive" });
+      return;
+    }
+
+    const safeFiles: File[] = [];
+    for (const file of files) {
+      const validation = validateFile(file);
+      if (!validation.valid) {
+        toast({ title: t("apply.fileError"), description: validation.message, variant: "destructive" });
+        return;
+      }
+      safeFiles.push(new File([file], sanitizeFileName(file.name), { type: file.type }));
+    }
+
+    setMerging(true);
+    try {
+      const prepared = await Promise.all(safeFiles.map(prepareDoc));
+      if (!uploaded && prepared.length === 1) {
+        onUpload({ key: docType.key, label: labelText, file: safeFiles[0], ...prepared[0], partCount: 1 });
+        return;
+      }
+      const merged = await mergeDocumentParts({
+        documentType: docType.key,
+        label: labelText,
+        publicSessionToken: applicationSession,
+        parts: [
+          ...(uploaded ? [{ file: uploaded.file, mediaType: uploaded.mediaType }] : []),
+          ...safeFiles.map((file, index) => ({ file, mediaType: prepared[index].mediaType })),
+        ],
+      });
+      onUpload({
+        key: docType.key,
+        label: labelText,
+        file: merged.file,
+        base64: merged.base64,
+        mediaType: merged.mediaType,
+        isImage: false,
+        partCount: currentPartCount + files.length,
+      });
+    } catch (error) {
+      toast({ title: "Documents could not be combined", description: error instanceof Error ? error.message : "Please try again.", variant: "destructive" });
+    } finally {
+      setMerging(false);
+    }
+  }
+
+  async function handleFile(file: File) {
+    await handleFiles([file]);
   }
 
   if (uploaded) {
@@ -247,7 +300,19 @@ function DropZone({ docType, uploaded, onUpload, onRemove }: {
         </button>
         <CheckCircle2 className="w-5 h-5 text-green-500" />
         <p className="text-xs font-semibold text-foreground truncate max-w-[90px]">{uploaded.file.name}</p>
+        {(uploaded.partCount || 1) > 1 && <p className="text-[10px] font-medium text-green-700">{uploaded.partCount} parts combined</p>}
         <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full font-medium">{docType.label ?? t(docType.labelKey)}</span>
+        {!isSingleImageDocumentType(docType.key) && (
+          <div className="flex items-center gap-2">
+            <button type="button" disabled={merging} onClick={() => inputRef.current?.click()} className="text-[10px] font-semibold text-primary hover:underline disabled:opacity-50">
+              {merging ? "Combining..." : "+ Add part"}
+            </button>
+            <button type="button" disabled={merging} onClick={() => setScannerOpen(true)} className="text-[10px] font-semibold text-primary hover:underline disabled:opacity-50">Scan</button>
+          </div>
+        )}
+        <input ref={inputRef} type="file" multiple={!isSingleImageDocumentType(docType.key)} accept={docType.accept} className="hidden"
+          onChange={(e) => { void handleFiles(Array.from(e.target.files || [])); e.target.value = ""; }} />
+        <DocumentScanner open={scannerOpen} onClose={() => setScannerOpen(false)} baseName={docType.key} onCapture={handleFile} />
       </div>
     );
   }
@@ -262,7 +327,7 @@ function DropZone({ docType, uploaded, onUpload, onRemove }: {
       onClick={() => inputRef.current?.click()}
       onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
       onDragLeave={() => setDragging(false)}
-      onDrop={(e) => { e.preventDefault(); setDragging(false); const f = e.dataTransfer.files[0]; if (f) handleFile(f); }}
+      onDrop={(e) => { e.preventDefault(); setDragging(false); void handleFiles(Array.from(e.dataTransfer.files)); }}
     >
       <span className="text-2xl">{docType.icon}</span>
       <p className="text-xs font-semibold text-foreground">{docType.label ?? t(docType.labelKey)}</p>
@@ -271,8 +336,8 @@ function DropZone({ docType, uploaded, onUpload, onRemove }: {
         ? <span className="text-[10px] bg-rose-100 text-rose-600 px-1.5 py-0.5 rounded-full font-semibold dark:bg-rose-900/40 dark:text-rose-300">{t("apply.required")}</span>
         : <span className="text-[10px] bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400 px-1.5 py-0.5 rounded-full font-medium">{t("apply.optional")}</span>
       }
-      <input ref={inputRef} type="file" accept={docType.accept} className="hidden"
-        onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); e.target.value = ""; }} />
+      <input ref={inputRef} type="file" multiple={!isSingleImageDocumentType(docType.key)} accept={docType.accept} className="hidden"
+        onChange={(e) => { void handleFiles(Array.from(e.target.files || [])); e.target.value = ""; }} />
       <button
         type="button"
         onClick={(e) => { e.stopPropagation(); setScannerOpen(true); }}
@@ -281,12 +346,7 @@ function DropZone({ docType, uploaded, onUpload, onRemove }: {
         <Camera className="w-3 h-3" />
         {t("scanner.scanWithCamera")}
       </button>
-      <DocumentScanner
-        open={scannerOpen}
-        onClose={() => setScannerOpen(false)}
-        baseName={docType.key}
-        onCapture={(f) => handleFile(f)}
-      />
+      <DocumentScanner open={scannerOpen} onClose={() => setScannerOpen(false)} baseName={docType.key} onCapture={handleFile} />
     </div>
   );
 }
@@ -1019,6 +1079,7 @@ function ApplyDialog({ open, onClose, program, countries }: { open: boolean; onC
                         setReplacedTypes(prev => { const n = new Set(prev); n.delete(dt.key); return n; });
                       }
                     }}
+                    applicationSession={applicationSessionRef.current}
                   />
                 );
               })}

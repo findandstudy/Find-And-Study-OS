@@ -13,7 +13,12 @@ export type {
 } from "./types.js";
 
 // Credential helper — reads from process.env (or injected override)
-export { portalCreds, setCredsOverride, clearCredsOverride, type ResolvedCreds } from "./portalCreds.js";
+export {
+  portalCreds,
+  setCredsOverride,
+  clearCredsOverride,
+  type ResolvedCreds,
+} from "./portalCreds.js";
 
 // Reactive exclusive-region detection (portal response safety net)
 export { detectExclusiveRegion } from "./exclusiveRegion.js";
@@ -181,10 +186,12 @@ export {
 } from "./identityValidation.js";
 export {
   evaluateSitIdentity,
+  evaluateSitSubmissionIdentityGate,
   normalizeSitPassport,
   sitPassportIdentityProofFromDocument,
   type SitIdentityEvaluation,
   type SitIdentityField,
+  type SitSubmissionIdentityGate,
 } from "./universities/sit/helpers.js";
 
 export {

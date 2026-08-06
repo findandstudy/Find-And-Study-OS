@@ -78,6 +78,22 @@ const DOC_LABELS: Record<string, string> = {
   final_acceptance: "Final Acceptance Letter",
 };
 
+// Older Add Student clients sent the visible label instead of the canonical
+// document key. Keep the aliases explicit: ambiguous labels must not be
+// guessed into the wrong document category.
+const LEGACY_DOC_TYPE_ALIASES: Record<string, string> = {
+  "diploma certificate": "diploma_certificate",
+  "diploma transcript": "diploma_transcript",
+  "bachelor's cert.": "bachelors_certificate",
+  "bachelor’s cert.": "bachelors_certificate",
+};
+
+export function normalizeDocumentTypeKey(value: unknown): string {
+  const key = String(value ?? "").trim().toLowerCase();
+  if (!key) return "";
+  return LEGACY_DOC_TYPE_ALIASES[key] ?? key;
+}
+
 /**
  * In-memory cache of admin-managed document-type labels from the
  * `catalog_options` table (category='documents'). Refreshed lazily

@@ -7,6 +7,8 @@ import { useCountrySearch } from "@/hooks/use-countries";
 import { useToast } from "@/hooks/use-toast";
 import { useI18n } from "@/hooks/use-i18n";
 import { isNonLatinNameError } from "@/lib/latinNameError";
+import { MAX_DOCUMENT_PARTS, isSingleImageDocumentType, mergeDocumentParts } from "@/lib/documentPartMerge";
+import { sanitizeFileName, validateApplicationDocumentFileObj } from "@/lib/fileUploadValidation";
 import { CountryFlag } from "@/components/CountryFlag";
 import { cn } from "@/lib/utils";
 import { PhoneCodePicker } from "@/components/ui/phone-code-picker";
@@ -46,6 +48,13 @@ function isDoctorate(level: string): boolean {
   const v = level.toLowerCase();
   return v.includes("ph") || v.includes("doctor");
 }
+function defaultStudyLevel(levels: Array<{ key: string; label: string }>): string {
+  if (levels.length === 0) return "";
+  return levels.find((level) => {
+    const value = `${level.key} ${level.label}`.toLowerCase();
+    return value.includes("bachelor");
+  })?.key ?? levels[0].key;
+}
 
 const DOC_TYPE_META: Record<string, { label: string; icon: string; accept: string }> = {
   high_school_diploma_translation:    { label: "HS Diploma",           icon: "🎓", accept: "image/*,.pdf" },
@@ -84,6 +93,7 @@ type UploadedDoc = {
   file: File;
   mediaType: string;
   isImage: boolean;
+  partCount?: number;
 };
 
 type ExtractedData = {
@@ -212,22 +222,65 @@ function DropZone({
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
+  const [merging, setMerging] = useState(false);
+  const { toast } = useToast();
 
-  async function handleFile(file: File) {
-    const { file: prepared, mediaType, isImage } = await prepareDocumentFile(file);
-    onUpload({ key: docType.key, label: docType.label, file: prepared, mediaType, isImage });
+  async function handleFiles(files: File[]) {
+    if (files.length === 0) return;
+    const currentPartCount = uploaded?.partCount || (uploaded ? 1 : 0);
+    if (isSingleImageDocumentType(docType.key) && (uploaded || files.length > 1)) {
+      toast({ title: "Photograph accepts one image", description: "Remove the current photograph before choosing another.", variant: "destructive" });
+      return;
+    }
+    if (currentPartCount + files.length > MAX_DOCUMENT_PARTS) {
+      toast({ title: "Too many document parts", description: `You can combine up to ${MAX_DOCUMENT_PARTS} parts in one document box.`, variant: "destructive" });
+      return;
+    }
+    const safeFiles: File[] = [];
+    for (const file of files) {
+      const validation = validateApplicationDocumentFileObj(file);
+      if (!validation.valid) {
+        toast({ title: "File error", description: validation.message, variant: "destructive" });
+        return;
+      }
+      safeFiles.push(new File([file], sanitizeFileName(file.name), { type: file.type }));
+    }
+    setMerging(true);
+    try {
+      const prepared = await Promise.all(safeFiles.map(prepareDocumentFile));
+      if (!uploaded && prepared.length === 1) {
+        const item = prepared[0];
+        onUpload({ key: docType.key, label: docType.label, ...item, partCount: 1 });
+        return;
+      }
+      const merged = await mergeDocumentParts({
+        documentType: docType.key,
+        label: docType.label,
+        parts: [
+          ...(uploaded ? [{ file: uploaded.file, mediaType: uploaded.mediaType }] : []),
+          ...prepared.map((item) => ({ file: item.file, mediaType: item.mediaType })),
+        ],
+      });
+      onUpload({
+        key: docType.key,
+        label: docType.label,
+        file: merged.file,
+        mediaType: merged.mediaType,
+        isImage: false,
+        partCount: currentPartCount + files.length,
+      });
+    } catch (error) {
+      toast({ title: "Documents could not be combined", description: error instanceof Error ? error.message : "Please try again.", variant: "destructive" });
+    } finally {
+      setMerging(false);
+    }
   }
 
-  const handleDrop = useCallback(
-    (e: React.DragEvent) => {
-      e.preventDefault();
-      setDragging(false);
-      const file = e.dataTransfer.files[0];
-      if (file) handleFile(file);
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    []
-  );
+  function handleDrop(e: React.DragEvent) {
+    e.preventDefault();
+    setDragging(false);
+    void handleFiles(Array.from(e.dataTransfer.files));
+  }
 
   const requiredBadge = docType.required
     ? <span className="text-[10px] bg-rose-100 text-rose-600 px-1.5 py-0.5 rounded-full font-semibold border border-rose-200">Required</span>
@@ -247,8 +300,22 @@ function DropZone({
         <div>
           <p className="text-xs font-semibold text-foreground truncate max-w-[90px]">{uploaded.file.name}</p>
           <p className="text-xs text-muted-foreground">{Math.round(uploaded.file.size / 1024)}KB</p>
+          {(uploaded.partCount || 1) > 1 && <p className="text-[10px] font-medium text-green-700">{uploaded.partCount} parts combined</p>}
         </div>
         <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full font-medium">{docType.label}</span>
+        {!isSingleImageDocumentType(docType.key) && (
+          <button type="button" disabled={merging} onClick={() => inputRef.current?.click()} className="text-[10px] font-semibold text-primary hover:underline disabled:opacity-50">
+            {merging ? "Combining..." : "+ Add another part"}
+          </button>
+        )}
+        <input
+          ref={inputRef}
+          type="file"
+          multiple={!isSingleImageDocumentType(docType.key)}
+          accept={docType.accept}
+          className="hidden"
+          onChange={(e) => { void handleFiles(Array.from(e.target.files || [])); e.target.value = ""; }}
+        />
       </div>
     );
   }
@@ -271,9 +338,10 @@ function DropZone({
       <input
         ref={inputRef}
         type="file"
+        multiple={!isSingleImageDocumentType(docType.key)}
         accept={docType.accept}
         className="hidden"
-        onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); e.target.value = ""; }}
+        onChange={(e) => { void handleFiles(Array.from(e.target.files || [])); e.target.value = ""; }}
       />
     </div>
   );
@@ -429,15 +497,20 @@ export function AddStudentModal({
   const [applicationLevel, setApplicationLevel] = useState<AppLevel>("");
 
   useEffect(() => {
-    if (!applicationLevel && studyLevels.length > 0) {
-      const bach = studyLevels.find(l => l.key.toLowerCase().includes("bachelor")) ?? studyLevels[0];
-      setApplicationLevel(bach.key);
+    if (studyLevels.length === 0) return;
+    const selectedLevelExists = studyLevels.some((level) => level.key === applicationLevel);
+    if (!applicationLevel || !selectedLevelExists) {
+      const level = defaultStudyLevel(studyLevels);
+      setApplicationLevel(level);
+      setForm((current) => ({ ...current, interestedLevel: level }));
     }
   }, [studyLevels, applicationLevel]);
 
   useEffect(() => {
     if (open) {
-      setForm(buildInitialForm(prefill));
+      const level = defaultStudyLevel(studyLevels);
+      setForm({ ...buildInitialForm(prefill), interestedLevel: level });
+      setApplicationLevel(level);
       setStep("upload");
       setDocs({});
       setExtractedFields(new Set());
@@ -468,17 +541,23 @@ export function AddStudentModal({
   })();
 
   function handleClose() {
+    const level = defaultStudyLevel(studyLevels);
     setStep("upload");
     setDocs({});
     setExtractedFields(new Set());
-    setForm(EMPTY_FORM);
+    setForm({ ...EMPTY_FORM, interestedLevel: level });
     setAnalysisError(null);
-    setApplicationLevel(studyLevels[0]?.key ?? "");
+    setApplicationLevel(level);
     onClose();
   }
 
   function field(name: keyof typeof EMPTY_FORM) {
     return (value: string) => setForm((f) => ({ ...f, [name]: value }));
+  }
+
+  function selectApplicationLevel(level: string) {
+    setApplicationLevel(level);
+    setForm((current) => ({ ...current, interestedLevel: level }));
   }
 
   async function analyzeDocuments() {
@@ -500,7 +579,7 @@ export function AddStudentModal({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ documents: docPayload }),
+        body: JSON.stringify({ documents: docPayload, appliedLevel: form.interestedLevel || applicationLevel }),
       });
       if (!res.ok) {
         if (res.status === 413) throw new Error(t("studentsPage.documentsTooLarge"));
@@ -619,19 +698,19 @@ export function AddStudentModal({
 
   async function saveDocumentsForStudent(studentId: number, firstName: string, lastName: string) {
     const uploadedDocs = Object.values(docs);
-    if (uploadedDocs.length === 0) return;
+    if (uploadedDocs.length === 0) return { uploaded: [] as string[], failed: [] as string[] };
     const docTypeLabel: Record<string, string> = {
       passport: "Passport", diploma: "Diploma", transcript: "Transcript", photo: "Photo", other: "Other",
     };
-    await Promise.allSettled(
+    const results = await Promise.all(
       uploadedDocs.map(async (d) => {
         const label = docTypeLabel[d.label?.toLowerCase()] ?? d.label ?? "Document";
         const docName = `${firstName}-${lastName}-${label}`;
         try {
           const { fileKey, mimeType, sizeBytes } = await uploadDocumentFile(d.file);
-          return createDocumentRecord({
+          await createDocumentRecord({
             name: docName,
-            type: d.label?.toLowerCase() ?? "other",
+            type: d.key,
             status: "pending",
             studentId,
             fileKey,
@@ -639,12 +718,17 @@ export function AddStudentModal({
             sizeBytes,
             originalFileName: d.file?.name ?? null,
           });
+          return { label, uploaded: true };
         } catch (err) {
           console.error(`[STUDENTS] upload failed for ${label}:`, err);
-          return null;
+          return { label, uploaded: false };
         }
       })
     );
+    return {
+      uploaded: results.filter((result) => result.uploaded).map((result) => result.label),
+      failed: results.filter((result) => !result.uploaded).map((result) => result.label),
+    };
   }
 
   function handleSubmit() {
@@ -661,8 +745,17 @@ export function AddStudentModal({
     if (!form.passportNumber.trim()) missing.push("Passport Number");
     if (!form.passportIssueDate.trim()) missing.push("Issue Date");
     if (!form.passportExpiry.trim()) missing.push("Expiry Date");
+    if (!form.interestedLevel.trim()) missing.push("Interested Level");
     if (missing.length > 0) {
       toast({ title: "Required fields missing", description: missing.join(", "), variant: "destructive" });
+      return;
+    }
+    if (Object.keys(docs).length === 0) {
+      toast({
+        title: "No documents uploaded",
+        description: "A student profile requires documents. Create this person as a lead until their documents are available.",
+        variant: "destructive",
+      });
       return;
     }
     const missingDocs = currentDocs.filter(dt => dt.required && !docs[dt.key]).map(dt => dt.label);
@@ -700,8 +793,16 @@ export function AddStudentModal({
         onSuccess: async (createdStudent: any) => {
           const docCount = Object.keys(docs).length;
           if (docCount > 0) {
-            await saveDocumentsForStudent(createdStudent.id, form.firstName, form.lastName);
-            toast({ title: "Student created", description: `${docCount} document${docCount !== 1 ? "s" : ""} added to profile.` });
+            const result = await saveDocumentsForStudent(createdStudent.id, form.firstName, form.lastName);
+            if (result.failed.length > 0) {
+              toast({
+                title: "Student created, but document upload is incomplete",
+                description: `${result.uploaded.length}/${docCount} documents added. Failed: ${result.failed.join(", ")}. Please upload them again from the student profile.`,
+                variant: "destructive",
+              });
+            } else {
+              toast({ title: "Student created", description: `${result.uploaded.length} document${result.uploaded.length !== 1 ? "s" : ""} added to profile.` });
+            }
           } else {
             toast({ title: "Student created successfully" });
           }
@@ -717,6 +818,8 @@ export function AddStudentModal({
   }
 
   const uploadedCount = Object.keys(docs).length;
+  const missingRequiredDocLabels = currentDocs.filter((doc) => doc.required && !docs[doc.key]).map((doc) => doc.label);
+  const canProceedToForm = uploadedCount > 0 && missingRequiredDocLabels.length === 0;
   const stepProgress = step === "upload" ? 33 : step === "analyzing" ? 66 : 100;
   const ef = extractedFields;
 
@@ -758,7 +861,7 @@ export function AddStudentModal({
                     <button
                       key={lv.key}
                       type="button"
-                      onClick={() => setApplicationLevel(lv.key)}
+                      onClick={() => selectApplicationLevel(lv.key)}
                       className={cn(
                         "rounded-xl border-2 px-3 py-2.5 text-center transition-all",
                         applicationLevel === lv.key
@@ -806,7 +909,7 @@ export function AddStudentModal({
               <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 flex items-center gap-2">
                 <AlertCircle className="w-4 h-4 text-amber-500 shrink-0" />
                 <p className="text-xs text-amber-700">
-                  No documents? Use <strong>"Skip to Form"</strong> to fill the form manually.
+                  Student profiles require documents. If you only have contact details, create the person as a lead from the Leads page.
                 </p>
               </div>
             </div>
@@ -933,7 +1036,7 @@ export function AddStudentModal({
                 <div className="grid grid-cols-2 gap-4">
                   <div className="col-span-2 space-y-1.5">
                     <Label className="font-semibold text-sm">Interested Level</Label>
-                    <Select value={form.interestedLevel} onValueChange={field("interestedLevel")}>
+                    <Select value={form.interestedLevel} onValueChange={selectApplicationLevel}>
                       <SelectTrigger className="rounded-xl h-9">
                         <SelectValue placeholder="Select level..." />
                       </SelectTrigger>
@@ -1032,12 +1135,12 @@ export function AddStudentModal({
             <>
               <Button variant="ghost" onClick={handleClose} className="rounded-xl">Cancel</Button>
               <div className="flex gap-2">
-                <Button variant="outline" onClick={() => setStep("review")} className="rounded-xl text-muted-foreground">
-                  Skip to Form
+                <Button variant="outline" onClick={() => setStep("review")} disabled={!canProceedToForm} className="rounded-xl text-muted-foreground">
+                  Skip AI Analysis
                 </Button>
                 <Button
                   onClick={analyzeDocuments}
-                  disabled={uploadedCount === 0}
+                  disabled={!canProceedToForm}
                   className="rounded-xl gap-2 bg-gradient-to-r from-violet-600 to-blue-600 hover:from-violet-700 hover:to-blue-700 text-white border-0"
                 >
                   <Sparkles className="w-4 h-4" />
@@ -1058,7 +1161,7 @@ export function AddStudentModal({
               </Button>
               <Button
                 onClick={handleSubmit}
-                disabled={createStudent.isPending || !form.firstName.trim() || !form.lastName.trim() || !form.email.trim() || !form.phone.trim() || !form.dateOfBirth.trim() || !form.gender.trim() || !form.nationality.trim() || !form.motherName.trim() || !form.fatherName.trim() || !form.passportNumber.trim() || !form.passportIssueDate.trim() || !form.passportExpiry.trim()}
+                disabled={createStudent.isPending || !form.firstName.trim() || !form.lastName.trim() || !form.email.trim() || !form.phone.trim() || !form.dateOfBirth.trim() || !form.gender.trim() || !form.nationality.trim() || !form.motherName.trim() || !form.fatherName.trim() || !form.passportNumber.trim() || !form.passportIssueDate.trim() || !form.passportExpiry.trim() || !form.interestedLevel.trim()}
                 className="rounded-xl gap-2"
               >
                 {createStudent.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}

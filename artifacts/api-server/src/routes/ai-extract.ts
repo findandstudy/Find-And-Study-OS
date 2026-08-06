@@ -31,6 +31,11 @@ import { runEducationExtraction } from "../lib/educationAutoExtract";
 import { AiLaneQueueError, documentAiScheduler } from "../lib/aiLaneScheduler";
 import { getDocumentAiConnection } from "../lib/documentAiConnection";
 import { normalizeInboxStudentExtraction } from "../lib/inboxStudentExtraction";
+import {
+  DocumentPartMergeError,
+  mergeDocumentParts,
+  type DocumentPartInput,
+} from "../lib/documentPartMerge";
 
 // AI extraction endpoints accept base64-encoded PDF/image documents in the
 // JSON body. Base64 inflates payload size by ~33%, and the route itself
@@ -98,6 +103,36 @@ const DEFAULT_VISION_MODEL = "claude-sonnet-4-6";
 const DEFAULT_CSV_MODEL = "claude-haiku-4-5";
 
 // EXTRACT_PROMPT moved to ../lib/extractPrompt (shared with educationAutoExtract).
+
+router.post(
+  "/ai/merge-document-parts",
+  requireAuth,
+  aiRateLimit(30, 15 * 60 * 1000),
+  aiJson,
+  async (req, res): Promise<void> => {
+    try {
+      const documentType = String(req.body?.documentType || "").trim();
+      const label = String(req.body?.label || documentType).trim();
+      const parts = req.body?.parts as DocumentPartInput[];
+      if (!documentType || !label) {
+        res.status(400).json({ error: "Document type and label are required." });
+        return;
+      }
+      const merged = await mergeDocumentParts(documentType, label, parts);
+      res.json(merged);
+    } catch (error) {
+      if (error instanceof DocumentPartMergeError) {
+        res.status(error.statusCode).json({ error: error.message });
+        return;
+      }
+      console.error("[document-part-merge] authenticated merge failed", {
+        userId: (req as any).user?.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      res.status(500).json({ error: "Document parts could not be merged." });
+    }
+  },
+);
 
 router.post("/ai/extract-document", requireAuth, aiRateLimit(10, 15 * 60 * 1000), aiJson, async (req, res): Promise<void> => {
   const runStart = Date.now();

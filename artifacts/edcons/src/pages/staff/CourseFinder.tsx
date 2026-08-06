@@ -35,6 +35,7 @@ import {
   APPLICATION_DOCUMENT_HELP_TEXT,
   validateApplicationDocumentFileObj,
 } from "@/lib/fileUploadValidation";
+import { MAX_DOCUMENT_PARTS, isSingleImageDocumentType, mergeDocumentParts } from "@/lib/documentPartMerge";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
@@ -1751,7 +1752,7 @@ type StudentOption = {
 
 type AppLevel = "pathway" | "undergraduate" | "graduate" | "doctorate";
 type LevelDoc = { key: string; label: string; icon: string; accept: string; required: boolean; note?: string };
-type UploadedDoc = { key: string; label: string; file: File; mediaType: string; isImage: boolean };
+type UploadedDoc = { key: string; label: string; file: File; mediaType: string; isImage: boolean; partCount?: number };
 
 const LEVEL_DOCS: Record<AppLevel, LevelDoc[]> = {
   pathway: [
@@ -1841,17 +1842,53 @@ function ApplyDropZone({ docType, uploaded, onFile, onUpload, onRemove }: {
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
   const [scannerOpen, setScannerOpen] = useState(false);
+  const [merging, setMerging] = useState(false);
   const { t } = useI18n();
   const { toast } = useToast();
 
-  async function handleFile(file: File) {
-    const validation = validateApplicationDocumentFileObj(file);
-    if (!validation.valid) {
-      toast({ title: t("apply.fileError"), description: validation.message, variant: "destructive" });
+  async function handleFiles(files: File[]) {
+    if (files.length === 0) return;
+    const currentPartCount = uploaded?.partCount || (uploaded ? 1 : 0);
+    if (isSingleImageDocumentType(docType.key) && (uploaded || files.length > 1)) {
+      toast({ title: "Photograph accepts one image", description: "Remove the current photograph before choosing another.", variant: "destructive" });
       return;
     }
-    const { file: prepared, mediaType, isImage } = await prepareDocFile(file);
-    onUpload({ key: docType.key, label: docType.label, file: prepared, mediaType, isImage });
+    if (currentPartCount + files.length > MAX_DOCUMENT_PARTS) {
+      toast({ title: "Too many document parts", description: `You can combine up to ${MAX_DOCUMENT_PARTS} parts in one document box.`, variant: "destructive" });
+      return;
+    }
+    for (const file of files) {
+      const validation = validateApplicationDocumentFileObj(file);
+      if (!validation.valid) {
+        toast({ title: t("apply.fileError"), description: validation.message, variant: "destructive" });
+        return;
+      }
+    }
+    setMerging(true);
+    try {
+      const prepared = await Promise.all(files.map(prepareDocFile));
+      if (!uploaded && prepared.length === 1) {
+        onUpload({ key: docType.key, label: docType.label, ...prepared[0], partCount: 1 });
+        return;
+      }
+      const merged = await mergeDocumentParts({
+        documentType: docType.key,
+        label: docType.label,
+        parts: [
+          ...(uploaded ? [{ file: uploaded.file, mediaType: uploaded.mediaType }] : []),
+          ...prepared.map((item) => ({ file: item.file, mediaType: item.mediaType })),
+        ],
+      });
+      onUpload({ key: docType.key, label: docType.label, file: merged.file, mediaType: merged.mediaType, isImage: false, partCount: currentPartCount + files.length });
+    } catch (error) {
+      toast({ title: "Documents could not be combined", description: error instanceof Error ? error.message : "Please try again.", variant: "destructive" });
+    } finally {
+      setMerging(false);
+    }
+  }
+
+  async function handleFile(file: File) {
+    await handleFiles([file]);
   }
 
   if (uploaded) {
@@ -1863,7 +1900,19 @@ function ApplyDropZone({ docType, uploaded, onFile, onUpload, onRemove }: {
         </button>
         <CheckCircle2 className="w-5 h-5 text-green-500" />
         <p className="text-[10px] font-semibold text-foreground truncate max-w-[80px]">{uploaded.file.name}</p>
+        {(uploaded.partCount || 1) > 1 && <p className="text-[9px] font-medium text-green-700">{uploaded.partCount} parts combined</p>}
         <span className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-full font-medium">{docType.label}</span>
+        {!isSingleImageDocumentType(docType.key) && (
+          <div className="flex items-center gap-2">
+            <button type="button" disabled={merging} onClick={() => inputRef.current?.click()} className="text-[9px] font-semibold text-primary hover:underline disabled:opacity-50">
+              {merging ? "Combining..." : "+ Add part"}
+            </button>
+            <button type="button" disabled={merging} onClick={() => setScannerOpen(true)} className="text-[9px] font-semibold text-primary hover:underline disabled:opacity-50">Scan</button>
+          </div>
+        )}
+        <input ref={inputRef} type="file" multiple={!isSingleImageDocumentType(docType.key)} accept={docType.accept} className="hidden"
+          onChange={(e) => { void handleFiles(Array.from(e.target.files || [])); e.target.value = ""; }} />
+        <DocumentScanner open={scannerOpen} onClose={() => setScannerOpen(false)} baseName={docType.key} onCapture={handleFile} />
       </div>
       </>
     );
@@ -1887,14 +1936,14 @@ function ApplyDropZone({ docType, uploaded, onFile, onUpload, onRemove }: {
       onClick={() => inputRef.current?.click()}
       onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
       onDragLeave={() => setDragging(false)}
-      onDrop={(e) => { e.preventDefault(); setDragging(false); const f = e.dataTransfer.files[0]; if (f) handleFile(f); }}
+      onDrop={(e) => { e.preventDefault(); setDragging(false); void handleFiles(Array.from(e.dataTransfer.files)); }}
     >
       <span className="text-xl">{docType.icon}</span>
       <p className="text-[10px] font-semibold text-foreground leading-tight">{docType.label}</p>
       {docType.note && <p className="text-[9px] text-muted-foreground leading-tight">{docType.note}</p>}
       <div className="mt-0.5">{requiredBadge}</div>
-      <input ref={inputRef} type="file" accept={docType.accept} className="hidden"
-        onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); e.target.value = ""; }}
+      <input ref={inputRef} type="file" multiple={!isSingleImageDocumentType(docType.key)} accept={docType.accept} className="hidden"
+        onChange={(e) => { void handleFiles(Array.from(e.target.files || [])); e.target.value = ""; }}
       />
       <button
         type="button"

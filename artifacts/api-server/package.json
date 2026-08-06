@@ -73,6 +73,7 @@
     "test:portal-mapping-excel": "tsx --test ./scripts/test-portal-mapping-excel.ts",
     "test:shared-libs": "tsx --test ./scripts/test-shared-libs.ts",
     "test:document-intake-policy": "tsx --test ./scripts/test-document-intake-policy.ts",
+    "test:document-part-merge": "tsx --test ./scripts/test-document-part-merge.ts",
     "test:gpa-normalize": "tsx ./scripts/test-gpa-normalize.ts",
     "test:phone": "tsx --test ./scripts/test-phone.ts",
     "test:public-apply-flow": "tsx ./scripts/test-public-apply-flow.ts",

@@ -37,9 +37,11 @@ import {
   buildSitProgramMissingContext,
   matchSitProgramExactFormatting,
   evaluateSitIdentity,
+  evaluateSitSubmissionIdentityGate,
   normalizeSitPassport,
   sitPassportIdentityProofFromDocument,
 } from "../src/universities/sit/helpers.js";
+import { validateIdentityFields } from "../src/identityValidation.js";
 import {
   SIT_URLS,
   SIT_LOGIN,
@@ -212,32 +214,73 @@ test("IDENTITY4 — document proof requires complete high-confidence identity", 
   );
 });
 
-test("IDENTITY5 — existing SIT student reuse requires one passport+name match", () => {
+test("IDENTITY5 — runner tolerates unavailable proof but blocks real conflicts", () => {
+  const expected = {
+    firstName: "Aisha",
+    lastName: "Khan",
+    passportNumber: "AB123",
+  };
+
+  assert.deepEqual(evaluateSitSubmissionIdentityGate(expected, undefined), {
+    allowed: true,
+    verification: "unavailable",
+    fields: [],
+  });
+  assert.deepEqual(
+    evaluateSitSubmissionIdentityGate(expected, {
+      firstName: "Aisha",
+      lastName: "Khan",
+      passportNumber: "AB124",
+      confidence: "high",
+    }),
+    {
+      allowed: false,
+      verification: "conflict",
+      fields: ["passportNumber"],
+    },
+  );
+  assert.equal(
+    validateIdentityFields({
+      ...expected,
+      passportNumber: "A0'0458U",
+    }).some((error) => error.field === "passportNumber"),
+    true,
+    "missing proof must not bypass deterministic passport validation",
+  );
+});
+
+test("IDENTITY6 — existing SIT student reuse requires one passport+name match", () => {
   const requested = {
     email: "aisha@example.com",
     firstName: "Aisha",
     lastName: "Khan",
     passportNumber: "AB123",
   };
-  assert.deepEqual(resolveSitStudentLookup(requested, []), { status: "not_found" });
+  assert.deepEqual(resolveSitStudentLookup(requested, []), {
+    status: "not_found",
+  });
   assert.equal(
-    resolveSitStudentLookup(requested, [{
-      id: "1",
-      email: "aisha@example.com",
-      firstName: "Aisha",
-      lastName: "Khan",
-      passportNumber: "AB123",
-    }]).status,
+    resolveSitStudentLookup(requested, [
+      {
+        id: "1",
+        email: "aisha@example.com",
+        firstName: "Aisha",
+        lastName: "Khan",
+        passportNumber: "AB123",
+      },
+    ]).status,
     "found",
   );
   assert.equal(
-    resolveSitStudentLookup(requested, [{
-      id: "2",
-      email: "aisha@example.com",
-      firstName: "Fatima",
-      lastName: "Khan",
-      passportNumber: "ZZ999",
-    }]).status,
+    resolveSitStudentLookup(requested, [
+      {
+        id: "2",
+        email: "aisha@example.com",
+        firstName: "Fatima",
+        lastName: "Khan",
+        passportNumber: "ZZ999",
+      },
+    ]).status,
     "conflict",
   );
   assert.equal(
@@ -259,10 +302,9 @@ test("IDENTITY5 — existing SIT student reuse requires one passport+name match"
     ]).status,
     "conflict",
   );
-  assert.deepEqual(
-    resolveSitStudentLookup({ email: requested.email }, []),
-    { status: "unknown" },
-  );
+  assert.deepEqual(resolveSitStudentLookup({ email: requested.email }, []), {
+    status: "unknown",
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -327,8 +369,14 @@ test("AL2 — includes Beykoz, excludes İstanbul Yeni Yüzyıl", () => {
 });
 
 test("AL3 — matchAllowedUniversity resolves the canonical entry", () => {
-  assert.equal(matchAllowedUniversity("Beykoz Üniversitesi"), "Beykoz Üniversitesi");
-  assert.equal(matchAllowedUniversity("haliç universitesi"), "Haliç Üniversitesi");
+  assert.equal(
+    matchAllowedUniversity("Beykoz Üniversitesi"),
+    "Beykoz Üniversitesi",
+  );
+  assert.equal(
+    matchAllowedUniversity("haliç universitesi"),
+    "Haliç Üniversitesi",
+  );
   assert.equal(
     matchAllowedUniversity("Istanbul Aydin University"),
     "İstanbul Aydın Üniversitesi",
@@ -348,14 +396,20 @@ test("AL4 — exact-name guards reject look-alikes", () => {
   // İstanbul Medipol must NOT match Ankara Medipol.
   assert.equal(matchAllowedUniversity("İstanbul Medipol Üniversitesi"), null);
   // Removed university must not match.
-  assert.equal(matchAllowedUniversity("İstanbul Yeni Yüzyıl Üniversitesi"), null);
+  assert.equal(
+    matchAllowedUniversity("İstanbul Yeni Yüzyıl Üniversitesi"),
+    null,
+  );
   // Bare generic token must not match anything.
   assert.equal(matchAllowedUniversity("Üniversitesi"), null);
   // Exact token-set equality: an allowlisted token PLUS extra disambiguating
   // tokens is a DIFFERENT institution and must be rejected (no subset match).
   assert.equal(matchAllowedUniversity("Beykoz Lojistik Üniversitesi"), null);
   assert.equal(matchAllowedUniversity("Galata Meslek Yüksekokulu"), null);
-  assert.equal(matchAllowedUniversity("Istanbul Galata Technical University"), null);
+  assert.equal(
+    matchAllowedUniversity("Istanbul Galata Technical University"),
+    null,
+  );
   assert.equal(matchAllowedUniversity("TED Ankara Koleji"), null);
 });
 
@@ -392,10 +446,7 @@ test("EDU1B — SIT fuzzy matching requires a real subject anchor", () => {
     true,
   );
   assert.equal(
-    hasSitProgramSubjectAnchor(
-      "Bachelor of Law (Turkish)",
-      "Hukuk (Türkçe)",
-    ),
+    hasSitProgramSubjectAnchor("Bachelor of Law (Turkish)", "Hukuk (Türkçe)"),
     true,
   );
 });
@@ -507,11 +558,17 @@ test("DATE1 — formatSitDate ISO → DD/MM/YYYY", () => {
 
 test("LANG1 — language mismatch rejected, neutral allowed", () => {
   assert.equal(
-    isLanguageCompatible("Computer Engineering (English)", "Bilgisayar Müh. (Türkçe)"),
+    isLanguageCompatible(
+      "Computer Engineering (English)",
+      "Bilgisayar Müh. (Türkçe)",
+    ),
     false,
   );
   assert.equal(
-    isLanguageCompatible("Computer Engineering (English)", "Computer Engineering (English)"),
+    isLanguageCompatible(
+      "Computer Engineering (English)",
+      "Computer Engineering (English)",
+    ),
     true,
   );
   // Desired names no language → compatible with anything.
@@ -521,7 +578,10 @@ test("LANG1 — language mismatch rejected, neutral allowed", () => {
   );
   // Candidate names no language → compatible.
   assert.equal(
-    isLanguageCompatible("Computer Engineering (English)", "Computer Engineering"),
+    isLanguageCompatible(
+      "Computer Engineering (English)",
+      "Computer Engineering",
+    ),
     true,
   );
 });
@@ -551,10 +611,22 @@ test("SEL1 — selector constants are present and well-formed", () => {
   assert.ok(SIT_URLS.studentsPath.startsWith("/"), "students path");
 
   assert.ok(SIT_LOGIN.submitName instanceof RegExp, "login submit regex");
-  assert.ok(Array.isArray(SIT_LOGIN.emailCandidates) && SIT_LOGIN.emailCandidates.length > 0);
+  assert.ok(
+    Array.isArray(SIT_LOGIN.emailCandidates) &&
+      SIT_LOGIN.emailCandidates.length > 0,
+  );
 
-  for (const key of ["firstName", "lastName", "email", "gpa", "passportNumber"] as const) {
-    assert.ok(SIT_STUDENT_FIELDS[key] instanceof RegExp, `student field ${key}`);
+  for (const key of [
+    "firstName",
+    "lastName",
+    "email",
+    "gpa",
+    "passportNumber",
+  ] as const) {
+    assert.ok(
+      SIT_STUDENT_FIELDS[key] instanceof RegExp,
+      `student field ${key}`,
+    );
   }
   for (const key of ["university", "degree", "program"] as const) {
     assert.ok(SIT_APP_FIELDS[key] instanceof RegExp, `app field ${key}`);
@@ -563,7 +635,10 @@ test("SEL1 — selector constants are present and well-formed", () => {
     assert.ok(SIT_BUTTONS[key] instanceof RegExp, `button ${key}`);
   }
   assert.ok(SIT_UPLOAD.photoTrigger instanceof RegExp, "photo trigger");
-  assert.ok(SIT_UPLOAD.attachmentTrigger instanceof RegExp, "attachment trigger");
+  assert.ok(
+    SIT_UPLOAD.attachmentTrigger instanceof RegExp,
+    "attachment trigger",
+  );
 });
 
 // ---------------------------------------------------------------------------
@@ -625,7 +700,9 @@ test("PHOTO1 — sign → verify round-trips for the same student", () => {
   withPhotoSecret(() => {
     const path = buildSignedStudentPhotoPath(123);
     assert.ok(path, "expected a signed path when a secret is configured");
-    const m = path!.match(/^\/api\/students\/123\/photo\?exp=(\d+)&sig=([0-9a-f]+)$/);
+    const m = path!.match(
+      /^\/api\/students\/123\/photo\?exp=(\d+)&sig=([0-9a-f]+)$/,
+    );
     assert.ok(m, `unexpected path shape: ${path}`);
     const exp = Number(m![1]);
     const sig = m![2];
@@ -649,7 +726,14 @@ test("PHOTO3 — tampered signature / expiry is rejected", () => {
     const m = path.match(/exp=(\d+)&sig=([0-9a-f]+)/)!;
     const exp = Number(m[1]);
     const sig = m[2];
-    assert.equal(verifyStudentPhotoSignature(123, exp, sig.replace(/.$/, (c) => (c === "0" ? "1" : "0"))), false);
+    assert.equal(
+      verifyStudentPhotoSignature(
+        123,
+        exp,
+        sig.replace(/.$/, (c) => (c === "0" ? "1" : "0")),
+      ),
+      false,
+    );
     assert.equal(verifyStudentPhotoSignature(123, exp + 999, sig), false);
     assert.equal(verifyStudentPhotoSignature(123, exp, ""), false);
   });
@@ -675,7 +759,14 @@ test("PHOTO5 — no secret configured → signing returns null, verify false", (
   delete process.env.EMBED_TOKEN_SECRET;
   try {
     assert.equal(buildSignedStudentPhotoPath(123), null);
-    assert.equal(verifyStudentPhotoSignature(123, Math.floor(Date.now() / 1000) + 100, "abc"), false);
+    assert.equal(
+      verifyStudentPhotoSignature(
+        123,
+        Math.floor(Date.now() / 1000) + 100,
+        "abc",
+      ),
+      false,
+    );
   } finally {
     if (prevSession !== undefined) process.env.SESSION_SECRET = prevSession;
     if (prevEmbed !== undefined) process.env.EMBED_TOKEN_SECRET = prevEmbed;
@@ -689,7 +780,9 @@ test("DOC1 — document sign → verify round-trips; bound to id & rejects tampe
   withPhotoSecret(() => {
     const path = buildSignedDocumentPath(6008);
     assert.ok(path, "expected a signed doc path when a secret is configured");
-    const m = path!.match(/^\/api\/documents\/6008\/file\?exp=(\d+)&sig=([0-9a-f]+)$/);
+    const m = path!.match(
+      /^\/api\/documents\/6008\/file\?exp=(\d+)&sig=([0-9a-f]+)$/,
+    );
     assert.ok(m, `unexpected doc path shape: ${path}`);
     const exp = Number(m![1]);
     const sig = m![2];
@@ -697,7 +790,14 @@ test("DOC1 — document sign → verify round-trips; bound to id & rejects tampe
     // bound to id
     assert.equal(verifyDocumentSignature(9999, exp, sig), false);
     // tampered sig / expiry / empty
-    assert.equal(verifyDocumentSignature(6008, exp, sig.replace(/.$/, (c) => (c === "0" ? "1" : "0"))), false);
+    assert.equal(
+      verifyDocumentSignature(
+        6008,
+        exp,
+        sig.replace(/.$/, (c) => (c === "0" ? "1" : "0")),
+      ),
+      false,
+    );
     assert.equal(verifyDocumentSignature(6008, exp + 999, sig), false);
     assert.equal(verifyDocumentSignature(6008, exp, ""), false);
   });
@@ -719,7 +819,10 @@ test("DOC3 — no secret configured → signing null, verify false", () => {
   delete process.env.EMBED_TOKEN_SECRET;
   try {
     assert.equal(buildSignedDocumentPath(6008), null);
-    assert.equal(verifyDocumentSignature(6008, Math.floor(Date.now() / 1000) + 100, "abc"), false);
+    assert.equal(
+      verifyDocumentSignature(6008, Math.floor(Date.now() / 1000) + 100, "abc"),
+      false,
+    );
   } finally {
     if (prevSession !== undefined) process.env.SESSION_SECRET = prevSession;
     if (prevEmbed !== undefined) process.env.EMBED_TOKEN_SECRET = prevEmbed;
@@ -729,7 +832,13 @@ test("DOC3 — no secret configured → signing null, verify false", () => {
 test("DOC4 — extractStudentDocumentRefs signs base64-only rows; base64 photo → hasPhotoDoc, no public photoUrl", () => {
   withPhotoSecret(() => {
     const out = extractStudentDocumentRefs([
-      { id: 1, type: "passport", fileData: "QkFTRTY0", mimeType: "application/pdf", sizeBytes: 8 },
+      {
+        id: 1,
+        type: "passport",
+        fileData: "QkFTRTY0",
+        mimeType: "application/pdf",
+        sizeBytes: 8,
+      },
       { id: 2, type: "transcript", fileUrl: "https://cdn.example.com/t.pdf" },
       { id: 3, type: "photo", fileData: "Zm90bw==", mimeType: "image/jpeg" },
       { id: 4, type: "diploma", fileData: "" }, // empty stub → skipped
@@ -738,18 +847,30 @@ test("DOC4 — extractStudentDocumentRefs signs base64-only rows; base64 photo �
     // base64 passport now produces a signed document ref (no longer skipped)
     const passport = out.documents.find((d) => d.type === "passport");
     assert.ok(passport, "base64 passport should produce a ref");
-    assert.match(passport!.url, /^\/api\/documents\/1\/file\?exp=\d+&sig=[0-9a-f]+$/);
+    assert.match(
+      passport!.url,
+      /^\/api\/documents\/1\/file\?exp=\d+&sig=[0-9a-f]+$/,
+    );
     // public transcript passes through unchanged
     const transcript = out.documents.find((d) => d.type === "transcript");
     assert.equal(transcript!.url, "https://cdn.example.com/t.pdf");
     // empty stub and unsignable (no id) rows are skipped
-    assert.equal(out.documents.some((d) => d.type === "diploma"), false);
-    assert.equal(out.documents.some((d) => d.type === "certificate"), false);
+    assert.equal(
+      out.documents.some((d) => d.type === "diploma"),
+      false,
+    );
+    assert.equal(
+      out.documents.some((d) => d.type === "certificate"),
+      false,
+    );
     // base64 photo: no public photoUrl but hasPhotoDoc flags the signed-photo fallback
     assert.equal(out.photoUrl, undefined);
     assert.equal(out.hasPhotoDoc, true);
     // photo is never included in documents[]
-    assert.equal(out.documents.some((d) => d.type === "photo"), false);
+    assert.equal(
+      out.documents.some((d) => d.type === "photo"),
+      false,
+    );
   });
 });
 
@@ -805,12 +926,9 @@ test("AUTH2 — anon key in env → password grant needs no page", () => {
 });
 
 test("AUTH3 — injected access token → no page needed", () => {
-  withSitAuthEnv(
-    { SIT_ACCESS_TOKEN: "ey" + "AAAA.BBBB.CCCC" },
-    () => {
-      assert.equal(sitCanAuthWithoutPage({ user: "auth3@example.com" }), true);
-    },
-  );
+  withSitAuthEnv({ SIT_ACCESS_TOKEN: "ey" + "AAAA.BBBB.CCCC" }, () => {
+    assert.equal(sitCanAuthWithoutPage({ user: "auth3@example.com" }), true);
+  });
 });
 
 test("AUTH4 — refresh/cache mutations are serialized per SIT account", async () => {
@@ -920,12 +1038,14 @@ test("BUNDLE2 — drops cross-origin refs and dedups", () => {
 // its exact logic here as a pure-function unit test target.
 function cleanPhone(raw: string): string {
   if (!raw) return "";
-  let s = String(raw).trim().replace(/[^\d+]/g, "");
+  let s = String(raw)
+    .trim()
+    .replace(/[^\d+]/g, "");
   if (s.startsWith("00")) s = "+" + s.slice(2);
   if (!s.startsWith("+")) return s;
   const trunkFix: Array<[string, number, string]> = [
     ["+998", 9, "8"], // Uzbekistan
-    ["+7", 10, "8"],  // Russia / Kazakhstan
+    ["+7", 10, "8"], // Russia / Kazakhstan
     ["+994", 9, "0"], // Azerbaijan
     ["+996", 9, "0"], // Kyrgyzstan
     ["+992", 9, "8"], // Tajikistan
@@ -967,16 +1087,28 @@ test("PHONE2 — cleanPhone: strips non-digit/+ characters and trunk digits", ()
 
 test("PHONE3 — dial-code skip regex: short placeholders excluded, long ones kept", () => {
   // Should be SKIPPED (are dial codes, not mobile number inputs)
-  assert.ok(DIAL_CODE_PLACEHOLDER_RE.test("+"),     "+ is a dial code");
-  assert.ok(DIAL_CODE_PLACEHOLDER_RE.test("+1"),    "+1 is a dial code");
-  assert.ok(DIAL_CODE_PLACEHOLDER_RE.test("+90"),   "+90 is a dial code");
-  assert.ok(DIAL_CODE_PLACEHOLDER_RE.test("+994"),  "+994 is a dial code");
-  assert.ok(DIAL_CODE_PLACEHOLDER_RE.test("90"),    "bare 2-digit is a dial code");
-  assert.ok(DIAL_CODE_PLACEHOLDER_RE.test(""),      "empty string matches (no placeholder ⇒ skip)");
+  assert.ok(DIAL_CODE_PLACEHOLDER_RE.test("+"), "+ is a dial code");
+  assert.ok(DIAL_CODE_PLACEHOLDER_RE.test("+1"), "+1 is a dial code");
+  assert.ok(DIAL_CODE_PLACEHOLDER_RE.test("+90"), "+90 is a dial code");
+  assert.ok(DIAL_CODE_PLACEHOLDER_RE.test("+994"), "+994 is a dial code");
+  assert.ok(DIAL_CODE_PLACEHOLDER_RE.test("90"), "bare 2-digit is a dial code");
+  assert.ok(
+    DIAL_CODE_PLACEHOLDER_RE.test(""),
+    "empty string matches (no placeholder ⇒ skip)",
+  );
   // Should NOT be skipped (are real mobile-number inputs)
-  assert.ok(!DIAL_CODE_PLACEHOLDER_RE.test("Enter mobile number"), "descriptive placeholder kept");
-  assert.ok(!DIAL_CODE_PLACEHOLDER_RE.test("+1234567890"),         "full E.164 number kept");
-  assert.ok(!DIAL_CODE_PLACEHOLDER_RE.test("Mobile Number"),       "label-like placeholder kept");
+  assert.ok(
+    !DIAL_CODE_PLACEHOLDER_RE.test("Enter mobile number"),
+    "descriptive placeholder kept",
+  );
+  assert.ok(
+    !DIAL_CODE_PLACEHOLDER_RE.test("+1234567890"),
+    "full E.164 number kept",
+  );
+  assert.ok(
+    !DIAL_CODE_PLACEHOLDER_RE.test("Mobile Number"),
+    "label-like placeholder kept",
+  );
 });
 
 test("PHONE4 — DEEP_FILL_INPUT_JS tel-visibility guard: isTel bypasses offsetParent=null", () => {
@@ -988,13 +1120,25 @@ test("PHONE4 — DEEP_FILL_INPUT_JS tel-visibility guard: isTel bypasses offsetP
     return !visible && !isTel;
   }
   // tel with no offsetParent → must NOT skip
-  assert.ok(!shouldSkip("tel", false), "tel input with offsetParent=null must NOT be skipped");
+  assert.ok(
+    !shouldSkip("tel", false),
+    "tel input with offsetParent=null must NOT be skipped",
+  );
   // text with no offsetParent → must skip
-  assert.ok(shouldSkip("text", false), "text input with offsetParent=null must be skipped");
+  assert.ok(
+    shouldSkip("text", false),
+    "text input with offsetParent=null must be skipped",
+  );
   // tel with offsetParent → must NOT skip
-  assert.ok(!shouldSkip("tel", true), "tel input with offsetParent must NOT be skipped");
+  assert.ok(
+    !shouldSkip("tel", true),
+    "tel input with offsetParent must NOT be skipped",
+  );
   // text with offsetParent → must NOT skip
-  assert.ok(!shouldSkip("text", true), "text input with offsetParent must NOT be skipped");
+  assert.ok(
+    !shouldSkip("text", true),
+    "text input with offsetParent must NOT be skipped",
+  );
 });
 
 test("FALLBACK1 — SIT emits only scoped, deduplicated live candidates", () => {
@@ -1059,5 +1203,8 @@ test("BUNDLE3 — a deep chunk (19th) is included; low cap would drop it", () =>
   // A too-low cap of 12 would have missed it — this is the live bug we fixed.
   const capped = selectBundleUrls(tags, 12);
   assert.equal(capped.length, 12);
-  assert.equal(capped.includes("https://partners.sitconnect.net/chunk-18.js"), false);
+  assert.equal(
+    capped.includes("https://partners.sitconnect.net/chunk-18.js"),
+    false,
+  );
 });

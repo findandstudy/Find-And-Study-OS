@@ -7,7 +7,7 @@ import { assertCanAccessStudent } from "../lib/studentAccess";
 import { getAgentVisibleIds } from "../lib/agentVisibility";
 import { dispatchNotification } from "../lib/notificationDispatcher";
 import { validateStudentDocumentFile, validateStudentDocumentBuffer, sanitizeFileName, isPdf } from "../lib/fileUploadValidation";
-import { buildDocNameFromParts } from "../lib/docNaming";
+import { buildDocNameFromParts, normalizeDocumentTypeKey } from "../lib/docNaming";
 import { loadDocumentBytes, streamDocumentToResponse, recompressStoredObjectIfNeeded } from "../lib/documentBytes";
 import { UploadTooLargeError } from "../lib/uploads/processUpload";
 import { verifyDocumentSignature } from "@workspace/portal-adapters";
@@ -138,7 +138,8 @@ router.get("/documents", requireAuth, requireAgentStaffPermission("documents"), 
 router.post("/documents", requireAuth, requireAgentStaffPermission("documents"), async (req, res): Promise<void> => {
   const user = req.user!;
   const isStaff = STAFF_ROLES.includes(user.role as any);
-  const { name, type, status = "pending", studentId, applicationId, fileUrl, fileKey, notes, originalFileName, respondingToNoteId } = req.body;
+  const { name, type: requestedType, status = "pending", studentId, applicationId, fileUrl, fileKey, notes, originalFileName, respondingToNoteId } = req.body;
+  const type = normalizeDocumentTypeKey(requestedType);
   let { mimeType, sizeBytes } = req.body;
   if (req.body.fileData) {
     res.status(400).json({ error: "fileData uploads are no longer accepted. Upload via /storage/uploads/request-url and pass fileKey." });
@@ -727,7 +728,11 @@ router.patch("/documents/:id", requireAuth, requireRole(...STAFF_ROLES), async (
 
   const updates: Record<string, unknown> = {};
   for (const key of DOC_PATCH_FIELDS) {
-    if (req.body[key] !== undefined) updates[key] = req.body[key];
+    if (req.body[key] !== undefined) {
+      updates[key] = key === "type"
+        ? normalizeDocumentTypeKey(req.body[key])
+        : req.body[key];
+    }
   }
   if (req.body.fileUrl !== undefined) updates.fileUrl = req.body.fileUrl;
 

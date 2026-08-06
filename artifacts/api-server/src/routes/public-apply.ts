@@ -46,6 +46,12 @@ import { getEmbedSigningSecret } from "../lib/embedSigningSecret";
 import { verifyEmbedLeadDocumentSessionToken } from "../lib/embedLeadDocumentSession";
 import { normalizeInboxStudentExtraction } from "../lib/inboxStudentExtraction";
 import { validatePassportNumber } from "@workspace/portal-adapters/identity-validation";
+import {
+  DocumentPartMergeError,
+  mergeDocumentParts,
+  type DocumentPartInput,
+} from "../lib/documentPartMerge";
+import { resolveProgramInterestedLevel } from "../lib/programInterestedLevel";
 
 const router: IRouter = Router();
 
@@ -113,6 +119,69 @@ const aiExtractSessionLimiter = rateLimit({
     return `${getRateLimitIp(req)}:${session}`;
   },
 });
+
+// Merging is a local CPU/file operation, not an AI attempt. Keep it in a
+// separate bucket so adding document pieces cannot consume the applicant's
+// limited AI-analysis attempts.
+const documentMergeIpLimiter = rateLimit({
+  windowMs: APPLY_WINDOW_MS,
+  max: 120,
+  message: { error: "Too many document merge requests. Please try again later." },
+  standardHeaders: true,
+  legacyHeaders: false,
+  store: new PgRateLimitStore(APPLY_WINDOW_MS, "document-merge-ip"),
+  keyGenerator: (req) => getRateLimitIp(req),
+});
+
+const documentMergeSessionLimiter = rateLimit({
+  windowMs: APPLY_WINDOW_MS,
+  max: 20,
+  message: { error: "Too many document changes for this application. Please try again later." },
+  standardHeaders: true,
+  legacyHeaders: false,
+  store: new PgRateLimitStore(APPLY_WINDOW_MS, "document-merge-session"),
+  keyGenerator: (req) => {
+    const raw = String(req.get("x-application-session") || "").trim();
+    const session = /^[A-Za-z0-9._:-]{16,512}$/.test(raw)
+      ? crypto.createHash("sha256").update(raw).digest("hex")
+      : "no-session";
+    return `${getRateLimitIp(req)}:${session}`;
+  },
+});
+
+router.post(
+  "/public/documents/merge-parts",
+  documentMergeIpLimiter,
+  documentMergeSessionLimiter,
+  applyJson,
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const applicationSession = String(req.get("x-application-session") || "").trim();
+      if (!/^[A-Za-z0-9._:-]{16,512}$/.test(applicationSession)) {
+        res.status(400).json({ error: "A valid application session is required." });
+        return;
+      }
+      const documentType = String(req.body?.documentType || "").trim();
+      const label = String(req.body?.label || documentType).trim();
+      const parts = req.body?.parts as DocumentPartInput[];
+      if (!documentType || !label) {
+        res.status(400).json({ error: "Document type and label are required." });
+        return;
+      }
+      const merged = await mergeDocumentParts(documentType, label, parts);
+      res.json(merged);
+    } catch (error) {
+      if (error instanceof DocumentPartMergeError) {
+        res.status(error.statusCode).json({ error: error.message });
+        return;
+      }
+      console.error("[document-part-merge] public merge failed", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      res.status(500).json({ error: "Document parts could not be merged." });
+    }
+  },
+);
 
 /**
  * Read-only validation of a public-apply submission against a program.
@@ -383,7 +452,7 @@ export async function createApplicationForStudent(studentId: number, programId: 
 
 router.post("/public/apply", applyLimiter, applyJson, async (req: Request, res: Response): Promise<void> => {
   let { firstName, lastName, motherName, fatherName } = req.body;
-  const { email, phone, phoneCode, nationality, programId, programName, universityName, notes, passportNumber, passportIssueDate, passportExpiry, dateOfBirth, gender, address, addressCity, postalCode, highSchool, graduationYear, gpa, languageScore, documents, reuseDocumentIds, transferStudent, hasTcId, hasBlueCard, education } = req.body;
+  const { email, phone, phoneCode, nationality, programId, programName, programDegree, universityName, notes, passportNumber, passportIssueDate, passportExpiry, dateOfBirth, gender, address, addressCity, postalCode, highSchool, graduationYear, gpa, languageScore, documents, reuseDocumentIds, transferStudent, hasTcId, hasBlueCard, education } = req.body;
   const residence = resolveResidenceAddress({
     address,
     addressCity,
@@ -513,6 +582,7 @@ router.post("/public/apply", applyLimiter, applyJson, async (req: Request, res: 
     // submission would hit the email-already-exists path and be blocked
     // forever ("hesabınız kayıtlıdır" loop).
     const programIdNum = programId ? parseInt(String(programId), 10) : null;
+    const resolvedInterestedLevel = await resolveProgramInterestedLevel(programIdNum, programDegree);
     const precheck = await precheckProgramEligibility(programIdNum, gpa || null, languageScore || null);
     if (precheck?.eligibilityErrors) {
       res.status(422).json({ error: "Student does not meet program eligibility requirements", eligibilityErrors: precheck.eligibilityErrors, code: "ELIGIBILITY_FAILED" });
@@ -699,6 +769,7 @@ router.post("/public/apply", applyLimiter, applyJson, async (req: Request, res: 
           userId: newUser.id,
           addressCity: residence.addressCity,
           postalCode: residence.postalCode,
+          interestedLevel: resolvedInterestedLevel,
         }).where(eq(studentsTable.id, archivedByEmail.id));
         newStudent = {
           ...archivedByEmail,
@@ -706,6 +777,7 @@ router.post("/public/apply", applyLimiter, applyJson, async (req: Request, res: 
           userId: newUser.id,
           addressCity: residence.addressCity,
           postalCode: residence.postalCode,
+          interestedLevel: resolvedInterestedLevel,
         };
         console.log(`[PUBLIC-APPLY] Restored archived student #${archivedByEmail.id} for new user ${normalizedEmail}`);
       } else {
@@ -727,6 +799,7 @@ router.post("/public/apply", applyLimiter, applyJson, async (req: Request, res: 
           addressCity: residence.addressCity,
           postalCode: residence.postalCode,
           highSchool: s(highSchool, 200),
+          interestedLevel: resolvedInterestedLevel,
           graduationYear: graduationYear ? parseInt(String(graduationYear), 10) || null : null,
           gpa: s(gpa, 20),
           languageScore: s(languageScore, 20),

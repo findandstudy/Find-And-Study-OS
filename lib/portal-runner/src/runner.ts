@@ -36,9 +36,13 @@ import {
   clearCredsOverride,
   isSitMember,
   evaluatePortalPreflight,
-  evaluateSitIdentity,
+  evaluateSitSubmissionIdentityGate,
 } from "@workspace/portal-adapters";
-import type { SubmitResult, SubmitProfile, SubmitFiles } from "@workspace/portal-adapters";
+import type {
+  SubmitResult,
+  SubmitProfile,
+  SubmitFiles,
+} from "@workspace/portal-adapters";
 import {
   uploadBufferToGcs,
   resolveObjectPaths,
@@ -46,7 +50,10 @@ import {
 import type { ClaimedSubmission } from "./queue.js";
 import { loadProgramMapping } from "./programMappingLoader.js";
 import { resolveNationalityExclusion } from "./exclusions.js";
-import { resolveAdapterKey, loadAggregatorMemberNames } from "./resolveAdapter.js";
+import {
+  resolveAdapterKey,
+  loadAggregatorMemberNames,
+} from "./resolveAdapter.js";
 import {
   capturePortalRunEvidence,
   PortalRunError,
@@ -92,7 +99,10 @@ export interface RunResult {
  *                    browser (residential IP, no Cloudflare/bot block).
  */
 export async function runSubmission(
-  submission: Pick<ClaimedSubmission, "id" | "universityKey" | "universityName" | "mode">,
+  submission: Pick<
+    ClaimedSubmission,
+    "id" | "universityKey" | "universityName" | "mode"
+  >,
   profile: SubmitProfile,
   files: SubmitFiles,
   tempDir: string,
@@ -123,7 +133,9 @@ export async function runSubmission(
         alreadyExists: false,
         programMissing: false,
         exclusiveRegion: true,
-        ...(exclusion.agencyName ? { exclusiveAgency: exclusion.agencyName } : {}),
+        ...(exclusion.agencyName
+          ? { exclusiveAgency: exclusion.agencyName }
+          : {}),
         detail: exclusion.agencyName
           ? `Exclusive bölge — ${exclusion.agencyName} üzerinden başvurulmalı`
           : "Exclusive bölge — acenta üzerinden başvurulmalı",
@@ -191,7 +203,8 @@ export async function runSubmission(
   }
 
   if (adapter.key === "sit" && process.env.SIT_ENFORCE_MEMBERSHIP !== "false") {
-    const targetName = profile.universityName ?? submission.universityName ?? "";
+    const targetName =
+      profile.universityName ?? submission.universityName ?? "";
     const member = isSitMember(targetName, memberUniversities);
     console.log(
       `[sit] membership: ${targetName || "(unknown)"} → member=${member} (route=${member ? "sit" : "direct"})`,
@@ -227,22 +240,27 @@ export async function runSubmission(
     await cleanup(tempDir);
     throw new Error(
       `PORTAL_PREFLIGHT_NOT_READY: adapter=${adapter.key}` +
-      ` missing=${preflight.missingFields.join(",") || "-"}` +
-      ` incompatible=${preflight.incompatibleFields.map((issue) => issue.field).join(",") || "-"}` +
-      ` documents=${preflight.missingDocuments.join(",") || "-"}`,
+        ` missing=${preflight.missingFields.join(",") || "-"}` +
+        ` incompatible=${preflight.incompatibleFields.map((issue) => issue.field).join(",") || "-"}` +
+        ` documents=${preflight.missingDocuments.join(",") || "-"}`,
     );
   }
 
   if (adapter.key === "sit") {
-    const identity = evaluateSitIdentity(profile, profile.passportIdentityProof);
-    if (!identity.matched) {
+    const identity = evaluateSitSubmissionIdentityGate(
+      profile,
+      profile.passportIdentityProof,
+    );
+    if (!identity.allowed) {
       await cleanup(tempDir);
-      const fields = [...new Set([
-        ...identity.missingFields,
-        ...identity.mismatchedFields,
-      ])];
       throw new Error(
-        `SIT_IDENTITY_PROOF_FAILED: fields=${fields.join(",") || "passportIdentityProof"}`,
+        `SIT_IDENTITY_PROOF_FAILED: fields=${identity.fields.join(",") || "passportIdentityProof"}`,
+      );
+    }
+    if (identity.verification === "unavailable") {
+      console.warn(
+        `[portal-runner] SIT passport proof unavailable for submission #${submission.id}; ` +
+          "continuing after deterministic identity and document validation",
       );
     }
   }
@@ -263,7 +281,10 @@ export async function runSubmission(
   let session: Awaited<ReturnType<typeof adapter.login>> | null = null;
 
   if (creds) {
-    setCredsOverride(adapter.key, { user: creds.user, password: creds.password });
+    setCredsOverride(adapter.key, {
+      user: creds.user,
+      password: creds.password,
+    });
   }
 
   try {
@@ -283,7 +304,12 @@ export async function runSubmission(
       ...(memberUniversities !== undefined ? { memberUniversities } : {}),
     };
 
-    const result = await adapter.submit(session, enrichedProfile, files, !isDry);
+    const result = await adapter.submit(
+      session,
+      enrichedProfile,
+      files,
+      !isDry,
+    );
     const adapterError =
       typeof (result as SubmitResult & { error?: unknown }).error === "string"
         ? (result as SubmitResult & { error: string }).error
@@ -339,8 +365,7 @@ export async function runSubmission(
     const portalEvidence = session
       ? await capturePortalRunEvidence(session.page, adapter.key)
       : null;
-    const message =
-      error instanceof Error ? error.message : String(error);
+    const message = error instanceof Error ? error.message : String(error);
     throw new PortalRunError(message, portalEvidence);
   } finally {
     if (creds) clearCredsOverride(adapter.key);

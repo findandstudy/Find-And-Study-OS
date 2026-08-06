@@ -126,13 +126,13 @@ export interface SubmitProfile {
   passportNumber: string;
   firstName: string;
   lastName: string;
-  dateOfBirth: string;       // ISO-8601 date, e.g. "1999-04-15"
+  dateOfBirth: string; // ISO-8601 date, e.g. "1999-04-15"
   gender: string;
   fatherName: string;
   motherName: string;
   nationality: string;
   address: string;
-  phone: string;             // local format, no country code where required
+  phone: string; // local format, no country code where required
   transferStudent?: boolean;
   hasTcId?: boolean;
   hasBlueCard?: boolean;
@@ -142,9 +142,9 @@ export interface SubmitProfile {
   universityName?: string;
   /**
    * High-confidence identity read directly from the student's passport
-   * document. SIT requires this independent proof before any real portal
-   * mutation; CRM fields alone are not sufficient because they may have been
-   * typed incorrectly or copied from another student.
+   * document. When available, SIT requires it to match before any real portal
+   * mutation. When extraction is temporarily unavailable, deterministic
+   * identity validation and the required passport document remain mandatory.
    */
   passportIdentityProof?: {
     firstName: string;

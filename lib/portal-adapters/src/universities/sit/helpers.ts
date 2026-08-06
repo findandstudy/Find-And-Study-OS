@@ -20,9 +20,17 @@ export interface SitIdentityEvaluation {
   mismatchedFields: SitIdentityField[];
 }
 
+export interface SitSubmissionIdentityGate {
+  allowed: boolean;
+  verification: "unavailable" | "matched" | "conflict";
+  fields: SitIdentityField[];
+}
+
 /** Normalize only for equality checks; never log or persist this value. */
 export function normalizeSitPassport(value: string | null | undefined): string {
-  return String(value ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+  return String(value ?? "")
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "");
 }
 
 function normalizedNameTokens(
@@ -67,7 +75,10 @@ export function evaluateSitIdentity(
     mismatchedFields.push("passportNumber");
   }
 
-  const expectedName = normalizedNameTokens(expected.firstName, expected.lastName);
+  const expectedName = normalizedNameTokens(
+    expected.firstName,
+    expected.lastName,
+  );
   const proofName = normalizedNameTokens(proof.firstName, proof.lastName);
   if (
     expectedName.length === 0 ||
@@ -83,6 +94,35 @@ export function evaluateSitIdentity(
     matched: missingFields.length === 0 && mismatchedFields.length === 0,
     missingFields,
     mismatchedFields,
+  };
+}
+
+/**
+ * Runner-level SIT identity decision after deterministic profile validation and
+ * required-document preflight have already passed. A missing independent AI
+ * read is observable but must not turn a provider outage into a false identity
+ * mismatch. When proof exists, every mismatch still fails closed.
+ */
+export function evaluateSitSubmissionIdentityGate(
+  expected: Pick<SubmitProfile, "firstName" | "lastName" | "passportNumber">,
+  proof: SubmitProfile["passportIdentityProof"] | null | undefined,
+): SitSubmissionIdentityGate {
+  if (!proof) {
+    return {
+      allowed: true,
+      verification: "unavailable",
+      fields: [],
+    };
+  }
+
+  const identity = evaluateSitIdentity(expected, proof);
+  const fields = [
+    ...new Set([...identity.missingFields, ...identity.mismatchedFields]),
+  ];
+  return {
+    allowed: identity.matched,
+    verification: identity.matched ? "matched" : "conflict",
+    fields,
   };
 }
 
@@ -143,7 +183,8 @@ export function sitPassportIdentityProofFromDocument(input: {
     !lastName ||
     !normalizeSitPassport(passportNumber) ||
     validatePassportNumber(passportNumber)
-  ) return null;
+  )
+    return null;
 
   return {
     firstName,
@@ -284,7 +325,9 @@ export function normalizeGpa(
 // CRM degree level → canonical SIT degree label.
 // The combobox matcher fuzzy-matches this against the live option text.
 // ---------------------------------------------------------------------------
-export function mapEducationLevel(level: string | undefined | null): string | null {
+export function mapEducationLevel(
+  level: string | undefined | null,
+): string | null {
   const f = fold(level ?? "");
   // fold("Ph.D") is "ph d", so accept both the joined and punctuation-folded
   // spellings. CRM degree labels legitimately contain both variants.
@@ -338,8 +381,7 @@ function sitProgramSubjectTokens(name: string): Set<string> {
     fold(name)
       .split(" ")
       .filter(
-        (token) =>
-          token.length > 1 && !SIT_PROGRAM_GENERIC_TOKENS.has(token),
+        (token) => token.length > 1 && !SIT_PROGRAM_GENERIC_TOKENS.has(token),
       ),
   );
 }
@@ -467,7 +509,10 @@ export function resolveSitAcademicHistory(
   return {
     country: toEnglishCountryName(country),
     schoolName:
-      row?.schoolName?.trim() || legacySchool?.trim() || profile.schoolName?.trim() || "",
+      row?.schoolName?.trim() ||
+      legacySchool?.trim() ||
+      profile.schoolName?.trim() ||
+      "",
     gpa:
       row?.gpa?.trim() ||
       profile.legacyEducation?.rawGpa?.trim() ||
@@ -486,7 +531,8 @@ export function isSitContactStepLabels(
   labels: Array<string | undefined | null>,
 ): boolean {
   const folded = labels.map((label) => fold(label ?? ""));
-  if (folded.some((label) => /\bcountry of residence\b/.test(label))) return true;
+  if (folded.some((label) => /\bcountry of residence\b/.test(label)))
+    return true;
   const hasEmail = folded.some((label) => /\be-?mail\b/.test(label));
   const hasLocation = folded.some((label) =>
     /\b(address|city|district|residence)\b/.test(label),
@@ -502,10 +548,8 @@ export function isSitDocumentsStep(
   return (
     Number.isFinite(uploadAffordanceCount) &&
     uploadAffordanceCount > 0 &&
-    (
-      /\b(documents?|uploads?|belgeler?|dosyalar?)\b/i.test(heading ?? "") ||
-      hasHeadinglessDocumentsSignature
-    )
+    (/\b(documents?|uploads?|belgeler?|dosyalar?)\b/i.test(heading ?? "") ||
+      hasHeadinglessDocumentsSignature)
   );
 }
 
@@ -530,12 +574,19 @@ export function formatSitDate(iso: string | undefined | null): string {
 // ---------------------------------------------------------------------------
 function foldTr(s: string): string {
   return s
-    .replace(/İ/g, "i").replace(/I/g, "i").replace(/ı/g, "i")
-    .replace(/Ş/g, "s").replace(/ş/g, "s")
-    .replace(/Ğ/g, "g").replace(/ğ/g, "g")
-    .replace(/Ü/g, "u").replace(/ü/g, "u")
-    .replace(/Ö/g, "o").replace(/ö/g, "o")
-    .replace(/Ç/g, "c").replace(/ç/g, "c")
+    .replace(/İ/g, "i")
+    .replace(/I/g, "i")
+    .replace(/ı/g, "i")
+    .replace(/Ş/g, "s")
+    .replace(/ş/g, "s")
+    .replace(/Ğ/g, "g")
+    .replace(/ğ/g, "g")
+    .replace(/Ü/g, "u")
+    .replace(/ü/g, "u")
+    .replace(/Ö/g, "o")
+    .replace(/ö/g, "o")
+    .replace(/Ç/g, "c")
+    .replace(/ç/g, "c")
     .toLowerCase()
     .trim();
 }
@@ -800,7 +851,11 @@ type Lang = "en" | "tr" | "other" | null;
 function detectLang(folded: string): Lang {
   if (/\b(ingilizce|english)\b/.test(folded)) return "en";
   if (/\b(turkce|turkish)\b/.test(folded)) return "tr";
-  if (/\b(almanca|german|fransizca|french|arapca|arabic|rusca|russian)\b/.test(folded)) {
+  if (
+    /\b(almanca|german|fransizca|french|arapca|arabic|rusca|russian)\b/.test(
+      folded,
+    )
+  ) {
     return "other";
   }
   return null;

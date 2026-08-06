@@ -61,5 +61,14 @@ export function useStudyLevels(opts?: { onlyEnabled?: boolean }) {
     return (key: string | null | undefined) => (key ? (m[key] ?? key) : "");
   }, [levels]);
 
-  return { levels, labelOf, isLoading: query.isLoading, refetch: query.refetch };
+  const hasCatalogData = Array.isArray(query.data) && query.data.length > 0;
+
+  return {
+    levels,
+    labelOf,
+    isLoading: query.isLoading,
+    isError: query.isError,
+    hasCatalogData,
+    refetch: query.refetch,
+  };
 }
