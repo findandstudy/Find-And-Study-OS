@@ -115,21 +115,21 @@ const DEGREE_DOC_MAP: Record<string, DocType[]> = {
     { key: "hs_diploma", labelKey: "apply.docLabel_hs_diploma", icon: "🎓", accept: ".pdf,.jpg,.jpeg,.png", required: true },
     { key: "hs_transcript", labelKey: "apply.docLabel_hs_transcript", icon: "📋", accept: ".pdf,.jpg,.jpeg,.png", required: true },
     { key: "passport", labelKey: "apply.docLabel_passport", icon: "🛂", accept: ".pdf,.jpg,.jpeg,.png", required: true },
-    { key: "photo", labelKey: "apply.docLabel_photo", icon: "📷", accept: ".jpg,.jpeg,.png", required: true },
+    { key: "photo", labelKey: "apply.docLabel_photo", icon: "📷", accept: ".pdf,.jpg,.jpeg,.png", required: true },
     { key: "language_proof", labelKey: "apply.docLabel_language_proof", icon: "🌐", accept: ".pdf,.jpg,.jpeg,.png", required: false, subtitleKey: "apply.docSub_ifAvailable" },
   ],
   bachelors: [
     { key: "hs_diploma", labelKey: "apply.docLabel_hs_diploma", icon: "🎓", accept: ".pdf,.jpg,.jpeg,.png", required: true },
     { key: "hs_transcript", labelKey: "apply.docLabel_hs_transcript", icon: "📋", accept: ".pdf,.jpg,.jpeg,.png", required: true },
     { key: "passport", labelKey: "apply.docLabel_passport", icon: "🛂", accept: ".pdf,.jpg,.jpeg,.png", required: true },
-    { key: "photo", labelKey: "apply.docLabel_photo", icon: "📷", accept: ".jpg,.jpeg,.png", required: true },
+    { key: "photo", labelKey: "apply.docLabel_photo", icon: "📷", accept: ".pdf,.jpg,.jpeg,.png", required: true },
     { key: "language_proof", labelKey: "apply.docLabel_language_proof", icon: "🌐", accept: ".pdf,.jpg,.jpeg,.png", required: false, subtitleKey: "apply.docSub_ifAvailable" },
   ],
   masters: [
     { key: "bachelor_diploma", labelKey: "apply.docLabel_bachelor_diploma", icon: "🎓", accept: ".pdf,.jpg,.jpeg,.png", required: true },
     { key: "bachelor_transcript", labelKey: "apply.docLabel_bachelor_transcript", icon: "📋", accept: ".pdf,.jpg,.jpeg,.png", required: true },
     { key: "passport", labelKey: "apply.docLabel_passport", icon: "🛂", accept: ".pdf,.jpg,.jpeg,.png", required: true },
-    { key: "photo", labelKey: "apply.docLabel_photo", icon: "📷", accept: ".jpg,.jpeg,.png", required: true },
+    { key: "photo", labelKey: "apply.docLabel_photo", icon: "📷", accept: ".pdf,.jpg,.jpeg,.png", required: true },
     { key: "equivalency_letter", labelKey: "apply.docLabel_equivalency_letter", icon: "📜", accept: ".pdf,.jpg,.jpeg,.png", required: false, subtitleKey: "apply.docSub_recognition" },
     { key: "cv", labelKey: "apply.docLabel_cv", icon: "📄", accept: ".pdf,.jpg,.jpeg,.png", required: false, subtitleKey: "apply.docSub_ifRequired" },
     { key: "sop", labelKey: "apply.docLabel_sop", icon: "✍️", accept: ".pdf,.jpg,.jpeg,.png", required: false, subtitleKey: "apply.docSub_ifRequired" },
@@ -141,7 +141,7 @@ const DEGREE_DOC_MAP: Record<string, DocType[]> = {
     { key: "master_diploma", labelKey: "apply.docLabel_master_diploma", icon: "🎓", accept: ".pdf,.jpg,.jpeg,.png", required: true },
     { key: "master_transcript", labelKey: "apply.docLabel_master_transcript", icon: "📋", accept: ".pdf,.jpg,.jpeg,.png", required: true },
     { key: "passport", labelKey: "apply.docLabel_passport", icon: "🛂", accept: ".pdf,.jpg,.jpeg,.png", required: true },
-    { key: "photo", labelKey: "apply.docLabel_photo", icon: "📷", accept: ".jpg,.jpeg,.png", required: true },
+    { key: "photo", labelKey: "apply.docLabel_photo", icon: "📷", accept: ".pdf,.jpg,.jpeg,.png", required: true },
     { key: "equivalency_letter", labelKey: "apply.docLabel_equivalency_letter", icon: "📜", accept: ".pdf,.jpg,.jpeg,.png", required: false, subtitleKey: "apply.docSub_recognition" },
     { key: "cv", labelKey: "apply.docLabel_cv", icon: "📄", accept: ".pdf,.jpg,.jpeg,.png", required: false, subtitleKey: "apply.docSub_ifRequired" },
     { key: "sop", labelKey: "apply.docLabel_sop", icon: "✍️", accept: ".pdf,.jpg,.jpeg,.png", required: false, subtitleKey: "apply.docSub_ifRequired" },
@@ -151,13 +151,13 @@ const DEGREE_DOC_MAP: Record<string, DocType[]> = {
     { key: "passport", labelKey: "apply.docLabel_passport", icon: "🛂", accept: ".pdf,.jpg,.jpeg,.png", required: true },
     { key: "hs_diploma", labelKey: "apply.docLabel_hs_diploma", icon: "🎓", accept: ".pdf,.jpg,.jpeg,.png", required: false },
     { key: "hs_transcript", labelKey: "apply.docLabel_hs_transcript", icon: "📋", accept: ".pdf,.jpg,.jpeg,.png", required: false },
-    { key: "photo", labelKey: "apply.docLabel_photo", icon: "📷", accept: ".jpg,.jpeg,.png", required: false },
+    { key: "photo", labelKey: "apply.docLabel_photo", icon: "📷", accept: ".pdf,.jpg,.jpeg,.png", required: false },
   ],
   foundation: [
     { key: "passport", labelKey: "apply.docLabel_passport", icon: "🛂", accept: ".pdf,.jpg,.jpeg,.png", required: true },
     { key: "hs_diploma", labelKey: "apply.docLabel_hs_diploma", icon: "🎓", accept: ".pdf,.jpg,.jpeg,.png", required: false },
     { key: "hs_transcript", labelKey: "apply.docLabel_hs_transcript", icon: "📋", accept: ".pdf,.jpg,.jpeg,.png", required: false },
-    { key: "photo", labelKey: "apply.docLabel_photo", icon: "📷", accept: ".jpg,.jpeg,.png", required: false },
+    { key: "photo", labelKey: "apply.docLabel_photo", icon: "📷", accept: ".pdf,.jpg,.jpeg,.png", required: false },
   ],
 };
 
@@ -165,7 +165,7 @@ const DEFAULT_DOC_TYPES: DocType[] = [
   { key: "passport", labelKey: "apply.docLabel_passport", icon: "🛂", accept: ".pdf,.jpg,.jpeg,.png", required: true },
   { key: "hs_diploma", labelKey: "apply.docLabel_hs_diploma", icon: "🎓", accept: ".pdf,.jpg,.jpeg,.png", required: false },
   { key: "hs_transcript", labelKey: "apply.docLabel_hs_transcript", icon: "📋", accept: ".pdf,.jpg,.jpeg,.png", required: false },
-  { key: "photo", labelKey: "apply.docLabel_photo", icon: "📷", accept: ".jpg,.jpeg,.png", required: false },
+  { key: "photo", labelKey: "apply.docLabel_photo", icon: "📷", accept: ".pdf,.jpg,.jpeg,.png", required: false },
 ];
 
 function getDocTypesForDegree(degree: string | null | undefined): DocType[] {
@@ -238,7 +238,7 @@ function DropZone({ docType, uploaded, onUpload, onRemove, applicationSession }:
     const labelText = docType.label ?? t(docType.labelKey);
     const currentPartCount = uploaded?.partCount || (uploaded ? 1 : 0);
     if (isSingleImageDocumentType(docType.key) && (uploaded || files.length > 1)) {
-      toast({ title: "Photograph accepts one image", description: "Remove the current photograph before choosing another.", variant: "destructive" });
+      toast({ title: "Photograph accepts one file", description: "Remove the current photograph before choosing another PDF or image.", variant: "destructive" });
       return;
     }
     if (currentPartCount + files.length > MAX_DOCUMENT_PARTS) {

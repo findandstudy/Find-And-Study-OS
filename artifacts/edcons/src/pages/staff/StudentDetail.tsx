@@ -50,7 +50,7 @@ const FALLBACK_DOC_TYPES = [
   { key: "passport", label: "Passport", accept: ".pdf,.jpg,.jpeg,.png" },
   { key: "diploma_certificate", label: "Diploma Certificate", accept: ".pdf,.jpg,.jpeg,.png" },
   { key: "diploma_transcript", label: "Diploma Transcript", accept: ".pdf,.jpg,.jpeg,.png" },
-  { key: "photo", label: "Photograph", accept: ".jpg,.jpeg,.png" },
+  { key: "photo", label: "Photograph", accept: ".pdf,.jpg,.jpeg,.png" },
   { key: "other_certificates_documents", label: "Other Certificates", accept: ".pdf,.jpg,.jpeg,.png" },
 ];
 
@@ -403,9 +403,11 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
         return {
           key: String(row.value),
           label,
-          accept: typeof metadata.accept === "string" && metadata.accept.trim()
-            ? metadata.accept.trim()
-            : ".pdf,.jpg,.jpeg,.png",
+          accept: ["photo", "photograph", "passport_photo", "passport_size_photo_specifications"].includes(String(row.value).toLowerCase())
+            ? ".pdf,.jpg,.jpeg,.png"
+            : typeof metadata.accept === "string" && metadata.accept.trim()
+              ? metadata.accept.trim()
+              : ".pdf,.jpg,.jpeg,.png",
         };
       });
     return options.length > 0 ? options : FALLBACK_DOC_TYPES;
@@ -793,16 +795,13 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
 
   function getAcceptForType(t: string) {
     return documentTypeOptions.find((option) => option.key === t)?.accept
-      || (t === "photo" ? ".jpg,.jpeg,.png" : ".jpg,.jpeg,.png,.pdf");
+      || ".jpg,.jpeg,.png,.pdf";
   }
 
   function handleFileSelect(file: File) {
-    const allowed = uploadType === "photo"
-      ? ["image/jpeg", "image/png"]
-      : ["image/jpeg", "image/png", "application/pdf"];
+    const allowed = ["image/jpeg", "image/png", "application/pdf"];
     if (!allowed.includes(file.type)) {
-      const exts = uploadType === "photo" ? "JPG, JPEG, PNG" : "JPG, JPEG, PNG, PDF";
-      toast({ title: "Invalid file type", description: `Only ${exts} files are allowed.`, variant: "destructive" });
+      toast({ title: "Invalid file type", description: "Only JPG, JPEG, PNG and PDF files are allowed.", variant: "destructive" });
       return;
     }
     setUploadFile(file);
@@ -850,7 +849,7 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
   }
 
   async function handlePhotoUpload(file: File) {
-    if (!file.type.startsWith("image/")) return;
+    if (!["image/jpeg", "image/png", "application/pdf"].includes(file.type)) return;
     setPhotoUploading(true);
     try {
       const { fileKey, mimeType, sizeBytes } = await uploadDocumentFile(file);
@@ -952,7 +951,7 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
             <input
               ref={photoInputRef}
               type="file"
-              accept=".jpg,.jpeg,.png"
+              accept=".pdf,.jpg,.jpeg,.png"
               className="hidden"
               onChange={e => {
                 const file = e.target.files?.[0];
@@ -1681,7 +1680,7 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
                   <>
                     <Upload className="w-8 h-8 mx-auto mb-2 text-muted-foreground opacity-50" />
                     <p className="text-sm font-medium text-muted-foreground">Drag & drop or click</p>
-                    <p className="text-xs text-muted-foreground mt-1">{uploadType === "photo" ? "JPG, PNG — max 5 MB" : "PDF, JPG, PNG — max 5 MB"}</p>
+                    <p className="text-xs text-muted-foreground mt-1">PDF, JPG, JPEG, PNG — max 5 MB</p>
                   </>
                 )}
               </div>

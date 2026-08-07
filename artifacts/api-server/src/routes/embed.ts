@@ -3854,7 +3854,7 @@ function loadProgramDocs(pid,cb){
         var lowerKey=rawKey.toLowerCase();
         var key=(/^[a-z0-9_\\-]{1,64}$/i.test(rawKey)&&lowerKey!=='__proto__'&&lowerKey!=='prototype'&&lowerKey!=='constructor')?rawKey:'other';
         var meta=DOC_META[key]||{label:humanizeDocKey(key),icon:'\\ud83d\\udcce',accept:'.pdf,.jpg,.jpeg,.png'};
-        return {key:key,label:meta.label,icon:meta.icon,accept:meta.accept||'.pdf,.jpg,.jpeg,.png',required:!!r.mandatory};
+        return {key:key,label:meta.label,icon:meta.icon,accept:isPhotoDocumentKey(key)?'.pdf,.jpg,.jpeg,.png':(meta.accept||'.pdf,.jpg,.jpeg,.png'),required:!!r.mandatory};
       });
     }
   }
@@ -4018,19 +4018,19 @@ var LEVEL_DOCS={
     {key:'passport',label:'Passport',icon:'\\ud83d\\udec2',accept:'.pdf,.jpg,.jpeg,.png',required:true},
     {key:'hs_diploma',label:'HS Diploma',icon:'\\ud83c\\udf93',accept:'.pdf,.jpg,.jpeg,.png',required:false},
     {key:'hs_transcript',label:'HS Transcript',icon:'\\ud83d\\udccb',accept:'.pdf,.jpg,.jpeg,.png',required:false},
-    {key:'photo',label:'Photograph',icon:'\\ud83d\\udcf7',accept:'.jpg,.jpeg,.png',required:false}
+    {key:'photo',label:'Photograph',icon:'\\ud83d\\udcf7',accept:'.pdf,.jpg,.jpeg,.png',required:false}
   ],
   undergraduate:[
     {key:'hs_diploma',label:'HS Diploma',icon:'\\ud83c\\udf93',accept:'.pdf,.jpg,.jpeg,.png',required:true},
     {key:'hs_transcript',label:'HS Transcript',icon:'\\ud83d\\udccb',accept:'.pdf,.jpg,.jpeg,.png',required:true},
     {key:'passport',label:'Passport',icon:'\\ud83d\\udec2',accept:'.pdf,.jpg,.jpeg,.png',required:true},
-    {key:'photo',label:'Photograph',icon:'\\ud83d\\udcf7',accept:'.jpg,.jpeg,.png',required:true}
+    {key:'photo',label:'Photograph',icon:'\\ud83d\\udcf7',accept:'.pdf,.jpg,.jpeg,.png',required:true}
   ],
   graduate:[
     {key:'bachelor_diploma',label:'Bachelor Diploma',icon:'\\ud83c\\udf93',accept:'.pdf,.jpg,.jpeg,.png',required:true},
     {key:'bachelor_transcript',label:'Bachelor Transcript',icon:'\\ud83d\\udccb',accept:'.pdf,.jpg,.jpeg,.png',required:true},
     {key:'passport',label:'Passport',icon:'\\ud83d\\udec2',accept:'.pdf,.jpg,.jpeg,.png',required:true},
-    {key:'photo',label:'Photograph',icon:'\\ud83d\\udcf7',accept:'.jpg,.jpeg,.png',required:true},
+    {key:'photo',label:'Photograph',icon:'\\ud83d\\udcf7',accept:'.pdf,.jpg,.jpeg,.png',required:true},
     {key:'equivalency',label:'Equivalency Letter',icon:'\\ud83d\\udcdc',accept:'.pdf,.jpg,.jpeg,.png',required:true}
   ],
   doctorate:[
@@ -4038,7 +4038,7 @@ var LEVEL_DOCS={
     {key:'master_transcript',label:'Master Transcript',icon:'\\ud83d\\udccb',accept:'.pdf,.jpg,.jpeg,.png',required:true},
     {key:'bachelor_diploma',label:'Bachelor Diploma',icon:'\\ud83c\\udf93',accept:'.pdf,.jpg,.jpeg,.png',required:true},
     {key:'passport',label:'Passport',icon:'\\ud83d\\udec2',accept:'.pdf,.jpg,.jpeg,.png',required:true},
-    {key:'photo',label:'Photograph',icon:'\\ud83d\\udcf7',accept:'.jpg,.jpeg,.png',required:true}
+    {key:'photo',label:'Photograph',icon:'\\ud83d\\udcf7',accept:'.pdf,.jpg,.jpeg,.png',required:true}
   ]
 };
 
@@ -4316,7 +4316,7 @@ function handleDocumentFiles(key,files){
     if(validationError){alert(validationError);return Promise.resolve(null);}
   }
   if(isPhotoDocumentKey(key)&&files.length>1){
-    var photoError='Photograph accepts only one JPG, JPEG or PNG image.';
+    var photoError='Photograph accepts only one PDF, JPG, JPEG or PNG file.';
     alert(photoError);return Promise.resolve(null);
   }
   var existing=uploadedDocs[key]||null;
@@ -4328,7 +4328,7 @@ function handleDocumentFiles(key,files){
   documentMergeInFlight[key]=Promise.all(files.map(fileToBase64)).then(function(results){
     if(isPhotoDocumentKey(key)){
       var photo=results[results.length-1];
-      uploadedDocs[key]={label:key,base64:photo.base64,mediaType:photo.mediaType,sizeBytes:photo.size,isImage:true,fileName:photo.fileName,partCount:1};
+      uploadedDocs[key]={label:key,base64:photo.base64,mediaType:photo.mediaType,sizeBytes:photo.size,isImage:photo.isImage,fileName:photo.fileName,partCount:1};
       return uploadedDocs[key];
     }
     if(!existing&&results.length===1){

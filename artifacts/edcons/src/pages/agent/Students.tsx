@@ -138,7 +138,7 @@ const DOC_TYPE_META: Record<string, { label: string; icon: string; accept: strin
   experience_letters:                 { label: "Experience Letters",   icon: "💼", accept: ".pdf,.jpg,.jpeg,.png" },
   other_certificates_documents:       { label: "Other Documents",      icon: "📁", accept: ".pdf,.jpg,.jpeg,.png" },
   ielts_pte_gre_gmat_toefl_duolingo:  { label: "Language Test",        icon: "🌐", accept: ".pdf,.jpg,.jpeg,.png" },
-  photo:                              { label: "Photograph",           icon: "📷", accept: ".jpg,.jpeg,.png"      },
+  photo:                              { label: "Photograph",           icon: "📷", accept: ".pdf,.jpg,.jpeg,.png" },
   diploma_recognition:                { label: "Diploma Recognition",  icon: "📜", accept: ".pdf,.jpg,.jpeg,.png" },
 };
 

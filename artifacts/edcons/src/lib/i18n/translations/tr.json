@@ -5411,14 +5411,14 @@
         "keyLabel": "Üniversite Anahtarı",
         "keyHint": "Yalnızca küçük harf, rakam, alt çizgi ve tire kullanılabilir.",
         "adapterLabel": "Portal Adapter",
-        "adapterHint": "Bu üniversitenin portalı için otomasyon adapter'ı seçin.",
+        "adapterHint": "Uyumlu portal adaptörü üniversite adına göre otomatik seçilir. Eşleşen adaptör yoksa üniversite eklenmez.",
         "isActiveLabel": "Hemen etkinleştir",
         "saveButton": "Ekle",
         "saving": "Ekleniyor…",
         "saveSuccess": "Üniversite başarıyla eklendi.",
         "saveError": "Üniversite eklenemedi.",
         "duplicateKey": "Bu anahtar zaten kullanılıyor.",
-        "noAdapters": "Kullanılabilir adapter bulunmuyor."
+        "noAdapters": "Uyumlu adaptör bulunamadı. Önce adaptörü oluşturun veya sisteme kaydedin."
       },
       "defaultsDialog": {
         "title": "Varsayılanları Düzenle",

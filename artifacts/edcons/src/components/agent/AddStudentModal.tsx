@@ -90,7 +90,7 @@ const DOC_TYPE_META: Record<string, { label: string; icon: string; accept: strin
   experience_letters:                 { label: "Experience Letters",   icon: "💼", accept: ".pdf,.jpg,.jpeg,.png" },
   other_certificates_documents:       { label: "Other Documents",      icon: "📁", accept: ".pdf,.jpg,.jpeg,.png" },
   ielts_pte_gre_gmat_toefl_duolingo:  { label: "Language Test",        icon: "🌐", accept: ".pdf,.jpg,.jpeg,.png" },
-  photo:                              { label: "Photograph",           icon: "📷", accept: ".jpg,.jpeg,.png" },
+  photo:                              { label: "Photograph",           icon: "📷", accept: ".pdf,.jpg,.jpeg,.png" },
   diploma_recognition:                { label: "Diploma Recognition",  icon: "📜", accept: ".pdf,.jpg,.jpeg,.png" },
 };
 
@@ -159,7 +159,7 @@ function DropZone({ docType, uploaded, onUpload, onRemove }: {
     if (files.length === 0) return;
     const currentPartCount = uploaded?.partCount || (uploaded ? 1 : 0);
     if (isSingleImageDocumentType(docType.key) && (uploaded || files.length > 1)) {
-      toast({ title: "Photograph accepts one image", description: "Remove the current photograph before choosing another.", variant: "destructive" });
+      toast({ title: "Photograph accepts one file", description: "Remove the current photograph before choosing another PDF or image.", variant: "destructive" });
       return;
     }
     if (currentPartCount + files.length > MAX_DOCUMENT_PARTS) {

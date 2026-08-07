@@ -14,7 +14,7 @@
  * Run:
  *   pnpm --filter @workspace/api-server run test:portal-universities
  */
-import { after, test } from "node:test";
+import { after, before, test } from "node:test";
 import assert from "node:assert/strict";
 import http from "http";
 import express, { type Express } from "express";
@@ -23,7 +23,9 @@ import {
   db,
   portalUniversitiesTable,
   portalCredentialsTable,
+  portalAdaptersTable,
 } from "@workspace/db";
+import { invalidateDeclarativeAdapterCache } from "@workspace/portal-adapters";
 import portalMgmtRouter from "../src/routes/portalMgmt.js";
 
 // ---------------------------------------------------------------------------
@@ -36,6 +38,34 @@ const ALT_ADAPTER = `alt_adapter_${RUN_ID}`;
 const createdKeys: string[] = [];
 const credKeys: string[] = [TEST_KEY, TEST_ADAPTER, ALT_ADAPTER];
 
+function adapterValues(key: string, matchName: string) {
+  return {
+    key,
+    label: `${matchName} adapter`,
+    baseUrl: "https://portal.example.com/login",
+    matchNames: matchName,
+    kind: "declarative" as const,
+    configJson: {
+      credentials: {
+        userSelector: "#email",
+        passSelector: "#password",
+        submitSelector: "button[type=submit]",
+      },
+      steps: [{ type: "navigate", url: "https://portal.example.com/apply" }],
+      submitCheck: { successText: "ok" },
+    },
+    isActive: true,
+  };
+}
+
+before(async () => {
+  await db.insert(portalAdaptersTable).values([
+    adapterValues(TEST_ADAPTER, `portal test ${RUN_ID}`),
+    adapterValues(ALT_ADAPTER, `alternate portal ${RUN_ID}`),
+  ]);
+  invalidateDeclarativeAdapterCache();
+});
+
 after(async () => {
   if (createdKeys.length) {
     await db
@@ -47,6 +77,11 @@ after(async () => {
     .delete(portalCredentialsTable)
     .where(inArray(portalCredentialsTable.portalKey, credKeys))
     .catch(() => {});
+  await db
+    .delete(portalAdaptersTable)
+    .where(inArray(portalAdaptersTable.key, [TEST_ADAPTER, ALT_ADAPTER]))
+    .catch(() => {});
+  invalidateDeclarativeAdapterCache();
   setImmediate(() => process.exit(process.exitCode ?? 0));
 });
 
@@ -137,13 +172,12 @@ test("U1: POST creates a university and it appears in the list", async () => {
   try {
     const res = await sendReq(server, "POST", "/api/portal-universities", {
       universityKey: TEST_KEY,
-      universityName: `Test University ${RUN_ID}`,
-      adapterKey: TEST_ADAPTER,
+      universityName: `Portal Test ${RUN_ID}`,
       isActive: true,
     });
     assert.equal(res.status, 201, `Expected 201 got ${res.status}: ${JSON.stringify(res.body)}`);
     assert.equal(res.body.universityKey, TEST_KEY);
-    assert.equal(res.body.adapterKey, TEST_ADAPTER);
+    assert.equal(res.body.adapterKey, TEST_ADAPTER, "adapter must be resolved from the university name");
     assert.ok(typeof res.body.id === "number", "created row must expose a numeric id");
     createdId = res.body.id;
     createdKeys.push(TEST_KEY);
@@ -151,6 +185,24 @@ test("U1: POST creates a university and it appears in the list", async () => {
     const row = await findInList(server, TEST_KEY);
     assert.ok(row, "created university must appear in the list");
     assert.equal(row.hasCredentials, false, "fresh university has no credentials");
+  } finally {
+    await new Promise<void>((r) => server.close(() => r()));
+  }
+});
+
+test("U1b: POST fails closed when no registered adapter matches", async () => {
+  currentUser = { ...ADMIN };
+  const server = await listen(buildApp());
+  try {
+    const missingKey = `no_adapter_${RUN_ID}`;
+    const res = await sendReq(server, "POST", "/api/portal-universities", {
+      universityKey: missingKey,
+      universityName: `Unknown Portal ${RUN_ID}`,
+      isActive: true,
+    });
+    assert.equal(res.status, 422, `Expected 422 got ${res.status}: ${JSON.stringify(res.body)}`);
+    assert.equal(res.body.error, "NO_MATCHING_ADAPTER");
+    assert.equal(await findInList(server, missingKey), undefined, "failed setup must not create a row");
   } finally {
     await new Promise<void>((r) => server.close(() => r()));
   }

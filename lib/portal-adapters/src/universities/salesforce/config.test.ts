@@ -4,6 +4,7 @@ import { SALESFORCE_SCHOOLS } from "./config.js";
 
 test("requested Salesforce schools use the strict verification contract", () => {
   const requested = new Set([
+    "halic",
     "uskudar",
     "bau",
     "ozyegin",
@@ -24,4 +25,18 @@ test("requested Salesforce schools use the strict verification contract", () => 
       `${school.key} must fail closed`,
     );
   }
+});
+
+test("Haliç has a dedicated fail-closed Salesforce configuration", () => {
+  const halic = SALESFORCE_SCHOOLS.find((school) => school.key === "halic");
+
+  assert.ok(halic, "Haliç Salesforce configuration must exist");
+  assert.equal(halic.label, "Haliç Üniversitesi");
+  assert.equal(halic.portalUrl, "https://applyonline.halic.edu.tr/s");
+  assert.deepEqual(halic.namePatterns, ["halic"]);
+  assert.equal(
+    halic.strictContract,
+    true,
+    "Haliç must require strict readback and completion proof",
+  );
 });

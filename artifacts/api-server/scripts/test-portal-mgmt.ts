@@ -216,12 +216,12 @@ test("TAU3: POST /portal-universities creates a new university", async () => {
   try {
     const res = await sendReq(server, "POST", "/api/portal-universities", {
       universityKey:  TEST_KEY,
-      universityName: `TAU Test University ${RUN}`,
-      adapterKey:     `test_adapter_${RUN}`,
+      universityName: `Haliç University ${RUN}`,
       isActive:       true,
     });
     assert.equal(res.status, 201, `Expected 201 got ${res.status}: ${JSON.stringify(res.body)}`);
     assert.equal(res.body.universityKey, TEST_KEY);
+    assert.equal(res.body.adapterKey, "halic", "adapter must be resolved from the university name");
     assert.equal(res.body.isActive, true);
     assert.ok(res.body.id, "Should return id");
     cleanupUniIds.push(res.body.id);

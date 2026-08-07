@@ -30,7 +30,14 @@ import {
   programsTable,
   GENERAL_MAPPING_KEY,
 } from "@workspace/db";
-import { resolveAdapterByKey, adapterMetadata, setCredsOverride, clearCredsOverride, invalidateDeclarativeAdapterCache } from "@workspace/portal-adapters";
+import {
+  resolveAdapterByKey,
+  resolveAdapterForUniversity,
+  adapterMetadata,
+  setCredsOverride,
+  clearCredsOverride,
+  invalidateDeclarativeAdapterCache,
+} from "@workspace/portal-adapters";
 import { getSuccessCounts, isExperimentalDynamic, getNonGraduatedExperimentalKeys, GRADUATION_THRESHOLD } from "../lib/adapterGraduation.js";
 import { buildPageMeta, parsePaginationParams } from "@workspace/pagination";
 import { logAudit, requireAuth, requireRole } from "../lib/auth";
@@ -317,7 +324,10 @@ router.get(
 const createUniversityBodySchema = z.object({
   universityKey:    z.string().min(1).regex(/^[a-z0-9_-]+$/, "Only lowercase letters, digits, underscores and hyphens").refine((k) => k !== GENERAL_MAPPING_KEY, `'${GENERAL_MAPPING_KEY}' is reserved for the General mapping tier`),
   universityName:   z.string().min(1),
-  adapterKey:       z.string().min(1),
+  // Normally omitted: the canonical resolver selects the adapter from the
+  // university name. Kept optional for backwards-compatible operational API
+  // clients that intentionally pin a specific registered adapter.
+  adapterKey:       z.string().min(1).optional(),
   crmUniversityId:  z.coerce.number().int().positive().optional(),
   isActive:         z.boolean().optional(),
   defaults:         z.record(z.unknown()).optional(),
@@ -348,14 +358,30 @@ router.post(
       return;
     }
 
+    const adapter = body.adapterKey
+      ? await resolveAdapterByKey(body.adapterKey)
+      : await resolveAdapterForUniversity(body.universityName);
+
+    if (!adapter) {
+      res.status(422).json({
+        error: body.adapterKey ? "ADAPTER_NOT_FOUND" : "NO_MATCHING_ADAPTER",
+        message: body.adapterKey
+          ? `Registered adapter '${body.adapterKey}' was not found.`
+          : `No registered adapter matches '${body.universityName}'. Create or register the adapter first.`,
+      });
+      return;
+    }
+
     const [row] = await db
       .insert(portalUniversitiesTable)
       .values({
         universityKey:   body.universityKey,
         universityName:  body.universityName,
-        adapterKey:      body.adapterKey,
+        adapterKey:      adapter.key,
         crmUniversityId: body.crmUniversityId ?? null,
-        isActive:        body.isActive ?? true,
+        // A newly discovered portal must complete credentials, login testing
+        // and program mapping before it participates in routing.
+        isActive:        body.isActive ?? false,
         defaults:        body.defaults ?? null,
       })
       .returning();

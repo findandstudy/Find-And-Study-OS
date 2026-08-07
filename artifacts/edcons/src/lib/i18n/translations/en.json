@@ -5411,14 +5411,14 @@
         "keyLabel": "University Key",
         "keyHint": "Lowercase letters, digits, underscores and hyphens only.",
         "adapterLabel": "Portal Adapter",
-        "adapterHint": "Select the automation adapter for this university's portal.",
+        "adapterHint": "The compatible portal adapter will be selected automatically from the university name. If no adapter matches, the university will not be added.",
         "isActiveLabel": "Activate immediately",
         "saveButton": "Add",
         "saving": "Adding…",
         "saveSuccess": "University added successfully.",
         "saveError": "Failed to add university.",
         "duplicateKey": "This key already exists.",
-        "noAdapters": "No adapters available."
+        "noAdapters": "No compatible adapter was found. Create or register the adapter first."
       },
       "defaultsDialog": {
         "title": "Edit Defaults",

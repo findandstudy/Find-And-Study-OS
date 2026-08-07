@@ -78,6 +78,14 @@ let inflight: Promise<Record<string, DocCatalogEntry>> | null = null;
 // the catalog while a load is mid-flight.
 let generation = 0;
 
+const PHOTO_DOCUMENT_KEYS = new Set(["photo", "photograph", "passport_photo", "passport_size_photo_specifications"]);
+
+function canonicalAccept(key: string, configured: unknown): string {
+  return PHOTO_DOCUMENT_KEYS.has(key.trim().toLowerCase())
+    ? ".pdf,.jpg,.jpeg,.png"
+    : normaliseAccept(configured);
+}
+
 export async function loadDocCatalog(): Promise<Record<string, DocCatalogEntry>> {
   const now = Date.now();
   if (cache && now < cacheUntil) return cache;
@@ -97,7 +105,7 @@ export async function loadDocCatalog(): Promise<Record<string, DocCatalogEntry>>
         map[rawKey] = {
           label: normaliseShort(md.label, humaniseDocKey(rawKey), 80),
           icon: normaliseShort(md.icon, "📎", 8),
-          accept: normaliseAccept(md.accept),
+          accept: canonicalAccept(rawKey, md.accept),
         };
       }
       // Only publish if no invalidation happened while we were loading.

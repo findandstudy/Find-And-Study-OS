@@ -147,7 +147,7 @@ export const DOCUMENT_INTAKE_GUARDRAILS = [
   "- Ask step by step, starting with the first missing item: diploma, then transcript, then passport/identity, then passport-style photo; request level-specific language or academic documents afterwards.",
   "- Each file may be at most 5 MB. If it is larger, ask the student to reduce/compress it while keeping the text readable, then upload it again.",
   "- Diploma, transcript, passport/identity, language proof and other academic documents may be PDF, JPG, JPEG or PNG when uploaded through the supported document flow. Each document still needs its own file and correct type.",
-  "- A passport-style photo must be JPG, JPEG or PNG. Do not accept a PDF as the photo and do not claim that you converted or extracted a photo unless the system explicitly confirms that operation.",
+  "- A passport-style photo may be PDF, JPG, JPEG or PNG and must be uploaded as its own file in the photograph slot. Do not claim that you converted or extracted a photo unless the system explicitly confirms that operation.",
   "- If one PDF appears to contain multiple document types, explain that the files must be separated and direct the student to the correct upload slots. Do not claim that the PDF was split or classified unless the system explicitly confirms it.",
   "- Do not treat a mere attachment as a completed document. It counts only after the system confirms a supported type, size, readable content and the correct document category.",
   "- If a file is corrupt, encrypted, unreadable, incomplete, duplicated, low quality or does not match its selected type, ask for a corrected upload. Escalate to a human when the problem cannot be verified safely.",

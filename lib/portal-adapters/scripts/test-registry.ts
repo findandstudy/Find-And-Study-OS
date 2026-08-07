@@ -2,12 +2,12 @@
  * test-registry.ts — registry lookup and allowlist-count tests
  *
  * TR1 — adapterForUniversity("Istanbul Topkapi University") → key "topkapi"
- * TR2 — SIT allowlist length is exactly 12
+ * TR2 — SIT allowlist length is exactly 11
  * TR3 — United allowlist length is exactly 3
  * TR4 — adapterByKey("topkapi") returns the same adapter as adapterForUniversity
  * TR5 — adapterMetadata() includes family field for all 4 code adapter families
  * TR6 — adapterMetadata() exposes allowlist for SIT and United
- * TR7 — adapterForUniversity("Haliç Üniversitesi") → key "sit"
+ * TR7 — adapterForUniversity("Haliç Üniversitesi") → key "halic"
  * TR8 — adapterForUniversity("Biruni Üniversitesi") → key "united"
  * TR9 — adapters list is non-empty and all entries have key + label
  *
@@ -41,11 +41,11 @@ test("TR1 — adapterForUniversity('Istanbul Topkapi University') → topkapi", 
 // TR2 — SIT allowlist count
 // ---------------------------------------------------------------------------
 
-test("TR2 — SIT allowlist length is exactly 12", () => {
+test("TR2 — SIT allowlist length is exactly 11", () => {
   assert.equal(
     SIT_ALLOWLIST.length,
-    12,
-    `Expected 12 SIT universities, got ${SIT_ALLOWLIST.length}`,
+    11,
+    `Expected 11 SIT universities, got ${SIT_ALLOWLIST.length}`,
   );
 });
 
@@ -91,13 +91,13 @@ test("TR5 — adapterMetadata() includes metronic, salesforce, sit, united famil
 // TR6 — adapterMetadata exposes allowlist for SIT and United
 // ---------------------------------------------------------------------------
 
-test("TR6 — adapterMetadata() exposes allowlist for SIT (12) and United (3)", () => {
+test("TR6 — adapterMetadata() exposes allowlist for SIT (11) and United (3)", () => {
   const meta = adapterMetadata();
 
   const sitMeta = meta.find(m => m.family === "sit");
   assert.ok(sitMeta !== undefined,                      "SIT metadata entry must exist");
   assert.ok(Array.isArray(sitMeta?.allowlist),          "SIT allowlist must be an array");
-  assert.equal(sitMeta?.allowlist?.length, 12,          `SIT allowlist must have 12 entries, got ${sitMeta?.allowlist?.length}`);
+  assert.equal(sitMeta?.allowlist?.length, 11,          `SIT allowlist must have 11 entries, got ${sitMeta?.allowlist?.length}`);
 
   const unitedMeta = meta.find(m => m.family === "united");
   assert.ok(unitedMeta !== undefined,                   "United metadata entry must exist");
@@ -106,13 +106,13 @@ test("TR6 — adapterMetadata() exposes allowlist for SIT (12) and United (3)", 
 });
 
 // ---------------------------------------------------------------------------
-// TR7 — SIT matches one of its listed universities
+// TR7 — Haliç resolves to its dedicated Salesforce adapter, not SIT
 // ---------------------------------------------------------------------------
 
-test("TR7 — adapterForUniversity('Haliç Üniversitesi') → sit", () => {
+test("TR7 — adapterForUniversity('Haliç Üniversitesi') → halic", () => {
   const adapter = adapterForUniversity("Haliç Üniversitesi");
   assert.ok(adapter !== null,    "Expected a non-null adapter for Haliç");
-  assert.equal(adapter?.key, "sit", `Expected key "sit", got "${adapter?.key}"`);
+  assert.equal(adapter?.key, "halic", `Expected key "halic", got "${adapter?.key}"`);
 });
 
 // ---------------------------------------------------------------------------

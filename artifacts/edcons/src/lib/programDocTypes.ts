@@ -33,7 +33,7 @@ export const PROGRAM_DOC_META: Record<string, ProgramDocMeta> = {
   experience_letters:               { key: "experience_letters",               label: "Experience Letters", icon: "💼", accept: ".pdf,.jpg,.jpeg,.png" },
   other_certificates_documents:     { key: "other_certificates_documents",     label: "Other Certificates", icon: "📑", accept: ".pdf,.jpg,.jpeg,.png" },
   ielts_pte_gre_gmat_toefl_duolingo:{ key: "ielts_pte_gre_gmat_toefl_duolingo",label: "Language/Test Score", icon: "🌐", accept: ".pdf,.jpg,.jpeg,.png" },
-  photo:                            { key: "photo",                            label: "Photograph", icon: "📷", accept: ".jpg,.jpeg,.png" },
+  photo:                            { key: "photo",                            label: "Photograph", icon: "📷", accept: ".pdf,.jpg,.jpeg,.png" },
   diploma_recognition:              { key: "diploma_recognition",              label: "Diploma Recognition", icon: "📜", accept: ".pdf,.jpg,.jpeg,.png" },
   portfolio: { key: "portfolio", label: "Portfolio", icon: "🎨", accept: ".pdf,.jpg,.jpeg,.png" },
   research_proposal: { key: "research_proposal", label: "Research Proposal", icon: "🔬", accept: ".pdf,.jpg,.jpeg,.png" },
@@ -89,7 +89,7 @@ export const PROGRAM_DOC_META: Record<string, ProgramDocMeta> = {
   family_book: { key: "family_book", label: "Family Book", icon: "👨‍👩‍👧", accept: ".pdf,.jpg,.jpeg,.png" },
   marriage_certificate: { key: "marriage_certificate", label: "Marriage Certificate", icon: "💍", accept: ".pdf,.jpg,.jpeg,.png" },
   name_change_affidavit: { key: "name_change_affidavit", label: "Name Change Affidavit", icon: "📝", accept: ".pdf,.jpg,.jpeg,.png" },
-  passport_size_photo_specifications: { key: "passport_size_photo_specifications", label: "Passport-Size Photo (Spec-Compliant)", icon: "📷", accept: ".jpg,.jpeg,.png" },
+  passport_size_photo_specifications: { key: "passport_size_photo_specifications", label: "Passport-Size Photo (Spec-Compliant)", icon: "📷", accept: ".pdf,.jpg,.jpeg,.png" },
   no_objection_certificate: { key: "no_objection_certificate", label: "No Objection Certificate (NOC)", icon: "📝", accept: ".pdf,.jpg,.jpeg,.png" },
   employer_letter: { key: "employer_letter", label: "Employer Letter", icon: "💼", accept: ".pdf,.jpg,.jpeg,.png" },
   work_experience_certificate: { key: "work_experience_certificate", label: "Work Experience Certificate", icon: "💼", accept: ".pdf,.jpg,.jpeg,.png" },
@@ -118,6 +118,15 @@ export const PROGRAM_DOC_META: Record<string, ProgramDocMeta> = {
 };
 
 export type ProgramDocReq = { documentType: string; mandatory: boolean; sortOrder?: number };
+
+const PHOTO_DOCUMENT_KEYS = new Set(["photo", "photograph", "passport_photo", "passport_size_photo_specifications"]);
+
+function canonicalAccept(key: string, configured: unknown): string {
+  if (PHOTO_DOCUMENT_KEYS.has(key.trim().toLowerCase())) return ".pdf,.jpg,.jpeg,.png";
+  return typeof configured === "string" && configured.trim()
+    ? configured
+    : ".pdf,.jpg,.jpeg,.png";
+}
 
 /**
  * Fetch the admin-managed document-type catalog from the server.
@@ -151,7 +160,7 @@ export function useDocumentTypeCatalog() {
             key: r.value,
             label: typeof md.label === "string" ? md.label : humaniseKey(r.value),
             icon: typeof md.icon === "string" ? md.icon : "📄",
-            accept: typeof md.accept === "string" ? md.accept : ".pdf,.jpg,.jpeg,.png",
+            accept: canonicalAccept(r.value, md.accept),
           };
         }
         return map;
@@ -178,7 +187,10 @@ function humaniseKey(key: string): string {
  */
 export function useResolveDocMeta(): (key: string) => ProgramDocMeta {
   const { data: catalog } = useDocumentTypeCatalog();
-  return (key: string) => catalog?.[key] ?? resolveDocMeta(key);
+  return (key: string) => {
+    const resolved = catalog?.[key] ?? resolveDocMeta(key);
+    return { ...resolved, accept: canonicalAccept(key, resolved.accept) };
+  };
 }
 
 export function useProgramDocRequirements(programId: number | null | undefined) {

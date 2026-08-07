@@ -1789,20 +1789,20 @@ const LEVEL_DOCS: Record<AppLevel, LevelDoc[]> = {
     { key: "passport", label: "Passport", icon: "🛂", accept: "image/*,.pdf", required: true },
     { key: "hs_diploma", label: "HS Diploma", icon: "🎓", accept: "image/*,.pdf", required: false },
     { key: "hs_transcript", label: "HS Transcript", icon: "📋", accept: "image/*,.pdf", required: false },
-    { key: "photo", label: "Photograph", icon: "📷", accept: "image/*", required: false },
+    { key: "photo", label: "Photograph", icon: "📷", accept: ".pdf,.jpg,.jpeg,.png", required: false },
   ],
   undergraduate: [
     { key: "hs_diploma", label: "HS Diploma", icon: "🎓", accept: "image/*,.pdf", required: true },
     { key: "hs_transcript", label: "HS Transcript", icon: "📋", accept: "image/*,.pdf", required: true },
     { key: "passport", label: "Passport", icon: "🛂", accept: "image/*,.pdf", required: true },
-    { key: "photo", label: "Photograph", icon: "📷", accept: "image/*", required: true },
+    { key: "photo", label: "Photograph", icon: "📷", accept: ".pdf,.jpg,.jpeg,.png", required: true },
     { key: "language_proof", label: "Language Proof", icon: "🌐", accept: "image/*,.pdf", required: false, note: "If available" },
   ],
   graduate: [
     { key: "bachelor_diploma", label: "Bachelor Diploma", icon: "🎓", accept: "image/*,.pdf", required: true },
     { key: "bachelor_transcript", label: "Bachelor Transcript", icon: "📋", accept: "image/*,.pdf", required: true },
     { key: "passport", label: "Passport", icon: "🛂", accept: "image/*,.pdf", required: true },
-    { key: "photo", label: "Photograph", icon: "📷", accept: "image/*", required: true },
+    { key: "photo", label: "Photograph", icon: "📷", accept: ".pdf,.jpg,.jpeg,.png", required: true },
     { key: "equivalency", label: "Equivalency Letter", icon: "📜", accept: "image/*,.pdf", required: false, note: "Recognition" },
     { key: "cv", label: "CV", icon: "📄", accept: "image/*,.pdf", required: false, note: "If required" },
     { key: "sop", label: "SOP", icon: "✍️", accept: "image/*,.pdf", required: false, note: "If required" },
@@ -1814,7 +1814,7 @@ const LEVEL_DOCS: Record<AppLevel, LevelDoc[]> = {
     { key: "master_diploma", label: "Master Diploma", icon: "🎓", accept: "image/*,.pdf", required: true },
     { key: "master_transcript", label: "Master Transcript", icon: "📋", accept: "image/*,.pdf", required: true },
     { key: "passport", label: "Passport", icon: "🛂", accept: "image/*,.pdf", required: true },
-    { key: "photo", label: "Photograph", icon: "📷", accept: "image/*", required: true },
+    { key: "photo", label: "Photograph", icon: "📷", accept: ".pdf,.jpg,.jpeg,.png", required: true },
     { key: "equivalency", label: "Equivalency Letter", icon: "📜", accept: "image/*,.pdf", required: false, note: "Recognition" },
     { key: "cv", label: "CV", icon: "📄", accept: "image/*,.pdf", required: false, note: "If required" },
     { key: "sop", label: "SOP", icon: "✍️", accept: "image/*,.pdf", required: false, note: "If required" },
@@ -1880,7 +1880,7 @@ function ApplyDropZone({ docType, uploaded, onFile, onUpload, onRemove }: {
     if (files.length === 0) return;
     const currentPartCount = uploaded?.partCount || (uploaded ? 1 : 0);
     if (isSingleImageDocumentType(docType.key) && (uploaded || files.length > 1)) {
-      toast({ title: "Photograph accepts one image", description: "Remove the current photograph before choosing another.", variant: "destructive" });
+      toast({ title: "Photograph accepts one file", description: "Remove the current photograph before choosing another PDF or image.", variant: "destructive" });
       return;
     }
     if (currentPartCount + files.length > MAX_DOCUMENT_PARTS) {

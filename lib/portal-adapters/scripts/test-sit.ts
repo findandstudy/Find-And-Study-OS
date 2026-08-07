@@ -4,7 +4,7 @@
  * GPA1  — normalizeGpa: decimal rounding (dot & comma)
  * GPA2  — normalizeGpa: Cambridge letters A*=90…E=40 (case-insensitive)
  * GPA3  — normalizeGpa: number input rounds; empty/garbage → undefined
- * AL1   — allowlist length is exactly 12
+ * AL1   — allowlist length is exactly 11
  * AL2   — allowlist includes Beykoz, excludes İstanbul Yeni Yüzyıl
  * AL3   — matchAllowedUniversity resolves the canonical entry
  * AL4   — exact-name guards: Cyprus Aydın / Beykent / İstanbul Medipol rejected
@@ -353,8 +353,8 @@ test("DOCSTEP — uploads require a heading or the unique headingless final-scre
 // Allowlist integrity
 // ---------------------------------------------------------------------------
 
-test("AL1 — allowlist length is exactly 12", () => {
-  assert.equal(SIT_ALLOWLIST.length, 12);
+test("AL1 — allowlist length is exactly 11", () => {
+  assert.equal(SIT_ALLOWLIST.length, 11);
 });
 
 test("AL2 — includes Beykoz, excludes İstanbul Yeni Yüzyıl", () => {
@@ -368,14 +368,14 @@ test("AL2 — includes Beykoz, excludes İstanbul Yeni Yüzyıl", () => {
   );
 });
 
-test("AL3 — matchAllowedUniversity resolves the canonical entry", () => {
+test("AL3 — allowlist resolves members and rejects direct Haliç routing", () => {
   assert.equal(
     matchAllowedUniversity("Beykoz Üniversitesi"),
     "Beykoz Üniversitesi",
   );
   assert.equal(
     matchAllowedUniversity("haliç universitesi"),
-    "Haliç Üniversitesi",
+    null,
   );
   assert.equal(
     matchAllowedUniversity("Istanbul Aydin University"),
@@ -655,6 +655,8 @@ test("MEMBER2 — direct-access universities are NOT SIT members", () => {
   assert.equal(isSitMember("Altınbaş Üniversitesi"), false);
   assert.equal(isSitMember("İstanbul Okan Üniversitesi"), false);
   assert.equal(isSitMember("Üsküdar Üniversitesi"), false);
+  assert.equal(isSitMember("Haliç Üniversitesi"), false);
+  assert.equal(isSitMember("Halic University"), false);
 });
 
 test("MEMBER3 — empty / nullish → not a member", () => {
@@ -672,6 +674,20 @@ test("MEMBER4 — SIT_MEMBER_UNIVERSITIES env EXTENDS (never shrinks) the list",
     assert.equal(isSitMember("Üsküdar Üniversitesi"), true);
     // agreed members are still recognised alongside the extension
     assert.equal(isSitMember("Atlas Üniversitesi"), true);
+  } finally {
+    if (prev === undefined) delete process.env.SIT_MEMBER_UNIVERSITIES;
+    else process.env.SIT_MEMBER_UNIVERSITIES = prev;
+  }
+});
+
+test("MEMBER5 — direct-portal exclusion wins over stale DB/env membership", () => {
+  const prev = process.env.SIT_MEMBER_UNIVERSITIES;
+  try {
+    process.env.SIT_MEMBER_UNIVERSITIES = "Haliç Üniversitesi";
+    assert.equal(
+      isSitMember("Haliç Üniversitesi", ["Haliç Üniversitesi"]),
+      false,
+    );
   } finally {
     if (prev === undefined) delete process.env.SIT_MEMBER_UNIVERSITIES;
     else process.env.SIT_MEMBER_UNIVERSITIES = prev;

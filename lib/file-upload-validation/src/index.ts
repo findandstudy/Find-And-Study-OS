@@ -49,8 +49,6 @@ export const APPLICATION_DOCUMENT_MAX_SIZE_MB = 5;
 export const APPLICATION_DOCUMENT_ACCEPT_ATTRIBUTE = ".pdf,.jpg,.jpeg,.png";
 export const APPLICATION_DOCUMENT_HELP_TEXT = "PDF, JPG, JPEG or PNG \u2022 Max 5 MB per file";
 
-const PHOTO_DOCUMENT_TYPES = new Set(["photo", "photograph"]);
-
 const APPLICATION_DOCUMENT_MIME_TYPES = new Set<string>([
   "application/pdf",
   "image/jpeg",
@@ -249,9 +247,8 @@ export function validateApplicationDocumentFile(
 
 /**
  * Canonical student/lead/application document policy. All intake documents are
- * capped at 5 MB and limited to PDF/JPG/JPEG/PNG. A passport-style photograph
- * is stricter: it must be an actual image, never a PDF. Other document slots
- * continue accepting an image because the mobile scanner produces JPG/PNG.
+ * capped at 5 MB and limited to PDF/JPG/JPEG/PNG. Photograph slots accept the
+ * same safe formats; they remain single-file slots at the UI layer.
  */
 export function validateStudentDocumentFile(
   documentType: string,
@@ -262,12 +259,6 @@ export function validateStudentDocumentFile(
   const baseError = validateApplicationDocumentFile(fileName, mimeType, sizeBytes);
   if (baseError) return baseError;
 
-  if (PHOTO_DOCUMENT_TYPES.has(documentType.trim().toLowerCase()) && !isImage(mimeType)) {
-    return {
-      type: "document_type_mismatch",
-      message: "Vesikal\u0131k foto\u011fraf yaln\u0131zca JPG, JPEG veya PNG format\u0131nda y\u00fcklenebilir.",
-    };
-  }
   return null;
 }
 

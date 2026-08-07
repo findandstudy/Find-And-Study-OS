@@ -26,12 +26,9 @@ test("student documents enforce the 5 MB boundary and reject empty files", () =>
   );
 });
 
-test("passport accepts PDF/image while the photograph slot rejects PDF", () => {
+test("passport and photograph slots accept PDF/JPG/JPEG/PNG", () => {
   assert.equal(validateStudentDocumentFile("passport", "passport.pdf", "application/pdf", 1024), null);
-  assert.equal(
-    validateStudentDocumentFile("photo", "photo.pdf", "application/pdf", 1024)?.type,
-    "document_type_mismatch",
-  );
+  assert.equal(validateStudentDocumentFile("photo", "photo.pdf", "application/pdf", 1024), null);
   assert.equal(validateStudentDocumentFile("photograph", "photo.jpg", "image/jpeg", 1024), null);
 });
 
@@ -49,7 +46,7 @@ test("AI intake prompt keeps document safety rules outside editable knowledge", 
   const prompt = buildBotSystemPrompt("en", "Custom university knowledge only");
   assert.match(prompt, /at most 5 MB/i);
   assert.match(prompt, /separate file/i);
-  assert.match(prompt, /passport-style photo must be JPG, JPEG or PNG/i);
+  assert.match(prompt, /passport-style photo.*PDF, JPG, JPEG or PNG/i);
   assert.match(prompt, /one PDF appears to contain multiple document types/i);
   assert.match(prompt, /Do not treat a mere attachment as a completed document/i);
 });

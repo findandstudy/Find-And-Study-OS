@@ -20,6 +20,17 @@ export interface SalesforceSchoolConfig {
 
 export const SALESFORCE_SCHOOLS: SalesforceSchoolConfig[] = [
   {
+    key: "halic",
+    label: "Haliç Üniversitesi",
+    portalUrl: "https://applyonline.halic.edu.tr/s",
+    namePatterns: ["halic"],
+    requiredDocs: ["diploma", "transcript", "passport"],
+    // Haliç is a new independent lane. Keep strict readback/upload/completion
+    // proof enabled so an uncalibrated portal difference fails closed instead
+    // of being recorded as a successful application.
+    strictContract: true,
+  },
+  {
     key: "uskudar",
     label: "Üsküdar Üniversitesi",
     portalUrl: "https://apply.uskudar.edu.tr/agency/s",

@@ -6,7 +6,7 @@
  *  - isActive toggle per row (PATCH /portal-universities/:id/active)
  *  - hasCredentials badge (green / red) — no actual creds shown
  *  - Test Login button per row (POST /portal-universities/:id/test-login)
- *  - Add University dialog (POST /portal-universities) — picks adapter from registry
+ *  - Add University dialog (POST /portal-universities) — adapter is resolved canonically
  *  - Edit Defaults dialog (PATCH /portal-universities/:id) — defaults JSONB
  */
 
@@ -168,22 +168,20 @@ interface AddDialogProps {
   open: boolean;
   onClose: () => void;
   onCreated: (uni: PortalUniversity) => void;
-  registryAdapters: RegistryAdapter[];
 }
 
-function AddUniversityDialog({ open, onClose, onCreated, registryAdapters }: AddDialogProps) {
+function AddUniversityDialog({ open, onClose, onCreated }: AddDialogProps) {
   const { t } = useI18n();
   const { toast } = useToast();
   const [name, setName] = useState("");
   const [key, setKey]   = useState("");
-  const [adapterKey, setAdapterKey] = useState("");
-  const [isActive, setIsActive] = useState(true);
+  const [isActive, setIsActive] = useState(false);
   const [saving, setSaving]     = useState(false);
   const [keyEdited, setKeyEdited] = useState(false);
 
   // Reset on open
   useEffect(() => {
-    if (open) { setName(""); setKey(""); setAdapterKey(""); setIsActive(true); setKeyEdited(false); }
+    if (open) { setName(""); setKey(""); setIsActive(false); setKeyEdited(false); }
   }, [open]);
 
   // Auto-slug key from name unless user edited it manually
@@ -192,13 +190,13 @@ function AddUniversityDialog({ open, onClose, onCreated, registryAdapters }: Add
   }, [name, keyEdited]);
 
   const submit = async () => {
-    if (!name.trim() || !key.trim() || !adapterKey) return;
+    if (!name.trim() || !key.trim()) return;
     setSaving(true);
     try {
       const uni = await customFetch<PortalUniversity>("/api/portal-universities", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ universityName: name.trim(), universityKey: key.trim(), adapterKey, isActive }),
+        body: JSON.stringify({ universityName: name.trim(), universityKey: key.trim(), isActive }),
       });
       toast({ title: t("portalAutomation.unis.addDialog.saveSuccess") });
       onCreated(uni);
@@ -207,6 +205,12 @@ function AddUniversityDialog({ open, onClose, onCreated, registryAdapters }: Add
       const body = (err as any)?.body;
       if (body?.error === "DUPLICATE_KEY") {
         toast({ title: t("portalAutomation.unis.addDialog.duplicateKey"), variant: "destructive" });
+      } else if (body?.error === "NO_MATCHING_ADAPTER" || body?.error === "ADAPTER_NOT_FOUND") {
+        toast({
+          title: t("portalAutomation.unis.addDialog.noAdapters"),
+          description: typeof body?.message === "string" ? body.message : undefined,
+          variant: "destructive",
+        });
       } else {
         toast({ title: t("portalAutomation.unis.addDialog.saveError"), variant: "destructive" });
       }
@@ -215,7 +219,7 @@ function AddUniversityDialog({ open, onClose, onCreated, registryAdapters }: Add
     }
   };
 
-  const canSubmit = name.trim() && key.trim() && adapterKey && !saving;
+  const canSubmit = name.trim() && key.trim() && !saving;
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
@@ -252,37 +256,12 @@ function AddUniversityDialog({ open, onClose, onCreated, registryAdapters }: Add
             </p>
           </div>
 
-          {/* Adapter */}
-          <div className="space-y-1.5">
-            <Label>{t("portalAutomation.unis.addDialog.adapterLabel")}</Label>
-            {registryAdapters.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                {t("portalAutomation.unis.addDialog.noAdapters")}
-              </p>
-            ) : (
-              <Select value={adapterKey} onValueChange={setAdapterKey}>
-                <SelectTrigger>
-                  <SelectValue placeholder={t("portalAutomation.unis.addDialog.adapterLabel")} />
-                </SelectTrigger>
-                <SelectContent>
-                  {registryAdapters.map((a) => (
-                    <SelectItem key={a.key} value={a.key}>
-                      <span className="font-medium">{a.label}</span>
-                      <span className="ml-2 text-xs text-muted-foreground font-mono">
-                        ({a.key})
-                      </span>
-                      <Badge
-                        variant={a.kind === "code" ? "default" : "secondary"}
-                        className="ml-2 text-[10px] py-0 h-4"
-                      >
-                        {a.kind}
-                      </Badge>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
-            <p className="text-xs text-muted-foreground">
+          {/* Adapter resolution is intentionally automatic. The backend uses
+              the same canonical resolver as the automation worker, including
+              DB-backed custom adapters. */}
+          <div className="flex items-start gap-3 rounded-lg border bg-muted/40 p-3">
+            <Settings2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+            <p className="text-sm text-muted-foreground">
               {t("portalAutomation.unis.addDialog.adapterHint")}
             </p>
           </div>
@@ -1639,7 +1618,6 @@ export default function PortalUniversitiesTab() {
         open={addOpen}
         onClose={() => setAddOpen(false)}
         onCreated={handleCreated}
-        registryAdapters={registryAdapters}
       />
 
       {/* Edit Defaults dialog */}

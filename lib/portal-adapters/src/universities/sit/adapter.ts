@@ -1,7 +1,7 @@
 // ---------------------------------------------------------------------------
 // SIT portal adapter (partners.sitconnect.net)
 //
-// Production-grade Playwright adapter covering the 12 agreed universities.
+// Production-grade Playwright adapter covering the 11 agreed universities.
 // Capabilities:
 //   - login + ensureLoggedIn (re-auth on /auth/login redirect)
 //   - createStudent (idempotent; GraphQL email/passport precheck, then create)

@@ -250,11 +250,12 @@ export function matchSitProgramExactFormatting<T extends { name: string }>(
 }
 
 // ---------------------------------------------------------------------------
-// SIT allowlist — EXACTLY 12 universities (do not add/remove without sign-off).
+// SIT allowlist — EXACTLY 11 universities (do not add/remove without sign-off).
 //
 // Agreed list. Note vs. the old stub:
 //   + Beykoz Üniversitesi          (ADDED)
 //   - İstanbul Yeni Yüzyıl Ünv.    (REMOVED)
+//   - Haliç Üniversitesi            (DIRECT Salesforce portal)
 //
 // Exact-name guards (handled by token-subset matching below):
 //   - "İstanbul Aydın" must NOT match "Kıbrıs/Cyprus Aydın".
@@ -262,7 +263,6 @@ export function matchSitProgramExactFormatting<T extends { name: string }>(
 //   - "Ankara Medipol" must NOT match "İstanbul Medipol".
 // ---------------------------------------------------------------------------
 export const SIT_ALLOWLIST: readonly string[] = [
-  "Haliç Üniversitesi",
   "İstanbul Atlas Üniversitesi",
   "Ankara Medipol Üniversitesi",
   "Galata Üniversitesi",
@@ -274,6 +274,13 @@ export const SIT_ALLOWLIST: readonly string[] = [
   "İstanbul Kültür Üniversitesi",
   "İstanbul Gelişim Üniversitesi",
   "TED Üniversitesi",
+] as const;
+
+// Direct-portal universities are an explicit denylist at the SIT membership
+// boundary. This prevents stale panel membership or an environment extension
+// from routing Haliç back through SIT after its dedicated adapter is enabled.
+const SIT_DIRECT_PORTAL_UNIVERSITIES: readonly string[] = [
+  "Haliç Üniversitesi",
 ] as const;
 
 // ---------------------------------------------------------------------------
@@ -707,7 +714,7 @@ const SIT_UNIVERSITY_ALIASES: ReadonlyMap<string, string> = new Map([
 
 /**
  * Resolve a free-form university name to its canonical allowlist entry, or
- * null when the name is not one of the 12 agreed universities.
+ * null when the name is not one of the 11 agreed universities.
  *
  * Two tiers, both operating on Turkish-folded distinctive tokens:
  *
@@ -779,7 +786,7 @@ export function isAllowedUniversity(name: string): boolean {
 //
 // An optional env var SIT_MEMBER_UNIVERSITIES (comma / semicolon / newline
 // separated university names) EXTENDS — never shrinks — this set without a code
-// change.
+// change, except for explicit direct-portal exclusions which always win.
 //
 // TODO(Dr. Namazcı): confirm the definitive SIT member university list.
 // ---------------------------------------------------------------------------
@@ -790,6 +797,16 @@ export function isSitMember(
   if (universityNameOrId == null) return false;
   const name = String(universityNameOrId).trim();
   if (name === "") return false;
+
+  const nameTokens = distinctiveTokenKey(distinctiveTokens(name));
+  if (
+    SIT_DIRECT_PORTAL_UNIVERSITIES.some(
+      (entry) =>
+        distinctiveTokenKey(distinctiveTokens(entry)) === nameTokens,
+    )
+  ) {
+    return false;
+  }
 
   // Authoritative agreed list (token-set matched, IDOR-safe).
   if (isAllowedUniversity(name)) return true;
