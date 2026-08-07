@@ -22,7 +22,7 @@ export const SALESFORCE_SCHOOLS: SalesforceSchoolConfig[] = [
   {
     key: "halic",
     label: "Haliç Üniversitesi",
-    portalUrl: "https://applyonline.halic.edu.tr/s",
+    portalUrl: "https://applyonline.halic.edu.tr/agency/s",
     namePatterns: ["halic"],
     requiredDocs: ["diploma", "transcript", "passport"],
     // Haliç is a new independent lane. Keep strict readback/upload/completion

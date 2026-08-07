@@ -32,7 +32,7 @@ test("Haliç has a dedicated fail-closed Salesforce configuration", () => {
 
   assert.ok(halic, "Haliç Salesforce configuration must exist");
   assert.equal(halic.label, "Haliç Üniversitesi");
-  assert.equal(halic.portalUrl, "https://applyonline.halic.edu.tr/s");
+  assert.equal(halic.portalUrl, "https://applyonline.halic.edu.tr/agency/s");
   assert.deepEqual(halic.namePatterns, ["halic"]);
   assert.equal(
     halic.strictContract,
