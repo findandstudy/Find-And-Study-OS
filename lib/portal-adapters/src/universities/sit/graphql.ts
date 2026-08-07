@@ -1613,7 +1613,16 @@ const studentSearchSchema = z.object({
  * fail closed (abort create) since proceeding would risk a duplicate student.
  */
 export type SitStudentLookup =
-  | { status: "found"; ref: SitStudentRef }
+  | {
+      status: "found";
+      ref: SitStudentRef;
+      /**
+       * Informational only: SIT may abbreviate or retain an older spelling of
+       * the name. Reuse is still safe when one record matches both independent
+       * identifiers exactly; callers should log these fields for auditability.
+       */
+      identityWarningFields?: string[];
+    }
   | { status: "not_found" }
   | { status: "conflict"; fields: string[] }
   | { status: "unknown" };
@@ -1642,12 +1651,21 @@ export function resolveSitStudentLookup(
   );
   if (relevant.length === 0) return { status: "not_found" };
 
-  const exact = relevant.filter((candidate) => {
-    if (
-      normalizeSitPassport(candidate.passportNumber) !==
-      normalizeSitPassport(by.passportNumber)
-    ) return false;
-    return evaluateSitIdentity(
+  // Email and passport are the two independent identifiers used by SIT's own
+  // search. A single row matching BOTH is safe to reuse even when SIT has
+  // abbreviated a middle name or retained an older name spelling. Requiring
+  // full name-token equality here caused verified existing students to be
+  // rejected and then repeatedly retried. Name differences remain visible as
+  // audit warnings; they never allow reuse when either identifier differs or
+  // when more than one relevant portal row exists.
+  const strongMatches = relevant.filter((candidate) =>
+    normalizeEmail(candidate.email) === normalizeEmail(by.email) &&
+    normalizeSitPassport(candidate.passportNumber) ===
+      normalizeSitPassport(by.passportNumber),
+  );
+  if (strongMatches.length === 1 && relevant.length === 1) {
+    const candidate = strongMatches[0];
+    const identity = evaluateSitIdentity(
       {
         firstName: by.firstName ?? "",
         lastName: by.lastName ?? "",
@@ -1659,17 +1677,18 @@ export function resolveSitStudentLookup(
         passportNumber: candidate.passportNumber ?? "",
         confidence: "high",
       },
-    ).matched;
-  });
-  // A verified passport+name row is still unsafe when the email/passport
-  // search resolves to another portal record as well. Reuse requires one and
-  // only one relevant portal identity.
-  if (exact.length === 1 && relevant.length === 1) {
-    return { status: "found", ref: exact[0] };
+    );
+    const identityWarningFields = [
+      ...identity.missingFields,
+      ...identity.mismatchedFields,
+    ].filter((field) => field !== "passportNumber").sort();
+    return identityWarningFields.length > 0
+      ? { status: "found", ref: candidate, identityWarningFields }
+      : { status: "found", ref: candidate };
   }
 
   const fields = new Set<string>();
-  if (exact.length > 1 || relevant.length > 1) fields.add("multipleStudents");
+  if (strongMatches.length > 1 || relevant.length > 1) fields.add("multipleStudents");
   for (const candidate of relevant) {
     if (
       normalizeSitPassport(candidate.passportNumber) !==

@@ -2080,6 +2080,13 @@ export const sitAdapter: SitAdapter = {
       };
     }
     if (existing.status === "found") {
+      if (existing.identityWarningFields?.length) {
+        logger.warn(
+          `[sit] tek portal kaydı e-posta+pasaport ile kesin eşleşti; ` +
+            `ad alanlarındaki portal/CRM biçim farkı denetim notu olarak korundu ` +
+            `(fields=${existing.identityWarningFields.join(",")})`,
+        );
+      }
       // Recovery for an already-existing Zoho student: we deliberately do NOT
       // resend createStudentViaWebhook here. It is a plain "create" webhook
       // with no documented upsert/idempotency contract on the Zoho side, so

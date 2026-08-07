@@ -252,7 +252,7 @@ test("IDENTITY5 — runner tolerates unavailable proof but blocks real conflicts
   );
 });
 
-test("IDENTITY6 — existing SIT student reuse requires one passport+name match", () => {
+test("IDENTITY6 — existing SIT student reuse requires one exact email+passport match", () => {
   const requested = {
     email: "aisha@example.com",
     firstName: "Aisha",
@@ -274,6 +274,54 @@ test("IDENTITY6 — existing SIT student reuse requires one passport+name match"
     ]).status,
     "found",
   );
+  assert.deepEqual(
+    resolveSitStudentLookup(requested, [
+      {
+        id: "1",
+        email: "aisha@example.com",
+        firstName: "Aisha Noor Fatima",
+        lastName: "Khan Ahmed",
+        passportNumber: "AB123",
+      },
+    ]),
+    {
+      status: "found",
+      ref: {
+        id: "1",
+        email: "aisha@example.com",
+        firstName: "Aisha Noor Fatima",
+        lastName: "Khan Ahmed",
+        passportNumber: "AB123",
+      },
+      identityWarningFields: ["firstName", "lastName"],
+    },
+    "SIT name abbreviation/format differences must not block a unique dual-identifier match",
+  );
+  assert.deepEqual(
+    resolveSitStudentLookup(requested, [
+      {
+        id: "1",
+        email: "aisha@example.com",
+        firstName: "Aisha",
+        lastName: "Rahman",
+        passportNumber: "AB123",
+      },
+    ]),
+    {
+      status: "found",
+      ref: {
+        id: "1",
+        email: "aisha@example.com",
+        firstName: "Aisha",
+        lastName: "Rahman",
+        passportNumber: "AB123",
+      },
+      // Name comparison is intentionally order-agnostic across first/last, so
+      // a combined-name difference reports both fields for auditability.
+      identityWarningFields: ["firstName", "lastName"],
+    },
+    "an older portal surname is an audit warning when both identifiers still match",
+  );
   assert.equal(
     resolveSitStudentLookup(requested, [
       {
@@ -285,6 +333,19 @@ test("IDENTITY6 — existing SIT student reuse requires one passport+name match"
       },
     ]).status,
     "conflict",
+  );
+  assert.equal(
+    resolveSitStudentLookup(requested, [
+      {
+        id: "3",
+        email: "other@example.com",
+        firstName: "Aisha",
+        lastName: "Khan",
+        passportNumber: "AB123",
+      },
+    ]).status,
+    "conflict",
+    "passport+name alone must not bypass an email mismatch",
   );
   assert.equal(
     resolveSitStudentLookup(requested, [
