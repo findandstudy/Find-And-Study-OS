@@ -223,7 +223,10 @@ export default function CourseFinder() {
     queryKey: ["course-finder-filters", filterParams],
     queryFn: () => apiFetch(`${BASE_URL}/api/course-finder/filters${filterParams ? `?${filterParams}` : ""}`),
     staleTime: 30_000,
-    placeholderData: (prev) => prev,
+    // Cascading options belong to the exact active filter set. Reusing the
+    // previous query's options can make the effect below prune newly selected
+    // values while the matching options request is still in flight.
+    placeholderData: undefined,
   });
 
   // Auto-prune selected values that are no longer present in the cascading
@@ -269,9 +272,19 @@ export default function CourseFinder() {
     return p.toString();
   }, [filterParams, page]);
 
-  const { data, isLoading } = useQuery<{ data: Program[]; meta: { total: number; page: number; limit: number; totalPages: number } }>({
+  const {
+    data,
+    isPending,
+    isFetching,
+    isError,
+    refetch,
+  } = useQuery<{ data: Program[]; meta: { total: number; page: number; limit: number; totalPages: number } }>({
     queryKey: ["course-finder", queryParams],
     queryFn: () => apiFetch(`${BASE_URL}/api/course-finder?${queryParams}`),
+    // The application-wide query default keeps previous data. That is useful
+    // for many tables, but misleading here: filter chips can represent the new
+    // query while cards and the total still represent the old one.
+    placeholderData: undefined,
   });
 
   const programs = data?.data ?? [];
@@ -790,7 +803,13 @@ export default function CourseFinder() {
                   <List className="w-4 h-4" />
                 </button>
               </div>
-              {meta && (
+              {isFetching && !isPending && !isError && (
+                <div className="flex items-center gap-1.5 text-sm text-muted-foreground" role="status">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  Updating results...
+                </div>
+              )}
+              {meta && !isError && (
                 <div className="text-sm text-muted-foreground">
                   {meta.total} program{meta.total !== 1 ? "s" : ""} found
                 </div>
@@ -799,7 +818,7 @@ export default function CourseFinder() {
           </div>
         </div>
 
-        {isLoading ? (
+        {isPending ? (
           viewMode === "grid" ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
               {Array.from({ length: 6 }).map((_, i) => (
@@ -827,6 +846,17 @@ export default function CourseFinder() {
               ))}
             </div>
           )
+        ) : isError ? (
+          <div className="rounded-2xl border border-destructive/30 bg-destructive/5 px-6 py-12 text-center" role="alert">
+            <AlertCircle className="mx-auto mb-3 h-10 w-10 text-destructive" />
+            <p className="text-lg font-semibold">Programs could not be loaded</p>
+            <p className="mx-auto mt-1 max-w-xl text-sm text-muted-foreground">
+              The selected filters were not applied. No previous results are being shown.
+            </p>
+            <Button variant="outline" className="mt-4" onClick={() => void refetch()}>
+              {t("common.retry")}
+            </Button>
+          </div>
         ) : programs.length === 0 ? (
           <div className="text-center py-16 text-muted-foreground">
             <BookOpen className="w-12 h-12 mx-auto mb-3 opacity-50" />
