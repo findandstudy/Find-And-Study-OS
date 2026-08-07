@@ -166,3 +166,50 @@ test("eleven selected programs use the adaptive one-page comparison layout", asy
     await writeFile(visualPath, new Uint8Array(document.output("arraybuffer")));
   }
 });
+
+test("selected-level documents are appended after every program page", async () => {
+  const programs = Array.from({ length: 7 }, (_, index) => ({
+    ...sampleProgram,
+    id: index + 1,
+    name: `${sampleProgram.name} ${index + 1}`,
+  }));
+  const document = await buildProposalPdf({
+    programs,
+    documentRequirements: [{
+      studyLevel: "Bachelor",
+      requirements: [
+        { documentType: "diploma_certificate", label: "Diploma Certificate", mandatory: true },
+        { documentType: "diploma_transcript", label: "Diploma Transcript", mandatory: true },
+        { documentType: "passport", label: "Passport", mandatory: true },
+        { documentType: "photo", label: "Photograph", mandatory: true },
+        { documentType: "language_proof", label: "Language/Test Score", mandatory: false },
+      ],
+    }],
+    companyName: "Find And Study",
+    companyPhone: "+90 552 689 85 15",
+    generatedAt: new Date("2026-08-08T00:15:00.000Z"),
+  });
+
+  assert.equal(document.getNumberOfPages(), 2);
+
+  const visualPath = process.env.PROPOSAL_DOCUMENTS_VISUAL_PATH;
+  if (visualPath) {
+    await mkdir(dirname(visualPath), { recursive: true });
+    await writeFile(visualPath, new Uint8Array(document.output("arraybuffer")));
+  }
+});
+
+test("long document checklists paginate without changing program-page capacity", async () => {
+  const requirements = Array.from({ length: 29 }, (_, index) => ({
+    documentType: `document_${index + 1}`,
+    label: `Document ${index + 1}`,
+    mandatory: index < 17,
+  }));
+  const document = await buildProposalPdf({
+    programs: [sampleProgram],
+    documentRequirements: [{ studyLevel: "Master", requirements }],
+    generatedAt: new Date("2026-08-08T00:15:00.000Z"),
+  });
+
+  assert.equal(document.getNumberOfPages(), 3);
+});

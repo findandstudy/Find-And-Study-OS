@@ -155,6 +155,7 @@ export default function CourseFinder() {
   const { user, hasAgentStaffPermission } = useAuth(true);
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const resolveProposalDocMeta = useResolveDocMeta();
   const [filters, setFilters] = useState<Filters>({
     country: [], city: [], universityType: [], universityId: [],
     level: [], language: [], field: [], search: "", feeMin: "", feeMax: "",
@@ -438,9 +439,43 @@ export default function CourseFinder() {
       const proposalBranding = resolveProposalBranding(user?.role, settings, agentProfile);
       const agencyBrandedProposal =
         user?.role === "agent" || user?.role === "sub_agent" || user?.role === "agent_staff";
+      const programStudyLevels = [
+        ...new Set(
+          selected
+            .map((program) => program.degree?.trim())
+            .filter((level): level is string => !!level),
+        ),
+      ];
+      const selectedStudyLevels = programStudyLevels.length > 0
+        ? programStudyLevels
+        : filters.level;
+      if (selectedStudyLevels.length === 0) {
+        throw new Error("The selected programs do not have a study level for the document checklist.");
+      }
+      const documentRequirements = await Promise.all(
+        selectedStudyLevels.map(async (studyLevel) => {
+          const response = await apiFetch(
+            `${BASE_URL}/api/degrees/by-value/${encodeURIComponent(studyLevel)}/document-requirements`,
+          ) as Array<{ documentType: string; mandatory: boolean; sortOrder?: number }>;
+          if (!Array.isArray(response) || response.length === 0) {
+            throw new Error(`No document requirements are configured for ${studyLevel}.`);
+          }
+          return {
+            studyLevel,
+            requirements: [...response]
+              .sort((left, right) => (left.sortOrder ?? 0) - (right.sortOrder ?? 0))
+              .map((requirement) => ({
+                documentType: requirement.documentType,
+                label: resolveProposalDocMeta(requirement.documentType).label,
+                mandatory: !!requirement.mandatory,
+              })),
+          };
+        }),
+      );
 
       await generateProposalPdf({
         programs: selected,
+        documentRequirements,
         // The PDF generator owns URL normalisation, authenticated fetching,
         // rasterisation and compression for both tenant and agency logos.
         // Tenant PDFs use the stable branding endpoint so a private object URL

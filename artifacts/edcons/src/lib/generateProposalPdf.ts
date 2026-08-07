@@ -24,8 +24,20 @@ export type ProposalProgramData = {
   universityStatus?: string | null;
 };
 
+export type ProposalDocumentRequirement = {
+  documentType: string;
+  label: string;
+  mandatory: boolean;
+};
+
+export type ProposalStudyLevelDocuments = {
+  studyLevel: string;
+  requirements: ProposalDocumentRequirement[];
+};
+
 export type ProposalOptions = {
   programs: ProposalProgramData[];
+  documentRequirements?: ProposalStudyLevelDocuments[];
   logoDataUrl?: string | null;
   companyName?: string;
   companyEmail?: string;
@@ -338,6 +350,7 @@ function discountData(program: ProposalProgramData): { saving: number; percent: 
 export async function buildProposalPdf(options: ProposalOptions): Promise<jsPDF> {
   const {
     programs,
+    documentRequirements = [],
     logoDataUrl,
     companyName = "Find And Study",
     companyEmail,
@@ -406,6 +419,13 @@ export async function buildProposalPdf(options: ProposalOptions): Promise<jsPDF>
     doc.setDrawColor(color[0], color[1], color[2]);
   }
 
+  // Keep the existing layout and spacing, but make every text role slightly
+  // easier to read. A small uniform increase avoids redesigning the proposal
+  // while preserving the established visual hierarchy.
+  function setReadableFontSize(size: number) {
+    doc.setFontSize(size * 1.08);
+  }
+
   function fitText(value: unknown, maxWidth: number): string {
     const safe = proposalPdfText(value);
     if (doc.getTextWidth(safe) <= maxWidth) return safe;
@@ -427,7 +447,7 @@ export async function buildProposalPdf(options: ProposalOptions): Promise<jsPDF>
     doc.roundedRect(x, y, size, size, 2, 2, "FD");
     setText(color);
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(Math.max(5.5, size * 0.55));
+    setReadableFontSize(Math.max(5.5, size * 0.55));
     const initials =
       proposalPdfText(label)
         .split(/\s+/)
@@ -482,7 +502,7 @@ export async function buildProposalPdf(options: ProposalOptions): Promise<jsPDF>
     height = 4.5,
   ): number {
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(5.1);
+    setReadableFontSize(5.1);
     const safe = fitText(text, maxWidth - 4);
     const width = Math.min(maxWidth, Math.max(10, doc.getTextWidth(safe) + 4));
     setFill(background);
@@ -518,10 +538,10 @@ export async function buildProposalPdf(options: ProposalOptions): Promise<jsPDF>
     const titleX = logoX + logoSize + 3.5;
     setText(WHITE);
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(compact ? 12 : 14);
+    setReadableFontSize(compact ? 12 : 14);
     doc.text(fitText(companyName.toUpperCase(), compact ? 92 : 103), titleX, compact ? 13.5 : 16.5);
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(compact ? 6 : 6.8);
+    setReadableFontSize(compact ? 6 : 6.8);
     setText(mix(WHITE, primary, 0.12));
     doc.text(
       compact ? "PROGRAM PROPOSAL - CONTINUED" : "GLOBAL EDUCATION CONSULTANCY",
@@ -532,16 +552,16 @@ export async function buildProposalPdf(options: ProposalOptions): Promise<jsPDF>
     const rightX = pageW - marginX;
     setText(mix(WHITE, primary, 0.13));
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(5.8);
+    setReadableFontSize(5.8);
     doc.text(compact ? "Prepared" : "Prepared for", rightX, compact ? 9 : 12, { align: "right" });
     setText(WHITE);
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(compact ? 7.8 : 9.2);
+    setReadableFontSize(compact ? 7.8 : 9.2);
     doc.text(compact ? `${dateStr} ${timeStr}` : "Student Review", rightX, compact ? 14 : 17.5, {
       align: "right",
     });
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(5.8);
+    setReadableFontSize(5.8);
     setText(mix(WHITE, primary, 0.13));
     doc.text(
       compact ? `${programs.length} selected programs` : `${dateStr} - ${timeStr} Istanbul`,
@@ -565,7 +585,7 @@ export async function buildProposalPdf(options: ProposalOptions): Promise<jsPDF>
   function drawSectionLabel(text: string, x: number, y: number) {
     setText(MUTED);
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(5.6);
+    setReadableFontSize(5.6);
     doc.text(proposalPdfText(text).toUpperCase(), x, y, { charSpace: 0.9 });
   }
 
@@ -591,7 +611,7 @@ export async function buildProposalPdf(options: ProposalOptions): Promise<jsPDF>
     let chipY = top + 6.5;
     for (const value of summaryValues) {
       doc.setFont("helvetica", "bold");
-      doc.setFontSize(5.5);
+      setReadableFontSize(5.5);
       const width = Math.min(34, Math.max(14, doc.getTextWidth(value) + 7));
       if (chipX + width > marginX + 108) {
         chipX = marginX + 4;
@@ -620,10 +640,10 @@ export async function buildProposalPdf(options: ProposalOptions): Promise<jsPDF>
     const statsX = marginX + 119;
     setText(MUTED);
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(5.6);
+    setReadableFontSize(5.6);
     doc.text("Annual tuition range", statsX, top + 10);
     setText(primary);
-    doc.setFontSize(12);
+    setReadableFontSize(12);
     doc.text(
       minTuition == null
         ? "-"
@@ -633,7 +653,7 @@ export async function buildProposalPdf(options: ProposalOptions): Promise<jsPDF>
     );
     setText(MUTED);
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(5.3);
+    setReadableFontSize(5.3);
     const countParts = [
       publicCount ? `${publicCount} public` : "",
       privateCount ? `${privateCount} private` : "",
@@ -649,7 +669,7 @@ export async function buildProposalPdf(options: ProposalOptions): Promise<jsPDF>
     doc.roundedRect(marginX, top + 27, 1.3, 12, 0.65, 0.65, "F");
     setText(mix(primary, WHITE, 0.18));
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(6);
+    setReadableFontSize(6);
     const degree = commonValue(programs.map((program) => program.degree), "selected");
     const language = commonValue(programs.map((program) => program.language), "multiple languages");
     doc.text(
@@ -751,14 +771,14 @@ export async function buildProposalPdf(options: ProposalOptions): Promise<jsPDF>
       doc.roundedRect(x, y, width, 14.8, 2.5, 2.5, "FD");
       setText(pick.color);
       doc.setFont("helvetica", "bold");
-      doc.setFontSize(4.7);
+      setReadableFontSize(4.7);
       doc.text(pick.label.toUpperCase(), x + 3, y + 4.2, { charSpace: 0.35 });
       setText(primary);
-      doc.setFontSize(6.5);
+      setReadableFontSize(6.5);
       doc.text(fitText(pick.program?.universityName || "No data", width - 6), x + 3, y + 8.5);
       setText(MUTED);
       doc.setFont("helvetica", "normal");
-      doc.setFontSize(5.1);
+      setReadableFontSize(5.1);
       doc.text(fitText(pick.detail, width - 6), x + 3, y + 12.3);
     });
   }
@@ -797,7 +817,7 @@ export async function buildProposalPdf(options: ProposalOptions): Promise<jsPDF>
     doc.circle(marginX + (compact ? 4.6 : 6), middleY, compact ? 2.25 : 3.25, "F");
     setText(WHITE);
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(compact ? 4.8 : 6.1);
+    setReadableFontSize(compact ? 4.8 : 6.1);
     doc.text(String(rank), marginX + (compact ? 4.6 : 6), middleY + (compact ? 1.1 : 1.4), {
       align: "center",
     });
@@ -823,15 +843,15 @@ export async function buildProposalPdf(options: ProposalOptions): Promise<jsPDF>
     const textMax = compact ? 102 : 99;
     setText(primary);
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(compact ? 5.8 : 7);
+    setReadableFontSize(compact ? 5.8 : 7);
     doc.text(fitText(program.name, textMax), textX, y + (compact ? 3.15 : 5.2));
     setText(BODY);
-    doc.setFontSize(compact ? 4.85 : 5.8);
+    setReadableFontSize(compact ? 4.85 : 5.8);
     doc.text(fitText(program.universityName, textMax), textX, y + (compact ? 6.1 : 8.7));
 
     setText(MUTED);
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(compact ? 4.1 : 4.9);
+    setReadableFontSize(compact ? 4.1 : 4.9);
     const location = [program.universityCity, program.universityCountry].filter(Boolean).join(", ") || "-";
     if (compact) {
       const meta = [
@@ -864,19 +884,19 @@ export async function buildProposalPdf(options: ProposalOptions): Promise<jsPDF>
     const feeRight = pageW - marginX - 30;
     setText(primary);
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(compact ? 7.6 : 10.2);
+    setReadableFontSize(compact ? 7.6 : 10.2);
     doc.text(fitText(fmt(tuition, currency), 31), feeRight, y + (compact ? 4.25 : 6.2), {
       align: "right",
     });
     setText(MUTED);
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(compact ? 3.7 : 4.7);
+    setReadableFontSize(compact ? 3.7 : 4.7);
     doc.text("/ year", feeRight + 1.5, y + (compact ? 4.25 : 6.2));
 
     if (compact) {
       if (discount) {
         setText(SUBTLE);
-        doc.setFontSize(3.7);
+        setReadableFontSize(3.7);
         doc.text(`Was ${fmt(program.tuitionFee, currency)}`, feeRight, y + 7, {
           align: "right",
         });
@@ -884,37 +904,37 @@ export async function buildProposalPdf(options: ProposalOptions): Promise<jsPDF>
       if (firstYearTotal != null) {
         setText(BODY);
         doc.setFont("helvetica", "bold");
-        doc.setFontSize(3.8);
+        setReadableFontSize(3.8);
         doc.text(`First year ${fmt(firstYearTotal, currency)}`, feeRight, y + 9.65, {
           align: "right",
         });
       } else if (serviceFee != null) {
         setText(MUTED);
         doc.setFont("helvetica", "normal");
-        doc.setFontSize(3.8);
+        setReadableFontSize(3.8);
         doc.text(`Service ${fmt(serviceFee, currency)}`, feeRight, y + 9.65, {
           align: "right",
         });
       }
     } else if (discount) {
       setText(SUBTLE);
-      doc.setFontSize(4.4);
+      setReadableFontSize(4.4);
       doc.text(`Was ${fmt(program.tuitionFee, currency)}`, feeRight, y + 9.3, { align: "right" });
       setText(success);
       doc.setFont("helvetica", "bold");
-      doc.setFontSize(4.5);
+      setReadableFontSize(4.5);
       doc.text(`Save ${fmt(discount.saving, currency)} - ${discount.percent}%`, feeRight, y + 12.2, {
         align: "right",
       });
       if (serviceFee != null) {
         setText(MUTED);
         doc.setFont("helvetica", "normal");
-        doc.setFontSize(4.3);
+        setReadableFontSize(4.3);
         doc.text(`Service fee ${fmt(serviceFee, currency)}`, feeRight, y + 15, { align: "right" });
       } else if (firstYearTotal != null) {
         setText(BODY);
         doc.setFont("helvetica", "bold");
-        doc.setFontSize(4.3);
+        setReadableFontSize(4.3);
         doc.text(`First year ${fmt(firstYearTotal, currency)}`, feeRight, y + 15, {
           align: "right",
         });
@@ -922,13 +942,13 @@ export async function buildProposalPdf(options: ProposalOptions): Promise<jsPDF>
     } else if (serviceFee != null) {
       setText(MUTED);
       doc.setFont("helvetica", "normal");
-      doc.setFontSize(4.5);
+      setReadableFontSize(4.5);
       doc.text(`Service fee ${fmt(serviceFee, currency)}`, feeRight, y + 9.4, { align: "right" });
     }
     if (!compact && firstYearTotal != null && !discount) {
       setText(BODY);
       doc.setFont("helvetica", "bold");
-      doc.setFontSize(4.6);
+      setReadableFontSize(4.6);
       doc.text(`First year ${fmt(firstYearTotal, currency)}`, feeRight, y + 15, { align: "right" });
     }
 
@@ -944,7 +964,7 @@ export async function buildProposalPdf(options: ProposalOptions): Promise<jsPDF>
     );
     setText(primary);
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(compact ? 4.4 : 5.3);
+    setReadableFontSize(compact ? 4.4 : 5.3);
     doc.text(
       fitText(program.intakes || "-", 19),
       statusX + 5.7,
@@ -953,7 +973,7 @@ export async function buildProposalPdf(options: ProposalOptions): Promise<jsPDF>
     );
     setText(MUTED);
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(compact ? 3.65 : 4.2);
+    setReadableFontSize(compact ? 3.65 : 4.2);
     doc.text(
       `${compact ? "App" : "Application"} ${feeOrFree(program.applicationFee, currency)}`,
       statusX + 5.7,
@@ -970,16 +990,102 @@ export async function buildProposalPdf(options: ProposalOptions): Promise<jsPDF>
     );
   }
 
+  function drawDocumentChecklistPage(
+    studyLevel: string,
+    requirements: ProposalDocumentRequirement[],
+    allRequirements: ProposalDocumentRequirement[],
+    chunkIndex: number,
+    chunkCount: number,
+  ) {
+    drawSectionLabel(
+      chunkIndex === 0 ? "Documents for your selected level" : "Documents continued",
+      marginX,
+      35,
+    );
+
+    setFill(primarySoft);
+    setDraw(mix(primary, WHITE, 0.76));
+    doc.setLineWidth(0.25);
+    doc.roundedRect(marginX, 39, contentW, 18, 3, 3, "FD");
+    setText(primary);
+    doc.setFont("helvetica", "bold");
+    setReadableFontSize(10.2);
+    doc.text(fitText(`${studyLevel} application documents`, 105), marginX + 4, 46.2);
+
+    const requiredCount = allRequirements.filter((item) => item.mandatory).length;
+    const optionalCount = allRequirements.length - requiredCount;
+    setText(BODY);
+    doc.setFont("helvetica", "normal");
+    setReadableFontSize(5.8);
+    doc.text(
+      `Prepare each document as a separate, clear file. Required: ${requiredCount}  |  Optional: ${optionalCount}`,
+      marginX + 4,
+      51.5,
+    );
+    if (chunkCount > 1) {
+      setText(MUTED);
+      doc.setFont("helvetica", "bold");
+      setReadableFontSize(5.4);
+      doc.text(`Checklist ${chunkIndex + 1} / ${chunkCount}`, pageW - marginX - 4, 46.4, {
+        align: "right",
+      });
+    }
+
+    const columnGap = 4;
+    const columnWidth = (contentW - columnGap) / 2;
+    const rowHeight = 13.2;
+    const rowsPerColumn = Math.min(12, Math.ceil(requirements.length / 2));
+    requirements.forEach((requirement, index) => {
+      const column = index >= rowsPerColumn ? 1 : 0;
+      const row = index % rowsPerColumn;
+      const x = marginX + column * (columnWidth + columnGap);
+      const y = 63 + row * rowHeight;
+      const marker = requirement.mandatory ? success : MUTED;
+
+      setFill(WHITE);
+      setDraw(BORDER);
+      doc.roundedRect(x, y, columnWidth, 10.8, 2.2, 2.2, "FD");
+      setFill(marker);
+      doc.circle(x + 4, y + 5.4, 1.55, "F");
+      setText(WHITE);
+      doc.setFont("helvetica", "bold");
+      setReadableFontSize(5.2);
+      doc.text(requirement.mandatory ? "R" : "O", x + 4, y + 6.2, { align: "center" });
+
+      setText(NAVY);
+      doc.setFont("helvetica", "bold");
+      setReadableFontSize(6.5);
+      doc.text(fitText(requirement.label, columnWidth - 31), x + 8, y + 4.7);
+      setText(MUTED);
+      doc.setFont("helvetica", "normal");
+      setReadableFontSize(5.1);
+      doc.text(
+        requirement.mandatory ? "Must be submitted" : "Submit if available",
+        x + 8,
+        y + 8,
+      );
+      drawPill(
+        requirement.mandatory ? "REQUIRED" : "OPTIONAL",
+        x + columnWidth - 20,
+        y + 3.1,
+        17,
+        marker,
+        requirement.mandatory ? successSoft : LIGHT_BG,
+        4.3,
+      );
+    });
+  }
+
   function drawCallToAction(y: number) {
     setFill(primary);
     doc.roundedRect(marginX, y, contentW, 11.5, 2.5, 2.5, "F");
     setText(WHITE);
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(6.8);
+    setReadableFontSize(6.8);
     doc.text("Ready to move forward?", marginX + 3, y + 4.8);
     setText(mix(WHITE, primary, 0.18));
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(5.1);
+    setReadableFontSize(5.1);
     doc.text(
       "Send your preferred choices to your advisor. We will review the documents and prepare the application.",
       marginX + 3,
@@ -990,7 +1096,7 @@ export async function buildProposalPdf(options: ProposalOptions): Promise<jsPDF>
       .map(proposalPdfText);
     setText(WHITE);
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(5.1);
+    setReadableFontSize(5.1);
     contactLines.slice(0, 2).forEach((line, index) => {
       doc.text(fitText(line, 45), pageW - marginX - 3, y + 4.5 + index * 3.2, { align: "right" });
     });
@@ -1002,7 +1108,7 @@ export async function buildProposalPdf(options: ProposalOptions): Promise<jsPDF>
     doc.line(marginX, footerLineY, pageW - marginX, footerLineY);
     setText(primary);
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(5);
+    setReadableFontSize(5);
     doc.text(fitText(companyName.toUpperCase(), 45), marginX, footerLineY + 4);
     setText(MUTED);
     doc.setFont("helvetica", "normal");
@@ -1019,6 +1125,25 @@ export async function buildProposalPdf(options: ProposalOptions): Promise<jsPDF>
     if (left == null) return 1;
     if (right == null) return -1;
     return left - right;
+  });
+
+  const documentPages = documentRequirements.flatMap((level) => {
+    const sortedRequirements = [...level.requirements].sort((left, right) => {
+      if (left.mandatory !== right.mandatory) return left.mandatory ? -1 : 1;
+      return left.label.localeCompare(right.label);
+    });
+    if (sortedRequirements.length === 0) return [];
+    const chunks: ProposalDocumentRequirement[][] = [];
+    for (let index = 0; index < sortedRequirements.length; index += 24) {
+      chunks.push(sortedRequirements.slice(index, index + 24));
+    }
+    return chunks.map((requirements, index) => ({
+      studyLevel: level.studyLevel,
+      requirements,
+      allRequirements: sortedRequirements,
+      chunkIndex: index,
+      chunkCount: chunks.length,
+    }));
   });
 
   const compactSinglePage = sortedPrograms.length > 7 && sortedPrograms.length <= 11;
@@ -1052,7 +1177,7 @@ export async function buildProposalPdf(options: ProposalOptions): Promise<jsPDF>
         drawProgramRow(program, index + 1, rowY, index === 0, compactSinglePage);
         rowY += compactSinglePage ? 13.25 : 19.2;
       });
-      if (pages.length === 1) {
+      if (pages.length === 1 && documentPages.length === 0) {
         drawCallToAction(compactSinglePage ? 266 : Math.min(266, rowY + 1.5));
       }
     } else {
@@ -1064,8 +1189,23 @@ export async function buildProposalPdf(options: ProposalOptions): Promise<jsPDF>
         drawProgramRow(program, absoluteRank, rowY, false);
         rowY += 19.2;
       });
-      if (pageNumber === pages.length) drawCallToAction(Math.min(267, rowY + 1.5));
+      if (pageNumber === pages.length && documentPages.length === 0) {
+        drawCallToAction(Math.min(267, rowY + 1.5));
+      }
     }
+  });
+
+  documentPages.forEach((page, index) => {
+    doc.addPage();
+    drawHeader(doc.getNumberOfPages());
+    drawDocumentChecklistPage(
+      page.studyLevel,
+      page.requirements,
+      page.allRequirements,
+      page.chunkIndex,
+      page.chunkCount,
+    );
+    if (index === documentPages.length - 1) drawCallToAction(263);
   });
 
   const totalPages = doc.getNumberOfPages();
