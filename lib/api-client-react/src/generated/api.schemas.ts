@@ -759,6 +759,12 @@ export interface Application {
   programName?: string | null;
   /** @nullable */
   universityName?: string | null;
+  /**
+   * Current university-assigned application identifier. Historical portal-run references are stored separately.
+   * @maxLength 128
+   * @nullable
+   */
+  universityApplicationId?: string | null;
   /** @nullable */
   country?: string | null;
   /** @nullable */
@@ -828,6 +834,11 @@ export interface UpdateApplicationBody {
   programName?: string | null;
   /** @nullable */
   universityName?: string | null;
+  /**
+   * @maxLength 128
+   * @nullable
+   */
+  universityApplicationId?: string | null;
   /** @nullable */
   country?: string | null;
   /** @nullable */

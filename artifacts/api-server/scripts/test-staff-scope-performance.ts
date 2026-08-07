@@ -13,6 +13,14 @@ const applicationsRouteSource = readFileSync(
   new URL("../src/routes/applications.ts", import.meta.url),
   "utf8",
 );
+const leadsRouteSource = readFileSync(
+  new URL("../src/routes/leads.ts", import.meta.url),
+  "utf8",
+);
+const studentsRouteSource = readFileSync(
+  new URL("../src/routes/students.ts", import.meta.url),
+  "utf8",
+);
 const applicationsPageSource = readFileSync(
   new URL("../../edcons/src/pages/staff/Applications.tsx", import.meta.url),
   "utf8",
@@ -98,4 +106,19 @@ test("list avatars use short-lived signed URLs without repeating session auth", 
   assert.match(applicationsRouteSource, /studentPhotoUrl: rest\.studentHasPhoto/);
   assert.match(authMiddlewareSource, /signedPhotoMatch/);
   assert.match(authMiddlewareSource, /verifyStudentPhotoSignature\(studentId, exp, sig\)/);
+});
+
+test("facet caches are keyed by freshly resolved authorization outputs", () => {
+  for (const source of [leadsRouteSource, studentsRouteSource, applicationsRouteSource]) {
+    assert.match(source, /loadFacetValue\(/);
+    assert.match(source, /userId: user\.id/);
+    assert.match(source, /role: user\.role/);
+    assert.match(source, /visibleBranchIds:/);
+    assert.match(source, /agentVisibleIds:/);
+  }
+  assert.match(leadsRouteSource, /permissions: staffPerms \? \[\.\.\.staffPerms\]\.sort\(\) : null/);
+  assert.match(studentsRouteSource, /permissions: permissionKeys/);
+  assert.match(applicationsRouteSource, /permissions: permissionKeys/);
+  assert.match(studentsRouteSource, /agencyAgentIds:/);
+  assert.match(applicationsRouteSource, /agencyAgentIds:/);
 });

@@ -2839,6 +2839,7 @@
     "student": "دانشجو",
     "country": "کشور",
     "university": "دانشگاه",
+    "universityApplicationId": "شناسه درخواست دانشگاه",
     "program": "رشته/برنامه",
     "level": "مقطع",
     "language": "زبان",

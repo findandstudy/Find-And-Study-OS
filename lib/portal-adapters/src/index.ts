@@ -45,6 +45,8 @@ export {
 // Signed, auth-free student-photo URLs (external create webhooks)
 export {
   buildSignedStudentPhotoPath,
+  buildStableSignedStudentPhotoPath,
+  buildStableSignedStudentPhotoThumbnailPath,
   verifyStudentPhotoSignature,
 } from "./studentPhotoSigning.js";
 
@@ -203,3 +205,4 @@ export {
   type PortalPreflightManifest,
   type PortalPreflightResult,
 } from "./preflight.js";
+export * from "./applicationReference.js";

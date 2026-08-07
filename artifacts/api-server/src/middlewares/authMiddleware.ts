@@ -185,7 +185,7 @@ export async function authMiddleware(
   // reads any bytes. Unsigned or malformed paths continue through normal auth.
   // Explicit API bearer tokens retain precedence (and their fail-closed rules).
   const signedPhotoMatch = req.method === "GET"
-    ? req.path.match(/^\/api\/students\/(\d+)\/photo$/)
+    ? req.path.match(/^\/api\/students\/(\d+)\/photo(?:\/thumbnail)?$/)
     : null;
   if (signedPhotoMatch) {
     const studentId = Number(signedPhotoMatch[1]);

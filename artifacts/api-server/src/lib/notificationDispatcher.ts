@@ -4,6 +4,8 @@ import { sendEmail, buildNotificationEmail } from "./email";
 import { notificationBus } from "./notificationBus";
 import { decryptConfig } from "./encryption";
 import { sendWhatsAppText, type WhatsAppConfig } from "./inbox/channels/whatsapp";
+import { invalidateNotificationCounts } from "./notificationCountCache";
+import { notificationPriority } from "./notificationPriority";
 
 // ---------------------------------------------------------------------------
 // Cached settings helper — suppress_automation_app_notifications
@@ -250,6 +252,7 @@ export async function dispatchNotification(ctx: DispatchContext): Promise<void> 
             channel: "in_app",
           }))
         ).returning({ id: notificationsTable.id, userId: notificationsTable.userId });
+        invalidateNotificationCounts(inserted.map(row => row.userId));
         for (const row of inserted) {
           notificationBus.publish({
             userId: row.userId,
@@ -258,6 +261,7 @@ export async function dispatchNotification(ctx: DispatchContext): Promise<void> 
             title: ctx.title,
             body: ctx.body || null,
             data: ctx.data || {},
+            priority: notificationPriority(ctx.event),
           });
         }
       } catch (err) {

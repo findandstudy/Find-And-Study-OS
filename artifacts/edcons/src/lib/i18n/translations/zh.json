@@ -2839,6 +2839,7 @@
     "student": "学生",
     "country": "国家",
     "university": "大学",
+    "universityApplicationId": "大学申请 ID",
     "program": "专业",
     "level": "层次",
     "language": "语言",

@@ -598,9 +598,11 @@ function StudentAvatar({ student, size = "sm" }: { student: any; size?: "sm" | "
     <div ref={ref} className={`${dim} rounded-full shrink-0 overflow-hidden`}>
       {showPhoto ? (
         <img
-          src={student.photoUrl || `/api/students/${student.id}/photo`}
+          src={student.photoUrl || `/api/students/${student.id}/photo/thumbnail`}
           alt={`${student.firstName} ${student.lastName}`}
           className={`${dim} rounded-full object-cover border border-primary/20`}
+          loading="lazy"
+          decoding="async"
           onError={() => setImgError(true)}
         />
       ) : (

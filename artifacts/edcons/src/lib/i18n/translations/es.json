@@ -2839,6 +2839,7 @@
     "student": "Estudiante",
     "country": "País",
     "university": "Universidad",
+    "universityApplicationId": "ID de solicitud universitaria",
     "program": "Programa",
     "level": "Nivel",
     "language": "Idioma",

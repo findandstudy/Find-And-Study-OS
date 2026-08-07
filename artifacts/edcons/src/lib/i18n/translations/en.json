@@ -3146,6 +3146,7 @@
     "student": "Student",
     "country": "Country",
     "university": "University",
+    "universityApplicationId": "University Application ID",
     "program": "Program",
     "level": "Level",
     "language": "Language",

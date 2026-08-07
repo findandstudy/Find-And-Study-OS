@@ -22,6 +22,10 @@ export const applicationsTable = pgTable("applications", {
   deadline: text("deadline"),
   programName: text("program_name"),
   universityName: text("university_name"),
+  // Canonical portal-assigned application identifier. Per-run evidence remains
+  // in portal_submissions.external_ref; this value is the current staff-facing
+  // identifier and can be corrected without rewriting submission history.
+  universityApplicationId: text("university_application_id"),
   country: text("country"),
   tuitionFee: real("tuition_fee"),
   discountedFee: real("discounted_fee"),

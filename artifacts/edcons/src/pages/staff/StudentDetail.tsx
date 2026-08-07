@@ -340,10 +340,11 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
   // fileData, or fileUrl). Probing it directly means the avatar renders correctly
   // even if the denormalized students.has_photo flag is ever stale. Reads the
   // Content-Type header and cancels the body so we don't download the image twice.
+  const [photoRevision, setPhotoRevision] = useState(0);
   const { data: photoMime } = useQuery<string | null>({
-    queryKey: ["student-photo-mime", id],
+    queryKey: ["student-photo-mime", id, photoRevision],
     queryFn: async () => {
-      const res = await fetch(`${BASE_URL}/api/students/${id}/photo`, { credentials: "include" });
+      const res = await fetch(`${BASE_URL}/api/students/${id}/photo?v=${photoRevision}`, { credentials: "include" });
       if (!res.ok) { try { await res.body?.cancel(); } catch { /* ignore */ } return null; }
       const ct = res.headers.get("content-type") || "image/jpeg";
       try { await res.body?.cancel(); } catch { /* ignore */ }
@@ -370,6 +371,7 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
     if (photoDocs.length === 0) return null;
     return photoDocs.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
   }, [documents, hasPhotoResolved, photoMime, student?.hasPhoto]);
+  const currentPhotoUrl = `${BASE_URL}/api/students/${id}/photo?v=${photoRevision}`;
 
   // Reset load-error state whenever the photo source changes (e.g. new upload, different student).
   useEffect(() => { setPhotoLoadError(false); }, [photoDoc]);
@@ -868,6 +870,15 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
       });
 
       await qc.invalidateQueries({ predicate: q => q.queryKey.some(k => typeof k === "string" && (k.includes("document") || k.includes("student") || k.includes(`/api/students`))) });
+      setPhotoRevision(value => value + 1);
+      setPhotoLoadError(false);
+      toast({ title: "Photo updated" });
+    } catch (err: any) {
+      toast({
+        title: "Photo upload failed",
+        description: err?.message || "The profile photo could not be updated.",
+        variant: "destructive",
+      });
     } finally {
       setPhotoUploading(false);
     }
@@ -901,7 +912,7 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
                   </div>
                 }>
                   <LazyPdfPhotoAvatar
-                    src={`${BASE_URL}/api/students/${id}/photo`}
+                    src={currentPhotoUrl}
                     alt={`${student?.firstName} ${student?.lastName}`}
                     className="w-20 h-20 rounded-full object-cover border-2 border-primary/20"
                     fallback={
@@ -913,7 +924,7 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
                 </Suspense>
               ) : (
                 <img
-                  src={`${BASE_URL}/api/students/${id}/photo`}
+                  src={currentPhotoUrl}
                   alt={`${student?.firstName} ${student?.lastName}`}
                   className="w-20 h-20 rounded-full object-cover border-2 border-primary/20"
                   onError={() => setPhotoLoadError(true)}
@@ -924,25 +935,27 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
                 {(student?.firstName?.[0] ?? "").toUpperCase()}{(student?.lastName?.[0] ?? "").toUpperCase()}
               </div>
             )}
-            <div className="absolute inset-0 rounded-full bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1">
+            <button
+              type="button"
+              className="absolute inset-0 rounded-full bg-black/40 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity flex items-center justify-center text-white cursor-pointer"
+              title="Upload photo"
+              aria-label="Upload profile photo"
+              onClick={() => photoInputRef.current?.click()}
+              disabled={photoUploading}
+            >
+              <Camera className="w-5 h-5" />
+            </button>
+            {photoDoc && (
               <button
-                className="p-1.5 rounded-full bg-white/20 hover:bg-white/40 text-white transition-colors"
-                title="Upload photo"
-                onClick={() => photoInputRef.current?.click()}
-                disabled={photoUploading}
+                type="button"
+                className="absolute -bottom-1 -right-1 z-10 p-1.5 rounded-full bg-background border border-border shadow hover:bg-secondary text-foreground transition-colors"
+                title="Download photo"
+                aria-label="Download profile photo"
+                onClick={downloadPhoto}
               >
-                <Camera className="w-4 h-4" />
+                <Download className="w-3.5 h-3.5" />
               </button>
-              {photoDoc && (
-                <button
-                  className="p-1.5 rounded-full bg-white/20 hover:bg-white/40 text-white transition-colors"
-                  title="Download photo"
-                  onClick={downloadPhoto}
-                >
-                  <Download className="w-4 h-4" />
-                </button>
-              )}
-            </div>
+            )}
             {photoUploading && (
               <div className="absolute inset-0 rounded-full bg-black/50 flex items-center justify-center">
                 <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />

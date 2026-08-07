@@ -4450,6 +4450,10 @@ components:
           type: ["string", "null"]
         universityName:
           type: ["string", "null"]
+        universityApplicationId:
+          type: ["string", "null"]
+          maxLength: 128
+          description: Current university-assigned application identifier. Historical portal-run references are stored separately.
         country:
           type: ["string", "null"]
         tuitionFee:
@@ -4534,6 +4538,9 @@ components:
           type: ["string", "null"]
         universityName:
           type: ["string", "null"]
+        universityApplicationId:
+          type: ["string", "null"]
+          maxLength: 128
         country:
           type: ["string", "null"]
         tuitionFee:

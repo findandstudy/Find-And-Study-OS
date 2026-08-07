@@ -551,7 +551,7 @@ export default function AdminDashboard() {
                   <div className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-secondary/50 transition-colors cursor-pointer group">
                     <div className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold shrink-0 overflow-hidden ${AVATAR_COLORS[i % AVATAR_COLORS.length]}`}>
                       <img
-                        src={`${BASE}/api/students/${st.id}/photo`}
+                        src={st.photoUrl || `${BASE}/api/students/${st.id}/photo/thumbnail`}
                         alt={`${st.firstName} ${st.lastName}`}
                         className="w-full h-full object-cover"
                         onError={(e) => {

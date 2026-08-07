@@ -1,6 +1,11 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import pg from "pg";
 import * as schema from "./schema";
+import {
+  recordDbAcquire,
+  recordDbQuery,
+  recordDbRetry,
+} from "./requestMetrics";
 
 const { Pool } = pg;
 
@@ -55,6 +60,24 @@ pool.on("connect", (client) => {
     });
   });
 });
+
+const originalConnect = pool.connect.bind(pool) as (...args: unknown[]) => unknown;
+
+(pool as unknown as { connect: (...args: unknown[]) => unknown }).connect =
+  function instrumentedConnect(...args: unknown[]): unknown {
+    const startedAt = process.hrtime.bigint();
+    const callback = args[0];
+    if (typeof callback === "function") {
+      return originalConnect((...callbackArgs: unknown[]) => {
+        recordDbAcquire(Number(process.hrtime.bigint() - startedAt) / 1_000_000);
+        return (callback as (...values: unknown[]) => unknown)(...callbackArgs);
+      });
+    }
+    return (originalConnect() as Promise<unknown>).then((client) => {
+      recordDbAcquire(Number(process.hrtime.bigint() - startedAt) / 1_000_000);
+      return client;
+    });
+  };
 
 const RETRYABLE_PG_CODES = new Set([
   "ECONNRESET", "ECONNREFUSED", "ETIMEDOUT", "EPIPE", "ENETRESET", "ENETUNREACH",
@@ -151,38 +174,44 @@ const originalQuery = pool.query.bind(pool) as (...args: unknown[]) => Promise<u
 
 (pool as unknown as { query: (...args: unknown[]) => Promise<unknown> }).query =
   async function retryingQuery(...args: unknown[]): Promise<unknown> {
+    const queryStartedAt = process.hrtime.bigint();
     const sql = extractSqlText(args);
     const retryable = isReadOnlySql(sql);
     maybeWarnPoolPressure(sql);
     let lastErr: unknown;
-    for (let attempt = 1; attempt <= MAX_QUERY_ATTEMPTS; attempt++) {
-      try {
-        return await originalQuery(...args);
-      } catch (err) {
-        lastErr = err;
-        if (
-          attempt === MAX_QUERY_ATTEMPTS ||
-          !retryable ||
-          !isRetryablePgError(err as ErrLike)
-        ) {
-          throw err;
+    try {
+      for (let attempt = 1; attempt <= MAX_QUERY_ATTEMPTS; attempt++) {
+        try {
+          return await originalQuery(...args);
+        } catch (err) {
+          lastErr = err;
+          if (
+            attempt === MAX_QUERY_ATTEMPTS ||
+            !retryable ||
+            !isRetryablePgError(err as ErrLike)
+          ) {
+            throw err;
+          }
+          recordDbRetry();
+          const delay = RETRY_BASE_DELAY_MS * attempt;
+          const e = err as ErrLike;
+          console.warn("[db] retrying read query after transient error", {
+            attempt,
+            maxAttempts: MAX_QUERY_ATTEMPTS,
+            code: e?.code ?? e?.cause?.code,
+            message: e?.message,
+            delayMs: delay,
+            sql: sqlSnippet(sql),
+            poolWaiting: pool.waitingCount,
+            poolTotal: pool.totalCount,
+          });
+          await new Promise((resolve) => setTimeout(resolve, delay));
         }
-        const delay = RETRY_BASE_DELAY_MS * attempt;
-        const e = err as ErrLike;
-        console.warn("[db] retrying read query after transient error", {
-          attempt,
-          maxAttempts: MAX_QUERY_ATTEMPTS,
-          code: e?.code ?? e?.cause?.code,
-          message: e?.message,
-          delayMs: delay,
-          sql: sqlSnippet(sql),
-          poolWaiting: pool.waitingCount,
-          poolTotal: pool.totalCount,
-        });
-        await new Promise((resolve) => setTimeout(resolve, delay));
       }
+      throw lastErr;
+    } finally {
+      recordDbQuery(Number(process.hrtime.bigint() - queryStartedAt) / 1_000_000);
     }
-    throw lastErr;
   };
 
 export const db = drizzle(pool, { schema });
@@ -190,6 +219,7 @@ export const db = drizzle(pool, { schema });
 export * from "./schema";
 export * from "./softDelete";
 export * from "./academicLevels";
+export * from "./requestMetrics";
 export * from "./portal/portalFieldSpec";
 export * from "./portal/portalNormalize";
 export * from "./portal/canonicalCountries";

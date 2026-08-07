@@ -275,7 +275,7 @@ export default function StaffDashboard() {
                     <div className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-secondary/50 transition-colors cursor-pointer group">
                       <div className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold shrink-0 overflow-hidden ${AVATAR_COLORS[i % AVATAR_COLORS.length]}`}>
                         <img
-                          src={s.photoUrl || `${BASE}/api/students/${s.id}/photo`}
+                          src={s.photoUrl || `${BASE}/api/students/${s.id}/photo/thumbnail`}
                           alt={`${s.firstName} ${s.lastName}`}
                           loading="lazy"
                           decoding="async"

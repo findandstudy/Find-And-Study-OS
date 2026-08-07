@@ -35,7 +35,9 @@ import {
 } from "../lib/portalDraftPreflight.js";
 import { resolveResidenceAddress } from "../lib/studentAddressDefaults";
 import { validatePassportNumber } from "@workspace/portal-adapters/identity-validation";
-import { buildSignedStudentPhotoPath } from "@workspace/portal-adapters";
+import { buildStableSignedStudentPhotoThumbnailPath } from "@workspace/portal-adapters";
+import { recordRequestSpan } from "../lib/requestTelemetry";
+import { buildFacetFilterInput, loadFacetValue } from "../lib/facetCache";
 
 const router: IRouter = Router();
 
@@ -269,6 +271,7 @@ router.get("/leads", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), r
   const offset = pageParams.offset;
 
   const conditions = [isNull(leadsTable.deletedAt)];
+  const scopeResolveStartedAt = process.hrtime.bigint();
   if (season) conditions.push(eq(leadsTable.season, season));
 
   const isNonAdminStaff = !isAgentRole(user.role)
@@ -276,6 +279,7 @@ router.get("/leads", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), r
   const staffPerms = isNonAdminStaff
     ? await getEffectivePermissionSet(user)
     : null;
+  let agentVisibleIds: number[] | null = null;
 
   // KURAL 1: non-admin staff cannot see agent-sourced leads
   // unless they have records.view_others (Task #494)
@@ -285,12 +289,12 @@ router.get("/leads", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), r
     }
   }
   if (isAgentRole(user.role)) {
-    const visibleIds = await getAgentVisibleIds(user.id, user.role);
-    if (visibleIds.length === 0) {
+    agentVisibleIds = await getAgentVisibleIds(user.id, user.role);
+    if (agentVisibleIds.length === 0) {
       res.json({ data: [], meta: { total: 0, page: pageNum, limit: limitNum, totalPages: 0 } });
       return;
     }
-    conditions.push(inArray(leadsTable.agentId, visibleIds));
+    conditions.push(inArray(leadsTable.agentId, agentVisibleIds));
   }
   // Branch scoping (super_admin: null = all). Applies to staff AND agents.
   // We include null-branch records: public-form leads (POST /public/lead,
@@ -322,6 +326,15 @@ router.get("/leads", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), r
     }
     conditions.push(or(...orParts)!);
   }
+  recordRequestSpan("scopeResolve", Number(process.hrtime.bigint() - scopeResolveStartedAt) / 1_000_000);
+  const facetScope = {
+    userId: user.id,
+    role: user.role,
+    permissions: staffPerms ? [...staffPerms].sort() : null,
+    assignmentVisibility: staffAssignmentVisibility,
+    visibleBranchIds: visibleBranchIds ? [...visibleBranchIds].sort((a, b) => a - b) : visibleBranchIds,
+    agentVisibleIds: agentVisibleIds ? [...agentVisibleIds].sort((a, b) => a - b) : null,
+  };
 
   if (search) {
     const rawTerm = search.trim();
@@ -461,7 +474,31 @@ router.get("/leads", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), r
   const orderColumn = sortColumns[sortKey] || leadsTable.createdAt;
   const order = sortDir === "asc" ? asc(orderColumn) : desc(orderColumn);
 
-  const [countRows, rows, statusRows, nationalityRows, agentRows] = await Promise.all([
+  const facetRowsPromise = includeFacets
+    ? loadFacetValue({
+        namespace: "leads-list",
+        scope: facetScope,
+        filters: buildFacetFilterInput(query),
+        load: async () => {
+          const [statusRows, nationalityRows, agentRows] = await Promise.all([
+            db.select({ status: leadsTable.status, count: sql<number>`count(*)` })
+              .from(leadsTable).where(whereClause).groupBy(leadsTable.status),
+            db.selectDistinct({ value: leadsTable.nationality })
+              .from(leadsTable).where(and(whereClause, isNotNull(leadsTable.nationality))).orderBy(leadsTable.nationality),
+            db.selectDistinct({ id: agentsTable.id, name: agentsTable.companyName })
+              .from(leadsTable).innerJoin(agentsTable, eq(leadsTable.agentId, agentsTable.id))
+              .where(whereClause).orderBy(agentsTable.companyName),
+          ]);
+          return { statusRows, nationalityRows, agentRows };
+        },
+      })
+    : Promise.resolve({
+        statusRows: [] as Array<{ status: string; count: number }>,
+        nationalityRows: [] as Array<{ value: string | null }>,
+        agentRows: [] as Array<{ id: number | null; name: string | null }>,
+      });
+
+  const [countRows, rows, facetRows] = await Promise.all([
     db.select({ count: sql<number>`count(*)` }).from(leadsTable).where(whereClause),
     db
     .select({
@@ -479,20 +516,9 @@ router.get("/leads", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), r
     .limit(limitNum)
     .offset(offset)
     .orderBy(order, desc(leadsTable.id)),
-    includeFacets
-      ? db.select({ status: leadsTable.status, count: sql<number>`count(*)` })
-          .from(leadsTable).where(whereClause).groupBy(leadsTable.status)
-      : Promise.resolve([] as Array<{ status: string; count: number }>),
-    includeFacets
-      ? db.selectDistinct({ value: leadsTable.nationality })
-          .from(leadsTable).where(and(whereClause, isNotNull(leadsTable.nationality))).orderBy(leadsTable.nationality)
-      : Promise.resolve([] as Array<{ value: string | null }>),
-    includeFacets
-      ? db.selectDistinct({ id: agentsTable.id, name: agentsTable.companyName })
-          .from(leadsTable).innerJoin(agentsTable, eq(leadsTable.agentId, agentsTable.id))
-          .where(whereClause).orderBy(agentsTable.companyName)
-      : Promise.resolve([] as Array<{ id: number | null; name: string | null }>),
+    facetRowsPromise,
   ]);
+  const { statusRows, nationalityRows, agentRows } = facetRows;
   const count = countRows[0]?.count ?? 0;
 
   const leadIds = rows.map(r => r.lead.id);
@@ -518,7 +544,7 @@ router.get("/leads", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), r
     nextFollowup: nextFollowupMap.get(r.lead.id) || null,
     convertedStudentHasPhoto: r.studentHasPhoto ?? false,
     convertedStudentPhotoUrl: r.studentHasPhoto && r.lead.convertedStudentId
-      ? buildSignedStudentPhotoPath(r.lead.convertedStudentId, 15 * 60)
+      ? buildStableSignedStudentPhotoThumbnailPath(r.lead.convertedStudentId)
       : null,
   }));
 

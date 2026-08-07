@@ -7,7 +7,7 @@ import {
   studentsTable,
   pipelineStagesTable,
 } from "@workspace/db";
-import { eq, and, desc, sql, isNull, inArray } from "drizzle-orm";
+import { eq, and, desc, sql, isNull, inArray, like, or } from "drizzle-orm";
 import { requireAuth, requireRole, logAudit } from "../lib/auth";
 import { ADMIN_ROLES } from "../lib/roles";
 import {
@@ -16,6 +16,18 @@ import {
   NOTIFICATION_CHANNELS,
 } from "@workspace/db";
 import { notificationBus, type NotificationBusEvent } from "../lib/notificationBus";
+import { coalesceRead } from "../lib/readPathCoalescing";
+import {
+  cacheNotificationCounts,
+  getCachedNotificationCounts,
+  invalidateNotificationCounts,
+  type NotificationSectionCounts,
+} from "../lib/notificationCountCache";
+import {
+  IMPORTANT_NOTIFICATION_TYPES,
+  isImportantNotification,
+  notificationPriority,
+} from "../lib/notificationPriority";
 
 const router: IRouter = Router();
 
@@ -208,11 +220,23 @@ seedNotificationRules().catch((err) => console.error("[notifications] Seed error
 
 router.get("/notifications", requireAuth, async (req, res): Promise<void> => {
   const userId = req.user!.id;
-  const { limit = "20", unreadOnly } = req.query as Record<string, string>;
+  const { limit = "20", unreadOnly, view = "all" } = req.query as Record<string, string>;
+  const parsedLimit = Math.max(1, Math.min(parseInt(limit, 10) || 20, 100));
 
   const conditions = [eq(notificationsTable.userId, userId), liveResourceFilter];
   if (unreadOnly === "true") {
     conditions.push(eq(notificationsTable.isRead, false));
+  }
+  if (view === "important") {
+    conditions.push(
+      or(
+        inArray(notificationsTable.type, [...IMPORTANT_NOTIFICATION_TYPES]),
+        like(notificationsTable.type, "%failed%"),
+        like(notificationsTable.type, "%expired%"),
+        like(notificationsTable.type, "%missing%"),
+        like(notificationsTable.type, "%unmatched%"),
+      )!,
+    );
   }
 
   const notifications = await db
@@ -220,49 +244,87 @@ router.get("/notifications", requireAuth, async (req, res): Promise<void> => {
     .from(notificationsTable)
     .where(and(...conditions))
     .orderBy(desc(notificationsTable.createdAt))
-    .limit(parseInt(limit, 10));
+    .limit(parsedLimit);
 
-  res.json({ data: await enrichOfferExpiryNotifications(notifications) });
+  const enriched = await enrichOfferExpiryNotifications(notifications);
+  res.json({
+    data: enriched.map(row => ({ ...row, priority: notificationPriority(row.type) })),
+  });
 });
 
 router.get("/notifications/unread-count", requireAuth, async (req, res): Promise<void> => {
   const userId = req.user!.id;
-  const [{ count }] = await db
-    .select({ count: sql<number>`count(*)` })
-    .from(notificationsTable)
-    .where(and(
-      eq(notificationsTable.userId, userId),
-      eq(notificationsTable.isRead, false),
-      liveResourceFilter,
-    ));
+  const cached = getCachedNotificationCounts(userId);
+  if (cached) {
+    res.setHeader("X-Notification-Count-Cache", "hit");
+    res.json({ count: cached.total });
+    return;
+  }
+  const { value: count } = await coalesceRead({
+    namespace: "notification-unread-count",
+    key: String(userId),
+    execute: async () => {
+      const [row] = await db
+        .select({ count: sql<number>`count(*)` })
+        .from(notificationsTable)
+        .where(and(
+          eq(notificationsTable.userId, userId),
+          eq(notificationsTable.isRead, false),
+          liveResourceFilter,
+        ));
+      return Number(row.count);
+    },
+  });
 
-  res.json({ count: Number(count) });
+  res.json({ count });
 });
 
 router.get("/notifications/section-counts", requireAuth, async (req, res): Promise<void> => {
   const userId = req.user!.id;
-  const rows = await db
-    .select({
-      type: notificationsTable.type,
-      actionUrl: notificationsTable.actionUrl,
-      data: notificationsTable.data,
-    })
-    .from(notificationsTable)
-    .where(and(
-      eq(notificationsTable.userId, userId),
-      eq(notificationsTable.isRead, false),
-      liveResourceFilter,
-    ));
-
-  const sections: Record<string, number> = { leads: 0, students: 0, applications: 0, tasks: 0 };
-  for (const row of rows) {
-    const section = bucketSection(
-      row.type || "",
-      row.actionUrl || "",
-      (row.data as any)?.resourceType || "",
-    );
-    if (section) sections[section]++;
+  const cached = getCachedNotificationCounts(userId);
+  if (cached) {
+    res.setHeader("X-Notification-Count-Cache", "hit");
+    res.json(cached);
+    return;
   }
+  const { value: sections } = await coalesceRead({
+    namespace: "notification-section-counts",
+    key: String(userId),
+    execute: async () => {
+      const rows = await db
+        .select({
+          type: notificationsTable.type,
+          actionUrl: notificationsTable.actionUrl,
+          data: notificationsTable.data,
+        })
+        .from(notificationsTable)
+        .where(and(
+          eq(notificationsTable.userId, userId),
+          eq(notificationsTable.isRead, false),
+          liveResourceFilter,
+        ));
+
+      const result: NotificationSectionCounts = {
+        total: rows.length,
+        importantTotal: rows.filter(row => isImportantNotification(row.type || "")).length,
+        leads: 0,
+        students: 0,
+        applications: 0,
+        tasks: 0,
+      };
+      for (const row of rows) {
+        const section = bucketSection(
+          row.type || "",
+          row.actionUrl || "",
+          (row.data as any)?.resourceType || "",
+        );
+        if (section) result[section]++;
+      }
+      return result;
+    },
+  });
+  cacheNotificationCounts(userId, sections);
+  res.setHeader("X-Notification-Count-Cache", "miss");
   res.json(sections);
 });
 
@@ -302,6 +364,7 @@ router.post("/notifications/section/:section/read", requireAuth, async (req, res
       .update(notificationsTable)
       .set({ isRead: true, readAt: new Date() })
       .where(and(eq(notificationsTable.userId, userId), inArray(notificationsTable.id, ids)));
+    invalidateNotificationCounts(userId);
   }
 
   res.json({ success: true, marked: ids.length });
@@ -321,6 +384,7 @@ router.patch("/notifications/:id/read", requireAuth, async (req, res): Promise<v
     res.status(404).json({ error: "Notification not found" });
     return;
   }
+  invalidateNotificationCounts(userId);
   res.json(notification);
 });
 
@@ -331,6 +395,7 @@ router.post("/notifications/mark-all-read", requireAuth, async (req, res): Promi
     .set({ isRead: true, readAt: new Date() })
     .where(and(eq(notificationsTable.userId, userId), eq(notificationsTable.isRead, false)));
 
+  invalidateNotificationCounts(userId);
   res.json({ success: true });
 });
 

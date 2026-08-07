@@ -170,7 +170,7 @@ export default function AgentDashboard() {
                     <div className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-secondary/50 transition-colors cursor-pointer">
                       <div className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold shrink-0 overflow-hidden ${AVATAR_COLORS[i % AVATAR_COLORS.length]}`}>
                         <img
-                          src={`${BASE}/api/students/${st2.id}/photo`}
+                          src={st2.photoUrl || `${BASE}/api/students/${st2.id}/photo/thumbnail`}
                           alt={`${st2.firstName} ${st2.lastName}`}
                           className="w-full h-full object-cover"
                           onError={(e) => {

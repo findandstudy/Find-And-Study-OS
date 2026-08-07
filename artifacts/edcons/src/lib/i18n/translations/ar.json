@@ -2890,6 +2890,7 @@
     "student": "الطالب",
     "country": "الدولة",
     "university": "الجامعة",
+    "universityApplicationId": "معرّف طلب الجامعة",
     "program": "البرنامج",
     "level": "المستوى",
     "language": "اللغة",

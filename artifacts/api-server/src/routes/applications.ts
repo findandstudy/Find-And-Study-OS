@@ -30,7 +30,9 @@ import {
   prepareRoutedPortalDraftPreflight,
 } from "../lib/portalDraftPreflight.js";
 import { resolveApplicationCommissionTotal } from "../lib/applicationCommissionTotals";
-import { buildSignedStudentPhotoPath } from "@workspace/portal-adapters";
+import { buildStableSignedStudentPhotoThumbnailPath, parseUniversityApplicationId } from "@workspace/portal-adapters";
+import { recordRequestSpan } from "../lib/requestTelemetry";
+import { buildFacetFilterInput, loadFacetValue } from "../lib/facetCache";
 
 const router: IRouter = Router();
 
@@ -109,6 +111,7 @@ async function isStageFileUploadMandatory(stageKey: string): Promise<boolean> {
 const APP_PATCH_FIELDS = [
   "stage", "universityId", "programId", "agentId", "assignedToId",
   "universityName", "country", "programName", "intake",
+  "universityApplicationId",
   "level", "instructionLanguage", "deadline",
   "tuitionFee", "discountedFee", "scholarship", "commissionRate",
   "serviceFeeAmount", "applicationFee", "depositFee", "advancedFee",
@@ -167,6 +170,13 @@ router.get("/applications", requireAuth, requireAgentStaffPermission("applicatio
   const isStaff = STAFF_ROLES.includes(user.role as any);
 
   const conditions = [isNull(applicationsTable.deletedAt)];
+  const scopeResolveStartedAt = process.hrtime.bigint();
+  let permissionKeys: string[] | null = null;
+  let assignmentVisibility: string | null = null;
+  let agencyAgentIds: number[] = [];
+  let agentVisibleIds: number[] | null = null;
+  let visibleBranchIds: number[] | null = null;
+  let studentScopeId: number | null = null;
 
   if (season) conditions.push(eq(applicationsTable.season, season));
   if (originFilter && ["direct", "agent", "sub_agent"].includes(originFilter)) {
@@ -183,14 +193,15 @@ router.get("/applications", requireAuth, requireAgentStaffPermission("applicatio
       // teammates' records. Task #128: also include applications for
       // agencies where this staff is listed as agency-assigned staff.
       const perms = await getEffectivePermissionSet(user);
+      permissionKeys = [...perms].sort();
       // KURAL 1: non-admin staff cannot see agent-sourced applications
       // unless they have records.view_others (Task #494)
       if (!perms.has("records.view_others")) {
         conditions.push(isNull(applicationsTable.agentId));
       }
-      const assignmentVisibility = getAssignmentVisibility(perms);
+      assignmentVisibility = getAssignmentVisibility(perms);
       if (assignmentVisibility !== "all") {
-        const agencyAgentIds = await getAgencyMemberAgentIds(user.id);
+        agencyAgentIds = await getAgencyMemberAgentIds(user.id);
         const orParts: any[] = assignmentVisibility === "assigned"
           ? [isNotNull(applicationsTable.assignedToId)]
           : [eq(applicationsTable.assignedToId, user.id)];
@@ -209,20 +220,21 @@ router.get("/applications", requireAuth, requireAgentStaffPermission("applicatio
       res.json({ data: [], meta: { total: 0, totalCommission: 0, page: pageNum, limit: limitNum, totalPages: 0 } });
       return;
     }
+    studentScopeId = studentRec.id;
     conditions.push(eq(applicationsTable.studentId, studentRec.id));
   } else if (isAgentRole(user.role)) {
-    const visibleIds = await getAgentVisibleIds(user.id, user.role);
-    if (visibleIds.length === 0) {
+    agentVisibleIds = await getAgentVisibleIds(user.id, user.role);
+    if (agentVisibleIds.length === 0) {
       res.json({ data: [], meta: { total: 0, totalCommission: 0, page: pageNum, limit: limitNum, totalPages: 0 } });
       return;
     }
-    conditions.push(inArray(applicationsTable.agentId, visibleIds));
+    conditions.push(inArray(applicationsTable.agentId, agentVisibleIds));
     if (studentId) conditions.push(eq(applicationsTable.studentId, parseInt(studentId, 10)));
   }
 
   // Branch scoping (super_admin: null = all). Applies to staff AND agents.
   if (user.role !== "student") {
-    const visibleBranchIds = await getVisibleBranchIds(user.id, user.role, user);
+    visibleBranchIds = await getVisibleBranchIds(user.id, user.role, user);
     if (visibleBranchIds !== null) {
       if (visibleBranchIds.length === 0) {
         conditions.push(isNull(applicationsTable.branchId));
@@ -231,11 +243,51 @@ router.get("/applications", requireAuth, requireAgentStaffPermission("applicatio
       }
     }
   }
+  recordRequestSpan("scopeResolve", Number(process.hrtime.bigint() - scopeResolveStartedAt) / 1_000_000);
+  const facetScope = {
+    userId: user.id,
+    role: user.role,
+    permissions: permissionKeys,
+    assignmentVisibility,
+    visibleBranchIds: visibleBranchIds ? [...visibleBranchIds].sort((a, b) => a - b) : visibleBranchIds,
+    agentVisibleIds: agentVisibleIds ? [...agentVisibleIds].sort((a, b) => a - b) : null,
+    agencyAgentIds: [...agencyAgentIds].sort((a, b) => a - b),
+    studentScopeId,
+  };
 
   // Keep the unfiltered, permission-scoped base for filter facets. This lets
   // the UI request only one page of rows without losing university/country/
   // agent options that happen to be on later pages.
   const scopeWhereClause = conditions.length > 0 ? and(...conditions) : undefined;
+  const applicationFacetsPromise = includeFacets
+    ? loadFacetValue({
+        namespace: "applications-list",
+        scope: facetScope,
+        filters: buildFacetFilterInput(query),
+        load: async () => {
+          const [countryRows, universityRows, agentRows] = await Promise.all([
+            db.selectDistinct({ country: applicationsTable.country })
+              .from(applicationsTable)
+              .where(and(scopeWhereClause, isNotNull(applicationsTable.country)))
+              .orderBy(applicationsTable.country),
+            db.selectDistinct({ id: applicationsTable.universityId, name: applicationsTable.universityName })
+              .from(applicationsTable)
+              .where(and(scopeWhereClause, isNotNull(applicationsTable.universityId), isNotNull(applicationsTable.universityName)))
+              .orderBy(applicationsTable.universityName),
+            db.selectDistinct({ id: applicationsTable.agentId, name: agentsTable.companyName })
+              .from(applicationsTable)
+              .innerJoin(agentsTable, eq(applicationsTable.agentId, agentsTable.id))
+              .where(scopeWhereClause)
+              .orderBy(agentsTable.companyName),
+          ]);
+          return { countryRows, universityRows, agentRows };
+        },
+      })
+    : Promise.resolve({
+        countryRows: [] as { country: string | null }[],
+        universityRows: [] as { id: number | null; name: string | null }[],
+        agentRows: [] as { id: number | null; name: string | null }[],
+      });
 
   if (search) {
     const term = `%${search.trim()}%`;
@@ -319,7 +371,7 @@ router.get("/applications", requireAuth, requireAgentStaffPermission("applicatio
       .where(whereClause)
       .as("pipeline_filtered_applications");
 
-    const [summaryRows, countryRows, universityRows, agentRows] = await Promise.all([
+    const [summaryRows, facetRows] = await Promise.all([
       db
         .select({
           stage: filteredApplications.stage,
@@ -331,20 +383,9 @@ router.get("/applications", requireAuth, requireAgentStaffPermission("applicatio
         .from(filteredApplications)
         .leftJoin(commissionsTable, eq(filteredApplications.id, commissionsTable.applicationId))
         .groupBy(filteredApplications.stage),
-      includeFacets ? db.selectDistinct({ country: applicationsTable.country })
-        .from(applicationsTable)
-        .where(and(scopeWhereClause, isNotNull(applicationsTable.country)))
-        .orderBy(applicationsTable.country) : Promise.resolve([] as { country: string | null }[]),
-      includeFacets ? db.selectDistinct({ id: applicationsTable.universityId, name: applicationsTable.universityName })
-        .from(applicationsTable)
-        .where(and(scopeWhereClause, isNotNull(applicationsTable.universityId), isNotNull(applicationsTable.universityName)))
-        .orderBy(applicationsTable.universityName) : Promise.resolve([] as { id: number | null; name: string | null }[]),
-      includeFacets ? db.selectDistinct({ id: applicationsTable.agentId, name: agentsTable.companyName })
-        .from(applicationsTable)
-        .innerJoin(agentsTable, eq(applicationsTable.agentId, agentsTable.id))
-        .where(scopeWhereClause)
-        .orderBy(agentsTable.companyName) : Promise.resolve([] as { id: number | null; name: string | null }[]),
+      applicationFacetsPromise,
     ]);
+    const { countryRows, universityRows, agentRows } = facetRows;
 
     const stages = summaryRows.map(row => ({
       stage: row.stage,
@@ -434,6 +475,7 @@ router.get("/applications", requireAuth, requireAgentStaffPermission("applicatio
       deadline: applicationsTable.deadline,
       programName: applicationsTable.programName,
       universityName: applicationsTable.universityName,
+      universityApplicationId: applicationsTable.universityApplicationId,
       country: applicationsTable.country,
       tuitionFee: applicationsTable.tuitionFee,
       scholarship: applicationsTable.scholarship,
@@ -490,23 +532,12 @@ router.get("/applications", requireAuth, requireAgentStaffPermission("applicatio
     .from(filteredApplicationIds)
     .leftJoin(commissionsTable, eq(filteredApplicationIds.id, commissionsTable.applicationId));
 
-  const [countRows, rows, countryRows, universityRows, agentRows] = await Promise.all([
+  const [countRows, rows, facetRows] = await Promise.all([
     includeTotals ? applicationTotalsQuery : Promise.resolve([]),
     rowsQuery,
-    includeFacets ? db.selectDistinct({ country: applicationsTable.country })
-      .from(applicationsTable)
-      .where(and(scopeWhereClause, isNotNull(applicationsTable.country)))
-      .orderBy(applicationsTable.country) : Promise.resolve([] as { country: string | null }[]),
-    includeFacets ? db.selectDistinct({ id: applicationsTable.universityId, name: applicationsTable.universityName })
-      .from(applicationsTable)
-      .where(and(scopeWhereClause, isNotNull(applicationsTable.universityId), isNotNull(applicationsTable.universityName)))
-      .orderBy(applicationsTable.universityName) : Promise.resolve([] as { id: number | null; name: string | null }[]),
-    includeFacets ? db.selectDistinct({ id: applicationsTable.agentId, name: agentsTable.companyName })
-      .from(applicationsTable)
-      .innerJoin(agentsTable, eq(applicationsTable.agentId, agentsTable.id))
-      .where(scopeWhereClause)
-      .orderBy(agentsTable.companyName) : Promise.resolve([] as { id: number | null; name: string | null }[]),
+    applicationFacetsPromise,
   ]);
+  const { countryRows, universityRows, agentRows } = facetRows;
   const count = includeTotals ? (countRows[0]?.count ?? 0) : rows.length;
   const totalCommission = includeTotals ? resolveApplicationCommissionTotal({
     universityCommissionTotal: countRows[0]?.universityCommissionTotal,
@@ -525,21 +556,21 @@ router.get("/applications", requireAuth, requireAgentStaffPermission("applicatio
         return {
           ...rest,
           commissionAmount: subAgentCommissionAmount,
-          studentPhotoUrl: rest.studentHasPhoto ? buildSignedStudentPhotoPath(rest.studentId, 15 * 60) : null,
+          studentPhotoUrl: rest.studentHasPhoto ? buildStableSignedStudentPhotoThumbnailPath(rest.studentId) : null,
         };
       }
       const parentNet = agentCommissionAmount == null ? null : String(agentNum - subNum);
       return {
         ...rest,
         commissionAmount: parentNet,
-        studentPhotoUrl: rest.studentHasPhoto ? buildSignedStudentPhotoPath(rest.studentId, 15 * 60) : null,
+        studentPhotoUrl: rest.studentHasPhoto ? buildStableSignedStudentPhotoThumbnailPath(rest.studentId) : null,
       };
     }
     const netAgency = uniAmt == null ? null : String(uniNum - agentNum);
     return {
       ...rest,
       commissionAmount: netAgency,
-      studentPhotoUrl: rest.studentHasPhoto ? buildSignedStudentPhotoPath(rest.studentId, 15 * 60) : null,
+      studentPhotoUrl: rest.studentHasPhoto ? buildStableSignedStudentPhotoThumbnailPath(rest.studentId) : null,
     };
   });
 
@@ -1091,6 +1122,7 @@ router.get("/applications/:id", requireAuth, requireAgentStaffPermission("applic
       deadline: applicationsTable.deadline,
       programName: applicationsTable.programName,
       universityName: applicationsTable.universityName,
+      universityApplicationId: applicationsTable.universityApplicationId,
       country: applicationsTable.country,
       tuitionFee: applicationsTable.tuitionFee,
       scholarship: applicationsTable.scholarship,
@@ -1249,7 +1281,17 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, ...AG
 
   const updates: Record<string, unknown> = {};
   for (const key of allowedFields) {
-    if (req.body[key] !== undefined) updates[key] = req.body[key];
+    if (req.body[key] === undefined) continue;
+    if (key === "universityApplicationId") {
+      const parsed = parseUniversityApplicationId(req.body[key]);
+      if (!parsed.ok) {
+        res.status(400).json({ error: parsed.error, code: "INVALID_UNIVERSITY_APPLICATION_ID" });
+        return;
+      }
+      updates[key] = parsed.value;
+    } else {
+      updates[key] = req.body[key];
+    }
   }
   if (isAdmin && req.body.originType !== undefined) {
     const validOrigin = ["direct", "agent", "sub_agent"];
@@ -1434,7 +1476,12 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, ...AG
     }
   }
 
-  const [preUpdateApp] = await db.select({ assignedToId: applicationsTable.assignedToId, agentId: applicationsTable.agentId, branchId: applicationsTable.branchId }).from(applicationsTable).where(and(eq(applicationsTable.id, id), isNull(applicationsTable.deletedAt)));
+  const [preUpdateApp] = await db.select({
+    assignedToId: applicationsTable.assignedToId,
+    agentId: applicationsTable.agentId,
+    branchId: applicationsTable.branchId,
+    universityApplicationId: applicationsTable.universityApplicationId,
+  }).from(applicationsTable).where(and(eq(applicationsTable.id, id), isNull(applicationsTable.deletedAt)));
 
   // KURAL 1: non-admin staff cannot update agent-sourced applications
   // unless they have records.view_others (Task #494) — within branch scope only
@@ -1571,7 +1618,16 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, ...AG
     }
   }
 
-  await logAudit(req.user!.id, "update_application", "application", id, updates, req.ip);
+  const auditChanges = updates.universityApplicationId !== undefined
+    ? {
+        ...updates,
+        universityApplicationId: {
+          from: preUpdateApp?.universityApplicationId ?? null,
+          to: app.universityApplicationId ?? null,
+        },
+      }
+    : updates;
+  logAudit(req.user!.id, "update_application", "application", id, auditChanges, req.ip);
 
   if (updates.stage !== undefined) {
     const stageStr = String(updates.stage);

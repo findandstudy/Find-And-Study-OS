@@ -27,6 +27,7 @@ import { isWithin24hWindow } from "../lib/inbox/channels/whatsapp";
 import { toE164 } from "../lib/inbox/phone";
 import { isAgentSourcedAndBlockedForStaff } from "../lib/rbac/agentSourceScope";
 import { maybeAutoReply } from "../lib/inbox/botAutoReply";
+import { invalidateNotificationCounts } from "../lib/notificationCountCache";
 
 const router: IRouter = Router();
 
@@ -729,6 +730,7 @@ router.post("/broadcasts", requireAuth, requireRole(...ADMIN_ROLES, ...STAFF_ROL
       data: { broadcastId: broadcast.id, channel },
     });
   }
+  invalidateNotificationCounts(recipients.map(r => r.id));
 
   await logAudit(userId, "send_broadcast", "broadcast", broadcast.id, { recipientCount: recipients.length, channel }, req.ip);
   res.status(201).json({ ...broadcast, recipientCount: recipients.length });

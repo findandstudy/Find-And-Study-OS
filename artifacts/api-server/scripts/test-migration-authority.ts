@@ -112,7 +112,7 @@ test("repository migration history is complete, ordered and duplicate-free", () 
     },
   );
   assert.equal(result.status, 0, result.stderr);
-  assert.match(result.stdout, /OK: 43 files, 43 journal entries/);
+  assert.match(result.stdout, /OK: 44 files, 44 journal entries/);
 });
 
 test("migration validator rejects duplicate ids and non-monotonic journal timestamps", () => {
@@ -274,6 +274,9 @@ test("ledger baseline requires explicit audit and exact database confirmation be
     "utf8",
   );
   assert.match(source, /MIGRATION_BASELINE_CONFIRMED_DB/);
+  assert.match(source, /MIGRATION_BASELINE_THROUGH_TAG/);
+  assert.match(source, /unknown MIGRATION_BASELINE_THROUGH_TAG/);
+  assert.match(source, /expectedMigrations\.slice\(0, throughIndex \+ 1\)/);
   assert.match(source, /BEGIN READ ONLY/);
   assert.doesNotMatch(
     source,

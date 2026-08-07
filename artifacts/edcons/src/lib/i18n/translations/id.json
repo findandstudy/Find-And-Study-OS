@@ -2839,6 +2839,7 @@
     "student": "Siswa",
     "country": "Negara",
     "university": "Universitas",
+    "universityApplicationId": "ID Pendaftaran Universitas",
     "program": "Program",
     "level": "Jenjang",
     "language": "Bahasa",

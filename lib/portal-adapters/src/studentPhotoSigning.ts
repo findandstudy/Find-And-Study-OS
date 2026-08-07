@@ -53,6 +53,42 @@ export function buildSignedStudentPhotoPath(
 }
 
 /**
+ * Build a cache-stable signed photo path for authenticated list views.
+ *
+ * A fresh expiry timestamp on every list request changes the browser cache key
+ * even when the underlying photo is unchanged.  The expiry below is anchored
+ * to a short time bucket while retaining the requested TTL, so every response
+ * generated in the same bucket receives the same URL.  The default five-minute
+ * bucket matches the photo route's private browser-cache lifetime.
+ */
+export function buildStableSignedStudentPhotoPath(
+  studentId: number,
+  ttlSeconds: number = 15 * 60,
+  bucketSeconds: number = 5 * 60,
+): string | null {
+  if (!Number.isFinite(studentId) || studentId <= 0) return null;
+  if (!Number.isFinite(ttlSeconds) || ttlSeconds <= 0) return null;
+  if (!Number.isFinite(bucketSeconds) || bucketSeconds <= 0) return null;
+  const secret = photoSigningSecret();
+  if (!secret) return null;
+
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  const bucketStart = Math.floor(nowSeconds / bucketSeconds) * bucketSeconds;
+  const exp = bucketStart + ttlSeconds;
+  const sig = computeSignature(studentId, exp, secret);
+  return `/api/students/${studentId}/photo?exp=${exp}&sig=${sig}`;
+}
+
+export function buildStableSignedStudentPhotoThumbnailPath(
+  studentId: number,
+  ttlSeconds = 15 * 60,
+  bucketSeconds = 5 * 60,
+): string | null {
+  const path = buildStableSignedStudentPhotoPath(studentId, ttlSeconds, bucketSeconds);
+  return path?.replace(`/students/${studentId}/photo?`, `/students/${studentId}/photo/thumbnail?`) ?? null;
+}
+
+/**
  * Verify a signed student-photo request. Returns true only when the signature
  * matches and has not expired. Constant-time compare; never throws.
  */

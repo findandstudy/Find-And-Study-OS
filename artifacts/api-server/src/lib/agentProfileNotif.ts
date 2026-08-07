@@ -1,6 +1,7 @@
 import { db, notificationsTable, usersTable } from "@workspace/db";
 import { and, inArray, eq } from "drizzle-orm";
 import { notificationBus } from "./notificationBus";
+import { invalidateNotificationCounts } from "./notificationCountCache";
 
 const AGENT_PROFILE_NOTIF: Record<string, { title: string; body: string }> = {
   en: { title: "Agent profile updated", body: "{{agentName}} updated their profile: {{fields}}" },
@@ -64,6 +65,7 @@ export async function dispatchAgentProfileChangedNotif(opts: {
     .insert(notificationsTable)
     .values(notifValues)
     .returning({ id: notificationsTable.id, userId: notificationsTable.userId, title: notificationsTable.title });
+  invalidateNotificationCounts(inserted.map(row => row.userId));
   for (const row of inserted) {
     notificationBus.publish({ userId: row.userId, notificationId: row.id, type: "agent.profile_changed", title: row.title });
   }

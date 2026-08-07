@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
@@ -23,6 +24,7 @@ interface NotificationItem {
   isRead: boolean;
   createdAt: string;
   data?: Record<string, unknown> | null;
+  priority?: "critical" | "high" | "normal";
 }
 
 const typeIcons: Record<string, any> = {
@@ -81,29 +83,40 @@ export function NotificationCenter() {
   const [, setLocation] = useLocation();
   const [open, setOpen] = useState(false);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
-  const [unreadCount, setUnreadCount] = useState(0);
+  const [view, setView] = useState<"important" | "all">("important");
   const [loading, setLoading] = useState(false);
+  const queryClient = useQueryClient();
   const { toast } = useToast();
   const { user } = useAuth(true);
   const { lang } = useI18n();
   const panelRef = useRef<HTMLDivElement>(null);
 
-  const fetchUnreadCount = useCallback(async () => {
-    try {
-      const res = await customFetch("/api/notifications/unread-count");
-      setUnreadCount((res as any)?.count || 0);
-    } catch {}
-  }, []);
+  const { data: notificationCounts } = useQuery<Record<string, number>>({
+    queryKey: ["notification-section-counts"],
+    queryFn: async () => {
+      const res = await customFetch<Record<string, number>>("/api/notifications/section-counts");
+      return (res as any) || {};
+    },
+    refetchInterval: 60000,
+    staleTime: 45000,
+    refetchOnWindowFocus: true,
+  });
+  const importantUnreadCount = notificationCounts?.importantTotal || 0;
+  const allUnreadCount = notificationCounts?.total || 0;
+
+  const refreshNotificationCounts = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ["notification-section-counts"] });
+  }, [queryClient]);
 
   const fetchNotifications = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await customFetch("/api/notifications?limit=20");
+      const res = await customFetch(`/api/notifications?limit=20&view=${view}`);
       setNotifications((res as any)?.data || res || []);
     } catch {} finally {
       setLoading(false);
     }
-  }, []);
+  }, [view]);
 
   // Track `open` via ref so the SSE handler always reads the latest value
   // without re-subscribing the EventSource every time the panel toggles.
@@ -113,11 +126,6 @@ export function NotificationCenter() {
   // Push-based updates via SSE. Initial fetch + window-focus refetch are kept
   // as belt-and-braces for the case where the EventSource silently drops.
   useEffect(() => {
-    fetchUnreadCount();
-
-    const onFocus = () => fetchUnreadCount();
-    window.addEventListener("focus", onFocus);
-
     let es: EventSource | null = null;
     let reconnectTimer: number | undefined;
 
@@ -125,14 +133,14 @@ export function NotificationCenter() {
       try {
         es = new EventSource("/api/notifications/events", { withCredentials: true });
         es.addEventListener("notification", (ev) => {
-          fetchUnreadCount();
+          refreshNotificationCounts();
           if (openRef.current) fetchNotifications();
           // Surface a toast so the user sees the new notification even when
           // the bell panel is closed. Throttled by the toast hook itself.
           try {
             const data = JSON.parse((ev as MessageEvent).data || "{}") as NotificationItem;
             const localized = localizeNotification(data, lang);
-            if (localized.title) {
+            if (localized.title && data.priority !== "normal") {
               toast({ title: localized.title });
             }
           } catch { /* ignore malformed payload */ }
@@ -149,12 +157,11 @@ export function NotificationCenter() {
     connect();
 
     return () => {
-      window.removeEventListener("focus", onFocus);
       if (reconnectTimer !== undefined) window.clearTimeout(reconnectTimer);
       try { es?.close(); } catch { /* ignore */ }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fetchUnreadCount, fetchNotifications, lang, toast]);
+  }, [refreshNotificationCounts, fetchNotifications, lang, toast]);
 
   useEffect(() => {
     if (open) fetchNotifications();
@@ -164,7 +171,7 @@ export function NotificationCenter() {
     try {
       await customFetch(`/api/notifications/${id}/read`, { method: "PATCH" });
       setNotifications(prev => prev.map(n => n.id === id ? { ...n, isRead: true } : n));
-      setUnreadCount(prev => Math.max(0, prev - 1));
+      refreshNotificationCounts();
     } catch {}
   };
 
@@ -172,7 +179,15 @@ export function NotificationCenter() {
     try {
       await customFetch("/api/notifications/mark-all-read", { method: "POST" });
       setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
-      setUnreadCount(0);
+      queryClient.setQueryData<Record<string, number>>(["notification-section-counts"], current => ({
+        ...(current || {}),
+        total: 0,
+        importantTotal: 0,
+        leads: 0,
+        students: 0,
+        applications: 0,
+        tasks: 0,
+      }));
       toast({ title: "All notifications marked as read" });
     } catch {}
   };
@@ -184,9 +199,9 @@ export function NotificationCenter() {
         className="relative p-2 rounded-xl hover:bg-secondary transition-colors"
       >
         <Bell className="w-5 h-5 text-muted-foreground" />
-        {unreadCount > 0 && (
+        {importantUnreadCount > 0 && (
           <span className="absolute -top-0.5 -right-0.5 w-5 h-5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center animate-in zoom-in">
-            {unreadCount > 99 ? "99+" : unreadCount}
+            {importantUnreadCount > 99 ? "99+" : importantUnreadCount}
           </span>
         )}
       </button>
@@ -199,12 +214,12 @@ export function NotificationCenter() {
               <div className="flex items-center gap-2">
                 <Bell className="w-4 h-4 text-primary" />
                 <h3 className="font-semibold text-sm">Notifications</h3>
-                {unreadCount > 0 && (
-                  <Badge className="bg-red-500 text-white text-[10px] h-5">{unreadCount}</Badge>
+                {importantUnreadCount > 0 && (
+                  <Badge className="bg-red-500 text-white text-[10px] h-5">{importantUnreadCount}</Badge>
                 )}
               </div>
               <div className="flex gap-1">
-                {unreadCount > 0 && (
+                {allUnreadCount > 0 && (
                   <Button size="sm" variant="ghost" className="h-7 text-xs gap-1" onClick={markAllRead}>
                     <CheckCheck className="w-3 h-3" /> Mark all read
                   </Button>
@@ -215,6 +230,27 @@ export function NotificationCenter() {
               </div>
             </div>
 
+            <div className="px-3 py-2 border-b border-border/50 flex gap-1 bg-secondary/20">
+              <Button
+                size="sm"
+                variant={view === "important" ? "default" : "ghost"}
+                className="h-7 text-xs gap-1.5"
+                onClick={() => setView("important")}
+              >
+                Important
+                {importantUnreadCount > 0 && <Badge variant="secondary" className="h-4 px-1.5 text-[9px]">{importantUnreadCount}</Badge>}
+              </Button>
+              <Button
+                size="sm"
+                variant={view === "all" ? "default" : "ghost"}
+                className="h-7 text-xs gap-1.5"
+                onClick={() => setView("all")}
+              >
+                All
+                {allUnreadCount > 0 && <Badge variant="secondary" className="h-4 px-1.5 text-[9px]">{allUnreadCount}</Badge>}
+              </Button>
+            </div>
+
             <div className="max-h-96 overflow-y-auto">
               {loading ? (
                 <div className="p-8 text-center">
@@ -223,7 +259,7 @@ export function NotificationCenter() {
               ) : notifications.length === 0 ? (
                 <div className="p-8 text-center text-muted-foreground">
                   <Bell className="w-10 h-10 mx-auto mb-2 opacity-20" />
-                  <p className="text-sm">No notifications yet</p>
+                  <p className="text-sm">{view === "important" ? "No important notifications" : "No notifications yet"}</p>
                 </div>
               ) : (
                 notifications.map(n => {

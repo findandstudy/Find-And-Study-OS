@@ -26,7 +26,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import {
   ArrowLeft, MessageSquare, User, BookOpen, DollarSign,
   MapPin, GraduationCap, Globe, Calendar, Pencil, TrendingUp,
-  CalendarClock, CheckCircle2, Clock, Plus, Send, RotateCcw, XCircle,
+  CalendarClock, CheckCircle2, Clock, Plus, Send, RotateCcw, XCircle, Hash,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { QuickContactButtons } from "@/components/QuickContact";
@@ -368,6 +368,7 @@ export default function ApplicationDetail({ id, basePath = "/staff" }: Props) {
                   <InfoRow icon={<User className="w-4 h-4" />} label={t("applicationDetailPage.student")} value={app?.studentFirstName && app?.studentLastName ? `${app.studentFirstName} ${app.studentLastName}` : undefined} />
                   <InfoRow icon={<Globe className="w-4 h-4" />} label={t("applicationDetailPage.country")} value={app?.country} />
                   <InfoRow icon={<GraduationCap className="w-4 h-4" />} label={t("applicationDetailPage.university")} value={app?.universityName} />
+                  <InfoRow icon={<Hash className="w-4 h-4" />} label={t("applicationDetailPage.universityApplicationId")} value={app?.universityApplicationId} />
                   <InfoRow icon={<BookOpen className="w-4 h-4" />} label={t("applicationDetailPage.program")} value={app?.programName} />
                   <InfoRow icon={<BookOpen className="w-4 h-4" />} label={t("applicationDetailPage.level")} value={levelLabel} />
                   <InfoRow icon={<Globe className="w-4 h-4" />} label={t("applicationDetailPage.language")} value={app?.instructionLanguage} />
@@ -876,6 +877,7 @@ function EditApplicationInlineDialog({ open, onClose, app, stages, onSaved }: {
     stage: app?.stage || "",
     country: app?.country || "",
     universityName: app?.universityName || "",
+    universityApplicationId: app?.universityApplicationId || "",
     programName: app?.programName || "",
     level: app?.level || "",
     instructionLanguage: app?.instructionLanguage || "",
@@ -983,6 +985,15 @@ function EditApplicationInlineDialog({ open, onClose, app, stages, onSaved }: {
           <div className="col-span-2">
             <Label className="text-xs">{t("applicationDetailPage.university")}</Label>
             <Input value={form.universityName} onChange={e => setForm({ ...form, universityName: e.target.value })} />
+          </div>
+          <div className="col-span-2">
+            <Label className="text-xs">{t("applicationDetailPage.universityApplicationId")}</Label>
+            <Input
+              value={form.universityApplicationId}
+              maxLength={128}
+              autoComplete="off"
+              onChange={e => setForm({ ...form, universityApplicationId: e.target.value })}
+            />
           </div>
           <div className="col-span-2">
             <Label className="text-xs">{t("applicationDetailPage.program")}</Label>

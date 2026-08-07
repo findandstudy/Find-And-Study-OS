@@ -2890,6 +2890,7 @@
     "student": "Étudiant",
     "country": "Pays",
     "university": "Université",
+    "universityApplicationId": "ID de candidature universitaire",
     "program": "Programme",
     "level": "Niveau",
     "language": "Langue",

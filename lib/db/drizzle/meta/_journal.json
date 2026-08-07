@@ -302,6 +302,13 @@
       "when": 1785900000000,
       "tag": "0042_staff_scope_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1786000000000,
+      "tag": "0043_application_university_id",
+      "breakpoints": true
     }
   ]
 }

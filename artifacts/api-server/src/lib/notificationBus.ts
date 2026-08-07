@@ -8,6 +8,7 @@ export interface NotificationBusEvent {
   title: string;
   body?: string | null;
   data?: Record<string, unknown>;
+  priority?: "critical" | "high" | "normal";
 }
 
 const CHANNEL = "notification_events";

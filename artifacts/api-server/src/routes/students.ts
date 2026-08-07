@@ -18,7 +18,7 @@ import { inferOriginFromUser, inferOriginFromAgentId, type OriginMeta } from "..
 import { toE164 } from "../lib/inbox/phone";
 import { rejectInvalidPhone } from "../lib/phoneValidation";
 import { parsePaginationParams, buildPageMeta } from "@workspace/pagination";
-import { buildSignedStudentPhotoPath, verifyStudentPhotoSignature } from "@workspace/portal-adapters";
+import { buildStableSignedStudentPhotoThumbnailPath, verifyStudentPhotoSignature } from "@workspace/portal-adapters";
 import bcrypt from "bcryptjs";
 import { deleteSessionsForUser } from "../lib/replitAuth";
 import { getCurrentSeason } from "../lib/season";
@@ -40,6 +40,9 @@ import {
 import { authorizeStudentCreationSourceLead } from "../lib/studentCreationSource";
 import { validatePassportNumber } from "@workspace/portal-adapters/identity-validation";
 import { validateStudentCreateFields } from "../lib/studentCreateValidation";
+import { recordRequestSpan } from "../lib/requestTelemetry";
+import { buildFacetFilterInput, loadFacetValue } from "../lib/facetCache";
+import { getStudentPhotoThumbnail } from "../lib/studentPhotoThumbnail";
 
 const router: IRouter = Router();
 
@@ -278,6 +281,59 @@ router.get("/students/:id/photo", photoAccessGuard, async (req, res): Promise<vo
   }
 });
 
+router.get("/students/:id/photo/thumbnail", photoAccessGuard, async (req, res): Promise<void> => {
+  const studentId = parseInt(String(req.params.id), 10);
+  if (!(req as Request & { __photoSignedAccess?: boolean }).__photoSignedAccess) {
+    const access = await assertCanAccessStudent(req, studentId);
+    if (!access.ok) { res.status(access.status).json({ error: access.error }); return; }
+  }
+  const [photoDoc] = await db.select({
+      id: documentsTable.id,
+      fileKey: documentsTable.fileKey,
+      fileData: documentsTable.fileData,
+      fileUrl: documentsTable.fileUrl,
+      mimeType: documentsTable.mimeType,
+      createdAt: documentsTable.createdAt,
+      firstName: studentsTable.firstName,
+      lastName: studentsTable.lastName,
+    })
+    .from(documentsTable)
+    .innerJoin(studentsTable, eq(documentsTable.studentId, studentsTable.id))
+    .where(and(
+      eq(documentsTable.studentId, studentId),
+      or(eq(documentsTable.type, "photo"), eq(documentsTable.type, "photograph")),
+      isNull(documentsTable.deletedAt),
+    ))
+    .orderBy(desc(documentsTable.createdAt), desc(documentsTable.id))
+    .limit(1);
+  if (!photoDoc || (!photoDoc.fileKey && !photoDoc.fileData && !photoDoc.fileUrl)) {
+    res.status(404).json({ error: "No photo" }); return;
+  }
+
+  const etag = `\"student-photo-thumb-${photoDoc.id}\"`;
+  if (req.headers["if-none-match"] === etag) {
+    res.status(304).end();
+    return;
+  }
+  try {
+    const thumbnail = await getStudentPhotoThumbnail(
+      `${photoDoc.id}:${photoDoc.createdAt?.getTime() || 0}`,
+      photoDoc,
+      `${photoDoc.firstName} ${photoDoc.lastName}`,
+    );
+    res.setHeader("Content-Type", "image/jpeg");
+    res.setHeader("Content-Length", String(thumbnail.buffer.length));
+    res.setHeader("Cache-Control", "private, max-age=300");
+    res.setHeader("ETag", etag);
+    res.setHeader("X-Thumbnail-Cache", thumbnail.cacheStatus);
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.end(thumbnail.buffer);
+  } catch (err) {
+    console.error(`[STUDENTS] photo thumbnail for #${studentId} failed:`, err);
+    if (!res.headersSent) res.status(500).json({ error: "Failed to create photo thumbnail" });
+  }
+});
+
 router.get("/students", requireAuth, requireRole(...STAFF_ROLES, "student", ...AGENT_ROLES), requireAgentStaffPermission("students"), async (req, res): Promise<void> => {
   const user = req.user!;
   const query = req.query as Record<string, string>;
@@ -293,15 +349,21 @@ router.get("/students", requireAuth, requireRole(...STAFF_ROLES, "student", ...A
   const offset = pageParams.offset;
 
   const conditions = [isNull(studentsTable.deletedAt)];
+  const scopeResolveStartedAt = process.hrtime.bigint();
+  let agentVisibleIds: number[] | null = null;
+  let permissionKeys: string[] | null = null;
+  let assignmentVisibility: string | null = null;
+  let agencyAgentIds: number[] = [];
+  let visibleBranchIds: number[] | null = null;
 
   if (season) conditions.push(eq(studentsTable.season, season));
   if (isAgentRole(user.role)) {
-    const visibleIds = await getAgentVisibleIds(user.id, user.role);
-    if (visibleIds.length === 0) {
+    agentVisibleIds = await getAgentVisibleIds(user.id, user.role);
+    if (agentVisibleIds.length === 0) {
       res.json({ data: [], meta: { total: 0, page: pageNum, limit: limitNum, totalPages: 0 } });
       return;
     }
-    conditions.push(inArray(studentsTable.agentId, visibleIds));
+    conditions.push(inArray(studentsTable.agentId, agentVisibleIds));
   } else if (user.role === "student") {
     conditions.push(eq(studentsTable.userId, user.id));
   } else if (!(ADMIN_ROLES as readonly string[]).includes(user.role)) {
@@ -310,9 +372,10 @@ router.get("/students", requireAuth, requireRole(...STAFF_ROLES, "student", ...A
     // teammates' records. Plus (Task #128) students of an agency where the
     // user is listed as assigned staff are always visible.
     const perms = await getEffectivePermissionSet(user);
-    const assignmentVisibility = getAssignmentVisibility(perms);
+    permissionKeys = [...perms].sort();
+    assignmentVisibility = getAssignmentVisibility(perms);
     if (assignmentVisibility !== "all") {
-      const agencyAgentIds = await getAgencyMemberAgentIds(user.id);
+      agencyAgentIds = await getAgencyMemberAgentIds(user.id);
       const orParts: any[] = assignmentVisibility === "assigned"
         ? [isNotNull(studentsTable.assignedToId)]
         : [eq(studentsTable.assignedToId, user.id)];
@@ -329,7 +392,7 @@ router.get("/students", requireAuth, requireRole(...STAFF_ROLES, "student", ...A
   // Null-branch students (created via public apply popup, embed widgets) are
   // visible to any branch-scoped user so they can be claimed and assigned.
   if (user.role !== "student") {
-    const visibleBranchIds = await getVisibleBranchIds(user.id, user.role, user);
+    visibleBranchIds = await getVisibleBranchIds(user.id, user.role, user);
     if (visibleBranchIds !== null) {
       if (visibleBranchIds.length === 0) {
         conditions.push(isNull(studentsTable.branchId));
@@ -338,6 +401,16 @@ router.get("/students", requireAuth, requireRole(...STAFF_ROLES, "student", ...A
       }
     }
   }
+  recordRequestSpan("scopeResolve", Number(process.hrtime.bigint() - scopeResolveStartedAt) / 1_000_000);
+  const facetScope = {
+    userId: user.id,
+    role: user.role,
+    permissions: permissionKeys,
+    assignmentVisibility,
+    visibleBranchIds: visibleBranchIds ? [...visibleBranchIds].sort((a, b) => a - b) : visibleBranchIds,
+    agentVisibleIds: agentVisibleIds ? [...agentVisibleIds].sort((a, b) => a - b) : null,
+    agencyAgentIds: [...agencyAgentIds].sort((a, b) => a - b),
+  };
   if (search) {
     const rawTerm = search.trim();
     const translitTerm = toLatinUpper(rawTerm);
@@ -431,7 +504,31 @@ router.get("/students", requireAuth, requireRole(...STAFF_ROLES, "student", ...A
   const orderColumn = sortColumns[sortKey] || studentsTable.createdAt;
   const order = sortDir === "asc" ? asc(orderColumn) : desc(orderColumn);
 
-  const [countRows, rows, statusRows, nationalityRows, agentRows] = await Promise.all([
+  const facetRowsPromise = includeFacets
+    ? loadFacetValue({
+        namespace: "students-list",
+        scope: facetScope,
+        filters: buildFacetFilterInput(query),
+        load: async () => {
+          const [statusRows, nationalityRows, agentRows] = await Promise.all([
+            db.select({ status: studentsTable.status, count: sql<number>`count(*)` })
+              .from(studentsTable).where(whereClause).groupBy(studentsTable.status),
+            db.selectDistinct({ value: studentsTable.nationality })
+              .from(studentsTable).where(and(whereClause, isNotNull(studentsTable.nationality))).orderBy(studentsTable.nationality),
+            db.selectDistinct({ id: agentsTable.id, name: agentsTable.companyName })
+              .from(studentsTable).innerJoin(agentsTable, eq(studentsTable.agentId, agentsTable.id))
+              .where(whereClause).orderBy(agentsTable.companyName),
+          ]);
+          return { statusRows, nationalityRows, agentRows };
+        },
+      })
+    : Promise.resolve({
+        statusRows: [] as Array<{ status: string; count: number }>,
+        nationalityRows: [] as Array<{ value: string | null }>,
+        agentRows: [] as Array<{ id: number | null; name: string | null }>,
+      });
+
+  const [countRows, rows, facetRows] = await Promise.all([
     db.select({ count: sql<number>`count(*)` }).from(studentsTable).where(whereClause),
     db
     .select({
@@ -444,20 +541,9 @@ router.get("/students", requireAuth, requireRole(...STAFF_ROLES, "student", ...A
     .limit(limitNum)
     .offset(offset)
     .orderBy(order, desc(studentsTable.id)),
-    includeFacets
-      ? db.select({ status: studentsTable.status, count: sql<number>`count(*)` })
-          .from(studentsTable).where(whereClause).groupBy(studentsTable.status)
-      : Promise.resolve([] as Array<{ status: string; count: number }>),
-    includeFacets
-      ? db.selectDistinct({ value: studentsTable.nationality })
-          .from(studentsTable).where(and(whereClause, isNotNull(studentsTable.nationality))).orderBy(studentsTable.nationality)
-      : Promise.resolve([] as Array<{ value: string | null }>),
-    includeFacets
-      ? db.selectDistinct({ id: agentsTable.id, name: agentsTable.companyName })
-          .from(studentsTable).innerJoin(agentsTable, eq(studentsTable.agentId, agentsTable.id))
-          .where(whereClause).orderBy(agentsTable.companyName)
-      : Promise.resolve([] as Array<{ id: number | null; name: string | null }>),
+    facetRowsPromise,
   ]);
+  const { statusRows, nationalityRows, agentRows } = facetRows;
   const count = countRows[0]?.count ?? 0;
 
   // hasPhoto is denormalized on students.has_photo; document upload/delete
@@ -467,7 +553,7 @@ router.get("/students", requireAuth, requireRole(...STAFF_ROLES, "student", ...A
     ...r.student,
     agentName: r.agentName || null,
     hasPhoto: !!r.student.hasPhoto,
-    photoUrl: r.student.hasPhoto ? buildSignedStudentPhotoPath(r.student.id, 15 * 60) : null,
+    photoUrl: r.student.hasPhoto ? buildStableSignedStudentPhotoThumbnailPath(r.student.id) : null,
   }));
 
   res.json({

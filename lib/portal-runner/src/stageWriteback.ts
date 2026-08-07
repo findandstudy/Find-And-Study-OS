@@ -25,13 +25,14 @@ import {
   applicationsTable,
   pipelineStagesTable,
 } from "@workspace/db";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import type { RunResult } from "./runner.js";
 import type { PortalRunEvidence } from "./portalEvidence.js";
 import {
   resolveWritebackError,
   resolveWritebackTarget,
 } from "./stageWritebackTarget.js";
+import { planUniversityApplicationIdSync } from "@workspace/portal-adapters";
 
 // ---------------------------------------------------------------------------
 // writebackResult
@@ -171,7 +172,49 @@ export async function writebackResult(
         : eq(portalSubmissionsTable.id, submissionId),
     );
 
-  // ----- 3. Best-effort application stage update --------------------------
+  // ----- 3. Best-effort canonical application reference sync -------------
+  // portal_submissions.external_ref remains immutable run evidence. The
+  // application-level value is populated only when empty; a different manual
+  // or previously-confirmed value is never overwritten automatically.
+  if (sub.applicationId && submissionStatus === "submitted" && result?.externalRef) {
+    try {
+      const [application] = await db
+        .select({ universityApplicationId: applicationsTable.universityApplicationId })
+        .from(applicationsTable)
+        .where(eq(applicationsTable.id, sub.applicationId));
+      const plan = planUniversityApplicationIdSync(
+        application?.universityApplicationId,
+        result.externalRef,
+      );
+      if (plan.action === "set") {
+        const updated = await db
+          .update(applicationsTable)
+          .set({ universityApplicationId: plan.value, updatedAt: new Date() })
+          .where(and(
+            eq(applicationsTable.id, sub.applicationId),
+            sql`(${applicationsTable.universityApplicationId} IS NULL OR btrim(${applicationsTable.universityApplicationId}) = '')`,
+          ))
+          .returning({ id: applicationsTable.id });
+        if (updated.length > 0) {
+          console.log(
+            `[writeback] Submission #${submissionId}: canonical university application ID stored for app #${sub.applicationId}`,
+          );
+        } else {
+          console.warn(
+            `[writeback] Submission #${submissionId}: canonical university application ID changed concurrently for app #${sub.applicationId}; preserving current value`,
+          );
+        }
+      } else if (plan.action === "conflict") {
+        console.warn(
+          `[writeback] Submission #${submissionId}: university application ID conflict for app #${sub.applicationId}; preserving canonical value`,
+        );
+      }
+    } catch (err) {
+      console.error("[writeback] Application reference sync failed (non-fatal):", err);
+    }
+  }
+
+  // ----- 4. Best-effort application stage update --------------------------
   if (stageKey && sub.applicationId) {
     try {
       const [stageRow] = await db

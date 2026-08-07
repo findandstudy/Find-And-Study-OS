@@ -59,6 +59,8 @@ import {
 } from "../src/universities/sit/graphql.js";
 import {
   buildSignedStudentPhotoPath,
+  buildStableSignedStudentPhotoPath,
+  buildStableSignedStudentPhotoThumbnailPath,
   verifyStudentPhotoSignature,
 } from "../src/studentPhotoSigning.js";
 import {
@@ -735,6 +737,32 @@ test("PHOTO1 — sign → verify round-trips for the same student", () => {
     const exp = Number(m![1]);
     const sig = m![2];
     assert.equal(verifyStudentPhotoSignature(123, exp, sig), true);
+  });
+});
+
+test("PHOTO1B — list photo signatures stay stable inside a cache bucket", () => {
+  withPhotoSecret(() => {
+    const originalNow = Date.now;
+    const bucketStartMs = 1_800_000_000_000;
+    try {
+      Date.now = () => bucketStartMs + 1_000;
+      const first = buildStableSignedStudentPhotoPath(123, 15 * 60, 5 * 60);
+      Date.now = () => bucketStartMs + 120_000;
+      const sameBucket = buildStableSignedStudentPhotoPath(123, 15 * 60, 5 * 60);
+      assert.equal(sameBucket, first);
+      assert.ok(first);
+      const thumbnail = buildStableSignedStudentPhotoThumbnailPath(123, 15 * 60, 5 * 60);
+      assert.equal(thumbnail, first!.replace("/photo?", "/photo/thumbnail?"));
+
+      const match = first!.match(/exp=(\d+)&sig=([0-9a-f]+)/)!;
+      assert.equal(verifyStudentPhotoSignature(123, Number(match[1]), match[2]), true);
+
+      Date.now = () => bucketStartMs + 301_000;
+      const nextBucket = buildStableSignedStudentPhotoPath(123, 15 * 60, 5 * 60);
+      assert.notEqual(nextBucket, first);
+    } finally {
+      Date.now = originalNow;
+    }
   });
 });
 

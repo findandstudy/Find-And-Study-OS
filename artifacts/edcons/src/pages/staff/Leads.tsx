@@ -175,9 +175,11 @@ function LeadAvatar({ lead, size = "sm" }: { lead: any; size?: "sm" | "md" }) {
     <div ref={ref} className={`${dim} rounded-full shrink-0 overflow-hidden`}>
       {showPhoto ? (
         <img
-          src={lead.convertedStudentPhotoUrl || `/api/students/${lead.convertedStudentId}/photo`}
+          src={lead.convertedStudentPhotoUrl || `/api/students/${lead.convertedStudentId}/photo/thumbnail`}
           alt={`${lead.firstName} ${lead.lastName}`}
           className={`${dim} rounded-full object-cover border border-primary/20`}
+          loading="lazy"
+          decoding="async"
           onError={() => setImgError(true)}
         />
       ) : (

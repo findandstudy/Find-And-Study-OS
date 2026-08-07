@@ -9,6 +9,7 @@ import { getCsrfCookieOptions } from "./lib/cookieOptions";
 import { getAllowedOrigins, isCredentialedCorsOriginAllowed } from "./lib/requestOrigin";
 import router from "./routes";
 import webhooksRouter from "./routes/webhooks";
+import { requestPerformanceMiddleware } from "./lib/requestPerformance";
 
 const app: Express = express();
 
@@ -35,6 +36,8 @@ app.use((req, res, next) => {
   }
   next();
 });
+
+app.use(requestPerformanceMiddleware);
 
 const cspDirectives = {
   defaultSrc: ["'self'"],

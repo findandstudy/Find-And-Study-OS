@@ -24,6 +24,7 @@ import {
   type PublicCatalogPolicy,
 } from "../lib/publicCatalogPolicy";
 import { resolveResidenceAddress } from "../lib/studentAddressDefaults";
+import { coalesceRead } from "../lib/readPathCoalescing";
 
 const router: IRouter = Router();
 
@@ -33,11 +34,6 @@ const courseFinderFilterCache = new Map<
   string,
   { expiresAt: number; value: CourseFinderFilterPayload }
 >();
-const courseFinderFilterInFlight = new Map<
-  string,
-  Promise<CourseFinderFilterPayload>
->();
-
 let publicCatalogPolicyCache:
   | { expiresAt: number; value: PublicCatalogPolicy }
   | undefined;
@@ -429,10 +425,14 @@ router.get("/course-finder/filters", async (req, res): Promise<void> => {
       return;
     }
 
-    let pending = courseFinderFilterInFlight.get(cacheKey);
-    const wasCoalesced = Boolean(pending);
-    if (!pending) {
-      pending = (async (): Promise<CourseFinderFilterPayload> => {
+    const { value: payload, coalesced: wasCoalesced } = await coalesceRead({
+      namespace: "course-finder-filters",
+      key: cacheKey,
+      // Preserve the endpoint's pre-existing unconditional coalescing. The
+      // environment flag governs new opt-in call sites, not this established
+      // protection.
+      enabled: true,
+      execute: async (): Promise<CourseFinderFilterPayload> => {
         const join = eq(programsTable.universityId, universitiesTable.id);
         const policyOpts = { publicPolicy };
         const wCountry = buildProgramFacetConditions(params, "country", policyOpts);
@@ -502,15 +502,8 @@ router.get("/course-finder/filters", async (req, res): Promise<void> => {
         };
         cacheCourseFinderFilters(cacheKey, payload);
         return payload;
-      })();
-      courseFinderFilterInFlight.set(cacheKey, pending);
-      void pending.then(
-        () => courseFinderFilterInFlight.delete(cacheKey),
-        () => courseFinderFilterInFlight.delete(cacheKey),
-      );
-    }
-
-    const payload = await pending;
+      },
+    });
     res.setHeader("Cache-Control", "private, max-age=30, stale-while-revalidate=120");
     res.setHeader(
       "X-Course-Finder-Filter-Cache",
@@ -609,7 +602,6 @@ router.patch(
     }
     publicCatalogPolicyCache = undefined;
     courseFinderFilterCache.clear();
-    courseFinderFilterInFlight.clear();
     const value = await getPublicCatalogPolicy();
     logAudit(req.user!.id, "update_public_catalog_settings", "settings", existing?.id, value, req.ip);
     res.json(value);

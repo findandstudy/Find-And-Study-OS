@@ -410,8 +410,9 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
       );
       return { total, mine };
     },
-    refetchInterval: 15000,
-    staleTime: 10000,
+    refetchInterval: 60000,
+    staleTime: 45000,
+    refetchOnWindowFocus: true,
   });
 
   // Subscribe to the same SSE inbox stream that powers /staff/messages so the
@@ -447,8 +448,9 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
       const total = convs.reduce((sum: number, c: any) => sum + (c.unreadCount || 0), 0);
       return total;
     },
-    refetchInterval: 15000,
-    staleTime: 10000,
+    refetchInterval: 60000,
+    staleTime: 45000,
+    refetchOnWindowFocus: true,
   });
 
   const staffUnreadTotal = isStaff ? unreadMsgData?.total || 0 : 0;
@@ -462,8 +464,9 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
       const res = await customFetch<Record<string, number>>("/api/notifications/section-counts");
       return (res as any) || {};
     },
-    refetchInterval: 15000,
-    staleTime: 10000,
+    refetchInterval: 60000,
+    staleTime: 45000,
+    refetchOnWindowFocus: true,
   });
 
   // Clear a section's sidebar badge when the user visits that section (its list

@@ -2890,6 +2890,7 @@
     "student": "Студент",
     "country": "Страна",
     "university": "Университет",
+    "universityApplicationId": "ID заявки университета",
     "program": "Программа",
     "level": "Уровень",
     "language": "Язык",
