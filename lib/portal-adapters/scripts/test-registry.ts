@@ -222,3 +222,10 @@ test("TR12 — requested portal names resolve to their canonical adapters", () =
     );
   }
 });
+
+test("TR13 — Haliç metadata exposes its canonical portal URL", () => {
+  const halic = adapterMetadata().find((entry) => entry.key === "halic");
+  assert.ok(halic, "Haliç metadata must exist");
+  assert.equal(halic.portalUrl, "https://applyonline.halic.edu.tr/s");
+  assert.equal(adapterByKey("halic")?.portalUrl, halic.portalUrl);
+});

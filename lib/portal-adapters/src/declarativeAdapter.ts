@@ -350,6 +350,7 @@ export function createDeclarativeAdapter(
   return {
     key:   config.key,
     label: config.label,
+    portalUrl: config.loginUrl,
 
     matches(name: string): boolean {
       const f = fold(name);

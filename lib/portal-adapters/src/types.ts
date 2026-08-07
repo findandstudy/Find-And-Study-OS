@@ -369,6 +369,13 @@ export interface UniversityAdapter {
   label: string;
 
   /**
+   * Canonical public login/start URL for this adapter. This is operational
+   * metadata, never a credential. The management UI may display it read-only
+   * so operators do not create a second, conflicting URL source.
+   */
+  portalUrl?: string;
+
+  /**
    * Optional human-readable list of university names handled by this adapter.
    * Returned by adapterMetadata() for UI / API display.
    */

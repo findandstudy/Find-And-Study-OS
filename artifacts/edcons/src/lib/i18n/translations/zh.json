@@ -5405,6 +5405,7 @@
       "fanOutModeError": "无法更新扩散模式",
       "autoProcessLabel": "Auto-process",
       "defaultsButton": "Defaults",
+      "openPortal": "Open Portal",
       "addDialog": {
         "title": "Add University",
         "nameLabel": "University Name",
@@ -5425,6 +5426,9 @@
         "editTitle": "Edit University",
         "nameLabel": "University Name",
         "adapterLabel": "Portal Adapter",
+        "portalUrlLabel": "Portal Login Address",
+        "portalUrlHint": "This address is managed by the selected adapter so the automation worker and panel always use the same URL.",
+        "portalUrlUnavailable": "This adapter does not publish a portal login address yet. Configure it from the Adapters tab before activation.",
         "defaultsHeading": "Submission Defaults",
         "description": "Set the default values pre-filled when submitting to this portal.",
         "intakeLabel": "Default Intake Type",

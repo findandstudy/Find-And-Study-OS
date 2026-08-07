@@ -66,6 +66,7 @@ import {
   verifyDocumentSignature,
 } from "../src/documentSigning.js";
 import { extractStudentDocumentRefs } from "../src/profile.js";
+import { existingSitApplicationAsSubmitted } from "../src/universities/sit/adapter.js";
 
 // ---------------------------------------------------------------------------
 // SIT identity safety — passport document proof + existing-student reuse
@@ -304,6 +305,17 @@ test("IDENTITY6 — existing SIT student reuse requires one passport+name match"
   );
   assert.deepEqual(resolveSitStudentLookup({ email: requested.email }, []), {
     status: "unknown",
+  });
+});
+
+test("APP1 — an existing matching SIT application is idempotent submit success", () => {
+  assert.deepEqual(existingSitApplicationAsSubmitted("student-1", "app-1"), {
+    studentId: "student-1",
+    submitted: true,
+    alreadyExists: false,
+    programMissing: false,
+    externalRef: "app-1",
+    detail: "başvuru portalda mevcut (idempotent başarı)",
   });
 });
 

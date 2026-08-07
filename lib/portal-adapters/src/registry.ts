@@ -156,6 +156,7 @@ export function adapterMetadata(): {
   label: string;
   family: AdapterFamily;
   experimental: boolean;
+  portalUrl?: string;
   allowlist?: string[];
 }[] {
   return adapters.map((a) => {
@@ -165,6 +166,7 @@ export function adapterMetadata(): {
       label: string;
       family: AdapterFamily;
       experimental: boolean;
+      portalUrl?: string;
       allowlist?: string[];
     } = {
       key:   a.key,
@@ -174,6 +176,9 @@ export function adapterMetadata(): {
       // key entry in EXPERIMENTAL_FAMILIES are correctly flagged.
       experimental: isExperimentalAdapterKey(a.key),
     };
+    if (a.portalUrl !== undefined) {
+      entry.portalUrl = a.portalUrl;
+    }
     if (a.allowlist !== undefined) {
       entry.allowlist = a.allowlist;
     }

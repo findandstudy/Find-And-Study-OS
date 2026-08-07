@@ -205,6 +205,17 @@ const listUniversitiesQuerySchema = z.object({
 });
 type ListUnisSchemas = { query: typeof listUniversitiesQuerySchema };
 
+function safePortalUrl(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  try {
+    const url = new URL(value);
+    if (url.protocol !== "https:" || url.username || url.password) return null;
+    return url.toString();
+  } catch {
+    return null;
+  }
+}
+
 router.get(
   "/portal-universities",
   requireAuth,
@@ -254,6 +265,29 @@ router.get(
       .orderBy(uniSortDirFn(uniSortColumn), asc(portalUniversitiesTable.id))
       .limit(pageParams.limit)
       .offset(pageParams.offset);
+
+    const adapterUrls = new Map(
+      adapterMetadata()
+        .map((adapter) => [adapter.key, safePortalUrl(adapter.portalUrl)] as const)
+        .filter((entry): entry is readonly [string, string] => entry[1] !== null),
+    );
+
+    const unresolvedAdapterKeys = Array.from(
+      new Set(rows.map((row) => row.adapterKey).filter((key) => !adapterUrls.has(key))),
+    );
+    if (unresolvedAdapterKeys.length > 0) {
+      const dbAdapterUrls = await db
+        .select({ key: portalAdaptersTable.key, baseUrl: portalAdaptersTable.baseUrl })
+        .from(portalAdaptersTable)
+        .where(and(
+          inArray(portalAdaptersTable.key, unresolvedAdapterKeys),
+          isNull(portalAdaptersTable.deletedAt),
+        ));
+      for (const adapter of dbAdapterUrls) {
+        const url = safePortalUrl(adapter.baseUrl);
+        if (url) adapterUrls.set(adapter.key, url);
+      }
+    }
 
     // CRM link status — resolve the linked CRM university name + active program
     // count for the crm_university_id column (drives the frontend Linked/Stale
@@ -307,6 +341,7 @@ router.get(
             : "linked";
       return {
         ...row,
+        portalUrl: adapterUrls.get(row.adapterKey) ?? null,
         hasCredentials,
         crmUniversityName: crm?.name ?? null,
         programCount,
@@ -395,7 +430,10 @@ router.post(
       req.ip,
     );
 
-    res.status(201).json(row);
+    res.status(201).json({
+      ...row,
+      portalUrl: safePortalUrl(adapter.portalUrl),
+    });
   },
 );
 
@@ -1198,7 +1236,7 @@ router.get(
       .map((m) => m.key);
     const successCounts = await getSuccessCounts(staticExperimentalKeys);
 
-    const registry = staticMeta.map(({ key, label, family, experimental }) => {
+    const registry = staticMeta.map(({ key, label, family, experimental, portalUrl }) => {
       const K = key.toUpperCase().replace(/-/g, "_");
       const envHas = !!(
         (process.env[`${K}_EMAIL`] || process.env[`${K}_USER`]) &&
@@ -1219,6 +1257,7 @@ router.get(
         successCount,
         graduationThreshold: experimental ? GRADUATION_THRESHOLD : null,
         graduated,
+        portalUrl: safePortalUrl(portalUrl),
         hasCredentials,
       };
     });

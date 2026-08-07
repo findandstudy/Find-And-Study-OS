@@ -172,6 +172,27 @@ export interface SitApplicationResult extends SubmitResult {
   studentId: string | null;
 }
 
+/**
+ * A matching SIT application is proof that the requested portal outcome
+ * already exists. Treat it as an idempotent submit success, not as an
+ * "already registered" student. The latter is a different business state and
+ * would incorrectly move the CRM application to the terminal
+ * `all_registered` stage on a safe retry.
+ */
+export function existingSitApplicationAsSubmitted(
+  studentId: string,
+  externalRef: string,
+): SitApplicationResult {
+  return {
+    studentId,
+    submitted: true,
+    alreadyExists: false,
+    programMissing: false,
+    externalRef,
+    detail: "başvuru portalda mevcut (idempotent başarı)",
+  };
+}
+
 /** Extended adapter type — UniversityAdapter plus SIT-specific operations. */
 export interface SitAdapter extends UniversityAdapter {
   ensureLoggedIn(session: AdapterSession): Promise<void>;
@@ -3619,11 +3640,7 @@ export const sitAdapter: SitAdapter = {
       logger.info(
         `[sit] mevcut başvuru bulundu (dedup, id=${dedup.id}) — webhook atlanıyor (idempotent başarı)`,
       );
-      return {
-        ...base,
-        alreadyExists: true,
-        externalRef: dedup.id,
-      };
+      return existingSitApplicationAsSubmitted(studentId, dedup.id);
     }
 
     // --- CREATE via the n8n webhook (Zoho assigns the id) ---
@@ -3646,26 +3663,33 @@ export const sitAdapter: SitAdapter = {
     if (!webhookResult.ok) {
       // The external n8n workflow can finish creating the record but still
       // return status=false (or time out) under load. Never POST a second time:
-      // wait briefly and repeat only the read-only dedup proof. A newly visible
-      // record means the requested outcome exists and is safe to accept.
-      await sleep(page, 1200).catch(() => {});
-      const afterFailureDedup = await dedupApplication(page, {
-        student: studentId,
-        university: progIds.universityId,
-        degree: progIds.degreeId,
-        academicYear: ay.id,
-        semester: sem.id,
-      });
-      if (afterFailureDedup.status === "found") {
-        logger.warn(
-          `[sit] webhook başarısız yanıt verdi ancak başvuru dedup ile doğrulandı (id=${afterFailureDedup.id})`,
-        );
-        return {
-          ...base,
-          submitted: true,
-          externalRef: afterFailureDedup.id,
-          detail: "webhook yanıtı başarısızdı; başvuru portalda sonradan doğrulandı",
-        };
+      // SIT's n8n flow can persist successfully after its HTTP response has
+      // timed out or reported failure. Poll the read-only dedup query for a
+      // bounded period before declaring failure. A newly visible record means
+      // the requested outcome exists and is safe to accept. Never POST again.
+      for (let proofAttempt = 1; proofAttempt <= 5; proofAttempt++) {
+        await sleep(page, proofAttempt === 1 ? 1200 : 3000).catch(() => {});
+        const afterFailureDedup = await dedupApplication(page, {
+          student: studentId,
+          university: progIds.universityId,
+          degree: progIds.degreeId,
+          academicYear: ay.id,
+          semester: sem.id,
+        });
+        if (afterFailureDedup.status === "found") {
+          logger.warn(
+            `[sit] webhook başarısız yanıt verdi ancak başvuru dedup ile doğrulandı` +
+              ` (deneme=${proofAttempt}, id=${afterFailureDedup.id})`,
+          );
+          return {
+            ...existingSitApplicationAsSubmitted(
+              studentId,
+              afterFailureDedup.id,
+            ),
+            detail:
+              "webhook yanıtı başarısızdı; başvuru portalda sonradan doğrulandı",
+          };
+        }
       }
       return {
         ...base,

@@ -51,6 +51,7 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
   return {
     key:   cfg.key,
     label: cfg.label,
+    portalUrl: cfg.portalUrl,
 
     matches(name: string): boolean {
       const f = fold(name);

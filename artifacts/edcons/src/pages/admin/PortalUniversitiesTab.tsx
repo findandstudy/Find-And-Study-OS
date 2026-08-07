@@ -72,6 +72,7 @@ import {
   Link2Off,
   RefreshCw,
   AlertTriangle,
+  ExternalLink,
 } from "lucide-react";
 import {
   PortalEmptyState, PortalErrorState,
@@ -107,6 +108,7 @@ interface PortalUniversity {
   universityKey: string;
   universityName: string;
   adapterKey: string;
+  portalUrl: string | null;
   defaults: Record<string, unknown> | null;
   isActive: boolean;
   autoProcess: boolean;
@@ -133,6 +135,7 @@ interface RegistryAdapter {
   graduationThreshold?: number | null;
   graduated?: boolean | null;
   hasCredentials: boolean;
+  portalUrl?: string | null;
 }
 
 interface UniversityListResponse {
@@ -427,6 +430,33 @@ function EditDefaultsDialog({ uni, onClose, onSaved, registryAdapters }: EditDef
                 ))}
               </SelectContent>
             </Select>
+          </div>
+
+          {/* Portal URL is owned by the adapter and intentionally read-only. */}
+          <div className="space-y-1.5">
+            <Label>{t("portalAutomation.unis.defaultsDialog.portalUrlLabel")}</Label>
+            {uni?.portalUrl ? (
+              <div className="flex gap-2">
+                <Input value={uni.portalUrl} readOnly className="font-mono text-xs" />
+                <Button variant="outline" size="icon" asChild>
+                  <a
+                    href={uni.portalUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label={t("portalAutomation.unis.openPortal")}
+                  >
+                    <ExternalLink className="h-4 w-4" />
+                  </a>
+                </Button>
+              </div>
+            ) : (
+              <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-300">
+                {t("portalAutomation.unis.defaultsDialog.portalUrlUnavailable")}
+              </p>
+            )}
+            <p className="text-xs text-muted-foreground">
+              {t("portalAutomation.unis.defaultsDialog.portalUrlHint")}
+            </p>
           </div>
 
           {/* Multi-portal company toggle */}
@@ -979,6 +1009,16 @@ function UniversityRow({ uni, onToggle, onToggleAutoProcess, onSetFanOutMode, on
                 {t("portalAutomation.unis.autoProcessLabel")}
               </span>
             </div>
+
+            {/* Defaults button */}
+            {uni.portalUrl && (
+              <Button variant="outline" size="sm" className="h-8 gap-1.5" asChild>
+                <a href={uni.portalUrl} target="_blank" rel="noopener noreferrer">
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  {t("portalAutomation.unis.openPortal")}
+                </a>
+              </Button>
+            )}
 
             {/* Defaults button */}
             <TooltipProvider>

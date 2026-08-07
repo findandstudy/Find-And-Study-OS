@@ -1211,6 +1211,7 @@ export function createSpecAdapter(
   return {
     key: spec.meta.key,
     label: spec.meta.name,
+    portalUrl: spec.auth.loginUrl,
 
     matches(name: string): boolean {
       const f = fold(name);

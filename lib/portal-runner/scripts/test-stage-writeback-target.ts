@@ -25,6 +25,15 @@ test("SWT1: verified submit moves to Awaiting Offer", () => {
   );
 });
 
+test("SWT1B: verified SIT submit moves to Awaiting Offer", () => {
+  assert.deepEqual(
+    resolveWritebackTarget(result({ submitted: true }), {
+      adapterKey: "sit",
+    }),
+    { submissionStatus: "submitted", stageKey: "awaiting_offer" },
+  );
+});
+
 test("SWT2: portal duplicate moves to Already Registered", () => {
   assert.deepEqual(
     resolveWritebackTarget(result({ alreadyExists: true }), {

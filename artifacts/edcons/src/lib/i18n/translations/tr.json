@@ -5405,6 +5405,7 @@
       "fanOutModeError": "Yayılım modu güncellenemedi",
       "autoProcessLabel": "Otomatik İşlem",
       "defaultsButton": "Varsayılanlar",
+      "openPortal": "Portalı Aç",
       "addDialog": {
         "title": "Üniversite Ekle",
         "nameLabel": "Üniversite Adı",
@@ -5425,6 +5426,9 @@
         "editTitle": "Üniversiteyi Düzenle",
         "nameLabel": "Üniversite Adı",
         "adapterLabel": "Portal Adaptörü",
+        "portalUrlLabel": "Portal Giriş Adresi",
+        "portalUrlHint": "Otomasyon worker'ı ile panelin her zaman aynı adresi kullanması için bu adres seçili adaptör tarafından yönetilir.",
+        "portalUrlUnavailable": "Bu adaptör henüz bir portal giriş adresi yayınlamıyor. Etkinleştirmeden önce Adaptörler sekmesinden yapılandırın.",
         "defaultsHeading": "Gönderim Varsayılanları",
         "description": "Bu portala gönderimde önceden doldurulacak varsayılan değerleri ayarlayın.",
         "intakeLabel": "Varsayılan Başvuru Dönemi",
