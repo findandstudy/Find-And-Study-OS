@@ -39,6 +39,7 @@ import {
 } from "../lib/educationAutoExtract";
 import { authorizeStudentCreationSourceLead } from "../lib/studentCreationSource";
 import { validatePassportNumber } from "@workspace/portal-adapters/identity-validation";
+import { validateStudentCreateFields } from "../lib/studentCreateValidation";
 
 const router: IRouter = Router();
 
@@ -506,6 +507,15 @@ router.post("/students", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES
 
   if (!firstName || !lastName) {
     res.status(400).json({ error: "firstName and lastName are required" });
+    return;
+  }
+  const createValidationIssues = validateStudentCreateFields(req.body);
+  if (createValidationIssues.length > 0) {
+    res.status(422).json({
+      error: createValidationIssues[0].message,
+      code: "STUDENT_CREATE_VALIDATION_FAILED",
+      fields: createValidationIssues,
+    });
     return;
   }
   if (

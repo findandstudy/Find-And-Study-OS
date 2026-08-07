@@ -567,6 +567,8 @@ export interface CreateStudentBody {
   /** @nullable */
   dateOfBirth?: string | null;
   /** @nullable */
+  gender?: string | null;
+  /** @nullable */
   nationality?: string | null;
   /** @nullable */
   passportNumber?: string | null;
@@ -580,17 +582,34 @@ export interface CreateStudentBody {
   fatherName?: string | null;
   /** @nullable */
   address?: string | null;
+  /** @nullable */
+  cityOfBirth?: string | null;
+  /** @nullable */
+  addressCity?: string | null;
+  /** @nullable */
+  postalCode?: string | null;
+  /** @nullable */
+  needsVisaSupport?: boolean | null;
   status: string;
   /** @nullable */
   agentId?: number | null;
   /** @nullable */
   highSchool?: string | null;
   /** @nullable */
+  universityBachelor?: string | null;
+  /** @nullable */
+  universityMaster?: string | null;
+  /** @nullable */
   graduationYear?: number | null;
   /** @nullable */
   gpa?: string | null;
   /** @nullable */
   languageScore?: string | null;
+  /** @nullable */
+  interestedLevel?: string | null;
+  /** @nullable */
+  season?: string | null;
+  educationRecords?: StudentEducationRecordInput[];
   /** @nullable */
   notes?: string | null;
   /**

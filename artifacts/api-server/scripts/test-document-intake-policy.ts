@@ -196,6 +196,26 @@ test("agent Add Student uses the canonical dynamic level document policy", () =>
   assert.doesNotMatch(agentAddStudent, /required: false/);
 });
 
+test("staff and agent Add Student fail closed and enforce the same 5 MB policy", () => {
+  const staffAddStudent = readFileSync(
+    new URL("../../edcons/src/components/AddStudentModal.tsx", import.meta.url),
+    "utf8",
+  );
+  const agentAddStudent = readFileSync(
+    new URL("../../edcons/src/components/agent/AddStudentModal.tsx", import.meta.url),
+    "utf8",
+  );
+
+  for (const source of [staffAddStudent, agentAddStudent]) {
+    assert.match(source, /validateApplicationDocumentFileObj\(file\)/);
+    assert.match(source, /APPLICATION_DOCUMENT_HELP_TEXT/);
+    assert.match(source, /const documentPolicyReady =/);
+    assert.match(source, /const canProceedToForm = documentPolicyReady/);
+    assert.match(source, /Document requirements could not be loaded/);
+    assert.doesNotMatch(source, /validateFileObj as validateFile/);
+  }
+});
+
 test("known legacy document labels normalize without guessing ambiguous labels", () => {
   assert.equal(normalizeDocumentTypeKey("Diploma Certificate"), "diploma_certificate");
   assert.equal(normalizeDocumentTypeKey("diploma transcript"), "diploma_transcript");

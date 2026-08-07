@@ -33,6 +33,13 @@ function integerOrNull(value: unknown): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+function validGpa(value: string | null, scale: number | null): boolean {
+  if (!value) return true;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0 || parsed > 100) return false;
+  return scale === null || parsed <= scale;
+}
+
 export function cleanStudentEducationRecords(input: unknown): CleanResult {
   if (!Array.isArray(input)) {
     return { ok: false, error: "educationRecords must be an array" };
@@ -62,10 +69,16 @@ export function cleanStudentEducationRecords(input: unknown): CleanResult {
     }
     seen.add(level);
 
+    if (raw.graduationYear !== undefined && raw.graduationYear !== null && raw.graduationYear !== "" && !/^\d+$/.test(String(raw.graduationYear).trim())) {
+      return {
+        ok: false,
+        error: `educationRecords[${index}].graduationYear is invalid`,
+      };
+    }
     const graduationYear = integerOrNull(raw.graduationYear);
     if (
       graduationYear !== null &&
-      (graduationYear < 1900 || graduationYear > 2200)
+      (graduationYear < 1900 || graduationYear > new Date().getUTCFullYear() + 1)
     ) {
       return {
         ok: false,
@@ -73,11 +86,25 @@ export function cleanStudentEducationRecords(input: unknown): CleanResult {
       };
     }
 
-    const gpaScale = integerOrNull(raw.gpaScale);
-    if (gpaScale !== null && gpaScale <= 0) {
+    if (raw.gpaScale !== undefined && raw.gpaScale !== null && raw.gpaScale !== "" && !/^\d+$/.test(String(raw.gpaScale).trim())) {
       return {
         ok: false,
         error: `educationRecords[${index}].gpaScale is invalid`,
+      };
+    }
+    const gpaScale = integerOrNull(raw.gpaScale);
+    if (gpaScale !== null && (gpaScale <= 0 || gpaScale > 100)) {
+      return {
+        ok: false,
+        error: `educationRecords[${index}].gpaScale is invalid`,
+      };
+    }
+
+    const gpa = stringOrNull(raw.gpa, 20);
+    if (!validGpa(gpa, gpaScale)) {
+      return {
+        ok: false,
+        error: `educationRecords[${index}].gpa is invalid or exceeds its scale`,
       };
     }
 
@@ -87,7 +114,7 @@ export function cleanStudentEducationRecords(input: unknown): CleanResult {
       program: level === "high_school" ? null : stringOrNull(raw.program, 300),
       country: stringOrNull(raw.country, 100),
       graduationYear,
-      gpa: stringOrNull(raw.gpa, 20),
+      gpa,
       gpaRaw: stringOrNull(raw.gpaRaw, 50),
       gpaScale,
       languageScore: stringOrNull(raw.languageScore, 50),

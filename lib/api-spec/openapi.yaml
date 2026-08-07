@@ -4197,9 +4197,12 @@ components:
           type: string
         email:
           type: ["string", "null"]
+          format: email
         phone:
           type: ["string", "null"]
         dateOfBirth:
+          type: ["string", "null"]
+        gender:
           type: ["string", "null"]
         nationality:
           type: ["string", "null"]
@@ -4215,11 +4218,23 @@ components:
           type: ["string", "null"]
         address:
           type: ["string", "null"]
+        cityOfBirth:
+          type: ["string", "null"]
+        addressCity:
+          type: ["string", "null"]
+        postalCode:
+          type: ["string", "null"]
+        needsVisaSupport:
+          type: ["boolean", "null"]
         status:
           type: string
         agentId:
           type: ["integer", "null"]
         highSchool:
+          type: ["string", "null"]
+        universityBachelor:
+          type: ["string", "null"]
+        universityMaster:
           type: ["string", "null"]
         graduationYear:
           type: ["integer", "null"]
@@ -4227,6 +4242,14 @@ components:
           type: ["string", "null"]
         languageScore:
           type: ["string", "null"]
+        interestedLevel:
+          type: ["string", "null"]
+        season:
+          type: ["string", "null"]
+        educationRecords:
+          type: array
+          items:
+            $ref: "#/components/schemas/StudentEducationRecordInput"
         notes:
           type: ["string", "null"]
         sourceLeadId:

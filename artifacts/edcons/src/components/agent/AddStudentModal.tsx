@@ -20,8 +20,9 @@ import { useStudyLevels } from "@/hooks/useStudyLevels";
 import { cn } from "@/lib/utils";
 import { CountryFlag } from "@/components/CountryFlag";
 import { useCountrySearch } from "@/hooks/use-countries";
-import { validateFileObj as validateFile, sanitizeFileName, FILE_UPLOAD_HELP_TEXT } from "@/lib/fileUploadValidation";
+import { APPLICATION_DOCUMENT_HELP_TEXT, validateApplicationDocumentFileObj, sanitizeFileName } from "@/lib/fileUploadValidation";
 import { MAX_DOCUMENT_PARTS, isSingleImageDocumentType, mergeDocumentParts } from "@/lib/documentPartMerge";
+import { resolveCountryInput, validateStudentIntakeForm } from "@/lib/studentIntakeValidation";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
@@ -167,7 +168,7 @@ function DropZone({ docType, uploaded, onUpload, onRemove }: {
     }
     const safeFiles: File[] = [];
     for (const file of files) {
-      const validation = validateFile(file);
+      const validation = validateApplicationDocumentFileObj(file);
       if (!validation.valid) { toast({ title: t("apply.fileError"), description: validation.message, variant: "destructive" }); return; }
       safeFiles.push(new File([file], sanitizeFileName(file.name), { type: file.type }));
     }
@@ -291,17 +292,30 @@ function NationalityCombobox({ value, onChange, countries, aiExtracted }: {
   useEffect(() => {
     if (!open) return;
     function handleClickOutside(e: MouseEvent) {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) { setOpen(false); setSearchVal(""); }
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        onChange(resolveCountryInput(searchVal, value));
+        setOpen(false);
+        setSearchVal("");
+      }
     }
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [open]);
+  }, [onChange, open, searchVal, value]);
 
   return (
     <div className="relative" ref={containerRef}>
       <Input value={open ? searchVal : value}
         onChange={e => { setSearchVal(e.target.value); if (!open) setOpen(true); }}
         onFocus={() => { setSearchVal(""); setOpen(true); }}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" && open) {
+            event.preventDefault();
+            onChange(resolveCountryInput(searchVal, value));
+            setOpen(false);
+            setSearchVal("");
+          }
+          if (event.key === "Escape") { setOpen(false); setSearchVal(""); }
+        }}
         placeholder={value || "Select or type..."} className="h-9 text-sm" autoComplete="off" />
       {open && (
         <div className="absolute z-[9999] mt-1 w-full bg-popover border rounded-md shadow-lg max-h-48 overflow-y-auto">
@@ -540,6 +554,8 @@ export function AddStudentModal({ open, onClose, onSuccess, defaultStatus }: {
     if (!form.interestedLevel.trim()) missing.push("Interested Level");
     if (missing.length > 0) { toast({ title: "Required fields missing", description: missing.join(", "), variant: "destructive" }); return; }
     if (!isPhoneFieldValid(form.phone, true)) { toast({ title: "Invalid phone number", description: "Enter a valid phone number for the selected country.", variant: "destructive" }); return; }
+    const validationErrors = validateStudentIntakeForm(form);
+    if (validationErrors.length > 0) { toast({ title: "Check student details", description: validationErrors.join(" "), variant: "destructive" }); return; }
     if (!documentPolicyReady) {
       toast({ title: "Document requirements unavailable", description: "The selected level's document policy could not be verified. Please reload and try again.", variant: "destructive" });
       return;
@@ -552,7 +568,7 @@ export function AddStudentModal({ open, onClose, onSuccess, defaultStatus }: {
     if (missingDocs.length > 0) { toast({ title: "Required documents missing", description: missingDocs.join(", "), variant: "destructive" }); return; }
     const fullPhone = form.phone || null;
     createStudent.mutate(
-      { data: { firstName: form.firstName, lastName: form.lastName, email: form.email || null, phone: fullPhone, nationality: form.nationality || null, dateOfBirth: form.dateOfBirth || null, gender: form.gender || null, passportNumber: form.passportNumber || null, passportIssueDate: form.passportIssueDate || null, passportExpiry: form.passportExpiry || null, motherName: form.motherName || null, fatherName: form.fatherName || null, address: form.address || null, highSchool: form.highSchool || null, graduationYear: form.graduationYear ? parseInt(form.graduationYear, 10) : null, gpa: form.gpa ? `${form.gpa} / ${form.gradingSystem}` : null, languageScore: form.languageScore || null, notes: form.notes || null, interestedLevel: form.interestedLevel || null, status: defaultStatus || "active" } as any },
+      { data: { firstName: form.firstName, lastName: form.lastName, email: form.email || null, phone: fullPhone, nationality: form.nationality || null, dateOfBirth: form.dateOfBirth || null, gender: form.gender || null, passportNumber: form.passportNumber || null, passportIssueDate: form.passportIssueDate || null, passportExpiry: form.passportExpiry || null, motherName: form.motherName || null, fatherName: form.fatherName || null, address: form.address || null, highSchool: form.highSchool || null, graduationYear: form.graduationYear ? parseInt(form.graduationYear, 10) : null, gpa: form.gpa ? `${form.gpa} / ${form.gradingSystem}` : null, languageScore: form.languageScore || null, notes: form.notes || null, interestedLevel: form.interestedLevel || null, status: defaultStatus || "active" } },
       {
         onSuccess: async (createdStudent: any) => {
           const docCount = Object.keys(docs).length;
@@ -648,7 +664,7 @@ export function AddStudentModal({ open, onClose, onSuccess, defaultStatus }: {
                     <AlertCircle className="h-3.5 w-3.5 shrink-0" /> No reviewed document policy exists for this level. Student creation is disabled.
                   </div>
                 )}
-                <p className="text-[11px] text-muted-foreground mb-2">{FILE_UPLOAD_HELP_TEXT}</p>
+                <p className="text-[11px] text-muted-foreground mb-2">{APPLICATION_DOCUMENT_HELP_TEXT}</p>
                 <div className={cn("grid gap-2", currentDocs.length <= 5 ? "grid-cols-5" : currentDocs.length <= 7 ? "grid-cols-4" : "grid-cols-3")}>
                   {currentDocs.map((dt) => (
                     <DropZone key={dt.key} docType={dt} uploaded={docs[dt.key]}
@@ -796,7 +812,7 @@ export function AddStudentModal({ open, onClose, onSuccess, defaultStatus }: {
                 <div className="flex items-center justify-between">
                   <p className="text-xs text-muted-foreground">{Object.keys(docs).length}/{currentDocs.length} uploaded</p>
                 </div>
-                <p className="text-[11px] text-muted-foreground mb-1">{FILE_UPLOAD_HELP_TEXT}</p>
+                <p className="text-[11px] text-muted-foreground mb-1">{APPLICATION_DOCUMENT_HELP_TEXT}</p>
                 <div className={cn("grid gap-2", currentDocs.length <= 5 ? "grid-cols-5" : currentDocs.length <= 7 ? "grid-cols-4" : "grid-cols-3")}>
                   {currentDocs.map((dt) => (
                     <DropZone key={dt.key} docType={dt} uploaded={docs[dt.key]}

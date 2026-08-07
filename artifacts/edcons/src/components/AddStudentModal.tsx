@@ -8,7 +8,8 @@ import { useToast } from "@/hooks/use-toast";
 import { useI18n } from "@/hooks/use-i18n";
 import { isNonLatinNameError } from "@/lib/latinNameError";
 import { MAX_DOCUMENT_PARTS, isSingleImageDocumentType, mergeDocumentParts } from "@/lib/documentPartMerge";
-import { sanitizeFileName, validateApplicationDocumentFileObj } from "@/lib/fileUploadValidation";
+import { APPLICATION_DOCUMENT_HELP_TEXT, sanitizeFileName, validateApplicationDocumentFileObj } from "@/lib/fileUploadValidation";
+import { resolveCountryInput, validateStudentIntakeForm } from "@/lib/studentIntakeValidation";
 import { CountryFlag } from "@/components/CountryFlag";
 import { cn } from "@/lib/utils";
 import { PhoneCodePicker } from "@/components/ui/phone-code-picker";
@@ -404,13 +405,14 @@ export function NationalityCombobox({ value, onChange, countries }: {
     if (!open) return;
     function handleClickOutside(e: MouseEvent) {
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        onChange(resolveCountryInput(searchVal, value));
         setOpen(false);
         setSearchVal("");
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [open]);
+  }, [onChange, open, searchVal, value]);
 
   return (
     <div className="relative" ref={containerRef}>
@@ -418,6 +420,18 @@ export function NationalityCombobox({ value, onChange, countries }: {
         value={open ? searchVal : value}
         onChange={e => { setSearchVal(e.target.value); if (!open) setOpen(true); }}
         onFocus={() => { setSearchVal(""); setOpen(true); }}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" && open) {
+            event.preventDefault();
+            onChange(resolveCountryInput(searchVal, value));
+            setOpen(false);
+            setSearchVal("");
+          }
+          if (event.key === "Escape") {
+            setOpen(false);
+            setSearchVal("");
+          }
+        }}
         placeholder={value || "Select or type..."}
         className="h-9 text-sm"
         autoComplete="off"
@@ -519,26 +533,34 @@ export function AddStudentModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  const { data: degreeDocReqs } = useQuery<{ documentType: string; mandatory: boolean; sortOrder: number }[]>({
+  const degreeDocumentRequirements = useQuery<{ documentType: string; mandatory: boolean; sortOrder: number }[]>({
     queryKey: ["degree-doc-reqs", applicationLevel],
-    queryFn: () => fetch(`${BASE_URL}/api/degrees/by-value/${encodeURIComponent(applicationLevel)}/document-requirements`, { credentials: "include" }).then(r => r.ok ? r.json() : []),
+    queryFn: async () => {
+      const response = await fetch(`${BASE_URL}/api/degrees/by-value/${encodeURIComponent(applicationLevel)}/document-requirements`, { credentials: "include" });
+      if (!response.ok) throw new Error(`Document requirements could not be loaded (${response.status})`);
+      const payload = await response.json();
+      if (!Array.isArray(payload)) throw new Error("Document requirements response is invalid");
+      return payload;
+    },
     enabled: !!applicationLevel,
     staleTime: 30_000,
   });
 
   const currentDocs = (() => {
-    if (degreeDocReqs && degreeDocReqs.length > 0) {
-      return [...degreeDocReqs]
+    if (degreeDocumentRequirements.data) {
+      return [...degreeDocumentRequirements.data]
         .sort((a, b) => a.sortOrder - b.sortOrder)
         .map(r => {
           const meta = DOC_TYPE_META[r.documentType] ?? { label: r.documentType, icon: "📄", accept: "image/*,.pdf" };
           return { key: r.documentType, label: meta.label, icon: meta.icon, accept: meta.accept, required: r.mandatory };
         });
     }
-    return Object.entries(DOC_TYPE_META).map(([key, meta]) => ({
-      key, label: meta.label, icon: meta.icon, accept: meta.accept, required: false,
-    }));
+    return [];
   })();
+
+  const documentPolicyReady = !!applicationLevel
+    && degreeDocumentRequirements.isSuccess
+    && currentDocs.length > 0;
 
   function handleClose() {
     const level = defaultStudyLevel(studyLevels);
@@ -750,6 +772,15 @@ export function AddStudentModal({
       toast({ title: "Required fields missing", description: missing.join(", "), variant: "destructive" });
       return;
     }
+    const validationErrors = validateStudentIntakeForm(form);
+    if (validationErrors.length > 0) {
+      toast({ title: "Check student details", description: validationErrors.join(" "), variant: "destructive" });
+      return;
+    }
+    if (!documentPolicyReady) {
+      toast({ title: "Document requirements unavailable", description: "The selected level's document policy could not be verified. Please reload and try again.", variant: "destructive" });
+      return;
+    }
     if (Object.keys(docs).length === 0) {
       toast({
         title: "No documents uploaded",
@@ -787,7 +818,7 @@ export function AddStudentModal({
           notes: form.notes || null,
           interestedLevel: form.interestedLevel || null,
           status: defaultStatus || "active",
-        } as any,
+        },
       },
       {
         onSuccess: async (createdStudent: any) => {
@@ -819,7 +850,7 @@ export function AddStudentModal({
 
   const uploadedCount = Object.keys(docs).length;
   const missingRequiredDocLabels = currentDocs.filter((doc) => doc.required && !docs[doc.key]).map((doc) => doc.label);
-  const canProceedToForm = uploadedCount > 0 && missingRequiredDocLabels.length === 0;
+  const canProceedToForm = documentPolicyReady && uploadedCount > 0 && missingRequiredDocLabels.length === 0;
   const stepProgress = step === "upload" ? 33 : step === "analyzing" ? 66 : 100;
   const ef = extractedFields;
 
@@ -890,6 +921,22 @@ export function AddStudentModal({
                   <p className="text-sm font-semibold text-foreground">Required Documents</p>
                   <p className="text-xs text-muted-foreground">{uploadedCount}/{currentDocs.length} uploaded</p>
                 </div>
+                {degreeDocumentRequirements.isPending && (
+                  <div className="mb-2 flex items-center gap-2 rounded-xl border border-border bg-secondary/30 p-3 text-xs text-muted-foreground">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading document requirements…
+                  </div>
+                )}
+                {degreeDocumentRequirements.isError && (
+                  <div className="mb-2 flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">
+                    <AlertCircle className="h-3.5 w-3.5 shrink-0" /> Document requirements could not be loaded. Student creation is disabled until this policy is available.
+                  </div>
+                )}
+                {degreeDocumentRequirements.isSuccess && currentDocs.length === 0 && (
+                  <div className="mb-2 flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">
+                    <AlertCircle className="h-3.5 w-3.5 shrink-0" /> No reviewed document policy exists for this level. Student creation is disabled.
+                  </div>
+                )}
+                <p className="text-[11px] text-muted-foreground mb-2">{APPLICATION_DOCUMENT_HELP_TEXT}</p>
                 <div className={cn(
                   "grid gap-2",
                   currentDocs.length <= 5 ? "grid-cols-5" : currentDocs.length <= 7 ? "grid-cols-4" : "grid-cols-3"
@@ -1161,7 +1208,7 @@ export function AddStudentModal({
               </Button>
               <Button
                 onClick={handleSubmit}
-                disabled={createStudent.isPending || !form.firstName.trim() || !form.lastName.trim() || !form.email.trim() || !form.phone.trim() || !form.dateOfBirth.trim() || !form.gender.trim() || !form.nationality.trim() || !form.motherName.trim() || !form.fatherName.trim() || !form.passportNumber.trim() || !form.passportIssueDate.trim() || !form.passportExpiry.trim() || !form.interestedLevel.trim()}
+                disabled={createStudent.isPending || !documentPolicyReady || !form.firstName.trim() || !form.lastName.trim() || !form.email.trim() || !form.phone.trim() || !form.dateOfBirth.trim() || !form.gender.trim() || !form.nationality.trim() || !form.motherName.trim() || !form.fatherName.trim() || !form.passportNumber.trim() || !form.passportIssueDate.trim() || !form.passportExpiry.trim() || !form.interestedLevel.trim()}
                 className="rounded-xl gap-2"
               >
                 {createStudent.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}

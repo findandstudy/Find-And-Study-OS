@@ -67,3 +67,20 @@ test("high school cannot carry a fabricated program", () => {
   assert.equal(result.ok, true);
   if (result.ok) assert.equal(result.records[0]?.program, null);
 });
+
+test("rejects implausible graduation years and GPA values above their scale", () => {
+  assert.equal(cleanStudentEducationRecords([{
+    level: "bachelor",
+    graduationYear: 2200,
+  }]).ok, false);
+  assert.equal(cleanStudentEducationRecords([{
+    level: "bachelor",
+    gpa: "4.5",
+    gpaScale: 4,
+  }]).ok, false);
+  assert.equal(cleanStudentEducationRecords([{
+    level: "bachelor",
+    graduationYear: "unknown",
+    gpaScale: "four",
+  }]).ok, false);
+});

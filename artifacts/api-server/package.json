@@ -23,6 +23,8 @@
     "test:passport-validity": "tsx --test ./scripts/test-passport-validity.ts",
     "test:student-education": "tsx --test ./scripts/test-student-education.ts",
     "test:student-create-education-input": "tsx --test ./scripts/test-student-create-education-input.ts",
+    "test:student-create-validation": "tsx --test ./scripts/test-student-create-validation.ts",
+    "test:student-intake-ui-validation": "tsx --test ./scripts/test-student-intake-ui-validation.ts",
     "test:public-apply-passport": "tsx --test ./scripts/test-public-apply-passport.ts",
     "test:ai-extract-education": "tsx --test ./scripts/test-ai-extract-education.ts",
     "test:identity-validation": "tsx --test ./scripts/test-identity-validation.ts",

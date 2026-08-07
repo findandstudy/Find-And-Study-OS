@@ -5,6 +5,7 @@
  * Education Consultancy Operating System API
  * OpenAPI spec version: 0.1.0
  */
+import type { StudentEducationRecordInput } from "./studentEducationRecordInput";
 
 export interface CreateStudentBody {
   /** @nullable */
@@ -17,6 +18,8 @@ export interface CreateStudentBody {
   phone?: string | null;
   /** @nullable */
   dateOfBirth?: string | null;
+  /** @nullable */
+  gender?: string | null;
   /** @nullable */
   nationality?: string | null;
   /** @nullable */
@@ -31,17 +34,34 @@ export interface CreateStudentBody {
   fatherName?: string | null;
   /** @nullable */
   address?: string | null;
+  /** @nullable */
+  cityOfBirth?: string | null;
+  /** @nullable */
+  addressCity?: string | null;
+  /** @nullable */
+  postalCode?: string | null;
+  /** @nullable */
+  needsVisaSupport?: boolean | null;
   status: string;
   /** @nullable */
   agentId?: number | null;
   /** @nullable */
   highSchool?: string | null;
   /** @nullable */
+  universityBachelor?: string | null;
+  /** @nullable */
+  universityMaster?: string | null;
+  /** @nullable */
   graduationYear?: number | null;
   /** @nullable */
   gpa?: string | null;
   /** @nullable */
   languageScore?: string | null;
+  /** @nullable */
+  interestedLevel?: string | null;
+  /** @nullable */
+  season?: string | null;
+  educationRecords?: StudentEducationRecordInput[];
   /** @nullable */
   notes?: string | null;
   /**
