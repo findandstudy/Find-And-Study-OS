@@ -256,6 +256,7 @@ export async function processInboundMessage(opts: {
   }
 
   const isLinked = Boolean(externalContact.leadId || externalContact.studentId || externalContact.agentId);
+  const isBlocked = externalContact.isBlocked === true;
 
   const externalThreadId = message.externalThreadId || contact.externalId;
 
@@ -302,7 +303,7 @@ export async function processInboundMessage(opts: {
         externalThreadId,
         unmatched: !isLinked,
         status: "open",
-        botEnabled: aiConfig.defaultOnForNew,
+        botEnabled: isBlocked ? false : aiConfig.defaultOnForNew,
         lastMessageAt: message.receivedAt || new Date(),
         lastMessagePreview: message.text.slice(0, 200),
         lastInboundAt: message.receivedAt || new Date(),
@@ -376,7 +377,7 @@ export async function processInboundMessage(opts: {
       lastMessageAt: message.receivedAt || new Date(),
       lastMessagePreview: message.text.slice(0, 200),
       lastInboundAt: message.receivedAt || new Date(),
-      status: "open",
+      ...(isBlocked ? { botEnabled: false } : { status: "open" }),
       unmatched: !isLinked,
     })
     .where(eq(conversationsTable.id, conversation.id));
@@ -388,7 +389,7 @@ export async function processInboundMessage(opts: {
       .where(eq(channelAccountsTable.id, channelAccountId));
   }
 
-  try {
+  if (!isBlocked) try {
     // Targeting:
     //   - if conversation has an assignee, send only to that user (assigned semantics).
     //   - else fall through to role-based routing in dispatchNotification.

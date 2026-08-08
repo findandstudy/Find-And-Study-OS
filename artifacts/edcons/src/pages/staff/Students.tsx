@@ -664,13 +664,13 @@ function DraggableStudentCard({ student, onView, variant, assignedUserName, onAs
           </span>
         </div>
       )}
-      <div className="px-4 pb-3 flex items-center justify-between">
-        <div className="flex items-center gap-1 min-w-0">
+      <div className="px-4 pb-3 flex items-center gap-1">
+        <div className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden">
           {onAssign && student.assignedToId ? (
             (canReassign || student.assignedToId === currentUserId) && staffUsersList ? (
               <AssignPopover assignedUserName={assignedUserName} staffUsers={staffUsersList} currentUserId={currentUserId} onAssign={(uid) => onAssign(student.id, uid)} />
             ) : assignedUserName ? (
-              <span className="text-[10px] text-muted-foreground flex items-center gap-0.5 truncate"><UserCheck className="w-3 h-3 shrink-0" />{assignedUserName}</span>
+              <span className="flex min-w-0 items-center gap-0.5 truncate text-[10px] text-muted-foreground" title={assignedUserName}><UserCheck className="w-3 h-3 shrink-0" />{assignedUserName}</span>
             ) : null
           ) : onAssign && !student.assignedToId ? (
             canReassign && staffUsersList ? (
@@ -681,10 +681,10 @@ function DraggableStudentCard({ student, onView, variant, assignedUserName, onAs
               </button>
             ) : null
           ) : assignedUserName ? (
-            <span className="text-[10px] text-muted-foreground flex items-center gap-0.5 truncate"><UserCheck className="w-3 h-3 shrink-0" />{assignedUserName}</span>
+            <span className="flex min-w-0 items-center gap-0.5 truncate text-[10px] text-muted-foreground" title={assignedUserName}><UserCheck className="w-3 h-3 shrink-0" />{assignedUserName}</span>
           ) : null}
         </div>
-        <div className="flex items-center gap-1.5">
+        <div className="ml-auto flex shrink-0 items-center gap-1">
           <button onClick={(e) => { e.stopPropagation(); openContact("internal"); }} title="Message"
             className="w-6 h-6 flex items-center justify-center rounded-md text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors">
             <MessageSquare className="w-3.5 h-3.5" />
@@ -703,9 +703,10 @@ function DraggableStudentCard({ student, onView, variant, assignedUserName, onAs
           )}
           <Link
             href={`/staff/students/${student.id}`}
-            className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-primary transition-colors"
+            className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary"
+            title="View student"
           >
-            <Eye className="w-3 h-3" /> View
+            <Eye className="w-3.5 h-3.5" />
           </Link>
         </div>
       </div>

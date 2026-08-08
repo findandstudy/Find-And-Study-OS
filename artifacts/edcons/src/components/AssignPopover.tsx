@@ -84,10 +84,10 @@ export function AssignPopover({ assignedUserName, staffUsers, currentUserId, onA
     : filtered;
 
   return (
-    <div ref={triggerRef} className="relative inline-flex">
+    <div ref={triggerRef} className="relative flex min-w-0 max-w-full">
       <button
         onClick={(e) => { e.stopPropagation(); setOpen(!open); setSearch(""); }}
-        className={`flex items-center gap-0.5 truncate ${
+        className={`flex min-w-0 max-w-full items-center gap-0.5 truncate ${
           assignedUserName
             ? `text-[10px] text-muted-foreground hover:text-primary transition-colors`
             : `text-[10px] text-primary hover:underline font-medium`

@@ -34,6 +34,8 @@ export const externalContactsTable = pgTable("external_contacts", {
   leadId: integer("lead_id").references(() => leadsTable.id, { onDelete: "set null" }),
   studentId: integer("student_id").references(() => studentsTable.id, { onDelete: "set null" }),
   agentId: integer("agent_id").references(() => agentsTable.id, { onDelete: "set null" }),
+  isBlocked: boolean("is_blocked").notNull().default(false),
+  blockedAt: timestamp("blocked_at", { withTimezone: true }),
   metadata: jsonb("metadata").default({}),
   firstSeenAt: timestamp("first_seen_at", { withTimezone: true }).notNull().defaultNow(),
   lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull().defaultNow(),

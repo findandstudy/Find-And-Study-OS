@@ -1503,6 +1503,19 @@ router.patch(
       return;
     }
 
+    if (enabled && conversation.channel !== "internal") {
+      const [contact] = await db
+        .select({ isBlocked: externalContactsTable.isBlocked })
+        .from(externalContactsTable)
+        .innerJoin(conversationsTable, eq(conversationsTable.externalContactId, externalContactsTable.id))
+        .where(eq(conversationsTable.id, id))
+        .limit(1);
+      if (contact?.isBlocked) {
+        res.status(409).json({ error: "contact_blocked" });
+        return;
+      }
+    }
+
     // Internal conversations can include students, agents and staff. Merely
     // knowing a conversation id must never grant control of its AI assistant.
     if (conversation.channel === "internal") {
@@ -1551,6 +1564,50 @@ router.patch(
     }
     await logAudit(req.user!.id, "toggle_conversation_bot", "conversation", id, { enabled }, req.ip);
     res.json({ data: { id: updated.id, botEnabled: updated.botEnabled, needsHuman: updated.needsHuman } });
+  },
+);
+
+router.patch(
+  "/inbox/conversations/:id/block",
+  requireAuth,
+  requireRole(...STAFF_ROLES, ...ADMIN_ROLES),
+  async (req, res): Promise<void> => {
+    const id = parseInt(String(req.params.id), 10);
+    const { blocked } = req.body as { blocked?: boolean };
+    if (!id || typeof blocked !== "boolean") {
+      res.status(400).json({ error: "blocked (boolean) is required" });
+      return;
+    }
+    if (await isConversationEntityBlocked(req.user!, id)) {
+      res.status(404).json({ error: "Conversation not found" });
+      return;
+    }
+    const [conversation] = await db
+      .select({ externalContactId: conversationsTable.externalContactId, channel: conversationsTable.channel })
+      .from(conversationsTable)
+      .where(eq(conversationsTable.id, id))
+      .limit(1);
+    if (!conversation?.externalContactId || conversation.channel === "internal") {
+      res.status(404).json({ error: "Conversation has no external contact" });
+      return;
+    }
+    const [contact] = await db
+      .update(externalContactsTable)
+      .set({ isBlocked: blocked, blockedAt: blocked ? new Date() : null })
+      .where(eq(externalContactsTable.id, conversation.externalContactId))
+      .returning({ id: externalContactsTable.id, isBlocked: externalContactsTable.isBlocked, blockedAt: externalContactsTable.blockedAt });
+    if (!contact) {
+      res.status(404).json({ error: "External contact not found" });
+      return;
+    }
+    if (blocked) {
+      await db
+        .update(conversationsTable)
+        .set({ botEnabled: false, botReplyCount: 0 })
+        .where(eq(conversationsTable.externalContactId, conversation.externalContactId));
+    }
+    await logAudit(req.user!.id, blocked ? "block_external_contact" : "unblock_external_contact", "external_contact", contact.id, { conversationId: id }, req.ip);
+    res.json({ data: contact });
   },
 );
 
@@ -2140,6 +2197,17 @@ router.post(
     if (!conv) {
       res.status(404).json({ error: "Not found" });
       return;
+    }
+    if (conv.externalContactId) {
+      const [contact] = await db
+        .select({ isBlocked: externalContactsTable.isBlocked })
+        .from(externalContactsTable)
+        .where(eq(externalContactsTable.id, conv.externalContactId))
+        .limit(1);
+      if (contact?.isBlocked) {
+        res.status(409).json({ error: "contact_blocked" });
+        return;
+      }
     }
 
     if (hasContent) {
@@ -3008,6 +3076,10 @@ router.post(
       return;
     }
     const [contact] = await db.select().from(externalContactsTable).where(eq(externalContactsTable.id, conv.externalContactId));
+    if (contact?.isBlocked) {
+      res.status(409).json({ error: "contact_blocked" });
+      return;
+    }
     if (!contact?.phoneE164) {
       res.status(400).json({ error: "Contact has no E.164 phone" });
       return;

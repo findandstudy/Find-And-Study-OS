@@ -1,8 +1,8 @@
 import { Router, type IRouter, type Request } from "express";
 import express from "express";
-import { db, applicationStageDocumentsTable, applicationsTable, studentsTable, usersTable, pipelineStagesTable, universitiesTable, programsTable, documentsTable } from "@workspace/db";
+import { db, applicationStageDocumentsTable, applicationsTable, studentsTable, usersTable, pipelineStagesTable, universitiesTable, programsTable, documentsTable, auditLogsTable } from "@workspace/db";
 import { handleMissingDocFulfillment } from "../lib/missingDocsFulfillment";
-import { reEvaluateMandatoryDocs } from "../lib/mandatoryDocs.js";
+import { checkMandatoryDocsForApplication, reEvaluateMandatoryDocs } from "../lib/mandatoryDocs.js";
 import { eq, and, sql, desc, isNull } from "drizzle-orm";
 import { requireAuth, requireAgentStaffPermission, logAudit } from "../lib/auth";
 import { STAFF_ROLES, ADMIN_ROLES, isAgentRole, isStaffRole } from "../lib/roles";
@@ -447,7 +447,89 @@ router.get("/applications/:id/missing-doc-notes", requireAuth, requireAgentStaff
     requestedAt: n.createdAt,
     requestedBy: n.uploadedByName,
   }));
-  res.json(shaped);
+
+  // Automatic readiness checks can park an application in missing_docs without
+  // a staff actor. In that path we cannot create application_stage_documents
+  // request rows because uploaded_by is a required user FK. Keep this endpoint
+  // read-only and supplement persisted staff requests with the current canonical
+  // mandatory-doc result and the latest portal preflight evidence.
+  const [application] = await db
+    .select({ stage: applicationsTable.stage })
+    .from(applicationsTable)
+    .where(eq(applicationsTable.id, applicationId))
+    .limit(1);
+
+  const shouldDerive = application?.stage === "missing_docs" && (!stage || stage === "missing_docs");
+  if (!shouldDerive) {
+    res.json(shaped);
+    return;
+  }
+
+  const requestedKeys = new Set(
+    shaped
+      .filter((note: any) => !note.fulfilledAt)
+      .map((note: any) => String(note.fileName || "").trim().toLowerCase())
+      .filter(Boolean),
+  );
+  const derivedKeys = new Set<string>();
+
+  const mandatoryCheck = await checkMandatoryDocsForApplication(applicationId);
+  for (const type of mandatoryCheck?.missing || []) derivedKeys.add(String(type).trim().toLowerCase());
+
+  const [latestPreflight] = await db
+    .select({ changes: auditLogsTable.changes, createdAt: auditLogsTable.createdAt })
+    .from(auditLogsTable)
+    .where(and(
+      eq(auditLogsTable.action, "portal_application_preflight"),
+      eq(auditLogsTable.resource, "application"),
+      eq(auditLogsTable.resourceId, applicationId),
+    ))
+    .orderBy(desc(auditLogsTable.createdAt), desc(auditLogsTable.id))
+    .limit(1);
+
+  let preflight: Record<string, unknown> = {};
+  if (latestPreflight?.changes) {
+    try {
+      preflight = JSON.parse(latestPreflight.changes) as Record<string, unknown>;
+    } catch {
+      preflight = {};
+    }
+  }
+  const failedPreflight = preflight.ready === false;
+  const preflightMissing = failedPreflight && Array.isArray(preflight.missingDocuments) ? preflight.missingDocuments : [];
+  for (const type of preflightMissing) {
+    const key = String(type || "").trim().toLowerCase();
+    if (key) derivedKeys.add(key);
+  }
+
+  const incompatibleFields = failedPreflight && Array.isArray(preflight.incompatibleFields) ? preflight.incompatibleFields : [];
+  for (const issue of incompatibleFields) {
+    const field = String((issue as { field?: unknown })?.field || "").trim().toLowerCase();
+    if (field.startsWith("passport")) derivedKeys.add("passport");
+  }
+
+  const derived = [...derivedKeys]
+    .filter((key) => key && !requestedKeys.has(key))
+    .map((key, index) => ({
+      id: -(index + 1),
+      applicationId,
+      stage: "missing_docs",
+      fileName: key,
+      isMissingDocNote: true,
+      isCustom: false,
+      fulfilledAt: null,
+      respondedAt: null,
+      note: null,
+      createdAt: latestPreflight?.createdAt || null,
+      uploadedByName: null,
+      documentType: key,
+      customTitle: null,
+      requestedAt: latestPreflight?.createdAt || null,
+      requestedBy: null,
+      isDerived: true,
+    }));
+
+  res.json([...shaped, ...derived]);
 });
 
 router.post("/applications/:id/missing-doc-notes", requireAuth, (req, res, next) => {

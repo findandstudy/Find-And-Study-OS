@@ -14,6 +14,8 @@ import {
   Trash2,
   UserPlus,
   Lock,
+  FileText,
+  Send,
 } from "lucide-react";
 import { InboxStatusControl } from "./InboxStatusControl";
 import {
@@ -45,6 +47,23 @@ interface AppRow {
   season?: string | null;
 }
 
+interface StageDocumentRow {
+  id: number;
+  fileName: string;
+  mimeType?: string | null;
+  sizeBytes?: number | null;
+  isMissingDocNote?: boolean;
+  hasFileData?: boolean;
+  fileUrl?: string | null;
+}
+
+interface SendableApplicationDocument {
+  applicationId: number;
+  documentId: number;
+  fileName: string;
+  mimeType?: string | null;
+}
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
 interface DocPreflight {
@@ -59,6 +78,76 @@ interface InboxApplicationTabProps {
   overrideStudentId?: number;
   onUpdated?: () => void;
   onProgramSelected?: (p: { id: number; name: string } | null) => void;
+  onSendDocument?: (document: SendableApplicationDocument) => Promise<void>;
+  documentSendingDisabled?: boolean;
+}
+
+function ApplicationStageDocuments({
+  application,
+  onSendDocument,
+  sendingDisabled,
+}: {
+  application: AppRow;
+  onSendDocument?: (document: SendableApplicationDocument) => Promise<void>;
+  sendingDisabled?: boolean;
+}) {
+  const [sendingId, setSendingId] = useState<number | null>(null);
+  const { data, isLoading } = useQuery<StageDocumentRow[]>({
+    queryKey: ["inbox-application-stage-documents", application.id, application.stage],
+    queryFn: () =>
+      customFetch(
+        `${BASE_URL}/api/applications/${application.id}/stage-documents?stage=${encodeURIComponent(application.stage || "inquiry")}`,
+      ),
+    enabled: Boolean(application.id && application.stage),
+    staleTime: 15_000,
+  });
+  const documents = (data ?? []).filter(
+    (document) =>
+      !document.isMissingDocNote && Boolean(document.fileUrl || document.hasFileData),
+  );
+
+  if (isLoading || documents.length === 0) return null;
+
+  return (
+    <div className="mt-2 space-y-1 border-t border-border/60 pt-2">
+      {documents.map((document) => (
+        <div key={document.id} className="flex min-w-0 items-center gap-1.5">
+          <FileText className="h-3.5 w-3.5 shrink-0 text-primary/70" />
+          <span className="min-w-0 flex-1 truncate text-[10px]" title={document.fileName}>
+            {document.fileName}
+          </span>
+          {onSendDocument && (
+            <button
+              type="button"
+              className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-primary transition-colors hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-40"
+              title={sendingDisabled ? "The 24-hour reply window is closed" : "Send document to chat"}
+              aria-label={`Send ${document.fileName} to chat`}
+              disabled={sendingDisabled || sendingId !== null}
+              onClick={async () => {
+                setSendingId(document.id);
+                try {
+                  await onSendDocument({
+                    applicationId: application.id,
+                    documentId: document.id,
+                    fileName: document.fileName,
+                    mimeType: document.mimeType,
+                  });
+                } finally {
+                  setSendingId(null);
+                }
+              }}
+            >
+              {sendingId === document.id ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Send className="h-3.5 w-3.5" />
+              )}
+            </button>
+          )}
+        </div>
+      ))}
+    </div>
+  );
 }
 
 export function InboxApplicationTab({
@@ -67,6 +156,8 @@ export function InboxApplicationTab({
   overrideStudentId,
   onUpdated,
   onProgramSelected,
+  onSendDocument,
+  documentSendingDisabled,
 }: InboxApplicationTabProps) {
   const { t } = useI18n();
   const { toast } = useToast();
@@ -604,6 +695,11 @@ export function InboxApplicationTab({
                     }}
                   />
                 </div>
+                <ApplicationStageDocuments
+                  application={app}
+                  onSendDocument={onSendDocument}
+                  sendingDisabled={documentSendingDisabled}
+                />
               </div>
               <button
                 type="button"

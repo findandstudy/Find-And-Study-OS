@@ -479,6 +479,7 @@ export interface AutoReplyOutcome {
     | "sent"
     | "globally_disabled"
     | "bot_disabled"
+    | "contact_blocked"
     | "already_handled"
     | "not_inbound_text"
     | "escalated"
@@ -518,6 +519,15 @@ export async function maybeAutoReply(opts: {
     .from(conversationsTable)
     .where(eq(conversationsTable.id, conversationId));
   if (!conv) return { acted: false, reason: "not_found" };
+
+  if (conv.externalContactId) {
+    const [contact] = await db
+      .select({ isBlocked: externalContactsTable.isBlocked })
+      .from(externalContactsTable)
+      .where(eq(externalContactsTable.id, conv.externalContactId))
+      .limit(1);
+    if (contact?.isBlocked) return { acted: false, reason: "contact_blocked" };
+  }
 
   // Global master switch: when the bot is off agency-wide, no auto-replies are
   // sent regardless of the per-conversation toggle.

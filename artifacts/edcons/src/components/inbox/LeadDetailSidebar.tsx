@@ -37,6 +37,13 @@ interface LeadDetailSidebarProps {
   onSummarize: () => void;
   isSummarizing: boolean;
   onUpdated?: () => void;
+  onSendApplicationDocument?: (document: {
+    applicationId: number;
+    documentId: number;
+    fileName: string;
+    mimeType?: string | null;
+  }) => Promise<void>;
+  applicationDocumentSendingDisabled?: boolean;
 }
 
 type LinkedType = "lead" | "student" | "agent";
@@ -161,6 +168,8 @@ export function LeadDetailSidebar({
   onSummarize,
   isSummarizing,
   onUpdated,
+  onSendApplicationDocument,
+  applicationDocumentSendingDisabled,
 }: LeadDetailSidebarProps) {
   const { t } = useI18n();
   const { toast } = useToast();
@@ -423,6 +432,8 @@ export function LeadDetailSidebar({
             overrideStudentId={pendingStudentId ?? undefined}
             onUpdated={onUpdated}
             onProgramSelected={setSelectedProgram}
+            onSendDocument={onSendApplicationDocument}
+            documentSendingDisabled={applicationDocumentSendingDisabled}
           />
         ) : (
           placeholder

@@ -5788,6 +5788,13 @@ components:
           type: ["integer", "null"]
         agentId:
           type: ["integer", "null"]
+        isBlocked:
+          type: boolean
+        blockedAt:
+          oneOf:
+            - type: string
+              format: date-time
+            - type: "null"
         metadata:
           type: ["object", "null"]
           additionalProperties: true
@@ -5811,6 +5818,7 @@ components:
         - lastSeenAt
         - createdAt
         - updatedAt
+        - isBlocked
 
     InboxLeadSummary:
       type: object

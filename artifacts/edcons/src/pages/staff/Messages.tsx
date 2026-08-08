@@ -42,7 +42,7 @@ import {
   FileText, Edit, Trash2, Copy, Check, CheckCheck, X, Loader2, Eye, EyeOff, Globe, Download,
   Inbox as InboxIcon, AlertTriangle, UserCheck, Link2, Clock, FormInput, RefreshCw, Info, Filter, Bot,
   Facebook, Instagram, Archive, ArchiveRestore, ArrowDown, ArrowUpDown, ListChecks, FlaskConical,
-  UserPlus, FilePlus2, SmilePlus, CornerUpLeft, Pin, Forward, Mic, Square,
+  UserPlus, FilePlus2, SmilePlus, CornerUpLeft, Pin, Forward, Mic, Square, Ban, ShieldCheck,
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -482,6 +482,7 @@ function InboxTab() {
   const [detail, setDetail] = useState<InboxConversationDetailResponse | null>(null);
   const [reply, setReply] = useState("");
   const [sending, setSending] = useState(false);
+  const [blockingContact, setBlockingContact] = useState(false);
   const [composeTab, setComposeTab] = useState<ComposeTab>("chat");
   const [noteDraft, setNoteDraft] = useState("");
   const [taskDraft, setTaskDraft] = useState<TaskDraft>({
@@ -1140,6 +1141,27 @@ function InboxTab() {
     }
   }
 
+  async function toggleContactBlock(blocked: boolean) {
+    if (!selectedId || blockingContact) return;
+    if (!window.confirm(blocked ? t("messagesPage.confirmBlockContact") : t("messagesPage.confirmUnblockContact"))) return;
+    setBlockingContact(true);
+    try {
+      await customFetch(`/api/inbox/conversations/${selectedId}/block`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ blocked }),
+      });
+      toast({ title: blocked ? t("messagesPage.contactBlocked") : t("messagesPage.contactUnblocked") });
+      setPendingFiles([]);
+      setReply("");
+      await Promise.all([fetchInbox(), fetchDetail(selectedId)]);
+    } catch (err: any) {
+      toast({ title: err?.data?.error || t("messagesPage.contactBlockFailed"), variant: "destructive" });
+    } finally {
+      setBlockingContact(false);
+    }
+  }
+
   async function uploadFileForInbox(file: File): Promise<{
     url: string;
     type: string;
@@ -1236,7 +1258,7 @@ function InboxTab() {
   }
 
   async function sendReply() {
-    if (!selectedId || (!reply.trim() && pendingFiles.length === 0)) return;
+    if (!selectedId || contactBlocked || (!reply.trim() && pendingFiles.length === 0)) return;
     setSending(true);
     setUploading(true);
     try {
@@ -1278,6 +1300,77 @@ function InboxTab() {
         });
       } else {
         toast({ title: body?.error || "Failed to send", variant: "destructive" });
+      }
+    } finally {
+      setSending(false);
+      setUploading(false);
+    }
+  }
+
+  async function sendApplicationDocument(document: {
+    applicationId: number;
+    documentId: number;
+    fileName: string;
+    mimeType?: string | null;
+  }) {
+    if (!selectedId || contactBlocked || metaReplyWindowClosed) {
+      toast({
+        title: contactBlocked ? t("messagesPage.contactBlocked") : t("messagesPage.outsideWindow"),
+        description: contactBlocked ? t("messagesPage.blockedReplyPlaceholder") : t("messagesPage.useTemplateInstead"),
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setSending(true);
+    setUploading(true);
+    try {
+      const response = await fetch(
+        `/api/applications/${document.applicationId}/stage-documents/${document.documentId}/download`,
+        { credentials: "include" },
+      );
+      if (!response.ok) throw new Error("Document could not be downloaded");
+      const blob = await response.blob();
+      const file = new File([blob], document.fileName, {
+        type: document.mimeType || blob.type || "application/octet-stream",
+      });
+      const attachment = await uploadFileForInbox(file);
+      if (!attachment) return;
+
+      const result: any = await customFetch(
+        `/api/inbox/conversations/${selectedId}/messages`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ content: "", attachments: [attachment] }),
+        },
+      );
+      toast({
+        title: result?.simulated
+          ? t("messagesPage.sentSimulated")
+          : t("messagesPage.sent"),
+      });
+      setConvs((previous) =>
+        previous.map((conversation) =>
+          conversation.id === selectedId
+            ? { ...conversation, awaitingReply: false }
+            : conversation,
+        ),
+      );
+      await fetchDetail(selectedId);
+    } catch (err: any) {
+      const body = err?.body ?? err?.data;
+      if (body?.error === "outside_24h_window") {
+        toast({
+          title: t("messagesPage.outsideWindow"),
+          description: t("messagesPage.useTemplateInstead"),
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: body?.error || err?.message || t("messagesPage.failedToSend"),
+          variant: "destructive",
+        });
       }
     } finally {
       setSending(false);
@@ -1796,6 +1889,7 @@ function InboxTab() {
     !detail.withinWindow
   );
   const ext = detail?.externalContact;
+  const contactBlocked = Boolean((ext as any)?.isBlocked);
   const linked = ext && (ext.leadId || ext.studentId || ext.agentId);
   // Student wins over lead (converted leads have both leadId and studentId set).
   const linkedLabel = ext?.studentId ? "Student" : ext?.leadId ? "Lead" : ext?.agentId ? "Agent" : null;
@@ -2345,11 +2439,28 @@ function InboxTab() {
                       size="sm"
                       variant={conv.botEnabled ? "default" : "outline"}
                       onClick={() => toggleBot(!conv.botEnabled)}
+                      disabled={contactBlocked}
                       className="h-7 text-xs gap-1"
                       title={conv.botEnabled ? t("messagesPage.aiOnHint") : t("messagesPage.aiOffHint")}
                       data-testid="button-toggle-bot"
                     >
                       <Bot className="w-3 h-3" /> {conv.botEnabled ? t("messagesPage.aiOn") : t("messagesPage.aiOff")}
+                    </Button>
+                  )}
+                  {conv.channel !== "internal" && ext && (
+                    <Button
+                      size="sm"
+                      variant={contactBlocked ? "outline" : "destructive"}
+                      onClick={() => toggleContactBlock(!contactBlocked)}
+                      disabled={blockingContact}
+                      className="h-7 text-xs gap-1"
+                      title={contactBlocked ? t("messagesPage.unblockContact") : t("messagesPage.blockContact")}
+                      data-testid="button-toggle-contact-block"
+                    >
+                      {blockingContact ? <Loader2 className="w-3 h-3 animate-spin" /> : contactBlocked ? <ShieldCheck className="w-3 h-3" /> : <Ban className="w-3 h-3" />}
+                      <span className="hidden min-[1800px]:inline">
+                        {contactBlocked ? t("messagesPage.unblock") : t("messagesPage.block")}
+                      </span>
                     </Button>
                   )}
                   {(user?.role === "super_admin" || user?.role === "admin") ? (
@@ -2412,6 +2523,16 @@ function InboxTab() {
                   </div>
                   <Button size="sm" variant="outline" className="h-7 text-xs" onClick={loadSuggestions}>
                     Match
+                  </Button>
+                </div>
+              )}
+
+              {contactBlocked && (
+                <div className="m-3 flex items-center gap-2 rounded-lg border border-red-300 bg-red-50 p-3 text-red-900">
+                  <Ban className="h-4 w-4 shrink-0" />
+                  <p className="flex-1 text-xs">{t("messagesPage.blockedContactNotice")}</p>
+                  <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => toggleContactBlock(false)} disabled={blockingContact}>
+                    {t("messagesPage.unblock")}
                   </Button>
                 </div>
               )}
@@ -2868,6 +2989,7 @@ function InboxTab() {
                         )}
                         <Textarea
                           value={reply}
+                          disabled={contactBlocked}
                           onChange={(e) => setReply(e.target.value)}
                           onPaste={(e) => {
                             const pastedFiles = Array.from(e.clipboardData.items)
@@ -2907,7 +3029,7 @@ function InboxTab() {
                               if (!metaReplyWindowClosed) sendReply();
                             }
                           }}
-                          placeholder={metaReplyWindowClosed ? (conv.channel === "whatsapp" ? t("messagesPage.outside24hUseTemplate") : t("messagesPage.outside24hReplyWindowMeta")) : t("messagesPage.replyPlaceholder")}
+                          placeholder={contactBlocked ? t("messagesPage.blockedReplyPlaceholder") : metaReplyWindowClosed ? (conv.channel === "whatsapp" ? t("messagesPage.outside24hUseTemplate") : t("messagesPage.outside24hReplyWindowMeta")) : t("messagesPage.replyPlaceholder")}
                           rows={2}
                           className="w-full rounded-lg text-sm"
                         />
@@ -2919,7 +3041,7 @@ function InboxTab() {
                           className="h-8 w-8 shrink-0"
                           title={t("inbox.compose.attach")}
                           onClick={() => fileInputRef.current?.click()}
-                          disabled={metaReplyWindowClosed || voiceRecorder.isRecording}
+                          disabled={contactBlocked || metaReplyWindowClosed || voiceRecorder.isRecording}
                         >
                           <Paperclip className="w-4 h-4" />
                         </Button>
@@ -2929,7 +3051,7 @@ function InboxTab() {
                             variant={voiceRecorder.isRecording ? "destructive" : "ghost"}
                             className="h-8 w-8 shrink-0"
                             onClick={voiceRecorder.isRecording ? voiceRecorder.stop : voiceRecorder.start}
-                            disabled={metaReplyWindowClosed || sending || uploading}
+                            disabled={contactBlocked || metaReplyWindowClosed || sending || uploading}
                             title={voiceRecorder.isRecording ? "Stop voice recording" : "Record voice message"}
                           >
                             {voiceRecorder.isRecording
@@ -2946,7 +3068,7 @@ function InboxTab() {
                       <Button
                         size="sm"
                         onClick={sendReply}
-                        disabled={sending || uploading || voiceRecorder.isRecording || (reply.trim() === "" && pendingFiles.length === 0) || metaReplyWindowClosed}
+                        disabled={contactBlocked || sending || uploading || voiceRecorder.isRecording || (reply.trim() === "" && pendingFiles.length === 0) || metaReplyWindowClosed}
                         className="h-9 shrink-0 gap-1 px-3"
                       >
                         {(sending || uploading) ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
@@ -3008,6 +3130,8 @@ function InboxTab() {
               onSummarize={handleSummarize}
               isSummarizing={summarizeMutation.isPending}
               onUpdated={() => { if (selectedId) fetchDetail(selectedId); }}
+              onSendApplicationDocument={sendApplicationDocument}
+              applicationDocumentSendingDisabled={metaReplyWindowClosed || sending || uploading}
             />
           </div>
         )}
@@ -3037,6 +3161,8 @@ function InboxTab() {
                 onSummarize={handleSummarize}
                 isSummarizing={summarizeMutation.isPending}
                 onUpdated={() => { if (selectedId) fetchDetail(selectedId); }}
+                onSendApplicationDocument={sendApplicationDocument}
+                applicationDocumentSendingDisabled={metaReplyWindowClosed || sending || uploading}
               />
             </div>
           </SheetContent>

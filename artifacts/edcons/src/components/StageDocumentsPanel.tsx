@@ -603,15 +603,19 @@ function MissingDocsSection({
                   {note.note && (
                     <p className="text-[11px] text-muted-foreground mt-0.5">{note.note}</p>
                   )}
-                  <p className="text-[10px] text-muted-foreground mt-0.5">
-                    {t("stageDocs.requestDate", { date: note.createdAt ? formatDate(note.createdAt, lang) : "—" })}
-                    {note.uploadedByName ? ` · ${t("stageDocs.requestedBy", { name: note.uploadedByName })}` : ""}
-                    {fulfilled && note.fulfilledAt
-                      ? ` · ${t("stageDocs.fulfilledOn", { date: formatDate(note.fulfilledAt, lang) })}`
-                      : ""}
-                  </p>
+                  {note.isDerived ? (
+                    <p className="text-[10px] text-muted-foreground mt-0.5">{t("stageDocs.derivedRequest")}</p>
+                  ) : (
+                    <p className="text-[10px] text-muted-foreground mt-0.5">
+                      {t("stageDocs.requestDate", { date: note.createdAt ? formatDate(note.createdAt, lang) : "—" })}
+                      {note.uploadedByName ? ` · ${t("stageDocs.requestedBy", { name: note.uploadedByName })}` : ""}
+                      {fulfilled && note.fulfilledAt
+                        ? ` · ${t("stageDocs.fulfilledOn", { date: formatDate(note.fulfilledAt, lang) })}`
+                        : ""}
+                    </p>
+                  )}
                 </div>
-                {isAdmin && (
+                {isAdmin && !note.isDerived && (
                   <div className="flex gap-0.5 shrink-0">
                     <Button
                       variant="ghost" size="icon" className="h-6 w-6"
