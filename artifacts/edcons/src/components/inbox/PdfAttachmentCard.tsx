@@ -77,6 +77,9 @@ export default function PdfAttachmentCard({ url, serverThumbUrl, name, fileSize,
         if (!resp.ok) throw new Error(String(resp.status));
         const pages = Number(resp.headers.get("X-Pdf-Page-Count"));
         const blob = await resp.blob();
+        if (!blob.size || !blob.type.toLowerCase().startsWith("image/")) {
+          throw new Error("Invalid PDF thumbnail response");
+        }
         if (cancelled) return;
         objectUrl = URL.createObjectURL(blob);
         setServerThumb(objectUrl);
@@ -163,6 +166,10 @@ export default function PdfAttachmentCard({ url, serverThumbUrl, name, fileSize,
           src={serverThumb}
           alt={name}
           className="w-full block bg-white object-cover object-top max-h-[130px]"
+          onError={() => {
+            setServerThumb(null);
+            setServerThumbFailed(true);
+          }}
         />
       ) : !failed && (
         <canvas

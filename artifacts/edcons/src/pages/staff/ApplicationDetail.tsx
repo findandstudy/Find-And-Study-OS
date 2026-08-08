@@ -280,7 +280,7 @@ export default function ApplicationDetail({ id, basePath = "/staff" }: Props) {
 
   return (
     <>
-      <div className="w-full space-y-6">
+      <div className="w-full space-y-6 select-text">
         <div className="flex items-center gap-4">
           <Button variant="ghost" size="icon" onClick={() => setLocation(`${basePath}/applications`)}>
             <ArrowLeft className="w-4 h-4" />
@@ -1100,7 +1100,7 @@ function InfoRow({
       <span className="text-muted-foreground mt-0.5 shrink-0">{icon}</span>
       <div className="min-w-0">
         <p className="text-xs text-muted-foreground">{label}</p>
-        <p className="font-medium text-foreground break-words">{value || "—"}</p>
+        <p className="font-medium text-foreground break-words select-text">{value || "—"}</p>
       </div>
     </div>
     </>

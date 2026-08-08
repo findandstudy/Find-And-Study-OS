@@ -20,6 +20,7 @@ import {
   Table, TableHeader, TableBody, TableHead, TableRow, TableCell,
 } from "@/components/ui/table";
 import { ColumnHeader } from "@/components/ui/column-header";
+import { Checkbox } from "@/components/ui/checkbox";
 
 import { ADMIN_ROLES as _ADMIN_ROLES } from "@workspace/roles";
 const ADMIN_ROLES = _ADMIN_ROLES;
@@ -214,6 +215,12 @@ export default function TasksPage() {
   const [loading, setLoading] = useState(true);
   const [showArchived, setShowArchived] = useState(false);
   const [dueFilter, setDueFilter] = useState<DueFilter>("all");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"all" | Task["status"]>("all");
+  const [priorityFilter, setPriorityFilter] = useState<"all" | Task["priority"]>("all");
+  const [assigneeFilter, setAssigneeFilter] = useState("all");
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [bulkArchiving, setBulkArchiving] = useState(false);
   const [viewMode, setViewMode] = useState<"canvas" | "list">(() => {
     if (typeof window === "undefined") return "canvas";
     return (localStorage.getItem(TASKS_VIEW_KEY) as "canvas" | "list") || "canvas";
@@ -453,6 +460,27 @@ export default function TasksPage() {
     }
   }
 
+  async function archiveSelectedTasks() {
+    if (!isAdmin || selectedIds.size === 0) return;
+    const count = selectedIds.size;
+    if (!confirm(`Archive ${count} selected task${count === 1 ? "" : "s"}?`)) return;
+    setBulkArchiving(true);
+    try {
+      const result = await customFetch<{ archived: number }>("/api/tasks/bulk-archive", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: Array.from(selectedIds) }),
+      });
+      toast({ title: `${result.archived} task${result.archived === 1 ? "" : "s"} archived` });
+      setSelectedIds(new Set());
+      void loadTasks(showArchived);
+    } catch (err) {
+      toastApiError(toast, err, "Could not archive selected tasks");
+    } finally {
+      setBulkArchiving(false);
+    }
+  }
+
   function resetNoteEditor() {
     setNewNoteText("");
     setNoteMentionIds([]);
@@ -576,19 +604,27 @@ export default function TasksPage() {
   }, [tasks, todayIso, sevenDaysIso]);
 
   const visibleTasks = useMemo(() => {
-    if (dueFilter === "all") return tasks;
+    const query = searchQuery.trim().toLowerCase();
     return tasks.filter(tk => {
-      if (dueFilter === "noDue") return !tk.dueDate;
-      if (!tk.dueDate) return false;
-      if (dueFilter === "overdue") {
-        return tk.status !== "done" && tk.dueDate < todayIso;
-      }
-      if (dueFilter === "dueWeek") {
-        return tk.status !== "done" && tk.dueDate >= todayIso && tk.dueDate <= sevenDaysIso;
-      }
+      if (dueFilter === "noDue" && tk.dueDate) return false;
+      if (dueFilter === "overdue" && (tk.status === "done" || !tk.dueDate || tk.dueDate >= todayIso)) return false;
+      if (dueFilter === "dueWeek" && (tk.status === "done" || !tk.dueDate || tk.dueDate < todayIso || tk.dueDate > sevenDaysIso)) return false;
+      if (statusFilter !== "all" && tk.status !== statusFilter) return false;
+      if (priorityFilter !== "all" && tk.priority !== priorityFilter) return false;
+      if (assigneeFilter === "unassigned" && tk.assignedTo !== null) return false;
+      if (assigneeFilter !== "all" && assigneeFilter !== "unassigned" && tk.assignedTo !== Number(assigneeFilter)) return false;
+      if (query && !`${tk.title} ${tk.description ?? ""} ${tk.assignedToName ?? ""}`.toLowerCase().includes(query)) return false;
       return true;
     });
-  }, [tasks, dueFilter, todayIso, sevenDaysIso]);
+  }, [tasks, dueFilter, statusFilter, priorityFilter, assigneeFilter, searchQuery, todayIso, sevenDaysIso]);
+
+  useEffect(() => {
+    const available = new Set(tasks.map(task => task.id));
+    setSelectedIds(previous => {
+      const next = new Set(Array.from(previous).filter(id => available.has(id)));
+      return next.size === previous.size ? previous : next;
+    });
+  }, [tasks]);
 
   const grouped = useMemo(() => {
     const out: Record<Task["status"], Task[]> = { todo: [], in_progress: [], done: [] };
@@ -630,6 +666,28 @@ export default function TasksPage() {
 
   const totalCount = tasks.length;
   const visibleCount = visibleTasks.length;
+  const allVisibleSelected = visibleCount > 0 && visibleTasks.every(task => selectedIds.has(task.id));
+  const someVisibleSelected = visibleTasks.some(task => selectedIds.has(task.id));
+
+  function toggleTaskSelection(id: number, checked: boolean) {
+    setSelectedIds(previous => {
+      const next = new Set(previous);
+      if (checked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  }
+
+  function toggleVisibleSelection(checked: boolean) {
+    setSelectedIds(previous => {
+      const next = new Set(previous);
+      for (const task of visibleTasks) {
+        if (checked) next.add(task.id);
+        else next.delete(task.id);
+      }
+      return next;
+    });
+  }
 
   const assigneesById = useMemo(() => {
     const m = new Map<number, Assignee>();
@@ -811,6 +869,86 @@ export default function TasksPage() {
           </div>
         )}
 
+        {!loading && totalCount > 0 && (
+          <div className="flex flex-col xl:flex-row xl:items-center gap-2 rounded-xl border bg-card p-3" data-testid="task-advanced-filters">
+            <Input
+              value={searchQuery}
+              onChange={event => setSearchQuery(event.target.value)}
+              placeholder="Search title, description or assignee..."
+              className="xl:max-w-sm"
+              data-testid="input-task-search"
+            />
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 flex-1">
+              <Select value={statusFilter} onValueChange={value => setStatusFilter(value as typeof statusFilter)}>
+                <SelectTrigger data-testid="filter-task-status"><SelectValue placeholder={t("tasks.fields.status")} /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All statuses</SelectItem>
+                  <SelectItem value="todo">{t("tasks.col.todo")}</SelectItem>
+                  <SelectItem value="in_progress">{t("tasks.col.in_progress")}</SelectItem>
+                  <SelectItem value="done">{t("tasks.col.done")}</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={priorityFilter} onValueChange={value => setPriorityFilter(value as typeof priorityFilter)}>
+                <SelectTrigger data-testid="filter-task-priority"><SelectValue placeholder={t("tasks.fields.priority")} /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All priorities</SelectItem>
+                  <SelectItem value="high">{t("tasks.priority.high")}</SelectItem>
+                  <SelectItem value="medium">{t("tasks.priority.medium")}</SelectItem>
+                  <SelectItem value="low">{t("tasks.priority.low")}</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={assigneeFilter} onValueChange={setAssigneeFilter}>
+                <SelectTrigger data-testid="filter-task-assignee"><SelectValue placeholder={t("tasks.fields.assignTo")} /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All assignees</SelectItem>
+                  <SelectItem value="unassigned">{t("tasks.unassigned")}</SelectItem>
+                  {assignees.map(assignee => (
+                    <SelectItem key={assignee.id} value={String(assignee.id)}>{displayName(assignee)}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {(searchQuery || statusFilter !== "all" || priorityFilter !== "all" || assigneeFilter !== "all") && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => { setSearchQuery(""); setStatusFilter("all"); setPriorityFilter("all"); setAssigneeFilter("all"); }}
+              >
+                Clear filters
+              </Button>
+            )}
+          </div>
+        )}
+
+        {isAdmin && !showArchived && !loading && totalCount > 0 && (
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border bg-muted/30 px-3 py-2" data-testid="task-bulk-toolbar">
+            <label className="inline-flex items-center gap-2 text-sm cursor-pointer">
+              <Checkbox
+                checked={allVisibleSelected ? true : someVisibleSelected ? "indeterminate" : false}
+                onCheckedChange={value => toggleVisibleSelection(value === true)}
+                aria-label="Select all filtered tasks"
+                data-testid="checkbox-select-all-tasks"
+              />
+              Select all filtered ({visibleCount})
+            </label>
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground">{selectedIds.size} selected</span>
+              <Button
+                type="button"
+                variant="destructive"
+                size="sm"
+                disabled={selectedIds.size === 0 || bulkArchiving}
+                onClick={archiveSelectedTasks}
+                data-testid="button-bulk-archive-tasks"
+              >
+                <Trash2 className="w-4 h-4 mr-1.5" />
+                {bulkArchiving ? "Archiving..." : "Archive selected"}
+              </Button>
+            </div>
+          </div>
+        )}
+
         {/* Empty / Loading */}
         {loading ? (
           <div className="text-sm text-muted-foreground">{t("tasks.loading")}</div>
@@ -882,6 +1020,15 @@ export default function TasksPage() {
                           data-testid={`task-card-${task.id}`}
                         >
                           <div className="flex items-start gap-2">
+                            {isAdmin && !showArchived && (
+                              <Checkbox
+                                checked={selectedIds.has(task.id)}
+                                onCheckedChange={value => toggleTaskSelection(task.id, value === true)}
+                                onClick={event => event.stopPropagation()}
+                                aria-label={`Select ${task.title}`}
+                                data-testid={`checkbox-task-card-${task.id}`}
+                              />
+                            )}
                             {canManage && !showArchived && (
                               <span
                                 className="mt-0.5 text-muted-foreground/60 hover:text-foreground cursor-grab active:cursor-grabbing"
@@ -1039,6 +1186,15 @@ export default function TasksPage() {
               <Table>
                 <TableHeader>
                   <TableRow className="bg-muted/50">
+                    {isAdmin && !showArchived && (
+                      <TableHead className="w-10">
+                        <Checkbox
+                          checked={allVisibleSelected ? true : someVisibleSelected ? "indeterminate" : false}
+                          onCheckedChange={value => toggleVisibleSelection(value === true)}
+                          aria-label="Select all filtered tasks"
+                        />
+                      </TableHead>
+                    )}
                     <ColumnHeader
                       label={t("tasks.fields.title")}
                       sort={{ sortKey: "title", current: sort, onSort: handleSort }}
@@ -1075,6 +1231,16 @@ export default function TasksPage() {
                         onClick={() => setNotesTask(task)}
                         data-testid={`task-row-${task.id}`}
                       >
+                        {isAdmin && !showArchived && (
+                          <TableCell onClick={event => event.stopPropagation()}>
+                            <Checkbox
+                              checked={selectedIds.has(task.id)}
+                              onCheckedChange={value => toggleTaskSelection(task.id, value === true)}
+                              aria-label={`Select ${task.title}`}
+                              data-testid={`checkbox-task-row-${task.id}`}
+                            />
+                          </TableCell>
+                        )}
                         <TableCell className="max-w-[360px]">
                           <div className={`font-medium leading-snug break-words ${task.status === "done" ? "line-through text-muted-foreground" : ""}`}>
                             {task.title}

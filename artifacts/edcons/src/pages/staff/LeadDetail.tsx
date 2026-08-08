@@ -37,6 +37,7 @@ import { AuditLogSection } from "@/components/AuditLogSection";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { StudentPhotoAvatar } from "@/components/StudentPhotoAvatar";
+import { getLeadSourceLabel } from "@/lib/leadSourceLabel";
 
 
 const SOURCES = ["website", "referral", "social_media", "walk_in", "partner", "other"];
@@ -440,7 +441,7 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
 
   return (
     <>
-      <div className="w-full space-y-6">
+      <div className="w-full space-y-6 select-text">
         <div className="flex items-center gap-4">
           <Button variant="ghost" size="icon" onClick={() => setLocation(`${basePath}/leads`)}>
             <ArrowLeft className="w-4 h-4" />
@@ -593,21 +594,14 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
                 <div className="pt-2 border-t">
                   <p className="text-xs font-medium text-muted-foreground mb-2">{t("leadDetailPage.sourceInfo")}</p>
                   <div className="space-y-2 text-sm">
-                    {lead?.sourcePageUrl && (() => {
-                      const safeHref = /^https?:\/\//i.test(lead.sourcePageUrl) ? lead.sourcePageUrl : null;
-                      return (
-                        <div className="flex items-start gap-2">
-                          <Globe className="w-4 h-4 text-muted-foreground mt-0.5 shrink-0" />
-                          {safeHref ? (
-                            <a href={safeHref} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline break-all text-xs">
-                              {lead.sourcePageUrl}
-                            </a>
-                          ) : (
-                            <span className="text-muted-foreground break-all text-xs">{lead.sourcePageUrl}</span>
-                          )}
-                        </div>
-                      );
-                    })()}
+                    {lead?.sourcePageUrl && (
+                      <div className="flex items-center gap-2">
+                        <Globe className="w-4 h-4 text-muted-foreground shrink-0" />
+                        <Badge variant="secondary" className="max-w-full truncate text-xs" title={getLeadSourceLabel(lead?.source, lead.sourcePageUrl)}>
+                          {getLeadSourceLabel(lead?.source, lead.sourcePageUrl)}
+                        </Badge>
+                      </div>
+                    )}
                     {(lead?.utmSource || lead?.utmMedium || lead?.utmCampaign || lead?.utmTerm || lead?.utmContent) && (
                       <div className="flex flex-wrap gap-1.5">
                         {lead?.utmSource && <Badge variant="secondary" className="text-[10px]">utm_source: {lead.utmSource}</Badge>}
@@ -1327,9 +1321,9 @@ function InfoRow({
     <>
     <div className="flex items-start gap-2">
       <span className="text-muted-foreground mt-0.5 shrink-0">{icon}</span>
-      <div>
+      <div className="min-w-0">
         <p className="text-xs text-muted-foreground">{label}</p>
-        <p className="font-medium text-foreground">{value || "—"}</p>
+        <p className="font-medium text-foreground break-words select-text">{value || "—"}</p>
       </div>
     </div>
     </>

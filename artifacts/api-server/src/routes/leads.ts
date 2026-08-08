@@ -265,7 +265,7 @@ router.get("/leads", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), r
     source, appSource, assignment, nationality, name, email, program, country,
     minValue, dateRange, followupRange, sortKey = "date", sortDir = "desc",
   } = query;
-  const pageParams = parsePaginationParams(req, { defaultLimit: 20, maxLimit: 500 });
+  const pageParams = parsePaginationParams(req, { defaultLimit: 20, maxLimit: 5000 });
   const pageNum = pageParams.page;
   const limitNum = pageParams.limit;
   const offset = pageParams.offset;

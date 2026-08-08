@@ -273,6 +273,37 @@ router.delete("/tasks/:id", requireAuth, requireRole(...ADMIN_ROLES), async (req
   res.json({ success: true });
 });
 
+router.post("/tasks/bulk-archive", requireAuth, requireRole(...ADMIN_ROLES), async (req, res): Promise<void> => {
+  const rawIds = Array.isArray(req.body?.ids) ? req.body.ids : [];
+  const ids: number[] = Array.from(new Set<number>(
+    rawIds
+      .map((value: unknown) => Number(value))
+      .filter((value: number) => Number.isInteger(value) && value > 0),
+  ));
+
+  if (ids.length === 0) {
+    res.status(400).json({ error: "At least one valid task id is required" });
+    return;
+  }
+  if (ids.length > 500) {
+    res.status(400).json({ error: "A maximum of 500 tasks can be archived at once" });
+    return;
+  }
+
+  const now = new Date();
+  const updated = await db
+    .update(tasksTable)
+    .set({ archivedAt: now, updatedAt: now })
+    .where(and(inArray(tasksTable.id, ids), isNull(tasksTable.archivedAt)))
+    .returning({ id: tasksTable.id });
+
+  for (const task of updated) {
+    logAudit(req.user!.id, "task.archive", "task", task.id, { source: "bulk" });
+  }
+
+  res.json({ success: true, archived: updated.length });
+});
+
 router.post("/tasks/restore/:id", requireAuth, requireRole(...ADMIN_ROLES), async (req, res): Promise<void> => {
   const id = parseInt(String(req.params.id), 10);
   if (!Number.isFinite(id)) { res.status(400).json({ error: "Invalid id" }); return; }

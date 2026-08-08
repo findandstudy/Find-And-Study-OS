@@ -42,7 +42,7 @@ interface ThemeContextType {
 
 const ThemeContext = createContext<ThemeContextType | null>(null);
 
-function hexToHsl(hex: string): string | null {
+function hexToHsl(hex: string, minimumLightness?: number): string | null {
   hex = hex.replace(/^#/, "");
   if (hex.length === 3) hex = hex.split("").map(c => c + c).join("");
   if (hex.length !== 6) return null;
@@ -59,7 +59,10 @@ function hexToHsl(hex: string): string | null {
     else if (max === g) h = ((b - r) / d + 2) / 6;
     else h = ((r - g) / d + 4) / 6;
   }
-  return `${Math.round(h * 360)} ${Math.round(s * 100)}% ${Math.round(l * 100)}%`;
+  const lightness = minimumLightness == null
+    ? Math.round(l * 100)
+    : Math.max(Math.round(l * 100), minimumLightness);
+  return `${Math.round(h * 360)} ${Math.round(s * 100)}% ${lightness}%`;
 }
 
 function getSystemTheme(): "light" | "dark" {
@@ -107,12 +110,14 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     const resolved = mode === "system" ? getSystemTheme() : mode;
     setResolved(resolved);
     document.documentElement.classList.toggle("dark", resolved === "dark");
+    document.documentElement.style.colorScheme = resolved;
 
     if (mode === "system") {
       const mq = window.matchMedia("(prefers-color-scheme: dark)");
       const handler = (e: MediaQueryListEvent) => {
         setResolved(e.matches ? "dark" : "light");
         document.documentElement.classList.toggle("dark", e.matches);
+        document.documentElement.style.colorScheme = e.matches ? "dark" : "light";
       };
       mq.addEventListener("change", handler);
       return () => mq.removeEventListener("change", handler);
@@ -123,7 +128,10 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const applyThemeColors = useCallback((s: ThemeSettings) => {
     const root = document.documentElement;
     if (s.themePrimary) {
-      const hsl = hexToHsl(s.themePrimary);
+      // A brand navy that works well on white can become nearly invisible on
+      // the dark dashboard. Preserve its hue/saturation while lifting only the
+      // dark-mode lightness to an accessible interactive colour.
+      const hsl = hexToHsl(s.themePrimary, resolvedTheme === "dark" ? 62 : undefined);
       if (hsl) {
         root.style.setProperty("--primary", hsl);
         root.style.setProperty("--ring", hsl);
@@ -137,20 +145,20 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       root.style.removeProperty("--sidebar-ring");
     }
     if (s.themeButton) {
-      const hsl = hexToHsl(s.themeButton);
+      const hsl = hexToHsl(s.themeButton, resolvedTheme === "dark" ? 58 : undefined);
       if (hsl) root.style.setProperty("--button", hsl);
       else root.style.removeProperty("--button");
     } else {
       root.style.removeProperty("--button");
     }
     if (s.themeHover) {
-      const hsl = hexToHsl(s.themeHover);
+      const hsl = hexToHsl(s.themeHover, resolvedTheme === "dark" ? 66 : undefined);
       if (hsl) root.style.setProperty("--hover", hsl);
       else root.style.removeProperty("--hover");
     } else {
       root.style.removeProperty("--hover");
     }
-  }, []);
+  }, [resolvedTheme]);
 
   const refreshSettings = useCallback(async () => {
     try {
@@ -188,14 +196,32 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
         socialTiktok: data.socialTiktok || null,
       };
       setSettings(s);
-      applyThemeColors(s);
       try { localStorage.setItem("edcons_branding", JSON.stringify(s)); } catch {}
     } catch {}
-  }, [applyThemeColors]);
+  }, []);
 
   useEffect(() => {
     applyThemeColors(settings);
-  }, []);
+  }, [applyThemeColors, settings]);
+
+  useEffect(() => {
+    const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
+    const sources = [
+      settings.logoUrl ? `${BASE}/api/settings/branding/logo` : null,
+      settings.logoDarkUrl ? `${BASE}/api/settings/branding/logo?variant=dark` : null,
+      settings.logoSquareUrl ? `${BASE}/api/settings/branding/logo?variant=square` : null,
+    ].filter((source): source is string => Boolean(source));
+
+    // Warm every configured logo variant once. Route changes and theme
+    // switches can then reuse the decoded browser image instead of briefly
+    // showing an empty logo slot while another request completes.
+    for (const source of sources) {
+      const image = new Image();
+      image.decoding = "async";
+      image.src = source;
+      void image.decode?.().catch(() => undefined);
+    }
+  }, [settings.logoUrl, settings.logoDarkUrl, settings.logoSquareUrl]);
 
   useEffect(() => {
     refreshSettings();

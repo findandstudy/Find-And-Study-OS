@@ -106,6 +106,14 @@ function getMenuForRole(role: string, t: TFunc, agentStaffPerms?: string[], hasP
       { title: t("dashboard.messages"), icon: MessageCircle, url: '/staff/messages' },
       { title: t("dashboard.tasks"), icon: ClipboardList, url: '/staff/tasks' },
     ];
+    if (hasPermFn?.('academy.access')) {
+      crmItems.push({
+        title: t("dashboard.academy"),
+        icon: ExternalLink,
+        url: '/admin/__academy__',
+        externalHref: '/api/academy-sso',
+      });
+    }
 
     const agentNetworkItems: MenuItem[] = [
       { title: t("dashboard.agents"), icon: Handshake, url: '/staff/agents' },
@@ -593,19 +601,19 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
     >
       <div className="flex min-h-screen w-full bg-secondary/20">
         <Sidebar collapsible="icon" className="border-r border-border/60 shadow-sm">
-          <SidebarContent className="bg-card">
+          <SidebarContent className="bg-sidebar text-sidebar-foreground">
             {/* Logo */}
             <div className="px-5 py-4 border-b border-border/40 group-data-[collapsible=icon]:px-0 group-data-[collapsible=icon]:py-3 group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:justify-center">
               <button
                 type="button"
                 onClick={() => navigate(localePath("/"))}
-                className="flex items-center gap-2.5 group/logo group-data-[collapsible=icon]:justify-center"
+                className="flex w-full items-center justify-center gap-2.5 group/logo group-data-[collapsible=icon]:justify-center"
                 title={t("dashboard.homeTooltip")}
               >
                 {/* Expanded: full logo (image or icon+wordmark) */}
-                <span className="flex items-center gap-2.5 group-data-[collapsible=icon]:hidden">
+                <span className="flex w-full items-center justify-center gap-2.5 group-data-[collapsible=icon]:hidden">
                   {sidebarLogo ? (
-                    <img src={sidebarLogo} alt="Logo" className="h-9 max-w-[120px] object-contain group-hover/logo:scale-105 transition-transform" />
+                    <img src={sidebarLogo} alt="Logo" decoding="async" fetchPriority="high" className="h-[2.6rem] max-w-[138px] object-contain group-hover/logo:scale-105 transition-transform" />
                   ) : (
                     <>
                       <span className="w-9 h-9 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center text-white shadow-md group-hover/logo:scale-105 transition-transform">
@@ -618,7 +626,7 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
                 {/* Collapsed: compact mark only — uses Square Logo if configured */}
                 {sidebarSquareLogo ? (
                   <span className="hidden group-data-[collapsible=icon]:flex w-9 h-9 rounded-xl overflow-hidden items-center justify-center bg-card group-hover/logo:scale-105 transition-transform">
-                    <img src={sidebarSquareLogo} alt="Logo" className="w-full h-full object-contain" />
+                    <img src={sidebarSquareLogo} alt="Logo" decoding="async" fetchPriority="high" className="w-full h-full object-contain" />
                   </span>
                 ) : (
                   <span className="hidden group-data-[collapsible=icon]:flex w-9 h-9 rounded-xl bg-gradient-to-br from-primary to-accent items-center justify-center text-white shadow-md group-hover/logo:scale-105 transition-transform">
@@ -858,7 +866,7 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
               }}
             />
           </div>
-          <header className="h-14 flex items-center justify-between px-5 bg-card/80 backdrop-blur-sm border-b border-border/50 sticky top-0 z-30">
+          <header className="h-14 flex items-center justify-between px-5 bg-card/95 backdrop-blur-sm border-b border-border sticky top-0 z-30">
             <div className="flex items-center gap-3">
               <SidebarTrigger className="text-muted-foreground hover:text-foreground transition-colors" />
               <div className="h-5 w-px bg-border" />

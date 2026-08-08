@@ -41,7 +41,7 @@ function signHs256(payload: Record<string, unknown>, secret: string): string {
   return data + "." + sig;
 }
 
-router.get("/academy-sso", requireAuth, requireRole("agent", "sub_agent", "agent_staff", "staff", "consultant", "accountant", "editor"), async (req: Request, res: Response) => {
+router.get("/academy-sso", requireAuth, requireRole("super_admin", "admin", "manager", "agent", "sub_agent", "agent_staff", "staff", "consultant", "accountant", "editor"), async (req: Request, res: Response) => {
   const secret = process.env.SSO_SHARED_SECRET;
   if (!secret) {
     res.status(500).send("SSO not configured");

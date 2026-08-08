@@ -270,8 +270,9 @@ export default function CourseFinder() {
     const p = new URLSearchParams(filterParams);
     p.set("page", String(page));
     p.set("limit", "24");
+    if (sortField === "tuition") p.set("sort", sortDir === "asc" ? "price_asc" : "price_desc");
     return p.toString();
-  }, [filterParams, page]);
+  }, [filterParams, page, sortField, sortDir]);
 
   const {
     data,
@@ -531,6 +532,17 @@ export default function CourseFinder() {
     }
   }
 
+  function handlePriceSort(value: string) {
+    if (value === "default") {
+      setSortField("");
+      setSortDir("asc");
+    } else {
+      setSortField("tuition");
+      setSortDir(value === "price_desc" ? "desc" : "asc");
+    }
+    setPage(1);
+  }
+
   const sortedPrograms = useMemo(() => {
     if (!sortField) return programs;
     const sorted = [...programs].sort((a, b) => {
@@ -747,6 +759,20 @@ export default function CourseFinder() {
               )}
             </div>
             <div className="flex flex-wrap items-center gap-2 xl:justify-end">
+              <Select
+                value={sortField === "tuition" ? (sortDir === "asc" ? "price_asc" : "price_desc") : "default"}
+                onValueChange={handlePriceSort}
+              >
+                <SelectTrigger className="h-8 w-[190px] rounded-lg text-xs" aria-label="Sort programs by price">
+                  <ArrowUpDown className="mr-1.5 h-3.5 w-3.5 shrink-0" />
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="default">Default order</SelectItem>
+                  <SelectItem value="price_asc">Price: Low to high</SelectItem>
+                  <SelectItem value="price_desc">Price: High to low</SelectItem>
+                </SelectContent>
+              </Select>
               {programs.length > 0 && (
                 <div className={cn(
                   "flex flex-wrap items-center gap-2",

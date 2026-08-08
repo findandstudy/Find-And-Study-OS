@@ -177,7 +177,7 @@ function parseNonNegativeInt(raw: string | undefined): number | null {
 }
 
 router.get("/course-finder", async (req, res): Promise<void> => {
-  const { country, city, universityType, universityId, programId, level, language, search, intake, feeMin, feeMax, page = "1", limit = "24" } = req.query as Record<string, string>;
+  const { country, city, universityType, universityId, programId, level, language, search, intake, feeMin, feeMax, sort, page = "1", limit = "24" } = req.query as Record<string, string>;
   const pageNum = Math.max(1, parseInt(page, 10));
   // Cap at 500 (was 1000). Lowering further requires StudentDetail.tsx:319
   // to be paginated — currently it requests `limit=500` for a single
@@ -248,6 +248,13 @@ router.get("/course-finder", async (req, res): Promise<void> => {
     .innerJoin(universitiesTable, eq(programsTable.universityId, universitiesTable.id))
     .where(where);
 
+  const effectiveFee = sql`COALESCE(${programsTable.discountedFee}, ${programsTable.tuitionFee})`;
+  const orderBy = sort === "price_asc"
+    ? [sql`${effectiveFee} ASC NULLS LAST`, universitiesTable.name, programsTable.name]
+    : sort === "price_desc"
+      ? [sql`${effectiveFee} DESC NULLS LAST`, universitiesTable.name, programsTable.name]
+      : [universitiesTable.name, programsTable.name];
+
   const rows = await db
     .select({
       id: programsTable.id,
@@ -293,7 +300,7 @@ router.get("/course-finder", async (req, res): Promise<void> => {
     .from(programsTable)
     .innerJoin(universitiesTable, eq(programsTable.universityId, universitiesTable.id))
     .where(where)
-    .orderBy(universitiesTable.name, programsTable.name)
+    .orderBy(...orderBy)
     .limit(limitNum)
     .offset(offset);
 

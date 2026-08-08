@@ -13,13 +13,15 @@ interface TablePaginationProps {
   pageSizeOptions?: number[];
 }
 
+export const TABLE_PAGE_SIZE_OPTIONS = [10, 25, 50, 100, 200, 500, 1000, 5000] as const;
+
 export function TablePagination({
   currentPage,
   totalItems,
   pageSize,
   onPageChange,
   onPageSizeChange,
-  pageSizeOptions = [10, 25, 50, 100],
+  pageSizeOptions = [...TABLE_PAGE_SIZE_OPTIONS],
 }: TablePaginationProps) {
   const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
   const from = totalItems === 0 ? 0 : (currentPage - 1) * pageSize + 1;

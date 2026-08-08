@@ -67,6 +67,7 @@ import {
   type LeadSourceOption,
 } from "@/lib/leadSourceOptions";
 import { LinkedTableCell } from "@/components/LinkedTableCell";
+import { getLeadSourceLabel } from "@/lib/leadSourceLabel";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
@@ -221,20 +222,23 @@ function LeadCard({ lead, onView, showRevenue, variant, assignedUserName, onAssi
     <div
       ref={setNodeRef}
       style={style}
-      className={`rounded-xl border ${
+      className={`rounded-xl border overflow-hidden ${
         isDragging ? "border-primary shadow-xl opacity-50 z-50 relative" : cardBg
       } mb-3 transition-shadow duration-200`}
     >
       <div {...attributes} {...listeners} className={`p-4 pb-2 ${!canMoveCards ? "cursor-default" : isDragging ? "cursor-grabbing" : "cursor-grab"}`}>
         <div className="flex items-start gap-2 mb-2">
           <LeadAvatar lead={lead} />
-          <div className="flex-1 min-w-0 flex justify-between items-start gap-1">
-            <h4 className="font-bold text-sm text-foreground line-clamp-1">
+          <div className="flex-1 min-w-0 flex justify-between items-start gap-2">
+            <h4 className="min-w-0 flex-1 font-bold text-sm text-foreground truncate">
               {lead.firstName} {lead.lastName}
             </h4>
             {lead.source && (
-              <span className="text-[10px] px-2 py-0.5 rounded-full bg-secondary text-secondary-foreground font-medium shrink-0">
-                {lead.source}
+              <span
+                className="max-w-[48%] truncate text-[10px] px-2 py-0.5 rounded-full bg-secondary text-secondary-foreground font-medium shrink"
+                title={getLeadSourceLabel(lead.source, lead.sourcePageUrl)}
+              >
+                {getLeadSourceLabel(lead.source, lead.sourcePageUrl)}
               </span>
             )}
           </div>
@@ -271,8 +275,8 @@ function LeadCard({ lead, onView, showRevenue, variant, assignedUserName, onAssi
           </span>
         </div>
       )}
-      <div className="px-4 pb-3 flex items-center justify-between">
-        <div className="flex items-center gap-1 min-w-0">
+      <div className="px-4 pb-3 flex min-w-0 items-center justify-between gap-2">
+        <div className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden">
           {onAssign && lead.assignedToId ? (
             (canReassign || lead.assignedToId === currentUserId) && staffUsersList ? (
               <AssignPopover assignedUserName={assignedUserName} staffUsers={staffUsersList} currentUserId={currentUserId} onAssign={(uid) => onAssign(lead.id, uid)} />
@@ -291,7 +295,7 @@ function LeadCard({ lead, onView, showRevenue, variant, assignedUserName, onAssi
             <span className="text-[10px] text-muted-foreground truncate" title={assignedUserName}><UserCheck2 className="w-3 h-3 inline mr-0.5" />{assignedUserName}</span>
           ) : null}
         </div>
-        <div className="flex items-center gap-1.5">
+        <div className="flex shrink-0 items-center gap-0.5">
           <button onClick={(e) => { e.stopPropagation(); openContact("internal"); }} title={t("leadsPage.message")}
             className="w-6 h-6 flex items-center justify-center rounded-md text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors">
             <MessageSquare className="w-3.5 h-3.5" />
