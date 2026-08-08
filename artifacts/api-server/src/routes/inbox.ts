@@ -111,6 +111,7 @@ import { buildDocNameFromParts } from "../lib/docNaming";
 import { normalizeInboxStudentExtraction } from "../lib/inboxStudentExtraction";
 import { writeAudit } from "../lib/auditLog";
 import { recomputeStudentPhoto } from "../lib/studentPhoto";
+import { callerOwnsObject } from "../lib/objectAuthz";
 import { loadDocCatalogKeySet } from "../lib/docCatalog";
 import {
   ensureAttachmentFilenameExtension,
@@ -4128,6 +4129,184 @@ function mimeToExt(mime: string): string {
   if (mime === "image/webp") return "webp";
   return "bin";
 }
+
+// Manual document uploads from the Documents side panel use the same signed
+// upload flow as the rest of the application, then bind the verified object to
+// the lead/student linked to this conversation. Multiple files of the same
+// document type are intentionally allowed (for example, a diploma split across
+// several screenshots/pages).
+router.post(
+  "/inbox/conversations/:id/manual-document",
+  requireAuth,
+  requireRole(...STAFF_ROLES, ...ADMIN_ROLES),
+  async (req, res): Promise<void> => {
+    const conversationId = parseInt(String(req.params.id), 10);
+    const ownerType = req.body?.ownerType;
+    const ownerId = Number(req.body?.ownerId);
+    const documentType = typeof req.body?.documentType === "string"
+      ? req.body.documentType.trim()
+      : "";
+    const fileKey = typeof req.body?.fileKey === "string" ? req.body.fileKey.trim() : "";
+    const mimeType = typeof req.body?.mimeType === "string" ? req.body.mimeType.trim() : "";
+    const originalFileName = sanitizeFileName(
+      typeof req.body?.originalFileName === "string" ? req.body.originalFileName : "document",
+    );
+    const sizeBytes = Number(req.body?.sizeBytes);
+    const setAsPhoto = req.body?.setAsPhoto !== false;
+
+    if (!conversationId || !Number.isInteger(ownerId) || ownerId <= 0) {
+      res.status(400).json({ error: "Invalid conversation or owner" });
+      return;
+    }
+    if (ownerType !== "lead" && ownerType !== "student") {
+      res.status(400).json({ error: "ownerType must be 'lead' or 'student'" });
+      return;
+    }
+    if (!documentType || !fileKey || !mimeType || !Number.isFinite(sizeBytes)) {
+      res.status(400).json({ error: "documentType, fileKey, mimeType and sizeBytes are required" });
+      return;
+    }
+    if (!fileKey.startsWith("/objects/student-documents/")) {
+      res.status(400).json({ error: "Invalid manual document storage path" });
+      return;
+    }
+
+    const link = await loadConversationLink(conversationId);
+    if (!link) {
+      res.status(404).json({ error: "Conversation not found" });
+      return;
+    }
+    const linkedOwnerId = ownerType === "student" ? link.studentId : link.leadId;
+    if (linkedOwnerId !== ownerId) {
+      res.status(403).json({ error: "The selected owner is not linked to this conversation" });
+      return;
+    }
+
+    const activeDocumentTypes = await loadDocCatalogKeySet();
+    const legacyAliases = new Set(["diploma", "transcript", "photograph"]);
+    if (!activeDocumentTypes.has(documentType) && !legacyAliases.has(documentType)) {
+      res.status(400).json({ error: `documentType is not active in the document catalog: ${documentType}` });
+      return;
+    }
+
+    // Even staff may only register the object created by their own signed
+    // upload request. This prevents an arbitrary private object key from being
+    // attached through this convenience endpoint.
+    if (!(await callerOwnsObject(req.user!.id, fileKey))) {
+      res.status(403).json({ error: "You can only attach files that you have uploaded" });
+      return;
+    }
+
+    const validationError = validateStudentDocumentFile(
+      documentType,
+      originalFileName,
+      mimeType,
+      sizeBytes,
+    );
+    if (validationError) {
+      res.status(validationError.type === "size_exceeded" ? 413 : 400).json({ error: validationError.message });
+      return;
+    }
+
+    let bytes: Buffer;
+    try {
+      const file = await inboxMediaStorage.getObjectEntityFile(fileKey);
+      [bytes] = await file.download();
+    } catch (error) {
+      console.error("[INBOX manual-document] uploaded object read failed:", error);
+      res.status(400).json({ error: "Uploaded file could not be located in object storage" });
+      return;
+    }
+    if (bytes.length !== sizeBytes) {
+      res.status(400).json({ error: "Uploaded file size does not match the declared size" });
+      return;
+    }
+    const bufferError = await validateStudentDocumentBuffer(
+      documentType,
+      originalFileName,
+      mimeType,
+      bytes,
+    );
+    if (bufferError) {
+      res.status(bufferError.type === "size_exceeded" ? 413 : 400).json({ error: bufferError.message });
+      return;
+    }
+
+    const ownerCondition = ownerType === "student"
+      ? eq(documentsTable.studentId, ownerId)
+      : eq(documentsTable.leadId, ownerId);
+    const [duplicate] = await db
+      .select({ id: documentsTable.id })
+      .from(documentsTable)
+      .where(and(
+        ownerCondition,
+        eq(documentsTable.fileKey, fileKey),
+        isNull(documentsTable.deletedAt),
+      ))
+      .limit(1);
+    if (duplicate) {
+      res.status(409).json({ error: "This uploaded file is already saved", existingDocumentId: duplicate.id });
+      return;
+    }
+
+    let ownerFirstName: string | null = null;
+    let ownerLastName: string | null = null;
+    if (ownerType === "student") {
+      const [owner] = await db
+        .select({ firstName: studentsTable.firstName, lastName: studentsTable.lastName })
+        .from(studentsTable)
+        .where(and(eq(studentsTable.id, ownerId), isNull(studentsTable.deletedAt)));
+      ownerFirstName = owner?.firstName ?? null;
+      ownerLastName = owner?.lastName ?? null;
+    } else {
+      const [owner] = await db
+        .select({ firstName: leadsTable.firstName, lastName: leadsTable.lastName })
+        .from(leadsTable)
+        .where(and(eq(leadsTable.id, ownerId), isNull(leadsTable.deletedAt)));
+      ownerFirstName = owner?.firstName ?? null;
+      ownerLastName = owner?.lastName ?? null;
+    }
+    if (!ownerFirstName && !ownerLastName) {
+      res.status(404).json({ error: "Linked owner not found" });
+      return;
+    }
+
+    const [document] = await db.insert(documentsTable).values({
+      name: buildDocNameFromParts(ownerFirstName, ownerLastName, documentType, mimeType),
+      type: documentType,
+      status: "pending",
+      studentId: ownerType === "student" ? ownerId : null,
+      leadId: ownerType === "lead" ? ownerId : null,
+      applicationId: null,
+      fileKey,
+      mimeType,
+      sizeBytes,
+      source: "inbox_manual",
+      sourceConversationId: conversationId,
+      sourceMessageId: null,
+      sourceAttachmentId: null,
+    }).returning();
+
+    if (
+      ownerType === "student" &&
+      (documentType === "photo" || documentType === "photograph") &&
+      setAsPhoto
+    ) {
+      await recomputeStudentPhoto(ownerId);
+    }
+
+    await writeAudit({
+      userId: req.user!.id,
+      action: "inbox_manual_document_upload",
+      resource: "document",
+      resourceId: document.id,
+      changes: { conversationId, ownerType, ownerId, documentType },
+      ipAddress: req.ip,
+    });
+
+    res.status(201).json(document);
+  },
+);
 
 
 router.post(

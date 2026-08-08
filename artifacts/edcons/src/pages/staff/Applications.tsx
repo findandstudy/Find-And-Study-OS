@@ -600,12 +600,21 @@ function DraggableAppCard({ app, onView, variant, assignedUserName, onAssign, st
       <div {...attributes} {...listeners} className={`p-4 pb-2 ${!canMoveCards ? "cursor-default" : isDragging ? "cursor-grabbing" : "cursor-grab"}`}>
         <div className="flex items-center gap-2.5 mb-1.5">
           <AppStudentAvatar app={app} />
-          <h4
-            className="font-bold text-sm text-foreground line-clamp-1 hover:text-primary hover:underline cursor-pointer transition-colors min-w-0"
-            onClick={(e) => { e.stopPropagation(); if (app.studentId) setLoc(`/staff/students/${app.studentId}`); }}
-          >
-            {app.studentFirstName} {app.studentLastName}
-          </h4>
+          {app.studentId ? (
+            <Link
+              href={`/staff/students/${app.studentId}`}
+              className="min-w-0 line-clamp-1 cursor-pointer text-sm font-bold text-foreground transition-colors hover:text-primary hover:underline"
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => e.stopPropagation()}
+              title={`Open ${studentName}`}
+            >
+              {app.studentFirstName} {app.studentLastName}
+            </Link>
+          ) : (
+            <h4 className="min-w-0 line-clamp-1 text-sm font-bold text-foreground">
+              {app.studentFirstName} {app.studentLastName}
+            </h4>
+          )}
         </div>
         {app.universityName && (
           <p

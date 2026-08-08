@@ -33,6 +33,8 @@ import {
   Circle,
   Paperclip,
   Trash2,
+  Upload,
+  ClipboardPaste,
   X as XIcon,
 } from "lucide-react";
 import { inboxDocumentLabel } from "./documentPresentation";
@@ -41,6 +43,7 @@ import {
   normalizeInboxGpaForForm,
 } from "./inboxExtractionNormalization";
 import { resolveInboxStudentContactPrefill } from "./studentDraftContact";
+import { uploadDocumentFile } from "@/lib/uploadDocumentFile";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
@@ -277,6 +280,10 @@ export function InboxStudentTab({
   } | null>(null);
   const [documentToDelete, setDocumentToDelete] = useState<PersistedDocument | null>(null);
   const [deletingDocumentId, setDeletingDocumentId] = useState<number | null>(null);
+  const [uploadingDocumentType, setUploadingDocumentType] = useState<string | null>(null);
+  const [pasteTargetDocumentType, setPasteTargetDocumentType] = useState<string | null>(null);
+  const [filePickerDocumentType, setFilePickerDocumentType] = useState<string | null>(null);
+  const manualFileInputRef = useRef<HTMLInputElement | null>(null);
   // extracting state for analyze button
   const [extracting, setExtracting] = useState(false);
 
@@ -389,6 +396,34 @@ export function InboxStudentTab({
     () => extractChatAttachments((detail as any).messages ?? [], t),
     [detail, t]
   );
+
+  useEffect(() => {
+    const handlePaste = (event: ClipboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      const targetAcceptsText =
+        target?.tagName === "INPUT" ||
+        target?.tagName === "TEXTAREA" ||
+        target?.isContentEditable;
+      if (!pasteTargetDocumentType || targetAcceptsText) return;
+
+      const imageItem = Array.from(event.clipboardData?.items ?? []).find(
+        (item) => item.kind === "file" && item.type.startsWith("image/"),
+      );
+      const blob = imageItem?.getAsFile();
+      if (!blob) return;
+
+      event.preventDefault();
+      const extension = blob.type === "image/png" ? "png" : "jpg";
+      const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+      const file = new File([blob], `screenshot-${stamp}.${extension}`, { type: blob.type });
+      const documentType = pasteTargetDocumentType;
+      setPasteTargetDocumentType(null);
+      void handleManualDocumentUpload(file, documentType);
+    };
+
+    window.addEventListener("paste", handlePaste);
+    return () => window.removeEventListener("paste", handlePaste);
+  }, [pasteTargetDocumentType, uploadingDocumentType, ownerKey]);
 
   const sortedDocReqs = useMemo(
     () => [...docReqs].sort((a, b) => a.sortOrder - b.sortOrder),
@@ -506,6 +541,49 @@ export function InboxStudentTab({
       });
     } finally {
       setDeletingDocumentId(null);
+    }
+  }
+
+  async function handleManualDocumentUpload(file: File, documentType: string) {
+    if (uploadingDocumentType || !ownerKey) return;
+    const ownerType = studentId ? "student" : "lead";
+    const ownerId = studentId ?? leadId;
+    if (!ownerId) {
+      toast({
+        title: t("inbox.studentTab.manualUploadFailed"),
+        description: t("inbox.studentTab.noLinkedOwner"),
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setUploadingDocumentType(documentType);
+    try {
+      const uploaded = await uploadDocumentFile(file);
+      await customFetch(`/api/inbox/conversations/${conversationId}/manual-document`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ownerType,
+          ownerId,
+          documentType,
+          fileKey: uploaded.fileKey,
+          mimeType: uploaded.mimeType,
+          sizeBytes: uploaded.sizeBytes,
+          originalFileName: file.name,
+        }),
+      });
+      await refetchBackendDocs();
+      onUpdated?.();
+      toast({ title: t("inbox.studentTab.manualUploadSuccess") });
+    } catch (error) {
+      toast({
+        title: t("inbox.studentTab.manualUploadFailed"),
+        description: error instanceof Error ? error.message : t("common.uploadFailed"),
+        variant: "destructive",
+      });
+    } finally {
+      setUploadingDocumentType(null);
     }
   }
 
@@ -716,9 +794,25 @@ export function InboxStudentTab({
         {/* Required doc slots */}
         {selectedLevel ? (
           <div className="px-3 pt-3 pb-2 space-y-1">
-            <div className="text-[11px] text-muted-foreground uppercase tracking-wide mb-2">
-              {t("inbox.studentTab.requiredDocs")}
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <div className="text-[11px] text-muted-foreground uppercase tracking-wide">
+                {t("inbox.studentTab.requiredDocs")}
+              </div>
             </div>
+            <input
+              ref={manualFileInputRef}
+              type="file"
+              className="hidden"
+              accept="application/pdf,image/jpeg,image/png"
+              onChange={(event) => {
+                const file = event.target.files?.[0] ?? null;
+                const documentType = filePickerDocumentType;
+                event.target.value = "";
+                setFilePickerDocumentType(null);
+                if (file && documentType) void handleManualDocumentUpload(file, documentType);
+              }}
+              data-testid="inbox-manual-document-input"
+            />
             {programId && programName ? (
               <p className="text-[10px] text-primary/80 mb-1.5" data-testid="doc-reqs-program-note">
                 {t("inbox.studentTab.programScopedNote", { name: programName })}
@@ -813,6 +907,46 @@ export function InboxStudentTab({
                       ) : (
                         <Circle className="w-3.5 h-3.5 text-muted-foreground/40 shrink-0" />
                       )}
+                      <button
+                        type="button"
+                        className="shrink-0 rounded p-0.5 text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary disabled:opacity-40"
+                        onClick={() => {
+                          setPasteTargetDocumentType(null);
+                          setFilePickerDocumentType(req.documentType);
+                          manualFileInputRef.current?.click();
+                        }}
+                        disabled={!ownerKey || uploadingDocumentType !== null}
+                        title={`${docLabel(req.documentType)} · ${t("inbox.studentTab.uploadFromDevice")}`}
+                        aria-label={`${docLabel(req.documentType)} · ${t("inbox.studentTab.uploadFromDevice")}`}
+                        data-testid={`upload-document-${req.documentType}`}
+                      >
+                        {uploadingDocumentType === req.documentType ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <Upload className="h-3.5 w-3.5" />
+                        )}
+                      </button>
+                      <button
+                        type="button"
+                        className={`shrink-0 rounded p-0.5 transition-colors disabled:opacity-40 ${
+                          pasteTargetDocumentType === req.documentType
+                            ? "bg-primary/10 text-primary"
+                            : "text-muted-foreground hover:bg-primary/10 hover:text-primary"
+                        }`}
+                        onClick={() => {
+                          setPasteTargetDocumentType(req.documentType);
+                          toast({
+                            title: t("inbox.studentTab.pasteReady"),
+                            description: `${docLabel(req.documentType)} · ${t("inbox.studentTab.pasteInstruction")}`,
+                          });
+                        }}
+                        disabled={!ownerKey || uploadingDocumentType !== null}
+                        title={`${docLabel(req.documentType)} · ${t("inbox.studentTab.pasteScreenshot")}`}
+                        aria-label={`${docLabel(req.documentType)} · ${t("inbox.studentTab.pasteScreenshot")}`}
+                        data-testid={`paste-document-${req.documentType}`}
+                      >
+                        <ClipboardPaste className="h-3.5 w-3.5" />
+                      </button>
                     </div>
                     {persistedDocsForRequirement.length > 0 && (
                       <div className="ms-5 mt-1 space-y-1">
