@@ -3628,7 +3628,7 @@ body{font-family:${fontFamily};background:transparent;color:#1f2937;line-height:
 .ew-scholarship-box-lbl{font-size:9px;color:#94a3b8;font-weight:500;margin-bottom:2px}
 .ew-scholarship-box-amt{font-size:13px;font-weight:800;color:#059669}
 .ew-fee-section{margin-bottom:12px}
-.ew-fee-section-label{font-size:10px;color:#94a3b8;font-weight:500;margin-bottom:4px;text-transform:uppercase;letter-spacing:.3px}
+.ew-fee-section-label{font-size:9px;color:#94a3b8;font-weight:600;letter-spacing:.15px;white-space:nowrap;flex-shrink:0}
 .ew-fee-section-row{display:flex;align-items:center;justify-content:space-between;gap:12px}
 .ew-fee-values{flex:1;min-width:0}
 .ew-fee-main{font-size:20px;font-weight:800;color:#1f2937;line-height:1}
@@ -4563,10 +4563,10 @@ function renderCard(p){
   /* Fee + Scholarship */
   if(effFee){
     h+='<div class="ew-fee-section">';
-    h+='<div class="ew-fee-section-label">Tuition Fee'+(p.feeType?' ('+esc(p.feeType)+')':'')+'</div>';
     h+='<div class="ew-fee-section-row">';
     h+='<div class="ew-fee-values">';
     h+='<div class="ew-fee-row">';
+    h+='<span class="ew-fee-section-label">Tuition Fee'+(p.feeType?' ('+esc(p.feeType)+')':'')+'</span>';
     h+='<span class="ew-fee-main">'+esc(fmtFee(effFee,p.currency))+'</span>';
     if(hasDiscount)h+=' <span class="ew-fee-orig">'+esc(fmtFee(p.tuitionFee,p.currency))+'</span>';
     if(hasDiscount)h+=' <span class="ew-fee-pct">'+pct+'% OFF</span>';
