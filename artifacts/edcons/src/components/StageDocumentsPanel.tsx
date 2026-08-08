@@ -182,7 +182,11 @@ function StageSection({
   })();
 
   const uploadMutation = useMutation({
-    mutationFn: async (file: File) => {
+    mutationFn: async ({ file, documentNameOverride, respondingToNoteId }: {
+      file: File;
+      documentNameOverride?: string;
+      respondingToNoteId?: number;
+    }) => {
       const base64 = await fileToBase64(file);
       const body: any = {
         stage,
@@ -191,6 +195,8 @@ function StageSection({
         mimeType: file.type,
         sizeBytes: file.size,
       };
+      if (documentNameOverride) body.documentNameOverride = documentNameOverride;
+      if (respondingToNoteId) body.respondingToNoteId = respondingToNoteId;
       if (supportsValidUntil && pendingValidUntil) body.validUntil = pendingValidUntil;
       return customFetch(`${BASE_URL}/api/applications/${applicationId}/stage-documents`, {
         method: "POST",
@@ -200,6 +206,10 @@ function StageSection({
     },
     onSuccess: async () => {
       qc.invalidateQueries({ queryKey: [`app-stage-docs-${applicationId}`] });
+      qc.invalidateQueries({ queryKey: [`app-missing-notes-${applicationId}`] });
+      qc.invalidateQueries({
+        predicate: (q) => typeof q.queryKey[0] === "string" && (q.queryKey[0] as string).startsWith("/api/applications"),
+      });
       setPendingValidUntil("");
       // Mirror the kanban "Document Required" flow: uploading a document for a
       // stage ahead of the application's current stage auto-advances the
@@ -271,7 +281,7 @@ function StageSection({
     }
     setUploading(true);
     const safeFile = new File([file], sanitizeFileName(file.name), { type: file.type });
-    await uploadMutation.mutateAsync(safeFile);
+    await uploadMutation.mutateAsync({ file: safeFile });
     setUploading(false);
     if (fileRef.current) fileRef.current.value = "";
   }
@@ -319,6 +329,20 @@ function StageSection({
               applicationId={applicationId}
               notes={missingNotes}
               isAdmin={isAdmin}
+              canUpload={canUpload}
+              onUpload={async (file, note) => {
+                const validation = validateFile(file);
+                if (!validation.valid) {
+                  toast({ title: t("stageDocs.toastFileError"), description: validation.message, variant: "destructive" });
+                  return;
+                }
+                const safeFile = new File([file], sanitizeFileName(file.name), { type: file.type });
+                await uploadMutation.mutateAsync({
+                  file: safeFile,
+                  documentNameOverride: note.fileName,
+                  respondingToNoteId: note.id,
+                });
+              }}
             />
           )}
 
@@ -433,7 +457,7 @@ function StageSection({
             )
           )}
 
-          {canUpload && (
+          {canUpload && !(stage === "missing_docs" && missingNotes.some((note: any) => !note.fulfilledAt)) && (
             <div className="pt-1 space-y-1">
               {supportsValidUntil && (
                 <div className="flex items-center gap-2">
@@ -473,7 +497,7 @@ function StageSection({
                   setUploading(true);
                   try {
                     const safeFile = new File([file], sanitizeFileName(file.name), { type: file.type });
-                    await uploadMutation.mutateAsync(safeFile);
+                    await uploadMutation.mutateAsync({ file: safeFile });
                   } catch (err: any) {
                     toast({ title: t("stageDocs.toastFileError"), description: err?.message || String(err), variant: "destructive" });
                   } finally {
@@ -511,11 +535,13 @@ function StageSection({
 }
 
 function MissingDocsSection({
-  applicationId, notes, isAdmin,
+  applicationId, notes, isAdmin, canUpload, onUpload,
 }: {
   applicationId: number;
   notes: any[];
   isAdmin: boolean;
+  canUpload: boolean;
+  onUpload: (file: File, note: any) => Promise<void>;
 }) {
   const { t, lang } = useI18n();
   const { toast } = useToast();
@@ -614,6 +640,9 @@ function MissingDocsSection({
                         : ""}
                     </p>
                   )}
+                  {!fulfilled && canUpload && (
+                    <MissingDocumentUploadActions note={note} onUpload={onUpload} />
+                  )}
                 </div>
                 {isAdmin && !note.isDerived && (
                   <div className="flex gap-0.5 shrink-0">
@@ -634,6 +663,79 @@ function MissingDocsSection({
           );
         })}
       </ul>
+    </div>
+  );
+}
+
+function MissingDocumentUploadActions({
+  note,
+  onUpload,
+}: {
+  note: any;
+  onUpload: (file: File, note: any) => Promise<void>;
+}) {
+  const { t } = useI18n();
+  const { toast } = useToast();
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [scannerOpen, setScannerOpen] = useState(false);
+  const [uploading, setUploading] = useState(false);
+
+  async function submit(file: File) {
+    setUploading(true);
+    try {
+      await onUpload(file, note);
+    } catch (err: any) {
+      toast({
+        title: t("stageDocs.toastUploadFailed"),
+        description: err?.message || t("stageDocs.toastGenericError"),
+        variant: "destructive",
+      });
+    } finally {
+      setUploading(false);
+      if (inputRef.current) inputRef.current.value = "";
+    }
+  }
+
+  return (
+    <div className="mt-2 flex items-center gap-1.5">
+      <input
+        ref={inputRef}
+        type="file"
+        className="hidden"
+        accept={APPLICATION_DOCUMENT_ACCEPT_ATTRIBUTE}
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          if (file) void submit(file);
+        }}
+      />
+      <DocumentScanner
+        open={scannerOpen}
+        onClose={() => setScannerOpen(false)}
+        baseName={String(note.fileName || "missing-document")}
+        onCapture={submit}
+      />
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        className="h-7 gap-1 px-2 text-[10px]"
+        disabled={uploading}
+        onClick={() => inputRef.current?.click()}
+      >
+        <Upload className="h-3 w-3" />
+        {uploading ? t("stageDocs.uploading") : t("stageDocs.uploadDocument")}
+      </Button>
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        className="h-7 gap-1 px-2 text-[10px]"
+        disabled={uploading}
+        onClick={() => setScannerOpen(true)}
+      >
+        <Camera className="h-3 w-3" />
+        {t("scanner.scanWithCamera")}
+      </Button>
     </div>
   );
 }

@@ -2001,7 +2001,14 @@ export default function ApplicationsPage() {
   }
 
   async function handleStageAction(app: ApplicationRow, action: StageAction) {
-    const targetKey = action.targetStageKey ?? null;
+    // Older pipeline rows can have a Deposit Receipt quick action without a
+    // target. Keep those rows compatible with the canonical lifecycle.
+    const actionName = `${action.label || ""} ${action.documentName || ""}`.trim().toLowerCase();
+    const isDepositReceiptUpload = action.type === "upload" && /deposit[ _-]*receipt/.test(actionName);
+    const targetKey = action.targetStageKey
+      ?? (isDepositReceiptUpload && pipelineStages.some((stage) => stage.key === "upload_payment")
+        ? "upload_payment"
+        : null);
     const targetLabel = targetKey
       ? (pipelineStages.find((s) => s.key === targetKey)?.label ?? targetKey)
       : "";

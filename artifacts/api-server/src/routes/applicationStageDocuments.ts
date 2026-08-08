@@ -122,11 +122,16 @@ router.post("/applications/:id/stage-documents", requireAuth, requireAgentStaffP
   const hasAccess = await verifyApplicationAccess(req, applicationId);
   if (!hasAccess) { res.status(403).json({ error: "Access denied" }); return; }
 
-  const { stage, fileName, fileUrl, validUntil, documentNameOverride } = req.body;
+  const { stage, fileName, fileUrl, validUntil, documentNameOverride, respondingToNoteId } = req.body;
   let { fileData, mimeType, sizeBytes } = req.body;
 
   if (!stage || !fileName) {
     res.status(400).json({ error: "stage and fileName are required" });
+    return;
+  }
+  const parsedRespondingToNoteId = respondingToNoteId == null ? undefined : Number(respondingToNoteId);
+  if (parsedRespondingToNoteId !== undefined && (!Number.isInteger(parsedRespondingToNoteId) || parsedRespondingToNoteId <= 0)) {
+    res.status(400).json({ error: "respondingToNoteId must be a positive integer" });
     return;
   }
 
@@ -270,7 +275,13 @@ router.post("/applications/:id/stage-documents", requireAuth, requireAgentStaffP
   const fulfilmentSignal = (typeof documentNameOverride === "string" && documentNameOverride.trim())
     ? documentNameOverride.trim()
     : stage;
-  void handleMissingDocFulfillment(applicationId, fulfilmentSignal, user.id);
+  await handleMissingDocFulfillment(
+    applicationId,
+    fulfilmentSignal,
+    user.id,
+    doc.id,
+    parsedRespondingToNoteId,
+  );
 
   // Mirror ALL stage uploads to the student's shared document pool so they
   // appear in the application detail (Program Document Requirements), the

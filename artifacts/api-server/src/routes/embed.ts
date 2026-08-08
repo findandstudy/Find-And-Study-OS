@@ -3617,7 +3617,7 @@ body{font-family:${fontFamily};background:transparent;color:#1f2937;line-height:
 .ew-meta-icon-green{color:#22c55e}
 .ew-meta-icon-orange{color:#f97316}
 .ew-meta-icon-emerald{color:#10b981}
-.ew-fee-row{display:flex;align-items:center;gap:6px;flex-wrap:nowrap;white-space:nowrap}
+.ew-fee-row{display:flex;align-items:baseline;gap:6px;flex-wrap:wrap;min-width:0}
 .ew-fee-orig{text-decoration:line-through;color:rgba(148,163,184,.7);font-size:10px;font-weight:400}
 .ew-fee-disc{color:#059669;font-weight:700}
 .ew-fee-pct{font-size:9px;font-weight:700;color:#fff;background:#10b981;border-radius:3px;padding:1px 4px;line-height:1.2}
@@ -3628,10 +3628,10 @@ body{font-family:${fontFamily};background:transparent;color:#1f2937;line-height:
 .ew-scholarship-box-lbl{font-size:9px;color:#94a3b8;font-weight:500;margin-bottom:2px}
 .ew-scholarship-box-amt{font-size:13px;font-weight:800;color:#059669}
 .ew-fee-section{margin-bottom:12px}
-.ew-fee-section-label{font-size:9px;color:#94a3b8;font-weight:600;letter-spacing:.15px;white-space:nowrap;flex-shrink:0}
-.ew-fee-section-row{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.ew-fee-section-label{display:block;font-size:9px;color:#94a3b8;font-weight:600;letter-spacing:.15px;white-space:nowrap;margin-bottom:5px}
+.ew-fee-section-row{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:12px}
 .ew-fee-values{flex:1;min-width:0}
-.ew-fee-main{font-size:20px;font-weight:800;color:#1f2937;line-height:1}
+.ew-fee-main{font-size:20px;font-weight:800;color:#1f2937;line-height:1;white-space:nowrap}
 .ew-fee-disc-big{color:#059669!important;font-size:20px;font-weight:800;line-height:1}
 .ew-scholarship-right{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:500;padding:4px 10px;border-radius:9999px;border:1px solid rgba(16,185,129,.3);color:#059669;background:rgba(236,253,245,.7);white-space:nowrap}
 .ew-scholarship-right svg{width:12px;height:12px}
@@ -4565,8 +4565,8 @@ function renderCard(p){
     h+='<div class="ew-fee-section">';
     h+='<div class="ew-fee-section-row">';
     h+='<div class="ew-fee-values">';
-    h+='<div class="ew-fee-row">';
     h+='<span class="ew-fee-section-label">Tuition Fee'+(p.feeType?' ('+esc(p.feeType)+')':'')+'</span>';
+    h+='<div class="ew-fee-row">';
     h+='<span class="ew-fee-main">'+esc(fmtFee(effFee,p.currency))+'</span>';
     if(hasDiscount)h+=' <span class="ew-fee-orig">'+esc(fmtFee(p.tuitionFee,p.currency))+'</span>';
     if(hasDiscount)h+=' <span class="ew-fee-pct">'+pct+'% OFF</span>';
