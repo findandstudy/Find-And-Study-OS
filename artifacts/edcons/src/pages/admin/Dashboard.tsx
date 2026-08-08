@@ -522,7 +522,7 @@ export default function AdminDashboard() {
           { label: "Audit Log", icon: Activity, href: "/admin/audit", color: "text-rose-500 bg-rose-500/10" },
         ].map((item, i) => (
           <Link key={i} href={item.href}>
-            <Card className="p-5 text-center border-none shadow-md shadow-black/5 hover:-translate-y-1 hover:shadow-lg transition-all duration-300 cursor-pointer group">
+            <Card className="p-5 text-center border-none shadow-md shadow-black/5 hover:-translate-y-1 hover:shadow-lg transition-[transform,box-shadow] duration-200 cursor-pointer group">
               <div className={`w-12 h-12 rounded-xl ${item.color} flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform`}>
                 <item.icon className="w-5 h-5" />
               </div>
@@ -613,10 +613,10 @@ export default function AdminDashboard() {
                           {actionLabel}{resourceLabel ? ` — ${resourceLabel}` : ""}
                           {u.resourceId ? ` #${u.resourceId}` : ""}
                         </p>
-                        {changes && <p className="text-[11px] text-muted-foreground line-clamp-1 mt-0.5">{changes}</p>}
+                        {changes && <p className="text-[11px] text-foreground/65 dark:text-foreground/75 line-clamp-1 mt-0.5">{changes}</p>}
                       </div>
                       <div className="flex flex-col items-end shrink-0 mt-1">
-                        <span className="text-[10px] text-muted-foreground whitespace-nowrap">{timeAgo(u.createdAt)}</span>
+                        <span className="text-[10px] text-foreground/60 dark:text-foreground/70 whitespace-nowrap">{timeAgo(u.createdAt)}</span>
                         {detailHref && <ArrowUpRight className="w-3 h-3 text-muted-foreground mt-1" />}
                       </div>
                     </div>
@@ -649,10 +649,10 @@ export default function AdminDashboard() {
                         <NIcon className={`w-3.5 h-3.5 ${n.isRead ? "text-muted-foreground" : "text-primary"}`} />
                       </div>
                       <div className="min-w-0 flex-1">
-                        <p className={`text-sm font-medium line-clamp-1 ${n.isRead ? "text-muted-foreground" : "text-foreground"}`}>{localized.title}</p>
-                        {localized.body && <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">{localized.body}</p>}
+                        <p className={`text-sm font-medium line-clamp-1 ${n.isRead ? "text-foreground/75 dark:text-foreground/80" : "text-foreground"}`}>{localized.title}</p>
+                        {localized.body && <p className="text-xs text-foreground/65 dark:text-foreground/75 line-clamp-2 mt-0.5">{localized.body}</p>}
                       </div>
-                      <span className="text-[10px] text-muted-foreground whitespace-nowrap shrink-0 mt-0.5">{timeAgo(n.createdAt)}</span>
+                      <span className="text-[10px] text-foreground/60 dark:text-foreground/70 whitespace-nowrap shrink-0 mt-0.5">{timeAgo(n.createdAt)}</span>
                     </div>
                   </div>
                 );

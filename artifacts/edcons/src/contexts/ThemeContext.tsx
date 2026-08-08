@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useLayoutEffect, useState, useCallback, type ReactNode } from "react";
 
 type ThemeMode = "light" | "dark" | "system";
 
@@ -70,6 +70,24 @@ function getSystemTheme(): "light" | "dark" {
   return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
 }
 
+let themeTransitionLockVersion = 0;
+
+function lockThemeTransitions() {
+  const root = document.documentElement;
+  const lockVersion = ++themeTransitionLockVersion;
+  root.classList.add("theme-switching");
+
+  // Keep the lock through the frame in which React applies the new theme and
+  // release it only after the browser has painted the complete theme once.
+  window.requestAnimationFrame(() => {
+    window.requestAnimationFrame(() => {
+      if (lockVersion === themeTransitionLockVersion) {
+        root.classList.remove("theme-switching");
+      }
+    });
+  });
+}
+
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [mode, setModeState] = useState<ThemeMode>(() => {
     if (typeof window === "undefined") return "light";
@@ -102,11 +120,12 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   });
 
   const setMode = useCallback((m: ThemeMode) => {
+    lockThemeTransitions();
     setModeState(m);
     localStorage.setItem("edcons_theme", m);
   }, []);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const resolved = mode === "system" ? getSystemTheme() : mode;
     setResolved(resolved);
     document.documentElement.classList.toggle("dark", resolved === "dark");
@@ -115,6 +134,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     if (mode === "system") {
       const mq = window.matchMedia("(prefers-color-scheme: dark)");
       const handler = (e: MediaQueryListEvent) => {
+        lockThemeTransitions();
         setResolved(e.matches ? "dark" : "light");
         document.documentElement.classList.toggle("dark", e.matches);
         document.documentElement.style.colorScheme = e.matches ? "dark" : "light";
@@ -200,7 +220,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     } catch {}
   }, []);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     applyThemeColors(settings);
   }, [applyThemeColors, settings]);
 

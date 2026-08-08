@@ -168,6 +168,15 @@
   }
 }
 
+/* A theme change must be perceived as one atomic UI update. Component hover
+ * and motion transitions resume immediately after the new palette is painted. */
+html.theme-switching,
+html.theme-switching *,
+html.theme-switching *::before,
+html.theme-switching *::after {
+  transition: none !important;
+}
+
 /* Dashboard density is a layout preference, not browser zoom. Keeping the
  * scale on the root preserves normal reflow and crisp rendering while making
  * data-heavy staff/admin screens usable at 100% browser zoom. Public and

@@ -297,11 +297,11 @@ function getRoleLabel(role: string, t: TFunc): string {
 }
 
 const ROLE_COLORS: Record<string, string> = {
-  super_admin: "bg-rose-500/10 text-rose-600", admin: "bg-red-500/10 text-red-600",
-  manager: "bg-orange-500/10 text-orange-600", staff: "bg-blue-500/10 text-blue-600",
-  consultant: "bg-indigo-500/10 text-indigo-600", accountant: "bg-purple-500/10 text-purple-600",
-  student: "bg-green-500/10 text-green-600", agent: "bg-amber-500/10 text-amber-600",
-  agent_staff: "bg-teal-500/10 text-teal-600",
+  super_admin: "bg-rose-500/12 text-rose-700 dark:bg-rose-400/15 dark:text-rose-300", admin: "bg-red-500/12 text-red-700 dark:bg-red-400/15 dark:text-red-300",
+  manager: "bg-orange-500/12 text-orange-700 dark:bg-orange-400/15 dark:text-orange-300", staff: "bg-blue-500/12 text-blue-700 dark:bg-blue-400/15 dark:text-blue-300",
+  consultant: "bg-indigo-500/12 text-indigo-700 dark:bg-indigo-400/15 dark:text-indigo-300", accountant: "bg-purple-500/12 text-purple-700 dark:bg-purple-400/15 dark:text-purple-300",
+  student: "bg-green-500/12 text-green-700 dark:bg-green-400/15 dark:text-green-300", agent: "bg-amber-500/12 text-amber-700 dark:bg-amber-400/15 dark:text-amber-300",
+  agent_staff: "bg-teal-500/12 text-teal-700 dark:bg-teal-400/15 dark:text-teal-300",
 };
 
 type PanelDensity = "compact" | "comfortable";
@@ -648,7 +648,7 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
                               asChild
                               data-active={isActive}
                               tooltip={item.title}
-                              className="w-full justify-start gap-3 px-3 py-2.5 rounded-xl transition-all duration-150 hover:bg-primary/5 data-[active=true]:bg-primary/10 data-[active=true]:text-primary font-medium text-muted-foreground hover:text-foreground data-[active=true]:font-semibold text-sm group-data-[collapsible=icon]:!w-10 group-data-[collapsible=icon]:!h-10 group-data-[collapsible=icon]:!p-0 group-data-[collapsible=icon]:!justify-center group-data-[collapsible=icon]:!rounded-xl group-data-[collapsible=icon]:!gap-0 relative"
+                              className="w-full justify-start gap-3 px-3 py-2.5 rounded-xl transition-all duration-150 hover:bg-primary/5 data-[active=true]:bg-primary/10 data-[active=true]:text-primary font-medium text-sidebar-foreground/80 dark:text-sidebar-foreground/85 hover:text-foreground data-[active=true]:font-semibold text-sm group-data-[collapsible=icon]:!w-10 group-data-[collapsible=icon]:!h-10 group-data-[collapsible=icon]:!p-0 group-data-[collapsible=icon]:!justify-center group-data-[collapsible=icon]:!rounded-xl group-data-[collapsible=icon]:!gap-0 relative"
                             >
                               <a
                                 href={item.externalHref ?? item.url}
@@ -784,7 +784,7 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
                         <button
                           type="button"
                           onClick={() => toggleGroup(groupKey, defaultOpen)}
-                          className="w-full flex items-center justify-between text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-1 px-3 hover:text-foreground transition-colors cursor-pointer group-data-[collapsible=icon]:-mt-8 group-data-[collapsible=icon]:opacity-0"
+                          className="w-full flex items-center justify-between text-[10px] font-bold text-sidebar-foreground/70 dark:text-sidebar-foreground/75 uppercase tracking-widest mb-1 px-3 hover:text-foreground transition-colors cursor-pointer group-data-[collapsible=icon]:-mt-8 group-data-[collapsible=icon]:opacity-0"
                         >
                           <span>{group.label}</span>
                           <ChevronDown className={`w-3.5 h-3.5 shrink-0 transition-transform duration-200 ${expanded ? "" : "-rotate-90"}`} />
@@ -868,7 +868,7 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
           </div>
           <header className="h-14 flex items-center justify-between px-5 bg-card/95 backdrop-blur-sm border-b border-border sticky top-0 z-30">
             <div className="flex items-center gap-3">
-              <SidebarTrigger className="text-muted-foreground hover:text-foreground transition-colors" />
+              <SidebarTrigger className="text-foreground/70 hover:bg-secondary hover:text-foreground transition-colors" />
               <div className="h-5 w-px bg-border" />
               <h1 className="font-display font-bold text-base text-foreground hidden sm:block">
                 {activeItem?.title || t("dashboard.portal")}
@@ -876,7 +876,7 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
             </div>
             <div className="flex items-center gap-3">
               {isOperationalRole && (
-                <div className="flex items-center gap-1.5 bg-primary/8 border border-primary/20 rounded-lg px-2 py-1">
+                <div className="flex items-center gap-1.5 bg-primary/10 dark:bg-primary/15 border border-primary/25 dark:border-primary/35 rounded-lg px-2 py-1">
                   <CalendarDays className="w-3.5 h-3.5 text-primary shrink-0" />
                   <Select value={season} onValueChange={setSeason}>
                     <SelectTrigger className="h-6 border-0 bg-transparent p-0 text-xs font-bold text-primary shadow-none focus:ring-0 w-[52px]">
@@ -894,7 +894,7 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
               <Button
                 size="icon"
                 variant="ghost"
-                className="w-8 h-8 rounded-lg"
+                className="w-8 h-8 rounded-lg text-foreground/75 hover:bg-secondary hover:text-foreground"
                 onClick={() => setPanelDensity(current => current === "compact" ? "comfortable" : "compact")}
                 title={panelDensity === "compact" ? "Switch to comfortable view" : "Switch to compact view"}
                 aria-label="Compact panel view"
@@ -903,7 +903,7 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
               >
                 {panelDensity === "compact" ? <Maximize2 className="w-4 h-4" /> : <Minimize2 className="w-4 h-4" />}
               </Button>
-              <Button size="icon" variant="ghost" className="w-8 h-8 rounded-lg"
+              <Button size="icon" variant="ghost" className="w-8 h-8 rounded-lg text-foreground/75 hover:bg-secondary hover:text-foreground"
                 onClick={() => setMode(resolvedTheme === "dark" ? "light" : "dark")}
                 title={resolvedTheme === "dark" ? t("dashboard.switchToLight") : t("dashboard.switchToDark")}>
                 {resolvedTheme === "dark" ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}

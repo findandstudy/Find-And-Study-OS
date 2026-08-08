@@ -198,7 +198,7 @@ export function NotificationCenter() {
         onClick={() => setOpen(!open)}
         className="relative p-2 rounded-xl hover:bg-secondary transition-colors"
       >
-        <Bell className="w-5 h-5 text-muted-foreground" />
+        <Bell className="w-5 h-5 text-foreground/75 dark:text-foreground/80" />
         {importantUnreadCount > 0 && (
           <span className="absolute -top-0.5 -right-0.5 w-5 h-5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center animate-in zoom-in">
             {importantUnreadCount > 99 ? "99+" : importantUnreadCount}
@@ -280,8 +280,8 @@ export function NotificationCenter() {
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className={`text-sm ${!n.isRead ? "font-semibold text-foreground" : "text-foreground/80"}`}>{localized.title}</p>
-                        {localized.body && <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{localized.body}</p>}
-                        <p className="text-[10px] text-muted-foreground mt-1">{timeAgo(n.createdAt)}</p>
+                        {localized.body && <p className="text-xs text-foreground/65 dark:text-foreground/75 mt-0.5 line-clamp-2">{localized.body}</p>}
+                        <p className="text-[10px] text-foreground/60 dark:text-foreground/70 mt-1">{timeAgo(n.createdAt)}</p>
                       </div>
                       <div className="flex flex-col items-center gap-1 shrink-0 mt-1">
                         {!n.isRead && (
