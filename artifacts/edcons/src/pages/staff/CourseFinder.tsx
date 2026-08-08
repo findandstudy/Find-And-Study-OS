@@ -748,6 +748,31 @@ export default function CourseFinder() {
                 />
               </div>
             </div>
+
+            <div className="space-y-1 sm:col-span-2 lg:col-span-2 xl:col-span-2">
+              <Label className="text-xs text-muted-foreground">Sort by</Label>
+              <Select
+                value={sortField === "tuition" ? (sortDir === "asc" ? "price_asc" : "price_desc") : "default"}
+                onValueChange={handlePriceSort}
+              >
+                <SelectTrigger
+                  className="h-9 w-full rounded-lg border-border/80 bg-background px-3 text-sm shadow-sm transition-colors hover:border-primary/40 focus:ring-2 focus:ring-primary/20"
+                  aria-label="Sort programs by price"
+                >
+                  <span className="flex min-w-0 items-center gap-2">
+                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+                      <ArrowUpDown className="h-3.5 w-3.5" />
+                    </span>
+                    <SelectValue />
+                  </span>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="default">Default order</SelectItem>
+                  <SelectItem value="price_asc">Price: Low to high</SelectItem>
+                  <SelectItem value="price_desc">Price: High to low</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
 
           <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
@@ -759,20 +784,6 @@ export default function CourseFinder() {
               )}
             </div>
             <div className="flex flex-wrap items-center gap-2 xl:justify-end">
-              <Select
-                value={sortField === "tuition" ? (sortDir === "asc" ? "price_asc" : "price_desc") : "default"}
-                onValueChange={handlePriceSort}
-              >
-                <SelectTrigger className="h-8 w-[190px] rounded-lg text-xs" aria-label="Sort programs by price">
-                  <ArrowUpDown className="mr-1.5 h-3.5 w-3.5 shrink-0" />
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="default">Default order</SelectItem>
-                  <SelectItem value="price_asc">Price: Low to high</SelectItem>
-                  <SelectItem value="price_desc">Price: High to low</SelectItem>
-                </SelectContent>
-              </Select>
               {programs.length > 0 && (
                 <div className={cn(
                   "flex flex-wrap items-center gap-2",
