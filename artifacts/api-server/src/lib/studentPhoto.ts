@@ -1,5 +1,28 @@
 import { db, studentsTable, documentsTable } from "@workspace/db";
-import { and, eq, or, isNull, desc } from "drizzle-orm";
+import { and, eq, or, isNull, desc, sql } from "drizzle-orm";
+
+/**
+ * Read-side source of truth for whether the latest photo document is servable.
+ *
+ * `students.has_photo` is maintained as a cache for new writes, but historical
+ * rows can predate that synchronization. List endpoints use this expression so
+ * their avatars agree with GET /api/students/:id/photo without mutating data.
+ */
+export function studentHasServablePhotoSql() {
+  return sql<boolean>`COALESCE((
+    SELECT (
+      (NULLIF(${documentsTable.fileKey}, '') IS NOT NULL)
+      OR (NULLIF(${documentsTable.fileData}, '') IS NOT NULL)
+      OR (${documentsTable.fileUrl} ~* '^https?://')
+    )
+    FROM ${documentsTable}
+    WHERE ${documentsTable.studentId} = ${studentsTable.id}
+      AND ${documentsTable.type} IN ('photo', 'photograph')
+      AND ${documentsTable.deletedAt} IS NULL
+    ORDER BY ${documentsTable.createdAt} DESC, ${documentsTable.id} DESC
+    LIMIT 1
+  ), false)`;
+}
 
 /**
  * Single source of truth for the denormalized students.has_photo + photo_url
@@ -32,7 +55,7 @@ export async function recomputeStudentPhoto(studentId: number | null | undefined
         or(eq(documentsTable.type, "photo"), eq(documentsTable.type, "photograph")),
         isNull(documentsTable.deletedAt),
       ))
-      .orderBy(desc(documentsTable.createdAt))
+      .orderBy(desc(documentsTable.createdAt), desc(documentsTable.id))
       .limit(1);
     // Match the endpoint's servability rule precisely (JS-falsy: "" counts as absent).
     const servable = !!photoDoc && (

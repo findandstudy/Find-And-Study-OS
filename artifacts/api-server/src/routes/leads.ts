@@ -18,7 +18,7 @@ import { getCurrentSeason } from "../lib/season";
 import { enqueueOnStageChange, maybeEnqueuePortalSubmission } from "../lib/portalAutoTrigger.js";
 import { applyLeadAssignmentRules, cascadeLeadAssignment } from "../lib/leadAssignment";
 import { findOrUpsertPublicLead } from "../lib/leadDedup";
-import { recomputeStudentPhoto } from "../lib/studentPhoto";
+import { recomputeStudentPhoto, studentHasServablePhotoSql } from "../lib/studentPhoto";
 import { maybeTriggerAutoEducationExtractForStudent } from "../lib/educationAutoExtract";
 import { parsePaginationParams, buildPageMeta } from "@workspace/pagination";
 import { validateStudentDocumentFile, validateStudentDocumentBuffer, sanitizeFileName, isPdf } from "../lib/fileUploadValidation";
@@ -504,7 +504,7 @@ router.get("/leads", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), r
     .select({
       lead: leadsTable,
       agentName: agentsTable.companyName,
-      studentHasPhoto: studentsTable.hasPhoto,
+      studentHasPhoto: studentHasServablePhotoSql(),
     })
     .from(leadsTable)
     .leftJoin(agentsTable, eq(leadsTable.agentId, agentsTable.id))

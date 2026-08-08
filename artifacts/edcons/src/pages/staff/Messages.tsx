@@ -2298,11 +2298,16 @@ function InboxTab() {
                       </Badge>
                     )}
                     {linked && linkedHref && (
-                      <button type="button" onClick={() => setLocation(linkedHref)}>
+                      <a
+                        href={linkedHref}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        aria-label={`Open ${linkedLabel} #${ext.studentId || ext.leadId || ext.agentId} in a new tab`}
+                      >
                         <Badge variant="outline" className="text-[10px] gap-1 cursor-pointer hover:bg-primary/10">
                           <Link2 className="w-3 h-3" /> {linkedLabel} #{ext.studentId || ext.leadId || ext.agentId}
                         </Badge>
-                      </button>
+                      </a>
                     )}
                   </div>
                   <div className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[11px] text-muted-foreground">

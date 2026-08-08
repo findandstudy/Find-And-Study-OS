@@ -29,6 +29,10 @@ const authMiddlewareSource = readFileSync(
   new URL("../src/middlewares/authMiddleware.ts", import.meta.url),
   "utf8",
 );
+const studentPhotoSource = readFileSync(
+  new URL("../src/lib/studentPhoto.ts", import.meta.url),
+  "utf8",
+);
 
 test("pre-resolved request permissions preserve grants and revocations without a DB lookup", async () => {
   const permissions = await getEffectivePermissionSet({
@@ -106,6 +110,16 @@ test("list avatars use short-lived signed URLs without repeating session auth", 
   assert.match(applicationsRouteSource, /studentPhotoUrl: rest\.studentHasPhoto/);
   assert.match(authMiddlewareSource, /signedPhotoMatch/);
   assert.match(authMiddlewareSource, /verifyStudentPhotoSignature\(studentId, exp, sig\)/);
+});
+
+test("student avatar lists derive photo availability from the canonical document record", () => {
+  assert.match(studentPhotoSource, /studentHasServablePhotoSql/);
+  assert.match(studentPhotoSource, /IN \('photo', 'photograph'\)/);
+  assert.match(studentPhotoSource, /deletedAt\} IS NULL/);
+  assert.match(studentPhotoSource, /ORDER BY .*createdAt\} DESC, .*id\} DESC/s);
+  for (const source of [applicationsRouteSource, leadsRouteSource, studentsRouteSource]) {
+    assert.match(source, /studentHasServablePhotoSql\(\)/);
+  }
 });
 
 test("facet caches are keyed by freshly resolved authorization outputs", () => {

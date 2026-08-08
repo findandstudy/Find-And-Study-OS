@@ -33,6 +33,7 @@ import { resolveApplicationCommissionTotal } from "../lib/applicationCommissionT
 import { buildStableSignedStudentPhotoThumbnailPath, parseUniversityApplicationId } from "@workspace/portal-adapters";
 import { recordRequestSpan } from "../lib/requestTelemetry";
 import { buildFacetFilterInput, loadFacetValue } from "../lib/facetCache";
+import { studentHasServablePhotoSql } from "../lib/studentPhoto";
 
 const router: IRouter = Router();
 
@@ -487,7 +488,7 @@ router.get("/applications", requireAuth, requireAgentStaffPermission("applicatio
       studentLastName: studentsTable.lastName,
       studentEmail: studentsTable.email,
       studentPhone: studentsTable.phone,
-      studentHasPhoto: studentsTable.hasPhoto,
+      studentHasPhoto: studentHasServablePhotoSql(),
       commissionAmount: commissionsTable.universityCommissionAmount,
       agentCommissionAmount: commissionsTable.agentCommissionAmount,
       subAgentCommissionAmount: commissionsTable.subAgentCommissionAmount,
@@ -1134,7 +1135,7 @@ router.get("/applications/:id", requireAuth, requireAgentStaffPermission("applic
       studentLastName: studentsTable.lastName,
       studentEmail: studentsTable.email,
       studentPhone: studentsTable.phone,
-      studentHasPhoto: studentsTable.hasPhoto,
+      studentHasPhoto: studentHasServablePhotoSql(),
       commissionAmount: commissionsTable.universityCommissionAmount,
       agentCommissionAmount: commissionsTable.agentCommissionAmount,
       subAgentCommissionAmount: commissionsTable.subAgentCommissionAmount,

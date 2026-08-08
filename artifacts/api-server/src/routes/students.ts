@@ -43,6 +43,7 @@ import { validateStudentCreateFields } from "../lib/studentCreateValidation";
 import { recordRequestSpan } from "../lib/requestTelemetry";
 import { buildFacetFilterInput, loadFacetValue } from "../lib/facetCache";
 import { getStudentPhotoThumbnail } from "../lib/studentPhotoThumbnail";
+import { studentHasServablePhotoSql } from "../lib/studentPhoto";
 
 const router: IRouter = Router();
 
@@ -253,7 +254,7 @@ router.get("/students/:id/photo", photoAccessGuard, async (req, res): Promise<vo
     })
     .from(documentsTable)
     .where(and(eq(documentsTable.studentId, studentId), or(eq(documentsTable.type, "photo"), eq(documentsTable.type, "photograph")), isNull(documentsTable.deletedAt)))
-    .orderBy(desc(documentsTable.createdAt))
+    .orderBy(desc(documentsTable.createdAt), desc(documentsTable.id))
     .limit(1);
   if (!photoDoc || (!photoDoc.fileKey && !photoDoc.fileData && !photoDoc.fileUrl)) {
     res.status(404).json({ error: "No photo" }); return;
@@ -534,6 +535,7 @@ router.get("/students", requireAuth, requireRole(...STAFF_ROLES, "student", ...A
     .select({
       student: studentsTable,
       agentName: agentsTable.companyName,
+      studentHasPhoto: studentHasServablePhotoSql(),
     })
     .from(studentsTable)
     .leftJoin(agentsTable, eq(studentsTable.agentId, agentsTable.id))
@@ -546,14 +548,11 @@ router.get("/students", requireAuth, requireRole(...STAFF_ROLES, "student", ...A
   const { statusRows, nationalityRows, agentRows } = facetRows;
   const count = countRows[0]?.count ?? 0;
 
-  // hasPhoto is denormalized on students.has_photo; document upload/delete
-  // handlers keep it in sync, so the listing query no longer needs an
-  // extra SELECT against documents.
   const data = rows.map(r => ({
     ...r.student,
     agentName: r.agentName || null,
-    hasPhoto: !!r.student.hasPhoto,
-    photoUrl: r.student.hasPhoto ? buildStableSignedStudentPhotoThumbnailPath(r.student.id) : null,
+    hasPhoto: !!r.studentHasPhoto,
+    photoUrl: r.studentHasPhoto ? buildStableSignedStudentPhotoThumbnailPath(r.student.id) : null,
   }));
 
   res.json({
