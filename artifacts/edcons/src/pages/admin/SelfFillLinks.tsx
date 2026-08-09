@@ -10,15 +10,27 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import { useI18n } from "@/hooks/use-i18n";
 import { formatDateTime } from "@/lib/i18n";
-import { Link2, Loader2, Plus, RotateCw, Ban, Copy, Pencil, Trash2 } from "lucide-react";
+import { Link2, Loader2, Plus, RotateCw, Ban, Copy, Pencil, Trash2, BellRing } from "lucide-react";
+import { ContractAssociationLink } from "@/components/contracts/ContractAssociationLink";
+import { ContractSubjectPicker } from "@/components/contracts/ContractSubjectPicker";
 
 type Session = {
   id: number; templateId: number; agentId: number | null; mode: string; status: string;
   signerEmail: string; signerName: string | null; expiresAt: string;
   openedAt: string | null; signedAt: string | null; revokedAt: string | null; createdAt: string;
+  subjectType: string | null; subjectId: number | null; subjectLabel: string | null;
+  lastSentAt: string | null; lastReminderAt: string | null; sendCount: number;
 };
 
-type Template = { id: number; name: string; language: string; entityType: string; version: number; isActive: boolean };
+type Template = {
+  id: number;
+  name: string;
+  language: string;
+  entityType: string;
+  version: number;
+  isActive: boolean;
+  publicationStatus: "published";
+};
 
 const LANG_LABELS: Record<string, string> = {
   en: "English", tr: "Türkçe", ar: "العربية", fr: "Français", ru: "Русский",
@@ -30,6 +42,17 @@ const STATUS_TONE: Record<string, any> = {
   review_pending: "default",
   signed: "outline",
   revoked: "destructive",
+};
+
+const SUBJECT_TYPES = ["agent", "student", "lead", "application", "university", "company", "other"] as const;
+const SUBJECT_LABELS: Record<string, string> = {
+  agent: "Agent", student: "Student", lead: "Lead", application: "Application",
+  university: "University", company: "Company", other: "Other",
+};
+
+const emptyForm = {
+  signerEmail: "", signerName: "", templateId: "", expiryDays: "14",
+  subjectType: "", subjectId: "", subjectLabel: "",
 };
 
 // The server builds signUrl from its own resolved base URL, which can fall back
@@ -56,11 +79,11 @@ export default function SelfFillLinksPage() {
   const [loading, setLoading] = useState(true);
   const [showDialog, setShowDialog] = useState(false);
   const [creating, setCreating] = useState(false);
-  const [form, setForm] = useState({ signerEmail: "", signerName: "", templateId: "" });
+  const [form, setForm] = useState(emptyForm);
   const [lastUrl, setLastUrl] = useState("");
 
   const [editSession, setEditSession] = useState<Session | null>(null);
-  const [editForm, setEditForm] = useState({ signerName: "", signerEmail: "" });
+  const [editForm, setEditForm] = useState({ signerName: "", signerEmail: "", subjectType: "", subjectId: "", subjectLabel: "" });
   const [editSaving, setEditSaving] = useState(false);
 
   const [selected, setSelected] = useState<Set<number>>(new Set());
@@ -77,23 +100,38 @@ export default function SelfFillLinksPage() {
   }
   async function loadTemplates() {
     try {
-      const res: any = await customFetch(`/api/contract-templates?isActive=true`);
-      setTemplates(res.data || []);
+      const res: any = await customFetch(`/api/contract-templates?isActive=true&publicationStatus=published`);
+      const published = (res.data || []).filter((template: Template) => template.isActive && template.publicationStatus === "published");
+      setTemplates(published);
+      setForm(current => published.some((template: Template) => String(template.id) === current.templateId)
+        ? current
+        : { ...current, templateId: "" });
     } catch (err: any) { toast({ title: t("common.error"), description: err.message, variant: "destructive" }); }
   }
   useEffect(() => { load(); loadTemplates(); }, []);
 
   async function create() {
     if (!form.templateId) { toast({ title: t("selfFill.selectTemplate"), variant: "destructive" }); return; }
+    if (form.subjectType && form.subjectType !== "other" && (!form.subjectId || Number(form.subjectId) < 1)) {
+      toast({ title: "Select a record for the association", variant: "destructive" }); return;
+    }
     setCreating(true);
     try {
       const res: any = await customFetch(`/api/contracts/self-fill-link`, {
         method: "POST", headers: { "content-type": "application/json" },
-        body: JSON.stringify({ signerEmail: form.signerEmail, signerName: form.signerName, templateId: parseInt(form.templateId, 10) }),
+        body: JSON.stringify({
+          signerEmail: form.signerEmail,
+          signerName: form.signerName,
+          templateId: parseInt(form.templateId, 10),
+          expiryDays: Number(form.expiryDays),
+          subjectType: form.subjectType || null,
+          subjectId: form.subjectId ? Number(form.subjectId) : null,
+          subjectLabel: form.subjectLabel || null,
+        }),
       });
       setLastUrl(toBrowserSignUrl(res.data?.signUrl));
       toast({ title: t("selfFill.toast.linkCreated") });
-      setForm({ signerEmail: "", signerName: "", templateId: "" });
+      setForm(emptyForm);
       await load();
     } catch (err: any) { toast({ title: t("common.error"), description: err.message, variant: "destructive" }); }
     setCreating(false);
@@ -109,18 +147,37 @@ export default function SelfFillLinksPage() {
     catch (err: any) { toast({ title: t("common.error"), description: err.message, variant: "destructive" }); }
   }
 
+  async function remind(id: number) {
+    try {
+      const res: any = await customFetch(`/api/contracts/sessions/${id}/remind`, { method: "POST" });
+      toast({ title: "Reminder sent", description: res.data?.emailSent === false ? "A new link was created, but email delivery failed." : undefined });
+      await load();
+    } catch (err: any) { toast({ title: t("common.error"), description: err.message, variant: "destructive" }); }
+  }
+
   function openEdit(s: Session) {
     setEditSession(s);
-    setEditForm({ signerName: s.signerName || "", signerEmail: s.signerEmail });
+    setEditForm({
+      signerName: s.signerName || "", signerEmail: s.signerEmail || "",
+      subjectType: s.subjectType || "", subjectId: s.subjectId ? String(s.subjectId) : "", subjectLabel: s.subjectLabel || "",
+    });
   }
 
   async function saveEdit() {
     if (!editSession) return;
+    if (editForm.subjectType && editForm.subjectType !== "other" && (!editForm.subjectId || Number(editForm.subjectId) < 1)) {
+      toast({ title: "Select a record for the association", variant: "destructive" }); return;
+    }
     setEditSaving(true);
     try {
       await customFetch(`/api/contracts/sessions/${editSession.id}`, {
         method: "PATCH", headers: { "content-type": "application/json" },
-        body: JSON.stringify({ signerName: editForm.signerName, signerEmail: editForm.signerEmail }),
+        body: JSON.stringify({
+          signerName: editForm.signerName, signerEmail: editForm.signerEmail,
+          subjectType: editForm.subjectType || null,
+          subjectId: editForm.subjectId ? Number(editForm.subjectId) : null,
+          subjectLabel: editForm.subjectLabel || null,
+        }),
       });
       toast({ title: t("selfFill.toast.signerUpdated") });
       setEditSession(null);
@@ -205,7 +262,9 @@ export default function SelfFillLinksPage() {
                   <input type="checkbox" checked={allDeletableSelected} onChange={toggleAll} className="cursor-pointer" title={t("common.selectAll")} />
                 </th>
                 <th className="text-left px-4 py-3">{t("selfFill.columns.signer")}</th>
+                <th className="text-left px-4 py-3">Association</th>
                 <th className="text-left px-4 py-3">{t("common.status")}</th>
+                <th className="text-left px-4 py-3">Delivery</th>
                 <th className="text-left px-4 py-3">{t("selfFill.columns.expires")}</th>
                 <th className="text-right px-4 py-3">{t("common.actions")}</th>
               </tr>
@@ -222,12 +281,20 @@ export default function SelfFillLinksPage() {
                     <div className="font-medium">{s.signerName || "-"}</div>
                     <div className="text-xs text-muted-foreground">{s.signerEmail}</div>
                   </td>
+                  <td className="px-4 py-3">
+                    <ContractAssociationLink subjectType={s.subjectType} subjectId={s.subjectId} subjectLabel={s.subjectLabel} />
+                  </td>
                   <td className="px-4 py-3"><Badge variant={STATUS_TONE[s.status]}>{t(`selfFill.status.${s.status}`)}</Badge></td>
+                  <td className="px-4 py-3 text-xs text-muted-foreground">
+                    <div>{s.sendCount || 0} send{s.sendCount === 1 ? "" : "s"}</div>
+                    <div>{s.lastReminderAt ? `Reminder ${formatDateTime(lang, s.lastReminderAt)}` : s.lastSentAt ? formatDateTime(lang, s.lastSentAt) : "Not sent"}</div>
+                  </td>
                   <td className="px-4 py-3 text-xs text-muted-foreground">{formatDateTime(lang, s.expiresAt)}</td>
                   <td className="px-4 py-3 text-right space-x-1">
                     {s.status !== "signed" && s.status !== "revoked" && (
                       <>
                         <Button size="sm" variant="ghost" title={t("selfFill.actions.resend")} onClick={() => resend(s.id)}><RotateCw className="w-4 h-4" /></Button>
+                        <Button size="sm" variant="ghost" title="Send reminder" onClick={() => remind(s.id)}><BellRing className="w-4 h-4" /></Button>
                         <Button size="sm" variant="ghost" title={t("selfFill.actions.revoke")} onClick={() => revoke(s.id)}><Ban className="w-4 h-4 text-red-500" /></Button>
                       </>
                     )}
@@ -246,7 +313,7 @@ export default function SelfFillLinksPage() {
       </Card>
 
       <Dialog open={showDialog} onOpenChange={(o) => { setShowDialog(o); if (!o) setLastUrl(""); }}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-lg">
           <DialogHeader><DialogTitle>{t("selfFill.modalTitle")}</DialogTitle></DialogHeader>
           <div className="space-y-4 min-w-0">
             <div>
@@ -259,7 +326,7 @@ export default function SelfFillLinksPage() {
             </div>
             <div>
               <Label>{t("selfFill.fields.template")}</Label>
-              <Select value={form.templateId} onValueChange={v => setForm(f => ({ ...f, templateId: v }))}>
+              <Select disabled={templates.length === 0} value={form.templateId} onValueChange={v => setForm(f => ({ ...f, templateId: v }))}>
                 <SelectTrigger><SelectValue placeholder={t("selfFill.selectTemplate")} /></SelectTrigger>
                 <SelectContent>
                   {templates.map(tpl => (
@@ -269,7 +336,42 @@ export default function SelfFillLinksPage() {
                   ))}
                 </SelectContent>
               </Select>
+              {templates.length === 0 && (
+                <div className="mt-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-100">
+                  No published contract template is available. Save the template, then publish it before creating a signing link.{" "}
+                  <a className="font-medium underline underline-offset-2" href="/admin/contract-templates">Open Contract Templates</a>
+                </div>
+              )}
             </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Link validity (days)</Label>
+                <Input type="number" min={1} max={90} value={form.expiryDays} onChange={e => setForm(f => ({ ...f, expiryDays: e.target.value }))} />
+              </div>
+              <div>
+                <Label>Associate with</Label>
+                <Select value={form.subjectType || "none"} onValueChange={v => setForm(f => ({ ...f, subjectType: v === "none" ? "" : v, subjectId: "", subjectLabel: "" }))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No association</SelectItem>
+                    {SUBJECT_TYPES.map(type => <SelectItem key={type} value={type}>{SUBJECT_LABELS[type]}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            {form.subjectType && <div>
+              <Label>{form.subjectType === "other" ? "Association label" : `Select ${SUBJECT_LABELS[form.subjectType]}`}</Label>
+              {form.subjectType === "other" ? (
+                <Input value={form.subjectLabel} onChange={e => setForm(f => ({ ...f, subjectLabel: e.target.value }))} placeholder="Name or reference" />
+              ) : (
+                <ContractSubjectPicker
+                  subjectType={form.subjectType}
+                  subjectId={form.subjectId}
+                  subjectLabel={form.subjectLabel}
+                  onChange={(subjectId, subjectLabel) => setForm(f => ({ ...f, subjectId, subjectLabel }))}
+                />
+              )}
+            </div>}
             {lastUrl && (
               <div className="bg-muted/40 rounded-lg p-3 text-xs flex items-center gap-2 min-w-0 overflow-hidden">
                 <Copy className="w-4 h-4 shrink-0 cursor-pointer" onClick={() => { navigator.clipboard.writeText(lastUrl); toast({ title: t("common.copied") }); }} />
@@ -279,13 +381,13 @@ export default function SelfFillLinksPage() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowDialog(false)}>{t("common.close")}</Button>
-            <Button onClick={create} disabled={creating}>{creating ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Plus className="w-4 h-4 mr-2" />} {t("selfFill.actions.createAndSend")}</Button>
+            <Button onClick={create} disabled={creating || templates.length === 0 || !form.templateId}>{creating ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Plus className="w-4 h-4 mr-2" />} {t("selfFill.actions.createAndSend")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       <Dialog open={!!editSession} onOpenChange={o => { if (!o) setEditSession(null); }}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-lg">
           <DialogHeader><DialogTitle>{t("selfFill.editSignerTitle")}</DialogTitle></DialogHeader>
           <div className="space-y-4">
             <div>
@@ -296,6 +398,29 @@ export default function SelfFillLinksPage() {
               <Label>{t("selfFill.fields.email")}</Label>
               <Input type="email" value={editForm.signerEmail} onChange={e => setEditForm(f => ({ ...f, signerEmail: e.target.value }))} />
             </div>
+            <div>
+              <Label>Associate with</Label>
+              <Select value={editForm.subjectType || "none"} onValueChange={v => setEditForm(f => ({ ...f, subjectType: v === "none" ? "" : v, subjectId: "", subjectLabel: "" }))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">No association</SelectItem>
+                  {SUBJECT_TYPES.map(type => <SelectItem key={type} value={type}>{SUBJECT_LABELS[type]}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            {editForm.subjectType && <div>
+              <Label>{editForm.subjectType === "other" ? "Association label" : `Select ${SUBJECT_LABELS[editForm.subjectType]}`}</Label>
+              {editForm.subjectType === "other" ? (
+                <Input value={editForm.subjectLabel} onChange={e => setEditForm(f => ({ ...f, subjectLabel: e.target.value }))} />
+              ) : (
+                <ContractSubjectPicker
+                  subjectType={editForm.subjectType}
+                  subjectId={editForm.subjectId}
+                  subjectLabel={editForm.subjectLabel}
+                  onChange={(subjectId, subjectLabel) => setEditForm(f => ({ ...f, subjectId, subjectLabel }))}
+                />
+              )}
+            </div>}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditSession(null)}>{t("common.cancel")}</Button>

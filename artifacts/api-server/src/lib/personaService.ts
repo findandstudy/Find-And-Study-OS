@@ -11,6 +11,7 @@ import { getAnthropicClient } from "@workspace/integrations-anthropic-ai";
 import { SCOPE_REGISTRY } from "./scopeRegistry";
 import { TOOL_REGISTRY } from "./toolRegistry";
 import { redactPII, redactString } from "./piiRedaction";
+import { classifyAiFailure } from "./aiFailurePolicy";
 
 const ADMIN_ROLES = ["super_admin", "admin"];
 
@@ -24,6 +25,8 @@ export type RunPersonaOptions = {
    * redacted before persistence and is never interpolated into the prompt.
    */
   actionContext?: Record<string, unknown>;
+  retryOfRunId?: number;
+  retryAttempt?: number;
 };
 
 export type RunPersonaResult = {
@@ -103,7 +106,7 @@ function buildMessages(
 }
 
 export async function runPersona(opts: RunPersonaOptions): Promise<RunPersonaResult> {
-  const { personaId, input, triggeredBy, triggerActor, actionContext } = opts;
+  const { personaId, input, triggeredBy, triggerActor, actionContext, retryOfRunId, retryAttempt } = opts;
 
   const [persona] = await db
     .select()
@@ -211,6 +214,7 @@ export async function runPersona(opts: RunPersonaOptions): Promise<RunPersonaRes
   let costUsd: string | null = null;
   let runStatus: "success" | "error" | "rate_limited" = "success";
   let errorMessage: string | null = null;
+  let failure: ReturnType<typeof classifyAiFailure> | null = null;
 
   try {
     const client = await getAnthropicClient();
@@ -231,7 +235,8 @@ export async function runPersona(opts: RunPersonaOptions): Promise<RunPersonaRes
     costUsd = null;
   } catch (e) {
     const msg = (e as Error).message || String(e);
-    if (/rate.?limit|429/i.test(msg)) runStatus = "rate_limited";
+    failure = classifyAiFailure(e);
+    if (failure.category === "rate_limit") runStatus = "rate_limited";
     else runStatus = "error";
     errorMessage = msg;
   }
@@ -246,7 +251,12 @@ export async function runPersona(opts: RunPersonaOptions): Promise<RunPersonaRes
       triggeredBy,
       triggerActor: triggerActor ?? null,
       inputPayload: { system, user, warnings },
-      outputPayload: { output: outputText, warnings },
+      outputPayload: {
+        output: outputText,
+        warnings,
+        failure,
+        retry: retryOfRunId ? { retryOfRunId, attempt: retryAttempt ?? 1 } : undefined,
+      },
       model: persona.model,
       promptTokens,
       completionTokens,

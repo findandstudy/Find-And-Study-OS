@@ -141,7 +141,9 @@ test("dedicated portal worker drains an active claim and exits on fatal process 
     "utf8",
   );
   assert.match(worker, /while \(!stopping\)/);
-  assert.match(worker, /activeTick/);
+  assert.match(worker, /schedulerTick/);
+  assert.match(worker, /activeJobs/);
+  assert.match(worker, /Promise\.allSettled/);
   assert.match(worker, /SHUTDOWN_TIMEOUT_MS/);
   assert.match(worker, /pool\.end\(\)/);
   assert.match(worker, /beginShutdown\("uncaughtException", 1\)/);

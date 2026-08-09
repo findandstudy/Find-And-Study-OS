@@ -138,6 +138,9 @@ export async function finalizeSign(opts: {
         signingSessionId: session.id,
         agentId: session.agentId,
         templateId: template.id,
+        subjectType: session.subjectType,
+        subjectId: session.subjectId,
+        subjectLabel: session.subjectLabel,
         pdfObjectKey: null,
         signatureImageObjectKey: null,
         signatureImageBase64: signatureBase64,
@@ -229,6 +232,16 @@ export async function ensureSignedContractPdf(
   const [session] = await db.select().from(signingSessionsTable).where(eq(signingSessionsTable.id, row.signingSessionId));
   const [template] = await db.select().from(contractTemplatesTable).where(eq(contractTemplatesTable.id, row.templateId));
   if (!template) throw new Error("Template missing");
+  const resolvedTemplate = {
+    ...template,
+    version: session?.templateVersionSnapshot ?? template.version,
+    name: session?.templateNameSnapshot ?? template.name,
+    language: session?.templateLanguageSnapshot ?? template.language,
+    entityType: session?.templateEntityTypeSnapshot ?? template.entityType,
+    bodyHtml: session?.templateBodyHtmlSnapshot ?? template.bodyHtml,
+    intakeSchema: session?.templateIntakeSchemaSnapshot ?? template.intakeSchema,
+    signingPageConfig: session?.templateSigningPageConfigSnapshot ?? template.signingPageConfig,
+  };
   let agent: typeof agentsTable.$inferSelect | null = null;
   if (row.agentId) {
     const [a] = await db.select().from(agentsTable).where(eq(agentsTable.id, row.agentId));
@@ -287,8 +300,9 @@ export async function ensureSignedContractPdf(
   // the identical source used for the download filename — so the body and the
   // filename can never disagree.
   const renderedHtml = buildFinalSignedContractHtml({
-    bodyHtml: template.bodyHtml,
-    templateLanguage: template.language,
+    bodyHtml: resolvedTemplate.bodyHtml,
+    templateLanguage: resolvedTemplate.language,
+    signingPageConfig: resolvedTemplate.signingPageConfig,
     agent,
     intakeData: (session?.intakeData as any) || null,
     signerEmail: row.signerEmail,
@@ -312,7 +326,7 @@ export async function ensureSignedContractPdf(
     // the browser on expiry, so the lock is held only until Chromium has actually
     // exited — a timed-out render frees its memory before the next one starts.
     const built = await buildSignedPdf({
-      templateName: template.name,
+      templateName: resolvedTemplate.name,
       bodyHtml: renderedHtml,
       signerEmail: row.signerEmail,
       signerName: row.signerName,

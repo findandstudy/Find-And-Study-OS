@@ -749,29 +749,55 @@ export default function CourseFinder() {
               </div>
             </div>
 
-            <div className="space-y-1 sm:col-span-2 lg:col-span-2 xl:col-span-2">
-              <Label className="text-xs text-muted-foreground">Sort by</Label>
-              <Select
-                value={sortField === "tuition" ? (sortDir === "asc" ? "price_asc" : "price_desc") : "default"}
-                onValueChange={handlePriceSort}
+            <div className="flex items-end sm:col-span-1">
+              <div
+                className="inline-flex h-9 items-center overflow-hidden rounded-xl border border-border/70 bg-muted/50 p-0.5 shadow-sm"
+                role="group"
+                aria-label="Sort programs"
               >
-                <SelectTrigger
-                  className="h-9 w-full rounded-lg border-border/80 bg-background px-3 text-sm shadow-sm transition-colors hover:border-primary/40 focus:ring-2 focus:ring-primary/20"
-                  aria-label="Sort programs by price"
+                <button
+                  type="button"
+                  onClick={() => handlePriceSort("default")}
+                  className={cn(
+                    "flex h-8 w-9 items-center justify-center rounded-lg transition-colors",
+                    sortField !== "tuition"
+                      ? "bg-primary text-primary-foreground shadow-sm"
+                      : "text-muted-foreground hover:bg-background/80 hover:text-foreground",
+                  )}
+                  aria-label="Recommended order"
+                  title="Recommended order"
                 >
-                  <span className="flex min-w-0 items-center gap-2">
-                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
-                      <ArrowUpDown className="h-3.5 w-3.5" />
-                    </span>
-                    <SelectValue />
-                  </span>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="default">Default order</SelectItem>
-                  <SelectItem value="price_asc">Price: Low to high</SelectItem>
-                  <SelectItem value="price_desc">Price: High to low</SelectItem>
-                </SelectContent>
-              </Select>
+                  <ArrowUpDown className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handlePriceSort("price_asc")}
+                  className={cn(
+                    "flex h-8 w-9 items-center justify-center rounded-lg transition-colors",
+                    sortField === "tuition" && sortDir === "asc"
+                      ? "bg-primary text-primary-foreground shadow-sm"
+                      : "text-muted-foreground hover:bg-background/80 hover:text-foreground",
+                  )}
+                  aria-label="Price from low to high"
+                  title="Price from low to high"
+                >
+                  <ArrowUp className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handlePriceSort("price_desc")}
+                  className={cn(
+                    "flex h-8 w-9 items-center justify-center rounded-lg transition-colors",
+                    sortField === "tuition" && sortDir === "desc"
+                      ? "bg-primary text-primary-foreground shadow-sm"
+                      : "text-muted-foreground hover:bg-background/80 hover:text-foreground",
+                  )}
+                  aria-label="Price from high to low"
+                  title="Price from high to low"
+                >
+                  <ArrowDown className="h-4 w-4" />
+                </button>
+              </div>
             </div>
           </div>
 

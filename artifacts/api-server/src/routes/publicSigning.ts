@@ -13,6 +13,7 @@ import { buildSignVerificationCodeEmail, getAppBaseUrl } from "../lib/email";
 import { dispatchNotification } from "../lib/notificationDispatcher";
 import { PgRateLimitStore } from "../lib/pgRateLimiter";
 import { getRateLimitIp, getClientIp } from "../lib/clientIp";
+import { applyContractBranding, publicContractBranding } from "../lib/contractBranding";
 
 const router: IRouter = Router();
 
@@ -114,12 +115,22 @@ async function resolveByToken(rawToken: string): Promise<ResolvedSession | { err
   const expired = isPastDue;
   const [template] = await db.select().from(contractTemplatesTable).where(eq(contractTemplatesTable.id, session.templateId));
   if (!template) return { error: "Template missing", status: 404 };
+  const resolvedTemplate = {
+    ...template,
+    version: session.templateVersionSnapshot ?? template.version,
+    name: session.templateNameSnapshot ?? template.name,
+    language: session.templateLanguageSnapshot ?? template.language,
+    entityType: session.templateEntityTypeSnapshot ?? template.entityType,
+    bodyHtml: session.templateBodyHtmlSnapshot ?? template.bodyHtml,
+    intakeSchema: session.templateIntakeSchemaSnapshot ?? template.intakeSchema,
+    signingPageConfig: session.templateSigningPageConfigSnapshot ?? template.signingPageConfig,
+  };
   let agent: typeof agentsTable.$inferSelect | null = null;
   if (session.agentId) {
     const [a] = await db.select().from(agentsTable).where(eq(agentsTable.id, session.agentId));
     agent = a || null;
   }
-  return { session, template, agent, expired };
+  return { session, template: resolvedTemplate, agent, expired };
 }
 
 router.get("/public/sign/:token", signLimiter, async (req, res): Promise<void> => {
@@ -164,7 +175,7 @@ router.get("/public/sign/:token", signLimiter, async (req, res): Promise<void> =
           language: r.template.language,
           entityType: r.template.entityType,
           intakeSchema: r.template.intakeSchema || null,
-          signingPageConfig: r.template.signingPageConfig || null,
+          signingPageConfig: publicContractBranding(r.template.signingPageConfig),
         },
         agent: r.agent ? {
           id: r.agent.id,
@@ -204,7 +215,10 @@ router.get("/public/sign/:token/preview", signLimiter, async (req, res): Promise
     // sandboxed <iframe>, which preserves the template's own <style> blocks and
     // inline CSS instead of stripping them through the app's prose/DOMPurify
     // pipeline — making the preview visually faithful to the signed PDF.
-    const html = documentShell(cleanupSignatureImages(rendered, placeholder));
+    const html = documentShell(applyContractBranding(
+      cleanupSignatureImages(rendered, placeholder),
+      r.template.signingPageConfig,
+    ));
     res.json({ data: { html, templateName: r.template.name } });
   } catch (err) {
     console.error("[public-sign] preview:", err);
@@ -242,7 +256,10 @@ router.get("/public/sign/:token/preview.html", signLimiter, async (req, res): Pr
     });
     const rendered = renderTemplate(r.template.bodyHtml, ctx);
     const placeholder = SIG_PLACEHOLDER[r.template.language] || SIG_PLACEHOLDER.en;
-    const html = documentShell(cleanupSignatureImages(rendered, placeholder));
+    const html = documentShell(applyContractBranding(
+      cleanupSignatureImages(rendered, placeholder),
+      r.template.signingPageConfig,
+    ));
     res.setHeader("Content-Type", "text/html; charset=utf-8");
     res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
     res.send(html);

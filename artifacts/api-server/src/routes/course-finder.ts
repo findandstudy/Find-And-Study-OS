@@ -242,7 +242,7 @@ router.get("/course-finder", async (req, res): Promise<void> => {
 
   const where = and(...conditions);
 
-  const [{ count }] = await db
+  const countQuery = db
     .select({ count: sql<number>`count(*)` })
     .from(programsTable)
     .innerJoin(universitiesTable, eq(programsTable.universityId, universitiesTable.id))
@@ -255,7 +255,7 @@ router.get("/course-finder", async (req, res): Promise<void> => {
       ? [sql`${effectiveFee} DESC NULLS LAST`, universitiesTable.name, programsTable.name]
       : [universitiesTable.name, programsTable.name];
 
-  const rows = await db
+  const rowsQuery = db
     .select({
       id: programsTable.id,
       name: programsTable.name,
@@ -303,6 +303,10 @@ router.get("/course-finder", async (req, res): Promise<void> => {
     .orderBy(...orderBy)
     .limit(limitNum)
     .offset(offset);
+
+  // The total and current page are independent read-only queries. Running
+  // them concurrently removes one full DB round trip from every listing load.
+  const [[{ count }], rows] = await Promise.all([countQuery, rowsQuery]);
 
   const user = (req as any).user;
   const canSeeContacts = user && ([...STAFF_ROLES, ...AGENT_ROLES] as string[]).includes(user.role);

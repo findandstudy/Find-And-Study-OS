@@ -95,6 +95,44 @@ async function getWhatsAppConfig(): Promise<WhatsAppConfig | null> {
   return (decryptConfig(row.config as Record<string, any>) as WhatsAppConfig) || {};
 }
 
+type WhatsAppSigningSecretCandidate = {
+  source: "matched_account" | "legacy_integration" | "configured_account";
+  appSecret: string;
+};
+
+/**
+ * Build the closed set of trusted Meta app secrets that may sign a WhatsApp
+ * delivery. Multiple phone numbers can belong to the same Meta app, while old
+ * installations may still keep the app secret in the legacy integration row.
+ * Trying only the phone-number row makes a valid delivery fail when that row's
+ * copied secret is stale. We never accept an unsigned request and never source
+ * a secret from the request itself.
+ */
+async function getWhatsAppSigningSecretCandidates(
+  matchedConfig: WhatsAppConfig | null,
+  legacyConfig: WhatsAppConfig | null,
+): Promise<WhatsAppSigningSecretCandidate[]> {
+  const candidates: WhatsAppSigningSecretCandidate[] = [];
+  const seen = new Set<string>();
+  const add = (source: WhatsAppSigningSecretCandidate["source"], value: unknown) => {
+    if (typeof value !== "string" || !value || seen.has(value)) return;
+    seen.add(value);
+    candidates.push({ source, appSecret: value });
+  };
+  add("matched_account", matchedConfig?.appSecret);
+  add("legacy_integration", legacyConfig?.appSecret);
+  try {
+    const rows = await db
+      .select({ configEncrypted: channelAccountsTable.configEncrypted })
+      .from(channelAccountsTable)
+      .where(and(eq(channelAccountsTable.channel, "whatsapp"), eq(channelAccountsTable.isActive, true)));
+    for (const row of rows) add("configured_account", parseAccountConfig(row.configEncrypted).appSecret);
+  } catch (err) {
+    console.error("[WEBHOOK] WhatsApp signing-secret candidate lookup failed", err);
+  }
+  return candidates;
+}
+
 async function getMessengerConfig(): Promise<MessengerConfig | null> {
   const [row] = await db.select().from(integrationsTable).where(eq(integrationsTable.key, "facebook_messenger"));
   if (!row || !row.isEnabled) return null;
@@ -279,27 +317,39 @@ router.post("/webhooks/whatsapp", webhookLimiter, rawJson, async (req: Request, 
   // Per-account first; fall back to the legacy single-config integration only
   // when no active channel_account matches the inbound phone_number_id.
   const perAccount = await resolveInboundAccount<WhatsAppConfig>("whatsapp", phoneNumberId);
-  const config = perAccount?.config ?? (await getWhatsAppConfig());
+  const legacyConfig = await getWhatsAppConfig();
+  const config = perAccount?.config ?? legacyConfig;
   if (!config) {
     res.status(200).json({ ok: true, ignored: "integration disabled" });
     return;
   }
 
-  // Always verify — verifyWhatsAppSignature returns false when appSecret OR
-  // the signature header is missing, so unsigned/legacy configs are rejected.
-  if (!verifyWhatsAppSignature(raw, sig, config.appSecret)) {
+  // Always verify against a closed set of configured secrets. This supports
+  // several phone numbers under one Meta app without weakening authentication.
+  const secretCandidates = await getWhatsAppSigningSecretCandidates(perAccount?.config ?? null, legacyConfig);
+  const matchedSecret = secretCandidates.find((candidate) =>
+    verifyWhatsAppSignature(raw, sig, candidate.appSecret),
+  );
+  if (!matchedSecret) {
     logAudit(null, "webhook_auth_failed", "webhook:whatsapp", undefined, {
       reason: "invalid_or_missing_signature",
       hasSig: Boolean(sig),
-      hasSecret: Boolean(config.appSecret),
+      configuredSecretCount: secretCandidates.length,
       perAccount: Boolean(perAccount),
     }, req.ip);
     console.warn("[WEBHOOK] WhatsApp signature verification failed", {
       hasSig: Boolean(sig),
-      hasSecret: Boolean(config.appSecret),
+      configuredSecretCount: secretCandidates.length,
     });
     res.status(401).json({ error: "Invalid or missing signature" });
     return;
+  }
+  if (matchedSecret.source !== "matched_account") {
+    console.info("[WEBHOOK] WhatsApp signature accepted via configured fallback", {
+      phoneNumberIdPresent: Boolean(phoneNumberId),
+      matchedSource: matchedSecret.source,
+      perAccount: Boolean(perAccount),
+    });
   }
 
   const messages = parseWhatsAppWebhook(payload);

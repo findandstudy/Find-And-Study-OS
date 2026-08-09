@@ -316,6 +316,20 @@
       "when": 1786174200000,
       "tag": "0044_external_contact_blocking",
       "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "7",
+      "when": 1786251600000,
+      "tag": "0045_contract_signing_snapshots",
+      "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "7",
+      "when": 1786258800000,
+      "tag": "0046_contract_operations",
+      "breakpoints": true
     }
   ]
 }

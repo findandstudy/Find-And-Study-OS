@@ -27,6 +27,7 @@ const BACKFILL_BATCH_SIZE = 3;
 // restarted mid-delivery) after this long and becomes reclaimable. Comfortably
 // longer than the worst-case SMTP timeout.
 const LEASE_TIMEOUT_MS = 5 * 60_000;
+const PDF_ONLY_BATCH_SIZE = 3;
 
 // A signed-PDF render that fails for one of these reasons is treated as an
 // out-of-memory / Chromium-crash event: the lease is released (emailed_at stays
@@ -325,6 +326,118 @@ export async function backfillMissingSignedPdfs(): Promise<void> {
     }
   } catch (err) {
     console.error("[contract-pdf-backfill] sweep error:", err);
+  }
+}
+
+/**
+ * Render-only sweep used by local HTTP development when the global background
+ * job coordinator is intentionally disabled. It never sends email, dispatches
+ * notifications, or marks a contract delivered. The existing database lease
+ * keeps this safe if two local API processes briefly overlap.
+ */
+export async function generatePendingSignedContractPdfs(): Promise<void> {
+  try {
+    const cutoff = new Date(Date.now() - RECENT_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+    const leaseExpiry = new Date(Date.now() - LEASE_TIMEOUT_MS);
+    const reclaimable = or(
+      isNull(signedContractsTable.deliveryClaimedAt),
+      lt(signedContractsTable.deliveryClaimedAt, leaseExpiry),
+    );
+    const candidates = await db.select({ id: signedContractsTable.id })
+      .from(signedContractsTable)
+      .where(and(
+        isNull(signedContractsTable.pdfObjectKey),
+        gt(signedContractsTable.signedAt, cutoff),
+        reclaimable,
+      ))
+      .orderBy(asc(signedContractsTable.signedAt))
+      .limit(PDF_ONLY_BATCH_SIZE);
+
+    for (const row of candidates) {
+      const claimed = await db.update(signedContractsTable)
+        .set({ deliveryClaimedAt: new Date() })
+        .where(and(
+          eq(signedContractsTable.id, row.id),
+          isNull(signedContractsTable.pdfObjectKey),
+          or(isNull(signedContractsTable.deliveryClaimedAt), lt(signedContractsTable.deliveryClaimedAt, leaseExpiry)),
+        ))
+        .returning({ id: signedContractsTable.id });
+      if (claimed.length === 0) continue;
+
+      try {
+        await ensureSignedContractPdf(row.id);
+        oomStreak = 0;
+        console.log(`[contract-pdf-local] ready row=${row.id}`);
+      } catch (pdfErr) {
+        const msg = String((pdfErr as any)?.message || pdfErr || "");
+        if (OOM_PATTERN.test(msg)) oomStreak++;
+        console.error(`[contract-pdf-local] render failed row=${row.id}:`, pdfErr);
+      } finally {
+        // PDF generation and email delivery are separate concerns. Always
+        // release the lease so the normal delivery worker can later claim the
+        // row and send its email when that worker is enabled.
+        try {
+          await db.update(signedContractsTable)
+            .set({ deliveryClaimedAt: null })
+            .where(eq(signedContractsTable.id, row.id));
+        } catch (resetErr) {
+          console.error(`[contract-pdf-local] failed to release lease for row=${row.id}:`, resetErr);
+        }
+      }
+    }
+  } catch (err) {
+    console.error("[contract-pdf-local] sweep error:", err);
+  }
+}
+
+export function signedContractPdfWorkerEnabled(
+  raw = process.env.SIGNED_CONTRACT_PDF_WORKER_ENABLED,
+  nodeEnv = process.env.NODE_ENV,
+): boolean {
+  if (raw === "true") return true;
+  if (raw === "false") return false;
+  if (raw !== undefined) {
+    console.warn(`[contract-pdf-local] Invalid SIGNED_CONTRACT_PDF_WORKER_ENABLED=${JSON.stringify(raw)}; disabled`);
+    return false;
+  }
+  return nodeEnv === "development" || nodeEnv === "test";
+}
+
+let pdfOnlyInterval: ReturnType<typeof setInterval> | null = null;
+let pdfOnlyInitialTimer: ReturnType<typeof setTimeout> | null = null;
+let pdfOnlySweeping = false;
+
+async function runPdfOnlySweep(): Promise<void> {
+  if (pdfOnlySweeping) return;
+  pdfOnlySweeping = true;
+  try {
+    await generatePendingSignedContractPdfs();
+  } finally {
+    pdfOnlySweeping = false;
+  }
+}
+
+export function startSignedContractPdfWorker(intervalMs = DELIVERY_INTERVAL_MS): () => Promise<void> {
+  if (pdfOnlyInterval || pdfOnlyInitialTimer) return stopSignedContractPdfWorker;
+  console.log(`[contract-pdf-local] Render-only worker started, running every ${intervalMs / 1000}s`);
+  pdfOnlyInitialTimer = setTimeout(() => {
+    pdfOnlyInitialTimer = null;
+    void runPdfOnlySweep();
+  }, 1_000);
+  pdfOnlyInitialTimer.unref?.();
+  pdfOnlyInterval = setInterval(() => { void runPdfOnlySweep(); }, intervalMs);
+  pdfOnlyInterval.unref?.();
+  return stopSignedContractPdfWorker;
+}
+
+export async function stopSignedContractPdfWorker(): Promise<void> {
+  if (pdfOnlyInitialTimer) clearTimeout(pdfOnlyInitialTimer);
+  if (pdfOnlyInterval) clearInterval(pdfOnlyInterval);
+  pdfOnlyInitialTimer = null;
+  pdfOnlyInterval = null;
+  const deadline = Date.now() + 10_000;
+  while (pdfOnlySweeping && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 50));
   }
 }
 

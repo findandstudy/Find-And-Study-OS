@@ -21,6 +21,7 @@ import {
   validateGuardianStagingPatch,
 } from "../lib/portalAiGuardianStaging";
 import { buildPortalDeployProposalPayload } from "../lib/portalAiGuardianApproval";
+import { aiRetryDelaySeconds, classifyAiFailure } from "../lib/aiFailurePolicy";
 
 const router: IRouter = Router();
 
@@ -70,6 +71,66 @@ router.get(
   requireRole(...ADMIN_ROLES),
   (_req, res): void => {
     res.json({ scopes: listScopes() });
+  },
+);
+
+// A retry is always explicit, bounded and recorded as a new run. It re-reads
+// current scoped data instead of replaying a persisted prompt that may contain
+// stale or sensitive context.
+router.post(
+  "/ai-personas/runs/:runId/retry",
+  requireAuth,
+  requireRole(...ADMIN_ROLES),
+  async (req, res): Promise<void> => {
+    const runId = Number(req.params.runId);
+    if (!Number.isFinite(runId) || runId <= 0) {
+      res.status(400).json({ error: "Invalid run id" });
+      return;
+    }
+    const [run] = await db.select().from(aiPersonaRunsTable).where(eq(aiPersonaRunsTable.id, runId));
+    if (!run || !["error", "rate_limited"].includes(run.status)) {
+      res.status(409).json({ error: "Only failed AI runs can be retried" });
+      return;
+    }
+    const output = reviewRecord(run.outputPayload);
+    const previousRetry = reviewRecord(output.retry);
+    const attempt = Number(previousRetry.attempt ?? 0) + 1;
+    if (attempt > 3) {
+      res.status(409).json({ error: "AI retry limit reached", maxAttempts: 3 });
+      return;
+    }
+    const failure = classifyAiFailure(run.errorMessage ?? "");
+    if (!failure.retryable) {
+      res.status(409).json({
+        error: "AI failure is not safely retryable",
+        category: failure.category,
+      });
+      return;
+    }
+    const retryAfterSeconds = aiRetryDelaySeconds(attempt, failure.retryAfterSeconds ?? 30);
+    const earliestRetryAt = new Date(run.createdAt.getTime() + retryAfterSeconds * 1000);
+    if (earliestRetryAt.getTime() > Date.now()) {
+      res.status(429).json({
+        error: "Retry backoff is still active",
+        category: failure.category,
+        retryAt: earliestRetryAt.toISOString(),
+      });
+      return;
+    }
+    const result = await runPersona({
+      personaId: run.personaId,
+      triggeredBy: "manual",
+      triggerActor: req.user!.id,
+      retryOfRunId: runId,
+      retryAttempt: attempt,
+    });
+    await logAudit(req.user!.id, "retry_ai_persona_run", "ai_persona_run", runId, {
+      newRunId: result.runId,
+      attempt,
+      failureCategory: failure.category,
+      resultStatus: result.status,
+    }, req.ip);
+    res.status(201).json(result);
   },
 );
 

@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db, contractTemplatesTable, signingSessionsTable, signedContractsTable, agentsTable, usersTable, agentBranchesTable } from "@workspace/db";
-import { and, desc, eq, getTableColumns, gte, ilike, inArray, isNull, lte, or, type SQL } from "drizzle-orm";
+import { and, desc, eq, getTableColumns, gte, ilike, inArray, isNull, lte, or, sql, type SQL } from "drizzle-orm";
 import { requireAuth, requirePermission } from "../lib/auth";
 import { writeAudit } from "../lib/auditLog";
 import { createSigningToken } from "../lib/signingTokens";
@@ -8,10 +8,44 @@ import { dispatchNotification } from "../lib/notificationDispatcher";
 import { buildContractSignRequestEmail, sendEmail, getAppBaseUrl } from "../lib/email";
 import { signedContractFilename } from "../lib/contractRenderer";
 import { getVisibleBranchIds, isAgentInScope } from "../lib/branchScope";
+import { hasContractCompanySignature } from "../lib/contractBranding";
+import { resolveContractTemplateBranding } from "../lib/contractTemplateBranding";
 
 const router: IRouter = Router();
 
 const DEFAULT_EXPIRY_DAYS = 14;
+const CONTRACT_SUBJECT_TYPES = new Set(["agent", "student", "lead", "application", "university", "company", "other"]);
+
+function parseExpiryDays(value: unknown): number {
+  const parsed = typeof value === "number" ? value : Number(value);
+  return Number.isInteger(parsed) && parsed > 0 && parsed <= 90 ? parsed : DEFAULT_EXPIRY_DAYS;
+}
+
+function parseSubject(input: Record<string, unknown>) {
+  const rawType = typeof input.subjectType === "string" ? input.subjectType.trim().toLowerCase() : "";
+  if (!rawType) return { subjectType: null, subjectId: null, subjectLabel: null };
+  if (!CONTRACT_SUBJECT_TYPES.has(rawType)) throw new Error("INVALID_SUBJECT_TYPE");
+  const parsedId = input.subjectId === undefined || input.subjectId === null || input.subjectId === ""
+    ? null
+    : Number(input.subjectId);
+  if (rawType !== "other" && (!Number.isInteger(parsedId) || Number(parsedId) <= 0)) {
+    throw new Error("INVALID_SUBJECT_ID");
+  }
+  const subjectLabel = typeof input.subjectLabel === "string" && input.subjectLabel.trim()
+    ? input.subjectLabel.trim().slice(0, 250)
+    : null;
+  return { subjectType: rawType, subjectId: parsedId ? Number(parsedId) : null, subjectLabel };
+}
+
+async function markEmailSent(sessionId: number, reminder = false) {
+  const now = new Date();
+  const updates: Record<string, unknown> = {
+    lastSentAt: now,
+    sendCount: sql`${signingSessionsTable.sendCount} + 1`,
+  };
+  if (reminder) updates.lastReminderAt = now;
+  await db.update(signingSessionsTable).set(updates).where(eq(signingSessionsTable.id, sessionId));
+}
 
 // Status-neutral PDF-cache reset applied by the regenerate endpoint. It clears
 // ONLY the rendered-PDF cache fields so the background sweep re-renders the PDF;
@@ -35,6 +69,7 @@ async function pickTemplate(language: string, entityType: string) {
     .where(and(
       isNull(contractTemplatesTable.deletedAt),
       eq(contractTemplatesTable.isActive, true),
+      eq(contractTemplatesTable.publicationStatus, "published"),
       eq(contractTemplatesTable.language, language),
       eq(contractTemplatesTable.entityType, entityType),
     ))
@@ -45,8 +80,26 @@ async function pickTemplate(language: string, entityType: string) {
 
 async function loadTemplateById(id: number) {
   const [row] = await db.select().from(contractTemplatesTable)
-    .where(and(eq(contractTemplatesTable.id, id), isNull(contractTemplatesTable.deletedAt), eq(contractTemplatesTable.isActive, true)));
+    .where(and(eq(contractTemplatesTable.id, id), isNull(contractTemplatesTable.deletedAt), eq(contractTemplatesTable.isActive, true), eq(contractTemplatesTable.publicationStatus, "published")));
   return row || null;
+}
+
+async function describeUnavailableTemplate(id: number): Promise<{ status: number; error: string }> {
+  const [row] = await db.select({
+    isActive: contractTemplatesTable.isActive,
+    publicationStatus: contractTemplatesTable.publicationStatus,
+  }).from(contractTemplatesTable)
+    .where(and(eq(contractTemplatesTable.id, id), isNull(contractTemplatesTable.deletedAt)));
+
+  if (!row) return { status: 404, error: `Contract template ${id} not found` };
+  if (!row.isActive) return { status: 409, error: `Contract template ${id} is inactive` };
+  if (row.publicationStatus !== "published") {
+    return {
+      status: 409,
+      error: `Contract template ${id} is ${row.publicationStatus}. Publish it before creating or sending a signing link.`,
+    };
+  }
+  return { status: 404, error: `Contract template ${id} is unavailable` };
 }
 
 // Mode-aware gate: self-fill listings honor self_fill_links.view, admin-driven listings honor contracts.view.
@@ -128,6 +181,12 @@ router.get("/contracts/sessions", requireAuth, gateSessionList, async (req, res)
       revokedAt: signingSessionsTable.revokedAt,
       createdAt: signingSessionsTable.createdAt,
       isPrimaryOnboarding: signingSessionsTable.isPrimaryOnboarding,
+      subjectType: signingSessionsTable.subjectType,
+      subjectId: signingSessionsTable.subjectId,
+      subjectLabel: signingSessionsTable.subjectLabel,
+      lastSentAt: signingSessionsTable.lastSentAt,
+      lastReminderAt: signingSessionsTable.lastReminderAt,
+      sendCount: signingSessionsTable.sendCount,
     }).from(signingSessionsTable)
       .where(where)
       .orderBy(desc(signingSessionsTable.createdAt))
@@ -178,38 +237,10 @@ router.get("/contracts/signed", requireAuth, requirePermission("contracts.view")
   }
 });
 
-// Hard-delete a signed contract record. Unlike sessions (where a signed session
-// is protected as the audit anchor), admins may explicitly remove a
-// signed_contracts row from the Signed tab. The underlying signing session is
-// left intact; only the signed artifact row is removed. Any PDF object in
-// storage is left in place (orphaned objects are harmless and no storage delete
-// API is wired here). Note: removing the newest signed contract for an agent
-// makes onboarding-status resolve them as unsigned again (the reminder/gate may
-// reappear) — that is the intended consequence of an explicit deletion.
-router.delete("/contracts/signed/:id", requireAuth, requirePermission("contracts.manage"), async (req, res): Promise<void> => {
-  try {
-    const id = parseInt(String(req.params.id), 10);
-    if (!id) { res.status(400).json({ error: "Invalid id" }); return; }
-    const [row] = await db.select().from(signedContractsTable).where(eq(signedContractsTable.id, id));
-    if (!row) { res.status(404).json({ error: "Not found" }); return; }
-    if (row.agentId) {
-      const inScope = await isAgentInScope((req as any).user!.id, (req as any).user!.role, row.agentId);
-      if (!inScope) { res.status(403).json({ error: "Access denied: agent is outside your branch scope" }); return; }
-    }
-    await db.delete(signedContractsTable).where(eq(signedContractsTable.id, id));
-    await writeAudit({
-      userId: (req as any).user?.id ?? null,
-      action: "contract.signed_deleted",
-      resource: "signed_contract",
-      resourceId: id,
-      changes: { signingSessionId: row.signingSessionId, agentId: row.agentId },
-      ipAddress: req.ip,
-    });
-    res.json({ success: true });
-  } catch (err) {
-    console.error("[contracts] delete signed:", err);
-    res.status(500).json({ error: "Failed to delete signed contract" });
-  }
+// Signed contracts are immutable evidence records. They may be downloaded or
+// regenerated from their captured snapshot, but never deleted through the API.
+router.delete("/contracts/signed/:id", requireAuth, requirePermission("contracts.manage"), async (_req, res): Promise<void> => {
+  res.status(409).json({ error: "Signed contracts are immutable and cannot be deleted." });
 });
 
 // Admin-gated streaming download for a signed contract PDF.
@@ -316,20 +347,38 @@ router.post("/contracts/admin-send", requireAuth, requirePermission("contracts.m
       const tid = parseInt(String(explicitTemplateId), 10);
       if (!tid) { res.status(400).json({ error: "Invalid templateId" }); return; }
       tpl = await loadTemplateById(tid);
-      if (!tpl) { res.status(404).json({ error: "Selected template not found or inactive" }); return; }
+      if (!tpl) {
+        const unavailable = await describeUnavailableTemplate(tid);
+        res.status(unavailable.status).json({ error: unavailable.error });
+        return;
+      }
     } else {
       tpl = await pickTemplate(lang, entityType);
       if (!tpl) { res.status(404).json({ error: `No active template found for language=${lang}, entityType=${entityType}` }); return; }
     }
 
     const { rawToken, tokenHash } = createSigningToken();
-    const days = Number.isInteger(expiryDays) && expiryDays > 0 && expiryDays <= 90 ? expiryDays : DEFAULT_EXPIRY_DAYS;
+    const days = parseExpiryDays(expiryDays);
     const expiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
 
     const signerName = `${agent.firstName || ""} ${agent.lastName || ""}`.trim() || agent.businessName || null;
+    const brandingSnapshot = await resolveContractTemplateBranding(tpl);
+    if (!hasContractCompanySignature(brandingSnapshot)) {
+      res.status(409).json({
+        error: "The selected template has no official company signature. Assign a brand profile with a signature and publish a new template version before issuing a signing link.",
+      });
+      return;
+    }
 
     const [session] = await db.insert(signingSessionsTable).values({
       templateId: tpl.id,
+      templateVersionSnapshot: tpl.version,
+      templateNameSnapshot: tpl.name,
+      templateLanguageSnapshot: tpl.language,
+      templateEntityTypeSnapshot: tpl.entityType,
+      templateBodyHtmlSnapshot: tpl.bodyHtml,
+      templateIntakeSchemaSnapshot: tpl.intakeSchema,
+      templateSigningPageConfigSnapshot: brandingSnapshot,
       agentId: aId,
       tokenHash,
       mode: "admin_driven",
@@ -337,11 +386,15 @@ router.post("/contracts/admin-send", requireAuth, requirePermission("contracts.m
       intakeData: null,
       signerEmail: agent.email,
       signerName,
+      subjectType: "agent",
+      subjectId: aId,
+      subjectLabel: agent.businessName || signerName,
       expiresAt,
       createdByUserId: (req as any).user?.id ?? null,
     }).returning();
 
     const signUrl = `${getAppBaseUrl()}/sign/${rawToken}`;
+    let emailSent = false;
     try {
       const email = await buildContractSignRequestEmail({
         signerName,
@@ -352,6 +405,8 @@ router.post("/contracts/admin-send", requireAuth, requirePermission("contracts.m
         selfFill: false,
       });
       await sendEmail(agent.email, email);
+      await markEmailSent(session.id);
+      emailSent = true;
     } catch (err) {
       console.error("[contracts] failed to send sign request email:", err);
     }
@@ -379,7 +434,7 @@ router.post("/contracts/admin-send", requireAuth, requirePermission("contracts.m
       ipAddress: req.ip,
     });
 
-    res.status(201).json({ data: { sessionId: session.id, signUrl, templateId: tpl.id, expiresAt } });
+    res.status(201).json({ data: { sessionId: session.id, signUrl, templateId: tpl.id, expiresAt, emailSent } });
   } catch (err) {
     console.error("[contracts] admin-send:", err);
     res.status(500).json({ error: "Failed to create signing session" });
@@ -389,13 +444,25 @@ router.post("/contracts/admin-send", requireAuth, requirePermission("contracts.m
 router.post("/contracts/self-fill-link", requireAuth, requirePermission("self_fill_links.manage"), async (req, res): Promise<void> => {
   try {
     const { signerEmail, signerName, language, entityType, expiryDays, templateId } = req.body || {};
+    let subject;
+    try {
+      subject = parseSubject(req.body || {});
+    } catch (err: any) {
+      if (err?.message === "INVALID_SUBJECT_TYPE") { res.status(400).json({ error: "Invalid subjectType" }); return; }
+      if (err?.message === "INVALID_SUBJECT_ID") { res.status(400).json({ error: "subjectId is required for the selected subjectType" }); return; }
+      throw err;
+    }
     const hasEmail = typeof signerEmail === "string" && signerEmail.trim().length > 0;
     let tpl: Awaited<ReturnType<typeof pickTemplate>> | Awaited<ReturnType<typeof loadTemplateById>> | null = null;
     if (templateId !== undefined && templateId !== null && templateId !== "") {
       const tid = typeof templateId === "number" ? templateId : parseInt(String(templateId), 10);
       if (!Number.isInteger(tid) || tid <= 0) { res.status(400).json({ error: "Invalid templateId" }); return; }
       tpl = await loadTemplateById(tid);
-      if (!tpl) { res.status(404).json({ error: `Active template ${tid} not found` }); return; }
+      if (!tpl) {
+        const unavailable = await describeUnavailableTemplate(tid);
+        res.status(unavailable.status).json({ error: unavailable.error });
+        return;
+      }
     } else {
       const lang = (language && typeof language === "string") ? language : "en";
       const ent = entityType === "individual" ? "individual" : "company";
@@ -404,12 +471,26 @@ router.post("/contracts/self-fill-link", requireAuth, requirePermission("self_fi
     }
 
     const { rawToken, tokenHash } = createSigningToken();
-    const days = Number.isInteger(expiryDays) && expiryDays > 0 && expiryDays <= 90 ? expiryDays : DEFAULT_EXPIRY_DAYS;
+    const days = parseExpiryDays(expiryDays);
     const expiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
 
     const normalizedEmail = hasEmail ? String(signerEmail).toLowerCase().trim() : "";
+    const brandingSnapshot = await resolveContractTemplateBranding(tpl);
+    if (!hasContractCompanySignature(brandingSnapshot)) {
+      res.status(409).json({
+        error: "The selected template has no official company signature. Assign a brand profile with a signature and publish a new template version before issuing a signing link.",
+      });
+      return;
+    }
     const [session] = await db.insert(signingSessionsTable).values({
       templateId: tpl.id,
+      templateVersionSnapshot: tpl.version,
+      templateNameSnapshot: tpl.name,
+      templateLanguageSnapshot: tpl.language,
+      templateEntityTypeSnapshot: tpl.entityType,
+      templateBodyHtmlSnapshot: tpl.bodyHtml,
+      templateIntakeSchemaSnapshot: tpl.intakeSchema,
+      templateSigningPageConfigSnapshot: brandingSnapshot,
       agentId: null,
       tokenHash,
       mode: "self_fill",
@@ -422,11 +503,15 @@ router.post("/contracts/self-fill-link", requireAuth, requirePermission("self_fi
       // has been issued (email rebinding attack).
       expectedEmail: hasEmail ? normalizedEmail : null,
       signerName: signerName ? String(signerName).slice(0, 200) : null,
+      subjectType: subject.subjectType,
+      subjectId: subject.subjectId,
+      subjectLabel: subject.subjectLabel,
       expiresAt,
       createdByUserId: (req as any).user?.id ?? null,
     }).returning();
 
     const signUrl = `${getAppBaseUrl()}/sign/${rawToken}`;
+    let emailSent = false;
     if (hasEmail) {
       try {
         const email = await buildContractSignRequestEmail({
@@ -438,6 +523,8 @@ router.post("/contracts/self-fill-link", requireAuth, requirePermission("self_fi
           selfFill: true,
         });
         await sendEmail(session.signerEmail, email);
+        await markEmailSent(session.id);
+        emailSent = true;
       } catch (err) {
         console.error("[contracts] failed to send self-fill email:", err);
       }
@@ -466,7 +553,7 @@ router.post("/contracts/self-fill-link", requireAuth, requirePermission("self_fi
       ipAddress: req.ip,
     });
 
-    res.status(201).json({ data: { sessionId: session.id, signUrl, templateId: tpl.id, expiresAt } });
+    res.status(201).json({ data: { sessionId: session.id, signUrl, templateId: tpl.id, expiresAt, emailSent } });
   } catch (err) {
     console.error("[contracts] self-fill-link:", err);
     res.status(500).json({ error: "Failed to create self-fill link" });
@@ -500,10 +587,22 @@ router.patch("/contracts/sessions/:id", requireAuth, gateSessionMutate, async (r
     const updates: Record<string, any> = {};
     if (signerName !== undefined) updates.signerName = signerName || null;
     if (signerEmail !== undefined) {
-      if (!signerEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(signerEmail)) {
+      const normalizedEmail = signerEmail.trim().toLowerCase();
+      if (!normalizedEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
         res.status(400).json({ error: "Invalid signerEmail" }); return;
       }
-      updates.signerEmail = signerEmail;
+      updates.signerEmail = normalizedEmail;
+      updates.expectedEmail = normalizedEmail;
+      updates.verifiedEmail = null;
+    }
+    if (req.body.subjectType !== undefined || req.body.subjectId !== undefined || req.body.subjectLabel !== undefined) {
+      try {
+        Object.assign(updates, parseSubject(req.body as Record<string, unknown>));
+      } catch (err: any) {
+        if (err?.message === "INVALID_SUBJECT_TYPE") { res.status(400).json({ error: "Invalid subjectType" }); return; }
+        if (err?.message === "INVALID_SUBJECT_ID") { res.status(400).json({ error: "subjectId is required for the selected subjectType" }); return; }
+        throw err;
+      }
     }
     if (Object.keys(updates).length === 0) { res.status(400).json({ error: "No fields to update" }); return; }
     const [row] = await db.update(signingSessionsTable).set(updates).where(eq(signingSessionsTable.id, id)).returning();
@@ -592,6 +691,7 @@ router.post("/contracts/sessions/:id/resend", requireAuth, gateSessionMutate, as
       .where(eq(signingSessionsTable.id, id));
     const [tpl] = await db.select().from(contractTemplatesTable).where(eq(contractTemplatesTable.id, session.templateId));
     const signUrl = `${getAppBaseUrl()}/sign/${rawToken}`;
+    let emailSent = false;
     if (tpl && session.signerEmail) {
       try {
         const email = await buildContractSignRequestEmail({
@@ -603,13 +703,15 @@ router.post("/contracts/sessions/:id/resend", requireAuth, gateSessionMutate, as
           selfFill: session.mode === "self_fill",
         });
         await sendEmail(session.signerEmail, email);
+        await markEmailSent(id);
+        emailSent = true;
       } catch (err) {
         console.error("[contracts] failed to resend email:", err);
       }
     }
     const resendActorId = (req as any).user?.id ?? undefined;
     const resendVars = { signerName: session.signerName || "", signerEmail: session.signerEmail || "", contractName: tpl?.name || "", contractLink: signUrl };
-    (async () => {
+    if (emailSent) (async () => {
       try {
         await dispatchNotification({
           event: "contract.sent",
@@ -625,13 +727,68 @@ router.post("/contracts/sessions/:id/resend", requireAuth, gateSessionMutate, as
       action: "contract.link_sent",
       resource: "signing_session",
       resourceId: id,
-      changes: { resent: true },
+      changes: { resent: true, emailSent },
       ipAddress: req.ip,
     });
-    res.json({ data: { signUrl, expiresAt } });
+    res.json({ data: { signUrl, expiresAt, emailSent } });
   } catch (err) {
     console.error("[contracts] resend:", err);
     res.status(500).json({ error: "Failed to resend session" });
+  }
+});
+
+router.post("/contracts/sessions/:id/remind", requireAuth, gateSessionMutate, async (req, res): Promise<void> => {
+  try {
+    const id = parseInt(String(req.params.id), 10);
+    if (!id) { res.status(400).json({ error: "Invalid id" }); return; }
+    const [session] = await db.select().from(signingSessionsTable).where(eq(signingSessionsTable.id, id));
+    if (!session) { res.status(404).json({ error: "Not found" }); return; }
+    if (session.status === "signed" || session.status === "revoked") {
+      res.status(409).json({ error: "Cannot remind a signed or revoked session" }); return;
+    }
+    if (!session.signerEmail) { res.status(409).json({ error: "A signer email is required before sending a reminder" }); return; }
+
+    const [tpl] = await db.select().from(contractTemplatesTable).where(eq(contractTemplatesTable.id, session.templateId));
+    if (!tpl) { res.status(404).json({ error: "Contract template not found" }); return; }
+
+    let rawToken: string;
+    let expiresAt = session.expiresAt;
+    if (new Date(session.expiresAt).getTime() <= Date.now()) {
+      const token = createSigningToken();
+      rawToken = token.rawToken;
+      expiresAt = new Date(Date.now() + DEFAULT_EXPIRY_DAYS * 24 * 60 * 60 * 1000);
+      await db.update(signingSessionsTable)
+        .set({ tokenHash: token.tokenHash, expiresAt, status: "intake_pending" })
+        .where(eq(signingSessionsTable.id, id));
+    } else {
+      const token = createSigningToken();
+      rawToken = token.rawToken;
+      await db.update(signingSessionsTable).set({ tokenHash: token.tokenHash }).where(eq(signingSessionsTable.id, id));
+    }
+
+    const signUrl = `${getAppBaseUrl()}/sign/${rawToken}`;
+    const email = await buildContractSignRequestEmail({
+      signerName: session.signerName,
+      agentName: null,
+      templateName: tpl.name,
+      signUrl,
+      expiresAt,
+      selfFill: session.mode === "self_fill",
+    });
+    await sendEmail(session.signerEmail, email);
+    await markEmailSent(id, true);
+    await writeAudit({
+      userId: (req as any).user?.id ?? null,
+      action: "contract.reminder_sent",
+      resource: "signing_session",
+      resourceId: id,
+      changes: { signerEmail: session.signerEmail, expiresAt: expiresAt.toISOString() },
+      ipAddress: req.ip,
+    });
+    res.json({ data: { signUrl, expiresAt, emailSent: true } });
+  } catch (err) {
+    console.error("[contracts] reminder:", err);
+    res.status(502).json({ error: "Failed to send contract reminder" });
   }
 });
 

@@ -8,6 +8,22 @@ import { getClientIp } from "../lib/clientIp";
 
 const router: IRouter = Router();
 
+const DEFAULT_TOKEN_LIFETIME_DAYS = 30;
+const MAX_TOKEN_LIFETIME_DAYS = 90;
+
+function tokenExpiry(raw: unknown): { expiresAt?: Date; error?: string } {
+  const now = Date.now();
+  const parsed = raw == null || raw === ""
+    ? new Date(now + DEFAULT_TOKEN_LIFETIME_DAYS * 86_400_000)
+    : new Date(String(raw));
+  if (isNaN(parsed.getTime())) return { error: "expiresAt is not a valid date" };
+  if (parsed.getTime() <= now) return { error: "expiresAt must be in the future" };
+  if (parsed.getTime() > now + MAX_TOKEN_LIFETIME_DAYS * 86_400_000) {
+    return { error: `expiresAt cannot be more than ${MAX_TOKEN_LIFETIME_DAYS} days in the future` };
+  }
+  return { expiresAt: parsed };
+}
+
 // API tokens may only be managed from an interactive (cookie) session. A token
 // must never be able to mint or revoke further tokens — that would let a leaked
 // token bootstrap persistent, broader access. Block Bearer-authed requests.
@@ -78,19 +94,12 @@ router.post("/api-tokens", requireAuth, requireRole(...ADMIN_ROLES), blockTokenA
     return;
   }
 
-  let expiresAt: Date | null = null;
-  if (req.body?.expiresAt != null && req.body.expiresAt !== "") {
-    const parsed = new Date(req.body.expiresAt);
-    if (isNaN(parsed.getTime())) {
-      res.status(400).json({ error: "expiresAt is not a valid date" });
-      return;
-    }
-    if (parsed.getTime() <= Date.now()) {
-      res.status(400).json({ error: "expiresAt must be in the future" });
-      return;
-    }
-    expiresAt = parsed;
+  const expiry = tokenExpiry(req.body?.expiresAt);
+  if (expiry.error || !expiry.expiresAt) {
+    res.status(400).json({ error: expiry.error || "expiresAt is required" });
+    return;
   }
+  const expiresAt = expiry.expiresAt;
 
   const { plain, prefix, hash } = generateToken();
   const [row] = await db
@@ -142,6 +151,53 @@ router.post("/api-tokens/:id/revoke", requireAuth, requireRole(...ADMIN_ROLES), 
   logAudit(req.user!.id, "revoke", "api_token", id, { name: existing.name }, getClientIp(req) ?? undefined);
 
   res.json(publicToken(updated));
+});
+
+// Atomically replace an active token. The old token is revoked in the same
+// transaction that creates its replacement, so rotation cannot leave two
+// indefinitely active credentials. The new plain token is returned once.
+router.post("/api-tokens/:id/rotate", requireAuth, requireRole(...ADMIN_ROLES), blockTokenAuth, async (req, res): Promise<void> => {
+  const id = parseInt(String(req.params.id), 10);
+  if (isNaN(id)) {
+    res.status(400).json({ error: "Invalid id" });
+    return;
+  }
+  const expiry = tokenExpiry(req.body?.expiresAt);
+  if (expiry.error || !expiry.expiresAt) {
+    res.status(400).json({ error: expiry.error || "expiresAt is required" });
+    return;
+  }
+  const result = await db.transaction(async (tx) => {
+    const [existing] = await tx
+      .select()
+      .from(apiTokensTable)
+      .where(and(eq(apiTokensTable.id, id), eq(apiTokensTable.userId, req.user!.id)));
+    if (!existing || existing.revokedAt) return null;
+    const generated = generateToken();
+    const [replacement] = await tx
+      .insert(apiTokensTable)
+      .values({
+        userId: existing.userId,
+        name: `${existing.name} (rotated)`.slice(0, 100),
+        tokenHash: generated.hash,
+        tokenPrefix: generated.prefix,
+        scopes: (existing.scopes as string[] | null) ?? [],
+        expiresAt: expiry.expiresAt,
+        createdBy: req.user!.id,
+      })
+      .returning();
+    await tx.update(apiTokensTable).set({ revokedAt: new Date() }).where(eq(apiTokensTable.id, existing.id));
+    return { plain: generated.plain, replacement, previous: existing };
+  });
+  if (!result) {
+    res.status(404).json({ error: "Active token not found" });
+    return;
+  }
+  logAudit(req.user!.id, "rotate", "api_token", result.replacement.id, {
+    previousTokenId: result.previous.id,
+    expiresAt: result.replacement.expiresAt,
+  }, getClientIp(req) ?? undefined);
+  res.status(201).json({ token: result.plain, ...publicToken(result.replacement) });
 });
 
 export default router;

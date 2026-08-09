@@ -4,7 +4,7 @@ import * as fsPromises from "node:fs/promises";
 import * as nodePath from "node:path";
 import { ObjectStorageService, ObjectNotFoundError } from "../lib/objectStorage";
 import { requireAuth } from "../lib/auth";
-import { canAccessGenericObject, recordObjectOwner } from "../lib/objectAuthz";
+import { callerOwnsObject, canAccessGenericObject, recordObjectOwner } from "../lib/objectAuthz";
 import { checkAndIncrementRateLimit } from "../lib/pgRateLimiter";
 import { validateApplicationDocumentFile, validateUploadedFile } from "../lib/fileUploadValidation";
 import { processUpload, UploadTooLargeError } from "../lib/uploads/processUpload";
@@ -31,6 +31,7 @@ const objectStorageService = new ObjectStorageService();
 
 const UPLOAD_LIMIT = 30;
 const UPLOAD_WINDOW_MS = 15 * 60 * 1000;
+const LOCAL_UPLOAD_ABSOLUTE_MAX_BYTES = 25 * 1024 * 1024;
 
 const INBOX_MEDIA_RULES: Record<string, { extensions: Set<string>; maxBytes: number }> = {
   "image/jpeg": { extensions: new Set(["jpg", "jpeg"]), maxBytes: 5 * 1024 * 1024 },
@@ -149,7 +150,11 @@ router.post("/storage/uploads/request-url", requireAuth, async (req: Request, re
 
     // Bind the object to its uploader so the generic download endpoint can
     // authorize access without trusting self-writable reference fields.
-    await recordObjectOwner(objectPath, userId);
+    const ownerRecorded = await recordObjectOwner(objectPath, userId);
+    if (!ownerRecorded) {
+      res.status(503).json({ error: "Upload authorization could not be established" });
+      return;
+    }
 
     res.json(
       RequestUploadUrlResponse.parse({
@@ -204,12 +209,35 @@ router.put("/storage/local-upload/:encoded", requireAuth, async (req: Request, r
     return;
   }
 
+  // The upload URL is only an encoded storage path, not a secret. Require the
+  // authenticated caller to be the user who requested that path so leaked or
+  // guessed URLs cannot overwrite another user's private object.
+  const userId = req.user!.id;
+  if (!(await callerOwnsObject(userId, relPath))) {
+    res.status(403).json({ error: "Upload target is not owned by the current user" });
+    return;
+  }
+
+  const contentLengthHeader = req.headers["content-length"];
+  const contentLength = typeof contentLengthHeader === "string" ? Number(contentLengthHeader) : Number.NaN;
+  if (Number.isFinite(contentLength) && contentLength > LOCAL_UPLOAD_ABSOLUTE_MAX_BYTES) {
+    res.status(413).json({ error: "Upload exceeds the 25MB absolute limit" });
+    return;
+  }
+
   try {
     await fsPromises.mkdir(nodePath.dirname(localPath), { recursive: true });
 
     const chunks: Buffer[] = [];
+    let receivedBytes = 0;
     for await (const chunk of req) {
-      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk as Uint8Array));
+      const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk as Uint8Array);
+      receivedBytes += buffer.length;
+      if (receivedBytes > LOCAL_UPLOAD_ABSOLUTE_MAX_BYTES) {
+        res.status(413).json({ error: "Upload exceeds the 25MB absolute limit" });
+        return;
+      }
+      chunks.push(buffer);
     }
     const rawBody = Buffer.concat(chunks);
     const contentType = (req.headers["content-type"] ?? "application/octet-stream").split(";")[0].trim();
@@ -245,7 +273,9 @@ router.put("/storage/local-upload/:encoded", requireAuth, async (req: Request, r
           res.status(413).json({ error: err.message });
           return;
         }
-        console.error("[local-upload] processUpload failed, storing original:", err);
+        console.error("[local-upload] processUpload rejected upload:", err);
+        res.status(400).json({ error: "Uploaded file could not be processed" });
+        return;
       }
     }
 

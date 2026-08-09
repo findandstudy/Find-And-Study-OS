@@ -3064,7 +3064,7 @@ async function seedClaudeIntegration() {
   }
   }
 
-  const { BackgroundJobCoordinator } = await import("./lib/backgroundJobs");
+  const { BackgroundJobCoordinator, backgroundJobsEnabled } = await import("./lib/backgroundJobs");
   const backgroundJobs = new BackgroundJobCoordinator(pool, [
     { name: "emailWorker", offsetMs: 1_000, start: async () => {
       const { startEmailWorker } = await import("./lib/email");
@@ -3134,7 +3134,18 @@ async function seedClaudeIntegration() {
       return startMessageCampaignWorker();
     } },
   ]);
-  await backgroundJobs.start();
+  const backgroundJobsRequested = backgroundJobsEnabled();
+  await backgroundJobs.start(backgroundJobsRequested);
+  let stopLocalSignedContractPdfWorker: (() => Promise<void>) | null = null;
+  if (!backgroundJobsRequested) {
+    const {
+      signedContractPdfWorkerEnabled,
+      startSignedContractPdfWorker,
+    } = await import("./lib/signedContractDelivery");
+    if (signedContractPdfWorkerEnabled()) {
+      stopLocalSignedContractPdfWorker = startSignedContractPdfWorker();
+    }
+  }
 
   serveStaticFrontend();
 
@@ -3166,6 +3177,12 @@ async function seedClaudeIntegration() {
     try { await backgroundJobs.shutdown(); } catch (error) {
       console.error("[shutdown] Background-job shutdown failed:", error);
       exitCode = 1;
+    }
+    if (stopLocalSignedContractPdfWorker) {
+      try { await stopLocalSignedContractPdfWorker(); } catch (error) {
+        console.error("[shutdown] Local signed-contract PDF worker shutdown failed:", error);
+        exitCode = 1;
+      }
     }
     try { await feedBus.shutdown(); } catch (error) {
       console.error("[shutdown] feedBus shutdown failed:", error);

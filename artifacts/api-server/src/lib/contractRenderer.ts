@@ -1,4 +1,5 @@
-import { MAIN_AGENCY_SIGNATURE_DATA_URL } from "./mainAgencySignature";
+import { loadMainAgencySignatureDataUrl } from "./mainAgencySignature";
+import { applyContractBranding, sanitizeContractBranding } from "./contractBranding";
 
 type Ctx = Record<string, any>;
 
@@ -326,8 +327,8 @@ export function documentShell(innerHtml: string): string {
  * through here so the two things that must always be present in a signed
  * document can never be forgotten by one path and remembered by another:
  *
- *   1. {{main_agency_signature}} -> the Find And Study (main agency) seal, an
- *      inlined data URL so it can never fail to fetch. The unsigned preview /
+ *   1. {{main_agency_signature}} -> the Find And Study (main agency) seal,
+ *      loaded from protected persistent storage. The unsigned preview /
  *      signing-screen renders deliberately leave this empty (buildAgentContext
  *      defaults it to ""), so the seal appears ONLY after signing.
  *   2. {{contract_number}} -> the canonical contract number, identical to the
@@ -346,6 +347,7 @@ export function buildFinalSignedContractHtml(params: {
   signedAt: Date;
   signatureBase64: string;
   contractNumber: string;
+  signingPageConfig?: unknown;
 }): string {
   const ctx = buildAgentContext(params.agent, params.intakeData || null, {
     signerEmail: params.signerEmail,
@@ -354,7 +356,8 @@ export function buildFinalSignedContractHtml(params: {
     number: params.contractNumber,
   });
   ctx.signature = toSignatureDataUrl(params.signatureBase64);
-  ctx.main_agency_signature = MAIN_AGENCY_SIGNATURE_DATA_URL;
+  const branding = sanitizeContractBranding(params.signingPageConfig);
+  ctx.main_agency_signature = branding?.companySignatureDataUrl || loadMainAgencySignatureDataUrl();
   const placeholder = SIG_PLACEHOLDER[params.templateLanguage] || SIG_PLACEHOLDER.en;
-  return cleanupSignatureImages(renderTemplate(params.bodyHtml, ctx), placeholder);
+  return applyContractBranding(cleanupSignatureImages(renderTemplate(params.bodyHtml, ctx), placeholder), branding);
 }

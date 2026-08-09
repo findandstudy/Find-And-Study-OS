@@ -2234,6 +2234,7 @@ function InboxTab() {
               return (
                 <div
                   key={c.id}
+                  style={{ contentVisibility: "auto", containIntrinsicSize: "68px" }}
                   data-testid="inbox-conversation-item"
                   data-unread={isUnread ? "true" : "false"}
                   aria-label={isUnread ? `${displayName}, ${unreadCount} ${t("inbox.tabs.unread")}` : displayName}
@@ -3773,6 +3774,7 @@ function ConversationList({
             return (
               <div
                 key={conv.id}
+                style={{ contentVisibility: "auto", containIntrinsicSize: "68px" }}
                 data-testid="internal-conversation-item"
                 data-unread={isUnread ? "true" : "false"}
                 aria-label={isUnread ? `${displayName}, ${unreadCount} ${t("inbox.tabs.unread")}` : displayName}

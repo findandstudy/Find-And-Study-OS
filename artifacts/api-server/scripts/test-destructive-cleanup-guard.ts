@@ -17,6 +17,22 @@ const deployScriptSource = readFileSync(
   new URL("../../../deploy/deploy.sh", import.meta.url),
   "utf8",
 );
+const postMergeScriptSource = readFileSync(
+  new URL("../../../scripts/post-merge.sh", import.meta.url),
+  "utf8",
+);
+const embedDuplicateCleanupSource = readFileSync(
+  new URL("./cleanup-embed-duplicates.ts", import.meta.url),
+  "utf8",
+);
+const publicLeadCleanupSource = readFileSync(
+  new URL("./cleanup-public-lead-duplicates.ts", import.meta.url),
+  "utf8",
+);
+const assignmentBackfillSource = readFileSync(
+  new URL("./sync-assignment-backfill.ts", import.meta.url),
+  "utf8",
+);
 
 test("manual cleanup requires the exact destructive cleanup flag before DB access", () => {
   for (const value of [undefined, "", "false", "1", "yes", "TRUE"]) {
@@ -59,9 +75,14 @@ test("API boot and deployment never invoke destructive cleanup automatically", (
   assert.doesNotMatch(apiIndexSource, /runDataCleanupOnce/);
   assert.doesNotMatch(deployScriptSource, /cleanup-data\.mjs/);
   assert.doesNotMatch(deployScriptSource, /ALLOW_DESTRUCTIVE_DATA_CLEANUP/);
+  assert.doesNotMatch(postMergeScriptSource, /cleanup-(?:embed-duplicates|public-lead-duplicates)/);
+  assert.doesNotMatch(postMergeScriptSource, /sync-assignment-backfill/);
 });
 
 test("both cleanup implementations retain the shared explicit flag contract", () => {
   assert.match(cleanupScriptSource, /ALLOW_DESTRUCTIVE_DATA_CLEANUP/);
   assert.match(runtimeCleanupSource, /ALLOW_DESTRUCTIVE_DATA_CLEANUP/);
+  assert.match(embedDuplicateCleanupSource, /ALLOW_DESTRUCTIVE_DATA_CLEANUP/);
+  assert.match(publicLeadCleanupSource, /ALLOW_DESTRUCTIVE_DATA_CLEANUP/);
+  assert.match(assignmentBackfillSource, /ALLOW_ASSIGNMENT_BACKFILL/);
 });

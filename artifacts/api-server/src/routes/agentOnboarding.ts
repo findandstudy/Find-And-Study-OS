@@ -8,6 +8,8 @@ import { MANAGER_ROLES } from "../lib/roles";
 import { writeAudit } from "../lib/auditLog";
 import { sendEmail, buildContractSignRequestEmail, buildAgentOnboardingEmail, getAppBaseUrl } from "../lib/email";
 import { createSigningToken } from "../lib/signingTokens";
+import { hasContractCompanySignature } from "../lib/contractBranding";
+import { resolveContractTemplateBranding } from "../lib/contractTemplateBranding";
 import { finalizeSign, loadNewestSignedContractForAgent } from "../lib/signContract";
 import { agentIntakeDefaults, signedContractFilename } from "../lib/contractRenderer";
 import { RateLimiterPostgres } from "rate-limiter-flexible";
@@ -909,6 +911,14 @@ router.post("/contracts/agent/:agentId/resend-onboarding", requireAuth, requireR
   }
   if (!template) { res.status(404).json({ error: "No matching contract template found" }); return; }
 
+  const templateBrandingSnapshot = await resolveContractTemplateBranding(template);
+  if (!hasContractCompanySignature(templateBrandingSnapshot)) {
+    res.status(409).json({
+      error: "Selected contract template has no official company signature. Configure one in Contract Brand Profiles before resending.",
+    });
+    return;
+  }
+
   const [settings] = await db.select({ days: settingsTable.defaultSigningDeadlineDays }).from(settingsTable);
   const days = Math.max(1, Math.min(365, settings?.days || 14));
   const expiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
@@ -917,6 +927,13 @@ router.post("/contracts/agent/:agentId/resend-onboarding", requireAuth, requireR
   const signerName = `${agent.firstName || ""} ${agent.lastName || ""}`.trim() || agent.businessName || null;
   const [session] = await db.insert(signingSessionsTable).values({
     templateId: template.id,
+    templateVersionSnapshot: template.version,
+    templateNameSnapshot: template.name,
+    templateLanguageSnapshot: template.language,
+    templateEntityTypeSnapshot: template.entityType,
+    templateBodyHtmlSnapshot: template.bodyHtml,
+    templateIntakeSchemaSnapshot: template.intakeSchema,
+    templateSigningPageConfigSnapshot: templateBrandingSnapshot,
     agentId: agent.id,
     tokenHash,
     mode: "admin_driven",

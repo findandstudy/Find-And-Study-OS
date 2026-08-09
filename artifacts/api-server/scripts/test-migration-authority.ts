@@ -26,7 +26,7 @@ test("all legacy boot DDL, seed and backfill calls are unreachable during API bo
   const bootStart = indexSource.indexOf("(async () => {");
   const disabledStart = indexSource.indexOf("if (false) {", bootStart);
   const backgroundStart = indexSource.indexOf(
-    "const { BackgroundJobCoordinator }",
+    "const { BackgroundJobCoordinator",
     disabledStart,
   );
   assert(
@@ -112,7 +112,7 @@ test("repository migration history is complete, ordered and duplicate-free", () 
     },
   );
   assert.equal(result.status, 0, result.stderr);
-  assert.match(result.stdout, /OK: 44 files, 44 journal entries/);
+  assert.match(result.stdout, /OK: (\d+) files, \1 journal entries/);
 });
 
 test("migration validator rejects duplicate ids and non-monotonic journal timestamps", () => {

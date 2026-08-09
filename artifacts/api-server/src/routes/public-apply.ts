@@ -52,6 +52,7 @@ import {
   type DocumentPartInput,
 } from "../lib/documentPartMerge";
 import { resolveProgramInterestedLevel } from "../lib/programInterestedLevel";
+import { issueEmailVerificationToken } from "../lib/emailVerificationToken";
 
 const router: IRouter = Router();
 
@@ -745,8 +746,6 @@ router.post("/public/apply", applyLimiter, applyJson, async (req: Request, res: 
       const [archivedByEmail] = await db.select().from(studentsTable).where(and(eq(studentsTable.email, normalizedEmail), isNotNull(studentsTable.deletedAt)));
 
       const passwordToken = generateSecureToken();
-      const verificationToken = generateSecureToken();
-
       const [newUser] = await db.insert(usersTable).values({
         email: normalizedEmail,
         firstName: s(firstName, 100)!,
@@ -758,9 +757,10 @@ router.post("/public/apply", applyLimiter, applyJson, async (req: Request, res: 
         language: "en",
         passwordResetToken: crypto.createHash("sha256").update(passwordToken).digest("hex"),
         passwordResetExpires: new Date(Date.now() + 48 * 60 * 60 * 1000),
-        emailVerificationToken: verificationToken,
         createdFromSource: "public_apply",
       }).returning();
+
+      const verificationToken = await issueEmailVerificationToken(normalizedEmail);
 
       let newStudent: any;
       if (archivedByEmail) {

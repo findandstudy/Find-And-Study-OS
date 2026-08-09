@@ -32,6 +32,22 @@ const messagesUiSource = readFileSync(
   new URL("../../edcons/src/pages/staff/Messages.tsx", import.meta.url),
   "utf8",
 );
+const storageRouteSource = readFileSync(
+  new URL("../src/routes/storage.ts", import.meta.url),
+  "utf8",
+);
+const objectAuthzSource = readFileSync(
+  new URL("../src/lib/objectAuthz.ts", import.meta.url),
+  "utf8",
+);
+const emailVerificationSource = readFileSync(
+  new URL("../src/lib/emailVerificationToken.ts", import.meta.url),
+  "utf8",
+);
+const mainAgencySignatureSource = readFileSync(
+  new URL("../src/lib/mainAgencySignature.ts", import.meta.url),
+  "utf8",
+);
 
 test("authenticated course-finder writes are not exempt from CSRF", () => {
   assert.doesNotMatch(
@@ -180,4 +196,33 @@ test("E2E database mutations accept only explicit test database names", () => {
     false,
   );
   assert.equal(getDatabaseName("not-a-database-url"), null);
+});
+
+test("local uploads are owner-bound, fail closed, and bounded before buffering", () => {
+  assert.match(storageRouteSource, /callerOwnsObject\(userId, relPath\)/);
+  assert.match(storageRouteSource, /LOCAL_UPLOAD_ABSOLUTE_MAX_BYTES = 25 \* 1024 \* 1024/);
+  assert.match(storageRouteSource, /receivedBytes \+= buffer\.length/);
+  assert.match(storageRouteSource, /receivedBytes > LOCAL_UPLOAD_ABSOLUTE_MAX_BYTES/);
+  assert.match(storageRouteSource, /const ownerRecorded = await recordObjectOwner/);
+  assert.match(storageRouteSource, /if \(!ownerRecorded\)/);
+  assert.doesNotMatch(storageRouteSource, /processUpload failed, storing original/);
+  assert.match(objectAuthzSource, /recordObjectOwner[\s\S]*Promise<boolean>/);
+  assert.match(objectAuthzSource, /failed to record object owner:[\s\S]*return false/);
+});
+
+test("email verification links are random, hashed, expiring, and one-time", () => {
+  assert.match(emailVerificationSource, /randomBytes\(32\)\.toString\("base64url"\)/);
+  assert.match(emailVerificationSource, /createHash\("sha256"\)/);
+  assert.match(emailVerificationSource, /EMAIL_VERIFICATION_LINK_TTL_MS = 24 \* 60 \* 60 \* 1000/);
+  assert.match(emailVerificationSource, /eq\(emailVerificationCodesTable\.used, false\)/);
+  assert.match(emailVerificationSource, /gt\(emailVerificationCodesTable\.expiresAt, new Date\(\)\)/);
+  assert.match(emailVerificationSource, /\.set\(\{ used: true \}\)/);
+});
+
+test("the reusable main-agency signature is external to source and release artifacts", () => {
+  assert.doesNotMatch(mainAgencySignatureSource, /data:image\/(?:png|jpeg);base64,/i);
+  assert.match(mainAgencySignatureSource, /MAIN_AGENCY_SIGNATURE_FILE/);
+  assert.match(mainAgencySignatureSource, /must be an absolute path/);
+  assert.match(mainAgencySignatureSource, /must be outside the runtime release directory/);
+  assert.match(mainAgencySignatureSource, /valid PNG or JPEG/);
 });

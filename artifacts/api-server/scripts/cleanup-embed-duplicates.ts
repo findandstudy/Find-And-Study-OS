@@ -23,11 +23,26 @@
  *
  * Idempotent: re-running this script after a clean DB does nothing.
  * Dry-run: pass DRY_RUN=1 to print the plan without writing.
+ * Live mode additionally requires ALLOW_DESTRUCTIVE_DATA_CLEANUP=true.
  */
 import { db } from "@workspace/db";
 import { sql } from "drizzle-orm";
 
 const DRY_RUN = process.env.DRY_RUN === "1" || process.env.DRY_RUN === "true";
+const CLEANUP_FLAG = "ALLOW_DESTRUCTIVE_DATA_CLEANUP";
+
+function assertCleanupAuthorized(): void {
+  if (!DRY_RUN && process.env[CLEANUP_FLAG] !== "true") {
+    throw new Error(`${CLEANUP_FLAG}=true is required for live cleanup`);
+  }
+}
+
+function numericIdList(ids: number[]) {
+  if (!ids.every((id) => Number.isSafeInteger(id) && id > 0)) {
+    throw new Error("Cleanup received an invalid database identifier");
+  }
+  return sql.join(ids.map((id) => sql`${id}`), sql.raw(", "));
+}
 
 interface DupGroup {
   email_lc: string;
@@ -64,7 +79,7 @@ async function findDuplicateGroups(): Promise<DupGroup[]> {
 
 async function repointFks(keeper: number, victims: number[]): Promise<void> {
   if (victims.length === 0) return;
-  const list = sql.raw(victims.join(","));
+  const list = numericIdList(victims);
   await db.execute(sql`UPDATE embed_submissions SET lead_id = ${keeper} WHERE lead_id IN (${list})`);
   await db.execute(sql`UPDATE follow_ups       SET lead_id = ${keeper} WHERE lead_id IN (${list})`);
   await db.execute(sql`UPDATE documents        SET lead_id = ${keeper} WHERE lead_id IN (${list})`);
@@ -79,7 +94,7 @@ async function repointFks(keeper: number, victims: number[]): Promise<void> {
  */
 async function mergeScalars(keeper: number, victims: number[]): Promise<void> {
   if (victims.length === 0) return;
-  const list = sql.raw(victims.join(","));
+  const list = numericIdList(victims);
   await db.execute(sql`
     WITH best AS (
       SELECT
@@ -138,7 +153,7 @@ async function mergeScalars(keeper: number, victims: number[]): Promise<void> {
 
 async function deleteVictims(victims: number[]): Promise<number> {
   if (victims.length === 0) return 0;
-  const list = sql.raw(victims.join(","));
+  const list = numericIdList(victims);
   const res: any = await db.execute(sql`DELETE FROM leads WHERE id IN (${list})`);
   return Number(res?.rowCount ?? victims.length);
 }
@@ -153,11 +168,12 @@ async function installUniqueIndex(): Promise<void> {
 }
 
 async function main(): Promise<void> {
+  assertCleanupAuthorized();
   console.log(`[cleanup-embed-duplicates] mode=${DRY_RUN ? "DRY_RUN" : "LIVE"}`);
   const groups = await findDuplicateGroups();
   console.log(`[cleanup-embed-duplicates] duplicate groups found: ${groups.length}`);
   if (groups.length === 0) {
-    await installUniqueIndex();
+    if (!DRY_RUN) await installUniqueIndex();
     return;
   }
 
@@ -165,7 +181,7 @@ async function main(): Promise<void> {
   let totalDeleted = 0;
   for (const g of groups) {
     totalVictims += g.victim_ids.length;
-    console.log(`  group source=${g.source} email=${g.email_lc} rows=${g.total} keeper=${g.keeper_id} drop=${g.victim_ids.join(",")}`);
+    console.log(`  group source=${g.source} rows=${g.total} keeper=${g.keeper_id} victimCount=${g.victim_ids.length}`);
     if (DRY_RUN) continue;
     await repointFks(g.keeper_id, g.victim_ids);
     await mergeScalars(g.keeper_id, g.victim_ids);

@@ -1,7 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { validateSignatureImage, MAX_SIGNATURE_BYTES } from "../src/lib/signContract";
-import { MAIN_AGENCY_SIGNATURE_DATA_URL } from "../src/lib/mainAgencySignature";
+import {
+  clearMainAgencySignatureCacheForTests,
+  loadMainAgencySignatureDataUrl,
+} from "../src/lib/mainAgencySignature";
 import {
   renderTemplate,
   buildAgentContext,
@@ -17,6 +23,14 @@ import { REGENERATE_PDF_CACHE_RESET } from "../src/routes/contracts";
 // A real 1x1 transparent PNG (starts with the PNG magic 89 50 4E 47 0D 0A 1A 0A).
 const VALID_PNG_BASE64 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
+const MAIN_SIGNATURE_PNG_BASE64 =
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Zl7sAAAAASUVORK5CYII=";
+
+const signatureFixtureDir = mkdtempSync(join(tmpdir(), "fas-main-signature-"));
+const signatureFixturePath = join(signatureFixtureDir, "main-signature.png");
+writeFileSync(signatureFixturePath, Buffer.from(MAIN_SIGNATURE_PNG_BASE64, "base64"));
+const MAIN_AGENCY_SIGNATURE_DATA_URL = loadMainAgencySignatureDataUrl(signatureFixturePath);
+process.once("exit", () => rmSync(signatureFixtureDir, { recursive: true, force: true }));
 
 test("accepts a valid bare-base64 PNG and returns no data: prefix", () => {
   const r = validateSignatureImage(VALID_PNG_BASE64);
@@ -131,6 +145,21 @@ test("final render stamps the main-agency seal into {{main_agency_signature}}", 
   assert.notEqual(MAIN_AGENCY_SIGNATURE_DATA_URL, toSignatureDataUrl(VALID_PNG_BASE64));
 });
 
+test("main-agency seal loader rejects relative paths and invalid image bytes", () => {
+  assert.throws(
+    () => loadMainAgencySignatureDataUrl("relative/signature.png"),
+    /absolute path/,
+  );
+  const invalidPath = join(signatureFixtureDir, "invalid.png");
+  writeFileSync(invalidPath, "not an image");
+  clearMainAgencySignatureCacheForTests();
+  assert.throws(
+    () => loadMainAgencySignatureDataUrl(invalidPath),
+    /valid PNG or JPEG/,
+  );
+  clearMainAgencySignatureCacheForTests();
+});
+
 test("preview render leaves {{main_agency_signature}} empty (no seal, no <img>)", () => {
   const ctx = buildAgentContext(null, null, { signerName: "Test Agent" });
   ctx.signature = toSignatureDataUrl(VALID_PNG_BASE64);
@@ -155,6 +184,8 @@ const FINAL_RENDER_TEMPLATE =
   `<img src="{{main_agency_signature}}" alt="Ana Acente İmzası">`;
 
 test("sign-time render (buildFinalSignedContractHtml) stamps the main-agency seal", () => {
+  process.env.MAIN_AGENCY_SIGNATURE_FILE = signatureFixturePath;
+  clearMainAgencySignatureCacheForTests();
   const html = buildFinalSignedContractHtml({
     bodyHtml: FINAL_RENDER_TEMPLATE,
     templateLanguage: "tr",
@@ -177,6 +208,8 @@ test("sign-time render (buildFinalSignedContractHtml) stamps the main-agency sea
   // The final PDF must also carry the contract number (previously empty because
   // the finalizer passed no number to buildAgentContext).
   assert.ok(html.includes("FAS-2026-00025"), `expected contract number in body, got: ${html}`);
+  delete process.env.MAIN_AGENCY_SIGNATURE_FILE;
+  clearMainAgencySignatureCacheForTests();
 });
 
 // --- Contract number / download filename (SORUN 2). The filename is derived

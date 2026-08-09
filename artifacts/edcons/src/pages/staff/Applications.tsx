@@ -1675,7 +1675,8 @@ export default function ApplicationsPage() {
     setIf("program", colFilters.program);
     setIf("level", colFilters.level);
     setIf("intake", colFilters.intake);
-    params.set("includeFacets", pg.page === 1 ? "1" : "0");
+    const shouldIncludeFacets = pg.page === 1;
+    params.set("includeFacets", shouldIncludeFacets ? "1" : "0");
     return params.toString();
   }, [
     season, pg.page, pg.pageSize, sort, debouncedSearch,

@@ -118,12 +118,12 @@ async function lookupOwner(key: string): Promise<OwnerBinding> {
 /**
  * Record (idempotently) that `userId` requested the upload of `keyOrPath`.
  * Called from the upload-URL endpoint so every new object is bound to its
- * uploader. Failures are swallowed so an authz-table hiccup never blocks an
- * upload; the worst case is the object falls back to legacy reference rules.
+ * uploader. The caller must fail closed when this binding cannot be persisted;
+ * otherwise an upload URL would be issued without an authorization owner.
  */
-export async function recordObjectOwner(keyOrPath: string, userId: number | null): Promise<void> {
+export async function recordObjectOwner(keyOrPath: string, userId: number | null): Promise<boolean> {
   const key = canonicalizeKey(keyOrPath);
-  if (!key) return;
+  if (!key) return false;
   try {
     // Upload-time binding is the most authoritative (sourcePriority 0). It may
     // correct a weaker backfill-reconstructed row, but never overwrites another
@@ -137,8 +137,10 @@ export async function recordObjectOwner(keyOrPath: string, userId: number | null
         set: { uploadedBy: userId, sourcePriority: 0 },
         where: sql`${objectOwnersTable.sourcePriority} > 0`,
       });
+    return true;
   } catch (err) {
     console.error("[objectAuthz] failed to record object owner:", err);
+    return false;
   }
 }
 

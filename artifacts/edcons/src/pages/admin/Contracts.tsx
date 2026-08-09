@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import { useI18n } from "@/hooks/use-i18n";
 import { Send, Loader2, FileSignature, RotateCw, Ban, Download, Trash2, ChevronUp, ChevronDown, ChevronsUpDown } from "lucide-react";
+import { ContractAssociationLink } from "@/components/contracts/ContractAssociationLink";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
@@ -17,15 +18,25 @@ type Session = {
   id: number; templateId: number; agentId: number | null; mode: string; status: string;
   signerEmail: string; signerName: string | null; expiresAt: string;
   openedAt: string | null; signedAt: string | null; revokedAt: string | null; createdAt: string;
+  subjectType: string | null; subjectId: number | null; subjectLabel: string | null;
   isPrimaryOnboarding?: boolean;
 };
 type Signed = {
   id: number; signingSessionId: number; agentId: number | null; templateId: number;
   pdfObjectKey: string | null; evidenceHash: string | null; signerEmail: string; signerName: string | null; signedAt: string;
+  subjectType: string | null; subjectId: number | null; subjectLabel: string | null;
   templateTitle?: string | null;
 };
 type Agent = { id: number; firstName: string | null; lastName: string | null; businessName: string | null; email: string | null; entityType?: string | null; preferredContractLanguage?: string | null };
-type Template = { id: number; name: string; language: string; entityType: string; version: number; isActive: boolean };
+type Template = {
+  id: number;
+  name: string;
+  language: string;
+  entityType: string;
+  version: number;
+  isActive: boolean;
+  publicationStatus: "published";
+};
 
 const LANG_LABELS: Record<string, string> = {
   en: "English", tr: "Türkçe", ar: "العربية", fr: "Français", ru: "Русский",
@@ -153,8 +164,12 @@ export default function ContractsPage() {
       } catch { setAgents([]); }
       setSelected(new Set());
       try {
-        const tpls: any = await customFetch(`/api/contract-templates?isActive=true`);
-        setTemplates(tpls.data || []);
+        const tpls: any = await customFetch(`/api/contract-templates?isActive=true&publicationStatus=published`);
+        const published = (tpls.data || []).filter((template: Template) => template.isActive && template.publicationStatus === "published");
+        setTemplates(published);
+        setTemplateId(current => current === "auto" || published.some((template: Template) => String(template.id) === current)
+          ? current
+          : "auto");
       } catch (tErr: any) {
         setTemplates([]);
         toast({ title: t("contracts.templatesLoadError"), description: tErr.message, variant: "destructive" });
@@ -252,37 +267,8 @@ export default function ContractsPage() {
     await load();
   }
 
-  async function deleteSigned(id: number) {
-    if (!confirm(t("contracts.confirmDeleteSigned"))) return;
-    try {
-      await customFetch(`/api/contracts/signed/${id}`, { method: "DELETE" });
-      toast({ title: t("contracts.signedDeleted") });
-      await load();
-    } catch (err: any) { toast({ title: t("contracts.error"), description: err.message, variant: "destructive" }); }
-  }
-
-  function toggleAllSigned() {
-    if (signed.length > 0 && signed.every(c => selected.has(c.id))) setSelected(new Set());
-    else setSelected(new Set(signed.map(c => c.id)));
-  }
-
-  async function bulkDeleteSigned() {
-    if (!confirm(t("common.confirmBulkDelete", { n: selected.size }))) return;
-    setBulkDeleting(true);
-    let failed = 0;
-    for (const id of Array.from(selected)) {
-      try { await customFetch(`/api/contracts/signed/${id}`, { method: "DELETE" }); }
-      catch { failed++; }
-    }
-    if (failed > 0) toast({ title: t("common.error"), description: t("common.bulkDeletePartialFailure", { n: failed }), variant: "destructive" });
-    else toast({ title: t("contracts.signedBulkDeleted") });
-    setBulkDeleting(false);
-    await load();
-  }
-
   const deletableSessions = sessions.filter(s => s.status !== "signed" && s.status !== "revoked");
   const allDeletableSelected = deletableSessions.length > 0 && deletableSessions.every(s => selected.has(s.id));
-  const allSignedSelected = signed.length > 0 && signed.every(c => selected.has(c.id));
 
   const sortedSessions = useMemo(() => {
     if (!sessionSort) return sessions;
@@ -290,6 +276,7 @@ export default function ContractsPage() {
       switch (sessionSort.key) {
         case "signer": return (s.signerName || s.signerEmail || "").toLowerCase();
         case "status": return s.status;
+        case "association": return `${s.subjectType || ""}:${s.subjectId || ""}:${s.subjectLabel || ""}`.toLowerCase();
         case "opened": return s.openedAt ? new Date(s.openedAt).getTime() : null;
         case "expires": return s.expiresAt ? new Date(s.expiresAt).getTime() : null;
         default: return null;
@@ -306,6 +293,7 @@ export default function ContractsPage() {
         case "date": return c.signedAt ? new Date(c.signedAt).getTime() : null;
         case "evidence": return c.evidenceHash || null;
         case "title": return (c.templateTitle || "").toLowerCase();
+        case "association": return `${c.subjectType || ""}:${c.subjectId || ""}:${c.subjectLabel || ""}`.toLowerCase();
         default: return null;
       }
     };
@@ -343,10 +331,10 @@ export default function ContractsPage() {
         </button>
       </div>
 
-      {selected.size > 0 && (
+      {tab === "sessions" && selected.size > 0 && (
         <div className="flex items-center gap-3 px-4 py-2 bg-muted/60 rounded-lg border">
           <span className="text-sm font-medium">{t("common.selectedCount", { n: selected.size })}</span>
-          <Button size="sm" variant="destructive" onClick={tab === "sessions" ? bulkDelete : bulkDeleteSigned} disabled={bulkDeleting}>
+          <Button size="sm" variant="destructive" onClick={bulkDelete} disabled={bulkDeleting}>
             {bulkDeleting ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : <Trash2 className="w-3.5 h-3.5 mr-1" />}
             {t("common.deleteSelected", { n: selected.size })}
           </Button>
@@ -367,6 +355,7 @@ export default function ContractsPage() {
                     <input type="checkbox" checked={allDeletableSelected} onChange={toggleAll} className="cursor-pointer" title={t("common.selectAll")} />
                   </th>
                   {sortTh(t("contracts.colSigner"), "signer", sessionSort, setSessionSort)}
+                  {sortTh("Association", "association", sessionSort, setSessionSort)}
                   {sortTh(t("contracts.colStatus"), "status", sessionSort, setSessionSort)}
                   {sortTh(t("contracts.colOpened"), "opened", sessionSort, setSessionSort)}
                   {sortTh(t("contracts.colExpires"), "expires", sessionSort, setSessionSort)}
@@ -389,6 +378,9 @@ export default function ContractsPage() {
                           {s.isPrimaryOnboarding && <Badge variant="secondary" className="text-[10px] px-1.5 py-0">{t("contracts.onboarding")}</Badge>}
                         </div>
                         <div className="text-xs text-muted-foreground">{s.signerEmail}</div>
+                      </td>
+                      <td className="px-4 py-3 text-xs">
+                        <ContractAssociationLink subjectType={s.subjectType} subjectId={s.subjectId} subjectLabel={s.subjectLabel} />
                       </td>
                       <td className="px-4 py-3"><Badge variant={STATUS_LABELS[s.status]?.tone}>{STATUS_LABELS[s.status]?.label || s.status}</Badge></td>
                       <td className="px-4 py-3 text-xs text-muted-foreground">{s.openedAt ? fmtDateTime(s.openedAt) : "-"}</td>
@@ -426,10 +418,8 @@ export default function ContractsPage() {
           <table className="w-full text-sm">
             <thead className="bg-muted/40">
               <tr>
-                <th className="px-4 py-3 w-10">
-                  <input type="checkbox" checked={allSignedSelected} onChange={toggleAllSigned} className="cursor-pointer" title={t("common.selectAll")} />
-                </th>
                 {sortTh(t("contracts.colSigner"), "signer", signedSort, setSignedSort)}
+                {sortTh("Association", "association", signedSort, setSignedSort)}
                 {sortTh(t("contracts.colTitle"), "title", signedSort, setSignedSort)}
                 {sortTh(t("contracts.colDate"), "date", signedSort, setSignedSort)}
                 {sortTh(t("contracts.colEvidenceHash"), "evidence", signedSort, setSignedSort)}
@@ -440,11 +430,11 @@ export default function ContractsPage() {
               {sortedSigned.map(c => (
                 <tr key={c.id} className="border-t">
                   <td className="px-4 py-3">
-                    <input type="checkbox" checked={selected.has(c.id)} onChange={() => toggleSelect(c.id)} className="cursor-pointer" />
-                  </td>
-                  <td className="px-4 py-3">
                     <div className="font-medium">{c.signerName || "-"}</div>
                     <div className="text-xs text-muted-foreground">{c.signerEmail}</div>
+                  </td>
+                  <td className="px-4 py-3 text-xs">
+                    <ContractAssociationLink subjectType={c.subjectType} subjectId={c.subjectId} subjectLabel={c.subjectLabel} />
                   </td>
                   <td className="px-4 py-3 text-xs text-muted-foreground">{c.templateTitle || "—"}</td>
                   <td className="px-4 py-3 text-xs text-muted-foreground">{fmtDate(c.signedAt)}</td>
@@ -471,14 +461,6 @@ export default function ContractsPage() {
                       {downloadingId === c.id
                         ? <Loader2 className="w-4 h-4 animate-spin" />
                         : <Download className="w-4 h-4" />}
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      title={t("common.delete")}
-                      onClick={() => deleteSigned(c.id)}
-                    >
-                      <Trash2 className="w-4 h-4 text-red-500" />
                     </Button>
                   </td>
                 </tr>

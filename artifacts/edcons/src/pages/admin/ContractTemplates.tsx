@@ -10,7 +10,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { useI18n } from "@/hooks/use-i18n";
-import { FileText, Plus, Edit, Trash2, Loader2, ChevronDown, ChevronUp, AlertTriangle, ArrowRight } from "lucide-react";
+import { FileText, Plus, Edit, Trash2, Loader2, ChevronDown, ChevronUp, AlertTriangle, ArrowRight, Palette, Send, CheckCircle2, Copy } from "lucide-react";
+import { ContractRichTextEditor } from "@/components/contracts/ContractRichTextEditor";
+import { ContractFieldBuilder, type ContractIntakeField } from "@/components/contracts/ContractFieldBuilder";
+import { ContractBrandProfilesDialog, type ContractBrandProfile } from "@/components/contracts/ContractBrandProfilesDialog";
 
 type Template = {
   id: number;
@@ -21,12 +24,14 @@ type Template = {
   version: number;
   bodyHtml: string;
   intakeSchema: any;
-  signingPageConfig: { logoUrl?: string; pageTitle?: string; pageSubtitle?: string } | null;
+  signingPageConfig: Partial<SigningPageConfig> | null;
+  brandProfileId: number | null;
+  publicationStatus: "draft" | "review_pending" | "published" | "archived";
   isActive: boolean;
   updatedAt: string;
 };
 
-type IntakeField = { key: string; label: string; type: "text" | "email" | "date" | "textarea" | "select" | "tel" | "country" | "city"; required?: boolean; maps_to?: string; dependsOn?: string; options?: string[] };
+type IntakeField = ContractIntakeField;
 
 const LANGUAGES = [
   { code: "en", label: "English" },
@@ -89,9 +94,23 @@ function placeholderInBody(placeholder: string, bodyHtml: string): boolean {
     bodyHtml.includes(`{{${placeholder}}`);
 }
 
-type SigningPageConfig = { logoUrl: string; pageTitle: string; pageSubtitle: string };
+type SigningPageConfig = {
+  brandName: string;
+  logoUrl: string;
+  primaryColor: string;
+  accentColor: string;
+  pageTitle: string;
+  pageSubtitle: string;
+  pdfHeaderText: string;
+  pdfFooterText: string;
+  companySignatureDataUrl: string;
+};
 
-const EMPTY_SPC: SigningPageConfig = { logoUrl: "", pageTitle: "", pageSubtitle: "" };
+const EMPTY_SPC: SigningPageConfig = {
+  brandName: "", logoUrl: "", primaryColor: "#143591", accentColor: "#0f766e",
+  pageTitle: "", pageSubtitle: "", pdfHeaderText: "", pdfFooterText: "",
+  companySignatureDataUrl: "",
+};
 
 function FieldMappingPanel({ schema, bodyHtml, t }: { schema: IntakeField[]; bodyHtml: string; t: (k: string, p?: any) => string }) {
   if (!schema.length) {
@@ -132,6 +151,8 @@ export default function ContractTemplatesPage() {
   const { toast } = useToast();
   const { t } = useI18n();
   const [rows, setRows] = useState<Template[]>([]);
+  const [brands, setBrands] = useState<ContractBrandProfile[]>([]);
+  const [brandDialogOpen, setBrandDialogOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [showDialog, setShowDialog] = useState(false);
   const [editing, setEditing] = useState<Template | null>(null);
@@ -145,6 +166,7 @@ export default function ContractTemplatesPage() {
     bodyHtml: STARTER_BODY,
     intakeSchema: STARTER_INTAKE as IntakeField[],
     isActive: true,
+    brandProfileId: null as number | null,
     signingPageConfig: EMPTY_SPC,
   });
   const [signingPageOpen, setSigningPageOpen] = useState(false);
@@ -164,13 +186,23 @@ export default function ContractTemplatesPage() {
     setLoading(false);
   }
 
-  useEffect(() => { load(); }, []);
+  async function loadBrands() {
+    try {
+      const response: any = await customFetch("/api/contract-brands");
+      setBrands(response.data || []);
+    } catch (error: any) {
+      toast({ title: "Contract brands could not be loaded", description: error.message, variant: "destructive" });
+    }
+  }
+
+  useEffect(() => { load(); loadBrands(); }, []);
 
   function openNew() {
     setEditing(null);
     setForm({
       name: "", title: "", language: "en", entityType: "company", version: 1,
       bodyHtml: STARTER_BODY, intakeSchema: STARTER_INTAKE, isActive: true,
+      brandProfileId: null,
       signingPageConfig: EMPTY_SPC,
     });
     setSigningPageOpen(false);
@@ -189,14 +221,35 @@ export default function ContractTemplatesPage() {
       bodyHtml: tpl.bodyHtml,
       intakeSchema: Array.isArray(tpl.intakeSchema) ? tpl.intakeSchema : STARTER_INTAKE,
       isActive: tpl.isActive,
+      brandProfileId: tpl.brandProfileId || null,
       signingPageConfig: {
+        brandName: spc?.brandName || "",
         logoUrl: spc?.logoUrl || "",
+        primaryColor: spc?.primaryColor || "#143591",
+        accentColor: spc?.accentColor || "#0f766e",
         pageTitle: spc?.pageTitle || "",
         pageSubtitle: spc?.pageSubtitle || "",
+        pdfHeaderText: spc?.pdfHeaderText || "",
+        pdfFooterText: spc?.pdfFooterText || "",
+        companySignatureDataUrl: spc?.companySignatureDataUrl || "",
       },
     });
-    setSigningPageOpen(Boolean(spc?.logoUrl || spc?.pageTitle || spc?.pageSubtitle));
+    setSigningPageOpen(Boolean(spc && Object.values(spc).some(Boolean)));
     setShowDialog(true);
+  }
+
+  function loadCompanySignature(file: File | undefined) {
+    if (!file) return;
+    if (!/^image\/(png|jpeg)$/.test(file.type) || file.size > 2 * 1024 * 1024) {
+      toast({ title: "Signature must be a PNG or JPEG up to 2 MB", variant: "destructive" });
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => setForm(f => ({
+      ...f,
+      signingPageConfig: { ...f.signingPageConfig, companySignatureDataUrl: String(reader.result || "") },
+    }));
+    reader.readAsDataURL(file);
   }
 
   async function save() {
@@ -204,14 +257,12 @@ export default function ContractTemplatesPage() {
     setSaving(true);
     try {
       const spc = form.signingPageConfig;
-      const hasSpc = spc.logoUrl || spc.pageTitle || spc.pageSubtitle;
+      const hasSpc = Object.values(spc).some(Boolean);
       const payload = {
         ...form,
-        signingPageConfig: hasSpc ? {
-          logoUrl: spc.logoUrl || undefined,
-          pageTitle: spc.pageTitle || undefined,
-          pageSubtitle: spc.pageSubtitle || undefined,
-        } : null,
+        // A selected brand profile remains the single source of branding and
+        // the official signature. Do not copy its values into the template.
+        signingPageConfig: form.brandProfileId ? null : (hasSpc ? spc : null),
       };
       const body = JSON.stringify(payload);
       if (editing) {
@@ -219,13 +270,43 @@ export default function ContractTemplatesPage() {
       } else {
         await customFetch(`/api/contract-templates`, { method: "POST", headers: { "content-type": "application/json" }, body });
       }
-      toast({ title: editing ? t("contractTemplates.updated") : t("contractTemplates.created") });
+      toast({
+        title: editing ? t("contractTemplates.updated") : t("contractTemplates.created"),
+        description: editing ? undefined : "Template saved as a draft. Publish it before creating or sending signing links.",
+      });
       setShowDialog(false);
       await load();
     } catch (err: any) {
       toast({ title: t("contractTemplates.error"), description: err.message, variant: "destructive" });
     }
     setSaving(false);
+  }
+
+  async function workflowAction(template: Template, action: "submit-review" | "publish" | "new-version") {
+    const labels = { "submit-review": "Submitted for review", publish: "Template published", "new-version": "New draft version created" };
+    try {
+      const response: any = await customFetch(`/api/contract-templates/${template.id}/${action}`, { method: "POST" });
+      toast({ title: labels[action] });
+      await load();
+      if (action === "new-version" && response?.data) openEdit(response.data);
+    } catch (error: any) {
+      toast({ title: "Template workflow could not be updated", description: error.message, variant: "destructive" });
+    }
+  }
+
+  function applyBrandProfile(value: string) {
+    if (value === "none") {
+      setForm(current => ({ ...current, brandProfileId: null }));
+      return;
+    }
+    const brand = brands.find(item => item.id === Number(value));
+    if (!brand) return;
+    setForm(current => ({
+      ...current,
+      brandProfileId: brand.id,
+      signingPageConfig: EMPTY_SPC,
+    }));
+    setSigningPageOpen(true);
   }
 
   async function remove(id: number) {
@@ -270,6 +351,10 @@ export default function ContractTemplatesPage() {
   }
 
   const allSelected = rows.length > 0 && rows.every(r => selected.has(r.id));
+  const editingPublished = editing?.publicationStatus === "published";
+  const selectedBrand = form.brandProfileId
+    ? brands.find(brand => brand.id === form.brandProfileId) || null
+    : null;
 
   // Live-parse intake schema for the mapping panel
   const parsedSchema = useMemo<IntakeField[]>(() => {
@@ -283,7 +368,10 @@ export default function ContractTemplatesPage() {
           <h1 className="text-2xl font-bold flex items-center gap-2"><FileText className="w-6 h-6" /> {t("contractTemplates.title")}</h1>
           <p className="text-sm text-muted-foreground mt-1">{t("contractTemplates.subtitle")} <code className="text-xs">{`{{agent.field}}, {{intake.field}}, {{contract.date}}, {{contract.signerName}}`}</code></p>
         </div>
-        <Button onClick={openNew}><Plus className="w-4 h-4 mr-2" /> {t("contractTemplates.newTemplate")}</Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={() => setBrandDialogOpen(true)}><Palette className="w-4 h-4 mr-2" /> Brand profiles</Button>
+          <Button onClick={openNew}><Plus className="w-4 h-4 mr-2" /> {t("contractTemplates.newTemplate")}</Button>
+        </div>
       </div>
 
       {selected.size > 0 && (
@@ -326,9 +414,19 @@ export default function ContractTemplatesPage() {
                   <td className="px-4 py-3 uppercase">{tpl.language}</td>
                   <td className="px-4 py-3">{tpl.entityType === "individual" ? t("contractTemplates.entityIndividual") : t("contractTemplates.entityCompany")}</td>
                   <td className="px-4 py-3">v{tpl.version}</td>
-                  <td className="px-4 py-3">{tpl.isActive ? <Badge>{t("contractTemplates.statusActive")}</Badge> : <Badge variant="secondary">{t("contractTemplates.statusInactive")}</Badge>}</td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <Badge variant={tpl.publicationStatus === "published" ? "default" : tpl.publicationStatus === "review_pending" ? "secondary" : "outline"}>
+                        {tpl.publicationStatus === "review_pending" ? "In review" : tpl.publicationStatus}
+                      </Badge>
+                      {!tpl.isActive && <Badge variant="secondary">{t("contractTemplates.statusInactive")}</Badge>}
+                    </div>
+                  </td>
                   <td className="px-4 py-3 text-right space-x-2">
                     <Button size="sm" variant="ghost" onClick={() => openEdit(tpl)}><Edit className="w-4 h-4" /></Button>
+                    {tpl.publicationStatus === "draft" && <Button size="sm" variant="outline" title="Submit for review" onClick={() => workflowAction(tpl, "submit-review")}><Send className="w-4 h-4" /></Button>}
+                    {(["draft", "review_pending"] as const).includes(tpl.publicationStatus as any) && <Button size="sm" variant="outline" title="Publish" onClick={() => workflowAction(tpl, "publish")}><CheckCircle2 className="w-4 h-4 mr-2" />Publish</Button>}
+                    {tpl.publicationStatus === "published" && <Button size="sm" variant="outline" title="Create new version" onClick={() => workflowAction(tpl, "new-version")}><Copy className="w-4 h-4" /></Button>}
                     <Button size="sm" variant="ghost" onClick={() => remove(tpl.id)}><Trash2 className="w-4 h-4 text-red-500" /></Button>
                   </td>
                 </tr>
@@ -344,17 +442,22 @@ export default function ContractTemplatesPage() {
             <DialogTitle>{editing ? t("contractTemplates.editTemplate") : t("contractTemplates.newTemplate")}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
+            {editingPublished && (
+              <div className="rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/20 px-4 py-3 text-sm text-amber-900 dark:text-amber-100">
+                This version is published and its contract content, fields and branding are locked. Create a new version to make changes without altering already-issued contracts.
+              </div>
+            )}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <Label>{t("contractTemplates.colName")} *</Label>
                 <Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
                 <Label className="mt-2 block">{t("contractTemplates.titleLabel")}</Label>
-                <Input className="mt-1" placeholder={t("contractTemplates.titlePlaceholder")} value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} />
+                <Input disabled={editingPublished} className="mt-1" placeholder={t("contractTemplates.titlePlaceholder")} value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} />
               </div>
               <div className="grid grid-cols-3 gap-2">
                 <div>
                   <Label>{t("contractTemplates.colLanguage")}</Label>
-                  <Select value={form.language} onValueChange={v => setForm(f => ({ ...f, language: v }))}>
+                  <Select disabled={editingPublished} value={form.language} onValueChange={v => setForm(f => ({ ...f, language: v }))}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
                       {LANGUAGES.map(l => <SelectItem key={l.code} value={l.code}>{l.label}</SelectItem>)}
@@ -363,7 +466,7 @@ export default function ContractTemplatesPage() {
                 </div>
                 <div>
                   <Label>{t("contractTemplates.colType")}</Label>
-                  <Select value={form.entityType} onValueChange={v => setForm(f => ({ ...f, entityType: v as any }))}>
+                  <Select disabled={editingPublished} value={form.entityType} onValueChange={v => setForm(f => ({ ...f, entityType: v as any }))}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="company">{t("contractTemplates.entityCompany")}</SelectItem>
@@ -373,35 +476,19 @@ export default function ContractTemplatesPage() {
                 </div>
                 <div>
                   <Label>{t("contractTemplates.colVersion")}</Label>
-                  <Input type="number" min={1} value={form.version} onChange={e => setForm(f => ({ ...f, version: parseInt(e.target.value, 10) || 1 }))} />
+                  <Input disabled={Boolean(editing)} type="number" min={1} value={form.version} onChange={e => setForm(f => ({ ...f, version: parseInt(e.target.value, 10) || 1 }))} />
                 </div>
               </div>
             </div>
             <div>
               <Label>{t("contractTemplates.bodyLabel")}</Label>
-              <Textarea
-                rows={14}
-                value={form.bodyHtml}
-                onChange={e => setForm(f => ({ ...f, bodyHtml: e.target.value }))}
-                className="font-mono text-xs"
-              />
+              <p className="text-xs text-muted-foreground mb-2">Write and format the agreement visually. HTML remains available in Advanced mode.</p>
+              <ContractRichTextEditor value={form.bodyHtml} disabled={editingPublished} onChange={bodyHtml => setForm(current => ({ ...current, bodyHtml }))} />
             </div>
             <div>
               <Label>{t("contractTemplates.intakeSchemaLabel")}</Label>
-              <Textarea
-                rows={6}
-                value={JSON.stringify(form.intakeSchema, null, 2)}
-                onChange={e => {
-                  try {
-                    const parsed = JSON.parse(e.target.value);
-                    if (Array.isArray(parsed)) setForm(f => ({ ...f, intakeSchema: parsed }));
-                  } catch {
-                    // ignore parse errors during typing
-                  }
-                }}
-                className="font-mono text-xs"
-              />
-              <p className="text-xs text-muted-foreground mt-1">{t("contractTemplates.intakeSchemaHint")}</p>
+              <p className="text-xs text-muted-foreground mb-2">Build the counterparty form field by field. Reorder fields and mark required information without writing JSON.</p>
+              <ContractFieldBuilder value={parsedSchema} disabled={editingPublished} onChange={intakeSchema => setForm(current => ({ ...current, intakeSchema }))} />
 
               {/* Field → placeholder mapping panel */}
               {parsedSchema.length > 0 && (
@@ -428,8 +515,64 @@ export default function ContractTemplatesPage() {
               {signingPageOpen && (
                 <div className="p-4 space-y-3 bg-background">
                   <div>
+                    <Label className="text-xs">Reusable brand profile</Label>
+                    <div className="flex gap-2 mt-1">
+                      <Select disabled={editingPublished} value={form.brandProfileId ? String(form.brandProfileId) : "none"} onValueChange={applyBrandProfile}>
+                        <SelectTrigger><SelectValue placeholder="Use template-specific branding" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">Template-specific branding</SelectItem>
+                          {brands.filter(brand => brand.isActive).map(brand => <SelectItem key={brand.id} value={String(brand.id)}>{brand.name}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                      <Button type="button" variant="outline" onClick={() => setBrandDialogOpen(true)}><Palette className="h-4 w-4" /></Button>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1">The selected profile is the central source for the logo, colors and official signature. A contract receives an immutable snapshot when its signing link is issued.</p>
+                  </div>
+                  {selectedBrand ? (
+                    <div className="rounded-lg border bg-muted/20 p-4 space-y-3">
+                      <div className="flex items-center gap-3">
+                        {selectedBrand.config.logoUrl ? (
+                          <img src={selectedBrand.config.logoUrl} alt="" className="h-12 w-20 rounded border bg-white object-contain p-1" />
+                        ) : (
+                          <div className="h-12 w-20 rounded border" style={{ background: selectedBrand.config.primaryColor || "#143591" }} />
+                        )}
+                        <div className="min-w-0 flex-1">
+                          <div className="font-medium">{selectedBrand.name}</div>
+                          <div className="text-xs text-muted-foreground">Managed centrally in Brand profiles</div>
+                        </div>
+                        <Badge variant={selectedBrand.hasCompanySignature ? "secondary" : "destructive"}>
+                          {selectedBrand.hasCompanySignature ? "Signature ready" : "Signature required"}
+                        </Badge>
+                      </div>
+                      {selectedBrand.hasCompanySignature && <p className="text-xs text-muted-foreground">The official signature is stored privately and appears only on the final signed PDF.</p>}
+                      <Button type="button" size="sm" variant="outline" onClick={() => setBrandDialogOpen(true)}>
+                        <Palette className="mr-2 h-4 w-4" /> Manage brand profile
+                      </Button>
+                    </div>
+                  ) : <>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <Label className="text-xs">Brand name</Label>
+                      <Input disabled={editingPublished} className="mt-1" placeholder="Find And Study" value={form.signingPageConfig.brandName}
+                        onChange={e => setForm(f => ({ ...f, signingPageConfig: { ...f.signingPageConfig, brandName: e.target.value } }))} />
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <Label className="text-xs">Primary color</Label>
+                        <Input disabled={editingPublished} className="mt-1 h-10 p-1" type="color" value={form.signingPageConfig.primaryColor}
+                          onChange={e => setForm(f => ({ ...f, signingPageConfig: { ...f.signingPageConfig, primaryColor: e.target.value } }))} />
+                      </div>
+                      <div>
+                        <Label className="text-xs">Accent color</Label>
+                        <Input disabled={editingPublished} className="mt-1 h-10 p-1" type="color" value={form.signingPageConfig.accentColor}
+                          onChange={e => setForm(f => ({ ...f, signingPageConfig: { ...f.signingPageConfig, accentColor: e.target.value } }))} />
+                      </div>
+                    </div>
+                  </div>
+                  <div>
                     <Label className="text-xs">{t("contractTemplates.signingPageLogoUrl")}</Label>
                     <Input
+                      disabled={editingPublished}
                       className="mt-1"
                       placeholder="https://example.com/logo.png"
                       value={form.signingPageConfig.logoUrl}
@@ -449,6 +592,7 @@ export default function ContractTemplatesPage() {
                   <div>
                     <Label className="text-xs">{t("contractTemplates.signingPageTitle")}</Label>
                     <Input
+                      disabled={editingPublished}
                       className="mt-1"
                       placeholder={t("contractTemplates.signingPageTitlePlaceholder")}
                       value={form.signingPageConfig.pageTitle}
@@ -459,6 +603,7 @@ export default function ContractTemplatesPage() {
                   <div>
                     <Label className="text-xs">{t("contractTemplates.signingPageSubtitle")}</Label>
                     <Input
+                      disabled={editingPublished}
                       className="mt-1"
                       placeholder={t("contractTemplates.signingPageSubtitlePlaceholder")}
                       value={form.signingPageConfig.pageSubtitle}
@@ -466,6 +611,32 @@ export default function ContractTemplatesPage() {
                     />
                     <p className="text-xs text-muted-foreground mt-0.5">{t("contractTemplates.signingPageSubtitleHint")}</p>
                   </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <Label className="text-xs">PDF header text</Label>
+                      <Input disabled={editingPublished} className="mt-1" placeholder="Official agreement" value={form.signingPageConfig.pdfHeaderText}
+                        onChange={e => setForm(f => ({ ...f, signingPageConfig: { ...f.signingPageConfig, pdfHeaderText: e.target.value } }))} />
+                    </div>
+                    <div>
+                      <Label className="text-xs">PDF footer text</Label>
+                      <Input disabled={editingPublished} className="mt-1" placeholder="Company contact or legal text" value={form.signingPageConfig.pdfFooterText}
+                        onChange={e => setForm(f => ({ ...f, signingPageConfig: { ...f.signingPageConfig, pdfFooterText: e.target.value } }))} />
+                    </div>
+                  </div>
+                  <div className="rounded-md border p-3 space-y-2">
+                    <div>
+                      <Label className="text-xs">Company signature for final PDF</Label>
+                      <p className="text-xs text-muted-foreground">Hidden during details and review. It is added only after the counterparty signs.</p>
+                    </div>
+                    <Input disabled={editingPublished} type="file" accept="image/png,image/jpeg" onChange={e => loadCompanySignature(e.target.files?.[0])} />
+                    {form.signingPageConfig.companySignatureDataUrl && (
+                      <div className="flex items-center gap-3">
+                        <img src={form.signingPageConfig.companySignatureDataUrl} alt="Company signature preview" className="h-14 max-w-[220px] object-contain border rounded p-1" />
+                        <Button disabled={editingPublished} type="button" size="sm" variant="outline" onClick={() => setForm(f => ({ ...f, signingPageConfig: { ...f.signingPageConfig, companySignatureDataUrl: "" } }))}>Remove</Button>
+                      </div>
+                    )}
+                  </div>
+                  </>}
                 </div>
               )}
             </div>
@@ -477,10 +648,12 @@ export default function ContractTemplatesPage() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowDialog(false)}>{t("contractTemplates.cancel")}</Button>
+            {editingPublished && editing && <Button variant="secondary" onClick={() => workflowAction(editing, "new-version")}><Copy className="h-4 w-4 mr-2" /> Create editable version</Button>}
             <Button onClick={save} disabled={saving}>{saving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null} {t("contractTemplates.save")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <ContractBrandProfilesDialog open={brandDialogOpen} onOpenChange={setBrandDialogOpen} profiles={brands} onChanged={loadBrands} />
     </div>
   );
 }

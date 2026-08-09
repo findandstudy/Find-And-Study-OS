@@ -26,6 +26,7 @@ import { getSessionCookieOptions } from "../lib/cookieOptions";
 import { PasswordSchema } from "../lib/passwordPolicy";
 import { logAudit } from "../lib/auth";
 import { validate, getValidated } from "../middlewares/validate";
+import { consumeEmailVerificationToken, issueEmailVerificationToken } from "../lib/emailVerificationToken";
 
 const loginBodySchema = z.object({
   email: z.string().trim().toLowerCase().email(),
@@ -587,10 +588,23 @@ router.get("/auth/verify-email-token/:token", async (req: Request, res: Response
     return;
   }
 
-  const [user] = await db
-    .select()
-    .from(usersTable)
-    .where(eq(usersTable.emailVerificationToken, String(token)));
+  const verifiedEmail = await consumeEmailVerificationToken(String(token));
+  let [user] = verifiedEmail
+    ? await db.select().from(usersTable).where(eq(usersTable.email, verifiedEmail))
+    : [];
+
+  // Transitional compatibility for links issued before hashed, expiring link
+  // tokens were introduced. Restrict this fallback to recently created users;
+  // older accounts must request a new verification link.
+  if (!user) {
+    [user] = await db
+      .select()
+      .from(usersTable)
+      .where(and(
+        eq(usersTable.emailVerificationToken, String(token)),
+        gt(usersTable.createdAt, new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)),
+      ));
+  }
 
   if (!user) {
     res.redirect("/login?verifyError=invalid");
@@ -638,10 +652,10 @@ router.post("/auth/resend-verification-email", async (req: Request, res: Respons
 
   const { generateSecureToken, buildVerificationEmail, sendEmail, getAppBaseUrl } = await import("../lib/email");
 
-  const verificationToken = generateSecureToken();
-  await db
-    .update(usersTable)
-    .set({ emailVerificationToken: verificationToken })
+  const verificationToken = await issueEmailVerificationToken(user.email || "");
+  // Clear legacy raw tokens once a new hashed, expiring link is issued.
+  await db.update(usersTable)
+    .set({ emailVerificationToken: null })
     .where(eq(usersTable.id, user.id));
 
   const baseUrl = getAppBaseUrl();

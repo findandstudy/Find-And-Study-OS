@@ -33,6 +33,8 @@ import bcrypt from "bcryptjs";
 import { createSession, getSession, deleteSession, deleteSessionsForUser, SESSION_COOKIE, SESSION_TTL, type SessionData } from "../lib/replitAuth";
 import { getSessionCookieOptions } from "../lib/cookieOptions";
 import { dispatchNotification } from "../lib/notificationDispatcher";
+import { hasContractCompanySignature, type ContractBrandingConfig } from "../lib/contractBranding";
+import { resolveContractTemplateBranding } from "../lib/contractTemplateBranding";
 import { dispatchAgentProfileChangedNotif } from "../lib/agentProfileNotif";
 import { toE164 } from "../lib/inbox/phone";
 import { getCurrentSeason } from "../lib/season";
@@ -1270,6 +1272,7 @@ router.post("/agents", requireAuth, requireRole(...MANAGER_ROLES), async (req, r
     return;
   }
   let template: typeof contractTemplatesTable.$inferSelect | null = null;
+  let templateBrandingSnapshot: ContractBrandingConfig | null = null;
   if (tplId && !isNaN(tplId)) {
     const [tpl] = await db.select().from(contractTemplatesTable).where(and(
       eq(contractTemplatesTable.id, tplId),
@@ -1288,6 +1291,13 @@ router.post("/agents", requireAuth, requireRole(...MANAGER_ROLES), async (req, r
     }
     if (preferredContractLanguage && template.language !== preferredContractLanguage) {
       res.status(400).json({ error: `Template language (${template.language}) does not match agent preferredContractLanguage (${preferredContractLanguage})` });
+      return;
+    }
+    templateBrandingSnapshot = await resolveContractTemplateBranding(template);
+    if (!hasContractCompanySignature(templateBrandingSnapshot)) {
+      res.status(409).json({
+        error: "Selected contract template has no official company signature. Configure one in Contract Brand Profiles before creating the agent.",
+      });
       return;
     }
   }
@@ -1454,6 +1464,13 @@ router.post("/agents", requireAuth, requireRole(...MANAGER_ROLES), async (req, r
       const hasIntake = Array.isArray(template.intakeSchema) && (template.intakeSchema as any[]).length > 0;
       const [session] = await db.insert(signingSessionsTable).values({
         templateId: template.id,
+        templateVersionSnapshot: template.version,
+        templateNameSnapshot: template.name,
+        templateLanguageSnapshot: template.language,
+        templateEntityTypeSnapshot: template.entityType,
+        templateBodyHtmlSnapshot: template.bodyHtml,
+        templateIntakeSchemaSnapshot: template.intakeSchema,
+        templateSigningPageConfigSnapshot: templateBrandingSnapshot,
         agentId: agent.id,
         tokenHash,
         mode: "admin_driven",

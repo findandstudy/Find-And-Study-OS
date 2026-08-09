@@ -715,6 +715,49 @@ router.get("/documents/:id", requireAuth, requireAgentStaffPermission("documents
   res.json(doc);
 });
 
+router.get("/documents/:id/versions", requireAuth, requireAgentStaffPermission("documents"), async (req, res): Promise<void> => {
+  const id = parseInt(String(req.params.id), 10);
+  if (!Number.isFinite(id) || id <= 0) { res.status(400).json({ error: "Invalid id" }); return; }
+
+  const [current] = await db.select().from(documentsTable).where(
+    and(eq(documentsTable.id, id), isNull(documentsTable.deletedAt)),
+  );
+  if (!current) { res.status(404).json({ error: "Document not found" }); return; }
+  if (!current.studentId) { res.status(400).json({ error: "Document has no versionable owner" }); return; }
+
+  const access = await assertCanAccessStudent(req, current.studentId);
+  if (!access.ok) { res.status(access.status).json({ error: access.error }); return; }
+
+  const scope = current.applicationId
+    ? eq(documentsTable.applicationId, current.applicationId)
+    : isNull(documentsTable.applicationId);
+  const versions = await db.select({
+    id: documentsTable.id,
+    name: documentsTable.name,
+    type: documentsTable.type,
+    status: documentsTable.status,
+    mimeType: documentsTable.mimeType,
+    sizeBytes: documentsTable.sizeBytes,
+    createdAt: documentsTable.createdAt,
+    updatedAt: documentsTable.updatedAt,
+    deletedAt: documentsTable.deletedAt,
+  }).from(documentsTable).where(and(
+    eq(documentsTable.studentId, current.studentId),
+    eq(documentsTable.type, current.type),
+    scope,
+  )).orderBy(desc(documentsTable.createdAt), desc(documentsTable.id));
+
+  const total = versions.length;
+  res.json({
+    documentId: current.id,
+    versions: versions.map((version, index) => ({
+      ...version,
+      version: total - index,
+      isCurrent: version.id === current.id && version.deletedAt === null,
+    })),
+  });
+});
+
 router.patch("/documents/:id", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
   const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }

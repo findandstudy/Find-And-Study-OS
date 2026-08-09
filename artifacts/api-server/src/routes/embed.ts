@@ -1745,7 +1745,6 @@ router.post("/public/embed/:slug/apply", embedSubmitLimiter, embedApplyJson, asy
         userId = existingUser.id;
       } else {
         const passwordToken = generateSecureToken();
-        const verificationToken = generateSecureToken();
         const [newUser] = await db.insert(usersTable).values({
           email: normalizedEmail,
           firstName: tlu(firstName, 100)!,
@@ -1758,7 +1757,6 @@ router.post("/public/embed/:slug/apply", embedSubmitLimiter, embedApplyJson, asy
           language: "en",
           passwordResetToken: crypto.createHash("sha256").update(passwordToken).digest("hex"),
           passwordResetExpires: new Date(Date.now() + 48 * 60 * 60 * 1000),
-          emailVerificationToken: verificationToken,
           createdFromSource: `embed:${widget.slug}`,
         }).returning();
         userId = newUser.id;

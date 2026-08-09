@@ -212,6 +212,10 @@ const LARGE_BODY_PATHS = [
   // long before the route's own 2 MB validation could run. The primary
   // onboarding sign route installs its own 3 MB parser.
   "/api/contracts/me/sign",
+  // Contract brand/template forms may carry a private base64 PNG/JPEG company
+  // signature (max 2 MB). Their routers install a dedicated 3 MB parser.
+  "/api/contract-brands",
+  "/api/contract-templates",
   // Public token-based signing also sends a base64 PNG; the route installs its
   // own 3 MB parser. Match the prefix so all /public/sign/:token/* sub-paths
   // (verify-code, intake, sign) bypass the global 1 MB cap.

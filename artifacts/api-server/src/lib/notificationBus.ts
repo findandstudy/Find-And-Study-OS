@@ -81,15 +81,11 @@ async function connectListenClient(): Promise<void> {
   return connecting;
 }
 
-void connectListenClient().catch((err) => {
-  console.error("[notificationBus] initial LISTEN failed, will retry", err);
-  scheduleReconnect();
-});
-
 export const notificationBus = {
   subscribe(handler: (event: NotificationBusEvent) => void): () => void {
-    void connectListenClient().catch(() => {
-      // already logged
+    void connectListenClient().catch((err) => {
+      console.error("[notificationBus] initial LISTEN failed, will retry", err);
+      scheduleReconnect();
     });
     localEmitter.on("event", handler);
     return () => {

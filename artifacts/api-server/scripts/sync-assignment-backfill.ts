@@ -13,6 +13,7 @@
  * differ from canonical, so no updates are issued).
  *
  * Dry-run: DRY_RUN=1 prints what would change without writing anything.
+ * Live mode additionally requires ALLOW_ASSIGNMENT_BACKFILL=true.
  *
  * Optional filter: pass `studentIds` to restrict the backfill to a specific
  * subset of students (useful for targeted repairs and integration tests).
@@ -145,6 +146,9 @@ export async function runBackfill(opts?: {
 
 async function main() {
   const DRY_RUN = process.env.DRY_RUN === "1" || process.env.DRY_RUN === "true";
+  if (!DRY_RUN && process.env.ALLOW_ASSIGNMENT_BACKFILL !== "true") {
+    throw new Error("ALLOW_ASSIGNMENT_BACKFILL=true is required for live backfill");
+  }
   console.log(`[sync-assignment-backfill] starting (DRY_RUN=${DRY_RUN})`);
 
   const result = await runBackfill({ dryRun: DRY_RUN });

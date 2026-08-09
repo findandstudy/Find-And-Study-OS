@@ -140,7 +140,11 @@ test("all shell consumers still route through the shared documentShell", () => {
 
   // The public signing preview endpoint returns a full document from the shell.
   const publicSigning = read("../src/routes/publicSigning.ts");
-  assert.ok(publicSigning.includes("documentShell(cleanupSignatureImages("), "public /preview wraps via shell");
+  assert.match(
+    publicSigning,
+    /documentShell\(applyContractBranding\(\s*cleanupSignatureImages\(/,
+    "public /preview applies canonical branding inside the shared shell",
+  );
 
   // The agent-onboarding preview endpoints (Task #578) route through it too.
   const agentOnboarding = read("../src/routes/agentOnboarding.ts");

@@ -18,7 +18,16 @@ const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MAX_SIG_BASE64 = 1_900_000;
 
-type SigningPageConfig = { logoUrl?: string; pageTitle?: string; pageSubtitle?: string } | null;
+type SigningPageConfig = {
+  brandName?: string;
+  logoUrl?: string;
+  primaryColor?: string;
+  accentColor?: string;
+  pageTitle?: string;
+  pageSubtitle?: string;
+  pdfHeaderText?: string;
+  pdfFooterText?: string;
+} | null;
 
 type SessionView = {
   sessionId: number;
@@ -35,7 +44,15 @@ type SessionView = {
 };
 
 type Step = "loading" | "expired" | "revoked" | "intake" | "review" | "sign" | "success" | "error";
-type Brand = { companyName: string; hasLogo: boolean; customLogoUrl?: string | null; pageTitle?: string | null; pageSubtitle?: string | null };
+type Brand = {
+  companyName: string;
+  hasLogo: boolean;
+  customLogoUrl?: string | null;
+  primaryColor?: string | null;
+  accentColor?: string | null;
+  pageTitle?: string | null;
+  pageSubtitle?: string | null;
+};
 type Tfn = (key: string, params?: Record<string, string | number>) => string;
 
 // Heuristic: detect intake fields that already capture the signer's full name
@@ -205,10 +222,13 @@ export default function SignFlow({ token }: { token: string }) {
         // Merge per-template signing page config into brand so BrandHeader +
         // title/subtitle can use it without a separate fetch.
         const spc = data.template.signingPageConfig;
-        if (spc?.logoUrl || spc?.pageTitle || spc?.pageSubtitle) {
+        if (spc) {
           setBrand(prev => ({
             ...prev,
+            companyName: spc.brandName || prev.companyName,
             customLogoUrl: spc.logoUrl || null,
+            primaryColor: spc.primaryColor || null,
+            accentColor: spc.accentColor || null,
             pageTitle: spc.pageTitle || null,
             pageSubtitle: spc.pageSubtitle || null,
           }));
@@ -370,7 +390,7 @@ export default function SignFlow({ token }: { token: string }) {
       <Button
         onClick={handleDownloadPdf}
         disabled={downloadingPdf}
-        className="w-full bg-[#143591] hover:bg-[#0f2870] text-white"
+        className="w-full bg-[var(--contract-primary)] hover:opacity-90 text-white"
       >
         {downloadingPdf
           ? <Loader2 className="w-4 h-4 mr-2 animate-spin" />
@@ -407,7 +427,7 @@ export default function SignFlow({ token }: { token: string }) {
         subtitle={intakeSubtitle}
         footerNote={t("footerNote")}
         footer={
-          <Button className="w-full bg-[#143591] hover:bg-[#0f2870] text-white" size="lg" onClick={submitIntake} disabled={submitting || !canContinue}>
+          <Button className="w-full bg-[var(--contract-primary)] hover:opacity-90 text-white" size="lg" onClick={submitIntake} disabled={submitting || !canContinue}>
             {submitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null} {t("continue")}
           </Button>
         }
@@ -554,7 +574,7 @@ export default function SignFlow({ token }: { token: string }) {
         subtitle={<span className="font-semibold text-foreground">{session.template.name}</span>}
         footer={
           <div className="flex flex-col sm:flex-row-reverse gap-2">
-            <Button className="w-full sm:flex-1 bg-[#143591] hover:bg-[#0f2870] text-white" size="lg" onClick={() => setStep("sign")}>
+            <Button className="w-full sm:flex-1 bg-[var(--contract-primary)] hover:opacity-90 text-white" size="lg" onClick={() => setStep("sign")}>
               <FileSignature className="w-4 h-4 mr-2" /> {t("sign")}
             </Button>
             {session.mode === "self_fill" && (
@@ -598,7 +618,7 @@ export default function SignFlow({ token }: { token: string }) {
         footer={
           <div className="flex flex-col sm:flex-row-reverse gap-2">
             <Button
-              className="w-full sm:flex-1 bg-[#143591] hover:bg-[#0f2870] text-white"
+              className="w-full sm:flex-1 bg-[var(--contract-primary)] hover:opacity-90 text-white"
               size="lg"
               onClick={() => sigSubmitRef.current?.()}
               disabled={!verified || !sigReady || !signerName.trim() || submitting}
@@ -651,7 +671,7 @@ export default function SignFlow({ token }: { token: string }) {
 
 function FieldLabel({ children, required }: { children: React.ReactNode; required?: boolean }) {
   return (
-    <Label className="text-[#143591] dark:text-foreground font-medium">
+    <Label className="text-[var(--contract-primary)] dark:text-foreground font-medium">
       {children}{required ? <span className="text-red-500"> *</span> : null}
     </Label>
   );
@@ -669,7 +689,7 @@ function BrandHeader({ brand }: { brand: Brand }) {
   const logoSrc = customLogoSrc || globalLogoSrc;
 
   return (
-    <div className="bg-[#143591] text-white">
+    <div className="text-white" style={{ backgroundColor: brand.primaryColor || "#143591" }}>
       <div className="max-w-3xl mx-auto px-6 py-5 flex items-center justify-center gap-3">
         {logoSrc ? (
           <img
@@ -693,7 +713,10 @@ function BrandHeader({ brand }: { brand: Brand }) {
 
 function CenterShell({ children, brand }: { children: React.ReactNode; brand: Brand }) {
   return (
-    <div className="min-h-screen bg-secondary/30 flex flex-col">
+    <div
+      className="min-h-screen bg-secondary/30 flex flex-col"
+      style={{ "--contract-primary": brand.primaryColor || "#143591", "--contract-accent": brand.accentColor || brand.primaryColor || "#143591" } as React.CSSProperties}
+    >
       <BrandHeader brand={brand} />
       <div className="flex-1 flex items-center justify-center p-4">
         <div className="bg-card border rounded-2xl shadow-sm p-10 max-w-md w-full flex flex-col items-center text-center">{children}</div>
@@ -707,13 +730,16 @@ function Shell({ subtitle, title, step, labels, brand, children, footer, footerN
   children: React.ReactNode; footer?: React.ReactNode; footerNote?: string;
 }) {
   return (
-    <div className="min-h-screen bg-secondary/30 flex flex-col">
+    <div
+      className="min-h-screen bg-secondary/30 flex flex-col"
+      style={{ "--contract-primary": brand.primaryColor || "#143591", "--contract-accent": brand.accentColor || brand.primaryColor || "#143591" } as React.CSSProperties}
+    >
       <BrandHeader brand={brand} />
       <div className="flex-1 py-8 px-4">
         <div className="max-w-3xl mx-auto">
-          <Stepper step={step} labels={labels} />
+          <Stepper step={step} labels={labels} primaryColor={brand.primaryColor || "#143591"} />
           <div className="text-center mb-6">
-            <h1 className="text-2xl font-bold text-[#143591] dark:text-white">{title}</h1>
+            <h1 className="text-2xl font-bold dark:text-white" style={{ color: brand.primaryColor || "#143591" }}>{title}</h1>
             <p className="text-sm text-muted-foreground mt-1">{subtitle}</p>
           </div>
           <div className="bg-card border rounded-2xl shadow-sm p-6">{children}</div>
@@ -731,7 +757,7 @@ function Shell({ subtitle, title, step, labels, brand, children, footer, footerN
   );
 }
 
-function Stepper({ step, labels }: { step: number; labels: string[] }) {
+function Stepper({ step, labels, primaryColor }: { step: number; labels: string[]; primaryColor: string }) {
   const icons = [Pencil, FileText, PenLine];
   return (
     <div className="flex items-center justify-center mb-8">
@@ -746,11 +772,12 @@ function Stepper({ step, labels }: { step: number; labels: string[] }) {
             <div
               className={`flex items-center gap-2 rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors ${
                 active
-                  ? "bg-[#143591] text-white"
+                  ? "text-white"
                   : done
                   ? "bg-emerald-500 text-white"
                   : "bg-muted text-muted-foreground"
               }`}
+              style={active ? { backgroundColor: primaryColor } : undefined}
             >
               {done ? <CheckCircle2 className="w-4 h-4" /> : <Icon className="w-4 h-4" />}
               <span>{label}</span>
@@ -809,7 +836,7 @@ function EmailVerify({
               size="sm"
               onClick={onSend}
               disabled={sendingCode || !email.trim()}
-              className="mt-1 h-auto p-0 font-medium text-[#143591] hover:bg-transparent hover:text-[#0f2870] dark:text-blue-300"
+              className="mt-1 h-auto p-0 font-medium text-[var(--contract-primary)] hover:bg-transparent hover:opacity-80 dark:text-blue-300"
             >
               {sendingCode ? <Loader2 className="w-4 h-4 animate-spin mr-1.5" /> : <Mail className="w-4 h-4 mr-1.5" />}
               {codeSent ? t("resendCode") : t("sendCode")}
@@ -831,7 +858,7 @@ function EmailVerify({
                     type="button"
                     onClick={onVerify}
                     disabled={verifyingCode || code.trim().length !== 6}
-                    className="bg-[#143591] hover:bg-[#0f2870] text-white"
+                    className="bg-[var(--contract-primary)] hover:opacity-90 text-white"
                   >
                     {verifyingCode ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
                     {t("verify")}
@@ -970,13 +997,13 @@ function SignaturePad({ onSubmit, submitRef, onReady, signerName, onChangeName, 
     <div className="space-y-4">
       {showNameInput && (
         <div>
-          <Label className="text-[#143591] dark:text-foreground">{t("fullName")} *</Label>
+          <Label className="text-[var(--contract-primary)] dark:text-foreground">{t("fullName")} *</Label>
           <Input value={signerName} onChange={e => onChangeName(e.target.value)} />
         </div>
       )}
 
       <div>
-        <Label className="text-[#143591] dark:text-foreground">{t("signature")}</Label>
+        <Label className="text-[var(--contract-primary)] dark:text-foreground">{t("signature")}</Label>
         <div className="inline-flex rounded-lg border p-1 bg-muted/40 mt-1 mb-2">
           <button
             type="button"
