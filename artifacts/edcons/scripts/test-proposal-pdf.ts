@@ -11,6 +11,10 @@ import {
   proposalPdfText,
   type ProposalProgramData,
 } from "../src/lib/generateProposalPdf";
+import {
+  collectProposalStudyLevels,
+  loadProposalDocumentRequirements,
+} from "../src/lib/proposalDocumentRequirements";
 
 const sampleProgram: ProposalProgramData = {
   id: 1,
@@ -65,6 +69,37 @@ test("storage logo paths are normalised without changing data URLs", () => {
     "data:image/png;base64,AAAA",
   );
   assert.equal(normalizeProposalLogoUrl("  "), null);
+});
+
+test("mixed proposals use only the distinct study levels present in selected programs", () => {
+  assert.deepEqual(
+    collectProposalStudyLevels([
+      { degree: "Bachelor" },
+      { degree: "Master" },
+      { degree: "master" },
+      { degree: "PhD" },
+    ], ["Associate"]),
+    ["Bachelor", "Master", "PhD"],
+  );
+});
+
+test("an unconfigured selected level does not block a mixed-level proposal", async () => {
+  const requirementsByLevel: Record<string, Array<{ documentType: string; mandatory: boolean }>> = {
+    Bachelor: [{ documentType: "passport", mandatory: true }],
+    Master: [{ documentType: "diploma_transcript", mandatory: true }],
+    PhD: [],
+  };
+  const result = await loadProposalDocumentRequirements({
+    studyLevels: ["Bachelor", "Master", "PhD"],
+    fetchRequirements: async (studyLevel) => requirementsByLevel[studyLevel] ?? [],
+    resolveLabel: (documentType) => documentType.replaceAll("_", " "),
+  });
+
+  assert.deepEqual(result.missingStudyLevels, ["PhD"]);
+  assert.deepEqual(
+    result.documentRequirements.map((item) => item.studyLevel),
+    ["Bachelor", "Master"],
+  );
 });
 
 test("seven-program visual proposal stays on one page and remains lightweight", async () => {

@@ -8,6 +8,7 @@ import {
 } from "../src/lib/ga4LeadTracking";
 import { getFtcAutomationForSource } from "../src/lib/ftcLeadAutomationConfig";
 import { buildFtcLeadAcknowledgementEmail } from "../src/lib/ftcLeadEmail";
+import { getEmbedLeadFormCopy } from "../src/lib/embedLeadFormI18n";
 
 test("maps the configured CRM funnel to recommended GA4 lead events", () => {
   assert.equal(mapLeadStageToGa4Event({ key: "contacted" }), "working_lead");
@@ -50,4 +51,15 @@ test("builds a branded transactional email without allowing name markup", () => 
   assert.doesNotMatch(email.html, /Hi <img src=x>/);
   assert.match(email.html, /Hi &lt;img src=x&gt;/);
   assert.match(email.text, /service message/);
+});
+
+test("localizes the FTC lead form for every course interface language", () => {
+  for (const locale of ["en", "tr", "ar", "fr", "ru", "fa"] as const) {
+    const copy = getEmbedLeadFormCopy(locale);
+    assert.ok(copy.submit.length > 2);
+    assert.ok(copy.successTitle.length > 2);
+    assert.equal(copy.dir, locale === "ar" || locale === "fa" ? "rtl" : "ltr");
+  }
+  assert.equal(getEmbedLeadFormCopy("tr").submit, "Talebi gönder");
+  assert.equal(getEmbedLeadFormCopy("fr").successTitle, "Demande reçue");
 });

@@ -157,6 +157,7 @@ export function MultiSelectFilter({ values, onChange, options, placeholder, clas
       {open && pos && portalTarget && createPortal(
         <div
           ref={popRef}
+          onClick={event => event.stopPropagation()}
           style={{
             position: "fixed",
             top: openUp ? pos.top - 4 : pos.top + 4,

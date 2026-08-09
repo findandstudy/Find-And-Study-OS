@@ -108,6 +108,7 @@ import {
   resolveEmbedChatLocale,
   type EmbedChatLocale,
 } from "../lib/embedChatI18n";
+import { getEmbedLeadFormCopy } from "../lib/embedLeadFormI18n";
 import { validatePassportNumber } from "@workspace/portal-adapters/identity-validation";
 import { resolveProgramInterestedLevel } from "../lib/programInterestedLevel";
 
@@ -2804,7 +2805,12 @@ router.get("/public/embed/:slug/widget", async (req, res): Promise<void> => {
     return;
   }
   const docMeta = await loadDocCatalogForEmbed();
-  let html = generateWidgetHTML(slug, baseUrl, widget, docMeta, dialCodes);
+  const widgetLocale = resolveEmbedChatLocale(
+    req.query.lang,
+    localeFromPublicUrl(req.headers.referer),
+    req.headers["accept-language"],
+  );
+  let html = generateWidgetHTML(slug, baseUrl, widget, docMeta, dialCodes, widgetLocale);
     // SAFETY GUARD (widget fragility): strip control chars the HTML parser rewrites, which
     // can corrupt the inline widget <script> - a stray NUL (U+0000) becomes U+FFFD and yields
     // a "Range out of order in character class" SyntaxError that blanks the whole widget.
@@ -3573,7 +3579,7 @@ export function generateChatbotWidgetHTML(
 </html>`;
 }
 
-function generateWidgetHTML(slug: string, baseUrl: string, widget: any, docMeta: Record<string, DocCatalogEntry>, dialCodes: [string, string, string][] = []): string {
+function generateWidgetHTML(slug: string, baseUrl: string, widget: any, docMeta: Record<string, DocCatalogEntry>, dialCodes: [string, string, string][] = [], locale: EmbedChatLocale = "en"): string {
   const theme = sanitizeTheme(widget.theme);
   const primaryColor = theme.primaryColor || "#2563eb";
   const secondaryColor = theme.secondaryColor || "#1e40af";
@@ -3581,11 +3587,12 @@ function generateWidgetHTML(slug: string, baseUrl: string, widget: any, docMeta:
   const borderRadius = theme.borderRadius || "8px";
   const fontFamily = theme.fontFamily || "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
   const safeMode = VALID_MODES.includes(widget.mode) ? widget.mode : "combined";
+  const leadCopy = getEmbedLeadFormCopy(locale);
 
   const NATIONALITIES = ["Afghanistan","Albania","Algeria","Andorra","Angola","Antigua and Barbuda","Argentina","Armenia","Australia","Austria","Azerbaijan","Bahamas","Bahrain","Bangladesh","Barbados","Belarus","Belgium","Belize","Benin","Bhutan","Bolivia","Bosnia and Herzegovina","Botswana","Brazil","Brunei","Bulgaria","Burkina Faso","Burundi","Cabo Verde","Cambodia","Cameroon","Canada","Central African Republic","Chad","Chile","China","Colombia","Comoros","Congo","Costa Rica","Croatia","Cuba","Cyprus","Czech Republic","Denmark","Djibouti","Dominican Republic","East Timor","Ecuador","Egypt","El Salvador","Equatorial Guinea","Eritrea","Estonia","Eswatini","Ethiopia","Fiji","Finland","France","Gabon","Gambia","Georgia","Germany","Ghana","Greece","Grenada","Guatemala","Guinea","Guyana","Haiti","Honduras","Hungary","Iceland","India","Indonesia","Iran","Iraq","Ireland","Israel","Italy","Ivory Coast","Jamaica","Japan","Jordan","Kazakhstan","Kenya","Kiribati","Kosovo","Kuwait","Kyrgyzstan","Laos","Latvia","Lebanon","Liberia","Libya","Liechtenstein","Lithuania","Luxembourg","Madagascar","Malawi","Malaysia","Maldives","Mali","Malta","Marshall Islands","Mauritania","Mauritius","Mexico","Micronesia","Moldova","Monaco","Mongolia","Montenegro","Morocco","Mozambique","Myanmar","Namibia","Nauru","Nepal","Netherlands","New Zealand","Nicaragua","Niger","Nigeria","North Korea","North Macedonia","Norway","Oman","Pakistan","Palau","Palestine","Panama","Papua New Guinea","Paraguay","Peru","Philippines","Poland","Portugal","Qatar","Romania","Russia","Rwanda","Saint Kitts and Nevis","Saint Lucia","Samoa","San Marino","São Tomé and Príncipe","Saudi Arabia","Senegal","Serbia","Seychelles","Sierra Leone","Singapore","Slovakia","Slovenia","Solomon Islands","Somalia","South Africa","South Korea","South Sudan","Spain","Sri Lanka","Sudan","Suriname","Sweden","Switzerland","Syria","Tajikistan","Tanzania","Thailand","Togo","Tonga","Trinidad and Tobago","Tunisia","Turkey","Turkmenistan","Tuvalu","Uganda","Ukraine","United Arab Emirates","United Kingdom","United States","Uruguay","Uzbekistan","Vanuatu","Venezuela","Vietnam","Yemen","Zambia","Zimbabwe"];
 
   return `<!DOCTYPE html>
-<html lang="en">
+<html lang="${locale}" dir="${leadCopy.dir}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -3829,6 +3836,7 @@ body{font-family:${fontFamily};background:transparent;color:#1f2937;line-height:
 var API='${baseUrl}/api/public/embed/${slug}';
 var SLUG='${slug}';
 var MODE='${safeMode}';
+var LC=${JSON.stringify(leadCopy).replace(/<\//g, "<\\/").replace(/\u2028/g, "\\u2028").replace(/\u2029/g, "\\u2029")};
 // Read the HMAC token the loader script placed in the iframe URL (?t=...).
 // The token is required by restricted widgets; for open widgets it is ignored.
 var TOKEN=(typeof URLSearchParams!=='undefined'?(new URLSearchParams(window.location.search)).get('t')||'':'');
@@ -4702,7 +4710,7 @@ function renderFormContent(prog){
     for(var pi=0;pi<ops.length;pi++){if(ops[pi][0]===sel){cur=ops[pi];break;}}
     var trigInner=cur
       ?'<img src="https://flagcdn.com/24x18/'+cur[1].toLowerCase()+'.png" srcset="https://flagcdn.com/48x36/'+cur[1].toLowerCase()+'.png 2x" alt=""><span class="ew-cc-code">'+cur[0]+'</span><span class="ew-cc-caret">\\u25BC</span>'
-      :'<span class="ew-cc-code" style="color:#9ca3af">Code</span><span class="ew-cc-caret">\\u25BC</span>';
+      :'<span class="ew-cc-code" style="color:#9ca3af">'+esc(LC.countryCode)+'</span><span class="ew-cc-caret">\\u25BC</span>';
     var listHtml='';
     for(var pj=0;pj<ops.length;pj++){
       var o=ops[pj];
@@ -4717,9 +4725,9 @@ function renderFormContent(prog){
     return '<div class="ew-cc"><input type="hidden" name="countryCode" value="'+esc(sel)+'">'+
       '<button type="button" class="ew-cc-trigger" aria-haspopup="listbox" aria-expanded="false">'+trigInner+'</button>'+
       '<div class="ew-cc-list" role="listbox">'+
-        '<input type="text" class="ew-cc-search" placeholder="Search country or code" autocomplete="off">'+
+        '<input type="text" class="ew-cc-search" placeholder="'+esc(LC.countrySearch)+'" autocomplete="off">'+
         listHtml+
-        '<div class="ew-cc-empty">No matches</div>'+
+        '<div class="ew-cc-empty">'+esc(LC.countryNoMatches)+'</div>'+
       '</div>'+
     '</div>';
   }
@@ -4729,25 +4737,25 @@ function renderFormContent(prog){
     // phone) plus an "Applying for" summary pill. Nationality / desired
     // level / preferred uni or program are deliberately deferred to the
     // Review step to keep the first screen short and welcoming.
-    h+='<h3>Apply'+(prog?' \\u2014 '+esc(prog.name):'')+'</h3>';
+    h+='<h3>'+esc(MODE==='lead_form'?LC.apply:'Apply')+(prog?' \\u2014 '+esc(prog.name):'')+'</h3>';
     if(prog)h+='<div class="ew-modal-subtitle">'+esc(prog.universityName||'')+'</div>';
-    else h+='<div class="ew-modal-subtitle">Tell us about yourself to get started.</div>';
+    else h+='<div class="ew-modal-subtitle">'+esc(MODE==='lead_form'?LC.intro:'Tell us about yourself to get started.')+'</div>';
     // Lightly tinted info card matching the portal's primary/5 callout.
     h+='<div style="background:${primaryColor}10;border:1px solid ${primaryColor}30;border-radius:12px;padding:14px;margin:14px 0">';
-    h+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px"><span style="font-size:0.95rem">\\ud83d\\udc65</span><strong style="font-size:0.88rem;color:${primaryColor}">Personal Information</strong></div>';
-    h+='<p style="font-size:0.78rem;color:#64748b;margin:0;line-height:1.45">Please provide your contact details. You will be able to review and update them before submitting.</p>';
+    h+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px"><span style="font-size:0.95rem">\\ud83d\\udc65</span><strong style="font-size:0.88rem;color:${primaryColor}">'+esc(MODE==='lead_form'?LC.personalInfo:'Personal Information')+'</strong></div>';
+    h+='<p style="font-size:0.78rem;color:#64748b;margin:0;line-height:1.45">'+esc(MODE==='lead_form'?LC.personalInfoHelp:'Please provide your contact details. You will be able to review and update them before submitting.')+'</p>';
     h+='</div>';
     h+='<form id="ew-personal-form" onsubmit="return false">';
     h+='<input type="text" name="_hp" class="ew-hp" tabindex="-1" autocomplete="off">';
     h+='<div class="ew-form-grid">';
-    aiField('firstName','First Name','text',true,true);
-    aiField('lastName','Last Name','text',true,true);
-    aiField('email','Email','email',true,false);
+    aiField('firstName',MODE==='lead_form'?LC.firstName:'First Name','text',true,true);
+    aiField('lastName',MODE==='lead_form'?LC.lastName:'Last Name','text',true,true);
+    aiField('email',MODE==='lead_form'?LC.email:'Email','email',true,false);
     var fv=savedFormData;
     // Phone with a flag-prefixed country code picker (matches the portal's
     // PhoneCodePicker visual). Spans the full row.
     var sel=fv.countryCode||'';
-    h+='<div class="ew-form-group full"><label>Phone *</label><div class="ew-phone-group">'+buildCcDropdown(sel)+'<input name="phone" placeholder="Phone number" value="'+esc(fv.phone||'')+'" required></div>'+(phoneError?'<div class="ew-field-err">Please enter a valid phone number for the selected country.</div>':'')+'</div>';
+    h+='<div class="ew-form-group full"><label>'+esc(MODE==='lead_form'?LC.phone:'Phone')+' *</label><div class="ew-phone-group">'+buildCcDropdown(sel)+'<input name="phone" placeholder="'+esc(MODE==='lead_form'?LC.phonePlaceholder:'Phone number')+'" value="'+esc(fv.phone||'')+'" required></div>'+(phoneError?'<div class="ew-field-err">'+esc(MODE==='lead_form'?LC.phoneInvalid:'Please enter a valid phone number for the selected country.')+'</div>':'')+'</div>';
     h+='</div>';
     if(prog){
       // "Applying for" summary pill (mirrors portal's bg-secondary/50 card).
@@ -4757,9 +4765,9 @@ function renderFormContent(prog){
       h+='</div>';
     }
     h+='<div class="ew-form-actions" style="margin-top:14px">';
-    var nextLabel=(MODE==='lead_form')?(formLoading?'Submitting...':'Submit'):'Next \\u2192';
+    var nextLabel=(MODE==='lead_form')?(formLoading?LC.submitting:LC.submit):'Next \\u2192';
     h+='<button type="button" class="ew-btn" id="ew-next-personal"'+(formLoading?' disabled':'')+' style="background:linear-gradient(135deg,${primaryColor},${secondaryColor})">'+nextLabel+'</button>';
-    if(formOpen)h+='<button type="button" class="ew-btn ew-btn-outline" id="ew-cancel">Cancel</button>';
+    if(formOpen)h+='<button type="button" class="ew-btn ew-btn-outline" id="ew-cancel">'+esc(MODE==='lead_form'?LC.cancel:'Cancel')+'</button>';
     h+='</div></form>';
   } else if(formStep==='documents'){
     // Step 2 — Documents: upload + AI extract option.
@@ -4884,6 +4892,7 @@ function renderFormContent(prog){
 }
 
 function renderSuccess(){
+  if(MODE==='lead_form')return '<div class="ew-success"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg><h3>'+esc(LC.successTitle)+'</h3><p>'+esc(LC.successText)+'</p></div>';
   var docCount=Object.keys(uploadedDocs).length;
   var docMsg=docCount>0?' with '+docCount+' document'+(docCount!==1?'s':''):'';
   return '<div class="ew-success"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg><h3>Application Submitted!</h3><p>Thank you! Your application'+docMsg+' has been received. We will review it and get back to you shortly.</p></div>';
@@ -5491,12 +5500,12 @@ function handleNextPersonal(scope){
       ewFireEarlyLead();
     }
     handleNextPersonalInFlight=false;
-    alert('Please fill in all required fields, including the phone country code.');
+    alert(MODE==='lead_form'?LC.requiredAlert:'Please fill in all required fields, including the phone country code.');
     return;
   }
   if(ewFirstNonLatinName()){
     handleNextPersonalInFlight=false;
-    alert('Names must use Latin letters only. Please remove non-Latin characters (e.g. Arabic, Cyrillic).');
+    alert(MODE==='lead_form'?LC.latinNameAlert:'Names must use Latin letters only. Please remove non-Latin characters (e.g. Arabic, Cyrillic).');
     return;
   }
   // If a lead was already issued during this session (user clicked Next,
@@ -5540,7 +5549,7 @@ function handleNextPersonal(scope){
       // Lead-form widgets only collect contact info — show success now.
       if(!res.ok){
         formLoading=false;
-        alert('Submission failed. Please try again.');
+        alert(MODE==='lead_form'?LC.submissionFailed:'Submission failed. Please try again.');
         if(formOpen)showModal();else render(false);
         return;
       }
@@ -5558,7 +5567,7 @@ function handleNextPersonal(scope){
     handleNextPersonalInFlight=false;
     if(MODE==='lead_form'){
       formLoading=false;
-      alert('Submission failed. Please try again.');
+      alert(MODE==='lead_form'?LC.submissionFailed:'Submission failed. Please try again.');
       if(formOpen)showModal();else render(false);
       return;
     }
@@ -5672,11 +5681,11 @@ function handleFormSubmit(e){
   var form=e.target;
   new FormData(form).forEach(function(v,k){savedFormData[k]=v});
   if(!savedFormData.firstName||!savedFormData.lastName||!savedFormData.email){
-    alert('Please fill in all required fields.');
+    alert(MODE==='lead_form'?LC.requiredAlert:'Please fill in all required fields.');
     return;
   }
   if(savedFormData.phone&&!savedFormData.countryCode){
-    alert('Please select the phone country code.');
+    alert(MODE==='lead_form'?LC.countryCodeAlert:'Please select the phone country code.');
     return;
   }
   if(!enforceDocGate())return;
@@ -5734,7 +5743,7 @@ function handleFormSubmit(e){
   }).catch(function(err){
     formLoading=false;
     if(formOpen)showModal();else render(false);
-    alert(err.message||'Something went wrong. Please try again.');
+    alert(err.message||(MODE==='lead_form'?LC.genericFailed:'Something went wrong. Please try again.'));
   });
 }
 

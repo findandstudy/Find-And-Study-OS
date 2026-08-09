@@ -24,6 +24,10 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { generateProposalPdf } from "@/lib/generateProposalPdf";
+import {
+  collectProposalStudyLevels,
+  loadProposalDocumentRequirements,
+} from "@/lib/proposalDocumentRequirements";
 import { resolveProposalBranding } from "@/lib/proposalBranding";
 import { createDocumentRecord, uploadDocumentFile } from "@/lib/uploadDocumentFile";
 import { applicationCreationErrorMessage } from "@/lib/applicationCreationError";
@@ -440,39 +444,17 @@ export default function CourseFinder() {
       const proposalBranding = resolveProposalBranding(user?.role, settings, agentProfile);
       const agencyBrandedProposal =
         user?.role === "agent" || user?.role === "sub_agent" || user?.role === "agent_staff";
-      const programStudyLevels = [
-        ...new Set(
-          selected
-            .map((program) => program.degree?.trim())
-            .filter((level): level is string => !!level),
-        ),
-      ];
-      const selectedStudyLevels = programStudyLevels.length > 0
-        ? programStudyLevels
-        : filters.level;
+      const selectedStudyLevels = collectProposalStudyLevels(selected, filters.level);
       if (selectedStudyLevels.length === 0) {
         throw new Error("The selected programs do not have a study level for the document checklist.");
       }
-      const documentRequirements = await Promise.all(
-        selectedStudyLevels.map(async (studyLevel) => {
-          const response = await apiFetch(
-            `${BASE_URL}/api/degrees/by-value/${encodeURIComponent(studyLevel)}/document-requirements`,
-          ) as Array<{ documentType: string; mandatory: boolean; sortOrder?: number }>;
-          if (!Array.isArray(response) || response.length === 0) {
-            throw new Error(`No document requirements are configured for ${studyLevel}.`);
-          }
-          return {
-            studyLevel,
-            requirements: [...response]
-              .sort((left, right) => (left.sortOrder ?? 0) - (right.sortOrder ?? 0))
-              .map((requirement) => ({
-                documentType: requirement.documentType,
-                label: resolveProposalDocMeta(requirement.documentType).label,
-                mandatory: !!requirement.mandatory,
-              })),
-          };
-        }),
-      );
+      const { documentRequirements, missingStudyLevels } = await loadProposalDocumentRequirements({
+        studyLevels: selectedStudyLevels,
+        fetchRequirements: async (studyLevel) => apiFetch(
+          `${BASE_URL}/api/degrees/by-value/${encodeURIComponent(studyLevel)}/document-requirements`,
+        ) as Promise<Array<{ documentType: string; mandatory: boolean; sortOrder?: number }>>,
+        resolveLabel: (documentType) => resolveProposalDocMeta(documentType).label,
+      });
 
       await generateProposalPdf({
         programs: selected,
@@ -500,6 +482,12 @@ export default function CourseFinder() {
         successColor: settings?.themeSuccess || undefined,
       });
       toast({ title: t("courseFinderPage.pdfGenerated"), description: t("courseFinderPage.proposalDownloaded", { n: selected.length }) });
+      if (missingStudyLevels.length > 0) {
+        toast({
+          title: "Proposal generated with a partial document checklist",
+          description: `No document requirements are configured for: ${missingStudyLevels.join(", ")}.`,
+        });
+      }
     } catch (err: any) {
       toast({ title: t("courseFinderPage.pdfGenerationFailed"), description: err.message || t("courseFinderPage.unknownError"), variant: "destructive" });
     } finally {
