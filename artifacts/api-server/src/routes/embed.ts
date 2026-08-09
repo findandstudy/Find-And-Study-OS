@@ -80,6 +80,8 @@ import { isAnthropicConnectionKey } from "../lib/documentAiConnection";
 import { getEmbedSigningSecret } from "../lib/embedSigningSecret";
 import { rejectInvalidPhone } from "../lib/phoneValidation";
 import { containsNonLatinLetter, NON_LATIN_NAME_CODE } from "../lib/textNormalize";
+import { sanitizeGa4AnalyticsContext } from "../lib/ga4LeadTracking";
+import { runFtcNewLeadAutomation } from "../lib/ftcLeadAutomation";
 import {
   emptySummary,
   tallyResult,
@@ -1376,8 +1378,8 @@ router.post("/public/embed/:slug/lead", embedSubmitLimiter, embedLeadJson, async
   }
   setEmbedCors(res, widget, origin);
 
-  const { firstName, lastName, email, phone, countryCode, programName, universityName, sourcePageUrl, utmSource, utmMedium, utmCampaign, utmTerm, utmContent, _hp } = req.body;
-  if (_hp) { res.json({ success: true, leadId: null }); return; }
+  const { firstName, lastName, email, phone, countryCode, programName, universityName, sourcePageUrl, utmSource, utmMedium, utmCampaign, utmTerm, utmContent, gaClientId, gaSessionId, gaCapturedAt, _hp } = req.body;
+  if (_hp) { res.json({ success: true, leadId: null, created: false }); return; }
 
   if (!firstName || !lastName || !email) {
     res.status(400).json({ error: "firstName, lastName, and email are required" });
@@ -1423,6 +1425,19 @@ router.post("/public/embed/:slug/lead", embedSubmitLimiter, embedLeadJson, async
         utmContent: s(utmContent, 100),
       },
     });
+    const ga4Context = sanitizeGa4AnalyticsContext({ gaClientId, gaSessionId, gaCapturedAt });
+    if (ga4Context) {
+      await db.update(leadsTable).set({
+        educationData: sql`
+          COALESCE(${leadsTable.educationData}, '{}'::jsonb)
+          || jsonb_build_object(
+            'analytics',
+            COALESCE(${leadsTable.educationData}->'analytics', '{}'::jsonb)
+            || jsonb_build_object('ga4', ${JSON.stringify(ga4Context)}::jsonb)
+          )
+        `,
+      }).where(eq(leadsTable.id, lead.id));
+    }
     // SECURITY (Public Intake): only disclose the numeric lead ID for a
     // freshly created lead, never for a deduped existing one. The opaque,
     // signed document session can be returned for both paths because it is
@@ -1443,8 +1458,14 @@ router.post("/public/embed/:slug/lead", embedSubmitLimiter, embedLeadJson, async
     res.status(201).json({
       success: true,
       leadId: created ? lead.id : null,
+      created,
       documentSessionToken,
     });
+    if (created) {
+      void runFtcNewLeadAutomation(lead.id).catch((automationError) => {
+        console.error("[embed/lead] FTC automation failed:", automationError);
+      });
+    }
   } catch (err: any) {
     console.error("[embed/lead] failed:", err?.message || err);
     res.status(500).json({ error: "Failed to save lead" });
@@ -3988,6 +4009,9 @@ var PHONE_CODES=(PHONE_CODES_CATALOG&&PHONE_CODES_CATALOG.length)?PHONE_CODES_CA
 var searchDebounce=null;
 var userFilters={};
 var parentViewport=null;
+var parentOrigin=(function(){try{return document.referrer?new URL(document.referrer).origin:''}catch(e){return''}})();
+var analyticsContext=null;
+var sourceContext=null;
 var modalElements=null;
 var modalNotified=false;
 
@@ -5198,6 +5222,7 @@ var savedFormData={};
 // back on the final /apply call so the server reuses (instead of
 // duplicating) the existing "new" lead and can flip it to "converted".
 var leadId=null;
+var leadWasCreated=false;
 // Opaque, signed token issued with the Step-1 lead capture. It allows the
 // Documents step to persist draft files without exposing or trusting a numeric
 // lead id, including when the backend deduplicates onto an existing lead.
@@ -5405,16 +5430,25 @@ function ewBuildLeadPayload(){
     programName:formProgram?formProgram.name:null,
     universityName:formProgram?formProgram.universityName:null
   };
-  // Capture page URL + UTMs so the lead row carries source attribution.
-  try{p.sourcePageUrl=window.parent.location.href}catch(_){p.sourcePageUrl=window.location.href}
-  try{
-    var search=window.location.search;
-    try{search=window.parent.location.search}catch(_){}
-    var params=new URLSearchParams(search);
-    var utmMap={utm_source:'utmSource',utm_medium:'utmMedium',utm_campaign:'utmCampaign',utm_term:'utmTerm',utm_content:'utmContent'};
-    Object.keys(utmMap).forEach(function(k){var v=params.get(k);if(v)p[utmMap[k]]=v});
-  }catch(_){}
+  // The trusted host page provides its real URL and campaign parameters via
+  // postMessage. Cross-origin iframe rules prevent direct parent.location reads.
+  if(sourceContext){
+    p.sourcePageUrl=sourceContext.sourcePageUrl;
+    ['utmSource','utmMedium','utmCampaign','utmTerm','utmContent'].forEach(function(k){if(sourceContext[k])p[k]=sourceContext[k]});
+  }else{
+    p.sourcePageUrl=window.location.href;
+  }
+  if(analyticsContext){
+    p.gaClientId=analyticsContext.clientId;
+    if(analyticsContext.sessionId)p.gaSessionId=analyticsContext.sessionId;
+    p.gaCapturedAt=analyticsContext.capturedAt;
+  }
   return p;
+}
+function ewNotifyLeadSubmitted(){
+  try{
+    window.parent.postMessage({type:'edcons-lead-submitted',slug:SLUG,leadId:leadId,created:leadWasCreated},parentOrigin||'*');
+  }catch(e){}
 }
 // Fire-and-forget early lead capture. Never blocks or navigates; the
 // backend dedups by email+source, so re-fires refresh the same row.
@@ -5429,6 +5463,7 @@ function ewFireEarlyLead(){
   }).then(function(d){
     leadCreating=false;
     if(d&&d.leadId)leadId=d.leadId;
+    if(d&&typeof d.created==='boolean')leadWasCreated=d.created;
     if(d&&d.documentSessionToken)leadDocumentSessionToken=d.documentSessionToken;
   }).catch(function(){leadCreating=false});
 }
@@ -5478,6 +5513,7 @@ function handleNextPersonal(scope){
     if(MODE==='lead_form'){
       formSubmitted=true;formLoading=false;
       if(formOpen)showModal();else render(false);
+      ewNotifyLeadSubmitted();
     } else {
       formStep='documents';
       if(formOpen)showModal();else render(false);
@@ -5498,11 +5534,19 @@ function handleNextPersonal(scope){
     leadCreating=false;
     handleNextPersonalInFlight=false;
     if(res.ok&&res.data&&res.data.leadId)leadId=res.data.leadId;
+    if(res.ok&&res.data&&typeof res.data.created==='boolean')leadWasCreated=res.data.created;
     if(res.ok&&res.data&&res.data.documentSessionToken)leadDocumentSessionToken=res.data.documentSessionToken;
     if(MODE==='lead_form'){
       // Lead-form widgets only collect contact info — show success now.
+      if(!res.ok){
+        formLoading=false;
+        alert('Submission failed. Please try again.');
+        if(formOpen)showModal();else render(false);
+        return;
+      }
       formSubmitted=true;formLoading=false;
       if(formOpen)showModal();else render(false);
+      ewNotifyLeadSubmitted();
       return;
     }
     // Always advance — failing to create the lead should not block the
@@ -5823,7 +5867,8 @@ if(ro){
 
 window.addEventListener('message',function(e){
   var d=e.data;
-  if(!d||d.slug!==SLUG)return;
+  if(e.source!==window.parent||!d||d.slug!==SLUG)return;
+  if(parentOrigin&&e.origin!==parentOrigin)return;
   if(d.type==='edcons-viewport'){
     parentViewport={
       parentScrollY:d.parentScrollY||0,
@@ -5832,9 +5877,30 @@ window.addEventListener('message',function(e){
       iframeHeight:d.iframeHeight||0
     };
     if(modalElements)repositionModal();
+  }else if(d.type==='edcons-analytics-context'){
+    var cid=String(d.clientId||'').trim();
+    var sid=String(d.sessionId||'').trim();
+    var captured=String(d.capturedAt||'').trim();
+    if(/^[A-Za-z0-9._-]{1,128}$/.test(cid)){
+      analyticsContext={clientId:cid,capturedAt:captured||new Date().toISOString()};
+      if(/^\\d{1,32}$/.test(sid))analyticsContext.sessionId=sid;
+    }
+  }else if(d.type==='edcons-source-context'){
+    var page=String(d.sourcePageUrl||'').trim();
+    try{
+      var parsed=new URL(page);
+      if(parsed.origin===parentOrigin){
+        sourceContext={sourcePageUrl:page.slice(0,500)};
+        ['utmSource','utmMedium','utmCampaign','utmTerm','utmContent'].forEach(function(k){
+          var value=String(d[k]||'').trim();
+          if(value)sourceContext[k]=value.slice(0,100);
+        });
+      }
+    }catch(ex){}
   }
 });
 
+try{window.parent.postMessage({type:'edcons-analytics-request',slug:SLUG},parentOrigin||'*');}catch(e){}
 init();
 })();
 </script>

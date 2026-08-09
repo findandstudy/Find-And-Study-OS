@@ -38,10 +38,33 @@ import { validatePassportNumber } from "@workspace/portal-adapters/identity-vali
 import { buildStableSignedStudentPhotoThumbnailPath } from "@workspace/portal-adapters";
 import { recordRequestSpan } from "../lib/requestTelemetry";
 import { buildFacetFilterInput, loadFacetValue } from "../lib/facetCache";
+import { isFtcEmbedSource, trackFtcLeadStageChange } from "../lib/ga4LeadTracking";
 
 const router: IRouter = Router();
 
 const leadDocsObjectStorage = new ObjectStorageService();
+
+function enqueueFtcLeadStageAnalytics(
+  lead: typeof leadsTable.$inferSelect,
+  previousStage: string,
+  nextStageKey: string,
+): void {
+  if (!isFtcEmbedSource(lead.source) || previousStage === nextStageKey) return;
+  void (async () => {
+    const [stage] = await db.select({ key: pipelineStagesTable.key, variant: pipelineStagesTable.variant })
+      .from(pipelineStagesTable)
+      .where(and(eq(pipelineStagesTable.entityType, "lead"), eq(pipelineStagesTable.key, nextStageKey)))
+      .limit(1);
+    const result = await trackFtcLeadStageChange({
+      lead: { ...lead, status: nextStageKey },
+      previousStage,
+      nextStage: stage || { key: nextStageKey, variant: null },
+    });
+    if (!result.sent && ["ga4_http_error", "ga4_network_error"].includes(result.reason || "")) {
+      console.error(`[GA4] FTC lead stage event failed (${result.reason}, status=${result.status || "n/a"})`);
+    }
+  })().catch((error) => console.error("[GA4] FTC lead stage tracking failed:", error));
+}
 
 const LEAD_PATCH_FIELDS = [
   "firstName", "lastName", "email", "phone", "nationality",
@@ -1163,6 +1186,7 @@ router.patch("/leads/:id", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROL
   }
 
   if (updates.status && updates.status !== existing.status) {
+    enqueueFtcLeadStageAnalytics(lead, existing.status, String(updates.status));
     // Event-driven portal enqueue: if this lead is already converted to a
     // student, propagate the stage change to their applications immediately.
     if (lead.convertedStudentId) {
@@ -1317,9 +1341,14 @@ router.post("/leads/bulk-action", requireAuth, requireRole(...STAFF_ROLES), asyn
     }
     res.json({ success: true, updated, skipped }); return;
   } else if (action === "move" && status) {
+    const affectedLeads = await db.select().from(leadsTable)
+      .where(and(inArray(leadsTable.id, numericIds), isNull(leadsTable.deletedAt)));
     const result = await db.update(leadsTable).set({ status }).where(inArray(leadsTable.id, numericIds));
     updated = result.rowCount ?? numericIds.length;
     await logAudit(user.id, "bulk_move_leads", "lead", undefined, { ids: numericIds, status }, req.ip);
+    for (const affectedLead of affectedLeads) {
+      enqueueFtcLeadStageAnalytics(affectedLead, affectedLead.status, String(status));
+    }
   } else {
     res.status(400).json({ error: "Missing required fields for action" }); return;
   }
@@ -1361,6 +1390,7 @@ router.post("/leads/:id/convert", requireAuth, requireRole(...STAFF_ROLES, ...AG
       const convertedKey = wonStages.length > 0 ? wonStages[0].key : "converted";
       if (lead.status !== convertedKey) {
         await db.update(leadsTable).set({ status: convertedKey }).where(eq(leadsTable.id, id));
+        enqueueFtcLeadStageAnalytics(lead, lead.status, convertedKey);
       }
       res.json({ student: existing, merged: false, alreadyConverted: true });
       return;
@@ -1504,6 +1534,7 @@ router.post("/leads/:id/convert", requireAuth, requireRole(...STAFF_ROLES, ...AG
       }
 
       await db.update(leadsTable).set({ status: "converted", convertedStudentId: existingByEmail.id }).where(eq(leadsTable.id, id));
+      enqueueFtcLeadStageAnalytics(lead, lead.status, "converted");
       // Keep inbox external_contacts in sync so conversation linking resolves to student post-conversion
       await db.update(externalContactsTable).set({ studentId: existingByEmail.id }).where(eq(externalContactsTable.leadId, lead.id));
       await logAudit(req.user!.id, "convert_lead", "lead", id, { studentId: existingByEmail.id, merged: true }, req.ip);
@@ -1535,6 +1566,7 @@ router.post("/leads/:id/convert", requireAuth, requireRole(...STAFF_ROLES, ...AG
   }
 
   await db.update(leadsTable).set({ status: "converted", convertedStudentId: student.id }).where(eq(leadsTable.id, id));
+  enqueueFtcLeadStageAnalytics(lead, lead.status, "converted");
   // Keep inbox external_contacts in sync so conversation linking resolves to student post-conversion
   await db.update(externalContactsTable).set({ studentId: student.id }).where(eq(externalContactsTable.leadId, lead.id));
   await logAudit(req.user!.id, "convert_lead", "lead", id, { studentId: student.id }, req.ip);
