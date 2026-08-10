@@ -99,6 +99,36 @@ function addApplicationDateRangeCondition(conditions: any[], range?: string): vo
   }
 }
 
+// Some applications created through the student/public flow predate direct
+// application ownership. Preserve an explicit application assignment when it
+// exists; otherwise inherit the linked student's assignment for visibility.
+function applicationAssignedTo(userId: number) {
+  return orFn(
+    eq(applicationsTable.assignedToId, userId),
+    and(
+      isNull(applicationsTable.assignedToId),
+      eq(studentsTable.assignedToId, userId),
+    ),
+  )!;
+}
+
+function applicationIsAssigned() {
+  return orFn(
+    isNotNull(applicationsTable.assignedToId),
+    and(
+      isNull(applicationsTable.assignedToId),
+      isNotNull(studentsTable.assignedToId),
+    ),
+  )!;
+}
+
+function applicationIsUnassigned() {
+  return and(
+    isNull(applicationsTable.assignedToId),
+    isNull(studentsTable.assignedToId),
+  )!;
+}
+
 async function isStageFileUploadMandatory(stageKey: string): Promise<boolean> {
   const [row] = await db.select({ isFileUploadMandatory: pipelineStagesTable.isFileUploadMandatory })
     .from(pipelineStagesTable)
@@ -204,10 +234,10 @@ router.get("/applications", requireAuth, requireAgentStaffPermission("applicatio
       if (assignmentVisibility !== "all") {
         agencyAgentIds = await getAgencyMemberAgentIds(user.id);
         const orParts: any[] = assignmentVisibility === "assigned"
-          ? [isNotNull(applicationsTable.assignedToId)]
-          : [eq(applicationsTable.assignedToId, user.id)];
+          ? [applicationIsAssigned()]
+          : [applicationAssignedTo(user.id)];
         if (assignmentVisibility === "own_or_unassigned") {
-          orParts.push(isNull(applicationsTable.assignedToId));
+          orParts.push(applicationIsUnassigned());
         }
         if (agencyAgentIds.length > 0) {
           orParts.push(inArray(applicationsTable.agentId, agencyAgentIds));
@@ -269,15 +299,18 @@ router.get("/applications", requireAuth, requireAgentStaffPermission("applicatio
           const [countryRows, universityRows, agentRows] = await Promise.all([
             db.selectDistinct({ country: applicationsTable.country })
               .from(applicationsTable)
+              .leftJoin(studentsTable, eq(applicationsTable.studentId, studentsTable.id))
               .where(and(scopeWhereClause, isNotNull(applicationsTable.country)))
               .orderBy(applicationsTable.country),
             db.selectDistinct({ id: applicationsTable.universityId, name: applicationsTable.universityName })
               .from(applicationsTable)
+              .leftJoin(studentsTable, eq(applicationsTable.studentId, studentsTable.id))
               .where(and(scopeWhereClause, isNotNull(applicationsTable.universityId), isNotNull(applicationsTable.universityName)))
               .orderBy(applicationsTable.universityName),
             db.selectDistinct({ id: applicationsTable.agentId, name: agentsTable.companyName })
               .from(applicationsTable)
               .innerJoin(agentsTable, eq(applicationsTable.agentId, agentsTable.id))
+              .leftJoin(studentsTable, eq(applicationsTable.studentId, studentsTable.id))
               .where(scopeWhereClause)
               .orderBy(agentsTable.companyName),
           ]);
@@ -321,13 +354,13 @@ router.get("/applications", requireAuth, requireAgentStaffPermission("applicatio
       if (Number.isFinite(parsed)) conditions.push(eq(applicationsTable.agentId, parsed));
     }
   }
-  if (assignment === "mine") conditions.push(eq(applicationsTable.assignedToId, user.id));
-  else if (assignment === "unassigned") conditions.push(isNull(applicationsTable.assignedToId));
+  if (assignment === "mine") conditions.push(applicationAssignedTo(user.id));
+  else if (assignment === "unassigned") conditions.push(applicationIsUnassigned());
   else if (assignment === "mine_unassigned") {
-    conditions.push(orFn(eq(applicationsTable.assignedToId, user.id), isNull(applicationsTable.assignedToId))!);
+    conditions.push(orFn(applicationAssignedTo(user.id), applicationIsUnassigned())!);
   } else if (assignment && assignment !== "all") {
     const parsed = parseInt(assignment, 10);
-    if (Number.isFinite(parsed)) conditions.push(eq(applicationsTable.assignedToId, parsed));
+    if (Number.isFinite(parsed)) conditions.push(applicationAssignedTo(parsed));
   }
   if (createdSource === "exclude_automation") {
     conditions.push(sql`coalesce(${applicationsTable.createdSource}, 'student') != 'automation'`);
@@ -467,7 +500,7 @@ router.get("/applications", requireAuth, requireAgentStaffPermission("applicatio
       programId: applicationsTable.programId,
       universityId: applicationsTable.universityId,
       agentId: applicationsTable.agentId,
-      assignedToId: applicationsTable.assignedToId,
+      assignedToId: sql<number | null>`COALESCE(${applicationsTable.assignedToId}, ${studentsTable.assignedToId})`.as("assigned_to_id"),
       season: applicationsTable.season,
       stage: applicationsTable.stage,
       intake: resolvedApplicationIntakeSql().as("intake"),

@@ -341,7 +341,12 @@ export async function createApplicationForStudent(studentId: number, programId: 
     const currentYear = await getCurrentSeason();
     const stage = "inquiry";
 
-    const [studentRec] = await db.select({ firstName: studentsTable.firstName, lastName: studentsTable.lastName, assignedToId: studentsTable.assignedToId }).from(studentsTable).where(eq(studentsTable.id, studentId));
+    const [studentRec] = await db.select({
+      firstName: studentsTable.firstName,
+      lastName: studentsTable.lastName,
+      assignedToId: studentsTable.assignedToId,
+      branchId: studentsTable.branchId,
+    }).from(studentsTable).where(eq(studentsTable.id, studentId));
     const studentFullName = studentRec ? `${studentRec.firstName || ""} ${studentRec.lastName || ""}`.trim() : null;
 
     const [app] = await db.insert(applicationsTable).values({
@@ -353,7 +358,8 @@ export async function createApplicationForStudent(studentId: number, programId: 
       universityId: snapshotUniversityId,
       programId: programId || null,
       agentId: null,
-      assignedToId: studentRec?.assignedToId || null,
+      assignedToId: studentRec?.assignedToId ?? null,
+      branchId: studentRec?.branchId ?? null,
       universityName: snapshotUniversityName,
       country: snapshotCountry,
       programName: snapshotProgramName,
@@ -770,6 +776,8 @@ router.post("/public/apply", applyLimiter, applyJson, async (req: Request, res: 
           addressCity: residence.addressCity,
           postalCode: residence.postalCode,
           interestedLevel: resolvedInterestedLevel,
+          assignedToId: archivedByEmail.assignedToId ?? websiteLead?.assignedToId ?? null,
+          branchId: archivedByEmail.branchId ?? websiteLead?.branchId ?? null,
         }).where(eq(studentsTable.id, archivedByEmail.id));
         newStudent = {
           ...archivedByEmail,
@@ -778,6 +786,8 @@ router.post("/public/apply", applyLimiter, applyJson, async (req: Request, res: 
           addressCity: residence.addressCity,
           postalCode: residence.postalCode,
           interestedLevel: resolvedInterestedLevel,
+          assignedToId: archivedByEmail.assignedToId ?? websiteLead?.assignedToId ?? null,
+          branchId: archivedByEmail.branchId ?? websiteLead?.branchId ?? null,
         };
         console.log(`[PUBLIC-APPLY] Restored archived student #${archivedByEmail.id} for new user ${normalizedEmail}`);
       } else {
@@ -803,6 +813,8 @@ router.post("/public/apply", applyLimiter, applyJson, async (req: Request, res: 
           graduationYear: graduationYear ? parseInt(String(graduationYear), 10) || null : null,
           gpa: s(gpa, 20),
           languageScore: s(languageScore, 20),
+          assignedToId: websiteLead?.assignedToId ?? null,
+          branchId: websiteLead?.branchId ?? null,
         }).returning();
       }
 

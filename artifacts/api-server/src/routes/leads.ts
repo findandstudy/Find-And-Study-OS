@@ -1595,6 +1595,7 @@ async function createApplicationFromSubmission(studentId: number, submission: an
 
     const [studentRec] = await db.select({
       assignedToId: studentsTable.assignedToId, agentId: studentsTable.agentId,
+      branchId: studentsTable.branchId,
       originType: studentsTable.originType, originEntityType: studentsTable.originEntityType,
       originEntityId: studentsTable.originEntityId, originDisplayName: studentsTable.originDisplayName,
     }).from(studentsTable).where(eq(studentsTable.id, studentId));
@@ -1639,7 +1640,8 @@ async function createApplicationFromSubmission(studentId: number, submission: an
       scholarship: program.scholarship || null,
       stage: "inquiry",
       season: "2026",
-      assignedToId: studentRec?.assignedToId || null,
+      assignedToId: studentRec?.assignedToId ?? null,
+      branchId: studentRec?.branchId ?? null,
       agentId: studentRec?.agentId || null,
       originType: studentRec?.originType || "direct",
       originEntityType: studentRec?.originEntityType || null,

@@ -41,6 +41,8 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { useStudyLevels } from "@/hooks/useStudyLevels";
 import { requiredEducationLevels, academicFieldsForLevel, academicGroupForLevel, type EducationLevel } from "@/lib/academicLevels";
+import { usePipelineStages } from "@/hooks/use-pipeline-stages";
+import { humanizePipelineStageKey } from "@/lib/pipelineStageLabel";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
@@ -297,6 +299,20 @@ function AcademicInfoCard({
 
 export default function StudentDetail({ id, basePath = "/staff" }: Props) {
   const { t, lang } = useI18n();
+  const { stages: studentStages } = usePipelineStages("student");
+  const { stages: applicationStages } = usePipelineStages("application");
+  const studentStageLabelByKey = useMemo(
+    () => new Map<string, string>(studentStages.map((stage) => [stage.key, stage.label] as const)),
+    [studentStages],
+  );
+  const applicationStageLabelByKey = useMemo(
+    () => new Map<string, string>(applicationStages.map((stage) => [stage.key, stage.label] as const)),
+    [applicationStages],
+  );
+  const getStudentStageLabel = (key?: string | null) =>
+    key ? (studentStageLabelByKey.get(key) ?? humanizePipelineStageKey(key)) : "";
+  const getApplicationStageLabel = (key?: string | null) =>
+    key ? (applicationStageLabelByKey.get(key) ?? humanizePipelineStageKey(key)) : "";
   const dateFormat = useDateFormat();
   const [, setLocation] = useLocation();
   const qc = useQueryClient();
@@ -996,9 +1012,9 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
               />
               <PortalReadinessBadge studentId={id} />
               <Badge
-                className={`capitalize px-3 py-1 rounded-full text-sm font-medium border-0 ${STATUS_COLORS[student.status ?? "active"]}`}
+                className={`px-3 py-1 rounded-full text-sm font-medium border-0 ${STATUS_COLORS[student.status ?? "active"] ?? "bg-muted text-muted-foreground"}`}
               >
-                {student.status}
+                {getStudentStageLabel(student.status)}
               </Badge>
               {/* T8: Admin can toggle student active/inactive */}
               {canChangeStage && (
@@ -1391,7 +1407,7 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
                           <span className="text-2xl font-semibold tabular-nums text-foreground">{count}</span>
                           <span className={`shrink-0 w-2.5 h-2.5 rounded-full ${(STAGE_COLORS[stage] ?? "bg-gray-300 text-gray-600").split(" ")[0]}`} />
                         </div>
-                        <p className="mt-1 text-xs font-medium capitalize text-muted-foreground">{stage.replace(/_/g, " ")}</p>
+                        <p className="mt-1 text-xs font-medium text-muted-foreground">{getApplicationStageLabel(stage)}</p>
                       </div>
                     ))}
                   </div>
@@ -1421,7 +1437,7 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
                             <Badge
                               className={`capitalize text-xs px-2 py-0.5 border-0 rounded-full shrink-0 ${STAGE_COLORS[app.stage] ?? "bg-gray-100 text-gray-600"}`}
                             >
-                              {app.stage?.replace(/_/g, " ")}
+                              {getApplicationStageLabel(app.stage)}
                             </Badge>
                             <div className="hidden md:block w-24 text-right text-xs text-muted-foreground shrink-0">
                               {new Date(app.createdAt).toLocaleDateString()}
@@ -2631,7 +2647,7 @@ function ApplicationStageDocumentsSection({ studentId, basePath }: { studentId: 
                       <p className="text-sm font-medium truncate">{d.fileName}</p>
                       <p className="text-xs text-muted-foreground">
                         <span className="inline-block px-1.5 py-0 rounded-full bg-secondary text-foreground/80 mr-1.5">
-                          {d.stageLabel ?? d.stage?.replace(/_/g, " ") ?? "—"}
+                          {d.stageLabel || humanizePipelineStageKey(d.stage) || "—"}
                         </span>
                         {new Date(d.createdAt).toLocaleString()}
                         {d.uploadedByName && <> · {d.uploadedByName}</>}

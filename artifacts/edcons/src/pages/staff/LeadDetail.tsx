@@ -38,6 +38,8 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { StudentPhotoAvatar } from "@/components/StudentPhotoAvatar";
 import { getLeadSourceLabel } from "@/lib/leadSourceLabel";
+import { usePipelineStages } from "@/hooks/use-pipeline-stages";
+import { humanizePipelineStageKey } from "@/lib/pipelineStageLabel";
 
 
 const SOURCES = ["website", "referral", "social_media", "walk_in", "partner", "other"];
@@ -76,6 +78,19 @@ interface Props {
 
 export default function LeadDetail({ id, basePath = "/staff" }: Props) {
   const { t, lang } = useI18n();
+  const { stages: leadStages } = usePipelineStages("lead");
+  const leadStageLabelByKey = useMemo(
+    () => new Map<string, string>(leadStages.map((stage) => [stage.key, stage.label] as const)),
+    [leadStages],
+  );
+  const leadStatusOptions = useMemo(
+    () => (leadStages.length > 0 ? leadStages.map((stage) => stage.key) : STATUS_OPTIONS),
+    [leadStages],
+  );
+  const getLeadStageLabel = (key?: string | null) =>
+    key ? (leadStageLabelByKey.get(key) ?? humanizePipelineStageKey(key)) : "";
+  const getLeadStageColor = (key?: string | null) =>
+    STATUS_COLORS[key ?? ""] ?? "bg-muted text-muted-foreground";
   const dateFormat = useDateFormat();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
@@ -550,10 +565,10 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {STATUS_OPTIONS.map((s) => (
+                      {leadStatusOptions.map((s) => (
                         <SelectItem key={s} value={s}>
-                          <span className={`capitalize px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[s]}`}>
-                            {s}
+                          <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getLeadStageColor(s)}`}>
+                            {getLeadStageLabel(s)}
                           </span>
                         </SelectItem>
                       ))}
@@ -561,8 +576,8 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
                   </Select>
                 ) : (
                   lead?.status && (
-                    <Badge className={`capitalize px-3 py-1 rounded-full text-xs font-medium border-0 ${STATUS_COLORS[lead.status]}`}>
-                      {lead.status}
+                    <Badge className={`px-3 py-1 rounded-full text-xs font-medium border-0 ${getLeadStageColor(lead.status)}`}>
+                      {getLeadStageLabel(lead.status)}
                     </Badge>
                   )
                 )}
@@ -842,9 +857,9 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
                 <Skeleton className="h-8 w-24 rounded-full" />
               ) : (
                 <Badge
-                  className={`capitalize px-3 py-1 rounded-full text-sm font-medium border-0 ${STATUS_COLORS[lead?.status ?? "new"]}`}
+                  className={`px-3 py-1 rounded-full text-sm font-medium border-0 ${getLeadStageColor(lead?.status ?? "new")}`}
                 >
-                  {lead?.status}
+                  {getLeadStageLabel(lead?.status)}
                 </Badge>
               )}
               {/* T8: Admin can change lead status (incl. lost = inactive) */}
@@ -869,12 +884,11 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="new">{t("leadDetailPage.statusNew")}</SelectItem>
-                    <SelectItem value="contacted">{t("leadDetailPage.statusContacted")}</SelectItem>
-                    <SelectItem value="interested">{t("leadDetailPage.statusInterested")}</SelectItem>
-                    <SelectItem value="qualified">{t("leadDetailPage.statusQualified")}</SelectItem>
-                    <SelectItem value="converted">{t("leadDetailPage.statusConverted")}</SelectItem>
-                    <SelectItem value="lost">Lost (Inactive)</SelectItem>
+                    {leadStatusOptions.map((stageKey) => (
+                      <SelectItem key={stageKey} value={stageKey}>
+                        {getLeadStageLabel(stageKey)}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               )}
