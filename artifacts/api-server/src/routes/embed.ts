@@ -20,6 +20,8 @@ import {
   messagesTable,
   integrationsTable,
   aiExtractorsTable,
+  aiBotsTable,
+  communicationPipelinesTable,
   canonicalCountry,
 } from "@workspace/db";
 import { eq, ilike, sql, and, or, asc, desc, inArray, isNotNull, isNull } from "drizzle-orm";
@@ -83,6 +85,10 @@ import { containsNonLatinLetter, NON_LATIN_NAME_CODE } from "../lib/textNormaliz
 import { sanitizeGa4AnalyticsContext } from "../lib/ga4LeadTracking";
 import { runFtcNewLeadAutomation } from "../lib/ftcLeadAutomation";
 import {
+  isValidEmbedUniversityScope,
+  resolveEmbedUniversityScope,
+} from "../lib/embedUniversityScope";
+import {
   emptySummary,
   tallyResult,
   nextAvailableSlug,
@@ -111,6 +117,7 @@ import {
 import { getEmbedLeadFormCopy } from "../lib/embedLeadFormI18n";
 import { validatePassportNumber } from "@workspace/portal-adapters/identity-validation";
 import { resolveProgramInterestedLevel } from "../lib/programInterestedLevel";
+import { requireAiBotId } from "../lib/inbox/aiBotRuntime";
 
 const TR_MAP: Record<string, string> = { "ç":"C","Ç":"C","ğ":"G","Ğ":"G","ı":"I","İ":"I","ö":"O","Ö":"O","ş":"S","Ş":"S","ü":"U","Ü":"U" };
 function tlu(v: any, max: number): string | null {
@@ -531,12 +538,6 @@ function sanitizeTheme(theme: any): Record<string, string> {
 
 const VALID_MODES = ["combined", "course_finder", "application_only", "lead_form", "ai_chatbot"];
 
-function chatbotUniversityId(presetFilters: unknown): number | null {
-  if (!presetFilters || typeof presetFilters !== "object") return null;
-  const universityId = Number((presetFilters as Record<string, unknown>).universityId);
-  return Number.isInteger(universityId) && universityId > 0 ? universityId : null;
-}
-
 function sanitizeWidget(widget: Record<string, any>, userRole: string): Record<string, any> {
   if (ADMIN_ROLES.includes(userRole)) return widget;
   const { embedApiKey: _stripped, ...rest } = widget;
@@ -552,6 +553,73 @@ function normalizeAiExtractorId(value: unknown): number | null {
   if (value === null || value === undefined || value === "") return null;
   const id = Number(value);
   return Number.isInteger(id) && id > 0 ? id : null;
+}
+
+class EmbedAutomationSelectionError extends Error {}
+
+function normalizeOptionalPositiveId(value: unknown, field: string): number | null {
+  if (value === null || value === "") return null;
+  const id = Number(value);
+  if (!Number.isInteger(id) || id <= 0) {
+    throw new EmbedAutomationSelectionError(`Invalid ${field}`);
+  }
+  return id;
+}
+
+async function resolveEmbedAutomationSelection(
+  rawAiBotId: unknown,
+  rawCommunicationPipelineId: unknown,
+  fallback: { aiBotId: number | null; communicationPipelineId: number | null },
+): Promise<{ aiBotId: number; communicationPipelineId: number | null }> {
+  const hasAiBotId = rawAiBotId !== undefined;
+  const hasPipelineId = rawCommunicationPipelineId !== undefined;
+  let aiBotId = hasAiBotId
+    ? normalizeOptionalPositiveId(rawAiBotId, "AI bot")
+    : fallback.aiBotId;
+  const communicationPipelineId = hasPipelineId
+    ? normalizeOptionalPositiveId(rawCommunicationPipelineId, "communication pipeline")
+    : fallback.communicationPipelineId;
+
+  let pipeline: { id: number; aiBotId: number | null } | undefined;
+  if (communicationPipelineId != null) {
+    [pipeline] = await db
+      .select({
+        id: communicationPipelinesTable.id,
+        aiBotId: communicationPipelinesTable.aiBotId,
+      })
+      .from(communicationPipelinesTable)
+      .where(and(
+        eq(communicationPipelinesTable.id, communicationPipelineId),
+        eq(communicationPipelinesTable.isActive, true),
+      ))
+      .limit(1);
+    if (!pipeline) {
+      throw new EmbedAutomationSelectionError("Active communication pipeline not found");
+    }
+    if (pipeline.aiBotId == null) {
+      throw new EmbedAutomationSelectionError("Communication pipeline has no AI bot");
+    }
+    if (aiBotId == null) aiBotId = pipeline.aiBotId;
+  }
+
+  let resolvedAiBotId: number;
+  try {
+    resolvedAiBotId = await requireAiBotId(aiBotId, { activeOnly: true });
+  } catch {
+    throw new EmbedAutomationSelectionError("Active AI bot not found");
+  }
+  if (pipeline && pipeline.aiBotId !== resolvedAiBotId) {
+    throw new EmbedAutomationSelectionError("Communication pipeline belongs to a different AI bot");
+  }
+
+  const [activeBot] = await db
+    .select({ id: aiBotsTable.id })
+    .from(aiBotsTable)
+    .where(and(eq(aiBotsTable.id, resolvedAiBotId), eq(aiBotsTable.isActive, true)))
+    .limit(1);
+  if (!activeBot) throw new EmbedAutomationSelectionError("Active AI bot not found");
+
+  return { aiBotId: resolvedAiBotId, communicationPipelineId };
 }
 
 router.get("/embed/widgets", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
@@ -608,11 +676,11 @@ router.get("/embed/widgets/:id", requireAuth, requireRole(...STAFF_ROLES), async
 });
 
 router.post("/embed/widgets", requireAuth, requireRole(...ADMIN_ROLES), async (req, res): Promise<void> => {
-  const { name, slug, mode, presetFilters, lockedFilters, hiddenFilters, visibleFilters, theme, allowedDomains, aiConnectionKey, aiExtractorId } = req.body;
+  const { name, slug, mode, presetFilters, lockedFilters, hiddenFilters, visibleFilters, theme, allowedDomains, aiConnectionKey, aiExtractorId, aiBotId, communicationPipelineId } = req.body;
   if (!name || !slug) { res.status(400).json({ error: "name and slug are required" }); return; }
   const validMode = VALID_MODES.includes(mode) ? mode : "combined";
-  if (validMode === "ai_chatbot" && !chatbotUniversityId(presetFilters)) {
-    res.status(400).json({ error: "AI chatbot widgets require exactly one universityId preset." });
+  if (!isValidEmbedUniversityScope(presetFilters)) {
+    res.status(400).json({ error: "Selected university scope requires at least one university." });
     return;
   }
   const cleanSlug = slug.toLowerCase().replace(/[^a-z0-9-]/g, "-").replace(/-+/g, "-");
@@ -624,6 +692,11 @@ router.post("/embed/widgets", requireAuth, requireRole(...ADMIN_ROLES), async (r
     return;
   }
   try {
+    const automationSelection = await resolveEmbedAutomationSelection(
+      aiBotId,
+      communicationPipelineId,
+      { aiBotId: null, communicationPipelineId: null },
+    );
     const isRestricted = Array.isArray(allowedDomains) && allowedDomains.length > 0;
     const [widget] = await db.insert(embedWidgetsTable).values({
       name,
@@ -637,6 +710,8 @@ router.post("/embed/widgets", requireAuth, requireRole(...ADMIN_ROLES), async (r
       allowedDomains: allowedDomains || [],
       aiConnectionKey: cleanAiConnectionKey,
       aiExtractorId: cleanAiExtractorId,
+      aiBotId: automationSelection.aiBotId,
+      communicationPipelineId: automationSelection.communicationPipelineId,
       // Auto-generate an API key for restricted widgets so it's ready immediately.
       // Open widgets (no allowedDomains) don't need one.
       embedApiKey: isRestricted ? generateWidgetApiKey() : null,
@@ -649,7 +724,9 @@ router.post("/embed/widgets", requireAuth, requireRole(...ADMIN_ROLES), async (r
     // English locale postgres uses in dev — production server returned a
     // localized/wrapped message and the check missed, surfacing as 500.
     // Match by SQLSTATE for a locale-independent detection.
-    if (err?.code === "23505" || err?.cause?.code === "23505" || err?.message?.includes("duplicate") || err?.message?.includes("unique")) {
+    if (err instanceof EmbedAutomationSelectionError) {
+      res.status(400).json({ error: err.message });
+    } else if (err?.code === "23505" || err?.cause?.code === "23505" || err?.message?.includes("duplicate") || err?.message?.includes("unique")) {
       res.status(409).json({ error: "A widget with this slug already exists" });
     } else {
       throw err;
@@ -660,7 +737,7 @@ router.post("/embed/widgets", requireAuth, requireRole(...ADMIN_ROLES), async (r
 router.patch("/embed/widgets/:id", requireAuth, requireRole(...ADMIN_ROLES), async (req, res, next): Promise<void> => {
   if (!/^\d+$/.test(String(req.params.id))) { next(); return; }
   const id = parseInt(String(req.params.id), 10);
-  const { name, slug, mode, presetFilters, lockedFilters, hiddenFilters, visibleFilters, theme, allowedDomains, isActive, aiConnectionKey, aiExtractorId } = req.body;
+  const { name, slug, mode, presetFilters, lockedFilters, hiddenFilters, visibleFilters, theme, allowedDomains, isActive, aiConnectionKey, aiExtractorId, aiBotId, communicationPipelineId } = req.body;
   const [current] = await db
     .select()
     .from(embedWidgetsTable)
@@ -673,8 +750,8 @@ router.patch("/embed/widgets/:id", requireAuth, requireRole(...ADMIN_ROLES), asy
   const effectivePresetFilters = presetFilters !== undefined
     ? presetFilters
     : current.presetFilters;
-  if (effectiveMode === "ai_chatbot" && !chatbotUniversityId(effectivePresetFilters)) {
-    res.status(400).json({ error: "AI chatbot widgets require exactly one universityId preset." });
+  if (!isValidEmbedUniversityScope(effectivePresetFilters)) {
+    res.status(400).json({ error: "Selected university scope requires at least one university." });
     return;
   }
   const updates: any = {};
@@ -711,12 +788,26 @@ router.patch("/embed/widgets/:id", requireAuth, requireRole(...ADMIN_ROLES), asy
   }
 
   try {
+    if (aiBotId !== undefined || communicationPipelineId !== undefined) {
+      const automationSelection = await resolveEmbedAutomationSelection(
+        aiBotId,
+        communicationPipelineId,
+        {
+          aiBotId: current.aiBotId,
+          communicationPipelineId: current.communicationPipelineId,
+        },
+      );
+      updates.aiBotId = automationSelection.aiBotId;
+      updates.communicationPipelineId = automationSelection.communicationPipelineId;
+    }
     const [widget] = await db.update(embedWidgetsTable).set(updates).where(eq(embedWidgetsTable.id, id)).returning();
     if (!widget) { res.status(404).json({ error: "Widget not found" }); return; }
     await logAudit(req.user!.id, "update_embed_widget", "embed_widget", id, updates, req.ip);
     res.json(sanitizeWidget(widget, req.user!.role));
   } catch (err: any) {
-    if (err?.code === "23505" || err?.cause?.code === "23505" || err?.message?.includes("duplicate") || err?.message?.includes("unique")) {
+    if (err instanceof EmbedAutomationSelectionError) {
+      res.status(400).json({ error: err.message });
+    } else if (err?.code === "23505" || err?.cause?.code === "23505" || err?.message?.includes("duplicate") || err?.message?.includes("unique")) {
       res.status(409).json({ error: "A widget with this slug already exists" });
     } else {
       throw err;
@@ -1177,6 +1268,7 @@ router.get("/public/embed/:slug/programs", async (req, res): Promise<void> => {
   const offset = (pageNum - 1) * limitNum;
 
   const conditions = [eq(programsTable.isActive, true)];
+  const universityScope = resolveEmbedUniversityScope(presetFilters);
 
   function applyFilter(filterKey: string, userValue: string | undefined, applyFn: (val: string) => void) {
     const preset = presetFilters[filterKey];
@@ -1190,7 +1282,20 @@ router.get("/public/embed/:slug/programs", async (req, res): Promise<void> => {
   applyFilter("country", country, v => conditions.push(eq(universitiesTable.country, v)));
   applyFilter("city", city, v => conditions.push(eq(universitiesTable.city, v)));
   applyFilter("universityType", universityType, v => conditions.push(eq(universitiesTable.universityType, v)));
-  applyFilter("universityId", universityId, v => conditions.push(eq(programsTable.universityId, parseInt(v, 10))));
+  if (universityScope.mode === "selected") {
+    if (universityScope.universityIds.length === 1) {
+      conditions.push(eq(programsTable.universityId, universityScope.universityIds[0]));
+    } else {
+      conditions.push(inArray(programsTable.universityId, universityScope.universityIds));
+    }
+  } else if (universityId && !lockedFilters.includes("universityId")) {
+    const universityIds = universityId
+      .split(",")
+      .map(value => parseInt(value.trim(), 10))
+      .filter(value => Number.isInteger(value) && value > 0);
+    if (universityIds.length === 1) conditions.push(eq(programsTable.universityId, universityIds[0]));
+    else if (universityIds.length > 1) conditions.push(inArray(programsTable.universityId, universityIds));
+  }
   applyFilter("level", level, v => conditions.push(ilike(programsTable.degree, `%${v}%`)));
   applyFilter("language", language, v => conditions.push(ilike(programsTable.language, v)));
   // Field of study supports comma-separated multi-values (e.g. "Engineering,Medicine").
@@ -1274,6 +1379,7 @@ router.get("/public/embed/:slug/filters", async (req, res): Promise<void> => {
     setEmbedCors(res, widget, origin);
 
     const presetFilters = (widget.presetFilters || {}) as Record<string, any>;
+    const universityScope = resolveEmbedUniversityScope(presetFilters);
     const userParams = req.query as Record<string, string | undefined>;
     const join = eq(programsTable.universityId, universitiesTable.id);
 
@@ -1286,7 +1392,10 @@ router.get("/public/embed/:slug/filters", async (req, res): Promise<void> => {
       if (presetFilters.country) c.push(eq(universitiesTable.country, String(presetFilters.country)));
       if (presetFilters.city) c.push(eq(universitiesTable.city, String(presetFilters.city)));
       if (presetFilters.universityType) c.push(eq(universitiesTable.universityType, String(presetFilters.universityType)));
-      if (presetFilters.universityId) c.push(eq(programsTable.universityId, parseInt(String(presetFilters.universityId), 10)));
+      if (universityScope.mode === "selected") {
+        if (universityScope.universityIds.length === 1) c.push(eq(programsTable.universityId, universityScope.universityIds[0]));
+        else c.push(inArray(programsTable.universityId, universityScope.universityIds));
+      }
       if (presetFilters.level) c.push(ilike(programsTable.degree, `%${presetFilters.level}%`));
       if (presetFilters.language) c.push(ilike(programsTable.language, String(presetFilters.language)));
       if (presetFilters.field) c.push(ilike(programsTable.field, String(presetFilters.field)));
@@ -1308,7 +1417,7 @@ router.get("/public/embed/:slug/filters", async (req, res): Promise<void> => {
         if (vals.length === 1) c.push(eq(universitiesTable.universityType, vals[0]));
         else if (vals.length > 1) c.push(inArray(universitiesTable.universityType, vals));
       }
-      if (excludeKey !== "universityId" && !presetFilters.universityId && userParams.universityId) {
+      if (excludeKey !== "universityId" && universityScope.mode === "all" && userParams.universityId) {
         const vals = userParams.universityId.split(",").map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n));
         if (vals.length === 1) c.push(eq(programsTable.universityId, vals[0]));
         else if (vals.length > 1) c.push(inArray(programsTable.universityId, vals));
@@ -2067,8 +2176,11 @@ router.post("/public/embed/:slug/apply", embedSubmitLimiter, embedApplyJson, asy
 type ChatScopeMetadata = {
   widgetId: number;
   widgetSlug: string;
-  universityId: number;
-  universityName: string;
+  universityScope: "all" | "selected";
+  universityIds: number[];
+  universityNames: string[];
+  universityId: number | null;
+  universityName: string | null;
   universityCountry?: string | null;
   universityCountryCode?: string | null;
   sourcePageUrl: string | null;
@@ -2082,14 +2194,39 @@ function readChatScope(metadata: unknown): ChatScopeMetadata | null {
   const scope = (metadata as Record<string, unknown>).chatbotScope;
   if (!scope || typeof scope !== "object") return null;
   const row = scope as Record<string, unknown>;
-  if (
-    !Number.isInteger(row.widgetId) ||
-    !Number.isInteger(row.universityId) ||
-    typeof row.widgetSlug !== "string" ||
-    typeof row.universityName !== "string"
-  ) return null;
+  if (!Number.isInteger(row.widgetId) || typeof row.widgetSlug !== "string") return null;
+  const universityIds = Array.isArray(row.universityIds)
+    ? [...new Set(row.universityIds
+        .map((value) => Number(value))
+        .filter((value) => Number.isInteger(value) && value > 0))]
+    : [];
+  const legacyUniversityId = Number(row.universityId);
+  if (universityIds.length === 0 && Number.isInteger(legacyUniversityId) && legacyUniversityId > 0) {
+    universityIds.push(legacyUniversityId);
+  }
+  const universityNames = Array.isArray(row.universityNames)
+    ? [...new Set(row.universityNames
+        .filter((value): value is string => typeof value === "string")
+        .map((value) => value.trim())
+        .filter(Boolean))]
+    : [];
+  const legacyUniversityName = typeof row.universityName === "string"
+    ? row.universityName.trim()
+    : "";
+  if (universityNames.length === 0 && legacyUniversityName) universityNames.push(legacyUniversityName);
+  const universityScope = row.universityScope === "all"
+    ? "all"
+    : universityIds.length > 0
+      ? "selected"
+      : null;
+  if (!universityScope || (universityScope === "selected" && universityIds.length === 0)) return null;
   return {
-    ...(scope as Omit<ChatScopeMetadata, "language">),
+    ...(scope as Omit<ChatScopeMetadata, "language" | "universityScope" | "universityIds" | "universityNames" | "universityId" | "universityName">),
+    universityScope,
+    universityIds,
+    universityNames,
+    universityId: universityIds.length === 1 ? universityIds[0] : null,
+    universityName: universityNames.length === 1 ? universityNames[0] : null,
     language: resolveEmbedChatLocale(row.language),
   };
 }
@@ -2229,34 +2366,53 @@ router.post(
       return;
     }
 
-    const preset = (widget.presetFilters || {}) as Record<string, unknown>;
-    const universityId = Number(preset.universityId);
-    if (!Number.isInteger(universityId) || universityId < 1) {
-      res.status(409).json({ error: "This chatbot is not assigned to a university." });
+    const universityScope = resolveEmbedUniversityScope(widget.presetFilters);
+    if (!isValidEmbedUniversityScope(widget.presetFilters)) {
+      res.status(409).json({ error: "Selected university scope requires at least one university." });
       return;
     }
-    const [university] = await db
-      .select({
-        id: universitiesTable.id,
-        name: universitiesTable.name,
-        logoUrl: universitiesTable.logoUrl,
-        country: universitiesTable.country,
-        countryCode: countriesTable.code,
-      })
-      .from(universitiesTable)
-      .leftJoin(
-        countriesTable,
-        sql`lower(${countriesTable.name}) = lower(${universitiesTable.country})`,
-      )
-      .where(and(eq(universitiesTable.id, universityId), eq(universitiesTable.isActive, true)))
-      .limit(1);
-    if (!university) {
-      res.status(409).json({ error: "Assigned university is unavailable." });
+    const scopedUniversities = universityScope.mode === "selected"
+      ? await db
+          .select({
+            id: universitiesTable.id,
+            name: universitiesTable.name,
+            logoUrl: universitiesTable.logoUrl,
+            country: universitiesTable.country,
+            countryCode: countriesTable.code,
+          })
+          .from(universitiesTable)
+          .leftJoin(
+            countriesTable,
+            sql`lower(${countriesTable.name}) = lower(${universitiesTable.country})`,
+          )
+          .where(and(
+            inArray(universitiesTable.id, universityScope.universityIds),
+            eq(universitiesTable.isActive, true),
+          ))
+      : [];
+    if (
+      universityScope.mode === "selected" &&
+      scopedUniversities.length !== universityScope.universityIds.length
+    ) {
+      res.status(409).json({ error: "One or more selected universities are unavailable." });
       return;
     }
-    let universityCountryCode = university.countryCode?.trim().toUpperCase() ?? "";
-    if (!universityCountryCode && university.country) {
-      const canonicalName = canonicalCountry(university.country) ?? university.country.trim();
+    const selectedUniversityNames = scopedUniversities.map((university) => university.name);
+    const primaryUniversity = scopedUniversities.length === 1 ? scopedUniversities[0] : null;
+    const firstCountry = scopedUniversities[0]?.country?.trim() ?? "";
+    const commonCountry = firstCountry && scopedUniversities.every(
+      (university) => university.country?.trim().toLowerCase() === firstCountry.toLowerCase(),
+    )
+      ? firstCountry
+      : "";
+    const firstCountryCode = scopedUniversities[0]?.countryCode?.trim().toUpperCase() ?? "";
+    let universityCountryCode = firstCountryCode && scopedUniversities.every(
+      (university) => university.countryCode?.trim().toUpperCase() === firstCountryCode,
+    )
+      ? firstCountryCode
+      : "";
+    if (!universityCountryCode && commonCountry) {
+      const canonicalName = canonicalCountry(commonCountry) ?? commonCountry;
       const [catalogCountry] = await db
         .select({ code: countriesTable.code })
         .from(countriesTable)
@@ -2272,8 +2428,9 @@ router.post(
     const theme = sanitizeTheme(widget.theme);
     const chatLocale = resolveEmbedChatLocale(language);
     const chatCopy = getEmbedChatCopy(chatLocale);
+    const scopeDisplayName = primaryUniversity?.name || theme.assistantName || widget.name || "Find & Study";
     const assistantName =
-      theme.assistantName || chatCopy.assistantName(university.name);
+      theme.assistantName || chatCopy.assistantName(scopeDisplayName);
     const displayName = `${cleanFirstName} ${cleanLastName}`.trim();
 
     try {
@@ -2293,7 +2450,9 @@ router.post(
             email: cleanEmail,
             phone: phoneE164,
             phoneE164,
-            interestedUniversity: university.name,
+            interestedUniversity: selectedUniversityNames.length
+              ? selectedUniversityNames.join(", ")
+              : undefined,
             sourcePageUrl: pageUrl,
             notes: `AI chatbot source: ${website || pageUrl || slug}`,
           },
@@ -2327,9 +2486,12 @@ router.post(
       const scope: ChatScopeMetadata = {
         widgetId: widget.id,
         widgetSlug: slug,
-        universityId: university.id,
-        universityName: university.name,
-        universityCountry: university.country,
+        universityScope: universityScope.mode,
+        universityIds: scopedUniversities.map((university) => university.id),
+        universityNames: selectedUniversityNames,
+        universityId: primaryUniversity?.id ?? null,
+        universityName: primaryUniversity?.name ?? null,
+        universityCountry: commonCountry || null,
         universityCountryCode: universityCountryCode || null,
         sourcePageUrl: pageUrl,
         sourceWebsite: website,
@@ -2343,6 +2505,8 @@ router.post(
           type: "external",
           title: displayName,
           channel: "web_chat",
+          aiBotId: widget.aiBotId,
+          communicationPipelineId: widget.communicationPipelineId,
           externalContactId: contact.id,
           externalThreadId,
           unmatched: false,
@@ -2357,7 +2521,7 @@ router.post(
 
       const greeting =
         theme.welcomeMessage ||
-        chatCopy.greeting(cleanFirstName, university.name);
+        chatCopy.greeting(cleanFirstName, scopeDisplayName);
       const [greetingMessage] = await db
         .insert(messagesTable)
         .values({
@@ -2393,8 +2557,8 @@ router.post(
           conversation.id,
         ),
         assistantName,
-        universityName: university.name,
-        logoUrl: theme.logoUrl || university.logoUrl || null,
+        universityName: scopeDisplayName,
+        logoUrl: theme.logoUrl || primaryUniversity?.logoUrl || null,
         greeting: {
           id: greetingMessage.id,
           content: greetingMessage.content,
@@ -2762,19 +2926,34 @@ router.get("/public/embed/:slug/widget", async (req, res): Promise<void> => {
     .filter((row) => row.dialCode)
     .map((row) => [row.dialCode as string, row.code, row.name]);
   if (widget.mode === "ai_chatbot") {
-    const preset = (widget.presetFilters || {}) as Record<string, unknown>;
-    const universityId = Number(preset.universityId);
-    const [university] = Number.isInteger(universityId) && universityId > 0
+    const universityScope = resolveEmbedUniversityScope(widget.presetFilters);
+    if (!isValidEmbedUniversityScope(widget.presetFilters)) {
+      res.status(409).send("Selected university scope requires at least one university");
+      return;
+    }
+    const scopedUniversities = universityScope.mode === "selected"
       ? await db
           .select({ id: universitiesTable.id, name: universitiesTable.name, logoUrl: universitiesTable.logoUrl })
           .from(universitiesTable)
-          .where(and(eq(universitiesTable.id, universityId), eq(universitiesTable.isActive, true)))
-          .limit(1)
-      : [null];
-    if (!university) {
-      res.status(409).send("Chatbot university is not configured");
+          .where(and(
+            inArray(universitiesTable.id, universityScope.universityIds),
+            eq(universitiesTable.isActive, true),
+          ))
+      : [];
+    if (
+      universityScope.mode === "selected" &&
+      scopedUniversities.length !== universityScope.universityIds.length
+    ) {
+      res.status(409).send("One or more selected universities are unavailable");
       return;
     }
+    const primaryUniversity = scopedUniversities.length === 1 ? scopedUniversities[0] : null;
+    const chatTheme = sanitizeTheme(widget.theme);
+    const university = primaryUniversity || {
+      id: 0,
+      name: chatTheme.assistantName || widget.name || "Find & Study",
+      logoUrl: null,
+    };
     const chatLocale = resolveEmbedChatLocale(
       req.query.lang,
       localeFromPublicUrl(req.headers.referer),
@@ -4526,7 +4705,8 @@ function renderFilters(){
     (filters.universityTypes||[]).forEach(function(t){h+='<option value="'+esc(t)+'"'+(userFilters.universityType===t?' selected':'')+'>'+esc(t)+'</option>'});
     h+='</select></div>';
   }
-  if(!hidden.includes('universityId')&&!pf.universityId){
+  var hasUniversityScope=pf.universityScope==='selected'||(Array.isArray(pf.universityIds)&&pf.universityIds.length>0)||!!pf.universityId;
+  if(!hidden.includes('universityId')&&!hasUniversityScope){
     h+='<div class="ew-filter-group"><label>University</label><select id="ew-f-universityId"'+(locked.includes('universityId')?' disabled':'')+'><option value="">All Universities</option>';
     (filters.universities||[]).forEach(function(u){h+='<option value="'+esc(String(u.id))+'"'+(userFilters.universityId==u.id?' selected':'')+'>'+esc(u.name)+'</option>'});
     h+='</select></div>';

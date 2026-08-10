@@ -54,6 +54,7 @@ import { usePipelineStages, type PipelineStage } from "@/hooks/use-pipeline-stag
 import { useI18n } from "@/hooks/use-i18n";
 import { AddStudentModal, NationalityCombobox } from "@/components/AddStudentModal";
 import { LinkedTableCell } from "@/components/LinkedTableCell";
+import { StudentListPhotoAvatar } from "@/components/StudentListPhotoAvatar";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
@@ -570,47 +571,15 @@ function StuSortHeader({ label, sortKey, currentSort, onSort }: {
 
 type StuColVariant = "won" | "lost" | undefined;
 
-function useInView(rootMargin = "200px") {
-  const ref = useRef<HTMLDivElement>(null);
-  const [inView, setInView] = useState(false);
-  useEffect(() => {
-    const el = ref.current;
-    if (!el || typeof IntersectionObserver === "undefined") { setInView(true); return; }
-    const obs = new IntersectionObserver(
-      ([entry]) => { if (entry.isIntersecting) { setInView(true); obs.disconnect(); } },
-      { threshold: 0, rootMargin },
-    );
-    obs.observe(el);
-    return () => obs.disconnect();
-  }, [rootMargin]);
-  return { ref, inView };
-}
-
 function StudentAvatar({ student, size = "sm" }: { student: any; size?: "sm" | "md" }) {
-  const dim = size === "md" ? "w-10 h-10" : "w-8 h-8";
-  const textSize = size === "md" ? "text-sm" : "text-xs";
-  const [imgError, setImgError] = useState(false);
-  const { ref, inView } = useInView();
-
-  const showPhoto = student.hasPhoto && !imgError && inView;
-
   return (
-    <div ref={ref} className={`${dim} rounded-full shrink-0 overflow-hidden`}>
-      {showPhoto ? (
-        <img
-          src={student.photoUrl || `/api/students/${student.id}/photo/thumbnail`}
-          alt={`${student.firstName} ${student.lastName}`}
-          className={`${dim} rounded-full object-cover border border-primary/20`}
-          loading="lazy"
-          decoding="async"
-          onError={() => setImgError(true)}
-        />
-      ) : (
-        <div className={`${dim} rounded-full bg-gradient-to-br from-primary/20 to-primary/10 flex items-center justify-center`}>
-          <span className={`${textSize} font-bold text-primary`}>{student.firstName?.[0]}{student.lastName?.[0]}</span>
-        </div>
-      )}
-    </div>
+    <StudentListPhotoAvatar
+      studentId={student.id}
+      firstName={student.firstName}
+      lastName={student.lastName}
+      photoUrl={student.photoUrl}
+      size={size}
+    />
   );
 }
 

@@ -14,6 +14,7 @@ import { dispatchNotification } from "../notificationDispatcher";
 import { inboxBus } from "./eventBus";
 import { applyLeadAssignmentRules } from "../leadAssignment";
 import { getAiAgentConfig } from "./aiAgentConfig";
+import { resolveInboundCommunicationContext } from "./channelAccountConfig";
 
 export interface InboundContactInfo {
   externalId: string;
@@ -55,6 +56,9 @@ export async function processInboundMessage(opts: {
 }): Promise<InboundResult> {
   const { channel, channelAccountId = null, contact, message } = opts;
   const phoneE164 = toE164(contact.phone || null);
+  const inboundCommunicationContext = channelAccountId
+    ? await resolveInboundCommunicationContext(channelAccountId)
+    : null;
 
   // Race-safe upsert: insert with onConflictDoNothing on the (channel, externalId)
   // unique index. If the row already exists OR was inserted concurrently by
@@ -291,7 +295,7 @@ export async function processInboundMessage(opts: {
   if (!conversation) {
     // New conversations start with the bot toggle from the "default-on for new
     // chats" setting (default OFF — nothing auto-enables until staff opt in).
-    const aiConfig = await getAiAgentConfig();
+    const aiConfig = await getAiAgentConfig(inboundCommunicationContext?.aiBotId);
     const insertResult = await db
       .insert(conversationsTable)
       .values({
@@ -299,6 +303,8 @@ export async function processInboundMessage(opts: {
         title: contact.displayName || contact.phone || channel,
         channel,
         channelAccountId,
+        aiBotId: inboundCommunicationContext?.aiBotId ?? null,
+        communicationPipelineId: inboundCommunicationContext?.communicationPipelineId ?? null,
         externalContactId: externalContact.id,
         externalThreadId,
         unmatched: !isLinked,
@@ -329,6 +335,30 @@ export async function processInboundMessage(opts: {
         throw new Error("processInbound: conversation upsert returned no row");
       }
     }
+  }
+
+  // Attach legacy conversations to their inbound pipeline once it becomes
+  // known, but never move a conversation that was already pinned elsewhere.
+  if (
+    inboundCommunicationContext &&
+    (!conversation.aiBotId || !conversation.communicationPipelineId)
+  ) {
+    const communicationPatch = {
+      ...(conversation.aiBotId
+        ? {}
+        : { aiBotId: inboundCommunicationContext.aiBotId }),
+      ...(conversation.communicationPipelineId
+        ? {}
+        : {
+            communicationPipelineId:
+              inboundCommunicationContext.communicationPipelineId,
+          }),
+    };
+    await db
+      .update(conversationsTable)
+      .set(communicationPatch)
+      .where(eq(conversationsTable.id, conversation.id));
+    conversation = { ...conversation, ...communicationPatch };
   }
 
   // Race-safe message insert. The unique index on (channel, externalMessageId)

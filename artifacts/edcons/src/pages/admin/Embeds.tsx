@@ -26,6 +26,7 @@ import {
 import { useI18n } from "@/hooks/use-i18n";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ExportImportToolbar } from "@/components/admin/ExportImportToolbar";
+import { MultiSelectFilter } from "@/components/admin/MultiSelectFilter";
 
 const BASE_URL = import.meta.env.BASE_URL || "/";
 const API_BASE = `${BASE_URL}api`.replace(/\/+/g, "/");
@@ -46,8 +47,27 @@ type Widget = {
   embedApiKey?: string | null;
   aiConnectionKey: string;
   aiExtractorId?: number | null;
+  aiBotId?: number | null;
+  communicationPipelineId?: number | null;
   isActive: boolean;
   createdAt: string;
+};
+
+type AiBotOption = {
+  id: number;
+  name: string;
+  slug: string;
+  isDefault: boolean;
+  isActive: boolean;
+};
+
+type CommunicationPipelineOption = {
+  id: number;
+  name: string;
+  slug: string;
+  aiBotId: number;
+  isDefault: boolean;
+  isActive: boolean;
 };
 
 type Submission = {
@@ -383,7 +403,8 @@ function WidgetFormDialog({ open, onClose, widget, onSaved }: {
   const [presetCountry, setPresetCountry] = useState("");
   const [presetCity, setPresetCity] = useState("");
   const [presetUniversityType, setPresetUniversityType] = useState("");
-  const [presetUniversityId, setPresetUniversityId] = useState("");
+  const [universityScopeMode, setUniversityScopeMode] = useState<"all" | "selected">("all");
+  const [presetUniversityIds, setPresetUniversityIds] = useState<string[]>([]);
   const [presetLevel, setPresetLevel] = useState("");
   const [presetLanguage, setPresetLanguage] = useState("");
   const [presetField, setPresetField] = useState("");
@@ -413,6 +434,8 @@ function WidgetFormDialog({ open, onClose, widget, onSaved }: {
   const [assistantName, setAssistantName] = useState("");
   const [welcomeMessage, setWelcomeMessage] = useState("");
   const [isActive, setIsActive] = useState(true);
+  const [aiBotId, setAiBotId] = useState("");
+  const [communicationPipelineId, setCommunicationPipelineId] = useState("__none__");
   const [aiConnectionKey, setAiConnectionKey] = useState("claude");
   const [aiExtractorId, setAiExtractorId] = useState<string>("__default__");
   const [saving, setSaving] = useState(false);
@@ -429,6 +452,26 @@ function WidgetFormDialog({ open, onClose, widget, onSaved }: {
     staleTime: 60_000,
   });
 
+  const { data: aiBotsResponse, isLoading: aiBotsLoading } = useQuery({
+    queryKey: ["ai-bots"],
+    queryFn: () => customFetch("/api/ai-bots") as Promise<{ bots: AiBotOption[] }>,
+    enabled: open,
+    staleTime: 60_000,
+  });
+
+  const { data: pipelinesResponse, isLoading: pipelinesLoading } = useQuery({
+    queryKey: ["communication-pipelines"],
+    queryFn: () => customFetch("/api/communication-pipelines") as Promise<{ pipelines: CommunicationPipelineOption[] }>,
+    enabled: open,
+    staleTime: 30_000,
+  });
+
+  const activeAiBots = (aiBotsResponse?.bots || []).filter(bot => bot.isActive);
+  const selectedAiBotId = Number(aiBotId);
+  const availablePipelines = (pipelinesResponse?.pipelines || []).filter(pipeline => (
+    pipeline.isActive && pipeline.aiBotId === selectedAiBotId
+  ));
+
   useEffect(() => {
     if (!open) return;
     if (widget) {
@@ -439,7 +482,15 @@ function WidgetFormDialog({ open, onClose, widget, onSaved }: {
       setPresetCountry(pf.country || "");
       setPresetCity(pf.city || "");
       setPresetUniversityType(pf.universityType || "");
-      setPresetUniversityId(pf.universityId ? String(pf.universityId) : "");
+      const storedUniversityIds = Array.isArray(pf.universityIds)
+        ? pf.universityIds.map(String).filter((value: string) => /^\d+$/.test(value) && Number(value) > 0)
+        : [];
+      const legacyUniversityId = pf.universityId ? String(pf.universityId) : "";
+      const selectedUniversityIds = storedUniversityIds.length
+        ? storedUniversityIds
+        : (legacyUniversityId ? [legacyUniversityId] : []);
+      setUniversityScopeMode(pf.universityScope === "all" || selectedUniversityIds.length === 0 ? "all" : "selected");
+      setPresetUniversityIds(selectedUniversityIds);
       setPresetLevel(pf.level || "");
       setPresetLanguage(pf.language || "");
       setPresetField(pf.field || "");
@@ -454,28 +505,64 @@ function WidgetFormDialog({ open, onClose, widget, onSaved }: {
       setAssistantName(th.assistantName || "");
       setWelcomeMessage(th.welcomeMessage || "");
       setIsActive(widget.isActive);
+      setAiBotId(widget.aiBotId ? String(widget.aiBotId) : "");
+      setCommunicationPipelineId(widget.communicationPipelineId ? String(widget.communicationPipelineId) : "__none__");
       setAiConnectionKey(widget.aiConnectionKey || "claude");
       setAiExtractorId(widget.aiExtractorId ? String(widget.aiExtractorId) : "__default__");
     } else {
       setName(""); setSlug(""); setMode("combined");
-      setPresetCountry(""); setPresetCity(""); setPresetUniversityType(""); setPresetUniversityId(""); setPresetLevel(""); setPresetLanguage(""); setPresetField("");
+      setPresetCountry(""); setPresetCity(""); setPresetUniversityType(""); setUniversityScopeMode("all"); setPresetUniversityIds([]); setPresetLevel(""); setPresetLanguage(""); setPresetField("");
       setLocked([]); setHidden([]); setDomains("");
       setPrimaryColor("#2563eb"); setButtonColor("#2563eb"); setBorderRadius("8px");
       setLogoUrl(""); setAssistantName(""); setWelcomeMessage("");
       setIsActive(true);
+      setAiBotId(""); setCommunicationPipelineId("__none__");
       setAiConnectionKey("claude"); setAiExtractorId("__default__");
     }
   }, [open, widget]);
+
+  useEffect(() => {
+    if (!open || activeAiBots.length === 0) return;
+    setAiBotId(current => {
+      if (current && activeAiBots.some(bot => String(bot.id) === current)) return current;
+      const defaultBot = activeAiBots.find(bot => bot.isDefault) || activeAiBots[0];
+      return String(defaultBot.id);
+    });
+  }, [open, aiBotsResponse]);
+
+  useEffect(() => {
+    if (!open || !pipelinesResponse || communicationPipelineId === "__none__") return;
+    if (!availablePipelines.some(pipeline => String(pipeline.id) === communicationPipelineId)) {
+      setCommunicationPipelineId("__none__");
+    }
+  }, [open, pipelinesResponse, aiBotId, communicationPipelineId]);
 
   const handleSave = async () => {
     if (!name.trim() || !slug.trim()) {
       toast({ title: "Name and slug are required", variant: "destructive" });
       return;
     }
-    if (mode === "ai_chatbot" && !presetUniversityId) {
+    if (universityScopeMode === "selected" && presetUniversityIds.length === 0) {
       toast({
-        title: "AI Chatbot requires exactly one university",
-        description: "Select the university in the Filters tab. The AI is fail-closed and cannot answer without a university scope.",
+        title: "Select at least one university",
+        description: "Choose one or more universities, or switch the widget scope to All Universities.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (!Number.isInteger(selectedAiBotId) || selectedAiBotId <= 0) {
+      toast({
+        title: "Select an active AI bot",
+        description: "Every widget must belong to one independent AI bot.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (communicationPipelineId !== "__none__"
+      && !availablePipelines.some(pipeline => String(pipeline.id) === communicationPipelineId)) {
+      toast({
+        title: "Select a valid communication pipeline",
+        description: "The pipeline must be active and belong to the selected AI bot.",
         variant: "destructive",
       });
       return;
@@ -485,7 +572,12 @@ function WidgetFormDialog({ open, onClose, widget, onSaved }: {
     if (presetCountry) presetFilters.country = presetCountry;
     if (presetCity) presetFilters.city = presetCity;
     if (presetUniversityType) presetFilters.universityType = presetUniversityType;
-    if (presetUniversityId) presetFilters.universityId = parseInt(presetUniversityId, 10);
+    presetFilters.universityScope = universityScopeMode;
+    if (universityScopeMode === "selected") {
+      const universityIds = [...new Set(presetUniversityIds.map(Number).filter(id => Number.isInteger(id) && id > 0))];
+      presetFilters.universityIds = universityIds;
+      if (universityIds.length === 1) presetFilters.universityId = universityIds[0];
+    }
     if (presetLevel) presetFilters.level = presetLevel;
     if (presetLanguage) presetFilters.language = presetLanguage;
     if (presetField) presetFilters.field = presetField;
@@ -507,6 +599,8 @@ function WidgetFormDialog({ open, onClose, widget, onSaved }: {
         ...(welcomeMessage.trim() ? { welcomeMessage: welcomeMessage.trim() } : {}),
       },
       allowedDomains: domains.split(",").map(d => d.trim()).filter(Boolean),
+      aiBotId: selectedAiBotId,
+      communicationPipelineId: communicationPipelineId === "__none__" ? null : Number(communicationPipelineId),
       aiConnectionKey,
       aiExtractorId: aiExtractorId === "__default__" ? null : Number(aiExtractorId),
       isActive,
@@ -617,7 +711,7 @@ function WidgetFormDialog({ open, onClose, widget, onSaved }: {
                   </div>
                   <p className="mt-1 text-xs leading-5 text-cyan-900/80">
                     Collects the visitor's contact details, matches or creates a lead, appears in Messages,
-                    and can hand the conversation to a human. It is restricted to the selected university.
+                    and can hand the conversation to a human. Its answers and program suggestions follow the university scope selected in Filters.
                   </p>
                 </div>
               )}
@@ -633,10 +727,10 @@ function WidgetFormDialog({ open, onClose, widget, onSaved }: {
               <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-3 text-sm text-amber-950">
                 <div className="flex items-center gap-2 font-semibold">
                   <ShieldCheck className="h-4 w-4" />
-                  One chatbot, one university
+                  Choose the chatbot's university scope
                 </div>
                 <p className="mt-1 text-xs leading-5 text-amber-900/80">
-                  University is mandatory. The chatbot will not suggest, compare, or answer about another university.
+                  Use All Universities for general domains, or select one or more universities for a focused widget. Program results and AI answers use the same scope.
                 </p>
               </div>
             )}
@@ -680,19 +774,42 @@ function WidgetFormDialog({ open, onClose, widget, onSaved }: {
                     </SelectContent>
                   </Select>
                 </div>
-                <div>
-                  <label className="text-xs font-medium">
-                    University {mode === "ai_chatbot" ? "*" : ""}
-                  </label>
-                  <Select value={presetUniversityId || "__none__"} onValueChange={v => setPresetUniversityId(v === "__none__" ? "" : v)}>
-                    <SelectTrigger><SelectValue placeholder="All Universities" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__none__">All Universities</SelectItem>
-                      {(filterOptions?.universities || []).map(u => (
-                        <SelectItem key={u.id} value={String(u.id)}>{u.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                <div className="space-y-2">
+                  <label className="text-xs font-medium">University scope</label>
+                  <div className="grid grid-cols-2 rounded-lg border bg-muted/40 p-1">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={universityScopeMode === "all" ? "default" : "ghost"}
+                      onClick={() => setUniversityScopeMode("all")}
+                      className="h-8"
+                    >
+                      All Universities
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={universityScopeMode === "selected" ? "default" : "ghost"}
+                      onClick={() => setUniversityScopeMode("selected")}
+                      className="h-8"
+                    >
+                      Selected
+                    </Button>
+                  </div>
+                  {universityScopeMode === "selected" && (
+                    <MultiSelectFilter
+                      options={(filterOptions?.universities || []).map(university => ({
+                        value: String(university.id),
+                        label: university.name,
+                      }))}
+                      value={presetUniversityIds}
+                      onChange={setPresetUniversityIds}
+                      placeholder="Select universities"
+                      searchPlaceholder="Search universities..."
+                      emptyText="No universities found"
+                      selectedText={count => `${count} ${count === 1 ? "university" : "universities"} selected`}
+                    />
+                  )}
                 </div>
                 <div>
                   <label className="text-xs font-medium">Level</label>
@@ -865,8 +982,61 @@ function WidgetFormDialog({ open, onClose, widget, onSaved }: {
           </TabsContent>
 
           <TabsContent value="ai" className="space-y-4 mt-4">
-            <div className="rounded-xl border border-blue-200 bg-blue-50/70 p-3 text-sm text-blue-950">
-              Each widget has its own processing lane. Select a dedicated Anthropic connection when this widget needs isolated provider capacity. If that connection is unavailable, the default Claude connection is used safely.
+            <div className="rounded-xl border border-blue-200 bg-blue-50/70 p-3 text-sm text-blue-950 dark:border-blue-900 dark:bg-blue-950/30 dark:text-blue-100">
+              The selected AI bot owns this widget's instructions, knowledge sources and runtime settings. A communication pipeline can optionally attach that bot to its own WhatsApp lines.
+            </div>
+            <div>
+              <label className="text-sm font-medium">AI Bot *</label>
+              <Select
+                value={aiBotId}
+                onValueChange={value => {
+                  setAiBotId(value);
+                  setCommunicationPipelineId("__none__");
+                }}
+                disabled={aiBotsLoading || activeAiBots.length === 0}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={aiBotsLoading ? "Loading AI bots..." : "Select an AI bot"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {activeAiBots.map(bot => (
+                    <SelectItem key={bot.id} value={String(bot.id)}>
+                      {bot.name}{bot.isDefault ? " · Default" : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {activeAiBots.length === 0 && !aiBotsLoading ? (
+                <p className="mt-1 text-xs text-destructive">Create and activate an AI bot in AI Agent before saving this widget.</p>
+              ) : (
+                <p className="mt-1 text-xs text-muted-foreground">Bot configurations and knowledge remain isolated from other projects.</p>
+              )}
+            </div>
+            <div>
+              <label className="text-sm font-medium">Communication Pipeline</label>
+              <Select
+                value={communicationPipelineId}
+                onValueChange={setCommunicationPipelineId}
+                disabled={!aiBotId || pipelinesLoading}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={pipelinesLoading ? "Loading pipelines..." : "No WhatsApp pipeline"} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">No WhatsApp pipeline</SelectItem>
+                  {availablePipelines.map(pipeline => (
+                    <SelectItem key={pipeline.id} value={String(pipeline.id)}>
+                      {pipeline.name}{pipeline.isDefault ? " · Default" : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Only active pipelines owned by the selected AI bot are available. Primary and secondary phone routing is configured in AI Agent.
+              </p>
+            </div>
+            <div className="rounded-xl border bg-muted/30 p-3 text-xs text-muted-foreground">
+              Provider capacity is a separate layer. Select a dedicated Anthropic connection when this widget needs isolated provider throughput; safe fallback still uses the default Claude connection.
             </div>
             <div>
               <label className="text-sm font-medium">AI Connection</label>

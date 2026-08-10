@@ -16,8 +16,14 @@
  * AES-256-GCM encrypted). The legacy `integrations.config` is jsonb holding the
  * same encryptConfig output directly. Both are decrypted with decryptConfig.
  */
-import { db, channelAccountsTable, integrationsTable } from "@workspace/db";
-import { and, eq } from "drizzle-orm";
+import {
+  db,
+  channelAccountsTable,
+  integrationsTable,
+  communicationPipelineAccountsTable,
+  communicationPipelinesTable,
+} from "@workspace/db";
+import { and, asc, eq } from "drizzle-orm";
 import { decryptConfig, encryptConfig } from "../encryption";
 
 /** Map an inbox channel to its legacy `integrations` table key. */
@@ -74,7 +80,62 @@ async function resolveLegacyConfig<T extends Record<string, any>>(
 export async function resolveOutboundConfig<T extends Record<string, any>>(
   channel: string,
   channelAccountId: number | null | undefined,
+  communicationPipelineId?: number | null,
 ): Promise<T | null> {
+  if (communicationPipelineId != null) {
+    const [pipeline] = await db
+      .select({
+        isActive: communicationPipelinesTable.isActive,
+        isDefault: communicationPipelinesTable.isDefault,
+      })
+      .from(communicationPipelinesTable)
+      .where(eq(communicationPipelinesTable.id, communicationPipelineId));
+
+    // A conversation pinned to an unknown/inactive pipeline must never escape
+    // to another project's credentials.
+    if (!pipeline?.isActive) return null;
+
+    const candidates = await db
+      .select({
+        channel: channelAccountsTable.channel,
+        isActive: channelAccountsTable.isActive,
+        configEncrypted: channelAccountsTable.configEncrypted,
+      })
+      .from(communicationPipelineAccountsTable)
+      .innerJoin(
+        communicationPipelinesTable,
+        eq(communicationPipelinesTable.id, communicationPipelineAccountsTable.pipelineId),
+      )
+      .innerJoin(
+        channelAccountsTable,
+        eq(channelAccountsTable.id, communicationPipelineAccountsTable.channelAccountId),
+      )
+      .where(
+        and(
+          eq(communicationPipelineAccountsTable.pipelineId, communicationPipelineId),
+          eq(communicationPipelineAccountsTable.canSend, true),
+          eq(communicationPipelinesTable.isActive, true),
+          eq(channelAccountsTable.channel, channel),
+          eq(channelAccountsTable.isActive, true),
+        ),
+      )
+      .orderBy(asc(communicationPipelineAccountsTable.priority));
+
+    // Primary and secondary are evaluated before any legacy/direct fallback.
+    // We intentionally do not retry a provider request with the secondary after
+    // an ambiguous provider failure; that could deliver the same message twice.
+    for (const candidate of candidates) {
+      if (candidate.configEncrypted) {
+        return parseAccountConfig(candidate.configEncrypted) as T;
+      }
+    }
+
+    // Only the migration-created default pipeline may retain the legacy
+    // single-account fallback. Custom project pipelines fail closed when their
+    // primary/secondary sender configuration is incomplete.
+    if (!pipeline.isDefault) return null;
+  }
+
   if (channelAccountId != null) {
     const [acct] = await db
       .select()
@@ -85,6 +146,47 @@ export async function resolveOutboundConfig<T extends Record<string, any>>(
     }
   }
   return resolveLegacyConfig<T>(channel);
+}
+
+export interface InboundCommunicationContext {
+  communicationPipelineId: number | null;
+  aiBotId: number | null;
+}
+
+/**
+ * Resolve the project pipeline and bot that own an inbound channel account.
+ * A channel account may receive for only one pipeline (enforced by the partial
+ * unique index), so inbound conversations cannot leak between projects/bots.
+ */
+export async function resolveInboundCommunicationContext(
+  channelAccountId: number | null | undefined,
+): Promise<InboundCommunicationContext> {
+  if (channelAccountId == null) {
+    return { communicationPipelineId: null, aiBotId: null };
+  }
+  const [mapping] = await db
+    .select({
+      communicationPipelineId: communicationPipelinesTable.id,
+      aiBotId: communicationPipelinesTable.aiBotId,
+    })
+    .from(communicationPipelineAccountsTable)
+    .innerJoin(
+      communicationPipelinesTable,
+      eq(communicationPipelinesTable.id, communicationPipelineAccountsTable.pipelineId),
+    )
+    .innerJoin(
+      channelAccountsTable,
+      eq(channelAccountsTable.id, communicationPipelineAccountsTable.channelAccountId),
+    )
+    .where(
+      and(
+        eq(communicationPipelineAccountsTable.channelAccountId, channelAccountId),
+        eq(communicationPipelineAccountsTable.canReceive, true),
+        eq(communicationPipelinesTable.isActive, true),
+        eq(channelAccountsTable.isActive, true),
+      ),
+    );
+  return mapping || { communicationPipelineId: null, aiBotId: null };
 }
 
 export interface InboundAccountResolution<T extends Record<string, any>> {

@@ -39,6 +39,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
 import { MultiSelectFilter } from "@/components/ui/multi-select-filter";
 import KnowledgeSourcesRag from "@/components/admin/KnowledgeSourcesRag";
+import CommunicationPipelineManager from "@/components/admin/CommunicationPipelineManager";
 import {
   Select,
   SelectContent,
@@ -56,6 +57,8 @@ import {
   Trash2,
   Database,
   RefreshCw,
+  Bot,
+  Copy,
 } from "lucide-react";
 
 type HistoryDirection = "inbound" | "outbound";
@@ -76,6 +79,25 @@ type AiAgentModelOption = {
   current: boolean;
 };
 
+type AiBotSummary = {
+  id: number;
+  name: string;
+  slug: string;
+  description?: string | null;
+  isDefault: boolean;
+  isActive: boolean;
+};
+
+function toBotSlug(value: string) {
+  return value
+    .toLocaleLowerCase("en-US")
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80);
+}
+
 // Parse a textarea of comma/newline-separated keywords into a clean array.
 function parseKeywords(raw: string): string[] {
   return raw
@@ -87,6 +109,13 @@ function parseKeywords(raw: string): string[] {
 export default function AiAgent() {
   const { t, lang } = useI18n();
   const { toast } = useToast();
+
+  const [bots, setBots] = useState<AiBotSummary[]>([]);
+  const [selectedBotId, setSelectedBotId] = useState<number | null>(null);
+  const [botsLoading, setBotsLoading] = useState(true);
+  const [creatingBot, setCreatingBot] = useState(false);
+  const [newBotName, setNewBotName] = useState("");
+  const [newBotSlug, setNewBotSlug] = useState("");
 
   const [config, setConfig] = useState<AiAgentConfig | null>(null);
   const [keywordText, setKeywordText] = useState<Record<EscalationTopicKey, string>>({
@@ -130,11 +159,28 @@ export default function AiAgent() {
   const removeHistoryTurn = (index: number) =>
     setTestHistory((prev) => prev.filter((_, i) => i !== index));
 
+  const loadBots = useCallback(async () => {
+    setBotsLoading(true);
+    try {
+      const { bots: rows } = await customFetch<{ bots: AiBotSummary[] }>("/api/ai-bots");
+      setBots(rows);
+      setSelectedBotId((current) => {
+        if (current && rows.some((bot) => bot.id === current)) return current;
+        return rows.find((bot) => bot.isDefault)?.id ?? rows.find((bot) => bot.isActive)?.id ?? rows[0]?.id ?? null;
+      });
+    } catch {
+      toast({ title: "AI bot listesi yüklenemedi", variant: "destructive" });
+    } finally {
+      setBotsLoading(false);
+    }
+  }, [toast]);
+
   const load = useCallback(async () => {
+    if (!selectedBotId) return;
     setLoading(true);
     try {
       const { config: cfg } = await customFetch<{ config: AiAgentConfig }>(
-        "/api/inbox/ai-agent/config",
+        `/api/ai-bots/${selectedBotId}/config`,
       );
       setConfig(cfg);
       setKeywordText({
@@ -148,14 +194,15 @@ export default function AiAgent() {
     } finally {
       setLoading(false);
     }
-  }, [t, toast]);
+  }, [selectedBotId, t, toast]);
 
   const loadProgramScope = useCallback(async () => {
+    if (!selectedBotId) return;
     setScopeLoading(true);
     try {
       const [{ source }, filters] = await Promise.all([
         customFetch<{ source: KnowledgeSourceProgramScope }>(
-          "/api/inbox/knowledge-sources/program-scope",
+          `/api/inbox/knowledge-sources/program-scope?aiBotId=${selectedBotId}`,
         ),
         customFetch<{ countries?: string[]; universityTypes?: string[] }>(
           "/api/course-finder/filters",
@@ -171,7 +218,7 @@ export default function AiAgent() {
     } finally {
       setScopeLoading(false);
     }
-  }, [t, toast]);
+  }, [selectedBotId, t, toast]);
 
   const loadModels = useCallback(async () => {
     setModelsLoading(true);
@@ -193,10 +240,19 @@ export default function AiAgent() {
   }, []);
 
   useEffect(() => {
+    loadBots();
+    loadModels();
+  }, [loadBots, loadModels]);
+
+  useEffect(() => {
+    if (!selectedBotId) return;
+    setConfig(null);
+    setProgramScopeSource(null);
+    setTestResult(null);
+    setTestHistory([]);
     load();
     loadProgramScope();
-    loadModels();
-  }, [load, loadModels, loadProgramScope]);
+  }, [load, loadProgramScope, selectedBotId]);
 
   const patch = (p: Partial<AiAgentConfig>) =>
     setConfig((prev) => (prev ? { ...prev, ...p } : prev));
@@ -265,7 +321,7 @@ export default function AiAgent() {
     setScopeSaving(true);
     try {
       const { source } = await customFetch<{ source: KnowledgeSourceProgramScope }>(
-        "/api/inbox/knowledge-sources/program-scope",
+        `/api/inbox/knowledge-sources/program-scope?aiBotId=${selectedBotId}`,
         {
           method: "PUT",
           headers: { "content-type": "application/json" },
@@ -285,7 +341,7 @@ export default function AiAgent() {
   };
 
   const save = async () => {
-    if (!config) return;
+    if (!config || !selectedBotId) return;
     if (config.scheduleEnabled && scheduleInvalidDays.length > 0) {
       toast({
         title: t("aiAgentAdmin.schedule.invalidRange"),
@@ -314,7 +370,7 @@ export default function AiAgent() {
         },
       };
       const { config: cfg } = await customFetch<{ config: AiAgentConfig }>(
-        "/api/inbox/ai-agent/config",
+        `/api/ai-bots/${selectedBotId}/config`,
         {
           method: "PUT",
           headers: { "content-type": "application/json" },
@@ -348,7 +404,7 @@ export default function AiAgent() {
         .filter((turn) => turn.content.length > 0);
       if (cleanHistory.length > 0) body.history = cleanHistory;
       const { result } = await customFetch<{ result: AiAgentTestResult }>(
-        "/api/inbox/ai-agent/test",
+        `/api/inbox/ai-agent/test?aiBotId=${selectedBotId}`,
         {
           method: "POST",
           headers: { "content-type": "application/json" },
@@ -363,6 +419,113 @@ export default function AiAgent() {
     }
   };
 
+  const createBot = async () => {
+    if (newBotName.trim().length < 2 || newBotSlug.trim().length < 2) return;
+    setCreatingBot(true);
+    try {
+      const { bot } = await customFetch<{ bot: AiBotSummary }>("/api/ai-bots", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          name: newBotName.trim(),
+          slug: newBotSlug.trim(),
+          ...(selectedBotId ? { cloneFromBotId: selectedBotId } : {}),
+        }),
+      });
+      setNewBotName("");
+      setNewBotSlug("");
+      await loadBots();
+      setSelectedBotId(bot.id);
+      toast({
+        title: `${bot.name} oluşturuldu`,
+        description: selectedBotId
+          ? "Ayarlar ve bilgi kaynakları seçili bottan bağımsız bir kopya olarak oluşturuldu."
+          : "İlk AI bot oluşturuldu ve varsayılan bot olarak ayarlandı.",
+      });
+    } catch (error) {
+      toast({
+        title: "AI bot oluşturulamadı",
+        description: error instanceof Error ? error.message : undefined,
+        variant: "destructive",
+      });
+    } finally {
+      setCreatingBot(false);
+    }
+  };
+
+  const updateBot = async (botId: number, update: Partial<AiBotSummary>) => {
+    try {
+      await customFetch(`/api/ai-bots/${botId}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(update),
+      });
+      await loadBots();
+      toast({ title: "AI bot ayarları güncellendi" });
+    } catch (error) {
+      toast({
+        title: "AI bot güncellenemedi",
+        description: error instanceof Error ? error.message : undefined,
+        variant: "destructive",
+      });
+    }
+  };
+
+  if (botsLoading) {
+    return (
+      <div className="space-y-4 py-4">
+        {[...Array(4)].map((_, i) => (
+          <Skeleton key={i} className="h-24 w-full rounded-xl" />
+        ))}
+      </div>
+    );
+  }
+
+  if (!selectedBotId) {
+    return (
+      <div className="space-y-6 py-2 max-w-4xl">
+        <div className="flex items-center gap-3">
+          <div className="rounded-xl bg-primary/10 p-2.5">
+            <Bot className="h-5 w-5 text-primary" />
+          </div>
+          <div>
+            <h1 className="text-xl font-semibold">AI Botları</h1>
+            <p className="text-sm text-muted-foreground">
+              Her proje ve web sitesi için bağımsız bir AI bot oluşturun.
+            </p>
+          </div>
+        </div>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">İlk AI botu oluşturun</CardTitle>
+            <CardDescription>
+              Bu bot kendi ayarlarına, bilgi kaynaklarına ve iletişim pipeline'larına sahip olacak.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-3 sm:grid-cols-[1fr_1fr_auto]">
+            <Input
+              value={newBotName}
+              onChange={(event) => {
+                setNewBotName(event.target.value);
+                setNewBotSlug(toBotSlug(event.target.value));
+              }}
+              placeholder="Örn. Dorm Booking"
+            />
+            <Input
+              value={newBotSlug}
+              onChange={(event) => setNewBotSlug(toBotSlug(event.target.value))}
+              placeholder="dorm-booking"
+            />
+            <Button onClick={createBot} disabled={creatingBot || newBotName.trim().length < 2}>
+              <Plus className="mr-2 h-4 w-4" />
+              Oluştur
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   if (loading || !config) {
     return (
       <div className="space-y-4 py-4">
@@ -372,6 +535,8 @@ export default function AiAgent() {
       </div>
     );
   }
+
+  const selectedBot = bots.find((bot) => bot.id === selectedBotId)!;
 
   const selectableModels = modelOptions.some((model) => model.id === config.model)
     ? modelOptions
@@ -404,6 +569,84 @@ export default function AiAgent() {
           {saving ? t("aiAgentAdmin.saving") : t("aiAgentAdmin.save")}
         </Button>
       </div>
+
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Bot className="h-4 w-4" />
+            AI Bot Yönetimi
+          </CardTitle>
+          <CardDescription>
+            Seçilen botun ayarları ve bilgi kaynakları diğer botlardan tamamen bağımsızdır.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
+            <Select
+              value={String(selectedBotId)}
+              onValueChange={(value) => setSelectedBotId(Number(value))}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {bots.map((bot) => (
+                  <SelectItem key={bot.id} value={String(bot.id)}>
+                    {bot.name}{bot.isDefault ? " · Varsayılan" : ""}{!bot.isActive ? " · Pasif" : ""}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={selectedBot.isDefault}
+              onClick={() => updateBot(selectedBot.id, { isDefault: true })}
+            >
+              Varsayılan yap
+            </Button>
+            <div className="flex items-center gap-2 rounded-md border px-3">
+              <Switch
+                checked={selectedBot.isActive}
+                onCheckedChange={(isActive) => updateBot(selectedBot.id, { isActive })}
+              />
+              <span className="text-sm">{selectedBot.isActive ? "Aktif" : "Pasif"}</span>
+            </div>
+          </div>
+
+          <Separator />
+
+          <div className="space-y-2">
+            <div className="flex items-center gap-2 text-sm font-medium">
+              <Copy className="h-4 w-4" />
+              Seçili botu bağımsız bir bot olarak kopyala
+            </div>
+            <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto]">
+              <Input
+                value={newBotName}
+                onChange={(event) => {
+                  setNewBotName(event.target.value);
+                  setNewBotSlug(toBotSlug(event.target.value));
+                }}
+                placeholder="Örn. Dorm Booking"
+              />
+              <Input
+                value={newBotSlug}
+                onChange={(event) => setNewBotSlug(toBotSlug(event.target.value))}
+                placeholder="dorm-booking"
+              />
+              <Button
+                type="button"
+                onClick={createBot}
+                disabled={creatingBot || newBotName.trim().length < 2 || newBotSlug.trim().length < 2}
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                Kopyala ve oluştur
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Global settings */}
       <Card>
@@ -814,7 +1057,9 @@ export default function AiAgent() {
       </Card>
 
       {/* Knowledge Sources — external RAG (FAZ 2) */}
-      <KnowledgeSourcesRag />
+      <KnowledgeSourcesRag aiBotId={selectedBotId} />
+
+      <CommunicationPipelineManager aiBotId={selectedBotId} />
 
       {/* Escalation keywords */}
       <Card>

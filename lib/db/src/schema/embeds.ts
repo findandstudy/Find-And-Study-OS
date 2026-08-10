@@ -4,6 +4,7 @@ import { z } from "zod/v4";
 import { programsTable } from "./universities";
 import { leadsTable } from "./leads";
 import { aiExtractorsTable } from "./aiExtractors";
+import { aiBotsTable, communicationPipelinesTable } from "./aiBots";
 
 export const embedWidgetsTable = pgTable("embed_widgets", {
   id: serial("id").primaryKey(),
@@ -19,11 +20,15 @@ export const embedWidgetsTable = pgTable("embed_widgets", {
   embedApiKey: text("embed_api_key"),
   aiConnectionKey: text("ai_connection_key").notNull().default("claude"),
   aiExtractorId: integer("ai_extractor_id").references(() => aiExtractorsTable.id, { onDelete: "set null" }),
+  aiBotId: integer("ai_bot_id").references(() => aiBotsTable.id, { onDelete: "set null" }),
+  communicationPipelineId: integer("communication_pipeline_id").references(() => communicationPipelinesTable.id, { onDelete: "set null" }),
   isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 }, (table) => [
   index("embed_widgets_ai_extractor_idx").on(table.aiExtractorId),
+  index("embed_widgets_ai_bot_idx").on(table.aiBotId),
+  index("embed_widgets_communication_pipeline_idx").on(table.communicationPipelineId),
 ]);
 
 export const embedSubmissionsTable = pgTable("embed_submissions", {

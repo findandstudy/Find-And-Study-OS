@@ -96,9 +96,11 @@ export function expandProgramFieldIntent(...values: Array<string | undefined>): 
  */
 export function normalizeProgramSearchInput(
   input: SearchProgramsToolInput,
-  enforcedUniversityId?: number,
+  enforcedUniversityIds?: number[],
 ): SearchProgramsToolInput {
-  const isUniversityScoped = Number.isInteger(enforcedUniversityId) && Number(enforcedUniversityId) > 0;
+  const isUniversityScoped = Array.isArray(enforcedUniversityIds) && enforcedUniversityIds.some(
+    (id) => Number.isInteger(id) && id > 0,
+  );
   if (isUniversityScoped) {
     return {
       ...input,

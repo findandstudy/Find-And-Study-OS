@@ -6,24 +6,30 @@ import {
   ACADEMY_PUBLIC_BASE_URL,
 } from "./academyKnowledge";
 import { ingestKnowledgeSource } from "./knowledgeIngest";
+import { listActiveAiBotIds, requireAiBotId } from "./aiBotRuntime";
 
 const SYNC_INTERVAL_MS = 6 * 60 * 60 * 1000;
 const CHECK_INTERVAL_MS = 30 * 60 * 1000;
 const STALE_PROCESSING_MS = 30 * 60 * 1000;
 
-let running = false;
+const runningBotIds = new Set<number>();
 let timer: ReturnType<typeof setInterval> | null = null;
 
-export async function seedAcademyKnowledgeSource(): Promise<number> {
+export async function seedAcademyKnowledgeSource(aiBotId?: number | null): Promise<number> {
+  const resolvedBotId = await requireAiBotId(aiBotId, { activeOnly: true });
   const [existing] = await db
     .select({ id: knowledgeSourcesTable.id })
     .from(knowledgeSourcesTable)
-    .where(eq(knowledgeSourcesTable.type, ACADEMY_KNOWLEDGE_SOURCE_TYPE));
+    .where(and(
+      eq(knowledgeSourcesTable.aiBotId, resolvedBotId),
+      eq(knowledgeSourcesTable.type, ACADEMY_KNOWLEDGE_SOURCE_TYPE),
+    ));
   if (existing) return existing.id;
 
   const [created] = await db
     .insert(knowledgeSourcesTable)
     .values({
+      aiBotId: resolvedBotId,
       type: ACADEMY_KNOWLEDGE_SOURCE_TYPE,
       name: ACADEMY_KNOWLEDGE_SOURCE_NAME,
       config: {
@@ -39,11 +45,11 @@ export async function seedAcademyKnowledgeSource(): Promise<number> {
   return created.id;
 }
 
-export async function syncAcademyKnowledgeIfDue(force = false): Promise<boolean> {
-  if (running) return false;
-  running = true;
+async function syncAcademyKnowledgeForBot(aiBotId: number, force = false): Promise<boolean> {
+  if (runningBotIds.has(aiBotId)) return false;
+  runningBotIds.add(aiBotId);
   try {
-    const sourceId = await seedAcademyKnowledgeSource();
+    const sourceId = await seedAcademyKnowledgeSource(aiBotId);
     const dueBefore = new Date(Date.now() - SYNC_INTERVAL_MS);
     const staleProcessingBefore = new Date(Date.now() - STALE_PROCESSING_MS);
 
@@ -107,8 +113,19 @@ export async function syncAcademyKnowledgeIfDue(force = false): Promise<boolean>
     await ingestKnowledgeSource(sourceId);
     return true;
   } finally {
-    running = false;
+    runningBotIds.delete(aiBotId);
   }
+}
+
+export async function syncAcademyKnowledgeIfDue(force = false): Promise<boolean> {
+  const botIds = await listActiveAiBotIds();
+  const results = await Promise.all(botIds.map((aiBotId) =>
+    syncAcademyKnowledgeForBot(aiBotId, force).catch((error) => {
+      console.error(`[academy-knowledge] bot #${aiBotId} sync failed:`, error);
+      return false;
+    }),
+  ));
+  return results.some(Boolean);
 }
 
 export function startAcademyKnowledgeSync(): () => Promise<void> {
@@ -129,7 +146,7 @@ export async function stopAcademyKnowledgeSync(): Promise<void> {
   if (timer) clearInterval(timer);
   timer = null;
   const deadline = Date.now() + 10_000;
-  while (running && Date.now() < deadline) {
+  while (runningBotIds.size > 0 && Date.now() < deadline) {
     await new Promise((resolve) => setTimeout(resolve, 50));
   }
 }

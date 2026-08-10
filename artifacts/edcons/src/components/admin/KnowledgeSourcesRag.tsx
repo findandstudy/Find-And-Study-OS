@@ -67,7 +67,12 @@ function statusBadgeVariant(status: RagSourceStatus): "default" | "secondary" | 
   return "secondary";
 }
 
-export default function KnowledgeSourcesRag() {
+function botScopedUrl(path: string, aiBotId: number) {
+  const separator = path.includes("?") ? "&" : "?";
+  return `${path}${separator}aiBotId=${encodeURIComponent(aiBotId)}`;
+}
+
+export default function KnowledgeSourcesRag({ aiBotId }: { aiBotId: number }) {
   const { t } = useI18n();
   const { toast } = useToast();
 
@@ -86,7 +91,7 @@ export default function KnowledgeSourcesRag() {
     setLoading(true);
     try {
       const { sources: list } = await customFetch<{ sources: RagSource[] }>(
-        "/api/inbox/knowledge-sources/rag",
+        botScopedUrl("/api/inbox/knowledge-sources/rag", aiBotId),
       );
       setSources(list);
     } catch {
@@ -94,7 +99,7 @@ export default function KnowledgeSourcesRag() {
     } finally {
       setLoading(false);
     }
-  }, [t, toast]);
+  }, [aiBotId, t, toast]);
 
   useEffect(() => {
     load();
@@ -150,7 +155,7 @@ export default function KnowledgeSourcesRag() {
           headers: { "Content-Type": pendingFile.type },
         });
         if (!putRes.ok) throw new Error("upload-failed");
-        await customFetch("/api/inbox/knowledge-sources/rag", {
+        await customFetch(botScopedUrl("/api/inbox/knowledge-sources/rag", aiBotId), {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
@@ -167,7 +172,7 @@ export default function KnowledgeSourcesRag() {
           setSubmitting(false);
           return;
         }
-        await customFetch("/api/inbox/knowledge-sources/rag", {
+        await customFetch(botScopedUrl("/api/inbox/knowledge-sources/rag", aiBotId), {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ type: "url", name: newName.trim(), url: newUrl.trim() }),
@@ -178,7 +183,7 @@ export default function KnowledgeSourcesRag() {
           setSubmitting(false);
           return;
         }
-        await customFetch("/api/inbox/knowledge-sources/rag", {
+        await customFetch(botScopedUrl("/api/inbox/knowledge-sources/rag", aiBotId), {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ type: "text", name: newName.trim(), rawText: newText.trim() }),
@@ -199,7 +204,7 @@ export default function KnowledgeSourcesRag() {
       prev.map((s) => (s.id === source.id ? { ...s, isActive: !s.isActive } : s)),
     );
     try {
-      await customFetch(`/api/inbox/knowledge-sources/rag/${source.id}`, {
+      await customFetch(botScopedUrl(`/api/inbox/knowledge-sources/rag/${source.id}`, aiBotId), {
         method: "PATCH",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ isActive: !source.isActive }),
@@ -212,9 +217,12 @@ export default function KnowledgeSourcesRag() {
 
   const reprocess = async (source: RagSource) => {
     try {
-      await customFetch(`/api/inbox/knowledge-sources/rag/${source.id}/reprocess`, {
+      await customFetch(
+        botScopedUrl(`/api/inbox/knowledge-sources/rag/${source.id}/reprocess`, aiBotId),
+        {
         method: "POST",
-      });
+        },
+      );
       toast({ title: t("aiAgentAdmin.ragSources.reprocessQueued") });
       load();
     } catch {
@@ -225,7 +233,9 @@ export default function KnowledgeSourcesRag() {
   const remove = async (source: RagSource) => {
     if (!window.confirm(t("aiAgentAdmin.ragSources.deleteConfirm", { name: source.name }))) return;
     try {
-      await customFetch(`/api/inbox/knowledge-sources/rag/${source.id}`, { method: "DELETE" });
+      await customFetch(botScopedUrl(`/api/inbox/knowledge-sources/rag/${source.id}`, aiBotId), {
+        method: "DELETE",
+      });
       setSources((prev) => prev.filter((s) => s.id !== source.id));
       toast({ title: t("aiAgentAdmin.ragSources.deleteSuccess") });
     } catch {

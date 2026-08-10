@@ -1,9 +1,17 @@
+import { execFile } from "node:child_process";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { promisify } from "node:util";
 import sharp from "sharp";
 import { loadDocumentBytes, type DocBytesSource } from "./documentBytes";
 
 const THUMBNAIL_SIZE = 128;
 const CACHE_TTL_MS = 6 * 60 * 60_000;
 const MAX_CACHE_BYTES = 32 * 1024 * 1024;
+const MAX_RENDERABLE_PDF_BYTES = 25 * 1024 * 1024;
+const MAX_PDF_RENDER_CONCURRENCY = 2;
+const execFileAsync = promisify(execFile);
 
 interface ThumbnailEntry {
   buffer: Buffer;
@@ -13,6 +21,21 @@ interface ThumbnailEntry {
 const cache = new Map<string, ThumbnailEntry>();
 const inFlight = new Map<string, Promise<Buffer>>();
 let cacheBytes = 0;
+let activePdfRenders = 0;
+const pdfRenderWaiters: Array<() => void> = [];
+
+async function withPdfRenderSlot<T>(operation: () => Promise<T>): Promise<T> {
+  if (activePdfRenders >= MAX_PDF_RENDER_CONCURRENCY) {
+    await new Promise<void>(resolve => pdfRenderWaiters.push(resolve));
+  }
+  activePdfRenders += 1;
+  try {
+    return await operation();
+  } finally {
+    activePdfRenders -= 1;
+    pdfRenderWaiters.shift()?.();
+  }
+}
 
 function safeInitials(label: string): string {
   const parts = label.trim().split(/\s+/).filter(Boolean);
@@ -31,23 +54,82 @@ async function placeholderThumbnail(label: string): Promise<Buffer> {
   return sharp(svg).jpeg({ quality: 78, mozjpeg: true }).toBuffer();
 }
 
+function isPdf(buffer: Buffer, declaredMimeType: string): boolean {
+  return declaredMimeType === "application/pdf"
+    || buffer.subarray(0, 5).toString("latin1") === "%PDF-";
+}
+
+async function renderPdfFirstPage(buffer: Buffer): Promise<Buffer | null> {
+  if (buffer.length === 0 || buffer.length > MAX_RENDERABLE_PDF_BYTES) return null;
+
+  return withPdfRenderSlot(async () => {
+    const tempDirectory = await mkdtemp(join(tmpdir(), "fas-student-photo-"));
+    const pdfPath = join(tempDirectory, "source.pdf");
+    const outputBase = join(tempDirectory, "page");
+    const outputPath = `${outputBase}.jpg`;
+    try {
+      await writeFile(pdfPath, buffer);
+      let rendered = false;
+      try {
+        await execFileAsync(
+          "pdftoppm",
+          ["-jpeg", "-f", "1", "-l", "1", "-scale-to", "512", "-singlefile", pdfPath, outputBase],
+          { timeout: 20_000, maxBuffer: 1024 * 1024 },
+        );
+        rendered = true;
+      } catch {
+        try {
+          await execFileAsync(
+            "gs",
+            [
+              "-dSAFER",
+              "-dBATCH",
+              "-dNOPAUSE",
+              "-dFirstPage=1",
+              "-dLastPage=1",
+              "-sDEVICE=jpeg",
+              "-r96",
+              `-sOutputFile=${outputPath}`,
+              pdfPath,
+            ],
+            { timeout: 20_000, maxBuffer: 1024 * 1024 },
+          );
+          rendered = true;
+        } catch {
+          // A missing/failed renderer is not fatal. The caller returns initials.
+        }
+      }
+      if (!rendered) return null;
+      return await readFile(outputPath);
+    } finally {
+      await rm(tempDirectory, { recursive: true, force: true });
+    }
+  });
+}
+
+async function normalizeThumbnail(buffer: Buffer): Promise<Buffer> {
+  return sharp(buffer, { failOn: "warning" })
+    .rotate()
+    .resize(THUMBNAIL_SIZE, THUMBNAIL_SIZE, {
+      fit: "cover",
+      position: "attention",
+      withoutEnlargement: false,
+    })
+    .jpeg({ quality: 78, mozjpeg: true })
+    .toBuffer();
+}
+
 async function createThumbnail(source: DocBytesSource, fallbackLabel: string): Promise<Buffer> {
   const loaded = await loadDocumentBytes(source);
-  if (!loaded || loaded.mimeType === "application/pdf") {
-    // The production sharp build has no PDF renderer. Returning a tiny stable
-    // placeholder is safer than sending a multi-megabyte PDF to an <img> tag.
-    return placeholderThumbnail(fallbackLabel);
-  }
+  if (!loaded) return placeholderThumbnail(fallbackLabel);
   try {
-    return await sharp(loaded.buffer, { failOn: "warning" })
-      .rotate()
-      .resize(THUMBNAIL_SIZE, THUMBNAIL_SIZE, {
-        fit: "cover",
-        position: "attention",
-        withoutEnlargement: false,
-      })
-      .jpeg({ quality: 78, mozjpeg: true })
-      .toBuffer();
+    if (isPdf(loaded.buffer, loaded.mimeType)) {
+      const firstPage = await renderPdfFirstPage(loaded.buffer);
+      return firstPage
+        ? await normalizeThumbnail(firstPage)
+        : await placeholderThumbnail(fallbackLabel);
+    }
+    return await normalizeThumbnail(loaded.buffer);
   } catch {
     return placeholderThumbnail(fallbackLabel);
   }

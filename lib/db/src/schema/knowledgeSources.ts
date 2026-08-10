@@ -1,4 +1,5 @@
-import { pgTable, serial, integer, text, boolean, jsonb, timestamp } from "drizzle-orm/pg-core";
+import { index, pgTable, serial, integer, text, boolean, jsonb, timestamp } from "drizzle-orm/pg-core";
+import { aiBotsTable } from "./aiBots";
 
 // ---------------------------------------------------------------------------
 // Table — knowledge_sources (AI Agent Faz 1 scaffold, extended in Faz 2)
@@ -33,6 +34,9 @@ export type KnowledgeSourceType = (typeof knowledgeSourceTypeValues)[number];
 
 export const knowledgeSourcesTable = pgTable("knowledge_sources", {
   id: serial("id").primaryKey(),
+  aiBotId: integer("ai_bot_id")
+    .notNull()
+    .references(() => aiBotsTable.id, { onDelete: "cascade" }),
   type: text("type").notNull(),
   name: text("name").notNull(),
   config: jsonb("config").notNull().default({}),
@@ -40,7 +44,10 @@ export const knowledgeSourcesTable = pgTable("knowledge_sources", {
   status: text("status"),
   lastSyncedAt: timestamp("last_synced_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}, (table) => [
+  index("knowledge_sources_ai_bot_idx").on(table.aiBotId),
+  index("knowledge_sources_ai_bot_type_idx").on(table.aiBotId, table.type),
+]);
 
 export type KnowledgeSource = typeof knowledgeSourcesTable.$inferSelect;
 export type InsertKnowledgeSource = typeof knowledgeSourcesTable.$inferInsert;

@@ -52,6 +52,7 @@ import { useDroppable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import { useI18n } from "@/hooks/use-i18n";
 import { applicationCreationErrorMessage } from "@/lib/applicationCreationError";
+import { StudentListPhotoAvatar } from "@/components/StudentListPhotoAvatar";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 const VIEW_KEY = "edcons_applications_view";
@@ -136,45 +137,16 @@ function formatDate(dateStr: string | null | undefined): string {
 
 type Student = { id: number; firstName: string; lastName: string; email?: string | null; nationality?: string | null };
 
-/* ── useInView ───────────────────────────────────────────── */
-function useInView(rootMargin = "200px") {
-  const ref = useRef<HTMLDivElement>(null);
-  const [inView, setInView] = useState(false);
-  useEffect(() => {
-    const el = ref.current;
-    if (!el || typeof IntersectionObserver === "undefined") { setInView(true); return; }
-    const obs = new IntersectionObserver(
-      ([entry]) => { if (entry.isIntersecting) { setInView(true); obs.disconnect(); } },
-      { threshold: 0, rootMargin },
-    );
-    obs.observe(el);
-    return () => obs.disconnect();
-  }, [rootMargin]);
-  return { ref, inView };
-}
-
 /* ── AppStudentAvatar ────────────────────────────────────── */
 function AppStudentAvatar({ app, size = "sm" }: { app: any; size?: "sm" | "md" }) {
-  const dim = size === "md" ? "w-10 h-10" : "w-8 h-8";
-  const textSize = size === "md" ? "text-sm" : "text-xs";
-  const [imgError, setImgError] = useState(false);
-  const { ref, inView } = useInView();
-  const showPhoto = app.studentHasPhoto && !imgError && inView;
   return (
-    <div ref={ref} className={`${dim} rounded-full shrink-0 overflow-hidden`}>
-      {showPhoto ? (
-        <img
-          src={app.studentPhotoUrl || `/api/students/${app.studentId}/photo/thumbnail`}
-          alt={`${app.studentFirstName} ${app.studentLastName}`}
-          className={`${dim} rounded-full object-cover border border-primary/20`}
-          onError={() => setImgError(true)}
-        />
-      ) : (
-        <div className={`${dim} rounded-full bg-gradient-to-br from-primary/20 to-primary/10 flex items-center justify-center`}>
-          <span className={`${textSize} font-bold text-primary`}>{app.studentFirstName?.[0]}{app.studentLastName?.[0]}</span>
-        </div>
-      )}
-    </div>
+    <StudentListPhotoAvatar
+      studentId={app.studentId}
+      firstName={app.studentFirstName}
+      lastName={app.studentLastName}
+      photoUrl={app.studentPhotoUrl}
+      size={size}
+    />
   );
 }
 

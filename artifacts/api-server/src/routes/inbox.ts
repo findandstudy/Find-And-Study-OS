@@ -1,4 +1,4 @@
-import { Router, raw, type IRouter } from "express";
+import { Router, raw, type IRouter, type Request, type Response as ExpressResponse } from "express";
 import {
   db,
   pool,
@@ -92,6 +92,7 @@ import {
   deleteRagSource,
   reprocessRagSource,
 } from "../lib/inbox/knowledgeSourcesAdmin";
+import { requireAiBotId } from "../lib/inbox/aiBotRuntime";
 import { ObjectStorageService } from "../lib/objectStorage";
 import {
   WEB_CHAT_MEDIA_MAX_BYTES,
@@ -131,6 +132,24 @@ import {
 const router: IRouter = Router();
 const inboxMediaStorage = new ObjectStorageService();
 const webChatMediaBody = raw({ limit: WEB_CHAT_MEDIA_MAX_BYTES, type: () => true });
+
+function requestedAiBotId(req: Request): number | null {
+  const rawValue = req.body?.aiBotId ?? req.query.aiBotId;
+  if (rawValue == null || rawValue === "") return null;
+  const value = Number(rawValue);
+  if (!Number.isInteger(value) || value < 1) throw new Error("INVALID_AI_BOT_ID");
+  return value;
+}
+
+async function resolveAdminAiBotId(req: Request, res: ExpressResponse): Promise<number | null> {
+  try {
+    return await requireAiBotId(requestedAiBotId(req));
+  } catch (error) {
+    const invalid = error instanceof Error && error.message === "INVALID_AI_BOT_ID";
+    res.status(invalid ? 400 : 404).json({ error: invalid ? "Invalid AI bot id" : "AI bot not found" });
+    return null;
+  }
+}
 
 interface EntityWhatsAppTarget {
   id: number;
@@ -2313,7 +2332,7 @@ router.post(
         res.status(400).json({ error: "Contact has no E.164 phone" });
         return;
       }
-      const cfg: WhatsAppConfig = (await resolveOutboundConfig<WhatsAppConfig>("whatsapp", conv.channelAccountId)) || {};
+      const cfg: WhatsAppConfig = (await resolveOutboundConfig<WhatsAppConfig>("whatsapp", conv.channelAccountId, conv.communicationPipelineId)) || {};
 
       // Persist a 'pending' row first so the client can observe lifecycle.
       const [pending] = await db
@@ -2395,7 +2414,7 @@ router.post(
         res.status(400).json({ error: "Conversation has no recipient id" });
         return;
       }
-      const metaCfg = (await resolveOutboundConfig<MessengerConfig & InstagramConfig>(conv.channel, conv.channelAccountId)) || {};
+      const metaCfg = (await resolveOutboundConfig<MessengerConfig & InstagramConfig>(conv.channel, conv.channelAccountId, conv.communicationPipelineId)) || {};
 
       // Persist a 'pending' row first so the client can observe lifecycle.
       const [pending] = await db
@@ -2692,7 +2711,7 @@ router.post(
         return;
       }
       const cfg: WhatsAppConfig =
-        (await resolveOutboundConfig<WhatsAppConfig>("whatsapp", conv.channelAccountId)) || {};
+        (await resolveOutboundConfig<WhatsAppConfig>("whatsapp", conv.channelAccountId, conv.communicationPipelineId)) || {};
       const result = await sendWhatsAppText({ config: cfg, toPhoneE164: contact.phoneE164, text: text || "" });
       ok = result.ok;
       error = result.error;
@@ -2712,7 +2731,7 @@ router.post(
         return;
       }
       const metaCfg =
-        (await resolveOutboundConfig<MessengerConfig & InstagramConfig>(conv.channel, conv.channelAccountId)) || {};
+        (await resolveOutboundConfig<MessengerConfig & InstagramConfig>(conv.channel, conv.channelAccountId, conv.communicationPipelineId)) || {};
       const result =
         conv.channel === "messenger"
           ? await sendMessengerText({ config: metaCfg as MessengerConfig, recipientId, text: text || "" })
@@ -3147,7 +3166,7 @@ router.post(
       });
       result = { ok: zr.ok, externalMessageId: zr.externalMessageId, error: zr.error, broadcastId: zr.broadcastId, simulated: false };
     } else {
-      const cfg: WhatsAppConfig = (await resolveOutboundConfig<WhatsAppConfig>("whatsapp", conv.channelAccountId)) || {};
+      const cfg: WhatsAppConfig = (await resolveOutboundConfig<WhatsAppConfig>("whatsapp", conv.channelAccountId, conv.communicationPipelineId)) || {};
       result = await sendWhatsAppTemplate({
         config: cfg,
         toPhoneE164: contact.phoneE164,
@@ -3792,8 +3811,10 @@ router.get(
   "/inbox/ai-agent/config",
   requireAuth,
   requireRole(...ADMIN_ROLES),
-  async (_req, res): Promise<void> => {
-    const config = await getAiAgentConfig();
+  async (req, res): Promise<void> => {
+    const aiBotId = await resolveAdminAiBotId(req, res);
+    if (aiBotId == null) return;
+    const config = await getAiAgentConfig(aiBotId);
     res.json({ config });
   },
 );
@@ -3805,8 +3826,10 @@ router.get(
   "/inbox/ai-agent/models",
   requireAuth,
   requireRole(...ADMIN_ROLES),
-  async (_req, res): Promise<void> => {
-    const config = await getAiAgentConfig();
+  async (req, res): Promise<void> => {
+    const aiBotId = await resolveAdminAiBotId(req, res);
+    if (aiBotId == null) return;
+    const config = await getAiAgentConfig(aiBotId);
     try {
       const anthropic = await getAnthropicClient();
       const models = await loadAnthropicModelOptions(anthropic, config.model);
@@ -3843,14 +3866,17 @@ router.put(
   requireAuth,
   requireRole(...ADMIN_ROLES),
   async (req, res): Promise<void> => {
+    const aiBotId = await resolveAdminAiBotId(req, res);
+    if (aiBotId == null) return;
     const parsed = aiAgentConfigPatchSchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ error: "Invalid config", details: parsed.error.flatten() });
       return;
     }
     try {
-      const config = await writeAiAgentConfig(parsed.data);
+      const config = await writeAiAgentConfig(parsed.data, aiBotId);
       logAudit(req.user!.id, "update_ai_agent_config", "integration", undefined, {
+        aiBotId,
         enabled: config.enabled,
         model: config.model,
       }, req.ip);
@@ -3871,6 +3897,7 @@ router.put(
 // (optional) history, returning the would-be reply, detected language, and
 // escalation result. Sends NOTHING.
 const aiAgentTestSchema = z.object({
+  aiBotId: z.number().int().positive().optional(),
   message: z.string().min(1).max(4000),
   language: z.enum(["tr", "en", "ar", "ru", "fr"]).optional(),
   history: z
@@ -3894,8 +3921,11 @@ router.post(
       res.status(400).json({ error: "Invalid request", details: parsed.error.flatten() });
       return;
     }
+    const aiBotId = await resolveAdminAiBotId(req, res);
+    if (aiBotId == null) return;
     try {
       const result = await runBotReplyTest({
+        aiBotId,
         message: parsed.data.message,
         language: parsed.data.language,
         history: parsed.data.history,
@@ -3932,13 +3962,15 @@ router.get(
   "/inbox/knowledge-sources/program-scope",
   requireAuth,
   requireRole(...ADMIN_ROLES),
-  async (_req, res): Promise<void> => {
-    const source = await getProgramScopeSource();
+  async (req, res): Promise<void> => {
+    const aiBotId = await resolveAdminAiBotId(req, res);
+    if (aiBotId == null) return;
+    const source = await getProgramScopeSource(aiBotId);
     if (source) {
       res.json({ source: { isActive: source.isActive, scope: source.scope, lastSyncedAt: source.lastSyncedAt } });
       return;
     }
-    const config = await getAiAgentConfig();
+    const config = await getAiAgentConfig(aiBotId);
     res.json({ source: { isActive: true, scope: config.programScope, lastSyncedAt: null } });
   },
 );
@@ -3950,13 +3982,16 @@ router.put(
   requireAuth,
   requireRole(...ADMIN_ROLES),
   async (req, res): Promise<void> => {
+    const aiBotId = await resolveAdminAiBotId(req, res);
+    if (aiBotId == null) return;
     const parsed = knowledgeSourceProgramScopeSchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ error: "Invalid request", details: parsed.error.flatten() });
       return;
     }
-    const source = await writeProgramScopeSource(parsed.data);
+    const source = await writeProgramScopeSource(parsed.data, aiBotId);
     logAudit(req.user!.id, "update_knowledge_source_program_scope", "integration", undefined, {
+      aiBotId,
       isActive: source.isActive,
       enabled: source.scope.enabled,
     }, req.ip);
@@ -4004,8 +4039,10 @@ router.get(
   "/inbox/knowledge-sources/rag",
   requireAuth,
   requireRole(...ADMIN_ROLES),
-  async (_req, res): Promise<void> => {
-    const sources = await listRagSources();
+  async (req, res): Promise<void> => {
+    const aiBotId = await resolveAdminAiBotId(req, res);
+    if (aiBotId == null) return;
+    const sources = await listRagSources(aiBotId);
     res.json({ sources });
   },
 );
@@ -4017,12 +4054,15 @@ router.post(
   requireAuth,
   requireRole(...ADMIN_ROLES),
   async (req, res): Promise<void> => {
+    const aiBotId = await resolveAdminAiBotId(req, res);
+    if (aiBotId == null) return;
     const parsed = createRagSourceSchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ error: "Invalid request", details: parsed.error.flatten() });
       return;
     }
     const source = await createRagSource({
+      aiBotId,
       type: parsed.data.type,
       name: parsed.data.name,
       config: ragSourceConfigFromInput(parsed.data),
@@ -4038,6 +4078,8 @@ router.patch(
   requireAuth,
   requireRole(...ADMIN_ROLES),
   async (req, res): Promise<void> => {
+    const aiBotId = await resolveAdminAiBotId(req, res);
+    if (aiBotId == null) return;
     const id = parseInt(String(req.params.id), 10);
     if (!id) { res.status(400).json({ error: "Invalid id" }); return; }
     const parsed = updateRagSourceSchema.safeParse(req.body);
@@ -4045,7 +4087,7 @@ router.patch(
       res.status(400).json({ error: "Invalid request", details: parsed.error.flatten() });
       return;
     }
-    const source = await updateRagSource(id, parsed.data);
+    const source = await updateRagSource(id, aiBotId, parsed.data);
     if (!source) { res.status(404).json({ error: "Not found" }); return; }
     logAudit(req.user!.id, "update_knowledge_source_rag", "integration", id, parsed.data, req.ip);
     res.json({ source });
@@ -4058,9 +4100,11 @@ router.post(
   requireAuth,
   requireRole(...ADMIN_ROLES),
   async (req, res): Promise<void> => {
+    const aiBotId = await resolveAdminAiBotId(req, res);
+    if (aiBotId == null) return;
     const id = parseInt(String(req.params.id), 10);
     if (!id) { res.status(400).json({ error: "Invalid id" }); return; }
-    const ok = await reprocessRagSource(id);
+    const ok = await reprocessRagSource(id, aiBotId);
     if (!ok) { res.status(404).json({ error: "Not found" }); return; }
     logAudit(req.user!.id, "reprocess_knowledge_source_rag", "integration", id, {}, req.ip);
     res.json({ success: true });
@@ -4073,9 +4117,11 @@ router.delete(
   requireAuth,
   requireRole(...ADMIN_ROLES),
   async (req, res): Promise<void> => {
+    const aiBotId = await resolveAdminAiBotId(req, res);
+    if (aiBotId == null) return;
     const id = parseInt(String(req.params.id), 10);
     if (!id) { res.status(400).json({ error: "Invalid id" }); return; }
-    const ok = await deleteRagSource(id);
+    const ok = await deleteRagSource(id, aiBotId);
     if (!ok) { res.status(404).json({ error: "Not found" }); return; }
     logAudit(req.user!.id, "delete_knowledge_source_rag", "integration", id, {}, req.ip);
     res.json({ success: true });
@@ -4493,7 +4539,7 @@ router.post(
     } else try {
       if (waMediaId) {
         // WhatsApp Cloud API: resolve download URL then download with Bearer token
-        const waConfig = await resolveOutboundConfig<WhatsAppConfig>("whatsapp", conv.channelAccountId);
+        const waConfig = await resolveOutboundConfig<WhatsAppConfig>("whatsapp", conv.channelAccountId, conv.communicationPipelineId);
         const accessToken = (waConfig?.accessToken ?? process.env.WA_ACCESS_TOKEN ?? "").trim();
         if (!accessToken) {
           res.status(502).json({ error: "WhatsApp access token not configured" });
@@ -4790,7 +4836,7 @@ router.post(
 
     try {
       if (waMediaId) {
-        const waConfig = await resolveOutboundConfig<WhatsAppConfig>("whatsapp", conv.channelAccountId);
+        const waConfig = await resolveOutboundConfig<WhatsAppConfig>("whatsapp", conv.channelAccountId, conv.communicationPipelineId);
         const accessToken = (waConfig?.accessToken ?? process.env.WA_ACCESS_TOKEN ?? "").trim();
         if (!accessToken) {
           res.json({ extracted: {} });

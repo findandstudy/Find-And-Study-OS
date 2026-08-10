@@ -11,6 +11,7 @@ export type RagSourceType = (typeof RAG_SOURCE_TYPES)[number];
 
 export interface RagSourceListItem {
   id: number;
+  aiBotId: number;
   type: RagSourceType;
   name: string;
   isActive: boolean;
@@ -22,11 +23,14 @@ export interface RagSourceListItem {
 }
 
 /** List all admin-managed RAG sources (file/url/text), newest first, with chunk counts. */
-export async function listRagSources(): Promise<RagSourceListItem[]> {
+export async function listRagSources(aiBotId: number): Promise<RagSourceListItem[]> {
   const rows = await db
     .select()
     .from(knowledgeSourcesTable)
-    .where(inArray(knowledgeSourcesTable.type, [...RAG_SOURCE_TYPES]))
+    .where(and(
+      eq(knowledgeSourcesTable.aiBotId, aiBotId),
+      inArray(knowledgeSourcesTable.type, [...RAG_SOURCE_TYPES]),
+    ))
     .orderBy(desc(knowledgeSourcesTable.createdAt));
   if (rows.length === 0) return [];
 
@@ -39,6 +43,7 @@ export async function listRagSources(): Promise<RagSourceListItem[]> {
 
   return rows.map((r) => ({
     id: r.id,
+    aiBotId: r.aiBotId,
     type: r.type as RagSourceType,
     name: r.name,
     isActive: r.isActive,
@@ -52,6 +57,7 @@ export async function listRagSources(): Promise<RagSourceListItem[]> {
 
 /** Create a new RAG source row and fire the (async, non-blocking) ingestion pipeline. */
 export async function createRagSource(input: {
+  aiBotId: number;
   type: RagSourceType;
   name: string;
   config: Record<string, unknown>;
@@ -59,6 +65,7 @@ export async function createRagSource(input: {
   const [row] = await db
     .insert(knowledgeSourcesTable)
     .values({
+      aiBotId: input.aiBotId,
       type: input.type,
       name: input.name,
       config: input.config,
@@ -69,6 +76,7 @@ export async function createRagSource(input: {
   triggerKnowledgeIngest(row.id);
   return {
     id: row.id,
+    aiBotId: row.aiBotId,
     type: row.type as RagSourceType,
     name: row.name,
     isActive: row.isActive,
@@ -83,12 +91,17 @@ export async function createRagSource(input: {
 /** Toggle active state or rename a RAG source. Inactive sources are excluded from retrieval. */
 export async function updateRagSource(
   id: number,
+  aiBotId: number,
   patch: { isActive?: boolean; name?: string },
 ): Promise<RagSourceListItem | null> {
   const [existing] = await db
     .select()
     .from(knowledgeSourcesTable)
-    .where(and(eq(knowledgeSourcesTable.id, id), inArray(knowledgeSourcesTable.type, [...RAG_SOURCE_TYPES])));
+    .where(and(
+      eq(knowledgeSourcesTable.id, id),
+      eq(knowledgeSourcesTable.aiBotId, aiBotId),
+      inArray(knowledgeSourcesTable.type, [...RAG_SOURCE_TYPES]),
+    ));
   if (!existing) return null;
 
   const [row] = await db
@@ -97,7 +110,7 @@ export async function updateRagSource(
       ...(patch.isActive !== undefined ? { isActive: patch.isActive } : {}),
       ...(patch.name !== undefined ? { name: patch.name } : {}),
     })
-    .where(eq(knowledgeSourcesTable.id, id))
+    .where(and(eq(knowledgeSourcesTable.id, id), eq(knowledgeSourcesTable.aiBotId, aiBotId)))
     .returning();
 
   const [{ n }] = await db
@@ -107,6 +120,7 @@ export async function updateRagSource(
 
   return {
     id: row.id,
+    aiBotId: row.aiBotId,
     type: row.type as RagSourceType,
     name: row.name,
     isActive: row.isActive,
@@ -119,20 +133,28 @@ export async function updateRagSource(
 }
 
 /** Delete a RAG source; its chunks cascade-delete via the FK. */
-export async function deleteRagSource(id: number): Promise<boolean> {
+export async function deleteRagSource(id: number, aiBotId: number): Promise<boolean> {
   const result = await db
     .delete(knowledgeSourcesTable)
-    .where(and(eq(knowledgeSourcesTable.id, id), inArray(knowledgeSourcesTable.type, [...RAG_SOURCE_TYPES])))
+    .where(and(
+      eq(knowledgeSourcesTable.id, id),
+      eq(knowledgeSourcesTable.aiBotId, aiBotId),
+      inArray(knowledgeSourcesTable.type, [...RAG_SOURCE_TYPES]),
+    ))
     .returning({ id: knowledgeSourcesTable.id });
   return result.length > 0;
 }
 
 /** Re-run extraction + chunking + embedding for an existing source. */
-export async function reprocessRagSource(id: number): Promise<boolean> {
+export async function reprocessRagSource(id: number, aiBotId: number): Promise<boolean> {
   const [existing] = await db
     .select({ id: knowledgeSourcesTable.id })
     .from(knowledgeSourcesTable)
-    .where(and(eq(knowledgeSourcesTable.id, id), inArray(knowledgeSourcesTable.type, [...RAG_SOURCE_TYPES])));
+    .where(and(
+      eq(knowledgeSourcesTable.id, id),
+      eq(knowledgeSourcesTable.aiBotId, aiBotId),
+      inArray(knowledgeSourcesTable.type, [...RAG_SOURCE_TYPES]),
+    ));
   if (!existing) return false;
   triggerKnowledgeIngest(id);
   return true;

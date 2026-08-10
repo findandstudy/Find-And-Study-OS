@@ -1,5 +1,6 @@
 import { pgTable, serial, text, timestamp, integer, boolean, jsonb, index, uniqueIndex } from "drizzle-orm/pg-core";
 import { usersTable } from "./users";
+import { aiBotsTable, communicationPipelinesTable } from "./aiBots";
 
 // AI summary cache stored in conversations.metadata.aiSummary.
 // The pgTable schema itself does not change — this is the TypeScript
@@ -23,6 +24,8 @@ export const conversationsTable = pgTable("conversations", {
   metadata: jsonb("metadata").default({}),
   channel: text("channel").notNull().default("internal"),
   channelAccountId: integer("channel_account_id"),
+  aiBotId: integer("ai_bot_id").references(() => aiBotsTable.id, { onDelete: "set null" }),
+  communicationPipelineId: integer("communication_pipeline_id").references(() => communicationPipelinesTable.id, { onDelete: "set null" }),
   externalContactId: integer("external_contact_id"),
   externalThreadId: text("external_thread_id"),
   assignedToId: integer("assigned_to_id").references(() => usersTable.id, { onDelete: "set null" }),
@@ -43,6 +46,8 @@ export const conversationsTable = pgTable("conversations", {
   index("conversations_status_idx").on(table.status),
   index("conversations_unmatched_idx").on(table.unmatched),
   index("conversations_external_contact_id_idx").on(table.externalContactId),
+  index("conversations_ai_bot_idx").on(table.aiBotId),
+  index("conversations_communication_pipeline_idx").on(table.communicationPipelineId),
   uniqueIndex("conversations_channel_thread_idx").on(table.channelAccountId, table.externalThreadId),
 ]);
 

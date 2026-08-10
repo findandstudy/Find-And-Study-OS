@@ -91,6 +91,7 @@ export async function retrieveKnowledgeChunks(
   options: {
     sourceTypes?: readonly RetrievalSourceType[];
     academyCountryCode?: string;
+    aiBotId?: number | null;
   } = {},
 ): Promise<RetrievedChunk[]> {
   const trimmed = query.trim();
@@ -99,6 +100,8 @@ export async function retrieveKnowledgeChunks(
     ? [...options.sourceTypes]
     : [...RAG_SOURCE_TYPES];
   const academyCountryCode = options.academyCountryCode?.trim().toUpperCase() ?? "";
+  const aiBotId = options.aiBotId;
+  if (!Number.isInteger(aiBotId) || Number(aiBotId) <= 0) return [];
   if (academyCountryCode && !/^[A-Z]{2,3}$/.test(academyCountryCode)) return [];
   // Country scoping applies only to the curated Academy source. Mixing it with
   // admin file/url/text sources could reintroduce cross-university knowledge.
@@ -111,6 +114,7 @@ export async function retrieveKnowledgeChunks(
       .where(
         and(
           inArray(knowledgeSourcesTable.type, sourceTypes),
+          eq(knowledgeSourcesTable.aiBotId, Number(aiBotId)),
           eq(knowledgeSourcesTable.isActive, true),
           eq(knowledgeSourcesTable.status, "ready"),
         ),

@@ -43,6 +43,7 @@ export * from "./agencyAssignedStaff";
 export * from "./staffCards";
 export * from "./objectOwners";
 export * from "./aiPersonas";
+export * from "./aiBots";
 export * from "./aiExtractors";
 export * from "./portalSubmissions";
 export * from "./portalAutomationSettings";

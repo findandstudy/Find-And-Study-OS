@@ -8,7 +8,7 @@ import {
   canonicalCountry,
 } from "@workspace/db";
 import crypto from "node:crypto";
-import { and, asc, eq, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { getAnthropicClient } from "@workspace/integrations-anthropic-ai";
 import {
   sendWhatsAppText,
@@ -166,12 +166,13 @@ export function detectLanguage(text: string, fallback: BotLanguage = "en"): BotL
 // ---------------------------------------------------------------------------
 
 export interface BotReplyInput {
+  aiBotId?: number | null;
   systemPrompt: string;
   language: BotLanguage;
   model: string;
   temperature: number;
   messages: Array<{ direction: string; content: string }>;
-  enforcedUniversityId?: number;
+  enforcedUniversityIds?: number[];
 }
 let __botReplyOverride: ((input: BotReplyInput) => Promise<string>) | null = null;
 export function __setBotReplyOverrideForTests(
@@ -189,6 +190,7 @@ export interface BotSendInput {
   // The conversation's connected account (multi-account-per-channel). When null
   // the legacy single-config integrations row is used (resolveOutboundConfig).
   channelAccountId?: number | null;
+  communicationPipelineId?: number | null;
   // Set when the conversation is Zernio-hosted: the reply MUST go through the
   // Zernio API (same path as manual staff replies), never the direct Meta
   // senders — those fail with "The account is not registered".
@@ -222,7 +224,7 @@ const MAX_TOOL_ROUNDS = 3;
 async function generateBotReply(input: BotReplyInput): Promise<string> {
   if (__botReplyOverride) return __botReplyOverride(input);
   const anthropic = await getAnthropicClient();
-  const { enabled: toolsEnabled } = await isProgramSearchToolEnabled();
+  const { enabled: toolsEnabled } = await isProgramSearchToolEnabled(input.aiBotId);
 
   type AnthropicMessage = { role: "user" | "assistant"; content: any };
   const conversation: AnthropicMessage[] = input.messages.map((m) => ({
@@ -255,7 +257,8 @@ async function generateBotReply(input: BotReplyInput): Promise<string> {
                 block.name === SEARCH_PROGRAMS_TOOL_NAME
                   ? await executeSearchProgramsTool(
                       block.input || {},
-                      input.enforcedUniversityId,
+                      input.enforcedUniversityIds,
+                      input.aiBotId,
                     )
                   : { error: `unknown_tool:${block.name}` };
             } catch (err) {
@@ -299,6 +302,8 @@ export interface BotTestInput {
   language?: BotLanguage;
   /** Optional prior turns for context (oldest → newest). */
   history?: Array<{ direction: string; content: string }>;
+  /** Optional bot whose isolated configuration should be previewed. */
+  aiBotId?: number | null;
 }
 
 export interface BotTestResult {
@@ -320,7 +325,7 @@ export interface BotTestResult {
  * mirror that by returning `reply: null` and the matched topic.
  */
 export async function runBotReplyTest(input: BotTestInput): Promise<BotTestResult> {
-  const config = await getAiAgentConfig();
+  const config = await getAiAgentConfig(input.aiBotId);
   const language = input.language ?? detectLanguage(input.message);
   const topic = detectEscalation(input.message, config.escalationKeywords);
   if (topic) {
@@ -331,13 +336,14 @@ export async function runBotReplyTest(input: BotTestInput): Promise<BotTestResul
       model: config.model,
     };
   }
-  const ragChunks = await retrieveKnowledgeChunks(input.message);
+  const ragChunks = await retrieveKnowledgeChunks(input.message, { aiBotId: input.aiBotId });
   const systemPrompt = buildBotSystemPrompt(language, config.knowledgeBase, ragChunks);
   const turns = [
     ...(input.history ?? []),
     { direction: "inbound", content: input.message },
   ].slice(-BOT_HISTORY_LIMIT);
   const reply = await generateBotReply({
+    aiBotId: input.aiBotId,
     systemPrompt,
     language,
     model: config.model,
@@ -378,7 +384,11 @@ async function sendBotReply(input: BotSendInput): Promise<BotSendResult> {
   }
   if (input.channel === "whatsapp") {
     const cfg: WhatsAppConfig =
-      (await resolveOutboundConfig<WhatsAppConfig>("whatsapp", input.channelAccountId)) || {};
+      (await resolveOutboundConfig<WhatsAppConfig>(
+        "whatsapp",
+        input.channelAccountId,
+        input.communicationPipelineId,
+      )) || {};
     const result = await sendWhatsAppText({
       config: cfg,
       toPhoneE164: input.recipient,
@@ -388,12 +398,20 @@ async function sendBotReply(input: BotSendInput): Promise<BotSendResult> {
   }
   if (input.channel === "messenger") {
     const cfg: MessengerConfig =
-      (await resolveOutboundConfig<MessengerConfig>("messenger", input.channelAccountId)) || {};
+      (await resolveOutboundConfig<MessengerConfig>(
+        "messenger",
+        input.channelAccountId,
+        input.communicationPipelineId,
+      )) || {};
     return sendMessengerText({ config: cfg, recipientId: input.recipient, text: input.text });
   }
   if (input.channel === "instagram") {
     const cfg: InstagramConfig =
-      (await resolveOutboundConfig<InstagramConfig>("instagram", input.channelAccountId)) || {};
+      (await resolveOutboundConfig<InstagramConfig>(
+        "instagram",
+        input.channelAccountId,
+        input.communicationPipelineId,
+      )) || {};
     return sendInstagramText({ config: cfg, recipientId: input.recipient, text: input.text });
   }
   return { ok: false, error: `unsupported_channel:${input.channel}` };
@@ -406,6 +424,7 @@ export interface BotTemplateSendInput {
   language: string;
   parameters?: string[];
   channelAccountId?: number | null;
+  communicationPipelineId?: number | null;
 }
 let __botTemplateSendOverride:
   | ((input: BotTemplateSendInput) => Promise<BotSendResult>)
@@ -421,7 +440,11 @@ async function sendBotTemplate(input: BotTemplateSendInput): Promise<BotSendResu
   if (__botTemplateSendOverride) return __botTemplateSendOverride(input);
   if (input.channel === "whatsapp") {
     const cfg: WhatsAppConfig =
-      (await resolveOutboundConfig<WhatsAppConfig>("whatsapp", input.channelAccountId)) || {};
+      (await resolveOutboundConfig<WhatsAppConfig>(
+        "whatsapp",
+        input.channelAccountId,
+        input.communicationPipelineId,
+      )) || {};
     return sendWhatsAppTemplate({
       config: cfg,
       toPhoneE164: input.toPhoneE164,
@@ -510,15 +533,15 @@ export async function maybeAutoReply(opts: {
 }): Promise<AutoReplyOutcome> {
   const { conversationId, inboundMessageId } = opts;
 
-  // Load the live, DB-managed agent config (global switch, model, escalation
-  // keywords, handoff threshold + message, knowledge base).
-  const config = await getAiAgentConfig();
-
   const [conv] = await db
     .select()
     .from(conversationsTable)
     .where(eq(conversationsTable.id, conversationId));
   if (!conv) return { acted: false, reason: "not_found" };
+
+  // Each conversation is pinned to one bot at creation time. Legacy rows with
+  // no pin keep using the historical default configuration.
+  const config = await getAiAgentConfig(conv.aiBotId);
 
   if (conv.externalContactId) {
     const [contact] = await db
@@ -786,6 +809,7 @@ export async function maybeAutoReply(opts: {
         recipient: recipient || "",
         text: handoffText,
         channelAccountId: conv.channelAccountId,
+        communicationPipelineId: conv.communicationPipelineId,
         zernio: zernioRoute,
       });
       sendOk = handoffResult.ok;
@@ -846,49 +870,66 @@ export async function maybeAutoReply(opts: {
   // recommending a different university even though the global knowledge
   // base and program-search tool know about the entire catalog.
   const rawScope = conversationMetadata.chatbotScope;
-  let scopedUniversityId: number | undefined;
-  let scopedUniversityName = "";
+  let scopedUniversityIds: number[] = [];
+  let scopedUniversityNames: string[] = [];
   let scopedUniversityCountry = "";
   let scopedUniversityCountryCode = "";
   let scopedAssistantName = "";
   let scopedLanguage: BotLanguage | null = null;
   if (rawScope && typeof rawScope === "object") {
     const scope = rawScope as Record<string, unknown>;
-    const universityName = typeof scope.universityName === "string"
-      ? scope.universityName.trim()
-      : "";
     const assistantName = typeof scope.assistantName === "string"
       ? scope.assistantName.trim()
       : "";
-    const universityCountry = typeof scope.universityCountry === "string"
-      ? scope.universityCountry.trim()
-      : "";
-    const universityCountryCode = typeof scope.universityCountryCode === "string"
-      ? scope.universityCountryCode.trim().toUpperCase()
-      : "";
-    const universityId = Number(scope.universityId);
     scopedLanguage = normalizeEmbedChatLocale(scope.language);
-    if (universityName && Number.isInteger(universityId) && universityId > 0) {
-      scopedUniversityId = universityId;
-      scopedUniversityName = universityName;
-      scopedUniversityCountry = universityCountry;
-      scopedUniversityCountryCode = /^[A-Z]{2,3}$/.test(universityCountryCode)
-        ? universityCountryCode
+    scopedAssistantName = assistantName;
+
+    const metadataIds = Array.isArray(scope.universityIds)
+      ? scope.universityIds
+          .map((value) => Number(value))
+          .filter((value) => Number.isInteger(value) && value > 0)
+      : [];
+    const legacyUniversityId = Number(scope.universityId);
+    if (metadataIds.length === 0 && Number.isInteger(legacyUniversityId) && legacyUniversityId > 0) {
+      metadataIds.push(legacyUniversityId);
+    }
+    const scopeMode = scope.universityScope === "all"
+      ? "all"
+      : metadataIds.length > 0
+        ? "selected"
+        : "all";
+
+    if (scopeMode === "selected") {
+      scopedUniversityIds = [...new Set(metadataIds)];
+      const universityRows = await db
+        .select({
+          id: universitiesTable.id,
+          name: universitiesTable.name,
+          country: universitiesTable.country,
+        })
+        .from(universitiesTable)
+        .where(and(
+          inArray(universitiesTable.id, scopedUniversityIds),
+          eq(universitiesTable.isActive, true),
+        ));
+      const rowById = new Map(universityRows.map((row) => [row.id, row]));
+      scopedUniversityNames = scopedUniversityIds
+        .map((id) => rowById.get(id)?.name?.trim() ?? "")
+        .filter(Boolean);
+
+      const firstCountry = universityRows[0]?.country?.trim() ?? "";
+      scopedUniversityCountry = firstCountry && universityRows.every(
+        (row) => row.country?.trim().toLowerCase() === firstCountry.toLowerCase(),
+      )
+        ? firstCountry
         : "";
-      scopedAssistantName = assistantName;
     }
   }
 
-  // Backward compatibility for conversations opened before country metadata
-  // was added. Resolve from the server-owned university record and fail closed
-  // if the catalog cannot map the university country to an ISO code.
-  if (scopedUniversityId && !scopedUniversityCountryCode) {
-    const [universityScope] = await db
-      .select({ country: universitiesTable.country })
-      .from(universitiesTable)
-      .where(eq(universitiesTable.id, scopedUniversityId))
-      .limit(1);
-    scopedUniversityCountry = universityScope?.country?.trim() ?? "";
+  // Destination guidance is safe only when all selected universities belong
+  // to the same country. Mixed-country and all-university assistants keep the
+  // destination RAG closed until the visitor narrows the scope.
+  if (scopedUniversityIds.length > 0 && scopedUniversityCountry) {
     const canonicalName = canonicalCountry(scopedUniversityCountry) ?? scopedUniversityCountry;
     const [catalogCountry] = canonicalName
       ? await db
@@ -906,15 +947,16 @@ export async function maybeAutoReply(opts: {
   // global knowledgeBase are intentionally excluded because they may contain
   // other universities. Only student-safe Academy chunks for the university's
   // own country are allowed. The live program tool is independently hard-
-  // filtered by scopedUniversityId below.
-  const ragChunks = scopedUniversityId
+  // filtered by scopedUniversityIds below.
+  const ragChunks = scopedUniversityIds.length > 0
     ? scopedUniversityCountryCode
       ? await retrieveKnowledgeChunks(msg.content, {
+          aiBotId: conv.aiBotId,
           sourceTypes: ["academy"],
           academyCountryCode: scopedUniversityCountryCode,
         })
       : []
-    : await retrieveKnowledgeChunks(msg.content);
+    : await retrieveKnowledgeChunks(msg.content, { aiBotId: conv.aiBotId });
   let systemPrompt = isInternal
     ? [
         "You are Find And Study's private internal collaboration assistant.",
@@ -930,22 +972,28 @@ export async function maybeAutoReply(opts: {
       ].join("\n")
     : buildBotSystemPrompt(
         language,
-        scopedUniversityId ? "" : config.knowledgeBase,
+        scopedUniversityIds.length > 0 ? "" : config.knowledgeBase,
         ragChunks,
       );
 
-  if (scopedUniversityId && scopedUniversityName) {
+  if (scopedUniversityIds.length > 0) {
+    const singleUniversityName = scopedUniversityNames.length === 1
+      ? scopedUniversityNames[0]
+      : "";
+    const scopeLabel = scopedUniversityNames.length > 0
+      ? scopedUniversityNames.join(", ")
+      : "the configured university selection";
     systemPrompt = [
       systemPrompt,
       "",
       "## Mandatory landing-page scope (highest priority)",
-      `- Your public title is "${scopedAssistantName || `${scopedUniversityName} Yetkili Temsilci Başvuru Asistanı`}".`,
-      `- You are the authorized representative application assistant for ${scopedUniversityName}.`,
-      `- Discuss, recommend, search and present ONLY ${scopedUniversityName}. Never name, compare, suggest or redirect the visitor to another university.`,
+      `- Your public title is "${scopedAssistantName || (singleUniversityName ? `${singleUniversityName} Yetkili Temsilci Başvuru Asistanı` : "Find & Study Başvuru Asistanı")}".`,
+      `- You are the authorized representative application assistant for this configured selection: ${scopeLabel}.`,
+      `- Discuss, recommend, search and present ONLY universities in this configured selection: ${scopeLabel}. Never name, compare, suggest or redirect the visitor to a university outside this selection.`,
       scopedUniversityCountry
         ? `- For destination procedures and country guidance, use only retrieved Academy excerpts for ${scopedUniversityCountry}. Never use or mention another destination country's procedures.`
-        : "- Destination-country guidance is unavailable for this university; ask the team instead of guessing.",
-      `- If the answer for ${scopedUniversityName} is unavailable, say you will ask the team; never fill the gap with another university.`,
+        : "- The selected universities do not resolve to one destination country. Give country-specific guidance only after the visitor chooses a university; otherwise ask the team instead of guessing.",
+      `- If the answer for ${scopeLabel} is unavailable, say you will ask the team; never fill the gap with a university outside this selection.`,
       "- Do not claim to be the university's official internal office. If directly asked, state transparently that you are the university's authorized representative application assistant.",
       "- A visitor request for a human advisor, distrust of the AI, or uncertainty about representation requires a human handoff.",
     ].join("\n");
@@ -973,6 +1021,7 @@ export async function maybeAutoReply(opts: {
   }
 
   const rawReplyText = await generateBotReply({
+    aiBotId: conv.aiBotId,
     systemPrompt,
     language,
     model: config.model,
@@ -987,7 +1036,7 @@ export async function maybeAutoReply(opts: {
         content: m.content,
       };
     }),
-    enforcedUniversityId: scopedUniversityId,
+    enforcedUniversityIds: scopedUniversityIds,
   });
   if (!rawReplyText) return { acted: false, reason: "send_failed" };
   // Strip any Markdown that WhatsApp renders as literal characters (**, ##, ---, etc.)
@@ -1012,6 +1061,7 @@ export async function maybeAutoReply(opts: {
     recipient: recipient || "",
     text: replyText,
     channelAccountId: conv.channelAccountId,
+    communicationPipelineId: conv.communicationPipelineId,
     zernio: zernioRoute,
   });
 

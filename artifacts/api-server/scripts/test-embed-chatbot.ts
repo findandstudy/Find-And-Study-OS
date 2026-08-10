@@ -13,6 +13,10 @@ import {
   normalizeEmbedChatLocale,
   resolveEmbedChatLocale,
 } from "../src/lib/embedChatI18n";
+import {
+  isValidEmbedUniversityScope,
+  resolveEmbedUniversityScope,
+} from "../src/lib/embedUniversityScope";
 import { buildKnownEmbedContactInstruction } from "../src/lib/inbox/embedChatIdentityPrompt";
 import {
   expandProgramFieldIntent,
@@ -117,7 +121,7 @@ test("embedded assistant does not re-ask identity collected by the pre-chat form
 });
 
 test("chatbot route keeps identity, authorization and XSS guards server-owned", () => {
-  assert.match(routeSource, /AI chatbot widgets require exactly one universityId preset/);
+  assert.match(routeSource, /Selected university scope requires at least one university/);
   assert.match(routeSource, /createEmbedChatSessionToken\(/);
   assert.match(routeSource, /verifyEmbedChatSessionToken\(/);
   assert.match(routeSource, /eq\(embedWidgetsTable\.isActive, true\)/);
@@ -212,27 +216,62 @@ test("assistant logos use an admin-only, image-only upload flow", () => {
 });
 
 test("university scope is enforced below the prompt layer", () => {
+  assert.match(routeSource, /resolveEmbedUniversityScope/);
+  assert.match(routeSource, /inArray\(programsTable\.universityId/);
+  assert.match(routeSource, /universityScope: universityScope\.mode/);
+  assert.match(
+    routeSource,
+    /universityIds: scopedUniversities\.map\(\(university\) => university\.id\)/,
+  );
+  assert.match(routeSource, /hasUniversityScope/);
   assert.match(
     botSource,
-    /const ragChunks = scopedUniversityId[\s\S]*sourceTypes: \["academy"\][\s\S]*academyCountryCode: scopedUniversityCountryCode/,
+    /const ragChunks = scopedUniversityIds\.length > 0[\s\S]*sourceTypes: \["academy"\][\s\S]*academyCountryCode: scopedUniversityCountryCode/,
   );
   assert.match(
     botSource,
     /destination procedures and country guidance[\s\S]*Never use or mention another destination country/i,
   );
-  assert.match(routeSource, /canonicalCountry\(university\.country\)/);
+  assert.match(routeSource, /canonicalCountry\(commonCountry\)/);
   assert.match(routeSource, /universityCountryCode: universityCountryCode \|\| null/);
   assert.match(knowledgeIngestSource, /academyCountryCode: document\.countryCode/);
   assert.match(knowledgeRetrievalSource, /metadata}->>'academyCountryCode'/);
-  assert.match(botSource, /enforcedUniversityId: scopedUniversityId/);
+  assert.match(botSource, /inArray\(universitiesTable\.id, scopedUniversityIds\)/);
+  assert.match(botSource, /enforcedUniversityIds: scopedUniversityIds/);
   assert.match(botSource, /requestsEmbedHumanHandoff\(msg\.content\)/);
   assert.match(
     botSource,
-    /scopedUniversityId && scopedUniversityName[\s\S]*buildKnownEmbedContactInstruction\(contact\)/,
+    /scopedUniversityIds\.length > 0[\s\S]*buildKnownEmbedContactInstruction\(contact\)/,
   );
   assert.match(
     programToolSource,
-    /Number\.isInteger\(enforcedUniversityId\)[\s\S]*String\(enforcedUniversityId\)/,
+    /new Set\([\s\S]*enforcedUniversityIds[\s\S]*join\(","\)/,
+  );
+});
+
+test("university scope supports all, selected sets and legacy widgets", () => {
+  assert.deepEqual(resolveEmbedUniversityScope(undefined), {
+    mode: "all",
+    universityIds: [],
+  });
+  assert.deepEqual(
+    resolveEmbedUniversityScope({ universityScope: "all", universityIds: [42] }),
+    { mode: "all", universityIds: [] },
+  );
+  assert.deepEqual(resolveEmbedUniversityScope({ universityId: "42" }), {
+    mode: "selected",
+    universityIds: [42],
+  });
+  assert.deepEqual(
+    resolveEmbedUniversityScope({
+      universityScope: "selected",
+      universityIds: ["42", 7, 42, 0, "invalid"],
+    }),
+    { mode: "selected", universityIds: [42, 7] },
+  );
+  assert.equal(
+    isValidEmbedUniversityScope({ universityScope: "selected", universityIds: [] }),
+    false,
   );
 });
 
@@ -245,7 +284,7 @@ test("vague multilingual program intent is normalized inside university scope", 
   assert.doesNotMatch(expandProgramFieldIntent("flawless design") ?? "", /Law/);
 
   assert.deepEqual(
-    normalizeProgramSearchInput({ search: "bilgisayar bölümü" }, 42),
+    normalizeProgramSearchInput({ search: "bilgisayar bölümü" }, [42]),
     { search: undefined, field: "bilgisayar bölümü,Computer" },
   );
   assert.deepEqual(

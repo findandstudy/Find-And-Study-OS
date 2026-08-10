@@ -5,12 +5,13 @@
 // webhook/conversation rows to the same table; this module only manages the
 // program_scope row today.
 import { db, knowledgeSourcesTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import {
   DEFAULT_PROGRAM_SCOPE,
   writeAiAgentConfig,
   type ProgramScope,
 } from "./aiAgentConfig";
+import { listActiveAiBotIds, requireAiBotId } from "./aiBotRuntime";
 
 export const PROGRAM_SCOPE_SOURCE_TYPE = "program_scope";
 const PROGRAM_SCOPE_SOURCE_NAME = "Programlar (Course Finder)";
@@ -42,12 +43,16 @@ export interface ProgramScopeSource {
  * missing (pre-seed / DB unavailable) so callers can fall back to safe
  * defaults instead of throwing on the bot hot path.
  */
-export async function getProgramScopeSource(): Promise<ProgramScopeSource | null> {
+export async function getProgramScopeSource(aiBotId?: number | null): Promise<ProgramScopeSource | null> {
   try {
+    const resolvedBotId = await requireAiBotId(aiBotId);
     const [row] = await db
       .select()
       .from(knowledgeSourcesTable)
-      .where(eq(knowledgeSourcesTable.type, PROGRAM_SCOPE_SOURCE_TYPE));
+      .where(and(
+        eq(knowledgeSourcesTable.aiBotId, resolvedBotId),
+        eq(knowledgeSourcesTable.type, PROGRAM_SCOPE_SOURCE_TYPE),
+      ));
     if (!row) return null;
     return {
       id: row.id,
@@ -69,12 +74,16 @@ export async function getProgramScopeSource(): Promise<ProgramScopeSource | null
 export async function writeProgramScopeSource(input: {
   isActive: boolean;
   scope: ProgramScope;
-}): Promise<ProgramScopeSource> {
+}, aiBotId?: number | null): Promise<ProgramScopeSource> {
+  const resolvedBotId = await requireAiBotId(aiBotId);
   const now = new Date();
   const [existing] = await db
     .select({ id: knowledgeSourcesTable.id })
     .from(knowledgeSourcesTable)
-    .where(eq(knowledgeSourcesTable.type, PROGRAM_SCOPE_SOURCE_TYPE));
+    .where(and(
+      eq(knowledgeSourcesTable.aiBotId, resolvedBotId),
+      eq(knowledgeSourcesTable.type, PROGRAM_SCOPE_SOURCE_TYPE),
+    ));
 
   if (existing) {
     await db
@@ -88,6 +97,7 @@ export async function writeProgramScopeSource(input: {
       .where(eq(knowledgeSourcesTable.id, existing.id));
   } else {
     await db.insert(knowledgeSourcesTable).values({
+      aiBotId: resolvedBotId,
       type: PROGRAM_SCOPE_SOURCE_TYPE,
       name: PROGRAM_SCOPE_SOURCE_NAME,
       config: input.scope,
@@ -101,10 +111,10 @@ export async function writeProgramScopeSource(input: {
   // actually reads. `enabled` on programScope means "the toggle is on"; the
   // master is_active gate for the whole source lives on knowledge_sources and
   // is combined with it by isProgramSearchToolEnabled() below.
-  await writeAiAgentConfig({ programScope: input.scope });
+  await writeAiAgentConfig({ programScope: input.scope }, resolvedBotId);
 
   return {
-    id: existing?.id ?? (await getProgramScopeSource())!.id,
+    id: existing?.id ?? (await getProgramScopeSource(resolvedBotId))!.id,
     isActive: input.isActive,
     scope: input.scope,
     lastSyncedAt: now,
@@ -115,14 +125,19 @@ export async function writeProgramScopeSource(input: {
  * Idempotently seed the program_scope source row if it does not exist yet.
  * Runs on api-server boot, mirroring seedAiAgentConfig.
  */
-export async function seedProgramScopeSource(): Promise<void> {
+export async function seedProgramScopeSource(aiBotId?: number | null): Promise<void> {
   try {
+    const resolvedBotId = await requireAiBotId(aiBotId);
     const [existing] = await db
       .select({ id: knowledgeSourcesTable.id })
       .from(knowledgeSourcesTable)
-      .where(eq(knowledgeSourcesTable.type, PROGRAM_SCOPE_SOURCE_TYPE));
+      .where(and(
+        eq(knowledgeSourcesTable.aiBotId, resolvedBotId),
+        eq(knowledgeSourcesTable.type, PROGRAM_SCOPE_SOURCE_TYPE),
+      ));
     if (existing) return;
     await db.insert(knowledgeSourcesTable).values({
+      aiBotId: resolvedBotId,
       type: PROGRAM_SCOPE_SOURCE_TYPE,
       name: PROGRAM_SCOPE_SOURCE_NAME,
       config: DEFAULT_PROGRAM_SCOPE,
@@ -130,10 +145,15 @@ export async function seedProgramScopeSource(): Promise<void> {
       status: "active",
       lastSyncedAt: new Date(),
     });
-    console.log("[seed] knowledge_sources: program_scope row seeded");
+    console.log(`[seed] knowledge_sources: program_scope row seeded for bot #${resolvedBotId}`);
   } catch (err) {
     console.error("[seed] seedProgramScopeSource error:", err);
   }
+}
+
+export async function seedProgramScopeSources(): Promise<void> {
+  const botIds = await listActiveAiBotIds();
+  await Promise.all(botIds.map((aiBotId) => seedProgramScopeSource(aiBotId)));
 }
 
 /**
@@ -142,8 +162,8 @@ export async function seedProgramScopeSource(): Promise<void> {
  * missing/unreachable state fails CLOSED (tool disabled, bot falls back to
  * static knowledgeBase) rather than silently exposing unscoped programs.
  */
-export async function isProgramSearchToolEnabled(): Promise<{ enabled: boolean; scope: ProgramScope }> {
-  const source = await getProgramScopeSource();
+export async function isProgramSearchToolEnabled(aiBotId?: number | null): Promise<{ enabled: boolean; scope: ProgramScope }> {
+  const source = await getProgramScopeSource(aiBotId);
   if (!source || !source.isActive || !source.scope.enabled) {
     return { enabled: false, scope: source?.scope ?? DEFAULT_PROGRAM_SCOPE };
   }

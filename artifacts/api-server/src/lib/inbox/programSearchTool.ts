@@ -125,15 +125,16 @@ function intersectWithScope(requested: string | undefined, scope: string[] | "al
  */
 export async function executeSearchProgramsTool(
   input: SearchProgramsToolInput,
-  enforcedUniversityId?: number,
+  enforcedUniversityIds?: number[],
+  aiBotId?: number | null,
 ): Promise<SearchProgramsToolOutput> {
-  const { enabled, scope } = await isProgramSearchToolEnabled();
+  const { enabled, scope } = await isProgramSearchToolEnabled(aiBotId);
   if (!enabled) {
     return { disabled: true, count: 0, results: [] };
   }
 
-  const normalizedInput = normalizeProgramSearchInput(input, enforcedUniversityId);
-  const params = scopedParams(normalizedInput, scope, enforcedUniversityId);
+  const normalizedInput = normalizeProgramSearchInput(input, enforcedUniversityIds);
+  const params = scopedParams(normalizedInput, scope, enforcedUniversityIds);
   const where = buildProgramFacetConditions(params, undefined, { fuzzyField: true });
 
   const rows = await db
@@ -169,18 +170,18 @@ export async function executeSearchProgramsTool(
 function scopedParams(
   input: SearchProgramsToolInput,
   scope: ProgramScope,
-  enforcedUniversityId?: number,
+  enforcedUniversityIds?: number[],
 ): Record<string, string | undefined> {
   const country = intersectWithScope(input.country, scope.countries);
   const universityType = intersectWithScope(input.universityType, scope.universityTypes);
+  const universityIds = Array.from(new Set(
+    (enforcedUniversityIds || []).filter((id) => Number.isInteger(id) && id > 0),
+  ));
   return {
     country,
     city: input.city,
     universityType,
-    universityId:
-      Number.isInteger(enforcedUniversityId) && Number(enforcedUniversityId) > 0
-        ? String(enforcedUniversityId)
-        : undefined,
+    universityId: universityIds.length ? universityIds.join(",") : undefined,
     level: input.level,
     language: input.language,
     field: input.field,

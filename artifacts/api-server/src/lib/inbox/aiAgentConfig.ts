@@ -8,7 +8,7 @@
 // the multilingual escalation keyword sets, and the editable knowledge base
 // (markdown system prompt). The admin panel (FAZ 2) edits this record; the
 // auto-reply engine and lead automation (FAZ 3) read it.
-import { db, integrationsTable } from "@workspace/db";
+import { aiBotsTable, db, integrationsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { decryptConfig, encryptConfig } from "../encryption";
@@ -244,7 +244,7 @@ export const aiAgentConfigSchema = z.object({
   temperature: z.number().min(0).max(2),
   maxConsecutiveReplies: z.number().int().min(0).max(100),
   handoffMessage: z.string().max(2000),
-  languages: z.array(z.enum(["tr", "en", "ar", "ru", "fr"])).min(1),
+  languages: z.array(z.enum(["tr", "en", "ar", "fa", "fr", "es", "ru", "zh", "hi", "id"])).min(1),
   escalationKeywords: escalationKeywordsSchema,
   knowledgeBase: z.string().min(1).max(200000),
   programScope: programScopeSchema,
@@ -398,8 +398,29 @@ export function __setAiAgentConfigOverrideForTests(patch: Partial<AiAgentConfig>
   __configOverride = patch ? mergeWithDefaults(patch as Record<string, unknown>) : null;
 }
 
-async function readRawConfig(): Promise<AiAgentConfig> {
+function parseBotConfig(configEncrypted: string | null | undefined): AiAgentConfig | null {
+  if (!configEncrypted) return null;
   try {
+    const encrypted = JSON.parse(configEncrypted) as Record<string, any>;
+    return mergeWithDefaults(decryptConfig(encrypted));
+  } catch {
+    return null;
+  }
+}
+
+async function readRawConfig(aiBotId?: number | null): Promise<AiAgentConfig> {
+  try {
+    if (aiBotId != null) {
+      const [bot] = await db
+        .select({ configEncrypted: aiBotsTable.configEncrypted })
+        .from(aiBotsTable)
+        .where(eq(aiBotsTable.id, aiBotId));
+      const scoped = parseBotConfig(bot?.configEncrypted);
+      // A named bot is an isolation boundary. Never fall through to the
+      // legacy global integration when its configuration is empty or the id
+      // no longer exists; doing so would make two bots silently share state.
+      return scoped ?? mergeWithDefaults(null);
+    }
     const [row] = await db
       .select()
       .from(integrationsTable)
@@ -415,9 +436,9 @@ async function readRawConfig(): Promise<AiAgentConfig> {
 }
 
 /** Load the live AI agent config, merged over safe defaults. */
-export async function getAiAgentConfig(): Promise<AiAgentConfig> {
+export async function getAiAgentConfig(aiBotId?: number | null): Promise<AiAgentConfig> {
   if (__configOverride) return __configOverride;
-  return readRawConfig();
+  return readRawConfig(aiBotId);
 }
 
 /**
@@ -425,8 +446,11 @@ export async function getAiAgentConfig(): Promise<AiAgentConfig> {
  * encrypted like the other integration configs. Returns the merged, validated
  * config. Used by the seed and the FAZ 2 admin panel.
  */
-export async function writeAiAgentConfig(patch: AiAgentConfigPatch): Promise<AiAgentConfig> {
-  const current = await readRawConfig();
+export async function writeAiAgentConfig(
+  patch: AiAgentConfigPatch | AiAgentConfig,
+  aiBotId?: number | null,
+): Promise<AiAgentConfig> {
+  const current = await readRawConfig(aiBotId);
   const merged = mergeWithDefaults({
     ...current,
     ...patch,
@@ -445,6 +469,18 @@ export async function writeAiAgentConfig(patch: AiAgentConfigPatch): Promise<AiA
   });
   const validated = aiAgentConfigSchema.parse(merged);
   const encrypted = encryptConfig(validated as Record<string, any>);
+  if (aiBotId != null) {
+    const updated = await db
+      .update(aiBotsTable)
+      .set({
+        configEncrypted: JSON.stringify(encrypted),
+        updatedAt: new Date(),
+      })
+      .where(eq(aiBotsTable.id, aiBotId))
+      .returning({ id: aiBotsTable.id });
+    if (updated.length === 0) throw new Error(`AI bot ${aiBotId} not found`);
+    return validated;
+  }
   await db
     .insert(integrationsTable)
     .values({
