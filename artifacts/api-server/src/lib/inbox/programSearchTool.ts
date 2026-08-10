@@ -12,7 +12,7 @@
 // student-safe fields (no internal commission/contact data — mirrors the
 // non-staff sanitization already used by GET /course-finder).
 import { db, programsTable, universitiesTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { buildProgramFacetConditions } from "../../routes/course-finder";
 import { isProgramSearchToolEnabled } from "./knowledgeSources";
 import type { ProgramScope } from "./aiAgentConfig";
@@ -76,6 +76,15 @@ export interface SearchProgramsToolInput {
   search?: string;
 }
 
+export interface EnforcedProgramFilters {
+  country?: string;
+  city?: string;
+  universityType?: string;
+  level?: string;
+  language?: string;
+  field?: string;
+}
+
 export interface SearchProgramsResultRow {
   id: number;
   name: string;
@@ -127,6 +136,7 @@ export async function executeSearchProgramsTool(
   input: SearchProgramsToolInput,
   enforcedUniversityIds?: number[],
   aiBotId?: number | null,
+  enforcedFilters?: EnforcedProgramFilters,
 ): Promise<SearchProgramsToolOutput> {
   const { enabled, scope } = await isProgramSearchToolEnabled(aiBotId);
   if (!enabled) {
@@ -134,8 +144,18 @@ export async function executeSearchProgramsTool(
   }
 
   const normalizedInput = normalizeProgramSearchInput(input, enforcedUniversityIds);
-  const params = scopedParams(normalizedInput, scope, enforcedUniversityIds);
-  const where = buildProgramFacetConditions(params, undefined, { fuzzyField: true });
+  const requestedWhere = buildProgramFacetConditions(
+    scopedParams(normalizedInput, scope),
+    undefined,
+    { fuzzyField: true },
+  );
+  const hardScopeParams = enforcedScopeParams(enforcedUniversityIds, enforcedFilters);
+  const hardScopeWhere = hardScopeParams
+    ? buildProgramFacetConditions(hardScopeParams)
+    : undefined;
+  const where = requestedWhere && hardScopeWhere
+    ? and(requestedWhere, hardScopeWhere)
+    : hardScopeWhere ?? requestedWhere;
 
   const rows = await db
     .select({
@@ -170,18 +190,14 @@ export async function executeSearchProgramsTool(
 function scopedParams(
   input: SearchProgramsToolInput,
   scope: ProgramScope,
-  enforcedUniversityIds?: number[],
 ): Record<string, string | undefined> {
   const country = intersectWithScope(input.country, scope.countries);
   const universityType = intersectWithScope(input.universityType, scope.universityTypes);
-  const universityIds = Array.from(new Set(
-    (enforcedUniversityIds || []).filter((id) => Number.isInteger(id) && id > 0),
-  ));
   return {
     country,
     city: input.city,
     universityType,
-    universityId: universityIds.length ? universityIds.join(",") : undefined,
+    universityId: undefined,
     level: input.level,
     language: input.language,
     field: input.field,
@@ -189,4 +205,30 @@ function scopedParams(
     feeMax: typeof input.feeMax === "number" && Number.isFinite(input.feeMax) ? String(input.feeMax) : undefined,
     search: input.search,
   };
+}
+
+function enforcedScopeParams(
+  enforcedUniversityIds?: number[],
+  enforcedFilters?: EnforcedProgramFilters,
+): Record<string, string | undefined> | null {
+  const universityIds = Array.from(new Set(
+    (enforcedUniversityIds || []).filter((id) => Number.isInteger(id) && id > 0),
+  ));
+  const clean = (value: string | undefined) => {
+    const normalized = value?.trim();
+    return normalized || undefined;
+  };
+  const params = {
+    country: clean(enforcedFilters?.country),
+    city: clean(enforcedFilters?.city),
+    universityType: clean(enforcedFilters?.universityType),
+    universityId: universityIds.length ? universityIds.join(",") : undefined,
+    level: clean(enforcedFilters?.level),
+    language: clean(enforcedFilters?.language),
+    field: clean(enforcedFilters?.field),
+    feeMin: undefined,
+    feeMax: undefined,
+    search: undefined,
+  };
+  return Object.values(params).some(Boolean) ? params : null;
 }

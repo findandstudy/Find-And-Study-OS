@@ -86,6 +86,7 @@ import { sanitizeGa4AnalyticsContext } from "../lib/ga4LeadTracking";
 import { runFtcNewLeadAutomation } from "../lib/ftcLeadAutomation";
 import {
   isValidEmbedUniversityScope,
+  resolveEmbedPresetScopeFilters,
   resolveEmbedUniversityScope,
 } from "../lib/embedUniversityScope";
 import {
@@ -2183,6 +2184,12 @@ type ChatScopeMetadata = {
   universityName: string | null;
   universityCountry?: string | null;
   universityCountryCode?: string | null;
+  presetCountry?: string | null;
+  presetCity?: string | null;
+  presetUniversityType?: string | null;
+  presetLevel?: string | null;
+  presetLanguage?: string | null;
+  presetField?: string | null;
   sourcePageUrl: string | null;
   sourceWebsite: string | null;
   assistantName: string;
@@ -2220,6 +2227,10 @@ function readChatScope(metadata: unknown): ChatScopeMetadata | null {
       ? "selected"
       : null;
   if (!universityScope || (universityScope === "selected" && universityIds.length === 0)) return null;
+  const scopeText = (key: string) => {
+    const value = row[key];
+    return typeof value === "string" && value.trim() ? value.trim() : null;
+  };
   return {
     ...(scope as Omit<ChatScopeMetadata, "language" | "universityScope" | "universityIds" | "universityNames" | "universityId" | "universityName">),
     universityScope,
@@ -2227,6 +2238,14 @@ function readChatScope(metadata: unknown): ChatScopeMetadata | null {
     universityNames,
     universityId: universityIds.length === 1 ? universityIds[0] : null,
     universityName: universityNames.length === 1 ? universityNames[0] : null,
+    universityCountry: scopeText("universityCountry"),
+    universityCountryCode: scopeText("universityCountryCode"),
+    presetCountry: scopeText("presetCountry"),
+    presetCity: scopeText("presetCity"),
+    presetUniversityType: scopeText("presetUniversityType"),
+    presetLevel: scopeText("presetLevel"),
+    presetLanguage: scopeText("presetLanguage"),
+    presetField: scopeText("presetField"),
     language: resolveEmbedChatLocale(row.language),
   };
 }
@@ -2367,6 +2386,7 @@ router.post(
     }
 
     const universityScope = resolveEmbedUniversityScope(widget.presetFilters);
+    const presetScopeFilters = resolveEmbedPresetScopeFilters(widget.presetFilters);
     if (!isValidEmbedUniversityScope(widget.presetFilters)) {
       res.status(409).json({ error: "Selected university scope requires at least one university." });
       return;
@@ -2400,19 +2420,20 @@ router.post(
     const selectedUniversityNames = scopedUniversities.map((university) => university.name);
     const primaryUniversity = scopedUniversities.length === 1 ? scopedUniversities[0] : null;
     const firstCountry = scopedUniversities[0]?.country?.trim() ?? "";
-    const commonCountry = firstCountry && scopedUniversities.every(
+    const commonSelectedCountry = firstCountry && scopedUniversities.every(
       (university) => university.country?.trim().toLowerCase() === firstCountry.toLowerCase(),
     )
       ? firstCountry
       : "";
+    const scopeCountry = presetScopeFilters.country || commonSelectedCountry;
     const firstCountryCode = scopedUniversities[0]?.countryCode?.trim().toUpperCase() ?? "";
     let universityCountryCode = firstCountryCode && scopedUniversities.every(
       (university) => university.countryCode?.trim().toUpperCase() === firstCountryCode,
     )
       ? firstCountryCode
       : "";
-    if (!universityCountryCode && commonCountry) {
-      const canonicalName = canonicalCountry(commonCountry) ?? commonCountry;
+    if (presetScopeFilters.country || (!universityCountryCode && scopeCountry)) {
+      const canonicalName = canonicalCountry(scopeCountry) ?? scopeCountry;
       const [catalogCountry] = await db
         .select({ code: countriesTable.code })
         .from(countriesTable)
@@ -2491,8 +2512,14 @@ router.post(
         universityNames: selectedUniversityNames,
         universityId: primaryUniversity?.id ?? null,
         universityName: primaryUniversity?.name ?? null,
-        universityCountry: commonCountry || null,
+        universityCountry: scopeCountry || null,
         universityCountryCode: universityCountryCode || null,
+        presetCountry: presetScopeFilters.country || null,
+        presetCity: presetScopeFilters.city || null,
+        presetUniversityType: presetScopeFilters.universityType || null,
+        presetLevel: presetScopeFilters.level || null,
+        presetLanguage: presetScopeFilters.language || null,
+        presetField: presetScopeFilters.field || null,
         sourcePageUrl: pageUrl,
         sourceWebsite: website,
         assistantName,

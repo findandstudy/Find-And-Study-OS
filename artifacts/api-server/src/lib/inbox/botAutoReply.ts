@@ -42,6 +42,7 @@ import {
   searchProgramsToolDefinition,
   executeSearchProgramsTool,
   SEARCH_PROGRAMS_TOOL_NAME,
+  type EnforcedProgramFilters,
 } from "./programSearchTool";
 import { isProgramSearchToolEnabled } from "./knowledgeSources";
 import { retrieveKnowledgeChunks } from "./knowledgeRetrieval";
@@ -173,6 +174,7 @@ export interface BotReplyInput {
   temperature: number;
   messages: Array<{ direction: string; content: string }>;
   enforcedUniversityIds?: number[];
+  enforcedProgramFilters?: EnforcedProgramFilters;
 }
 let __botReplyOverride: ((input: BotReplyInput) => Promise<string>) | null = null;
 export function __setBotReplyOverrideForTests(
@@ -259,6 +261,7 @@ async function generateBotReply(input: BotReplyInput): Promise<string> {
                       block.input || {},
                       input.enforcedUniversityIds,
                       input.aiBotId,
+                      input.enforcedProgramFilters,
                     )
                   : { error: `unknown_tool:${block.name}` };
             } catch (err) {
@@ -876,13 +879,27 @@ export async function maybeAutoReply(opts: {
   let scopedUniversityCountryCode = "";
   let scopedAssistantName = "";
   let scopedLanguage: BotLanguage | null = null;
+  let scopedProgramFilters: EnforcedProgramFilters = {};
   if (rawScope && typeof rawScope === "object") {
     const scope = rawScope as Record<string, unknown>;
+    const scopeText = (key: string) => {
+      const value = scope[key];
+      return typeof value === "string" ? value.trim() : "";
+    };
     const assistantName = typeof scope.assistantName === "string"
       ? scope.assistantName.trim()
       : "";
     scopedLanguage = normalizeEmbedChatLocale(scope.language);
     scopedAssistantName = assistantName;
+    scopedProgramFilters = {
+      country: scopeText("presetCountry") || undefined,
+      city: scopeText("presetCity") || undefined,
+      universityType: scopeText("presetUniversityType") || undefined,
+      level: scopeText("presetLevel") || undefined,
+      language: scopeText("presetLanguage") || undefined,
+      field: scopeText("presetField") || undefined,
+    };
+    scopedUniversityCountry = scopedProgramFilters.country ?? "";
 
     const metadataIds = Array.isArray(scope.universityIds)
       ? scope.universityIds
@@ -917,19 +934,25 @@ export async function maybeAutoReply(opts: {
         .map((id) => rowById.get(id)?.name?.trim() ?? "")
         .filter(Boolean);
 
-      const firstCountry = universityRows[0]?.country?.trim() ?? "";
-      scopedUniversityCountry = firstCountry && universityRows.every(
-        (row) => row.country?.trim().toLowerCase() === firstCountry.toLowerCase(),
-      )
-        ? firstCountry
-        : "";
+      if (!scopedUniversityCountry) {
+        const firstCountry = universityRows[0]?.country?.trim() ?? "";
+        scopedUniversityCountry = firstCountry && universityRows.every(
+          (row) => row.country?.trim().toLowerCase() === firstCountry.toLowerCase(),
+        )
+          ? firstCountry
+          : "";
+      }
     }
   }
+
+  const hasWidgetProgramScope = scopedUniversityIds.length > 0 || Object.values(
+    scopedProgramFilters,
+  ).some(Boolean);
 
   // Destination guidance is safe only when all selected universities belong
   // to the same country. Mixed-country and all-university assistants keep the
   // destination RAG closed until the visitor narrows the scope.
-  if (scopedUniversityIds.length > 0 && scopedUniversityCountry) {
+  if (hasWidgetProgramScope && scopedUniversityCountry) {
     const canonicalName = canonicalCountry(scopedUniversityCountry) ?? scopedUniversityCountry;
     const [catalogCountry] = canonicalName
       ? await db
@@ -948,7 +971,7 @@ export async function maybeAutoReply(opts: {
   // other universities. Only student-safe Academy chunks for the university's
   // own country are allowed. The live program tool is independently hard-
   // filtered by scopedUniversityIds below.
-  const ragChunks = scopedUniversityIds.length > 0
+  const ragChunks = hasWidgetProgramScope
     ? scopedUniversityCountryCode
       ? await retrieveKnowledgeChunks(msg.content, {
           aiBotId: conv.aiBotId,
@@ -972,27 +995,35 @@ export async function maybeAutoReply(opts: {
       ].join("\n")
     : buildBotSystemPrompt(
         language,
-        scopedUniversityIds.length > 0 ? "" : config.knowledgeBase,
+        hasWidgetProgramScope ? "" : config.knowledgeBase,
         ragChunks,
       );
 
-  if (scopedUniversityIds.length > 0) {
+  if (hasWidgetProgramScope) {
     const singleUniversityName = scopedUniversityNames.length === 1
       ? scopedUniversityNames[0]
       : "";
-    const scopeLabel = scopedUniversityNames.length > 0
-      ? scopedUniversityNames.join(", ")
-      : "the configured university selection";
+    const scopeLabel = [
+      scopedUniversityNames.join(", "),
+      [
+        scopedProgramFilters.country,
+        scopedProgramFilters.city,
+        scopedProgramFilters.universityType,
+        scopedProgramFilters.level,
+        scopedProgramFilters.language,
+        scopedProgramFilters.field,
+      ].filter(Boolean).join(", "),
+    ].filter(Boolean).join(" · ") || "the configured catalog scope";
     systemPrompt = [
       systemPrompt,
       "",
       "## Mandatory landing-page scope (highest priority)",
       `- Your public title is "${scopedAssistantName || (singleUniversityName ? `${singleUniversityName} Yetkili Temsilci Başvuru Asistanı` : "Find & Study Başvuru Asistanı")}".`,
-      `- You are the authorized representative application assistant for this configured selection: ${scopeLabel}.`,
-      `- Discuss, recommend, search and present ONLY universities in this configured selection: ${scopeLabel}. Never name, compare, suggest or redirect the visitor to a university outside this selection.`,
+      `- You are the authorized representative application assistant for this configured catalog scope: ${scopeLabel}.`,
+      `- Discuss, recommend, search and present ONLY programs and universities inside this configured catalog scope: ${scopeLabel}. Never widen, bypass or contradict the configured country, city, university type, university, level, language or field filters.`,
       scopedUniversityCountry
         ? `- For destination procedures and country guidance, use only retrieved Academy excerpts for ${scopedUniversityCountry}. Never use or mention another destination country's procedures.`
-        : "- The selected universities do not resolve to one destination country. Give country-specific guidance only after the visitor chooses a university; otherwise ask the team instead of guessing.",
+        : "- The configured scope does not resolve to one destination country. Give country-specific guidance only after the visitor chooses a country or university; otherwise ask the team instead of guessing.",
       `- If the answer for ${scopeLabel} is unavailable, say you will ask the team; never fill the gap with a university outside this selection.`,
       "- Do not claim to be the university's official internal office. If directly asked, state transparently that you are the university's authorized representative application assistant.",
       "- A visitor request for a human advisor, distrust of the AI, or uncertainty about representation requires a human handoff.",
@@ -1037,6 +1068,7 @@ export async function maybeAutoReply(opts: {
       };
     }),
     enforcedUniversityIds: scopedUniversityIds,
+    enforcedProgramFilters: scopedProgramFilters,
   });
   if (!rawReplyText) return { acted: false, reason: "send_failed" };
   // Strip any Markdown that WhatsApp renders as literal characters (**, ##, ---, etc.)

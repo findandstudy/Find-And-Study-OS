@@ -15,6 +15,7 @@ import {
 } from "../src/lib/embedChatI18n";
 import {
   isValidEmbedUniversityScope,
+  resolveEmbedPresetScopeFilters,
   resolveEmbedUniversityScope,
 } from "../src/lib/embedUniversityScope";
 import { buildKnownEmbedContactInstruction } from "../src/lib/inbox/embedChatIdentityPrompt";
@@ -215,38 +216,47 @@ test("assistant logos use an admin-only, image-only upload flow", () => {
   assert.doesNotMatch(embedsAdminSource, /image\/svg\+xml/);
 });
 
-test("university scope is enforced below the prompt layer", () => {
+test("embed catalog scope is enforced below the prompt layer", () => {
   assert.match(routeSource, /resolveEmbedUniversityScope/);
+  assert.match(routeSource, /resolveEmbedPresetScopeFilters/);
   assert.match(routeSource, /inArray\(programsTable\.universityId/);
   assert.match(routeSource, /universityScope: universityScope\.mode/);
   assert.match(
     routeSource,
     /universityIds: scopedUniversities\.map\(\(university\) => university\.id\)/,
   );
-  assert.match(routeSource, /hasUniversityScope/);
   assert.match(
     botSource,
-    /const ragChunks = scopedUniversityIds\.length > 0[\s\S]*sourceTypes: \["academy"\][\s\S]*academyCountryCode: scopedUniversityCountryCode/,
+    /const ragChunks = hasWidgetProgramScope[\s\S]*sourceTypes: \["academy"\][\s\S]*academyCountryCode: scopedUniversityCountryCode/,
   );
   assert.match(
     botSource,
     /destination procedures and country guidance[\s\S]*Never use or mention another destination country/i,
   );
-  assert.match(routeSource, /canonicalCountry\(commonCountry\)/);
+  assert.match(routeSource, /presetCountry: presetScopeFilters\.country \|\| null/);
+  assert.match(routeSource, /presetUniversityType: presetScopeFilters\.universityType \|\| null/);
+  assert.match(routeSource, /canonicalCountry\(scopeCountry\)/);
   assert.match(routeSource, /universityCountryCode: universityCountryCode \|\| null/);
   assert.match(knowledgeIngestSource, /academyCountryCode: document\.countryCode/);
   assert.match(knowledgeRetrievalSource, /metadata}->>'academyCountryCode'/);
   assert.match(botSource, /inArray\(universitiesTable\.id, scopedUniversityIds\)/);
   assert.match(botSource, /enforcedUniversityIds: scopedUniversityIds/);
+  assert.match(botSource, /enforcedProgramFilters: scopedProgramFilters/);
+  assert.match(
+    botSource,
+    /Never widen, bypass or contradict the configured country, city, university type, university, level, language or field filters/,
+  );
   assert.match(botSource, /requestsEmbedHumanHandoff\(msg\.content\)/);
   assert.match(
     botSource,
-    /scopedUniversityIds\.length > 0[\s\S]*buildKnownEmbedContactInstruction\(contact\)/,
+    /hasWidgetProgramScope[\s\S]*buildKnownEmbedContactInstruction\(contact\)/,
   );
   assert.match(
     programToolSource,
     /new Set\([\s\S]*enforcedUniversityIds[\s\S]*join\(","\)/,
   );
+  assert.match(programToolSource, /buildProgramFacetConditions\(hardScopeParams\)/);
+  assert.match(programToolSource, /and\(requestedWhere, hardScopeWhere\)/);
 });
 
 test("university scope supports all, selected sets and legacy widgets", () => {
@@ -272,6 +282,38 @@ test("university scope supports all, selected sets and legacy widgets", () => {
   assert.equal(
     isValidEmbedUniversityScope({ universityScope: "selected", universityIds: [] }),
     false,
+  );
+});
+
+test("embed preset scope supports regional filters without a university selection", () => {
+  assert.deepEqual(
+    resolveEmbedPresetScopeFilters({
+      country: " Turkey ",
+      city: " Istanbul ",
+      universityType: " Private ",
+      level: " Bachelor ",
+      language: " English ",
+      field: " Business ",
+      ignored: "not-a-scope-filter",
+    }),
+    {
+      country: "Turkey",
+      city: "Istanbul",
+      universityType: "Private",
+      level: "Bachelor",
+      language: "English",
+      field: "Business",
+    },
+  );
+  assert.deepEqual(resolveEmbedPresetScopeFilters(null), {});
+  assert.deepEqual(
+    resolveEmbedUniversityScope({
+      universityScope: "all",
+      country: "Turkey",
+      city: "Istanbul",
+      universityType: "Private",
+    }),
+    { mode: "all", universityIds: [] },
   );
 });
 

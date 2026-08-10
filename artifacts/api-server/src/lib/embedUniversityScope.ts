@@ -3,6 +3,15 @@ export type EmbedUniversityScope = {
   universityIds: number[];
 };
 
+export type EmbedPresetScopeFilters = {
+  country?: string;
+  city?: string;
+  universityType?: string;
+  level?: string;
+  language?: string;
+  field?: string;
+};
+
 function positiveInteger(value: unknown): number | null {
   const parsed = Number(value);
   return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
@@ -33,6 +42,28 @@ export function resolveEmbedUniversityScope(presetFilters: unknown): EmbedUniver
     return { mode: "selected", universityIds: [] };
   }
   return { mode: "all", universityIds: [] };
+}
+
+export function resolveEmbedPresetScopeFilters(
+  presetFilters: unknown,
+): EmbedPresetScopeFilters {
+  if (!presetFilters || typeof presetFilters !== "object" || Array.isArray(presetFilters)) {
+    return {};
+  }
+
+  const filters = presetFilters as Record<string, unknown>;
+  const clean = (key: keyof EmbedPresetScopeFilters) => {
+    const value = filters[key];
+    return typeof value === "string" && value.trim() ? value.trim() : undefined;
+  };
+  return {
+    country: clean("country"),
+    city: clean("city"),
+    universityType: clean("universityType"),
+    level: clean("level"),
+    language: clean("language"),
+    field: clean("field"),
+  };
 }
 
 export function isValidEmbedUniversityScope(presetFilters: unknown): boolean {
