@@ -134,11 +134,55 @@ switch_release_link() {
   mv -Tf "$next_link" "$CURRENT_RELEASE_LINK"
 }
 
+pm2_process_exists_once() {
+  process_name="$1"
+  PM2_EXPECTED_PROCESS_NAME="$process_name" pm2 jlist | node -e '
+    let raw = "";
+    process.stdin.setEncoding("utf8");
+    process.stdin.on("data", (chunk) => { raw += chunk; });
+    process.stdin.on("end", () => {
+      try {
+        const processes = JSON.parse(raw);
+        const matches = processes.filter(
+          (processInfo) => processInfo?.name === process.env.PM2_EXPECTED_PROCESS_NAME,
+        );
+        process.exit(matches.length === 1 ? 0 : 1);
+      } catch { process.exit(1); }
+    });
+  '
+}
+
+restart_pm2_process() {
+  process_name="$1"
+  clear_port="${2:-false}"
+
+  for restart_attempt in 1 2 3; do
+    if [ "$clear_port" = "true" ]; then
+      if PORT="" pm2 restart "$process_name" --update-env; then
+        return 0
+      fi
+    elif pm2 restart "$process_name" --update-env; then
+      return 0
+    fi
+
+    # PM2 can transiently return "Process <id> not found" while a graceful
+    # restart is still draining the exact named process. Retry only while the
+    # canonical topology still contains exactly one matching process; never
+    # create a replacement process from here.
+    pm2_process_exists_once "$process_name" || return 1
+    [ "$restart_attempt" -lt 3 ] || break
+    echo "[deploy] PM2 restart retry $((restart_attempt + 1))/3 for $process_name"
+    sleep 2
+  done
+
+  return 1
+}
+
 rollback_code() {
   echo "[rollback] Restoring previous code release"
   switch_release_link "$PREVIOUS_RELEASE"
-  PORT="" pm2 restart "$PORTAL_WORKER_PROCESS_NAME" --update-env || true
-  pm2 restart "$API_PROCESS_NAME" --update-env || true
+  restart_pm2_process "$PORTAL_WORKER_PROCESS_NAME" true || true
+  restart_pm2_process "$API_PROCESS_NAME" || true
   if curl --fail --silent --show-error --max-time 5 \
     "http://127.0.0.1:$PORT/api/healthz" >/dev/null; then
     echo "[rollback] Previous code release is healthy"
@@ -149,11 +193,11 @@ rollback_code() {
 
 echo "[6/7] Atomically switching code and draining canonical processes"
 switch_release_link "$RELEASE_DIR"
-if ! PORT="" pm2 restart "$PORTAL_WORKER_PROCESS_NAME" --update-env; then
+if ! restart_pm2_process "$PORTAL_WORKER_PROCESS_NAME" true; then
   rollback_code
   fail "portal worker restart failed; code rollback attempted"
 fi
-if ! pm2 restart "$API_PROCESS_NAME" --update-env; then
+if ! restart_pm2_process "$API_PROCESS_NAME"; then
   rollback_code
   fail "API restart failed; code rollback attempted"
 fi

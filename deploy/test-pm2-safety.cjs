@@ -125,8 +125,9 @@ test("deploy entrypoints use preflight and contain no blind fallback", () => {
   assert.match(deploy, /EXPECTED_RELEASE_ID/);
   assert.match(deploy, /git archive/);
   assert.doesNotMatch(deploy, /pm2 start|startOrRestart|pm2 restart all/);
-  assert.match(deploy, /PORT="" pm2 restart "\$PORTAL_WORKER_PROCESS_NAME"/);
-  assert.match(deploy, /pm2 restart "\$API_PROCESS_NAME"/);
+  assert.match(deploy, /restart_pm2_process "\$PORTAL_WORKER_PROCESS_NAME" true/);
+  assert.match(deploy, /restart_pm2_process "\$API_PROCESS_NAME"/);
+  assert.match(deploy, /pm2_process_exists_once/);
   assert.match(compatibility, /exec bash .*deploy\/deploy\.sh/);
   assert.doesNotMatch(compatibility, /pm2|migrate/);
 
