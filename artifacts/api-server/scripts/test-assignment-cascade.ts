@@ -54,13 +54,14 @@ after(() => {
 
 import http from "http";
 import express, { type Express, type Request } from "express";
-import { eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import {
   db,
   usersTable,
   leadsTable,
   studentsTable,
   applicationsTable,
+  pipelineStagesTable,
 } from "@workspace/db";
 
 import studentsRouter from "../src/routes/students.js";
@@ -620,4 +621,59 @@ test("sync-assignment-backfill is idempotent", async () => {
   const afterSecond = await readAssignments(s);
   assert.equal(afterSecond.lead, staffA, "lead unchanged after second run");
   assert.deepEqual(afterSecond.apps, [staffA, staffA], "apps unchanged after second run");
+});
+
+// ---------------------------------------------------------------------------
+// (m) Moving an application into any stage whose variant is "lost" cascades
+//     the linked student and lead into their own first configured lost stages.
+// ---------------------------------------------------------------------------
+test("application lost stage cascades to student and lead lost stages", async () => {
+  const admin = await createUser({ role: "admin" });
+  currentUser = { id: admin, role: "admin", isActive: true };
+
+  const [applicationLost] = await db.select({ key: pipelineStagesTable.key })
+    .from(pipelineStagesTable)
+    .where(and(
+      eq(pipelineStagesTable.entityType, "application"),
+      eq(pipelineStagesTable.variant, "lost"),
+    ))
+    .orderBy(asc(pipelineStagesTable.sortOrder), asc(pipelineStagesTable.id))
+    .limit(1);
+  const [studentLost] = await db.select({ key: pipelineStagesTable.key })
+    .from(pipelineStagesTable)
+    .where(and(
+      eq(pipelineStagesTable.entityType, "student"),
+      eq(pipelineStagesTable.variant, "lost"),
+    ))
+    .orderBy(asc(pipelineStagesTable.sortOrder), asc(pipelineStagesTable.id))
+    .limit(1);
+  const [leadLost] = await db.select({ key: pipelineStagesTable.key })
+    .from(pipelineStagesTable)
+    .where(and(
+      eq(pipelineStagesTable.entityType, "lead"),
+      eq(pipelineStagesTable.variant, "lost"),
+    ))
+    .orderBy(asc(pipelineStagesTable.sortOrder), asc(pipelineStagesTable.id))
+    .limit(1);
+
+  assert.ok(applicationLost?.key, "application pipeline must define a lost stage");
+  assert.ok(studentLost?.key, "student pipeline must define a lost stage");
+  assert.ok(leadLost?.key, "lead pipeline must define a lost stage");
+
+  const s = await seedScenario(null);
+  const targetAppId = s.appIds[0];
+  const res = await request("PATCH", `/api/applications/${targetAppId}`, {
+    stage: applicationLost.key,
+    notes: "Lost cascade regression",
+  });
+  assert.equal(res.status, 200, `PATCH should succeed (got ${res.status}: ${JSON.stringify(res.body)})`);
+
+  const [student] = await db.select({ status: studentsTable.status })
+    .from(studentsTable)
+    .where(eq(studentsTable.id, s.studentId));
+  const [lead] = await db.select({ status: leadsTable.status })
+    .from(leadsTable)
+    .where(eq(leadsTable.id, s.leadId));
+  assert.equal(student?.status, studentLost.key, "student moved to its configured lost stage");
+  assert.equal(lead?.status, leadLost.key, "lead moved to its configured lost stage");
 });

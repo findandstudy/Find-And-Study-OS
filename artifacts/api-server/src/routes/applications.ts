@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { db, applicationsTable, notesTable, usersTable, studentsTable, agentsTable, commissionsTable, serviceFeesTable, programsTable, universitiesTable, pipelineStagesTable, applicationStageDocumentsTable, documentsTable, settingsTable, softDelete } from "@workspace/db";
+import { db, applicationsTable, notesTable, usersTable, studentsTable, leadsTable, agentsTable, commissionsTable, serviceFeesTable, programsTable, universitiesTable, pipelineStagesTable, applicationStageDocumentsTable, documentsTable, settingsTable, softDelete } from "@workspace/db";
 import { eq, sql, and, inArray, asc, desc, ilike, isNull, isNotNull, ne, lt, gte } from "drizzle-orm";
 import { normalizeGpaTo100 } from "../lib/gpaNormalize";
 import { requireAuth, requireRole, requireAgentStaffPermission, logAudit } from "../lib/auth";
@@ -179,6 +179,94 @@ async function autoCancelSiblingApplications(wonAppId: number, studentId: number
         await db.update(serviceFeesTable).set({ financeStatus: "excluded" }).where(eq(serviceFeesTable.id, sf.id));
       }
     }
+  }
+}
+
+type LostCascadeTargets = {
+  studentStage: string;
+  leadStage: string;
+};
+
+async function resolveLostCascadeTargets(applicationStage: string): Promise<LostCascadeTargets | null> {
+  const [target] = await db.select({
+    variant: pipelineStagesTable.variant,
+    mappedStudentStageKey: pipelineStagesTable.mappedStudentStageKey,
+  })
+    .from(pipelineStagesTable)
+    .where(and(
+      eq(pipelineStagesTable.entityType, "application"),
+      eq(pipelineStagesTable.key, applicationStage),
+    ));
+  if (target?.variant !== "lost") return null;
+
+  const [studentStages, leadStages] = await Promise.all([
+    db.select({ key: pipelineStagesTable.key })
+      .from(pipelineStagesTable)
+      .where(and(
+        eq(pipelineStagesTable.entityType, "student"),
+        eq(pipelineStagesTable.variant, "lost"),
+        target.mappedStudentStageKey
+          ? eq(pipelineStagesTable.key, target.mappedStudentStageKey)
+          : undefined,
+      ))
+      .orderBy(asc(pipelineStagesTable.sortOrder), asc(pipelineStagesTable.id))
+      .limit(1),
+    db.select({ key: pipelineStagesTable.key })
+      .from(pipelineStagesTable)
+      .where(and(
+        eq(pipelineStagesTable.entityType, "lead"),
+        eq(pipelineStagesTable.variant, "lost"),
+      ))
+      .orderBy(asc(pipelineStagesTable.sortOrder), asc(pipelineStagesTable.id))
+      .limit(1),
+  ]);
+
+  const studentStage = studentStages[0]?.key;
+  const leadStage = leadStages[0]?.key;
+  if (!studentStage || !leadStage) {
+    throw new Error("LOST cascade requires configured lost stages for both student and lead pipelines");
+  }
+  return { studentStage, leadStage };
+}
+
+async function cascadeApplicationLostStage(opts: {
+  applicationId: number;
+  studentId: number;
+  targets: LostCascadeTargets;
+  actorUserId: number;
+  ipAddress?: string;
+}): Promise<void> {
+  const { applicationId, studentId, targets, actorUserId, ipAddress } = opts;
+  const [student] = await db.select({ status: studentsTable.status })
+    .from(studentsTable)
+    .where(and(eq(studentsTable.id, studentId), isNull(studentsTable.deletedAt)));
+
+  if (student && student.status !== targets.studentStage) {
+    await db.update(studentsTable)
+      .set({ status: targets.studentStage })
+      .where(and(eq(studentsTable.id, studentId), isNull(studentsTable.deletedAt)));
+    logAudit(actorUserId, "stage.lost_cascade", "student", studentId, {
+      from: student.status,
+      to: targets.studentStage,
+      source: "application",
+      sourceId: applicationId,
+    }, ipAddress);
+  }
+
+  const linkedLeads = await db.select({ id: leadsTable.id, status: leadsTable.status })
+    .from(leadsTable)
+    .where(and(eq(leadsTable.convertedStudentId, studentId), isNull(leadsTable.deletedAt)));
+  for (const lead of linkedLeads) {
+    if (lead.status === targets.leadStage) continue;
+    await db.update(leadsTable)
+      .set({ status: targets.leadStage })
+      .where(and(eq(leadsTable.id, lead.id), isNull(leadsTable.deletedAt)));
+    logAudit(actorUserId, "stage.lost_cascade", "lead", lead.id, {
+      from: lead.status,
+      to: targets.leadStage,
+      source: "application",
+      sourceId: applicationId,
+    }, ipAddress);
   }
 }
 
@@ -1533,8 +1621,21 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, ...AG
     conditions.push(inArray(applicationsTable.agentId, visibleIds));
   }
 
+  const lostCascadeTargets = updates.stage !== undefined
+    ? await resolveLostCascadeTargets(String(updates.stage))
+    : null;
   const [app] = await db.update(applicationsTable).set(updates).where(and(...conditions)).returning();
   if (!app) { res.status(404).json({ error: "Application not found" }); return; }
+
+  if (lostCascadeTargets) {
+    await cascadeApplicationLostStage({
+      applicationId: app.id,
+      studentId: app.studentId,
+      targets: lostCascadeTargets,
+      actorUserId: user.id,
+      ipAddress: req.ip,
+    });
+  }
 
   if (updates.stage !== undefined) {
     const newStage = updates.stage as string;
@@ -1902,8 +2003,18 @@ router.post("/applications/bulk-action", requireAuth, requireRole(...STAFF_ROLES
     }
     // Hoisted out of the per-app loop: one DB roundtrip vs N when bulk-moving.
     const fallbackSeason = await getCurrentSeason();
+    const lostCascadeTargets = await resolveLostCascadeTargets(String(stage));
     for (const app of apps) {
       await db.update(applicationsTable).set({ stage }).where(eq(applicationsTable.id, app.id));
+      if (lostCascadeTargets) {
+        await cascadeApplicationLostStage({
+          applicationId: app.id,
+          studentId: app.studentId,
+          targets: lostCascadeTargets,
+          actorUserId: user.id,
+          ipAddress: req.ip,
+        });
+      }
       const [commStatus, sfStatus] = await Promise.all([
         getCommissionFinanceStatus(stage),
         getServiceFeeFinanceStatus(stage),
