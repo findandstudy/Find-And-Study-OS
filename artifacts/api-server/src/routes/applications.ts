@@ -7,9 +7,8 @@ import { STAFF_ROLES, ADMIN_ROLES, AGENT_ROLES, isAgentRole } from "../lib/roles
 import { assertCanAccessStudent } from "../lib/studentAccess";
 import { getAgentVisibleIds, getAgentRecord } from "../lib/agentVisibility";
 import { isAgentSourcedAndBlockedForStaff } from "../lib/rbac/agentSourceScope";
-import { getAssignmentVisibility, getEffectivePermissionSet, canAccessAssignedRecord, userHasPermission } from "../lib/permissions";
+import { getEffectivePermissionSet, canAccessAssignedRecord, userHasPermission } from "../lib/permissions";
 import { cascadeApplicationAssignment } from "../lib/leadAssignment";
-import { getAgencyMemberAgentIds } from "../lib/agencyStaff";
 import { getVisibleBranchIds, resolveCreateBranchId, isInBranchScope } from "../lib/branchScope";
 import { or as orFn } from "drizzle-orm";
 import { getCommissionFinanceStatus, getServiceFeeFinanceStatus, shouldAutoCancelSiblings, getCancelledStageKey } from "../lib/stageFinance";
@@ -368,35 +367,10 @@ router.get("/applications", requireAuth, requireAgentStaffPermission("applicatio
 
   if (isStaff) {
     if (studentId) conditions.push(eq(applicationsTable.studentId, parseInt(studentId, 10)));
-    // Non-admin staff: only see applications assigned to them or unassigned
-    // (mirrors the leads / students lists). Admins see everything in scope.
-    if (!(ADMIN_ROLES as readonly string[]).includes(user.role)) {
-      // Visibility driven by records.* keys. Always see own records;
-      // view_unassigned adds the unassigned pool; view_others adds
-      // teammates' records. Task #128: also include applications for
-      // agencies where this staff is listed as agency-assigned staff.
-      const perms = await getEffectivePermissionSet(user);
-      permissionKeys = [...perms].sort();
-      // KURAL 1: non-admin staff cannot see agent-sourced applications
-      // unless they have records.view_others (Task #494)
-      if (!perms.has("records.view_others")) {
-        conditions.push(isNull(applicationsTable.agentId));
-      }
-      assignmentVisibility = getAssignmentVisibility(perms);
-      if (assignmentVisibility !== "all") {
-        agencyAgentIds = await getAgencyMemberAgentIds(user.id);
-        const orParts: any[] = assignmentVisibility === "assigned"
-          ? [applicationIsAssigned()]
-          : [applicationAssignedTo(user.id)];
-        if (assignmentVisibility === "own_or_unassigned") {
-          orParts.push(applicationIsUnassigned());
-        }
-        if (agencyAgentIds.length > 0) {
-          orParts.push(inArray(applicationsTable.agentId, agencyAgentIds));
-        }
-        conditions.push(orFn(...orParts)!);
-      }
-    }
+    // Historical CRM behaviour: every staff role can browse the complete
+    // application pipeline. Assignment, source, agency and branch are
+    // optional UI filters; they must not become implicit visibility gates.
+    // Student and agent roles remain scoped in their dedicated branches below.
   } else if (user.role === "student") {
     const [studentRec] = await db.select().from(studentsTable).where(eq(studentsTable.userId, user.id));
     if (!studentRec) {
@@ -415,8 +389,9 @@ router.get("/applications", requireAuth, requireAgentStaffPermission("applicatio
     if (studentId) conditions.push(eq(applicationsTable.studentId, parseInt(studentId, 10)));
   }
 
-  // Branch scoping (super_admin: null = all). Applies to staff AND agents.
-  if (user.role !== "student") {
+  // Staff application visibility is global. Branch scoping remains enforced
+  // for agents; students are already limited to their own application rows.
+  if (!isStaff && user.role !== "student") {
     visibleBranchIds = await getVisibleBranchIds(user.id, user.role, user);
     if (visibleBranchIds !== null) {
       if (visibleBranchIds.length === 0) {
@@ -1335,17 +1310,8 @@ router.get("/applications/:id", requireAuth, requireAgentStaffPermission("applic
 
   const user = req.user!;
   const isStaff = STAFF_ROLES.includes(user.role as any);
-  // KURAL 1: non-admin staff cannot access agent-sourced application detail
-  // unless they have records.view_others (Task #494) — within branch scope only
-  if (isAgentSourcedAndBlockedForStaff(user, row.agentId)) {
-    const p = await getEffectivePermissionSet(user);
-    if (!p.has("records.view_others")) {
-      res.status(404).json({ error: "Application not found" }); return;
-    }
-    if (!(await isInBranchScope(user.id, user.role, row.branchId, user))) {
-      res.status(404).json({ error: "Application not found" }); return;
-    }
-  }
+  // Staff can open every application they can browse, regardless of source,
+  // assignment or branch. Agent and student access checks remain below.
   if (isAgentRole(user.role)) {
     const agentRec = await getAgentRecord(user.id, user.role);
     const isSubAgentUser = user.role === "sub_agent" || !!agentRec?.parentAgentId;
@@ -2264,19 +2230,11 @@ router.get("/applications/:id/notes", requireAuth, requireRole(...STAFF_ROLES, .
   const limitNum = Math.min(200, Math.max(1, parseInt(limit, 10)));
   const offset = (pageNum - 1) * limitNum;
 
-  // KURAL 1: non-admin staff cannot access notes of agent-sourced applications
-  // unless they have records.view_others (Task #494) — within branch scope only
-  const [noteApp] = await db.select({ agentId: applicationsTable.agentId, branchId: applicationsTable.branchId }).from(applicationsTable).where(and(eq(applicationsTable.id, id), isNull(applicationsTable.deletedAt)));
+  // Notes follow the same read visibility as the application detail: staff
+  // can read notes for every application, while agent permissions are still
+  // enforced by the route's role/permission middleware.
+  const [noteApp] = await db.select({ id: applicationsTable.id }).from(applicationsTable).where(and(eq(applicationsTable.id, id), isNull(applicationsTable.deletedAt)));
   if (!noteApp) { res.status(404).json({ error: "Application not found" }); return; }
-  if (isAgentSourcedAndBlockedForStaff(req.user!, noteApp.agentId)) {
-    const notePerms = await getEffectivePermissionSet(req.user!);
-    if (!notePerms.has("records.view_others")) {
-      res.status(404).json({ error: "Application not found" }); return;
-    }
-    if (!(await isInBranchScope(req.user!.id, req.user!.role, noteApp.branchId, req.user!))) {
-      res.status(404).json({ error: "Application not found" }); return;
-    }
-  }
 
   const isStaff = ["super_admin", "admin", "manager", "staff"].includes(req.user!.role);
   const conditions = [eq(notesTable.resourceId, id), eq(notesTable.resourceType, "application")];

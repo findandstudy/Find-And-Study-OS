@@ -69,6 +69,7 @@
     "test:api-token-scope": "tsx --test ./scripts/test-api-token-scope.ts",
     "test:api-token-role": "tsx --test ./scripts/test-api-token-role.ts",
     "test:assignment-cascade": "tsx --test ./scripts/test-assignment-cascade.ts",
+    "test:application-staff-visibility": "tsx --test ./scripts/test-application-staff-visibility.ts",
     "test:contract-context": "tsx ./scripts/test-contract-context.ts",
     "test:inbox-ai-actions": "tsx --test ./scripts/test-inbox-ai-actions.ts",
     "test:inbox-create-lead": "tsx --test ./scripts/test-inbox-create-lead.ts",
