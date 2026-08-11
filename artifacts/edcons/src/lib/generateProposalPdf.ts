@@ -134,6 +134,28 @@ function feeOrFree(amount: number | null | undefined, currency: string): string 
   return fmt(amount, currency);
 }
 
+export function getProposalFeeType(
+  program: Pick<ProposalProgramData, "feeType">,
+): string {
+  return proposalPdfText(program.feeType).trim() || "Per Year";
+}
+
+export function getProposalFeePeriod(
+  program: Pick<ProposalProgramData, "feeType">,
+): string {
+  const feeType = getProposalFeeType(program);
+  const period = feeType.replace(/^per\s+/i, "").trim();
+  return period ? `/ ${period.toLowerCase()}` : `(${feeType})`;
+}
+
+function isAnnualFee(program: Pick<ProposalProgramData, "feeType">): boolean {
+  return /^(per\s+)?(?:academic\s+)?year(?:ly)?$/i.test(getProposalFeeType(program));
+}
+
+function proposalTotalLabel(program: Pick<ProposalProgramData, "feeType">): string {
+  return isAnnualFee(program) ? "First year" : "Total incl. fees";
+}
+
 export function getProposalServiceFee(
   program: Pick<ProposalProgramData, "serviceFeeAmount">,
   serviceFeeMarkup = 0,
@@ -641,7 +663,11 @@ export async function buildProposalPdf(options: ProposalOptions): Promise<jsPDF>
     setText(MUTED);
     doc.setFont("helvetica", "bold");
     setReadableFontSize(5.6);
-    doc.text("Annual tuition range", statsX, top + 10);
+    const feeTypes = [...new Set(programs.map(getProposalFeeType))];
+    const tuitionRangeLabel = feeTypes.length === 1
+      ? `Tuition range (${feeTypes[0]})`
+      : "Tuition range (mixed fee periods)";
+    doc.text(fitText(tuitionRangeLabel, contentW - 123), statsX, top + 10);
     setText(primary);
     setReadableFontSize(12);
     doc.text(
@@ -724,12 +750,16 @@ export async function buildProposalPdf(options: ProposalOptions): Promise<jsPDF>
       color: Rgb;
     }> = [
       {
-        label: firstYearLowest ? "Lowest first-year total" : "Lowest annual tuition",
+        label: firstYearLowest
+          ? isAnnualFee(firstYearLowest.program)
+            ? "Lowest first-year total"
+            : "Lowest total incl. fees"
+          : "Lowest listed tuition",
         program: firstYearLowest?.program || lowestTuition,
         detail: firstYearLowest
           ? `${fmt(firstYearLowest.total, firstYearLowest.program.currency || "USD")} including visible fees`
           : lowestTuition
-            ? `${fmt(effectiveTuition(lowestTuition), lowestTuition.currency || "USD")} per year`
+            ? `${fmt(effectiveTuition(lowestTuition), lowestTuition.currency || "USD")} ${getProposalFeeType(lowestTuition).toLowerCase()}`
             : "Tuition not available",
         color: success,
       },
@@ -755,7 +785,7 @@ export async function buildProposalPdf(options: ProposalOptions): Promise<jsPDF>
           ? `${fmt(
               effectiveTuition(istanbulLowest || lowestTuition),
               (istanbulLowest || lowestTuition)?.currency || "USD",
-            )} per year`
+            )} ${getProposalFeeType(istanbulLowest || lowestTuition).toLowerCase()}`
           : "Review the selected options",
         color: accent,
       },
@@ -891,7 +921,7 @@ export async function buildProposalPdf(options: ProposalOptions): Promise<jsPDF>
     setText(MUTED);
     doc.setFont("helvetica", "normal");
     setReadableFontSize(compact ? 3.7 : 4.7);
-    doc.text("/ year", feeRight + 1.5, y + (compact ? 4.25 : 6.2));
+    doc.text(getProposalFeePeriod(program), feeRight + 1.5, y + (compact ? 4.25 : 6.2));
 
     if (compact) {
       if (discount) {
@@ -905,7 +935,7 @@ export async function buildProposalPdf(options: ProposalOptions): Promise<jsPDF>
         setText(BODY);
         doc.setFont("helvetica", "bold");
         setReadableFontSize(3.8);
-        doc.text(`First year ${fmt(firstYearTotal, currency)}`, feeRight, y + 9.65, {
+        doc.text(`${proposalTotalLabel(program)} ${fmt(firstYearTotal, currency)}`, feeRight, y + 9.65, {
           align: "right",
         });
       } else if (serviceFee != null) {
@@ -935,7 +965,7 @@ export async function buildProposalPdf(options: ProposalOptions): Promise<jsPDF>
         setText(BODY);
         doc.setFont("helvetica", "bold");
         setReadableFontSize(4.3);
-        doc.text(`First year ${fmt(firstYearTotal, currency)}`, feeRight, y + 15, {
+        doc.text(`${proposalTotalLabel(program)} ${fmt(firstYearTotal, currency)}`, feeRight, y + 15, {
           align: "right",
         });
       }
@@ -949,7 +979,7 @@ export async function buildProposalPdf(options: ProposalOptions): Promise<jsPDF>
       setText(BODY);
       doc.setFont("helvetica", "bold");
       setReadableFontSize(4.6);
-      doc.text(`First year ${fmt(firstYearTotal, currency)}`, feeRight, y + 15, { align: "right" });
+      doc.text(`${proposalTotalLabel(program)} ${fmt(firstYearTotal, currency)}`, feeRight, y + 15, { align: "right" });
     }
 
     const statusX = pageW - marginX - 19.5;
@@ -984,7 +1014,7 @@ export async function buildProposalPdf(options: ProposalOptions): Promise<jsPDF>
 
   function drawProgramsLabel(y: number, continued = false) {
     drawSectionLabel(
-      continued ? "Programs continued" : "Programs sorted by annual tuition",
+      continued ? "Programs continued" : "Programs sorted by listed tuition",
       marginX,
       y,
     );

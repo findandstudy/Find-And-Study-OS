@@ -6,6 +6,8 @@ import {
   buildProposalPdf,
   getProposalDateTime,
   getProposalFirstYearTotal,
+  getProposalFeePeriod,
+  getProposalFeeType,
   getProposalServiceFee,
   normalizeProposalLogoUrl,
   proposalPdfText,
@@ -57,6 +59,57 @@ test("proposal date and time are rendered in Europe/Istanbul", () => {
 test("unsupported PDF glyphs are normalised without changing ASCII data", () => {
   assert.equal(proposalPdfText("İŞ GÜÇ — 2026"), "Is Guc - 2026");
   assert.equal(proposalPdfText("info@example.com"), "info@example.com");
+});
+
+test("proposal fee period follows the program instead of defaulting every row to year", () => {
+  assert.equal(getProposalFeeType({ feeType: "Per Program" }), "Per Program");
+  assert.equal(getProposalFeePeriod({ feeType: "Per Program" }), "/ program");
+  assert.equal(getProposalFeePeriod({ feeType: "Per Semester" }), "/ semester");
+  assert.equal(getProposalFeePeriod({ feeType: null }), "/ year");
+});
+
+test("generated proposal preserves mixed program fee periods in its visible text", async () => {
+  const document = await buildProposalPdf({
+    programs: [
+      {
+        ...sampleProgram,
+        id: 101,
+        universityName: "Istanbul Kent University",
+        tuitionFee: 5_000,
+        discountedFee: 2_500,
+        feeType: "Per Program",
+      },
+      {
+        ...sampleProgram,
+        id: 102,
+        universityName: "Annual Fee University",
+        tuitionFee: 6_000,
+        discountedFee: null,
+        feeType: "Per Year",
+      },
+    ],
+    generatedAt: new Date("2026-08-11T18:16:00.000Z"),
+  });
+  const bytes = new Uint8Array(document.output("arraybuffer"));
+  const visualBytes = bytes.slice();
+  const { getDocument } = await import("pdfjs-dist/legacy/build/pdf.mjs");
+  const pdf = await getDocument({ data: bytes, disableWorker: true }).promise;
+  const page = await pdf.getPage(1);
+  const content = await page.getTextContent();
+  const text = content.items
+    .map((item) => ("str" in item ? item.str : ""))
+    .join(" ");
+
+  assert.match(text, /Tuition range \(mixed fee periods\)/);
+  assert.match(text, /P R O G R A M S\s+S O R T E D\s+B Y\s+L I S T E D\s+T U I T I O N/);
+  assert.match(text, /\$2,500\s+\/ program/);
+  assert.match(text, /\$6,000\s+\/ year/);
+
+  const visualPath = process.env.PROPOSAL_FEE_TYPE_VISUAL_PATH;
+  if (visualPath) {
+    await mkdir(dirname(visualPath), { recursive: true });
+    await writeFile(visualPath, visualBytes);
+  }
 });
 
 test("storage logo paths are normalised without changing data URLs", () => {
