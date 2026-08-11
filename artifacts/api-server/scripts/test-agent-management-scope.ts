@@ -22,6 +22,7 @@
  *   9.  A5: manager branchA → agentA resend-credentials → 200
  *  10.  A6: branch-limited manager sees only own-branch contract-alerts
  *  11.  A6: admin sees all branches in contract-alerts
+ *  12.  A7: branch-limited agent search returns 200 and only own-branch rows
  *
  * Run with:
  *   pnpm --filter @workspace/api-server run test:agent-management-scope
@@ -346,6 +347,21 @@ test("Agent Management Scope — Faz S3", async (t) => {
         ids.includes(agentBId),
         `agentB (branchB) must appear for super_admin`,
       );
+    },
+  );
+
+  // ── A7: GET /agents search ───────────────────────────────────────────────
+
+  await t.test(
+    "A7 branch-limited manager can search own-branch agents without a 500",
+    async () => {
+      currentUser = { id: managerUserId, role: "manager", isActive: true };
+      const { status, data } = await apiReq("GET", "/api/agents?type=agent&search=AMS&page=1&limit=20");
+      assert.equal(status, 200, `expected 200, got ${status}: ${JSON.stringify(data)}`);
+      const rows = (data as { data: Array<{ id: number }> }).data;
+      const ids = rows.map(row => row.id);
+      assert.ok(ids.includes(agentAId), "own-branch agent must be returned by search");
+      assert.ok(!ids.includes(agentBId), "cross-branch agent must not be returned by search");
     },
   );
 

@@ -325,23 +325,79 @@ router.post("/contracts/signed/:id/regenerate", requireAuth, requirePermission("
 
 router.post("/contracts/admin-send", requireAuth, requirePermission("contracts.manage"), async (req, res): Promise<void> => {
   try {
-    const { agentId, language: requestedLang, expiryDays, templateId: explicitTemplateId } = req.body || {};
-    const aId = parseInt(String(agentId), 10);
-    if (!aId) { res.status(400).json({ error: "agentId is required" }); return; }
-    const [agent] = await db.select().from(agentsTable).where(eq(agentsTable.id, aId));
-    if (!agent) { res.status(404).json({ error: "Agent not found" }); return; }
-    if (!agent.email) { res.status(400).json({ error: "Agent has no email on file" }); return; }
-    const inScope = await isAgentInScope((req as any).user!.id, (req as any).user!.role, aId);
-    if (!inScope) { res.status(403).json({ error: "Access denied: agent is outside your branch scope" }); return; }
-    if (agent.userId) {
+    const body = req.body || {};
+    const {
+      agentId,
+      signerEmail: requestedSignerEmail,
+      signerName: requestedSignerName,
+      language: requestedLang,
+      entityType: requestedEntityType,
+      expiryDays,
+      templateId: explicitTemplateId,
+    } = body;
+    let subject;
+    try {
+      subject = parseSubject(body);
+    } catch (err: any) {
+      if (err?.message === "INVALID_SUBJECT_TYPE") { res.status(400).json({ error: "Invalid subjectType" }); return; }
+      if (err?.message === "INVALID_SUBJECT_ID") { res.status(400).json({ error: "subjectId is required for the selected subjectType" }); return; }
+      throw err;
+    }
+
+    // Backwards-compatible agentId support. The new UI treats the association
+    // as optional and represents an agent association through subjectType/id.
+    const legacyAgentId = agentId === undefined || agentId === null || agentId === ""
+      ? null
+      : parseInt(String(agentId), 10);
+    if (legacyAgentId !== null && (!Number.isInteger(legacyAgentId) || legacyAgentId <= 0)) {
+      res.status(400).json({ error: "Invalid agentId" }); return;
+    }
+    const subjectAgentId = subject.subjectType === "agent" ? subject.subjectId : null;
+    if (legacyAgentId && subjectAgentId && legacyAgentId !== subjectAgentId) {
+      res.status(400).json({ error: "agentId and subjectId must reference the same agent" }); return;
+    }
+    const aId = legacyAgentId || subjectAgentId;
+
+    let agent: typeof agentsTable.$inferSelect | null = null;
+    if (aId) {
+      const rows = await db.select().from(agentsTable).where(eq(agentsTable.id, aId));
+      agent = rows[0] || null;
+      if (!agent) { res.status(404).json({ error: "Agent not found" }); return; }
+      const inScope = await isAgentInScope((req as any).user!.id, (req as any).user!.role, aId);
+      if (!inScope) { res.status(403).json({ error: "Access denied: agent is outside your branch scope" }); return; }
+    }
+    if (agent?.userId) {
       const [linkedUser] = await db.select({ role: usersTable.role }).from(usersTable).where(eq(usersTable.id, agent.userId));
       if (linkedUser && (linkedUser.role === "agent_staff" || linkedUser.role === "sub_agent")) {
         res.status(400).json({ error: "Contracts cannot be sent to agent staff or sub-agent accounts" });
         return;
       }
     }
-    const lang = (requestedLang && typeof requestedLang === "string") ? requestedLang : (agent.preferredContractLanguage || "en");
-    const entityType = agent.entityType === "individual" ? "individual" : "company";
+
+    const fallbackAgentName = agent
+      ? (`${agent.firstName || ""} ${agent.lastName || ""}`.trim() || agent.businessName || null)
+      : null;
+    const signerName = typeof requestedSignerName === "string" && requestedSignerName.trim()
+      ? requestedSignerName.trim().slice(0, 200)
+      : fallbackAgentName;
+    const signerEmail = (typeof requestedSignerEmail === "string" && requestedSignerEmail.trim()
+      ? requestedSignerEmail
+      : agent?.email || "").trim().toLowerCase();
+    if (!signerEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(signerEmail)) {
+      res.status(400).json({ error: agent ? "Agent has no valid email on file; enter a signerEmail" : "A valid signerEmail is required" });
+      return;
+    }
+
+    if (agent) {
+      subject = {
+        subjectType: "agent",
+        subjectId: agent.id,
+        subjectLabel: subject.subjectLabel || agent.businessName || fallbackAgentName,
+      };
+    }
+
+    const lang = (requestedLang && typeof requestedLang === "string") ? requestedLang : (agent?.preferredContractLanguage || "en");
+    const entityType = requestedEntityType === "individual" || agent?.entityType === "individual" ? "individual" : "company";
     let tpl = null as unknown as Awaited<ReturnType<typeof pickTemplate>>;
     if (explicitTemplateId) {
       const tid = parseInt(String(explicitTemplateId), 10);
@@ -361,7 +417,6 @@ router.post("/contracts/admin-send", requireAuth, requirePermission("contracts.m
     const days = parseExpiryDays(expiryDays);
     const expiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
 
-    const signerName = `${agent.firstName || ""} ${agent.lastName || ""}`.trim() || agent.businessName || null;
     const brandingSnapshot = await resolveContractTemplateBranding(tpl);
     if (!hasContractCompanySignature(brandingSnapshot)) {
       res.status(409).json({
@@ -379,16 +434,16 @@ router.post("/contracts/admin-send", requireAuth, requirePermission("contracts.m
       templateBodyHtmlSnapshot: tpl.bodyHtml,
       templateIntakeSchemaSnapshot: tpl.intakeSchema,
       templateSigningPageConfigSnapshot: brandingSnapshot,
-      agentId: aId,
+      agentId: aId || null,
       tokenHash,
       mode: "admin_driven",
       status: "review_pending",
       intakeData: null,
-      signerEmail: agent.email,
+      signerEmail,
       signerName,
-      subjectType: "agent",
-      subjectId: aId,
-      subjectLabel: agent.businessName || signerName,
+      subjectType: subject.subjectType,
+      subjectId: subject.subjectId,
+      subjectLabel: subject.subjectLabel,
       expiresAt,
       createdByUserId: (req as any).user?.id ?? null,
     }).returning();
@@ -398,13 +453,13 @@ router.post("/contracts/admin-send", requireAuth, requirePermission("contracts.m
     try {
       const email = await buildContractSignRequestEmail({
         signerName,
-        agentName: agent.businessName || null,
+        agentName: agent?.businessName || subject.subjectLabel || null,
         templateName: tpl.name,
         signUrl,
         expiresAt,
         selfFill: false,
       });
-      await sendEmail(agent.email, email);
+      await sendEmail(signerEmail, email);
       await markEmailSent(session.id);
       emailSent = true;
     } catch (err) {
@@ -412,7 +467,7 @@ router.post("/contracts/admin-send", requireAuth, requirePermission("contracts.m
     }
 
     const actorUserId = (req as any).user?.id ?? undefined;
-    const sentVars = { signerName: signerName || "", signerEmail: agent.email || "", contractName: tpl.name || "", contractLink: signUrl };
+    const sentVars = { signerName: signerName || "", signerEmail, contractName: tpl.name || "", contractLink: signUrl };
     (async () => {
       try {
         await dispatchNotification({
@@ -430,7 +485,14 @@ router.post("/contracts/admin-send", requireAuth, requirePermission("contracts.m
       action: "contract.link_sent",
       resource: "signing_session",
       resourceId: session.id,
-      changes: { mode: "admin_driven", agentId: aId, templateId: tpl.id, expiresAt: expiresAt.toISOString() },
+      changes: {
+        mode: "admin_driven",
+        agentId: aId || null,
+        templateId: tpl.id,
+        subjectType: subject.subjectType,
+        subjectId: subject.subjectId,
+        expiresAt: expiresAt.toISOString(),
+      },
       ipAddress: req.ip,
     });
 

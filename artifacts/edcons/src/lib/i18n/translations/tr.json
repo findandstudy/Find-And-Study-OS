@@ -2080,7 +2080,7 @@
   },
   "contracts": {
     "title": "Sözleşmeler",
-    "subtitle": "Acente seç, dil ve şablon otomatik eşleşir, imza isteği e-posta ile gönderilir.",
+    "subtitle": "Herhangi bir e-posta adresine sözleşme gönderin; acente, firma veya başka bir kayıtla ilişkilendirme isteğe bağlıdır.",
     "sendSigningRequest": "İmza isteği gönder",
     "tabSessions": "Oturumlar",
     "tabSigned": "İmzalanmış",

@@ -2139,7 +2139,7 @@
   },
   "contracts": {
     "title": "Contracts",
-    "subtitle": "Pick an agent — language and template are auto-matched, the signing request is sent by email.",
+    "subtitle": "Send a contract to any email address; linking an agent, company, or other record is optional.",
     "sendSigningRequest": "Send signing request",
     "tabSessions": "Sessions",
     "tabSigned": "Signed",

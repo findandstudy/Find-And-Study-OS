@@ -4,6 +4,11 @@ import { isAbsolute, relative, resolve } from "node:path";
 const MAX_MAIN_AGENCY_SIGNATURE_BYTES = 2 * 1024 * 1024;
 const PNG_MAGIC = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 const JPEG_MAGIC = Buffer.from([0xff, 0xd8, 0xff]);
+// A valid 1x1 PNG used only to exercise the complete PDF pipeline in local and
+// automated-test environments. Production remains fail-closed and must use the
+// pre-approved signature file from persistent storage.
+const NON_PRODUCTION_SIGNATURE_DATA_URL =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
 
 type CachedSignature = {
   filePath: string;
@@ -35,6 +40,9 @@ function detectSignatureMime(bytes: Buffer): "image/png" | "image/jpeg" | null {
 export function loadMainAgencySignatureDataUrl(explicitPath?: string): string {
   const configuredPath = (explicitPath ?? process.env.MAIN_AGENCY_SIGNATURE_FILE ?? "").trim();
   if (!configuredPath) {
+    if (!explicitPath && (process.env.NODE_ENV === "development" || process.env.NODE_ENV === "test")) {
+      return NON_PRODUCTION_SIGNATURE_DATA_URL;
+    }
     throw new Error("MAIN_AGENCY_SIGNATURE_FILE is required to finalize a signed contract");
   }
   if (!isAbsolute(configuredPath)) {

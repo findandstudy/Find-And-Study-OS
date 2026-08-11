@@ -5,12 +5,14 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { useI18n } from "@/hooks/use-i18n";
 import { Send, Loader2, FileSignature, RotateCw, Ban, Download, Trash2, ChevronUp, ChevronDown, ChevronsUpDown } from "lucide-react";
 import { ContractAssociationLink } from "@/components/contracts/ContractAssociationLink";
+import { ContractSubjectPicker, type ContractSubjectSearchResult } from "@/components/contracts/ContractSubjectPicker";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
@@ -27,7 +29,6 @@ type Signed = {
   subjectType: string | null; subjectId: number | null; subjectLabel: string | null;
   templateTitle?: string | null;
 };
-type Agent = { id: number; firstName: string | null; lastName: string | null; businessName: string | null; email: string | null; entityType?: string | null; preferredContractLanguage?: string | null };
 type Template = {
   id: number;
   name: string;
@@ -43,12 +44,17 @@ const LANG_LABELS: Record<string, string> = {
   es: "Español", fa: "فارسی", hi: "हिन्दी", id: "Bahasa", zh: "中文",
 };
 
+const SUBJECT_TYPES = ["agent", "company", "university", "student", "lead", "application", "other"] as const;
+const SUBJECT_LABELS: Record<string, string> = {
+  agent: "Agent", company: "Company", university: "University", student: "Student",
+  lead: "Lead", application: "Application", other: "Other",
+};
+
 export default function ContractsPage() {
   const { toast } = useToast();
   const { t } = useI18n();
   const [sessions, setSessions] = useState<Session[]>([]);
   const [signed, setSigned] = useState<Signed[]>([]);
-  const [agents, setAgents] = useState<Agent[]>([]);
   const [templates, setTemplates] = useState<Template[]>([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<"sessions" | "signed">("sessions");
@@ -108,8 +114,13 @@ export default function ContractsPage() {
   }
 
   const [showSendDialog, setShowSendDialog] = useState(false);
-  const [agentId, setAgentId] = useState<string>("");
+  const [signerName, setSignerName] = useState("");
+  const [signerEmail, setSignerEmail] = useState("");
+  const [subjectType, setSubjectType] = useState("");
+  const [subjectId, setSubjectId] = useState("");
+  const [subjectLabel, setSubjectLabel] = useState("");
   const [templateId, setTemplateId] = useState<string>("auto");
+  const [expiryDays, setExpiryDays] = useState("14");
   const [sending, setSending] = useState(false);
 
   const [selected, setSelected] = useState<Set<number>>(new Set());
@@ -157,11 +168,6 @@ export default function ContractsPage() {
       ]);
       setSessions(s.data || []);
       setSigned(sc.data || []);
-      // Agents load is non-blocking: a failure here (e.g. 500 for staff) must not hide sessions/signed.
-      try {
-        const a: any = await customFetch(`/api/agents?type=agent`);
-        setAgents(a.data || a.agents || []);
-      } catch { setAgents([]); }
       setSelected(new Set());
       try {
         const tpls: any = await customFetch(`/api/contract-templates?isActive=true&publicationStatus=published`);
@@ -183,22 +189,58 @@ export default function ContractsPage() {
   useEffect(() => { load(); }, []);
 
   async function send() {
-    const aid = parseInt(agentId, 10);
-    if (!aid) { toast({ title: t("contracts.selectAgent"), variant: "destructive" }); return; }
+    const linkedAgent = subjectType === "agent" && Number(subjectId) > 0;
+    const normalizedEmail = signerEmail.trim();
+    if (!linkedAgent && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+      toast({ title: "Enter a valid signer email", variant: "destructive" }); return;
+    }
+    if (subjectType && subjectType !== "other" && (!subjectId || Number(subjectId) < 1)) {
+      toast({ title: "Select a record for the association", variant: "destructive" }); return;
+    }
+    if (templateId === "auto" && !linkedAgent) {
+      toast({ title: "Select a contract template when no agent is linked", variant: "destructive" }); return;
+    }
     setSending(true);
     try {
       await customFetch(`/api/contracts/admin-send`, {
         method: "POST", headers: { "content-type": "application/json" },
-        body: JSON.stringify({ agentId: aid, templateId: templateId !== "auto" ? parseInt(templateId, 10) : undefined }),
+        body: JSON.stringify({
+          signerName: signerName.trim() || undefined,
+          signerEmail: normalizedEmail || undefined,
+          templateId: templateId !== "auto" ? parseInt(templateId, 10) : undefined,
+          expiryDays: Number(expiryDays),
+          subjectType: subjectType || null,
+          subjectId: subjectId ? Number(subjectId) : null,
+          subjectLabel: subjectLabel || null,
+        }),
       });
       toast({ title: t("contracts.sentTitle") });
       setShowSendDialog(false);
-      setAgentId(""); setTemplateId("auto");
+      resetSendForm();
       await load();
     } catch (err: any) {
       toast({ title: t("contracts.error"), description: err.message, variant: "destructive" });
     }
     setSending(false);
+  }
+
+  function resetSendForm() {
+    setSignerName("");
+    setSignerEmail("");
+    setSubjectType("");
+    setSubjectId("");
+    setSubjectLabel("");
+    setTemplateId("auto");
+    setExpiryDays("14");
+  }
+
+  function handleSubjectChange(id: string, label: string, result?: ContractSubjectSearchResult) {
+    setSubjectId(id);
+    setSubjectLabel(label);
+    if (subjectType === "agent" && id) {
+      if (!signerName.trim()) setSignerName(label);
+      if (!signerEmail.trim() && result?.email) setSignerEmail(result.email);
+    }
   }
 
   async function revoke(id: number) {
@@ -470,24 +512,48 @@ export default function ContractsPage() {
         )}
       </Card>
 
-      <Dialog open={showSendDialog} onOpenChange={(open) => { setShowSendDialog(open); if (!open) { setAgentId(""); setTemplateId("auto"); } }}>
+      <Dialog open={showSendDialog} onOpenChange={(open) => { setShowSendDialog(open); if (!open) resetSendForm(); }}>
         <DialogContent>
           <DialogHeader><DialogTitle>{t("contracts.sendSigningRequest")}</DialogTitle></DialogHeader>
           <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Signer name</Label>
+                <Input value={signerName} onChange={event => setSignerName(event.target.value)} placeholder="Name or company" />
+              </div>
+              <div>
+                <Label>Signer email *</Label>
+                <Input type="email" value={signerEmail} onChange={event => setSignerEmail(event.target.value)} placeholder="name@example.com" />
+              </div>
+            </div>
             <div>
-              <Label>{t("contracts.agent")} *</Label>
-              <Select value={agentId} onValueChange={setAgentId}>
-                <SelectTrigger><SelectValue placeholder={t("contracts.selectAgentPlaceholder")} /></SelectTrigger>
+              <Label>Associate with (optional)</Label>
+              <Select value={subjectType || "none"} onValueChange={value => {
+                setSubjectType(value === "none" ? "" : value);
+                setSubjectId("");
+                setSubjectLabel("");
+              }}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {agents.filter(a => a.email).map(a => (
-                    <SelectItem key={a.id} value={String(a.id)}>
-                      {(a.businessName || `${a.firstName || ""} ${a.lastName || ""}`.trim() || a.email)} — {a.email}
-                    </SelectItem>
-                  ))}
+                  <SelectItem value="none">No association</SelectItem>
+                  {SUBJECT_TYPES.map(type => <SelectItem key={type} value={type}>{SUBJECT_LABELS[type]}</SelectItem>)}
                 </SelectContent>
               </Select>
-              <p className="text-xs text-muted-foreground mt-1">{t("contracts.templateAutoHint")}</p>
+              <p className="text-xs text-muted-foreground mt-1">Linking an agent, company or another record is optional.</p>
             </div>
+            {subjectType && <div>
+              <Label>{subjectType === "other" ? "Association label" : `Select ${SUBJECT_LABELS[subjectType]}`}</Label>
+              {subjectType === "other" ? (
+                <Input value={subjectLabel} onChange={event => setSubjectLabel(event.target.value)} placeholder="Name or reference" />
+              ) : (
+                <ContractSubjectPicker
+                  subjectType={subjectType}
+                  subjectId={subjectId}
+                  subjectLabel={subjectLabel}
+                  onChange={handleSubjectChange}
+                />
+              )}
+            </div>}
             <div>
               <Label>{t("contracts.contractTemplate")}</Label>
               <Select value={templateId} onValueChange={setTemplateId}>
@@ -501,12 +567,16 @@ export default function ContractsPage() {
                   ))}
                 </SelectContent>
               </Select>
-              <p className="text-xs text-muted-foreground mt-1">{t("contracts.templatePickHint")}</p>
+              <p className="text-xs text-muted-foreground mt-1">Auto-match is available for linked agents. Otherwise select a template.</p>
+            </div>
+            <div>
+              <Label>Link validity (days)</Label>
+              <Input type="number" min={1} max={90} value={expiryDays} onChange={event => setExpiryDays(event.target.value)} />
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowSendDialog(false)}>{t("contracts.cancel")}</Button>
-            <Button onClick={send} disabled={sending || !agentId}>{sending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Send className="w-4 h-4 mr-2" />} {t("contracts.send")}</Button>
+            <Button onClick={send} disabled={sending}>{sending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Send className="w-4 h-4 mr-2" />} {t("contracts.send")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

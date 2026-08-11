@@ -1067,7 +1067,14 @@ router.get("/agents", requireAuth, requireRole(...STAFF_ROLES), async (req, res)
       res.json({ data: [], meta: { total: 0, page: pageNum, limit: limitNum, totalPages: 0 } });
       return;
     }
-    conditions.push(sql`${agentsTable.id} IN (SELECT agent_id FROM agent_branches WHERE branch_id = ANY(${visible}))`);
+    // Bind each visible branch as a typed IN-list value. Passing the JS array
+    // directly to ANY(${visible}) produced `ANY(($1))`, which node-postgres sent
+    // as an untyped scalar and caused every branch-scoped agent search to 500.
+    const visibleAgentIds = db
+      .select({ id: agentBranchesTable.agentId })
+      .from(agentBranchesTable)
+      .where(inArray(agentBranchesTable.branchId, visible));
+    conditions.push(inArray(agentsTable.id, visibleAgentIds));
   } else if (requestedBranchId && !isNaN(requestedBranchId)) {
     conditions.push(sql`${agentsTable.id} IN (SELECT agent_id FROM agent_branches WHERE branch_id = ${requestedBranchId})`);
   }

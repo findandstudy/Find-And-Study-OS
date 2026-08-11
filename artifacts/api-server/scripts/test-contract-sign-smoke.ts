@@ -409,16 +409,25 @@ async function runPdfSection(
     return { name: "(c) PDF download (ensureSignedContractPdf)", ok: false, details };
   }
 
-  // GET /api/contracts/me/pdf — triggers headless Chromium render.
-  // This is the heaviest part of the test; allow up to 120 s.
+  // PDF rendering is deliberately asynchronous. The first request normally
+  // returns 202 while the background delivery worker runs Chromium off the
+  // request path, so poll until the file becomes available.
   let pdfResponse: Response;
+  let attempts = 0;
   try {
     const csrfToken = jar.get("csrf_token") ?? "";
-    pdfResponse = await fetch(`${BASE}/api/contracts/me/pdf`, {
-      method: "GET",
-      headers: { Cookie: cookieHeader(jar), "x-csrf-token": csrfToken },
-      signal: AbortSignal.timeout(120_000),
-    });
+    const deadline = Date.now() + 45_000;
+    do {
+      attempts += 1;
+      pdfResponse = await fetch(`${BASE}/api/contracts/me/pdf`, {
+        method: "GET",
+        headers: { Cookie: cookieHeader(jar), "x-csrf-token": csrfToken },
+        signal: AbortSignal.timeout(10_000),
+      });
+      if (pdfResponse.status !== 202 || Date.now() >= deadline) break;
+      await pdfResponse.arrayBuffer();
+      await new Promise(resolve => setTimeout(resolve, 2_000));
+    } while (true);
   } catch (err) {
     details.push(`FAIL GET /api/contracts/me/pdf threw: ${err}`);
     return { name: "(c) PDF download (ensureSignedContractPdf)", ok: false, details };
@@ -427,7 +436,7 @@ async function runPdfSection(
   ok =
     assert(
       pdfResponse.status === 200,
-      `GET /api/contracts/me/pdf → 200 (got ${pdfResponse.status})`,
+      `GET /api/contracts/me/pdf → 200 after ${attempts} attempt(s) (got ${pdfResponse.status})`,
       details,
     ) && ok;
 

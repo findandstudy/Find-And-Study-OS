@@ -160,6 +160,29 @@ test("main-agency seal loader rejects relative paths and invalid image bytes", (
   clearMainAgencySignatureCacheForTests();
 });
 
+test("main-agency seal uses a local placeholder but remains fail-closed in production", () => {
+  const previousNodeEnv = process.env.NODE_ENV;
+  const previousSignaturePath = process.env.MAIN_AGENCY_SIGNATURE_FILE;
+  try {
+    delete process.env.MAIN_AGENCY_SIGNATURE_FILE;
+    process.env.NODE_ENV = "test";
+    const localValue = loadMainAgencySignatureDataUrl();
+    assert.match(localValue, /^data:image\/png;base64,/);
+
+    process.env.NODE_ENV = "production";
+    assert.throws(
+      () => loadMainAgencySignatureDataUrl(),
+      /MAIN_AGENCY_SIGNATURE_FILE is required/,
+    );
+  } finally {
+    if (previousNodeEnv === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = previousNodeEnv;
+    if (previousSignaturePath === undefined) delete process.env.MAIN_AGENCY_SIGNATURE_FILE;
+    else process.env.MAIN_AGENCY_SIGNATURE_FILE = previousSignaturePath;
+    clearMainAgencySignatureCacheForTests();
+  }
+});
+
 test("preview render leaves {{main_agency_signature}} empty (no seal, no <img>)", () => {
   const ctx = buildAgentContext(null, null, { signerName: "Test Agent" });
   ctx.signature = toSignatureDataUrl(VALID_PNG_BASE64);

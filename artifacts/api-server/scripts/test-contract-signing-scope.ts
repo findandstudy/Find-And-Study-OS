@@ -42,11 +42,8 @@ import { createSigningToken } from "../src/lib/signingTokens.js";
 import publicSigningRouter from "../src/routes/publicSigning.js";
 import contractsRouter from "../src/routes/contracts.js";
 
-after(() => {
-  setImmediate(() => process.exit(process.exitCode ?? 0));
-});
-
 const RUN_ID = `css_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+const TEST_COMPANY_SIGNATURE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
 
 // ---------------------------------------------------------------------------
 // Mutable user injected per-request — bypasses the real auth stack.
@@ -154,6 +151,7 @@ async function createTemplate(): Promise<number> {
       language: "en",
       entityType: "company",
       bodyHtml: "<p>Test contract {{signer_name}}</p>",
+      signingPageConfig: { companySignatureDataUrl: TEST_COMPANY_SIGNATURE },
       isActive: true,
     })
     .returning({ id: contractTemplatesTable.id });
@@ -441,6 +439,70 @@ test("C2-5: GET /contracts/signed/:id/pdf — cross-branch signed contract → 4
 });
 
 // ---------------------------------------------------------------------------
+// ─── C3: admin-driven sends may be associated or standalone ────────────────
+// ---------------------------------------------------------------------------
+test("C3-1: admin-send creates a standalone contract without an agent or company", async () => {
+  const tplId = await createTemplate();
+  const adminUserId = await createUser("super_admin");
+  currentUser = {
+    id: adminUserId,
+    role: "super_admin",
+    isActive: true,
+    permissions: ["contracts.manage"],
+  };
+
+  const r = await apiReq("POST", "/api/contracts/admin-send", {
+    signerName: "Standalone Signer",
+    signerEmail: "standalone@example.com",
+    templateId: tplId,
+    expiryDays: 21,
+  });
+  assert.equal(r.status, 201, `Expected 201 standalone send, got ${r.status}: ${JSON.stringify(r.data)}`);
+  const sessionId = Number((r.data as any)?.data?.sessionId);
+  assert.ok(sessionId > 0, "standalone send returns a session id");
+  cleanupSessionIds.push(sessionId);
+
+  const [row] = await db.select().from(signingSessionsTable).where(eq(signingSessionsTable.id, sessionId));
+  assert.equal(row.agentId, null);
+  assert.equal(row.subjectType, null);
+  assert.equal(row.subjectId, null);
+  assert.equal(row.signerEmail, "standalone@example.com");
+  assert.equal(row.signerName, "Standalone Signer");
+  assert.equal(row.mode, "admin_driven");
+});
+
+test("C3-2: admin-send can associate an agent and use its stored identity", async () => {
+  const tplId = await createTemplate();
+  const adminUserId = await createUser("super_admin");
+  const agentUserId = await createUser("agent");
+  const agentId = await createAgent(agentUserId);
+  currentUser = {
+    id: adminUserId,
+    role: "super_admin",
+    isActive: true,
+    permissions: ["contracts.manage"],
+  };
+
+  const r = await apiReq("POST", "/api/contracts/admin-send", {
+    templateId: tplId,
+    subjectType: "agent",
+    subjectId: agentId,
+    subjectLabel: "Linked Test Agency",
+  });
+  assert.equal(r.status, 201, `Expected 201 linked send, got ${r.status}: ${JSON.stringify(r.data)}`);
+  const sessionId = Number((r.data as any)?.data?.sessionId);
+  assert.ok(sessionId > 0, "linked send returns a session id");
+  cleanupSessionIds.push(sessionId);
+
+  const [row] = await db.select().from(signingSessionsTable).where(eq(signingSessionsTable.id, sessionId));
+  assert.equal(row.agentId, agentId);
+  assert.equal(row.subjectType, "agent");
+  assert.equal(row.subjectId, agentId);
+  assert.equal(row.subjectLabel, "Linked Test Agency");
+  assert.match(row.signerEmail, /@css-test\.local$/);
+});
+
+// ---------------------------------------------------------------------------
 // Teardown
 // ---------------------------------------------------------------------------
 after(async () => {
@@ -468,5 +530,11 @@ after(async () => {
     }
   } catch (err) {
     console.error("[cleanup] error:", err);
+    process.exitCode = 1;
+  } finally {
+    // Imported application modules keep timers alive. Exit only after the
+    // asynchronous teardown finishes; the previous early after() hook raced
+    // this cleanup and left fixtures in the developer database.
+    setImmediate(() => process.exit(process.exitCode ?? 0));
   }
 });

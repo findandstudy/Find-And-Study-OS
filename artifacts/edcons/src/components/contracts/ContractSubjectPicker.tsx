@@ -4,13 +4,13 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Loader2, Search, X } from "lucide-react";
 
-type SearchResult = { id: number; label: string; description?: string };
+export type ContractSubjectSearchResult = { id: number; label: string; description?: string; email?: string };
 
 type Props = {
   subjectType: string;
   subjectId: string;
   subjectLabel: string;
-  onChange: (subjectId: string, subjectLabel: string) => void;
+  onChange: (subjectId: string, subjectLabel: string, result?: ContractSubjectSearchResult) => void;
 };
 
 const TYPE_LABELS: Record<string, string> = {
@@ -22,7 +22,7 @@ const TYPE_LABELS: Record<string, string> = {
   company: "company",
 };
 
-function resultLabel(type: string, row: Record<string, any>): SearchResult | null {
+function resultLabel(type: string, row: Record<string, any>): ContractSubjectSearchResult | null {
   const id = Number(row.id);
   if (!Number.isInteger(id) || id < 1) return null;
 
@@ -48,7 +48,12 @@ function resultLabel(type: string, row: Record<string, any>): SearchResult | nul
     description = row.email || row.phone || row.status || "";
   }
 
-  return { id, label: String(label), description: description ? String(description) : undefined };
+  return {
+    id,
+    label: String(label),
+    description: description ? String(description) : undefined,
+    email: typeof row.email === "string" && row.email.trim() ? row.email.trim() : undefined,
+  };
 }
 
 function searchPath(type: string, query: string): string {
@@ -66,7 +71,7 @@ function searchPath(type: string, query: string): string {
 
 export function ContractSubjectPicker({ subjectType, subjectId, subjectLabel, onChange }: Props) {
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState<SearchResult[]>([]);
+  const [results, setResults] = useState<ContractSubjectSearchResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [open, setOpen] = useState(false);
@@ -97,7 +102,7 @@ export function ContractSubjectPicker({ subjectType, subjectId, subjectLabel, on
         const response: any = await customFetch(searchPath(subjectType, trimmed));
         if (cancelled) return;
         const rows = Array.isArray(response?.data) ? response.data : [];
-        setResults(rows.map((row: Record<string, any>) => resultLabel(subjectType, row)).filter(Boolean) as SearchResult[]);
+        setResults(rows.map((row: Record<string, any>) => resultLabel(subjectType, row)).filter(Boolean) as ContractSubjectSearchResult[]);
         setOpen(true);
       } catch (err: any) {
         if (!cancelled) {
@@ -156,7 +161,7 @@ export function ContractSubjectPicker({ subjectType, subjectId, subjectLabel, on
                 className="block w-full rounded-sm px-3 py-2 text-left hover:bg-accent hover:text-accent-foreground"
                 onMouseDown={(event) => event.preventDefault()}
                 onClick={() => {
-                  onChange(String(result.id), result.label);
+                  onChange(String(result.id), result.label, result);
                   setQuery("");
                   setOpen(false);
                 }}
