@@ -37,6 +37,7 @@
     "test:ai-agent-admin": "tsx --test ./scripts/test-ai-agent-admin.ts",
     "test:ai-agent-models": "tsx --test ./scripts/test-ai-agent-models.ts",
     "test:academy-knowledge": "tsx --test ./scripts/test-academy-knowledge.ts",
+    "test:dormbooking-knowledge": "tsx --test ./scripts/test-dormbooking-knowledge.ts",
     "test:ai-schedule": "tsx --test ./scripts/test-ai-schedule.ts",
     "test:contract-signing-scope": "NODE_ENV=test tsx --test ./scripts/test-contract-signing-scope.ts",
     "test:contract-operations": "NODE_ENV=test tsx --test ./scripts/test-contract-operations.ts",

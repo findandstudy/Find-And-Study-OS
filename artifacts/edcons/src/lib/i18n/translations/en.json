@@ -6127,6 +6127,7 @@
       "typeFile": "File (PDF/Word/Excel)",
       "typeUrl": "Web page",
       "typeText": "Free text",
+      "typeDormBooking": "DormBooking live catalog",
       "nameLabel": "Name",
       "namePlaceholder": "e.g. Admission requirements",
       "fileLabel": "File",

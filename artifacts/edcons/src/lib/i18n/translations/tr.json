@@ -6127,6 +6127,7 @@
       "typeFile": "Dosya (PDF/Word/Excel)",
       "typeUrl": "Web sayfası",
       "typeText": "Serbest metin",
+      "typeDormBooking": "DormBooking canlı kataloğu",
       "nameLabel": "Ad",
       "namePlaceholder": "örn. Kabul koşulları",
       "fileLabel": "Dosya",

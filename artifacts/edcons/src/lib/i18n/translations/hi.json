@@ -6117,6 +6117,7 @@
       "typeFile": "फ़ाइल (PDF/Word/Excel)",
       "typeUrl": "वेब पेज",
       "typeText": "फ्री टेक्स्ट",
+      "typeDormBooking": "DormBooking लाइव कैटलॉग",
       "nameLabel": "नाम",
       "namePlaceholder": "उदा. प्रवेश आवश्यकताएं",
       "fileLabel": "फ़ाइल",

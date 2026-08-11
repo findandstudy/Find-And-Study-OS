@@ -6,7 +6,7 @@ import { db, knowledgeSourcesTable, knowledgeChunksTable } from "@workspace/db";
 import { and, count, desc, eq, inArray } from "drizzle-orm";
 import { triggerKnowledgeIngest } from "./knowledgeIngest";
 
-export const RAG_SOURCE_TYPES = ["file", "url", "text", "academy"] as const;
+export const RAG_SOURCE_TYPES = ["file", "url", "text", "academy", "dormbooking"] as const;
 export type RagSourceType = (typeof RAG_SOURCE_TYPES)[number];
 
 export interface RagSourceListItem {
@@ -62,6 +62,33 @@ export async function createRagSource(input: {
   name: string;
   config: Record<string, unknown>;
 }): Promise<RagSourceListItem> {
+  if (input.type === "dormbooking") {
+    const [existing] = await db
+      .select()
+      .from(knowledgeSourcesTable)
+      .where(and(
+        eq(knowledgeSourcesTable.aiBotId, input.aiBotId),
+        eq(knowledgeSourcesTable.type, "dormbooking"),
+      ));
+    if (existing) {
+      const [{ n }] = await db
+        .select({ n: count() })
+        .from(knowledgeChunksTable)
+        .where(eq(knowledgeChunksTable.sourceId, existing.id));
+      return {
+        id: existing.id,
+        aiBotId: existing.aiBotId,
+        type: "dormbooking",
+        name: existing.name,
+        isActive: existing.isActive,
+        status: existing.status,
+        lastSyncedAt: existing.lastSyncedAt,
+        createdAt: existing.createdAt,
+        chunkCount: Number(n),
+        config: (existing.config ?? {}) as Record<string, unknown>,
+      };
+    }
+  }
   const [row] = await db
     .insert(knowledgeSourcesTable)
     .values({

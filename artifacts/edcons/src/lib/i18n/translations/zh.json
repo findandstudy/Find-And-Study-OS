@@ -6117,6 +6117,7 @@
       "typeFile": "文件（PDF/Word/Excel）",
       "typeUrl": "网页",
       "typeText": "自由文本",
+      "typeDormBooking": "DormBooking 实时目录",
       "nameLabel": "名称",
       "namePlaceholder": "例如：录取条件",
       "fileLabel": "文件",

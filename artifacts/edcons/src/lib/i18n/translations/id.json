@@ -6117,6 +6117,7 @@
       "typeFile": "File (PDF/Word/Excel)",
       "typeUrl": "Halaman web",
       "typeText": "Teks bebas",
+      "typeDormBooking": "Katalog langsung DormBooking",
       "nameLabel": "Nama",
       "namePlaceholder": "mis. Persyaratan penerimaan",
       "fileLabel": "File",

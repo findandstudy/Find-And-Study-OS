@@ -6117,6 +6117,7 @@
       "typeFile": "فایل (PDF/Word/Excel)",
       "typeUrl": "صفحه وب",
       "typeText": "متن آزاد",
+      "typeDormBooking": "کاتالوگ زنده DormBooking",
       "nameLabel": "نام",
       "namePlaceholder": "مثلاً شرایط پذیرش",
       "fileLabel": "فایل",

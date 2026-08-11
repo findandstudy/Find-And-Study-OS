@@ -4065,6 +4065,10 @@ const createRagSourceSchema = z.discriminatedUnion("type", [
     name: z.string().min(1).max(200),
     rawText: z.string().min(1).max(400_000),
   }),
+  z.object({
+    type: z.literal("dormbooking"),
+    name: z.string().min(1).max(200),
+  }),
 ]);
 const updateRagSourceSchema = z.object({
   isActive: z.boolean().optional(),
@@ -4074,7 +4078,12 @@ const updateRagSourceSchema = z.object({
 function ragSourceConfigFromInput(input: z.infer<typeof createRagSourceSchema>): Record<string, unknown> {
   if (input.type === "file") return { objectPath: input.objectPath, fileName: input.fileName, mimeType: input.mimeType };
   if (input.type === "url") return { url: input.url };
-  return { rawText: input.rawText };
+  if (input.type === "text") return { rawText: input.rawText };
+  return {
+    sourceUrl: "https://dormbooking.com/wp-json/dormbooking/v1/ai-catalog",
+    studentSafeOnly: true,
+    syncIntervalHours: 1,
+  };
 }
 
 // GET /inbox/knowledge-sources/rag — list all admin-managed file/url/text

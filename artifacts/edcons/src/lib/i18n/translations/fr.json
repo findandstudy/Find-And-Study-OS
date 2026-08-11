@@ -6117,6 +6117,7 @@
       "typeFile": "Fichier (PDF/Word/Excel)",
       "typeUrl": "Page web",
       "typeText": "Texte libre",
+      "typeDormBooking": "Catalogue DormBooking en direct",
       "nameLabel": "Nom",
       "namePlaceholder": "ex. Conditions d'admission",
       "fileLabel": "Fichier",

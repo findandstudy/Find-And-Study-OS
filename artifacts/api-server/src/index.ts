@@ -3129,6 +3129,10 @@ async function seedClaudeIntegration() {
       const { startAcademyKnowledgeSync } = await import("./lib/inbox/academyKnowledgeSync");
       return startAcademyKnowledgeSync();
     } },
+    { name: "dormBookingKnowledgeSync", offsetMs: 44_500, start: async () => {
+      const { startDormBookingKnowledgeSync } = await import("./lib/inbox/dormBookingKnowledgeSync");
+      return startDormBookingKnowledgeSync();
+    } },
     { name: "messageCampaignWorker", offsetMs: 46_000, start: async () => {
       const { startMessageCampaignWorker } = await import("./lib/inbox/messageCampaignWorker");
       return startMessageCampaignWorker();

@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/select";
 import {
   FileText,
+  BedDouble,
   GraduationCap,
   Link as LinkIcon,
   Type,
@@ -37,7 +38,7 @@ import {
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
-type ManualRagSourceType = "file" | "url" | "text";
+type ManualRagSourceType = "file" | "url" | "text" | "dormbooking";
 type RagSourceType = ManualRagSourceType | "academy";
 type RagSourceStatus = "pending" | "processing" | "ready" | "error" | null;
 
@@ -58,6 +59,7 @@ const TYPE_ICON: Record<RagSourceType, typeof FileText> = {
   url: LinkIcon,
   text: Type,
   academy: GraduationCap,
+  dormbooking: BedDouble,
 };
 
 function statusBadgeVariant(status: RagSourceStatus): "default" | "secondary" | "destructive" | "outline" {
@@ -177,7 +179,7 @@ export default function KnowledgeSourcesRag({ aiBotId }: { aiBotId: number }) {
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ type: "url", name: newName.trim(), url: newUrl.trim() }),
         });
-      } else {
+      } else if (newType === "text") {
         if (!newText.trim()) {
           toast({ title: t("aiAgentAdmin.ragSources.textRequired"), variant: "destructive" });
           setSubmitting(false);
@@ -187,6 +189,12 @@ export default function KnowledgeSourcesRag({ aiBotId }: { aiBotId: number }) {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ type: "text", name: newName.trim(), rawText: newText.trim() }),
+        });
+      } else {
+        await customFetch(botScopedUrl("/api/inbox/knowledge-sources/rag", aiBotId), {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ type: "dormbooking", name: newName.trim() }),
         });
       }
       toast({ title: t("aiAgentAdmin.ragSources.createSuccess") });
@@ -266,6 +274,7 @@ export default function KnowledgeSourcesRag({ aiBotId }: { aiBotId: number }) {
                   <SelectItem value="file">{t("aiAgentAdmin.ragSources.typeFile")}</SelectItem>
                   <SelectItem value="url">{t("aiAgentAdmin.ragSources.typeUrl")}</SelectItem>
                   <SelectItem value="text">{t("aiAgentAdmin.ragSources.typeText")}</SelectItem>
+                  <SelectItem value="dormbooking">{t("aiAgentAdmin.ragSources.typeDormBooking")}</SelectItem>
                 </SelectContent>
               </Select>
             </div>

@@ -6117,6 +6117,7 @@
       "typeFile": "Файл (PDF/Word/Excel)",
       "typeUrl": "Веб-страница",
       "typeText": "Свободный текст",
+      "typeDormBooking": "Живой каталог DormBooking",
       "nameLabel": "Название",
       "namePlaceholder": "например, Требования к поступлению",
       "fileLabel": "Файл",
