@@ -52,7 +52,11 @@ import { resolveOutboundConfig } from "../lib/inbox/channelAccountConfig";
 import { decryptConfig } from "../lib/encryption";
 import { sendViaZernio, getZernioApiKey, resolveZernioAccount, sendZernioTemplate } from "../lib/inbox/zernioSend";
 import { toE164 } from "../lib/inbox/phone";
-import { parseContentDispositionFilename, persistAttachmentMeta, backfillConversationAttachmentNames } from "../lib/inbox/attachmentNames";
+import {
+  backfillConversationAttachmentNames,
+  parseContentDispositionFilename,
+  persistAttachmentMeta,
+} from "../lib/inbox/attachmentNames";
 import { getChainOwner, syncConversationOwner, loadLink } from "../lib/inbox/assignmentSync";
 import {
   findApprovedZernioTemplate,
@@ -115,7 +119,9 @@ import { recomputeStudentPhoto } from "../lib/studentPhoto";
 import { callerOwnsObject } from "../lib/objectAuthz";
 import { loadDocCatalogKeySet } from "../lib/docCatalog";
 import {
+  contentDispositionWithFilename,
   ensureAttachmentFilenameExtension,
+  normalizeJpegDownloadFilename,
   readNestedZernioAttachmentMetadata,
 } from "../lib/inboxAttachmentMetadata";
 import { META_API_VERSION } from "../lib/inbox/channels/meta-shared";
@@ -542,8 +548,16 @@ router.get(
         res.status(upstream.status === 404 ? 404 : 502).json({ error: "Failed to fetch media" });
         return;
       }
+      const upstreamContentType = upstream.headers.get("content-type") || "application/octet-stream";
+      const dispo = upstream.headers.get("content-disposition");
+      const upstreamFilename = parseContentDispositionFilename(dispo);
+      const downloadFilename = normalizeJpegDownloadFilename(upstreamFilename);
+      const normalizedJpegName = Boolean(
+        upstreamFilename && downloadFilename && upstreamFilename !== downloadFilename,
+      );
+
       res.status(200);
-      res.setHeader("Content-Type", upstream.headers.get("content-type") || "application/octet-stream");
+      res.setHeader("Content-Type", normalizedJpegName ? "image/jpeg" : upstreamContentType);
       const len = upstream.headers.get("content-length");
       if (len) res.setHeader("Content-Length", len);
       res.setHeader("Cache-Control", "private, max-age=300");
@@ -552,12 +566,17 @@ router.get(
       // UI stops showing generic labels. Both steps are best-effort and can
       // never break the proxy stream.
       try {
-        const dispo = upstream.headers.get("content-disposition");
-        const filename = parseContentDispositionFilename(dispo);
-        if (dispo) res.setHeader("Content-Disposition", dispo);
+        if (dispo) {
+          res.setHeader(
+            "Content-Disposition",
+            normalizedJpegName && downloadFilename
+              ? contentDispositionWithFilename(dispo, downloadFilename)
+              : dispo,
+          );
+        }
         const sizeNum = Number(len);
         void persistAttachmentMeta(messageId, index, {
-          name: filename,
+          name: downloadFilename,
           size: Number.isFinite(sizeNum) && sizeNum > 0 ? sizeNum : null,
         });
       } catch { /* best-effort only */ }

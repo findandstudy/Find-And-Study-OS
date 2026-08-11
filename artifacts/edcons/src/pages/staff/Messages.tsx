@@ -54,6 +54,7 @@ import PdfAttachmentCard from "@/components/inbox/PdfAttachmentCard";
 import {
   getInboxAttachmentPreviewKind,
   inboxAttachmentMediaUrl,
+  normalizeInboxDownloadFilename,
   shouldProxyInboxAttachment,
 } from "@/components/inbox/attachmentMediaUrl";
 import { WhatsAppTemplatePicker } from "@/components/inbox/WhatsAppTemplatePicker";
@@ -2736,6 +2737,7 @@ function InboxTab() {
                                   (v) => typeof v === "string" && v.trim() && v.trim().toLowerCase() !== "file",
                                 ) as string | undefined;
                                 const name = explicitName ?? typedName;
+                                const downloadName = normalizeInboxDownloadFilename(name);
                                 const previewKind = getInboxAttachmentPreviewKind({
                                   type,
                                   mimeType: (a as any).mimeType ?? a.fileType,
@@ -2750,7 +2752,7 @@ function InboxTab() {
                                   <div className="flex items-center gap-1 flex-wrap mt-0.5">
                                     <a
                                       href={url}
-                                      download={name}
+                                      download={downloadName}
                                       target="_blank"
                                       rel="noopener noreferrer"
                                       className={_btnCls}

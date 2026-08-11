@@ -4,10 +4,38 @@ import {
 } from "./fileUploadValidation";
 
 type JsonRecord = Record<string, any>;
+const JPEG_TRANSPORT_EXTENSION = /\.(?:jfif|jfi|jif)$/i;
 
 export interface NestedAttachmentMetadata {
   mimeType: string | null;
   fileName: string | null;
+}
+
+/**
+ * JFIF is a JPEG interchange format, but several document systems reject its
+ * less-common filename extensions. Keep the bytes unchanged and expose these
+ * transport aliases as the widely-supported .jpg extension on download.
+ */
+export function normalizeJpegDownloadFilename(name: string | null | undefined): string | null {
+  if (!name) return null;
+  const safe = sanitizeFileName(name.trim());
+  if (!safe) return null;
+  return JPEG_TRANSPORT_EXTENSION.test(safe)
+    ? safe.replace(JPEG_TRANSPORT_EXTENSION, ".jpg")
+    : safe;
+}
+
+/** Preserve inline/attachment semantics while replacing an unsafe filename. */
+export function contentDispositionWithFilename(
+  originalHeader: string,
+  filename: string,
+): string {
+  const disposition = /^\s*attachment\b/i.test(originalHeader) ? "attachment" : "inline";
+  const asciiFallback = filename
+    .normalize("NFKD")
+    .replace(/[^\x20-\x7e]/g, "_")
+    .replace(/["\\]/g, "_");
+  return `${disposition}; filename="${asciiFallback}"; filename*=UTF-8''${encodeURIComponent(filename)}`;
 }
 
 /**

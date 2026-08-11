@@ -2,7 +2,9 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
+  contentDispositionWithFilename,
   ensureAttachmentFilenameExtension,
+  normalizeJpegDownloadFilename,
   readNestedZernioAttachmentMetadata,
 } from "../src/lib/inboxAttachmentMetadata";
 import {
@@ -35,6 +37,22 @@ test("preserves an already-valid filename", () => {
     ensureAttachmentFilenameExtension("degree.pdf", "application/pdf"),
     "degree.pdf",
   );
+});
+
+test("normalizes JFIF transport aliases to a JPG download name", () => {
+  assert.equal(normalizeJpegDownloadFilename("WhatsApp Image.JFIF"), "WhatsApp Image.jpg");
+  assert.equal(normalizeJpegDownloadFilename("photo.jfi"), "photo.jpg");
+  assert.equal(normalizeJpegDownloadFilename("photo.jpeg"), "photo.jpeg");
+});
+
+test("rewrites Content-Disposition without changing its disposition mode", () => {
+  const header = contentDispositionWithFilename(
+    'attachment; filename="WhatsApp Image.jfif"',
+    "WhatsApp Image.jpg",
+  );
+  assert.match(header, /^attachment;/);
+  assert.match(header, /filename="WhatsApp Image\.jpg"/);
+  assert.match(header, /filename\*=UTF-8''WhatsApp%20Image\.jpg/);
 });
 
 test("adds Office extensions for generic document placeholders", () => {

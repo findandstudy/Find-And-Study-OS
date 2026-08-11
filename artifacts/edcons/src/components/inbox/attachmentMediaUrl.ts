@@ -1,4 +1,5 @@
 const INBOX_STORAGE_PATH = /^\/api\/storage\/(?:public-objects|objects)\//;
+const JPEG_TRANSPORT_EXTENSION = /\.(?:jfif|jfi|jif)$/i;
 
 export type InboxAttachmentPreviewKind =
   | "image"
@@ -27,10 +28,14 @@ export function getInboxAttachmentPreviewKind(input: {
   if (type === "video" || mimeType.startsWith("video/")) return "video";
   if (type === "audio" || mimeType.startsWith("audio/")) return "audio";
   if (mimeType === "application/pdf" || extension === "pdf") return "pdf";
-  if (["jpg", "jpeg", "png", "gif", "webp"].includes(extension ?? "")) return "image";
+  if (["jpg", "jpeg", "jfif", "jfi", "jif", "png", "gif", "webp"].includes(extension ?? "")) return "image";
   if (["mp4", "3gp", "3gpp", "mov"].includes(extension ?? "")) return "video";
   if (["mp3", "ogg", "opus", "webm", "wav", "m4a", "aac", "amr"].includes(extension ?? "")) return "audio";
   return "file";
+}
+
+export function normalizeInboxDownloadFilename(name: string): string {
+  return String(name || "attachment").replace(JPEG_TRANSPORT_EXTENSION, ".jpg");
 }
 
 /**

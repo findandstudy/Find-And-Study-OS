@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   getInboxAttachmentPreviewKind,
   inboxAttachmentMediaUrl,
+  normalizeInboxDownloadFilename,
   shouldProxyInboxAttachment,
 } from "../src/components/inbox/attachmentMediaUrl";
 
@@ -61,4 +62,14 @@ test("provider files are previewed from MIME type or extension", () => {
     getInboxAttachmentPreviewKind({ type: "file", mimeType: "application/msword", name: "letter.doc" }),
     "file",
   );
+  assert.equal(
+    getInboxAttachmentPreviewKind({ type: "file", mimeType: "application/octet-stream", name: "photo.jfif" }),
+    "image",
+  );
+});
+
+test("JFIF-family image downloads use the compatible JPG extension", () => {
+  assert.equal(normalizeInboxDownloadFilename("WhatsApp Image.jfif"), "WhatsApp Image.jpg");
+  assert.equal(normalizeInboxDownloadFilename("photo.JFI"), "photo.jpg");
+  assert.equal(normalizeInboxDownloadFilename("photo.jpeg"), "photo.jpeg");
 });
