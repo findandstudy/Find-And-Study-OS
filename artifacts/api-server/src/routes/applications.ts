@@ -128,6 +128,47 @@ function applicationIsUnassigned() {
   )!;
 }
 
+const GLOBAL_APPLICATION_STAFF_ROLES = new Set(["super_admin", "admin"]);
+
+/**
+ * Application read scope for branch-bound staff.
+ *
+ * Legacy rows are intentionally fail-open when they have no branch, or when
+ * their branch has no active staff (the transitional "Genel Şube" pool).
+ * Conflicting legacy application.branch_id values do not hide a record when
+ * the linked student or either effective assignee belongs to the caller's
+ * branch. This keeps historical applications such as #1977 visible while new
+ * records continue to inherit a real branch at creation time.
+ */
+function applicationInStaffBranchScope(visibleBranchIds: number[]) {
+  const branchIds = visibleBranchIds.length > 0 ? visibleBranchIds : [-1];
+  return orFn(
+    isNull(applicationsTable.branchId),
+    inArray(applicationsTable.branchId, branchIds),
+    inArray(studentsTable.branchId, branchIds),
+    sql`EXISTS (
+      SELECT 1 FROM users application_assignee
+      WHERE application_assignee.id = ${applicationsTable.assignedToId}
+        AND application_assignee.branch_id IN (${sql.join(branchIds.map(id => sql`${id}`), sql`, `)})
+    )`,
+    sql`EXISTS (
+      SELECT 1 FROM users student_assignee
+      WHERE student_assignee.id = ${studentsTable.assignedToId}
+        AND student_assignee.branch_id IN (${sql.join(branchIds.map(id => sql`${id}`), sql`, `)})
+    )`,
+    sql`(
+      ${applicationsTable.branchId} IS NOT NULL
+      AND NOT EXISTS (
+        SELECT 1 FROM users branch_staff
+        WHERE branch_staff.branch_id = ${applicationsTable.branchId}
+          AND branch_staff.deleted_at IS NULL
+          AND branch_staff.is_active = true
+          AND branch_staff.role IN ('staff', 'consultant', 'manager', 'admin', 'editor', 'accountant')
+      )
+    )`,
+  )!;
+}
+
 async function isStageFileUploadMandatory(stageKey: string): Promise<boolean> {
   const [row] = await db.select({ isFileUploadMandatory: pipelineStagesTable.isFileUploadMandatory })
     .from(pipelineStagesTable)
@@ -367,10 +408,12 @@ router.get("/applications", requireAuth, requireAgentStaffPermission("applicatio
 
   if (isStaff) {
     if (studentId) conditions.push(eq(applicationsTable.studentId, parseInt(studentId, 10)));
-    // Historical CRM behaviour: every staff role can browse the complete
-    // application pipeline. Assignment, source, agency and branch are
-    // optional UI filters; they must not become implicit visibility gates.
-    // Student and agent roles remain scoped in their dedicated branches below.
+    // Super admins/admins retain global read access. Other staff roles see
+    // their branch plus branchless/shared legacy rows.
+    if (!GLOBAL_APPLICATION_STAFF_ROLES.has(user.role)) {
+      visibleBranchIds = await getVisibleBranchIds(user.id, user.role, user);
+      conditions.push(applicationInStaffBranchScope(visibleBranchIds ?? []));
+    }
   } else if (user.role === "student") {
     const [studentRec] = await db.select().from(studentsTable).where(eq(studentsTable.userId, user.id));
     if (!studentRec) {
@@ -1310,8 +1353,20 @@ router.get("/applications/:id", requireAuth, requireAgentStaffPermission("applic
 
   const user = req.user!;
   const isStaff = STAFF_ROLES.includes(user.role as any);
-  // Staff can open every application they can browse, regardless of source,
-  // assignment or branch. Agent and student access checks remain below.
+  if (isStaff && !GLOBAL_APPLICATION_STAFF_ROLES.has(user.role)) {
+    const visibleBranchIds = await getVisibleBranchIds(user.id, user.role, user);
+    const [visibleRow] = await db
+      .select({ id: applicationsTable.id })
+      .from(applicationsTable)
+      .leftJoin(studentsTable, eq(applicationsTable.studentId, studentsTable.id))
+      .where(and(
+        eq(applicationsTable.id, id),
+        isNull(applicationsTable.deletedAt),
+        applicationInStaffBranchScope(visibleBranchIds ?? []),
+      ));
+    if (!visibleRow) { res.status(404).json({ error: "Application not found" }); return; }
+  }
+  // Agent and student access checks remain below.
   if (isAgentRole(user.role)) {
     const agentRec = await getAgentRecord(user.id, user.role);
     const isSubAgentUser = user.role === "sub_agent" || !!agentRec?.parentAgentId;
@@ -2235,6 +2290,19 @@ router.get("/applications/:id/notes", requireAuth, requireRole(...STAFF_ROLES, .
   // enforced by the route's role/permission middleware.
   const [noteApp] = await db.select({ id: applicationsTable.id }).from(applicationsTable).where(and(eq(applicationsTable.id, id), isNull(applicationsTable.deletedAt)));
   if (!noteApp) { res.status(404).json({ error: "Application not found" }); return; }
+  if (STAFF_ROLES.includes(req.user!.role as any) && !GLOBAL_APPLICATION_STAFF_ROLES.has(req.user!.role)) {
+    const visibleBranchIds = await getVisibleBranchIds(req.user!.id, req.user!.role, req.user!);
+    const [visibleRow] = await db
+      .select({ id: applicationsTable.id })
+      .from(applicationsTable)
+      .leftJoin(studentsTable, eq(applicationsTable.studentId, studentsTable.id))
+      .where(and(
+        eq(applicationsTable.id, id),
+        isNull(applicationsTable.deletedAt),
+        applicationInStaffBranchScope(visibleBranchIds ?? []),
+      ));
+    if (!visibleRow) { res.status(404).json({ error: "Application not found" }); return; }
+  }
 
   const isStaff = ["super_admin", "admin", "manager", "staff"].includes(req.user!.role);
   const conditions = [eq(notesTable.resourceId, id), eq(notesTable.resourceType, "application")];
