@@ -32,6 +32,8 @@
  *       student AND that student's applications get the same assignee.
  *   (l) sync-assignment-backfill is idempotent: first run fixes mismatched
  *       records; second run is a no-op (zero updates).
+ *   (m) Inbox admin reassignment updates the linked student source before the
+ *       lead/application cascade, so detail sync cannot restore the old owner.
  *
  * Mounts the real students + leads + applications + staffCards routers and
  * injects a fake `req.user` (the same seam used by test-inbox-ai-actions).
@@ -61,6 +63,8 @@ import {
   leadsTable,
   studentsTable,
   applicationsTable,
+  conversationsTable,
+  externalContactsTable,
   pipelineStagesTable,
 } from "@workspace/db";
 
@@ -68,6 +72,7 @@ import studentsRouter from "../src/routes/students.js";
 import leadsRouter from "../src/routes/leads.js";
 import applicationsRouter from "../src/routes/applications.js";
 import staffCardsRouter from "../src/routes/staffCards.js";
+import inboxRouter from "../src/routes/inbox.js";
 import { runBackfill } from "./sync-assignment-backfill.js";
 
 const RUN_ID = `t326_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
@@ -89,6 +94,7 @@ function buildApp(): Express {
   app.use("/api", leadsRouter);
   app.use("/api", applicationsRouter);
   app.use("/api", staffCardsRouter);
+  app.use("/api", inboxRouter);
   return app;
 }
 
@@ -621,6 +627,62 @@ test("sync-assignment-backfill is idempotent", async () => {
   const afterSecond = await readAssignments(s);
   assert.equal(afterSecond.lead, staffA, "lead unchanged after second run");
   assert.deepEqual(afterSecond.apps, [staffA, staffA], "apps unchanged after second run");
+});
+
+// ---------------------------------------------------------------------------
+// (m) Inbox admin reassignment must patch the authoritative student itself.
+// ---------------------------------------------------------------------------
+test("inbox admin reassignment persists across the student-authoritative chain", async (t) => {
+  const admin = await createUser({ role: "admin" });
+  const staffA = await createUser({ role: "staff" });
+  const staffB = await createUser({ role: "staff" });
+  currentUser = { id: admin, role: "admin", isActive: true };
+
+  const s = await seedScenario(staffA);
+  const suffix = `${RUN_ID}_${Math.random().toString(36).slice(2, 8)}`;
+  const [contact] = await db
+    .insert(externalContactsTable)
+    .values({
+      channel: "whatsapp",
+      externalId: `assignment-${suffix}`,
+      displayName: "Inbox assignment test",
+      leadId: s.leadId,
+      studentId: s.studentId,
+    })
+    .returning({ id: externalContactsTable.id });
+  const [conversation] = await db
+    .insert(conversationsTable)
+    .values({
+      type: "external",
+      channel: "whatsapp",
+      externalContactId: contact.id,
+      externalThreadId: `assignment-thread-${suffix}`,
+      assignedToId: staffA,
+    })
+    .returning({ id: conversationsTable.id });
+
+  t.after(async () => {
+    await db.delete(conversationsTable).where(eq(conversationsTable.id, conversation.id));
+    await db.delete(externalContactsTable).where(eq(externalContactsTable.id, contact.id));
+  });
+
+  const assigned = await request(
+    "PATCH",
+    `/api/inbox/conversations/${conversation.id}/assign`,
+    { userId: staffB },
+  );
+  assert.equal(assigned.status, 200, `assignment should succeed: ${JSON.stringify(assigned.body)}`);
+
+  const after = await readAssignments(s);
+  assert.equal(after.student, staffB, "linked student owner changed");
+  assert.equal(after.lead, staffB, "converted lead followed student owner");
+  assert.deepEqual(after.apps, [staffB, staffB], "applications followed student owner");
+
+  const [conversationAfter] = await db
+    .select({ assignedToId: conversationsTable.assignedToId })
+    .from(conversationsTable)
+    .where(eq(conversationsTable.id, conversation.id));
+  assert.equal(conversationAfter?.assignedToId, staffB, "conversation remains on the selected owner");
 });
 
 // ---------------------------------------------------------------------------

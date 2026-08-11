@@ -1462,7 +1462,40 @@ router.patch(
         if (link) {
           const actor = req.user!;
           const canCascade = actorCanCascade;
-          if (link.leadId != null) {
+          // A linked student is the authoritative owner in getChainOwner(), so
+          // update that source row first. cascadeStudentAssignment deliberately
+          // updates only the student's lead/app siblings (its normal callers
+          // have already patched the student). Skipping this source update made
+          // the next detail refresh restore the old student owner and silently
+          // undo an admin's conversation reassignment.
+          if (link.studentId != null && (canCascade || assignedToId !== null)) {
+            const [student] = await db
+              .select({ id: studentsTable.id, assignedToId: studentsTable.assignedToId })
+              .from(studentsTable)
+              .where(and(eq(studentsTable.id, link.studentId), isNull(studentsTable.deletedAt)));
+            const shouldUpdateStudent = student
+              && student.assignedToId !== assignedToId
+              && (canCascade || student.assignedToId === null);
+            if (shouldUpdateStudent) {
+              await db
+                .update(studentsTable)
+                .set({ assignedToId })
+                .where(eq(studentsTable.id, student.id));
+              await logAudit(actor.id, canCascade ? "assignment.cascade" : "assignment.null_fill_cascade", "student", student.id, {
+                from: student.assignedToId ?? null,
+                to: assignedToId,
+                source: "conversation",
+                sourceId: id,
+              }, req.ip);
+            }
+            await cascadeStudentAssignment({
+              studentId: link.studentId,
+              newAssignedToId: assignedToId,
+              actorUserId: actor.id,
+              ipAddress: req.ip,
+              nullFillOnly: !canCascade,
+            });
+          } else if (link.leadId != null) {
             const [lead] = await db
               .select({ id: leadsTable.id, convertedStudentId: leadsTable.convertedStudentId })
               .from(leadsTable)
@@ -1477,14 +1510,6 @@ router.patch(
                 nullFillOnly: !canCascade,
               });
             }
-          } else if (link.studentId != null && (canCascade || assignedToId !== null)) {
-            await cascadeStudentAssignment({
-              studentId: link.studentId,
-              newAssignedToId: assignedToId,
-              actorUserId: actor.id,
-              ipAddress: req.ip,
-              nullFillOnly: !canCascade,
-            });
           }
         }
       } catch (err: any) {
