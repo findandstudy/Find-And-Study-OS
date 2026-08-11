@@ -337,6 +337,13 @@
       "when": 1786338000000,
       "tag": "0047_multi_bot_communication_pipelines",
       "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1786424400000,
+      "tag": "0048_application_lead_link",
+      "breakpoints": true
     }
   ]
 }

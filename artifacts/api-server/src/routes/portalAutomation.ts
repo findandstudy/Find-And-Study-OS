@@ -1910,6 +1910,7 @@ async function fanOutApplicationToUniversities(
               .insert(applicationsTable)
               .values({
                 studentId:           srcApp.studentId,
+                leadId:              srcApp.leadId,
                 programId:           program.id,
                 universityId:        crmUniversityId,
                 agentId:             srcApp.agentId,

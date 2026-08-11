@@ -2069,6 +2069,14 @@ router.post("/public/embed/:slug/apply", embedSubmitLimiter, embedApplyJson, asy
           await db.update(leadsTable)
             .set({ status: "converted", convertedStudentId: resultStudentId })
             .where(eq(leadsTable.id, result.leadId));
+          if (resultAppId !== null) {
+            await db.update(applicationsTable)
+              .set({ leadId: result.leadId })
+              .where(and(
+                eq(applicationsTable.id, resultAppId),
+                eq(applicationsTable.studentId, resultStudentId),
+              ));
+          }
           console.log(`[EMBED-APPLY] Auto-converted lead #${result.leadId} → student #${resultStudentId} (slug=${widget.slug}, stage=${studentStageKey})`);
           // Event-driven portal enqueue: student just entered the configured
           // auto-convert stage. actorUserId is null (public endpoint — no

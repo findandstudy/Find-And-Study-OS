@@ -1530,7 +1530,7 @@ router.post("/leads/:id/convert", requireAuth, requireRole(...STAFF_ROLES, ...AG
       });
 
       if (submission?.programId) {
-        await createApplicationFromSubmission(existingByEmail.id, submission, req.user?.id ?? null);
+        await createApplicationFromSubmission(existingByEmail.id, lead.id, submission, req.user?.id ?? null);
       }
 
       await db.update(leadsTable).set({ status: "converted", convertedStudentId: existingByEmail.id }).where(eq(leadsTable.id, id));
@@ -1562,7 +1562,7 @@ router.post("/leads/:id/convert", requireAuth, requireRole(...STAFF_ROLES, ...AG
   });
 
   if (submission?.programId) {
-    await createApplicationFromSubmission(student.id, submission);
+    await createApplicationFromSubmission(student.id, lead.id, submission, req.user?.id ?? null);
   }
 
   await db.update(leadsTable).set({ status: "converted", convertedStudentId: student.id }).where(eq(leadsTable.id, id));
@@ -1573,7 +1573,7 @@ router.post("/leads/:id/convert", requireAuth, requireRole(...STAFF_ROLES, ...AG
   res.json({ student, merged: false });
 });
 
-async function createApplicationFromSubmission(studentId: number, submission: any, actorUserId: number | null = null) {
+async function createApplicationFromSubmission(studentId: number, leadId: number, submission: any, actorUserId: number | null = null) {
   try {
     const programId = submission.programId;
     const [program] = await db.select().from(programsTable).where(eq(programsTable.id, programId));
@@ -1626,6 +1626,10 @@ async function createApplicationFromSubmission(studentId: number, submission: an
 
     const [app] = await db.insert(applicationsTable).values({
       studentId,
+      // This application is created as part of this exact lead conversion, so
+      // the relationship is authoritative. Other creation paths leave leadId
+      // null rather than guessing from the student's converted leads.
+      leadId,
       // Lead submission (public intake form) → student self-service.
       createdSource: "student",
       programId: program.id,

@@ -1218,10 +1218,19 @@ router.post("/public/apply", applyLimiter, applyJson, async (req: Request, res: 
           if (leadId) {
             const leadIdNum = parseInt(String(leadId), 10);
             if (Number.isFinite(leadIdNum) && leadIdNum > 0) {
-              await db.update(leadsTable)
+              const [convertedLead] = await db.update(leadsTable)
                 .set({ status: "converted", convertedStudentId: resultStudentId })
-                .where(eq(leadsTable.id, leadIdNum));
-              console.log(`[PUBLIC-APPLY] Auto-converted lead #${leadIdNum} → student #${resultStudentId} (stage=${studentStageKey})`);
+                .where(eq(leadsTable.id, leadIdNum))
+                .returning({ id: leadsTable.id });
+              if (convertedLead) {
+                await db.update(applicationsTable)
+                  .set({ leadId: convertedLead.id })
+                  .where(and(
+                    eq(applicationsTable.id, resultAppId),
+                    eq(applicationsTable.studentId, resultStudentId),
+                  ));
+                console.log(`[PUBLIC-APPLY] Auto-converted lead #${leadIdNum} → student #${resultStudentId} (stage=${studentStageKey})`);
+              }
             }
           }
         } else {

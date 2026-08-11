@@ -6,10 +6,12 @@ import { studentsTable } from "./students";
 import { programsTable, universitiesTable } from "./universities";
 import { agentsTable } from "./agents";
 import { usersTable } from "./users";
+import { leadsTable } from "./leads";
 
 export const applicationsTable = pgTable("applications", {
   id: serial("id").primaryKey(),
   studentId: integer("student_id").notNull().references(() => studentsTable.id, { onDelete: "cascade" }),
+  leadId: integer("lead_id").references(() => leadsTable.id, { onDelete: "set null" }),
   programId: integer("program_id").references(() => programsTable.id, { onDelete: "set null" }),
   universityId: integer("university_id").references(() => universitiesTable.id, { onDelete: "set null" }),
   agentId: integer("agent_id").references(() => agentsTable.id, { onDelete: "set null" }),
@@ -82,6 +84,7 @@ export const applicationsTable = pgTable("applications", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 }, (table) => [
   index("applications_student_id_idx").on(table.studentId),
+  index("applications_lead_id_idx").on(table.leadId),
   index("applications_program_id_idx").on(table.programId),
   index("applications_university_id_idx").on(table.universityId),
   index("applications_agent_id_idx").on(table.agentId),

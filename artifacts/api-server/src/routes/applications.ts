@@ -232,32 +232,89 @@ async function resolveLostCascadeTargets(applicationStage: string): Promise<Lost
 async function cascadeApplicationLostStage(opts: {
   applicationId: number;
   studentId: number;
+  leadId: number | null;
   targets: LostCascadeTargets;
   actorUserId: number;
   ipAddress?: string;
 }): Promise<void> {
-  const { applicationId, studentId, targets, actorUserId, ipAddress } = opts;
-  const [student] = await db.select({ status: studentsTable.status })
-    .from(studentsTable)
-    .where(and(eq(studentsTable.id, studentId), isNull(studentsTable.deletedAt)));
+  const { applicationId, studentId, leadId, targets, actorUserId, ipAddress } = opts;
 
-  if (student && student.status !== targets.studentStage) {
-    await db.update(studentsTable)
-      .set({ status: targets.studentStage })
+  const allApplicationsAreLost = async (scope: "student" | "lead", id: number): Promise<boolean> => {
+    const rows = await db.select({ stage: applicationsTable.stage })
+      .from(applicationsTable)
+      .where(and(
+        scope === "student"
+          ? eq(applicationsTable.studentId, id)
+          : eq(applicationsTable.leadId, id),
+        isNull(applicationsTable.deletedAt),
+      ));
+    if (rows.length === 0) return false;
+
+    const stageKeys = [...new Set(rows.map((row) => row.stage))];
+    const stageVariants = await db.select({
+      key: pipelineStagesTable.key,
+      variant: pipelineStagesTable.variant,
+    })
+      .from(pipelineStagesTable)
+      .where(and(
+        eq(pipelineStagesTable.entityType, "application"),
+        inArray(pipelineStagesTable.key, stageKeys),
+      ));
+    const variantByKey = new Map(stageVariants.map((stage) => [stage.key, stage.variant]));
+    return rows.every((row) => variantByKey.get(row.stage) === "lost");
+  };
+
+  if (await allApplicationsAreLost("student", studentId)) {
+    const [student] = await db.select({ status: studentsTable.status })
+      .from(studentsTable)
       .where(and(eq(studentsTable.id, studentId), isNull(studentsTable.deletedAt)));
-    logAudit(actorUserId, "stage.lost_cascade", "student", studentId, {
-      from: student.status,
-      to: targets.studentStage,
+    if (student && student.status !== targets.studentStage) {
+      await db.update(studentsTable)
+        .set({ status: targets.studentStage })
+        .where(and(eq(studentsTable.id, studentId), isNull(studentsTable.deletedAt)));
+      logAudit(actorUserId, "stage.lost_cascade", "student", studentId, {
+        from: student.status,
+        to: targets.studentStage,
+        source: "application",
+        sourceId: applicationId,
+        rule: "all_student_applications_lost",
+      }, ipAddress);
+    }
+  } else {
+    logAudit(actorUserId, "stage.lost_cascade_skipped", "student", studentId, {
       source: "application",
       sourceId: applicationId,
+      reason: "student_has_non_lost_application",
     }, ipAddress);
   }
 
-  const linkedLeads = await db.select({ id: leadsTable.id, status: leadsTable.status })
+  // A lead is updated only through an explicit application.leadId. Legacy and
+  // direct-created applications deliberately remain unlinked; never guess a
+  // lead from convertedStudentId because one student can have multiple leads.
+  if (leadId == null) {
+    logAudit(actorUserId, "stage.lost_cascade_skipped", "application", applicationId, {
+      reason: "application_has_no_lead_link",
+    }, ipAddress);
+    return;
+  }
+
+  const [lead] = await db.select({ id: leadsTable.id, status: leadsTable.status })
     .from(leadsTable)
-    .where(and(eq(leadsTable.convertedStudentId, studentId), isNull(leadsTable.deletedAt)));
-  for (const lead of linkedLeads) {
-    if (lead.status === targets.leadStage) continue;
+    .where(and(
+      eq(leadsTable.id, leadId),
+      eq(leadsTable.convertedStudentId, studentId),
+      isNull(leadsTable.deletedAt),
+    ));
+  if (!lead) {
+    logAudit(actorUserId, "stage.lost_cascade_skipped", "application", applicationId, {
+      leadId,
+      reason: "lead_link_not_active_for_student",
+    }, ipAddress);
+    return;
+  }
+
+  if (await allApplicationsAreLost("lead", leadId)) {
+    if (lead.status === targets.leadStage) return;
     await db.update(leadsTable)
       .set({ status: targets.leadStage })
       .where(and(eq(leadsTable.id, lead.id), isNull(leadsTable.deletedAt)));
@@ -266,6 +323,13 @@ async function cascadeApplicationLostStage(opts: {
       to: targets.leadStage,
       source: "application",
       sourceId: applicationId,
+      rule: "all_lead_applications_lost",
+    }, ipAddress);
+  } else {
+    logAudit(actorUserId, "stage.lost_cascade_skipped", "lead", leadId, {
+      source: "application",
+      sourceId: applicationId,
+      reason: "lead_has_non_lost_application",
     }, ipAddress);
   }
 }
@@ -1631,6 +1695,7 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, ...AG
     await cascadeApplicationLostStage({
       applicationId: app.id,
       studentId: app.studentId,
+      leadId: app.leadId ?? null,
       targets: lostCascadeTargets,
       actorUserId: user.id,
       ipAddress: req.ip,
@@ -2010,6 +2075,7 @@ router.post("/applications/bulk-action", requireAuth, requireRole(...STAFF_ROLES
         await cascadeApplicationLostStage({
           applicationId: app.id,
           studentId: app.studentId,
+          leadId: app.leadId ?? null,
           targets: lostCascadeTargets,
           actorUserId: user.id,
           ipAddress: req.ip,

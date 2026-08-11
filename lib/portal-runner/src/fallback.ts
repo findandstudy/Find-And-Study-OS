@@ -570,6 +570,7 @@ export async function handleNeedsFallback(
       .insert(applicationsTable)
       .values({
         studentId:           srcApp.studentId,
+        leadId:              srcApp.leadId,
         programId:           selected.programId,
         universityId:        srcApp.universityId,
         agentId:             srcApp.agentId,

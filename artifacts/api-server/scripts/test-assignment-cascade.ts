@@ -187,8 +187,8 @@ async function seedScenario(initialAssignee: number | null = null): Promise<Scen
   const appRows = await db
     .insert(applicationsTable)
     .values([
-      { studentId: student.id, assignedToId: initialAssignee },
-      { studentId: student.id, assignedToId: initialAssignee },
+      { studentId: student.id, leadId: lead.id, assignedToId: initialAssignee },
+      { studentId: student.id, leadId: lead.id, assignedToId: initialAssignee },
     ])
     .returning({ id: applicationsTable.id });
 
@@ -624,13 +624,11 @@ test("sync-assignment-backfill is idempotent", async () => {
 });
 
 // ---------------------------------------------------------------------------
-// (m) Moving an application into any stage whose variant is "lost" cascades
-//     the linked student and lead into their own first configured lost stages.
+// (m) LOST is aggregate and relationship-safe: sibling applications are never
+//     modified; student/lead only become LOST when all applications in their
+//     respective scope are LOST, and unlinked applications never guess a lead.
 // ---------------------------------------------------------------------------
-test("application lost stage cascades to student and lead lost stages", async () => {
-  const admin = await createUser({ role: "admin" });
-  currentUser = { id: admin, role: "admin", isActive: true };
-
+async function lostStageKeys() {
   const [applicationLost] = await db.select({ key: pipelineStagesTable.key })
     .from(pipelineStagesTable)
     .where(and(
@@ -655,25 +653,116 @@ test("application lost stage cascades to student and lead lost stages", async ()
     ))
     .orderBy(asc(pipelineStagesTable.sortOrder), asc(pipelineStagesTable.id))
     .limit(1);
+  const [applicationWon] = await db.select({ key: pipelineStagesTable.key })
+    .from(pipelineStagesTable)
+    .where(and(
+      eq(pipelineStagesTable.entityType, "application"),
+      eq(pipelineStagesTable.variant, "won"),
+    ))
+    .orderBy(asc(pipelineStagesTable.sortOrder), asc(pipelineStagesTable.id))
+    .limit(1);
 
   assert.ok(applicationLost?.key, "application pipeline must define a lost stage");
   assert.ok(studentLost?.key, "student pipeline must define a lost stage");
   assert.ok(leadLost?.key, "lead pipeline must define a lost stage");
+  assert.ok(applicationWon?.key, "application pipeline must define a won stage");
+  return {
+    applicationLost: applicationLost.key,
+    applicationWon: applicationWon.key,
+    studentLost: studentLost.key,
+    leadLost: leadLost.key,
+  };
+}
 
-  const s = await seedScenario(null);
-  const targetAppId = s.appIds[0];
-  const res = await request("PATCH", `/api/applications/${targetAppId}`, {
-    stage: applicationLost.key,
-    notes: "Lost cascade regression",
-  });
-  assert.equal(res.status, 200, `PATCH should succeed (got ${res.status}: ${JSON.stringify(res.body)})`);
-
+async function readLostStatuses(s: Scenario) {
   const [student] = await db.select({ status: studentsTable.status })
     .from(studentsTable)
     .where(eq(studentsTable.id, s.studentId));
   const [lead] = await db.select({ status: leadsTable.status })
     .from(leadsTable)
     .where(eq(leadsTable.id, s.leadId));
-  assert.equal(student?.status, studentLost.key, "student moved to its configured lost stage");
-  assert.equal(lead?.status, leadLost.key, "lead moved to its configured lost stage");
+  const apps = await db.select({ id: applicationsTable.id, stage: applicationsTable.stage })
+    .from(applicationsTable)
+    .where(inArray(applicationsTable.id, s.appIds))
+    .orderBy(applicationsTable.id);
+  return { student: student?.status, lead: lead?.status, apps };
+}
+
+test("LOST patch leaves student and lead unchanged while a sibling application is active", async () => {
+  const admin = await createUser({ role: "admin" });
+  currentUser = { id: admin, role: "admin", isActive: true };
+  const stages = await lostStageKeys();
+  const s = await seedScenario(null);
+
+  const targetAppId = s.appIds[0];
+  const res = await request("PATCH", `/api/applications/${targetAppId}`, {
+    stage: stages.applicationLost,
+  });
+  assert.equal(res.status, 200, `PATCH should succeed (got ${res.status}: ${JSON.stringify(res.body)})`);
+  const state = await readLostStatuses(s);
+  assert.notEqual(state.student, stages.studentLost, "active sibling protects student status");
+  assert.notEqual(state.lead, stages.leadLost, "active sibling linked to lead protects lead status");
+  assert.notEqual(state.apps[1]?.stage, stages.applicationLost, "sibling application is untouched");
+});
+
+test("LOST patch leaves student and lead unchanged while a sibling application is WON", async () => {
+  const admin = await createUser({ role: "admin" });
+  currentUser = { id: admin, role: "admin", isActive: true };
+  const stages = await lostStageKeys();
+  const s = await seedScenario(null);
+  await db.update(applicationsTable).set({ stage: stages.applicationWon }).where(eq(applicationsTable.id, s.appIds[1]));
+  const res = await request("PATCH", `/api/applications/${s.appIds[0]}`, { stage: stages.applicationLost });
+  assert.equal(res.status, 200, `PATCH should succeed (got ${res.status}: ${JSON.stringify(res.body)})`);
+  const state = await readLostStatuses(s);
+  assert.notEqual(state.student, stages.studentLost, "WON sibling protects student status");
+  assert.notEqual(state.lead, stages.leadLost, "WON sibling protects lead status");
+  assert.equal(state.apps[1]?.stage, stages.applicationWon, "WON sibling is untouched");
+});
+
+test("LOST patch cascades when every student and lead application is LOST", async () => {
+  const admin = await createUser({ role: "admin" });
+  currentUser = { id: admin, role: "admin", isActive: true };
+  const stages = await lostStageKeys();
+  const s = await seedScenario(null);
+  await db.update(applicationsTable).set({ stage: stages.applicationLost }).where(eq(applicationsTable.id, s.appIds[1]));
+  const res = await request("PATCH", `/api/applications/${s.appIds[0]}`, { stage: stages.applicationLost });
+  assert.equal(res.status, 200, `PATCH should succeed (got ${res.status}: ${JSON.stringify(res.body)})`);
+  const state = await readLostStatuses(s);
+  assert.equal(state.student, stages.studentLost, "all applications LOST moves student");
+  assert.equal(state.lead, stages.leadLost, "all lead-linked applications LOST moves lead");
+});
+
+test("leadless LOST application never guesses a lead", async () => {
+  const admin = await createUser({ role: "admin" });
+  currentUser = { id: admin, role: "admin", isActive: true };
+  const stages = await lostStageKeys();
+  const s = await seedScenario(null);
+  await db.update(applicationsTable)
+    .set({ leadId: null })
+    .where(eq(applicationsTable.id, s.appIds[0]));
+  await db.update(applicationsTable)
+    .set({ deletedAt: new Date() })
+    .where(eq(applicationsTable.id, s.appIds[1]));
+  const res = await request("PATCH", `/api/applications/${s.appIds[0]}`, { stage: stages.applicationLost });
+  assert.equal(res.status, 200, `PATCH should succeed (got ${res.status}: ${JSON.stringify(res.body)})`);
+  const state = await readLostStatuses(s);
+  assert.equal(state.student, stages.studentLost, "single live application controls student aggregate");
+  assert.notEqual(state.lead, stages.leadLost, "unlinked application does not mutate converted lead");
+});
+
+test("bulk LOST move uses the same aggregate safety rules", async () => {
+  const admin = await createUser({ role: "admin" });
+  currentUser = { id: admin, role: "admin", isActive: true };
+  const stages = await lostStageKeys();
+  const s = await seedScenario(null);
+  const res = await request("POST", "/api/applications/bulk-action", {
+    ids: [s.appIds[0]],
+    action: "move",
+    stage: stages.applicationLost,
+  });
+  assert.equal(res.status, 200, `bulk move should succeed (got ${res.status}: ${JSON.stringify(res.body)})`);
+  const state = await readLostStatuses(s);
+  assert.notEqual(state.student, stages.studentLost, "active sibling protects student in bulk move");
+  assert.notEqual(state.lead, stages.leadLost, "active sibling protects lead in bulk move");
+  assert.notEqual(state.apps[1]?.stage, stages.applicationLost, "bulk move does not touch sibling");
 });

@@ -191,6 +191,14 @@ async function runEmbedFlow(slug: string): Promise<Section> {
     ok = assert(!!leadAfter?.convertedStudentId, `lead.convertedStudentId is set (got ${leadAfter?.convertedStudentId})`, details) && ok;
 
     if (leadAfter?.convertedStudentId) {
+      const linkedApps = await db.select({ leadId: applicationsTable.leadId })
+        .from(applicationsTable)
+        .where(eq(applicationsTable.studentId, leadAfter.convertedStudentId));
+      ok = assert(
+        linkedApps.some((app) => app.leadId === leadId),
+        `auto-converted application stores its exact leadId`,
+        details,
+      ) && ok;
       const [stu] = await db.select().from(studentsTable).where(eq(studentsTable.id, leadAfter.convertedStudentId));
       ok = assert(!!stu, `student row created`, details) && ok;
       if (stu) {
