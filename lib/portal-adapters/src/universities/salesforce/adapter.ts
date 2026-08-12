@@ -1648,6 +1648,16 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
             'input[name="City"]',
             strictMappedPortal ? profile.addressCity : profile.address,
           );
+          if (cfg.key === "halic") {
+            personalProof.motherName = await fill(
+              'input[name="Mother_s_Name"]',
+              profile.motherName,
+            );
+            personalProof.fatherName = await fill(
+              'input[name="Father_s_Name"]',
+              profile.fatherName,
+            );
+          }
           if (strictMappedPortal) {
             const failed = Object.entries(personalProof)
               .filter(([, ok]) => !ok)
