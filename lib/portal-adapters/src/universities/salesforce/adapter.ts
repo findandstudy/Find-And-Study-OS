@@ -2268,6 +2268,25 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
           !(activeStage === "Program Selection" && bodyChanged)
         ) {
           const validation = await readValidationMessages();
+          if (cfg.key === "halic" && activeStage === "Review and Submit") {
+            const buttons = await page
+              .locator('button:visible,[role="button"]:visible')
+              .evaluateAll((nodes: Element[]) =>
+                nodes.slice(0, 40).map((node: Element) => ({
+                  text: (node.textContent || "").replace(/\s+/g, " ").trim(),
+                  disabled:
+                    (node as HTMLButtonElement).disabled ||
+                    node.getAttribute("aria-disabled") === "true",
+                  name: node.getAttribute("name"),
+                  title: node.getAttribute("title"),
+                })),
+              )
+              .catch(() => []);
+            logger.warn(`[salesforce:${cfg.key}] review stage did not advance`, {
+              validation,
+              buttons: JSON.stringify(buttons),
+            });
+          }
           result.stuckStep = step;
           result.detail =
             `${cfg.label}: ${activeStage} did not advance` +
