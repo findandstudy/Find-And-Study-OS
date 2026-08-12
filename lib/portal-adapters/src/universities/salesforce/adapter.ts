@@ -985,6 +985,24 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
           activeStage === "Review and Submit" &&
           /review your application before submit/i.test(txt)
         ) {
+          if (cfg.key === "halic") {
+            const reviewButtons = await page
+              .locator('button:visible,[role="button"]:visible')
+              .evaluateAll((nodes: Element[]) =>
+                nodes.slice(0, 40).map((node: Element) => ({
+                  text: (node.textContent || "").replace(/\s+/g, " ").trim(),
+                  disabled:
+                    (node as HTMLButtonElement).disabled ||
+                    node.getAttribute("aria-disabled") === "true",
+                  name: node.getAttribute("name"),
+                  title: node.getAttribute("title"),
+                })),
+              )
+              .catch(() => []);
+            logger.info(`[salesforce:${cfg.key}] dry review controls`, {
+              buttons: JSON.stringify(reviewButtons),
+            });
+          }
           result.dryReachedFinal = true;
           break;
         }
