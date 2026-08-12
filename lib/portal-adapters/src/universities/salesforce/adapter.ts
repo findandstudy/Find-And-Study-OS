@@ -1799,12 +1799,10 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
                 profile.languageScore ? /^\s*other\s*$/i : /^\s*none\s*$/i,
               );
             }
-            if (profile.languageScore) {
-              educationProof.languageScore = await fill(
-                'input[name="Language_Exam_Score"]',
-                profile.languageScore,
-              );
-            }
+            educationProof.languageScore = await fill(
+              'input[name="Language_Exam_Score"]',
+              profile.languageScore || "0",
+            );
           }
           if (strictMappedPortal) {
             const failed = Object.entries(educationProof)
