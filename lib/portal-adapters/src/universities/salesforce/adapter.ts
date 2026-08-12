@@ -1565,7 +1565,7 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
             break;
           }
           continue;
-        } else if (await has("select[name=\"Gender\"]")) {
+        } else if (await hasVisible('select[name="Gender"]')) {
           const personalProof: Record<string, boolean> = {};
           personalProof.firstName = await fill(
             cfg.key === "halic"
@@ -1753,7 +1753,10 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
             }
           }
           await clickNext();
-        } else if (await has("select[name=\"Country_of_Secondary_School\"]") || /secondary school/i.test(txt)) {
+        } else if (
+          (await hasVisible('select[name="Country_of_Secondary_School"]')) ||
+          (!strictMappedPortal && /secondary school/i.test(txt))
+        ) {
           const educationProof: Record<string, boolean> = {};
           educationProof.schoolName = await fill(
             'input[name="Name_of_Secondary_School"]',
@@ -1855,7 +1858,7 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
           await clickNext();
         } else if (
           activeStage === "Documents" &&
-          (await has("input[type=file]"))
+          (await hasVisible("input[type=file]"))
         ) {
           try {
             const fi = page.locator("input[type=file]");
@@ -1965,7 +1968,11 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
             if (strictMappedPortal) throw e;
           }
           await clickNext();
-        } else if (activeStage === "Documents" && strictMappedPortal) {
+        } else if (
+          activeStage === "Documents" &&
+          strictMappedPortal &&
+          (await hasVisible('button[name="filesToSelect"]'))
+        ) {
           if (cfg.key === "halic") {
             const halicDocuments: Array<{
               slot: string;
