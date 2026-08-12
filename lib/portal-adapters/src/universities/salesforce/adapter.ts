@@ -1533,7 +1533,8 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
           );
           personalProof.citizenship =
             cfg.key === "halic"
-              ? await selLightningByName("Citizenship_0", profile.nationality)
+              ? (await selByName("Citizenship_0", profile.nationality)) ||
+                (await selLightningByName("Citizenship_0", profile.nationality))
               : await selByName("Citizenship", profile.nationality);
           personalProof.residenceCountry = await selByName(
             "Country_of_Residence",
@@ -1601,15 +1602,33 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
             if (await phoneCountry.count()) {
               await phoneCountry.click({ timeout: 4000 }).catch(() => {});
               await page.waitForTimeout(400);
-              const option = page
-                .getByRole("option")
-                .filter({ hasText: /Bangladesh|\+880/ })
-                .first();
-              if (await option.count()) {
-                await option.click({ timeout: 4000 }).catch(() => {});
-                const phoneCountryText =
-                  (await phoneCountry.innerText().catch(() => "")) || "";
-                countryCodeProof = /Bangladesh|\+?880/.test(phoneCountryText);
+              const choices = page.locator(
+                '[role="option"],lightning-base-combobox-item,li[role="presentation"]',
+              );
+              const matchingChoices: any[] = [];
+              const choiceTexts: string[] = [];
+              for (let index = 0; index < await choices.count(); index++) {
+                const choice = choices.nth(index);
+                if (!(await choice.isVisible().catch(() => false))) continue;
+                const choiceText =
+                  ((await choice.innerText().catch(() => "")) || "")
+                    .replace(/\s+/g, " ")
+                    .trim();
+                if (choiceText) choiceTexts.push(choiceText);
+                if (/Bangladesh|\+?880/.test(choiceText)) {
+                  matchingChoices.push(choice);
+                }
+              }
+              if (matchingChoices.length === 1) {
+                await matchingChoices[0]
+                  .click({ timeout: 4000 })
+                  .catch(() => {});
+                countryCodeProof = true;
+              } else {
+                logger.warn(`[salesforce:${cfg.key}] phone country options`, {
+                  matchingCount: matchingChoices.length,
+                  choices: choiceTexts.slice(0, 80),
+                });
               }
             }
             personalProof.phone =
