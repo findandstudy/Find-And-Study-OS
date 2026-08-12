@@ -1070,6 +1070,22 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
             result.alreadyExists = true;
             break;
           } else {
+            if (cfg.key === "halic") {
+              const buttons = await page
+                .locator('button:visible,[role="button"]:visible')
+                .evaluateAll((nodes: Element[]) =>
+                  nodes.slice(0, 40).map((node: Element) => ({
+                    text: (node.textContent || "").replace(/\s+/g, " ").trim(),
+                    disabled:
+                      (node as HTMLButtonElement).disabled ||
+                      node.getAttribute("aria-disabled") === "true",
+                  })),
+                )
+                .catch(() => []);
+              logger.warn(`[salesforce:${cfg.key}] existing applicant controls`, {
+                buttons: JSON.stringify(buttons),
+              });
+            }
             result.stuckStep = step;
             result.detail =
               `${cfg.label}: applicant already exists, but no owned application continuation or completion proof was found`;
