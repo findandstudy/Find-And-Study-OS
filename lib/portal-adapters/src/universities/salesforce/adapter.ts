@@ -1023,20 +1023,10 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
         }
         if (DUP.test(txt)) {
           if (exactApplicantReadback && !applicantPreflight.owned) {
-            const beforeResume = txt.replace(/\s+/g, " ");
             const clicked = await clickNext();
             if (clicked) {
-              await page.waitForTimeout(5000);
-              const afterResume = (await bodyText()).replace(/\s+/g, " ");
-              if (
-                beforeResume !== afterResume ||
-                (await readActiveStage()) ||
-                (await hasVisible(
-                  'input[placeholder*="search program" i],input[placeholder*="keyword" i]',
-                ))
-              ) {
-                continue;
-              }
+              await page.waitForTimeout(7000);
+              continue;
             }
           }
           const duplicateDisposition = salesforceDuplicateDisposition({
