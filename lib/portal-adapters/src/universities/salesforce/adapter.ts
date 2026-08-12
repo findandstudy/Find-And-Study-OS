@@ -1967,9 +1967,6 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
           await clickNext();
         } else if (activeStage === "Documents" && strictMappedPortal) {
           if (cfg.key === "halic") {
-            const chooseFile = page
-              .getByRole("button", { name: /^\s*choose a file\s*$/i })
-              .first();
             const requiredFileBySlot: Record<string, string | undefined> = {
               diploma: files.diploma,
               transcript: files.transcript,
@@ -1977,12 +1974,36 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
             };
             const uploadedSlots: string[] = [];
             for (const [slot, localPath] of Object.entries(requiredFileBySlot)) {
-              if (!localPath || !(await chooseFile.count())) continue;
+              if (!localPath) continue;
               try {
+                const moreButton = page
+                  .getByRole("button", { name: /^\s*more\s*$/i })
+                  .first();
+                if (!(await moreButton.count())) continue;
+                await moreButton.click({ timeout: 5000 });
+                await page.waitForTimeout(350);
+                const uploadAction = page
+                  .getByRole("menuitem", { name: /upload files?/i })
+                  .or(page.getByRole("button", { name: /upload files?/i }))
+                  .or(page.getByText(/^\s*upload files?\s*$/i))
+                  .first();
+                if (!(await uploadAction.count())) {
+                  const menuTexts = await page
+                    .locator('[role="menuitem"],[role="option"],button,a')
+                    .allInnerTexts()
+                    .catch(() => []);
+                  logger.warn(`[salesforce:${cfg.key}] More menu options`, {
+                    options: menuTexts
+                      .map((text: string) => text.replace(/\s+/g, " ").trim())
+                      .filter(Boolean)
+                      .slice(-60),
+                  });
+                  continue;
+                }
                 const chooserPromise = page.waitForEvent("filechooser", {
                   timeout: 6000,
                 });
-                await chooseFile.click({ timeout: 6000 });
+                await uploadAction.click({ timeout: 6000 });
                 const chooser = await chooserPromise;
                 await chooser.setFiles(localPath);
                 const expectedName = basename(localPath);
