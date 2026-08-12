@@ -4,7 +4,32 @@ import {
   chooseSalesforceBinaryCandidate,
   hasSalesforceCompletionProof,
   hasSalesforceUploadProof,
+  salesforceProgramCardMatchesCandidate,
 } from "./portalState.js";
+
+test("Salesforce programme card fallback matches only the exact card", () => {
+  assert.equal(
+    salesforceProgramCardMatchesCandidate(
+      "Select\nArtificial Intelligence Operations\n- Turkish",
+      "Artificial Intelligence Operations - Turkish",
+    ),
+    true,
+  );
+  assert.equal(
+    salesforceProgramCardMatchesCandidate(
+      "Select Artificial Intelligence Operations - English",
+      "Artificial Intelligence Operations - Turkish",
+    ),
+    false,
+  );
+  assert.equal(
+    salesforceProgramCardMatchesCandidate(
+      "Select Artificial Intelligence Operation - Turkish",
+      "Artificial Intelligence Operations - Turkish",
+    ),
+    false,
+  );
+});
 
 test("Salesforce binary resolver supports value, data-value and associated labels", () => {
   assert.equal(

@@ -52,6 +52,22 @@ export function salesforcePortalProgramCandidates(
 }
 
 /**
+ * Salesforce programme cards render the programme name across nested shadow
+ * DOM nodes. Accessible exact-text lookup can therefore miss a visible card
+ * even though its nearest list item has an unambiguous "Select <programme>"
+ * text readback. Keep this fallback exact and fail-closed.
+ */
+export function salesforceProgramCardMatchesCandidate(
+  cardText: string | null | undefined,
+  candidate: string | null | undefined,
+): boolean {
+  const expected = fold(candidate ?? "");
+  if (!expected) return false;
+  const actual = fold(cardText ?? "").replace(/^select\s+/, "").trim();
+  return actual === expected;
+}
+
+/**
  * Resolve the live portal label without relying on the CRM catalogue id.
  *
  * Portal mappings are stored as { portal label -> CRM programme name }. A

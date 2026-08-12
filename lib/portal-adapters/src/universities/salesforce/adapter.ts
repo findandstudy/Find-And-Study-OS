@@ -21,6 +21,7 @@ import {
   resolveSalesforceProgramTarget,
   salesforceApplicantReadbackFailures,
   salesforceDuplicateDisposition,
+  salesforceProgramCardMatchesCandidate,
   salesforcePortalProgramCandidates,
   type SalesforceStage,
 } from "./portalState.js";
@@ -1186,6 +1187,7 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
           const exactProgramLabel = page.getByText(
             new RegExp(`^\\s*${escapedPortalProgram}\\s*$`, "i"),
           );
+          const exactProgramButtons: any[] = [];
           if (!visibleExactLabels.length) {
             const exactLabelCount = await exactProgramLabel
               .count()
@@ -1201,10 +1203,45 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
               }
             }
           }
+          // Haliç currently splits the programme label across nested shadow
+          // nodes, so getByText(exact) sees no single matching element. Resolve
+          // the visible Select button through its nearest programme card and
+          // require one exact normalized card readback.
+          if (!visibleExactLabels.length) {
+            const selectButtons = page.getByRole("button", {
+              name: /^\s*select\s*$/i,
+            });
+            const selectCount = await selectButtons.count().catch(() => 0);
+            for (let i = 0; i < selectCount; i++) {
+              const button = selectButtons.nth(i);
+              if (!(await button.isVisible().catch(() => false))) continue;
+              let cardText = "";
+              for (const ancestor of [
+                "xpath=ancestor::li[1]",
+                "xpath=ancestor::article[1]",
+                "xpath=ancestor::tr[1]",
+              ]) {
+                const card = button.locator(ancestor);
+                if (!(await card.count().catch(() => 0))) continue;
+                cardText = (
+                  (await card.innerText().catch(() => "")) || ""
+                )
+                  .replace(/\s+/g, " ")
+                  .trim();
+                if (cardText) break;
+              }
+              const matchedCandidate = programCandidates.find((candidate) =>
+                salesforceProgramCardMatchesCandidate(cardText, candidate),
+              );
+              if (!matchedCandidate) continue;
+              portalProg = matchedCandidate;
+              exactProgramButtons.push(button);
+            }
+          }
           const cartBtn = page.getByRole("button", { name: /selected programs/i }).first();
           const readCartN = async () => { const t = (await cartBtn.count()) ? (((await cartBtn.innerText().catch(() => "")) || "").replace(/\s+/g, " ").trim()) : ""; return ((t.match(/\((\d+)\)/) || [])[1]) || "0"; };
           let cartN = "0";
-          const cardCount = visibleExactLabels.length;
+          const cardCount = exactProgramButtons.length || visibleExactLabels.length;
           for (let attempt = 1; attempt <= 2 && cartN === "0"; attempt++) {
             if (!cardCount) break;
             if (strictMappedPortal && cardCount !== 1) {
@@ -1213,20 +1250,23 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
               );
               break;
             }
-            const label = visibleExactLabels[0];
-            let row = label.locator("xpath=ancestor::tr[1]");
-            if (!(await row.count().catch(() => 0))) {
-              row = page
-                .locator(
-                  'li,article,lightning-card,[class*="card" i],[class*="tile" i]',
-                )
-                .filter({ has: label })
-                .filter({ hasText: /select/i })
-                .last();
+            let target = exactProgramButtons[0];
+            if (!target) {
+              const label = visibleExactLabels[0];
+              let row = label.locator("xpath=ancestor::tr[1]");
+              if (!(await row.count().catch(() => 0))) {
+                row = page
+                  .locator(
+                    'li,article,lightning-card,[class*="card" i],[class*="tile" i]',
+                  )
+                  .filter({ has: label })
+                  .filter({ hasText: /select/i })
+                  .last();
+              }
+              target = row
+                .getByRole("button", { name: /^\s*select\s*$/i })
+                .first();
             }
-            const target = row
-              .getByRole("button", { name: /^\s*select\s*$/i })
-              .first();
             if (!(await target.count().catch(() => 0))) break;
             await target.scrollIntoViewIfNeeded().catch(() => {});
             await target.click({ timeout: 6000 }).catch(() => {});
