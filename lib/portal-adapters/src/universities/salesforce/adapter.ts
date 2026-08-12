@@ -1967,9 +1967,6 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
           await clickNext();
         } else if (activeStage === "Documents" && strictMappedPortal) {
           if (cfg.key === "halic") {
-            const fileLibrary = page
-              .locator('button[name="filesToSelect"]')
-              .first();
             const halicDocuments: Array<{
               slot: string;
               label: string;
@@ -1993,13 +1990,27 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
             ];
             const uploadedSlots: string[] = [];
             for (const document of halicDocuments) {
+              const fileLibrary = page
+                .locator('button[name="filesToSelect"]')
+                .first();
               if (!document.localPath || !(await fileLibrary.count())) continue;
               await fileLibrary.click({ timeout: 5000 }).catch(() => {});
               await page.waitForTimeout(350);
               const option = page
                 .getByRole("option", { name: document.label, exact: true })
                 .first();
-              if (!(await option.count())) continue;
+              if (!(await option.count())) {
+                const options = await page
+                  .locator('[role="option"],lightning-base-combobox-item')
+                  .allInnerTexts()
+                  .catch(() => []);
+                logger.warn(`[salesforce:${cfg.key}] document type missing`, {
+                  slot: document.slot,
+                  expected: document.label,
+                  options,
+                });
+                continue;
+              }
               await option.click({ timeout: 5000 }).catch(() => {});
               await page.waitForTimeout(500);
               const inputs = page.locator('input[type="file"]');
@@ -2022,7 +2033,10 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
                   break;
                 }
               }
-              if (proved) uploadedSlots.push(document.slot);
+              if (proved) {
+                uploadedSlots.push(document.slot);
+                await page.waitForTimeout(4500);
+              }
             }
             result.uploadedSlots = uploadedSlots;
             const missingDocuments = cfg.requiredDocs.filter(
