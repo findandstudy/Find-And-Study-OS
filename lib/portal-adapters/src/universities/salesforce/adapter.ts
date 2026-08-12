@@ -1791,12 +1791,12 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
             );
             educationProof.englishProficiency = await selByName(
               "English_Proficiency",
-              profile.languageScore ? "Yes" : "No",
+              profile.languageScore ? "Other" : "None",
             );
             if (!educationProof.englishProficiency) {
               educationProof.englishProficiency = await selByNamePattern(
                 "English_Proficiency",
-                profile.languageScore ? /^\s*yes\b/i : /^\s*no\b/i,
+                profile.languageScore ? /^\s*other\s*$/i : /^\s*none\s*$/i,
               );
             }
             if (profile.languageScore) {
