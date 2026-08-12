@@ -1308,7 +1308,8 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
           };
           let cartN = "0";
           const cardCount = exactProgramButtons.length || visibleExactLabels.length;
-          for (let attempt = 1; attempt <= 2 && cartN === "0"; attempt++) {
+          const maxSelectAttempts = strictMappedPortal ? 1 : 2;
+          for (let attempt = 1; attempt <= maxSelectAttempts && cartN === "0"; attempt++) {
             if (!cardCount) break;
             if (strictMappedPortal && cardCount !== 1) {
               logger.warn(
@@ -1335,9 +1336,39 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
             }
             if (!(await target.count().catch(() => 0))) break;
             await target.scrollIntoViewIfNeeded().catch(() => {});
-            await target.click({ timeout: 6000 }).catch(() => {});
+            let clicked = false;
+            try {
+              await target.click({ timeout: 6000 });
+              clicked = true;
+            } catch {
+              try {
+                await target.click({ timeout: 6000, force: true });
+                clicked = true;
+              } catch {
+                clicked = false;
+              }
+            }
+            if (!clicked) break;
             await page.waitForTimeout(2400);
             cartN = await readCartN();
+            if (cartN === "0") {
+              const controlState = [
+                await target.innerText().catch(() => ""),
+                await target.getAttribute("aria-label").catch(() => ""),
+                await target.getAttribute("title").catch(() => ""),
+              ]
+                .filter(Boolean)
+                .join(" ")
+                .replace(/\s+/g, " ")
+                .trim();
+              const selectedState =
+                /selected|remove|unselect|deselect/i.test(controlState) ||
+                (await target.getAttribute("aria-pressed").catch(() => null)) ===
+                  "true" ||
+                (await target.getAttribute("disabled").catch(() => null)) !==
+                  null;
+              if (selectedState) cartN = "1";
+            }
           }
           if (cardCount === 0) {
             result.programMissing = true;
