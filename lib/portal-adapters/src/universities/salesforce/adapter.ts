@@ -1964,6 +1964,26 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
             if (strictMappedPortal) throw e;
           }
           await clickNext();
+        } else if (activeStage === "Documents" && strictMappedPortal) {
+          const documentControls = await page
+            .locator("input,button,[role=button],label")
+            .evaluateAll((nodes: Element[]) =>
+              nodes.slice(0, 120).map((node: Element) => {
+                const input = node as HTMLInputElement;
+                return {
+                  tag: node.tagName,
+                  name: input.getAttribute("name"),
+                  type: input.getAttribute("type"),
+                  id: input.id,
+                  text: (node.textContent || "").replace(/\s+/g, " ").trim(),
+                };
+              }),
+            )
+            .catch(() => []);
+          logger.warn(`[salesforce:${cfg.key}] documents controls diagnostic`, {
+            controls: JSON.stringify(documentControls),
+          });
+          await clickNext();
         } else {
           const cna = page.getByRole("button", { name: /create new application|add application/i }).first();
           if (await cna.count()) { await cna.click({ timeout: 6000 }).catch(() => {}); }
