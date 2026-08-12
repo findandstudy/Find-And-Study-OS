@@ -754,20 +754,23 @@ async function downloadStudentDocuments(
       )
     : sortedDocs;
 
-  await Promise.all(
-    docsToProcess.map(async (doc) => {
-      if (!doc.type) return;
+  // Run native photo/PDF normalization sequentially. Concurrent sharp plus
+  // multiple Ghostscript children can terminate the worker with SIGBUS on the
+  // production host, leaving the submission lease stuck without a JS error.
+  // Sequential processing also makes the first-wins slot rule deterministic.
+  docsLoop: for (const doc of docsToProcess) {
+      if (!doc.type) continue;
 
       const docKey = mapDocType(doc.type);
-      if (!docKey) return;
+      if (!docKey) continue;
 
-      if (files[docKey]) return; // first-wins — already resolved by a content-bearing record
+      if (files[docKey]) continue; // first-wins — already resolved by a content-bearing record
 
       // Skip empty stubs entirely (no content in any storage field) —
       // genuinely no document was ever attached to this row.
       if (!doc.fileUrl && !doc.fileKey && !doc.fileData) {
         docKeyStatus[docKey] = docKeyStatus[docKey] ?? "no-content";
-        return;
+        continue;
       }
 
       try {
@@ -809,7 +812,7 @@ async function downloadStudentDocuments(
             await downloadFile(url, dest);
             files[docKey] = await ensureUploadFormat(dest, docKey, logLabel);
             docKeyStatus[docKey] = "ok";
-            return;
+            continue docsLoop;
           } catch (err) {
             const msg = err instanceof Error ? err.message : String(err);
             attemptErrors.push(msg);
@@ -830,7 +833,7 @@ async function downloadStudentDocuments(
           await fs.writeFile(dest, buf);
           files[docKey] = await ensureUploadFormat(dest, docKey, logLabel);
           docKeyStatus[docKey] = "ok";
-          return;
+          continue;
         }
 
         // Tüm adaylar tükendi ve base64 yok → hatayı slot bazında kaydet.
@@ -851,8 +854,7 @@ async function downloadStudentDocuments(
           ` — slot=${docKey} doc #${doc.id} type=${doc.type} fileKey=${doc.fileKey ?? "-"}: ${msg}`,
         );
       }
-    }),
-  );
+  }
 
   const filledSlots  = REQUIRED_DOCS.filter((slot) => !!files[slot]);
   const missingSlots = REQUIRED_DOCS.filter((slot) => !files[slot]);
