@@ -1271,8 +1271,24 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
               exactProgramButtons.push(button);
             }
           }
-          const cartBtn = page.getByRole("button", { name: /selected programs/i }).first();
-          const readCartN = async () => { const t = (await cartBtn.count()) ? (((await cartBtn.innerText().catch(() => "")) || "").replace(/\s+/g, " ").trim()) : ""; return ((t.match(/\((\d+)\)/) || [])[1]) || "0"; };
+          const cartBtn = page
+            .getByRole("button", {
+              name: /selected\s+program(?:me)?s?/i,
+            })
+            .first();
+          const readCartN = async () => {
+            if (!(await cartBtn.count())) return "0";
+            const text = [
+              await cartBtn.innerText().catch(() => ""),
+              await cartBtn.getAttribute("aria-label").catch(() => ""),
+              await cartBtn.getAttribute("title").catch(() => ""),
+            ]
+              .filter(Boolean)
+              .join(" ")
+              .replace(/\s+/g, " ")
+              .trim();
+            return ((text.match(/\((\d+)\)/) || [])[1]) || "0";
+          };
           let cartN = "0";
           const cardCount = exactProgramButtons.length || visibleExactLabels.length;
           for (let attempt = 1; attempt <= 2 && cartN === "0"; attempt++) {
