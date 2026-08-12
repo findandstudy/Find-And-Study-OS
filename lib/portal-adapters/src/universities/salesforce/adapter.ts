@@ -25,6 +25,7 @@ import {
   salesforcePortalProgramCandidates,
   type SalesforceStage,
 } from "./portalState.js";
+import { basename } from "node:path";
 
 function markSalesforceVerifiedSuccess(
   result: SubmitResult,
@@ -1965,6 +1966,65 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
           }
           await clickNext();
         } else if (activeStage === "Documents" && strictMappedPortal) {
+          if (cfg.key === "halic") {
+            const chooseFile = page
+              .getByRole("button", { name: /^\s*choose a file\s*$/i })
+              .first();
+            const requiredFileBySlot: Record<string, string | undefined> = {
+              diploma: files.diploma,
+              transcript: files.transcript,
+              passport: files.passport,
+            };
+            const uploadedSlots: string[] = [];
+            for (const [slot, localPath] of Object.entries(requiredFileBySlot)) {
+              if (!localPath || !(await chooseFile.count())) continue;
+              try {
+                const chooserPromise = page.waitForEvent("filechooser", {
+                  timeout: 6000,
+                });
+                await chooseFile.click({ timeout: 6000 });
+                const chooser = await chooserPromise;
+                await chooser.setFiles(localPath);
+                const expectedName = basename(localPath);
+                let proved = false;
+                for (let attempt = 0; attempt < 20; attempt++) {
+                  await page.waitForTimeout(750);
+                  const currentText = await bodyText();
+                  if (currentText.includes(expectedName)) {
+                    proved = true;
+                    break;
+                  }
+                }
+                if (proved) uploadedSlots.push(slot);
+              } catch {
+                logger.warn(`[salesforce:${cfg.key}] choose-file upload failed`, {
+                  slot,
+                });
+              }
+            }
+            result.uploadedSlots = uploadedSlots;
+            const missingDocuments = cfg.requiredDocs.filter(
+              (slot) => !uploadedSlots.includes(String(slot)),
+            );
+            if (missingDocuments.length > 0) {
+              result.missingDocuments = missingDocuments;
+              result.detail = `${cfg.label}: required document upload could not be proved`;
+              break;
+            }
+            await clickNext();
+            await page.waitForTimeout(3500);
+            if ((await readActiveStage()) === "Documents") {
+              result.stuckStep = step;
+              const validation = await readValidationMessages();
+              result.detail =
+                `${cfg.label}: Documents did not advance` +
+                (validation.length
+                  ? ` — validation: ${validation.join(" | ")}`
+                  : "");
+              break;
+            }
+            continue;
+          }
           const documentControls = await page
             .locator("input,button,[role=button],label")
             .evaluateAll((nodes: Element[]) =>
