@@ -6146,6 +6146,7 @@
       "adding": "Добавление…",
       "empty": "Внешних источников знаний пока нет.",
       "chunkCount": "Проиндексировано фрагментов: {count}",
+      "catalogCounts": "{dorms} общежитий · {rooms} комнат",
       "statusPending": "Ожидание обработки…",
       "statusProcessing": "Обработка…",
       "statusError": "Ошибка обработки.",

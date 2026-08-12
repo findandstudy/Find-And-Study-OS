@@ -6146,6 +6146,7 @@
       "adding": "Añadiendo…",
       "empty": "Aún no hay fuentes de conocimiento externas.",
       "chunkCount": "{count} fragmentos indexados",
+      "catalogCounts": "{dorms} residencias · {rooms} habitaciones",
       "statusPending": "Esperando procesamiento…",
       "statusProcessing": "Procesando…",
       "statusError": "El procesamiento falló.",

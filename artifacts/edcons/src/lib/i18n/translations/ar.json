@@ -6146,6 +6146,7 @@
       "adding": "جارٍ الإضافة…",
       "empty": "لا توجد مصادر معرفة خارجية بعد.",
       "chunkCount": "تمت فهرسة {count} جزء",
+      "catalogCounts": "{dorms} سكن · {rooms} غرفة",
       "statusPending": "بانتظار المعالجة…",
       "statusProcessing": "قيد المعالجة…",
       "statusError": "فشلت المعالجة.",

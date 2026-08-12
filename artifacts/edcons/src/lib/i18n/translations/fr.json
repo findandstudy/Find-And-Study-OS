@@ -6146,6 +6146,7 @@
       "adding": "Ajout…",
       "empty": "Aucune source de connaissances externe pour le moment.",
       "chunkCount": "{count} extraits indexés",
+      "catalogCounts": "{dorms} résidences · {rooms} chambres",
       "statusPending": "En attente de traitement…",
       "statusProcessing": "Traitement…",
       "statusError": "Le traitement a échoué.",

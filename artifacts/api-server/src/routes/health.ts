@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { pool } from "@workspace/db";
-import { readFileSync } from "fs";
+import { readFileSync, readdirSync, statfsSync, statSync } from "fs";
 import { resolve } from "path";
 import { requireAuth, requireRole } from "../lib/auth";
 import { ADMIN_ROLES } from "../lib/roles";
@@ -61,6 +61,43 @@ type HealthIssue = {
   count: number;
 };
 
+function readStorageHealth() {
+  try {
+    const stats = statfsSync(process.cwd());
+    const totalBytes = Number(stats.blocks) * Number(stats.bsize);
+    const freeBytes = Number(stats.bavail) * Number(stats.bsize);
+    return {
+      available: true,
+      totalBytes,
+      freeBytes,
+      freePercent: totalBytes > 0 ? Math.round((freeBytes / totalBytes) * 1000) / 10 : null,
+    };
+  } catch {
+    return { available: false, totalBytes: null, freeBytes: null, freePercent: null };
+  }
+}
+
+function readBackupHealth() {
+  const backupDir = process.env.BACKUP_DIR || "/opt/findandstudy/backups";
+  try {
+    const files = readdirSync(backupDir)
+      .filter((name) => /\.(?:dump|backup|sql(?:\.gz)?)$/i.test(name))
+      .map((name) => statSync(resolve(backupDir, name)))
+      .filter((stat) => stat.isFile())
+      .sort((a, b) => b.mtimeMs - a.mtimeMs);
+    const latest = files[0];
+    return {
+      available: true,
+      count: files.length,
+      latestAt: latest ? latest.mtime.toISOString() : null,
+      latestSizeBytes: latest?.size ?? null,
+      latestAgeHours: latest ? Math.round(((Date.now() - latest.mtimeMs) / 3_600_000) * 10) / 10 : null,
+    };
+  } catch {
+    return { available: false, count: null, latestAt: null, latestSizeBytes: null, latestAgeHours: null };
+  }
+}
+
 // Operational health is intentionally separate from the public liveness probes.
 // It is read-only, admin-scoped and never returns credentials, payloads, prompts,
 // webhook bodies or student data.
@@ -90,10 +127,19 @@ router.get(
           WHERE created_at >= now() - interval '24 hours'
         `),
         pool.query(`
-          SELECT count(*)::int AS auth_failures
-          FROM audit_logs
-          WHERE action = 'webhook_auth_failed'
-            AND created_at >= now() - interval '24 hours'
+          WITH grouped AS (
+            SELECT resource, count(*)::int AS n
+            FROM audit_logs
+            WHERE action = 'webhook_auth_failed'
+              AND created_at >= now() - interval '24 hours'
+            GROUP BY resource
+          )
+          SELECT
+            coalesce(sum(n), 0)::int AS auth_failures,
+            coalesce(sum(n) FILTER (WHERE resource LIKE '%:verify'), 0)::int AS verification_probes,
+            coalesce(sum(n) FILTER (WHERE resource NOT LIKE '%:verify'), 0)::int AS delivery_failures,
+            coalesce(jsonb_object_agg(resource, n), '{}'::jsonb) AS by_resource
+          FROM grouped
         `),
         pool.query(`
           SELECT
@@ -114,6 +160,8 @@ router.get(
       const ai = aiResult.rows[0] ?? {};
       const webhooks = webhookResult.rows[0] ?? {};
       const portal = portalResult.rows[0] ?? {};
+      const storage = readStorageHealth();
+      const backups = readBackupHealth();
       const issues: HealthIssue[] = [];
       const addIssue = (key: string, severity: HealthIssue["severity"], message: string, value: unknown) => {
         const count = Number(value ?? 0);
@@ -125,9 +173,25 @@ router.get(
       addIssue("tokens.expiring_soon", "warning", "API tokens expire within seven days", tokens.expiring_soon);
       addIssue("ai.failed", "warning", "AI runs failed during the last 24 hours", ai.failed);
       addIssue("ai.rate_limited", "warning", "AI runs were rate limited during the last 24 hours", ai.rate_limited);
-      addIssue("webhooks.auth_failed", "critical", "Webhook authentication failures occurred during the last 24 hours", webhooks.auth_failures);
+      addIssue("webhooks.delivery_auth_failed", "critical", "Signed webhook deliveries failed authentication during the last 24 hours", webhooks.delivery_failures);
+      if (Number(webhooks.verification_probes ?? 0) >= 100) {
+        addIssue("webhooks.verification_probes", "warning", "High volume of rejected webhook verification probes", webhooks.verification_probes);
+      }
       addIssue("portal.stale_running", "critical", "Portal submissions appear stuck in running state", portal.stale_running);
       addIssue("portal.failed", "warning", "Portal submissions failed during the last 24 hours", portal.failed_24h);
+      if (storage.available && storage.freePercent != null) {
+        if (storage.freePercent < 10) addIssue("storage.disk_free", "critical", "Server disk free space is below 10%", 1);
+        else if (storage.freePercent < 20) addIssue("storage.disk_free", "warning", "Server disk free space is below 20%", 1);
+      } else {
+        addIssue("storage.unavailable", "warning", "Server disk metrics could not be read", 1);
+      }
+      if (!backups.available || backups.count === 0) {
+        addIssue("backups.unavailable", "critical", "No readable database backup was found", 1);
+      } else if (backups.latestAgeHours != null && backups.latestAgeHours > 168) {
+        addIssue("backups.stale", "critical", "Latest readable database backup is older than seven days", 1);
+      } else if (backups.latestAgeHours != null && backups.latestAgeHours > 48) {
+        addIssue("backups.stale", "warning", "Latest readable database backup is older than 48 hours", 1);
+      }
 
       const status = issues.some((issue) => issue.severity === "critical")
         ? "critical"
@@ -145,6 +209,8 @@ router.get(
           aiRuns24h: ai,
           webhook24h: webhooks,
           portalSubmissions: portal,
+          storage,
+          backups,
         },
         issues,
       });

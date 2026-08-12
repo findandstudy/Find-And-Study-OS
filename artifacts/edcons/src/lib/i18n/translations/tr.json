@@ -6146,6 +6146,7 @@
       "adding": "Ekleniyor…",
       "empty": "Henüz harici bilgi kaynağı eklenmedi.",
       "chunkCount": "{count} parça dizinlendi",
+      "catalogCounts": "{dorms} yurt · {rooms} oda",
       "statusPending": "İşlem bekleniyor…",
       "statusProcessing": "İşleniyor…",
       "statusError": "İşleme başarısız oldu.",

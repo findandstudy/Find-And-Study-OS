@@ -20,8 +20,10 @@ type HealthResponse = {
   metrics?: {
     apiTokens?: { no_expiry?: number; expired?: number; expiring_soon?: number };
     aiRuns24h?: { failed?: number; rate_limited?: number };
-    webhook24h?: { auth_failures?: number };
+    webhook24h?: { auth_failures?: number; verification_probes?: number; delivery_failures?: number; by_resource?: Record<string, number> };
     portalSubmissions?: { queued?: number; running?: number; stale_running?: number; failed_24h?: number };
+    storage?: { available?: boolean; totalBytes?: number | null; freeBytes?: number | null; freePercent?: number | null };
+    backups?: { available?: boolean; count?: number | null; latestAt?: string | null; latestSizeBytes?: number | null; latestAgeHours?: number | null };
   };
   issues: HealthIssue[];
 };
@@ -52,9 +54,9 @@ export default function SystemHealthPage() {
 
   const metricCards = data ? [
     {
-      title: "Webhook authentication (24h)",
-      value: count(data.metrics?.webhook24h?.auth_failures),
-      detail: "Rejected signature checks",
+      title: "Webhook delivery failures (24h)",
+      value: count(data.metrics?.webhook24h?.delivery_failures),
+      detail: `${count(data.metrics?.webhook24h?.verification_probes)} rejected verification probes`,
     },
     {
       title: "AI failures (24h)",
@@ -70,6 +72,18 @@ export default function SystemHealthPage() {
       title: "API token attention",
       value: count(data.metrics?.apiTokens?.no_expiry) + count(data.metrics?.apiTokens?.expired) + count(data.metrics?.apiTokens?.expiring_soon),
       detail: "No expiry, expired or expiring soon",
+    },
+    {
+      title: "Server disk",
+      value: data.metrics?.storage?.freePercent == null ? "—" : `${data.metrics.storage.freePercent}%`,
+      detail: "Free filesystem capacity",
+    },
+    {
+      title: "Database backups",
+      value: data.metrics?.backups?.count ?? "—",
+      detail: data.metrics?.backups?.latestAt
+        ? `Latest ${new Date(data.metrics.backups.latestAt).toLocaleString()}`
+        : "Latest backup not readable",
     },
   ] : [];
 
@@ -108,7 +122,7 @@ export default function SystemHealthPage() {
             </CardContent>
           </Card>
 
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
             {metricCards.map((metric) => (
               <Card key={metric.title}>
                 <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">{metric.title}</CardTitle></CardHeader>

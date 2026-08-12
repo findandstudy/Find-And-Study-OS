@@ -6146,6 +6146,7 @@
       "adding": "در حال افزودن…",
       "empty": "هنوز منبع دانش خارجی اضافه نشده است.",
       "chunkCount": "{count} بخش نمایه شد",
+      "catalogCounts": "{dorms} خوابگاه · {rooms} اتاق",
       "statusPending": "در انتظار پردازش…",
       "statusProcessing": "در حال پردازش…",
       "statusError": "پردازش ناموفق بود.",

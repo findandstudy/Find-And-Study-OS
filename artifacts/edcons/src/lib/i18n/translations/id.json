@@ -6146,6 +6146,7 @@
       "adding": "Menambahkan…",
       "empty": "Belum ada sumber pengetahuan eksternal.",
       "chunkCount": "{count} bagian terindeks",
+      "catalogCounts": "{dorms} asrama · {rooms} kamar",
       "statusPending": "Menunggu pemrosesan…",
       "statusProcessing": "Memproses…",
       "statusError": "Pemrosesan gagal.",

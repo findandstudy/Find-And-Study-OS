@@ -121,15 +121,30 @@ router.get("/leads/distinct-sources", requireAuth, requireRole(...STAFF_ROLES), 
   ]);
   type SourceItem = { value: string; label: string; kind: "connected_account" | "lead_form" | "embed" | "other" };
   const byValue = new Map<string, SourceItem>();
+  const nonMessagingAccountChannels = new Set(["web_form", "embed", "internal"]);
+  const channelLabels: Record<string, string> = {
+    whatsapp: "WhatsApp",
+    instagram: "Instagram",
+    messenger: "Facebook / Messenger",
+    facebook: "Facebook",
+    telegram: "Telegram",
+    sms: "SMS",
+    email: "Email",
+  };
   for (const account of accountRows) {
+    const normalizedChannel = account.channel.trim().toLowerCase();
+    // Forms and embeds have their own canonical entries below. Historical
+    // channel_accounts rows for them would otherwise flood this list with
+    // duplicate technical records that cannot receive/reply to messages.
+    if (nonMessagingAccountChannels.has(normalizedChannel)) continue;
     const metadata = account.metadata && typeof account.metadata === "object"
       ? account.metadata as Record<string, unknown>
       : {};
     const label = typeof metadata.brandLabel === "string" && metadata.brandLabel.trim()
       ? metadata.brandLabel.trim()
       : account.displayName;
-    const channelLabel = account.channel === "messenger" ? "Facebook / Messenger" :
-      account.channel.charAt(0).toUpperCase() + account.channel.slice(1);
+    const channelLabel = channelLabels[normalizedChannel] ??
+      normalizedChannel.replace(/(^|[_-])(\w)/g, (_match, _separator, char: string) => ` ${char.toUpperCase()}`).trim();
     byValue.set(`channel-account:${account.id}`, {
       value: `channel-account:${account.id}`,
       label: `${channelLabel} — ${label}`,

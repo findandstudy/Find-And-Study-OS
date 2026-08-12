@@ -6146,6 +6146,7 @@
       "adding": "正在添加…",
       "empty": "尚未添加外部知识来源。",
       "chunkCount": "已索引 {count} 个片段",
+      "catalogCounts": "{dorms} 所宿舍 · {rooms} 个房间",
       "statusPending": "等待处理…",
       "statusProcessing": "处理中…",
       "statusError": "处理失败。",

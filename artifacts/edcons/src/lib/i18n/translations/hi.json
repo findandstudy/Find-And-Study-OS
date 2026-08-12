@@ -6146,6 +6146,7 @@
       "adding": "जोड़ा जा रहा है…",
       "empty": "अभी तक कोई बाहरी ज्ञान स्रोत नहीं जोड़ा गया।",
       "chunkCount": "{count} खंड अनुक्रमित",
+      "catalogCounts": "{dorms} छात्रावास · {rooms} कमरे",
       "statusPending": "प्रोसेसिंग की प्रतीक्षा…",
       "statusProcessing": "प्रोसेस हो रहा है…",
       "statusError": "प्रोसेसिंग विफल रही।",

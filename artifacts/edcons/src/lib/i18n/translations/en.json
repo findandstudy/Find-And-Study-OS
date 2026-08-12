@@ -6146,6 +6146,7 @@
       "adding": "Adding…",
       "empty": "No external knowledge sources yet.",
       "chunkCount": "{count} chunks indexed",
+      "catalogCounts": "{dorms} dorms · {rooms} rooms",
       "statusPending": "Waiting to process…",
       "statusProcessing": "Processing…",
       "statusError": "Processing failed.",

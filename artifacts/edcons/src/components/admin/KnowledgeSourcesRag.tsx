@@ -51,7 +51,17 @@ interface RagSource {
   lastSyncedAt: string | null;
   createdAt: string;
   chunkCount: number;
-  config: { error?: string; extractedChars?: number; fileName?: string; url?: string };
+  config: {
+    error?: string;
+    extractedChars?: number;
+    fileName?: string;
+    url?: string;
+    dormCount?: number;
+    roomCount?: number;
+    fetchedAt?: string;
+    lastSyncError?: string | null;
+    lastSyncErrorAt?: string | null;
+  };
 }
 
 const TYPE_ICON: Record<RagSourceType, typeof FileText> = {
@@ -360,6 +370,33 @@ export default function KnowledgeSourcesRag({ aiBotId }: { aiBotId: number }) {
                         {source.status === "processing" && t("aiAgentAdmin.ragSources.statusProcessing")}
                         {source.status === "pending" && t("aiAgentAdmin.ragSources.statusPending")}
                       </p>
+                      {source.type === "dormbooking" && source.status === "ready" && (
+                        <div className="mt-1 space-y-0.5 text-xs text-muted-foreground">
+                          {typeof source.config.dormCount === "number" && typeof source.config.roomCount === "number" && (
+                            <p>
+                              {t("aiAgentAdmin.ragSources.catalogCounts", {
+                                dorms: source.config.dormCount,
+                                rooms: source.config.roomCount,
+                              })}
+                            </p>
+                          )}
+                          {source.lastSyncedAt && (
+                            <p>
+                              {t("aiAgentAdmin.knowledgeSources.lastSyncedAt", {
+                                date: new Intl.DateTimeFormat(document.documentElement.lang || "en", {
+                                  dateStyle: "medium",
+                                  timeStyle: "short",
+                                }).format(new Date(source.lastSyncedAt)),
+                              })}
+                            </p>
+                          )}
+                          {source.config.lastSyncError && (
+                            <p className="max-w-xl truncate text-destructive" title={source.config.lastSyncError}>
+                              {t("aiAgentAdmin.ragSources.statusError")} {source.config.lastSyncError}
+                            </p>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
