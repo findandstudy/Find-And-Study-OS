@@ -990,6 +990,7 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
         : strictMappedPortal
           ? ""
           : "01/01/2000";
+      let exactApplicantReadback = false;
       for (let step = 0; step < 12; step++) {
         await page.waitForTimeout(2500);
         const txt = await bodyText();
@@ -1021,6 +1022,23 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
           break;
         }
         if (DUP.test(txt)) {
+          if (exactApplicantReadback && !applicantPreflight.owned) {
+            const beforeResume = txt.replace(/\s+/g, " ");
+            const clicked = await clickNext();
+            if (clicked) {
+              await page.waitForTimeout(5000);
+              const afterResume = (await bodyText()).replace(/\s+/g, " ");
+              if (
+                beforeResume !== afterResume ||
+                (await readActiveStage()) ||
+                (await hasVisible(
+                  'input[placeholder*="search program" i],input[placeholder*="keyword" i]',
+                ))
+              ) {
+                continue;
+              }
+            }
+          }
           const duplicateDisposition = salesforceDuplicateDisposition({
             activeStage,
             ownedApplicant: applicantPreflight.owned,
@@ -1175,6 +1193,7 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
                 `${cfg.label}: applicant fields could not be verified (${applicantFailures.join(", ")})`;
               break;
             }
+            exactApplicantReadback = true;
           } else {
             await typeInto("input[name=\"Student_First_Name\"]", profile.firstName);
             await typeInto("input[name=\"First_Name\"]", profile.firstName);
@@ -2211,6 +2230,24 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
           if ((await sub.count()) && !hn) {
             if (dryRun) { result.dryReachedFinal = true; break; }
             await sub.click({ timeout: 8000 }).catch(() => {});
+            if (cfg.key === "halic") {
+              await page.waitForTimeout(1500);
+              const confirmation = page
+                .locator('[role="dialog"],section.slds-modal,.slds-modal')
+                .filter({ hasText: /confirm|complete|submit/i })
+                .last();
+              if (await confirmation.isVisible().catch(() => false)) {
+                const positive = confirmation.getByRole("button", {
+                  name: /^\s*(confirm|yes|submit(?:\s+application)?|complete(?:\s+application)?)\s*$/i,
+                });
+                const positiveVisible = await visibleControls(positive);
+                if (positiveVisible.length === 1) {
+                  await positiveVisible[0]
+                    .click({ timeout: 6000 })
+                    .catch(() => {});
+                }
+              }
+            }
             await page.waitForTimeout(6000);
             const finalText = await bodyText();
             if (DUP.test(finalText)) {
