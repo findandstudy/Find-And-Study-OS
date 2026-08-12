@@ -25,7 +25,6 @@ import {
   salesforcePortalProgramCandidates,
   type SalesforceStage,
 } from "./portalState.js";
-import { basename } from "node:path";
 
 function markSalesforceVerifiedSuccess(
   result: SubmitResult,
@@ -1967,61 +1966,22 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
           await clickNext();
         } else if (activeStage === "Documents" && strictMappedPortal) {
           if (cfg.key === "halic") {
-            const requiredFileBySlot: Record<string, string | undefined> = {
-              diploma: files.diploma,
-              transcript: files.transcript,
-              passport: files.passport,
-            };
             const uploadedSlots: string[] = [];
-            for (const [slot, localPath] of Object.entries(requiredFileBySlot)) {
-              if (!localPath) continue;
-              try {
-                const moreButton = page
-                  .getByRole("button", { name: /^\s*more\s*$/i })
-                  .first();
-                if (!(await moreButton.count())) continue;
-                await moreButton.click({ timeout: 5000 });
-                await page.waitForTimeout(350);
-                const uploadAction = page
-                  .getByRole("menuitem", { name: /upload files?/i })
-                  .or(page.getByRole("button", { name: /upload files?/i }))
-                  .or(page.getByText(/^\s*upload files?\s*$/i))
-                  .first();
-                if (!(await uploadAction.count())) {
-                  const menuTexts = await page
-                    .locator('[role="menuitem"],[role="option"],button,a')
-                    .allInnerTexts()
-                    .catch(() => []);
-                  logger.warn(`[salesforce:${cfg.key}] More menu options`, {
-                    options: menuTexts
-                      .map((text: string) => text.replace(/\s+/g, " ").trim())
-                      .filter(Boolean)
-                      .slice(-60),
-                  });
-                  continue;
-                }
-                const chooserPromise = page.waitForEvent("filechooser", {
-                  timeout: 6000,
-                });
-                await uploadAction.click({ timeout: 6000 });
-                const chooser = await chooserPromise;
-                await chooser.setFiles(localPath);
-                const expectedName = basename(localPath);
-                let proved = false;
-                for (let attempt = 0; attempt < 20; attempt++) {
-                  await page.waitForTimeout(750);
-                  const currentText = await bodyText();
-                  if (currentText.includes(expectedName)) {
-                    proved = true;
-                    break;
-                  }
-                }
-                if (proved) uploadedSlots.push(slot);
-              } catch {
-                logger.warn(`[salesforce:${cfg.key}] choose-file upload failed`, {
-                  slot,
-                });
-              }
+            const fileLibrary = page
+              .locator('button[name="filesToSelect"]')
+              .first();
+            if (await fileLibrary.count()) {
+              await fileLibrary.click({ timeout: 5000 }).catch(() => {});
+              await page.waitForTimeout(450);
+              const libraryOptions = await page
+                .locator('[role="option"],lightning-base-combobox-item')
+                .allInnerTexts()
+                .catch(() => []);
+              logger.warn(`[salesforce:${cfg.key}] file library options`, {
+                options: libraryOptions
+                  .map((text: string) => text.replace(/\s+/g, " ").trim())
+                  .filter(Boolean),
+              });
             }
             result.uploadedSlots = uploadedSlots;
             const missingDocuments = cfg.requiredDocs.filter(
