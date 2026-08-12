@@ -1272,9 +1272,9 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
             }
           }
           const cartBtn = page
-            .getByRole("button", {
-              name: /selected\s+program(?:me)?s?/i,
-            })
+            .locator(
+              'button[name*="selected" i],button[title*="selected" i],button[aria-label*="selected" i]',
+            )
             .first();
           const cartText = page
             .locator("button")
@@ -1339,6 +1339,10 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
             }
             if (!(await target.count().catch(() => 0))) break;
             await target.scrollIntoViewIfNeeded().catch(() => {});
+            const selectCountBefore = await page
+              .locator('button[name="select_program"]')
+              .count()
+              .catch(() => 0);
             const controlBefore = await target
               .evaluate((element: HTMLElement) => element.outerHTML.slice(0, 500))
               .catch(() => "");
@@ -1358,6 +1362,10 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
             await page.waitForTimeout(2400);
             cartN = await readCartN();
             if (cartN === "0") {
+              const selectCountAfter = await page
+                .locator('button[name="select_program"]')
+                .count()
+                .catch(() => 0);
               const controlState = [
                 await target.innerText().catch(() => ""),
                 await target.getAttribute("aria-label").catch(() => ""),
@@ -1368,6 +1376,8 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
                 .replace(/\s+/g, " ")
                 .trim();
               const selectedState =
+                selectCountBefore > 0 &&
+                selectCountAfter === selectCountBefore - 1 ||
                 /selected|remove|unselect|deselect/i.test(controlState) ||
                 (await target.getAttribute("aria-pressed").catch(() => null)) ===
                   "true" ||
@@ -1397,6 +1407,8 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
                   controlBefore,
                   controlState,
                   selectedState,
+                  selectCountBefore,
+                  selectCountAfter,
                   buttonSamples: buttonSamples.slice(0, 20),
                 },
               );
