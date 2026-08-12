@@ -1802,6 +1802,13 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
                         type: element.getAttribute("type"),
                         id: element.id,
                         value: element.value,
+                        options:
+                          node instanceof HTMLSelectElement
+                            ? Array.from(node.options).map((option) => ({
+                                label: option.text,
+                                value: option.value,
+                              }))
+                            : undefined,
                       };
                     }),
                   )
