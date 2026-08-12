@@ -1996,8 +1996,18 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
               if (!document.localPath || !(await fileLibrary.count())) continue;
               await fileLibrary.click({ timeout: 5000 }).catch(() => {});
               await page.waitForTimeout(350);
+              const escapedDocumentLabel = document.label.replace(
+                /[.*+?^${}()|[\]\\]/g,
+                "\\$&",
+              );
               const option = page
-                .getByRole("option", { name: document.label, exact: true })
+                .locator('[role="option"],lightning-base-combobox-item')
+                .filter({
+                  hasText: new RegExp(
+                    `^\\s*${escapedDocumentLabel}\\s*$`,
+                    "i",
+                  ),
+                })
                 .first();
               if (!(await option.count())) {
                 const options = await page
