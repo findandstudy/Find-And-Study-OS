@@ -676,6 +676,36 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
           return false;
         }
       };
+      const selByNamePattern = async (
+        name: string,
+        pattern: RegExp,
+      ): Promise<boolean> => {
+        try {
+          const select = page.locator(`select[name="${name}"]`).first();
+          if (!(await select.count())) return false;
+          const options = select.locator("option");
+          const matches: Array<{ value: string; label: string }> = [];
+          for (let index = 0; index < await options.count(); index++) {
+            const option = options.nth(index);
+            const label =
+              ((await option.innerText().catch(() => "")) || "")
+                .replace(/\s+/g, " ")
+                .trim();
+            const value = (await option.getAttribute("value").catch(() => "")) || "";
+            if (pattern.test(label)) matches.push({ value, label });
+          }
+          if (matches.length !== 1 || !matches[0].value) return false;
+          await select.selectOption(matches[0].value);
+          const selected = await select
+            .locator("option:checked")
+            .first()
+            .innerText()
+            .catch(() => "");
+          return fold(selected) === fold(matches[0].label);
+        } catch {
+          return false;
+        }
+      };
       const selLightningByName = async (
         name: string,
         label: string,
@@ -1742,6 +1772,12 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
               "English_Proficiency",
               profile.languageScore ? "Yes" : "No",
             );
+            if (!educationProof.englishProficiency) {
+              educationProof.englishProficiency = await selByNamePattern(
+                "English_Proficiency",
+                profile.languageScore ? /^\s*yes\b/i : /^\s*no\b/i,
+              );
+            }
             if (profile.languageScore) {
               educationProof.languageScore = await fill(
                 'input[name="Language_Exam_Score"]',
