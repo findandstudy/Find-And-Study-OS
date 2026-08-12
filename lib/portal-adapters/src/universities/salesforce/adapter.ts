@@ -1461,6 +1461,13 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
               advanced = (await readActiveStage()) !== "Program Selection";
             }
           }
+          if (!advanced) {
+            const clickedNext = await clickNext();
+            if (clickedNext) {
+              await page.waitForTimeout(3500);
+              advanced = (await readActiveStage()) !== "Program Selection";
+            }
+          }
           logger.info("[salesforce:" + cfg.key + "] program seçildi (Save and Next)", { portalProg, cartN, advanced });
           if (strictMappedPortal && !advanced) {
             result.stuckStep = step;
