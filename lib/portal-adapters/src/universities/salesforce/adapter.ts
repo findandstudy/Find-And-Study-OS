@@ -2060,9 +2060,20 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
             let documentsAdvanced = false;
             for (let attempt = 0; attempt < 3; attempt++) {
               await page.waitForTimeout(attempt === 0 ? 4500 : 6500);
-              await clickNext();
+              const clicked = await clickNext();
               await page.waitForTimeout(3500);
-              if ((await readActiveStage()) !== "Documents") {
+              const finalSubmit = page
+                .getByRole("button", {
+                  name: /^\s*(submit|complete|tamamla|gönder|finish|onayla)\s*$/i,
+                })
+                .first();
+              const finalSubmitVisible =
+                (await finalSubmit.count().catch(() => 0)) > 0 &&
+                (await finalSubmit.isVisible().catch(() => false));
+              if (
+                clicked &&
+                (finalSubmitVisible || (await readActiveStage()) !== "Documents")
+              ) {
                 documentsAdvanced = true;
                 break;
               }
