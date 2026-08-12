@@ -762,7 +762,7 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
       const clickNext = async (): Promise<boolean> => {
         const candidates = [
           page.getByRole("button", {
-            name: /^\s*(next|ileri|sonraki|devam)\s*$/i,
+            name: /^\s*(next|save\s*(?:and|&)\s*next|ileri|kaydet\s*(?:ve|&)\s*ilerle|sonraki|devam)\s*$/i,
           }),
           page.getByRole("button", {
             name: /create new application|add application|create application/i,
