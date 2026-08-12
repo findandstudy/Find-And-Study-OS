@@ -262,6 +262,20 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
             .first()
             .getAttribute("href")
             .catch(() => "")) || "";
+        if (cfg.key === "halic") {
+          const cells = await row
+            .locator("td")
+            .evaluateAll((nodes: Element[]) =>
+              nodes.map((node: Element) => ({
+                label: node.getAttribute("data-label"),
+                text: (node.textContent || "").replace(/\s+/g, " ").trim(),
+              })),
+            )
+            .catch(() => []);
+          logger.info(`[salesforce:${cfg.key}] track applicant row`, {
+            cells: JSON.stringify(cells),
+          });
+        }
         const owned = isOwnedSalesforceApplicant({
           firstName: profile.firstName,
           lastName: profile.lastName,
