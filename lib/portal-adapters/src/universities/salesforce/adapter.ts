@@ -2057,9 +2057,17 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
               result.detail = `${cfg.label}: required document upload could not be proved`;
               break;
             }
-            await clickNext();
-            await page.waitForTimeout(3500);
-            if ((await readActiveStage()) === "Documents") {
+            let documentsAdvanced = false;
+            for (let attempt = 0; attempt < 3; attempt++) {
+              await page.waitForTimeout(attempt === 0 ? 4500 : 6500);
+              await clickNext();
+              await page.waitForTimeout(3500);
+              if ((await readActiveStage()) !== "Documents") {
+                documentsAdvanced = true;
+                break;
+              }
+            }
+            if (!documentsAdvanced) {
               result.stuckStep = step;
               const validation = await readValidationMessages();
               result.detail =
