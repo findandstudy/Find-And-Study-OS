@@ -25,6 +25,7 @@ import {
   salesforcePortalProgramCandidates,
   type SalesforceStage,
 } from "./portalState.js";
+import { basename } from "node:path";
 
 function markSalesforceVerifiedSuccess(
   result: SubmitResult,
@@ -1966,22 +1967,62 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
           await clickNext();
         } else if (activeStage === "Documents" && strictMappedPortal) {
           if (cfg.key === "halic") {
-            const uploadedSlots: string[] = [];
             const fileLibrary = page
               .locator('button[name="filesToSelect"]')
               .first();
-            if (await fileLibrary.count()) {
+            const halicDocuments: Array<{
+              slot: string;
+              label: string;
+              localPath?: string;
+            }> = [
+              {
+                slot: "transcript",
+                label: "High School Transcript (*)",
+                localPath: files.transcript,
+              },
+              {
+                slot: "passport",
+                label: "Passport (*)",
+                localPath: files.passport,
+              },
+              {
+                slot: "diploma",
+                label: "High School Diploma",
+                localPath: files.diploma,
+              },
+            ];
+            const uploadedSlots: string[] = [];
+            for (const document of halicDocuments) {
+              if (!document.localPath || !(await fileLibrary.count())) continue;
               await fileLibrary.click({ timeout: 5000 }).catch(() => {});
-              await page.waitForTimeout(450);
-              const libraryOptions = await page
-                .locator('[role="option"],lightning-base-combobox-item')
-                .allInnerTexts()
-                .catch(() => []);
-              logger.warn(`[salesforce:${cfg.key}] file library options`, {
-                options: libraryOptions
-                  .map((text: string) => text.replace(/\s+/g, " ").trim())
-                  .filter(Boolean),
-              });
+              await page.waitForTimeout(350);
+              const option = page
+                .getByRole("option", { name: document.label, exact: true })
+                .first();
+              if (!(await option.count())) continue;
+              await option.click({ timeout: 5000 }).catch(() => {});
+              await page.waitForTimeout(500);
+              const inputs = page.locator('input[type="file"]');
+              const inputCount = await inputs.count();
+              if (inputCount < 1) {
+                logger.warn(`[salesforce:${cfg.key}] document file input missing`, {
+                  slot: document.slot,
+                  label: document.label,
+                });
+                continue;
+              }
+              const input = inputs.last();
+              await input.setInputFiles(document.localPath).catch(() => {});
+              const expectedName = basename(document.localPath);
+              let proved = false;
+              for (let attempt = 0; attempt < 20; attempt++) {
+                await page.waitForTimeout(750);
+                if ((await bodyText()).includes(expectedName)) {
+                  proved = true;
+                  break;
+                }
+              }
+              if (proved) uploadedSlots.push(document.slot);
             }
             result.uploadedSlots = uploadedSlots;
             const missingDocuments = cfg.requiredDocs.filter(
