@@ -1714,17 +1714,41 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
             profile.nationality,
           );
           if (strictMappedPortal) {
-            educationProof.system = await selByName(
-              "Choose_the_education_system_of_the_high_school_you_have_graduated_from",
-              "Other",
-            );
+            if (
+              await has(
+                'select[name="Choose_the_education_system_of_the_high_school_you_have_graduated_from"]',
+              )
+            ) {
+              educationProof.system = await selByName(
+                "Choose_the_education_system_of_the_high_school_you_have_graduated_from",
+                "Other",
+              );
+            }
           } else {
             await selByName("Choose_the_education_system_of_the_high_school_you_have_graduated_from");
           }
           educationProof.gpa = await fill(
-            'input[name="GPA_of_Secondary_School"]',
+            cfg.key === "halic"
+              ? 'input[name="GPA"]'
+              : 'input[name="GPA_of_Secondary_School"]',
             String(strictMappedPortal ? profile.gpa : profile.gpa || "3"),
           );
+          if (cfg.key === "halic") {
+            educationProof.graduationYear = await selByName(
+              "High_School_Graduation_Year",
+              String(profile.graduationYear),
+            );
+            educationProof.englishProficiency = await selByName(
+              "English_Proficiency",
+              profile.languageScore ? "Yes" : "No",
+            );
+            if (profile.languageScore) {
+              educationProof.languageScore = await fill(
+                'input[name="Language_Exam_Score"]',
+                profile.languageScore,
+              );
+            }
+          }
           if (strictMappedPortal) {
             const failed = Object.entries(educationProof)
               .filter(([, ok]) => !ok)
