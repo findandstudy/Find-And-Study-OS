@@ -1277,7 +1277,7 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
             })
             .first();
           const cartText = page.getByText(
-            /selected\s+program(?:me)?s?/i,
+            /^\s*selected\s+program(?:me)?s?(?:\s*[:([]?\s*\d+\s*[)\]]?)?\s*$/i,
           );
           const readCartN = async () => {
             const controls: any[] = [];
