@@ -1276,18 +1276,35 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
               name: /selected\s+program(?:me)?s?/i,
             })
             .first();
+          const cartText = page.getByText(
+            /selected\s+program(?:me)?s?/i,
+          );
           const readCartN = async () => {
-            if (!(await cartBtn.count())) return "0";
-            const text = [
-              await cartBtn.innerText().catch(() => ""),
-              await cartBtn.getAttribute("aria-label").catch(() => ""),
-              await cartBtn.getAttribute("title").catch(() => ""),
-            ]
-              .filter(Boolean)
-              .join(" ")
-              .replace(/\s+/g, " ")
-              .trim();
-            return ((text.match(/\((\d+)\)/) || [])[1]) || "0";
+            const controls: any[] = [];
+            if (await cartBtn.count()) controls.push(cartBtn);
+            const textCount = await cartText.count().catch(() => 0);
+            for (let i = 0; i < textCount; i++) {
+              const control = cartText.nth(i);
+              if (await control.isVisible().catch(() => false)) {
+                controls.push(control);
+              }
+            }
+            for (const control of controls) {
+              const text = [
+                await control.innerText().catch(() => ""),
+                await control.getAttribute("aria-label").catch(() => ""),
+                await control.getAttribute("title").catch(() => ""),
+              ]
+                .filter(Boolean)
+                .join(" ")
+                .replace(/\s+/g, " ")
+                .trim();
+              const count = text.match(
+                /(?:\(|\[|:\s*)(\d+)(?:\)|\]|\s*$)/,
+              )?.[1];
+              if (count) return count;
+            }
+            return "0";
           };
           let cartN = "0";
           const cardCount = exactProgramButtons.length || visibleExactLabels.length;
@@ -1334,8 +1351,21 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
             break;
           }
           let advanced = false;
-          if ((await cartBtn.count())) {
-            await cartBtn.click({ timeout: 4000 }).catch(() => {});
+          let cartControl: any = null;
+          if (await cartBtn.count()) {
+            cartControl = cartBtn;
+          } else {
+            const textCount = await cartText.count().catch(() => 0);
+            for (let i = 0; i < textCount; i++) {
+              const control = cartText.nth(i);
+              if (await control.isVisible().catch(() => false)) {
+                cartControl = control;
+                break;
+              }
+            }
+          }
+          if (cartControl) {
+            await cartControl.click({ timeout: 4000 }).catch(() => {});
             await page.waitForTimeout(1500);
             const selectedProgramLabelCount = await page
               .getByText(
