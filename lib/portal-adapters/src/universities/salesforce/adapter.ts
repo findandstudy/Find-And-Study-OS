@@ -1175,7 +1175,7 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
               programCandidates,
               mappingSource: programTarget.source,
               count: labels.length,
-              sample: labels.slice(0, 15),
+              sample: labels.slice(0, 40),
             });
           } catch (e) {}
           // KÖK NEDEN: kartlar KAPALI shadow root'ta; page.evaluate manuel walk giremez (cards:0).
