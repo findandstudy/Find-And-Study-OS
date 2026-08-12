@@ -1549,6 +1549,37 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
               .filter(([, ok]) => !ok)
               .map(([field]) => field);
             if (failed.length > 0) {
+              const controls = await page
+                .locator("input,select,textarea,[role=combobox],[role=radio]")
+                .evaluateAll((nodes: Element[]) =>
+                  nodes.slice(0, 80).map((node: Element) => {
+                    const element = node as HTMLInputElement;
+                    return {
+                      tag: node.tagName,
+                      name: element.getAttribute("name"),
+                      type: element.getAttribute("type"),
+                      id: element.id,
+                      ariaLabel: element.getAttribute("aria-label"),
+                      value: element.value,
+                    };
+                  }),
+                )
+                .catch(() => []);
+              const labels = await page
+                .locator("label,legend")
+                .allInnerTexts()
+                .catch(() => []);
+              logger.warn(
+                `[salesforce:${cfg.key}] personal controls diagnostic`,
+                {
+                  failed,
+                  controls,
+                  labels: labels
+                    .map((label: string) => label.replace(/\s+/g, " ").trim())
+                    .filter(Boolean)
+                    .slice(0, 80),
+                },
+              );
               result.detail =
                 `${cfg.label}: personal fields could not be verified (${failed.join(", ")})`;
               result.stuckStep = step;
