@@ -14,7 +14,7 @@
  * serializeAccountConfig. Nothing here ever persists a masked placeholder.
  */
 import { Router, type IRouter } from "express";
-import { db, channelAccountsTable } from "@workspace/db";
+import { db, channelAccountsTable, conversationsTable } from "@workspace/db";
 import { and, eq, ne, asc } from "drizzle-orm";
 import { requireAuth, requireRole, logAudit } from "../lib/auth";
 import { ADMIN_ROLES } from "../lib/roles";
@@ -22,6 +22,7 @@ import { isLiveIntegrationsEnabled } from "../lib/inbox/liveMode";
 import { META_API_VERSION } from "../lib/inbox/channels/meta-shared";
 import { maskSecrets, mergeConfig } from "../lib/configMasking";
 import { parseAccountConfig, serializeAccountConfig } from "../lib/inbox/channelAccountConfig";
+import { getZernioApiKey, resolveZernioProfileId } from "../lib/inbox/zernioSend";
 
 const router: IRouter = Router();
 
@@ -43,6 +44,7 @@ function serializeRow(row: typeof channelAccountsTable.$inferSelect): Record<str
   return {
     id: row.id,
     channel: row.channel,
+    provider: row.provider,
     displayName: row.displayName,
     externalAccountId: row.externalAccountId,
     config: maskSecrets(parseAccountConfig(row.configEncrypted)),
@@ -141,7 +143,13 @@ router.put("/channel-accounts/:id", requireAuth, requireRole(...ADMIN_ROLES), as
   const mergedConfig = (config && typeof config === "object")
     ? mergeConfig(existingPlain, config as Record<string, any>)
     : existingPlain;
-  const externalAccountId = deriveExternalAccountId(existing.channel, mergedConfig);
+  // Some provider-backed accounts (notably legacy Zernio WhatsApp lines) keep
+  // their stable routing identity in externalAccountId rather than in the
+  // direct Meta config fields. Editing only the display label or brand color
+  // must not erase that identity when phoneNumberId/pageId is absent.
+  const externalAccountId = existing.provider === "zernio"
+    ? existing.externalAccountId
+    : deriveExternalAccountId(existing.channel, mergedConfig) || existing.externalAccountId;
   const existingMetadata = existing.metadata && typeof existing.metadata === "object"
     ? existing.metadata as Record<string, unknown>
     : {};
@@ -223,6 +231,18 @@ router.delete("/channel-accounts/:id", requireAuth, requireRole(...ADMIN_ROLES),
     res.status(404).json({ error: "Account not found" });
     return;
   }
+  const [linkedConversation] = await db
+    .select({ id: conversationsTable.id })
+    .from(conversationsTable)
+    .where(eq(conversationsTable.channelAccountId, id))
+    .limit(1);
+  if (linkedConversation) {
+    res.status(409).json({
+      error: "account_has_conversations",
+      message: "This account has linked conversations and cannot be deleted until they are reassigned.",
+    });
+    return;
+  }
   await db.transaction(async (tx) => {
     await tx.delete(channelAccountsTable).where(eq(channelAccountsTable.id, id));
     if (existing.isDefault) {
@@ -257,6 +277,23 @@ router.post("/channel-accounts/:id/test", requireAuth, requireRole(...ADMIN_ROLE
 
   if (!isLiveIntegrationsEnabled()) {
     res.json({ success: true, message: "Test skipped — running in simulated mode (set ALLOW_LIVE_INTEGRATIONS=true to test live)" });
+    return;
+  }
+
+  if (existing.provider === "zernio") {
+    const apiKey = await getZernioApiKey();
+    if (!apiKey) {
+      res.json({ success: false, message: "Zernio API key is not configured" });
+      return;
+    }
+    if (!existing.externalAccountId) {
+      res.json({ success: false, message: "Zernio account ID is missing" });
+      return;
+    }
+    const resolved = await resolveZernioProfileId(apiKey, existing.externalAccountId);
+    res.json(resolved.id
+      ? { success: true, message: "Zernio WhatsApp account verified" }
+      : { success: false, message: resolved.error || "Zernio WhatsApp account could not be verified" });
     return;
   }
 

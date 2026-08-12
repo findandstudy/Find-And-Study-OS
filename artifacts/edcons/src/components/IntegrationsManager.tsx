@@ -58,6 +58,7 @@ interface IntegrationData {
 interface ChannelAccount {
   id: number;
   channel: string;
+  provider: string;
   displayName: string;
   externalAccountId: string | null;
   config: Record<string, any>;

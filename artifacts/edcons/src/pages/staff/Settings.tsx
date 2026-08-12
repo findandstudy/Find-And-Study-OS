@@ -2926,7 +2926,7 @@ function LeadAssignmentRulesTab() {
   const [staff, setStaff] = useState<StaffOption[]>([]);
   const [countries, setCountries] = useState<CountryOption[]>([]);
   const [cities, setCities] = useState<string[]>([]);
-  const [sources, setSources] = useState<{ value: string; label: string; kind: "lead_form" | "embed" | "other" }[]>([]);
+  const [sources, setSources] = useState<{ value: string; label: string; kind: "connected_account" | "lead_form" | "embed" | "other" }[]>([]);
   const [universities, setUniversities] = useState<UniversityOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -2969,7 +2969,7 @@ function LeadAssignmentRulesTab() {
         fetchAllPages<StaffOption>("/api/users", 100),
         fetchAllPages<CountryOption>("/api/countries", 500),
         fetchAllPages<{ id: number; name: string; countryId?: number }>("/api/cities", 1000),
-        customFetch("/api/leads/distinct-sources") as Promise<{ data: { value: string; label: string; kind: "lead_form" | "embed" | "other" }[] }>,
+        customFetch("/api/leads/distinct-sources") as Promise<{ data: { value: string; label: string; kind: "connected_account" | "lead_form" | "embed" | "other" }[] }>,
         fetchAllPages<UniversityOption>("/api/universities", 100),
       ]);
       setRules(rulesRes.data || []);
@@ -3002,6 +3002,10 @@ function LeadAssignmentRulesTab() {
   function phoneCodeLabel(code: string) {
     const o = PHONE_CODE_OPTIONS.find(x => x.value === code);
     return o ? o.label : code;
+  }
+
+  function sourceLabel(value: string) {
+    return sources.find(source => source.value === value)?.label || value;
   }
 
   function openNew() {
@@ -3229,7 +3233,7 @@ function LeadAssignmentRulesTab() {
                     {rule.countries.length > 0 && <div>{t("leadAssignment.filterCountry", { values: rule.countries.join(", ") })}</div>}
                     {rule.cities.length > 0 && <div>{t("leadAssignment.filterCity", { values: rule.cities.join(", ") })}</div>}
                     {(rule.phoneCodes?.length ?? 0) > 0 && <div>{t("leadAssignment.filterPhoneCode", { values: rule.phoneCodes.map(phoneCodeLabel).join(", ") })}</div>}
-                    {rule.sources.length > 0 && <div>{t("leadAssignment.filterSource", { values: rule.sources.join(", ") })}</div>}
+                    {rule.sources.length > 0 && <div>{t("leadAssignment.filterSource", { values: rule.sources.map(sourceLabel).join(", ") })}</div>}
                     {rule.universityIds.length > 0 && <div>{t("leadAssignment.filterUniversity", { values: rule.universityIds.map(uniLabel).join(", ") })}</div>}
                     {rule.countries.length === 0 && rule.cities.length === 0 && (rule.phoneCodes?.length ?? 0) === 0 && rule.sources.length === 0 && rule.universityIds.length === 0 && <div className="italic">{t("leadAssignment.filterAll")}</div>}
                     <div>{t("leadAssignment.filterStaff", { values: rule.staffUserIds.map(staffLabel).join(", ") })}</div>

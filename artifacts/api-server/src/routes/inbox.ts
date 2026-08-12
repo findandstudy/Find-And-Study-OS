@@ -1994,7 +1994,7 @@ router.post(
       return inserted;
     });
 
-    await applyLeadAssignmentRules(lead, req.ip);
+    await applyLeadAssignmentRules({ ...lead, channelAccountId: conv.channelAccountId }, req.ip);
     // Single-owner rule: sync conversation ⇄ freshly created lead ownership.
     await syncConversationOwner(id, req.user!.id, req.ip);
     logAudit(
@@ -2050,7 +2050,7 @@ router.post(
       .returning();
     await db.update(externalContactsTable).set({ leadId: lead.id }).where(eq(externalContactsTable.id, contact.id));
     await db.update(conversationsTable).set({ unmatched: false }).where(eq(conversationsTable.id, id));
-    await applyLeadAssignmentRules(lead, req.ip);
+    await applyLeadAssignmentRules({ ...lead, channelAccountId: conv.channelAccountId }, req.ip);
     // Single-owner rule: sync conversation ⇄ freshly created lead ownership.
     await syncConversationOwner(id, req.user!.id, req.ip);
     await logAudit(req.user!.id, "create_lead_from_inbox", "lead", lead.id, { conversationId: id }, req.ip);

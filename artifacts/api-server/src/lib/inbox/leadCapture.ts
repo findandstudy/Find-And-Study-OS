@@ -35,6 +35,7 @@ import { DEFAULT_BOT_MODEL } from "./aiAgentConfig";
 import { validateStudentDocumentFile } from "@workspace/file-upload-validation";
 import { resolveIdentity } from "./identityResolver";
 import { directOrigin } from "../originHelper";
+import { applyLeadAssignmentRules } from "../leadAssignment";
 import { toLatinUpper, normalizePhoneField } from "../textNormalize";
 
 // Dedicated extraction model — cheap + structured. Independent of the reply
@@ -537,6 +538,13 @@ export async function captureLeadFromConversation(opts: {
       .where(eq(conversationsTable.id, conversationId));
     return { lead: inserted, created: true, stage };
   });
+
+  if (result.created) {
+    await applyLeadAssignmentRules({
+      ...result.lead,
+      channelAccountId: conv.channelAccountId,
+    });
+  }
 
   return {
     leadId: result.lead.id,

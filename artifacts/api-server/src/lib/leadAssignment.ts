@@ -11,6 +11,8 @@ interface LeadLike {
   interestedProgram?: string | null;
   notes?: string | null;
   phone?: string | null;
+  /** The real inbox account that originated this lead, when applicable. */
+  channelAccountId?: number | null;
 }
 
 /**
@@ -59,8 +61,15 @@ async function ruleMatches(rule: LeadAssignmentRule, lead: LeadLike): Promise<bo
 
   const sources = rule.sources || [];
   if (sources.length > 0) {
-    if (!lead.source) return false;
-    if (!sources.map(s => s.toLowerCase()).includes(lead.source.toLowerCase())) return false;
+    const normalizedSources = sources.map(s => s.toLowerCase());
+    const genericSourceMatches = Boolean(
+      lead.source && normalizedSources.includes(lead.source.toLowerCase()),
+    );
+    const accountSourceMatches = Boolean(
+      lead.channelAccountId != null &&
+      normalizedSources.includes(`channel-account:${lead.channelAccountId}`),
+    );
+    if (!genericSourceMatches && !accountSourceMatches) return false;
   }
 
   const universityIds = rule.universityIds || [];

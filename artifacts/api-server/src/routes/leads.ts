@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { db, leadsTable, studentsTable, notesTable, usersTable, followUpsTable, agentsTable, documentsTable, embedSubmissionsTable, embedWidgetsTable, applicationsTable, programsTable, universitiesTable, pipelineStagesTable, settingsTable, softDelete, externalContactsTable } from "@workspace/db";
+import { db, leadsTable, studentsTable, notesTable, usersTable, followUpsTable, agentsTable, documentsTable, embedSubmissionsTable, embedWidgetsTable, applicationsTable, programsTable, universitiesTable, pipelineStagesTable, settingsTable, softDelete, externalContactsTable, channelAccountsTable } from "@workspace/db";
 import { eq, ilike, or, sql, and, lt, lte, gte, asc, desc, inArray, isNull, isNotNull, ne } from "drizzle-orm";
 import { requireAuth, requireRole, requireAgentStaffPermission, logAudit } from "../lib/auth";
 import { publicLeadLimiter } from "../lib/limiters";
@@ -101,7 +101,7 @@ function addDateRangeCondition(conditions: any[], column: any, range?: string): 
 }
 
 router.get("/leads/distinct-sources", requireAuth, requireRole(...STAFF_ROLES), async (_req, res): Promise<void> => {
-  const [leadRows, widgetRows] = await Promise.all([
+  const [leadRows, widgetRows, accountRows] = await Promise.all([
     db
       .selectDistinct({ source: leadsTable.source })
       .from(leadsTable)
@@ -109,9 +109,33 @@ router.get("/leads/distinct-sources", requireAuth, requireRole(...STAFF_ROLES), 
     db
       .select({ slug: embedWidgetsTable.slug, name: embedWidgetsTable.name, mode: embedWidgetsTable.mode })
       .from(embedWidgetsTable),
+    db
+      .select({
+        id: channelAccountsTable.id,
+        channel: channelAccountsTable.channel,
+        displayName: channelAccountsTable.displayName,
+        metadata: channelAccountsTable.metadata,
+      })
+      .from(channelAccountsTable)
+      .where(eq(channelAccountsTable.isActive, true)),
   ]);
-  type SourceItem = { value: string; label: string; kind: "lead_form" | "embed" | "other" };
+  type SourceItem = { value: string; label: string; kind: "connected_account" | "lead_form" | "embed" | "other" };
   const byValue = new Map<string, SourceItem>();
+  for (const account of accountRows) {
+    const metadata = account.metadata && typeof account.metadata === "object"
+      ? account.metadata as Record<string, unknown>
+      : {};
+    const label = typeof metadata.brandLabel === "string" && metadata.brandLabel.trim()
+      ? metadata.brandLabel.trim()
+      : account.displayName;
+    const channelLabel = account.channel === "messenger" ? "Facebook / Messenger" :
+      account.channel.charAt(0).toUpperCase() + account.channel.slice(1);
+    byValue.set(`channel-account:${account.id}`, {
+      value: `channel-account:${account.id}`,
+      label: `${channelLabel} — ${label}`,
+      kind: "connected_account",
+    });
+  }
   for (const w of widgetRows) {
     if (!w.slug) continue;
     const value = `embed:${w.slug}`;
@@ -128,7 +152,7 @@ router.get("/leads/distinct-sources", requireAuth, requireRole(...STAFF_ROLES), 
     if (!v || byValue.has(v)) continue;
     byValue.set(v, { value: v, label: v, kind: "other" });
   }
-  const order: Record<SourceItem["kind"], number> = { lead_form: 0, embed: 1, other: 2 };
+  const order: Record<SourceItem["kind"], number> = { connected_account: 0, lead_form: 1, embed: 2, other: 3 };
   const data = [...byValue.values()].sort((a, b) => {
     const k = order[a.kind] - order[b.kind];
     return k !== 0 ? k : a.label.localeCompare(b.label, "tr");
