@@ -694,7 +694,28 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
             const value = (await option.getAttribute("value").catch(() => "")) || "";
             if (pattern.test(label)) matches.push({ value, label });
           }
-          if (matches.length !== 1 || !matches[0].value) return false;
+          if (matches.length !== 1 || !matches[0].value) {
+            if (cfg.key === "halic") {
+              const available = [];
+              for (let index = 0; index < await options.count(); index++) {
+                const option = options.nth(index);
+                available.push({
+                  label:
+                    ((await option.innerText().catch(() => "")) || "")
+                      .replace(/\s+/g, " ")
+                      .trim(),
+                  value:
+                    (await option.getAttribute("value").catch(() => "")) || "",
+                });
+              }
+              logger.warn(`[salesforce:${cfg.key}] select pattern options`, {
+                name,
+                pattern: String(pattern),
+                options: JSON.stringify(available),
+              });
+            }
+            return false;
+          }
           await select.selectOption(matches[0].value);
           const selected = await select
             .locator("option:checked")
