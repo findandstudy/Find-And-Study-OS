@@ -1276,9 +1276,12 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
               name: /selected\s+program(?:me)?s?/i,
             })
             .first();
-          const cartText = page.getByText(
-            /^\s*selected\s+program(?:me)?s?(?:\s*[:([]?\s*\d+\s*[)\]]?)?\s*$/i,
-          );
+          const cartText = page
+            .locator("button")
+            .filter({
+              hasText:
+                /^\s*selected\s+program(?:me)?s?(?:\s*[:([]?\s*\d+\s*[)\]]?)?\s*$/i,
+            });
           const readCartN = async () => {
             const controls: any[] = [];
             if (await cartBtn.count()) controls.push(cartBtn);
@@ -1336,6 +1339,9 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
             }
             if (!(await target.count().catch(() => 0))) break;
             await target.scrollIntoViewIfNeeded().catch(() => {});
+            const controlBefore = await target
+              .evaluate((element: HTMLElement) => element.outerHTML.slice(0, 500))
+              .catch(() => "");
             let clicked = false;
             try {
               await target.click({ timeout: 6000 });
@@ -1368,6 +1374,32 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
                 (await target.getAttribute("disabled").catch(() => null)) !==
                   null;
               if (selectedState) cartN = "1";
+              const buttonSamples: string[] = [];
+              const pageButtons = page.locator("button");
+              const pageButtonCount = Math.min(
+                await pageButtons.count().catch(() => 0),
+                80,
+              );
+              for (let buttonIndex = 0; buttonIndex < pageButtonCount; buttonIndex++) {
+                const buttonText = (
+                  (await pageButtons.nth(buttonIndex).innerText().catch(() => "")) ||
+                  ""
+                )
+                  .replace(/\s+/g, " ")
+                  .trim();
+                if (/select|program/i.test(buttonText) && buttonText.length < 100) {
+                  buttonSamples.push(buttonText);
+                }
+              }
+              logger.info(
+                `[salesforce:${cfg.key}] programme control readback`,
+                {
+                  controlBefore,
+                  controlState,
+                  selectedState,
+                  buttonSamples: buttonSamples.slice(0, 20),
+                },
+              );
             }
           }
           if (cardCount === 0) {
