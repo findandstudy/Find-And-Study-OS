@@ -1,5 +1,5 @@
 // AI Agent Faz 2 — retrieval: embed the student's message and pull the top-K
-// most relevant chunks from ACTIVE, ready file/url/text/academy sources.
+// most relevant chunks from ACTIVE, ready file/url/text/academy/dormbooking sources.
 // Never touches program_scope/webhook/conversation source types — those stay
 // on their own dedicated paths (searchPrograms tool / future integrations).
 //
@@ -23,7 +23,7 @@ export interface RetrievedChunk {
   distance: number;
 }
 
-export const RAG_SOURCE_TYPES = ["file", "url", "text", "academy"] as const;
+export const RAG_SOURCE_TYPES = ["file", "url", "text", "academy", "dormbooking"] as const;
 export type RetrievalSourceType = (typeof RAG_SOURCE_TYPES)[number];
 // Vector channel: how many top cosine-scored chunks to keep.
 const TOP_K = 8;
