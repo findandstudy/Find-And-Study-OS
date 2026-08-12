@@ -209,6 +209,10 @@ interface InboxChannelAccountSummary {
   externalAccountId?: string | null;
   isDefault: boolean;
   provider?: string | null;
+  metadata?: {
+    brandLabel?: string | null;
+    brandColor?: string | null;
+  } | null;
 }
 
 function isExternalAutoReplyAvailable(
@@ -221,15 +225,13 @@ function isExternalAutoReplyAvailable(
   return channel === "whatsapp" || channel === "messenger" || channel === "instagram";
 }
 
-// This is Zernio's stable account identity for the second WhatsApp line.
-// Meta display names may change after review; the visual identity must not.
-const INTERNATIONAL_OFFICE_ACCOUNT_ID = "6a6b7478df17280d93f6076c";
-
 interface WhatsAppLineBrand {
   label: string;
-  badgeClassName: string;
-  iconClassName: string;
-  dotClassName: string;
+  color: string;
+}
+
+function validBrandColor(value: unknown): string {
+  return typeof value === "string" && /^#[0-9a-f]{6}$/i.test(value) ? value : "#143591";
 }
 
 function whatsappLineBrand(
@@ -237,22 +239,9 @@ function whatsappLineBrand(
   account: InboxChannelAccountSummary | null | undefined,
 ): WhatsAppLineBrand | null {
   if (channel !== "whatsapp" || !account) return null;
-  const isInternationalOffice = account.externalAccountId === INTERNATIONAL_OFFICE_ACCOUNT_ID;
-
-  if (isInternationalOffice) {
-    return {
-      label: "International Office",
-      badgeClassName: "border-[#e31e24]/35 bg-[#e31e24]/10 text-[#c81920] dark:bg-[#e31e24]/20 dark:text-red-200",
-      iconClassName: "bg-[#e31e24]/10 text-[#e31e24]",
-      dotClassName: "bg-[#e31e24]",
-    };
-  }
-
   return {
-    label: "Find And Study",
-    badgeClassName: "border-[#143591]/35 bg-[#143591]/10 text-[#143591] dark:bg-[#143591]/20 dark:text-blue-200",
-    iconClassName: "bg-[#143591]/10 text-[#143591]",
-    dotClassName: "bg-[#143591]",
+    label: account.metadata?.brandLabel?.trim() || account.displayName,
+    color: validBrandColor(account.metadata?.brandColor),
   };
 }
 
@@ -521,8 +510,18 @@ function InboxTab() {
   const [newWaConvResults, setNewWaConvResults] = useState<{ entityType: string; entityId: number; name: string; phone: string }[]>([]);
   const [newWaConvLoading, setNewWaConvLoading] = useState(false);
   const [newWaConvSelected, setNewWaConvSelected] = useState<{ entityType: string; entityId: number; name: string; phone: string } | null>(null);
+  const [whatsAppAccounts, setWhatsAppAccounts] = useState<InboxChannelAccountSummary[]>([]);
+  const [newWaConvAccountId, setNewWaConvAccountId] = useState<string>("");
   const [newWaConvTplOpen, setNewWaConvTplOpen] = useState(false);
   const [newWaConvSending, setNewWaConvSending] = useState(false);
+
+  useEffect(() => {
+    void customFetch("/api/inbox/whatsapp-accounts").then((response: any) => {
+      const rows = Array.isArray(response?.accounts) ? response.accounts : [];
+      setWhatsAppAccounts(rows);
+      setNewWaConvAccountId((current) => current || String(rows.find((row: InboxChannelAccountSummary) => row.isDefault)?.id || rows[0]?.id || ""));
+    }).catch(() => setWhatsAppAccounts([]));
+  }, []);
   const [liveStatus, setLiveStatus] = useState<"connecting" | "open" | "offline">("connecting");
   const [reconnectKey, setReconnectKey] = useState(0);
   const [lastEventAt, setLastEventAt] = useState<number | null>(null);
@@ -1634,6 +1633,7 @@ function InboxTab() {
           entityId: newWaConvSelected.entityId,
           templateId,
           parameters,
+          channelAccountId: newWaConvAccountId ? Number(newWaConvAccountId) : undefined,
         }),
       });
       toast({ title: t("messagesPage.newConvSent") });
@@ -2260,9 +2260,12 @@ function InboxTab() {
                       data-testid={`checkbox-conv-${c.id}`}
                     />
                   )}
-                  <div className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 ${
-                    lineBrand?.iconClassName || channelColor[c.channel] || ""
-                  } ${isUnread ? "ring-2 ring-emerald-500 ring-offset-2 ring-offset-background" : ""}`}>
+                  <div
+                    className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 ${
+                      lineBrand ? "" : channelColor[c.channel] || ""
+                    } ${isUnread ? "ring-2 ring-emerald-500 ring-offset-2 ring-offset-background" : ""}`}
+                    style={lineBrand ? { color: lineBrand.color, backgroundColor: `${lineBrand.color}18` } : undefined}
+                  >
                     <Icon className="w-4 h-4" />
                   </div>
                   <div className="flex-1 min-w-0">
@@ -2282,14 +2285,12 @@ function InboxTab() {
                     <div className="mt-0.5 flex min-w-0 items-center gap-1.5">
                       {lineBrand && (
                         <span
-                          className={cn(
-                            "inline-flex h-4 max-w-[7.5rem] shrink-0 items-center gap-1 rounded-full border px-1.5 text-[9px] font-bold leading-none",
-                            lineBrand.badgeClassName,
-                          )}
+                          className="inline-flex h-4 max-w-[7.5rem] shrink-0 items-center gap-1 rounded-full border px-1.5 text-[9px] font-bold leading-none"
+                          style={{ color: lineBrand.color, borderColor: `${lineBrand.color}59`, backgroundColor: `${lineBrand.color}18` }}
                           title={`Gelen hat: ${lineBrand.label}`}
                           data-testid={`line-badge-${c.id}`}
                         >
-                          <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", lineBrand.dotClassName)} />
+                          <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: lineBrand.color }} />
                           <span className="truncate">{lineBrand.label}</span>
                         </span>
                       )}
@@ -2377,18 +2378,14 @@ function InboxTab() {
                     {activeLineBrand && (
                       <Badge
                         variant="outline"
-                        className={cn(
-                          "gap-1 text-[10px]",
-                          activeLineBrand.badgeClassName,
-                        )}
+                        className="gap-1 text-[10px]"
+                        style={{ color: activeLineBrand.color, borderColor: `${activeLineBrand.color}59`, backgroundColor: `${activeLineBrand.color}18` }}
                         title={`Gelen hat: ${activeLineBrand.label}`}
                         data-testid="active-line-badge"
                       >
                         <span
-                          className={cn(
-                            "h-1.5 w-1.5 rounded-full",
-                            activeLineBrand.dotClassName,
-                          )}
+                          className="h-1.5 w-1.5 rounded-full"
+                          style={{ backgroundColor: activeLineBrand.color }}
                         />
                         {activeLineBrand.label}
                       </Badge>
@@ -3532,6 +3529,26 @@ function InboxTab() {
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-3 py-1 overflow-x-hidden">
+            <div className="space-y-1.5">
+              <Label>{t("messagesPage.senderLine")}</Label>
+              <Select value={newWaConvAccountId} onValueChange={setNewWaConvAccountId}>
+                <SelectTrigger><SelectValue placeholder={t("messagesPage.selectSenderLine")} /></SelectTrigger>
+                <SelectContent>
+                  {whatsAppAccounts.map((account) => {
+                    const brand = whatsappLineBrand("whatsapp", account);
+                    return (
+                      <SelectItem key={account.id} value={String(account.id)}>
+                        <span className="inline-flex items-center gap-2">
+                          <span className="h-2 w-2 rounded-full" style={{ backgroundColor: brand?.color }} />
+                          {brand?.label || account.displayName}{account.isDefault ? ` · ${t("messagesPage.systemDefault")}` : ""}
+                        </span>
+                      </SelectItem>
+                    );
+                  })}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">{t("messagesPage.senderLineHelp")}</p>
+            </div>
             <div className="relative">
               <Search className="absolute left-2.5 top-2.5 w-4 h-4 text-muted-foreground pointer-events-none" />
               <Input

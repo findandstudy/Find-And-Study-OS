@@ -16,6 +16,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useI18n } from "@/hooks/use-i18n";
 
 type CampaignEntityType = "lead" | "student" | "application";
 
@@ -34,6 +36,13 @@ interface CampaignResult {
   summary?: { total: number; queued: number; skipped: number };
 }
 
+interface WhatsAppAccount {
+  id: number;
+  displayName: string;
+  isDefault: boolean;
+  metadata?: { brandLabel?: string | null; brandColor?: string | null } | null;
+}
+
 interface BulkMessageDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -41,12 +50,6 @@ interface BulkMessageDialogProps {
   entityIds: number[];
   onCreated?: () => void;
 }
-
-const ENTITY_LABELS: Record<CampaignEntityType, string> = {
-  lead: "leads",
-  student: "students",
-  application: "applications",
-};
 
 function unwrapTemplates(response: any): ApprovedTemplate[] {
   const rows = response?.data ?? response ?? [];
@@ -61,7 +64,11 @@ export function BulkMessageDialog({
   onCreated,
 }: BulkMessageDialogProps) {
   const { toast } = useToast();
+  const { t } = useI18n();
+  const tx = (key: string, vars?: Record<string, string | number>) => t(`bulkMessageDialog.${key}`, vars);
   const [templates, setTemplates] = useState<ApprovedTemplate[]>([]);
+  const [accounts, setAccounts] = useState<WhatsAppAccount[]>([]);
+  const [channelAccountId, setChannelAccountId] = useState<string>("");
   const [templateId, setTemplateId] = useState<number | null>(null);
   const [campaignName, setCampaignName] = useState("");
   const [query, setQuery] = useState("");
@@ -75,8 +82,11 @@ export function BulkMessageDialog({
     setLoading(true);
     setLoadError(null);
     setResult(null);
-    void customFetch("/api/message-templates?channel=whatsapp&activeOnly=true")
-      .then((response: any) => {
+    void Promise.all([
+      customFetch("/api/message-templates?channel=whatsapp&activeOnly=true"),
+      customFetch("/api/inbox/whatsapp-accounts"),
+    ])
+      .then(([response, accountResponse]: any[]) => {
         const approved = unwrapTemplates(response).filter((template) => (
           Boolean(template.externalTemplateName)
           && String(template.approvalStatus || "").toLowerCase() === "approved"
@@ -87,9 +97,12 @@ export function BulkMessageDialog({
             ? current
             : null
         ));
+        const accountRows = Array.isArray(accountResponse?.accounts) ? accountResponse.accounts : [];
+        setAccounts(accountRows);
+        setChannelAccountId((current) => current || String(accountRows.find((account: WhatsAppAccount) => account.isDefault)?.id || accountRows[0]?.id || ""));
       })
       .catch((error: any) => {
-        setLoadError(error?.message || "Approved WhatsApp templates could not be loaded.");
+        setLoadError(error?.message || tx("loadFailed"));
       })
       .finally(() => setLoading(false));
   }, [open]);
@@ -116,7 +129,7 @@ export function BulkMessageDialog({
   };
 
   const createCampaign = async () => {
-    if (!templateId || uniqueEntityIds.length === 0) return;
+    if (!templateId || !channelAccountId || uniqueEntityIds.length === 0) return;
     setSending(true);
     try {
       const response = await customFetch("/api/message-campaigns", {
@@ -127,21 +140,22 @@ export function BulkMessageDialog({
           entityType,
           entityIds: uniqueEntityIds,
           templateId,
+          channelAccountId: Number(channelAccountId),
         }),
       }) as CampaignResult;
       setResult(response);
       const summary = response.summary;
       toast({
-        title: `${summary?.queued ?? 0} WhatsApp message(s) queued`,
+        title: tx("queuedToast", { count: summary?.queued ?? 0 }),
         description: summary?.skipped
-          ? `${summary.skipped} record(s) were skipped because the phone was missing or duplicated.`
-          : "The delivery worker will process this campaign in the background.",
+          ? tx("skippedToast", { count: summary.skipped })
+          : tx("workerNotice"),
       });
       onCreated?.();
     } catch (error: any) {
       toast({
-        title: "Campaign could not be created",
-        description: error?.message || "The selected recipients were not queued.",
+        title: tx("createFailed"),
+        description: error?.message || tx("notQueued"),
         variant: "destructive",
       });
     } finally {
@@ -155,10 +169,10 @@ export function BulkMessageDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <MessageCircle className="h-5 w-5 text-emerald-600" />
-            Send approved WhatsApp template
+            {tx("title")}
           </DialogTitle>
           <DialogDescription>
-            Create a tracked CRM campaign for {uniqueEntityIds.length} selected {ENTITY_LABELS[entityType]}.
+            {tx("description", { count: uniqueEntityIds.length, entity: t(`bulkMessageDialog.entities.${entityType}`) })}
           </DialogDescription>
         </DialogHeader>
 
@@ -166,29 +180,44 @@ export function BulkMessageDialog({
           <div className="space-y-4 py-2">
             <Alert className="border-emerald-200 bg-emerald-50 text-emerald-950">
               <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-              <AlertTitle>Campaign queued</AlertTitle>
+              <AlertTitle>{tx("campaignQueued")}</AlertTitle>
               <AlertDescription>
-                {result.summary?.queued ?? 0} queued, {result.summary?.skipped ?? 0} skipped,
-                {" "}{result.summary?.total ?? uniqueEntityIds.length} total recipient record(s).
+                {tx("summary", { queued: result.summary?.queued ?? 0, skipped: result.summary?.skipped ?? 0, total: result.summary?.total ?? uniqueEntityIds.length })}
               </AlertDescription>
             </Alert>
             <p className="text-sm text-muted-foreground">
-              Delivery progress and per-recipient failures are available in Messages → Broadcast → CRM Campaigns.
+              {tx("historyNotice")}
             </p>
           </div>
         ) : (
           <div className="space-y-4 py-2">
             <Alert>
               <AlertCircle className="h-4 w-4" />
-              <AlertTitle>Safe recipient resolution</AlertTitle>
+              <AlertTitle>{tx("selectedSenderTitle")}</AlertTitle>
               <AlertDescription>
-                Existing contacts stay on the WhatsApp line they contacted. New contacts use the configured default line.
-                Template approval is re-verified for the exact line before every send; missing phones and duplicate numbers are skipped.
+                {tx("selectedSenderHelp")}
               </AlertDescription>
             </Alert>
 
             <div className="space-y-2">
-              <Label htmlFor="campaign-name">Campaign name (optional)</Label>
+              <Label>{tx("senderLine")}</Label>
+              <Select value={channelAccountId} onValueChange={setChannelAccountId}>
+                <SelectTrigger><SelectValue placeholder={tx("selectSenderLine")} /></SelectTrigger>
+                <SelectContent>
+                  {accounts.map((account) => (
+                    <SelectItem key={account.id} value={String(account.id)}>
+                      <span className="inline-flex items-center gap-2">
+                        <span className="h-2 w-2 rounded-full" style={{ backgroundColor: account.metadata?.brandColor || "#143591" }} />
+                        {account.metadata?.brandLabel || account.displayName}{account.isDefault ? ` · ${tx("systemDefault")}` : ""}
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="campaign-name">{tx("campaignName")}</Label>
               <Input
                 id="campaign-name"
                 value={campaignName}
@@ -199,22 +228,22 @@ export function BulkMessageDialog({
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="template-search">Approved template</Label>
+              <Label htmlFor="template-search">{tx("approvedTemplate")}</Label>
               <Input
                 id="template-search"
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                placeholder="Search approved templates..."
+                placeholder={tx("searchTemplates")}
               />
               <div className="rounded-xl border">
                 {loading ? (
                   <div className="flex h-40 items-center justify-center text-sm text-muted-foreground">
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Loading templates...
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" /> {tx("loadingTemplates")}
                   </div>
                 ) : loadError ? (
                   <div className="p-4 text-sm text-destructive">{loadError}</div>
                 ) : filteredTemplates.length === 0 ? (
-                  <div className="p-4 text-sm text-muted-foreground">No approved WhatsApp template found.</div>
+                  <div className="p-4 text-sm text-muted-foreground">{tx("noTemplate")}</div>
                 ) : (
                   <ScrollArea className="h-56">
                     <div className="divide-y">
@@ -233,10 +262,10 @@ export function BulkMessageDialog({
                               </span>
                               <div className="flex shrink-0 items-center gap-1.5">
                                 <Badge variant="outline" className="text-[10px]">{template.language || "EN"}</Badge>
-                                <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100">Approved</Badge>
+                                <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100">{tx("approved")}</Badge>
                               </div>
                             </div>
-                            <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{template.content || "No preview"}</p>
+                            <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{template.content || tx("noPreview")}</p>
                           </button>
                         );
                       })}
@@ -250,12 +279,12 @@ export function BulkMessageDialog({
 
         <DialogFooter>
           <Button variant="outline" onClick={close} disabled={sending}>
-            {result ? "Close" : "Cancel"}
+            {result ? tx("close") : tx("cancel")}
           </Button>
           {!result && (
-            <Button onClick={createCampaign} disabled={!templateId || uniqueEntityIds.length === 0 || sending}>
+            <Button onClick={createCampaign} disabled={!templateId || !channelAccountId || uniqueEntityIds.length === 0 || sending}>
               {sending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
-              Queue {uniqueEntityIds.length} recipient(s)
+              {tx("queueRecipients", { count: uniqueEntityIds.length })}
             </Button>
           )}
         </DialogFooter>

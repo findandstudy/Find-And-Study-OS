@@ -21,6 +21,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
+import { useI18n } from "@/hooks/use-i18n";
 import { GitBranch, Loader2, Plus, Save, Smartphone } from "lucide-react";
 
 type ChannelAccount = {
@@ -100,6 +101,8 @@ function slotsFromPipeline(pipeline: Pipeline): SlotDraft[] {
 
 export default function CommunicationPipelineManager({ aiBotId }: { aiBotId: number }) {
   const { toast } = useToast();
+  const { t } = useI18n();
+  const tx = (key: string) => t(`communicationRouting.${key}`);
   const [accounts, setAccounts] = useState<ChannelAccount[]>([]);
   const [pipelines, setPipelines] = useState<Pipeline[]>([]);
   const [drafts, setDrafts] = useState<Record<number, SlotDraft[]>>({});
@@ -121,7 +124,7 @@ export default function CommunicationPipelineManager({ aiBotId }: { aiBotId: num
       setDrafts(Object.fromEntries(pipelineRows.map((pipeline) => [pipeline.id, slotsFromPipeline(pipeline)])));
     } catch (error) {
       toast({
-        title: "Pipeline bilgileri yüklenemedi",
+        title: tx("loadFailed"),
         description: error instanceof Error ? error.message : undefined,
         variant: "destructive",
       });
@@ -160,10 +163,10 @@ export default function CommunicationPipelineManager({ aiBotId }: { aiBotId: num
       setNewName("");
       setNewSlug("");
       await load();
-      toast({ title: "Pipeline oluşturuldu" });
+      toast({ title: tx("created") });
     } catch (error) {
       toast({
-        title: "Pipeline oluşturulamadı",
+        title: tx("createFailed"),
         description: error instanceof Error ? error.message : undefined,
         variant: "destructive",
       });
@@ -176,16 +179,16 @@ export default function CommunicationPipelineManager({ aiBotId }: { aiBotId: num
     const slots = drafts[pipeline.id] ?? EMPTY_SLOTS;
     const selected = slots.filter((slot) => slot.channelAccountId !== "none");
     if (new Set(selected.map((slot) => slot.channelAccountId)).size !== selected.length) {
-      toast({ title: "Aynı WhatsApp hattı iki kez seçilemez", variant: "destructive" });
+      toast({ title: tx("duplicateLine"), variant: "destructive" });
       return;
     }
     if (selected.some((slot) => !slot.canSend && !slot.canReceive)) {
-      toast({ title: "Her hat gönderim veya alım için kullanılmalı", variant: "destructive" });
+      toast({ title: tx("lineNeedsPurpose"), variant: "destructive" });
       return;
     }
     if (selected.some((slot) => slot.priority === 2 && slot.canSend)
       && !selected.some((slot) => slot.priority === 1 && slot.canSend)) {
-      toast({ title: "İkincil gönderici için önce birincil gönderici seçin", variant: "destructive" });
+      toast({ title: tx("primaryRequired"), variant: "destructive" });
       return;
     }
     setSavingId(pipeline.id);
@@ -203,10 +206,10 @@ export default function CommunicationPipelineManager({ aiBotId }: { aiBotId: num
         }),
       });
       await load();
-      toast({ title: `${pipeline.name} hatları kaydedildi` });
+      toast({ title: t("communicationRouting.saved", { name: pipeline.name }) });
     } catch (error) {
       toast({
-        title: "WhatsApp hatları kaydedilemedi",
+        title: tx("saveFailed"),
         description: error instanceof Error ? error.message : undefined,
         variant: "destructive",
       });
@@ -226,7 +229,7 @@ export default function CommunicationPipelineManager({ aiBotId }: { aiBotId: num
       await load();
     } catch (error) {
       toast({
-        title: "Pipeline güncellenemedi",
+        title: tx("updateFailed"),
         description: error instanceof Error ? error.message : undefined,
         variant: "destructive",
       });
@@ -253,9 +256,9 @@ export default function CommunicationPipelineManager({ aiBotId }: { aiBotId: num
             <GitBranch className="h-4 w-4 text-primary" />
           </div>
           <div>
-            <CardTitle className="text-base">İletişim pipeline'ları</CardTitle>
+            <CardTitle className="text-base">{tx("title")}</CardTitle>
             <CardDescription>
-              Bu AI bot için birincil/ikincil WhatsApp göndericisini ve hangi hatların mesaj alacağını belirleyin.
+              {tx("description")}
             </CardDescription>
           </div>
         </div>
@@ -263,7 +266,7 @@ export default function CommunicationPipelineManager({ aiBotId }: { aiBotId: num
       <CardContent className="space-y-5">
         <div className="grid gap-3 rounded-xl border bg-muted/20 p-4 sm:grid-cols-[1fr_1fr_auto]">
           <div className="space-y-1.5">
-            <Label>Yeni pipeline</Label>
+            <Label>{tx("newRouting")}</Label>
             <Input
               value={newName}
               onChange={(event) => {
@@ -271,22 +274,22 @@ export default function CommunicationPipelineManager({ aiBotId }: { aiBotId: num
                 setNewName(value);
                 setNewSlug(toSlug(value));
               }}
-              placeholder="Örn. Dorm Booking"
+              placeholder={tx("namePlaceholder")}
             />
           </div>
           <div className="space-y-1.5">
-            <Label>Teknik anahtar</Label>
+            <Label>{tx("technicalKey")}</Label>
             <Input value={newSlug} onChange={(event) => setNewSlug(toSlug(event.target.value))} placeholder="dorm-booking" />
           </div>
           <Button className="self-end" onClick={createPipeline} disabled={creating || newName.trim().length < 2 || newSlug.length < 2}>
             {creating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
-            Oluştur
+            {tx("create")}
           </Button>
         </div>
 
         {botPipelines.length === 0 ? (
           <div className="rounded-xl border border-dashed p-6 text-center text-sm text-muted-foreground">
-            Bu AI bota bağlı pipeline yok. Proje veya web sitesi için ilk pipeline'ı oluşturun.
+            {tx("empty")}
           </div>
         ) : botPipelines.map((pipeline) => {
           const slots = drafts[pipeline.id] ?? EMPTY_SLOTS;
@@ -296,9 +299,9 @@ export default function CommunicationPipelineManager({ aiBotId }: { aiBotId: num
                 <div>
                   <div className="flex items-center gap-2">
                     <p className="font-medium">{pipeline.name}</p>
-                    {pipeline.isDefault && <Badge>Varsayılan</Badge>}
+                    {pipeline.isDefault && <Badge>{tx("default")}</Badge>}
                     <Badge variant={pipeline.isActive ? "outline" : "secondary"}>
-                      {pipeline.isActive ? "Aktif" : "Pasif"}
+                      {pipeline.isActive ? tx("active") : tx("inactive")}
                     </Badge>
                   </div>
                   <p className="text-xs text-muted-foreground">{pipeline.slug}</p>
@@ -306,10 +309,10 @@ export default function CommunicationPipelineManager({ aiBotId }: { aiBotId: num
                 <div className="flex items-center gap-2">
                   {!pipeline.isDefault && (
                     <Button size="sm" variant="outline" onClick={() => patchPipeline(pipeline, { isDefault: true })} disabled={savingId === pipeline.id}>
-                      Varsayılan yap
+                      {tx("makeDefault")}
                     </Button>
                   )}
-                  <Label htmlFor={`pipeline-active-${pipeline.id}`} className="text-xs">Aktif</Label>
+                  <Label htmlFor={`pipeline-active-${pipeline.id}`} className="text-xs">{tx("active")}</Label>
                   <Switch
                     id={`pipeline-active-${pipeline.id}`}
                     checked={pipeline.isActive}
@@ -324,15 +327,15 @@ export default function CommunicationPipelineManager({ aiBotId }: { aiBotId: num
                   <div key={slot.priority} className="space-y-3 rounded-lg bg-muted/30 p-3">
                     <div className="flex items-center gap-2">
                       <Smartphone className="h-4 w-4 text-primary" />
-                      <p className="text-sm font-medium">{index === 0 ? "Birincil hat" : "İkincil hat"}</p>
+                      <p className="text-sm font-medium">{index === 0 ? tx("primaryLine") : tx("secondaryLine")}</p>
                     </div>
                     <Select
                       value={slot.channelAccountId}
                       onValueChange={(channelAccountId) => updateSlot(pipeline.id, index, { channelAccountId })}
                     >
-                      <SelectTrigger><SelectValue placeholder="WhatsApp hattı seçin" /></SelectTrigger>
+                      <SelectTrigger><SelectValue placeholder={tx("selectLine")} /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="none">Hat seçilmedi</SelectItem>
+                        <SelectItem value="none">{tx("noLine")}</SelectItem>
                         {accounts.filter((account) => account.isActive).map((account) => (
                           <SelectItem key={account.id} value={String(account.id)}>
                             {account.displayName} · {account.provider}
@@ -347,7 +350,7 @@ export default function CommunicationPipelineManager({ aiBotId }: { aiBotId: num
                           onCheckedChange={(canSend) => updateSlot(pipeline.id, index, { canSend })}
                           disabled={slot.channelAccountId === "none"}
                         />
-                        <Label className="text-xs">Gönderici</Label>
+                        <Label className="text-xs">{tx("sender")}</Label>
                       </div>
                       <div className="flex items-center gap-2">
                         <Switch
@@ -355,7 +358,7 @@ export default function CommunicationPipelineManager({ aiBotId }: { aiBotId: num
                           onCheckedChange={(canReceive) => updateSlot(pipeline.id, index, { canReceive })}
                           disabled={slot.channelAccountId === "none"}
                         />
-                        <Label className="text-xs">Alıcı</Label>
+                        <Label className="text-xs">{tx("receiver")}</Label>
                       </div>
                     </div>
                   </div>
@@ -364,7 +367,7 @@ export default function CommunicationPipelineManager({ aiBotId }: { aiBotId: num
               <div className="flex justify-end">
                 <Button size="sm" onClick={() => saveAssignments(pipeline)} disabled={savingId === pipeline.id}>
                   {savingId === pipeline.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-                  Hatları kaydet
+                  {tx("saveLines")}
                 </Button>
               </div>
             </div>

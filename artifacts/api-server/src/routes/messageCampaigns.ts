@@ -4,6 +4,7 @@ import {
   messageCampaignsTable,
   messageCampaignRecipientsTable,
   messageTemplatesTable,
+  channelAccountsTable,
 } from "@workspace/db";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
@@ -14,6 +15,7 @@ import {
   WhatsAppTemplateSendError,
 } from "../lib/inbox/startWhatsAppTemplate";
 import type { MessageTemplateEntityType } from "../lib/inbox/templateVariableContext";
+import { resolveApprovedZernioTemplate } from "../lib/inbox/zernioTemplates";
 
 const router: IRouter = Router();
 
@@ -22,6 +24,7 @@ const createCampaignSchema = z.object({
   entityType: z.enum(["lead", "student", "application"]),
   entityIds: z.array(z.coerce.number().int().positive()).min(1).max(500),
   templateId: z.coerce.number().int().positive(),
+  channelAccountId: z.coerce.number().int().positive(),
   scheduledAt: z.coerce.date().optional(),
 });
 
@@ -55,7 +58,7 @@ router.post(
       return;
     }
 
-    const { entityType, templateId } = parsed.data;
+    const { entityType, templateId, channelAccountId } = parsed.data;
     const entityIds = [...new Set(parsed.data.entityIds)];
     const [template] = await db
       .select()
@@ -71,6 +74,34 @@ router.post(
       || String(template.approvalStatus || "").toLowerCase() !== "approved"
     ) {
       res.status(400).json({ error: "template_not_available" });
+      return;
+    }
+    const [account] = await db.select({
+      id: channelAccountsTable.id,
+      displayName: channelAccountsTable.displayName,
+      externalAccountId: channelAccountsTable.externalAccountId,
+      metadata: channelAccountsTable.metadata,
+    }).from(channelAccountsTable).where(and(
+      eq(channelAccountsTable.id, channelAccountId),
+      eq(channelAccountsTable.channel, "whatsapp"),
+      eq(channelAccountsTable.provider, "zernio"),
+      eq(channelAccountsTable.isActive, true),
+    )).limit(1);
+    if (!account?.externalAccountId) {
+      res.status(400).json({ error: "whatsapp_account_not_available" });
+      return;
+    }
+    const availability = await resolveApprovedZernioTemplate({
+      externalAccountId: account.externalAccountId,
+      templateName: template.externalTemplateName,
+      preferredLanguage: template.language,
+    });
+    if (!availability.ok) {
+      res.status(availability.reason === "provider_unavailable" ? 502 : 409).json({
+        error: availability.reason === "provider_unavailable"
+          ? "template_availability_check_failed"
+          : "template_not_approved_for_whatsapp_account",
+      });
       return;
     }
 
@@ -158,12 +189,20 @@ router.post(
           totalCount: recipients.length,
           queuedCount,
           skippedCount,
-          metadata: { templateName: template.externalTemplateName },
+          metadata: {
+            templateName: template.externalTemplateName,
+            channelAccountId: account.id,
+            senderLine: {
+              displayName: account.displayName,
+              brandLabel: (account.metadata as any)?.brandLabel || account.displayName,
+              brandColor: (account.metadata as any)?.brandColor || null,
+            },
+          },
         })
         .returning();
       if (recipients.length > 0) {
         await tx.insert(messageCampaignRecipientsTable).values(
-          recipients.map((recipient) => ({ ...recipient, campaignId: created.id })),
+          recipients.map((recipient) => ({ ...recipient, campaignId: created.id, channelAccountId: account.id })),
         );
       }
       return [created];
@@ -181,6 +220,7 @@ router.post(
         queuedCount,
         skippedCount,
         scheduledAt: scheduledAt.toISOString(),
+        channelAccountId: account.id,
       },
       req.ip,
     );

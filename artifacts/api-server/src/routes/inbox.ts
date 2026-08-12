@@ -136,6 +136,26 @@ import {
 } from "../lib/inboxConversationIndicators";
 
 const router: IRouter = Router();
+
+router.get(
+  "/inbox/whatsapp-accounts",
+  requireAuth,
+  requireRole(...STAFF_ROLES, ...ADMIN_ROLES),
+  async (_req, res): Promise<void> => {
+    const accounts = await db.select({
+      id: channelAccountsTable.id,
+      displayName: channelAccountsTable.displayName,
+      externalAccountId: channelAccountsTable.externalAccountId,
+      isDefault: channelAccountsTable.isDefault,
+      metadata: channelAccountsTable.metadata,
+    }).from(channelAccountsTable).where(and(
+      eq(channelAccountsTable.channel, "whatsapp"),
+      eq(channelAccountsTable.provider, "zernio"),
+      eq(channelAccountsTable.isActive, true),
+    )).orderBy(desc(channelAccountsTable.isDefault), asc(channelAccountsTable.displayName));
+    res.json({ accounts });
+  },
+);
 const inboxMediaStorage = new ObjectStorageService();
 const webChatMediaBody = raw({ limit: WEB_CHAT_MEDIA_MAX_BYTES, type: () => true });
 
@@ -171,7 +191,39 @@ interface EntityWhatsAppTarget {
  */
 async function resolveEntityWhatsAppTarget(
   contactCondition: SQL,
+  channelAccountId?: number,
 ): Promise<EntityWhatsAppTarget | null> {
+  if (channelAccountId) {
+    const [selected] = await db.select({
+      id: channelAccountsTable.id,
+      externalAccountId: channelAccountsTable.externalAccountId,
+      displayName: channelAccountsTable.displayName,
+      isDefault: channelAccountsTable.isDefault,
+    }).from(channelAccountsTable).where(and(
+      eq(channelAccountsTable.id, channelAccountId),
+      eq(channelAccountsTable.channel, "whatsapp"),
+      eq(channelAccountsTable.provider, "zernio"),
+      eq(channelAccountsTable.isActive, true),
+    )).limit(1);
+    if (!selected?.externalAccountId) return null;
+    const contacts = await db.select({ id: externalContactsTable.id })
+      .from(externalContactsTable)
+      .where(and(eq(externalContactsTable.channel, "whatsapp"), contactCondition));
+    const contactIds = contacts.map((contact) => contact.id);
+    const [conversation] = contactIds.length > 0
+      ? await db.select({ id: conversationsTable.id })
+          .from(conversationsTable)
+          .where(and(
+            inArray(conversationsTable.externalContactId, contactIds),
+            eq(conversationsTable.channel, "whatsapp"),
+            eq(conversationsTable.channelAccountId, selected.id),
+            isNotNull(conversationsTable.externalThreadId),
+          ))
+          .orderBy(desc(conversationsTable.lastMessageAt))
+          .limit(1)
+      : [];
+    return { ...selected, externalAccountId: selected.externalAccountId, conversationId: conversation?.id ?? null };
+  }
   const contacts = await db
     .select({ id: externalContactsTable.id })
     .from(externalContactsTable)
@@ -1019,6 +1071,7 @@ router.get(
       externalAccountId: string | null;
       isDefault: boolean;
       provider: string;
+      metadata: unknown;
     };
 
     const contactsMap = new Map<number, ExternalContact>();
@@ -1046,6 +1099,7 @@ router.get(
           externalAccountId: channelAccountsTable.externalAccountId,
           isDefault: channelAccountsTable.isDefault,
           provider: channelAccountsTable.provider,
+          metadata: channelAccountsTable.metadata,
         })
         .from(channelAccountsTable)
         .where(inArray(channelAccountsTable.id, channelAccountIds));
@@ -1089,6 +1143,7 @@ router.get(
             externalAccountId: channelAccountsTable.externalAccountId,
             isDefault: channelAccountsTable.isDefault,
             provider: channelAccountsTable.provider,
+            metadata: channelAccountsTable.metadata,
           })
           .from(channelAccountsTable)
           .where(eq(channelAccountsTable.id, conv.channelAccountId))
@@ -5125,15 +5180,17 @@ router.post(
   requireRole(...STAFF_ROLES, ...ADMIN_ROLES),
   async (req, res): Promise<void> => {
     const userId = req.user!.id;
-    const { entityType, entityId: rawId, templateId: rawTplId, parameters } = req.body as {
+    const { entityType, entityId: rawId, templateId: rawTplId, parameters, channelAccountId: rawChannelAccountId } = req.body as {
       entityType: string;
       entityId: number | string;
       templateId: number | string;
       parameters?: string[];
+      channelAccountId?: number | string;
     };
 
     const entityId = parseInt(String(rawId || ""), 10);
     const templateId = parseInt(String(rawTplId || ""), 10);
+    const channelAccountId = rawChannelAccountId == null ? undefined : parseInt(String(rawChannelAccountId), 10);
 
     if (!entityType || !entityId || !templateId) {
       res.status(400).json({ error: "entityType, entityId and templateId are required" });
@@ -5234,7 +5291,7 @@ router.post(
       // Existing contacts stay on the line where they wrote to us. New contacts
       // use the configured default line. Never infer approval from the global
       // message_templates cache.
-      const account = await resolveEntityWhatsAppTarget(contactConds[0]);
+      const account = await resolveEntityWhatsAppTarget(contactConds[0], channelAccountId);
       if (!account) {
         res.status(409).json({ error: "no_zernio_account", detail: "No active WhatsApp line is available for this recipient." });
         return;

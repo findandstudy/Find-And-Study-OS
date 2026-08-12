@@ -70,7 +70,10 @@
       "deleted": "Hesap silindi",
       "deleteConfirm": "Bu hesap silinsin mi? Bu işlem geri alınamaz.",
       "testPassed": "Bağlantı testi başarılı",
-      "testFailed": "Bağlantı testi başarısız"
+      "testFailed": "Bağlantı testi başarısız",
+      "brandLabel": "Gelen kutusu etiketi",
+      "brandLabelPlaceholder": "Örn. Find And Study",
+      "brandColor": "Gelen kutusu rengi"
     }
   },
   "currencyAllLabel": "Toplam (tümü)",
@@ -2732,7 +2735,11 @@
     "newConvSearchPlaceholder": "Ad veya telefon ile öğrenci ya da lead ara...",
     "newConvSent": "Şablon gönderildi! Sohbet açılıyor...",
     "noResults": "Sonuç bulunamadı",
-    "templateVariable": "{n}. değişken"
+    "templateVariable": "{n}. değişken",
+    "senderLine": "Gönderen hat",
+    "selectSenderLine": "WhatsApp hattı seçin",
+    "systemDefault": "Sistem ana hattı",
+    "senderLineHelp": "Bu hat yalnızca bu sohbeti başlatmak için kullanılır. Mevcut sohbetlerdeki yanıtlar kendi hattında kalır."
   },
   "settingsPage": {
     "navProfile": "Profil",
@@ -6343,5 +6350,67 @@
       "transcript": "Transkript",
       "diploma": "Diploma"
     }
+  },
+  "communicationRouting": {
+    "title": "AI ve kanal yönlendirme",
+    "description": "Bu AI botun gönderim ve alım için kullanacağı birincil ve ikincil WhatsApp hatlarını seçin.",
+    "loadFailed": "Yönlendirme ayarları yüklenemedi",
+    "created": "Yönlendirme oluşturuldu",
+    "createFailed": "Yönlendirme oluşturulamadı",
+    "duplicateLine": "Aynı WhatsApp hattı iki kez seçilemez",
+    "lineNeedsPurpose": "Her hat gönderim veya alım için kullanılmalı",
+    "primaryRequired": "İkincil göndericiden önce birincil gönderici seçin",
+    "saved": "{{name}} hatları kaydedildi",
+    "saveFailed": "WhatsApp hatları kaydedilemedi",
+    "updateFailed": "Yönlendirme güncellenemedi",
+    "newRouting": "Yeni yönlendirme",
+    "namePlaceholder": "Örn. Dorm Booking",
+    "technicalKey": "Teknik anahtar",
+    "create": "Oluştur",
+    "empty": "Bu AI bota henüz yönlendirme bağlanmadı.",
+    "default": "Varsayılan",
+    "active": "Aktif",
+    "inactive": "Pasif",
+    "makeDefault": "Varsayılan yap",
+    "primaryLine": "Birincil hat",
+    "secondaryLine": "İkincil hat",
+    "selectLine": "WhatsApp hattı seçin",
+    "noLine": "Hat seçilmedi",
+    "sender": "Gönderici",
+    "receiver": "Alıcı",
+    "saveLines": "Hatları kaydet"
+  },
+  "bulkMessageDialog": {
+    "title": "Onaylı WhatsApp şablonu gönder",
+    "description": "Create a tracked CRM campaign for {{count}} selected {{entity}}.",
+    "entities": {
+      "lead": "leads",
+      "student": "students",
+      "application": "applications"
+    },
+    "loadFailed": "Approved templates or WhatsApp lines could not be loaded.",
+    "queuedToast": "{{count}} WhatsApp messages queued",
+    "skippedToast": "{{count}} records were skipped because the phone was missing or duplicated.",
+    "workerNotice": "The delivery worker will process this campaign in the background.",
+    "createFailed": "Campaign could not be created",
+    "notQueued": "The selected recipients were not queued.",
+    "campaignQueued": "Campaign queued",
+    "summary": "{{queued}} queued, {{skipped}} skipped, {{total}} total recipient records.",
+    "historyNotice": "Delivery progress and recipient failures are available in Messages → Broadcast → CRM Campaigns.",
+    "selectedSenderTitle": "One sender line for the campaign",
+    "selectedSenderHelp": "Every recipient will be sent from the selected line. Template approval is verified for that exact line before the campaign is queued.",
+    "senderLine": "Gönderen hat",
+    "selectSenderLine": "WhatsApp hattı seçin",
+    "systemDefault": "Sistem ana hattı",
+    "campaignName": "Campaign name (optional)",
+    "approvedTemplate": "Approved template",
+    "searchTemplates": "Search approved templates...",
+    "loadingTemplates": "Loading templates...",
+    "noTemplate": "No approved WhatsApp template found.",
+    "approved": "Approved",
+    "noPreview": "No preview",
+    "close": "Close",
+    "cancel": "Cancel",
+    "queueRecipients": "Queue {{count}} recipients"
   }
 }

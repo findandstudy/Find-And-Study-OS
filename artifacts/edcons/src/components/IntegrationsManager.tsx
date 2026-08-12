@@ -64,7 +64,11 @@ interface ChannelAccount {
   status: string;
   isActive: boolean;
   isDefault: boolean;
+  brandLabel: string | null;
+  brandColor: string | null;
 }
+
+const ACCOUNT_COLOR_PRESETS = ["#143591", "#E31E24", "#059669", "#7C3AED", "#EA580C", "#0F766E"];
 
 /** Resolve a field's label from i18n when the def opts in, else the English fallback. */
 function resolveFieldLabel(def: IntegrationDef, field: FieldDef, t: (k: string) => string): string {
@@ -873,6 +877,8 @@ function ChannelAccountsDialog({
   const [mode, setMode] = useState<"list" | "form">("list");
   const [editingId, setEditingId] = useState<number | null>(null);
   const [displayName, setDisplayName] = useState("");
+  const [brandLabel, setBrandLabel] = useState("");
+  const [brandColor, setBrandColor] = useState("#143591");
   const [config, setConfig] = useState<Record<string, any>>({});
   const [saving, setSaving] = useState(false);
   const [busyId, setBusyId] = useState<number | null>(null);
@@ -900,6 +906,8 @@ function ChannelAccountsDialog({
   function openNew() {
     setEditingId(null);
     setDisplayName("");
+    setBrandLabel("");
+    setBrandColor("#143591");
     setConfig({});
     setShowPw(new Set());
     setMode("form");
@@ -908,6 +916,8 @@ function ChannelAccountsDialog({
   function openEditAccount(acc: ChannelAccount) {
     setEditingId(acc.id);
     setDisplayName(acc.displayName);
+    setBrandLabel(acc.brandLabel || acc.displayName);
+    setBrandColor(acc.brandColor || "#143591");
     setConfig({ ...acc.config });
     setShowPw(new Set());
     setMode("form");
@@ -936,13 +946,13 @@ function ChannelAccountsDialog({
         await customFetch(`/api/channel-accounts`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ channel, displayName: displayName.trim(), config }),
+          body: JSON.stringify({ channel, displayName: displayName.trim(), brandLabel: brandLabel.trim(), brandColor, config }),
         });
       } else {
         await customFetch(`/api/channel-accounts/${editingId}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ displayName: displayName.trim(), config }),
+          body: JSON.stringify({ displayName: displayName.trim(), brandLabel: brandLabel.trim(), brandColor, config }),
         });
       }
       toast({ title: ca("saved") });
@@ -1031,6 +1041,9 @@ function ChannelAccountsDialog({
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
                       <div className="flex items-center gap-1.5 flex-wrap">
+                        {channel === "whatsapp" && (
+                          <span className="h-3 w-3 shrink-0 rounded-full border" style={{ backgroundColor: acc.brandColor || "#143591" }} />
+                        )}
                         <p className="font-medium text-sm truncate">{acc.displayName}</p>
                         {acc.isDefault && (
                           <Badge className="bg-primary/10 text-primary border-primary/20 gap-1 text-[10px]">
@@ -1047,6 +1060,9 @@ function ChannelAccountsDialog({
                         <p className="text-[11px] text-muted-foreground font-mono mt-0.5 truncate">
                           {ca("externalId")}: {acc.externalAccountId}
                         </p>
+                      )}
+                      {channel === "whatsapp" && acc.brandLabel && (
+                        <p className="mt-0.5 text-[11px] text-muted-foreground">{ca("brandLabel")}: {acc.brandLabel}</p>
                       )}
                     </div>
                   </div>
@@ -1099,6 +1115,49 @@ function ChannelAccountsDialog({
                 className="h-9 rounded-xl mt-1"
               />
             </div>
+            {channel === "whatsapp" && (
+              <div className="grid gap-3 rounded-xl border border-border/50 bg-secondary/20 p-3 sm:grid-cols-[1fr_auto]">
+                <div>
+                  <Label className="text-xs">{ca("brandLabel")}</Label>
+                  <Input
+                    placeholder={ca("brandLabelPlaceholder")}
+                    value={brandLabel}
+                    onChange={(e) => setBrandLabel(e.target.value)}
+                    maxLength={80}
+                    className="mt-1 h-9 rounded-xl"
+                  />
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {ACCOUNT_COLOR_PRESETS.map((color) => (
+                      <button
+                        key={color}
+                        type="button"
+                        className={`h-6 w-6 rounded-full border-2 ${brandColor.toUpperCase() === color ? "border-foreground" : "border-background ring-1 ring-border"}`}
+                        style={{ backgroundColor: color }}
+                        onClick={() => setBrandColor(color)}
+                        aria-label={`${ca("brandColor")} ${color}`}
+                      />
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <Label className="text-xs">{ca("brandColor")}</Label>
+                  <div className="mt-1 flex items-center gap-2">
+                    <Input
+                      type="color"
+                      value={brandColor}
+                      onChange={(e) => setBrandColor(e.target.value.toUpperCase())}
+                      className="h-9 w-12 cursor-pointer rounded-lg p-1"
+                    />
+                    <Input
+                      value={brandColor}
+                      onChange={(e) => setBrandColor(e.target.value.toUpperCase())}
+                      pattern="#[0-9A-Fa-f]{6}"
+                      className="h-9 w-24 rounded-xl font-mono text-xs"
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
             {def.fields.map((field) => (
               <div key={field.key}>
                 <Label className="text-xs flex items-center gap-1">

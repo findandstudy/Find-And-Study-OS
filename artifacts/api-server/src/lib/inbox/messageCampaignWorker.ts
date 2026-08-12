@@ -18,6 +18,7 @@ interface ClaimedRecipient {
   entity_type: MessageTemplateEntityType;
   entity_id: number;
   phone_e164: string | null;
+  channel_account_id: number | null;
   attempts: number;
   template_id: number;
   created_by_id: number;
@@ -46,6 +47,7 @@ async function claimRecipient(): Promise<ClaimedRecipient | null> {
               recipient.entity_type,
               recipient.entity_id,
               recipient.phone_e164,
+              recipient.channel_account_id,
               recipient.attempts,
               (SELECT template_id FROM message_campaigns WHERE id = recipient.campaign_id) AS template_id,
               (SELECT created_by_id FROM message_campaigns WHERE id = recipient.campaign_id) AS created_by_id
@@ -114,6 +116,7 @@ async function processRecipient(recipient: ClaimedRecipient): Promise<void> {
       entityId: recipient.entity_id,
       templateId: recipient.template_id,
       expectedPhoneE164: recipient.phone_e164 || undefined,
+      channelAccountId: recipient.channel_account_id || undefined,
     });
     await db.update(messageCampaignRecipientsTable).set({
       status: "sent",

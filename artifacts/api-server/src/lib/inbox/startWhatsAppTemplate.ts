@@ -223,7 +223,44 @@ export async function loadWhatsAppEntitySnapshot(
   };
 }
 
-async function resolveEntityWhatsAppTarget(contactCondition: SQL): Promise<EntityWhatsAppTarget | null> {
+async function resolveEntityWhatsAppTarget(contactCondition: SQL, channelAccountId?: number): Promise<EntityWhatsAppTarget | null> {
+  if (channelAccountId) {
+    const [selected] = await db
+      .select({
+        id: channelAccountsTable.id,
+        externalAccountId: channelAccountsTable.externalAccountId,
+        displayName: channelAccountsTable.displayName,
+        isDefault: channelAccountsTable.isDefault,
+      })
+      .from(channelAccountsTable)
+      .where(and(
+        eq(channelAccountsTable.id, channelAccountId),
+        eq(channelAccountsTable.channel, "whatsapp"),
+        eq(channelAccountsTable.provider, "zernio"),
+        eq(channelAccountsTable.isActive, true),
+      ))
+      .limit(1);
+    if (!selected?.externalAccountId) return null;
+
+    const contacts = await db
+      .select({ id: externalContactsTable.id })
+      .from(externalContactsTable)
+      .where(and(eq(externalContactsTable.channel, "whatsapp"), contactCondition));
+    const contactIds = contacts.map((contact) => contact.id);
+    const [conversation] = contactIds.length > 0
+      ? await db.select({ id: conversationsTable.id })
+          .from(conversationsTable)
+          .where(and(
+            inArray(conversationsTable.externalContactId, contactIds),
+            eq(conversationsTable.channel, "whatsapp"),
+            eq(conversationsTable.channelAccountId, selected.id),
+            isNotNull(conversationsTable.externalThreadId),
+          ))
+          .orderBy(desc(conversationsTable.lastMessageAt))
+          .limit(1)
+      : [];
+    return { ...selected, externalAccountId: selected.externalAccountId, conversationId: conversation?.id ?? null };
+  }
   const contacts = await db
     .select({ id: externalContactsTable.id })
     .from(externalContactsTable)
@@ -384,6 +421,8 @@ export async function sendWhatsAppTemplateToEntity(params: {
    * redirecting an already-approved campaign to a different person.
    */
   expectedPhoneE164?: string;
+  /** Force this exact active Zernio WhatsApp line for the send. */
+  channelAccountId?: number;
   parameters?: string[];
   requestIp?: string;
 }): Promise<WhatsAppTemplateSendResult> {
@@ -407,7 +446,7 @@ export async function sendWhatsAppTemplateToEntity(params: {
     throw new WhatsAppTemplateSendError(400, "template_not_available");
   }
 
-  const account = await resolveEntityWhatsAppTarget(target.contactCondition);
+  const account = await resolveEntityWhatsAppTarget(target.contactCondition, params.channelAccountId);
   if (!account) {
     throw new WhatsAppTemplateSendError(
       409,

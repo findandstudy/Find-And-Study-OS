@@ -37,6 +37,9 @@ function deriveExternalAccountId(channel: string, config: Record<string, any>): 
 
 /** Serialize a channel_accounts row for the client (config secrets masked). */
 function serializeRow(row: typeof channelAccountsTable.$inferSelect): Record<string, any> {
+  const metadata = row.metadata && typeof row.metadata === "object"
+    ? row.metadata as Record<string, unknown>
+    : {};
   return {
     id: row.id,
     channel: row.channel,
@@ -46,6 +49,8 @@ function serializeRow(row: typeof channelAccountsTable.$inferSelect): Record<str
     status: row.status,
     isActive: row.isActive,
     isDefault: row.isDefault,
+    brandLabel: typeof metadata.brandLabel === "string" ? metadata.brandLabel : null,
+    brandColor: typeof metadata.brandColor === "string" ? metadata.brandColor : null,
     lastSeenAt: row.lastSeenAt,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
@@ -66,7 +71,7 @@ router.get("/channel-accounts", requireAuth, requireRole(...ADMIN_ROLES), async 
 
 /** Create a new account on a channel. */
 router.post("/channel-accounts", requireAuth, requireRole(...ADMIN_ROLES), async (req, res): Promise<void> => {
-  const { channel, displayName, config, isActive, isDefault } = req.body ?? {};
+  const { channel, displayName, config, isActive, isDefault, brandLabel, brandColor } = req.body ?? {};
   if (typeof channel !== "string" || !SUPPORTED_CHANNELS.has(channel)) {
     res.status(400).json({ error: "Unsupported or missing channel" });
     return;
@@ -84,6 +89,10 @@ router.post("/channel-accounts", requireAuth, requireRole(...ADMIN_ROLES), async
     .where(eq(channelAccountsTable.channel, channel));
   const makeDefault = isDefault === true || existing.length === 0;
   const active = isActive === false ? false : true;
+  if (brandColor != null && (typeof brandColor !== "string" || !/^#[0-9a-f]{6}$/i.test(brandColor))) {
+    res.status(400).json({ error: "brandColor must be a six-digit hex color" });
+    return;
+  }
 
   const result = await db.transaction(async (tx) => {
     if (makeDefault) {
@@ -99,6 +108,10 @@ router.post("/channel-accounts", requireAuth, requireRole(...ADMIN_ROLES), async
       status: active ? "active" : "inactive",
       isActive: active,
       isDefault: makeDefault,
+      metadata: {
+        ...(typeof brandLabel === "string" && brandLabel.trim() ? { brandLabel: brandLabel.trim().slice(0, 80) } : {}),
+        ...(typeof brandColor === "string" ? { brandColor: brandColor.toUpperCase() } : {}),
+      },
     }).returning();
     return row;
   });
@@ -119,17 +132,30 @@ router.put("/channel-accounts/:id", requireAuth, requireRole(...ADMIN_ROLES), as
     res.status(404).json({ error: "Account not found" });
     return;
   }
-  const { displayName, config } = req.body ?? {};
+  const { displayName, config, brandLabel, brandColor } = req.body ?? {};
+  if (brandColor != null && (typeof brandColor !== "string" || !/^#[0-9a-f]{6}$/i.test(brandColor))) {
+    res.status(400).json({ error: "brandColor must be a six-digit hex color" });
+    return;
+  }
   const existingPlain = parseAccountConfig(existing.configEncrypted);
   const mergedConfig = (config && typeof config === "object")
     ? mergeConfig(existingPlain, config as Record<string, any>)
     : existingPlain;
   const externalAccountId = deriveExternalAccountId(existing.channel, mergedConfig);
+  const existingMetadata = existing.metadata && typeof existing.metadata === "object"
+    ? existing.metadata as Record<string, unknown>
+    : {};
+  const metadata = {
+    ...existingMetadata,
+    ...(brandLabel !== undefined ? { brandLabel: typeof brandLabel === "string" ? brandLabel.trim().slice(0, 80) : "" } : {}),
+    ...(brandColor !== undefined ? { brandColor: typeof brandColor === "string" ? brandColor.toUpperCase() : "" } : {}),
+  };
 
   const [result] = await db.update(channelAccountsTable).set({
     displayName: typeof displayName === "string" && displayName.trim().length > 0 ? displayName.trim() : existing.displayName,
     configEncrypted: serializeAccountConfig(mergedConfig),
     externalAccountId,
+    metadata,
   }).where(eq(channelAccountsTable.id, id)).returning();
 
   await logAudit(req.user!.id, "update_channel_account", "channel_account", id, { channel: existing.channel }, req.ip);
