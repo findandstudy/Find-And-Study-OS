@@ -1208,6 +1208,39 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
           // the visible Select button through its nearest programme card and
           // require one exact normalized card readback.
           if (!visibleExactLabels.length) {
+            const programmeCards = page.locator("li,article,tr");
+            const programmeCardCount = await programmeCards
+              .count()
+              .catch(() => 0);
+            for (let i = 0; i < programmeCardCount; i++) {
+              const card = programmeCards.nth(i);
+              if (!(await card.isVisible().catch(() => false))) continue;
+              const cardText = (
+                (await card.innerText().catch(() => "")) || ""
+              )
+                .replace(/\s+/g, " ")
+                .trim();
+              const matchedCandidate = programCandidates.find((candidate) =>
+                salesforceProgramCardMatchesCandidate(cardText, candidate),
+              );
+              if (!matchedCandidate) continue;
+              const nativeButtons = card.locator("button");
+              const nativeButtonCount = await nativeButtons
+                .count()
+                .catch(() => 0);
+              const visibleButtons: any[] = [];
+              for (let buttonIndex = 0; buttonIndex < nativeButtonCount; buttonIndex++) {
+                const button = nativeButtons.nth(buttonIndex);
+                if (await button.isVisible().catch(() => false)) {
+                  visibleButtons.push(button);
+                }
+              }
+              if (visibleButtons.length !== 1) continue;
+              portalProg = matchedCandidate;
+              exactProgramButtons.push(visibleButtons[0]);
+            }
+          }
+          if (!visibleExactLabels.length && !exactProgramButtons.length) {
             const selectButtons = page.getByRole("button", {
               name: /^\s*select\s*$/i,
             });
