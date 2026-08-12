@@ -940,7 +940,7 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
         if (await hasVisible("input[type=file]")) return "Documents";
         const submit = page
           .getByRole("button", {
-            name: /^\s*(submit(?:\s+application)?|complete|tamamla|gönder|finish|onayla)\s*$/i,
+            name: /^\s*(submit(?:\s+application)?|complete(?:\s+application)?|tamamla|gönder|finish|onayla)\s*$/i,
           })
           .first();
         if (
@@ -2111,7 +2111,7 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
               await page.waitForTimeout(3500);
               const finalSubmit = page
                 .getByRole("button", {
-                  name: /^\s*(submit(?:\s+application)?|complete|tamamla|gönder|finish|onayla)\s*$/i,
+                  name: /^\s*(submit(?:\s+application)?|complete(?:\s+application)?|tamamla|gönder|finish|onayla)\s*$/i,
                 })
                 .first();
               const finalSubmitVisible =
@@ -2176,7 +2176,7 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
         } else {
           const cna = page.getByRole("button", { name: /create new application|add application/i }).first();
           if (await cna.count()) { await cna.click({ timeout: 6000 }).catch(() => {}); }
-          const sub = page.getByRole("button", { name: /^\s*(submit(?:\s+application)?|complete|tamamla|gönder|finish|onayla)\s*$/i }).first();
+          const sub = page.getByRole("button", { name: /^\s*(submit(?:\s+application)?|complete(?:\s+application)?|tamamla|gönder|finish|onayla)\s*$/i }).first();
           const hn = await page.getByRole("button", { name: /^\s*(next|ileri|sonraki|devam)\s*$/i }).count();
           if ((await sub.count()) && !hn) {
             if (dryRun) { result.dryReachedFinal = true; break; }
