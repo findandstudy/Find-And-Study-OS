@@ -2081,6 +2081,23 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
             if (!documentsAdvanced) {
               result.stuckStep = step;
               const validation = await readValidationMessages();
+              const visibleButtons = await page
+                .locator('button:visible,[role="button"]:visible')
+                .evaluateAll((nodes: Element[]) =>
+                  nodes.slice(0, 40).map((node: Element) => ({
+                    text: (node.textContent || "").replace(/\s+/g, " ").trim(),
+                    disabled:
+                      (node as HTMLButtonElement).disabled ||
+                      node.getAttribute("aria-disabled") === "true",
+                    name: node.getAttribute("name"),
+                    title: node.getAttribute("title"),
+                  })),
+                )
+                .catch(() => []);
+              logger.warn(`[salesforce:${cfg.key}] document stage did not advance`, {
+                validation,
+                buttons: JSON.stringify(visibleButtons),
+              });
               result.detail =
                 `${cfg.label}: Documents did not advance` +
                 (validation.length
