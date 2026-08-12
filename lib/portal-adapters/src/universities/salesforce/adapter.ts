@@ -676,6 +676,37 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
           return false;
         }
       };
+      const selLightningByName = async (
+        name: string,
+        label: string,
+      ): Promise<boolean> => {
+        const escapedName = name.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+        const control = page
+          .locator(`[name="${escapedName}"]`)
+          .filter({ visible: true })
+          .first();
+        if (!(await control.count().catch(() => 0))) return false;
+        try {
+          await control.click({ timeout: 4000 });
+          await page.waitForTimeout(500);
+          const escapedLabel = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+          const options = page.getByRole("option", {
+            name: new RegExp(`^\\s*${escapedLabel}\\s*$`, "i"),
+          });
+          const visibleOptions = await visibleControls(options);
+          if (visibleOptions.length !== 1) return false;
+          await visibleOptions[0].click({ timeout: 4000 });
+          await page.waitForTimeout(350);
+          const value =
+            (await control.inputValue().catch(() => "")) ||
+            (await control.innerText().catch(() => "")) ||
+            (await control.getAttribute("data-value").catch(() => "")) ||
+            "";
+          return fold(value).includes(fold(label));
+        } catch {
+          return false;
+        }
+      };
       const clickNext = async (): Promise<boolean> => {
         const candidates = [
           page.getByRole("button", {
@@ -886,7 +917,13 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
         };
       };
       const dobm = String(profile.dateOfBirth || "").match(/(\d{4})-(\d{2})-(\d{2})/);
-      const dobStr = dobm ? (dobm[2] + "/" + dobm[3] + "/" + dobm[1]) : strictMappedPortal ? "" : "01/01/2000";
+      const dobStr = dobm
+        ? cfg.key === "halic"
+          ? dobm[3] + "/" + dobm[2] + "/" + dobm[1]
+          : dobm[2] + "/" + dobm[3] + "/" + dobm[1]
+        : strictMappedPortal
+          ? ""
+          : "01/01/2000";
       for (let step = 0; step < 12; step++) {
         await page.waitForTimeout(2500);
         const txt = await bodyText();
@@ -1479,29 +1516,35 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
         } else if (await has("select[name=\"Gender\"]")) {
           const personalProof: Record<string, boolean> = {};
           personalProof.firstName = await fill(
-            'input[name="First_Name"]',
+            cfg.key === "halic"
+              ? 'input[name="FirstName"]'
+              : 'input[name="First_Name"]',
             profile.firstName,
           );
           personalProof.lastName = await fill(
-            'input[name="Last_Name"]',
+            cfg.key === "halic"
+              ? 'input[name="LastName"]'
+              : 'input[name="Last_Name"]',
             profile.lastName,
           );
           personalProof.gender = await selByName(
             "Gender",
             /female/i.test(profile.gender || "") ? "Female" : "Male",
           );
-          personalProof.citizenship = await selByName(
-            "Citizenship",
-            profile.nationality,
-          );
+          personalProof.citizenship =
+            cfg.key === "halic"
+              ? await selLightningByName("Citizenship_0", profile.nationality)
+              : await selByName("Citizenship", profile.nationality);
           personalProof.residenceCountry = await selByName(
             "Country_of_Residence",
             profile.nationality,
           );
-          personalProof.source = await selByName(
-            "Where_did_you_hear_us",
-            "University Website",
-          );
+          if (await has('select[name="Where_did_you_hear_us"]')) {
+            personalProof.source = await selByName(
+              "Where_did_you_hear_us",
+              "University Website",
+            );
+          }
           const dateControl = page
             .locator('input[name*="Date_of_Birth" i],input[name*="birth" i]')
             .first();
@@ -1511,31 +1554,73 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
             await dateControl.fill("").catch(() => {});
             await dateControl.pressSequentially(dobStr, { delay: 45 }).catch(() => {});
             await dateControl.press("Tab").catch(() => {});
-            personalProof.dateOfBirth = Boolean(
-              await dateControl.inputValue().catch(() => ""),
-            );
+            const readDate = await dateControl.inputValue().catch(() => "");
+            if (cfg.key === "halic" && dobm) {
+              const parsed = new Date(readDate);
+              personalProof.dateOfBirth =
+                !Number.isNaN(parsed.getTime()) &&
+                parsed.getUTCFullYear() === Number(dobm[1]) &&
+                parsed.getUTCMonth() + 1 === Number(dobm[2]) &&
+                parsed.getUTCDate() === Number(dobm[3]);
+            } else {
+              personalProof.dateOfBirth = Boolean(readDate);
+            }
           }
           if (strictMappedPortal) {
-            personalProof.turkishCitizenship = await setBinaryAnswer(
-              /turkish citizenship|türk vatanda/i,
-              profile.hasTcId ? "Yes" : "No",
-            );
-            personalProof.residencePermit = await setBinaryAnswer(
-              /residence permit|ikamet izni/i,
-              "No",
-            );
-            personalProof.blueCard = await setBinaryAnswer(
-              /blue card|mavi kart/i,
-              profile.hasBlueCard ? "Yes" : "No",
-            );
+            if (/turkish citizenship|türk vatanda/i.test(txt)) {
+              personalProof.turkishCitizenship = await setBinaryAnswer(
+                /turkish citizenship|türk vatanda/i,
+                profile.hasTcId ? "Yes" : "No",
+              );
+            }
+            if (/residence permit|ikamet izni/i.test(txt)) {
+              personalProof.residencePermit = await setBinaryAnswer(
+                /residence permit|ikamet izni/i,
+                "No",
+              );
+            }
+            if (/blue card|mavi kart/i.test(txt)) {
+              personalProof.blueCard = await setBinaryAnswer(
+                /blue card|mavi kart/i,
+                profile.hasBlueCard ? "Yes" : "No",
+              );
+            }
           }
           if (!strictMappedPortal) {
             try { const cb = page.locator("button[role=combobox],[role=combobox]").first(); if (await cb.count()) { await cb.click({ timeout: 2500 }).catch(() => {}); await page.waitForTimeout(800); const opts = page.locator("[role=option]"); const oc = await opts.count(); for (let i = 0; i < oc; i++) { const ot = (await opts.nth(i).innerText().catch(() => "")) || ""; if (!/none/i.test(ot)) { await opts.nth(i).click({ timeout: 2000 }).catch(() => {}); break; } } } } catch (e) {}
           }
-          personalProof.phone = await fill(
-            'input[name="MobilePhone_Text"]',
-            profile.phone,
-          );
+          if (cfg.key === "halic") {
+            const phoneDigits = String(profile.phone || "").replace(/\D/g, "");
+            const countryCode = profile.nationality === "Bangladesh" ? "880" : "";
+            const localPhone =
+              countryCode && phoneDigits.startsWith(countryCode)
+                ? phoneDigits.slice(countryCode.length)
+                : phoneDigits;
+            let countryCodeProof = false;
+            const phoneCountry = page.locator('button[name="phoneWithCountryCode"]').first();
+            if (await phoneCountry.count()) {
+              await phoneCountry.click({ timeout: 4000 }).catch(() => {});
+              await page.waitForTimeout(400);
+              const option = page
+                .getByRole("option")
+                .filter({ hasText: /Bangladesh|\+880/ })
+                .first();
+              if (await option.count()) {
+                await option.click({ timeout: 4000 }).catch(() => {});
+                const phoneCountryText =
+                  (await phoneCountry.innerText().catch(() => "")) || "";
+                countryCodeProof = /Bangladesh|\+?880/.test(phoneCountryText);
+              }
+            }
+            personalProof.phone =
+              countryCodeProof &&
+              (await fill('input[name="Mobile_Phone"]', localPhone));
+          } else {
+            personalProof.phone = await fill(
+              'input[name="MobilePhone_Text"]',
+              profile.phone,
+            );
+          }
           personalProof.address = await fill(
             'input[name="Address"]',
             profile.addressStreet || profile.address,
