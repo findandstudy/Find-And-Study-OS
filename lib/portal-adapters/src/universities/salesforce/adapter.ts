@@ -2045,6 +2045,20 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
               }
               if (proved) {
                 uploadedSlots.push(document.slot);
+                const uploadDialog = page
+                  .locator('[role="dialog"],section.slds-modal,.slds-modal')
+                  .filter({ hasText: expectedName })
+                  .last();
+                const doneButton = uploadDialog.getByRole("button", {
+                  name: /^\s*done\s*$/i,
+                });
+                if (
+                  (await uploadDialog.count().catch(() => 0)) > 0 &&
+                  (await doneButton.count().catch(() => 0)) === 1
+                ) {
+                  await doneButton.click({ timeout: 5000 }).catch(() => {});
+                  await page.waitForTimeout(800);
+                }
                 await page.waitForTimeout(4500);
               }
             }
