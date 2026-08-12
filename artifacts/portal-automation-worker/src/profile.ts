@@ -471,11 +471,19 @@ async function downloadFile(url: string, dest: string): Promise<void> {
   // Retry transient failures (network errors, 5xx, 404 races) with a short
   // backoff before giving up — a single hiccup must not cost the upload slot.
   const MAX_ATTEMPTS = 3;
+  // A broken/public object URL used to leave a worker lease in `running`
+  // forever because Node fetch has no default timeout. Keep each candidate
+  // bounded so the signed endpoint or base64 fallback can still be tried and
+  // the queue can write back a useful failure instead of requiring a manual
+  // cancel/reset.
+  const FETCH_TIMEOUT_MS = 15_000;
   let res: Awaited<ReturnType<typeof fetch>> | null = null;
   let lastErr: unknown = null;
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     try {
-      res = await fetch(absUrl);
+      res = await fetch(absUrl, {
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      });
       if (res.ok) break;
       lastErr = new Error(`HTTP ${res.status} downloading ${redactedUrl(absUrl)}`);
     } catch (err) {
