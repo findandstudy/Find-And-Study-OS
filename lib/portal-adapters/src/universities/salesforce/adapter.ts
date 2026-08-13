@@ -12,6 +12,7 @@ import { fold } from "../../programMatch.js";
 import { SALESFORCE_SCHOOLS, type SalesforceSchoolConfig } from "./config.js";
 import {
   chooseSalesforceBinaryCandidate,
+  findSalesforceAppliedProgramMatch,
   hasSalesforceCompletionProof,
   hasSalesforceUploadProof,
   inferSalesforceDocumentSlot,
@@ -159,6 +160,62 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
         } catch {
           return "";
         }
+      };
+      const inspectAppliedPrograms = async (): Promise<{
+        externalRef: string;
+        portalProgram: string;
+      } | null> => {
+        if (cfg.key !== "halic" || !strictMappedPortal) return null;
+        const expectedTarget = resolveSalesforceProgramTarget(
+          profile.programName,
+          profile.programNameMap,
+          profile.programNameMapGeneral,
+        );
+        const expectedCandidates =
+          salesforcePortalProgramCandidates(expectedTarget);
+        const rows = page.locator("tr");
+        const rowCount = await rows.count().catch(() => 0);
+        const appliedRows: Array<{
+          applicationNumber: string;
+          programName: string;
+        }> = [];
+        for (let index = 0; index < rowCount; index++) {
+          const row = rows.nth(index);
+          const cells = await row
+            .locator("td")
+            .evaluateAll((nodes: Element[]) =>
+              nodes.map((node: Element) => ({
+                label: node.getAttribute("data-label") || "",
+                text: (node.textContent || "").replace(/\s+/g, " ").trim(),
+              })),
+            )
+            .catch(() => []);
+          const applicationNumber =
+            cells.find((cell: { label: string }) =>
+              /applied program number/i.test(cell.label),
+            )?.text ||
+            cells.map((cell: { text: string }) => cell.text)
+              .find((text: string) => /^AP\d{6,}$/i.test(text)) ||
+            "";
+          const programName =
+            cells.find((cell: { label: string }) =>
+              /program name/i.test(cell.label),
+            )?.text || "";
+          if (applicationNumber && programName) {
+            appliedRows.push({ applicationNumber, programName });
+          }
+        }
+        const match = findSalesforceAppliedProgramMatch(
+          appliedRows,
+          expectedCandidates,
+        );
+        if (match) {
+          logger.info(`[salesforce:${cfg.key}] applied programme proof`, {
+            externalRef: match.externalRef,
+            portalProgram: match.portalProgram,
+          });
+        }
+        return match;
       };
       const filterTrackApplicant = async (
         query: string,
@@ -426,6 +483,15 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
           await popup.close().catch(() => {});
         }
         await page.waitForTimeout(4500);
+        const appliedProgram = await inspectAppliedPrograms();
+        if (appliedProgram) {
+          ownedCompletedApplication = {
+            externalRef: appliedProgram.externalRef,
+            portalProgram: appliedProgram.portalProgram,
+            programMismatch: false,
+          };
+          return false;
+        }
         const wizardAfterAction = await onWizard();
         if (wizardAfterAction) return true;
 
@@ -529,7 +595,7 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
           portalProgram: string;
           programMismatch: boolean;
         };
-        return {
+        const completedResult: SubmitResult = {
           alreadyExists: true,
           submitted: false,
           programMissing: false,
@@ -545,6 +611,11 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
               : {}),
           },
         };
+        markSalesforceVerifiedSuccess(
+          completedResult,
+          "exact_application_row",
+        );
+        return completedResult;
       }
       for (let attempt = 0; attempt < 3 && !(await onWizard()); attempt++) await gotoAppForm();
       await page.waitForTimeout(2000);
@@ -995,6 +1066,22 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
         await page.waitForTimeout(2500);
         const txt = await bodyText();
         const activeStage = await readActiveStage();
+        const appliedProgram = await inspectAppliedPrograms();
+        if (appliedProgram) {
+          result.alreadyExists = true;
+          markSalesforceVerifiedSuccess(
+            result,
+            "exact_application_row",
+          );
+          result.externalRef = appliedProgram.externalRef;
+          result.detail = `${cfg.label}: application already completed in portal`;
+          result.meta = {
+            ...result.meta,
+            existingPortalApplication: true,
+            portalProgram: appliedProgram.portalProgram,
+          };
+          break;
+        }
         if (
           dryRun &&
           activeStage === "Review and Submit" &&
@@ -2240,7 +2327,18 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
             }
             await page.waitForTimeout(6000);
             const finalText = await bodyText();
-            if (DUP.test(finalText)) {
+            const appliedProgram = await inspectAppliedPrograms();
+            if (appliedProgram) {
+              markSalesforceVerifiedSuccess(
+                result,
+                "exact_application_row",
+              );
+              result.externalRef = appliedProgram.externalRef;
+              result.meta = {
+                ...result.meta,
+                portalProgram: appliedProgram.portalProgram,
+              };
+            } else if (DUP.test(finalText)) {
               result.alreadyExists = true;
             } else if (!strictMappedPortal) {
               result.submitted = true;

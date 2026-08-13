@@ -67,6 +67,56 @@ export function salesforceProgramCardMatchesCandidate(
   return actual === expected;
 }
 
+export interface SalesforceAppliedProgramRow {
+  applicationNumber: string;
+  programName: string;
+}
+
+export interface SalesforceAppliedProgramMatch {
+  externalRef: string;
+  portalProgram: string;
+}
+
+/**
+ * Haliç renders durable application references in the Applicant Detail
+ * "Applied Programs" table. The table may omit the language suffix that was
+ * shown during programme selection, so compare both the exact portal label and
+ * its exact base label. More than one matching row is ambiguous and therefore
+ * never counts as completion proof.
+ */
+export function findSalesforceAppliedProgramMatch(
+  rows: SalesforceAppliedProgramRow[],
+  expectedCandidates: string[],
+): SalesforceAppliedProgramMatch | null {
+  const expected = new Set<string>();
+  for (const candidate of expectedCandidates) {
+    const exact = fold(candidate);
+    if (!exact) continue;
+    expected.add(exact);
+    const withoutLanguage = fold(
+      candidate.replace(
+        /\s*(?:-\s*|\(\s*)(?:English|Turkish)\s*\)?\s*$/i,
+        "",
+      ),
+    );
+    if (withoutLanguage) expected.add(withoutLanguage);
+  }
+  if (expected.size === 0) return null;
+
+  const matches = rows.filter((row) => {
+    const applicationNumber = row.applicationNumber.trim();
+    return (
+      /^AP\d{6,}$/i.test(applicationNumber) &&
+      expected.has(fold(row.programName))
+    );
+  });
+  if (matches.length !== 1) return null;
+  return {
+    externalRef: matches[0].applicationNumber.trim(),
+    portalProgram: matches[0].programName.replace(/\s+/g, " ").trim(),
+  };
+}
+
 /**
  * Resolve the live portal label without relying on the CRM catalogue id.
  *

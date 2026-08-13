@@ -2,10 +2,57 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   chooseSalesforceBinaryCandidate,
+  findSalesforceAppliedProgramMatch,
   hasSalesforceCompletionProof,
   hasSalesforceUploadProof,
   salesforceProgramCardMatchesCandidate,
 } from "./portalState.js";
+
+test("Haliç Applied Programs proves one exact application and rejects ambiguity", () => {
+  assert.deepEqual(
+    findSalesforceAppliedProgramMatch(
+      [
+        {
+          applicationNumber: "AP0101755",
+          programName: "Robotics and Artificial Intelligence",
+        },
+      ],
+      ["Robotics and Artificial Intelligence (Turkish)"],
+    ),
+    {
+      externalRef: "AP0101755",
+      portalProgram: "Robotics and Artificial Intelligence",
+    },
+  );
+  assert.equal(
+    findSalesforceAppliedProgramMatch(
+      [
+        {
+          applicationNumber: "AP0101755",
+          programName: "Robotics and Artificial Intelligence",
+        },
+        {
+          applicationNumber: "AP0101756",
+          programName: "Robotics and Artificial Intelligence",
+        },
+      ],
+      ["Robotics and Artificial Intelligence (Turkish)"],
+    ),
+    null,
+  );
+  assert.equal(
+    findSalesforceAppliedProgramMatch(
+      [
+        {
+          applicationNumber: "AP0101755",
+          programName: "Robotics and Artificial Intelligence",
+        },
+      ],
+      ["Artificial Intelligence Operations (Turkish)"],
+    ),
+    null,
+  );
+});
 
 test("Salesforce programme card fallback matches only the exact card", () => {
   assert.equal(
