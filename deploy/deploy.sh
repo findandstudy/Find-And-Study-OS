@@ -31,7 +31,7 @@ CURRENT_RELEASE_LINK="${CURRENT_RELEASE_LINK:-}"
 LOG_DIR="${LOG_DIR:-}"
 PORT="${PORT:-5000}"
 CANDIDATE_PORT="${CANDIDATE_PORT:-5057}"
-NGINX_BACKUP_PORT="5057"
+NGINX_BACKUP_PORT="${NGINX_BACKUP_PORT:-$CANDIDATE_PORT}"
 
 for path_name in RELEASES_DIR CURRENT_RELEASE_LINK LOG_DIR; do
   path_value="${!path_name:-}"
@@ -40,7 +40,7 @@ for path_name in RELEASES_DIR CURRENT_RELEASE_LINK LOG_DIR; do
 done
 [ "$PORT" != "$CANDIDATE_PORT" ] || fail "CANDIDATE_PORT must differ from PORT"
 [ "$CANDIDATE_PORT" = "$NGINX_BACKUP_PORT" ] || \
-  fail "CANDIDATE_PORT must match deploy/nginx.conf backup port $NGINX_BACKUP_PORT"
+  fail "CANDIDATE_PORT must match NGINX_BACKUP_PORT ($NGINX_BACKUP_PORT)"
 [[ "$PORT" =~ ^[0-9]{2,5}$ ]] || fail "PORT must be numeric"
 [[ "$CANDIDATE_PORT" =~ ^[0-9]{2,5}$ ]] || fail "CANDIDATE_PORT must be numeric"
 
