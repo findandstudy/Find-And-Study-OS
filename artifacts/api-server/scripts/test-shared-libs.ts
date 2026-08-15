@@ -6,6 +6,8 @@
  */
 import { test } from "node:test";
 import { strict as assert } from "node:assert";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import {
   STAFF_ROLES,
   ADMIN_ROLES,
@@ -24,6 +26,31 @@ import {
   APPLICATION_DOCUMENT_MAX_SIZE,
   validateApplicationDocumentFile,
 } from "@workspace/file-upload-validation";
+import {
+  buildOrganizationSchema,
+  CORPORATE_FACTS,
+  renderLlmsText,
+} from "@workspace/corporate-facts";
+
+test("corporate schema and llms.txt use the same canonical facts", () => {
+  const schema = buildOrganizationSchema() as Record<string, unknown>;
+  const llms = renderLlmsText();
+  assert.equal(schema.name, CORPORATE_FACTS.name);
+  assert.equal(schema.url, CORPORATE_FACTS.canonicalUrl);
+  assert.match(llms, new RegExp(CORPORATE_FACTS.name));
+  assert.match(llms, new RegExp(CORPORATE_FACTS.applicationUrl.replaceAll(".", "\\.")));
+  assert.doesNotMatch(llms, /Founded|founded|2010|2018|500\+|70\+/);
+});
+
+test("portal routing rejects stale SIT memberships before enqueue", () => {
+  const source = readFileSync(
+    fileURLToPath(new URL("../src/lib/portalAutoTrigger.ts", import.meta.url)),
+    "utf8",
+  );
+  assert.match(source, /aggregator\.adapterKey === "sit"/);
+  assert.match(source, /isSitExcludedUniversity\(memberName\)/);
+  assert.match(source, /ignored excluded SIT membership/);
+});
 
 test("@workspace/roles: STAFF_ROLES contains the canonical set", () => {
   assert.ok(STAFF_ROLES.includes("super_admin"));

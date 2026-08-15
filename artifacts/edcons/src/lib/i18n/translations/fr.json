@@ -1108,7 +1108,8 @@
     },
     "error": {
       "window24h": "Hors de la fenêtre de réponse WhatsApp de 24h. Utilisez un modèle.",
-      "sendMediaFailed": "Échec de l'envoi du média"
+      "sendMediaFailed": "Échec de l'envoi du média",
+      "temporaryMediaUnavailable": "Le service de fichiers est temporairement indisponible. Patientez quelques secondes, puis réessayez."
     },
     "sort": {
       "toggle": "Changer l'ordre de tri",
@@ -1261,6 +1262,7 @@
       "cancel": "Annuler",
       "docsSaveFailed": "{count} document(s) n'ont pas pu être enregistrés dans le profil étudiant.",
       "studentCreated": "Étudiant créé",
+      "existingStudentLinked": "Le profil étudiant existant a été associé à cette conversation",
       "studentCreatedWithDocs": "Étudiant créé — {count} document(s) enregistré(s) dans le profil",
       "programPendingNote": "La liste sera mise à jour une fois le programme sélectionné",
       "programScopedNote": "Exigences pour {name}"
@@ -3324,6 +3326,7 @@
     "noProgramsSelectedDesc": "Sélectionnez un ou plusieurs programmes pour générer une proposition.",
     "pdfGenerated": "PDF généré",
     "pdfGenerationFailed": "Échec de génération du PDF",
+    "temporaryServiceUnavailable": "Le service est temporairement indisponible. Patientez quelques secondes, puis essayez à nouveau de créer le PDF.",
     "unknownError": "Erreur inconnue",
     "excelExported": "Excel exporté",
     "country": "Pays",
@@ -3681,7 +3684,8 @@
     "reviewOnlyNotice": "Examen uniquement : la validation ne relance pas le portail et ne modifie ni le code ni les spécifications.",
     "approvedToast": "Validation humaine enregistrée",
     "rejectedToast": "Proposal rejected",
-    "reviewError": "Action could not be reviewed"
+    "reviewError": "Action could not be reviewed",
+    "suppressedGuardianNotice": "{count} anciens enregistrements Guardian sans spécification de portail active sont conservés dans le journal d’audit et masqués ici. Les nouveaux diagnostics sans proposition de staging valide ne créent plus d’actions d’approbation en échec."
   },
   "scanner": {
     "scanWithCamera": "Scanner avec la caméra",
@@ -6072,7 +6076,10 @@
       "contract": "Contract",
       "payment": "Payment",
       "commission": "Commission",
-      "partner": "Partner"
+      "partner": "Partenaire",
+      "human_request": "Demande d’un conseiller",
+      "visa_documents": "Visa et documents",
+      "supplier": "Fournisseur / gestionnaire de résidence"
     },
     "testTitle": "Test console",
     "testHint": "Run the bot brain against a sample message. Nothing is ever sent.",

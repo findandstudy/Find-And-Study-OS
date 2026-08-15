@@ -3,12 +3,13 @@ import {
   conversationsTable,
   messagesTable,
   externalContactsTable,
+  leadsTable,
   countriesTable,
   universitiesTable,
   canonicalCountry,
 } from "@workspace/db";
 import crypto from "node:crypto";
-import { and, asc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, or, sql } from "drizzle-orm";
 import { getAnthropicClient } from "@workspace/integrations-anthropic-ai";
 import {
   sendWhatsAppText,
@@ -25,6 +26,7 @@ import {
   recordInboundDocuments,
   computeMissingDocGroups,
   buildMissingDocsInstruction,
+  getAccommodationSlotInstruction,
 } from "./leadCapture";
 import { inboxBus } from "./eventBus";
 import { isAiAgentWithinWorkingHours } from "./botSchedule";
@@ -35,7 +37,7 @@ import {
   type BotLanguage,
   type EscalationTopic,
 } from "./botBrain";
-import { getAiAgentConfig, DEFAULT_BOT_MODEL } from "./aiAgentConfig";
+import { getAiAgentConfig, DEFAULT_BOT_MODEL, type AiAgentConfig } from "./aiAgentConfig";
 import { resolveZernioAccount, sendViaZernio } from "./zernioSend";
 import { assignStuckConversationById } from "../stuckConversationAssigner";
 import {
@@ -45,6 +47,12 @@ import {
   type EnforcedProgramFilters,
 } from "./programSearchTool";
 import { isProgramSearchToolEnabled } from "./knowledgeSources";
+import {
+  executeDormBookingCatalogTool,
+  isDormBookingCatalogToolEnabled,
+  searchDormBookingCatalogToolDefinition,
+  SEARCH_DORMBOOKING_CATALOG_TOOL_NAME,
+} from "./dormBookingCatalogTool";
 import { retrieveKnowledgeChunks } from "./knowledgeRetrieval";
 import { requestsEmbedHumanHandoff } from "../embedChatSession";
 import { normalizeEmbedChatLocale } from "../embedChatI18n";
@@ -126,7 +134,7 @@ const FR_HINTS = [
   "licence", "master",
 ];
 const FA_HINTS = [
-  "سلام", "دانشگاه", "رشته", "تحصیل", "درخواست", "شهریه", "ممنون",
+  "دانشگاه", "رشته", "تحصیل", "درخواست", "شهریه", "ممنون",
   "میخواهم", "می‌خواهم", "کارشناسی", "کارشناسی ارشد",
 ];
 const ES_HINTS = [
@@ -159,6 +167,97 @@ export function detectLanguage(text: string, fallback: BotLanguage = "en"): BotL
   if (ES_HINTS.some((h) => lower.includes(h))) return "es";
   if (ID_HINTS.some((h) => lower.includes(h))) return "id";
   return fallback;
+}
+
+function phoneLanguageHint(phone: string | null | undefined): BotLanguage {
+  const normalized = String(phone ?? "").replace(/\D/g, "");
+  if (normalized.startsWith("90")) return "tr";
+  if (["966", "964", "963", "970", "971"].some((code) => normalized.startsWith(code))) return "ar";
+  if (normalized.startsWith("98")) return "fa";
+  if (normalized.startsWith("7")) return "ru";
+  return "en";
+}
+
+interface ConversationLanguageState {
+  language: BotLanguage;
+  metadata: Record<string, unknown>;
+}
+
+/**
+ * Persist a stable language choice in conversation metadata. A detected switch
+ * is accepted only after two consecutive messages in the new language. This
+ * prevents Turkish proper nouns, short acknowledgements and phone-code hints
+ * from making the bot jump languages mid-conversation.
+ */
+export function resolveConversationLanguage(
+  message: string,
+  metadata: Record<string, unknown>,
+  phone?: string | null,
+): ConversationLanguageState {
+  const supported = new Set<BotLanguage>(["tr", "en", "ar", "fa", "fr", "es", "ru", "zh", "hi", "id"]);
+  const locked = supported.has(metadata.botLanguage as BotLanguage)
+    ? metadata.botLanguage as BotLanguage
+    : null;
+  const detected = detectLanguage(message, locked ?? phoneLanguageHint(phone));
+  if (!locked) {
+    return { language: detected, metadata: { ...metadata, botLanguage: detected, botLanguageCandidate: null, botLanguageCandidateCount: 0 } };
+  }
+  if (detected === locked) {
+    return { language: locked, metadata: { ...metadata, botLanguageCandidate: null, botLanguageCandidateCount: 0 } };
+  }
+  const previousCandidate = metadata.botLanguageCandidate === detected;
+  const count = previousCandidate ? Number(metadata.botLanguageCandidateCount ?? 0) + 1 : 1;
+  if (count >= 2) {
+    return { language: detected, metadata: { ...metadata, botLanguage: detected, botLanguageCandidate: null, botLanguageCandidateCount: 0 } };
+  }
+  return { language: locked, metadata: { ...metadata, botLanguageCandidate: detected, botLanguageCandidateCount: count } };
+}
+
+export function classifyNonStudentContact(contact: {
+  displayName?: string | null;
+  email?: string | null;
+}): "supplier" | "internal" | null {
+  const name = String(contact.displayName ?? "").toLowerCase();
+  const email = String(contact.email ?? "").trim().toLowerCase();
+  if (/@(?:findandstudy|dormbooking)\.com$/.test(email)) return "internal";
+  if (/(dormitory|student dormitory|\byurt\b|\byurdu\b|\bapart\b|\bhostel\b)/i.test(name)) return "supplier";
+  const domain = email.split("@")[1] ?? "";
+  const publicMail = /^(gmail|googlemail|hotmail|outlook|yahoo|icloud|protonmail)\./.test(domain);
+  if (!publicMail && /(dorm|yurt|apart|hostel|studenthouse|student-home)/.test(domain)) return "supplier";
+  return null;
+}
+
+async function loadUnifiedContactHistory(
+  contact: typeof externalContactsTable.$inferSelect | null,
+  currentConversationId: number,
+): Promise<Array<{ direction: string; content: string; metadata: unknown }>> {
+  let conversationIds = [currentConversationId];
+  if (contact) {
+    const email = contact.email?.trim().toLowerCase() ?? "";
+    const matches = await db.select({ id: externalContactsTable.id })
+      .from(externalContactsTable)
+      .where(or(
+        contact.phoneE164 ? eq(externalContactsTable.phoneE164, contact.phoneE164) : sql`false`,
+        email ? eq(sql`lower(${externalContactsTable.email})`, email) : sql`false`,
+        eq(externalContactsTable.id, contact.id),
+      ));
+    const contactIds = matches.map((row) => row.id);
+    if (contactIds.length > 0) {
+      const rows = await db.select({ id: conversationsTable.id })
+        .from(conversationsTable)
+        .where(inArray(conversationsTable.externalContactId, contactIds));
+      conversationIds = [...new Set([...conversationIds, ...rows.map((row) => row.id)])];
+    }
+  }
+  return db.select({
+    direction: messagesTable.direction,
+    content: messagesTable.content,
+    metadata: messagesTable.metadata,
+  })
+    .from(messagesTable)
+    .where(inArray(messagesTable.conversationId, conversationIds))
+    .orderBy(asc(messagesTable.createdAt))
+    .then((rows) => rows.slice(-BOT_HISTORY_LIMIT));
 }
 
 // ---------------------------------------------------------------------------
@@ -227,6 +326,11 @@ async function generateBotReply(input: BotReplyInput): Promise<string> {
   if (__botReplyOverride) return __botReplyOverride(input);
   const anthropic = await getAnthropicClient();
   const { enabled: toolsEnabled } = await isProgramSearchToolEnabled(input.aiBotId);
+  const dormCatalogEnabled = await isDormBookingCatalogToolEnabled(input.aiBotId);
+  const availableTools = [
+    ...(toolsEnabled ? [searchProgramsToolDefinition] : []),
+    ...(dormCatalogEnabled ? [searchDormBookingCatalogToolDefinition] : []),
+  ];
 
   type AnthropicMessage = { role: "user" | "assistant"; content: any };
   const conversation: AnthropicMessage[] = input.messages.map((m) => ({
@@ -235,14 +339,14 @@ async function generateBotReply(input: BotReplyInput): Promise<string> {
   }));
 
   for (let round = 0; round <= MAX_TOOL_ROUNDS; round++) {
-    const offerTools = toolsEnabled && round < MAX_TOOL_ROUNDS;
+    const offerTools = availableTools.length > 0 && round < MAX_TOOL_ROUNDS;
     const message = await anthropic.messages.create({
       model: input.model,
       max_tokens: 600,
       temperature: input.temperature,
       system: input.systemPrompt,
       messages: conversation,
-      ...(offerTools ? { tools: [searchProgramsToolDefinition] } : {}),
+      ...(offerTools ? { tools: availableTools } : {}),
     });
 
     if (message.stop_reason === "tool_use") {
@@ -263,7 +367,9 @@ async function generateBotReply(input: BotReplyInput): Promise<string> {
                       input.aiBotId,
                       input.enforcedProgramFilters,
                     )
-                  : { error: `unknown_tool:${block.name}` };
+                  : block.name === SEARCH_DORMBOOKING_CATALOG_TOOL_NAME
+                    ? await executeDormBookingCatalogTool(block.input || {}, input.aiBotId)
+                    : { error: `unknown_tool:${block.name}` };
             } catch (err) {
               console.error("[bot] tool execution failed:", block.name, err);
               resultPayload = { error: "tool_execution_failed" };
@@ -420,6 +526,91 @@ async function sendBotReply(input: BotSendInput): Promise<BotSendResult> {
   return { ok: false, error: `unsupported_channel:${input.channel}` };
 }
 
+function localizedHandoff(config: AiAgentConfig, language: BotLanguage): string {
+  return config.handoffMessages?.[language]?.trim()
+    || config.handoffMessages?.en?.trim()
+    || config.handoffMessage.trim();
+}
+
+async function handoffConversation(input: {
+  conv: typeof conversationsTable.$inferSelect;
+  config: AiAgentConfig;
+  language: BotLanguage;
+  recipient: string;
+  zernio: { externalAccountId: string; externalThreadId: string } | null;
+  inboundMessageId: number;
+  topic: EscalationTopic | "reply_limit" | "supplier_profile";
+}): Promise<AutoReplyOutcome> {
+  const handoffText = localizedHandoff(input.config, input.language);
+  let sendOk = true;
+  if (handoffText) {
+    const [pending] = await db.insert(messagesTable).values({
+      conversationId: input.conv.id,
+      senderId: null,
+      content: handoffText,
+      channel: input.conv.channel,
+      direction: "outbound",
+      status: "pending",
+      metadata: { botSent: true, botHandoff: true, language: input.language, topic: input.topic },
+    }).returning();
+    const result = await sendBotReply({
+      channel: input.conv.channel,
+      recipient: input.recipient,
+      text: handoffText,
+      channelAccountId: input.conv.channelAccountId,
+      communicationPipelineId: input.conv.communicationPipelineId,
+      zernio: input.zernio,
+    });
+    sendOk = result.ok;
+    await db.update(messagesTable).set({
+      status: result.ok ? "sent" : "failed",
+      externalMessageId: result.externalMessageId || null,
+      failedReason: result.ok ? null : result.error || "send_failed",
+      sentAt: result.ok ? new Date() : null,
+      metadata: {
+        botSent: true,
+        botHandoff: true,
+        language: input.language,
+        topic: input.topic,
+        simulated: result.simulated,
+        ...(result.ok ? {} : { error: result.error }),
+      },
+    }).where(eq(messagesTable.id, pending.id));
+  }
+
+  await db.insert(messagesTable).values({
+    conversationId: input.conv.id,
+    senderId: null,
+    content: `AI devir notu: neden=${input.topic}; dil=${input.language}; açık konu son gelen mesajdır.`,
+    channel: "internal",
+    direction: "internal",
+    status: "sent",
+    sentAt: new Date(),
+    metadata: { botHandoffNote: true, systemEvent: true, inboundMessageId: input.inboundMessageId },
+  });
+  await db.update(conversationsTable).set({
+    botEnabled: false,
+    needsHuman: true,
+    botLastHandledMessageId: input.inboundMessageId,
+    ...(sendOk && handoffText ? { lastMessageAt: new Date(), lastMessagePreview: handoffText.slice(0, 200) } : {}),
+  }).where(eq(conversationsTable.id, input.conv.id));
+  triggerStuckConversationAssignment(input.conv.id);
+  inboxBus.publish({
+    type: "message",
+    conversationId: input.conv.id,
+    channel: input.conv.channel,
+    assignedToId: input.conv.assignedToId ?? null,
+    unmatched: input.conv.unmatched,
+    direction: "outbound",
+  });
+  const isSensitiveEscalation = input.topic !== "reply_limit"
+    && input.topic !== "supplier_profile"
+    && input.topic !== "human_request";
+  return isSensitiveEscalation
+    ? { acted: true, reason: "escalated", topic: input.topic as EscalationTopic }
+    : { acted: true, reason: "handoff" };
+}
+
 export interface BotTemplateSendInput {
   channel: string;
   toPhoneE164: string;
@@ -439,7 +630,7 @@ export function __setBotTemplateSendOverrideForTests(
 }
 
 // Channel-aware approved-template send (used outside the 24h window).
-async function sendBotTemplate(input: BotTemplateSendInput): Promise<BotSendResult> {
+export async function sendBotTemplate(input: BotTemplateSendInput): Promise<BotSendResult> {
   if (__botTemplateSendOverride) return __botTemplateSendOverride(input);
   if (input.channel === "whatsapp") {
     const cfg: WhatsAppConfig =
@@ -459,7 +650,7 @@ async function sendBotTemplate(input: BotTemplateSendInput): Promise<BotSendResu
   return { ok: false, error: `unsupported_channel:${input.channel}` };
 }
 
-interface ReengagementTemplate {
+export interface ReengagementTemplate {
   externalTemplateName: string;
   language: string;
   content: string;
@@ -473,7 +664,7 @@ interface ReengagementTemplate {
  * NOT manage templates here — that's Task #61's UI; we only consume its rows.
  * Returns null when none is configured (caller defers to staff).
  */
-async function resolveReengagementTemplate(): Promise<ReengagementTemplate | null> {
+export async function resolveReengagementTemplate(): Promise<ReengagementTemplate | null> {
   const [tpl] = await db
     .select()
     .from(messageTemplatesTable)
@@ -546,14 +737,14 @@ export async function maybeAutoReply(opts: {
   // no pin keep using the historical default configuration.
   const config = await getAiAgentConfig(conv.aiBotId);
 
-  if (conv.externalContactId) {
-    const [contact] = await db
-      .select({ isBlocked: externalContactsTable.isBlocked })
+  const [contact] = conv.externalContactId
+    ? await db
+      .select()
       .from(externalContactsTable)
       .where(eq(externalContactsTable.id, conv.externalContactId))
-      .limit(1);
-    if (contact?.isBlocked) return { acted: false, reason: "contact_blocked" };
-  }
+      .limit(1)
+    : [null];
+  if (contact?.isBlocked) return { acted: false, reason: "contact_blocked" };
 
   // Global master switch: when the bot is off agency-wide, no auto-replies are
   // sent regardless of the per-conversation toggle.
@@ -601,6 +792,65 @@ export async function maybeAutoReply(opts: {
   const conversationMetadata = conv.metadata && typeof conv.metadata === "object"
     ? conv.metadata as Record<string, unknown>
     : {};
+  const languageState = resolveConversationLanguage(
+    msg.content,
+    conversationMetadata,
+    contact?.phoneE164 || contact?.phone,
+  );
+  const language = languageState.language;
+  const languageMetadataPatch = {
+    botLanguage: languageState.metadata.botLanguage ?? null,
+    botLanguageCandidate: languageState.metadata.botLanguageCandidate ?? null,
+    botLanguageCandidateCount: languageState.metadata.botLanguageCandidateCount ?? 0,
+  };
+
+  // Claim before any handoff send so duplicate webhook deliveries cannot send
+  // the localized transfer message more than once.
+  const claimed = await db
+    .update(conversationsTable)
+    .set({
+      botLastHandledMessageId: inboundMessageId,
+      metadata: sql`coalesce(${conversationsTable.metadata}, '{}'::jsonb) || ${JSON.stringify(languageMetadataPatch)}::jsonb`,
+    })
+    .where(
+      and(
+        eq(conversationsTable.id, conversationId),
+        sql`(${conversationsTable.botLastHandledMessageId} IS NULL OR ${conversationsTable.botLastHandledMessageId} < ${inboundMessageId})`,
+      ),
+    )
+    .returning({ id: conversationsTable.id });
+  if (claimed.length === 0) return { acted: false, reason: "already_handled" };
+
+  const toPhone = contact?.phoneE164 || contact?.phone || null;
+  const isMetaChannel = conv.channel === "messenger" || conv.channel === "instagram";
+  const recipient = conv.channel === "whatsapp"
+    ? toPhone
+    : isMetaChannel
+      ? contact?.externalId || conv.externalThreadId || null
+      : toPhone;
+  const zernioRoute = zernioAcct && conv.externalThreadId
+    ? { externalAccountId: zernioAcct.externalAccountId, externalThreadId: conv.externalThreadId }
+    : null;
+
+  const nonStudentType = contact ? classifyNonStudentContact(contact) : null;
+  if (!isInternal && nonStudentType) {
+    await db.update(externalContactsTable).set({
+      contactType: nonStudentType,
+      metadata: sql`coalesce(${externalContactsTable.metadata}, '{}'::jsonb) || jsonb_build_object('contactType', ${nonStudentType}, 'aiAutoDisabled', true)`,
+    }).where(eq(externalContactsTable.id, contact!.id));
+    if (contact!.leadId) {
+      await db.update(leadsTable).set({ contactType: nonStudentType }).where(eq(leadsTable.id, contact!.leadId));
+    }
+    return handoffConversation({
+      conv,
+      config,
+      language,
+      recipient: recipient || "",
+      zernio: zernioRoute,
+      inboundMessageId,
+      topic: "supplier_profile",
+    });
+  }
   const hasEmbedChatbotScope =
     conversationMetadata.chatbotScope !== null &&
     typeof conversationMetadata.chatbotScope === "object";
@@ -610,55 +860,20 @@ export async function maybeAutoReply(opts: {
   // deterministic instead of relying on the language model to interpret the
   // request correctly.
   if (!isInternal && hasEmbedChatbotScope && requestsEmbedHumanHandoff(msg.content)) {
-    await db
-      .update(conversationsTable)
-      .set({ botEnabled: false, needsHuman: true, botLastHandledMessageId: inboundMessageId })
-      .where(eq(conversationsTable.id, conversationId));
-    triggerStuckConversationAssignment(conversationId);
-    inboxBus.publish({
-      type: "message",
-      conversationId,
-      channel: conv.channel,
-      assignedToId: conv.assignedToId ?? null,
-      unmatched: conv.unmatched,
-      direction: "inbound",
+    return handoffConversation({
+      conv, config, language, recipient: recipient || "", zernio: zernioRoute,
+      inboundMessageId, topic: "human_request",
     });
-    return { acted: true, reason: "handoff" };
   }
 
   // Escalation gate (code layer): never auto-reply on sensitive topics. Flag
   // the conversation "needs human" and turn the bot off so staff take over.
   const topic = isInternal ? null : detectEscalation(msg.content, config.escalationKeywords);
   if (topic) {
-    await db
-      .update(conversationsTable)
-      .set({ botEnabled: false, needsHuman: true, botLastHandledMessageId: inboundMessageId })
-      .where(eq(conversationsTable.id, conversationId));
-    triggerStuckConversationAssignment(conversationId);
-    inboxBus.publish({
-      type: "message",
-      conversationId,
-      channel: conv.channel,
-      assignedToId: conv.assignedToId ?? null,
-      unmatched: conv.unmatched,
-      direction: "inbound",
+    return handoffConversation({
+      conv, config, language, recipient: recipient || "", zernio: zernioRoute,
+      inboundMessageId, topic,
     });
-    return { acted: true, reason: "escalated", topic };
-  }
-
-  // Idempotency claim: only the worker that advances the marker proceeds.
-  const claimed = await db
-    .update(conversationsTable)
-    .set({ botLastHandledMessageId: inboundMessageId })
-    .where(
-      and(
-        eq(conversationsTable.id, conversationId),
-        sql`(${conversationsTable.botLastHandledMessageId} IS NULL OR ${conversationsTable.botLastHandledMessageId} < ${inboundMessageId})`,
-      ),
-    )
-    .returning({ id: conversationsTable.id });
-  if (claimed.length === 0) {
-    return { acted: false, reason: "already_handled" };
   }
 
   // FAZ 3 — advance the funnel. On every handled inbound (while the bot is on)
@@ -667,17 +882,20 @@ export async function maybeAutoReply(opts: {
   let captureLeadId: number | null = null;
   let captureStudentId: number | null = null;
   let captureLevel: string | null = null;
+  const isDormBookingAgent = /\bDorm\s*Booking\b|accommodation assistant/i.test(config.knowledgeBase);
   if (!isInternal) {
     try {
       const capture = await captureLeadFromConversation({ conversationId });
       captureLeadId = capture.leadId;
       captureStudentId = capture.studentId;
       captureLevel = capture.level;
-      await recordInboundDocuments({
-        metadata: msg.metadata,
-        leadId: capture.leadId,
-        studentId: capture.studentId,
-      });
+      if (!isDormBookingAgent) {
+        await recordInboundDocuments({
+          metadata: msg.metadata,
+          leadId: capture.leadId,
+          studentId: capture.studentId,
+        });
+      }
     } catch (err) {
       console.error("[bot] lead capture failed:", err);
     }
@@ -686,29 +904,10 @@ export async function maybeAutoReply(opts: {
   // Resolve the outbound recipient. WhatsApp addresses by phone (E.164);
   // Messenger / Instagram address by the user's page-/IG-scoped id stored as
   // externalId. Needed by both the re-engagement and free-form reply paths.
-  const [contact] = conv.externalContactId
-    ? await db
-        .select()
-        .from(externalContactsTable)
-        .where(eq(externalContactsTable.id, conv.externalContactId))
-    : [null];
-  const toPhone = contact?.phoneE164 || contact?.phone || null;
-  const isMetaChannel = conv.channel === "messenger" || conv.channel === "instagram";
-  const recipient = conv.channel === "whatsapp"
-    ? toPhone
-    : isMetaChannel
-      ? contact?.externalId || conv.externalThreadId || null
-      : toPhone;
-
   // Zernio-hosted conversation? Then ALL bot sends must go through the Zernio
   // API (same as manual staff replies) — the direct Meta senders reject these
   // accounts ("The account is not registered"). Zernio addresses by thread id,
   // so the phone / 24h-template gates below don't apply.
-  const zernioRoute =
-    zernioAcct && conv.externalThreadId
-      ? { externalAccountId: zernioAcct.externalAccountId, externalThreadId: conv.externalThreadId }
-      : null;
-
   // 24h service window: free-form replies are only allowed within 24h of the
   // last inbound message (Meta policy). For WhatsApp, re-engage with an
   // approved template (Task #61 message_templates) if one is configured;
@@ -792,79 +991,14 @@ export async function maybeAutoReply(opts: {
   // bot here means subsequent inbound messages short-circuit on the per-conv
   // gate, so the handoff is never sent twice.
   if (!isInternal && config.maxConsecutiveReplies > 0 && (conv.botReplyCount ?? 0) >= config.maxConsecutiveReplies) {
-    const handoffText = config.handoffMessage.trim();
-    let sendOk = true;
-    if (handoffText) {
-      const [pendingHandoff] = await db
-        .insert(messagesTable)
-        .values({
-          conversationId,
-          senderId: null,
-          content: handoffText,
-          channel: conv.channel,
-          direction: "outbound",
-          status: "pending",
-          metadata: { botSent: true, botHandoff: true },
-        })
-        .returning();
-      const handoffResult = await sendBotReply({
-        channel: conv.channel,
-        recipient: recipient || "",
-        text: handoffText,
-        channelAccountId: conv.channelAccountId,
-        communicationPipelineId: conv.communicationPipelineId,
-        zernio: zernioRoute,
-      });
-      sendOk = handoffResult.ok;
-      await db
-        .update(messagesTable)
-        .set({
-          status: handoffResult.ok ? "sent" : "failed",
-          externalMessageId: handoffResult.externalMessageId || null,
-          failedReason: handoffResult.ok ? null : handoffResult.error || "send_failed",
-          sentAt: handoffResult.ok ? new Date() : null,
-          metadata: {
-            botSent: true,
-            botHandoff: true,
-            simulated: handoffResult.simulated,
-            ...(handoffResult.ok ? {} : { error: handoffResult.error }),
-          },
-        })
-        .where(eq(messagesTable.id, pendingHandoff.id));
-    }
-    await db
-      .update(conversationsTable)
-      .set({
-        botEnabled: false,
-        needsHuman: true,
-        ...(sendOk && handoffText
-          ? { lastMessageAt: new Date(), lastMessagePreview: handoffText.slice(0, 200) }
-          : {}),
-      })
-      .where(eq(conversationsTable.id, conversationId));
-    triggerStuckConversationAssignment(conversationId);
-    inboxBus.publish({
-      type: "message",
-      conversationId,
-      channel: conv.channel,
-      assignedToId: conv.assignedToId ?? null,
-      unmatched: conv.unmatched,
-      direction: "outbound",
+    return handoffConversation({
+      conv, config, language, recipient: recipient || "", zernio: zernioRoute,
+      inboundMessageId, topic: "reply_limit",
     });
-    return { acted: true, reason: "handoff" };
   }
 
   // Build context from the last N messages (oldest → newest for the model).
-  const recent = await db
-    .select({
-      direction: messagesTable.direction,
-      content: messagesTable.content,
-      metadata: messagesTable.metadata,
-    })
-    .from(messagesTable)
-    .where(eq(messagesTable.conversationId, conversationId))
-    .orderBy(asc(messagesTable.createdAt));
-  const history = recent.slice(-BOT_HISTORY_LIMIT);
+  const history = await loadUnifiedContactHistory(contact, conversationId);
 
   // University-scoped embedded assistants are deliberately narrower than the
   // global inbox agent. The scope is server-owned conversation metadata set
@@ -965,7 +1099,7 @@ export async function maybeAutoReply(opts: {
     scopedUniversityCountryCode = /^[A-Z]{2,3}$/.test(resolvedCode) ? resolvedCode : "";
   }
 
-  const language = detectLanguage(msg.content, scopedLanguage ?? "en");
+  const scopedReplyLanguage = language;
   // University widgets fail closed: global free-form knowledge sources and the
   // global knowledgeBase are intentionally excluded because they may contain
   // other universities. Only student-safe Academy chunks for the university's
@@ -994,7 +1128,7 @@ export async function maybeAutoReply(opts: {
           : []),
       ].join("\n")
     : buildBotSystemPrompt(
-        language,
+        scopedReplyLanguage,
         hasWidgetProgramScope ? "" : config.knowledgeBase,
         ragChunks,
       );
@@ -1039,13 +1173,17 @@ export async function maybeAutoReply(opts: {
   // documents for the captured lead/student.
   if (!isInternal) {
     try {
-      const missing = await computeMissingDocGroups({
-        leadId: captureLeadId,
-        studentId: captureStudentId,
-        level: captureLevel,
-      });
-      const docInstruction = buildMissingDocsInstruction(missing);
-      if (docInstruction) systemPrompt = `${systemPrompt}\n\n${docInstruction}`;
+      const slotInstruction = await getAccommodationSlotInstruction(captureLeadId);
+      if (slotInstruction) systemPrompt = `${systemPrompt}\n\n${slotInstruction}`;
+      if (!isDormBookingAgent) {
+        const missing = await computeMissingDocGroups({
+          leadId: captureLeadId,
+          studentId: captureStudentId,
+          level: captureLevel,
+        });
+        const docInstruction = buildMissingDocsInstruction(missing);
+        if (docInstruction) systemPrompt = `${systemPrompt}\n\n${docInstruction}`;
+      }
     } catch (err) {
       console.error("[bot] missing-doc computation failed:", err);
     }
@@ -1054,7 +1192,7 @@ export async function maybeAutoReply(opts: {
   const rawReplyText = await generateBotReply({
     aiBotId: conv.aiBotId,
     systemPrompt,
-    language,
+    language: scopedReplyLanguage,
     model: config.model,
     temperature: config.temperature,
     messages: history.map((m) => {
@@ -1084,7 +1222,7 @@ export async function maybeAutoReply(opts: {
       channel: conv.channel,
       direction: isInternal ? "internal" : "outbound",
       status: "pending",
-      metadata: { botSent: true, model: config.model, language },
+      metadata: { botSent: true, model: config.model, language: scopedReplyLanguage },
     })
     .returning();
 
@@ -1107,7 +1245,7 @@ export async function maybeAutoReply(opts: {
       metadata: {
         botSent: true,
         model: config.model,
-        language,
+        language: scopedReplyLanguage,
         simulated: sendResult.simulated,
         ...(sendResult.ok ? {} : { error: sendResult.error }),
       },

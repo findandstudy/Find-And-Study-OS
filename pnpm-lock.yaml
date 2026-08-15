@@ -210,6 +210,9 @@ importers:
       '@workspace/api-zod':
         specifier: workspace:*
         version: link:../../lib/api-zod
+      '@workspace/corporate-facts':
+        specifier: workspace:*
+        version: link:../../lib/corporate-facts
       '@workspace/db':
         specifier: workspace:*
         version: link:../../lib/db
@@ -454,6 +457,9 @@ importers:
       '@workspace/api-client-react':
         specifier: workspace:*
         version: link:../../lib/api-client-react
+      '@workspace/corporate-facts':
+        specifier: workspace:*
+        version: link:../../lib/corporate-facts
       '@workspace/doc-equivalence':
         specifier: workspace:*
         version: link:../../lib/doc-equivalence
@@ -814,6 +820,8 @@ importers:
       zod:
         specifier: 'catalog:'
         version: 3.25.76
+
+  lib/corporate-facts: {}
 
   lib/db:
     dependencies:

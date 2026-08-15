@@ -352,3 +352,20 @@ test("review endpoint contains no spec activation or privileged approval side ef
   );
   assert.match(reviewSection, /productionChanged:\s*false/);
 });
+
+test("Guardian queues only proposals that pass its validation gates", () => {
+  const guardianSource = readFileSync(
+    new URL("../src/lib/portalAiGuardian.ts", import.meta.url),
+    "utf8",
+  );
+  const personaSource = readFileSync(
+    new URL("../src/lib/personaService.ts", import.meta.url),
+    "utf8",
+  );
+  assert.match(guardianSource, /queueSideEffectTools:\s*false/);
+  assert.match(guardianSource, /proposalReady\s*=\s*[\s\S]*draftStatus === "created"[\s\S]*staging\?\.status === "passed"/);
+  assert.match(guardianSource, /status:\s*proposalReady \? "proposed" : "diagnosed_no_proposal"/);
+  assert.doesNotMatch(guardianSource, /status:\s*proposalReady \? "pending_approval" : "failed"/);
+  assert.match(personaSource, /queueSideEffectTools = true/);
+  assert.match(personaSource, /if \(!queueSideEffectTools\)/);
+});

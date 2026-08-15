@@ -1108,7 +1108,8 @@
     },
     "error": {
       "window24h": "Outside the WhatsApp 24-hour reply window. Use a template instead.",
-      "sendMediaFailed": "Failed to send media"
+      "sendMediaFailed": "Failed to send media",
+      "temporaryMediaUnavailable": "The file service is temporarily unavailable. Please wait a few seconds and try again."
     },
     "sort": {
       "toggle": "Toggle sort order",
@@ -1261,6 +1262,7 @@
       "cancel": "Cancel",
       "docsSaveFailed": "{count} document(s) could not be saved to the student profile.",
       "studentCreated": "Student created",
+      "existingStudentLinked": "The existing student profile was linked to this conversation",
       "studentCreatedWithDocs": "Student created — {count} document(s) saved to profile",
       "programPendingNote": "The list will update once a program is selected",
       "programScopedNote": "Requirements for {name}"
@@ -3590,6 +3592,7 @@
     "noProgramsSelectedDesc": "Select one or more programs to generate a proposal.",
     "pdfGenerated": "PDF generated",
     "pdfGenerationFailed": "PDF generation failed",
+    "temporaryServiceUnavailable": "The service is temporarily unavailable. Please wait a few seconds and try creating the PDF again.",
     "unknownError": "Unknown error",
     "excelExported": "Excel exported",
     "country": "Country",
@@ -4136,7 +4139,8 @@
     "reviewOnlyNotice": "Review-only: approval does not retry the portal or change code/specs.",
     "approvedToast": "Human approval recorded",
     "rejectedToast": "Proposal rejected",
-    "reviewError": "Action could not be reviewed"
+    "reviewError": "Action could not be reviewed",
+    "suppressedGuardianNotice": "{count} legacy Guardian records without an enabled portal specification remain in the audit log and are hidden here. New diagnoses without a valid staged proposal no longer create failed approval actions."
   },
   "scanner": {
     "scanWithCamera": "Scan with Camera",
@@ -6072,7 +6076,10 @@
       "contract": "Contract",
       "payment": "Payment",
       "commission": "Commission",
-      "partner": "Partner"
+      "partner": "Partner",
+      "human_request": "Human request",
+      "visa_documents": "Visa & documents",
+      "supplier": "Supplier / dormitory operator"
     },
     "testTitle": "Test console",
     "testHint": "Run the bot brain against a sample message. Nothing is ever sent.",

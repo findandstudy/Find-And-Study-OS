@@ -39,6 +39,7 @@ import {
 import { logAudit } from "./auth.js";
 import { checkHasPortalCredentials } from "./portalCreds.js";
 import {
+  isSitExcludedUniversity,
   shouldRouteTopkapiToMultico,
   validateIdentityFields,
   formatIdentityErrors,
@@ -288,10 +289,24 @@ export async function resolvePortalRouting(args: {
           .limit(1);
         const memberName =
           cat?.name ?? universityName ?? aggregator.universityName;
-        return {
-          portalUni: aggregator,
-          target: { catalogUniversityId: resolvedUniversityId, universityName: memberName },
-        };
+        // Database membership is admin-managed and can become stale. Explicit
+        // exclusions always win, but valid panel-managed dynamic SIT members
+        // remain supported. Fall through to a dedicated standalone portal
+        // when one exists.
+        if (
+          aggregator.adapterKey === "sit" &&
+          isSitExcludedUniversity(memberName)
+        ) {
+          console.warn(
+            `[portal-routing] ignored excluded SIT membership` +
+              ` university=${memberName} catalogId=${resolvedUniversityId}`,
+          );
+        } else {
+          return {
+            portalUni: aggregator,
+            target: { catalogUniversityId: resolvedUniversityId, universityName: memberName },
+          };
+        }
       }
       // Aggregator row missing/inactive → fall through to the standalone match.
     }

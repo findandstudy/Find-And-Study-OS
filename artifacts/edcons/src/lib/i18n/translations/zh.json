@@ -1108,7 +1108,8 @@
     },
     "error": {
       "window24h": "超出 WhatsApp 24 小时回复窗口，请使用模板。",
-      "sendMediaFailed": "发送媒体失败"
+      "sendMediaFailed": "发送媒体失败",
+      "temporaryMediaUnavailable": "文件服务暂时不可用。请等待几秒钟后重试。"
     },
     "sort": {
       "toggle": "切换排序顺序",
@@ -1261,6 +1262,7 @@
       "cancel": "取消",
       "docsSaveFailed": "{count} 个文件未能保存到学生档案。",
       "studentCreated": "学生已创建",
+      "existingStudentLinked": "现有学生档案已关联到此对话",
       "studentCreatedWithDocs": "学生已创建 — {count} 个文件已保存到档案",
       "programPendingNote": "选择专业后列表将更新",
       "programScopedNote": "{name} 的要求"
@@ -3273,6 +3275,7 @@
     "noProgramsSelectedDesc": "选择一个或多个专业以生成方案。",
     "pdfGenerated": "PDF 已生成",
     "pdfGenerationFailed": "PDF 生成失败",
+    "temporaryServiceUnavailable": "服务暂时不可用。请等待几秒钟，然后再次尝试生成 PDF。",
     "unknownError": "未知错误",
     "excelExported": "已导出 Excel",
     "country": "国家",
@@ -3630,7 +3633,8 @@
     "reviewOnlyNotice": "仅供审核：批准不会重试门户，也不会修改代码或规范。",
     "approvedToast": "已记录人工批准",
     "rejectedToast": "Proposal rejected",
-    "reviewError": "Action could not be reviewed"
+    "reviewError": "Action could not be reviewed",
+    "suppressedGuardianNotice": "{count} 条没有已启用门户规范的旧 Guardian 记录仍保留在审计日志中，并在此处隐藏。没有有效暂存提案的新诊断将不再创建失败的审批操作。"
   },
   "scanner": {
     "scanWithCamera": "用相机扫描",
@@ -6072,7 +6076,10 @@
       "contract": "Contract",
       "payment": "Payment",
       "commission": "Commission",
-      "partner": "Partner"
+      "partner": "合作伙伴",
+      "human_request": "人工客服请求",
+      "visa_documents": "签证与文件",
+      "supplier": "供应商 / 宿舍运营方"
     },
     "testTitle": "Test console",
     "testHint": "Run the bot brain against a sample message. Nothing is ever sent.",

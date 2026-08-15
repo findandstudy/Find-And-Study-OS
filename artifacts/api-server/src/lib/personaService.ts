@@ -25,6 +25,12 @@ export type RunPersonaOptions = {
    * redacted before persistence and is never interpolated into the prompt.
    */
   actionContext?: Record<string, unknown>;
+  /**
+   * Side-effect tools normally create approval-queue rows automatically.
+   * Callers that must validate/shape a proposal first can defer that insert
+   * and create the reviewed action only after their own safety gates pass.
+   */
+  queueSideEffectTools?: boolean;
   retryOfRunId?: number;
   retryAttempt?: number;
 };
@@ -106,7 +112,16 @@ function buildMessages(
 }
 
 export async function runPersona(opts: RunPersonaOptions): Promise<RunPersonaResult> {
-  const { personaId, input, triggeredBy, triggerActor, actionContext, retryOfRunId, retryAttempt } = opts;
+  const {
+    personaId,
+    input,
+    triggeredBy,
+    triggerActor,
+    actionContext,
+    queueSideEffectTools = true,
+    retryOfRunId,
+    retryAttempt,
+  } = opts;
 
   const [persona] = await db
     .select()
@@ -300,6 +315,15 @@ export async function runPersona(opts: RunPersonaOptions): Promise<RunPersonaRes
       continue;
     }
     if (tool.sideEffect) {
+      if (!queueSideEffectTools) {
+        toolResults.push({
+          tool: key,
+          queued: false,
+          ok: true,
+          detail: "approval queueing deferred to the validated caller",
+        });
+        continue;
+      }
       // queue for approval
       const [queuedAction] = await db
         .insert(aiActionQueueTable)

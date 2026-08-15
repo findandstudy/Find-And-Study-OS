@@ -8,6 +8,42 @@ export const inboxOuterConversationIdSql = sql.raw(
   '"conversations"."id"',
 );
 
+/**
+ * Effective inbox owner, matching assignmentSync.getChainOwner():
+ * student owner wins, then lead owner, then the conversation's own owner.
+ *
+ * Some historical conversations have a null conversations.assigned_to_id
+ * even though their linked CRM record is assigned. Inbox filtering must use
+ * this expression as well as displaying it, otherwise an assigned thread can
+ * appear under the Unassigned tab until its detail page happens to reconcile
+ * the stale conversation row.
+ */
+export function inboxEffectiveAssignedToSql() {
+  return sql<number | null>`COALESCE(
+    (
+      SELECT s.assigned_to_id
+      FROM external_contacts ec
+      JOIN students s
+        ON s.id = ec.student_id
+       AND s.deleted_at IS NULL
+      WHERE ec.id = "conversations"."external_contact_id"
+        AND s.assigned_to_id IS NOT NULL
+      LIMIT 1
+    ),
+    (
+      SELECT l.assigned_to_id
+      FROM external_contacts ec
+      JOIN leads l
+        ON l.id = ec.lead_id
+       AND l.deleted_at IS NULL
+      WHERE ec.id = "conversations"."external_contact_id"
+        AND l.assigned_to_id IS NOT NULL
+      LIMIT 1
+    ),
+    "conversations"."assigned_to_id"
+  )`;
+}
+
 export function inboxIsStarredSql(userId: number) {
   return sql<boolean>`EXISTS (
     SELECT 1 FROM conversation_participants cp

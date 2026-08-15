@@ -210,6 +210,12 @@ test("detectEscalation flags partner/agency topic", () => {
   assert.equal(detectEscalation("acente olmak istiyorum"), "partner");
 });
 
+test("detectEscalation flags human, visa and supplier handoff topics", () => {
+  assert.equal(detectEscalation("I need a real person"), "human_request");
+  assert.equal(detectEscalation("Vize reddi belgem var"), "visa_documents");
+  assert.equal(detectEscalation("Yeni sezon fiyatlarımız hazır"), "supplier");
+});
+
 test("detectEscalation returns null for a clean intake message", () => {
   assert.equal(detectEscalation("Hello, I want to study computer science in Istanbul"), null);
   assert.equal(detectEscalation("Merhaba, üniversite okumak istiyorum"), null);
@@ -230,6 +236,7 @@ test("detectLanguage picks the student's language", () => {
   assert.equal(detectLanguage("नमस्ते, मैं विश्वविद्यालय में पढ़ना चाहता हूँ"), "hi");
   assert.equal(detectLanguage("Halo, saya ingin kuliah di universitas"), "id");
   assert.equal(detectLanguage("Business administration", "es"), "es");
+  assert.equal(detectLanguage("سلام"), "ar");
 });
 
 test("auto-reply transport capability is fail-closed and Zernio-aware", () => {
@@ -273,15 +280,16 @@ test("maybeAutoReply: normal inbound → one send, outbound recorded, bot stays 
   assert.equal(conv.marker, msgId);
 });
 
-test("maybeAutoReply: escalation → no send, needs_human set, bot OFF", async () => {
+test("maybeAutoReply: escalation → localized handoff sent, needs_human set, bot OFF", async () => {
   resetMocks();
   const { conversationId } = await seedConversation({ botEnabled: true });
   const msgId = await seedInbound(conversationId, "Can you send me the contract to sign?");
   const outcome = await maybeAutoReply({ conversationId, inboundMessageId: msgId });
   assert.equal(outcome.reason, "escalated");
   assert.equal(outcome.topic, "contract");
-  assert.equal(sentCalls.length, 0);
-  assert.equal(await outboundCount(conversationId), 0);
+  assert.equal(sentCalls.length, 1);
+  assert.equal(sentCalls[0].text, "Our reservation team will take this from here and will get back to you shortly.");
+  assert.equal(await outboundCount(conversationId), 1);
   const [conv] = await db
     .select({ botEnabled: conversationsTable.botEnabled, needsHuman: conversationsTable.needsHuman })
     .from(conversationsTable)

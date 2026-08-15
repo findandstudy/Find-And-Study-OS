@@ -14,8 +14,17 @@ import { seedCurrencies } from "./scripts/seedCurrencies";
 import { HARDCODED_EXTRACTOR_FIELDS, HARDCODED_EXTRACTOR_RULES } from "./lib/aiDefaultConfigs";
 import { seedAiAgentConfig } from "./lib/inbox/aiAgentConfig";
 import { seedProgramScopeSource } from "./lib/inbox/knowledgeSources";
+import { renderLlmsText } from "@workspace/corporate-facts";
 
 const isProd = process.env.NODE_ENV === "production";
+
+const llmsText = renderLlmsText();
+app.get(["/llms.txt", "/.well-known/llms.txt"], (_req, res) => {
+  res
+    .type("text/plain; charset=utf-8")
+    .set("Cache-Control", "public, max-age=3600")
+    .send(llmsText);
+});
 
 type FatalShutdown = (reason: string, exitCode: number) => Promise<void>;
 let fatalShutdown: FatalShutdown | null = null;
@@ -1406,6 +1415,28 @@ async function seedClaudeIntegration() {
     }
   } catch (err) {
     console.error("[migrate] perf quick-win indexes:", err);
+  }
+
+  // Step 2b3a: Transactional provenance for application-driven lifecycle cascades.
+  // Lifecycle cascade provenance. Additive and empty on first deploy: legacy
+  // LOST statuses are intentionally not treated as automation-owned.
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS lifecycle_cascade_state (
+        id SERIAL PRIMARY KEY,
+        entity_type TEXT NOT NULL,
+        entity_id INTEGER NOT NULL,
+        previous_status TEXT NOT NULL,
+        cascaded_status TEXT NOT NULL,
+        source_application_id INTEGER,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+    await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS lifecycle_cascade_state_entity_idx ON lifecycle_cascade_state(entity_type, entity_id)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS lifecycle_cascade_state_source_app_idx ON lifecycle_cascade_state(source_application_id)`);
+  } catch (err) {
+    console.error("[migrate] lifecycle cascade state:", err);
   }
 
   // Step 2c: Idempotent migrations for the Branch system.
@@ -3132,6 +3163,10 @@ async function seedClaudeIntegration() {
     { name: "dormBookingKnowledgeSync", offsetMs: 44_500, start: async () => {
       const { startDormBookingKnowledgeSync } = await import("./lib/inbox/dormBookingKnowledgeSync");
       return startDormBookingKnowledgeSync();
+    } },
+    { name: "dormBooking23hFollowup", offsetMs: 45_000, start: async () => {
+      const { startDormBookingFollowupWorker } = await import("./lib/inbox/dormBookingFollowupWorker");
+      return startDormBookingFollowupWorker();
     } },
     { name: "messageCampaignWorker", offsetMs: 46_000, start: async () => {
       const { startMessageCampaignWorker } = await import("./lib/inbox/messageCampaignWorker");

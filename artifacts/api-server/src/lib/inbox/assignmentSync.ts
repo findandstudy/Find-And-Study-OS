@@ -81,14 +81,13 @@ export async function syncConversationOwner(
     // Chain unowned: if the conversation has an owner, null-fill it down.
     if (conv.assignedToId != null) {
       if (link.leadId != null) {
-        const [lead] = await db
-          .select({ id: leadsTable.id, convertedStudentId: leadsTable.convertedStudentId })
-          .from(leadsTable)
-          .where(and(eq(leadsTable.id, link.leadId), isNull(leadsTable.deletedAt)));
-        if (lead) {
-          await db
-            .update(leadsTable)
-            .set({ assignedToId: conv.assignedToId })
+        await db.transaction(async (tx) => {
+          const [lead] = await tx
+            .select({ id: leadsTable.id, convertedStudentId: leadsTable.convertedStudentId })
+            .from(leadsTable)
+            .where(and(eq(leadsTable.id, link.leadId!), isNull(leadsTable.deletedAt)));
+          if (!lead) return;
+          await tx.update(leadsTable).set({ assignedToId: conv.assignedToId })
             .where(and(eq(leadsTable.id, lead.id), isNull(leadsTable.assignedToId)));
           await cascadeLeadAssignment({
             leadId: lead.id,
@@ -97,19 +96,23 @@ export async function syncConversationOwner(
             actorUserId,
             ipAddress,
             nullFillOnly: true,
+            throwOnError: true,
+            executor: tx,
           });
-        }
+        });
       } else if (link.studentId != null) {
-        await db
-          .update(studentsTable)
-          .set({ assignedToId: conv.assignedToId })
-          .where(and(eq(studentsTable.id, link.studentId), isNull(studentsTable.assignedToId)));
-        await cascadeStudentAssignment({
-          studentId: link.studentId,
-          newAssignedToId: conv.assignedToId,
-          actorUserId,
-          ipAddress,
-          nullFillOnly: true,
+        await db.transaction(async (tx) => {
+          await tx.update(studentsTable).set({ assignedToId: conv.assignedToId })
+            .where(and(eq(studentsTable.id, link.studentId!), isNull(studentsTable.assignedToId)));
+          await cascadeStudentAssignment({
+            studentId: link.studentId!,
+            newAssignedToId: conv.assignedToId,
+            actorUserId,
+            ipAddress,
+            nullFillOnly: true,
+            throwOnError: true,
+            executor: tx,
+          });
         });
       }
       return conv.assignedToId;

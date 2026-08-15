@@ -1108,7 +1108,8 @@
     },
     "error": {
       "window24h": "Di luar jendela balasan 24 jam WhatsApp. Gunakan template.",
-      "sendMediaFailed": "Gagal mengirim media"
+      "sendMediaFailed": "Gagal mengirim media",
+      "temporaryMediaUnavailable": "Layanan file sementara tidak tersedia. Tunggu beberapa detik lalu coba lagi."
     },
     "sort": {
       "toggle": "Ubah urutan",
@@ -1261,6 +1262,7 @@
       "cancel": "Batal",
       "docsSaveFailed": "{count} dokumen gagal disimpan ke profil siswa.",
       "studentCreated": "Siswa dibuat",
+      "existingStudentLinked": "Profil siswa yang sudah ada ditautkan ke percakapan ini",
       "studentCreatedWithDocs": "Siswa dibuat — {count} dokumen disimpan ke profil",
       "programPendingNote": "Daftar akan diperbarui setelah program dipilih",
       "programScopedNote": "Persyaratan untuk {name}"
@@ -3273,6 +3275,7 @@
     "noProgramsSelectedDesc": "Pilih satu atau lebih program untuk membuat proposal.",
     "pdfGenerated": "PDF dibuat",
     "pdfGenerationFailed": "Gagal membuat PDF",
+    "temporaryServiceUnavailable": "Layanan sementara tidak tersedia. Tunggu beberapa detik lalu coba buat PDF lagi.",
     "unknownError": "Kesalahan tidak diketahui",
     "excelExported": "Excel diekspor",
     "country": "Negara",
@@ -3630,7 +3633,8 @@
     "reviewOnlyNotice": "Hanya untuk peninjauan: persetujuan tidak mencoba ulang portal atau mengubah kode/spec.",
     "approvedToast": "Persetujuan manusia dicatat",
     "rejectedToast": "Proposal rejected",
-    "reviewError": "Action could not be reviewed"
+    "reviewError": "Action could not be reviewed",
+    "suppressedGuardianNotice": "{count} catatan Guardian lama tanpa spesifikasi portal aktif tetap disimpan dalam log audit dan disembunyikan di sini. Diagnosis baru tanpa proposal staging yang valid tidak lagi membuat tindakan persetujuan gagal."
   },
   "scanner": {
     "scanWithCamera": "Pindai dengan Kamera",
@@ -6072,7 +6076,10 @@
       "contract": "Contract",
       "payment": "Payment",
       "commission": "Commission",
-      "partner": "Partner"
+      "partner": "Mitra",
+      "human_request": "Permintaan penasihat manusia",
+      "visa_documents": "Visa dan dokumen",
+      "supplier": "Pemasok / pengelola asrama"
     },
     "testTitle": "Test console",
     "testHint": "Run the bot brain against a sample message. Nothing is ever sent.",

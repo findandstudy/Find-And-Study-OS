@@ -1108,7 +1108,8 @@
     },
     "error": {
       "window24h": "خارج نافذة الرد البالغة 24 ساعة على واتساب. استخدم نموذجاً.",
-      "sendMediaFailed": "فشل إرسال الوسائط"
+      "sendMediaFailed": "فشل إرسال الوسائط",
+      "temporaryMediaUnavailable": "خدمة الملفات غير متاحة مؤقتًا. يُرجى الانتظار بضع ثوانٍ ثم المحاولة مرة أخرى."
     },
     "sort": {
       "toggle": "تبديل ترتيب الفرز",
@@ -1261,6 +1262,7 @@
       "cancel": "إلغاء",
       "docsSaveFailed": "تعذّر حفظ {count} مستند في ملف الطالب.",
       "studentCreated": "تم إنشاء الطالب",
+      "existingStudentLinked": "تم ربط ملف الطالب الحالي بهذه المحادثة",
       "studentCreatedWithDocs": "تم إنشاء الطالب — تم حفظ {count} مستند(ات) في الملف",
       "programPendingNote": "سيتم تحديث القائمة عند اختيار البرنامج",
       "programScopedNote": "متطلبات {name}"
@@ -3324,6 +3326,7 @@
     "noProgramsSelectedDesc": "اختر برنامجًا واحدًا أو أكثر لإنشاء عرض.",
     "pdfGenerated": "تم إنشاء PDF",
     "pdfGenerationFailed": "فشل إنشاء PDF",
+    "temporaryServiceUnavailable": "الخدمة غير متاحة مؤقتًا. يُرجى الانتظار بضع ثوانٍ ثم محاولة إنشاء ملف PDF مرة أخرى.",
     "unknownError": "خطأ غير معروف",
     "excelExported": "تم تصدير Excel",
     "country": "الدولة",
@@ -3681,7 +3684,8 @@
     "reviewOnlyNotice": "للمراجعة فقط: لا يعيد الاعتماد محاولة البوابة ولا يغيّر الكود أو المواصفات.",
     "approvedToast": "تم تسجيل الموافقة البشرية",
     "rejectedToast": "Proposal rejected",
-    "reviewError": "Action could not be reviewed"
+    "reviewError": "Action could not be reviewed",
+    "suppressedGuardianNotice": "يتم الاحتفاظ بـ {count} من سجلات Guardian القديمة التي لا تحتوي على مواصفة بوابة مفعّلة في سجل التدقيق وإخفاؤها هنا. لم تعد التشخيصات الجديدة من دون مقترح تجهيز صالح تنشئ إجراءات موافقة فاشلة."
   },
   "scanner": {
     "scanWithCamera": "المسح بالكاميرا",
@@ -6072,7 +6076,10 @@
       "contract": "Contract",
       "payment": "Payment",
       "commission": "Commission",
-      "partner": "Partner"
+      "partner": "شريك",
+      "human_request": "طلب التحدث مع شخص",
+      "visa_documents": "التأشيرة والوثائق",
+      "supplier": "مورد / مشغل سكن"
     },
     "testTitle": "Test console",
     "testHint": "Run the bot brain against a sample message. Nothing is ever sent.",

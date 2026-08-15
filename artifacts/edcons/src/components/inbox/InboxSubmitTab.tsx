@@ -240,7 +240,37 @@ export function InboxSubmitTab({
       }
       onCreated(studentId);
     } catch (err: any) {
-      const msg = err?.data?.error || err?.body?.error || err?.message;
+      const body = err?.data ?? err?.body;
+      const existingStudentId = Number(body?.studentId);
+      if (
+        err?.status === 409
+        && Number.isInteger(existingStudentId)
+        && existingStudentId > 0
+      ) {
+        try {
+          // Another screen/process may have completed the lead conversion
+          // after this form was prepared. Link the already-created canonical
+          // student instead of presenting a false creation failure.
+          await customFetch(`/api/inbox/conversations/${conversationId}/match`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ type: "student", entityId: existingStudentId }),
+          });
+          toast({ title: t("inbox.studentTab.existingStudentLinked") });
+          onCreated(existingStudentId);
+          return;
+        } catch (matchError: any) {
+          const matchBody = matchError?.data ?? matchError?.body;
+          const matchMessage = matchBody?.error || matchError?.message;
+          toast({
+            title: t("inbox.studentTab.createFailed"),
+            description: typeof matchMessage === "string" ? matchMessage : undefined,
+            variant: "destructive",
+          });
+          return;
+        }
+      }
+      const msg = body?.error || err?.message;
       toast({
         title: t("inbox.studentTab.createFailed"),
         description: typeof msg === "string" ? msg : undefined,

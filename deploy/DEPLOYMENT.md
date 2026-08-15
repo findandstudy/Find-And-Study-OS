@@ -205,8 +205,11 @@ sudo nginx -t
 sudo systemctl reload nginx
 ```
 
-> **Port kontrolü:** `nginx.conf` upstream bloğu `server 127.0.0.1:5000` olmalıdır.
-> `ecosystem.config.cjs` içindeki `PORT: 5000` ile eşleştiğinden emin olun.
+> **Port kontrolü:** `nginx.conf` upstream bloğunda PM2 API için birincil
+> `127.0.0.1:5000`, yalnızca kontrollü deploy sırasında çalışan aday API için
+> `127.0.0.1:5057 backup` bulunmalıdır. `PORT=5000` ve
+> `CANDIDATE_PORT=5057` değerlerini değiştirmeyin. Nginx değişikliğini ilk kez
+> kurarken `nginx -t` başarılı olmadan reload etmeyin.
 
 ---
 
@@ -267,6 +270,12 @@ RUNTIME_ENV_FILE=/etc/findandstudy.env bash deploy/deploy.sh
 Candidate readiness veri tabanını değiştirmez. Trafik değişiminden sonraki
 health kontrolü başarısız olursa script database, `.env` ve storage'a dokunmadan
 önceki kod release'ini geri bağlar.
+
+Doğrulanmış aday API, canonical fork/1 API yeniden başlatılırken Nginx backup
+upstream olarak canlı tutulur ve deploy sonunda kapatılır. Aday süreçte
+`BACKGROUND_JOBS_ENABLED=false` olduğu için zamanlanmış işler iki kez çalışmaz.
+Nginx yazma isteklerini otomatik tekrarlamaz; bu koruma restart penceresindeki
+GET/HEAD sayfa ve okuma isteklerinin 502 görmesini engellemek içindir.
 
 ---
 

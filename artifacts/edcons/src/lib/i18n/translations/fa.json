@@ -1108,7 +1108,8 @@
     },
     "error": {
       "window24h": "خارج از پنجره 24 ساعته پاسخ واتساپ. از قالب استفاده کنید.",
-      "sendMediaFailed": "ارسال رسانه ناموفق بود"
+      "sendMediaFailed": "ارسال رسانه ناموفق بود",
+      "temporaryMediaUnavailable": "سرویس فایل موقتاً در دسترس نیست. لطفاً چند ثانیه صبر کنید و دوباره تلاش کنید."
     },
     "sort": {
       "toggle": "تغییر ترتیب مرتب‌سازی",
@@ -1261,6 +1262,7 @@
       "cancel": "انصراف",
       "docsSaveFailed": "{count} سند در پروفایل دانشجو ذخیره نشد.",
       "studentCreated": "دانشجو ایجاد شد",
+      "existingStudentLinked": "پروفایل دانشجوی موجود به این گفتگو متصل شد",
       "studentCreatedWithDocs": "دانشجو ایجاد شد — {count} سند در پروفایل ذخیره شد",
       "programPendingNote": "پس از انتخاب برنامه، فهرست به‌روزرسانی می‌شود",
       "programScopedNote": "الزامات {name}"
@@ -3273,6 +3275,7 @@
     "noProgramsSelectedDesc": "برای ایجاد پیشنهاد یک یا چند رشته انتخاب کنید.",
     "pdfGenerated": "PDF ایجاد شد",
     "pdfGenerationFailed": "ایجاد PDF ناموفق",
+    "temporaryServiceUnavailable": "سرویس موقتاً در دسترس نیست. لطفاً چند ثانیه صبر کنید و دوباره فایل PDF را ایجاد کنید.",
     "unknownError": "خطای ناشناخته",
     "excelExported": "اکسل خروجی گرفته شد",
     "country": "کشور",
@@ -3630,7 +3633,8 @@
     "reviewOnlyNotice": "فقط برای بررسی: تأیید باعث تلاش دوباره در پورتال یا تغییر کد/spec نمی‌شود.",
     "approvedToast": "تأیید انسانی ثبت شد",
     "rejectedToast": "Proposal rejected",
-    "reviewError": "Action could not be reviewed"
+    "reviewError": "Action could not be reviewed",
+    "suppressedGuardianNotice": "{count} رکورد قدیمی Guardian بدون مشخصات فعال پورتال در گزارش ممیزی نگهداری و در اینجا پنهان می‌شوند. تشخیص‌های جدید بدون پیشنهاد معتبر staging دیگر اقدام تأیید ناموفق ایجاد نمی‌کنند."
   },
   "scanner": {
     "scanWithCamera": "اسکن با دوربین",
@@ -6072,7 +6076,10 @@
       "contract": "Contract",
       "payment": "Payment",
       "commission": "Commission",
-      "partner": "Partner"
+      "partner": "شریک",
+      "human_request": "درخواست پشتیبان انسانی",
+      "visa_documents": "ویزا و مدارک",
+      "supplier": "تأمین‌کننده / مدیر خوابگاه"
     },
     "testTitle": "Test console",
     "testHint": "Run the bot brain against a sample message. Nothing is ever sent.",

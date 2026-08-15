@@ -19,6 +19,9 @@ interface DormBookingRoom {
   listedPrice?: number | string | null;
   currency?: string | null;
   priceBasis?: string | null;
+  feePeriod?: string | null;
+  holdingFee?: number | string | null;
+  deposit?: number | string | null;
   roomCount?: number | string | null;
   adults?: number | string | null;
   children?: number | string | null;
@@ -42,6 +45,7 @@ interface DormBookingDorm {
   latitude?: number | string | null;
   longitude?: number | string | null;
   accommodationTypes?: string[];
+  gender?: string | null;
   facilities?: string[];
   nearbyUniversities?: string[];
   rating?: number | string | null;
@@ -113,33 +117,68 @@ function formatListedPrice(value: unknown, currency: unknown, basis: unknown): s
   return `${safeCurrency} ${amount.toLocaleString("en-US", { maximumFractionDigits: 2 })}${safeBasis ? ` (${safeBasis})` : " (billing period not specified)"}`;
 }
 
+function hasCompletePrice(room: DormBookingRoom, dormCurrency: unknown): boolean {
+  return safeNumber(room.listedPrice) !== null
+    && Boolean(safeText(room.currency ?? dormCurrency))
+    && Boolean(safeText(room.feePeriod ?? room.priceBasis))
+    && safeNumber(room.holdingFee) !== null
+    && safeNumber(room.deposit) !== null;
+}
+
+function deriveGenderEligibility(dorm: DormBookingDorm): string {
+  const explicit = safeText(dorm.gender);
+  if (explicit) return explicit;
+  const types = safeList(dorm.accommodationTypes);
+  // Match complete leading words. Never use `includes("male")` because the
+  // string "female" itself contains "male".
+  const female = types.some((value) => /^female(?:\b|\s*-)/i.test(value));
+  const male = types.some((value) => /^male(?:\b|\s*-)/i.test(value));
+  if (female && male) return "Male and female (separate listing eligibility)";
+  if (female) return "Female only";
+  if (male) return "Male only";
+  return "";
+}
+
+const QUARANTINED_GENDER_RECORDS = new Set([
+  "Istanbul Medipol University Male Student Dormitory",
+  "Istanbul Okan University Female Student Dormitories",
+]);
+
 export function buildDormBookingCatalogDocuments(
   dormsInput: DormBookingDorm[],
 ): Omit<DormBookingCatalogExtract, "sourceVersion" | "fetchedAt"> {
   const dorms = Array.isArray(dormsInput) ? dormsInput : [];
   const preface = [
     "SOURCE: DormBooking official published accommodation catalog.",
-    "AUDIENCE: International students looking for accommodation in Istanbul.",
+    "AUDIENCE: International students looking for accommodation in a city covered by DormBooking.",
     "FRESHNESS: Prices and availability can change. Confirm both before promising or accepting a reservation.",
-    "PRICE SAFETY: If the billing period is not explicitly stated, call it the listed price and never describe it as monthly, yearly, per semester or per program.",
-    "BOOKING SAFETY: Never guarantee a room. The advertised USD 100 Holding Fee may be discussed only after a suitable option and current availability are confirmed; it is not the full rent.",
+    "PRICE SAFETY: A room is price-complete only when price, currency, exact fee period, Holding Fee and deposit are all present. Otherwise do not quote any price; hand off for confirmation.",
+    "BOOKING SAFETY: Never guarantee a room. The Holding Fee varies by dormitory and room, forms part of the accommodation total, and must only be quoted from the selected room's current listing.",
     "PRIVACY: Do not disclose partner contact details, internal terms, commissions or unpublished information.",
   ].join("\n");
 
   const documents = dorms
     .filter((dorm) => Number.isInteger(dorm?.id) && safeText(dorm?.name) && safeText(dorm?.url))
+    .filter((dorm) => !QUARANTINED_GENDER_RECORDS.has(safeText(dorm.name)))
     .map((dorm) => {
       const dormName = safeText(dorm.name);
       const city = safeText(dorm.city) || "Istanbul";
+      const genderEligibility = deriveGenderEligibility(dorm);
       const nearbyUniversities = safeList(dorm.nearbyUniversities);
       const rooms = Array.isArray(dorm.rooms) ? dorm.rooms : [];
       const roomBlocks = rooms
         .filter((room) => Number.isInteger(room?.id) && safeText(room?.name))
-        .map((room) => [
+        .map((room) => {
+          const completePrice = hasCompletePrice(room, dorm.currency);
+          return [
           `ROOM: ${safeText(room.name)}`,
           `Room ID: ${room.id}`,
           safeText(room.url) ? `Public page: ${safeText(room.url)}` : "",
-          `Listed price: ${formatListedPrice(room.listedPrice, room.currency ?? dorm.currency, room.priceBasis)}`,
+          completePrice
+            ? `Accommodation price: ${formatListedPrice(room.listedPrice, room.currency ?? dorm.currency, room.feePeriod ?? room.priceBasis)}`
+            : "PRICE STATUS: Incomplete; do not quote a price. Hand off for exact price and payment-plan confirmation.",
+          completePrice ? `Holding Fee: ${formatListedPrice(room.holdingFee, room.currency ?? dorm.currency, "part of accommodation total")}` : "",
+          completePrice ? `Deposit: ${formatListedPrice(room.deposit, room.currency ?? dorm.currency, "listing value")}` : "",
           safeNumber(room.roomCount) !== null ? `Published room count: ${safeNumber(room.roomCount)}` : "",
           safeNumber(room.adults) !== null ? `Maximum adults: ${safeNumber(room.adults)}` : "",
           safeNumber(room.children) !== null ? `Maximum children: ${safeNumber(room.children)}` : "",
@@ -149,7 +188,8 @@ export function buildDormBookingCatalogDocuments(
           safeList(room.facilities).length ? `Room facilities: ${safeList(room.facilities).join(", ")}` : "",
           studentSafeText(room.description) ? `Room description: ${studentSafeText(room.description)}` : "",
           safeText(room.modifiedAt) ? `Room updated: ${safeText(room.modifiedAt)}` : "",
-        ].filter(Boolean).join("\n"));
+          ].filter(Boolean).join("\n");
+        });
 
       const text = [
         preface,
@@ -157,14 +197,12 @@ export function buildDormBookingCatalogDocuments(
         `Dorm ID: ${dorm.id}`,
         `Public page: ${safeText(dorm.url)}`,
         `City: ${city}`,
+        genderEligibility ? `Gender eligibility: ${genderEligibility}` : "Gender eligibility: Not verified; do not recommend until staff confirms.",
         safeText(dorm.address) ? `Address: ${safeText(dorm.address)}` : "",
         nearbyUniversities.length ? `Nearby universities: ${nearbyUniversities.join(", ")}` : "",
         safeList(dorm.accommodationTypes).length ? `Accommodation type: ${safeList(dorm.accommodationTypes).join(", ")}` : "",
         safeList(dorm.facilities).length ? `Dorm facilities: ${safeList(dorm.facilities).join(", ")}` : "",
         safeNumber(dorm.rating) !== null ? `Published rating: ${safeNumber(dorm.rating)}` : "",
-        safeNumber(dorm.averageListedPrice) !== null
-          ? `Average listed price: ${formatListedPrice(dorm.averageListedPrice, dorm.currency, null)}`
-          : "",
         studentSafeText(dorm.description) ? `Dorm description: ${studentSafeText(dorm.description)}` : "",
         safeText(dorm.modifiedAt) ? `Dorm updated: ${safeText(dorm.modifiedAt)}` : "",
         roomBlocks.length ? `PUBLISHED ROOMS:\n${roomBlocks.join("\n\n")}` : "PUBLISHED ROOMS: None listed; ask staff to check availability.",

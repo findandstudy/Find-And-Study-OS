@@ -38,6 +38,9 @@ export interface AiAgentConfig {
   maxConsecutiveReplies: number;
   /** Message sent once when the handoff threshold is crossed. */
   handoffMessage: string;
+  /** Language-specific handoff messages. The legacy single message remains a
+   * fallback for older stored configs and API clients. */
+  handoffMessages: Record<BotLanguage, string>;
   /** Supported intake languages (informational + future routing). */
   languages: BotLanguage[];
   /** Multilingual escalation keyword sets, per topic. */
@@ -161,6 +164,18 @@ export const DEFAULT_AI_AGENT_CONFIG: AiAgentConfig = {
   maxConsecutiveReplies: 5,
   handoffMessage:
     "Thanks for your patience — a member of our team will continue helping you shortly.",
+  handoffMessages: {
+    tr: "Bu konuda rezervasyon ekibimiz size yardımcı olacak — kısa süre içinde dönüş yapacaklar.",
+    en: "Our reservation team will take this from here and will get back to you shortly.",
+    ar: "سيتولى فريق الحجز لدينا هذا الطلب وسيتواصل معك قريبًا.",
+    fa: "تیم رزرو ما این درخواست را پیگیری می‌کند و به‌زودی با شما تماس می‌گیرد.",
+    ru: "Наша команда по бронированию возьмёт это на себя и свяжется с вами в ближайшее время.",
+    fr: "Notre équipe de réservation prend le relais et vous recontactera très prochainement.",
+    es: "Nuestro equipo de reservas se encargará de esto y se pondrá en contacto contigo en breve.",
+    zh: "我们的预订团队将接手此请求，并会尽快与您联系。",
+    hi: "हमारी आरक्षण टीम अब इस अनुरोध को संभालेगी और शीघ्र आपसे संपर्क करेगी।",
+    id: "Tim reservasi kami akan menangani permintaan ini dan segera menghubungi Anda.",
+  },
   languages: [...SUPPORTED_LANGUAGES],
   escalationKeywords: DEFAULT_ESCALATION_KEYWORDS,
   knowledgeBase: DEFAULT_KNOWLEDGE_BASE,
@@ -182,6 +197,22 @@ const escalationKeywordsSchema = z.object({
   payment: z.array(z.string()),
   commission: z.array(z.string()),
   partner: z.array(z.string()),
+  human_request: z.array(z.string()),
+  visa_documents: z.array(z.string()),
+  supplier: z.array(z.string()),
+});
+
+const handoffMessagesSchema = z.object({
+  tr: z.string().max(2000),
+  en: z.string().max(2000),
+  ar: z.string().max(2000),
+  fa: z.string().max(2000),
+  fr: z.string().max(2000),
+  es: z.string().max(2000),
+  ru: z.string().max(2000),
+  zh: z.string().max(2000),
+  hi: z.string().max(2000),
+  id: z.string().max(2000),
 });
 
 const qualityConfigSchema = z.object({
@@ -244,6 +275,7 @@ export const aiAgentConfigSchema = z.object({
   temperature: z.number().min(0).max(2),
   maxConsecutiveReplies: z.number().int().min(0).max(100),
   handoffMessage: z.string().max(2000),
+  handoffMessages: handoffMessagesSchema,
   languages: z.array(z.enum(["tr", "en", "ar", "fa", "fr", "es", "ru", "zh", "hi", "id"])).min(1),
   escalationKeywords: escalationKeywordsSchema,
   knowledgeBase: z.string().min(1).max(200000),
@@ -267,6 +299,9 @@ function cloneKeywords(kw: Record<EscalationTopic, string[]>): Record<Escalation
     payment: [...kw.payment],
     commission: [...kw.commission],
     partner: [...kw.partner],
+    human_request: [...kw.human_request],
+    visa_documents: [...kw.visa_documents],
+    supplier: [...kw.supplier],
   };
 }
 
@@ -283,7 +318,28 @@ function mergeKeywords(raw: unknown): Record<EscalationTopic, string[]> {
     payment: pick("payment"),
     commission: pick("commission"),
     partner: pick("partner"),
+    human_request: pick("human_request"),
+    visa_documents: pick("visa_documents"),
+    supplier: pick("supplier"),
   };
+}
+
+function cloneHandoffMessages(messages: Record<BotLanguage, string>): Record<BotLanguage, string> {
+  return { ...messages };
+}
+
+function mergeHandoffMessages(raw: unknown, legacyFallback: string): Record<BotLanguage, string> {
+  const defaults = DEFAULT_AI_AGENT_CONFIG.handoffMessages;
+  const input = raw && typeof raw === "object" ? raw as Partial<Record<BotLanguage, unknown>> : {};
+  return Object.fromEntries(SUPPORTED_LANGUAGES.map((language) => {
+    const configured = input[language];
+    const value = typeof configured === "string" && configured.trim()
+      ? configured
+      : language === "en" && legacyFallback.trim()
+        ? legacyFallback
+        : defaults[language];
+    return [language, value];
+  })) as Record<BotLanguage, string>;
 }
 
 function cloneProgramScope(scope: ProgramScope): ProgramScope {
@@ -356,6 +412,7 @@ function mergeWithDefaults(raw: Record<string, unknown> | null | undefined): AiA
       ...d,
       languages: [...d.languages],
       escalationKeywords: cloneKeywords(d.escalationKeywords),
+      handoffMessages: cloneHandoffMessages(d.handoffMessages),
       programScope: cloneProgramScope(d.programScope),
       quality: { ...d.quality },
       schedule: cloneSchedule(d.schedule),
@@ -376,6 +433,7 @@ function mergeWithDefaults(raw: Record<string, unknown> | null | undefined): AiA
         ? r.maxConsecutiveReplies
         : d.maxConsecutiveReplies,
     handoffMessage: typeof r.handoffMessage === "string" ? r.handoffMessage : d.handoffMessage,
+    handoffMessages: mergeHandoffMessages(r.handoffMessages, typeof r.handoffMessage === "string" ? r.handoffMessage : d.handoffMessage),
     languages: languages.length ? languages : [...d.languages],
     escalationKeywords: mergeKeywords(r.escalationKeywords),
     knowledgeBase: typeof r.knowledgeBase === "string" && r.knowledgeBase.trim() ? r.knowledgeBase : d.knowledgeBase,

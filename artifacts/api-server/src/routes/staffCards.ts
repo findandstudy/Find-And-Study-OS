@@ -460,40 +460,50 @@ router.post("/staff-cards/:userId/assigned-students", requireAuth, requireStaffC
   const parsed = z.object({ studentId: z.number().int().positive() }).safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: "Invalid body" }); return; }
   const { studentId } = parsed.data;
-  const [s] = await db.update(studentsTable).set({ assignedToId: userId }).where(eq(studentsTable.id, studentId)).returning();
-  if (!s) { res.status(404).json({ error: "Student not found" }); return; }
-  logAudit(req.user!.id, "staff_card.assigned_student.add", "user", userId, { studentId }, req.ip);
   const canCascadeAdd = await userHasPermission({ id: req.user!.id, role: req.user!.role }, "records.cascade_assignment");
-  if (canCascadeAdd) {
-    await cascadeStudentAssignment({
-      studentId,
-      newAssignedToId: userId,
-      actorUserId: req.user!.id,
-      ipAddress: req.ip,
-    }).catch((err) => {
-      console.error("[staff-cards] cascade assignment failed:", err);
-    });
-  }
+  const updated = await db.transaction(async (tx) => {
+    const [student] = await tx.update(studentsTable).set({ assignedToId: userId })
+      .where(eq(studentsTable.id, studentId)).returning();
+    if (!student) return null;
+    if (canCascadeAdd) {
+      await cascadeStudentAssignment({
+        studentId,
+        newAssignedToId: userId,
+        actorUserId: req.user!.id,
+        ipAddress: req.ip,
+        executor: tx,
+        throwOnError: true,
+      });
+    }
+    return student;
+  });
+  if (!updated) { res.status(404).json({ error: "Student not found" }); return; }
+  logAudit(req.user!.id, "staff_card.assigned_student.add", "user", userId, { studentId }, req.ip);
   res.json({ success: true });
 });
 
 router.delete("/staff-cards/:userId/assigned-students/:studentId", requireAuth, requireStaffCardAdmin, async (req, res): Promise<void> => {
   const userId = parseInt(String(req.params.userId), 10);
   const studentId = parseInt(String(req.params.studentId), 10);
-  await db.update(studentsTable).set({ assignedToId: null })
-    .where(and(eq(studentsTable.id, studentId), eq(studentsTable.assignedToId, userId)));
-  logAudit(req.user!.id, "staff_card.assigned_student.remove", "user", userId, { studentId }, req.ip);
   const canCascadeRemove = await userHasPermission({ id: req.user!.id, role: req.user!.role }, "records.cascade_assignment");
-  if (canCascadeRemove) {
-    await cascadeStudentAssignment({
-      studentId,
-      newAssignedToId: null,
-      actorUserId: req.user!.id,
-      ipAddress: req.ip,
-    }).catch((err) => {
-      console.error("[staff-cards] cascade unassignment failed:", err);
-    });
-  }
+  const changed = await db.transaction(async (tx) => {
+    const [student] = await tx.update(studentsTable).set({ assignedToId: null })
+      .where(and(eq(studentsTable.id, studentId), eq(studentsTable.assignedToId, userId)))
+      .returning({ id: studentsTable.id });
+    if (!student) return false;
+    if (canCascadeRemove) {
+      await cascadeStudentAssignment({
+        studentId,
+        newAssignedToId: null,
+        actorUserId: req.user!.id,
+        ipAddress: req.ip,
+        executor: tx,
+        throwOnError: true,
+      });
+    }
+    return true;
+  });
+  if (changed) logAudit(req.user!.id, "staff_card.assigned_student.remove", "user", userId, { studentId }, req.ip);
   res.sendStatus(204);
 });
 

@@ -1108,7 +1108,8 @@
     },
     "error": {
       "window24h": "Fuera de la ventana de respuesta de 24h de WhatsApp. Usa una plantilla.",
-      "sendMediaFailed": "Error al enviar el archivo multimedia"
+      "sendMediaFailed": "Error al enviar el archivo multimedia",
+      "temporaryMediaUnavailable": "El servicio de archivos no está disponible temporalmente. Espere unos segundos e inténtelo de nuevo."
     },
     "sort": {
       "toggle": "Cambiar orden",
@@ -1261,6 +1262,7 @@
       "cancel": "Cancelar",
       "docsSaveFailed": "No se pudieron guardar {count} documento(s) en el perfil del estudiante.",
       "studentCreated": "Estudiante creado",
+      "existingStudentLinked": "El perfil de estudiante existente se vinculó a esta conversación",
       "studentCreatedWithDocs": "Estudiante creado — {count} documento(s) guardado(s) en el perfil",
       "programPendingNote": "La lista se actualizará al seleccionar un programa",
       "programScopedNote": "Requisitos para {name}"
@@ -3273,6 +3275,7 @@
     "noProgramsSelectedDesc": "Seleccione uno o más programas para generar una propuesta.",
     "pdfGenerated": "PDF generado",
     "pdfGenerationFailed": "Error al generar PDF",
+    "temporaryServiceUnavailable": "El servicio no está disponible temporalmente. Espere unos segundos e intente crear el PDF de nuevo.",
     "unknownError": "Error desconocido",
     "excelExported": "Excel exportado",
     "country": "País",
@@ -3630,7 +3633,8 @@
     "reviewOnlyNotice": "Solo revisión: la aprobación no reintenta el portal ni modifica código o especificaciones.",
     "approvedToast": "Aprobación humana registrada",
     "rejectedToast": "Proposal rejected",
-    "reviewError": "Action could not be reviewed"
+    "reviewError": "Action could not be reviewed",
+    "suppressedGuardianNotice": "{count} registros antiguos de Guardian sin una especificación de portal activa se conservan en el registro de auditoría y se ocultan aquí. Los nuevos diagnósticos sin una propuesta de staging válida ya no crean acciones de aprobación fallidas."
   },
   "scanner": {
     "scanWithCamera": "Escanear con cámara",
@@ -6072,7 +6076,10 @@
       "contract": "Contract",
       "payment": "Payment",
       "commission": "Commission",
-      "partner": "Partner"
+      "partner": "Socio",
+      "human_request": "Solicitud de asesor humano",
+      "visa_documents": "Visado y documentos",
+      "supplier": "Proveedor / operador de residencia"
     },
     "testTitle": "Test console",
     "testHint": "Run the bot brain against a sample message. Nothing is ever sent.",

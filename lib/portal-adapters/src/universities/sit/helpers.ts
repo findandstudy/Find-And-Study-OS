@@ -279,9 +279,25 @@ export const SIT_ALLOWLIST: readonly string[] = [
 // Direct-portal universities are an explicit denylist at the SIT membership
 // boundary. This prevents stale panel membership or an environment extension
 // from routing Haliç back through SIT after its dedicated adapter is enabled.
-const SIT_DIRECT_PORTAL_UNIVERSITIES: readonly string[] = [
+const SIT_EXCLUDED_UNIVERSITIES: readonly string[] = [
   "Haliç Üniversitesi",
+  "Istanbul Arel University",
+  "İstanbul Arel Üniversitesi",
 ] as const;
+
+export function isSitExcludedUniversity(
+  universityNameOrId: string | null | undefined,
+): boolean {
+  if (universityNameOrId == null) return false;
+  const nameTokens = distinctiveTokenKey(
+    distinctiveTokens(String(universityNameOrId).trim()),
+  );
+  if (nameTokens === "") return false;
+  return SIT_EXCLUDED_UNIVERSITIES.some(
+    (entry) =>
+      distinctiveTokenKey(distinctiveTokens(entry)) === nameTokens,
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Cambridge / A-Level letter grade → integer (SIT GPA field is an integer).
@@ -798,15 +814,7 @@ export function isSitMember(
   const name = String(universityNameOrId).trim();
   if (name === "") return false;
 
-  const nameTokens = distinctiveTokenKey(distinctiveTokens(name));
-  if (
-    SIT_DIRECT_PORTAL_UNIVERSITIES.some(
-      (entry) =>
-        distinctiveTokenKey(distinctiveTokens(entry)) === nameTokens,
-    )
-  ) {
-    return false;
-  }
+  if (isSitExcludedUniversity(name)) return false;
 
   // Authoritative agreed list (token-set matched, IDOR-safe).
   if (isAllowedUniversity(name)) return true;

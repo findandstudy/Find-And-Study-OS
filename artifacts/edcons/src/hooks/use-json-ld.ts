@@ -1,4 +1,8 @@
 import { useEffect } from "react";
+import {
+  buildOrganizationSchema,
+  CORPORATE_FACTS,
+} from "@workspace/corporate-facts";
 
 export function useJsonLd(schema: object | object[]) {
   useEffect(() => {
@@ -21,37 +25,6 @@ export function useJsonLd(schema: object | object[]) {
   }, [JSON.stringify(schema)]);
 }
 
-export const SITE_URL = "https://findandstudy.com";
-export const SITE_NAME = "Find And Study";
-
-export const ORG_SCHEMA = {
-  "@context": "https://schema.org",
-  "@type": "EducationalOrganization",
-  "@id": `${SITE_URL}/#organization`,
-  name: SITE_NAME,
-  url: SITE_URL,
-  logo: {
-    "@type": "ImageObject",
-    url: `${SITE_URL}/favicon.svg`,
-    width: 512,
-    height: 512,
-  },
-  contactPoint: {
-    "@type": "ContactPoint",
-    telephone: "+90-552-689-8515",
-    contactType: "customer service",
-    email: "info@findandstudy.com",
-    availableLanguage: ["English", "Turkish", "Arabic", "French", "Russian"],
-  },
-  address: {
-    "@type": "PostalAddress",
-    streetAddress: "Levent Mahallesi, Büyükdere Cad. No:45",
-    addressLocality: "Istanbul",
-    postalCode: "34394",
-    addressCountry: "TR",
-  },
-  sameAs: [
-    "https://www.linkedin.com/company/findandstudy",
-    "https://www.instagram.com/findandstudy",
-  ],
-};
+export const SITE_URL = CORPORATE_FACTS.canonicalUrl;
+export const SITE_NAME = CORPORATE_FACTS.name;
+export const ORG_SCHEMA = buildOrganizationSchema();

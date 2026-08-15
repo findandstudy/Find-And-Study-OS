@@ -1108,7 +1108,8 @@
     },
     "error": {
       "window24h": "WhatsApp 24 saatlik cevap penceresi dışında. Lütfen şablon kullanın.",
-      "sendMediaFailed": "Medya gönderilemedi"
+      "sendMediaFailed": "Medya gönderilemedi",
+      "temporaryMediaUnavailable": "Dosya hizmetine geçici olarak ulaşılamıyor. Lütfen birkaç saniye bekleyip yeniden deneyin."
     },
     "sort": {
       "toggle": "Sıralamayı değiştir",
@@ -1261,6 +1262,7 @@
       "cancel": "İptal",
       "docsSaveFailed": "{count} belge öğrenci profiline kaydedilemedi.",
       "studentCreated": "Öğrenci oluşturuldu",
+      "existingStudentLinked": "Mevcut öğrenci profili bu sohbete bağlandı",
       "studentCreatedWithDocs": "Öğrenci oluşturuldu — {count} belge profile kaydedildi",
       "programPendingNote": "Program seçilince liste güncellenecek",
       "programScopedNote": "{name} için gereksinimler"
@@ -3531,6 +3533,7 @@
     "noProgramsSelectedDesc": "Teklif oluşturmak için bir veya daha fazla program seçin.",
     "pdfGenerated": "PDF oluşturuldu",
     "pdfGenerationFailed": "PDF oluşturma başarısız",
+    "temporaryServiceUnavailable": "Hizmete geçici olarak ulaşılamıyor. Lütfen birkaç saniye bekleyip PDF'yi yeniden oluşturun.",
     "unknownError": "Bilinmeyen hata",
     "excelExported": "Excel dışa aktarıldı",
     "country": "Ülke",
@@ -4077,7 +4080,8 @@
     "reviewOnlyNotice": "Salt inceleme: onay portalı yeniden çalıştırmaz, kodu veya spec'i değiştirmez.",
     "approvedToast": "İnsan onayı kaydedildi",
     "rejectedToast": "Öneri reddedildi",
-    "reviewError": "Eylem incelenemedi"
+    "reviewError": "Eylem incelenemedi",
+    "suppressedGuardianNotice": "Etkin portal tanımı bulunmayan {count} eski Guardian kaydı denetim günlüğünde korunuyor ve burada gizleniyor. Geçerli bir staging önerisi olmayan yeni teşhisler artık başarısız onay eylemi oluşturmuyor."
   },
   "scanner": {
     "scanWithCamera": "Kamerayla Tara",
@@ -6072,7 +6076,10 @@
       "contract": "Sözleşme",
       "payment": "Ödeme",
       "commission": "Komisyon",
-      "partner": "İş ortağı"
+      "partner": "İş ortağı",
+      "human_request": "İnsan talebi",
+      "visa_documents": "Vize ve belgeler",
+      "supplier": "Tedarikçi / yurt işletmecisi"
     },
     "testTitle": "Test konsolu",
     "testHint": "Bot beynini örnek bir mesajla çalıştırın. Hiçbir şey gönderilmez.",

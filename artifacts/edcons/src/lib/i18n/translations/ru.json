@@ -1108,7 +1108,8 @@
     },
     "error": {
       "window24h": "За пределами 24-часового окна ответа WhatsApp. Используйте шаблон.",
-      "sendMediaFailed": "Не удалось отправить медиа"
+      "sendMediaFailed": "Не удалось отправить медиа",
+      "temporaryMediaUnavailable": "Файловый сервис временно недоступен. Подождите несколько секунд и повторите попытку."
     },
     "sort": {
       "toggle": "Изменить порядок сортировки",
@@ -1261,6 +1262,7 @@
       "cancel": "Отмена",
       "docsSaveFailed": "{count} документ(ов) не удалось сохранить в профиле студента.",
       "studentCreated": "Студент создан",
+      "existingStudentLinked": "Существующий профиль студента привязан к этому диалогу",
       "studentCreatedWithDocs": "Студент создан — {count} документ(ов) сохранено в профиле",
       "programPendingNote": "Список обновится после выбора программы",
       "programScopedNote": "Требования для {name}"
@@ -3324,6 +3326,7 @@
     "noProgramsSelectedDesc": "Выберите одну или несколько программ для создания предложения.",
     "pdfGenerated": "PDF создан",
     "pdfGenerationFailed": "Ошибка создания PDF",
+    "temporaryServiceUnavailable": "Сервис временно недоступен. Подождите несколько секунд и попробуйте создать PDF снова.",
     "unknownError": "Неизвестная ошибка",
     "excelExported": "Excel экспортирован",
     "country": "Страна",
@@ -3681,7 +3684,8 @@
     "reviewOnlyNotice": "Только проверка: одобрение не повторяет попытку в портале и не изменяет код или спецификации.",
     "approvedToast": "Одобрение человеком зафиксировано",
     "rejectedToast": "Proposal rejected",
-    "reviewError": "Action could not be reviewed"
+    "reviewError": "Action could not be reviewed",
+    "suppressedGuardianNotice": "{count} старых записей Guardian без активной спецификации портала сохранены в журнале аудита и скрыты здесь. Новые диагнозы без действительного staging-предложения больше не создают ошибочные действия на утверждение."
   },
   "scanner": {
     "scanWithCamera": "Сканировать камерой",
@@ -6072,7 +6076,10 @@
       "contract": "Contract",
       "payment": "Payment",
       "commission": "Commission",
-      "partner": "Partner"
+      "partner": "Партнёр",
+      "human_request": "Запрос оператора",
+      "visa_documents": "Виза и документы",
+      "supplier": "Поставщик / оператор общежития"
     },
     "testTitle": "Test console",
     "testHint": "Run the bot brain against a sample message. Nothing is ever sent.",

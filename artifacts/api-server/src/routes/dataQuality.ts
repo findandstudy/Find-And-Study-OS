@@ -1,14 +1,14 @@
 import { Router, type IRouter } from "express";
-import { db } from "@workspace/db";
-import { sql } from "drizzle-orm";
-import { requireAuth, requireRole } from "../lib/auth";
+import { applicationsTable, db, leadsTable, studentsTable } from "@workspace/db";
+import { and, eq, isNull, sql } from "drizzle-orm";
+import { logAudit, requireAuth, requireRole } from "../lib/auth";
 import { ADMIN_ROLES } from "../lib/roles";
 
 const router: IRouter = Router();
 
 type DuplicateRow = {
   entity: "student" | "lead";
-  matchKey: "email" | "phone";
+  matchKey: "email" | "phone" | "passport";
   normalizedValue: string;
   recordIds: number[];
   recordCount: number;
@@ -45,6 +45,13 @@ router.get("/admin/data-quality/duplicates", requireAuth, requireRole(...ADMIN_R
         AND nullif(coalesce(nullif(trim(phone_e164), ''), regexp_replace(coalesce(phone, ''), '[^0-9]+', '', 'g')), '') IS NOT NULL
       GROUP BY coalesce(nullif(trim(phone_e164), ''), regexp_replace(coalesce(phone, ''), '[^0-9]+', '', 'g')) HAVING count(*) > 1
       UNION ALL
+      SELECT 'student', 'passport', upper(regexp_replace(trim(passport_number), '[^A-Za-z0-9]+', '', 'g')),
+             array_agg(id ORDER BY id), count(*)::int
+      FROM students
+      WHERE deleted_at IS NULL
+        AND nullif(regexp_replace(trim(coalesce(passport_number, '')), '[^A-Za-z0-9]+', '', 'g'), '') IS NOT NULL
+      GROUP BY upper(regexp_replace(trim(passport_number), '[^A-Za-z0-9]+', '', 'g')) HAVING count(*) > 1
+      UNION ALL
       SELECT 'lead', 'email', lower(trim(email)), array_agg(id ORDER BY id), count(*)::int
       FROM leads
       WHERE deleted_at IS NULL AND nullif(trim(email), '') IS NOT NULL
@@ -80,6 +87,62 @@ router.get("/admin/data-quality/duplicates", requireAuth, requireRole(...ADMIN_R
     },
     mergeAvailable: false,
     mergePolicy: "Review candidates before a dedicated transactional merge is enabled.",
+  });
+});
+
+/**
+ * One-shot, read-only health matrix for the Lead → Student → Application
+ * lifecycle. This endpoint is deliberately count-only: it is safe to run on
+ * production before a deployment and never guesses or repairs relationships.
+ */
+router.get("/admin/data-quality/lifecycle-integrity", requireAuth, requireRole(...ADMIN_ROLES), async (_req, res): Promise<void> => {
+  const result = await db.execute(sql`
+    SELECT
+      (SELECT count(*)::int FROM applications a
+       LEFT JOIN students s ON s.id = a.student_id
+       WHERE a.deleted_at IS NULL AND (s.id IS NULL OR s.deleted_at IS NOT NULL)) AS active_apps_without_active_student,
+      (SELECT count(*)::int FROM applications a
+       JOIN leads l ON l.id = a.lead_id
+       WHERE a.deleted_at IS NULL AND a.lead_id IS NOT NULL
+         AND (l.deleted_at IS NOT NULL OR l.converted_student_id IS DISTINCT FROM a.student_id)) AS application_lead_student_mismatch,
+      (SELECT count(*)::int FROM applications a
+       WHERE a.deleted_at IS NULL AND a.lead_id IS NULL) AS active_apps_without_explicit_lead,
+      (SELECT count(*)::int FROM leads l
+       JOIN students s ON s.id = l.converted_student_id
+       WHERE l.deleted_at IS NULL AND s.deleted_at IS NOT NULL) AS active_leads_pointing_to_deleted_students,
+      (SELECT count(*)::int FROM students s
+       LEFT JOIN leads l ON l.id = s.origin_lead_id
+       WHERE s.deleted_at IS NULL AND s.origin_lead_id IS NOT NULL AND l.id IS NULL) AS orphan_student_origin_leads,
+      (SELECT count(*)::int FROM leads l
+       JOIN students s ON s.id = l.converted_student_id AND s.deleted_at IS NULL
+       WHERE l.deleted_at IS NULL AND l.assigned_to_id IS DISTINCT FROM s.assigned_to_id) AS lead_student_assignment_mismatch,
+      (SELECT count(*)::int FROM applications a
+       JOIN students s ON s.id = a.student_id AND s.deleted_at IS NULL
+       WHERE a.deleted_at IS NULL AND a.assigned_to_id IS DISTINCT FROM s.assigned_to_id) AS application_student_assignment_mismatch,
+      (SELECT count(*)::int FROM applications a
+       JOIN students s ON s.id = a.student_id AND s.deleted_at IS NULL
+       WHERE a.deleted_at IS NULL AND a.branch_id IS NOT NULL AND s.branch_id IS NOT NULL
+         AND a.branch_id IS DISTINCT FROM s.branch_id) AS application_student_branch_conflict,
+      (SELECT count(*)::int FROM leads l
+       JOIN students s ON s.id = l.converted_student_id AND s.deleted_at IS NULL
+       WHERE l.deleted_at IS NULL AND l.branch_id IS NOT NULL AND s.branch_id IS NOT NULL
+         AND l.branch_id IS DISTINCT FROM s.branch_id) AS lead_student_branch_conflict,
+      (SELECT count(*)::int FROM lifecycle_cascade_state) AS recorded_lifecycle_cascades
+  `);
+  const row = (result.rows?.[0] ?? {}) as Record<string, unknown>;
+  const counts = Object.fromEntries(Object.entries(row).map(([key, value]) => [key, Number(value ?? 0)]));
+  const blockingKeys = [
+    "active_apps_without_active_student",
+    "application_lead_student_mismatch",
+    "active_leads_pointing_to_deleted_students",
+    "orphan_student_origin_leads",
+  ];
+  res.json({
+    generatedAt: new Date().toISOString(),
+    mode: "read_only",
+    counts,
+    deploymentBlockers: blockingKeys.filter((key) => (counts[key] ?? 0) > 0),
+    policy: "No records were changed. Unlinked legacy applications and ownership/branch mismatches require reviewed reconciliation, not automatic repair.",
   });
 });
 
@@ -182,6 +245,66 @@ router.get("/admin/data-quality/application-lead-links", requireAuth, requireRol
     writeEnabled: false,
     policy: "Analysis only. No application or lead record was changed.",
   });
+});
+
+/**
+ * Explicit, one-row repair after an administrator has reviewed the read-only
+ * candidate report. The endpoint never matches by e-mail/phone: the selected
+ * lead must already declare this exact student as convertedStudentId.
+ */
+router.post("/admin/data-quality/application-lead-links/:applicationId/approve", requireAuth, requireRole(...ADMIN_ROLES), async (req, res): Promise<void> => {
+  const applicationId = Number(req.params.applicationId);
+  const leadId = Number(req.body?.leadId);
+  if (!Number.isInteger(applicationId) || applicationId <= 0 || !Number.isInteger(leadId) || leadId <= 0) {
+    res.status(400).json({ error: "Valid applicationId and leadId are required" });
+    return;
+  }
+
+  const outcome = await db.transaction(async (tx) => {
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(78141, ${applicationId})`);
+    const [app] = await tx.select({
+      id: applicationsTable.id,
+      studentId: applicationsTable.studentId,
+      leadId: applicationsTable.leadId,
+    }).from(applicationsTable).where(and(
+      eq(applicationsTable.id, applicationId),
+      isNull(applicationsTable.deletedAt),
+    ));
+    if (!app) return { status: 404 as const, error: "Active application not found" };
+    if (app.leadId != null) {
+      return app.leadId === leadId
+        ? { status: 200 as const, app, idempotent: true }
+        : { status: 409 as const, error: "Application is already linked to a different lead" };
+    }
+    const [student] = await tx.select({ id: studentsTable.id }).from(studentsTable).where(and(
+      eq(studentsTable.id, app.studentId), isNull(studentsTable.deletedAt),
+    ));
+    const [lead] = await tx.select({ id: leadsTable.id, convertedStudentId: leadsTable.convertedStudentId }).from(leadsTable).where(and(
+      eq(leadsTable.id, leadId), isNull(leadsTable.deletedAt),
+    ));
+    if (!student || !lead) return { status: 404 as const, error: "Active student or lead not found" };
+    if (lead.convertedStudentId !== app.studentId) {
+      return { status: 409 as const, error: "Lead does not authoritatively reference this application student" };
+    }
+    const [updated] = await tx.update(applicationsTable).set({ leadId })
+      .where(and(eq(applicationsTable.id, applicationId), isNull(applicationsTable.leadId)))
+      .returning({ id: applicationsTable.id, studentId: applicationsTable.studentId, leadId: applicationsTable.leadId });
+    if (!updated) return { status: 409 as const, error: "Application link changed concurrently; reload the report" };
+    return { status: 200 as const, app: updated, idempotent: false };
+  });
+
+  if ("error" in outcome) {
+    res.status(outcome.status).json({ error: outcome.error });
+    return;
+  }
+  const linkedApp = outcome.app;
+  if (!outcome.idempotent) {
+    await logAudit(req.user!.id, "approve_application_lead_link", "application", applicationId, {
+      leadId,
+      studentId: linkedApp.studentId,
+    }, req.ip);
+  }
+  res.json({ success: true, application: linkedApp, idempotent: outcome.idempotent });
 });
 
 export default router;

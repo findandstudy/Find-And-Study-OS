@@ -120,11 +120,20 @@ test("deploy entrypoints use preflight and contain no blind fallback", () => {
   const compatibility = readFileSync(path.join(root, "scripts/deploy.sh"), "utf8");
   assert.match(deploy, /node deploy\/pm2-preflight\.cjs/);
   assert.match(deploy, /CANDIDATE_PORT/);
+  assert.match(deploy, /Keep the validated candidate alive/);
+  assert.match(deploy, /cleanup_candidate\n+candidate_pid=""\n+trap - EXIT INT TERM/);
   assert.match(deploy, /rollback_code/);
   assert.match(deploy, /release_health_ready/);
   assert.match(deploy, /EXPECTED_RELEASE_ID/);
   assert.match(deploy, /git archive/);
   assert.doesNotMatch(deploy, /pm2 start|startOrRestart|pm2 restart all/);
+
+  const nginx = readFileSync(path.join(__dirname, "nginx.conf"), "utf8");
+  assert.match(nginx, /server 127\.0\.0\.1:5057 backup;/);
+  assert.doesNotMatch(
+    nginx,
+    /^\s*proxy_next_upstream\s+[^;\n]*non_idempotent/m,
+  );
   assert.match(deploy, /restart_pm2_process "\$PORTAL_WORKER_PROCESS_NAME" true/);
   assert.match(deploy, /restart_pm2_process "\$API_PROCESS_NAME"/);
   assert.match(deploy, /pm2_process_exists_once/);

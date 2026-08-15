@@ -84,6 +84,55 @@ interface MessageAttachment {
   voiceNote?: boolean;
 }
 
+const TRANSIENT_MEDIA_STATUSES = new Set([502, 503, 504]);
+
+class TransientMediaUploadError extends Error {
+  constructor() {
+    super("Temporary media upload failure");
+    this.name = "TransientMediaUploadError";
+  }
+}
+
+function isTransientMediaRequestError(error: unknown): boolean {
+  if (error instanceof TypeError) return true;
+  const status = Number((error as { status?: unknown } | null)?.status);
+  return TRANSIENT_MEDIA_STATUSES.has(status);
+}
+
+function mediaRetryDelay(attempt: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, 400 * (2 ** attempt)));
+}
+
+async function retryMediaPreparation<T>(operation: () => Promise<T>): Promise<T> {
+  const attempts = 4;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      return await operation();
+    } catch (error) {
+      if (!isTransientMediaRequestError(error)) throw error;
+      if (attempt === attempts - 1) throw new TransientMediaUploadError();
+      await mediaRetryDelay(attempt);
+    }
+  }
+  throw new TransientMediaUploadError();
+}
+
+async function uploadInboxObject(uploadURL: string, file: File): Promise<void> {
+  await retryMediaPreparation(async () => {
+    const response = await fetch(uploadURL, {
+      method: "PUT",
+      body: file,
+      headers: { "Content-Type": file.type || "application/octet-stream" },
+    });
+    if (TRANSIENT_MEDIA_STATUSES.has(response.status)) {
+      const error = new Error(`Temporary upload failure (${response.status})`) as Error & { status: number };
+      error.status = response.status;
+      throw error;
+    }
+    if (!response.ok) throw new Error(`Upload failed (HTTP ${response.status})`);
+  });
+}
+
 interface Message {
   id: number;
   conversationId: number;
@@ -1109,14 +1158,17 @@ function InboxTab() {
         setAssignedNotice(true);
         setTimeout(() => setAssignedNotice(false), 3000);
       }
-      fetchInbox();
-      fetchDetail(selectedId);
     } catch (err: any) {
       const locked = err?.status === 403 && String(err?.data?.error ?? "") === "ASSIGNMENT_LOCKED";
       toast({
         title: locked ? t("messagesPage.assignmentLocked") : t("messagesPage.failedToAssign"),
         variant: "destructive",
       });
+    } finally {
+      // The API may reconcile a partially-updated CRM chain before returning
+      // an error. Always reload so the dropdown reflects the persisted owner.
+      fetchInbox();
+      fetchDetail(selectedId);
     }
   }
 
@@ -1190,14 +1242,19 @@ function InboxTab() {
         }
         return payload.attachment;
       }
-      const urlRes = await customFetch("/api/storage/uploads/request-url", {
+      // This request only prepares a private storage target; it does not send
+      // anything to WhatsApp/Meta/Zernio. Retrying a transient gateway failure
+      // here is safe and avoids dropping an attachment during a brief API
+      // restart. The external message POST below remains non-retried.
+      const urlRes = await retryMediaPreparation(() => customFetch("/api/storage/uploads/request-url", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ prefix: "inbox", name: file.name, size: file.size, contentType: file.type }),
-      }) as any;
+      })) as any;
       const { uploadURL, objectPath } = urlRes;
-      const uploadResp = await fetch(uploadURL, { method: "PUT", body: file, headers: { "Content-Type": file.type } });
-      if (!uploadResp.ok) throw new Error("Upload failed");
+      // PUT is idempotent for the same prepared object path, so retrying it
+      // cannot create a duplicate outbound message.
+      await uploadInboxObject(uploadURL, file);
       const storageKey = String(objectPath)
         .replace(/^\/+/, "")
         .replace(/^(?:objects\/)+/, "");
@@ -1209,7 +1266,13 @@ function InboxTab() {
       const isVoiceNote = type === "audio" && file.name.startsWith("voice-note-");
       return { url: privateUrl, type, name: file.name, ...(isVoiceNote ? { voiceNote: true } : {}) };
     } catch (err: any) {
-      toast({ title: t("inbox.error.sendMediaFailed"), description: err?.message, variant: "destructive" });
+      toast({
+        title: t("inbox.error.sendMediaFailed"),
+        description: err instanceof TransientMediaUploadError
+          ? t("inbox.error.temporaryMediaUnavailable")
+          : err?.message,
+        variant: "destructive",
+      });
       return null;
     }
   }

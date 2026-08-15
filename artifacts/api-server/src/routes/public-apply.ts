@@ -549,6 +549,18 @@ router.post("/public/apply", applyLimiter, applyJson, async (req: Request, res: 
 
   try {
     const [existingUser] = await db.select().from(usersTable).where(eq(usersTable.email, normalizedEmail));
+    const [archivedStudent] = await db.select({ id: studentsTable.id }).from(studentsTable).where(and(
+      sql`lower(trim(${studentsTable.email})) = ${normalizedEmail}`,
+      isNotNull(studentsTable.deletedAt),
+    ));
+    if (archivedStudent && !_testModeBypassAccountConflict) {
+      res.status(409).json({
+        error: "This student journey is archived. An administrator must restore it before a new application can be submitted.",
+        code: "STUDENT_JOURNEY_ARCHIVED",
+        loginUrl,
+      });
+      return;
+    }
 
     // SECURITY (Public Intake — account/identity enumeration): the
     // staff-email and passport-already-registered conflicts MUST return an
@@ -743,14 +755,16 @@ router.post("/public/apply", applyLimiter, applyJson, async (req: Request, res: 
         resultAppId = reApplyResult.appId;
         console.log(`[PUBLIC-APPLY] [TEST] Re-apply for existing student #${existingStudent.id} (${normalizedEmail}) → new app #${resultAppId}`);
       } else {
-        // No live student row — fall through to the new-account path below.
-        console.warn(`[PUBLIC-APPLY] User #${existingUser.id} (${normalizedEmail}) has no live student record — recreating.`);
+        res.status(409).json({
+          error: `We couldn't process this application with the information provided. Please log in or contact support: ${loginUrl}`,
+          code: "ACCOUNT_CONFLICT",
+          loginUrl,
+        });
+        return;
       }
     }
 
     if (!existingUser || resultStudentId === null) {
-      const [archivedByEmail] = await db.select().from(studentsTable).where(and(eq(studentsTable.email, normalizedEmail), isNotNull(studentsTable.deletedAt)));
-
       const passwordToken = generateSecureToken();
       const [newUser] = await db.insert(usersTable).values({
         email: normalizedEmail,
@@ -769,29 +783,7 @@ router.post("/public/apply", applyLimiter, applyJson, async (req: Request, res: 
       const verificationToken = await issueEmailVerificationToken(normalizedEmail);
 
       let newStudent: any;
-      if (archivedByEmail) {
-        await db.update(studentsTable).set({
-          deletedAt: null,
-          userId: newUser.id,
-          addressCity: residence.addressCity,
-          postalCode: residence.postalCode,
-          interestedLevel: resolvedInterestedLevel,
-          assignedToId: archivedByEmail.assignedToId ?? websiteLead?.assignedToId ?? null,
-          branchId: archivedByEmail.branchId ?? websiteLead?.branchId ?? null,
-        }).where(eq(studentsTable.id, archivedByEmail.id));
-        newStudent = {
-          ...archivedByEmail,
-          deletedAt: null,
-          userId: newUser.id,
-          addressCity: residence.addressCity,
-          postalCode: residence.postalCode,
-          interestedLevel: resolvedInterestedLevel,
-          assignedToId: archivedByEmail.assignedToId ?? websiteLead?.assignedToId ?? null,
-          branchId: archivedByEmail.branchId ?? websiteLead?.branchId ?? null,
-        };
-        console.log(`[PUBLIC-APPLY] Restored archived student #${archivedByEmail.id} for new user ${normalizedEmail}`);
-      } else {
-        [newStudent] = await db.insert(studentsTable).values({
+      [newStudent] = await db.insert(studentsTable).values({
           userId: newUser.id,
           firstName: s(firstName, 100)!,
           lastName: s(lastName, 100)!,
@@ -816,7 +808,6 @@ router.post("/public/apply", applyLimiter, applyJson, async (req: Request, res: 
           assignedToId: websiteLead?.assignedToId ?? null,
           branchId: websiteLead?.branchId ?? null,
         }).returning();
-      }
 
       resultStudentId = newStudent.id;
       const newAppResult = await createApplicationForStudent(newStudent.id, programId ? parseInt(String(programId), 10) : null, programName, universityName, gpa || null, languageScore || null);

@@ -63,12 +63,15 @@ import {
 
 type HistoryDirection = "inbound" | "outbound";
 
-type EscalationTopicKey = "contract" | "payment" | "commission" | "partner";
+type EscalationTopicKey = "contract" | "payment" | "commission" | "partner" | "human_request" | "visa_documents" | "supplier";
 const ESCALATION_TOPICS: EscalationTopicKey[] = [
   "contract",
   "payment",
   "commission",
   "partner",
+  "human_request",
+  "visa_documents",
+  "supplier",
 ];
 const TEST_LANGUAGES = ["tr", "en", "ar", "fa", "fr", "es", "ru", "zh", "hi", "id"] as const;
 type TestLanguage = (typeof TEST_LANGUAGES)[number];
@@ -123,6 +126,9 @@ export default function AiAgent() {
     payment: "",
     commission: "",
     partner: "",
+    human_request: "",
+    visa_documents: "",
+    supplier: "",
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -188,6 +194,9 @@ export default function AiAgent() {
         payment: (cfg.escalationKeywords.payment ?? []).join(", "),
         commission: (cfg.escalationKeywords.commission ?? []).join(", "),
         partner: (cfg.escalationKeywords.partner ?? []).join(", "),
+        human_request: (cfg.escalationKeywords.human_request ?? []).join(", "),
+        visa_documents: (cfg.escalationKeywords.visa_documents ?? []).join(", "),
+        supplier: (cfg.escalationKeywords.supplier ?? []).join(", "),
       });
     } catch {
       toast({ title: t("aiAgentAdmin.loadError"), variant: "destructive" });
@@ -358,6 +367,7 @@ export default function AiAgent() {
         temperature: config.temperature,
         maxConsecutiveReplies: config.maxConsecutiveReplies,
         handoffMessage: config.handoffMessage,
+        handoffMessages: config.handoffMessages,
         knowledgeBase: config.knowledgeBase,
         scheduleEnabled: config.scheduleEnabled,
         timezone: config.timezone,
@@ -367,6 +377,9 @@ export default function AiAgent() {
           payment: parseKeywords(keywordText.payment),
           commission: parseKeywords(keywordText.commission),
           partner: parseKeywords(keywordText.partner),
+          human_request: parseKeywords(keywordText.human_request),
+          visa_documents: parseKeywords(keywordText.visa_documents),
+          supplier: parseKeywords(keywordText.supplier),
         },
       };
       const { config: cfg } = await customFetch<{ config: AiAgentConfig }>(
@@ -775,16 +788,25 @@ export default function AiAgent() {
             </div>
           </div>
 
-          <div className="space-y-1.5">
-            <Label htmlFor="handoff">
-              {t("aiAgentAdmin.handoffMessageLabel")}
-            </Label>
-            <Textarea
-              id="handoff"
-              rows={2}
-              value={config.handoffMessage}
-              onChange={(e) => patch({ handoffMessage: e.target.value })}
-            />
+          <div className="space-y-3">
+            <Label>{t("aiAgentAdmin.handoffMessageLabel")}</Label>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {TEST_LANGUAGES.map((language) => (
+                <div key={language} className="space-y-1">
+                  <Label htmlFor={`handoff-${language}`} className="uppercase text-xs text-muted-foreground">{language}</Label>
+                  <Textarea
+                    id={`handoff-${language}`}
+                    rows={2}
+                    dir={["ar", "fa"].includes(language) ? "rtl" : "ltr"}
+                    value={config.handoffMessages[language]}
+                    onChange={(e) => patch({
+                      handoffMessages: { ...config.handoffMessages, [language]: e.target.value },
+                      ...(language === "en" ? { handoffMessage: e.target.value } : {}),
+                    })}
+                  />
+                </div>
+              ))}
+            </div>
             <p className="text-xs text-muted-foreground">
               {t("aiAgentAdmin.handoffMessageHint")}
             </p>

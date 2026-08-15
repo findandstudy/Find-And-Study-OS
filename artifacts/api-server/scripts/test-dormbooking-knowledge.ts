@@ -11,6 +11,7 @@ test("DormBooking catalog creates one isolated RAG document per published dorm",
       city: "Istanbul",
       address: "Bagcilar, Istanbul",
       nearbyUniversities: ["Altinbas University"],
+      accommodationTypes: ["Female - Dorm"],
       facilities: ["Wi-Fi", "Security"],
       description: "Email: partner@example.com Phone: +90 555 111 22 33",
       rooms: [{
@@ -19,7 +20,9 @@ test("DormBooking catalog creates one isolated RAG document per published dorm",
         url: "https://dormbooking.com/hotel_room/two-person-room/",
         listedPrice: 4300,
         currency: "USD",
-        priceBasis: null,
+        feePeriod: "academic year",
+        holdingFee: 300,
+        deposit: 500,
         adults: 2,
         beds: 2,
         facilities: ["Bunk Bed", "Mini Fridge"],
@@ -38,13 +41,35 @@ test("DormBooking catalog creates one isolated RAG document per published dorm",
   assert.equal(result.documents.length, 2);
   const central = result.documents.find((document) => document.dormId === 10)!;
   assert.deepEqual(central.nearbyUniversities, ["Altinbas University"]);
-  assert.match(central.text, /USD 4,300 \(billing period not specified\)/);
+  assert.match(central.text, /Accommodation price: USD 4,300 \(academic year\)/);
+  assert.match(central.text, /Gender eligibility: Female only/);
+  assert.doesNotMatch(central.text, /Male and female/);
+  assert.match(central.text, /Holding Fee: USD 300/);
   assert.match(central.text, /Never guarantee a room/);
-  assert.match(central.text, /USD 100 Holding Fee/);
-  assert.doesNotMatch(central.text, /Listed price: USD 4,300 \((monthly|yearly|per semester|per program)\)/i);
+  assert.doesNotMatch(central.text, /USD 100 Holding Fee/);
   assert.doesNotMatch(central.text, /partner@example\.com|555 111/);
   const campus = result.documents.find((document) => document.dormId === 20)!;
   assert.doesNotMatch(campus.text, /Two Person Room/);
+});
+
+test("DormBooking catalog withholds incomplete pricing and quarantines known gender errors", () => {
+  const result = buildDormBookingCatalogDocuments([
+    {
+      id: 30,
+      name: "Incomplete Price Dorm",
+      url: "https://dormbooking.com/incomplete",
+      rooms: [{ id: 31, name: "Room", listedPrice: 2000, currency: "USD" }],
+    },
+    {
+      id: 40,
+      name: "Istanbul Medipol University Male Student Dormitory",
+      url: "https://dormbooking.com/quarantined",
+    },
+  ]);
+  assert.equal(result.dormCount, 1);
+  assert.match(result.text, /PRICE STATUS: Incomplete/);
+  assert.doesNotMatch(result.text, /Accommodation price: USD 2,000/);
+  assert.doesNotMatch(result.text, /Medipol/);
 });
 
 test("DormBooking catalog rejects incomplete records and deduplicates public labels", () => {

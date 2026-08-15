@@ -128,6 +128,7 @@ import { META_API_VERSION } from "../lib/inbox/channels/meta-shared";
 import { isAgentSourcedAndBlockedForStaff } from "../lib/rbac/agentSourceScope";
 import {
   inboxAwaitingReplySql,
+  inboxEffectiveAssignedToSql,
   inboxIsStarredSql,
   inboxIsSubscribedSql,
   inboxOuterConversationIdSql,
@@ -346,8 +347,10 @@ async function defaultGenerateSummary(input: SummarizeInput): Promise<{ content:
     .join("\n");
   const systemPrompt =
     "You are a CRM assistant. Summarize the following customer conversation for staff " +
-    "in 3-5 sentences. Cover: (1) the customer's core need, (2) progress so far, " +
-    "(3) suggested next action. Respond in the same language the customer is using.";
+    "in two concise versions. Cover: (1) the customer's core need, (2) progress so far, " +
+    "(3) suggested next action. Always output both Turkish and English, regardless of the " +
+    "customer's language. Use exactly these labels: TR: and EN:. Do not include the customer's " +
+    "full phone, email, passport or payment details.";
   const message = await anthropic.messages.create({
     model: SUMMARIZE_MODEL,
     max_tokens: 500,
@@ -927,6 +930,7 @@ router.get(
         ? eq(conversationsTable.isArchived, true)
         : eq(conversationsTable.isArchived, false),
     ];
+    const effectiveAssignedTo = inboxEffectiveAssignedToSql();
 
     // Test/junk conversations are hidden by default: e2e-suite artifacts and
     // quick-contact WhatsApp stubs that never left the queue. Toggle with
@@ -950,7 +954,7 @@ router.get(
     }
 
     if (assignedToId !== null) {
-      where.push(eq(conversationsTable.assignedToId, assignedToId));
+      where.push(sql`${effectiveAssignedTo} = ${assignedToId}`);
     }
 
     if (search) {
@@ -972,8 +976,8 @@ router.get(
       if (searchCondition) where.push(searchCondition);
     }
 
-    if (tab === "mine") where.push(eq(conversationsTable.assignedToId, userId));
-    else if (tab === "unassigned") where.push(isNull(conversationsTable.assignedToId));
+    if (tab === "mine") where.push(sql`${effectiveAssignedTo} = ${userId}`);
+    else if (tab === "unassigned") where.push(sql`${effectiveAssignedTo} IS NULL`);
     else if (tab === "unmatched") where.push(eq(conversationsTable.unmatched, true));
     else if (tab === "unanswered") {
       where.push(eq(conversationsTable.status, "open"));
@@ -1030,7 +1034,7 @@ router.get(
         externalThreadId: conversationsTable.externalThreadId,
         unmatched: conversationsTable.unmatched,
         status: conversationsTable.status,
-        assignedToId: conversationsTable.assignedToId,
+        assignedToId: effectiveAssignedTo,
         lastMessageAt: conversationsTable.lastMessageAt,
         lastMessagePreview: conversationsTable.lastMessagePreview,
         lastInboundAt: conversationsTable.lastInboundAt,
@@ -1301,7 +1305,12 @@ router.get(
           )
       : [null];
 
-    const [student] = studentId
+    // A converted lead is authoritative even when an older/existing
+    // external_contact has not yet had student_id backfilled. Without this
+    // fallback the UI kept offering "Create Student", while POST /students
+    // correctly rejected the duplicate conversion with HTTP 409.
+    const resolvedStudentId = studentId ?? lead?.convertedStudentId ?? null;
+    const [student] = resolvedStudentId
       ? await db
           .select({
             id: studentsTable.id,
@@ -1320,7 +1329,7 @@ router.get(
             createdAt: studentsTable.createdAt,
           })
           .from(studentsTable)
-          .where(and(eq(studentsTable.id, studentId!), isNull(studentsTable.deletedAt)))
+          .where(and(eq(studentsTable.id, resolvedStudentId), isNull(studentsTable.deletedAt)))
       : [null];
 
     const [agent] = agentId
@@ -1346,8 +1355,8 @@ router.get(
       variant: string | null;
       icon: string | null;
     } | null = null;
-    const stageEntity: "lead" | "student" | null = lead ? "lead" : student ? "student" : null;
-    const stageKey = lead?.status ?? student?.status ?? null;
+    const stageEntity: "lead" | "student" | null = student ? "student" : lead ? "lead" : null;
+    const stageKey = student?.status ?? lead?.status ?? null;
     if (stageEntity && stageKey) {
       const [row] = await db
         .select({
@@ -1495,24 +1504,27 @@ router.patch(
       res.status(403).json({ error: "ASSIGNMENT_LOCKED", ownerId: chainOwnerId });
       return;
     }
-    const [updated] = await db
-      .update(conversationsTable)
-      .set({ assignedToId, status: assignedToId ? "open" : "open" })
-      .where(eq(conversationsTable.id, id))
-      .returning();
-    if (!updated) {
-      res.status(404).json({ error: "Not found" });
-      return;
-    }
-    await logAudit(req.user!.id, "assign_conversation", "conversation", id, { assignedToId }, req.ip);
-
     // Cascade to linked lead / student (and their sibling applications).
     // Awaited BEFORE responding: the conversation-detail route runs a
     // chain-wins owner sync, so if the chain still held the old owner when
     // the client refetched, the reassignment would be silently reverted.
-    const assignmentActuallyChanged = assignedToId !== (previous?.assignedToId ?? null);
-    if (assignmentActuallyChanged) {
-      try {
+    const chainHasEntity = Boolean(chainLink && (chainLink.studentId != null || chainLink.leadId != null));
+    // Also repair a previously interrupted assignment where the conversation
+    // row already has the requested owner but its authoritative CRM chain does
+    // not. Treating that retry as a no-op made the old owner return on refresh.
+    const assignmentNeedsCascade = assignedToId !== (previous?.assignedToId ?? null)
+      || (chainHasEntity && assignedToId !== chainOwnerId);
+    let updated: typeof conversationsTable.$inferSelect | null = null;
+    try {
+      updated = await db.transaction(async (tx) => {
+        const [updatedConversation] = await tx
+          .update(conversationsTable)
+          .set({ assignedToId, status: "open" })
+          .where(eq(conversationsTable.id, id))
+          .returning();
+        if (!updatedConversation) return null;
+
+        if (assignmentNeedsCascade) {
         const link = chainLink ?? await loadConversationLink(id);
         if (link) {
           const actor = req.user!;
@@ -1524,7 +1536,7 @@ router.patch(
           // the next detail refresh restore the old student owner and silently
           // undo an admin's conversation reassignment.
           if (link.studentId != null && (canCascade || assignedToId !== null)) {
-            const [student] = await db
+            const [student] = await tx
               .select({ id: studentsTable.id, assignedToId: studentsTable.assignedToId })
               .from(studentsTable)
               .where(and(eq(studentsTable.id, link.studentId), isNull(studentsTable.deletedAt)));
@@ -1532,7 +1544,7 @@ router.patch(
               && student.assignedToId !== assignedToId
               && (canCascade || student.assignedToId === null);
             if (shouldUpdateStudent) {
-              await db
+              await tx
                 .update(studentsTable)
                 .set({ assignedToId })
                 .where(eq(studentsTable.id, student.id));
@@ -1549,13 +1561,36 @@ router.patch(
               actorUserId: actor.id,
               ipAddress: req.ip,
               nullFillOnly: !canCascade,
+              throwOnError: true,
+              executor: tx,
             });
           } else if (link.leadId != null) {
-            const [lead] = await db
-              .select({ id: leadsTable.id, convertedStudentId: leadsTable.convertedStudentId })
+            const [lead] = await tx
+              .select({
+                id: leadsTable.id,
+                assignedToId: leadsTable.assignedToId,
+                convertedStudentId: leadsTable.convertedStudentId,
+              })
               .from(leadsTable)
               .where(and(eq(leadsTable.id, link.leadId), isNull(leadsTable.deletedAt)));
             if (lead && (canCascade || assignedToId !== null)) {
+              // A lead-only conversation resolves its owner from this row.
+              // Updating only the converted student/applications left the lead
+              // on the old owner, so the next detail refresh reverted the UI.
+              const shouldUpdateLead = lead.assignedToId !== assignedToId
+                && (canCascade || lead.assignedToId === null);
+              if (shouldUpdateLead) {
+                await tx
+                  .update(leadsTable)
+                  .set({ assignedToId })
+                  .where(eq(leadsTable.id, lead.id));
+                await logAudit(actor.id, canCascade ? "assignment.cascade" : "assignment.null_fill_cascade", "lead", lead.id, {
+                  from: lead.assignedToId ?? null,
+                  to: assignedToId,
+                  source: "conversation",
+                  sourceId: id,
+                }, req.ip);
+              }
               await cascadeLeadAssignment({
                 leadId: lead.id,
                 convertedStudentId: lead.convertedStudentId ?? null,
@@ -1563,12 +1598,32 @@ router.patch(
                 actorUserId: actor.id,
                 ipAddress: req.ip,
                 nullFillOnly: !canCascade,
+                throwOnError: true,
+                executor: tx,
               });
             }
           }
         }
-      } catch (err: any) {
-        console.error("[inbox assign cascade]", err?.message || err);
+        }
+        return updatedConversation;
+      });
+    } catch (err: any) {
+      console.error("[inbox assign cascade]", err?.message || err);
+      const effectiveOwnerId = await syncConversationOwner(id, req.user!.id, req.ip);
+      res.status(409).json({ error: "ASSIGNMENT_SYNC_FAILED", ownerId: effectiveOwnerId });
+      return;
+    }
+    if (!updated) {
+      res.status(404).json({ error: "Not found" });
+      return;
+    }
+    await logAudit(req.user!.id, "assign_conversation", "conversation", id, { assignedToId }, req.ip);
+    if (chainHasEntity) {
+      const verifiedOwnerId = chainLink ? await getChainOwner(chainLink) : null;
+      if (verifiedOwnerId !== assignedToId) {
+        const effectiveOwnerId = await syncConversationOwner(id, req.user!.id, req.ip);
+        res.status(409).json({ error: "ASSIGNMENT_SYNC_FAILED", ownerId: effectiveOwnerId });
+        return;
       }
     }
 

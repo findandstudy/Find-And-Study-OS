@@ -34,6 +34,10 @@
  *       records; second run is a no-op (zero updates).
  *   (m) Inbox admin reassignment updates the linked student source before the
  *       lead/application cascade, so detail sync cannot restore the old owner.
+ *   (n) Inbox admin reassignment updates a lead-only contact's authoritative
+ *       lead row, so detail sync cannot restore the old owner.
+ *   (o) Retrying a previously interrupted inbox assignment repairs the CRM
+ *       chain even when the conversation row already has the requested owner.
  *
  * Mounts the real students + leads + applications + staffCards routers and
  * injects a fake `req.user` (the same seam used by test-inbox-ai-actions).
@@ -44,7 +48,7 @@
  * Run with:
  *   pnpm --filter @workspace/api-server run test:assignment-cascade
  */
-import { test, after } from "node:test";
+import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 
 // Hard exit after all tests complete — the routers pull in the notification
@@ -56,16 +60,18 @@ after(() => {
 
 import http from "http";
 import express, { type Express, type Request } from "express";
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import {
   db,
   usersTable,
   leadsTable,
   studentsTable,
   applicationsTable,
+  documentsTable,
   conversationsTable,
   externalContactsTable,
   pipelineStagesTable,
+  lifecycleCascadeStateTable,
 } from "@workspace/db";
 
 import studentsRouter from "../src/routes/students.js";
@@ -76,6 +82,22 @@ import inboxRouter from "../src/routes/inbox.js";
 import { runBackfill } from "./sync-assignment-backfill.js";
 
 const RUN_ID = `t326_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+
+before(async () => {
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS lifecycle_cascade_state (
+      id SERIAL PRIMARY KEY,
+      entity_type TEXT NOT NULL,
+      entity_id INTEGER NOT NULL,
+      previous_status TEXT NOT NULL,
+      cascaded_status TEXT NOT NULL,
+      source_application_id INTEGER,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS lifecycle_cascade_state_entity_idx ON lifecycle_cascade_state(entity_type, entity_id)`);
+});
 
 type FakeUser = { id: number; role: string; isActive: boolean };
 
@@ -121,6 +143,9 @@ async function request(
     try { parsed = text ? JSON.parse(text) : null; } catch { parsed = text; }
     return { status: res.status, body: parsed };
   } finally {
+    // Node/undici keeps the fetch socket alive. server.close() alone waits for
+    // that idle connection and makes the suite appear hung for minutes.
+    server.closeAllConnections();
     await new Promise<void>((resolve) => server.close(() => resolve()));
   }
 }
@@ -133,6 +158,7 @@ async function request(
 const createdUserIds: number[] = [];
 const createdLeadIds: number[] = [];
 const createdStudentIds: number[] = [];
+const createdDocumentIds: number[] = [];
 
 async function createUser(opts: {
   role: string;
@@ -230,6 +256,19 @@ async function readAssignments(s: Scenario): Promise<{
 // assignee users), then the student (cascades its applications), then users.
 after(async () => {
   try {
+    if (createdDocumentIds.length) await db.delete(documentsTable).where(inArray(documentsTable.id, createdDocumentIds));
+    if (createdStudentIds.length) {
+      await db.delete(lifecycleCascadeStateTable).where(and(
+        eq(lifecycleCascadeStateTable.entityType, "student"),
+        inArray(lifecycleCascadeStateTable.entityId, createdStudentIds),
+      ));
+    }
+    if (createdLeadIds.length) {
+      await db.delete(lifecycleCascadeStateTable).where(and(
+        eq(lifecycleCascadeStateTable.entityType, "lead"),
+        inArray(lifecycleCascadeStateTable.entityId, createdLeadIds),
+      ));
+    }
     if (createdLeadIds.length) await db.delete(leadsTable).where(inArray(leadsTable.id, createdLeadIds));
     if (createdStudentIds.length) await db.delete(studentsTable).where(inArray(studentsTable.id, createdStudentIds));
     if (createdUserIds.length) await db.delete(usersTable).where(inArray(usersTable.id, createdUserIds));
@@ -686,7 +725,124 @@ test("inbox admin reassignment persists across the student-authoritative chain",
 });
 
 // ---------------------------------------------------------------------------
-// (m) LOST is aggregate and relationship-safe: sibling applications are never
+// (n) Inbox admin reassignment must patch the authoritative lead itself.
+// ---------------------------------------------------------------------------
+test("inbox admin reassignment persists for a lead-only conversation", async (t) => {
+  const admin = await createUser({ role: "admin" });
+  const staffA = await createUser({ role: "staff" });
+  const staffB = await createUser({ role: "staff" });
+  currentUser = { id: admin, role: "admin", isActive: true };
+
+  const suffix = `${RUN_ID}_${Math.random().toString(36).slice(2, 8)}`;
+  const [lead] = await db
+    .insert(leadsTable)
+    .values({
+      firstName: "Lead",
+      lastName: `Only_${suffix}`,
+      email: `lead_only_${suffix}@cascade-test.local`,
+      assignedToId: staffA,
+    })
+    .returning({ id: leadsTable.id });
+  createdLeadIds.push(lead.id);
+  const [contact] = await db
+    .insert(externalContactsTable)
+    .values({
+      channel: "whatsapp",
+      externalId: `lead-only-assignment-${suffix}`,
+      displayName: "Lead-only inbox assignment test",
+      leadId: lead.id,
+    })
+    .returning({ id: externalContactsTable.id });
+  const [conversation] = await db
+    .insert(conversationsTable)
+    .values({
+      type: "external",
+      channel: "whatsapp",
+      externalContactId: contact.id,
+      externalThreadId: `lead-only-assignment-thread-${suffix}`,
+      assignedToId: staffA,
+    })
+    .returning({ id: conversationsTable.id });
+
+  t.after(async () => {
+    await db.delete(conversationsTable).where(eq(conversationsTable.id, conversation.id));
+    await db.delete(externalContactsTable).where(eq(externalContactsTable.id, contact.id));
+  });
+
+  const assigned = await request(
+    "PATCH",
+    `/api/inbox/conversations/${conversation.id}/assign`,
+    { userId: staffB },
+  );
+  assert.equal(assigned.status, 200, `assignment should succeed: ${JSON.stringify(assigned.body)}`);
+
+  const [leadAfter] = await db
+    .select({ assignedToId: leadsTable.assignedToId })
+    .from(leadsTable)
+    .where(eq(leadsTable.id, lead.id));
+  assert.equal(leadAfter?.assignedToId, staffB, "linked lead owner changed");
+
+  const [conversationAfter] = await db
+    .select({ assignedToId: conversationsTable.assignedToId })
+    .from(conversationsTable)
+    .where(eq(conversationsTable.id, conversation.id));
+  assert.equal(conversationAfter?.assignedToId, staffB, "conversation remains on the selected owner");
+});
+
+// ---------------------------------------------------------------------------
+// (o) A retry repairs a half-completed conversation/CRM assignment.
+// ---------------------------------------------------------------------------
+test("inbox assignment retry repairs a mismatched CRM chain", async (t) => {
+  const admin = await createUser({ role: "admin" });
+  const staffA = await createUser({ role: "staff" });
+  const staffB = await createUser({ role: "staff" });
+  currentUser = { id: admin, role: "admin", isActive: true };
+
+  const s = await seedScenario(staffA);
+  const suffix = `${RUN_ID}_${Math.random().toString(36).slice(2, 8)}`;
+  const [contact] = await db
+    .insert(externalContactsTable)
+    .values({
+      channel: "whatsapp",
+      externalId: `assignment-retry-${suffix}`,
+      displayName: "Inbox assignment retry test",
+      leadId: s.leadId,
+      studentId: s.studentId,
+    })
+    .returning({ id: externalContactsTable.id });
+  // Simulate a previous interrupted attempt: conversation changed to staffB,
+  // while its authoritative student/lead/application chain stayed on staffA.
+  const [conversation] = await db
+    .insert(conversationsTable)
+    .values({
+      type: "external",
+      channel: "whatsapp",
+      externalContactId: contact.id,
+      externalThreadId: `assignment-retry-thread-${suffix}`,
+      assignedToId: staffB,
+    })
+    .returning({ id: conversationsTable.id });
+
+  t.after(async () => {
+    await db.delete(conversationsTable).where(eq(conversationsTable.id, conversation.id));
+    await db.delete(externalContactsTable).where(eq(externalContactsTable.id, contact.id));
+  });
+
+  const assigned = await request(
+    "PATCH",
+    `/api/inbox/conversations/${conversation.id}/assign`,
+    { userId: staffB },
+  );
+  assert.equal(assigned.status, 200, `assignment retry should succeed: ${JSON.stringify(assigned.body)}`);
+
+  const after = await readAssignments(s);
+  assert.equal(after.student, staffB, "retry repaired student owner");
+  assert.equal(after.lead, staffB, "retry repaired lead owner");
+  assert.deepEqual(after.apps, [staffB, staffB], "retry repaired application owners");
+});
+
+// ---------------------------------------------------------------------------
+// (p) LOST is aggregate and relationship-safe: sibling applications are never
 //     modified; student/lead only become LOST when all applications in their
 //     respective scope are LOST, and unlinked applications never guess a lead.
 // ---------------------------------------------------------------------------
@@ -827,4 +983,102 @@ test("bulk LOST move uses the same aggregate safety rules", async () => {
   assert.notEqual(state.student, stages.studentLost, "active sibling protects student in bulk move");
   assert.notEqual(state.lead, stages.leadLost, "active sibling protects lead in bulk move");
   assert.notEqual(state.apps[1]?.stage, stages.applicationLost, "bulk move does not touch sibling");
+});
+
+test("moving an application out of LOST restores only automation-owned parent statuses", async () => {
+  const admin = await createUser({ role: "admin" });
+  currentUser = { id: admin, role: "admin", isActive: true };
+  const stages = await lostStageKeys();
+  const s = await seedScenario(null);
+  const beforeState = await readLostStatuses(s);
+
+  await db.update(applicationsTable).set({ stage: stages.applicationLost }).where(eq(applicationsTable.id, s.appIds[1]));
+  const lost = await request("PATCH", `/api/applications/${s.appIds[0]}`, { stage: stages.applicationLost });
+  assert.equal(lost.status, 200, `LOST patch should succeed: ${JSON.stringify(lost.body)}`);
+  const cascaded = await readLostStatuses(s);
+  assert.equal(cascaded.student, stages.studentLost);
+  assert.equal(cascaded.lead, stages.leadLost);
+
+  const reopened = await request("PATCH", `/api/applications/${s.appIds[0]}`, { stage: stages.applicationWon });
+  assert.equal(reopened.status, 200, `reopen patch should succeed: ${JSON.stringify(reopened.body)}`);
+  const restored = await readLostStatuses(s);
+  assert.equal(restored.student, beforeState.student, "student returns to its pre-cascade status");
+  assert.equal(restored.lead, beforeState.lead, "lead returns to its pre-cascade status");
+});
+
+test("legacy or manually-set LOST parent statuses are never guessed on reopen", async () => {
+  const admin = await createUser({ role: "admin" });
+  currentUser = { id: admin, role: "admin", isActive: true };
+  const stages = await lostStageKeys();
+  const s = await seedScenario(null);
+
+  await db.update(studentsTable).set({ status: stages.studentLost }).where(eq(studentsTable.id, s.studentId));
+  await db.update(leadsTable).set({ status: stages.leadLost }).where(eq(leadsTable.id, s.leadId));
+  await db.update(applicationsTable).set({ stage: stages.applicationLost }).where(eq(applicationsTable.id, s.appIds[1]));
+  const reopened = await request("PATCH", `/api/applications/${s.appIds[0]}`, { stage: stages.applicationWon });
+  assert.equal(reopened.status, 200, `reopen patch should succeed: ${JSON.stringify(reopened.body)}`);
+  const state = await readLostStatuses(s);
+  assert.equal(state.student, stages.studentLost, "manual student LOST is preserved without provenance");
+  assert.equal(state.lead, stages.leadLost, "manual lead LOST is preserved without provenance");
+});
+
+test("a direct LOST stage mapping cannot bypass sibling aggregate protection", async (t) => {
+  const admin = await createUser({ role: "admin" });
+  currentUser = { id: admin, role: "admin", isActive: true };
+  const stages = await lostStageKeys();
+  const s = await seedScenario(null);
+  const [original] = await db.select({ mappedStudentStageKey: pipelineStagesTable.mappedStudentStageKey })
+    .from(pipelineStagesTable)
+    .where(and(eq(pipelineStagesTable.entityType, "application"), eq(pipelineStagesTable.key, stages.applicationLost)));
+  t.after(async () => {
+    await db.update(pipelineStagesTable).set({ mappedStudentStageKey: original?.mappedStudentStageKey ?? null })
+      .where(and(eq(pipelineStagesTable.entityType, "application"), eq(pipelineStagesTable.key, stages.applicationLost)));
+  });
+  await db.update(pipelineStagesTable).set({ mappedStudentStageKey: stages.studentLost })
+    .where(and(eq(pipelineStagesTable.entityType, "application"), eq(pipelineStagesTable.key, stages.applicationLost)));
+
+  const moved = await request("PATCH", `/api/applications/${s.appIds[0]}`, { stage: stages.applicationLost });
+  assert.equal(moved.status, 200, `LOST patch should succeed: ${JSON.stringify(moved.body)}`);
+  const state = await readLostStatuses(s);
+  assert.notEqual(state.student, stages.studentLost, "active sibling still protects student despite direct mapping");
+});
+
+test("student archive and restore preserve the journey without reviving older deletions", async () => {
+  const admin = await createUser({ role: "admin" });
+  currentUser = { id: admin, role: "admin", isActive: true };
+  const s = await seedScenario(null);
+  const previouslyDeletedAt = new Date(Date.now() - 60_000);
+  await db.update(applicationsTable).set({ deletedAt: previouslyDeletedAt })
+    .where(eq(applicationsTable.id, s.appIds[1]));
+  const [doc] = await db.insert(documentsTable).values({
+    studentId: s.studentId,
+    applicationId: s.appIds[0],
+    leadId: s.leadId,
+    name: `${RUN_ID}-passport.pdf`,
+    type: "passport",
+    status: "approved",
+  }).returning({ id: documentsTable.id });
+  createdDocumentIds.push(doc.id);
+
+  const archived = await request("DELETE", `/api/students/${s.studentId}`);
+  assert.equal(archived.status, 204, `archive should succeed: ${JSON.stringify(archived.body)}`);
+  const [studentArchived] = await db.select({ deletedAt: studentsTable.deletedAt }).from(studentsTable).where(eq(studentsTable.id, s.studentId));
+  const [leadArchived] = await db.select({ deletedAt: leadsTable.deletedAt }).from(leadsTable).where(eq(leadsTable.id, s.leadId));
+  const [appArchived] = await db.select({ deletedAt: applicationsTable.deletedAt }).from(applicationsTable).where(eq(applicationsTable.id, s.appIds[0]));
+  assert.ok(studentArchived?.deletedAt, "student archived");
+  assert.equal(leadArchived?.deletedAt?.getTime(), studentArchived.deletedAt.getTime(), "lead shares archive transaction timestamp");
+  assert.equal(appArchived?.deletedAt?.getTime(), studentArchived.deletedAt.getTime(), "application shares archive transaction timestamp");
+
+  const restored = await request("POST", `/api/students/${s.studentId}/restore`);
+  assert.equal(restored.status, 200, `restore should succeed: ${JSON.stringify(restored.body)}`);
+  const [studentAfter] = await db.select({ deletedAt: studentsTable.deletedAt }).from(studentsTable).where(eq(studentsTable.id, s.studentId));
+  const [leadAfter] = await db.select({ deletedAt: leadsTable.deletedAt }).from(leadsTable).where(eq(leadsTable.id, s.leadId));
+  const appsAfter = await db.select({ id: applicationsTable.id, deletedAt: applicationsTable.deletedAt })
+    .from(applicationsTable).where(inArray(applicationsTable.id, s.appIds));
+  const [docAfter] = await db.select({ deletedAt: documentsTable.deletedAt }).from(documentsTable).where(eq(documentsTable.id, doc.id));
+  assert.equal(studentAfter?.deletedAt, null, "student restored");
+  assert.equal(leadAfter?.deletedAt, null, "lead restored");
+  assert.equal(appsAfter.find((row) => row.id === s.appIds[0])?.deletedAt, null, "journey application restored");
+  assert.equal(appsAfter.find((row) => row.id === s.appIds[1])?.deletedAt?.getTime(), previouslyDeletedAt.getTime(), "older deletion preserved");
+  assert.equal(docAfter?.deletedAt, null, "journey document restored");
 });

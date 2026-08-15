@@ -81,13 +81,20 @@ export default function AiActionQueue() {
   const [items, setItems] = useState<ActionItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [reviewingId, setReviewingId] = useState<number | null>(null);
+  const [suppressedGuardianCount, setSuppressedGuardianCount] = useState(0);
 
   const load = async () => {
     try {
-      const data = await customFetch<{ actions: ActionItem[] }>(
+      const data = await customFetch<{
+        actions: ActionItem[];
+        suppressed?: { guardianNoEnabledSpec?: number };
+      }>(
         "/api/ai-personas/queue/actions",
       );
       setItems(data.actions);
+      setSuppressedGuardianCount(
+        data.suppressed?.guardianNoEnabledSpec ?? 0,
+      );
     } finally {
       setLoading(false);
     }
@@ -332,6 +339,14 @@ export default function AiActionQueue() {
           ))}
         </CardContent>
       </Card>
+
+      {suppressedGuardianCount > 0 && (
+        <div className="rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900 dark:border-sky-900 dark:bg-sky-950/30 dark:text-sky-200">
+          {t("aiActionQueue.suppressedGuardianNotice", {
+            count: suppressedGuardianCount,
+          })}
+        </div>
+      )}
 
       <Card>
         <CardHeader>

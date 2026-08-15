@@ -2,6 +2,9 @@ import { db, leadAssignmentRulesTable, leadsTable, studentsTable, applicationsTa
 import { and, asc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import { logAudit } from "./auth";
 
+type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+type DbLike = typeof db | Tx;
+
 interface LeadLike {
   id: number;
   source?: string | null;
@@ -164,19 +167,30 @@ export async function cascadeLeadAssignment(opts: {
   actorUserId: number | null;
   ipAddress?: string;
   nullFillOnly?: boolean;
+  throwOnError?: boolean;
+  executor?: DbLike;
 }): Promise<void> {
-  const { leadId, convertedStudentId, newAssignedToId, actorUserId, ipAddress, nullFillOnly = false } = opts;
+  const {
+    leadId,
+    convertedStudentId,
+    newAssignedToId,
+    actorUserId,
+    ipAddress,
+    nullFillOnly = false,
+    throwOnError = false,
+    executor = db,
+  } = opts;
   try {
     if (!convertedStudentId) return;
 
-    const [student] = await db
+    const [student] = await executor
       .select({ id: studentsTable.id, assignedToId: studentsTable.assignedToId })
       .from(studentsTable)
       .where(and(eq(studentsTable.id, convertedStudentId), isNull(studentsTable.deletedAt)));
     if (!student) return;
 
     if (student.assignedToId !== newAssignedToId && (!nullFillOnly || student.assignedToId === null)) {
-      await db.update(studentsTable)
+      await executor.update(studentsTable)
         .set({ assignedToId: newAssignedToId })
         .where(eq(studentsTable.id, student.id));
       logAudit(actorUserId, nullFillOnly ? "assignment.null_fill_cascade" : "assignment.cascade", "student", student.id, {
@@ -187,7 +201,28 @@ export async function cascadeLeadAssignment(opts: {
       }, ipAddress);
     }
 
-    const apps = await db
+    // One person may legitimately have multiple acquisition leads.  Once a
+    // lead is converted they all belong to the same student journey, so a full
+    // reassignment must not leave an older sibling lead on another owner.
+    const siblingLeads = await executor
+      .select({ id: leadsTable.id, assignedToId: leadsTable.assignedToId })
+      .from(leadsTable)
+      .where(and(eq(leadsTable.convertedStudentId, student.id), isNull(leadsTable.deletedAt)));
+    for (const siblingLead of siblingLeads) {
+      if (siblingLead.id === leadId || siblingLead.assignedToId === newAssignedToId) continue;
+      if (nullFillOnly && siblingLead.assignedToId !== null) continue;
+      await executor.update(leadsTable)
+        .set({ assignedToId: newAssignedToId })
+        .where(eq(leadsTable.id, siblingLead.id));
+      logAudit(actorUserId, nullFillOnly ? "assignment.null_fill_cascade" : "assignment.cascade", "lead", siblingLead.id, {
+        from: siblingLead.assignedToId ?? null,
+        to: newAssignedToId ?? null,
+        source: "lead",
+        sourceId: leadId,
+      }, ipAddress);
+    }
+
+    const apps = await executor
       .select({ id: applicationsTable.id, assignedToId: applicationsTable.assignedToId })
       .from(applicationsTable)
       .where(and(eq(applicationsTable.studentId, student.id), isNull(applicationsTable.deletedAt)));
@@ -195,7 +230,7 @@ export async function cascadeLeadAssignment(opts: {
     for (const app of apps) {
       if (app.assignedToId === newAssignedToId) continue;
       if (nullFillOnly && app.assignedToId !== null) continue;
-      await db.update(applicationsTable)
+      await executor.update(applicationsTable)
         .set({ assignedToId: newAssignedToId })
         .where(eq(applicationsTable.id, app.id));
       logAudit(actorUserId, nullFillOnly ? "assignment.null_fill_cascade" : "assignment.cascade", "application", app.id, {
@@ -207,6 +242,7 @@ export async function cascadeLeadAssignment(opts: {
     }
   } catch (err: any) {
     console.error("[cascadeLeadAssignment] failed:", err?.message || err);
+    if (throwOnError) throw err;
   }
 }
 
@@ -225,10 +261,20 @@ export async function cascadeStudentAssignment(opts: {
   actorUserId: number | null;
   ipAddress?: string;
   nullFillOnly?: boolean;
+  throwOnError?: boolean;
+  executor?: DbLike;
 }): Promise<void> {
-  const { studentId, newAssignedToId, actorUserId, ipAddress, nullFillOnly = false } = opts;
+  const {
+    studentId,
+    newAssignedToId,
+    actorUserId,
+    ipAddress,
+    nullFillOnly = false,
+    throwOnError = false,
+    executor = db,
+  } = opts;
   try {
-    const leads = await db
+    const leads = await executor
       .select({ id: leadsTable.id, assignedToId: leadsTable.assignedToId })
       .from(leadsTable)
       .where(and(eq(leadsTable.convertedStudentId, studentId), isNull(leadsTable.deletedAt)));
@@ -236,7 +282,7 @@ export async function cascadeStudentAssignment(opts: {
     for (const lead of leads) {
       if (lead.assignedToId === newAssignedToId) continue;
       if (nullFillOnly && lead.assignedToId !== null) continue;
-      await db.update(leadsTable)
+      await executor.update(leadsTable)
         .set({ assignedToId: newAssignedToId })
         .where(eq(leadsTable.id, lead.id));
       logAudit(actorUserId, nullFillOnly ? "assignment.null_fill_cascade" : "assignment.cascade", "lead", lead.id, {
@@ -247,7 +293,7 @@ export async function cascadeStudentAssignment(opts: {
       }, ipAddress);
     }
 
-    const apps = await db
+    const apps = await executor
       .select({ id: applicationsTable.id, assignedToId: applicationsTable.assignedToId })
       .from(applicationsTable)
       .where(and(eq(applicationsTable.studentId, studentId), isNull(applicationsTable.deletedAt)));
@@ -255,7 +301,7 @@ export async function cascadeStudentAssignment(opts: {
     for (const app of apps) {
       if (app.assignedToId === newAssignedToId) continue;
       if (nullFillOnly && app.assignedToId !== null) continue;
-      await db.update(applicationsTable)
+      await executor.update(applicationsTable)
         .set({ assignedToId: newAssignedToId })
         .where(eq(applicationsTable.id, app.id));
       logAudit(actorUserId, nullFillOnly ? "assignment.null_fill_cascade" : "assignment.cascade", "application", app.id, {
@@ -267,6 +313,7 @@ export async function cascadeStudentAssignment(opts: {
     }
   } catch (err: any) {
     console.error("[cascadeStudentAssignment] failed:", err?.message || err);
+    if (throwOnError) throw err;
   }
 }
 
@@ -381,16 +428,27 @@ export async function cascadeApplicationAssignment(opts: {
   actorUserId: number | null;
   ipAddress?: string;
   nullFillOnly?: boolean;
+  throwOnError?: boolean;
+  executor?: DbLike;
 }): Promise<void> {
-  const { applicationId, studentId, newAssignedToId, actorUserId, ipAddress, nullFillOnly = false } = opts;
+  const {
+    applicationId,
+    studentId,
+    newAssignedToId,
+    actorUserId,
+    ipAddress,
+    nullFillOnly = false,
+    throwOnError = false,
+    executor = db,
+  } = opts;
   try {
-    const [student] = await db
+    const [student] = await executor
       .select({ id: studentsTable.id, assignedToId: studentsTable.assignedToId })
       .from(studentsTable)
       .where(and(eq(studentsTable.id, studentId), isNull(studentsTable.deletedAt)));
 
     if (student && student.assignedToId !== newAssignedToId && (!nullFillOnly || student.assignedToId === null)) {
-      await db.update(studentsTable)
+      await executor.update(studentsTable)
         .set({ assignedToId: newAssignedToId })
         .where(eq(studentsTable.id, student.id));
       logAudit(actorUserId, nullFillOnly ? "assignment.null_fill_cascade" : "assignment.cascade", "student", student.id, {
@@ -401,7 +459,7 @@ export async function cascadeApplicationAssignment(opts: {
       }, ipAddress);
     }
 
-    const leads = await db
+    const leads = await executor
       .select({ id: leadsTable.id, assignedToId: leadsTable.assignedToId })
       .from(leadsTable)
       .where(and(eq(leadsTable.convertedStudentId, studentId), isNull(leadsTable.deletedAt)));
@@ -409,7 +467,7 @@ export async function cascadeApplicationAssignment(opts: {
     for (const lead of leads) {
       if (lead.assignedToId === newAssignedToId) continue;
       if (nullFillOnly && lead.assignedToId !== null) continue;
-      await db.update(leadsTable)
+      await executor.update(leadsTable)
         .set({ assignedToId: newAssignedToId })
         .where(eq(leadsTable.id, lead.id));
       logAudit(actorUserId, nullFillOnly ? "assignment.null_fill_cascade" : "assignment.cascade", "lead", lead.id, {
@@ -421,7 +479,7 @@ export async function cascadeApplicationAssignment(opts: {
     }
     // Sibling applications of the same student — keep the whole person's
     // applications in sync when one is reassigned (full-sync consistency).
-    const siblingApps = await db
+    const siblingApps = await executor
       .select({ id: applicationsTable.id, assignedToId: applicationsTable.assignedToId })
       .from(applicationsTable)
       .where(and(eq(applicationsTable.studentId, studentId), isNull(applicationsTable.deletedAt)));
@@ -430,7 +488,7 @@ export async function cascadeApplicationAssignment(opts: {
       if (app.id === applicationId) continue;
       if (app.assignedToId === newAssignedToId) continue;
       if (nullFillOnly && app.assignedToId !== null) continue;
-      await db.update(applicationsTable)
+      await executor.update(applicationsTable)
         .set({ assignedToId: newAssignedToId })
         .where(eq(applicationsTable.id, app.id));
       logAudit(actorUserId, nullFillOnly ? "assignment.null_fill_cascade" : "assignment.cascade", "application", app.id, {
@@ -442,5 +500,6 @@ export async function cascadeApplicationAssignment(opts: {
     }
   } catch (err: any) {
     console.error("[cascadeApplicationAssignment] failed:", err?.message || err);
+    if (throwOnError) throw err;
   }
 }

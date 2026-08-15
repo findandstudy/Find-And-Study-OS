@@ -32,6 +32,7 @@ import express, { type Express, type Request } from "express";
 import {
   db,
   usersTable,
+  leadsTable,
   studentsTable,
   channelAccountsTable,
   externalContactsTable,
@@ -109,6 +110,7 @@ async function api(
 // Seeding helpers
 // ---------------------------------------------------------------------------
 const cleanupStudentIds: number[] = [];
+const cleanupLeadIds: number[] = [];
 const cleanupContactIds: number[] = [];
 const cleanupConvIds: number[] = [];
 const cleanupCatalogOptionIds: number[] = [];
@@ -251,6 +253,35 @@ test("match endpoint — happy path: clears unmatched, links studentId", async (
     .from(externalContactsTable)
     .where(eq(externalContactsTable.id, contactId));
   assert.equal(updatedContact.studentId, studentId, "externalContact.studentId should be set");
+});
+
+test("conversation detail resolves the student from a converted lead", async () => {
+  await ensureStaffUser();
+  const { contactId, convId } = await seedUnmatchedConversation();
+  const studentId = await seedStudent();
+  const suffix = `${RUN_ID}_${seedSeq++}`;
+  const [lead] = await db
+    .insert(leadsTable)
+    .values({
+      firstName: "Converted",
+      lastName: `Lead_${suffix}`,
+      email: `converted_lead_${suffix}@test.invalid`,
+      status: "converted",
+      convertedStudentId: studentId,
+      assignedToId: sharedStaffUserId,
+    })
+    .returning({ id: leadsTable.id });
+  cleanupLeadIds.push(lead.id);
+  await db
+    .update(externalContactsTable)
+    .set({ leadId: lead.id, studentId: null })
+    .where(eq(externalContactsTable.id, contactId));
+
+  const res = await api("GET", `/api/inbox/conversations/${convId}`);
+  assert.equal(res.status, 200, `Expected 200 but got ${res.status}: ${JSON.stringify(res.body)}`);
+  const body = res.body as { lead?: { id?: number }; student?: { id?: number } };
+  assert.equal(body.lead?.id, lead.id, "converted lead remains available for history");
+  assert.equal(body.student?.id, studentId, "canonical student is resolved from lead.convertedStudentId");
 });
 
 test("match endpoint — 400 when required params missing", async () => {
@@ -569,6 +600,10 @@ test("cleanup", async () => {
   // External contacts
   for (const id of cleanupContactIds) {
     await db.delete(externalContactsTable).where(eq(externalContactsTable.id, id));
+  }
+  // Converted leads reference their student and must be removed first.
+  for (const id of cleanupLeadIds) {
+    await db.delete(leadsTable).where(eq(leadsTable.id, id));
   }
   // Students (must come after docs deleted above)
   for (const id of cleanupStudentIds) {

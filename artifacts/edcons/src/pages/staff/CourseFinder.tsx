@@ -42,6 +42,26 @@ import {
 import { MAX_DOCUMENT_PARTS, isSingleImageDocumentType, mergeDocumentParts } from "@/lib/documentPartMerge";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
+const TRANSIENT_API_STATUSES = new Set([502, 503, 504]);
+
+class CourseFinderApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number | null,
+    readonly transient: boolean,
+  ) {
+    super(message);
+    this.name = "CourseFinderApiError";
+  }
+}
+
+function isTransientCourseFinderError(error: unknown): boolean {
+  return error instanceof CourseFinderApiError && error.transient;
+}
+
+function retryDelay(attempt: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, 400 * (2 ** attempt)));
+}
 
 function getCsrfToken(): string {
   const m = document.cookie.match(/(?:^|;\s*)csrf_token=([^;]*)/);
@@ -50,16 +70,48 @@ function getCsrfToken(): string {
 
 async function apiFetch(url: string, opts?: RequestInit) {
   const headers = new Headers(opts?.headers);
-  if (opts?.method && opts.method !== "GET" && opts.method !== "HEAD") {
+  const method = (opts?.method || "GET").toUpperCase();
+  if (method !== "GET" && method !== "HEAD") {
     headers.set("x-csrf-token", getCsrfToken());
   }
-  const res = await fetch(url, { ...opts, credentials: "include", headers });
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(text || `API ${res.status}`);
+
+  const attempts = method === "GET" || method === "HEAD" ? 4 : 1;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    let res: Response;
+    try {
+      res = await fetch(url, { ...opts, credentials: "include", headers });
+    } catch (error) {
+      if (attempt < attempts - 1) {
+        await retryDelay(attempt);
+        continue;
+      }
+      throw new CourseFinderApiError(
+        error instanceof Error ? error.message : "Network request failed",
+        null,
+        true,
+      );
+    }
+
+    const transient = TRANSIENT_API_STATUSES.has(res.status);
+    if (transient && attempt < attempts - 1) {
+      await retryDelay(attempt);
+      continue;
+    }
+    if (!res.ok) {
+      const contentType = res.headers.get("content-type") || "";
+      const text = await res.text().catch(() => "");
+      // Nginx sends a full HTML error document for upstream failures. Never
+      // expose that implementation detail in a user-facing toast.
+      const safeMessage = !/text\/html/i.test(contentType) && !/^\s*<!?html/i.test(text)
+        ? text.slice(0, 500)
+        : "";
+      throw new CourseFinderApiError(safeMessage || `API ${res.status}`, res.status, transient);
+    }
+    if (res.status === 204) return null;
+    return res.json();
   }
-  if (res.status === 204) return null;
-  return res.json();
+
+  throw new CourseFinderApiError("Network request failed", null, true);
 }
 
 type Program = {
@@ -450,9 +502,20 @@ export default function CourseFinder() {
       }
       const { documentRequirements, missingStudyLevels } = await loadProposalDocumentRequirements({
         studyLevels: selectedStudyLevels,
-        fetchRequirements: async (studyLevel) => apiFetch(
-          `${BASE_URL}/api/degrees/by-value/${encodeURIComponent(studyLevel)}/document-requirements`,
-        ) as Promise<Array<{ documentType: string; mandatory: boolean; sortOrder?: number }>>,
+        fetchRequirements: async (studyLevel) => {
+          try {
+            return await apiFetch(
+              `${BASE_URL}/api/degrees/by-value/${encodeURIComponent(studyLevel)}/document-requirements`,
+            ) as Array<{ documentType: string; mandatory: boolean; sortOrder?: number }>;
+          } catch (error) {
+            // A document checklist enriches the proposal but is not required
+            // to render its selected programs and prices. If the API is only
+            // briefly unavailable, generate the PDF and report the checklist
+            // as partial instead of failing the whole download.
+            if (isTransientCourseFinderError(error)) return [];
+            throw error;
+          }
+        },
         resolveLabel: (documentType) => resolveProposalDocMeta(documentType).label,
       });
 
@@ -489,7 +552,13 @@ export default function CourseFinder() {
         });
       }
     } catch (err: any) {
-      toast({ title: t("courseFinderPage.pdfGenerationFailed"), description: err.message || t("courseFinderPage.unknownError"), variant: "destructive" });
+      toast({
+        title: t("courseFinderPage.pdfGenerationFailed"),
+        description: isTransientCourseFinderError(err)
+          ? t("courseFinderPage.temporaryServiceUnavailable")
+          : err.message || t("courseFinderPage.unknownError"),
+        variant: "destructive",
+      });
     } finally {
       setGeneratingPdf(false);
     }

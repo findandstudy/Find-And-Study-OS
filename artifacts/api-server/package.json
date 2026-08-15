@@ -8,6 +8,7 @@
     "drain-once": "NODE_OPTIONS=--max-old-space-size=512 tsx scripts/drain-once.ts",
     "seed:topkapi-mapping": "tsx scripts/seed-topkapi-mapping.ts",
     "seed:portal-mapped-specs": "tsx scripts/seed-portal-mapped-specs.ts",
+    "configure:dormbooking-ai-v2": "tsx scripts/configure-dormbooking-ai-v2.ts",
     "build": "tsx ./build.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test:inbox-create-student-add-doc": "tsx --test ./scripts/test-inbox-create-student-add-doc.ts",
@@ -38,6 +39,7 @@
     "test:ai-agent-models": "tsx --test ./scripts/test-ai-agent-models.ts",
     "test:academy-knowledge": "tsx --test ./scripts/test-academy-knowledge.ts",
     "test:dormbooking-knowledge": "tsx --test ./scripts/test-dormbooking-knowledge.ts",
+    "test:dormbooking-campus-map": "tsx --test ./scripts/test-dormbooking-campus-map.ts",
     "test:ai-schedule": "tsx --test ./scripts/test-ai-schedule.ts",
     "test:contract-signing-scope": "NODE_ENV=test tsx --test ./scripts/test-contract-signing-scope.ts",
     "test:contract-operations": "NODE_ENV=test tsx --test ./scripts/test-contract-operations.ts",
@@ -152,6 +154,7 @@
     "test:program-import-headers": "tsx --test ./scripts/test-program-import-headers.ts"
   },
   "dependencies": {
+    "@workspace/corporate-facts": "workspace:*",
     "@anthropic-ai/sdk": "^0.78.0",
     "@google-cloud/storage": "^7.19.0",
     "@mozilla/readability": "^0.6.0",

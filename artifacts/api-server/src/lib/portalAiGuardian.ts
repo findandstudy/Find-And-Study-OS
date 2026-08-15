@@ -365,6 +365,7 @@ export async function diagnosePortalSubmission(
     current.fingerprint === fingerprint &&
     [
       "proposed",
+      "diagnosed_no_proposal",
       "staging_failed",
       "deploy_proposed",
       "deploy_approved",
@@ -414,6 +415,7 @@ export async function diagnosePortalSubmission(
         fingerprint,
         reviewOnly: true,
       },
+      queueSideEffectTools: false,
     });
     if (run.status !== "success" || !run.output) {
       throw new Error(
@@ -428,59 +430,49 @@ export async function diagnosePortalSubmission(
           draftReason: "STRUCTURED_OUTPUT_INVALID",
         }
       : await createGuardianSpecDraft(enabledSpec, parsed.diagnosis);
-    const queuedProposal = run.toolResults.find(
-      (tool) =>
-        tool.tool === "portal_fix_proposal" && tool.queued && tool.actionId,
-    );
     const proposalReady =
       draft.draftStatus === "created" &&
       draft.staging?.status === "passed" &&
-      Boolean(queuedProposal?.actionId);
+      !parsed.parseError;
+    const [queuedProposal] = proposalReady
+      ? await db
+          .insert(aiActionQueueTable)
+          .values({
+            personaId: persona.id,
+            runId: run.runId,
+            actionType: "portal_fix_proposal",
+            payload: {
+              context: {
+                submissionId,
+                universityKey: submission.universityKey,
+                adapterKey: submission.adapterKey,
+                fingerprint,
+                reviewOnly: true,
+                baseSpecId: draft.baseSpecId,
+                baseSpecVersion: draft.baseSpecVersion,
+                draftSpecId: draft.draftSpecId,
+                draftSpecVersion: draft.draftSpecVersion,
+              },
+              diagnosis: parsed.diagnosis,
+              structuredOutputValid: true,
+              specDraft: draft,
+              staging: draft.staging,
+            },
+            preview: parsed.diagnosis.summary.slice(0, 400),
+            status: "pending_approval",
+          })
+          .returning({ id: aiActionQueueTable.id })
+      : [];
     const state: GuardianState = {
-      status: proposalReady ? "proposed" : "staging_failed",
+      status: proposalReady ? "proposed" : "diagnosed_no_proposal",
       fingerprint,
       diagnosedAt: new Date().toISOString(),
       runId: run.runId,
-      actionId: queuedProposal?.actionId,
+      actionId: queuedProposal?.id,
       ...draft,
       diagnosis: parsed.diagnosis,
       ...(parsed.parseError ? { error: "STRUCTURED_OUTPUT_INVALID" } : {}),
     };
-
-    if (queuedProposal?.actionId) {
-      await db
-        .update(aiActionQueueTable)
-        .set({
-          payload: {
-            context: {
-              submissionId,
-              universityKey: submission.universityKey,
-              adapterKey: submission.adapterKey,
-              fingerprint,
-              reviewOnly: true,
-              ...(draft.baseSpecId
-                ? {
-                    baseSpecId: draft.baseSpecId,
-                    baseSpecVersion: draft.baseSpecVersion,
-                  }
-                : {}),
-              ...(draft.draftSpecId
-                ? {
-                    draftSpecId: draft.draftSpecId,
-                    draftSpecVersion: draft.draftSpecVersion,
-                  }
-                : {}),
-            },
-            diagnosis: parsed.diagnosis,
-            structuredOutputValid: !parsed.parseError,
-            specDraft: draft,
-            staging: draft.staging,
-          },
-          preview: parsed.diagnosis.summary.slice(0, 400),
-          status: proposalReady ? "pending_approval" : "failed",
-        })
-        .where(eq(aiActionQueueTable.id, queuedProposal.actionId));
-    }
 
     await persistGuardianState(submissionId, state);
     return { reused: false, ...state };
@@ -513,7 +505,7 @@ export async function runPortalAiGuardianTick(): Promise<void> {
         inArray(portalSubmissionsTable.status, [...AUTOMATIC_STATUSES]),
         gte(portalSubmissionsTable.updatedAt, persona.updatedAt),
         sql`(
-          coalesce(${portalSubmissionsTable.resultJson}->'aiGuardian'->>'status', '') not in ('processing', 'proposed', 'staging_failed', 'deploy_proposed', 'deploy_approved', 'deploy_rejected', 'proposal_rejected', 'error')
+          coalesce(${portalSubmissionsTable.resultJson}->'aiGuardian'->>'status', '') not in ('processing', 'proposed', 'diagnosed_no_proposal', 'staging_failed', 'deploy_proposed', 'deploy_approved', 'deploy_rejected', 'proposal_rejected', 'error')
           or (
             ${portalSubmissionsTable.resultJson}->'aiGuardian'->>'status' = 'processing'
             and coalesce(
@@ -547,6 +539,7 @@ export async function runPortalAiGuardianTick(): Promise<void> {
         [
           "processing",
           "proposed",
+          "diagnosed_no_proposal",
           "staging_failed",
           "deploy_proposed",
           "deploy_approved",

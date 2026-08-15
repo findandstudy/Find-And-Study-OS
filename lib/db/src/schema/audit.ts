@@ -1,4 +1,4 @@
-import { pgTable, text, serial, timestamp, integer, index, boolean } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, integer, index, boolean, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { usersTable } from "./users";
@@ -17,6 +17,24 @@ export const auditLogsTable = pgTable("audit_logs", {
   index("audit_logs_action_idx").on(table.action),
   index("audit_logs_created_at_idx").on(table.createdAt),
   index("audit_logs_resource_idx").on(table.resource, table.resourceId),
+]);
+
+// Records lifecycle changes made by application-stage automation.  This is
+// deliberately separate from the append-only audit log: reconciliation needs
+// a synchronous, transactionally-written marker before it may restore a parent
+// status.  Manually-set LOST statuses have no marker and are never guessed.
+export const lifecycleCascadeStateTable = pgTable("lifecycle_cascade_state", {
+  id: serial("id").primaryKey(),
+  entityType: text("entity_type").notNull(),
+  entityId: integer("entity_id").notNull(),
+  previousStatus: text("previous_status").notNull(),
+  cascadedStatus: text("cascaded_status").notNull(),
+  sourceApplicationId: integer("source_application_id"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
+}, (table) => [
+  uniqueIndex("lifecycle_cascade_state_entity_idx").on(table.entityType, table.entityId),
+  index("lifecycle_cascade_state_source_app_idx").on(table.sourceApplicationId),
 ]);
 
 export const notesTable = pgTable("notes", {

@@ -1,5 +1,5 @@
 import { Router, type IRouter, type Request, type Response, type NextFunction } from "express";
-import { db, studentsTable, documentsTable, usersTable, agentsTable, applicationsTable, applicationStageDocumentsTable, notesTable, followUpsTable, leadsTable, invoicesTable, commissionsTable, serviceFeesTable, settingsTable, softDelete, studentEducationRecordsTable, educationRecordsTable } from "@workspace/db";
+import { db, studentsTable, documentsTable, usersTable, agentsTable, applicationsTable, applicationStageDocumentsTable, notesTable, followUpsTable, leadsTable, invoicesTable, commissionsTable, serviceFeesTable, settingsTable, softDelete, studentEducationRecordsTable, educationRecordsTable, lifecycleCascadeStateTable } from "@workspace/db";
 import { eq, ilike, or, sql, and, lt, lte, gte, desc, asc, inArray, isNotNull, ne } from "drizzle-orm";
 import { requireAuth, requireRole, requireAgentStaffPermission, logAudit } from "../lib/auth";
 import { STAFF_ROLES, ADMIN_ROLES, AGENT_ROLES, isAgentRole } from "../lib/roles";
@@ -1247,7 +1247,37 @@ router.patch("/students/:id", requireAuth, requireAgentStaffPermission("students
     (normUpdates as any).phone = rawPhone ? normalizePhoneField(rawPhone) : rawPhone;
     (normUpdates as any).phoneE164 = toE164((normUpdates as any).phone);
   }
-  const [student] = await db.update(studentsTable).set(normUpdates).where(eq(studentsTable.id, id)).returning();
+  const studentAssignmentChanged =
+    Object.prototype.hasOwnProperty.call(normUpdates, "assignedToId") &&
+    existing.assignedToId !== normUpdates.assignedToId;
+  const canCascadeAssignment = studentAssignmentChanged
+    ? await userHasPermission({ id: req.user!.id, role }, "records.cascade_assignment")
+    : false;
+  const studentStatusChanged = Object.prototype.hasOwnProperty.call(normUpdates, "status") && existing.status !== normUpdates.status;
+  const student = studentAssignmentChanged || studentStatusChanged
+    ? await db.transaction(async (tx) => {
+        const [updatedStudent] = await tx.update(studentsTable).set(normUpdates).where(eq(studentsTable.id, id)).returning();
+        if (!updatedStudent) return null;
+        if (studentStatusChanged) {
+          await tx.delete(lifecycleCascadeStateTable).where(and(
+            eq(lifecycleCascadeStateTable.entityType, "student"),
+            eq(lifecycleCascadeStateTable.entityId, id),
+          ));
+        }
+        if (studentAssignmentChanged && (canCascadeAssignment || updatedStudent.assignedToId !== null)) {
+          await cascadeStudentAssignment({
+            studentId: id,
+            newAssignedToId: updatedStudent.assignedToId,
+            actorUserId: req.user!.id,
+            ipAddress: req.ip,
+            nullFillOnly: !canCascadeAssignment,
+            throwOnError: true,
+            executor: tx,
+          });
+        }
+        return updatedStudent;
+      })
+    : (await db.update(studentsTable).set(normUpdates).where(eq(studentsTable.id, id)).returning())[0];
   if (!student) { res.status(404).json({ error: "Student not found" }); return; }
   const studentDiff: Record<string, any> = {};
   for (const k of Object.keys(normUpdates)) {
@@ -1292,29 +1322,6 @@ router.patch("/students/:id", requireAuth, requireAgentStaffPermission("students
   // applications so the same person shows one owner across Leads, Students and
   // Applications. With `records.cascade_assignment` permission: OVERWRITES all.
   // Without it: null-fill only — fills unassigned sibling records automatically.
-  const studentAssignmentChanged =
-    Object.prototype.hasOwnProperty.call(normUpdates, "assignedToId") &&
-    existing.assignedToId !== student.assignedToId;
-  if (studentAssignmentChanged) {
-    const canCascade = await userHasPermission({ id: req.user!.id, role }, "records.cascade_assignment");
-    if (canCascade) {
-      await cascadeStudentAssignment({
-        studentId: id,
-        newAssignedToId: student.assignedToId,
-        actorUserId: req.user!.id,
-        ipAddress: req.ip,
-      });
-    } else if (student.assignedToId !== null) {
-      await cascadeStudentAssignment({
-        studentId: id,
-        newAssignedToId: student.assignedToId,
-        actorUserId: req.user!.id,
-        ipAddress: req.ip,
-        nullFillOnly: true,
-      });
-    }
-  }
-
   if (updates.status && updates.status !== existing.status) {
     // Event-driven portal enqueue: student stage changed — check all their
     // applications immediately instead of waiting for the batch scan.
@@ -1518,23 +1525,37 @@ router.post("/students/bulk-action", requireAuth, requireRole(...STAFF_ROLES), a
     }
     const affected = await db.select({ id: studentsTable.id }).from(studentsTable)
       .where(and(inArray(studentsTable.id, idsToUpdate), isNull(studentsTable.deletedAt)));
-    const result = await db.update(studentsTable).set({ assignedToId: newAssignedToId }).where(and(inArray(studentsTable.id, idsToUpdate), isNull(studentsTable.deletedAt)));
-    updated = result.rowCount ?? idsToUpdate.length;
-    await logAudit(user.id, "bulk_assign_students", "student", undefined, { ids: idsToUpdate, assignedToId }, req.ip);
     const canCascade = await userHasPermission({ id: user.id, role: user.role }, "records.cascade_assignment");
-    for (const s of affected) {
-      await cascadeStudentAssignment({
-        studentId: s.id,
-        newAssignedToId,
-        actorUserId: user.id,
-        ipAddress: req.ip,
-        nullFillOnly: !canCascade,
-      });
-    }
+    updated = await db.transaction(async (tx) => {
+      const result = await tx.update(studentsTable).set({ assignedToId: newAssignedToId })
+        .where(and(inArray(studentsTable.id, idsToUpdate), isNull(studentsTable.deletedAt)));
+      for (const studentRow of affected) {
+        if (canCascade || newAssignedToId !== null) {
+          await cascadeStudentAssignment({
+            studentId: studentRow.id,
+            newAssignedToId,
+            actorUserId: user.id,
+            ipAddress: req.ip,
+            nullFillOnly: !canCascade,
+            throwOnError: true,
+            executor: tx,
+          });
+        }
+      }
+      return result.rowCount ?? idsToUpdate.length;
+    });
+    await logAudit(user.id, "bulk_assign_students", "student", undefined, { ids: idsToUpdate, assignedToId }, req.ip);
     res.json({ success: true, updated, skipped }); return;
   } else if (action === "move" && status) {
-    const result = await db.update(studentsTable).set({ status }).where(and(inArray(studentsTable.id, numericIds), isNull(studentsTable.deletedAt)));
-    updated = result.rowCount ?? numericIds.length;
+    updated = await db.transaction(async (tx) => {
+      const result = await tx.update(studentsTable).set({ status })
+        .where(and(inArray(studentsTable.id, numericIds), isNull(studentsTable.deletedAt)));
+      await tx.delete(lifecycleCascadeStateTable).where(and(
+        eq(lifecycleCascadeStateTable.entityType, "student"),
+        inArray(lifecycleCascadeStateTable.entityId, numericIds),
+      ));
+      return result.rowCount ?? numericIds.length;
+    });
     await logAudit(user.id, "bulk_move_students", "student", undefined, { ids: numericIds, status }, req.ip);
   } else {
     res.status(400).json({ error: "Missing required fields for action" }); return;
@@ -1575,12 +1596,62 @@ async function softDeleteStudents(studentIds: number[], userIds: number[], actor
     await tx.update(documentsTable)
       .set({ deletedAt: sql`now()` })
       .where(and(inArray(documentsTable.studentId, studentIds), isNull(documentsTable.deletedAt)));
+    // Archive the complete converted journey. Leaving live leads pointing at a
+    // deleted student produced unresolvable inbox/detail state and made a later
+    // restore incomplete. Multiple leads per student are all preserved and
+    // archived together; no row is hard-deleted.
+    const linkedLeads = await tx.select({ id: leadsTable.id }).from(leadsTable)
+      .where(and(inArray(leadsTable.convertedStudentId, studentIds), isNull(leadsTable.deletedAt)));
+    if (linkedLeads.length > 0) {
+      await softDelete(leadsTable, linkedLeads.map((row) => row.id), { actorUserId, tx });
+    }
     await softDelete(studentsTable, studentIds, { actorUserId, tx });
     if (userIds.length > 0) {
       await tx.update(usersTable).set({ isActive: false }).where(inArray(usersTable.id, userIds));
     }
   });
 }
+
+// Restore only rows archived by the same student-archive transaction. Because
+// PostgreSQL now() is transaction-stable, their deleted_at values are exactly
+// equal; applications/documents deleted earlier for another reason stay
+// archived and are never accidentally resurrected.
+router.post("/students/:id/restore", requireAuth, requireRole("super_admin", "admin"), async (req, res): Promise<void> => {
+  const id = parseInt(String(req.params.id), 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const [student] = await db.select().from(studentsTable).where(and(eq(studentsTable.id, id), isNotNull(studentsTable.deletedAt)));
+  if (!student?.deletedAt) { res.status(404).json({ error: "Archived student not found" }); return; }
+
+  const restored = await db.transaction(async (tx) => {
+    const deletedAt = student.deletedAt!;
+    const apps = await tx.select({ id: applicationsTable.id }).from(applicationsTable)
+      .where(and(eq(applicationsTable.studentId, id), eq(applicationsTable.deletedAt, deletedAt)));
+    const appIds = apps.map((row) => row.id);
+    const leads = await tx.select({ id: leadsTable.id }).from(leadsTable)
+      .where(and(eq(leadsTable.convertedStudentId, id), eq(leadsTable.deletedAt, deletedAt)));
+
+    if (appIds.length > 0) {
+      await tx.update(applicationsTable).set({ deletedAt: null, deletedBy: null }).where(inArray(applicationsTable.id, appIds));
+      await tx.update(documentsTable).set({ deletedAt: null }).where(and(
+        inArray(documentsTable.applicationId, appIds),
+        eq(documentsTable.deletedAt, deletedAt),
+      ));
+    }
+    await tx.update(documentsTable).set({ deletedAt: null }).where(and(
+      eq(documentsTable.studentId, id),
+      eq(documentsTable.deletedAt, deletedAt),
+    ));
+    if (leads.length > 0) {
+      await tx.update(leadsTable).set({ deletedAt: null, deletedBy: null }).where(inArray(leadsTable.id, leads.map((row) => row.id)));
+    }
+    await tx.update(studentsTable).set({ deletedAt: null, deletedBy: null }).where(eq(studentsTable.id, id));
+    if (student.userId) await tx.update(usersTable).set({ isActive: true }).where(eq(usersTable.id, student.userId));
+    return { applications: appIds.length, leads: leads.length };
+  });
+
+  await logAudit(req.user!.id, "restore_student_journey", "student", id, restored, req.ip);
+  res.json({ success: true, studentId: id, restored });
+});
 
 // Hard-delete (purge) — super_admin only. Permanently removes student and all
 // associated rows; loses audit/finance history. Use for GDPR-style purges.

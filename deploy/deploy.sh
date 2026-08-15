@@ -31,6 +31,7 @@ CURRENT_RELEASE_LINK="${CURRENT_RELEASE_LINK:-}"
 LOG_DIR="${LOG_DIR:-}"
 PORT="${PORT:-5000}"
 CANDIDATE_PORT="${CANDIDATE_PORT:-5057}"
+NGINX_BACKUP_PORT="5057"
 
 for path_name in RELEASES_DIR CURRENT_RELEASE_LINK LOG_DIR; do
   path_value="${!path_name:-}"
@@ -38,6 +39,8 @@ for path_name in RELEASES_DIR CURRENT_RELEASE_LINK LOG_DIR; do
   case "$path_value" in /*) ;; *) fail "$path_name must be absolute" ;; esac
 done
 [ "$PORT" != "$CANDIDATE_PORT" ] || fail "CANDIDATE_PORT must differ from PORT"
+[ "$CANDIDATE_PORT" = "$NGINX_BACKUP_PORT" ] || \
+  fail "CANDIDATE_PORT must match deploy/nginx.conf backup port $NGINX_BACKUP_PORT"
 [[ "$PORT" =~ ^[0-9]{2,5}$ ]] || fail "PORT must be numeric"
 [[ "$CANDIDATE_PORT" =~ ^[0-9]{2,5}$ ]] || fail "CANDIDATE_PORT must be numeric"
 
@@ -119,8 +122,12 @@ for _attempt in $(seq 1 30); do
   sleep 1
 done
 [ "$candidate_ready" = "1" ] || fail "candidate API did not become ready"
-cleanup_candidate
-candidate_pid=""
+
+# Keep the validated candidate alive as Nginx's backup upstream throughout the
+# canonical fork/1 restart. It runs with background jobs disabled, so it can
+# safely serve read traffic without duplicating schedulers or workers. The EXIT
+# trap (or the success cleanup below) always removes it.
+kill -0 "$candidate_pid" 2>/dev/null || fail "candidate API exited after readiness"
 
 echo "[5/7] Verifying canonical PM2 topology and release-link ownership"
 node deploy/pm2-preflight.cjs --release-link "$CURRENT_RELEASE_LINK"
@@ -193,6 +200,10 @@ rollback_code() {
 
 echo "[6/7] Atomically switching code and draining canonical processes"
 switch_release_link "$RELEASE_DIR"
+kill -0 "$candidate_pid" 2>/dev/null || {
+  rollback_code
+  fail "candidate API exited before canonical restart; code rollback attempted"
+}
 if ! restart_pm2_process "$PORTAL_WORKER_PROCESS_NAME" true; then
   rollback_code
   fail "portal worker restart failed; code rollback attempted"
@@ -217,6 +228,8 @@ if [ "$live_ready" != "1" ]; then
 fi
 
 pm2 save
+cleanup_candidate
+candidate_pid=""
 trap - EXIT INT TERM
 echo "[deploy] Release $RELEASE_ID is healthy on canonical port $PORT"
 echo "[deploy] Database, runtime env and storage were not migrated, copied or rolled back"

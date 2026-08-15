@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { db, leadsTable, studentsTable, notesTable, usersTable, followUpsTable, agentsTable, documentsTable, embedSubmissionsTable, embedWidgetsTable, applicationsTable, programsTable, universitiesTable, pipelineStagesTable, settingsTable, softDelete, externalContactsTable, channelAccountsTable } from "@workspace/db";
+import { db, leadsTable, studentsTable, notesTable, usersTable, followUpsTable, agentsTable, documentsTable, embedSubmissionsTable, embedWidgetsTable, applicationsTable, programsTable, universitiesTable, pipelineStagesTable, settingsTable, softDelete, externalContactsTable, channelAccountsTable, lifecycleCascadeStateTable } from "@workspace/db";
 import { eq, ilike, or, sql, and, lt, lte, gte, asc, desc, inArray, isNull, isNotNull, ne } from "drizzle-orm";
 import { requireAuth, requireRole, requireAgentStaffPermission, logAudit } from "../lib/auth";
 import { publicLeadLimiter } from "../lib/limiters";
@@ -29,10 +29,6 @@ import { checkMandatoryDocs, checkMandatoryDocsForStudent, reEvaluateMandatoryDo
 import { getDocLabel } from "../lib/docNaming";
 import { recompressStoredObjectIfNeeded } from "../lib/documentBytes";
 import { UploadTooLargeError } from "../lib/uploads/processUpload";
-import {
-  buildPortalDraftPreflightError,
-  prepareRoutedPortalDraftPreflight,
-} from "../lib/portalDraftPreflight.js";
 import { resolveResidenceAddress } from "../lib/studentAddressDefaults";
 import { validatePassportNumber } from "@workspace/portal-adapters/identity-validation";
 import { buildStableSignedStudentPhotoThumbnailPath } from "@workspace/portal-adapters";
@@ -1164,7 +1160,40 @@ router.patch("/leads/:id", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROL
     (normUpdates as any).phone = rawPhone ? normalizePhoneField(rawPhone) : rawPhone;
     (normUpdates as any).phoneE164 = toE164((normUpdates as any).phone);
   }
-  const [lead] = await db.update(leadsTable).set(normUpdates).where(eq(leadsTable.id, id)).returning();
+  const assignmentChanged =
+    Object.prototype.hasOwnProperty.call(normUpdates, "assignedToId") &&
+    existing.assignedToId !== normUpdates.assignedToId;
+  const canCascadeAssignment = assignmentChanged
+    ? await userHasPermission({ id: user.id, role: user.role }, "records.cascade_assignment")
+    : false;
+  const statusChanged = Object.prototype.hasOwnProperty.call(normUpdates, "status") && existing.status !== normUpdates.status;
+  const lead = assignmentChanged || statusChanged
+    ? await db.transaction(async (tx) => {
+        const [updatedLead] = await tx.update(leadsTable).set(normUpdates).where(eq(leadsTable.id, id)).returning();
+        if (!updatedLead) return null;
+        if (statusChanged) {
+          // A direct staff status change supersedes any earlier application
+          // automation ownership. A later reopen must never restore over it.
+          await tx.delete(lifecycleCascadeStateTable).where(and(
+            eq(lifecycleCascadeStateTable.entityType, "lead"),
+            eq(lifecycleCascadeStateTable.entityId, id),
+          ));
+        }
+        if (assignmentChanged && updatedLead.convertedStudentId && (canCascadeAssignment || updatedLead.assignedToId !== null)) {
+          await cascadeLeadAssignment({
+            leadId: updatedLead.id,
+            convertedStudentId: updatedLead.convertedStudentId,
+            newAssignedToId: updatedLead.assignedToId,
+            actorUserId: user.id,
+            ipAddress: req.ip,
+            nullFillOnly: !canCascadeAssignment,
+            throwOnError: true,
+            executor: tx,
+          });
+        }
+        return updatedLead;
+      })
+    : (await db.update(leadsTable).set(normUpdates).where(eq(leadsTable.id, id)).returning())[0];
   if (!lead) { res.status(404).json({ error: "Lead not found" }); return; }
   const diff: Record<string, any> = {};
   for (const k of Object.keys(normUpdates)) {
@@ -1199,31 +1228,6 @@ router.patch("/leads/:id", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROL
   // Cascade reassignment down to the converted student and its applications.
   // With `records.cascade_assignment` permission: OVERWRITES all downstream records.
   // Without it: null-fill only — fills unassigned downstream records automatically.
-  const assignmentChanged =
-    Object.prototype.hasOwnProperty.call(normUpdates, "assignedToId") &&
-    existing.assignedToId !== lead.assignedToId;
-  if (assignmentChanged && lead.convertedStudentId) {
-    const canCascade = await userHasPermission({ id: user.id, role: user.role }, "records.cascade_assignment");
-    if (canCascade) {
-      await cascadeLeadAssignment({
-        leadId: lead.id,
-        convertedStudentId: lead.convertedStudentId,
-        newAssignedToId: lead.assignedToId,
-        actorUserId: user.id,
-        ipAddress: req.ip,
-      });
-    } else if (lead.assignedToId !== null) {
-      await cascadeLeadAssignment({
-        leadId: lead.id,
-        convertedStudentId: lead.convertedStudentId,
-        newAssignedToId: lead.assignedToId,
-        actorUserId: user.id,
-        ipAddress: req.ip,
-        nullFillOnly: true,
-      });
-    }
-  }
-
   if (updates.status && updates.status !== existing.status) {
     enqueueFtcLeadStageAnalytics(lead, existing.status, String(updates.status));
     // Event-driven portal enqueue: if this lead is already converted to a
@@ -1296,17 +1300,19 @@ router.delete("/leads/:id", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_RO
   const [existing] = await db.select().from(leadsTable).where(and(eq(leadsTable.id, id), isNull(leadsTable.deletedAt)));
   if (!existing) { res.status(404).json({ error: "Lead not found" }); return; }
   const delUser = req.user!;
+  if (existing.convertedStudentId !== null) {
+    res.status(409).json({
+      error: "A converted lead belongs to an active student journey; archive the student journey instead",
+      code: "LEAD_CONVERTED",
+      studentId: existing.convertedStudentId,
+    });
+    return;
+  }
   if (isAgentRole(delUser.role)) {
     // Agents may only delete leads within their own visibility tree.
     const visibleIds = await getAgentVisibleIds(delUser.id, delUser.role);
     if (!existing.agentId || !visibleIds.includes(existing.agentId)) {
       res.status(403).json({ error: "Access denied" }); return;
-    }
-    // A converted lead is linked to a student record; deleting it would orphan
-    // that link, so agents cannot delete leads that have been converted.
-    if (existing.convertedStudentId !== null) {
-      res.status(409).json({ error: "Cannot delete a converted lead", code: "LEAD_CONVERTED" });
-      return;
     }
   } else if (!(ADMIN_ROLES as readonly string[]).includes(delUser.role)) {
     // KURAL 1: non-admin staff cannot delete agent-sourced leads
@@ -1326,6 +1332,17 @@ router.delete("/leads/:id", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_RO
 router.post("/leads/:id/purge", requireAuth, requireRole("super_admin"), async (req, res): Promise<void> => {
   const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const [originStudent] = await db.select({ id: studentsTable.id }).from(studentsTable)
+    .where(and(eq(studentsTable.originLeadId, id), isNull(studentsTable.deletedAt)))
+    .limit(1);
+  if (originStudent) {
+    res.status(409).json({
+      error: "This lead is the origin of an active student journey and cannot be permanently deleted",
+      code: "LEAD_HAS_ACTIVE_STUDENT_JOURNEY",
+      studentId: originStudent.id,
+    });
+    return;
+  }
   const result = await db.delete(leadsTable).where(eq(leadsTable.id, id));
   await logAudit(req.user!.id, "purge_lead", "lead", id, { hard: true }, req.ip);
   res.json({ success: true, deleted: result.rowCount ?? 0 });
@@ -1344,6 +1361,21 @@ router.post("/leads/bulk-action", requireAuth, requireRole(...STAFF_ROLES), asyn
   const numericIds = ids.map(Number).filter((n: number) => !isNaN(n));
   let updated = 0;
   if (action === "delete") {
+    const converted = await db.select({ id: leadsTable.id, studentId: leadsTable.convertedStudentId })
+      .from(leadsTable)
+      .where(and(
+        inArray(leadsTable.id, numericIds),
+        isNotNull(leadsTable.convertedStudentId),
+        isNull(leadsTable.deletedAt),
+      ));
+    if (converted.length > 0) {
+      res.status(409).json({
+        error: "Converted leads must be archived from their student journey",
+        code: "BULK_DELETE_CONVERTED_LEADS",
+        blockedLeadIds: converted.map((row) => row.id),
+      });
+      return;
+    }
     updated = await softDelete(leadsTable, numericIds, { actorUserId: user.id });
     for (const id of numericIds) logAudit(user.id, "delete_lead", "lead", id, { soft: true }, req.ip);
   } else if (action === "assign" && assignedToId !== undefined) {
@@ -1363,27 +1395,45 @@ router.post("/leads/bulk-action", requireAuth, requireRole(...STAFF_ROLES), asyn
     }
     const affectedLeads = await db.select({ id: leadsTable.id, convertedStudentId: leadsTable.convertedStudentId })
       .from(leadsTable).where(and(inArray(leadsTable.id, idsToUpdate), isNull(leadsTable.deletedAt)));
-    const result = await db.update(leadsTable).set({ assignedToId: newAssignedToId }).where(inArray(leadsTable.id, idsToUpdate));
-    updated = result.rowCount ?? idsToUpdate.length;
-    await logAudit(user.id, "bulk_assign_leads", "lead", undefined, { ids: idsToUpdate, assignedToId }, req.ip);
     const canCascadeLeads = await userHasPermission({ id: user.id, role: user.role }, "records.cascade_assignment");
-    for (const l of affectedLeads) {
-      if (!l.convertedStudentId) continue;
-      await cascadeLeadAssignment({
-        leadId: l.id,
-        convertedStudentId: l.convertedStudentId,
-        newAssignedToId,
-        actorUserId: user.id,
-        ipAddress: req.ip,
-        nullFillOnly: !canCascadeLeads,
-      });
-    }
+    updated = await db.transaction(async (tx) => {
+      const result = await tx.update(leadsTable).set({ assignedToId: newAssignedToId }).where(inArray(leadsTable.id, idsToUpdate));
+      const firstByStudent = new Map<number, number>();
+      for (const lead of affectedLeads) {
+        if (lead.convertedStudentId && !firstByStudent.has(lead.convertedStudentId)) {
+          firstByStudent.set(lead.convertedStudentId, lead.id);
+        }
+      }
+      for (const [studentId, leadId] of firstByStudent) {
+        if (canCascadeLeads || newAssignedToId !== null) {
+          await cascadeLeadAssignment({
+            leadId,
+            convertedStudentId: studentId,
+            newAssignedToId,
+            actorUserId: user.id,
+            ipAddress: req.ip,
+            nullFillOnly: !canCascadeLeads,
+            throwOnError: true,
+            executor: tx,
+          });
+        }
+      }
+      return result.rowCount ?? idsToUpdate.length;
+    });
+    await logAudit(user.id, "bulk_assign_leads", "lead", undefined, { ids: idsToUpdate, assignedToId }, req.ip);
     res.json({ success: true, updated, skipped }); return;
   } else if (action === "move" && status) {
     const affectedLeads = await db.select().from(leadsTable)
       .where(and(inArray(leadsTable.id, numericIds), isNull(leadsTable.deletedAt)));
-    const result = await db.update(leadsTable).set({ status }).where(inArray(leadsTable.id, numericIds));
-    updated = result.rowCount ?? numericIds.length;
+    updated = await db.transaction(async (tx) => {
+      const result = await tx.update(leadsTable).set({ status })
+        .where(and(inArray(leadsTable.id, numericIds), isNull(leadsTable.deletedAt)));
+      await tx.delete(lifecycleCascadeStateTable).where(and(
+        eq(lifecycleCascadeStateTable.entityType, "lead"),
+        inArray(lifecycleCascadeStateTable.entityId, numericIds),
+      ));
+      return result.rowCount ?? affectedLeads.length;
+    });
     await logAudit(user.id, "bulk_move_leads", "lead", undefined, { ids: numericIds, status }, req.ip);
     for (const affectedLead of affectedLeads) {
       enqueueFtcLeadStageAnalytics(affectedLead, affectedLead.status, String(status));
@@ -1493,6 +1543,7 @@ router.post("/leads/:id/convert", requireAuth, requireRole(...STAFF_ROLES, ...AG
     nationality: lead.nationality || s(aiData.nationality) || null,
     agentId: (lead as any).agentId || null,
     assignedToId: lead.assignedToId || null,
+    branchId: lead.branchId || null,
     status: "active",
     motherName: s(aiData.motherName) || null,
     fatherName: s(aiData.fatherName) || null,
@@ -1515,155 +1566,221 @@ router.post("/leads/:id/convert", requireAuth, requireRole(...STAFF_ROLES, ...AG
     originLeadId: lead.id,
   };
 
-  if (lead.email) {
-    const [existingByEmail] = await db.select().from(studentsTable).where(and(eq(studentsTable.email, lead.email), isNull(studentsTable.deletedAt)));
-    if (existingByEmail) {
-      const mergeUpdates: any = {};
-      if (!existingByEmail.assignedToId && lead.assignedToId) mergeUpdates.assignedToId = lead.assignedToId;
-      if (!existingByEmail.motherName && studentValues.motherName) mergeUpdates.motherName = studentValues.motherName;
-      if (!existingByEmail.fatherName && studentValues.fatherName) mergeUpdates.fatherName = studentValues.fatherName;
-      if (!existingByEmail.passportNumber && studentValues.passportNumber) mergeUpdates.passportNumber = studentValues.passportNumber;
-      if (!existingByEmail.passportIssueDate && studentValues.passportIssueDate) mergeUpdates.passportIssueDate = studentValues.passportIssueDate;
-      if (!existingByEmail.passportExpiry && studentValues.passportExpiry) mergeUpdates.passportExpiry = studentValues.passportExpiry;
-      if (!existingByEmail.dateOfBirth && studentValues.dateOfBirth) mergeUpdates.dateOfBirth = studentValues.dateOfBirth;
-      if (!existingByEmail.address && studentValues.address) mergeUpdates.address = studentValues.address;
-      const mergedResidence = resolveResidenceAddress({
-        address: studentValues.address || existingByEmail.address,
-        addressCity: existingByEmail.addressCity || studentValues.addressCity,
-        postalCode: existingByEmail.postalCode || studentValues.postalCode,
-        nationality: existingByEmail.nationality || studentValues.nationality,
-      });
-      if (existingByEmail.addressCity !== mergedResidence.addressCity) {
-        mergeUpdates.addressCity = mergedResidence.addressCity;
-      }
-      if (existingByEmail.postalCode !== mergedResidence.postalCode) {
-        mergeUpdates.postalCode = mergedResidence.postalCode;
-      }
-      if (!existingByEmail.highSchool && studentValues.highSchool) mergeUpdates.highSchool = studentValues.highSchool;
-      if (!existingByEmail.gpa && studentValues.gpa) mergeUpdates.gpa = studentValues.gpa;
-      if (!existingByEmail.languageScore && studentValues.languageScore) mergeUpdates.languageScore = studentValues.languageScore;
-      if (!existingByEmail.graduationYear && studentValues.graduationYear) mergeUpdates.graduationYear = studentValues.graduationYear;
-      if (!existingByEmail.originLeadId) mergeUpdates.originLeadId = lead.id;
-      if (existingByEmail.originType === "direct" && lead.originType !== "direct") {
-        mergeUpdates.originType = lead.originType;
-        mergeUpdates.originEntityType = lead.originEntityType;
-        mergeUpdates.originEntityId = lead.originEntityId;
-        mergeUpdates.originDisplayName = lead.originDisplayName;
+  try {
+    const conversion = await db.transaction(async (tx) => {
+      // Serialize every conversion attempt for this lead. Repeated clicks and
+      // concurrent workers either observe the committed result or perform the
+      // conversion once; they cannot create parallel students.
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(76123, ${lead.id})`);
+      const [lockedLead] = await tx.select().from(leadsTable)
+        .where(and(eq(leadsTable.id, lead.id), isNull(leadsTable.deletedAt)));
+      if (!lockedLead) throw new Error("Lead disappeared during conversion");
+      if (lockedLead.convertedStudentId) {
+        const [alreadyStudent] = await tx.select().from(studentsTable).where(and(
+          eq(studentsTable.id, lockedLead.convertedStudentId),
+          isNull(studentsTable.deletedAt),
+        ));
+        if (alreadyStudent) {
+          if (lockedLead.status !== "converted") {
+            await tx.update(leadsTable).set({ status: "converted" }).where(eq(leadsTable.id, lockedLead.id));
+          }
+          return { studentId: alreadyStudent.id, merged: true, alreadyConverted: true, app: null, appCreated: false };
+        }
+        await tx.update(leadsTable).set({ convertedStudentId: null }).where(eq(leadsTable.id, lockedLead.id));
       }
 
-      if (Object.keys(mergeUpdates).length > 0) {
-        await db.update(studentsTable).set(mergeUpdates).where(eq(studentsTable.id, existingByEmail.id));
+      const normalizedLeadEmail = lockedLead.email?.trim().toLowerCase() ?? "";
+      // A per-lead lock prevents repeated clicks for one row. The normalized
+      // e-mail lock additionally serializes two different leads representing
+      // the same person, so they cannot both create a new student.
+      if (normalizedLeadEmail) {
+        await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${normalizedLeadEmail}, 0))`);
+      }
+      const matchingStudents = normalizedLeadEmail
+        ? await tx.select().from(studentsTable).where(and(
+            sql`lower(trim(${studentsTable.email})) = ${normalizedLeadEmail}`,
+            isNull(studentsTable.deletedAt),
+          )).orderBy(asc(studentsTable.id)).limit(2)
+        : [];
+      if (matchingStudents.length > 1) {
+        const err = new Error("Multiple active students match this lead email") as Error & { code?: string; ids?: number[] };
+        err.code = "LEAD_CONVERSION_IDENTITY_AMBIGUOUS";
+        err.ids = matchingStudents.map((row) => row.id);
+        throw err;
       }
 
-      await db.update(documentsTable).set({ studentId: existingByEmail.id }).where(and(eq(documentsTable.leadId, lead.id), isNull(documentsTable.studentId)));
-      // Reassigned lead docs may include a photo/photograph — resync the flag now
-      // so the avatar appears immediately, not only after the next boot backfill.
-      await recomputeStudentPhoto(existingByEmail.id);
-      // Fire-and-forget: run AI education extraction on any newly adopted lead
-      // documents (transcript/diploma/degree) so the academic history section
-      // is filled in — identical to what happens for staff-uploaded documents.
-      maybeTriggerAutoEducationExtractForStudent({
-        studentId: existingByEmail.id,
+      const normalizedPassport = studentValues.passportNumber
+        ? String(studentValues.passportNumber).trim().toUpperCase()
+        : "";
+      const passportMatches = normalizedPassport
+        ? await tx.select({ id: studentsTable.id, email: studentsTable.email, passportNumber: studentsTable.passportNumber })
+            .from(studentsTable)
+            .where(and(
+              sql`upper(trim(${studentsTable.passportNumber})) = ${normalizedPassport}`,
+              isNull(studentsTable.deletedAt),
+            ))
+            .orderBy(asc(studentsTable.id))
+            .limit(2)
+        : [];
+      const emailStudent = matchingStudents[0] ?? null;
+      if (passportMatches.length > 1 || (passportMatches[0] && passportMatches[0].id !== emailStudent?.id)) {
+        const err = new Error("Passport identity conflicts with an existing active student") as Error & { code?: string };
+        err.code = "LEAD_CONVERSION_PASSPORT_CONFLICT";
+        throw err;
+      }
+      if (emailStudent?.passportNumber && normalizedPassport &&
+          emailStudent.passportNumber.trim().toUpperCase() !== normalizedPassport) {
+        const err = new Error("Lead passport conflicts with the matching student's passport") as Error & { code?: string };
+        err.code = "LEAD_CONVERSION_PASSPORT_CONFLICT";
+        throw err;
+      }
+
+      let student = emailStudent;
+      const merged = !!student;
+      if (student) {
+        const mergeUpdates: any = {};
+        if (!student.assignedToId && lockedLead.assignedToId) mergeUpdates.assignedToId = lockedLead.assignedToId;
+        if (!student.branchId && lockedLead.branchId) mergeUpdates.branchId = lockedLead.branchId;
+        if (!student.motherName && studentValues.motherName) mergeUpdates.motherName = studentValues.motherName;
+        if (!student.fatherName && studentValues.fatherName) mergeUpdates.fatherName = studentValues.fatherName;
+        if (!student.passportNumber && studentValues.passportNumber) mergeUpdates.passportNumber = studentValues.passportNumber;
+        if (!student.passportIssueDate && studentValues.passportIssueDate) mergeUpdates.passportIssueDate = studentValues.passportIssueDate;
+        if (!student.passportExpiry && studentValues.passportExpiry) mergeUpdates.passportExpiry = studentValues.passportExpiry;
+        if (!student.dateOfBirth && studentValues.dateOfBirth) mergeUpdates.dateOfBirth = studentValues.dateOfBirth;
+        if (!student.address && studentValues.address) mergeUpdates.address = studentValues.address;
+        const mergedResidence = resolveResidenceAddress({
+          address: studentValues.address || student.address,
+          addressCity: student.addressCity || studentValues.addressCity,
+          postalCode: student.postalCode || studentValues.postalCode,
+          nationality: student.nationality || studentValues.nationality,
+        });
+        if (student.addressCity !== mergedResidence.addressCity) mergeUpdates.addressCity = mergedResidence.addressCity;
+        if (student.postalCode !== mergedResidence.postalCode) mergeUpdates.postalCode = mergedResidence.postalCode;
+        if (!student.highSchool && studentValues.highSchool) mergeUpdates.highSchool = studentValues.highSchool;
+        if (!student.gpa && studentValues.gpa) mergeUpdates.gpa = studentValues.gpa;
+        if (!student.languageScore && studentValues.languageScore) mergeUpdates.languageScore = studentValues.languageScore;
+        if (!student.graduationYear && studentValues.graduationYear) mergeUpdates.graduationYear = studentValues.graduationYear;
+        if (!student.originLeadId) mergeUpdates.originLeadId = lockedLead.id;
+        if (student.originType === "direct" && lockedLead.originType !== "direct") {
+          mergeUpdates.originType = lockedLead.originType;
+          mergeUpdates.originEntityType = lockedLead.originEntityType;
+          mergeUpdates.originEntityId = lockedLead.originEntityId;
+          mergeUpdates.originDisplayName = lockedLead.originDisplayName;
+        }
+        if (Object.keys(mergeUpdates).length > 0) {
+          [student] = await tx.update(studentsTable).set(mergeUpdates)
+            .where(eq(studentsTable.id, student.id)).returning();
+        }
+      } else {
+        [student] = await tx.insert(studentsTable).values({
+          ...studentValues,
+          email: normalizedLeadEmail || studentValues.email,
+        }).returning();
+      }
+      if (!student) throw new Error("Student could not be resolved during conversion");
+
+      await tx.update(documentsTable).set({ studentId: student.id })
+        .where(and(eq(documentsTable.leadId, lockedLead.id), isNull(documentsTable.studentId)));
+      const appResult = submission?.programId
+        ? await createApplicationFromSubmission(student.id, lockedLead.id, submission, tx)
+        : { app: null, created: false };
+      if (submission?.programId && !appResult.app) {
+        throw new Error("Application could not be created during lead conversion");
+      }
+      await tx.update(leadsTable).set({ status: "converted", convertedStudentId: student.id })
+        .where(eq(leadsTable.id, lockedLead.id));
+      await tx.update(externalContactsTable).set({ studentId: student.id })
+        .where(eq(externalContactsTable.leadId, lockedLead.id));
+      return { studentId: student.id, merged, alreadyConverted: false, app: appResult.app, appCreated: appResult.created };
+    });
+
+    await recomputeStudentPhoto(conversion.studentId);
+    maybeTriggerAutoEducationExtractForStudent({
+      studentId: conversion.studentId,
+      actorUserId: req.user?.id ?? null,
+      ip: req.ip,
+    });
+    if (conversion.app && conversion.appCreated) {
+      maybeEnqueuePortalSubmission({
+        applicationId: conversion.app.id,
+        studentId: conversion.app.studentId,
+        newStage: String(conversion.app.stage),
+        universityName: conversion.app.universityName ?? null,
+        universityId: conversion.app.universityId ?? null,
         actorUserId: req.user?.id ?? null,
-        ip: req.ip,
+      }).catch((err) => console.error("[portal-auto] Trigger failed for new app", conversion.app?.id, ":", err));
+    }
+    if (!conversion.alreadyConverted) enqueueFtcLeadStageAnalytics(lead, lead.status, "converted");
+    await logAudit(req.user!.id, "convert_lead", "lead", id, {
+      studentId: conversion.studentId,
+      merged: conversion.merged,
+      alreadyConverted: conversion.alreadyConverted,
+      applicationId: conversion.app?.id ?? null,
+    }, req.ip);
+    const [student] = await db.select().from(studentsTable).where(eq(studentsTable.id, conversion.studentId));
+    res.json({ student, merged: conversion.merged, alreadyConverted: conversion.alreadyConverted });
+  } catch (err: any) {
+    if (err?.code === "LEAD_CONVERSION_IDENTITY_AMBIGUOUS") {
+      res.status(409).json({
+        error: "Multiple active students match this lead email; review duplicates before converting",
+        code: err.code,
+        candidateStudentIds: err.ids ?? [],
       });
-
-      if (submission?.programId) {
-        await createApplicationFromSubmission(existingByEmail.id, lead.id, submission, req.user?.id ?? null);
-      }
-
-      await db.update(leadsTable).set({ status: "converted", convertedStudentId: existingByEmail.id }).where(eq(leadsTable.id, id));
-      enqueueFtcLeadStageAnalytics(lead, lead.status, "converted");
-      // Keep inbox external_contacts in sync so conversation linking resolves to student post-conversion
-      await db.update(externalContactsTable).set({ studentId: existingByEmail.id }).where(eq(externalContactsTable.leadId, lead.id));
-      await logAudit(req.user!.id, "convert_lead", "lead", id, { studentId: existingByEmail.id, merged: true }, req.ip);
-
-      const [updatedStudent] = await db.select().from(studentsTable).where(eq(studentsTable.id, existingByEmail.id));
-      res.json({ student: updatedStudent || existingByEmail, merged: true });
       return;
     }
+    if (err?.code === "LEAD_CONVERSION_PASSPORT_CONFLICT") {
+      res.status(409).json({
+        error: "Passport identity conflicts with an existing student; review the records before converting",
+        code: err.code,
+      });
+      return;
+    }
+    console.error("[LEAD-CONVERT] atomic conversion failed:", err);
+    res.status(500).json({ error: "Lead conversion failed; no partial CRM conversion was committed" });
   }
-
-  const [student] = await db.insert(studentsTable).values(studentValues).returning();
-
-  await db.update(documentsTable).set({ studentId: student.id }).where(and(eq(documentsTable.leadId, lead.id), isNull(documentsTable.studentId)));
-
-  // Now that the lead's photo doc(s) belong to the student, sync has_photo +
-  // photo_url. Covers photo/photograph + fileKey/fileData/fileUrl uniformly.
-  await recomputeStudentPhoto(student.id);
-  // Fire-and-forget: run AI education extraction on any newly adopted lead
-  // documents (transcript/diploma/degree) so the academic history section
-  // is filled in — identical to what happens for staff-uploaded documents.
-  maybeTriggerAutoEducationExtractForStudent({
-    studentId: student.id,
-    actorUserId: req.user?.id ?? null,
-    ip: req.ip,
-  });
-
-  if (submission?.programId) {
-    await createApplicationFromSubmission(student.id, lead.id, submission, req.user?.id ?? null);
-  }
-
-  await db.update(leadsTable).set({ status: "converted", convertedStudentId: student.id }).where(eq(leadsTable.id, id));
-  enqueueFtcLeadStageAnalytics(lead, lead.status, "converted");
-  // Keep inbox external_contacts in sync so conversation linking resolves to student post-conversion
-  await db.update(externalContactsTable).set({ studentId: student.id }).where(eq(externalContactsTable.leadId, lead.id));
-  await logAudit(req.user!.id, "convert_lead", "lead", id, { studentId: student.id }, req.ip);
-  res.json({ student, merged: false });
 });
 
-async function createApplicationFromSubmission(studentId: number, leadId: number, submission: any, actorUserId: number | null = null) {
-  try {
+type LeadConversionTx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+type LeadConversionDb = typeof db | LeadConversionTx;
+
+async function createApplicationFromSubmission(
+  studentId: number,
+  leadId: number,
+  submission: any,
+  executor: LeadConversionDb = db,
+): Promise<{ app: typeof applicationsTable.$inferSelect | null; created: boolean }> {
     const programId = submission.programId;
-    const [program] = await db.select().from(programsTable).where(eq(programsTable.id, programId));
-    if (!program) return;
+    const [program] = await executor.select().from(programsTable).where(eq(programsTable.id, programId));
+    if (!program) throw new Error(`Program #${programId} not found during lead conversion`);
 
-    const [university] = await db.select().from(universitiesTable).where(eq(universitiesTable.id, program.universityId));
+    const [university] = await executor.select().from(universitiesTable).where(eq(universitiesTable.id, program.universityId));
 
-    const [existingApp] = await db.select().from(applicationsTable)
-      .where(and(eq(applicationsTable.studentId, studentId), eq(applicationsTable.programId, programId)));
-    if (existingApp) return;
-
-    const docStatus = await checkMandatoryDocsForStudent(program.id, studentId, program.degree);
-    if (docStatus.missing.length > 0) {
-      console.warn(
-        `[LEAD-CONVERT] Application creation blocked for student #${studentId}; missing mandatory docs: ${docStatus.missing.join(",")}`,
-      );
-      return;
+    const [existingApp] = await executor.select().from(applicationsTable)
+      .where(and(
+        eq(applicationsTable.studentId, studentId),
+        eq(applicationsTable.programId, programId),
+        isNull(applicationsTable.deletedAt),
+      ));
+    if (existingApp) {
+      // This conversion is authoritative for the current lead.  Fill only a
+      // missing link; never steal an application already tied to another lead.
+      if (existingApp.leadId == null) {
+        const [linked] = await executor.update(applicationsTable).set({ leadId })
+          .where(and(eq(applicationsTable.id, existingApp.id), isNull(applicationsTable.leadId)))
+          .returning();
+        return { app: linked ?? existingApp, created: false };
+      }
+      return { app: existingApp, created: false };
     }
 
-    const [studentRec] = await db.select({
+    const [studentRec] = await executor.select({
       assignedToId: studentsTable.assignedToId, agentId: studentsTable.agentId,
       branchId: studentsTable.branchId,
       originType: studentsTable.originType, originEntityType: studentsTable.originEntityType,
       originEntityId: studentsTable.originEntityId, originDisplayName: studentsTable.originDisplayName,
     }).from(studentsTable).where(eq(studentsTable.id, studentId));
 
-    const routedPreflight = await prepareRoutedPortalDraftPreflight({
-      universityId: program.universityId,
-      universityName: university?.name || submission.universityName || null,
-      draft: {
-        studentId,
-        programId: program.id,
-        level: program.degree || null,
-        programName: program.name,
-        universityName: university?.name || submission.universityName || null,
-      },
-      actorUserId,
-    });
-    if (
-      routedPreflight?.preflight.supported &&
-      !routedPreflight.preflight.ready
-    ) {
-      const detail = buildPortalDraftPreflightError(routedPreflight);
-      console.warn(
-        `[LEAD-CONVERT] Portal application blocked for student #${studentId}` +
-        ` adapter=${detail.adapterKey}: ${detail.error}`,
-      );
-      return;
-    }
-
-    const [app] = await db.insert(applicationsTable).values({
+    const [app] = await executor.insert(applicationsTable).values({
       studentId,
       // This application is created as part of this exact lead conversion, so
       // the relationship is authoritative. Other creation paths leave leadId
@@ -1693,22 +1810,7 @@ async function createApplicationFromSubmission(studentId: number, leadId: number
       originStudentId: studentId,
     }).returning();
 
-    if (app) {
-      // Portal automation auto-trigger (fire-and-forget — never blocks response).
-      maybeEnqueuePortalSubmission({
-        applicationId:  app.id,
-        studentId:      app.studentId,
-        newStage:       String(app.stage),
-        universityName: app.universityName ?? null,
-        universityId:   app.universityId ?? null,
-        actorUserId,
-      }).catch((err) =>
-        console.error("[portal-auto] Trigger failed for new app", app.id, ":", err),
-      );
-    }
-  } catch (err) {
-    console.error("Failed to create application from submission:", err);
-  }
+    return { app: app ?? null, created: true };
 }
 
 router.get("/leads/:id/notes", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), requireAgentStaffPermission("leads"), async (req, res): Promise<void> => {

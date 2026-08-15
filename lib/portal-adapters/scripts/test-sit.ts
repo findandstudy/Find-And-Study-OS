@@ -475,6 +475,13 @@ test("AL4 — exact-name guards reject look-alikes", () => {
     matchAllowedUniversity("İstanbul Yeni Yüzyıl Üniversitesi"),
     null,
   );
+  // Arel has no membership in the production SIT account; a stale admin
+  // membership must not pass the adapter boundary.
+  assert.equal(matchAllowedUniversity("Istanbul Arel University"), null);
+  assert.equal(
+    isSitMember("Istanbul Arel University", ["Istanbul Arel University"]),
+    false,
+  );
   // Bare generic token must not match anything.
   assert.equal(matchAllowedUniversity("Üniversitesi"), null);
   // Exact token-set equality: an allowlisted token PLUS extra disambiguating

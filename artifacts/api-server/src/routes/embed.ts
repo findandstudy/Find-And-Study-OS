@@ -1844,6 +1844,10 @@ router.post("/public/embed/:slug/apply", embedSubmitLimiter, embedApplyJson, asy
   try {
     const normalizedEmail = String(email).toLowerCase().trim();
     const [existingUser] = await db.select().from(usersTable).where(eq(usersTable.email, normalizedEmail));
+    const [archivedStudent] = await db.select({ id: studentsTable.id }).from(studentsTable).where(and(
+      sql`lower(trim(${studentsTable.email})) = ${normalizedEmail}`,
+      isNotNull(studentsTable.deletedAt),
+    ));
 
     // SECURITY (Public Intake — account takeover via email): do NOT write
     // applications or documents to an existing verified student account
@@ -1857,6 +1861,10 @@ router.post("/public/embed/:slug/apply", embedSubmitLimiter, embedApplyJson, asy
     // `existingStudentBlocked` prevents the fallthrough new-account path from
     // running (and failing on the unique-email constraint) when we skip here.
     let existingStudentBlocked = false;
+    if (archivedStudent) {
+      console.warn(`[EMBED-APPLY] Archived student #${archivedStudent.id} requires an administrator restore (slug=${widget.slug})`);
+      existingStudentBlocked = true;
+    }
     if (existingUser && existingUser.role === "student") {
       const [existingStudent] = await db.select().from(studentsTable)
         .where(and(eq(studentsTable.userId, existingUser.id), isNull(studentsTable.deletedAt)));
@@ -1894,31 +1902,10 @@ router.post("/public/embed/:slug/apply", embedSubmitLimiter, embedApplyJson, asy
         userId = newUser.id;
       }
 
-      // Reuse an archived student row for this email if present.
-      const [archivedByEmail] = await db.select().from(studentsTable)
-        .where(and(eq(studentsTable.email, normalizedEmail), isNotNull(studentsTable.deletedAt)));
-
       let newStudent: typeof studentsTable.$inferSelect;
-      if (archivedByEmail) {
-        await db.update(studentsTable).set({
-          deletedAt: null,
-          userId,
-          addressCity: residence.addressCity,
-          postalCode: residence.postalCode,
-          interestedLevel: resolvedInterestedLevel,
-        }).where(eq(studentsTable.id, archivedByEmail.id));
-        newStudent = {
-          ...archivedByEmail,
-          deletedAt: null,
-          userId,
-          addressCity: residence.addressCity,
-          postalCode: residence.postalCode,
-          interestedLevel: resolvedInterestedLevel,
-        };
-      } else {
-        const normalizedGender = gender ? String(gender).toLowerCase() : null;
-        const safeGender = (normalizedGender === "female" || normalizedGender === "male") ? normalizedGender : null;
-        [newStudent] = await db.insert(studentsTable).values({
+      const normalizedGender = gender ? String(gender).toLowerCase() : null;
+      const safeGender = (normalizedGender === "female" || normalizedGender === "male") ? normalizedGender : null;
+      [newStudent] = await db.insert(studentsTable).values({
           userId,
           firstName: tlu(firstName, 100)!,
           lastName: tlu(lastName, 100)!,
@@ -1942,7 +1929,6 @@ router.post("/public/embed/:slug/apply", embedSubmitLimiter, embedApplyJson, asy
           gpa: s(gpa, 20),
           languageScore: s(languageScore, 20),
         }).returning();
-      }
       resultStudentId = newStudent.id;
       const newAppResult = await createApplicationForStudent(
         newStudent.id,

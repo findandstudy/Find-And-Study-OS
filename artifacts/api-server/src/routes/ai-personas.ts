@@ -403,6 +403,11 @@ router.get(
   requireAuth,
   requireRole(...ADMIN_ROLES),
   async (_req, res): Promise<void> => {
+    const legacyGuardianNoise = sql<boolean>`
+      ${aiActionQueueTable.actionType} = 'portal_fix_proposal'
+      and ${aiActionQueueTable.status} = 'failed'
+      and ${aiActionQueueTable.payload}->'specDraft'->>'draftReason' = 'NO_ENABLED_SPEC_BASE'
+    `;
     const rows = await db
       .select({
         id: aiActionQueueTable.id,
@@ -420,9 +425,17 @@ router.get(
       .from(aiActionQueueTable)
       .leftJoin(aiPersonasTable, eq(aiActionQueueTable.personaId, aiPersonasTable.id))
       .leftJoin(usersTable, eq(aiActionQueueTable.reviewedBy, usersTable.id))
+      .where(sql`not (${legacyGuardianNoise})`)
       .orderBy(desc(aiActionQueueTable.createdAt))
       .limit(100);
-    res.json({ actions: rows });
+    const [suppressed] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(aiActionQueueTable)
+      .where(legacyGuardianNoise);
+    res.json({
+      actions: rows,
+      suppressed: { guardianNoEnabledSpec: suppressed?.count ?? 0 },
+    });
   },
 );
 

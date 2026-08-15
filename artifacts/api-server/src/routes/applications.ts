@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { db, applicationsTable, notesTable, usersTable, studentsTable, leadsTable, agentsTable, commissionsTable, serviceFeesTable, programsTable, universitiesTable, pipelineStagesTable, applicationStageDocumentsTable, documentsTable, settingsTable, softDelete } from "@workspace/db";
+import { db, applicationsTable, notesTable, usersTable, studentsTable, leadsTable, agentsTable, commissionsTable, serviceFeesTable, programsTable, universitiesTable, pipelineStagesTable, applicationStageDocumentsTable, documentsTable, settingsTable, lifecycleCascadeStateTable, softDelete } from "@workspace/db";
 import { eq, sql, and, inArray, asc, desc, ilike, isNull, isNotNull, ne, lt, gte } from "drizzle-orm";
 import { normalizeGpaTo100 } from "../lib/gpaNormalize";
 import { requireAuth, requireRole, requireAgentStaffPermission, logAudit } from "../lib/auth";
@@ -195,7 +195,11 @@ async function autoCancelSiblingApplications(wonAppId: number, studentId: number
   const cancelledSfStatus = await getServiceFeeFinanceStatus(cancelledKey);
 
   const siblings = await db.select().from(applicationsTable)
-    .where(and(eq(applicationsTable.studentId, studentId), sql`${applicationsTable.id} != ${wonAppId}`));
+    .where(and(
+      eq(applicationsTable.studentId, studentId),
+      sql`${applicationsTable.id} != ${wonAppId}`,
+      isNull(applicationsTable.deletedAt),
+    ));
 
   for (const sib of siblings) {
     const sibTriggers = await shouldAutoCancelSiblings(sib.stage);
@@ -226,6 +230,9 @@ type LostCascadeTargets = {
   studentStage: string;
   leadStage: string;
 };
+
+type DbTx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+type DbLike = typeof db | DbTx;
 
 async function resolveLostCascadeTargets(applicationStage: string): Promise<LostCascadeTargets | null> {
   const [target] = await db.select({
@@ -269,6 +276,20 @@ async function resolveLostCascadeTargets(applicationStage: string): Promise<Lost
   return { studentStage, leadStage };
 }
 
+async function resolveConfiguredLostCascadeTargets(): Promise<LostCascadeTargets | null> {
+  const [lostApplicationStage] = await db.select({ key: pipelineStagesTable.key })
+    .from(pipelineStagesTable)
+    .where(and(
+      eq(pipelineStagesTable.entityType, "application"),
+      eq(pipelineStagesTable.variant, "lost"),
+    ))
+    .orderBy(asc(pipelineStagesTable.sortOrder), asc(pipelineStagesTable.id))
+    .limit(1);
+  return lostApplicationStage?.key
+    ? resolveLostCascadeTargets(lostApplicationStage.key)
+    : null;
+}
+
 async function cascadeApplicationLostStage(opts: {
   applicationId: number;
   studentId: number;
@@ -276,11 +297,12 @@ async function cascadeApplicationLostStage(opts: {
   targets: LostCascadeTargets;
   actorUserId: number;
   ipAddress?: string;
+  executor?: DbLike;
 }): Promise<void> {
-  const { applicationId, studentId, leadId, targets, actorUserId, ipAddress } = opts;
+  const { applicationId, studentId, leadId, targets, actorUserId, ipAddress, executor = db } = opts;
 
   const allApplicationsAreLost = async (scope: "student" | "lead", id: number): Promise<boolean> => {
-    const rows = await db.select({ stage: applicationsTable.stage })
+    const rows = await executor.select({ stage: applicationsTable.stage })
       .from(applicationsTable)
       .where(and(
         scope === "student"
@@ -291,7 +313,7 @@ async function cascadeApplicationLostStage(opts: {
     if (rows.length === 0) return false;
 
     const stageKeys = [...new Set(rows.map((row) => row.stage))];
-    const stageVariants = await db.select({
+    const stageVariants = await executor.select({
       key: pipelineStagesTable.key,
       variant: pipelineStagesTable.variant,
     })
@@ -305,11 +327,25 @@ async function cascadeApplicationLostStage(opts: {
   };
 
   if (await allApplicationsAreLost("student", studentId)) {
-    const [student] = await db.select({ status: studentsTable.status })
+    const [student] = await executor.select({ status: studentsTable.status })
       .from(studentsTable)
       .where(and(eq(studentsTable.id, studentId), isNull(studentsTable.deletedAt)));
     if (student && student.status !== targets.studentStage) {
-      await db.update(studentsTable)
+      await executor.insert(lifecycleCascadeStateTable).values({
+        entityType: "student",
+        entityId: studentId,
+        previousStatus: student.status,
+        cascadedStatus: targets.studentStage,
+        sourceApplicationId: applicationId,
+      }).onConflictDoUpdate({
+        target: [lifecycleCascadeStateTable.entityType, lifecycleCascadeStateTable.entityId],
+        set: {
+          cascadedStatus: targets.studentStage,
+          sourceApplicationId: applicationId,
+          updatedAt: new Date(),
+        },
+      });
+      await executor.update(studentsTable)
         .set({ status: targets.studentStage })
         .where(and(eq(studentsTable.id, studentId), isNull(studentsTable.deletedAt)));
       logAudit(actorUserId, "stage.lost_cascade", "student", studentId, {
@@ -338,7 +374,7 @@ async function cascadeApplicationLostStage(opts: {
     return;
   }
 
-  const [lead] = await db.select({ id: leadsTable.id, status: leadsTable.status })
+  const [lead] = await executor.select({ id: leadsTable.id, status: leadsTable.status })
     .from(leadsTable)
     .where(and(
       eq(leadsTable.id, leadId),
@@ -355,7 +391,21 @@ async function cascadeApplicationLostStage(opts: {
 
   if (await allApplicationsAreLost("lead", leadId)) {
     if (lead.status === targets.leadStage) return;
-    await db.update(leadsTable)
+    await executor.insert(lifecycleCascadeStateTable).values({
+      entityType: "lead",
+      entityId: lead.id,
+      previousStatus: lead.status,
+      cascadedStatus: targets.leadStage,
+      sourceApplicationId: applicationId,
+    }).onConflictDoUpdate({
+      target: [lifecycleCascadeStateTable.entityType, lifecycleCascadeStateTable.entityId],
+      set: {
+        cascadedStatus: targets.leadStage,
+        sourceApplicationId: applicationId,
+        updatedAt: new Date(),
+      },
+    });
+    await executor.update(leadsTable)
       .set({ status: targets.leadStage })
       .where(and(eq(leadsTable.id, lead.id), isNull(leadsTable.deletedAt)));
     logAudit(actorUserId, "stage.lost_cascade", "lead", lead.id, {
@@ -372,6 +422,84 @@ async function cascadeApplicationLostStage(opts: {
       reason: "lead_has_non_lost_application",
     }, ipAddress);
   }
+}
+
+/**
+ * Restore parent statuses only when this service previously changed them.
+ * Legacy/manual LOST values have no lifecycle marker and therefore remain
+ * untouched for administrator review.
+ */
+async function restoreApplicationLostCascade(opts: {
+  applicationId: number;
+  studentId: number;
+  leadId: number | null;
+  targets: LostCascadeTargets;
+  actorUserId: number;
+  ipAddress?: string;
+  executor?: DbLike;
+}): Promise<void> {
+  const { applicationId, studentId, leadId, targets, actorUserId, ipAddress, executor = db } = opts;
+
+  const hasNonLostApplication = async (scope: "student" | "lead", id: number): Promise<boolean> => {
+    const rows = await executor.select({ stage: applicationsTable.stage })
+      .from(applicationsTable)
+      .where(and(
+        scope === "student" ? eq(applicationsTable.studentId, id) : eq(applicationsTable.leadId, id),
+        isNull(applicationsTable.deletedAt),
+      ));
+    if (rows.length === 0) return false;
+    const keys = [...new Set(rows.map((row) => row.stage))];
+    const variants = await executor.select({ key: pipelineStagesTable.key, variant: pipelineStagesTable.variant })
+      .from(pipelineStagesTable)
+      .where(and(eq(pipelineStagesTable.entityType, "application"), inArray(pipelineStagesTable.key, keys)));
+    const byKey = new Map(variants.map((row) => [row.key, row.variant]));
+    return rows.some((row) => byKey.get(row.stage) !== "lost");
+  };
+
+  const restoreEntity = async (entityType: "student" | "lead", entityId: number, currentStatus: string, lostStatus: string) => {
+    const [state] = await executor.select().from(lifecycleCascadeStateTable).where(and(
+      eq(lifecycleCascadeStateTable.entityType, entityType),
+      eq(lifecycleCascadeStateTable.entityId, entityId),
+    ));
+    if (!state) return;
+
+    // A human changed the status after the cascade. Drop stale automation
+    // ownership instead of overwriting that explicit decision.
+    if (currentStatus !== state.cascadedStatus || currentStatus !== lostStatus) {
+      await executor.delete(lifecycleCascadeStateTable).where(eq(lifecycleCascadeStateTable.id, state.id));
+      return;
+    }
+
+    if (entityType === "student") {
+      await executor.update(studentsTable).set({ status: state.previousStatus })
+        .where(and(eq(studentsTable.id, entityId), isNull(studentsTable.deletedAt)));
+    } else {
+      await executor.update(leadsTable).set({ status: state.previousStatus })
+        .where(and(eq(leadsTable.id, entityId), isNull(leadsTable.deletedAt)));
+    }
+    await executor.delete(lifecycleCascadeStateTable).where(eq(lifecycleCascadeStateTable.id, state.id));
+    logAudit(actorUserId, "stage.lost_cascade_restored", entityType, entityId, {
+      from: currentStatus,
+      to: state.previousStatus,
+      source: "application",
+      sourceId: applicationId,
+    }, ipAddress);
+  };
+
+  if (await hasNonLostApplication("student", studentId)) {
+    const [student] = await executor.select({ status: studentsTable.status }).from(studentsTable)
+      .where(and(eq(studentsTable.id, studentId), isNull(studentsTable.deletedAt)));
+    if (student) await restoreEntity("student", studentId, student.status, targets.studentStage);
+  }
+
+  if (leadId == null || !(await hasNonLostApplication("lead", leadId))) return;
+  const [lead] = await executor.select({ id: leadsTable.id, status: leadsTable.status }).from(leadsTable)
+    .where(and(
+      eq(leadsTable.id, leadId),
+      eq(leadsTable.convertedStudentId, studentId),
+      isNull(leadsTable.deletedAt),
+    ));
+  if (lead) await restoreEntity("lead", lead.id, lead.status, targets.leadStage);
 }
 
 router.get("/applications", requireAuth, requireAgentStaffPermission("applications"), async (req, res): Promise<void> => {
@@ -1709,19 +1837,67 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, ...AG
   const lostCascadeTargets = updates.stage !== undefined
     ? await resolveLostCascadeTargets(String(updates.stage))
     : null;
-  const [app] = await db.update(applicationsTable).set(updates).where(and(...conditions)).returning();
+  const lifecycleTargets = updates.stage !== undefined
+    ? (lostCascadeTargets ?? await resolveConfiguredLostCascadeTargets())
+    : null;
+  const mappedStudentStage = updates.stage !== undefined && !lostCascadeTargets
+    ? (await db.select({ mapped: pipelineStagesTable.mappedStudentStageKey })
+        .from(pipelineStagesTable)
+        .where(and(
+          eq(pipelineStagesTable.entityType, "application"),
+          eq(pipelineStagesTable.key, String(updates.stage)),
+        )))[0]?.mapped ?? null
+    : null;
+  const appAssignmentChanged =
+    Object.prototype.hasOwnProperty.call(updates, "assignedToId") &&
+    preUpdateApp != null &&
+    updates.assignedToId !== preUpdateApp.assignedToId;
+  const canCascadeAssignment = appAssignmentChanged
+    ? await userHasPermission({ id: req.user!.id, role: req.user!.role }, "records.cascade_assignment")
+    : false;
+  const needsAtomicJourneyUpdate = appAssignmentChanged || updates.stage !== undefined;
+  const app = needsAtomicJourneyUpdate
+    ? await db.transaction(async (tx) => {
+        const [updatedApp] = await tx.update(applicationsTable).set(updates).where(and(...conditions)).returning();
+        if (!updatedApp) return null;
+        const newAssignedToId = typeof updatedApp.assignedToId === "number" ? updatedApp.assignedToId : null;
+        if (appAssignmentChanged && (canCascadeAssignment || newAssignedToId !== null)) {
+          await cascadeApplicationAssignment({
+            applicationId: updatedApp.id,
+            studentId: updatedApp.studentId,
+            newAssignedToId,
+            actorUserId: req.user!.id,
+            ipAddress: req.ip,
+            nullFillOnly: !canCascadeAssignment,
+            throwOnError: true,
+            executor: tx,
+          });
+        }
+        if (updates.stage !== undefined && lifecycleTargets) {
+          const lifecycleOpts = {
+            applicationId: updatedApp.id,
+            studentId: updatedApp.studentId,
+            leadId: updatedApp.leadId ?? null,
+            targets: lifecycleTargets,
+            actorUserId: user.id,
+            ipAddress: req.ip,
+            executor: tx,
+          };
+          if (lostCascadeTargets) await cascadeApplicationLostStage(lifecycleOpts);
+          else await restoreApplicationLostCascade(lifecycleOpts);
+        }
+        if (mappedStudentStage) {
+          await tx.update(studentsTable).set({ status: mappedStudentStage })
+            .where(and(eq(studentsTable.id, updatedApp.studentId), isNull(studentsTable.deletedAt)));
+          await tx.delete(lifecycleCascadeStateTable).where(and(
+            eq(lifecycleCascadeStateTable.entityType, "student"),
+            eq(lifecycleCascadeStateTable.entityId, updatedApp.studentId),
+          ));
+        }
+        return updatedApp;
+      })
+    : (await db.update(applicationsTable).set(updates).where(and(...conditions)).returning())[0];
   if (!app) { res.status(404).json({ error: "Application not found" }); return; }
-
-  if (lostCascadeTargets) {
-    await cascadeApplicationLostStage({
-      applicationId: app.id,
-      studentId: app.studentId,
-      leadId: app.leadId ?? null,
-      targets: lostCascadeTargets,
-      actorUserId: user.id,
-      ipAddress: req.ip,
-    });
-  }
 
   if (updates.stage !== undefined) {
     const newStage = updates.stage as string;
@@ -1816,26 +1992,8 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, ...AG
       await autoCancelSiblingApplications(id, app.studentId);
     }
 
-    // If the new application stage has a configured student stage mapping
-    // (set in Settings → Pipeline Stages), propagate it to the linked
-    // student's status so the student lifecycle stays in sync with the
-    // application progress (e.g. enrolled → graduated).
-    try {
-      const [stageRow] = await db.select({ mappedStudentStageKey: pipelineStagesTable.mappedStudentStageKey })
-        .from(pipelineStagesTable)
-        .where(and(
-          eq(pipelineStagesTable.entityType, "application"),
-          eq(pipelineStagesTable.key, String(updates.stage)),
-        ));
-      const mapped = stageRow?.mappedStudentStageKey;
-      if (mapped && app.studentId) {
-        await db.update(studentsTable)
-          .set({ status: mapped })
-          .where(eq(studentsTable.id, app.studentId));
-        console.log(`[APPLICATIONS] Stage '${updates.stage}' mapped student #${app.studentId} → status='${mapped}'`);
-      }
-    } catch (mapErr) {
-      console.error("[APPLICATIONS] Failed to apply student stage mapping:", mapErr);
+    if (mappedStudentStage) {
+      console.log(`[APPLICATIONS] Stage '${updates.stage}' mapped student #${app.studentId} → status='${mappedStudentStage}'`);
     }
   }
 
@@ -1897,33 +2055,6 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, ...AG
       templateVars: { studentName: sName4, universityName: app.universityName || "", programName: app.programName || "" },
       createdSource: app.createdSource,
     }).catch(() => {});
-  }
-
-  const appAssignmentChanged =
-    Object.prototype.hasOwnProperty.call(updates, "assignedToId") &&
-    preUpdateApp &&
-    updates.assignedToId !== preUpdateApp.assignedToId;
-  if (appAssignmentChanged) {
-    const newAppAssignedToId = typeof app.assignedToId === "number" ? app.assignedToId : null;
-    const canCascade = await userHasPermission({ id: req.user!.id, role: req.user!.role }, "records.cascade_assignment");
-    if (canCascade) {
-      await cascadeApplicationAssignment({
-        applicationId: app.id,
-        studentId: app.studentId,
-        newAssignedToId: newAppAssignedToId,
-        actorUserId: req.user!.id,
-        ipAddress: req.ip,
-      });
-    } else if (newAppAssignedToId !== null) {
-      await cascadeApplicationAssignment({
-        applicationId: app.id,
-        studentId: app.studentId,
-        newAssignedToId: newAppAssignedToId,
-        actorUserId: req.user!.id,
-        ipAddress: req.ip,
-        nullFillOnly: true,
-      });
-    }
   }
 
   if (updates.agentId !== undefined && preUpdateApp && updates.agentId !== preUpdateApp.agentId) {
@@ -2018,20 +2149,29 @@ router.post("/applications/bulk-action", requireAuth, requireRole(...STAFF_ROLES
     const affectedApps = await db.select({ id: applicationsTable.id, studentId: applicationsTable.studentId })
       .from(applicationsTable)
       .where(and(inArray(applicationsTable.id, idsToUpdate), isNull(applicationsTable.deletedAt)));
-    const result = await db.update(applicationsTable).set({ assignedToId: newAssignedToId }).where(and(inArray(applicationsTable.id, idsToUpdate), isNull(applicationsTable.deletedAt)));
-    updated = result.rowCount ?? idsToUpdate.length;
-    await logAudit(user.id, "bulk_assign_applications", "application", undefined, { ids: idsToUpdate, assignedToId }, req.ip);
     const canCascadeApps = await userHasPermission({ id: user.id, role: user.role }, "records.cascade_assignment");
-    for (const a of affectedApps) {
-      await cascadeApplicationAssignment({
-        applicationId: a.id,
-        studentId: a.studentId,
-        newAssignedToId,
-        actorUserId: user.id,
-        ipAddress: req.ip,
-        nullFillOnly: !canCascadeApps,
-      });
-    }
+    updated = await db.transaction(async (tx) => {
+      const result = await tx.update(applicationsTable).set({ assignedToId: newAssignedToId })
+        .where(and(inArray(applicationsTable.id, idsToUpdate), isNull(applicationsTable.deletedAt)));
+      const firstByStudent = new Map<number, number>();
+      for (const app of affectedApps) if (!firstByStudent.has(app.studentId)) firstByStudent.set(app.studentId, app.id);
+      for (const [studentId, applicationId] of firstByStudent) {
+        if (canCascadeApps || newAssignedToId !== null) {
+          await cascadeApplicationAssignment({
+            applicationId,
+            studentId,
+            newAssignedToId,
+            actorUserId: user.id,
+            ipAddress: req.ip,
+            nullFillOnly: !canCascadeApps,
+            throwOnError: true,
+            executor: tx,
+          });
+        }
+      }
+      return result.rowCount ?? idsToUpdate.length;
+    });
+    await logAudit(user.id, "bulk_assign_applications", "application", undefined, { ids: idsToUpdate, assignedToId }, req.ip);
     res.json({ success: true, updated, skipped }); return;
   } else if (action === "move" && stage) {
     const allApps = await db.select().from(applicationsTable).where(and(inArray(applicationsTable.id, numericIds), isNull(applicationsTable.deletedAt)));
@@ -2045,14 +2185,19 @@ router.post("/applications/bulk-action", requireAuth, requireRole(...STAFF_ROLES
       key: pipelineStagesTable.key,
       sortOrder: pipelineStagesTable.sortOrder,
       actions: pipelineStagesTable.actions,
+      mappedStudentStageKey: pipelineStagesTable.mappedStudentStageKey,
     })
       .from(pipelineStagesTable)
       .where(eq(pipelineStagesTable.entityType, "application"));
     const orderOf = new Map<string, number>();
     let targetActions: unknown[] = [];
+    let targetMappedStudentStage: string | null = null;
     for (const s of stageRowsAll) {
       orderOf.set(s.key, s.sortOrder ?? 0);
-      if (s.key === String(stage)) targetActions = Array.isArray(s.actions) ? s.actions : [];
+      if (s.key === String(stage)) {
+        targetActions = Array.isArray(s.actions) ? s.actions : [];
+        targetMappedStudentStage = s.mappedStudentStageKey ?? null;
+      }
     }
     const targetHasMissingDocs = (targetActions as Array<{ type?: string }>).some(a => a && a.type === "missing_docs");
     const tgtOrder = orderOf.get(String(stage));
@@ -2090,18 +2235,33 @@ router.post("/applications/bulk-action", requireAuth, requireRole(...STAFF_ROLES
     // Hoisted out of the per-app loop: one DB roundtrip vs N when bulk-moving.
     const fallbackSeason = await getCurrentSeason();
     const lostCascadeTargets = await resolveLostCascadeTargets(String(stage));
+    const lifecycleTargets = lostCascadeTargets ?? await resolveConfiguredLostCascadeTargets();
+    const mappedStudentStage = lostCascadeTargets ? null : targetMappedStudentStage;
     for (const app of apps) {
-      await db.update(applicationsTable).set({ stage }).where(eq(applicationsTable.id, app.id));
-      if (lostCascadeTargets) {
-        await cascadeApplicationLostStage({
-          applicationId: app.id,
-          studentId: app.studentId,
-          leadId: app.leadId ?? null,
-          targets: lostCascadeTargets,
-          actorUserId: user.id,
-          ipAddress: req.ip,
-        });
-      }
+      await db.transaction(async (tx) => {
+        await tx.update(applicationsTable).set({ stage }).where(eq(applicationsTable.id, app.id));
+        if (lifecycleTargets) {
+          const lifecycleOpts = {
+            applicationId: app.id,
+            studentId: app.studentId,
+            leadId: app.leadId ?? null,
+            targets: lifecycleTargets,
+            actorUserId: user.id,
+            ipAddress: req.ip,
+            executor: tx,
+          };
+          if (lostCascadeTargets) await cascadeApplicationLostStage(lifecycleOpts);
+          else await restoreApplicationLostCascade(lifecycleOpts);
+        }
+        if (mappedStudentStage) {
+          await tx.update(studentsTable).set({ status: mappedStudentStage })
+            .where(and(eq(studentsTable.id, app.studentId), isNull(studentsTable.deletedAt)));
+          await tx.delete(lifecycleCascadeStateTable).where(and(
+            eq(lifecycleCascadeStateTable.entityType, "student"),
+            eq(lifecycleCascadeStateTable.entityId, app.studentId),
+          ));
+        }
+      });
       const [commStatus, sfStatus] = await Promise.all([
         getCommissionFinanceStatus(stage),
         getServiceFeeFinanceStatus(stage),
@@ -2181,26 +2341,6 @@ router.post("/applications/bulk-action", requireAuth, requireRole(...STAFF_ROLES
       const cancelSiblings = await shouldAutoCancelSiblings(stage);
       if (cancelSiblings) {
         await autoCancelSiblingApplications(app.id, app.studentId);
-      }
-
-      // Apply student-stage mapping for the new stage to keep the linked
-      // student's status in sync with the application progress (mirrors
-      // the per-app PATCH behaviour above).
-      try {
-        const [stageRow] = await db.select({ mappedStudentStageKey: pipelineStagesTable.mappedStudentStageKey })
-          .from(pipelineStagesTable)
-          .where(and(
-            eq(pipelineStagesTable.entityType, "application"),
-            eq(pipelineStagesTable.key, String(stage)),
-          ));
-        const mapped = stageRow?.mappedStudentStageKey;
-        if (mapped && app.studentId) {
-          await db.update(studentsTable)
-            .set({ status: mapped })
-            .where(eq(studentsTable.id, app.studentId));
-        }
-      } catch (mapErr) {
-        console.error("[APPLICATIONS] Bulk-move student stage mapping failed:", mapErr);
       }
 
       await logAudit(req.user!.id, "bulk_move_application", "application", app.id, { stage }, req.ip);

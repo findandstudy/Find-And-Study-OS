@@ -58,6 +58,13 @@ export interface StructuredLeadFields {
   program: string | null;
   language: string | null;
   country: string | null;
+  city: string | null;
+  university: string | null;
+  department: string | null;
+  campus: string | null;
+  gender: string | null;
+  checkInDate: string | null;
+  duration: string | null;
   /** Free-form budget text as the student stated it (e.g. "5000 USD/year"). */
   budget: string | null;
   /** Raw study level as stated (e.g. "master", "lisans"); normalized later. */
@@ -77,6 +84,13 @@ const EMPTY_FIELDS: StructuredLeadFields = {
   program: null,
   language: null,
   country: null,
+  city: null,
+  university: null,
+  department: null,
+  campus: null,
+  gender: null,
+  checkInDate: null,
+  duration: null,
   budget: null,
   level: null,
 };
@@ -100,6 +114,7 @@ const STRUCTURED_EXTRACTION_SYSTEM =
   '{ "firstName": string|null, "lastName": string|null, "email": string|null, ' +
   '"motherName": string|null, "fatherName": string|null, "program": string|null, ' +
   '"language": string|null, "country": string|null, "budget": string|null, "level": string|null }\n' +
+  'Also include: "city", "university", "department", "campus", "gender", "checkInDate", "duration" as string|null.\n' +
   '- "program": the field/program of study they want (e.g. "Computer Engineering").\n' +
   '- "language": preferred language of instruction (e.g. "English").\n' +
   '- "country": destination country they want to study in.\n' +
@@ -115,6 +130,13 @@ const extractionSchema = z.object({
   program: z.string().nullable(),
   language: z.string().nullable(),
   country: z.string().nullable(),
+  city: z.string().nullable(),
+  university: z.string().nullable(),
+  department: z.string().nullable(),
+  campus: z.string().nullable(),
+  gender: z.string().nullable(),
+  checkInDate: z.string().nullable(),
+  duration: z.string().nullable(),
   budget: z.string().nullable(),
   level: z.string().nullable(),
 });
@@ -136,6 +158,13 @@ function sanitizeFields(raw: StructuredLeadFields): StructuredLeadFields {
     program: nullifyBlank(raw.program),
     language: nullifyBlank(raw.language),
     country: nullifyBlank(raw.country),
+    city: nullifyBlank(raw.city),
+    university: nullifyBlank(raw.university),
+    department: nullifyBlank(raw.department),
+    campus: nullifyBlank(raw.campus),
+    gender: nullifyBlank(raw.gender),
+    checkInDate: nullifyBlank(raw.checkInDate),
+    duration: nullifyBlank(raw.duration),
     budget: nullifyBlank(raw.budget),
     level: nullifyBlank(raw.level),
   };
@@ -241,6 +270,59 @@ export function advanceStage(current: string | null | undefined, target: string)
   // Never pull a converted/lost lead back into the active funnel.
   if (cur === "converted" || cur === "lost") return cur;
   return tgtRank > curRank ? target : cur;
+}
+
+type AccommodationSlotKey = "city" | "university" | "department" | "campus" | "gender" | "checkInDate" | "duration" | "budget";
+
+function mergeAccommodationSlots(
+  educationData: unknown,
+  fields: StructuredLeadFields,
+): { value: Record<string, unknown>; changed: boolean } {
+  const root = educationData && typeof educationData === "object"
+    ? { ...(educationData as Record<string, unknown>) }
+    : {};
+  const current = root.accommodationSlots && typeof root.accommodationSlots === "object"
+    ? { ...(root.accommodationSlots as Record<string, unknown>) }
+    : {};
+  const candidates: Record<AccommodationSlotKey, string | null> = {
+    city: fields.city,
+    university: fields.university,
+    department: fields.department,
+    campus: fields.campus,
+    gender: fields.gender,
+    checkInDate: fields.checkInDate,
+    duration: fields.duration,
+    budget: fields.budget,
+  };
+  let changed = false;
+  for (const [key, value] of Object.entries(candidates)) {
+    if (value && !current[key]) {
+      current[key] = value;
+      changed = true;
+    }
+  }
+  if (changed) root.accommodationSlots = current;
+  return { value: root, changed };
+}
+
+export async function getAccommodationSlotInstruction(leadId: number | null): Promise<string> {
+  if (!leadId) return "";
+  const [lead] = await db.select({ educationData: leadsTable.educationData })
+    .from(leadsTable)
+    .where(eq(leadsTable.id, leadId));
+  const root = lead?.educationData && typeof lead.educationData === "object"
+    ? lead.educationData as Record<string, unknown>
+    : {};
+  const slots = root.accommodationSlots && typeof root.accommodationSlots === "object"
+    ? root.accommodationSlots as Record<string, unknown>
+    : {};
+  const filled = Object.entries(slots).filter(([, value]) => typeof value === "string" && value.trim());
+  if (!filled.length) return "";
+  return [
+    "## Persisted accommodation intake slots",
+    ...filled.map(([key, value]) => `- ${key}: ${value}`),
+    "- Treat these as already supplied. Never ask for them again unless the student explicitly gives a conflicting value; then ask which value is correct.",
+  ].join("\n");
 }
 
 // ---------------------------------------------------------------------------
@@ -384,6 +466,7 @@ export async function captureLeadFromConversation(opts: {
     };
     fillIfEmpty("email", email);
     fillIfEmpty("interestedProgram", fields.program);
+    fillIfEmpty("interestedUniversity", fields.university);
     fillIfEmpty("interestedCountry", fields.country);
     fillIfEmpty("interestedLevel", fields.level);
     fillIfEmpty("preferredLanguage", fields.language);
@@ -394,6 +477,8 @@ export async function captureLeadFromConversation(opts: {
     }
     if (phone && !lead.phone) patch.phone = normalizePhoneField(phone);
     if (contact.phoneE164 && !lead.phoneE164) patch.phoneE164 = contact.phoneE164;
+    const slotMerge = mergeAccommodationSlots(lead.educationData, fields);
+    if (slotMerge.changed) patch.educationData = slotMerge.value;
 
     const target = computeTargetStage(fields, Boolean(phone || email));
     const nextStage = advanceStage(lead.status, target);
@@ -480,6 +565,7 @@ export async function captureLeadFromConversation(opts: {
       };
       fillIfEmpty("email", email);
       fillIfEmpty("interestedProgram", fields.program);
+      fillIfEmpty("interestedUniversity", fields.university);
       fillIfEmpty("interestedCountry", fields.country);
       fillIfEmpty("interestedLevel", fields.level);
       fillIfEmpty("preferredLanguage", fields.language);
@@ -490,6 +576,8 @@ export async function captureLeadFromConversation(opts: {
       }
       if (phone && !dup.phone) patch.phone = normalizePhoneField(phone);
       if (contact.phoneE164 && !dup.phoneE164) patch.phoneE164 = contact.phoneE164;
+      const slotMerge = mergeAccommodationSlots(dup.educationData, fields);
+      if (slotMerge.changed) patch.educationData = slotMerge.value;
       const nextStage = advanceStage(dup.status, stage);
       if (nextStage !== dup.status) patch.status = nextStage;
       if (Object.keys(patch).length > 0) {
@@ -516,12 +604,14 @@ export async function captureLeadFromConversation(opts: {
         phoneE164: contact.phoneE164 || null,
         country: fields.country || null,
         interestedProgram: fields.program || null,
+        interestedUniversity: fields.university || null,
         interestedCountry: fields.country || null,
         interestedLevel: fields.level || null,
         preferredLanguage: fields.language || null,
         motherName: fields.motherName ? toLatinUpper(fields.motherName) : null,
         fatherName: fields.fatherName ? toLatinUpper(fields.fatherName) : null,
         estimatedValue: budgetNumeric != null ? budgetNumeric : null,
+        educationData: mergeAccommodationSlots(null, fields).value,
         source: conv.channel,
         status: stage,
         ...directOrigin(),

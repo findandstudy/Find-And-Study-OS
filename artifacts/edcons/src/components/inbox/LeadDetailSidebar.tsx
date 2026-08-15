@@ -194,12 +194,15 @@ export function LeadDetailSidebar({
     setSelectedProgram(null);
   }, [conversationId]);
 
-  // Clear pendingStudentId once detail.student catches up
+  // Once the backend resolves a converted lead to its canonical student, any
+  // previously prepared create-student draft is stale and must not take
+  // precedence over the existing student profile.
   useEffect(() => {
-    if (detail.student && pendingStudentId) {
+    if (detail.student) {
+      setSubmitData(null);
       setPendingStudentId(null);
     }
-  }, [detail.student, pendingStudentId]);
+  }, [detail.student]);
 
   const { data: countries = [] } = useCountrySearch("");
   const countryOptions = countries.map((c) => ({
@@ -311,7 +314,7 @@ export function LeadDetailSidebar({
 
   if (activeTab === "student") {
     const studentForTab = detail.student;
-    if (conversationId && submitData) {
+    if (conversationId && submitData && !studentForTab) {
       // New-student creation draft is ready — show the submit form.
       return (
         <div

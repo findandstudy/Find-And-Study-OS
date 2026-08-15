@@ -29,8 +29,9 @@ module.exports = {
       exec_mode: "fork",
       instances: 1,
 
-      // Heap 512 MB'ı geçince yeniden başlat
-      max_memory_restart: "512M",
+      // PM2 measures total process RSS (not only the V8 heap). The API's
+      // normal PDF/media/SSE workload can legitimately exceed 512 MB.
+      max_memory_restart: "1G",
 
       // Dosya değişikliklerini izleme — deploy scripti yeniden başlatır
       watch: false,

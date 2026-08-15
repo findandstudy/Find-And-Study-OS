@@ -5995,11 +5995,42 @@ components:
           type: array
           items:
             type: string
+        human_request:
+          type: array
+          items:
+            type: string
+        visa_documents:
+          type: array
+          items:
+            type: string
+        supplier:
+          type: array
+          items:
+            type: string
       required:
         - contract
         - payment
         - commission
         - partner
+        - human_request
+        - visa_documents
+        - supplier
+
+    AiAgentHandoffMessages:
+      type: object
+      additionalProperties: false
+      properties:
+        tr: { type: string }
+        en: { type: string }
+        ar: { type: string }
+        fa: { type: string }
+        fr: { type: string }
+        es: { type: string }
+        ru: { type: string }
+        zh: { type: string }
+        hi: { type: string }
+        id: { type: string }
+      required: [tr, en, ar, fa, fr, es, ru, zh, hi, id]
 
     AiAgentConfig:
       type: object
@@ -6016,11 +6047,15 @@ components:
           type: integer
         handoffMessage:
           type: string
+        handoffMessages:
+          $ref: "#/components/schemas/AiAgentHandoffMessages"
+        handoffMessages:
+          $ref: "#/components/schemas/AiAgentHandoffMessages"
         languages:
           type: array
           items:
             type: string
-            enum: [tr, en, ar, ru, fr]
+            enum: [tr, en, ar, fa, fr, es, ru, zh, hi, id]
         escalationKeywords:
           $ref: "#/components/schemas/EscalationKeywords"
         knowledgeBase:
@@ -6040,6 +6075,7 @@ components:
         - temperature
         - maxConsecutiveReplies
         - handoffMessage
+        - handoffMessages
         - languages
         - escalationKeywords
         - knowledgeBase
@@ -6183,7 +6219,7 @@ components:
           type: array
           items:
             type: string
-            enum: [tr, en, ar, ru, fr]
+            enum: [tr, en, ar, fa, fr, es, ru, zh, hi, id]
         escalationKeywords:
           $ref: "#/components/schemas/EscalationKeywords"
         knowledgeBase:
@@ -6202,7 +6238,7 @@ components:
           type: string
         language:
           type: string
-          enum: [tr, en, ar, ru, fr]
+          enum: [tr, en, ar, fa, fr, es, ru, zh, hi, id]
         history:
           type: array
           items:
@@ -6226,7 +6262,7 @@ components:
           type: ["string", "null"]
         language:
           type: string
-          enum: [tr, en, ar, ru, fr]
+          enum: [tr, en, ar, fa, fr, es, ru, zh, hi, id]
         escalation:
           type: object
           properties:
@@ -6234,7 +6270,7 @@ components:
               type: boolean
             topic:
               type: ["string", "null"]
-              enum: [contract, payment, commission, partner, null]
+              enum: [contract, payment, commission, partner, human_request, visa_documents, supplier, null]
           required:
             - escalated
             - topic
