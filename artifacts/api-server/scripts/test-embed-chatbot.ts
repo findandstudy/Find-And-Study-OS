@@ -51,6 +51,16 @@ const embedsAdminSource = readFileSync(
   new URL("../../edcons/src/pages/admin/Embeds.tsx", import.meta.url),
   "utf8",
 );
+const publicApplySource = readFileSync(
+  new URL("../src/routes/public-apply.ts", import.meta.url),
+  "utf8",
+);
+
+test("embed applications keep their source lead when auto-convert is disabled", () => {
+  assert.match(publicApplySource, /sourceLeadId\?: number \| null/);
+  assert.match(publicApplySource, /leadId: sourceLeadId \?\? null/);
+  assert.match(routeSource, /createApplicationForStudent\([\s\S]*?result\.leadId,[\s\S]*?\);/);
+});
 
 test("chat session tokens are signed, scoped, tamper-evident and expiring", () => {
   const now = Date.UTC(2026, 6, 30, 8, 0, 0);

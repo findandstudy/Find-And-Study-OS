@@ -247,7 +247,7 @@ async function precheckProgramEligibility(
   return null;
 }
 
-export async function createApplicationForStudent(studentId: number, programId: number | null, programName: string | null, universityName: string | null, studentGpa?: string | null, studentLanguageScore?: string | null): Promise<{ appId: number | null; eligibilityErrors?: string[]; quotaError?: string }> {
+export async function createApplicationForStudent(studentId: number, programId: number | null, programName: string | null, universityName: string | null, studentGpa?: string | null, studentLanguageScore?: string | null, sourceLeadId?: number | null): Promise<{ appId: number | null; eligibilityErrors?: string[]; quotaError?: string }> {
   try {
     let snapshotTuitionFee: number | null = null;
     let snapshotDiscountedFee: number | null = null;
@@ -351,6 +351,7 @@ export async function createApplicationForStudent(studentId: number, programId: 
 
     const [app] = await db.insert(applicationsTable).values({
       studentId,
+      leadId: sourceLeadId ?? null,
       stage,
       season: currentYear,
       // Public/embed/self-fill intake = student self-service.
@@ -743,6 +744,7 @@ router.post("/public/apply", applyLimiter, applyJson, async (req: Request, res: 
           universityName,
           gpa || null,
           languageScore || null,
+          leadId,
         );
         if (reApplyResult.eligibilityErrors) {
           res.status(422).json({ error: "Student does not meet program eligibility requirements", eligibilityErrors: reApplyResult.eligibilityErrors, code: "ELIGIBILITY_FAILED" });
@@ -810,7 +812,7 @@ router.post("/public/apply", applyLimiter, applyJson, async (req: Request, res: 
         }).returning();
 
       resultStudentId = newStudent.id;
-      const newAppResult = await createApplicationForStudent(newStudent.id, programId ? parseInt(String(programId), 10) : null, programName, universityName, gpa || null, languageScore || null);
+      const newAppResult = await createApplicationForStudent(newStudent.id, programId ? parseInt(String(programId), 10) : null, programName, universityName, gpa || null, languageScore || null, leadId);
       if (newAppResult.eligibilityErrors) {
         res.status(422).json({ error: "Student does not meet program eligibility requirements", eligibilityErrors: newAppResult.eligibilityErrors, code: "ELIGIBILITY_FAILED" });
         return;
@@ -1214,12 +1216,6 @@ router.post("/public/apply", applyLimiter, applyJson, async (req: Request, res: 
                 .where(eq(leadsTable.id, leadIdNum))
                 .returning({ id: leadsTable.id });
               if (convertedLead) {
-                await db.update(applicationsTable)
-                  .set({ leadId: convertedLead.id })
-                  .where(and(
-                    eq(applicationsTable.id, resultAppId),
-                    eq(applicationsTable.studentId, resultStudentId),
-                  ));
                 console.log(`[PUBLIC-APPLY] Auto-converted lead #${leadIdNum} → student #${resultStudentId} (stage=${studentStageKey})`);
               }
             }
