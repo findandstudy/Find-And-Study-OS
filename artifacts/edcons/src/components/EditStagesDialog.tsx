@@ -8,6 +8,7 @@ import { Plus, Trash2, Check, AlertCircle, Pencil, ArrowLeft } from "lucide-reac
 import type { PipelineStage, StageAction, StageActionType } from "@/hooks/use-pipeline-stages";
 import { useToast } from "@/hooks/use-toast";
 import { useI18n } from "@/hooks/use-i18n";
+import { preventPipelineDialogOutsideDismiss } from "@/lib/pipelineDialogDismiss";
 
 type ActionTypeOrNone = StageActionType | "none";
 const ACTION_TYPE_OPTIONS: { value: ActionTypeOrNone; labelKey: string; defaultLabelKey: string; defaultColor: string }[] = [
@@ -650,6 +651,7 @@ export function EditStagesDialog({ open, onClose, stages, onSave, isSaving, enti
     <Dialog open={open} onOpenChange={o => !o && onClose()}>
       <DialogContent
         className="sm:max-w-2xl max-h-[90vh] flex flex-col p-0 gap-0"
+        onInteractOutside={preventPipelineDialogOutsideDismiss}
       >
         <DialogHeader className="px-6 pt-5 pb-4 border-b shrink-0">
           <DialogTitle className="text-base">
