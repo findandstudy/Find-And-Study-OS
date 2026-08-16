@@ -6049,8 +6049,6 @@ components:
           type: string
         handoffMessages:
           $ref: "#/components/schemas/AiAgentHandoffMessages"
-        handoffMessages:
-          $ref: "#/components/schemas/AiAgentHandoffMessages"
         languages:
           type: array
           items:

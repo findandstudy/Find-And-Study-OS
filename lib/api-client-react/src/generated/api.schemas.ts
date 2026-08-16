@@ -1835,6 +1835,9 @@ export interface EscalationKeywords {
   payment: string[];
   commission: string[];
   partner: string[];
+  human_request: string[];
+  visa_documents: string[];
+  supplier: string[];
 }
 
 export type AiAgentConfigLanguagesItem =
@@ -1844,9 +1847,27 @@ export const AiAgentConfigLanguagesItem = {
   tr: "tr",
   en: "en",
   ar: "ar",
+  fa: "fa",
   ru: "ru",
   fr: "fr",
+  es: "es",
+  zh: "zh",
+  hi: "hi",
+  id: "id",
 } as const;
+
+export interface AiAgentHandoffMessages {
+  tr: string;
+  en: string;
+  ar: string;
+  fa: string;
+  fr: string;
+  es: string;
+  ru: string;
+  zh: string;
+  hi: string;
+  id: string;
+}
 
 /**
  * Country / university-type scope for the live searchPrograms tool (FAZ 1). "all" means no restriction on that axis.
@@ -1885,6 +1906,7 @@ export interface AiAgentConfig {
   temperature: number;
   maxConsecutiveReplies: number;
   handoffMessage: string;
+  handoffMessages: AiAgentHandoffMessages;
   languages: AiAgentConfigLanguagesItem[];
   escalationKeywords: EscalationKeywords;
   knowledgeBase: string;
@@ -1921,8 +1943,13 @@ export const AiAgentConfigUpdateLanguagesItem = {
   tr: "tr",
   en: "en",
   ar: "ar",
+  fa: "fa",
   ru: "ru",
   fr: "fr",
+  es: "es",
+  zh: "zh",
+  hi: "hi",
+  id: "id",
 } as const;
 
 /**
@@ -1935,6 +1962,7 @@ export interface AiAgentConfigUpdate {
   temperature?: number;
   maxConsecutiveReplies?: number;
   handoffMessage?: string;
+  handoffMessages?: AiAgentHandoffMessages;
   languages?: AiAgentConfigUpdateLanguagesItem[];
   escalationKeywords?: EscalationKeywords;
   knowledgeBase?: string;
