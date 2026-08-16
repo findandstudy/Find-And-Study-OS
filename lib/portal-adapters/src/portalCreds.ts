@@ -17,6 +17,7 @@ export interface ResolvedCreds {
 }
 
 const _overrides = new Map<string, ResolvedCreds>();
+const _sessionCreds = new WeakMap<object, ResolvedCreds>();
 
 export function setCredsOverride(adapterKey: string, creds: ResolvedCreds): void {
   _overrides.set(adapterKey, creds);
@@ -24,6 +25,30 @@ export function setCredsOverride(adapterKey: string, creds: ResolvedCreds): void
 
 export function clearCredsOverride(adapterKey: string): void {
   _overrides.delete(adapterKey);
+}
+
+/**
+ * Bind credentials to one browser session.
+ *
+ * The process-level override exists for backwards compatibility, but it is not
+ * safe as the long-lived source of truth when a worker runs two submissions for
+ * the same adapter concurrently: one submission can clear the shared override
+ * while the other is still navigating. Session-bound credentials cannot be
+ * observed or cleared by a sibling submission and disappear automatically when
+ * the session is garbage-collected.
+ */
+export function bindPortalSessionCreds(
+  session: object,
+  creds: ResolvedCreds,
+): void {
+  _sessionCreds.set(session, creds);
+}
+
+export function portalSessionCreds(
+  session: object,
+  adapterKey: string,
+): ResolvedCreds {
+  return _sessionCreds.get(session) ?? portalCreds(adapterKey);
 }
 
 export function portalCreds(adapterKey: string): ResolvedCreds {

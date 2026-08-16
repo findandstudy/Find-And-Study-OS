@@ -68,7 +68,58 @@ import {
   verifyDocumentSignature,
 } from "../src/documentSigning.js";
 import { extractStudentDocumentRefs } from "../src/profile.js";
-import { existingSitApplicationAsSubmitted } from "../src/universities/sit/adapter.js";
+import {
+  existingSitApplicationAsSubmitted,
+  isExpectedSitAuthRedirect,
+} from "../src/universities/sit/adapter.js";
+import {
+  bindPortalSessionCreds,
+  clearCredsOverride,
+  portalSessionCreds,
+  setCredsOverride,
+} from "../src/portalCreds.js";
+
+test("NAV1 — expected /students → /auth/login redirect is recoverable", () => {
+  assert.equal(
+    isExpectedSitAuthRedirect(
+      new Error("page.goto: net::ERR_ABORTED; maybe frame was detached?"),
+      "https://partners.sitconnect.net/auth/login",
+    ),
+    true,
+  );
+  assert.equal(
+    isExpectedSitAuthRedirect(
+      new Error("page.goto: net::ERR_ABORTED"),
+      "https://partners.sitconnect.net/students",
+    ),
+    false,
+  );
+  assert.equal(
+    isExpectedSitAuthRedirect(
+      new Error("page.goto: net::ERR_NAME_NOT_RESOLVED"),
+      "https://partners.sitconnect.net/auth/login",
+    ),
+    false,
+  );
+});
+
+test("CREDS1 — concurrent SIT sessions retain isolated credentials", () => {
+  const firstSession = {};
+  const secondSession = {};
+  setCredsOverride("sit", { user: "shared@example.test", password: "shared" });
+  bindPortalSessionCreds(firstSession, { user: "first@example.test", password: "one" });
+  bindPortalSessionCreds(secondSession, { user: "second@example.test", password: "two" });
+  clearCredsOverride("sit");
+
+  assert.deepEqual(portalSessionCreds(firstSession, "sit"), {
+    user: "first@example.test",
+    password: "one",
+  });
+  assert.deepEqual(portalSessionCreds(secondSession, "sit"), {
+    user: "second@example.test",
+    password: "two",
+  });
+});
 
 // ---------------------------------------------------------------------------
 // SIT identity safety — passport document proof + existing-student reuse

@@ -31,7 +31,12 @@ import type {
 } from "../../types.js";
 import { launchPortal, logger } from "../../browser.js";
 import { getAssetSigningSecret } from "../../assetSigningSecret.js";
-import { portalCreds, type ResolvedCreds } from "../../portalCreds.js";
+import {
+  bindPortalSessionCreds,
+  portalCreds,
+  portalSessionCreds,
+  type ResolvedCreds,
+} from "../../portalCreds.js";
 import { fold, matchProgram, type ProgramCandidate } from "../../programMatch.js";
 import { db, portalProgramCacheTable } from "@workspace/db";
 import {
@@ -303,10 +308,19 @@ async function openSitStudentsPage(
   creds: { user: string; password: string },
 ): Promise<void> {
   const navigate = async (): Promise<void> => {
-    await page.goto(SIT_URLS.base + SIT_URLS.studentsPath, {
-      waitUntil: "domcontentloaded",
-      timeout: 60_000,
-    });
+    try {
+      await page.goto(SIT_URLS.base + SIT_URLS.studentsPath, {
+        waitUntil: "domcontentloaded",
+        timeout: 60_000,
+      });
+    } catch (error) {
+      // The SPA can replace /students with /auth/login while Playwright's
+      // navigation is still pending. That expected auth redirect aborts the
+      // first goto; the recovery branch below must be allowed to refresh and
+      // seed the session. Genuine network/navigation failures still propagate.
+      await sleep(page, 250);
+      if (!isExpectedSitAuthRedirect(error, page.url())) throw error;
+    }
     await sleep(page, 3500);
     await dismissInactivityModal(page);
   };
@@ -336,6 +350,15 @@ async function openSitStudentsPage(
     );
   }
   logger.info("[sit] UI oturumu yenilendi ve /students doğrulandı");
+}
+
+export function isExpectedSitAuthRedirect(
+  error: unknown,
+  currentUrl: string,
+): boolean {
+  if (!SIT_LOGIN.loginUrlMarker.test(currentUrl)) return false;
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  return /ERR_ABORTED|navigation.*interrupted|frame was detached/i.test(message);
 }
 
 /** Read document.body.innerText (best-effort; "" on failure). */
@@ -1932,6 +1955,7 @@ export const sitAdapter: SitAdapter = {
   async login(opts?: LoginOpts): Promise<AdapterSession> {
     const creds = resolveCreds(opts);
     const session = await launchPortal({ headless: opts?.headless ?? true });
+    bindPortalSessionCreds(session, creds);
     installSpaAuthCapture(session.page);
 
     // PRIMARY: obtain a Supabase token WITHOUT submitting the login form (which
@@ -1983,13 +2007,14 @@ export const sitAdapter: SitAdapter = {
   /**
    * Ensure a usable Supabase Bearer before an operation. Token-first: reuses or
    * refreshes the process-cached session (no UI login, no captcha). Uses
-   * portalCreds(PORTAL_KEY), which returns the runner-injected override during a
-   * submission. Falls back to the UI login only as a last resort.
+   * the credentials bound during login, so concurrent SIT submissions cannot
+   * clear each other's process-level override. Falls back to the UI login only
+   * as a last resort.
    */
   async ensureLoggedIn(session: AdapterSession): Promise<void> {
     const page = session.page;
     installSpaAuthCapture(page); // idempotent — safe if login() already armed it
-    const creds = portalCreds(PORTAL_KEY);
+    const creds = portalSessionCreds(session, PORTAL_KEY);
 
     // Token-first — reuse/refresh the cached session. Cache hit = no network.
     if (await mintSupabaseBearer(page, creds).catch(() => false)) {
@@ -2178,7 +2203,7 @@ export const sitAdapter: SitAdapter = {
     // reach the card is the wizard's browser file-choosers at create time. We walk
     // the multi-step wizard, fill every field on screen, upload each local file
     // into its own slot, then save. Session-seed auth is already live/verified.
-    const creds = portalCreds(PORTAL_KEY);
+    const creds = portalSessionCreds(session, PORTAL_KEY);
     await openSitStudentsPage(page, creds);
     if (!(await clickButton(page, SIT_NAV.addStudentName))) {
       // Diagnose + one recovery attempt. This branch was previously a SILENT
