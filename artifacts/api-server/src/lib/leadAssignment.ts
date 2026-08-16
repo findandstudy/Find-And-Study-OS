@@ -14,6 +14,7 @@ interface LeadLike {
   interestedProgram?: string | null;
   notes?: string | null;
   phone?: string | null;
+  phoneE164?: string | null;
   /** The real inbox account that originated this lead, when applicable. */
   channelAccountId?: number | null;
 }
@@ -22,14 +23,13 @@ interface LeadLike {
  * Normalize a phone number for prefix matching: strip everything except
  * digits and the leading '+', collapse double '00' to '+'.
  */
-function normalizePhoneForMatch(raw: string | null | undefined): string | null {
+export function normalizePhoneForMatch(raw: string | null | undefined): string | null {
   if (!raw) return null;
   let s = String(raw).trim();
   if (!s) return null;
-  s = s.replace(/[\s().-]/g, "");
-  if (s.startsWith("00")) s = "+" + s.slice(2);
-  if (!s.startsWith("+")) s = "+" + s.replace(/[^\d]/g, "");
-  return s;
+  if (s.startsWith("00")) s = s.slice(2);
+  const digits = s.replace(/[^\d]/g, "");
+  return digits ? `+${digits}` : null;
 }
 
 function includesCI(haystacks: (string | null | undefined)[], needles: string[]): boolean {
@@ -53,12 +53,14 @@ async function ruleMatches(rule: LeadAssignmentRule, lead: LeadLike): Promise<bo
 
   const phoneCodes: string[] = (rule as any).phoneCodes || [];
   if (phoneCodes.length > 0) {
-    const normPhone = normalizePhoneForMatch(lead.phone);
-    if (!normPhone) return false;
+    const normalizedPhones = [lead.phoneE164, lead.phone]
+      .map(normalizePhoneForMatch)
+      .filter((phone): phone is string => Boolean(phone));
+    if (normalizedPhones.length === 0) return false;
     const matched = phoneCodes
       .map((c: string) => normalizePhoneForMatch(c))
       .filter((c): c is string => !!c)
-      .some((prefix: string) => normPhone.startsWith(prefix));
+      .some((prefix: string) => normalizedPhones.some((phone) => phone.startsWith(prefix)));
     if (!matched) return false;
   }
 
@@ -89,6 +91,16 @@ async function ruleMatches(rule: LeadAssignmentRule, lead: LeadLike): Promise<bo
   }
 
   return true;
+}
+
+export async function findMatchingLeadAssignmentRule(lead: LeadLike): Promise<LeadAssignmentRule | null> {
+  const rules = await db.select().from(leadAssignmentRulesTable)
+    .where(eq(leadAssignmentRulesTable.isActive, true))
+    .orderBy(asc(leadAssignmentRulesTable.priority), asc(leadAssignmentRulesTable.id));
+  for (const rule of rules) {
+    if (await ruleMatches(rule, lead)) return rule;
+  }
+  return null;
 }
 
 /**
@@ -126,17 +138,25 @@ export async function applyLeadAssignmentRules(lead: LeadLike & { assignedToId?:
   try {
     if (lead.assignedToId) return null;
 
-    const rules = await db.select().from(leadAssignmentRulesTable)
-      .where(eq(leadAssignmentRulesTable.isActive, true))
-      .orderBy(asc(leadAssignmentRulesTable.priority), asc(leadAssignmentRulesTable.id));
-
-    for (const rule of rules) {
-      if (!(await ruleMatches(rule, lead))) continue;
+    const rule = await findMatchingLeadAssignmentRule(lead);
+    if (rule) {
       const staffId = await pickStaffAtomic(rule);
-      if (!staffId) continue;
+      if (!staffId) return null;
 
-      await db.update(leadsTable).set({ assignedToId: staffId }).where(eq(leadsTable.id, lead.id));
+      const [assigned] = await db.update(leadsTable)
+        .set({ assignedToId: staffId })
+        .where(and(eq(leadsTable.id, lead.id), isNull(leadsTable.assignedToId)))
+        .returning({ convertedStudentId: leadsTable.convertedStudentId });
+      if (!assigned) return null;
       logAudit(null, "lead.auto_assigned", "lead", lead.id, { ruleId: rule.id, ruleName: rule.name, staffId }, ipAddress);
+      await cascadeLeadAssignment({
+        leadId: lead.id,
+        convertedStudentId: assigned.convertedStudentId,
+        newAssignedToId: staffId,
+        actorUserId: null,
+        ipAddress,
+        nullFillOnly: true,
+      });
       return staffId;
     }
     return null;

@@ -80,6 +80,7 @@ import applicationsRouter from "../src/routes/applications.js";
 import staffCardsRouter from "../src/routes/staffCards.js";
 import inboxRouter from "../src/routes/inbox.js";
 import { runBackfill } from "./sync-assignment-backfill.js";
+import { normalizePhoneForMatch } from "../src/lib/leadAssignment.js";
 
 const RUN_ID = `t326_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
 
@@ -121,6 +122,12 @@ function buildApp(): Express {
 }
 
 const app = buildApp();
+
+test("phone-code assignment normalization accepts phoneE164-style values", () => {
+  assert.equal(normalizePhoneForMatch("+92 341-1980649"), "+923411980649");
+  assert.equal(normalizePhoneForMatch("0092 341 1980649"), "+923411980649");
+  assert.equal(normalizePhoneForMatch(null), null);
+});
 
 async function request(
   method: "GET" | "POST" | "PATCH" | "DELETE",

@@ -23,9 +23,9 @@ import { applyLeadAssignmentRules } from "./leadAssignment";
  *
  * When an existing row is reused, only non-empty incoming fields
  * overwrite stored values; status, assignedToId and agentId are left
- * untouched. Lead assignment rules fire only on a brand-new insert —
- * re-running them on every submission would let a refresh re-route the
- * lead to a different staff member.
+ * untouched. Assignment rules are re-evaluated only while the row remains
+ * unassigned, allowing late-arriving phone/nationality data to complete a
+ * rule without ever re-routing an explicitly assigned lead.
  *
  * Race-safe: if the partial unique index rejects a concurrent insert
  * (23505) the helper re-selects the winning row and updates it.
@@ -140,10 +140,13 @@ export async function findOrUpsertPublicLead(opts: {
     const row = existing[0];
     const patch = buildUpdatePatch(opts.fields);
     if (Object.keys(patch).length === 0) {
+      if (!opts.tx && row.assignedToId == null) await applyLeadAssignmentRules(row, opts.ip);
       return { lead: row, created: false };
     }
     const [updated] = await conn.update(leadsTable).set(patch).where(eq(leadsTable.id, row.id)).returning();
-    return { lead: updated ?? row, created: false };
+    const resolved = updated ?? row;
+    if (!opts.tx && resolved.assignedToId == null) await applyLeadAssignmentRules(resolved, opts.ip);
+    return { lead: resolved, created: false };
   }
 
   try {
@@ -178,8 +181,6 @@ export async function findOrUpsertPublicLead(opts: {
     const [inserted] = await conn.insert(leadsTable).values(insertValues).returning();
     if (inserted && !opts.tx) {
       await applyLeadAssignmentRules(inserted, opts.ip);
-    } else if (inserted && opts.tx) {
-      queueMicrotask(() => { applyLeadAssignmentRules(inserted, opts.ip).catch(() => {}); });
     }
     return { lead: inserted, created: true };
   } catch (err: any) {
@@ -191,10 +192,13 @@ export async function findOrUpsertPublicLead(opts: {
       if (reFound) {
         const patch = buildUpdatePatch(opts.fields);
         if (Object.keys(patch).length === 0) {
+          if (!opts.tx && reFound.assignedToId == null) await applyLeadAssignmentRules(reFound, opts.ip);
           return { lead: reFound, created: false };
         }
         const [updated] = await conn.update(leadsTable).set(patch).where(eq(leadsTable.id, reFound.id)).returning();
-        return { lead: updated ?? reFound, created: false };
+        const resolved = updated ?? reFound;
+        if (!opts.tx && resolved.assignedToId == null) await applyLeadAssignmentRules(resolved, opts.ip);
+        return { lead: resolved, created: false };
       }
     }
     throw err;

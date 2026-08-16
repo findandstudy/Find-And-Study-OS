@@ -33,6 +33,7 @@ import { buildStableSignedStudentPhotoThumbnailPath, parseUniversityApplicationI
 import { recordRequestSpan } from "../lib/requestTelemetry";
 import { buildFacetFilterInput, loadFacetValue } from "../lib/facetCache";
 import { studentHasServablePhotoSql } from "../lib/studentPhoto";
+import { syncApplicationFinance } from "@workspace/portal-runner";
 
 const router: IRouter = Router();
 
@@ -191,8 +192,6 @@ const APP_PATCH_FIELDS = [
 
 async function autoCancelSiblingApplications(wonAppId: number, studentId: number) {
   const cancelledKey = await getCancelledStageKey();
-  const cancelledCommStatus = await getCommissionFinanceStatus(cancelledKey);
-  const cancelledSfStatus = await getServiceFeeFinanceStatus(cancelledKey);
 
   const siblings = await db.select().from(applicationsTable)
     .where(and(
@@ -208,21 +207,7 @@ async function autoCancelSiblingApplications(wonAppId: number, studentId: number
     if (alreadyCancelled) continue;
 
     await db.update(applicationsTable).set({ stage: cancelledKey }).where(eq(applicationsTable.id, sib.id));
-
-    const existingComms = await db.select().from(commissionsTable).where(eq(commissionsTable.applicationId, sib.id));
-    for (const comm of existingComms) {
-      if (cancelledCommStatus === "excluded" && !["collected_partial", "collected_full", "settled"].includes(comm.status)) {
-        await db.update(commissionsTable).set({ status: "excluded" }).where(eq(commissionsTable.id, comm.id));
-      }
-    }
-
-    const existingSFs = await db.select().from(serviceFeesTable).where(eq(serviceFeesTable.applicationId, sib.id));
-    for (const sf of existingSFs) {
-      const hasPaid = !!sf.firstInstallmentPaidAt || !!sf.secondInstallmentPaidAt;
-      if (cancelledSfStatus === "excluded" && !hasPaid) {
-        await db.update(serviceFeesTable).set({ financeStatus: "excluded" }).where(eq(serviceFeesTable.id, sf.id));
-      }
-    }
+    await syncApplicationFinance(sib.id);
   }
 }
 
@@ -1323,67 +1308,9 @@ router.post("/applications", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_R
     originStudentId: parseInt(studentId, 10),
   }).returning();
 
-  const commissionBaseFee = (snapshotDiscountedFee != null && !isNaN(snapshotDiscountedFee))
-    ? snapshotDiscountedFee
-    : snapshotTuitionFee;
-
-  // Commission, service fee, and student status are independent — run in parallel.
+  // Finance reconciliation and student status are independent.
   await Promise.all([
-    // Chain 1: commission record
-    (async () => {
-      const commFinStatus = await getCommissionFinanceStatus(stage);
-      if (commFinStatus === "excluded") return;
-      const existingComm = await db.select({ id: commissionsTable.id }).from(commissionsTable).where(eq(commissionsTable.applicationId, app.id));
-      if (existingComm.length > 0) return;
-      const uCommAmount = commissionBaseFee && snapshotCommissionRate
-        ? (commissionBaseFee * snapshotCommissionRate) / 100 : 0;
-      const agentComm = await resolveAgentCommission(resolvedAgentId, uCommAmount);
-      await db.insert(commissionsTable).values({
-        applicationId: app.id,
-        studentId: parseInt(studentId, 10),
-        agentId: agentComm.agentId,
-        studentName: studentFullName,
-        universityName: snapshotUniversityName,
-        programName: snapshotProgramName,
-        isStateUniversity: isStateUniversity,
-        season: season || currentYear,
-        currency: snapshotCurrency,
-        status: commFinStatus,
-        programFee: commissionBaseFee ? String(commissionBaseFee) : null,
-        universityCommissionRate: snapshotCommissionRate ? String(snapshotCommissionRate) : null,
-        universityCommissionAmount: uCommAmount > 0 ? String(uCommAmount) : null,
-        agentCommissionRate: agentComm.agentCommissionRate,
-        agentCommissionAmount: agentComm.agentCommissionAmount,
-        subAgentId: agentComm.subAgentId,
-        subAgentCommissionRate: agentComm.subAgentCommissionRate,
-        subAgentCommissionAmount: agentComm.subAgentCommissionAmount,
-      });
-    })(),
-
-    // Chain 2: service fee record
-    (async () => {
-      const sfFinStatus = await getServiceFeeFinanceStatus(stage);
-      if (sfFinStatus === "excluded") return;
-      const existingSF = await db.select({ id: serviceFeesTable.id }).from(serviceFeesTable).where(eq(serviceFeesTable.applicationId, app.id));
-      if (existingSF.length > 0) return;
-      const sfTotal = snapshotServiceFeeAmount ? String(snapshotServiceFeeAmount) : "0";
-      const sfHalf = snapshotServiceFeeAmount ? String(snapshotServiceFeeAmount / 2) : null;
-      await db.insert(serviceFeesTable).values({
-        applicationId: app.id,
-        studentId: parseInt(studentId, 10),
-        agentId: resolvedAgentId,
-        studentName: studentFullName,
-        universityName: snapshotUniversityName,
-        isStateUniversity: isStateUniversity,
-        season: season || currentYear,
-        currency: snapshotCurrency,
-        totalAmount: sfTotal,
-        firstInstallmentAmount: sfHalf,
-        secondInstallmentAmount: sfHalf,
-        financeStatus: sfFinStatus,
-        status: "pending",
-      });
-    })(),
+    syncApplicationFinance(app.id),
 
     // Chain 3: student status update (best-effort — never throws)
     (async () => {
@@ -1900,6 +1827,8 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, ...AG
   if (!app) { res.status(404).json({ error: "Application not found" }); return; }
 
   if (updates.stage !== undefined) {
+    // Keep every stage-change entry point aligned with portal automation.
+    await syncApplicationFinance(id);
     const newStage = updates.stage as string;
     const [commStatus, sfStatus] = await Promise.all([
       getCommissionFinanceStatus(newStage),
@@ -2262,6 +2191,7 @@ router.post("/applications/bulk-action", requireAuth, requireRole(...STAFF_ROLES
           ));
         }
       });
+      await syncApplicationFinance(app.id);
       const [commStatus, sfStatus] = await Promise.all([
         getCommissionFinanceStatus(stage),
         getServiceFeeFinanceStatus(stage),

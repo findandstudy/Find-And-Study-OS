@@ -1786,6 +1786,15 @@ router.post("/public/embed/:slug/apply", embedSubmitLimiter, embedApplyJson, asy
     return { leadId: lead.id, submissionId: submission.id };
   });
 
+  // Step 1 may have created this lead before nationality/full phone details
+  // existed. Re-evaluate only while it is still unassigned; the helper never
+  // overwrites an explicit owner and now checks both phone and phoneE164.
+  const [enrichedLead] = await db.select().from(leadsTable)
+    .where(eq(leadsTable.id, result.leadId)).limit(1);
+  if (enrichedLead?.assignedToId == null) {
+    await applyLeadAssignmentRules(enrichedLead, req.ip);
+  }
+
   // Save valid files on the lead before any mandatory-document rejection or
   // downstream student/application work. This guarantees that a failed final
   // submit still leaves the documents visible to staff on the lead detail.

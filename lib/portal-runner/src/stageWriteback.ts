@@ -33,6 +33,7 @@ import {
   resolveWritebackTarget,
 } from "./stageWritebackTarget.js";
 import { planUniversityApplicationIdSync } from "@workspace/portal-adapters";
+import { syncApplicationFinance } from "./applicationFinanceSync.js";
 
 // ---------------------------------------------------------------------------
 // writebackResult
@@ -232,6 +233,8 @@ export async function writebackResult(
           .update(applicationsTable)
           .set({ stage: stageKey, updatedAt: new Date() })
           .where(eq(applicationsTable.id, sub.applicationId));
+
+        await syncApplicationFinance(sub.applicationId);
 
         console.log(
           `[writeback] Submission #${submissionId}: status=${submissionStatus} → app #${sub.applicationId} stage=${stageKey}`,

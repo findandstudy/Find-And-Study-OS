@@ -70,6 +70,7 @@ import {
   getExperimentalExcludedUniversityKeys,
   type ClaimedSubmission,
   getApplicationMandatoryDocumentStatus,
+  syncApplicationFinance,
 } from "@workspace/portal-runner";
 import { batchPortalCredentialKeys, resolvePortalCreds, checkHasPortalCredentials } from "../lib/portalCreds.js";
 import { reconcilePortalUniversityCrmLinks } from "../lib/portalUniversityLinker.js";
@@ -2032,6 +2033,11 @@ async function fanOutApplicationToUniversities(
           return { kind: "queued", appId, subId: subRow.id };
         },
       );
+
+      // Fan-out application creation bypasses the normal applications route.
+      // Reconcile finance here so the new row immediately receives the same
+      // commission/service-fee treatment as a manually-created application.
+      await syncApplicationFinance(txOutcome.appId);
 
       results.push({
         universityKey:  uni.universityKey,

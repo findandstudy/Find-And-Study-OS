@@ -20,6 +20,8 @@ import {
   applicationsTable,
   studentsTable,
   pipelineStagesTable,
+  commissionsTable,
+  serviceFeesTable,
 } from "@workspace/db";
 import { and, eq } from "drizzle-orm";
 import { writebackResult, type RunResult } from "@workspace/portal-runner";
@@ -36,6 +38,8 @@ const cleanupStudentIds: number[] = [];
 
 after(async () => {
   for (const id of cleanupSubIds)     await db.delete(portalSubmissionsTable).where(eq(portalSubmissionsTable.id, id)).catch(() => {});
+  for (const id of cleanupAppIds)     await db.delete(commissionsTable).where(eq(commissionsTable.applicationId, id)).catch(() => {});
+  for (const id of cleanupAppIds)     await db.delete(serviceFeesTable).where(eq(serviceFeesTable.applicationId, id)).catch(() => {});
   for (const id of cleanupAppIds)     await db.delete(applicationsTable).where(eq(applicationsTable.id, id)).catch(() => {});
   for (const id of cleanupStudentIds) await db.delete(studentsTable).where(eq(studentsTable.id, id)).catch(() => {});
   setImmediate(() => process.exit(process.exitCode ?? 0));
@@ -56,6 +60,9 @@ async function seedRunningSubmission(): Promise<{ subId: number; appId: number }
     level:         "bachelor",
     season:        new Date().getFullYear().toString(),
     universityName: `TW_Uni_${RUN}`,
+    discountedFee: 3250,
+    commissionRate: 13,
+    currency: "USD",
   }).returning({ id: applicationsTable.id });
   cleanupAppIds.push(app.id);
 
@@ -138,6 +145,10 @@ test("TW1: submitted=true → status=submitted, stage=awaiting_offer (if stage e
   const stageExists = await lookupStageKey("awaiting_offer");
   if (stageExists) {
     assert.equal(app.stage, "awaiting_offer", "app stage → awaiting_offer");
+    const [commission] = await db.select().from(commissionsTable)
+      .where(eq(commissionsTable.applicationId, appId));
+    assert.equal(commission?.status, "potential", "portal stage writeback creates potential commission");
+    assert.equal(commission?.universityCommissionAmount, "422.50", "commission uses discounted fee × rate");
   } else {
     // Stage not in pipeline → app stays at inquiry (best-effort)
     assert.equal(app.stage, "inquiry", "app stage unchanged (stage not in pipeline)");
@@ -181,6 +192,9 @@ test("TW3: alreadyExists=true → status=already_exists, stage=all_registered (i
   const stageExists = await lookupStageKey("all_registered");
   if (stageExists) {
     assert.equal(app.stage, "all_registered", "app stage → all_registered");
+    const [commission] = await db.select().from(commissionsTable)
+      .where(eq(commissionsTable.applicationId, appId));
+    assert.equal(commission, undefined, "lost stage does not create a commission row");
   } else {
     assert.equal(app.stage, "inquiry", "app stage unchanged (stage not in pipeline)");
   }

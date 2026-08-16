@@ -11,3 +11,4 @@ export * from "./exclusions.js";
 export * from "./graduation.js";
 export * from "./altinbasLegacyPolicy.js";
 export * from "./mandatoryDocuments.js";
+export * from "./applicationFinanceSync.js";
