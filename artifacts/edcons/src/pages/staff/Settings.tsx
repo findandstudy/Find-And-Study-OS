@@ -194,7 +194,7 @@ function SaveButton({ onClick, saving, label }: { onClick: () => void; saving: b
   );
 }
 
-type SettingsTab = "profile" | "language" | "notifications" | "security" | "pipeline" | "seasons" | "branding" | "company" | "seo" | "email" | "documents" | "integrations" | "quicklinks" | "leadAssignment" | "webtolead" | "advanced";
+type SettingsTab = "profile" | "language" | "notifications" | "security" | "pipeline" | "seasons" | "branding" | "company" | "seo" | "email" | "documents" | "integrations" | "quicklinks" | "leadAssignment" | "advanced";
 
 interface NavItem { id: SettingsTab; label: string; navKey: string; icon: typeof User; group: "personal" | "organization"; managerOnly?: boolean; superAdminOnly?: boolean }
 
@@ -213,7 +213,6 @@ const NAV_ITEMS: NavItem[] = [
   { id: "integrations", label: "Integrations", navKey: "navIntegrations", icon: Plug, group: "organization", managerOnly: true },
   { id: "quicklinks", label: "Quick Links", navKey: "navQuickLinks", icon: LinkIcon, group: "organization", managerOnly: true },
   { id: "leadAssignment", label: "Lead Otomatik Atama", navKey: "navLeadAssignment", icon: GripVertical, group: "organization", managerOnly: true },
-  { id: "webtolead", label: "Web to Lead", navKey: "navWebToLead", icon: ExternalLink, group: "organization", superAdminOnly: true },
   { id: "advanced", label: "Advanced", navKey: "navAdvanced", icon: Code, group: "organization", managerOnly: true },
 ];
 
@@ -462,7 +461,6 @@ export default function SettingsPage() {
       case "integrations": return isManager ? IntegrationsTab() : null;
       case "quicklinks": return isManager ? <QuickLinksTab /> : null;
       case "leadAssignment": return isManager ? <LeadAssignmentRulesTab /> : null;
-      case "webtolead": return isSuperAdmin ? <WebToLeadTab /> : null;
       case "advanced": return isManager ? AdvancedTab() : null;
       default: return null;
     }

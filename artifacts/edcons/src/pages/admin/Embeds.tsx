@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useDeferredValue } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
@@ -21,7 +21,7 @@ import {
   Tabs, TabsContent, TabsList, TabsTrigger
 } from "@/components/ui/tabs";
 import {
-  Plus, Copy, Trash2, Edit2, Eye, Code2, ExternalLink, Globe, ChevronLeft, ChevronRight, FileText, Bot, ShieldCheck, Upload, Loader2, X
+  Plus, Copy, Trash2, Edit2, Eye, Code2, ExternalLink, Globe, ChevronLeft, ChevronRight, FileText, Bot, ShieldCheck, Upload, Loader2, X, Search, ListFilter, ArrowUpDown, RotateCcw
 } from "lucide-react";
 import { useI18n } from "@/hooks/use-i18n";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -32,6 +32,13 @@ const BASE_URL = import.meta.env.BASE_URL || "/";
 const API_BASE = `${BASE_URL}api`.replace(/\/+/g, "/");
 
 const FILTER_KEYS = ["country", "city", "universityType", "universityId", "level", "language", "field"];
+
+function widgetSlug(value: string) {
+  return value.toLowerCase()
+    .replace(/ı/g, "i").replace(/ğ/g, "g").replace(/ş/g, "s")
+    .replace(/ç/g, "c").replace(/ö/g, "o").replace(/ü/g, "u")
+    .replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60);
+}
 
 type Widget = {
   id: number;
@@ -105,14 +112,40 @@ export default function Embeds() {
   const [viewWidget, setViewWidget] = useState<Widget | null>(null);
   const [subTab, setSubTab] = useState<string>("submissions");
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  const [search, setSearch] = useState("");
+  const deferredSearch = useDeferredValue(search);
+  const [modeFilter, setModeFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [sort, setSort] = useState("createdAt-desc");
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [dialogInitialMode, setDialogInitialMode] = useState("combined");
+
+  const [sortBy, sortDir] = sort.split("-");
+  const activeFilterCount = Number(modeFilter !== "all") + Number(statusFilter !== "all");
 
   function toggleSelect(id: number) {
     setSelectedIds((cur) => cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]);
   }
 
+  useEffect(() => {
+    setPage(1);
+    setSelectedIds([]);
+  }, [deferredSearch, modeFilter, statusFilter, sort]);
+
   const { data: widgetsRes, isLoading } = useQuery({
-    queryKey: ["embed-widgets", page],
-    queryFn: () => customFetch<any>(`/api/embed/widgets?page=${page}&limit=20`),
+    queryKey: ["embed-widgets", page, deferredSearch, modeFilter, statusFilter, sort],
+    queryFn: () => {
+      const params = new URLSearchParams({
+        page: String(page),
+        limit: "20",
+        search: deferredSearch,
+        mode: modeFilter,
+        status: statusFilter,
+        sortBy,
+        sortDir,
+      });
+      return customFetch<any>(`/api/embed/widgets?${params.toString()}`);
+    },
   });
 
   const widgets = widgetsRes?.data || [];
@@ -128,12 +161,12 @@ export default function Embeds() {
 
   return (
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
             <h1 className="text-2xl font-bold">{t("adminEmbeds.title")}</h1>
             <p className="text-muted-foreground text-sm mt-1">{t("adminEmbeds.subtitle")}</p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <ExportImportToolbar
               exportPath="/api/embed/widgets/export"
               importPath="/api/embed/widgets/import"
@@ -142,8 +175,11 @@ export default function Embeds() {
               selectedIds={selectedIds}
               onImported={() => { qc.invalidateQueries({ queryKey: ["embed-widgets"] }); setSelectedIds([]); }}
             />
-            <Button onClick={() => { setEditWidget(null); setDialogOpen(true); }}>
-              <Plus className="w-4 h-4 mr-2" /> New Widget
+            <Button variant="outline" onClick={() => { setEditWidget(null); setDialogInitialMode("lead_form"); setDialogOpen(true); }}>
+              <Plus className="w-4 h-4 mr-2" /> {t("adminEmbeds.newForm")}
+            </Button>
+            <Button onClick={() => { setEditWidget(null); setDialogInitialMode("combined"); setDialogOpen(true); }}>
+              <Plus className="w-4 h-4 mr-2" /> {t("adminEmbeds.newWidget")}
             </Button>
           </div>
         </div>
@@ -160,9 +196,85 @@ export default function Embeds() {
         ) : (
           <Card>
             <CardHeader>
-              <CardTitle>Widgets ({meta.total})</CardTitle>
+              <CardTitle>{t("adminEmbeds.libraryTitle")} ({meta.total})</CardTitle>
+              <CardDescription>{t("adminEmbeds.libraryDescription")}</CardDescription>
             </CardHeader>
             <CardContent>
+              <div className="mb-5 space-y-3">
+                <div className="flex flex-col gap-2 md:flex-row md:items-center">
+                  <div className="relative min-w-0 flex-1">
+                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      value={search}
+                      onChange={(event) => setSearch(event.target.value)}
+                      placeholder={t("adminEmbeds.searchPlaceholder")}
+                      className="pl-9"
+                    />
+                  </div>
+                  <Button
+                    type="button"
+                    variant={filtersOpen || activeFilterCount ? "secondary" : "outline"}
+                    onClick={() => setFiltersOpen((open) => !open)}
+                    className="gap-2"
+                  >
+                    <ListFilter className="h-4 w-4" />
+                    {t("common.filter")}
+                    {activeFilterCount > 0 && <Badge variant="default" className="h-5 min-w-5 justify-center px-1.5">{activeFilterCount}</Badge>}
+                  </Button>
+                  <Select value={sort} onValueChange={setSort}>
+                    <SelectTrigger className="w-full md:w-[190px]">
+                      <ArrowUpDown className="mr-2 h-4 w-4" />
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="createdAt-desc">{t("adminEmbeds.sortNewest")}</SelectItem>
+                      <SelectItem value="createdAt-asc">{t("adminEmbeds.sortOldest")}</SelectItem>
+                      <SelectItem value="name-asc">{t("adminEmbeds.sortNameAsc")}</SelectItem>
+                      <SelectItem value="name-desc">{t("adminEmbeds.sortNameDesc")}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {filtersOpen && (
+                  <div className="grid gap-3 rounded-xl border bg-muted/20 p-3 md:grid-cols-[1fr_1fr_auto] md:items-end">
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-medium text-muted-foreground">{t("adminEmbeds.modeFilter")}</label>
+                      <Select value={modeFilter} onValueChange={setModeFilter}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">{t("adminEmbeds.allModes")}</SelectItem>
+                          <SelectItem value="lead_form">{t("adminEmbeds.modeLeadForm")}</SelectItem>
+                          <SelectItem value="ai_chatbot">{t("adminEmbeds.modeAiChatbot")}</SelectItem>
+                          <SelectItem value="combined">{t("adminEmbeds.modeCombined")}</SelectItem>
+                          <SelectItem value="course_finder">{t("adminEmbeds.modeCourseFinder")}</SelectItem>
+                          <SelectItem value="application_only">{t("adminEmbeds.modeApplication")}</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-medium text-muted-foreground">{t("common.status")}</label>
+                      <Select value={statusFilter} onValueChange={setStatusFilter}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">{t("adminEmbeds.allStatuses")}</SelectItem>
+                          <SelectItem value="active">{t("common.active")}</SelectItem>
+                          <SelectItem value="inactive">{t("common.inactive")}</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      onClick={() => { setModeFilter("all"); setStatusFilter("all"); }}
+                      disabled={activeFilterCount === 0}
+                      className="gap-2"
+                    >
+                      <RotateCcw className="h-4 w-4" /> {t("adminEmbeds.clearFilters")}
+                    </Button>
+                  </div>
+                )}
+              </div>
+
               {isLoading ? (
                 <div className="flex justify-center py-12">
                   <div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full" />
@@ -287,6 +399,7 @@ export default function Embeds() {
           open={dialogOpen}
           onClose={() => { setDialogOpen(false); setEditWidget(null); }}
           widget={editWidget}
+          initialMode={dialogInitialMode}
           onSaved={() => { qc.invalidateQueries({ queryKey: ["embed-widgets"] }); setDialogOpen(false); setEditWidget(null); }}
         />
 
@@ -389,16 +502,18 @@ function WidgetDetail({ widget, submissions, subMeta, subPage, setSubPage, onBac
   );
 }
 
-function WidgetFormDialog({ open, onClose, widget, onSaved }: {
+function WidgetFormDialog({ open, onClose, widget, initialMode, onSaved }: {
   open: boolean;
   onClose: () => void;
   widget: Widget | null;
+  initialMode: string;
   onSaved: () => void;
 }) {
   const { t } = useI18n();
   const { toast } = useToast();
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
+  const [slugTouched, setSlugTouched] = useState(false);
   const [mode, setMode] = useState("combined");
   const [presetCountry, setPresetCountry] = useState("");
   const [presetCity, setPresetCity] = useState("");
@@ -477,6 +592,7 @@ function WidgetFormDialog({ open, onClose, widget, onSaved }: {
     if (widget) {
       setName(widget.name);
       setSlug(widget.slug);
+      setSlugTouched(true);
       setMode(widget.mode);
       const pf = widget.presetFilters || {};
       setPresetCountry(pf.country || "");
@@ -510,7 +626,7 @@ function WidgetFormDialog({ open, onClose, widget, onSaved }: {
       setAiConnectionKey(widget.aiConnectionKey || "claude");
       setAiExtractorId(widget.aiExtractorId ? String(widget.aiExtractorId) : "__default__");
     } else {
-      setName(""); setSlug(""); setMode("combined");
+      setName(""); setSlug(""); setSlugTouched(false); setMode(initialMode);
       setPresetCountry(""); setPresetCity(""); setPresetUniversityType(""); setUniversityScopeMode("all"); setPresetUniversityIds([]); setPresetLevel(""); setPresetLanguage(""); setPresetField("");
       setLocked([]); setHidden([]); setDomains("");
       setPrimaryColor("#2563eb"); setButtonColor("#2563eb"); setBorderRadius("8px");
@@ -519,7 +635,7 @@ function WidgetFormDialog({ open, onClose, widget, onSaved }: {
       setAiBotId(""); setCommunicationPipelineId("__none__");
       setAiConnectionKey("claude"); setAiExtractorId("__default__");
     }
-  }, [open, widget]);
+  }, [open, widget, initialMode]);
 
   useEffect(() => {
     if (!open || activeAiBots.length === 0) return;
@@ -670,7 +786,7 @@ function WidgetFormDialog({ open, onClose, widget, onSaved }: {
     <Dialog open={open} onOpenChange={v => { if (!v) onClose(); }}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{isEdit ? t("adminEmbeds.editWidget") : t("adminEmbeds.newWidget")}</DialogTitle>
+          <DialogTitle>{isEdit ? t("adminEmbeds.editWidget") : (initialMode === "lead_form" ? t("adminEmbeds.newForm") : t("adminEmbeds.newWidget"))}</DialogTitle>
         </DialogHeader>
 
         <Tabs defaultValue="general" className="mt-2">
@@ -685,11 +801,23 @@ function WidgetFormDialog({ open, onClose, widget, onSaved }: {
           <TabsContent value="general" className="space-y-4 mt-4">
             <div>
               <label className="text-sm font-medium">Widget Name</label>
-              <Input value={name} onChange={e => setName(e.target.value)} placeholder="e.g., Okan University Programs" />
+              <Input
+                value={name}
+                onChange={e => {
+                  setName(e.target.value);
+                  if (!slugTouched) setSlug(widgetSlug(e.target.value));
+                }}
+                placeholder="e.g., Okan University Programs"
+              />
             </div>
             <div>
               <label className="text-sm font-medium">Slug (URL identifier)</label>
-              <Input value={slug} onChange={e => setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "-"))} placeholder="e.g., okan-programs" />
+              <Input
+                value={slug}
+                onChange={e => { setSlug(widgetSlug(e.target.value)); setSlugTouched(true); }}
+                placeholder="e.g., okan-programs"
+                disabled={isEdit}
+              />
               <p className="text-xs text-muted-foreground mt-1">Used in embed code and URLs</p>
             </div>
             <div>
@@ -700,6 +828,7 @@ function WidgetFormDialog({ open, onClose, widget, onSaved }: {
                   <SelectItem value="combined">Combined (Course Finder + Application Form)</SelectItem>
                   <SelectItem value="course_finder">Course Finder Only</SelectItem>
                   <SelectItem value="application_only">Application Form Only</SelectItem>
+                  <SelectItem value="lead_form">Web to Lead Form</SelectItem>
                   <SelectItem value="ai_chatbot">AI Chatbot (Messages + Lead)</SelectItem>
                 </SelectContent>
               </Select>

@@ -624,13 +624,48 @@ async function resolveEmbedAutomationSelection(
 }
 
 router.get("/embed/widgets", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
-  const { page = "1", limit = "20" } = req.query as Record<string, string>;
+  const {
+    page = "1",
+    limit = "20",
+    search = "",
+    mode = "all",
+    status = "all",
+    sortBy = "createdAt",
+    sortDir = "desc",
+  } = req.query as Record<string, string>;
   const pageNum = Math.max(1, parseInt(page, 10));
   const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10)));
   const offset = (pageNum - 1) * limitNum;
+  const conditions: any[] = [];
 
-  const [{ count }] = await db.select({ count: sql<number>`count(*)` }).from(embedWidgetsTable);
-  const rows = await db.select().from(embedWidgetsTable).orderBy(desc(embedWidgetsTable.createdAt)).limit(limitNum).offset(offset);
+  const cleanSearch = search.trim().slice(0, 120);
+  if (cleanSearch) {
+    const pattern = `%${cleanSearch}%`;
+    conditions.push(or(
+      ilike(embedWidgetsTable.name, pattern),
+      ilike(embedWidgetsTable.slug, pattern),
+      sql`${embedWidgetsTable.allowedDomains}::text ILIKE ${pattern}`,
+    ));
+  }
+  if (mode !== "all" && VALID_MODES.includes(mode)) {
+    conditions.push(eq(embedWidgetsTable.mode, mode));
+  }
+  if (status === "active") conditions.push(eq(embedWidgetsTable.isActive, true));
+  if (status === "inactive") conditions.push(eq(embedWidgetsTable.isActive, false));
+
+  const whereClause = conditions.length ? and(...conditions) : undefined;
+  const sortColumn = sortBy === "name" ? embedWidgetsTable.name : embedWidgetsTable.createdAt;
+  const orderBy = sortDir === "asc" ? asc(sortColumn) : desc(sortColumn);
+
+  const [{ count }] = await db.select({ count: sql<number>`count(*)` })
+    .from(embedWidgetsTable)
+    .where(whereClause);
+  const rows = await db.select()
+    .from(embedWidgetsTable)
+    .where(whereClause)
+    .orderBy(orderBy)
+    .limit(limitNum)
+    .offset(offset);
   const role = req.user!.role;
   res.json({ data: rows.map(w => sanitizeWidget(w, role)), meta: { total: Number(count), page: pageNum, limit: limitNum, totalPages: Math.ceil(Number(count) / limitNum) } });
 });
