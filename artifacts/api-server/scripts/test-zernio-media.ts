@@ -11,6 +11,7 @@ import {
 import {
   configuredInboxMediaHosts,
   resolveLocalInboxStorageKey,
+  zernioMediaFailureStatus,
 } from "../src/lib/inbox/mediaSource";
 
 type FetchCall = { url: string; init?: RequestInit };
@@ -124,6 +125,14 @@ test("historical production inbox media resolves to the canonical storage key", 
     ),
     "inbox/document-id",
   );
+});
+
+test("expired or deleted Zernio media is not reported as a gateway outage", () => {
+  assert.equal(zernioMediaFailureStatus(400, "Media has expired"), 410);
+  assert.equal(zernioMediaFailureStatus(400, "Attachment was deleted"), 410);
+  assert.equal(zernioMediaFailureStatus(404, "Not found"), 404);
+  assert.equal(zernioMediaFailureStatus(401, "Invalid API key"), 502);
+  assert.equal(zernioMediaFailureStatus(429, "Rate limited"), 502);
 });
 
 test("a missing remote template is a successful stale-cache cleanup", async () => {

@@ -175,9 +175,6 @@ export default function Embeds() {
               selectedIds={selectedIds}
               onImported={() => { qc.invalidateQueries({ queryKey: ["embed-widgets"] }); setSelectedIds([]); }}
             />
-            <Button variant="outline" onClick={() => { setEditWidget(null); setDialogInitialMode("lead_form"); setDialogOpen(true); }}>
-              <Plus className="w-4 h-4 mr-2" /> {t("adminEmbeds.newForm")}
-            </Button>
             <Button onClick={() => { setEditWidget(null); setDialogInitialMode("combined"); setDialogOpen(true); }}>
               <Plus className="w-4 h-4 mr-2" /> {t("adminEmbeds.newWidget")}
             </Button>

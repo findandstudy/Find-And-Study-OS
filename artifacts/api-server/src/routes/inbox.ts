@@ -110,6 +110,7 @@ import {
   configuredInboxMediaHosts,
   isZernioMediaUrl,
   resolveLocalInboxStorageKey,
+  zernioMediaFailureStatus,
 } from "../lib/inbox/mediaSource";
 import { validateStudentDocumentFile, validateStudentDocumentBuffer, sanitizeFileName } from "../lib/fileUploadValidation";
 import { buildDocNameFromParts } from "../lib/docNaming";
@@ -600,7 +601,10 @@ router.get(
       if (!upstream.ok) {
         const body = await upstream.text().catch(() => "");
         console.error(`[ZERNIO] media proxy upstream ${upstream.status} for message ${messageId}[${index}]:`, body.slice(0, 300));
-        res.status(upstream.status === 404 ? 404 : 502).json({ error: "Failed to fetch media" });
+        const clientStatus = zernioMediaFailureStatus(upstream.status, body);
+        res.status(clientStatus).json({
+          error: clientStatus === 410 ? "Media is no longer available" : "Failed to fetch media",
+        });
         return;
       }
       const upstreamContentType = upstream.headers.get("content-type") || "application/octet-stream";

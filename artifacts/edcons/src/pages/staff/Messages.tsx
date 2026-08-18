@@ -892,7 +892,20 @@ function InboxTab() {
     if (typeof window === "undefined" || typeof EventSource === "undefined") return;
     setLiveStatus("connecting");
     let failureCount = 0;
+    let inboxRefreshTimer: ReturnType<typeof setTimeout> | null = null;
     const es = new EventSource("/api/inbox/events", { withCredentials: true });
+
+    // One inbound action can emit message, assignment and read-state events.
+    // The inbox list is an enriched query of up to 200 conversations, so
+    // coalesce only these live-event refreshes into one request. Explicit user
+    // actions continue to refresh immediately.
+    const scheduleInboxRefresh = () => {
+      if (inboxRefreshTimer !== null) return;
+      inboxRefreshTimer = setTimeout(() => {
+        inboxRefreshTimer = null;
+        void fetchInboxRef.current();
+      }, 200);
+    };
 
     const refresh = (raw: MessageEvent) => {
       setLastEventAt(Date.now());
@@ -903,7 +916,7 @@ function InboxTab() {
       } catch {
         // ignore malformed frames; still refresh the list as a safety net.
       }
-      fetchInboxRef.current();
+      scheduleInboxRefresh();
       if (convId !== null && selectedIdRef.current === convId) {
         fetchDetailRef.current(convId);
       }
@@ -917,7 +930,7 @@ function InboxTab() {
         // and never refetch the open detail here: GET detail itself marks the
         // thread read and would undo a just-requested "mark as unread".
         if (payload.actorUserId === actorUserIdRef.current) {
-          fetchInboxRef.current();
+          scheduleInboxRefresh();
         }
       } catch {
         // A malformed read-state event cannot safely identify its owner.
@@ -961,6 +974,7 @@ function InboxTab() {
     es.addEventListener("heartbeat", onHeartbeat);
 
     return () => {
+      if (inboxRefreshTimer !== null) clearTimeout(inboxRefreshTimer);
       es.removeEventListener("inbox_message", refresh);
       es.removeEventListener("inbox_assigned", refresh);
       es.removeEventListener("inbox_read_state", refreshReadState);

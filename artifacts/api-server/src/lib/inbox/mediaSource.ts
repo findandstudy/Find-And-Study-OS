@@ -101,3 +101,28 @@ export function isZernioMediaUrl(rawUrl: string): boolean {
     return false;
   }
 }
+
+/**
+ * Zernio answers with HTTP 400 when an old WhatsApp attachment has expired or
+ * was deleted. That is a resource-level condition, not a gateway outage.
+ * Preserve 502 for genuine provider, authentication and rate-limit failures.
+ */
+export function zernioMediaFailureStatus(
+  upstreamStatus: number,
+  upstreamBody: string,
+): 404 | 410 | 502 {
+  if (upstreamStatus === 404) return 404;
+  if (upstreamStatus === 410) return 410;
+  if (upstreamStatus === 400) {
+    const body = upstreamBody.toLowerCase();
+    if (
+      body.includes("expired") ||
+      body.includes("deleted") ||
+      body.includes("not found") ||
+      body.includes("no longer available")
+    ) {
+      return 410;
+    }
+  }
+  return 502;
+}
