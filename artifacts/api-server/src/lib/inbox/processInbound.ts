@@ -407,7 +407,9 @@ export async function processInboundMessage(opts: {
       lastMessageAt: message.receivedAt || new Date(),
       lastMessagePreview: message.text.slice(0, 200),
       lastInboundAt: message.receivedAt || new Date(),
-      ...(isBlocked ? { botEnabled: false } : { status: "open" }),
+      ...(isBlocked
+        ? { botEnabled: false }
+        : { status: sql`CASE WHEN ${conversationsTable.needsHuman} THEN 'needs_human' ELSE 'open' END` }),
       unmatched: !isLinked,
     })
     .where(eq(conversationsTable.id, conversation.id));

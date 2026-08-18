@@ -1733,7 +1733,9 @@ router.patch(
     // starts fresh for the next bot-led stretch.
     const [updated] = await db
       .update(conversationsTable)
-      .set(enabled ? { botEnabled: true, needsHuman: false, botReplyCount: 0 } : { botEnabled: false })
+      .set(enabled
+        ? { botEnabled: true, needsHuman: false, status: "open", botReplyCount: 0 }
+        : { botEnabled: false })
       .where(eq(conversationsTable.id, id))
       .returning();
     if (!updated) {

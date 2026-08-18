@@ -20,6 +20,7 @@ import { extractDormBookingCatalog } from "./dormBookingKnowledge";
 import { count } from "drizzle-orm";
 
 const MAX_SOURCE_CHARS = 400_000; // guard against runaway ingestion cost
+const MAX_DORMBOOKING_SOURCE_CHARS = 1_000_000;
 
 export async function ingestKnowledgeSource(sourceId: number): Promise<void> {
   const [source] = await db
@@ -110,13 +111,18 @@ export async function ingestKnowledgeSource(sourceId: number): Promise<void> {
     } else if (source.type === "dormbooking") {
       const result = await extractDormBookingCatalog();
       text = result.text;
-      let remainingChars = MAX_SOURCE_CHARS;
+      // Never silently omit alphabetically later dormitories. A partial
+      // catalog makes the bot falsely claim that published rooms/prices do
+      // not exist. Keep a separate, audited ceiling and fail the refresh if
+      // the complete catalog no longer fits.
+      if (text.length > MAX_DORMBOOKING_SOURCE_CHARS) {
+        throw new Error(
+          `DormBooking catalog exceeds complete-ingestion limit (${text.length}/${MAX_DORMBOOKING_SOURCE_CHARS} chars).`,
+        );
+      }
       preparedChunks = [];
       for (const document of result.documents) {
-        if (remainingChars <= 0) break;
-        const boundedText = document.text.slice(0, remainingChars);
-        remainingChars -= boundedText.length;
-        for (const content of chunkText(boundedText)) {
+        for (const content of chunkText(document.text)) {
           preparedChunks.push({
             content,
             metadata: {
@@ -134,6 +140,9 @@ export async function ingestKnowledgeSource(sourceId: number): Promise<void> {
         fetchedAt: result.fetchedAt,
         dormCount: result.dormCount,
         roomCount: result.roomCount,
+        indexedDormCount: result.documents.length,
+        indexedChars: result.text.length,
+        completeCatalogIndexed: true,
         sourceUrl: "https://dormbooking.com/wp-json/dormbooking/v1/ai-catalog",
         studentSafeOnly: true,
         error: null,
@@ -165,7 +174,7 @@ export async function ingestKnowledgeSource(sourceId: number): Promise<void> {
     if (!text) {
       throw new Error("No extractable text found in this source.");
     }
-    if (text.length > MAX_SOURCE_CHARS) {
+    if (source.type !== "dormbooking" && text.length > MAX_SOURCE_CHARS) {
       text = text.slice(0, MAX_SOURCE_CHARS);
     }
 

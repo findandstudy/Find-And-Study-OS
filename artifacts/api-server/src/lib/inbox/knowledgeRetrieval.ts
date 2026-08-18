@@ -13,7 +13,7 @@
 // (ILIKE keyword match). Lexical ensures rare terms, acronyms, and proper
 // nouns (e.g. "NAWA") are never missed by cosine distance alone.
 import { db, knowledgeChunksTable, knowledgeSourcesTable } from "@workspace/db";
-import { and, eq, inArray, ilike, or, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, ilike, or, sql } from "drizzle-orm";
 import { embedQuery } from "./knowledgeEmbed";
 
 export interface RetrievedChunk {
@@ -164,10 +164,15 @@ export async function retrieveKnowledgeChunks(
     const terms = queryTerms(trimmed);
     if (terms.length > 0) {
       const orClauses = terms.map((t) => ilike(knowledgeChunksTable.content, `%${t}%`));
+      const lexicalScore = sql<number>`(${sql.join(
+        terms.map((term) => sql`case when ${knowledgeChunksTable.content} ilike ${`%${term}%`} then 1 else 0 end`),
+        sql` + `,
+      )})`.as("lexical_score");
       const lexRows = await db
         .select({
           sourceId: knowledgeChunksTable.sourceId,
           content: knowledgeChunksTable.content,
+          lexicalScore,
         })
         .from(knowledgeChunksTable)
         .where(and(
@@ -175,6 +180,7 @@ export async function retrieveKnowledgeChunks(
           chunkScope,
           or(...orClauses),
         ))
+        .orderBy(desc(lexicalScore))
         .limit(LEXICAL_LIMIT);
       lexical = lexRows.map((r) => ({
         sourceId: r.sourceId,

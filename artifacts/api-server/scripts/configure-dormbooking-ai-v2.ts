@@ -26,7 +26,7 @@ const patch = {
   enabled: true,
   defaultOnForNew: true,
   model,
-  temperature: 0.1,
+  temperature: 0.2,
   maxConsecutiveReplies: 6,
   programScope: { enabled: false, countries: "all", universityTypes: "all" },
   handoffMessage: current.handoffMessages.en,
@@ -50,7 +50,7 @@ console.log(JSON.stringify({
   bot: { id: bot.id, slug: bot.slug, name: bot.name },
   changes: {
     model: `${current.model} -> ${model}`,
-    temperature: `${current.temperature} -> 0.1`,
+    temperature: `${current.temperature} -> 0.2`,
     maxConsecutiveReplies: `${current.maxConsecutiveReplies} -> 6`,
     schedule: "Europe/Istanbul 10:00-19:00, every day",
     knowledgeChars: knowledgeBase.length,

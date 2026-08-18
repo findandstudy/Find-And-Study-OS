@@ -13,7 +13,7 @@ test("DormBooking catalog creates one isolated RAG document per published dorm",
       nearbyUniversities: ["Altinbas University"],
       accommodationTypes: ["Female - Dorm"],
       facilities: ["Wi-Fi", "Security"],
-      description: "Email: partner@example.com Phone: +90 555 111 22 33",
+      description: "Check In: 01/09/2026 Check Out: 30/06/2027 Contract Instalment Plan: August arrivals may pay the remaining balance in three instalments. Email: partner@example.com Phone: +90 555 111 22 33",
       rooms: [{
         id: 11,
         name: "Two Person Room",
@@ -45,6 +45,12 @@ test("DormBooking catalog creates one isolated RAG document per published dorm",
   assert.match(central.text, /Gender eligibility: Female only/);
   assert.doesNotMatch(central.text, /Male and female/);
   assert.match(central.text, /Holding Fee: USD 300/);
+  assert.match(central.text, /"net_accommodation_fee":4000/);
+  assert.match(central.text, /"advance_payment_30":1200/);
+  assert.match(central.text, /"remaining_payment_70":2800/);
+  assert.match(central.text, /"contract_start":"2026-09-01"/);
+  assert.match(central.text, /"contract_end":"2027-06-30"/);
+  assert.match(central.text, /August arrivals may pay the remaining balance in three instalments/);
   assert.match(central.text, /Never guarantee a room/);
   assert.doesNotMatch(central.text, /USD 100 Holding Fee/);
   assert.doesNotMatch(central.text, /partner@example\.com|555 111/);
@@ -52,7 +58,7 @@ test("DormBooking catalog creates one isolated RAG document per published dorm",
   assert.doesNotMatch(campus.text, /Two Person Room/);
 });
 
-test("DormBooking catalog withholds incomplete pricing and quarantines known gender errors", () => {
+test("DormBooking catalog quotes non-null prices, exposes missing fields and quarantines known gender errors", () => {
   const result = buildDormBookingCatalogDocuments([
     {
       id: 30,
@@ -67,9 +73,29 @@ test("DormBooking catalog withholds incomplete pricing and quarantines known gen
     },
   ]);
   assert.equal(result.dormCount, 1);
-  assert.match(result.text, /PRICE STATUS: Incomplete/);
-  assert.doesNotMatch(result.text, /Accommodation price: USD 2,000/);
+  assert.doesNotMatch(result.text, /PRICE STATUS: price is null/);
+  assert.match(result.text, /Accommodation price: USD 2,000/);
   assert.doesNotMatch(result.text, /Medipol/);
+  assert.match(result.text, /"price":2000/);
+  assert.match(result.text, /"fee_period":null/);
+  assert.deepEqual(result.incompletePriceFields, {
+    fee_period: 1,
+    holding_fee: 1,
+    contract_start: 1,
+    contract_end: 1,
+    instalment_plan: 1,
+  });
+  assert.equal(result.suppressedDormCount, 1);
+});
+
+test("DormBooking catalog filters explicit suppression and corrects the Yalova city", () => {
+  const result = buildDormBookingCatalogDocuments([
+    { id: 50, name: "Hidden Residence", url: "https://dormbooking.com/hidden", suppressed: true },
+    { id: 51, name: "Private Yalova Evim Male Student Dormitory", url: "https://dormbooking.com/yalova", city: "Istanbul" },
+  ]);
+  assert.equal(result.suppressedDormCount, 1);
+  assert.doesNotMatch(result.text, /Hidden Residence/);
+  assert.match(result.text, /City: Yalova/);
 });
 
 test("DormBooking catalog rejects incomplete records and deduplicates public labels", () => {
@@ -79,4 +105,38 @@ test("DormBooking catalog rejects incomplete records and deduplicates public lab
   ]);
   assert.equal(result.dormCount, 1);
   assert.match(result.text, /Dorm facilities: Wi-Fi/);
+});
+
+test("DormBooking catalog derives the published payment plan from the room name", () => {
+  const result = buildDormBookingCatalogDocuments([{
+    id: 60,
+    name: "Academic House",
+    url: "https://dormbooking.com/academic-house",
+    description: "Check In: 15/09/2026 Check Out: 15/06/2027 Contract",
+    rooms: [{
+      id: 61,
+      name: "Five Person Room | 10-Monthly Installment Payment",
+      listedPrice: 5750,
+      currency: "USD",
+    }],
+  }]);
+  assert.match(result.text, /"contract_start":"2026-09-15"/);
+  assert.match(result.text, /"contract_end":"2027-06-15"/);
+  assert.match(result.text, /"instalment_plan":\["10-Monthly Installment Payment"\]/);
+});
+
+test("DormBooking catalog never copies a dorm-level instalment plan onto every room", () => {
+  const result = buildDormBookingCatalogDocuments([{
+    id: 70,
+    name: "Mixed Payment Dorm",
+    url: "https://dormbooking.com/mixed-payment",
+    description: "Instalment Plan: Some selected rooms may offer instalments.",
+    rooms: [
+      { id: 71, name: "Single Room | Advance Payment", listedPrice: 6000, currency: "USD" },
+      { id: 72, name: "Double Room | 3 Installment", listedPrice: 5000, currency: "USD" },
+    ],
+  }]);
+  assert.deepEqual(result.documents[0]?.rooms[0]?.instalmentPlan, ["Advance Payment"]);
+  assert.deepEqual(result.documents[0]?.rooms[1]?.instalmentPlan, ["3 Installment"]);
+  assert.doesNotMatch(JSON.stringify(result.documents[0]?.rooms), /Some selected rooms/);
 });

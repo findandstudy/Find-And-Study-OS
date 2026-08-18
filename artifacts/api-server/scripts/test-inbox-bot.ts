@@ -31,14 +31,16 @@ import {
 import { and, eq } from "drizzle-orm";
 import {
   detectEscalation,
+  detectDormBookingEscalation,
   detectLanguage,
   isAutoReplyChannelSupported,
   maybeAutoReply,
+  selectHandoffMessage,
   __setBotReplyOverrideForTests,
   __setBotSendOverrideForTests,
   type BotSendInput,
 } from "../src/lib/inbox/botAutoReply";
-import { __setAiAgentConfigOverrideForTests } from "../src/lib/inbox/aiAgentConfig";
+import { __setAiAgentConfigOverrideForTests, DEFAULT_AI_AGENT_CONFIG } from "../src/lib/inbox/aiAgentConfig";
 
 const RUN_ID = `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
@@ -221,12 +223,31 @@ test("detectEscalation returns null for a clean intake message", () => {
   assert.equal(detectEscalation("Merhaba, üniversite okumak istiyorum"), null);
 });
 
+test("DormBooking payment handoff requires sensitive payment context", () => {
+  assert.equal(detectDormBookingEscalation("What is the monthly rent, deposit and payment plan?"), null);
+  assert.equal(detectDormBookingEscalation("Can I pay the 30% advance in two instalments?"), null);
+  assert.equal(detectDormBookingEscalation("Please send the bank account and IBAN"), "payment");
+  assert.equal(detectDormBookingEscalation("I already paid, where is my receipt?"), "payment");
+  assert.equal(detectDormBookingEscalation("Can you give me a discount?"), "payment");
+  assert.equal(detectDormBookingEscalation("I want to speak to a human"), "human_request");
+});
+
+test("handoff message follows the locked conversation language", () => {
+  for (const language of ["en", "ar", "fa", "ru", "fr", "es"] as const) {
+    assert.equal(
+      selectHandoffMessage(DEFAULT_AI_AGENT_CONFIG, language),
+      DEFAULT_AI_AGENT_CONFIG.handoffMessages[language],
+    );
+  }
+});
+
 // ---------------------------------------------------------------------------
 // Language detection
 // ---------------------------------------------------------------------------
 test("detectLanguage picks the student's language", () => {
   assert.equal(detectLanguage("Merhaba, nasıl başvuru yapabilirim?"), "tr");
   assert.equal(detectLanguage("Hello, I would like to apply"), "en");
+  assert.equal(detectLanguage("Hi, what is the room price?", "tr"), "en");
   assert.equal(detectLanguage("مرحبا أريد الدراسة في تركيا"), "ar");
   assert.equal(detectLanguage("Здравствуйте, я хочу учиться"), "ru");
   assert.equal(detectLanguage("Bonjour, je veux étudier en Turquie"), "fr");

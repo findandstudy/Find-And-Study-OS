@@ -93,7 +93,7 @@ export async function findStuckConversations(): Promise<StuckConversation[]> {
     .where(and(
       eq(conversationsTable.needsHuman, true),
       isNull(conversationsTable.assignedToId),
-      eq(conversationsTable.status, "open"),
+      inArray(conversationsTable.status, ["open", "needs_human"]),
       ne(conversationsTable.channel, "internal"),
       lte(conversationsTable.updatedAt, cutoff)
     ));

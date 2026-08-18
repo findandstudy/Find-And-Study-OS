@@ -91,19 +91,34 @@ function dormbooking_ai_description($post) {
     return function_exists('mb_substr') ? mb_substr($text, 0, 12000) : substr($text, 0, 12000);
 }
 
+function dormbooking_ai_contract_date($description, $label) {
+    if (!preg_match('/\b' . preg_quote($label, '/') . '\s*:\s*(\d{1,2})[\/.](\d{1,2})[\/.](\d{4})/iu', $description, $matches)) {
+        return null;
+    }
+    $date = DateTimeImmutable::createFromFormat('!d/m/Y', sprintf('%02d/%02d/%04d', $matches[1], $matches[2], $matches[3]));
+    return $date ? $date->format('Y-m-d') : null;
+}
+
 function dormbooking_ai_room($room_post) {
     $room_id = (int) $room_post->ID;
+    $description = dormbooking_ai_description($room_post);
     return array(
         'id' => $room_id,
         'name' => dormbooking_ai_text(get_the_title($room_id)),
         'url' => esc_url_raw(get_permalink($room_id)),
         'modifiedAt' => get_post_modified_time(DATE_ATOM, true, $room_id),
-        'description' => dormbooking_ai_description($room_post),
+        'description' => $description,
         'listedPrice' => dormbooking_ai_number(dormbooking_ai_meta($room_id, array('price'))),
         'currency' => 'USD',
         // Leave null unless the source explicitly stores a recognizable unit.
         // The consuming AI is instructed never to infer monthly/yearly terms.
         'priceBasis' => dormbooking_ai_text(dormbooking_ai_meta($room_id, array('price_unit', 'price_basis', 'unit'))) ?: null,
+        // Reservation/holding payment is deliberately separate from the full
+        // accommodation price. Only expose an explicitly stored value.
+        'holdingFee' => dormbooking_ai_number(dormbooking_ai_meta($room_id, array('holding_fee', '_holding_fee', 'reservation_fee', 'booking_fee'))),
+        'contractStart' => dormbooking_ai_text(dormbooking_ai_meta($room_id, array('contract_start', 'check_in'))) ?: null,
+        'contractEnd' => dormbooking_ai_text(dormbooking_ai_meta($room_id, array('contract_end', 'check_out'))) ?: null,
+        'instalmentPlan' => dormbooking_ai_text(dormbooking_ai_meta($room_id, array('instalment_plan', 'installment_plan', 'payment_plan'))) ?: null,
         'roomCount' => dormbooking_ai_number(dormbooking_ai_meta($room_id, array('number_room'))),
         'adults' => dormbooking_ai_number(dormbooking_ai_meta($room_id, array('adult_number'))),
         'children' => dormbooking_ai_number(dormbooking_ai_meta($room_id, array('children_number'))),
@@ -119,6 +134,7 @@ function dormbooking_ai_room($room_post) {
 
 function dormbooking_ai_dorm($dorm_post) {
     $dorm_id = (int) $dorm_post->ID;
+    $description = dormbooking_ai_description($dorm_post);
     $room_query = new WP_Query(array(
         'post_type' => 'hotel_room',
         'post_status' => 'publish',
@@ -140,7 +156,7 @@ function dormbooking_ai_dorm($dorm_post) {
         'name' => dormbooking_ai_text(get_the_title($dorm_id)),
         'url' => esc_url_raw(get_permalink($dorm_id)),
         'modifiedAt' => get_post_modified_time(DATE_ATOM, true, $dorm_id),
-        'description' => dormbooking_ai_description($dorm_post),
+        'description' => $description,
         'address' => dormbooking_ai_text(dormbooking_ai_meta($dorm_id, array('address', 'hotel_address'))),
         'city' => dormbooking_ai_text(dormbooking_ai_meta($dorm_id, array('city'))) ?: 'Istanbul',
         'latitude' => dormbooking_ai_number(dormbooking_ai_meta($dorm_id, array('map_lat', 'latitude', 'lat'))),
@@ -151,6 +167,10 @@ function dormbooking_ai_dorm($dorm_post) {
         'rating' => dormbooking_ai_number(dormbooking_ai_meta($dorm_id, array('review_score', 'rate_review', 'rating'))),
         'averageListedPrice' => dormbooking_ai_number(dormbooking_ai_meta($dorm_id, array('price_avg', 'avg_price', 'price'))),
         'currency' => 'USD',
+        // These values are rendered publicly as Check In / Check Out and are
+        // the contractual accommodation period.
+        'contractStart' => dormbooking_ai_contract_date($description, 'Check In'),
+        'contractEnd' => dormbooking_ai_contract_date($description, 'Check Out'),
         'image' => dormbooking_ai_media_url(get_post_thumbnail_id($dorm_id)),
         'gallery' => dormbooking_ai_gallery($dorm_id),
         'rooms' => $rooms,

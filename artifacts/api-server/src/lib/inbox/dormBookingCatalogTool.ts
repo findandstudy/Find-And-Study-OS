@@ -35,23 +35,63 @@ export async function isDormBookingCatalogToolEnabled(aiBotId?: number | null): 
 export async function executeDormBookingCatalogTool(
   input: unknown,
   aiBotId?: number | null,
-): Promise<{ matches: Array<{ source: string; content: string }>; authoritative: true }> {
+): Promise<{
+  matches: Array<{ source: string; content: string }>;
+  costRecords: Array<Record<string, unknown>>;
+  authoritative: true;
+}> {
   const query = input && typeof input === "object" && typeof (input as { query?: unknown }).query === "string"
     ? (input as { query: string }).query.trim()
     : "";
   if (!query || !(await isDormBookingCatalogToolEnabled(aiBotId))) {
-    return { matches: [], authoritative: true };
+    const empty = { matches: [], costRecords: [], authoritative: true as const };
+    traceCatalogCall({ query, aiBotId, result: empty });
+    return empty;
   }
   const chunks = await retrieveKnowledgeChunks(query, {
     aiBotId,
     sourceTypes: ["dormbooking"],
   });
   const campusGuidance = resolveDormBookingCampusGuidance(query);
-  return {
+  const matches = [
+    ...(campusGuidance ? [{ source: "DormBooking verified campus routing table", content: campusGuidance }] : []),
+    ...chunks.map((chunk) => ({ source: chunk.sourceName, content: chunk.content })),
+  ];
+  const costRecords = matches.flatMap((match) => {
+    const records: Array<Record<string, unknown>> = [];
+    for (const found of match.content.matchAll(/CATALOG COST JSON:\s*(\{[^\n]+\})/g)) {
+      try {
+        const value = JSON.parse(found[1]);
+        if (value && typeof value === "object") records.push(value as Record<string, unknown>);
+      } catch {
+        // A malformed upstream record remains in the text for diagnosis but
+        // is never presented as a structured price record.
+      }
+    }
+    return records;
+  });
+  const result = {
     matches: [
-      ...(campusGuidance ? [{ source: "DormBooking verified campus routing table", content: campusGuidance }] : []),
-      ...chunks.map((chunk) => ({ source: chunk.sourceName, content: chunk.content })),
+      ...matches,
     ],
-    authoritative: true,
+    costRecords,
+    authoritative: true as const,
   };
+  traceCatalogCall({ query, aiBotId, result });
+  return result;
+}
+
+function traceCatalogCall(input: { query: string; aiBotId?: number | null; result: unknown }): void {
+  const until = Date.parse(process.env.DORMBOOKING_CATALOG_TRACE_UNTIL ?? "");
+  if (!Number.isFinite(until) || Date.now() > until) return;
+  const serialized = JSON.stringify({
+    event: "dormbooking_catalog_tool",
+    at: new Date().toISOString(),
+    aiBotId: input.aiBotId ?? null,
+    arguments: { query: input.query.slice(0, 500) },
+    rawResponse: input.result,
+  });
+  // Keep a single call from flooding logs while retaining enough raw catalog
+  // output to diagnose absent fields during the temporary trace window.
+  console.info(serialized.slice(0, 100_000));
 }

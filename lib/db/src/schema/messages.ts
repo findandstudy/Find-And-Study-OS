@@ -30,6 +30,7 @@ export const conversationsTable = pgTable("conversations", {
   externalThreadId: text("external_thread_id"),
   assignedToId: integer("assigned_to_id").references(() => usersTable.id, { onDelete: "set null" }),
   status: text("status").notNull().default("open"),
+  language: text("language"),
   unmatched: boolean("unmatched").notNull().default(false),
   lastInboundAt: timestamp("last_inbound_at", { withTimezone: true }),
   readReceiptsEnabled: boolean("read_receipts_enabled").notNull().default(true),

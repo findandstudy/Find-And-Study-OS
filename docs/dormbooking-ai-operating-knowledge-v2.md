@@ -203,7 +203,7 @@ Do not decide an individual case in chat. Explain the published rule and hand of
 
 ## 9. 30% advance payment
 
-After the Pre-Acceptance Letter is issued, the student pays **30% of the total accommodation fee minus the Holding Fee** directly to the dormitory's bank account and sends the receipt.
+After the Pre-Acceptance Letter is issued, the student pays **30% × (total accommodation fee − Holding Fee)** directly to the dormitory's bank account and sends the receipt.
 
 - Letter issued **on or before 31 July** → payment must arrive within **7 days**.
 - Letter issued **from 1 August onward** → payment must arrive within **2 days**.
@@ -217,7 +217,7 @@ Never provide or confirm bank details unless they come from the student's offici
 ## 10. Remaining 70% and cancellation
 
 ### 10.1 Remaining 70%
-Follows the payment plan of the selected dormitory. **Installment count and due dates differ by dormitory and are negotiable at the dormitory level** — never present an installment schedule as a general Dorm Booking rule. The authoritative plan is on the listing and in the Confirmed Accommodation Letter.
+The remaining amount is **70% × (total accommodation fee − Holding Fee)**. Its installment count and due dates differ by both dormitory and room type. Never present one room's schedule as a general Dorm Booking or dormitory-wide rule. The authoritative plan is the selected room's current reservation information and the Confirmed Accommodation Letter.
 
 ### 10.2 Cancellation — the applicable date is the date the student notifies Dorm Booking **in writing**
 
@@ -429,4 +429,3 @@ Before this configuration goes live, these must all pass:
 9. Exchange student, 4 months → no catalog annual price; hand off for special pricing.
 10. "Will I get my holding fee back if my visa is refused?" → **no**; first month retained from the 30%, remainder refunded, Holding Fee not refunded.
 11. "What if there's an earthquake / border closure?" → no automatic refund, case-by-case, hand off.
-

@@ -40,6 +40,7 @@
     "test:academy-knowledge": "tsx --test ./scripts/test-academy-knowledge.ts",
     "test:dormbooking-knowledge": "tsx --test ./scripts/test-dormbooking-knowledge.ts",
     "test:dormbooking-campus-map": "tsx --test ./scripts/test-dormbooking-campus-map.ts",
+    "test:dormbooking-output-validator": "tsx --test ./scripts/test-dormbooking-output-validator.ts",
     "test:ai-schedule": "tsx --test ./scripts/test-ai-schedule.ts",
     "test:contract-signing-scope": "NODE_ENV=test tsx --test ./scripts/test-contract-signing-scope.ts",
     "test:contract-operations": "NODE_ENV=test tsx --test ./scripts/test-contract-operations.ts",
@@ -150,6 +151,7 @@
     "test:altinbas-flow-fields": "tsx --test ./scripts/test-altinbas-flow-fields.ts",
     "backfill:education-extract": "tsx scripts/backfill-education-extract.ts",
     "audit:sit-passport-identity": "tsx scripts/audit-sit-passport-identity.ts",
+    "audit:dormbooking-ai": "tsx scripts/audit-dormbooking-ai.ts",
     "reconcile:portal-passport-identities": "tsx scripts/reconcile-portal-passport-identities.ts",
     "test:program-import-headers": "tsx --test ./scripts/test-program-import-headers.ts"
   },
