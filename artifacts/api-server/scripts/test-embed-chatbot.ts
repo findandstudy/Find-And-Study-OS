@@ -55,11 +55,32 @@ const publicApplySource = readFileSync(
   new URL("../src/routes/public-apply.ts", import.meta.url),
   "utf8",
 );
+const embedLeadDedupSource = readFileSync(
+  new URL("../src/lib/embedLeadDedup.ts", import.meta.url),
+  "utf8",
+);
 
 test("embed applications keep their source lead when auto-convert is disabled", () => {
   assert.match(publicApplySource, /sourceLeadId\?: number \| null/);
   assert.match(publicApplySource, /leadId: sourceLeadId \?\? null/);
   assert.match(routeSource, /createApplicationForStudent\([\s\S]*?result\.leadId,[\s\S]*?\);/);
+});
+
+test("widget partner ownership flows from the lead to student and application", () => {
+  assert.match(embedLeadDedupSource, /extras\?: LeadDedupExtras/);
+  assert.match(embedLeadDedupSource, /extras: opts\.extras/);
+  assert.match(routeSource, /widgetPartnerExtras\(widget\.agentId\)/);
+  assert.match(routeSource, /findOrUpsertEmbedLead\([\s\S]*?extras: partnerExtras/);
+  assert.match(routeSource, /agentId: enrichedLead\?\.agentId \?\? null/);
+  assert.match(publicApplySource, /agentId: studentRec\?\.agentId \?\? null/);
+});
+
+test("widgets may explicitly disable AI and no longer expose communication pipelines", () => {
+  assert.match(embedsAdminSource, /value="__none__"[^>]*>\{t\("adminEmbeds\.noAiBot"\)\}/);
+  assert.match(embedsAdminSource, /aiBotId: aiBotId \? selectedAiBotId : null/);
+  assert.match(embedsAdminSource, /communicationPipelineId: null/);
+  assert.match(embedsAdminSource, /adminEmbeds\.partnerAgent/);
+  assert.doesNotMatch(embedsAdminSource, /queryKey: \["communication-pipelines"\]/);
 });
 
 test("chat session tokens are signed, scoped, tamper-evident and expiring", () => {

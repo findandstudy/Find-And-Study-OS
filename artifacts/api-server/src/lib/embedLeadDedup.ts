@@ -1,5 +1,5 @@
 import { db, type Lead } from "@workspace/db";
-import { findOrUpsertPublicLead, type LeadDedupFields } from "./leadDedup";
+import { findOrUpsertPublicLead, type LeadDedupExtras, type LeadDedupFields } from "./leadDedup";
 
 export type EmbedLeadFields = LeadDedupFields;
 
@@ -15,6 +15,7 @@ type DbLike = typeof db | Tx;
 export async function findOrUpsertEmbedLead(opts: {
   slug: string;
   fields: EmbedLeadFields;
+  extras?: LeadDedupExtras;
   ip?: string;
   tx?: DbLike;
 }): Promise<{ lead: Lead; created: boolean }> {
@@ -22,6 +23,7 @@ export async function findOrUpsertEmbedLead(opts: {
     source: `embed:${opts.slug}`,
     uniqueKey: { kind: "emailSource" },
     fields: opts.fields,
+    extras: opts.extras,
     ip: opts.ip,
     tx: opts.tx,
   });

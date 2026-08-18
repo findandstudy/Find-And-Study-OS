@@ -5,6 +5,7 @@ import { programsTable } from "./universities";
 import { leadsTable } from "./leads";
 import { aiExtractorsTable } from "./aiExtractors";
 import { aiBotsTable, communicationPipelinesTable } from "./aiBots";
+import { agentsTable } from "./agents";
 
 export const embedWidgetsTable = pgTable("embed_widgets", {
   id: serial("id").primaryKey(),
@@ -22,6 +23,7 @@ export const embedWidgetsTable = pgTable("embed_widgets", {
   aiExtractorId: integer("ai_extractor_id").references(() => aiExtractorsTable.id, { onDelete: "set null" }),
   aiBotId: integer("ai_bot_id").references(() => aiBotsTable.id, { onDelete: "set null" }),
   communicationPipelineId: integer("communication_pipeline_id").references(() => communicationPipelinesTable.id, { onDelete: "set null" }),
+  agentId: integer("agent_id").references(() => agentsTable.id, { onDelete: "set null" }),
   isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
@@ -29,6 +31,7 @@ export const embedWidgetsTable = pgTable("embed_widgets", {
   index("embed_widgets_ai_extractor_idx").on(table.aiExtractorId),
   index("embed_widgets_ai_bot_idx").on(table.aiBotId),
   index("embed_widgets_communication_pipeline_idx").on(table.communicationPipelineId),
+  index("embed_widgets_agent_idx").on(table.agentId),
 ]);
 
 export const embedSubmissionsTable = pgTable("embed_submissions", {

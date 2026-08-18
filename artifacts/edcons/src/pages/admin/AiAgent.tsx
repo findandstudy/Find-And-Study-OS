@@ -175,11 +175,11 @@ export default function AiAgent() {
         return rows.find((bot) => bot.isDefault)?.id ?? rows.find((bot) => bot.isActive)?.id ?? rows[0]?.id ?? null;
       });
     } catch {
-      toast({ title: "AI bot listesi yüklenemedi", variant: "destructive" });
+      toast({ title: t("aiAgentAdmin.botManagement.loadError"), variant: "destructive" });
     } finally {
       setBotsLoading(false);
     }
-  }, [toast]);
+  }, [t, toast]);
 
   const load = useCallback(async () => {
     if (!selectedBotId) return;
@@ -450,14 +450,14 @@ export default function AiAgent() {
       await loadBots();
       setSelectedBotId(bot.id);
       toast({
-        title: `${bot.name} oluşturuldu`,
+        title: t("aiAgentAdmin.botManagement.createSuccess", { name: bot.name }),
         description: selectedBotId
-          ? "Ayarlar ve bilgi kaynakları seçili bottan bağımsız bir kopya olarak oluşturuldu."
-          : "İlk AI bot oluşturuldu ve varsayılan bot olarak ayarlandı.",
+          ? t("aiAgentAdmin.botManagement.cloneSuccessDescription")
+          : t("aiAgentAdmin.botManagement.firstBotSuccessDescription"),
       });
     } catch (error) {
       toast({
-        title: "AI bot oluşturulamadı",
+        title: t("aiAgentAdmin.botManagement.createError"),
         description: error instanceof Error ? error.message : undefined,
         variant: "destructive",
       });
@@ -474,10 +474,10 @@ export default function AiAgent() {
         body: JSON.stringify(update),
       });
       await loadBots();
-      toast({ title: "AI bot ayarları güncellendi" });
+      toast({ title: t("aiAgentAdmin.botManagement.updateSuccess") });
     } catch (error) {
       toast({
-        title: "AI bot güncellenemedi",
+        title: t("aiAgentAdmin.botManagement.updateError"),
         description: error instanceof Error ? error.message : undefined,
         variant: "destructive",
       });
@@ -502,17 +502,17 @@ export default function AiAgent() {
             <Bot className="h-5 w-5 text-primary" />
           </div>
           <div>
-            <h1 className="text-xl font-semibold">AI Botları</h1>
+            <h1 className="text-xl font-semibold">{t("aiAgentAdmin.botManagement.emptyTitle")}</h1>
             <p className="text-sm text-muted-foreground">
-              Her proje ve web sitesi için bağımsız bir AI bot oluşturun.
+              {t("aiAgentAdmin.botManagement.emptySubtitle")}
             </p>
           </div>
         </div>
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">İlk AI botu oluşturun</CardTitle>
+            <CardTitle className="text-base">{t("aiAgentAdmin.botManagement.firstBotTitle")}</CardTitle>
             <CardDescription>
-              Bu bot kendi ayarlarına, bilgi kaynaklarına ve iletişim pipeline'larına sahip olacak.
+              {t("aiAgentAdmin.botManagement.firstBotDescription")}
             </CardDescription>
           </CardHeader>
           <CardContent className="grid gap-3 sm:grid-cols-[1fr_1fr_auto]">
@@ -522,7 +522,7 @@ export default function AiAgent() {
                 setNewBotName(event.target.value);
                 setNewBotSlug(toBotSlug(event.target.value));
               }}
-              placeholder="Örn. Dorm Booking"
+              placeholder={t("aiAgentAdmin.botManagement.namePlaceholder")}
             />
             <Input
               value={newBotSlug}
@@ -531,7 +531,7 @@ export default function AiAgent() {
             />
             <Button onClick={createBot} disabled={creatingBot || newBotName.trim().length < 2}>
               <Plus className="mr-2 h-4 w-4" />
-              Oluştur
+              {t("aiAgentAdmin.botManagement.create")}
             </Button>
           </CardContent>
         </Card>
@@ -587,10 +587,10 @@ export default function AiAgent() {
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center gap-2 text-base">
             <Bot className="h-4 w-4" />
-            AI Bot Yönetimi
+            {t("aiAgentAdmin.botManagement.title")}
           </CardTitle>
           <CardDescription>
-            Seçilen botun ayarları ve bilgi kaynakları diğer botlardan tamamen bağımsızdır.
+            {t("aiAgentAdmin.botManagement.description")}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -605,7 +605,7 @@ export default function AiAgent() {
               <SelectContent>
                 {bots.map((bot) => (
                   <SelectItem key={bot.id} value={String(bot.id)}>
-                    {bot.name}{bot.isDefault ? " · Varsayılan" : ""}{!bot.isActive ? " · Pasif" : ""}
+                    {bot.name}{bot.isDefault ? ` · ${t("aiAgentAdmin.botManagement.defaultBadge")}` : ""}{!bot.isActive ? ` · ${t("aiAgentAdmin.botManagement.inactive")}` : ""}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -616,14 +616,18 @@ export default function AiAgent() {
               disabled={selectedBot.isDefault}
               onClick={() => updateBot(selectedBot.id, { isDefault: true })}
             >
-              Varsayılan yap
+              {t("aiAgentAdmin.botManagement.makeDefault")}
             </Button>
             <div className="flex items-center gap-2 rounded-md border px-3">
               <Switch
                 checked={selectedBot.isActive}
                 onCheckedChange={(isActive) => updateBot(selectedBot.id, { isActive })}
               />
-              <span className="text-sm">{selectedBot.isActive ? "Aktif" : "Pasif"}</span>
+              <span className="text-sm">
+                {selectedBot.isActive
+                  ? t("aiAgentAdmin.botManagement.active")
+                  : t("aiAgentAdmin.botManagement.inactive")}
+              </span>
             </div>
           </div>
 
@@ -632,7 +636,7 @@ export default function AiAgent() {
           <div className="space-y-2">
             <div className="flex items-center gap-2 text-sm font-medium">
               <Copy className="h-4 w-4" />
-              Seçili botu bağımsız bir bot olarak kopyala
+              {t("aiAgentAdmin.botManagement.cloneTitle")}
             </div>
             <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto]">
               <Input
@@ -641,7 +645,7 @@ export default function AiAgent() {
                   setNewBotName(event.target.value);
                   setNewBotSlug(toBotSlug(event.target.value));
                 }}
-                placeholder="Örn. Dorm Booking"
+                placeholder={t("aiAgentAdmin.botManagement.namePlaceholder")}
               />
               <Input
                 value={newBotSlug}
@@ -654,7 +658,7 @@ export default function AiAgent() {
                 disabled={creatingBot || newBotName.trim().length < 2 || newBotSlug.trim().length < 2}
               >
                 <Plus className="mr-2 h-4 w-4" />
-                Kopyala ve oluştur
+                {t("aiAgentAdmin.botManagement.cloneAndCreate")}
               </Button>
             </div>
           </div>

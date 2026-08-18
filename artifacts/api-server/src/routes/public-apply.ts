@@ -346,6 +346,11 @@ export async function createApplicationForStudent(studentId: number, programId: 
       lastName: studentsTable.lastName,
       assignedToId: studentsTable.assignedToId,
       branchId: studentsTable.branchId,
+      agentId: studentsTable.agentId,
+      originType: studentsTable.originType,
+      originEntityType: studentsTable.originEntityType,
+      originEntityId: studentsTable.originEntityId,
+      originDisplayName: studentsTable.originDisplayName,
     }).from(studentsTable).where(eq(studentsTable.id, studentId));
     const studentFullName = studentRec ? `${studentRec.firstName || ""} ${studentRec.lastName || ""}`.trim() : null;
 
@@ -358,9 +363,14 @@ export async function createApplicationForStudent(studentId: number, programId: 
       createdSource: "student",
       universityId: snapshotUniversityId,
       programId: programId || null,
-      agentId: null,
+      agentId: studentRec?.agentId ?? null,
       assignedToId: studentRec?.assignedToId ?? null,
       branchId: studentRec?.branchId ?? null,
+      originType: studentRec?.originType || "direct",
+      originEntityType: studentRec?.originEntityType ?? null,
+      originEntityId: studentRec?.originEntityId ?? null,
+      originDisplayName: studentRec?.originDisplayName ?? null,
+      originStudentId: studentId,
       universityName: snapshotUniversityName,
       country: snapshotCountry,
       programName: snapshotProgramName,

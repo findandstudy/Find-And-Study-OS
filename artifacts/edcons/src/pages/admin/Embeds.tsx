@@ -56,6 +56,7 @@ type Widget = {
   aiExtractorId?: number | null;
   aiBotId?: number | null;
   communicationPipelineId?: number | null;
+  agentId?: number | null;
   isActive: boolean;
   createdAt: string;
 };
@@ -68,13 +69,12 @@ type AiBotOption = {
   isActive: boolean;
 };
 
-type CommunicationPipelineOption = {
+type PartnerAgentOption = {
   id: number;
   name: string;
-  slug: string;
-  aiBotId: number;
-  isDefault: boolean;
-  isActive: boolean;
+  parentAgentId: number | null;
+  parentName: string | null;
+  type: "agent" | "sub_agent";
 };
 
 type Submission = {
@@ -547,7 +547,7 @@ function WidgetFormDialog({ open, onClose, widget, initialMode, onSaved }: {
   const [welcomeMessage, setWelcomeMessage] = useState("");
   const [isActive, setIsActive] = useState(true);
   const [aiBotId, setAiBotId] = useState("");
-  const [communicationPipelineId, setCommunicationPipelineId] = useState("__none__");
+  const [partnerAgentId, setPartnerAgentId] = useState("__none__");
   const [aiConnectionKey, setAiConnectionKey] = useState("claude");
   const [aiExtractorId, setAiExtractorId] = useState<string>("__default__");
   const [saving, setSaving] = useState(false);
@@ -571,18 +571,16 @@ function WidgetFormDialog({ open, onClose, widget, initialMode, onSaved }: {
     staleTime: 60_000,
   });
 
-  const { data: pipelinesResponse, isLoading: pipelinesLoading } = useQuery({
-    queryKey: ["communication-pipelines"],
-    queryFn: () => customFetch("/api/communication-pipelines") as Promise<{ pipelines: CommunicationPipelineOption[] }>,
+  const { data: partnerOptions, isLoading: partnerOptionsLoading } = useQuery({
+    queryKey: ["embed-partner-options"],
+    queryFn: () => customFetch("/api/embed/widgets/partner-options") as Promise<{ agents: PartnerAgentOption[] }>,
     enabled: open,
-    staleTime: 30_000,
+    staleTime: 60_000,
   });
 
   const activeAiBots = (aiBotsResponse?.bots || []).filter(bot => bot.isActive);
   const selectedAiBotId = Number(aiBotId);
-  const availablePipelines = (pipelinesResponse?.pipelines || []).filter(pipeline => (
-    pipeline.isActive && pipeline.aiBotId === selectedAiBotId
-  ));
+  const selectedPartnerAgentId = partnerAgentId === "__none__" ? null : Number(partnerAgentId);
 
   useEffect(() => {
     if (!open) return;
@@ -619,7 +617,7 @@ function WidgetFormDialog({ open, onClose, widget, initialMode, onSaved }: {
       setWelcomeMessage(th.welcomeMessage || "");
       setIsActive(widget.isActive);
       setAiBotId(widget.aiBotId ? String(widget.aiBotId) : "");
-      setCommunicationPipelineId(widget.communicationPipelineId ? String(widget.communicationPipelineId) : "__none__");
+      setPartnerAgentId(widget.agentId ? String(widget.agentId) : "__none__");
       setAiConnectionKey(widget.aiConnectionKey || "claude");
       setAiExtractorId(widget.aiExtractorId ? String(widget.aiExtractorId) : "__default__");
     } else {
@@ -629,26 +627,10 @@ function WidgetFormDialog({ open, onClose, widget, initialMode, onSaved }: {
       setPrimaryColor("#2563eb"); setButtonColor("#2563eb"); setBorderRadius("8px");
       setLogoUrl(""); setAssistantName(""); setWelcomeMessage("");
       setIsActive(true);
-      setAiBotId(""); setCommunicationPipelineId("__none__");
+      setAiBotId(""); setPartnerAgentId("__none__");
       setAiConnectionKey("claude"); setAiExtractorId("__default__");
     }
   }, [open, widget, initialMode]);
-
-  useEffect(() => {
-    if (!open || activeAiBots.length === 0) return;
-    setAiBotId(current => {
-      if (current && activeAiBots.some(bot => String(bot.id) === current)) return current;
-      const defaultBot = activeAiBots.find(bot => bot.isDefault) || activeAiBots[0];
-      return String(defaultBot.id);
-    });
-  }, [open, aiBotsResponse]);
-
-  useEffect(() => {
-    if (!open || !pipelinesResponse || communicationPipelineId === "__none__") return;
-    if (!availablePipelines.some(pipeline => String(pipeline.id) === communicationPipelineId)) {
-      setCommunicationPipelineId("__none__");
-    }
-  }, [open, pipelinesResponse, aiBotId, communicationPipelineId]);
 
   const handleSave = async () => {
     if (!name.trim() || !slug.trim()) {
@@ -663,21 +645,15 @@ function WidgetFormDialog({ open, onClose, widget, initialMode, onSaved }: {
       });
       return;
     }
-    if (!Number.isInteger(selectedAiBotId) || selectedAiBotId <= 0) {
+    if (aiBotId && (!Number.isInteger(selectedAiBotId) || selectedAiBotId <= 0)) {
       toast({
-        title: "Select an active AI bot",
-        description: "Every widget must belong to one independent AI bot.",
+        title: t("adminEmbeds.invalidAiBot"),
         variant: "destructive",
       });
       return;
     }
-    if (communicationPipelineId !== "__none__"
-      && !availablePipelines.some(pipeline => String(pipeline.id) === communicationPipelineId)) {
-      toast({
-        title: "Select a valid communication pipeline",
-        description: "The pipeline must be active and belong to the selected AI bot.",
-        variant: "destructive",
-      });
+    if (selectedPartnerAgentId != null && (!Number.isInteger(selectedPartnerAgentId) || selectedPartnerAgentId <= 0)) {
+      toast({ title: t("adminEmbeds.invalidPartner"), variant: "destructive" });
       return;
     }
     setSaving(true);
@@ -712,8 +688,9 @@ function WidgetFormDialog({ open, onClose, widget, initialMode, onSaved }: {
         ...(welcomeMessage.trim() ? { welcomeMessage: welcomeMessage.trim() } : {}),
       },
       allowedDomains: domains.split(",").map(d => d.trim()).filter(Boolean),
-      aiBotId: selectedAiBotId,
-      communicationPipelineId: communicationPipelineId === "__none__" ? null : Number(communicationPipelineId),
+      aiBotId: aiBotId ? selectedAiBotId : null,
+      communicationPipelineId: null,
+      agentId: selectedPartnerAgentId,
       aiConnectionKey,
       aiExtractorId: aiExtractorId === "__default__" ? null : Number(aiExtractorId),
       isActive,
@@ -1109,79 +1086,78 @@ function WidgetFormDialog({ open, onClose, widget, initialMode, onSaved }: {
 
           <TabsContent value="ai" className="space-y-4 mt-4">
             <div className="rounded-xl border border-blue-200 bg-blue-50/70 p-3 text-sm text-blue-950 dark:border-blue-900 dark:bg-blue-950/30 dark:text-blue-100">
-              The selected AI bot owns this widget's instructions, knowledge sources and runtime settings. A communication pipeline can optionally attach that bot to its own WhatsApp lines.
+              {t("adminEmbeds.aiHelp")}
             </div>
             <div>
-              <label className="text-sm font-medium">AI Bot *</label>
+              <label className="text-sm font-medium">{t("adminEmbeds.aiBot")}</label>
               <Select
-                value={aiBotId}
-                onValueChange={value => {
-                  setAiBotId(value);
-                  setCommunicationPipelineId("__none__");
-                }}
-                disabled={aiBotsLoading || activeAiBots.length === 0}
+                value={aiBotId || "__none__"}
+                onValueChange={value => setAiBotId(value === "__none__" ? "" : value)}
+                disabled={aiBotsLoading}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder={aiBotsLoading ? "Loading AI bots..." : "Select an AI bot"} />
+                  <SelectValue placeholder={aiBotsLoading ? t("adminEmbeds.loadingAiBots") : t("adminEmbeds.selectAiBot")} />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="__none__">{t("adminEmbeds.noAiBot")}</SelectItem>
                   {activeAiBots.map(bot => (
                     <SelectItem key={bot.id} value={String(bot.id)}>
-                      {bot.name}{bot.isDefault ? " · Default" : ""}
+                      {bot.name}{bot.isDefault ? ` · ${t("adminEmbeds.defaultLabel")}` : ""}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
               {activeAiBots.length === 0 && !aiBotsLoading ? (
-                <p className="mt-1 text-xs text-destructive">Create and activate an AI bot in AI Agent before saving this widget.</p>
+                <p className="mt-1 text-xs text-muted-foreground">{t("adminEmbeds.noActiveAiBots")}</p>
               ) : (
-                <p className="mt-1 text-xs text-muted-foreground">Bot configurations and knowledge remain isolated from other projects.</p>
+                <p className="mt-1 text-xs text-muted-foreground">{t("adminEmbeds.aiBotHelp")}</p>
               )}
             </div>
             <div>
-              <label className="text-sm font-medium">Communication Pipeline</label>
+              <label className="text-sm font-medium">{t("adminEmbeds.partnerAgent")}</label>
               <Select
-                value={communicationPipelineId}
-                onValueChange={setCommunicationPipelineId}
-                disabled={!aiBotId || pipelinesLoading}
+                value={partnerAgentId}
+                onValueChange={setPartnerAgentId}
+                disabled={partnerOptionsLoading}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder={pipelinesLoading ? "Loading pipelines..." : "No WhatsApp pipeline"} />
+                  <SelectValue placeholder={partnerOptionsLoading ? t("adminEmbeds.loadingPartners") : t("adminEmbeds.selectPartner")} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="__none__">No WhatsApp pipeline</SelectItem>
-                  {availablePipelines.map(pipeline => (
-                    <SelectItem key={pipeline.id} value={String(pipeline.id)}>
-                      {pipeline.name}{pipeline.isDefault ? " · Default" : ""}
+                  <SelectItem value="__none__">{t("adminEmbeds.noPartner")}</SelectItem>
+                  {(partnerOptions?.agents || []).map(agent => (
+                    <SelectItem key={agent.id} value={String(agent.id)}>
+                      {agent.type === "sub_agent" ? `↳ ${agent.name}` : agent.name}
+                      {agent.parentName ? ` · ${agent.parentName}` : ""}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
               <p className="mt-1 text-xs text-muted-foreground">
-                Only active pipelines owned by the selected AI bot are available. Primary and secondary phone routing is configured in AI Agent.
+                {t("adminEmbeds.partnerHelp")}
               </p>
             </div>
             <div className="rounded-xl border bg-muted/30 p-3 text-xs text-muted-foreground">
-              Provider capacity is a separate layer. Select a dedicated Anthropic connection when this widget needs isolated provider throughput; safe fallback still uses the default Claude connection.
+              {aiBotId ? t("adminEmbeds.providerHelp") : t("adminEmbeds.aiDisabledHelp")}
             </div>
             <div>
-              <label className="text-sm font-medium">AI Connection</label>
-              <Select value={aiConnectionKey} onValueChange={setAiConnectionKey}>
+              <label className="text-sm font-medium">{t("adminEmbeds.aiConnection")}</label>
+              <Select value={aiConnectionKey} onValueChange={setAiConnectionKey} disabled={!aiBotId}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {(aiOptions?.connections || [{ key: "claude", name: "Default Claude connection" }]).map(connection => (
+                  {(aiOptions?.connections || [{ key: "claude", name: t("adminEmbeds.defaultClaudeConnection") }]).map(connection => (
                     <SelectItem key={connection.key} value={connection.key}>{connection.name} ({connection.key})</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-              <p className="text-xs text-muted-foreground mt-1">Secrets stay in Settings → Integrations and are never exposed here.</p>
+              <p className="text-xs text-muted-foreground mt-1">{t("adminEmbeds.aiConnectionHelp")}</p>
             </div>
             <div>
-              <label className="text-sm font-medium">Document Extractor</label>
-              <Select value={aiExtractorId} onValueChange={setAiExtractorId}>
+              <label className="text-sm font-medium">{t("adminEmbeds.documentExtractor")}</label>
+              <Select value={aiExtractorId} onValueChange={setAiExtractorId} disabled={!aiBotId}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="__default__">Default embed extractor</SelectItem>
+                  <SelectItem value="__default__">{t("adminEmbeds.defaultExtractor")}</SelectItem>
                   {(aiOptions?.extractors || []).map(extractor => (
                     <SelectItem key={extractor.id} value={String(extractor.id)}>{extractor.name}</SelectItem>
                   ))}
@@ -1189,7 +1165,7 @@ function WidgetFormDialog({ open, onClose, widget, initialMode, onSaved }: {
               </Select>
             </div>
             <div className="text-xs text-muted-foreground">
-              Lane: <code>widget:{widget?.id || "new"}</code> · Per-widget concurrency is controlled by the API scheduler.
+              {t("adminEmbeds.laneLabel")}: <code>widget:{widget?.id || "new"}</code> · {t("adminEmbeds.laneHelp")}
             </div>
           </TabsContent>
         </Tabs>

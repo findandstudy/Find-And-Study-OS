@@ -22,6 +22,7 @@ import {
   aiExtractorsTable,
   aiBotsTable,
   communicationPipelinesTable,
+  agentsTable,
   canonicalCountry,
 } from "@workspace/db";
 import { eq, ilike, sql, and, or, asc, desc, inArray, isNotNull, isNull } from "drizzle-orm";
@@ -571,7 +572,7 @@ async function resolveEmbedAutomationSelection(
   rawAiBotId: unknown,
   rawCommunicationPipelineId: unknown,
   fallback: { aiBotId: number | null; communicationPipelineId: number | null },
-): Promise<{ aiBotId: number; communicationPipelineId: number | null }> {
+): Promise<{ aiBotId: number | null; communicationPipelineId: number | null }> {
   const hasAiBotId = rawAiBotId !== undefined;
   const hasPipelineId = rawCommunicationPipelineId !== undefined;
   let aiBotId = hasAiBotId
@@ -603,24 +604,62 @@ async function resolveEmbedAutomationSelection(
     if (aiBotId == null) aiBotId = pipeline.aiBotId;
   }
 
-  let resolvedAiBotId: number;
-  try {
-    resolvedAiBotId = await requireAiBotId(aiBotId, { activeOnly: true });
-  } catch {
-    throw new EmbedAutomationSelectionError("Active AI bot not found");
+  let resolvedAiBotId: number | null = null;
+  if (aiBotId != null) {
+    try {
+      resolvedAiBotId = await requireAiBotId(aiBotId, { activeOnly: true });
+    } catch {
+      throw new EmbedAutomationSelectionError("Active AI bot not found");
+    }
   }
   if (pipeline && pipeline.aiBotId !== resolvedAiBotId) {
     throw new EmbedAutomationSelectionError("Communication pipeline belongs to a different AI bot");
   }
 
-  const [activeBot] = await db
-    .select({ id: aiBotsTable.id })
-    .from(aiBotsTable)
-    .where(and(eq(aiBotsTable.id, resolvedAiBotId), eq(aiBotsTable.isActive, true)))
-    .limit(1);
-  if (!activeBot) throw new EmbedAutomationSelectionError("Active AI bot not found");
+  if (resolvedAiBotId != null) {
+    const [activeBot] = await db
+      .select({ id: aiBotsTable.id })
+      .from(aiBotsTable)
+      .where(and(eq(aiBotsTable.id, resolvedAiBotId), eq(aiBotsTable.isActive, true)))
+      .limit(1);
+    if (!activeBot) throw new EmbedAutomationSelectionError("Active AI bot not found");
+  }
 
   return { aiBotId: resolvedAiBotId, communicationPipelineId };
+}
+
+async function resolveEmbedAgentId(rawAgentId: unknown, fallback: number | null): Promise<number | null> {
+  const agentId = rawAgentId === undefined
+    ? fallback
+    : normalizeOptionalPositiveId(rawAgentId, "partner agent");
+  if (agentId == null) return null;
+  const [agent] = await db.select({ id: agentsTable.id }).from(agentsTable).where(and(
+    eq(agentsTable.id, agentId),
+    eq(agentsTable.status, "active"),
+    isNull(agentsTable.deletedAt),
+  )).limit(1);
+  if (!agent) throw new EmbedAutomationSelectionError("Active partner agent not found");
+  return agent.id;
+}
+
+async function widgetPartnerExtras(agentId: number | null | undefined) {
+  if (!agentId) return undefined;
+  const [agent] = await db.select({
+    id: agentsTable.id,
+    parentAgentId: agentsTable.parentAgentId,
+    firstName: agentsTable.firstName,
+    lastName: agentsTable.lastName,
+    companyName: agentsTable.companyName,
+  }).from(agentsTable).where(and(eq(agentsTable.id, agentId), isNull(agentsTable.deletedAt))).limit(1);
+  if (!agent) return undefined;
+  const originType = agent.parentAgentId ? "sub_agent" : "agent";
+  return {
+    agentId: agent.id,
+    originType,
+    originEntityType: originType,
+    originEntityId: agent.id,
+    originDisplayName: agent.companyName || `${agent.firstName} ${agent.lastName}`.trim(),
+  };
 }
 
 router.get("/embed/widgets", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
@@ -711,8 +750,35 @@ router.get("/embed/widgets/:id", requireAuth, requireRole(...STAFF_ROLES), async
   res.json(sanitizeWidget(widget, req.user!.role));
 });
 
+router.get("/embed/widgets/partner-options", requireAuth, requireRole(...ADMIN_ROLES), async (_req, res): Promise<void> => {
+  const rows = await db.select({
+    id: agentsTable.id,
+    parentAgentId: agentsTable.parentAgentId,
+    firstName: agentsTable.firstName,
+    lastName: agentsTable.lastName,
+    companyName: agentsTable.companyName,
+    businessName: agentsTable.businessName,
+  }).from(agentsTable).where(and(
+    eq(agentsTable.status, "active"),
+    isNull(agentsTable.deletedAt),
+  )).orderBy(asc(agentsTable.parentAgentId), asc(agentsTable.companyName), asc(agentsTable.firstName));
+  const names = new Map(rows.map(row => [
+    row.id,
+    row.companyName || row.businessName || `${row.firstName} ${row.lastName}`.trim(),
+  ]));
+  res.json({
+    agents: rows.map(row => ({
+      id: row.id,
+      parentAgentId: row.parentAgentId,
+      name: names.get(row.id),
+      parentName: row.parentAgentId ? names.get(row.parentAgentId) || null : null,
+      type: row.parentAgentId ? "sub_agent" : "agent",
+    })),
+  });
+});
+
 router.post("/embed/widgets", requireAuth, requireRole(...ADMIN_ROLES), async (req, res): Promise<void> => {
-  const { name, slug, mode, presetFilters, lockedFilters, hiddenFilters, visibleFilters, theme, allowedDomains, aiConnectionKey, aiExtractorId, aiBotId, communicationPipelineId } = req.body;
+  const { name, slug, mode, presetFilters, lockedFilters, hiddenFilters, visibleFilters, theme, allowedDomains, aiConnectionKey, aiExtractorId, aiBotId, communicationPipelineId, agentId } = req.body;
   if (!name || !slug) { res.status(400).json({ error: "name and slug are required" }); return; }
   const validMode = VALID_MODES.includes(mode) ? mode : "combined";
   if (!isValidEmbedUniversityScope(presetFilters)) {
@@ -733,6 +799,7 @@ router.post("/embed/widgets", requireAuth, requireRole(...ADMIN_ROLES), async (r
       communicationPipelineId,
       { aiBotId: null, communicationPipelineId: null },
     );
+    const resolvedAgentId = await resolveEmbedAgentId(agentId, null);
     const isRestricted = Array.isArray(allowedDomains) && allowedDomains.length > 0;
     const [widget] = await db.insert(embedWidgetsTable).values({
       name,
@@ -748,6 +815,7 @@ router.post("/embed/widgets", requireAuth, requireRole(...ADMIN_ROLES), async (r
       aiExtractorId: cleanAiExtractorId,
       aiBotId: automationSelection.aiBotId,
       communicationPipelineId: automationSelection.communicationPipelineId,
+      agentId: resolvedAgentId,
       // Auto-generate an API key for restricted widgets so it's ready immediately.
       // Open widgets (no allowedDomains) don't need one.
       embedApiKey: isRestricted ? generateWidgetApiKey() : null,
@@ -773,7 +841,7 @@ router.post("/embed/widgets", requireAuth, requireRole(...ADMIN_ROLES), async (r
 router.patch("/embed/widgets/:id", requireAuth, requireRole(...ADMIN_ROLES), async (req, res, next): Promise<void> => {
   if (!/^\d+$/.test(String(req.params.id))) { next(); return; }
   const id = parseInt(String(req.params.id), 10);
-  const { name, slug, mode, presetFilters, lockedFilters, hiddenFilters, visibleFilters, theme, allowedDomains, isActive, aiConnectionKey, aiExtractorId, aiBotId, communicationPipelineId } = req.body;
+  const { name, slug, mode, presetFilters, lockedFilters, hiddenFilters, visibleFilters, theme, allowedDomains, isActive, aiConnectionKey, aiExtractorId, aiBotId, communicationPipelineId, agentId } = req.body;
   const [current] = await db
     .select()
     .from(embedWidgetsTable)
@@ -835,6 +903,9 @@ router.patch("/embed/widgets/:id", requireAuth, requireRole(...ADMIN_ROLES), asy
       );
       updates.aiBotId = automationSelection.aiBotId;
       updates.communicationPipelineId = automationSelection.communicationPipelineId;
+    }
+    if (agentId !== undefined) {
+      updates.agentId = await resolveEmbedAgentId(agentId, current.agentId);
     }
     const [widget] = await db.update(embedWidgetsTable).set(updates).where(eq(embedWidgetsTable.id, id)).returning();
     if (!widget) { res.status(404).json({ error: "Widget not found" }); return; }
@@ -1547,6 +1618,7 @@ router.post("/public/embed/:slug/lead", embedSubmitLimiter, embedLeadJson, async
   const s = (v: any, max: number) => v ? String(v).slice(0, max) : null;
 
   try {
+    const partnerExtras = await widgetPartnerExtras(widget.agentId);
     // Dedup-aware insert: if the same email already submitted to this
     // widget within the dedup window, the existing lead row is reused
     // and refreshed with the latest payload. Prevents duplicates when
@@ -1570,6 +1642,7 @@ router.post("/public/embed/:slug/lead", embedSubmitLimiter, embedLeadJson, async
         utmTerm: s(utmTerm, 100),
         utmContent: s(utmContent, 100),
       },
+      extras: partnerExtras,
     });
     const ga4Context = sanitizeGa4AnalyticsContext({ gaClientId, gaSessionId, gaCapturedAt });
     if (ga4Context) {
@@ -1771,6 +1844,7 @@ router.post("/public/embed/:slug/apply", embedSubmitLimiter, embedApplyJson, asy
   // the write to THIS widget's own lead for this email, prevents a second
   // row when Step-1 already created one, and preserves the lead-first ->
   // auto-convert UX. Any client-supplied leadId is intentionally ignored.
+  const partnerExtras = await widgetPartnerExtras(widget.agentId);
   const result = await db.transaction(async (tx) => {
     const upsertResult = await findOrUpsertEmbedLead({
       slug: widget.slug,
@@ -1787,6 +1861,7 @@ router.post("/public/embed/:slug/apply", embedSubmitLimiter, embedApplyJson, asy
         interestedUniversity: s(universityName || preferredUniversity, 255),
         notes: s(message, 2000),
       },
+      extras: partnerExtras,
     });
     const lead = upsertResult.lead;
 
@@ -1972,6 +2047,14 @@ router.post("/public/embed/:slug/apply", embedSubmitLimiter, embedApplyJson, asy
           graduationYear: graduationYear ? parseInt(String(graduationYear), 10) || null : null,
           gpa: s(gpa, 20),
           languageScore: s(languageScore, 20),
+          agentId: enrichedLead?.agentId ?? null,
+          assignedToId: enrichedLead?.assignedToId ?? null,
+          branchId: enrichedLead?.branchId ?? null,
+          originType: enrichedLead?.originType || "direct",
+          originEntityType: enrichedLead?.originEntityType ?? null,
+          originEntityId: enrichedLead?.originEntityId ?? null,
+          originDisplayName: enrichedLead?.originDisplayName ?? null,
+          originLeadId: result.leadId,
         }).returning();
       resultStudentId = newStudent.id;
       const newAppResult = await createApplicationForStudent(
@@ -2493,6 +2576,7 @@ router.post(
       let leadId: number | null = strong?.type === "lead" ? strong.id : null;
       const studentId: number | null = strong?.type === "student" ? strong.id : null;
       if (!leadId && !studentId) {
+        const partnerExtras = await widgetPartnerExtras(widget.agentId);
         const upsert = await findOrUpsertEmbedLead({
           slug,
           ip: req.ip,
@@ -2508,6 +2592,7 @@ router.post(
             sourcePageUrl: pageUrl,
             notes: `AI chatbot source: ${website || pageUrl || slug}`,
           },
+          extras: partnerExtras,
         });
         leadId = upsert.lead.id;
       }
@@ -2569,7 +2654,7 @@ router.post(
           externalThreadId,
           unmatched: false,
           status: "open",
-          botEnabled: true,
+          botEnabled: widget.aiBotId != null,
           metadata: {
             source: "web_chat",
             chatbotScope: scope,
@@ -2590,7 +2675,9 @@ router.post(
           direction: "outbound",
           status: "sent",
           sentAt: new Date(),
-          metadata: { botSent: true, botGreeting: true },
+          metadata: widget.aiBotId != null
+            ? { botSent: true, botGreeting: true }
+            : { systemGreeting: true },
         })
         .returning();
       await db
@@ -2716,10 +2803,12 @@ router.post(
           },
         },
       });
-      const outcome = await maybeAutoReply({
-        conversationId: inbound.conversationId,
-        inboundMessageId: inbound.messageId,
-      });
+      const outcome = session.conversation.aiBotId != null
+        ? await maybeAutoReply({
+            conversationId: inbound.conversationId,
+            inboundMessageId: inbound.messageId,
+          })
+        : { status: "disabled" as const };
       const rows = await db
         .select({
           id: messagesTable.id,
