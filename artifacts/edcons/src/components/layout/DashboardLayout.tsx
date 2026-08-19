@@ -164,10 +164,11 @@ function getMenuForRole(role: string, t: TFunc, agentStaffPerms?: string[], hasP
       { title: t("dashboard.auditLog"), icon: Activity, url: '/admin/audit' },
       { title: t("dashboard.userActivity"), icon: Activity, url: '/admin/activity' },
       ...(isAdmin || role === 'manager' ? [{ title: t("dashboard.qualityReport"), icon: Gauge, url: '/admin/quality-report' }] : []),
-      ...(isAdmin ? [{ title: "System Health", icon: HeartPulse, url: '/admin/system-health' }] : []),
-      ...(isAdmin ? [{ title: "Data Quality", icon: ShieldCheck, url: '/admin/data-quality' }] : []),
+      ...(isAdmin ? [{ title: t("dashboard.systemHealth"), icon: HeartPulse, url: '/admin/system-health' }] : []),
+      ...(isAdmin ? [{ title: t("dashboard.dataQuality"), icon: ShieldCheck, url: '/admin/data-quality' }] : []),
       ...(isAdmin ? [{ title: t("dashboard.apiTokens"), icon: KeyRound, url: '/admin/api-tokens' }] : []),
       { title: t("dashboard.settings"), icon: Settings, url: '/admin/settings' },
+      ...(isAdmin ? [{ title: t("dashboard.portalCredentials"), icon: KeyRound, url: '/admin/portal-credentials' }] : []),
       ...(isAdmin ? [{ title: t("dashboard.portalAutomation"), icon: Bot, url: '/admin/portal-automation' }] : []),
     ];
 

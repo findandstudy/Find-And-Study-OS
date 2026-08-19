@@ -1,6 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { sanitizeCourseFinderProgram } from "../src/lib/courseFinderVisibility";
+import {
+  courseFinderUniversityLogoUrl,
+  sanitizeCourseFinderProgram,
+} from "../src/lib/courseFinderVisibility";
 
 const program = {
   id: 42,
@@ -51,4 +54,12 @@ test("service-fee permission is independent of commission permission", () => {
   assert.equal(result.commissionRate, 15);
   assert.equal(result.applicationFee, 100);
   assert.equal("serviceFeeAmount" in result, false);
+});
+
+test("course finder rows reference the cached logo endpoint instead of inline data", () => {
+  assert.equal(
+    courseFinderUniversityLogoUrl(2218, true),
+    "/api/universities/2218/logo",
+  );
+  assert.equal(courseFinderUniversityLogoUrl(2218, false), null);
 });

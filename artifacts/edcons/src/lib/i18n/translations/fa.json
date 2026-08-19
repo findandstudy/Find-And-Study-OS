@@ -518,6 +518,9 @@
     "staffCards": "کارت‌های کارکنان",
     "apiTokens": "توکن‌های API",
     "portalAutomation": "Portal Automation",
+    "portalCredentials": "اطلاعات ورود پورتال",
+    "systemHealth": "سلامت سیستم",
+    "dataQuality": "کیفیت داده‌ها",
     "academy": "Academy",
     "qualityReport": "گزارش کیفیت"
   },
@@ -2535,6 +2538,9 @@
     "selectSenderLine": "یک خط واتساپ انتخاب کنید",
     "systemDefault": "پیش‌فرض سیستم",
     "senderLineHelp": "این خط فقط برای شروع این گفتگو استفاده می‌شود. پاسخ‌های گفتگوهای موجود در خط اصلی خود باقی می‌مانند."
+  },
+  "settingsHeader": {
+    "subtitle": "نمایه، سازمان، یکپارچه‌سازی‌ها و تنظیمات سیستم را مدیریت کنید."
   },
   "settingsPage": {
     "navProfile": "پروفایل",

@@ -518,6 +518,9 @@
     "staffCards": "Fichas del personal",
     "apiTokens": "Tokens de API",
     "portalAutomation": "Portal Automation",
+    "portalCredentials": "Credenciales del portal",
+    "systemHealth": "Estado del sistema",
+    "dataQuality": "Calidad de los datos",
     "academy": "Academy",
     "qualityReport": "Informe de calidad"
   },
@@ -2535,6 +2538,9 @@
     "selectSenderLine": "Selecciona una línea de WhatsApp",
     "systemDefault": "Predeterminada del sistema",
     "senderLineHelp": "Esta línea solo se usará para iniciar esta conversación. Las respuestas de conversaciones existentes permanecen en su línea original."
+  },
+  "settingsHeader": {
+    "subtitle": "Gestiona tu perfil, organización, integraciones y preferencias del sistema."
   },
   "settingsPage": {
     "navProfile": "Perfil",

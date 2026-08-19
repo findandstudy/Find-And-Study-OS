@@ -518,6 +518,9 @@
     "staffCards": "स्टाफ़ कार्ड",
     "apiTokens": "API टोकन",
     "portalAutomation": "Portal Automation",
+    "portalCredentials": "पोर्टल क्रेडेंशियल",
+    "systemHealth": "सिस्टम स्वास्थ्य",
+    "dataQuality": "डेटा गुणवत्ता",
     "academy": "Academy",
     "qualityReport": "गुणवत्ता रिपोर्ट"
   },
@@ -2535,6 +2538,9 @@
     "selectSenderLine": "WhatsApp लाइन चुनें",
     "systemDefault": "सिस्टम डिफ़ॉल्ट",
     "senderLineHelp": "यह लाइन केवल यह बातचीत शुरू करने के लिए उपयोग होगी। मौजूदा बातचीत के उत्तर उसी मूल लाइन पर रहेंगे।"
+  },
+  "settingsHeader": {
+    "subtitle": "अपनी प्रोफ़ाइल, संगठन, एकीकरण और सिस्टम प्राथमिकताएँ प्रबंधित करें।"
   },
   "settingsPage": {
     "navProfile": "प्रोफ़ाइल",

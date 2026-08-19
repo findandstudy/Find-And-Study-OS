@@ -518,6 +518,9 @@
     "staffCards": "Kartu Staf",
     "apiTokens": "Token API",
     "portalAutomation": "Portal Automation",
+    "portalCredentials": "Kredensial Portal",
+    "systemHealth": "Kesehatan Sistem",
+    "dataQuality": "Kualitas Data",
     "academy": "Academy",
     "qualityReport": "Laporan Kualitas"
   },
@@ -2535,6 +2538,9 @@
     "selectSenderLine": "Pilih nomor WhatsApp",
     "systemDefault": "Default sistem",
     "senderLineHelp": "Nomor ini hanya digunakan untuk memulai percakapan ini. Balasan pada percakapan lama tetap memakai nomor asalnya."
+  },
+  "settingsHeader": {
+    "subtitle": "Kelola profil, organisasi, integrasi, dan preferensi sistem Anda."
   },
   "settingsPage": {
     "navProfile": "Profil",

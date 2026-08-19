@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { useI18n } from "@/hooks/use-i18n";
 import { useToast } from "@/hooks/use-toast";
+import { TablePagination, useTablePagination } from "@/components/TablePagination";
 
 type PortalDiagnosis = {
   classification?: string;
@@ -82,6 +83,7 @@ export default function AiActionQueue() {
   const [loading, setLoading] = useState(true);
   const [reviewingId, setReviewingId] = useState<number | null>(null);
   const [suppressedGuardianCount, setSuppressedGuardianCount] = useState(0);
+  const historyPagination = useTablePagination(25);
 
   const load = async () => {
     try {
@@ -133,6 +135,7 @@ export default function AiActionQueue() {
 
   const pending = items.filter((i) => i.status === "pending_approval");
   const history = items.filter((i) => i.status !== "pending_approval");
+  const { paged: pagedHistory, total: historyTotal } = historyPagination.paginate(history);
 
   return (
     <div className="p-6 space-y-6 max-w-5xl">
@@ -356,7 +359,7 @@ export default function AiActionQueue() {
           {history.length === 0 && (
             <div className="text-sm text-muted-foreground">{t("aiActionQueue.noHistory")}</div>
           )}
-          {history.map((a) => (
+          {pagedHistory.map((a) => (
             <div
               key={a.id}
               className="border rounded p-2 text-sm flex items-center justify-between"
@@ -373,6 +376,16 @@ export default function AiActionQueue() {
               </div>
             </div>
           ))}
+          {historyTotal > 0 && (
+            <TablePagination
+              currentPage={historyPagination.page}
+              totalItems={historyTotal}
+              pageSize={historyPagination.pageSize}
+              onPageChange={historyPagination.setPage}
+              onPageSizeChange={historyPagination.setPageSize}
+              pageSizeOptions={[10, 25, 50, 100]}
+            />
+          )}
         </CardContent>
       </Card>
     </div>

@@ -518,6 +518,9 @@
     "staffCards": "بطاقات الموظفين",
     "apiTokens": "رموز API",
     "portalAutomation": "Portal Automation",
+    "portalCredentials": "بيانات اعتماد البوابة",
+    "systemHealth": "صحة النظام",
+    "dataQuality": "جودة البيانات",
     "academy": "Academy",
     "qualityReport": "تقرير الجودة"
   },
@@ -2586,6 +2589,9 @@
     "selectSenderLine": "اختر خط واتساب",
     "systemDefault": "الخط الافتراضي للنظام",
     "senderLineHelp": "يُستخدم هذا الخط لبدء هذه المحادثة فقط. تبقى الردود في المحادثات الحالية على خطها الأصلي."
+  },
+  "settingsHeader": {
+    "subtitle": "إدارة ملفك الشخصي ومؤسستك وعمليات التكامل وتفضيلات النظام."
   },
   "settingsPage": {
     "navProfile": "الملف الشخصي",

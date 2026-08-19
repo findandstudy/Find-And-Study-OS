@@ -518,6 +518,9 @@
     "aiActionQueue": "AI Aksiyon Kuyruğu",
     "apiTokens": "API Anahtarları",
     "portalAutomation": "Portal Otomasyonu",
+    "portalCredentials": "Portal Kimlik Bilgileri",
+    "systemHealth": "Sistem Sağlığı",
+    "dataQuality": "Veri Kalitesi",
     "academy": "Academy",
     "qualityReport": "Kalite Raporu"
   },
@@ -2783,6 +2786,9 @@
     "selectSenderLine": "WhatsApp hattı seçin",
     "systemDefault": "Sistem ana hattı",
     "senderLineHelp": "Bu hat yalnızca bu sohbeti başlatmak için kullanılır. Mevcut sohbetlerdeki yanıtlar kendi hattında kalır."
+  },
+  "settingsHeader": {
+    "subtitle": "Profilinizi, kurumunuzu, entegrasyonları ve sistem tercihlerini yönetin."
   },
   "settingsPage": {
     "navProfile": "Profil",

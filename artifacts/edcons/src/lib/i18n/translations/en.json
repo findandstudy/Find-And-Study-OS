@@ -518,6 +518,9 @@
     "aiActionQueue": "AI Action Queue",
     "apiTokens": "API Tokens",
     "portalAutomation": "Portal Automation",
+    "portalCredentials": "Portal Credentials",
+    "systemHealth": "System Health",
+    "dataQuality": "Data Quality",
     "academy": "Academy",
     "qualityReport": "Quality Report"
   },
@@ -2842,6 +2845,9 @@
     "selectSenderLine": "Select a WhatsApp line",
     "systemDefault": "System default",
     "senderLineHelp": "This line will be used only to start this conversation. Replies in existing conversations remain on their original line."
+  },
+  "settingsHeader": {
+    "subtitle": "Manage your profile, organization, integrations, and system preferences."
   },
   "settingsPage": {
     "navProfile": "Profile",

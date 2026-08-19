@@ -149,8 +149,8 @@
   },
   "contact": {
     "badge": "我们随时为您服务",
-    "title": "联系",
-    "titleHighlight": "我们",
+    "title": "联系我们",
+    "titleHighlight": "",
     "subtitle": "预约免费咨询或向我们提问。我们的顾问通常在2小时内回复。",
     "formTitle": "给我们留言",
     "formSubtitle": "填写下表，我们会尽快回复您。",
@@ -518,6 +518,9 @@
     "staffCards": "员工卡片",
     "apiTokens": "API 令牌",
     "portalAutomation": "Portal Automation",
+    "portalCredentials": "门户凭据",
+    "systemHealth": "系统健康",
+    "dataQuality": "数据质量",
     "academy": "Academy",
     "qualityReport": "质量报告"
   },
@@ -2535,6 +2538,9 @@
     "selectSenderLine": "选择 WhatsApp 线路",
     "systemDefault": "系统默认线路",
     "senderLineHelp": "此线路仅用于发起本次对话。现有对话的回复仍使用原线路。"
+  },
+  "settingsHeader": {
+    "subtitle": "管理您的个人资料、组织、集成和系统偏好设置。"
   },
   "settingsPage": {
     "navProfile": "个人资料",

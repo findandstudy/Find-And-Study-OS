@@ -149,8 +149,8 @@
   },
   "contact": {
     "badge": "Nous sommes là pour vous aider",
-    "title": "Contactez",
-    "titleHighlight": "-nous",
+    "title": "Contactez-nous",
+    "titleHighlight": "",
     "subtitle": "Réservez une consultation gratuite ou posez-nous toute question. Nos conseillers répondent généralement sous 2 heures.",
     "formTitle": "Envoyez-nous un message",
     "formSubtitle": "Remplissez le formulaire ci-dessous et nous vous répondrons rapidement.",
@@ -518,6 +518,9 @@
     "staffCards": "Fiches du personnel",
     "apiTokens": "Jetons API",
     "portalAutomation": "Portal Automation",
+    "portalCredentials": "Identifiants du portail",
+    "systemHealth": "État du système",
+    "dataQuality": "Qualité des données",
     "academy": "Academy",
     "qualityReport": "Rapport de qualité"
   },
@@ -2586,6 +2589,9 @@
     "selectSenderLine": "Sélectionner une ligne WhatsApp",
     "systemDefault": "Ligne par défaut du système",
     "senderLineHelp": "Cette ligne sert uniquement à démarrer cette conversation. Les réponses aux conversations existantes restent sur leur ligne d’origine."
+  },
+  "settingsHeader": {
+    "subtitle": "Gérez votre profil, votre organisation, vos intégrations et vos préférences système."
   },
   "settingsPage": {
     "navProfile": "Profil",

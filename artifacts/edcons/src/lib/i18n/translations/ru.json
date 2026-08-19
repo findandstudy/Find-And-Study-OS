@@ -518,6 +518,9 @@
     "staffCards": "Карточки сотрудников",
     "apiTokens": "API-токены",
     "portalAutomation": "Portal Automation",
+    "portalCredentials": "Учётные данные портала",
+    "systemHealth": "Состояние системы",
+    "dataQuality": "Качество данных",
     "academy": "Academy",
     "qualityReport": "Отчёт о качестве"
   },
@@ -2586,6 +2589,9 @@
     "selectSenderLine": "Выберите линию WhatsApp",
     "systemDefault": "Системная по умолчанию",
     "senderLineHelp": "Эта линия используется только для начала разговора. Ответы в существующих разговорах остаются на исходной линии."
+  },
+  "settingsHeader": {
+    "subtitle": "Управляйте профилем, организацией, интеграциями и системными настройками."
   },
   "settingsPage": {
     "navProfile": "Профиль",

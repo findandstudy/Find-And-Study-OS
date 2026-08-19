@@ -210,7 +210,10 @@ export default function Contact() {
               <MessageSquare className="w-4 h-4" /> {t("contact.badge")}
             </span>
             <h1 className="text-4xl md:text-6xl font-display font-bold text-foreground mb-6">
-              {t("contact.title")} <span className="text-primary">{t("contact.titleHighlight")}</span>
+              {t("contact.title")}
+              {t("contact.titleHighlight") ? (
+                <> <span className="text-primary">{t("contact.titleHighlight")}</span></>
+              ) : null}
             </h1>
             <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
               {t("contact.subtitle")}

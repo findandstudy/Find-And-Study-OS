@@ -4,6 +4,20 @@ export type CourseFinderProgramVisibility = {
   serviceFee: boolean;
 };
 
+/**
+ * Course Finder list rows must never inline the stored university logo.
+ * Some legacy records keep a base64 data URL in the database; repeating that
+ * payload for every program can turn a 24-row response into multiple megabytes.
+ * The dedicated logo route streams or redirects the source once and lets the
+ * browser cache it across every card for the same university.
+ */
+export function courseFinderUniversityLogoUrl(
+  universityId: number,
+  hasLogo: boolean,
+): string | null {
+  return hasLogo ? `/api/universities/${universityId}/logo` : null;
+}
+
 const CONTACT_FIELDS = [
   "universityContactName",
   "universityContactPhone",

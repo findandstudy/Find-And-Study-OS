@@ -15,8 +15,12 @@ import {
 import { getAgentVisibleIds } from "../lib/agentVisibility";
 import { getVisibleBranchIds } from "../lib/branchScope";
 import { getDocLabel } from "../lib/docNaming";
-import { sanitizeCourseFinderProgram } from "../lib/courseFinderVisibility";
+import {
+  courseFinderUniversityLogoUrl,
+  sanitizeCourseFinderProgram,
+} from "../lib/courseFinderVisibility";
 import { courseFinderFilterCacheKey } from "../lib/courseFinderFilterCache";
+import { parseCourseFinderPagination } from "../lib/courseFinderPagination";
 import {
   normaliseCountryRules,
   normaliseStringList,
@@ -178,12 +182,12 @@ function parseNonNegativeInt(raw: string | undefined): number | null {
 
 router.get("/course-finder", async (req, res): Promise<void> => {
   const { country, city, universityType, universityId, programId, level, language, search, intake, feeMin, feeMax, sort, page = "1", limit = "24" } = req.query as Record<string, string>;
-  const pageNum = Math.max(1, parseInt(page, 10));
   // Cap at 500 (was 1000). Lowering further requires StudentDetail.tsx:319
   // to be paginated — currently it requests `limit=500` for a single
-  // university's program list.
-  const limitNum = Math.min(500, Math.max(1, parseInt(limit, 10)));
-  const offset = (pageNum - 1) * limitNum;
+  // university's program list. Invalid values fall back safely instead of
+  // passing NaN to LIMIT/OFFSET and destabilising the API process.
+  const { page: pageNum, limit: limitNum, offset } =
+    parseCourseFinderPagination(page, limit);
 
   const conditions = [eq(programsTable.isActive, true)];
   const publicPolicy = await resolveCourseFinderPolicy(req);
@@ -280,7 +284,8 @@ router.get("/course-finder", async (req, res): Promise<void> => {
       isActive: programsTable.isActive,
       universityId: programsTable.universityId,
       universityName: universitiesTable.name,
-      universityLogoUrl: universitiesTable.logoUrl,
+      universityHasLogo: sql<boolean>`${universitiesTable.logoUrl} IS NOT NULL
+        AND length(trim(${universitiesTable.logoUrl})) > 0`.as("university_has_logo"),
       universityCountry: universitiesTable.country,
       universityCity: universitiesTable.city,
       universityStatus: universitiesTable.status,
@@ -321,11 +326,19 @@ router.get("/course-finder", async (req, res): Promise<void> => {
     canSeeInternalFees = permissions.includes("view_commission_amount");
     canSeeServiceFee = permissions.includes("view_service_fee");
   }
-  const sanitizedRows = rows.map((row) => sanitizeCourseFinderProgram(row, {
-    contacts: !!canSeeContacts,
-    internalFees: canSeeInternalFees,
-    serviceFee: canSeeServiceFee,
-  }));
+  const sanitizedRows = rows.map(({ universityHasLogo, ...row }) =>
+    sanitizeCourseFinderProgram({
+      ...row,
+      universityLogoUrl: courseFinderUniversityLogoUrl(
+        row.universityId,
+        universityHasLogo,
+      ),
+    }, {
+      contacts: !!canSeeContacts,
+      internalFees: canSeeInternalFees,
+      serviceFee: canSeeServiceFee,
+    })
+  );
 
   res.json({
     data: sanitizedRows,

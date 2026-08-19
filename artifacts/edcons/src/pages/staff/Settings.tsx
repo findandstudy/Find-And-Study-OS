@@ -1234,7 +1234,7 @@ export default function SettingsPage() {
       <div className="space-y-6">
         <div>
           <h1 className="text-2xl font-display font-bold text-foreground">{t("settingsPage.settings")}</h1>
-          <p className="text-muted-foreground text-sm mt-1">{t("settingsPage.subtitle")}</p>
+          <p className="text-muted-foreground text-sm mt-1">{t("settingsHeader.subtitle")}</p>
         </div>
 
         <div className="lg:hidden mb-4">
