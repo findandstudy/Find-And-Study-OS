@@ -15,6 +15,7 @@ import {
 } from "../src/lib/embedChatI18n";
 import {
   isValidEmbedUniversityScope,
+  resolveEmbedDefaultUniversityId,
   resolveEmbedPresetScopeFilters,
   resolveEmbedUniversityScope,
 } from "../src/lib/embedUniversityScope";
@@ -314,6 +315,29 @@ test("university scope supports all, selected sets and legacy widgets", () => {
     isValidEmbedUniversityScope({ universityScope: "selected", universityIds: [] }),
     false,
   );
+});
+
+test("all-university widgets can preselect a changeable default university", () => {
+  const presetFilters = {
+    universityScope: "all",
+    defaultUniversityId: "42",
+  };
+  assert.deepEqual(resolveEmbedUniversityScope(presetFilters), {
+    mode: "all",
+    universityIds: [],
+  });
+  assert.equal(resolveEmbedDefaultUniversityId(presetFilters), 42);
+  assert.equal(
+    resolveEmbedDefaultUniversityId({ universityScope: "selected", defaultUniversityId: 42 }),
+    null,
+  );
+  assert.equal(
+    resolveEmbedDefaultUniversityId({ universityScope: "all", defaultUniversityId: "invalid" }),
+    null,
+  );
+  assert.match(routeSource, /userFilters\.universityId=String\(defaultUniversityId\)/);
+  assert.match(embedsAdminSource, /presetFilters\.defaultUniversityId = defaultUniversityId/);
+  assert.match(embedsAdminSource, /Visitors can still switch to any university or All Universities/);
 });
 
 test("embed preset scope supports regional filters without a university selection", () => {

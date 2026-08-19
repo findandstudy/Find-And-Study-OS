@@ -44,6 +44,21 @@ export function resolveEmbedUniversityScope(presetFilters: unknown): EmbedUniver
   return { mode: "all", universityIds: [] };
 }
 
+/**
+ * Returns the university that should be selected only on the widget's first
+ * render. Unlike `universityId`, this value never narrows the widget's hard
+ * university scope and is intentionally ignored for selected-scope widgets.
+ */
+export function resolveEmbedDefaultUniversityId(presetFilters: unknown): number | null {
+  if (!presetFilters || typeof presetFilters !== "object" || Array.isArray(presetFilters)) {
+    return null;
+  }
+
+  const filters = presetFilters as Record<string, unknown>;
+  if (filters.universityScope !== "all") return null;
+  return positiveInteger(filters.defaultUniversityId);
+}
+
 export function resolveEmbedPresetScopeFilters(
   presetFilters: unknown,
 ): EmbedPresetScopeFilters {

@@ -517,6 +517,7 @@ function WidgetFormDialog({ open, onClose, widget, initialMode, onSaved }: {
   const [presetUniversityType, setPresetUniversityType] = useState("");
   const [universityScopeMode, setUniversityScopeMode] = useState<"all" | "selected">("all");
   const [presetUniversityIds, setPresetUniversityIds] = useState<string[]>([]);
+  const [presetDefaultUniversityId, setPresetDefaultUniversityId] = useState("");
   const [presetLevel, setPresetLevel] = useState("");
   const [presetLanguage, setPresetLanguage] = useState("");
   const [presetField, setPresetField] = useState("");
@@ -602,6 +603,8 @@ function WidgetFormDialog({ open, onClose, widget, initialMode, onSaved }: {
         : (legacyUniversityId ? [legacyUniversityId] : []);
       setUniversityScopeMode(pf.universityScope === "all" || selectedUniversityIds.length === 0 ? "all" : "selected");
       setPresetUniversityIds(selectedUniversityIds);
+      const defaultUniversityId = pf.defaultUniversityId ? String(pf.defaultUniversityId) : "";
+      setPresetDefaultUniversityId(/^\d+$/.test(defaultUniversityId) && Number(defaultUniversityId) > 0 ? defaultUniversityId : "");
       setPresetLevel(pf.level || "");
       setPresetLanguage(pf.language || "");
       setPresetField(pf.field || "");
@@ -622,7 +625,7 @@ function WidgetFormDialog({ open, onClose, widget, initialMode, onSaved }: {
       setAiExtractorId(widget.aiExtractorId ? String(widget.aiExtractorId) : "__default__");
     } else {
       setName(""); setSlug(""); setSlugTouched(false); setMode(initialMode);
-      setPresetCountry(""); setPresetCity(""); setPresetUniversityType(""); setUniversityScopeMode("all"); setPresetUniversityIds([]); setPresetLevel(""); setPresetLanguage(""); setPresetField("");
+      setPresetCountry(""); setPresetCity(""); setPresetUniversityType(""); setUniversityScopeMode("all"); setPresetUniversityIds([]); setPresetDefaultUniversityId(""); setPresetLevel(""); setPresetLanguage(""); setPresetField("");
       setLocked([]); setHidden([]); setDomains("");
       setPrimaryColor("#2563eb"); setButtonColor("#2563eb"); setBorderRadius("8px");
       setLogoUrl(""); setAssistantName(""); setWelcomeMessage("");
@@ -643,6 +646,11 @@ function WidgetFormDialog({ open, onClose, widget, initialMode, onSaved }: {
         description: "Choose one or more universities, or switch the widget scope to All Universities.",
         variant: "destructive",
       });
+      return;
+    }
+    const defaultUniversityId = presetDefaultUniversityId ? Number(presetDefaultUniversityId) : null;
+    if (defaultUniversityId != null && (!Number.isInteger(defaultUniversityId) || defaultUniversityId <= 0)) {
+      toast({ title: "Select a valid default university", variant: "destructive" });
       return;
     }
     if (aiBotId && (!Number.isInteger(selectedAiBotId) || selectedAiBotId <= 0)) {
@@ -666,19 +674,29 @@ function WidgetFormDialog({ open, onClose, widget, initialMode, onSaved }: {
       const universityIds = [...new Set(presetUniversityIds.map(Number).filter(id => Number.isInteger(id) && id > 0))];
       presetFilters.universityIds = universityIds;
       if (universityIds.length === 1) presetFilters.universityId = universityIds[0];
+    } else if (defaultUniversityId != null) {
+      presetFilters.defaultUniversityId = defaultUniversityId;
     }
     if (presetLevel) presetFilters.level = presetLevel;
     if (presetLanguage) presetFilters.language = presetLanguage;
     if (presetField) presetFilters.field = presetField;
+
+    const hasChangeableDefaultUniversity = universityScopeMode === "all" && defaultUniversityId != null;
+    const normalizedLockedFilters = hasChangeableDefaultUniversity
+      ? locked.filter(filter => filter !== "universityId")
+      : locked;
+    const normalizedHiddenFilters = hasChangeableDefaultUniversity
+      ? hidden.filter(filter => filter !== "universityId")
+      : hidden;
 
     const body = {
       name: name.trim(),
       slug: slug.trim(),
       mode,
       presetFilters,
-      lockedFilters: locked,
-      hiddenFilters: hidden,
-      visibleFilters: FILTER_KEYS.filter(k => !hidden.includes(k)),
+      lockedFilters: normalizedLockedFilters,
+      hiddenFilters: normalizedHiddenFilters,
+      visibleFilters: FILTER_KEYS.filter(k => !normalizedHiddenFilters.includes(k)),
       theme: {
         primaryColor,
         buttonColor,
@@ -913,6 +931,33 @@ function WidgetFormDialog({ open, onClose, widget, initialMode, onSaved }: {
                       selectedText={count => `${count} ${count === 1 ? "university" : "universities"} selected`}
                     />
                   )}
+                  {universityScopeMode === "all" && (
+                    <div className="space-y-1.5 rounded-lg border bg-background p-3">
+                      <label className="text-xs font-medium">Default university (optional)</label>
+                      <Select
+                        value={presetDefaultUniversityId || "__none__"}
+                        onValueChange={value => {
+                          const nextValue = value === "__none__" ? "" : value;
+                          setPresetDefaultUniversityId(nextValue);
+                          if (nextValue) {
+                            setLocked(current => current.filter(filter => filter !== "universityId"));
+                            setHidden(current => current.filter(filter => filter !== "universityId"));
+                          }
+                        }}
+                      >
+                        <SelectTrigger><SelectValue placeholder="All Universities on first load" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__none__">All Universities on first load</SelectItem>
+                          {(filterOptions?.universities || []).map(university => (
+                            <SelectItem key={university.id} value={String(university.id)}>{university.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <p className="text-[11px] leading-4 text-muted-foreground">
+                        The widget opens with this university selected. Visitors can still switch to any university or All Universities.
+                      </p>
+                    </div>
+                  )}
                 </div>
                 <div>
                   <label className="text-xs font-medium">Level</label>
@@ -957,12 +1002,20 @@ function WidgetFormDialog({ open, onClose, widget, initialMode, onSaved }: {
               <h4 className="text-sm font-semibold mb-2">Locked Filters</h4>
               <p className="text-xs text-muted-foreground mb-2">Visitors cannot change these filters</p>
               <div className="flex flex-wrap gap-2">
-                {FILTER_KEYS.map(k => (
-                  <Badge key={k} variant={locked.includes(k) ? "default" : "outline"} className="cursor-pointer"
-                    onClick={() => toggleArray(locked, setLocked, k)}>
-                    {locked.includes(k) ? "🔒 " : ""}{k}
-                  </Badge>
-                ))}
+                {FILTER_KEYS.map(k => {
+                  const keepsDefaultChangeable = k === "universityId" && universityScopeMode === "all" && !!presetDefaultUniversityId;
+                  return (
+                    <Badge
+                      key={k}
+                      variant={locked.includes(k) ? "default" : "outline"}
+                      className={keepsDefaultChangeable ? "cursor-not-allowed opacity-50" : "cursor-pointer"}
+                      title={keepsDefaultChangeable ? "The default university must remain changeable" : undefined}
+                      onClick={() => { if (!keepsDefaultChangeable) toggleArray(locked, setLocked, k); }}
+                    >
+                      {locked.includes(k) ? "🔒 " : ""}{k}
+                    </Badge>
+                  );
+                })}
               </div>
             </div>
 
@@ -970,12 +1023,20 @@ function WidgetFormDialog({ open, onClose, widget, initialMode, onSaved }: {
               <h4 className="text-sm font-semibold mb-2">Hidden Filters</h4>
               <p className="text-xs text-muted-foreground mb-2">These filters won't be shown to visitors</p>
               <div className="flex flex-wrap gap-2">
-                {FILTER_KEYS.map(k => (
-                  <Badge key={k} variant={hidden.includes(k) ? "destructive" : "outline"} className="cursor-pointer"
-                    onClick={() => toggleArray(hidden, setHidden, k)}>
-                    {hidden.includes(k) ? "👁‍🗨 " : ""}{k}
-                  </Badge>
-                ))}
+                {FILTER_KEYS.map(k => {
+                  const keepsDefaultChangeable = k === "universityId" && universityScopeMode === "all" && !!presetDefaultUniversityId;
+                  return (
+                    <Badge
+                      key={k}
+                      variant={hidden.includes(k) ? "destructive" : "outline"}
+                      className={keepsDefaultChangeable ? "cursor-not-allowed opacity-50" : "cursor-pointer"}
+                      title={keepsDefaultChangeable ? "The default university selector must remain visible" : undefined}
+                      onClick={() => { if (!keepsDefaultChangeable) toggleArray(hidden, setHidden, k); }}
+                    >
+                      {hidden.includes(k) ? "👁‍🗨 " : ""}{k}
+                    </Badge>
+                  );
+                })}
               </div>
             </div>
           </TabsContent>

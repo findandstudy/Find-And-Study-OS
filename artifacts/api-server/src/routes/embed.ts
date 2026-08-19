@@ -4743,6 +4743,11 @@ function fetchJSON(url){
 function init(){
   fetchJSON(API+'/config').then(function(c){
     config=c;
+    var pf=c.presetFilters||{};
+    var defaultUniversityId=pf.universityScope==='all'?parseInt(pf.defaultUniversityId,10):NaN;
+    if(Number.isInteger(defaultUniversityId)&&defaultUniversityId>0){
+      userFilters.universityId=String(defaultUniversityId);
+    }
     // loadPrograms also loads filters in parallel (cascading-aware).
     loadPrograms();
   }).catch(function(e){
@@ -4764,13 +4769,14 @@ function buildUserFilterParams(){
 function loadFilters(){
   return fetchJSON(API+'/filters?'+buildUserFilterParams().toString()).then(function(res){
     filters=res;
-    pruneStaleSelections();
-  }).catch(function(){});
+    return pruneStaleSelections();
+  }).catch(function(){return false;});
 }
 
 function pruneStaleSelections(){
-  if(!filters)return;
+  if(!filters)return false;
   var pf=config.presetFilters||{};
+  var changed=false;
   var checks=[
     ['country',(filters.countries||[]).reduce(function(s,v){s[v]=1;return s;},{})],
     ['universityType',(filters.universityTypes||[]).reduce(function(s,v){s[v]=1;return s;},{})],
@@ -4782,8 +4788,9 @@ function pruneStaleSelections(){
   checks.forEach(function(pair){
     var k=pair[0],valid=pair[1];
     if(pf[k])return;
-    if(userFilters[k]&&!valid[String(userFilters[k])]){userFilters[k]='';}
+    if(userFilters[k]&&!valid[String(userFilters[k])]){userFilters[k]='';changed=true;}
   });
+  return changed;
 }
 
 function loadPrograms(){
@@ -4795,7 +4802,16 @@ function loadPrograms(){
   Promise.all([
     fetchJSON(API+'/programs?'+params.toString()).then(function(res){programs=res.data;meta=res.meta;}).catch(function(){}),
     loadFilters()
-  ]).then(function(){
+  ]).then(function(results){
+    if(!results[1])return;
+    // A configured default can become stale when a university is disabled or
+    // no longer matches the other preset filters. Fall back to the valid
+    // unfiltered result set instead of leaving an empty, misleading widget.
+    var retryParams=buildUserFilterParams();
+    retryParams.set('page',currentPage);
+    retryParams.set('limit','12');
+    return fetchJSON(API+'/programs?'+retryParams.toString()).then(function(res){programs=res.data;meta=res.meta;}).catch(function(){});
+  }).then(function(){
     render(false);
   });
 }
