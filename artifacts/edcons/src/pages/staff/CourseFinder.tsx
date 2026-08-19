@@ -12,6 +12,7 @@ import { MultiSelectFilter } from "@/components/ui/multi-select-filter";
 import { ColumnHeader } from "@/components/ui/column-header";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
+import { useDebouncedValue } from "@/hooks/use-countries";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Search, Heart, Send, Info, GraduationCap, Globe, Clock,
@@ -81,6 +82,12 @@ async function apiFetch(url: string, opts?: RequestInit) {
     try {
       res = await fetch(url, { ...opts, credentials: "include", headers });
     } catch (error) {
+      if (
+        opts?.signal?.aborted ||
+        (error instanceof DOMException && error.name === "AbortError")
+      ) {
+        throw error;
+      }
       if (attempt < attempts - 1) {
         await retryDelay(attempt);
         continue;
@@ -216,6 +223,12 @@ export default function CourseFinder() {
     country: [], city: [], universityType: [], universityId: [],
     level: [], language: [], field: [], search: "", feeMin: "", feeMax: "",
   });
+  // Text and numeric inputs update immediately in the UI, but wait briefly
+  // before changing the server query. This prevents one list request plus
+  // eight cascading-facet queries from being fired for every keystroke.
+  const debouncedSearch = useDebouncedValue(filters.search.trim(), 400);
+  const debouncedFeeMin = useDebouncedValue(filters.feeMin, 400);
+  const debouncedFeeMax = useDebouncedValue(filters.feeMax, 400);
   const [hideServiceFee, setHideServiceFee] = useState(false);
   const [page, setPage] = useState(1);
   const [selectedProgram, setSelectedProgram] = useState<Program | null>(null);
@@ -270,16 +283,19 @@ export default function CourseFinder() {
     if (filters.level.length) p.set("level", filters.level.join(","));
     if (filters.language.length) p.set("language", filters.language.join(","));
     if (filters.field.length) p.set("field", filters.field.join(","));
-    if (filters.search) p.set("search", filters.search);
-    if (filters.feeMin) p.set("feeMin", filters.feeMin);
-    if (filters.feeMax) p.set("feeMax", filters.feeMax);
+    if (debouncedSearch) p.set("search", debouncedSearch);
+    if (debouncedFeeMin) p.set("feeMin", debouncedFeeMin);
+    if (debouncedFeeMax) p.set("feeMax", debouncedFeeMax);
     return p.toString();
-  }, [filters]);
+  }, [filters, debouncedSearch, debouncedFeeMin, debouncedFeeMax]);
 
   const { data: filterOptions } = useQuery<FilterOptions>({
     queryKey: ["course-finder-filters", filterParams],
-    queryFn: () => apiFetch(`${BASE_URL}/api/course-finder/filters${filterParams ? `?${filterParams}` : ""}`),
-    staleTime: 30_000,
+    queryFn: ({ signal }) => apiFetch(
+      `${BASE_URL}/api/course-finder/filters${filterParams ? `?${filterParams}` : ""}`,
+      { signal },
+    ),
+    staleTime: 45_000,
     // Cascading options belong to the exact active filter set. Reusing the
     // previous query's options can make the effect below prune newly selected
     // values while the matching options request is still in flight.
@@ -338,7 +354,8 @@ export default function CourseFinder() {
     refetch,
   } = useQuery<{ data: Program[]; meta: { total: number; page: number; limit: number; totalPages: number } }>({
     queryKey: ["course-finder", queryParams],
-    queryFn: () => apiFetch(`${BASE_URL}/api/course-finder?${queryParams}`),
+    queryFn: ({ signal }) => apiFetch(`${BASE_URL}/api/course-finder?${queryParams}`, { signal }),
+    staleTime: 15_000,
     // The application-wide query default keeps previous data. That is useful
     // for many tables, but misleading here: filter chips can represent the new
     // query while cards and the total still represent the old one.

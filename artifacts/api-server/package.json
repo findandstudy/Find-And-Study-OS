@@ -32,7 +32,7 @@
     "test:identity-validation": "tsx --test ./scripts/test-identity-validation.ts",
     "test:critical-field-validation": "tsx --test ./scripts/test-critical-field-validation.ts",
     "test:course-finder": "tsx --test ./scripts/test-course-finder.ts ./scripts/test-course-finder-pagination.ts ./scripts/test-course-finder-visibility.ts",
-    "test:course-finder-filter-cache": "tsx --test ./scripts/test-course-finder-filter-cache.ts",
+    "test:course-finder-filter-cache": "tsx --test ./scripts/test-course-finder-filter-cache.ts ./scripts/test-course-finder-list-cache.ts",
     "test:public-catalog-list-scaling": "tsx --test ./scripts/test-public-catalog-and-list-scaling.ts",
     "test:ai-agent": "tsx --test ./scripts/test-ai-agent-config.ts",
     "test:ai-agent-admin": "tsx --test ./scripts/test-ai-agent-admin.ts",

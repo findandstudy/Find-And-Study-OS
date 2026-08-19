@@ -20,7 +20,15 @@ import {
   sanitizeCourseFinderProgram,
 } from "../lib/courseFinderVisibility";
 import { courseFinderFilterCacheKey } from "../lib/courseFinderFilterCache";
+import {
+  courseFinderListCacheKey,
+  courseFinderVisibilityCacheKey,
+} from "../lib/courseFinderListCache";
 import { parseCourseFinderPagination } from "../lib/courseFinderPagination";
+import {
+  canonicalCourseFinderStudyLevels,
+  courseFinderStudyLevelSearchValues,
+} from "../lib/courseFinderStudyLevels";
 import {
   normaliseCountryRules,
   normaliseStringList,
@@ -34,9 +42,19 @@ const router: IRouter = Router();
 
 const COURSE_FINDER_FILTER_CACHE_TTL_MS = 45_000;
 const COURSE_FINDER_FILTER_CACHE_MAX = 100;
+const COURSE_FINDER_LIST_CACHE_TTL_MS = 15_000;
+const COURSE_FINDER_LIST_CACHE_MAX = 200;
 const courseFinderFilterCache = new Map<
   string,
   { expiresAt: number; value: CourseFinderFilterPayload }
+>();
+type CourseFinderListPayload = {
+  data: any[];
+  meta: { total: number; page: number; limit: number; totalPages: number };
+};
+const courseFinderListCache = new Map<
+  string,
+  { expiresAt: number; value: CourseFinderListPayload }
 >();
 let publicCatalogPolicyCache:
   | { expiresAt: number; value: PublicCatalogPolicy }
@@ -158,6 +176,24 @@ function cacheCourseFinderFilters(
   });
 }
 
+function cacheCourseFinderList(
+  key: string,
+  value: CourseFinderListPayload,
+): void {
+  const now = Date.now();
+  for (const [candidate, entry] of courseFinderListCache) {
+    if (entry.expiresAt <= now) courseFinderListCache.delete(candidate);
+  }
+  if (courseFinderListCache.size >= COURSE_FINDER_LIST_CACHE_MAX) {
+    const oldest = courseFinderListCache.keys().next().value;
+    if (oldest !== undefined) courseFinderListCache.delete(oldest);
+  }
+  courseFinderListCache.set(key, {
+    expiresAt: now + COURSE_FINDER_LIST_CACHE_TTL_MS,
+    value,
+  });
+}
+
 /**
  * Escape PostgreSQL LIKE/ILIKE pattern metacharacters so user-supplied
  * search input is matched literally. Without this, characters like `%`
@@ -181,7 +217,7 @@ function parseNonNegativeInt(raw: string | undefined): number | null {
 }
 
 router.get("/course-finder", async (req, res): Promise<void> => {
-  const { country, city, universityType, universityId, programId, level, language, search, intake, feeMin, feeMax, sort, page = "1", limit = "24" } = req.query as Record<string, string>;
+  const { country, city, universityType, universityId, programId, level, language, field, search, intake, feeMin, feeMax, sort, page = "1", limit = "24" } = req.query as Record<string, string>;
   // Cap at 500 (was 1000). Lowering further requires StudentDetail.tsx:319
   // to be paginated — currently it requests `limit=500` for a single
   // university's program list. Invalid values fall back safely instead of
@@ -217,7 +253,9 @@ router.get("/course-finder", async (req, res): Promise<void> => {
     else if (vals.length > 1) conditions.push(inArray(programsTable.universityId, vals));
   }
   if (level) {
-    const vals = level.split(",").map(s => s.trim()).filter(Boolean);
+    const vals = courseFinderStudyLevelSearchValues(
+      level.split(",").map(s => s.trim()).filter(Boolean),
+    );
     if (vals.length === 1) conditions.push(ilike(programsTable.degree, `%${vals[0]}%`));
     else if (vals.length > 1) conditions.push(or(...vals.map(v => ilike(programsTable.degree, `%${v}%`)))!);
   }
@@ -226,9 +264,8 @@ router.get("/course-finder", async (req, res): Promise<void> => {
     if (vals.length === 1) conditions.push(ilike(programsTable.language, vals[0]));
     else if (vals.length > 1) conditions.push(inArray(programsTable.language, vals));
   }
-  if ((req.query as Record<string, string>).field) {
-    const fieldVal = (req.query as Record<string, string>).field;
-    const vals = fieldVal.split(",").map(s => s.trim()).filter(Boolean);
+  if (field) {
+    const vals = field.split(",").map(s => s.trim()).filter(Boolean);
     if (vals.length === 1) conditions.push(ilike(programsTable.field, vals[0]));
     else if (vals.length > 1) conditions.push(or(...vals.map(v => ilike(programsTable.field, v)))!);
   }
@@ -245,73 +282,12 @@ router.get("/course-finder", async (req, res): Promise<void> => {
   }
 
   const where = and(...conditions);
-
-  const countQuery = db
-    .select({ count: sql<number>`count(*)` })
-    .from(programsTable)
-    .innerJoin(universitiesTable, eq(programsTable.universityId, universitiesTable.id))
-    .where(where);
-
   const effectiveFee = sql`COALESCE(${programsTable.discountedFee}, ${programsTable.tuitionFee})`;
   const orderBy = sort === "price_asc"
     ? [sql`${effectiveFee} ASC NULLS LAST`, universitiesTable.name, programsTable.name]
     : sort === "price_desc"
       ? [sql`${effectiveFee} DESC NULLS LAST`, universitiesTable.name, programsTable.name]
       : [universitiesTable.name, programsTable.name];
-
-  const rowsQuery = db
-    .select({
-      id: programsTable.id,
-      name: programsTable.name,
-      degree: programsTable.degree,
-      field: programsTable.field,
-      language: programsTable.language,
-      duration: programsTable.duration,
-      tuitionFee: programsTable.tuitionFee,
-      currency: programsTable.currency,
-      scholarship: programsTable.scholarship,
-      intakes: programsTable.intakes,
-      requirements: programsTable.requirements,
-      commissionRate: programsTable.commissionRate,
-      applicationFee: programsTable.applicationFee,
-      advancedFee: programsTable.advancedFee,
-      depositFee: programsTable.depositFee,
-      serviceFeeAmount: programsTable.serviceFeeAmount,
-      discountedFee: programsTable.discountedFee,
-      languageFee: programsTable.languageFee,
-      feeType: programsTable.feeType,
-      quota: programsTable.quota,
-      isActive: programsTable.isActive,
-      universityId: programsTable.universityId,
-      universityName: universitiesTable.name,
-      universityHasLogo: sql<boolean>`${universitiesTable.logoUrl} IS NOT NULL
-        AND length(trim(${universitiesTable.logoUrl})) > 0`.as("university_has_logo"),
-      universityCountry: universitiesTable.country,
-      universityCity: universitiesTable.city,
-      universityStatus: universitiesTable.status,
-      universityType: universitiesTable.universityType,
-      universityWebsite: universitiesTable.website,
-      universityDescription: universitiesTable.description,
-      universityQsRanking: universitiesTable.qsRanking,
-      universityTimesRanking: universitiesTable.timesRanking,
-      universityShanghaiRanking: universitiesTable.shanghaiRanking,
-      universityCwtsLeidenRanking: universitiesTable.cwtsLeidenRanking,
-      universityAddress: universitiesTable.address,
-      universityTaxType: universitiesTable.taxType,
-      universityContactName: universitiesTable.contactPersonName,
-      universityContactPhone: universitiesTable.contactPersonPhone,
-      universityContactEmail: universitiesTable.contactPersonEmail,
-    })
-    .from(programsTable)
-    .innerJoin(universitiesTable, eq(programsTable.universityId, universitiesTable.id))
-    .where(where)
-    .orderBy(...orderBy)
-    .limit(limitNum)
-    .offset(offset);
-
-  // The total and current page are independent read-only queries. Running
-  // them concurrently removes one full DB round trip from every listing load.
-  const [[{ count }], rows] = await Promise.all([countQuery, rowsQuery]);
 
   const user = (req as any).user;
   const canSeeContacts = user && ([...STAFF_ROLES, ...AGENT_ROLES] as string[]).includes(user.role);
@@ -326,29 +302,136 @@ router.get("/course-finder", async (req, res): Promise<void> => {
     canSeeInternalFees = permissions.includes("view_commission_amount");
     canSeeServiceFee = permissions.includes("view_service_fee");
   }
-  const sanitizedRows = rows.map(({ universityHasLogo, ...row }) =>
-    sanitizeCourseFinderProgram({
-      ...row,
-      universityLogoUrl: courseFinderUniversityLogoUrl(
-        row.universityId,
-        universityHasLogo,
-      ),
-    }, {
-      contacts: !!canSeeContacts,
-      internalFees: canSeeInternalFees,
-      serviceFee: canSeeServiceFee,
-    })
-  );
 
-  res.json({
-    data: sanitizedRows,
-    meta: {
-      total: Number(count),
-      page: pageNum,
-      limit: limitNum,
-      totalPages: Math.ceil(Number(count) / limitNum),
+  const policyKey = publicPolicy
+    ? `public:${publicCatalogPolicyCacheKey(publicPolicy)}`
+    : "internal";
+  const visibilityKey = courseFinderVisibilityCacheKey({
+    contacts: Boolean(canSeeContacts),
+    internalFees: canSeeInternalFees,
+    serviceFee: canSeeServiceFee,
+  });
+  const requestKey = courseFinderListCacheKey({
+    programId,
+    country,
+    city,
+    universityType,
+    universityId,
+    level,
+    language,
+    field,
+    intake,
+    feeMin,
+    feeMax,
+    search,
+    sort,
+    page: String(pageNum),
+    limit: String(limitNum),
+  });
+  const cacheKey = `${policyKey}:${visibilityKey}:${requestKey}`;
+  const cached = courseFinderListCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) {
+    res.setHeader("Cache-Control", "private, max-age=10, stale-while-revalidate=30");
+    res.setHeader("X-Course-Finder-List-Cache", "HIT");
+    res.json(cached.value);
+    return;
+  }
+
+  const { value: payload, coalesced: wasCoalesced } = await coalesceRead({
+    namespace: "course-finder-list",
+    key: cacheKey,
+    enabled: true,
+    execute: async (): Promise<CourseFinderListPayload> => {
+      const countQuery = db
+        .select({ count: sql<number>`count(*)` })
+        .from(programsTable)
+        .innerJoin(universitiesTable, eq(programsTable.universityId, universitiesTable.id))
+        .where(where);
+      const rowsQuery = db
+        .select({
+          id: programsTable.id,
+          name: programsTable.name,
+          degree: programsTable.degree,
+          field: programsTable.field,
+          language: programsTable.language,
+          duration: programsTable.duration,
+          tuitionFee: programsTable.tuitionFee,
+          currency: programsTable.currency,
+          scholarship: programsTable.scholarship,
+          intakes: programsTable.intakes,
+          requirements: programsTable.requirements,
+          commissionRate: programsTable.commissionRate,
+          applicationFee: programsTable.applicationFee,
+          advancedFee: programsTable.advancedFee,
+          depositFee: programsTable.depositFee,
+          serviceFeeAmount: programsTable.serviceFeeAmount,
+          discountedFee: programsTable.discountedFee,
+          languageFee: programsTable.languageFee,
+          feeType: programsTable.feeType,
+          quota: programsTable.quota,
+          isActive: programsTable.isActive,
+          universityId: programsTable.universityId,
+          universityName: universitiesTable.name,
+          universityHasLogo: sql<boolean>`${universitiesTable.logoUrl} IS NOT NULL
+            AND length(trim(${universitiesTable.logoUrl})) > 0`.as("university_has_logo"),
+          universityCountry: universitiesTable.country,
+          universityCity: universitiesTable.city,
+          universityStatus: universitiesTable.status,
+          universityType: universitiesTable.universityType,
+          universityWebsite: universitiesTable.website,
+          universityDescription: universitiesTable.description,
+          universityQsRanking: universitiesTable.qsRanking,
+          universityTimesRanking: universitiesTable.timesRanking,
+          universityShanghaiRanking: universitiesTable.shanghaiRanking,
+          universityCwtsLeidenRanking: universitiesTable.cwtsLeidenRanking,
+          universityAddress: universitiesTable.address,
+          universityTaxType: universitiesTable.taxType,
+          universityContactName: universitiesTable.contactPersonName,
+          universityContactPhone: universitiesTable.contactPersonPhone,
+          universityContactEmail: universitiesTable.contactPersonEmail,
+        })
+        .from(programsTable)
+        .innerJoin(universitiesTable, eq(programsTable.universityId, universitiesTable.id))
+        .where(where)
+        .orderBy(...orderBy)
+        .limit(limitNum)
+        .offset(offset);
+
+      // The total and current page are independent read-only queries. Running
+      // them concurrently removes one full DB round trip from every listing load.
+      const [[{ count }], rows] = await Promise.all([countQuery, rowsQuery]);
+      const sanitizedRows = rows.map(({ universityHasLogo, ...row }) =>
+        sanitizeCourseFinderProgram({
+          ...row,
+          universityLogoUrl: courseFinderUniversityLogoUrl(
+            row.universityId,
+            universityHasLogo,
+          ),
+        }, {
+          contacts: Boolean(canSeeContacts),
+          internalFees: canSeeInternalFees,
+          serviceFee: canSeeServiceFee,
+        })
+      );
+      const nextPayload: CourseFinderListPayload = {
+        data: sanitizedRows,
+        meta: {
+          total: Number(count),
+          page: pageNum,
+          limit: limitNum,
+          totalPages: Math.ceil(Number(count) / limitNum),
+        },
+      };
+      cacheCourseFinderList(cacheKey, nextPayload);
+      return nextPayload;
     },
   });
+  res.setHeader("Cache-Control", "private, max-age=10, stale-while-revalidate=30");
+  res.setHeader(
+    "X-Course-Finder-List-Cache",
+    wasCoalesced ? "COALESCED" : "MISS",
+  );
+  res.json(payload);
 });
 
 /**
@@ -389,7 +472,9 @@ export function buildProgramFacetConditions(
     else if (vals.length > 1) conditions.push(inArray(programsTable.universityId, vals));
   }
   if (excludeKey !== "level" && params.level) {
-    const vals = params.level.split(",").map(s => s.trim()).filter(Boolean);
+    const vals = courseFinderStudyLevelSearchValues(
+      params.level.split(",").map(s => s.trim()).filter(Boolean),
+    );
     if (vals.length === 1) conditions.push(ilike(programsTable.degree, `%${vals[0]}%`));
     else if (vals.length > 1) conditions.push(or(...vals.map(v => ilike(programsTable.degree, `%${v}%`)))!);
   }
@@ -510,9 +595,11 @@ router.get("/course-finder/filters", async (req, res): Promise<void> => {
             .map(r => r.type)
             .filter((value): value is string => Boolean(value)),
           universities: universities.map(r => ({ id: r.id, name: r.name })),
-          degrees: degrees
-            .map(r => r.degree)
-            .filter((value): value is string => Boolean(value)),
+          degrees: canonicalCourseFinderStudyLevels(
+            degrees
+              .map(r => r.degree)
+              .filter((value): value is string => Boolean(value)),
+          ),
           languages: languages
             .map(r => r.language)
             .filter((value): value is string => Boolean(value)),
