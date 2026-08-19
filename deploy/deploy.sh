@@ -142,6 +142,14 @@ done
 # trap (or the success cleanup below) always removes it.
 kill -0 "$candidate_pid" 2>/dev/null || fail "candidate API exited after readiness"
 
+# The backup port is intentionally empty between releases. Reload only after
+# the candidate is healthy so every new Nginx worker starts with fresh upstream
+# state and can use the candidate during the canonical restart. Existing
+# client/SSE connections drain on old workers and reconnect through new ones.
+echo "[4b/8] Reloading Nginx with the healthy candidate available"
+nginx -t
+nginx -s reload
+
 echo "[5/8] Verifying canonical PM2 topology and release-link ownership"
 node deploy/pm2-preflight.cjs --release-link "$CURRENT_RELEASE_LINK"
 API_PROCESS_NAME="$(node -p "require('./deploy/ecosystem.config.cjs').processNames.api")"

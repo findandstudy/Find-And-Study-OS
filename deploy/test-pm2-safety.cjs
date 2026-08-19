@@ -180,6 +180,8 @@ test("deploy entrypoints use preflight and contain no blind fallback", () => {
   assert.match(deploy, /node deploy\/nginx-preflight\.cjs/);
   assert.match(deploy, /CANDIDATE_PORT/);
   assert.match(deploy, /Keep the validated candidate alive/);
+  assert.match(deploy, /Reloading Nginx with the healthy candidate available/);
+  assert.match(deploy, /nginx -s reload/);
   assert.match(
     deploy,
     /cleanup_candidate\n+candidate_pid=""\n+trap - EXIT INT TERM/,
@@ -191,7 +193,7 @@ test("deploy entrypoints use preflight and contain no blind fallback", () => {
   assert.doesNotMatch(deploy, /pm2 start|startOrRestart|pm2 restart all/);
 
   const nginx = readFileSync(path.join(__dirname, "nginx.conf"), "utf8");
-  assert.match(nginx, /server 127\.0\.0\.1:5057 backup;/);
+  assert.match(nginx, /server 127\.0\.0\.1:5057 backup max_fails=0;/);
   assert.doesNotMatch(
     nginx,
     /^\s*proxy_next_upstream\s+[^;\n]*non_idempotent/m,
@@ -219,8 +221,8 @@ test("deploy entrypoints use preflight and contain no blind fallback", () => {
 test("Nginx preflight accepts a protected host route", () => {
   const result = runNginxPreflight(`
     upstream fasos_backend {
-      server 127.0.0.1:5057 max_fails=1 fail_timeout=2s;
-      server 127.0.0.1:5058 backup;
+      server 127.0.0.1:5057 max_fails=0;
+      server 127.0.0.1:5058 backup max_fails=0;
     }
     server {
       server_name apply.findandstudy.com;
@@ -322,7 +324,11 @@ test("Nginx installer changes only explicit files and keeps rollback copies", ()
   );
   assert.match(
     readFileSync(upstreamConfig, "utf8"),
-    /127\.0\.0\.1:5058 backup;/,
+    /127\.0\.0\.1:5058 backup max_fails=0;/,
+  );
+  assert.match(
+    readFileSync(upstreamConfig, "utf8"),
+    /127\.0\.0\.1:5057 max_fails=0;/,
   );
   assert.match(
     readFileSync(path.join(backupDirectory, "site-0.conf"), "utf8"),

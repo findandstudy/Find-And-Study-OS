@@ -87,8 +87,12 @@ done
 cat >"$work_dir/upstream.conf" <<EOF
 # Managed by Find And Study OS deploy/install-nginx-failover.sh.
 upstream ${NGINX_UPSTREAM_NAME} {
-    server 127.0.0.1:${PORT} max_fails=1 fail_timeout=2s;
-    server 127.0.0.1:${CANDIDATE_PORT} backup;
+    # Do not let a worker's passive failure accounting mark both local peers
+    # unavailable. The deploy gate proves the candidate is healthy before the
+    # canonical restart, and proxy_next_upstream still retries connection
+    # errors without replaying non-idempotent requests.
+    server 127.0.0.1:${PORT} max_fails=0;
+    server 127.0.0.1:${CANDIDATE_PORT} backup max_fails=0;
     keepalive 64;
 }
 EOF

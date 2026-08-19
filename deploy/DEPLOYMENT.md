@@ -171,9 +171,10 @@ Bu işlem:
 2. Locked dependencies, typecheck ve build adımlarını release içinde çalıştırır.
 3. Migration ledger'ını doğrular; migration uygulamaz.
 4. Background jobs kapalı aday API'yi ayrı portta başlatıp HTTP+DB readiness uygular.
-5. Canonical PM2 processlerinin `current` symlink'i altında olduğunu doğrular.
-6. Symlink'i atomik değiştirir, worker/API'yi bounded drain ile yeniden başlatır.
-7. Health başarısızsa yalnız kod symlink'ini önceki release'e döndürür.
+5. Aday sağlıklıyken Nginx'i yeniden yükleyip worker upstream durumunu sıfırlar.
+6. Canonical PM2 processlerinin `current` symlink'i altında olduğunu doğrular.
+7. Symlink'i atomik değiştirir, worker/API'yi bounded drain ile yeniden başlatır.
+8. Health başarısızsa yalnız kod symlink'ini önceki release'e döndürür.
 
 **Çalıştığını doğrulayın:**
 
@@ -304,6 +305,10 @@ health kontrolü başarısız olursa script database, `.env` ve storage'a dokunm
 Doğrulanmış aday API, canonical fork/1 API yeniden başlatılırken Nginx backup
 upstream olarak canlı tutulur ve deploy sonunda kapatılır. Aday süreçte
 `BACKGROUND_JOBS_ENABLED=false` olduğu için zamanlanmış işler iki kez çalışmaz.
+Her iki localhost upstream'de `max_fails=0` kullanılır; böylece farklı Nginx
+worker'larının pasif hata sayacı iki sağlıklı portu birden "no live upstreams"
+durumuna taşımaz. Aday readiness sonrasında yapılan güvenli Nginx reload'u da
+uzun bağlantıların yeni worker'lara temiz upstream durumu ile bağlanmasını sağlar.
 Nginx yazma isteklerini otomatik tekrarlamaz; bu koruma restart penceresindeki
 GET/HEAD sayfa ve okuma isteklerinin 502 görmesini engellemek içindir.
 
