@@ -72,6 +72,7 @@ EOF
 ```
 
 `DATABASE_URL` değeriniz:
+
 ```
 postgresql://edconsult:guclu-bir-sifre-girin@localhost:5432/edconsult_db
 ```
@@ -128,6 +129,7 @@ sudo nano /etc/findandstudy.env
 > **deploy/.env.example** tüm desteklenen değişkenleri ve açıklamalarını içerir.
 
 **Zorunlu değişkenler (`<degistir>` ile işaretli):**
+
 - `DATABASE_URL` — PostgreSQL bağlantı dizisi
 - `PORT` — `5000` (nginx.conf upstream ile eşleşmeli)
 - `SESSION_SECRET` — Üret: `openssl rand -hex 32`
@@ -157,7 +159,14 @@ cd /opt/findandstudy/source
 RUNTIME_ENV_FILE=/etc/findandstudy.env bash deploy/deploy.sh
 ```
 
+Normal deploys now hard-fail before build or restart unless the effective Nginx
+configuration for `APP_BASE_URL` routes through an upstream containing both the
+canonical API port and the candidate port marked `backup`. This prevents a
+deploy from claiming read-path failover while production still proxies directly
+to a single process.
+
 Bu işlem:
+
 1. Reviewed Git commit'ini yeni immutable release dizinine çıkarır.
 2. Locked dependencies, typecheck ve build adımlarını release içinde çalıştırır.
 3. Migration ledger'ını doğrular; migration uygulamaz.
@@ -167,6 +176,7 @@ Bu işlem:
 7. Health başarısızsa yalnız kod symlink'ini önceki release'e döndürür.
 
 **Çalıştığını doğrulayın:**
+
 ```bash
 pm2 status
 curl http://localhost:5000/api/healthz
@@ -211,6 +221,25 @@ sudo systemctl reload nginx
 > `CANDIDATE_PORT=5057` değerlerini değiştirmeyin. Nginx değişikliğini ilk kez
 > kurarken `nginx -t` başarılı olmadan reload etmeyin.
 
+### Existing multi-site installation
+
+For an existing server, do not manually search-and-replace every virtual host.
+After the production preflight has listed the exact files, use the guarded,
+idempotent installer. It modifies only the explicitly named files, creates a
+dated rollback copy, runs `nginx -t`, validates the effective host route and
+reloads Nginx. Any failed validation restores the previous files.
+
+```bash
+sudo env \
+  RUNTIME_ENV_FILE=/etc/findandstudy.env \
+  NGINX_SITE_CONFIGS=/etc/nginx/sites-available/apply.findandstudy.com \
+  bash deploy/install-nginx-failover.sh
+```
+
+List multiple exact files with `:` separators. Never point this variable at a
+directory or wildcard. The installer replaces only direct `proxy_pass` targets
+matching the configured canonical `PORT`; unrelated services remain untouched.
+
 ---
 
 ## SSL with Let's Encrypt
@@ -250,6 +279,7 @@ Bu sayede uygulama sunucu yeniden başlatmalarında otomatik olarak devreye gire
 loglar diskinizi doldurmadan döndürülür.
 
 Sistem genelinde logrotate kullanmak istiyorsanız:
+
 ```bash
 sudo cp /opt/findandstudy/source/deploy/logrotate.conf /etc/logrotate.d/findandstudy
 sudo logrotate -d /etc/logrotate.d/findandstudy  # test (dry-run)
@@ -289,6 +319,7 @@ normal API başlangıcında otomatik düzeltilmez; migration ayrı ve açıkça
 onaylanmış bir operasyon olmalıdır.
 
 **Manuel şema değişikliği (Drizzle migration):**
+
 ```bash
 # 1. lib/db dizininde migration SQL'i oluşturun
 cd lib/db
@@ -310,21 +341,22 @@ node validate-migrations.mjs
 Aşağıdaki endpoint'ler oturum gerektirmez ve internetten erişilebilirdir.
 Bu bilinçli bir tasarım tercihidir — nginx rate limiting ile korunurlar.
 
-| Endpoint | Açıklama | Rate Limit |
-|----------|----------|------------|
-| `GET /api/healthz` | Uygulama sağlık kontrolü | — |
-| `GET /api/destinations` | Aktif ülke/üniversite listesi (Course Finder) | API zone |
-| `POST /api/public-apply` | Öğrenci başvuru formu | API zone |
-| `GET /api/public/sign/:token` | Sözleşme imza sayfası | sign limiter |
-| `POST /api/public/sign/:token/sign` | Sözleşme imzalama | sign limiter |
-| `GET /api/public/sign/:token/pdf` | İmzalı PDF indirme | sign limiter |
-| `POST /api/webhooks/whatsapp` | WhatsApp Cloud API webhook | API zone |
-| `GET /api/webhooks/whatsapp` | WhatsApp webhook doğrulama | API zone |
-| `GET /api/embed/public/*` | Embed widget kamuya açık API | API zone |
-| `GET /public/website-forms/:slug/check` | Website form varlık kontrolü | API zone |
-| `POST /public/website-forms/:slug/submit` | Website form gönderimi | API zone |
+| Endpoint                                  | Açıklama                                      | Rate Limit   |
+| ----------------------------------------- | --------------------------------------------- | ------------ |
+| `GET /api/healthz`                        | Uygulama sağlık kontrolü                      | —            |
+| `GET /api/destinations`                   | Aktif ülke/üniversite listesi (Course Finder) | API zone     |
+| `POST /api/public-apply`                  | Öğrenci başvuru formu                         | API zone     |
+| `GET /api/public/sign/:token`             | Sözleşme imza sayfası                         | sign limiter |
+| `POST /api/public/sign/:token/sign`       | Sözleşme imzalama                             | sign limiter |
+| `GET /api/public/sign/:token/pdf`         | İmzalı PDF indirme                            | sign limiter |
+| `POST /api/webhooks/whatsapp`             | WhatsApp Cloud API webhook                    | API zone     |
+| `GET /api/webhooks/whatsapp`              | WhatsApp webhook doğrulama                    | API zone     |
+| `GET /api/embed/public/*`                 | Embed widget kamuya açık API                  | API zone     |
+| `GET /public/website-forms/:slug/check`   | Website form varlık kontrolü                  | API zone     |
+| `POST /public/website-forms/:slug/submit` | Website form gönderimi                        | API zone     |
 
 **Güvenlik notları:**
+
 - Sözleşme endpoint'leri cryptographic token ile korunur (hashToken)
 - WhatsApp webhook HMAC-SHA256 imzası doğrulanır (`WA_APP_SECRET`)
 - Embed widget API key ile doğrulanır; domain allowlist kontrolü yapılır
@@ -370,6 +402,7 @@ sudo tail -f /var/log/postgresql/postgresql-16-main.log
 ## Troubleshooting
 
 ### App not starting
+
 ```bash
 # PM2 log'larını kontrol edin
 pm2 logs fasos-apply-api --lines 50
@@ -383,6 +416,7 @@ NODE_ENV=production PORT=5000 node artifacts/api-server/dist/index.cjs
 ```
 
 ### Database connection issues
+
 ```bash
 # PostgreSQL bağlantısını test edin
 psql "$DATABASE_URL" -c "SELECT 1;"
@@ -392,6 +426,7 @@ sudo systemctl status postgresql
 ```
 
 ### Nginx 502 Bad Gateway
+
 ```bash
 # App may not be running
 pm2 status
@@ -403,6 +438,7 @@ sudo tail -f /var/log/nginx/error.log
 ```
 
 ### Frontend not loading / blank page
+
 ```bash
 # Verify frontend was built
 ls -la artifacts/edcons/dist/public/
@@ -416,6 +452,7 @@ pm2 restart all
 ```
 
 ### Permission errors
+
 ```bash
 # Ensure the app directory is owned by your deploy user
 sudo chown -R $USER:$USER /var/www/edconsult-os
@@ -425,6 +462,7 @@ mkdir -p /var/www/edconsult-os/logs
 ```
 
 ### Memory issues
+
 ```bash
 # Check memory usage
 free -h

@@ -9,7 +9,7 @@ fail() {
   exit 1
 }
 
-for command_name in git node pnpm curl pm2 tar; do
+for command_name in git node pnpm curl pm2 tar nginx; do
   command -v "$command_name" >/dev/null 2>&1 || fail "$command_name is required"
 done
 
@@ -44,9 +44,22 @@ done
 [[ "$PORT" =~ ^[0-9]{2,5}$ ]] || fail "PORT must be numeric"
 [[ "$CANDIDATE_PORT" =~ ^[0-9]{2,5}$ ]] || fail "CANDIDATE_PORT must be numeric"
 
+APP_BASE_URL="${APP_BASE_URL:-}"
+[ -n "$APP_BASE_URL" ] || fail "APP_BASE_URL is required for Nginx route validation"
+NGINX_APP_HOST="$(APP_BASE_URL="$APP_BASE_URL" node -e '
+  try {
+    const url = new URL(process.env.APP_BASE_URL);
+    if (url.protocol !== "https:" && url.protocol !== "http:") process.exit(1);
+    process.stdout.write(url.hostname);
+  } catch { process.exit(1); }
+')" || fail "APP_BASE_URL must be an absolute HTTP(S) URL"
+[ -n "$NGINX_APP_HOST" ] || fail "APP_BASE_URL has no hostname"
+export NGINX_APP_HOST
+
 cd "$SOURCE_ROOT"
 git diff --quiet || fail "tracked working tree changes must be committed and reviewed before release"
 git diff --cached --quiet || fail "staged changes must be committed and reviewed before release"
+node deploy/nginx-preflight.cjs --host "$NGINX_APP_HOST"
 SOURCE_COMMIT="$(git rev-parse --verify HEAD)"
 RELEASE_ID="$(date -u +%Y%m%dT%H%M%SZ)-${SOURCE_COMMIT:0:12}"
 export RELEASE_ID
@@ -90,20 +103,20 @@ release_health_ready() {
   ' <<<"$healthz_body"
 }
 
-echo "[1/7] Exporting immutable release $RELEASE_ID"
+echo "[1/8] Nginx failover is active; exporting immutable release $RELEASE_ID"
 git archive "$SOURCE_COMMIT" | tar -x -C "$RELEASE_DIR"
 
 cd "$RELEASE_DIR"
 export APP_RELEASE_DIR="$RELEASE_DIR"
 node deploy/data-path-preflight.cjs
 
-echo "[2/7] Installing locked dependencies and building release"
+echo "[2/8] Installing locked dependencies and building release"
 bash deploy/build-production.sh
 
-echo "[3/7] Validating migration ledger without applying migrations"
+echo "[3/8] Validating migration ledger without applying migrations"
 node lib/db/validate-migrations.mjs
 
-echo "[4/7] Starting isolated candidate API on port $CANDIDATE_PORT"
+echo "[4/8] Starting isolated candidate API on port $CANDIDATE_PORT"
 NODE_ENV=production \
 PORT="$CANDIDATE_PORT" \
 BACKGROUND_JOBS_ENABLED=false \
@@ -129,7 +142,7 @@ done
 # trap (or the success cleanup below) always removes it.
 kill -0 "$candidate_pid" 2>/dev/null || fail "candidate API exited after readiness"
 
-echo "[5/7] Verifying canonical PM2 topology and release-link ownership"
+echo "[5/8] Verifying canonical PM2 topology and release-link ownership"
 node deploy/pm2-preflight.cjs --release-link "$CURRENT_RELEASE_LINK"
 API_PROCESS_NAME="$(node -p "require('./deploy/ecosystem.config.cjs').processNames.api")"
 PORTAL_WORKER_PROCESS_NAME="$(node -p "require('./deploy/ecosystem.config.cjs').processNames.portalWorker")"
@@ -198,7 +211,10 @@ rollback_code() {
   fi
 }
 
-echo "[6/7] Atomically switching code and draining canonical processes"
+echo "[6/8] Rechecking Nginx failover immediately before cutover"
+node deploy/nginx-preflight.cjs --host "$NGINX_APP_HOST"
+
+echo "[7/8] Atomically switching code and draining canonical processes"
 switch_release_link "$RELEASE_DIR"
 kill -0 "$candidate_pid" 2>/dev/null || {
   rollback_code
@@ -213,7 +229,7 @@ if ! restart_pm2_process "$API_PROCESS_NAME"; then
   fail "API restart failed; code rollback attempted"
 fi
 
-echo "[7/7] Verifying canonical API and saving PM2 state"
+echo "[8/8] Verifying canonical API and saving PM2 state"
 live_ready=0
 for _attempt in $(seq 1 30); do
   if release_health_ready "$PORT" "$RELEASE_ID"; then
