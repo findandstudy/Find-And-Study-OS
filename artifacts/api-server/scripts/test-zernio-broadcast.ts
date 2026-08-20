@@ -14,6 +14,7 @@ import {
   resolveZernioProfileId,
   __clearZernioProfileCacheForTests,
 } from "../src/lib/inbox/zernioSend";
+import { buildZernioTemplateComponents } from "../src/lib/inbox/zernioTemplates";
 
 type FetchCall = { url: string; init?: RequestInit };
 let calls: FetchCall[] = [];
@@ -41,6 +42,29 @@ beforeEach(() => {
   responders = [];
   __clearZernioProfileCacheForTests();
   mockFetch();
+});
+
+test("WhatsApp template components use Zernio's lowercase discriminators", () => {
+  const components = buildZernioTemplateComponents({
+    mode: "custom",
+    bodyText: "Hello {{1}}",
+    bodyExamples: ["John Smith"],
+    footerText: "Find And Study",
+    quickReplyButtons: [{ text: "I Will Make Payment" }],
+  });
+
+  assert.deepEqual(components, [
+    {
+      type: "body",
+      text: "Hello {{1}}",
+      example: { body_text: [["John Smith"]] },
+    },
+    { type: "footer", text: "Find And Study" },
+    {
+      type: "buttons",
+      buttons: [{ type: "quick_reply", text: "I Will Make Payment" }],
+    },
+  ]);
 });
 
 test("resolveZernioProfileId picks isDefault and caches", async () => {

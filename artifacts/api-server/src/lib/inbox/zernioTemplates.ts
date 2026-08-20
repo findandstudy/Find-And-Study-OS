@@ -248,19 +248,22 @@ export function buildZernioTemplateComponents(
 
   const components: ZernioTemplateComponent[] = [];
   const bodyComponent: ZernioTemplateComponent = {
-    type: "BODY",
+    // Zernio's OpenAPI discriminator values are lowercase. Meta's own Graph
+    // payloads are commonly shown with uppercase component names, but sending
+    // those values to Zernio is rejected before the template reaches Meta.
+    type: "body",
     text: params.bodyText || "",
   };
   if (params.bodyExamples?.length) {
     bodyComponent.example = { body_text: [params.bodyExamples] };
   }
   components.push(bodyComponent);
-  if (params.footerText) components.push({ type: "FOOTER", text: params.footerText });
+  if (params.footerText) components.push({ type: "footer", text: params.footerText });
   if (params.quickReplyButtons?.length) {
     components.push({
-      type: "BUTTONS",
+      type: "buttons",
       buttons: params.quickReplyButtons.map((button) => ({
-        type: "QUICK_REPLY",
+        type: "quick_reply",
         text: button.text,
       })),
     });
