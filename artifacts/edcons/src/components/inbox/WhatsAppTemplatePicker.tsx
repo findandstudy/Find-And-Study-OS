@@ -10,6 +10,24 @@ import { customFetch } from "@workspace/api-client-react";
 import { cn } from "@/lib/utils";
 import { Search, FileText, Send, Loader2 } from "lucide-react";
 
+const TEMPLATE_VARIABLE_LABEL_KEYS: Record<string, string> = {
+  studentName: "messagesPage.variableStudentName",
+  firstName: "messagesPage.variableFirstName",
+  lastName: "messagesPage.variableLastName",
+  programName: "messagesPage.variableProgramName",
+  universityName: "messagesPage.variableUniversityName",
+  deadline: "messagesPage.variableDeadline",
+  level: "messagesPage.variableLevel",
+  intake: "messagesPage.variableIntake",
+};
+
+function initialTemplateParameters(template: any, count: number): string[] {
+  const resolved = Array.isArray(template?.resolvedParameters)
+    ? template.resolvedParameters.map((value: unknown) => String(value || ""))
+    : [];
+  return Array.from({ length: count }, (_, index) => resolved[index] || "");
+}
+
 interface WhatsAppTemplatePickerProps {
   open: boolean;
   onClose: () => void;
@@ -76,7 +94,7 @@ export function WhatsAppTemplatePicker({
             ? initial.variables.length
             : (initial.variableCount ?? (body.match(/\{\{\d+\}\}/g) || []).length);
           setTplId(String(initial.id));
-          setTplVars(Array.from({ length: count }, () => ""));
+          setTplVars(initialTemplateParameters(initial, count));
         }
       }
     } catch (err: any) {
@@ -213,7 +231,7 @@ export function WhatsAppTemplatePicker({
                       type="button"
                       onClick={() => {
                         setTplId(String(tpl.id));
-                        setTplVars(Array.from({ length: vCount }, () => ""));
+                        setTplVars(initialTemplateParameters(tpl, vCount));
                       }}
                       className={cn(
                         "w-full text-left rounded-lg border p-2.5 transition-colors hover:bg-muted/50",
@@ -264,6 +282,9 @@ export function WhatsAppTemplatePicker({
                 <div key={i}>
                   <Label className="text-xs">
                     {t("messagesPage.templateVariable", { n: String(i + 1) })}
+                    {selectedTpl.variables?.[i] && TEMPLATE_VARIABLE_LABEL_KEYS[selectedTpl.variables[i]]
+                      ? ` — ${t(TEMPLATE_VARIABLE_LABEL_KEYS[selectedTpl.variables[i]])}`
+                      : ""}
                   </Label>
                   <Input
                     className="h-9 rounded-lg mt-0.5"

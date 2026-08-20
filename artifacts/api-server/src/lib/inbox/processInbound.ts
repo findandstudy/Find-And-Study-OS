@@ -407,9 +407,11 @@ export async function processInboundMessage(opts: {
       lastMessageAt: message.receivedAt || new Date(),
       lastMessagePreview: message.text.slice(0, 200),
       lastInboundAt: message.receivedAt || new Date(),
-      ...(isBlocked
-        ? { botEnabled: false }
-        : { status: sql`CASE WHEN ${conversationsTable.needsHuman} THEN 'needs_human' ELSE 'open' END` }),
+      // `botReplyCount` is a consecutive AI-output guard, not a lifetime
+      // conversation counter. Every accepted human inbound breaks the AI
+      // streak, including messages on a reused provider thread.
+      botReplyCount: 0,
+      ...(isBlocked ? { botEnabled: false } : { status: "open" }),
       unmatched: !isLinked,
     })
     .where(eq(conversationsTable.id, conversation.id));

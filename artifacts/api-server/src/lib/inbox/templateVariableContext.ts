@@ -58,6 +58,7 @@ export async function loadEntityTemplateVariableContext(
           .select({
             programName: applicationsTable.programName,
             universityName: applicationsTable.universityName,
+            deadline: applicationsTable.deadline,
             level: applicationsTable.level,
             intake: applicationsTable.intake,
           })
@@ -89,6 +90,7 @@ export async function loadEntityTemplateVariableContext(
       .select({
         programName: applicationsTable.programName,
         universityName: applicationsTable.universityName,
+        deadline: applicationsTable.deadline,
         level: applicationsTable.level,
         intake: applicationsTable.intake,
       })
@@ -108,6 +110,7 @@ export async function loadEntityTemplateVariableContext(
       studentId: applicationsTable.studentId,
       programName: applicationsTable.programName,
       universityName: applicationsTable.universityName,
+      deadline: applicationsTable.deadline,
       level: applicationsTable.level,
       intake: applicationsTable.intake,
     })
@@ -194,6 +197,7 @@ export async function loadConversationTemplateVariableContext(
         .select({
           programName: applicationsTable.programName,
           universityName: applicationsTable.universityName,
+          deadline: applicationsTable.deadline,
           level: applicationsTable.level,
           intake: applicationsTable.intake,
         })

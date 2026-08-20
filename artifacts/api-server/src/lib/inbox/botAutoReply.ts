@@ -31,9 +31,10 @@ import {
 import { inboxBus } from "./eventBus";
 import { isAiAgentWithinWorkingHours } from "./botSchedule";
 import {
-  buildBotSystemPrompt,
+  buildBotSystemPromptParts,
   DEFAULT_ESCALATION_KEYWORDS,
   sanitizeWhatsAppText,
+  validateDormBookingBotOutput,
   type BotLanguage,
   type EscalationTopic,
 } from "./botBrain";
@@ -57,7 +58,6 @@ import { retrieveKnowledgeChunks } from "./knowledgeRetrieval";
 import { requestsEmbedHumanHandoff } from "../embedChatSession";
 import { normalizeEmbedChatLocale } from "../embedChatI18n";
 import { buildKnownEmbedContactInstruction } from "./embedChatIdentityPrompt";
-import { validateDormBookingOutput } from "./dormBookingOutputValidator";
 
 // Faz 2 handoff hook: fire-and-forget so we never delay the webhook response
 // or the bot-reply flow on assignment work. Errors are logged, not thrown.
@@ -119,34 +119,30 @@ export function detectEscalation(
   return null;
 }
 
-const DORMBOOKING_PAYMENT_HANDOFF_PATTERNS = [
-  /\b(?:iban|bank account|account number|swift|bic|wire transfer)\b/i,
-  /\b(?:refund|refundable|money back|chargeback|dispute)\b/i,
-  /\b(?:i|we|my (?:parent|friend|sponsor))\s+(?:have\s+)?(?:already\s+)?paid\b/i,
-  /\b(?:receipt|invoice|payment proof|proof of payment)\b/i,
-  /\b(?:discount|negotiate|cheaper price|best price)\b/i,
-  /\b(?:pay another way|alternative payment|cash payment|crypto|western union)\b/i,
-  /\b(?:third[- ]party payer|someone else (?:can|will) pay|pay on my behalf)\b/i,
-  /\b(?:banka hesabı|hesap numarası|havale|eft|iade|geri ödeme|ödeme yaptım|ödedim|dekont|fatura|indirim|pazarlık)\b/i,
-  /(?:آيبان|حساب بنكي|استرداد|دفعت|إيصال|فاتورة|خصم|طرف ثالث)/i,
-  /(?:شماره حساب|بازپرداخت|پرداخت کردم|رسید|فاکتور|تخفیف)/i,
-  /\b(?:банковск(?:ий|ого) счет|возврат|я оплатил|квитанц|счет-фактур|скидк)\w*/i,
-  /\b(?:iban|compte bancaire|remboursement|j'ai payé|reçu|facture|remise)\b/i,
-  /\b(?:cuenta bancaria|reembolso|ya pagué|recibo|factura|descuento)\b/i,
-];
-
-/** DormBooking may explain published prices, deposits and payment schedules.
- * A payment word alone is therefore not a hand-off. Only operational or
- * negotiable payment requests are sensitive enough to require staff. */
+/**
+ * Dorm Booking can answer ordinary catalogue/payment-plan questions from its
+ * verified knowledge. Only payment cases that require an account decision or
+ * a human action are escalated. This narrows the broad legacy payment keyword
+ * set without changing the behaviour of other AI bots.
+ */
 export function detectDormBookingEscalation(
   text: string,
   keywords: Record<EscalationTopic, string[]> = DEFAULT_ESCALATION_KEYWORDS,
 ): EscalationTopic | null {
-  const generic = detectEscalation(text, keywords);
-  if (generic !== "payment") return generic;
-  return DORMBOOKING_PAYMENT_HANDOFF_PATTERNS.some((pattern) => pattern.test(text))
-    ? "payment"
-    : null;
+  const topic = detectEscalation(text, keywords);
+  if (topic !== "payment") return topic;
+
+  const value = text.toLocaleLowerCase("en-US").replace(/\s+/g, " ").trim();
+  const requiresHumanPaymentHelp = [
+    /\biban\b|\bswift\b|\bbic\b|bank account|bank details|beneficiary|wire transfer|havale|eft|banka hesab[ıi]|hesap numaras[ıi]/i,
+    /refund|chargeback|dispute|money back|geri ödeme|iade|استرداد|بازپرداخت|возврат|remboursement|reembolso|退款|वापसी|pengembalian dana/i,
+    /already paid|payment (?:is )?(?:done|made|completed)|i paid|paid already|ödeme(?:yi)? yapt[ıi]m|ödedim|دفع(?:ت|نا)|پرداخت کردم|я оплатил|déjà payé|ya pagué|已付款|भुगतान कर दिया|sudah bayar/i,
+    /receipt|invoice|proof of payment|payment slip|dekont|makbuz|fatura|إيصال|فاتورة|رسید|فاکتور|квитанц|счет|facture|recibo|factura|收据|发票|रसीद|चालान|kwitansi|faktur/i,
+    /discount|negotiate|lower (?:the )?price|special price|alternative payment|different payment|change (?:the )?(?:payment|instalment|installment) plan|indirim|pazarl[ıi]k|farkl[ıi] ödeme|taksit plan[ıi].*değiş|خصم|تقسيط|تفاوض|تخفیف|рассроч|скидк|remise|descuento|折扣|छूट|diskon/i,
+    /someone else (?:can )?pay|third[- ]party (?:can )?pay|pay (?:for me|on my behalf)|another person.*pay|başkas[ıi].*öde|üçüncü (?:kişi|taraf)|طرف ثالث|شخص آخر.*دفع|شخص دیگری.*پرداخت|другой человек.*оплат|tiers.*payer|otra persona.*pagar|他人.*付款|कोई और.*भुगतान|orang lain.*bayar/i,
+  ].some((pattern) => pattern.test(value));
+
+  return requiresHumanPaymentHelp ? "payment" : null;
 }
 
 // ---------------------------------------------------------------------------
@@ -176,10 +172,6 @@ const ID_HINTS = [
   "halo", "universitas", "jurusan", "pendaftaran", "beasiswa", "kuliah",
   "saya ingin", "terima kasih", "sarjana", "magister",
 ];
-const EN_HINTS = [
-  "hello", "hi ", "price", "room", "dorm", "accommodation", "university",
-  "please", "thank you", "i want", "i need", "how much", "available",
-];
 
 /**
  * Detect the student's language from their message text. Script ranges decide
@@ -201,7 +193,6 @@ export function detectLanguage(text: string, fallback: BotLanguage = "en"): BotL
   if (FR_HINTS.some((h) => lower.includes(h))) return "fr";
   if (ES_HINTS.some((h) => lower.includes(h))) return "es";
   if (ID_HINTS.some((h) => lower.includes(h))) return "id";
-  if (EN_HINTS.some((h) => lower === h.trim() || lower.includes(h))) return "en";
   return fallback;
 }
 
@@ -304,12 +295,25 @@ async function loadUnifiedContactHistory(
 export interface BotReplyInput {
   aiBotId?: number | null;
   systemPrompt: string;
+  /** Dynamic per-inbound context placed after the cached stable prefix. */
+  runtimeContext?: string;
   language: BotLanguage;
   model: string;
   temperature: number;
   messages: Array<{ direction: string; content: string }>;
   enforcedUniversityIds?: number[];
   enforcedProgramFilters?: EnforcedProgramFilters;
+  onUsage?: (usage: BotGenerationUsage) => void;
+  onCatalogNames?: (names: string[]) => void;
+}
+
+export interface BotGenerationUsage {
+  round: number;
+  inputTokens: number;
+  outputTokens: number;
+  cacheCreationInputTokens: number;
+  cacheReadInputTokens: number;
+  cacheHitRate: number;
 }
 let __botReplyOverride: ((input: BotReplyInput) => Promise<string>) | null = null;
 export function __setBotReplyOverrideForTests(
@@ -376,14 +380,47 @@ async function generateBotReply(input: BotReplyInput): Promise<string> {
 
   for (let round = 0; round <= MAX_TOOL_ROUNDS; round++) {
     const offerTools = availableTools.length > 0 && round < MAX_TOOL_ROUNDS;
+    const system = [
+      {
+        type: "text" as const,
+        text: input.systemPrompt,
+        cache_control: { type: "ephemeral" as const },
+      },
+      ...(input.runtimeContext?.trim()
+        ? [{ type: "text" as const, text: input.runtimeContext.trim() }]
+        : []),
+    ];
     const message = await anthropic.messages.create({
       model: input.model,
       max_tokens: 600,
       temperature: input.temperature,
-      system: input.systemPrompt,
+      system,
       messages: conversation,
       ...(offerTools ? { tools: availableTools } : {}),
     });
+    const rawUsage = message.usage as typeof message.usage & {
+      cache_creation_input_tokens?: number;
+      cache_read_input_tokens?: number;
+    };
+    const inputTokens = Number(rawUsage.input_tokens ?? 0);
+    const outputTokens = Number(rawUsage.output_tokens ?? 0);
+    const cacheCreationInputTokens = Number(rawUsage.cache_creation_input_tokens ?? 0);
+    const cacheReadInputTokens = Number(rawUsage.cache_read_input_tokens ?? 0);
+    const cacheDenominator = inputTokens + cacheCreationInputTokens + cacheReadInputTokens;
+    const usage: BotGenerationUsage = {
+      round,
+      inputTokens,
+      outputTokens,
+      cacheCreationInputTokens,
+      cacheReadInputTokens,
+      cacheHitRate: cacheDenominator > 0 ? cacheReadInputTokens / cacheDenominator : 0,
+    };
+    input.onUsage?.(usage);
+    console.info("[bot] anthropic_usage", JSON.stringify({
+      aiBotId: input.aiBotId ?? null,
+      model: input.model,
+      ...usage,
+    }));
 
     if (message.stop_reason === "tool_use") {
       const toolUseBlocks = message.content.filter((b) => b.type === "tool_use");
@@ -409,6 +446,14 @@ async function generateBotReply(input: BotReplyInput): Promise<string> {
             } catch (err) {
               console.error("[bot] tool execution failed:", block.name, err);
               resultPayload = { error: "tool_execution_failed" };
+            }
+            if (block.name === SEARCH_DORMBOOKING_CATALOG_TOOL_NAME && resultPayload && typeof resultPayload === "object") {
+              const listings = (resultPayload as { listings?: unknown }).listings;
+              if (Array.isArray(listings)) {
+                input.onCatalogNames?.(listings
+                  .map((listing) => listing && typeof listing === "object" ? String((listing as { dormName?: unknown }).dormName ?? "") : "")
+                  .filter(Boolean));
+              }
             }
             return {
               type: "tool_result" as const,
@@ -472,7 +517,10 @@ export interface BotTestResult {
 export async function runBotReplyTest(input: BotTestInput): Promise<BotTestResult> {
   const config = await getAiAgentConfig(input.aiBotId);
   const language = input.language ?? detectLanguage(input.message);
-  const topic = detectEscalation(input.message, config.escalationKeywords);
+  const isDormBookingAgent = /\bDorm\s*Booking\b|accommodation assistant/i.test(config.knowledgeBase);
+  const topic = isDormBookingAgent
+    ? detectDormBookingEscalation(input.message, config.escalationKeywords)
+    : detectEscalation(input.message, config.escalationKeywords);
   if (topic) {
     return {
       reply: null,
@@ -482,14 +530,20 @@ export async function runBotReplyTest(input: BotTestInput): Promise<BotTestResul
     };
   }
   const ragChunks = await retrieveKnowledgeChunks(input.message, { aiBotId: input.aiBotId });
-  const systemPrompt = buildBotSystemPrompt(language, config.knowledgeBase, ragChunks);
+  const promptParts = buildBotSystemPromptParts(
+    language,
+    config.knowledgeBase,
+    ragChunks,
+    input.message,
+  );
   const turns = [
     ...(input.history ?? []),
     { direction: "inbound", content: input.message },
   ].slice(-BOT_HISTORY_LIMIT);
   const reply = await generateBotReply({
     aiBotId: input.aiBotId,
-    systemPrompt,
+    systemPrompt: promptParts.cacheable,
+    runtimeContext: promptParts.runtime,
     language,
     model: config.model,
     temperature: config.temperature,
@@ -562,7 +616,7 @@ async function sendBotReply(input: BotSendInput): Promise<BotSendResult> {
   return { ok: false, error: `unsupported_channel:${input.channel}` };
 }
 
-export function selectHandoffMessage(config: AiAgentConfig, language: BotLanguage): string {
+function localizedHandoff(config: AiAgentConfig, language: BotLanguage): string {
   return config.handoffMessages?.[language]?.trim()
     || config.handoffMessages?.en?.trim()
     || config.handoffMessage.trim();
@@ -575,59 +629,33 @@ async function handoffConversation(input: {
   recipient: string;
   zernio: { externalAccountId: string; externalThreadId: string } | null;
   inboundMessageId: number;
-  topic: EscalationTopic | "reply_limit" | "supplier_profile";
+  topic: EscalationTopic | "reply_limit" | "supplier_profile" | "output_validation";
 }): Promise<AutoReplyOutcome> {
-  const handoffText = selectHandoffMessage(input.config, input.language);
-  const now = new Date();
-  const claimed = await db.transaction(async (tx) => {
-    const disabled = await tx.update(conversationsTable).set({
-      botEnabled: false,
-      needsHuman: true,
-      status: "needs_human",
-      language: input.language,
-      botLastHandledMessageId: input.inboundMessageId,
-    }).where(and(
-      eq(conversationsTable.id, input.conv.id),
-      eq(conversationsTable.botEnabled, true),
-      eq(conversationsTable.needsHuman, false),
-    )).returning({ id: conversationsTable.id });
-    if (!disabled.length) return { won: false, pendingId: null as number | null };
+  // Close the runtime gate before any provider call. This makes human takeover
+  // visible to every concurrent inbound worker before the hand-off message is
+  // sent, so no second AI generation can race and talk over staff.
+  const [handoffClaim] = await db.update(conversationsTable).set({
+    botEnabled: false,
+    needsHuman: true,
+    botLastHandledMessageId: input.inboundMessageId,
+  }).where(and(
+    eq(conversationsTable.id, input.conv.id),
+    eq(conversationsTable.botEnabled, true),
+  )).returning({ id: conversationsTable.id });
+  if (!handoffClaim) return { acted: false, reason: "bot_disabled" };
 
-    const pending = handoffText
-      ? await tx.insert(messagesTable).values({
-          conversationId: input.conv.id,
-          senderId: null,
-          content: handoffText,
-          channel: input.conv.channel,
-          direction: "outbound",
-          status: "pending",
-          metadata: { botSent: true, botHandoff: true, language: input.language, topic: input.topic },
-        }).returning({ id: messagesTable.id })
-      : [];
-    await tx.insert(messagesTable).values({
+  const handoffText = localizedHandoff(input.config, input.language);
+  let sendOk = true;
+  if (handoffText) {
+    const [pending] = await db.insert(messagesTable).values({
       conversationId: input.conv.id,
       senderId: null,
-      content: `AI devir notu: neden=${input.topic}; dil=${input.language}; açık konu son gelen mesajdır.`,
-      channel: "internal",
-      direction: "internal",
-      status: "sent",
-      sentAt: now,
-      metadata: { botHandoffNote: true, systemEvent: true, inboundMessageId: input.inboundMessageId },
-    });
-    return { won: true, pendingId: pending[0]?.id ?? null };
-  });
-  if (!claimed.won) return { acted: false, reason: "bot_disabled" };
-
-  console.info(JSON.stringify({
-    event: "ai_handoff",
-    conversationId: input.conv.id,
-    inboundMessageId: input.inboundMessageId,
-    aiBotId: input.conv.aiBotId,
-    language: input.language,
-    triggerReason: input.topic,
-  }));
-  let sendOk = true;
-  if (handoffText && claimed.pendingId !== null) {
+      content: handoffText,
+      channel: input.conv.channel,
+      direction: "outbound",
+      status: "pending",
+      metadata: { botSent: true, botHandoff: true, language: input.language, topic: input.topic },
+    }).returning();
     const result = await sendBotReply({
       channel: input.conv.channel,
       recipient: input.recipient,
@@ -650,8 +678,25 @@ async function handoffConversation(input: {
         simulated: result.simulated,
         ...(result.ok ? {} : { error: result.error }),
       },
-    }).where(eq(messagesTable.id, claimed.pendingId));
+    }).where(eq(messagesTable.id, pending.id));
   }
+
+  await db.insert(messagesTable).values({
+    conversationId: input.conv.id,
+    senderId: null,
+    content: `AI devir notu: neden=${input.topic}; dil=${input.language}; açık konu son gelen mesajdır.`,
+    channel: "internal",
+    direction: "internal",
+    status: "sent",
+    sentAt: new Date(),
+    metadata: {
+      botHandoffNote: true,
+      systemEvent: true,
+      inboundMessageId: input.inboundMessageId,
+      topic: input.topic,
+      language: input.language,
+    },
+  });
   await db.update(conversationsTable).set({
     ...(sendOk && handoffText ? { lastMessageAt: new Date(), lastMessagePreview: handoffText.slice(0, 200) } : {}),
   }).where(eq(conversationsTable.id, input.conv.id));
@@ -853,12 +898,9 @@ export async function maybeAutoReply(opts: {
   const conversationMetadata = conv.metadata && typeof conv.metadata === "object"
     ? conv.metadata as Record<string, unknown>
     : {};
-  const persistedLanguage = typeof conv.language === "string" ? conv.language : null;
   const languageState = resolveConversationLanguage(
     msg.content,
-    persistedLanguage
-      ? { ...conversationMetadata, botLanguage: persistedLanguage }
-      : conversationMetadata,
+    conversationMetadata,
     contact?.phoneE164 || contact?.phone,
   );
   const language = languageState.language;
@@ -874,7 +916,10 @@ export async function maybeAutoReply(opts: {
     .update(conversationsTable)
     .set({
       botLastHandledMessageId: inboundMessageId,
-      language,
+      // Defence in depth for inbound paths that do not use processInbound
+      // (internal/test/imported messages). The current human message always
+      // breaks a run of consecutive AI replies.
+      botReplyCount: 0,
       metadata: sql`coalesce(${conversationsTable.metadata}, '{}'::jsonb) || ${JSON.stringify(languageMetadataPatch)}::jsonb`,
     })
     .where(
@@ -931,9 +976,10 @@ export async function maybeAutoReply(opts: {
     });
   }
 
+  const isDormBookingAgent = /\bDorm\s*Booking\b|accommodation assistant/i.test(config.knowledgeBase);
+
   // Escalation gate (code layer): never auto-reply on sensitive topics. Flag
   // the conversation "needs human" and turn the bot off so staff take over.
-  const isDormBookingAgent = /\bDorm\s*Booking\b|accommodation assistant/i.test(config.knowledgeBase);
   const topic = isInternal
     ? null
     : isDormBookingAgent
@@ -1054,17 +1100,13 @@ export async function maybeAutoReply(opts: {
     return { acted: false, reason: "no_phone" };
   }
 
-  // Consecutive-reply safety: after too many bot replies in a row (configurable
-  // threshold; 0 = no limit) hand the conversation to a human — flip needs-human,
-  // turn the bot off, and send the handoff message exactly once. Disabling the
-  // bot here means subsequent inbound messages short-circuit on the per-conv
-  // gate, so the handoff is never sent twice.
-  if (!isInternal && config.maxConsecutiveReplies > 0 && (conv.botReplyCount ?? 0) >= config.maxConsecutiveReplies) {
-    return handoffConversation({
-      conv, config, language, recipient: recipient || "", zernio: zernioRoute,
-      inboundMessageId, topic: "reply_limit",
-    });
-  }
+  // The eligible inbound claimed above has reset the consecutive-AI streak.
+  // Do not evaluate the stale value from the conversation snapshot here: that
+  // was the lifetime-counter bug that handed active qualification flows off at
+  // 0–3 turns. This engine emits at most one customer-facing AI message per
+  // inbound; any future multi-message emission path must increment and enforce
+  // the guard immediately before its *second* send, without crossing an
+  // intervening inbound.
 
   // Build context from the last N messages (oldest → newest for the model).
   const history = await loadUnifiedContactHistory(contact, conversationId);
@@ -1183,8 +1225,9 @@ export async function maybeAutoReply(opts: {
         })
       : []
     : await retrieveKnowledgeChunks(msg.content, { aiBotId: conv.aiBotId });
-  let systemPrompt = isInternal
-    ? [
+  const promptParts = isInternal
+    ? {
+        cacheable: [
         "You are Find And Study's private internal collaboration assistant.",
         "The people in this thread may be staff, students or authorized agents. Reply in the language used by the latest human message.",
         "Be concise, practical and transparent. Never impersonate a human participant and never claim that you changed records, sent documents, made payments, submitted applications or contacted a university unless the system explicitly confirms that action.",
@@ -1192,15 +1235,19 @@ export async function maybeAutoReply(opts: {
         "Use the verified knowledge below when relevant. If the answer is not supported, say that a human teammate should confirm it; do not invent facts.",
         "",
         config.knowledgeBase,
-        ...(ragChunks.length
-          ? ["", "Relevant verified excerpts:", ...ragChunks.map((chunk, index) => `[${index + 1}] ${chunk.sourceName}\n${chunk.content}`)]
-          : []),
-      ].join("\n")
-    : buildBotSystemPrompt(
+        ].join("\n"),
+        runtime: ragChunks.length
+          ? ["Relevant verified excerpts:", ...ragChunks.map((chunk, index) => `[${index + 1}] ${chunk.sourceName}\n${chunk.content}`)].join("\n\n")
+          : "",
+      }
+    : buildBotSystemPromptParts(
         scopedReplyLanguage,
         hasWidgetProgramScope ? "" : config.knowledgeBase,
         ragChunks,
+        msg.content,
       );
+  const systemPrompt = promptParts.cacheable;
+  let runtimeContext = promptParts.runtime;
 
   if (hasWidgetProgramScope) {
     const singleUniversityName = scopedUniversityNames.length === 1
@@ -1217,9 +1264,8 @@ export async function maybeAutoReply(opts: {
         scopedProgramFilters.field,
       ].filter(Boolean).join(", "),
     ].filter(Boolean).join(" · ") || "the configured catalog scope";
-    systemPrompt = [
-      systemPrompt,
-      "",
+    runtimeContext = [
+      runtimeContext,
       "## Mandatory landing-page scope (highest priority)",
       `- Your public title is "${scopedAssistantName || (singleUniversityName ? `${singleUniversityName} Yetkili Temsilci Başvuru Asistanı` : "Find & Study Başvuru Asistanı")}".`,
       `- You are the authorized representative application assistant for this configured catalog scope: ${scopeLabel}.`,
@@ -1234,7 +1280,7 @@ export async function maybeAutoReply(opts: {
 
     const knownContactInstruction = buildKnownEmbedContactInstruction(contact);
     if (knownContactInstruction) {
-      systemPrompt = `${systemPrompt}\n\n${knownContactInstruction}`;
+      runtimeContext = `${runtimeContext}\n\n${knownContactInstruction}`;
     }
   }
 
@@ -1243,7 +1289,7 @@ export async function maybeAutoReply(opts: {
   if (!isInternal) {
     try {
       const slotInstruction = await getAccommodationSlotInstruction(captureLeadId);
-      if (slotInstruction) systemPrompt = `${systemPrompt}\n\n${slotInstruction}`;
+      if (slotInstruction) runtimeContext = `${runtimeContext}\n\n${slotInstruction}`;
       if (!isDormBookingAgent) {
         const missing = await computeMissingDocGroups({
           leadId: captureLeadId,
@@ -1251,107 +1297,105 @@ export async function maybeAutoReply(opts: {
           level: captureLevel,
         });
         const docInstruction = buildMissingDocsInstruction(missing);
-        if (docInstruction) systemPrompt = `${systemPrompt}\n\n${docInstruction}`;
+        if (docInstruction) runtimeContext = `${runtimeContext}\n\n${docInstruction}`;
       }
     } catch (err) {
       console.error("[bot] missing-doc computation failed:", err);
     }
   }
 
-  // Re-read immediately before generation. Another inbound handler may have
-  // handed this conversation to staff after this invocation loaded `conv`.
-  const [generationGate] = await db.select({
-    botEnabled: conversationsTable.botEnabled,
-    needsHuman: conversationsTable.needsHuman,
-  }).from(conversationsTable).where(eq(conversationsTable.id, conversationId)).limit(1);
-  if (!generationGate?.botEnabled || generationGate.needsHuman) {
+  // Re-check the human-takeover gate immediately before generation. Context
+  // retrieval and lead capture can take long enough for a parallel hand-off or
+  // explicit staff takeover to happen after the initial conversation read.
+  const [generationGate] = await db
+    .select({ botEnabled: conversationsTable.botEnabled, needsHuman: conversationsTable.needsHuman })
+    .from(conversationsTable)
+    .where(eq(conversationsTable.id, conversationId))
+    .limit(1);
+  if (!isInternal && (!generationGate?.botEnabled || generationGate.needsHuman)) {
     return { acted: false, reason: "bot_disabled" };
   }
 
-  const replyInput: BotReplyInput = {
+  const generationUsage: BotGenerationUsage[] = [];
+  const catalogNames = new Set<string>();
+  const modelMessages = history.map((m) => {
+    if (!isInternal) return { direction: m.direction, content: m.content };
+    const metadata = m.metadata && typeof m.metadata === "object"
+      ? m.metadata as Record<string, unknown>
+      : {};
+    return {
+      direction: metadata.botSent === true ? "outbound" : "inbound",
+      content: m.content,
+    };
+  });
+  const generateOnce = (validationInstruction = "") => generateBotReply({
     aiBotId: conv.aiBotId,
     systemPrompt,
+    runtimeContext: [runtimeContext, validationInstruction].filter(Boolean).join("\n\n"),
     language: scopedReplyLanguage,
     model: config.model,
     temperature: config.temperature,
-    messages: history.map((m) => {
-      if (!isInternal) return { direction: m.direction, content: m.content };
-      const metadata = m.metadata && typeof m.metadata === "object"
-        ? m.metadata as Record<string, unknown>
-        : {};
-      return {
-        direction: metadata.botSent === true ? "outbound" : "inbound",
-        content: m.content,
-      };
-    }),
+    messages: modelMessages,
     enforcedUniversityIds: scopedUniversityIds,
     enforcedProgramFilters: scopedProgramFilters,
-  };
-  let rawReplyText = await generateBotReply(replyInput);
-  if (!rawReplyText) return { acted: false, reason: "send_failed" };
-  // Strip any Markdown that WhatsApp renders as literal characters (**, ##, ---, etc.)
-  let replyText = sanitizeWhatsAppText(rawReplyText);
+    onUsage: (usage) => generationUsage.push(usage),
+    onCatalogNames: (names) => names.forEach((name) => catalogNames.add(name)),
+  });
 
+  let rawReplyText = await generateOnce();
+  let validationRetried = false;
+  let validationRejectedRules: string[] = [];
   if (isDormBookingAgent && !isInternal) {
-    const knownDormNames = ragChunks.flatMap((chunk) =>
-      [...chunk.content.matchAll(/^DORM:\s*(.+)$/gm)].map((match) => match[1].trim()),
-    );
-    let validation = validateDormBookingOutput({
-      text: replyText,
-      firstReply: (conv.botReplyCount ?? 0) === 0,
-      latestInbound: msg.content,
-      knownDormNames,
+    const isFirstReply = !history.some((entry) => entry.direction === "outbound");
+    let validation = validateDormBookingBotOutput({
+      text: rawReplyText,
+      latestMessage: msg.content,
+      language: scopedReplyLanguage,
+      isFirstReply,
+      catalogNames: [...catalogNames],
     });
-    if (!validation.ok) {
-      console.warn(JSON.stringify({
-        event: "dormbooking_output_rejected",
+    if (!validation.valid) {
+      validationRetried = true;
+      validationRejectedRules = validation.rules;
+      console.warn("[bot] output_validation_retry", JSON.stringify({
         conversationId,
-        inboundMessageId,
-        attempt: 1,
-        ruleIds: validation.ruleIds,
+        aiBotId: conv.aiBotId ?? null,
+        rules: validation.rules,
       }));
-      rawReplyText = await generateBotReply({
-        ...replyInput,
-        systemPrompt: `${replyInput.systemPrompt}\n\nThe previous draft was rejected by runtime rules: ${validation.ruleIds.join(", ")}. Produce one corrected final reply only.`,
+      rawReplyText = await generateOnce([
+        "## Mandatory output correction",
+        `Your previous draft was rejected by these deterministic rules: ${validation.rules.join(", ")}.`,
+        "Write one corrected reply only. Keep the factual meaning, use exact catalog names, and obey every length, question, language and currency rule.",
+      ].join("\n"));
+      validation = validateDormBookingBotOutput({
+        text: rawReplyText,
+        latestMessage: msg.content,
+        language: scopedReplyLanguage,
+        isFirstReply,
+        catalogNames: [...catalogNames],
       });
-      replyText = sanitizeWhatsAppText(rawReplyText);
-      validation = validateDormBookingOutput({
-        text: replyText,
-        firstReply: (conv.botReplyCount ?? 0) === 0,
-        latestInbound: msg.content,
-        knownDormNames,
-      });
-      if (!validation.ok) {
-        console.warn(JSON.stringify({
-          event: "dormbooking_output_rejected",
+      if (!validation.valid) {
+        console.error("[bot] output_validation_handoff", JSON.stringify({
           conversationId,
-          inboundMessageId,
-          attempt: 2,
-          ruleIds: validation.ruleIds,
+          aiBotId: conv.aiBotId ?? null,
+          firstRules: validationRejectedRules,
+          finalRules: validation.rules,
         }));
         return handoffConversation({
           conv,
           config,
-          language,
+          language: scopedReplyLanguage,
           recipient: recipient || "",
           zernio: zernioRoute,
           inboundMessageId,
-          topic: "reply_limit",
+          topic: "output_validation",
         });
       }
     }
   }
-
-  // Generation is asynchronous. A hand-off can win while the model is
-  // running, so never persist or send the stale generated reply unless AI is
-  // still explicitly enabled.
-  const [sendGate] = await db.select({
-    botEnabled: conversationsTable.botEnabled,
-    needsHuman: conversationsTable.needsHuman,
-  }).from(conversationsTable).where(eq(conversationsTable.id, conversationId)).limit(1);
-  if (!sendGate?.botEnabled || sendGate.needsHuman) {
-    return { acted: false, reason: "bot_disabled" };
-  }
+  if (!rawReplyText) return { acted: false, reason: "send_failed" };
+  // Strip any Markdown that WhatsApp renders as literal characters (**, ##, ---, etc.)
+  const replyText = sanitizeWhatsAppText(rawReplyText);
 
   // Persist a pending outbound row first so the lifecycle is observable.
   const [pending] = await db
@@ -1363,7 +1407,14 @@ export async function maybeAutoReply(opts: {
       channel: conv.channel,
       direction: isInternal ? "internal" : "outbound",
       status: "pending",
-      metadata: { botSent: true, model: config.model, language: scopedReplyLanguage },
+      metadata: {
+        botSent: true,
+        model: config.model,
+        language: scopedReplyLanguage,
+        anthropicUsage: generationUsage,
+        outputValidationRetried: validationRetried,
+        outputValidationRejectedRules: validationRejectedRules,
+      },
     })
     .returning();
 
@@ -1387,6 +1438,9 @@ export async function maybeAutoReply(opts: {
         botSent: true,
         model: config.model,
         language: scopedReplyLanguage,
+        anthropicUsage: generationUsage,
+        outputValidationRetried: validationRetried,
+        outputValidationRejectedRules: validationRejectedRules,
         simulated: sendResult.simulated,
         ...(sendResult.ok ? {} : { error: sendResult.error }),
       },

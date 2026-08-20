@@ -13,7 +13,7 @@
 // (ILIKE keyword match). Lexical ensures rare terms, acronyms, and proper
 // nouns (e.g. "NAWA") are never missed by cosine distance alone.
 import { db, knowledgeChunksTable, knowledgeSourcesTable } from "@workspace/db";
-import { and, desc, eq, inArray, ilike, or, sql } from "drizzle-orm";
+import { and, eq, inArray, ilike, or, sql } from "drizzle-orm";
 import { embedQuery } from "./knowledgeEmbed";
 
 export interface RetrievedChunk {
@@ -21,6 +21,7 @@ export interface RetrievedChunk {
   sourceName: string;
   content: string;
   distance: number;
+  metadata: Record<string, unknown>;
 }
 
 export const RAG_SOURCE_TYPES = ["file", "url", "text", "academy", "dormbooking"] as const;
@@ -138,6 +139,7 @@ export async function retrieveKnowledgeChunks(
           sourceId: knowledgeChunksTable.sourceId,
           content: knowledgeChunksTable.content,
           embedding: knowledgeChunksTable.embedding,
+          metadata: knowledgeChunksTable.metadata,
         })
         .from(knowledgeChunksTable)
         .where(and(inArray(knowledgeChunksTable.sourceId, sourceIdList), chunkScope));
@@ -148,6 +150,7 @@ export async function retrieveKnowledgeChunks(
           sourceName: nameById.get(r.sourceId) ?? "Knowledge source",
           content: r.content,
           distance: cosineDistance(embedding, (r.embedding as number[] | null) ?? []),
+          metadata: (r.metadata as Record<string, unknown> | null) ?? {},
         }))
         .filter((r) => r.distance <= MAX_DISTANCE)
         .sort((a, b) => a.distance - b.distance)
@@ -164,15 +167,11 @@ export async function retrieveKnowledgeChunks(
     const terms = queryTerms(trimmed);
     if (terms.length > 0) {
       const orClauses = terms.map((t) => ilike(knowledgeChunksTable.content, `%${t}%`));
-      const lexicalScore = sql<number>`(${sql.join(
-        terms.map((term) => sql`case when ${knowledgeChunksTable.content} ilike ${`%${term}%`} then 1 else 0 end`),
-        sql` + `,
-      )})`.as("lexical_score");
       const lexRows = await db
         .select({
           sourceId: knowledgeChunksTable.sourceId,
           content: knowledgeChunksTable.content,
-          lexicalScore,
+          metadata: knowledgeChunksTable.metadata,
         })
         .from(knowledgeChunksTable)
         .where(and(
@@ -180,13 +179,13 @@ export async function retrieveKnowledgeChunks(
           chunkScope,
           or(...orClauses),
         ))
-        .orderBy(desc(lexicalScore))
         .limit(LEXICAL_LIMIT);
       lexical = lexRows.map((r) => ({
         sourceId: r.sourceId,
         sourceName: nameById.get(r.sourceId) ?? "Knowledge source",
         content: r.content,
         distance: 0.35, // neutral near score — lexical hits are always relevant
+        metadata: (r.metadata as Record<string, unknown> | null) ?? {},
       }));
     }
 

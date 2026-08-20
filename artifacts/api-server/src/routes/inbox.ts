@@ -69,10 +69,16 @@ import {
 } from "../lib/inbox/zernioTemplates";
 import { sendZernioConversationMessage } from "../lib/inbox/outboundMessage";
 import { resolveApplicationMessageTarget } from "../lib/inbox/quickContactTarget";
-import { loadConversationTemplateVariableContext } from "../lib/inbox/templateVariableContext";
 import {
+  loadConversationTemplateVariableContext,
+  loadEntityTemplateVariableContext,
+  type MessageTemplateEntityType,
+} from "../lib/inbox/templateVariableContext";
+import {
+  canonicalMessageTemplateVariable,
   extractNamedMessageTemplateVariables,
   resolveNamedMessageTemplateVariables,
+  type MessageTemplateVariableContext,
 } from "../lib/inbox/templateVariables";
 import { inboxBus, type InboxBusEvent } from "../lib/inbox/eventBus";
 import {
@@ -1733,9 +1739,7 @@ router.patch(
     // starts fresh for the next bot-led stretch.
     const [updated] = await db
       .update(conversationsTable)
-      .set(enabled
-        ? { botEnabled: true, needsHuman: false, status: "open", botReplyCount: 0 }
-        : { botEnabled: false })
+      .set(enabled ? { botEnabled: true, needsHuman: false, botReplyCount: 0 } : { botEnabled: false })
       .where(eq(conversationsTable.id, id))
       .returning();
     if (!updated) {
@@ -3114,6 +3118,7 @@ router.get(
     const entityId = req.query.entityId ? parseInt(String(req.query.entityId), 10) : 0;
 
     let account: EntityWhatsAppTarget | null = null;
+    let templateContext: MessageTemplateVariableContext = {};
 
     if (conversationId) {
       const [conv] = await db
@@ -3130,6 +3135,7 @@ router.get(
       }
       const resolved = await resolveZernioWhatsAppAccount(conv.channelAccountId);
       account = resolved ? { ...resolved, conversationId } : null;
+      templateContext = await loadConversationTemplateVariableContext(conversationId);
     } else if ((entityType === "lead" || entityType === "student" || entityType === "application") && entityId) {
       let entityAgentId: number | null | undefined;
       let contactCondition: SQL;
@@ -3175,6 +3181,10 @@ router.get(
         return;
       }
       account = await resolveEntityWhatsAppTarget(contactCondition);
+      templateContext = await loadEntityTemplateVariableContext(
+        entityType as MessageTemplateEntityType,
+        entityId,
+      );
     } else {
       res.status(400).json({ error: "conversationId or entityType/entityId is required" });
       return;
@@ -3211,12 +3221,16 @@ router.get(
         template.language,
       );
       if (!remote) return [];
+      const variableMappings = preservedTemplateMappings(template.variables, remote.variableCount);
+      const preview = resolveTemplateMappingPreview(variableMappings, templateContext);
       return [{
         ...template,
         content: remote.bodyText || template.content,
         language: remote.language,
         approvalStatus: "approved",
-        variables: Array.from({ length: remote.variableCount }, (_, index) => `{{${index + 1}}}`),
+        variables: variableMappings,
+        resolvedParameters: preview.resolvedParameters,
+        missingVariables: preview.missingVariables,
       }];
     });
 
@@ -3276,7 +3290,20 @@ router.post(
     // human-readable message instead.
     const placeholderMatches = (tpl.content || "").match(/\{\{\s*\d+\s*\}\}/g);
     const placeholderCount = placeholderMatches ? new Set(placeholderMatches.map((m) => m.replace(/\D/g, ""))).size : 0;
-    const providedParams = parameters || [];
+    let providedParams = parameters?.map((value) => String(value || "").trim());
+    if (providedParams == null) {
+      const mappings = preservedTemplateMappings(tpl.variables, placeholderCount);
+      const context = await loadConversationTemplateVariableContext(id);
+      const preview = resolveTemplateMappingPreview(mappings, context);
+      if (preview.missingVariables.length > 0) {
+        res.status(422).json({
+          error: "template_variables_missing",
+          detail: `Missing template data: ${preview.missingVariables.join(", ")}`,
+        });
+        return;
+      }
+      providedParams = preview.resolvedParameters;
+    }
     if (providedParams.length !== placeholderCount) {
       res.status(400).json({
         error: `Template gönderilemedi: şablonda ${placeholderCount} değişken var, ${providedParams.length} değer girildi. Lütfen tüm değişkenleri doldurun.`,
@@ -3332,11 +3359,11 @@ router.post(
         toPhoneE164: contact.phoneE164,
         templateName: tpl.externalTemplateName,
         language: tpl.language || "en",
-        parameters: parameters || [],
+        parameters: providedParams,
       });
     }
 
-    const renderedContent = (parameters || []).reduce<string>(
+    const renderedContent = providedParams.reduce<string>(
       (acc, val, idx) => acc.replace(new RegExp(`\\{\\{${idx + 1}\\}\\}`, "g"), val),
       tpl.content,
     );
@@ -3389,6 +3416,43 @@ router.post(
  * Templates management page can show both "our" canned responses and the
  * Meta-approved templates in one place.
  */
+function numericTemplatePlaceholderIndexes(text: string): number[] {
+  const indexes = Array.from(
+    new Set(
+      Array.from(text.matchAll(/\{\{\s*(\d+)\s*\}\}/g), (match) => Number(match[1])),
+    ),
+  );
+  return indexes.filter(Number.isInteger).sort((a, b) => a - b);
+}
+
+function defaultNumericTemplateMappings(variableCount: number): string[] {
+  return Array.from({ length: variableCount }, (_, index) => `{{${index + 1}}}`);
+}
+
+function preservedTemplateMappings(variables: unknown, variableCount: number): string[] {
+  if (!Array.isArray(variables) || variables.length !== variableCount) {
+    return defaultNumericTemplateMappings(variableCount);
+  }
+  const mappings = variables.map((value) => canonicalMessageTemplateVariable(String(value || "")));
+  return mappings.every(Boolean)
+    ? mappings as string[]
+    : defaultNumericTemplateMappings(variableCount);
+}
+
+function resolveTemplateMappingPreview(
+  mappings: string[],
+  context: MessageTemplateVariableContext,
+): { resolvedParameters: string[]; missingVariables: string[] } {
+  const missingVariables: string[] = [];
+  const resolvedParameters = mappings.map((mapping) => {
+    const canonical = canonicalMessageTemplateVariable(mapping);
+    const value = canonical ? String(context[canonical] || "").trim() : "";
+    if (!value) missingVariables.push(canonical || mapping);
+    return value;
+  });
+  return { resolvedParameters, missingVariables };
+}
+
 router.get(
   "/inbox/whatsapp-templates",
   requireAuth,
@@ -3421,7 +3485,7 @@ router.get(
             content: tpl.bodyText || existing.content,
             category: tpl.category || existing.category,
             approvalStatus: tpl.status,
-            variables: Array.from({ length: tpl.variableCount }, (_, i) => `{{${i + 1}}}`),
+            variables: preservedTemplateMappings(existing.variables, tpl.variableCount),
           })
           .where(eq(messageTemplatesTable.id, existing.id));
       } else {
@@ -3433,7 +3497,7 @@ router.get(
           language: tpl.language,
           externalTemplateName: tpl.name,
           approvalStatus: tpl.status,
-          variables: Array.from({ length: tpl.variableCount }, (_, i) => `{{${i + 1}}}`),
+          variables: defaultNumericTemplateMappings(tpl.variableCount),
           createdById: req.user!.id,
         });
       }
@@ -3453,13 +3517,28 @@ router.post(
   requireAuth,
   requireRole(...STAFF_ROLES, ...ADMIN_ROLES),
   async (req, res): Promise<void> => {
-    const { mode, name, language, category, bodyText, footerText, libraryTemplateName, channelAccountId } = req.body as {
+    const {
+      mode,
+      name,
+      language,
+      category,
+      bodyText,
+      footerText,
+      bodyExamples,
+      variableMappings,
+      quickReplyButtons,
+      libraryTemplateName,
+      channelAccountId,
+    } = req.body as {
       mode: "custom" | "library";
       name: string;
       language: string;
       category?: string;
       bodyText?: string;
       footerText?: string;
+      bodyExamples?: string[];
+      variableMappings?: string[];
+      quickReplyButtons?: Array<{ text?: string }>;
       libraryTemplateName?: string;
       channelAccountId?: number;
     };
@@ -3475,6 +3554,59 @@ router.post(
       res.status(400).json({ error: "libraryTemplateName is required for library templates" });
       return;
     }
+
+    const placeholderIndexes = mode === "custom"
+      ? numericTemplatePlaceholderIndexes(bodyText || "")
+      : [];
+    const expectedIndexes = placeholderIndexes.map((_, index) => index + 1);
+    if (placeholderIndexes.some((value, index) => value !== expectedIndexes[index])) {
+      res.status(400).json({
+        error: "Template variables must be sequential and start at {{1}} (for example {{1}}, {{2}}, {{3}}).",
+      });
+      return;
+    }
+
+    const normalizedMappings = (variableMappings || []).map((value) =>
+      canonicalMessageTemplateVariable(String(value || "")),
+    );
+    const normalizedExamples = (bodyExamples || []).map((value) => String(value || "").trim());
+    if (mode === "custom" && placeholderIndexes.length > 0) {
+      if (
+        normalizedMappings.length !== placeholderIndexes.length ||
+        normalizedMappings.some((value) => !value)
+      ) {
+        res.status(400).json({
+          error: `Every template variable must be mapped to CRM data (${placeholderIndexes.length} required).`,
+        });
+        return;
+      }
+      if (
+        normalizedExamples.length !== placeholderIndexes.length ||
+        normalizedExamples.some((value) => !value)
+      ) {
+        res.status(400).json({
+          error: `Every template variable needs a non-empty Meta review example (${placeholderIndexes.length} required).`,
+        });
+        return;
+      }
+    }
+
+    const normalizedQuickReplies = (quickReplyButtons || [])
+      .map((button) => ({ text: String(button?.text || "").trim() }))
+      .filter((button) => button.text.length > 0);
+    if (normalizedQuickReplies.length > 3) {
+      res.status(400).json({ error: "A maximum of 3 quick reply buttons is supported." });
+      return;
+    }
+    if (normalizedQuickReplies.some((button) => button.text.length > 25)) {
+      res.status(400).json({ error: "Quick reply button labels must be 25 characters or fewer." });
+      return;
+    }
+    if (new Set(normalizedQuickReplies.map((button) => button.text.toLocaleLowerCase())).size !== normalizedQuickReplies.length) {
+      res.status(400).json({ error: "Quick reply button labels must be unique." });
+      return;
+    }
+
     const account = await resolveZernioWhatsAppAccount(channelAccountId);
     if (!account) {
       res.status(400).json({ error: "No Zernio-hosted WhatsApp channel account configured" });
@@ -3489,6 +3621,8 @@ router.post(
       category,
       bodyText,
       footerText,
+      bodyExamples: normalizedExamples,
+      quickReplyButtons: normalizedQuickReplies,
       libraryTemplateName,
     });
     if (!outcome.ok) {
@@ -3506,20 +3640,23 @@ router.post(
         language,
         externalTemplateName: name,
         approvalStatus: outcome.status || "pending",
-        variables: mode === "custom" ? Array.from({ length: countVariablesForCreate(bodyText || "") }, (_, i) => `{{${i + 1}}}`) : [],
+        variables: mode === "custom"
+          ? normalizedMappings.filter((value): value is NonNullable<typeof value> => Boolean(value))
+          : [],
         createdById: req.user!.id,
       })
       .returning();
 
-    await logAudit(req.user!.id, "create_whatsapp_template", "message_template", template.id, { name, mode, language }, req.ip);
+    await logAudit(req.user!.id, "create_whatsapp_template", "message_template", template.id, {
+      name,
+      mode,
+      language,
+      variableMappings: normalizedMappings,
+      quickReplyCount: normalizedQuickReplies.length,
+    }, req.ip);
     res.status(201).json({ data: template });
   },
 );
-
-function countVariablesForCreate(text: string): number {
-  const matches = text.match(/\{\{\s*\d+\s*\}\}/g);
-  return matches ? new Set(matches).size : 0;
-}
 
 router.delete(
   "/inbox/whatsapp-templates/:templateName",
@@ -4016,6 +4153,77 @@ router.get(
         warning: "Provider model list is temporarily unavailable.",
       });
     }
+  },
+);
+
+// GET /inbox/ai-agent/metrics — operational visibility for hand-offs, prompt
+// cache usage and deterministic output-validation retries. Read-only/admin.
+router.get(
+  "/inbox/ai-agent/metrics",
+  requireAuth,
+  requireRole(...ADMIN_ROLES),
+  async (req, res): Promise<void> => {
+    const aiBotId = await resolveAdminAiBotId(req, res);
+    if (aiBotId == null) return;
+    const parsedDays = Number(req.query.days ?? 30);
+    const days = Number.isInteger(parsedDays) ? Math.min(90, Math.max(1, parsedDays)) : 30;
+    const rows = await db
+      .select({
+        createdAt: messagesTable.createdAt,
+        metadata: messagesTable.metadata,
+      })
+      .from(messagesTable)
+      .innerJoin(conversationsTable, eq(conversationsTable.id, messagesTable.conversationId))
+      .where(and(
+        eq(conversationsTable.aiBotId, aiBotId),
+        sql`${messagesTable.createdAt} >= now() - (${days} * interval '1 day')`,
+      ));
+
+    const handoffByReason: Record<string, number> = {};
+    const handoffByDay: Record<string, number> = {};
+    let handoffTotal = 0;
+    let inputTokens = 0;
+    let outputTokens = 0;
+    let cacheCreationInputTokens = 0;
+    let cacheReadInputTokens = 0;
+    let validationRetries = 0;
+    for (const row of rows) {
+      const metadata = row.metadata && typeof row.metadata === "object"
+        ? row.metadata as Record<string, unknown>
+        : {};
+      if (metadata.botHandoffNote === true) {
+        const reason = typeof metadata.topic === "string" && metadata.topic ? metadata.topic : "unknown";
+        const day = row.createdAt.toISOString().slice(0, 10);
+        handoffByReason[reason] = (handoffByReason[reason] ?? 0) + 1;
+        handoffByDay[day] = (handoffByDay[day] ?? 0) + 1;
+        handoffTotal += 1;
+      }
+      if (metadata.outputValidationRetried === true) validationRetries += 1;
+      const usageEntries = Array.isArray(metadata.anthropicUsage) ? metadata.anthropicUsage : [];
+      for (const entry of usageEntries) {
+        if (!entry || typeof entry !== "object") continue;
+        const usage = entry as Record<string, unknown>;
+        inputTokens += Number(usage.inputTokens ?? 0) || 0;
+        outputTokens += Number(usage.outputTokens ?? 0) || 0;
+        cacheCreationInputTokens += Number(usage.cacheCreationInputTokens ?? 0) || 0;
+        cacheReadInputTokens += Number(usage.cacheReadInputTokens ?? 0) || 0;
+      }
+    }
+    const cacheDenominator = inputTokens + cacheCreationInputTokens + cacheReadInputTokens;
+    res.json({
+      metrics: {
+        days,
+        handoffs: { total: handoffTotal, byReason: handoffByReason, byDay: handoffByDay },
+        promptCache: {
+          inputTokens,
+          outputTokens,
+          cacheCreationInputTokens,
+          cacheReadInputTokens,
+          hitRate: cacheDenominator > 0 ? cacheReadInputTokens / cacheDenominator : 0,
+        },
+        outputValidation: { retries: validationRetries },
+      },
+    });
   },
 );
 

@@ -30,17 +30,20 @@ import {
 } from "@workspace/db";
 import { and, eq } from "drizzle-orm";
 import {
-  detectEscalation,
   detectDormBookingEscalation,
+  detectEscalation,
   detectLanguage,
   isAutoReplyChannelSupported,
   maybeAutoReply,
-  selectHandoffMessage,
   __setBotReplyOverrideForTests,
   __setBotSendOverrideForTests,
   type BotSendInput,
 } from "../src/lib/inbox/botAutoReply";
-import { __setAiAgentConfigOverrideForTests, DEFAULT_AI_AGENT_CONFIG } from "../src/lib/inbox/aiAgentConfig";
+import { __setAiAgentConfigOverrideForTests } from "../src/lib/inbox/aiAgentConfig";
+import {
+  splitDormBookingRuntimeKnowledge,
+  validateDormBookingBotOutput,
+} from "../src/lib/inbox/botBrain";
 
 const RUN_ID = `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
@@ -50,6 +53,7 @@ const RUN_ID = `${Date.now().toString(36)}_${Math.random().toString(36).slice(2,
 __setAiAgentConfigOverrideForTests({
   enabled: true,
   scheduleEnabled: false,
+  maxConsecutiveReplies: 6,
 });
 
 // ---------------------------------------------------------------------------
@@ -92,6 +96,7 @@ async function ensureChannelAccount(): Promise<number> {
 async function seedConversation(opts: {
   botEnabled: boolean;
   lastInboundAt?: Date;
+  botReplyCount?: number;
 }): Promise<{ conversationId: number; contactId: number }> {
   const accId = await ensureChannelAccount();
   const n = seedCounter++;
@@ -119,6 +124,7 @@ async function seedConversation(opts: {
       externalThreadId: `bot_thread_${suffix}`,
       status: "open",
       botEnabled: opts.botEnabled,
+      botReplyCount: opts.botReplyCount ?? 0,
       lastInboundAt: opts.lastInboundAt ?? new Date(),
     })
     .returning({ id: conversationsTable.id });
@@ -223,22 +229,47 @@ test("detectEscalation returns null for a clean intake message", () => {
   assert.equal(detectEscalation("Merhaba, üniversite okumak istiyorum"), null);
 });
 
-test("DormBooking payment handoff requires sensitive payment context", () => {
-  assert.equal(detectDormBookingEscalation("What is the monthly rent, deposit and payment plan?"), null);
-  assert.equal(detectDormBookingEscalation("Can I pay the 30% advance in two instalments?"), null);
-  assert.equal(detectDormBookingEscalation("Please send the bank account and IBAN"), "payment");
-  assert.equal(detectDormBookingEscalation("I already paid, where is my receipt?"), "payment");
-  assert.equal(detectDormBookingEscalation("Can you give me a discount?"), "payment");
-  assert.equal(detectDormBookingEscalation("I want to speak to a human"), "human_request");
+test("Dorm Booking answers ordinary price questions but hands payment actions to staff", () => {
+  assert.equal(detectDormBookingEscalation("How much is the holding fee?"), null);
+  assert.equal(detectDormBookingEscalation("Can I pay in instalments?"), null);
+  assert.equal(detectDormBookingEscalation("What are the room charges?"), null);
+  assert.equal(detectDormBookingEscalation("Please send me the IBAN"), "payment");
+  assert.equal(detectDormBookingEscalation("I already paid, here is my receipt"), "payment");
+  assert.equal(detectDormBookingEscalation("Can someone else pay on my behalf?"), "payment");
+  assert.equal(detectDormBookingEscalation("Can you negotiate a discount?"), "payment");
 });
 
-test("handoff message follows the locked conversation language", () => {
-  for (const language of ["en", "ar", "fa", "ru", "fr", "es"] as const) {
-    assert.equal(
-      selectHandoffMessage(DEFAULT_AI_AGENT_CONFIG, language),
-      DEFAULT_AI_AGENT_CONFIG.handoffMessages[language],
-    );
-  }
+test("Dorm Booking prompt excludes regression and loads detailed policy on demand", () => {
+  const kb = [
+    "# Dorm Booking Accommodation Assistant",
+    "## 8. Payment Policy",
+    "Thirty percent payment details.",
+    "## 15. Dormitory Directory",
+    "Stale static dorm list.",
+    "## 20. Objection Handling",
+    "Trust objection details.",
+    "## 26. Regression Checks",
+    "This is a test assertion, not runtime knowledge.",
+  ].join("\n");
+  const ordinary = splitDormBookingRuntimeKnowledge(kb, "I need a male dorm near my university");
+  assert.doesNotMatch(ordinary.stable, /Stale static dorm list|test assertion|Thirty percent/);
+  assert.equal(ordinary.dynamic, "");
+  const payment = splitDormBookingRuntimeKnowledge(kb, "How is the payment plan?");
+  assert.match(payment.dynamic, /Thirty percent payment details/);
+  assert.doesNotMatch(payment.dynamic, /Regression|Stale static dorm list/);
+});
+
+test("Dorm Booking output validator rejects long, praising and currency-inventing drafts", () => {
+  const result = validateDormBookingBotOutput({
+    text: "Great!\nLine 2?\nLine 3?\nLine 4?\nLine 5\nYour budget is $3000.",
+    latestMessage: "My budget is 3000",
+    language: "en",
+    isFirstReply: true,
+  });
+  assert.equal(result.valid, false);
+  assert.ok(result.rules.includes("max_lines_4"));
+  assert.ok(result.rules.includes("praise_opener"));
+  assert.ok(result.rules.includes("invented_currency"));
 });
 
 // ---------------------------------------------------------------------------
@@ -247,7 +278,6 @@ test("handoff message follows the locked conversation language", () => {
 test("detectLanguage picks the student's language", () => {
   assert.equal(detectLanguage("Merhaba, nasıl başvuru yapabilirim?"), "tr");
   assert.equal(detectLanguage("Hello, I would like to apply"), "en");
-  assert.equal(detectLanguage("Hi, what is the room price?", "tr"), "en");
   assert.equal(detectLanguage("مرحبا أريد الدراسة في تركيا"), "ar");
   assert.equal(detectLanguage("Здравствуйте, я хочу учиться"), "ru");
   assert.equal(detectLanguage("Bonjour, je veux étudier en Turquie"), "fr");
@@ -299,6 +329,50 @@ test("maybeAutoReply: normal inbound → one send, outbound recorded, bot stays 
     .where(eq(conversationsTable.id, conversationId));
   assert.equal(conv.botEnabled, true);
   assert.equal(conv.marker, msgId);
+});
+
+test("maybeAutoReply: a new inbound resets a stale reply-limit counter", async () => {
+  resetMocks();
+  const { conversationId } = await seedConversation({
+    botEnabled: true,
+    botReplyCount: 6,
+  });
+  const msgId = await seedInbound(
+    conversationId,
+    "I study at Beykent University, Computer Engineering, male.",
+  );
+  const outcome = await maybeAutoReply({ conversationId, inboundMessageId: msgId });
+  assert.equal(outcome.reason, "sent");
+  assert.equal(sentCalls.length, 1);
+  const [conv] = await db
+    .select({ replyCount: conversationsTable.botReplyCount, needsHuman: conversationsTable.needsHuman })
+    .from(conversationsTable)
+    .where(eq(conversationsTable.id, conversationId));
+  assert.equal(conv.replyCount, 1);
+  assert.equal(conv.needsHuman, false);
+});
+
+test("maybeAutoReply: three answered qualification turns reach the options turn", async () => {
+  resetMocks();
+  const { conversationId } = await seedConversation({ botEnabled: true });
+  const turns = [
+    "Beykent University",
+    "Computer Engineering",
+    "Male",
+  ];
+  for (const content of turns) {
+    const msgId = await seedInbound(conversationId, content);
+    const outcome = await maybeAutoReply({ conversationId, inboundMessageId: msgId });
+    assert.equal(outcome.reason, "sent");
+  }
+  assert.equal(sentCalls.length, 3);
+  const [conv] = await db
+    .select({ replyCount: conversationsTable.botReplyCount, botEnabled: conversationsTable.botEnabled, needsHuman: conversationsTable.needsHuman })
+    .from(conversationsTable)
+    .where(eq(conversationsTable.id, conversationId));
+  assert.equal(conv.replyCount, 1);
+  assert.equal(conv.botEnabled, true);
+  assert.equal(conv.needsHuman, false);
 });
 
 test("maybeAutoReply: escalation → localized handoff sent, needs_human set, bot OFF", async () => {

@@ -21,7 +21,12 @@ export interface ZernioTemplateComponent {
   type: string;
   text?: string;
   format?: string;
+  example?: Record<string, unknown>;
   buttons?: Array<Record<string, any>>;
+}
+
+export interface ZernioQuickReplyButton {
+  text: string;
 }
 
 export interface NormalizedZernioTemplate {
@@ -221,6 +226,8 @@ export interface ZernioTemplateCreateParams {
   category?: string;
   bodyText?: string;
   footerText?: string;
+  bodyExamples?: string[];
+  quickReplyButtons?: ZernioQuickReplyButton[];
   libraryTemplateName?: string;
 }
 
@@ -231,6 +238,36 @@ export interface ZernioTemplateCreateOutcome {
   raw?: any;
 }
 
+export function buildZernioTemplateComponents(
+  params: Pick<
+    ZernioTemplateCreateParams,
+    "mode" | "bodyText" | "footerText" | "bodyExamples" | "quickReplyButtons"
+  >,
+): ZernioTemplateComponent[] {
+  if (params.mode !== "custom") return [];
+
+  const components: ZernioTemplateComponent[] = [];
+  const bodyComponent: ZernioTemplateComponent = {
+    type: "BODY",
+    text: params.bodyText || "",
+  };
+  if (params.bodyExamples?.length) {
+    bodyComponent.example = { body_text: [params.bodyExamples] };
+  }
+  components.push(bodyComponent);
+  if (params.footerText) components.push({ type: "FOOTER", text: params.footerText });
+  if (params.quickReplyButtons?.length) {
+    components.push({
+      type: "BUTTONS",
+      buttons: params.quickReplyButtons.map((button) => ({
+        type: "QUICK_REPLY",
+        text: button.text,
+      })),
+    });
+  }
+  return components;
+}
+
 export async function createZernioWhatsAppTemplate(
   params: ZernioTemplateCreateParams,
 ): Promise<ZernioTemplateCreateOutcome> {
@@ -239,11 +276,7 @@ export async function createZernioWhatsAppTemplate(
 
   // Correct endpoint: POST /v1/whatsapp/templates
   const url = `${ZERNIO_BASE}/templates`;
-  const components: ZernioTemplateComponent[] = [];
-  if (params.mode === "custom") {
-    components.push({ type: "body", text: params.bodyText || "" });
-    if (params.footerText) components.push({ type: "footer", text: params.footerText });
-  }
+  const components = buildZernioTemplateComponents(params);
 
   // WhatsApp template names: lowercase alphanumeric + underscores only.
   const normalizedName = params.name.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");

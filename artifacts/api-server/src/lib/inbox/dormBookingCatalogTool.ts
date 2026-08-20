@@ -13,6 +13,15 @@ export const searchDormBookingCatalogToolDefinition = {
     type: "object" as const,
     properties: {
       query: { type: "string", description: "Student need or exact dormitory/room query" },
+      orderBy: {
+        type: "string",
+        enum: ["relevance", "min_price_asc"],
+        description: "Use min_price_asc when the student asks for cheapest, affordable, budget or price-ordered options",
+      },
+      includeUnpriced: {
+        type: "boolean",
+        description: "Include dorms without a published amount; they are always listed after priced dorms",
+      },
     },
     required: ["query"],
     additionalProperties: false,
@@ -36,62 +45,81 @@ export async function executeDormBookingCatalogTool(
   input: unknown,
   aiBotId?: number | null,
 ): Promise<{
+  listings: Array<{
+    dormId: number;
+    dormName: string;
+    city: string;
+    genderEligibility: string;
+    nearbyUniversities: string[];
+    minPrice: number | null;
+    currency: string;
+    feePeriod: string;
+    roomType: string;
+    contractStart: string;
+    contractEnd: string;
+    sourceUrl: string;
+  }>;
   matches: Array<{ source: string; content: string }>;
-  costRecords: Array<Record<string, unknown>>;
   authoritative: true;
 }> {
-  const query = input && typeof input === "object" && typeof (input as { query?: unknown }).query === "string"
-    ? (input as { query: string }).query.trim()
+  const request = input && typeof input === "object" ? input as Record<string, unknown> : {};
+  const query = typeof request.query === "string"
+    ? request.query.trim()
     : "";
   if (!query || !(await isDormBookingCatalogToolEnabled(aiBotId))) {
-    const empty = { matches: [], costRecords: [], authoritative: true as const };
-    traceCatalogCall({ query, aiBotId, result: empty });
-    return empty;
+    return { listings: [], matches: [], authoritative: true };
   }
   const chunks = await retrieveKnowledgeChunks(query, {
     aiBotId,
     sourceTypes: ["dormbooking"],
   });
   const campusGuidance = resolveDormBookingCampusGuidance(query);
-  const matches = [
-    ...(campusGuidance ? [{ source: "DormBooking verified campus routing table", content: campusGuidance }] : []),
-    ...chunks.map((chunk) => ({ source: chunk.sourceName, content: chunk.content })),
-  ];
-  const costRecords = matches.flatMap((match) => {
-    const records: Array<Record<string, unknown>> = [];
-    for (const found of match.content.matchAll(/CATALOG COST JSON:\s*(\{[^\n]+\})/g)) {
-      try {
-        const value = JSON.parse(found[1]);
-        if (value && typeof value === "object") records.push(value as Record<string, unknown>);
-      } catch {
-        // A malformed upstream record remains in the text for diagnosis but
-        // is never presented as a structured price record.
-      }
+  const byDorm = new Map<number, (typeof chunks)[number]>();
+  for (const chunk of chunks) {
+    const dormId = Number(chunk.metadata.dormBookingDormId);
+    if (Number.isInteger(dormId) && dormId > 0 && !byDorm.has(dormId)) {
+      byDorm.set(dormId, chunk);
     }
-    return records;
-  });
-  const result = {
+  }
+  const includeUnpriced = request.includeUnpriced === true;
+  const priceIntent = request.orderBy === "min_price_asc"
+    || /cheap|cheapest|affordable|budget|lowest|price|cost|ucuz|bütçe|fiyat/i.test(query);
+  const listings = [...byDorm.values()]
+    .map((chunk) => {
+      const metadata = chunk.metadata;
+      const amount = Number(metadata.dormBookingMinPrice);
+      const minPrice = Number.isFinite(amount) ? amount : null;
+      return {
+        dormId: Number(metadata.dormBookingDormId),
+        dormName: String(metadata.dormBookingDormName ?? ""),
+        city: String(metadata.dormBookingCity ?? ""),
+        genderEligibility: String(metadata.dormBookingGenderEligibility ?? ""),
+        nearbyUniversities: Array.isArray(metadata.dormBookingNearbyUniversities)
+          ? metadata.dormBookingNearbyUniversities.map(String)
+          : [],
+        minPrice,
+        currency: String(metadata.dormBookingMinPriceCurrency ?? ""),
+        feePeriod: String(metadata.dormBookingMinPriceFeePeriod ?? ""),
+        roomType: String(metadata.dormBookingMinPriceRoomType ?? ""),
+        contractStart: String(metadata.dormBookingContractStart ?? ""),
+        contractEnd: String(metadata.dormBookingContractEnd ?? ""),
+        sourceUrl: String(metadata.sourceUrl ?? ""),
+      };
+    })
+    .filter((listing) => listing.dormName && (!priceIntent || includeUnpriced || listing.minPrice !== null))
+    .sort((a, b) => {
+      if (!priceIntent) return 0;
+      if (a.minPrice === null && b.minPrice === null) return a.dormName.localeCompare(b.dormName, "en");
+      if (a.minPrice === null) return 1;
+      if (b.minPrice === null) return -1;
+      return a.minPrice - b.minPrice || a.dormName.localeCompare(b.dormName, "en");
+    });
+  return {
+    listings,
     matches: [
-      ...matches,
+      ...(campusGuidance ? [{ source: "DormBooking verified campus routing table", content: campusGuidance }] : []),
+      ...chunks.map((chunk) => ({ source: chunk.sourceName, content: chunk.content })),
     ],
-    costRecords,
-    authoritative: true as const,
+    authoritative: true,
   };
-  traceCatalogCall({ query, aiBotId, result });
-  return result;
-}
-
-function traceCatalogCall(input: { query: string; aiBotId?: number | null; result: unknown }): void {
-  const until = Date.parse(process.env.DORMBOOKING_CATALOG_TRACE_UNTIL ?? "");
-  if (!Number.isFinite(until) || Date.now() > until) return;
-  const serialized = JSON.stringify({
-    event: "dormbooking_catalog_tool",
-    at: new Date().toISOString(),
-    aiBotId: input.aiBotId ?? null,
-    arguments: { query: input.query.slice(0, 500) },
-    rawResponse: input.result,
-  });
-  // Keep a single call from flooding logs while retaining enough raw catalog
-  // output to diagnose absent fields during the temporary trace window.
-  console.info(serialized.slice(0, 100_000));
 }

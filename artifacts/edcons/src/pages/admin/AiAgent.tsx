@@ -82,6 +82,19 @@ type AiAgentModelOption = {
   current: boolean;
 };
 
+type AiAgentMetrics = {
+  days: number;
+  handoffs: { total: number; byReason: Record<string, number>; byDay: Record<string, number> };
+  promptCache: {
+    inputTokens: number;
+    outputTokens: number;
+    cacheCreationInputTokens: number;
+    cacheReadInputTokens: number;
+    hitRate: number;
+  };
+  outputValidation: { retries: number };
+};
+
 type AiBotSummary = {
   id: number;
   name: string;
@@ -135,6 +148,8 @@ export default function AiAgent() {
   const [modelOptions, setModelOptions] = useState<AiAgentModelOption[]>([]);
   const [modelsLoading, setModelsLoading] = useState(true);
   const [modelsFallback, setModelsFallback] = useState(false);
+  const [metrics, setMetrics] = useState<AiAgentMetrics | null>(null);
+  const [metricsLoading, setMetricsLoading] = useState(false);
 
   // Knowledge Sources — program_scope (FAZ 1 scaffold).
   const [programScopeSource, setProgramScopeSource] =
@@ -248,6 +263,21 @@ export default function AiAgent() {
     }
   }, []);
 
+  const loadMetrics = useCallback(async () => {
+    if (!selectedBotId) return;
+    setMetricsLoading(true);
+    try {
+      const result = await customFetch<{ metrics: AiAgentMetrics }>(
+        `/api/inbox/ai-agent/metrics?aiBotId=${selectedBotId}&days=30`,
+      );
+      setMetrics(result.metrics);
+    } catch {
+      setMetrics(null);
+    } finally {
+      setMetricsLoading(false);
+    }
+  }, [selectedBotId]);
+
   useEffect(() => {
     loadBots();
     loadModels();
@@ -261,7 +291,8 @@ export default function AiAgent() {
     setTestHistory([]);
     load();
     loadProgramScope();
-  }, [load, loadProgramScope, selectedBotId]);
+    loadMetrics();
+  }, [load, loadMetrics, loadProgramScope, selectedBotId]);
 
   const patch = (p: Partial<AiAgentConfig>) =>
     setConfig((prev) => (prev ? { ...prev, ...p } : prev));
@@ -662,6 +693,48 @@ export default function AiAgent() {
               </Button>
             </div>
           </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <CardTitle className="text-base">{t("aiAgentAdmin.metrics.title")}</CardTitle>
+              <CardDescription>{t("aiAgentAdmin.metrics.description")}</CardDescription>
+            </div>
+            <Button type="button" variant="outline" size="sm" onClick={loadMetrics} disabled={metricsLoading}>
+              <RefreshCw className={`mr-2 h-4 w-4 ${metricsLoading ? "animate-spin" : ""}`} />
+              {t("aiAgentAdmin.metrics.refresh")}
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid gap-3 sm:grid-cols-3">
+            <div className="rounded-lg border p-3">
+              <p className="text-xs text-muted-foreground">{t("aiAgentAdmin.metrics.handoffs")}</p>
+              <p className="mt-1 text-2xl font-semibold">{metrics?.handoffs.total ?? "—"}</p>
+            </div>
+            <div className="rounded-lg border p-3">
+              <p className="text-xs text-muted-foreground">{t("aiAgentAdmin.metrics.cacheHitRate")}</p>
+              <p className="mt-1 text-2xl font-semibold">
+                {metrics ? `${(metrics.promptCache.hitRate * 100).toFixed(1)}%` : "—"}
+              </p>
+            </div>
+            <div className="rounded-lg border p-3">
+              <p className="text-xs text-muted-foreground">{t("aiAgentAdmin.metrics.validationRetries")}</p>
+              <p className="mt-1 text-2xl font-semibold">{metrics?.outputValidation.retries ?? "—"}</p>
+            </div>
+          </div>
+          {metrics && Object.keys(metrics.handoffs.byReason).length > 0 ? (
+            <div className="flex flex-wrap gap-2">
+              {Object.entries(metrics.handoffs.byReason)
+                .sort((a, b) => b[1] - a[1])
+                .map(([reason, count]) => <Badge key={reason} variant="secondary">{reason}: {count}</Badge>)}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">{t("aiAgentAdmin.metrics.noHandoffs")}</p>
+          )}
         </CardContent>
       </Card>
 

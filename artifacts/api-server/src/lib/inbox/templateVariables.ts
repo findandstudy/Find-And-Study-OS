@@ -4,6 +4,7 @@ export type MessageTemplateVariableKey =
   | "lastName"
   | "programName"
   | "universityName"
+  | "deadline"
   | "level"
   | "intake";
 
@@ -28,6 +29,7 @@ export interface MessageTemplateContextSources {
   application?: {
     programName?: string | null;
     universityName?: string | null;
+    deadline?: string | null;
     level?: string | null;
     intake?: string | null;
   } | null;
@@ -43,6 +45,10 @@ const VARIABLE_ALIASES: Record<string, MessageTemplateVariableKey> = {
   programname: "programName",
   university: "universityName",
   universityname: "universityName",
+  deadline: "deadline",
+  offerdeadline: "deadline",
+  offerletterdeadline: "deadline",
+  paymentdeadline: "deadline",
   level: "level",
   studylevel: "level",
   intake: "intake",
@@ -92,6 +98,7 @@ export function buildMessageTemplateVariableContext(
     universityName:
       cleanContextValue(application?.universityName) ??
       cleanContextValue(lead?.interestedUniversity),
+    deadline: cleanContextValue(application?.deadline),
     level:
       cleanContextValue(application?.level) ??
       cleanContextValue(student?.interestedLevel) ??

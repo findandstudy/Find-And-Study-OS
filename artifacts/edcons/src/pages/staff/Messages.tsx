@@ -4790,6 +4790,21 @@ const TEMPLATE_LANGUAGES = [
   { value: "zh", label: "中文" },
 ];
 
+const WHATSAPP_TEMPLATE_VARIABLES = [
+  { value: "studentName", labelKey: "messagesPage.variableStudentName" },
+  { value: "firstName", labelKey: "messagesPage.variableFirstName" },
+  { value: "lastName", labelKey: "messagesPage.variableLastName" },
+  { value: "universityName", labelKey: "messagesPage.variableUniversityName" },
+  { value: "programName", labelKey: "messagesPage.variableProgramName" },
+  { value: "deadline", labelKey: "messagesPage.variableDeadline" },
+  { value: "level", labelKey: "messagesPage.variableLevel" },
+  { value: "intake", labelKey: "messagesPage.variableIntake" },
+] as const;
+
+function whatsappTemplateVariableCount(body: string): number {
+  return new Set(Array.from(body.matchAll(/\{\{\s*(\d+)\s*\}\}/g), (match) => match[1])).size;
+}
+
 interface Template {
   id: number;
   name: string;
@@ -4841,7 +4856,23 @@ function TemplatesTab() {
   const [waCategory, setWaCategory] = useState("utility");
   const [waBodyText, setWaBodyText] = useState("");
   const [waFooterText, setWaFooterText] = useState("");
+  const [waVariableMappings, setWaVariableMappings] = useState<string[]>([]);
+  const [waVariableExamples, setWaVariableExamples] = useState<string[]>([]);
+  const [waQuickReplies, setWaQuickReplies] = useState<string[]>([]);
   const [waLibraryName, setWaLibraryName] = useState("");
+  const waVariableCount = useMemo(
+    () => whatsappTemplateVariableCount(waBodyText),
+    [waBodyText],
+  );
+
+  useEffect(() => {
+    setWaVariableMappings((current) =>
+      Array.from({ length: waVariableCount }, (_, index) => current[index] || ""),
+    );
+    setWaVariableExamples((current) =>
+      Array.from({ length: waVariableCount }, (_, index) => current[index] || ""),
+    );
+  }, [waVariableCount]);
 
   const fetchTemplates = useCallback(async () => {
     try {
@@ -4882,6 +4913,9 @@ function TemplatesTab() {
     setWaCategory("utility");
     setWaBodyText("");
     setWaFooterText("");
+    setWaVariableMappings([]);
+    setWaVariableExamples([]);
+    setWaQuickReplies([]);
     setWaLibraryName("");
     setWaTplOpen(true);
   }
@@ -4915,6 +4949,18 @@ function TemplatesTab() {
       toast({ title: tx("messagesPage.nameAndContentRequired"), variant: "destructive" });
       return;
     }
+    if (
+      waMode === "custom" &&
+      waVariableCount > 0 &&
+      (waVariableMappings.some((value) => !value) || waVariableExamples.some((value) => !value.trim()))
+    ) {
+      toast({ title: tx("messagesPage.variableMappingRequired"), variant: "destructive" });
+      return;
+    }
+    if (waQuickReplies.some((value) => value.trim().length > 25)) {
+      toast({ title: tx("messagesPage.quickReplyTooLong"), variant: "destructive" });
+      return;
+    }
     setWaSaving(true);
     try {
       await customFetch("/api/inbox/whatsapp-templates", {
@@ -4927,6 +4973,11 @@ function TemplatesTab() {
           category: waCategory,
           bodyText: waMode === "custom" ? waBodyText.trim() : undefined,
           footerText: waMode === "custom" ? (waFooterText.trim() || undefined) : undefined,
+          variableMappings: waMode === "custom" ? waVariableMappings : undefined,
+          bodyExamples: waMode === "custom" ? waVariableExamples.map((value) => value.trim()) : undefined,
+          quickReplyButtons: waMode === "custom"
+            ? waQuickReplies.map((text) => ({ text: text.trim() })).filter((button) => button.text)
+            : undefined,
           libraryTemplateName: waMode === "library" ? waLibraryName.trim() : undefined,
         }),
       });
@@ -5346,7 +5397,7 @@ function TemplatesTab() {
       </Card>
 
       <Dialog open={waTplOpen} onOpenChange={setWaTplOpen}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <FileText className="w-5 h-5 text-primary" /> {tx("messagesPage.newWhatsappTemplate")}
@@ -5401,9 +5452,105 @@ function TemplatesTab() {
                   </div>
                   <Textarea value={waBodyText} onChange={e => setWaBodyText(e.target.value)} rows={5} className="rounded-xl font-mono text-sm" />
                 </div>
+                {waVariableCount > 0 && (
+                  <div className="space-y-3 rounded-xl border bg-muted/20 p-3">
+                    <div>
+                      <Label>{tx("messagesPage.variableMappings")}</Label>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {tx("messagesPage.variableMappingsDesc")}
+                      </p>
+                    </div>
+                    {Array.from({ length: waVariableCount }, (_, index) => (
+                      <div key={index} className="grid grid-cols-1 gap-2 sm:grid-cols-[110px_1fr_1fr] sm:items-end">
+                        <Label className="pb-2 font-mono">{`{{${index + 1}}}`}</Label>
+                        <div className="space-y-1">
+                          <Label className="text-xs">{tx("messagesPage.crmField")}</Label>
+                          <Select
+                            value={waVariableMappings[index] || undefined}
+                            onValueChange={(value) => setWaVariableMappings((current) => {
+                              const next = [...current];
+                              next[index] = value;
+                              return next;
+                            })}
+                          >
+                            <SelectTrigger className="rounded-xl"><SelectValue placeholder={tx("messagesPage.selectCrmField")} /></SelectTrigger>
+                            <SelectContent>
+                              {WHATSAPP_TEMPLATE_VARIABLES.map((option) => (
+                                <SelectItem key={option.value} value={option.value}>
+                                  {tx(option.labelKey)}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-xs">{tx("messagesPage.metaReviewExample")}</Label>
+                          <Input
+                            value={waVariableExamples[index] || ""}
+                            onChange={(event) => setWaVariableExamples((current) => {
+                              const next = [...current];
+                              next[index] = event.target.value;
+                              return next;
+                            })}
+                            placeholder={tx("messagesPage.metaReviewExamplePlaceholder")}
+                            className="rounded-xl"
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
                 <div className="space-y-2">
                   <Label>{tx("messagesPage.waFooterOptional")}</Label>
                   <Input value={waFooterText} onChange={e => setWaFooterText(e.target.value)} className="rounded-xl" />
+                </div>
+                <div className="space-y-2 rounded-xl border bg-muted/20 p-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <Label>{tx("messagesPage.quickReplyButtons")}</Label>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {tx("messagesPage.quickReplyButtonsDesc")}
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={waQuickReplies.length >= 3}
+                      onClick={() => setWaQuickReplies((current) => [...current, ""])}
+                      className="shrink-0 rounded-lg gap-1"
+                    >
+                      <Plus className="h-3.5 w-3.5" /> {tx("messagesPage.addQuickReply")}
+                    </Button>
+                  </div>
+                  {waQuickReplies.map((reply, index) => (
+                    <div key={index} className="flex items-center gap-2">
+                      <Input
+                        value={reply}
+                        maxLength={25}
+                        onChange={(event) => setWaQuickReplies((current) => {
+                          const next = [...current];
+                          next[index] = event.target.value;
+                          return next;
+                        })}
+                        placeholder={tx("messagesPage.quickReplyPlaceholder")}
+                        className="rounded-xl"
+                      />
+                      <span className="w-10 shrink-0 text-right text-[10px] text-muted-foreground">
+                        {reply.length}/25
+                      </span>
+                      <Button
+                        type="button"
+                        size="icon"
+                        variant="ghost"
+                        onClick={() => setWaQuickReplies((current) => current.filter((_, replyIndex) => replyIndex !== index))}
+                        className="shrink-0 text-muted-foreground hover:text-destructive"
+                        aria-label={tx("messagesPage.removeQuickReply")}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ))}
                 </div>
               </>
             ) : (
