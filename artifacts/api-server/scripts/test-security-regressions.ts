@@ -40,6 +40,30 @@ const objectAuthzSource = readFileSync(
   new URL("../src/lib/objectAuthz.ts", import.meta.url),
   "utf8",
 );
+const objectStorageSource = readFileSync(
+  new URL("../src/lib/objectStorage.ts", import.meta.url),
+  "utf8",
+);
+const aiAgentConfigSource = readFileSync(
+  new URL("../src/lib/inbox/aiAgentConfig.ts", import.meta.url),
+  "utf8",
+);
+const botAutoReplySource = readFileSync(
+  new URL("../src/lib/inbox/botAutoReply.ts", import.meta.url),
+  "utf8",
+);
+const aiBotsRouteSource = readFileSync(
+  new URL("../src/routes/aiBots.ts", import.meta.url),
+  "utf8",
+);
+const dormBookingFollowupSource = readFileSync(
+  new URL("../src/lib/inbox/dormBookingFollowupWorker.ts", import.meta.url),
+  "utf8",
+);
+const publicObjectResolverSource = objectStorageSource.slice(
+  objectStorageSource.indexOf("async searchPublicObject"),
+  objectStorageSource.indexOf("// ── downloadObject"),
+);
 const emailVerificationSource = readFileSync(
   new URL("../src/lib/emailVerificationToken.ts", import.meta.url),
   "utf8",
@@ -208,6 +232,31 @@ test("local uploads are owner-bound, fail closed, and bounded before buffering",
   assert.doesNotMatch(storageRouteSource, /processUpload failed, storing original/);
   assert.match(objectAuthzSource, /recordObjectOwner[\s\S]*Promise<boolean>/);
   assert.match(objectAuthzSource, /failed to record object owner:[\s\S]*return false/);
+});
+
+test("local public-object lookup cannot fall through to the private namespace", () => {
+  assert.match(
+    publicObjectResolverSource,
+    /resolveExistingLocalPath\(nodePath\.posix\.join\("public", filePath\)\)/,
+  );
+  assert.doesNotMatch(publicObjectResolverSource, /resolveExistingLocalPath\(filePath\)/);
+  assert.match(objectStorageSource, /writeLocalObjectBuffer[\s\S]*mode: 0o700/);
+  assert.match(objectStorageSource, /writeLocalObjectBuffer[\s\S]*mode: 0o600/);
+  assert.match(storageRouteSource, /writeLocalObjectBuffer\(relPath, body, finalContentType\)/);
+  assert.doesNotMatch(storageRouteSource, /fsPromises\.writeFile\(localPath/);
+});
+
+test("external AI delivery fails closed and activation requires Super Admin", () => {
+  assert.match(aiAgentConfigSource, /externalAutoReplyEnabled: false/);
+  assert.match(aiAgentConfigSource, /aiAgentPatchRequiresSuperAdmin/);
+  assert.match(aiAgentConfigSource, /AI_EXTERNAL_AUTO_REPLY_KILL_SWITCH/);
+  assert.match(botAutoReplySource, /isExternalAutoReplyEmergencyStopped/);
+  assert.match(botAutoReplySource, /reason: "external_delivery_disabled"/);
+  assert.match(botAutoReplySource, /getExternalAiDeliveryBlockReason/);
+  assert.match(aiBotsRouteSource, /req\.user!\.role !== "super_admin"/);
+  assert.match(aiBotsRouteSource, /externalAutoReplyEnabled: false/);
+  assert.match(dormBookingFollowupSource, /!config\.externalAutoReplyEnabled/);
+  assert.match(dormBookingFollowupSource, /isExternalAutoReplyEmergencyStopped/);
 });
 
 test("email verification links are random, hashed, expiring, and one-time", () => {
