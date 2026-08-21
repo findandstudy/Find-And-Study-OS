@@ -1268,7 +1268,28 @@
       "existingStudentLinked": "Mevcut öğrenci profili bu sohbete bağlandı",
       "studentCreatedWithDocs": "Öğrenci oluşturuldu — {count} belge profile kaydedildi",
       "programPendingNote": "Program seçilince liste güncellenecek",
-      "programScopedNote": "{name} için gereksinimler"
+      "programScopedNote": "{name} için gereksinimler",
+      "applicationIntake": {
+        "title": "AI başvuru toplama süreci",
+        "identity": "Kimlik",
+        "documents": "Belgeler",
+        "profile": "Profil",
+        "reviewRequired": "İnsan kontrolü gerekiyor",
+        "createStudent": "Öğrenciyi güvenli oluştur",
+        "createApplication": "Başvuruyu güvenli oluştur",
+        "actionsDisabled": "Bu kontrollü adım için yerel AI başvuru işlemlerini etkinleştirin.",
+        "executed": "AI başvuru işlemi tamamlandı",
+        "executeFailed": "AI başvuru işlemi başarısız",
+        "phases": {
+          "collecting_identity": "Kimlik bilgileri toplanıyor",
+          "collecting_documents": "Belgeler toplanıyor",
+          "collecting_profile": "Profil tamamlanıyor",
+          "ready_for_student": "Öğrenci oluşturmaya hazır",
+          "ready_for_application": "Başvuru oluşturmaya hazır",
+          "application_created": "Başvuru oluşturuldu",
+          "needs_review": "Kontrol gerekiyor"
+        }
+      }
     },
     "applicationTab": {
       "noStudent": "Birştirilmiş öğrenci yok",

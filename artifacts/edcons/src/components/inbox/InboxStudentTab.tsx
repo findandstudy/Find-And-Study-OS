@@ -35,6 +35,7 @@ import {
   Trash2,
   Upload,
   ClipboardPaste,
+  Sparkles,
   X as XIcon,
 } from "lucide-react";
 import { inboxDocumentLabel } from "./documentPresentation";
@@ -78,6 +79,20 @@ interface PersistedDocument {
   name?: string | null;
   fileName?: string | null;
   sourceAttachmentId?: string | null;
+}
+
+interface ApplicationIntakeStateResponse {
+  enabled: boolean;
+  state: null | {
+    phase: string;
+    missingIdentityFields: string[];
+    missingProfileFields: string[];
+    missingDocumentGroups: string[];
+    pendingAction: "create_student" | "create_application" | null;
+    reviewReason: string | null;
+    studentId: number | null;
+    applicationId: number | null;
+  };
 }
 
 // ── Icon map ──────────────────────────────────────────────────────────────────
@@ -286,6 +301,22 @@ export function InboxStudentTab({
   const manualFileInputRef = useRef<HTMLInputElement | null>(null);
   // extracting state for analyze button
   const [extracting, setExtracting] = useState(false);
+  const [executingIntake, setExecutingIntake] = useState(false);
+
+  const latestMessageId = useMemo(() => {
+    const messages = (detail as any).messages as Array<{ id?: number }> | undefined;
+    return messages?.reduce((latest, message) => Math.max(latest, message.id ?? 0), 0) ?? 0;
+  }, [detail]);
+  const {
+    data: intakeResponse,
+    refetch: refetchIntake,
+  } = useQuery<ApplicationIntakeStateResponse>({
+    queryKey: ["inbox-application-intake", conversationId, latestMessageId],
+    queryFn: () => customFetch(`/api/inbox/conversations/${conversationId}/application-intake`),
+    enabled: Number.isInteger(conversationId) && conversationId > 0,
+    staleTime: 5_000,
+  });
+  const intakeState = intakeResponse?.state ?? null;
 
   // ── Backend docs — pre-populate staging for persistence across reloads ───────
   const leadId = (detail as any).lead?.id as number | undefined;
@@ -587,6 +618,27 @@ export function InboxStudentTab({
     }
   }
 
+  async function handleExecuteIntakeAction() {
+    if (!intakeState?.pendingAction || executingIntake || !intakeResponse?.enabled) return;
+    setExecutingIntake(true);
+    try {
+      await customFetch(`/api/inbox/conversations/${conversationId}/application-intake/execute`, {
+        method: "POST",
+      });
+      await Promise.all([refetchIntake(), refetchBackendDocs()]);
+      onUpdated?.();
+      toast({ title: t("inbox.studentTab.applicationIntake.executed") });
+    } catch (error) {
+      toast({
+        title: t("inbox.studentTab.applicationIntake.executeFailed"),
+        description: error instanceof Error ? error.message : undefined,
+        variant: "destructive",
+      });
+    } finally {
+      setExecutingIntake(false);
+    }
+  }
+
   async function handleAnalyzeAndCreate() {
     if (docReqsLoading || docReqsError) {
       toast({
@@ -757,6 +809,73 @@ export function InboxStudentTab({
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
+      {intakeState && (
+        <div className="shrink-0 border-b bg-primary/[0.03] px-3 py-3" data-testid="ai-application-intake-state">
+          <div className="flex items-start gap-2">
+            <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-xs font-semibold">
+                  {t("inbox.studentTab.applicationIntake.title")}
+                </p>
+                <span className="rounded-full border bg-background px-2 py-0.5 text-[10px] text-muted-foreground">
+                  {t(`inbox.studentTab.applicationIntake.phases.${intakeState.phase}`)}
+                </span>
+              </div>
+              <div className="mt-2 grid grid-cols-3 gap-1 text-center">
+                <div className="rounded-md border bg-background px-1 py-1.5">
+                  <p className="text-sm font-semibold">{intakeState.missingIdentityFields.length}</p>
+                  <p className="text-[9px] text-muted-foreground">
+                    {t("inbox.studentTab.applicationIntake.identity")}
+                  </p>
+                </div>
+                <div className="rounded-md border bg-background px-1 py-1.5">
+                  <p className="text-sm font-semibold">{intakeState.missingDocumentGroups.length}</p>
+                  <p className="text-[9px] text-muted-foreground">
+                    {t("inbox.studentTab.applicationIntake.documents")}
+                  </p>
+                </div>
+                <div className="rounded-md border bg-background px-1 py-1.5">
+                  <p className="text-sm font-semibold">{intakeState.missingProfileFields.length}</p>
+                  <p className="text-[9px] text-muted-foreground">
+                    {t("inbox.studentTab.applicationIntake.profile")}
+                  </p>
+                </div>
+              </div>
+              {intakeState.reviewReason && (
+                <p className="mt-2 text-[10px] text-amber-700">
+                  {t("inbox.studentTab.applicationIntake.reviewRequired")}: {intakeState.reviewReason}
+                </p>
+              )}
+              {intakeState.pendingAction && (
+                <div className="mt-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="h-7 w-full gap-1.5 text-[11px]"
+                    disabled={executingIntake || !intakeResponse?.enabled}
+                    onClick={() => void handleExecuteIntakeAction()}
+                    data-testid="execute-ai-application-intake"
+                  >
+                    {executingIntake && <Loader2 className="h-3 w-3 animate-spin" />}
+                    {t(
+                      intakeState.pendingAction === "create_student"
+                        ? "inbox.studentTab.applicationIntake.createStudent"
+                        : "inbox.studentTab.applicationIntake.createApplication",
+                    )}
+                  </Button>
+                  {!intakeResponse?.enabled && (
+                    <p className="mt-1 text-center text-[9px] text-muted-foreground">
+                      {t("inbox.studentTab.applicationIntake.actionsDisabled")}
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Level selector */}
       <div className="px-3 pt-3 pb-2.5 border-b shrink-0">
         <div className="text-[11px] text-muted-foreground uppercase tracking-wide mb-1.5">

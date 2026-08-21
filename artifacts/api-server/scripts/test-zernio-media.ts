@@ -16,6 +16,7 @@ import {
 
 type FetchCall = { url: string; init?: RequestInit };
 const realFetch = globalThis.fetch;
+const originalAllowLiveIntegrations = process.env.ALLOW_LIVE_INTEGRATIONS;
 let calls: FetchCall[] = [];
 
 function json(status: number, body: unknown): Response {
@@ -27,12 +28,35 @@ function json(status: number, body: unknown): Response {
 
 beforeEach(() => {
   calls = [];
+  process.env.ALLOW_LIVE_INTEGRATIONS = "true";
   __setZernioApiKeyOverrideForTests("test-key");
 });
 
 after(() => {
   __setZernioApiKeyOverrideForTests(null);
   globalThis.fetch = realFetch;
+  if (originalAllowLiveIntegrations === undefined) {
+    delete process.env.ALLOW_LIVE_INTEGRATIONS;
+  } else {
+    process.env.ALLOW_LIVE_INTEGRATIONS = originalAllowLiveIntegrations;
+  }
+});
+
+test("development mode simulates a Zernio send without calling the provider", async () => {
+  process.env.ALLOW_LIVE_INTEGRATIONS = "false";
+  globalThis.fetch = (async () => {
+    assert.fail("local Zernio send must not call fetch");
+  }) as typeof fetch;
+
+  const outcome = await sendViaZernio({
+    externalThreadId: "conv-local",
+    externalAccountId: "acct-local",
+    text: "Local-only test",
+  });
+
+  assert.equal(outcome.ok, true);
+  assert.equal(outcome.simulated, true);
+  assert.match(outcome.externalMessageId || "", /^sim_zernio_text_/);
 });
 
 test("voice recordings are delivered as WhatsApp voice notes", async () => {

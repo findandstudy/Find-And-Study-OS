@@ -23,11 +23,17 @@ import { resolveOutboundConfig } from "./channelAccountConfig";
 import { messageTemplatesTable } from "@workspace/db";
 import {
   captureLeadFromConversation,
-  recordInboundDocuments,
+  detectDocType,
+  parseInboundMedia,
   computeMissingDocGroups,
   buildMissingDocsInstruction,
   getAccommodationSlotInstruction,
 } from "./leadCapture";
+import { persistInboundAttachmentAsDocument } from "./inboundDocumentPersistence";
+import {
+  executeApplicationIntakePendingActions,
+  isApplicationIntakeAutoCommitEnabled,
+} from "./applicationIntakeActions";
 import { inboxBus } from "./eventBus";
 import { isAiAgentWithinWorkingHours } from "./botSchedule";
 import {
@@ -58,6 +64,12 @@ import { retrieveKnowledgeChunks } from "./knowledgeRetrieval";
 import { requestsEmbedHumanHandoff } from "../embedChatSession";
 import { normalizeEmbedChatLocale } from "../embedChatI18n";
 import { buildKnownEmbedContactInstruction } from "./embedChatIdentityPrompt";
+import {
+  buildApplicationIntakeInstruction,
+  expectedApplicationDocumentType,
+  syncApplicationIntakeState,
+  type ApplicationIntakeState,
+} from "./applicationIntakeOrchestrator";
 
 // Faz 2 handoff hook: fire-and-forget so we never delay the webhook response
 // or the bot-reply flow on assignment work. Errors are logged, not thrown.
@@ -257,7 +269,7 @@ export function classifyNonStudentContact(contact: {
 async function loadUnifiedContactHistory(
   contact: typeof externalContactsTable.$inferSelect | null,
   currentConversationId: number,
-): Promise<Array<{ direction: string; content: string; metadata: unknown }>> {
+): Promise<Array<{ id: number; direction: string; content: string; metadata: unknown }>> {
   let conversationIds = [currentConversationId];
   if (contact) {
     const email = contact.email?.trim().toLowerCase() ?? "";
@@ -277,6 +289,7 @@ async function loadUnifiedContactHistory(
     }
   }
   return db.select({
+    id: messagesTable.id,
     direction: messagesTable.direction,
     content: messagesTable.content,
     metadata: messagesTable.metadata,
@@ -817,6 +830,21 @@ export interface AutoReplyOutcome {
   topic?: EscalationTopic;
 }
 
+export function isEligibleInboundBotTrigger(input: {
+  conversationChannel: string;
+  messageDirection: string;
+  content: string | null | undefined;
+  metadata: Record<string, unknown>;
+}): boolean {
+  const isInternal = input.conversationChannel === "internal";
+  const eligibleDirection = isInternal
+    ? input.messageDirection === "internal" && input.metadata.botSent !== true
+    : input.messageDirection === "inbound";
+  if (!eligibleDirection) return false;
+
+  return Boolean(input.content?.trim()) || parseInboundMedia(input.metadata).length > 0;
+}
+
 /**
  * Decide and (when appropriate) send an automatic intake reply for the given
  * inbound message. Safe to call for every inbound — it cheaply short-circuits
@@ -887,11 +915,16 @@ export async function maybeAutoReply(opts: {
   const messageMetadata = msg.metadata && typeof msg.metadata === "object"
     ? msg.metadata as Record<string, unknown>
     : {};
+  const inboundAttachments = parseInboundMedia(messageMetadata);
+  const hasInboundAttachment = inboundAttachments.length > 0;
+  const inboundText = msg.content?.trim() ?? "";
   const isInternal = conv.channel === "internal";
-  const eligibleDirection = isInternal
-    ? msg.direction === "internal" && messageMetadata.botSent !== true
-    : msg.direction === "inbound";
-  if (!eligibleDirection || !msg.content || !msg.content.trim()) {
+  if (!isEligibleInboundBotTrigger({
+    conversationChannel: conv.channel,
+    messageDirection: msg.direction,
+    content: msg.content,
+    metadata: messageMetadata,
+  })) {
     return { acted: false, reason: "not_inbound_text" };
   }
 
@@ -899,7 +932,7 @@ export async function maybeAutoReply(opts: {
     ? conv.metadata as Record<string, unknown>
     : {};
   const languageState = resolveConversationLanguage(
-    msg.content,
+    inboundText,
     conversationMetadata,
     contact?.phoneE164 || contact?.phone,
   );
@@ -998,6 +1031,7 @@ export async function maybeAutoReply(opts: {
   let captureLeadId: number | null = null;
   let captureStudentId: number | null = null;
   let captureLevel: string | null = null;
+  let applicationIntakeState: ApplicationIntakeState | null = null;
   if (!isInternal) {
     try {
       const capture = await captureLeadFromConversation({ conversationId });
@@ -1005,11 +1039,58 @@ export async function maybeAutoReply(opts: {
       captureStudentId = capture.studentId;
       captureLevel = capture.level;
       if (!isDormBookingAgent) {
-        await recordInboundDocuments({
-          metadata: msg.metadata,
-          leadId: capture.leadId,
-          studentId: capture.studentId,
+        const expectedType = expectedApplicationDocumentType(conversationMetadata);
+        const ownerType = capture.studentId ? "student" : capture.leadId ? "lead" : null;
+        const ownerId = capture.studentId ?? capture.leadId;
+        if (ownerType && ownerId) {
+          const attachments = inboundAttachments;
+          for (const [attachmentIndex, attachment] of attachments.entries()) {
+            // A single-file message often says "here is my passport" while
+            // WhatsApp supplies only a generic image filename. Use that text
+            // as classification context only when it cannot be confused with
+            // another attachment in the same message.
+            const contextualCaption = attachment.caption
+              ?? (attachments.length === 1 ? msg.content : null);
+            const detectedType = detectDocType(attachment.filename, contextualCaption);
+            const documentType = detectedType === "other_certificates_documents"
+              ? attachmentIndex === 0 ? expectedType : null
+              : detectedType;
+            // A generic attachment without a currently requested slot is
+            // ambiguous. Leave it staged in the message for staff rather than
+            // silently filing it under the wrong document type.
+            if (!documentType) continue;
+            try {
+              await persistInboundAttachmentAsDocument({
+                conversationId,
+                messageId: inboundMessageId,
+                attachmentIndex,
+                ownerType,
+                ownerId,
+                documentType,
+              });
+            } catch (error) {
+              console.error(
+                `[bot] inbound document persistence failed conversation=${conversationId} message=${inboundMessageId} attachment=${attachmentIndex}:`,
+                error,
+              );
+            }
+          }
+        }
+        applicationIntakeState = await syncApplicationIntakeState({
+          conversationId,
+          inboundMessageId,
+          capture,
         });
+        if (
+          isApplicationIntakeAutoCommitEnabled()
+          && applicationIntakeState.pendingAction
+        ) {
+          const executed = await executeApplicationIntakePendingActions({
+            conversationId,
+            inboundMessageId,
+          });
+          applicationIntakeState = executed.state;
+        }
       }
     } catch (err) {
       console.error("[bot] lead capture failed:", err);
@@ -1296,8 +1377,12 @@ export async function maybeAutoReply(opts: {
           studentId: captureStudentId,
           level: captureLevel,
         });
-        const docInstruction = buildMissingDocsInstruction(missing);
-        if (docInstruction) runtimeContext = `${runtimeContext}\n\n${docInstruction}`;
+        if (applicationIntakeState) {
+          runtimeContext = `${runtimeContext}\n\n${buildApplicationIntakeInstruction(applicationIntakeState)}`;
+        } else {
+          const docInstruction = buildMissingDocsInstruction(missing);
+          if (docInstruction) runtimeContext = `${runtimeContext}\n\n${docInstruction}`;
+        }
       }
     } catch (err) {
       console.error("[bot] missing-doc computation failed:", err);
@@ -1319,7 +1404,12 @@ export async function maybeAutoReply(opts: {
   const generationUsage: BotGenerationUsage[] = [];
   const catalogNames = new Set<string>();
   const modelMessages = history.map((m) => {
-    if (!isInternal) return { direction: m.direction, content: m.content };
+    if (!isInternal) {
+      const content = m.id === inboundMessageId && !m.content.trim() && hasInboundAttachment
+        ? "[attachment received]"
+        : m.content;
+      return { direction: m.direction, content };
+    }
     const metadata = m.metadata && typeof m.metadata === "object"
       ? m.metadata as Record<string, unknown>
       : {};

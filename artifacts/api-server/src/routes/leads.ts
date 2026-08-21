@@ -1489,7 +1489,22 @@ router.post("/leads/:id/convert", requireAuth, requireRole(...STAFF_ROLES, ...AG
 
   const embedSubmissions = await db.select().from(embedSubmissionsTable).where(eq(embedSubmissionsTable.leadId, lead.id));
   const submission = embedSubmissions.length > 0 ? embedSubmissions[0] : null;
-  const aiData: Record<string, any> = (submission?.aiExtractedData as Record<string, any>) || {};
+  // Admissions facts collected during an AI inbox conversation live in the
+  // Lead's educationData.applicationIntake slot. Merge them into the existing
+  // submission extraction input so the canonical Lead -> Student conversion
+  // fills the same form fields without inventing a second conversion path.
+  // Submission/document extraction remains authoritative when both contain a
+  // value because it is generally backed by an uploaded document.
+  const leadEducationData = lead.educationData && typeof lead.educationData === "object"
+    ? lead.educationData as Record<string, any>
+    : {};
+  const chatIntakeData = leadEducationData.applicationIntake && typeof leadEducationData.applicationIntake === "object"
+    ? leadEducationData.applicationIntake as Record<string, any>
+    : {};
+  const aiData: Record<string, any> = {
+    ...chatIntakeData,
+    ...((submission?.aiExtractedData as Record<string, any>) || {}),
+  };
 
   // A lead is not converted into a student/application until every Mandatory
   // document configured for the selected program + degree is present. The

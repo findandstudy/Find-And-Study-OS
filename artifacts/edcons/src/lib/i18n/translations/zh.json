@@ -1268,7 +1268,28 @@
       "existingStudentLinked": "现有学生档案已关联到此对话",
       "studentCreatedWithDocs": "学生已创建 — {count} 个文件已保存到档案",
       "programPendingNote": "选择专业后列表将更新",
-      "programScopedNote": "{name} 的要求"
+      "programScopedNote": "{name} 的要求",
+      "applicationIntake": {
+        "title": "AI 申请资料收集",
+        "identity": "身份信息",
+        "documents": "文件",
+        "profile": "个人资料",
+        "reviewRequired": "需要人工审核",
+        "createStudent": "安全创建学生",
+        "createApplication": "安全创建申请",
+        "actionsDisabled": "请启用本地 AI 招生操作以执行此受保护步骤。",
+        "executed": "AI 招生操作已完成",
+        "executeFailed": "AI 招生操作失败",
+        "phases": {
+          "collecting_identity": "正在收集身份信息",
+          "collecting_documents": "正在收集文件",
+          "collecting_profile": "正在完善个人资料",
+          "ready_for_student": "可以创建学生",
+          "ready_for_application": "可以创建申请",
+          "application_created": "申请已创建",
+          "needs_review": "需要审核"
+        }
+      }
     },
     "applicationTab": {
       "noStudent": "未关联学生",

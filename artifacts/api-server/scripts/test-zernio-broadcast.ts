@@ -21,6 +21,7 @@ let calls: FetchCall[] = [];
 let responders: Array<(url: string, init?: RequestInit) => Response | null> = [];
 
 const realFetch = globalThis.fetch;
+const originalAllowLiveIntegrations = process.env.ALLOW_LIVE_INTEGRATIONS;
 function mockFetch() {
   globalThis.fetch = (async (input: any, init?: RequestInit) => {
     const url = typeof input === "string" ? input : input.url;
@@ -40,6 +41,7 @@ function json(status: number, body: unknown): Response {
 beforeEach(() => {
   calls = [];
   responders = [];
+  process.env.ALLOW_LIVE_INTEGRATIONS = "true";
   __clearZernioProfileCacheForTests();
   mockFetch();
 });
@@ -150,6 +152,23 @@ test("resolveZernioProfileId supports string profileId and fails closed for an u
 // (variableMapping shape + sent/failed contract) by driving fetch and
 // injecting the key via the test-only override below.
 import { sendZernioTemplate, __setZernioApiKeyOverrideForTests } from "../src/lib/inbox/zernioSend";
+
+test("development mode simulates a template send without creating a broadcast", async () => {
+  process.env.ALLOW_LIVE_INTEGRATIONS = "false";
+  const r = await sendZernioTemplate({
+    externalAccountId: "acct-local",
+    templateName: "welcome",
+    language: "en",
+    toPhoneE164: "+905551112233",
+  });
+
+  assert.equal(r.ok, true);
+  assert.equal(r.simulated, true);
+  assert.equal(r.sent, 1);
+  assert.equal(r.failed, 0);
+  assert.match(r.externalMessageId || "", /^sim_zernio_template_/);
+  assert.equal(calls.length, 0);
+});
 
 test("broadcast flow: create → recipients → send, ok on sent=1", async () => {
   __setZernioApiKeyOverrideForTests("test-key");
@@ -266,4 +285,9 @@ test("missing E.164 phone rejected before any network call", async () => {
 
 test.after?.(() => {
   globalThis.fetch = realFetch;
+  if (originalAllowLiveIntegrations === undefined) {
+    delete process.env.ALLOW_LIVE_INTEGRATIONS;
+  } else {
+    process.env.ALLOW_LIVE_INTEGRATIONS = originalAllowLiveIntegrations;
+  }
 });

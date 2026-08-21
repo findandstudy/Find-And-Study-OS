@@ -1268,7 +1268,28 @@
       "existingStudentLinked": "El perfil de estudiante existente se vinculó a esta conversación",
       "studentCreatedWithDocs": "Estudiante creado — {count} documento(s) guardado(s) en el perfil",
       "programPendingNote": "La lista se actualizará al seleccionar un programa",
-      "programScopedNote": "Requisitos para {name}"
+      "programScopedNote": "Requisitos para {name}",
+      "applicationIntake": {
+        "title": "Recopilación de solicitud con IA",
+        "identity": "Identidad",
+        "documents": "Documentos",
+        "profile": "Perfil",
+        "reviewRequired": "Se requiere revisión humana",
+        "createStudent": "Crear estudiante de forma segura",
+        "createApplication": "Crear solicitud de forma segura",
+        "actionsDisabled": "Activa las acciones locales de admisión con IA para ejecutar este paso protegido.",
+        "executed": "Acción de admisión con IA completada",
+        "executeFailed": "Falló la acción de admisión con IA",
+        "phases": {
+          "collecting_identity": "Recopilando identidad",
+          "collecting_documents": "Recopilando documentos",
+          "collecting_profile": "Completando perfil",
+          "ready_for_student": "Listo para crear estudiante",
+          "ready_for_application": "Listo para crear solicitud",
+          "application_created": "Solicitud creada",
+          "needs_review": "Requiere revisión"
+        }
+      }
     },
     "applicationTab": {
       "noStudent": "Ningún estudiante vinculado",

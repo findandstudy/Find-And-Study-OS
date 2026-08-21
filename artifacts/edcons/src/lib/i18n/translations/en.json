@@ -1268,7 +1268,28 @@
       "existingStudentLinked": "The existing student profile was linked to this conversation",
       "studentCreatedWithDocs": "Student created — {count} document(s) saved to profile",
       "programPendingNote": "The list will update once a program is selected",
-      "programScopedNote": "Requirements for {name}"
+      "programScopedNote": "Requirements for {name}",
+      "applicationIntake": {
+        "title": "AI application intake",
+        "identity": "Identity",
+        "documents": "Documents",
+        "profile": "Profile",
+        "reviewRequired": "Human review required",
+        "createStudent": "Create student safely",
+        "createApplication": "Create application safely",
+        "actionsDisabled": "Enable local AI intake actions to run this guarded step.",
+        "executed": "AI intake action completed",
+        "executeFailed": "AI intake action failed",
+        "phases": {
+          "collecting_identity": "Collecting identity",
+          "collecting_documents": "Collecting documents",
+          "collecting_profile": "Completing profile",
+          "ready_for_student": "Ready for student",
+          "ready_for_application": "Ready for application",
+          "application_created": "Application created",
+          "needs_review": "Needs review"
+        }
+      }
     },
     "applicationTab": {
       "noStudent": "No student linked",

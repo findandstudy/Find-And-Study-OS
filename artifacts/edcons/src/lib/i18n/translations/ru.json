@@ -1268,7 +1268,28 @@
       "existingStudentLinked": "Существующий профиль студента привязан к этому диалогу",
       "studentCreatedWithDocs": "Студент создан — {count} документ(ов) сохранено в профиле",
       "programPendingNote": "Список обновится после выбора программы",
-      "programScopedNote": "Требования для {name}"
+      "programScopedNote": "Требования для {name}",
+      "applicationIntake": {
+        "title": "Сбор данных заявки с помощью ИИ",
+        "identity": "Личность",
+        "documents": "Документы",
+        "profile": "Профиль",
+        "reviewRequired": "Требуется проверка сотрудником",
+        "createStudent": "Безопасно создать студента",
+        "createApplication": "Безопасно создать заявку",
+        "actionsDisabled": "Включите локальные действия ИИ по приёму для выполнения этого защищённого шага.",
+        "executed": "Действие ИИ по приёму выполнено",
+        "executeFailed": "Не удалось выполнить действие ИИ по приёму",
+        "phases": {
+          "collecting_identity": "Сбор данных личности",
+          "collecting_documents": "Сбор документов",
+          "collecting_profile": "Заполнение профиля",
+          "ready_for_student": "Готово к созданию студента",
+          "ready_for_application": "Готово к созданию заявки",
+          "application_created": "Заявка создана",
+          "needs_review": "Требуется проверка"
+        }
+      }
     },
     "applicationTab": {
       "noStudent": "Студент не привязан",

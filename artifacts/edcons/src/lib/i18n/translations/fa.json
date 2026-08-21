@@ -1268,7 +1268,28 @@
       "existingStudentLinked": "پروفایل دانشجوی موجود به این گفتگو متصل شد",
       "studentCreatedWithDocs": "دانشجو ایجاد شد — {count} سند در پروفایل ذخیره شد",
       "programPendingNote": "پس از انتخاب برنامه، فهرست به‌روزرسانی می‌شود",
-      "programScopedNote": "الزامات {name}"
+      "programScopedNote": "الزامات {name}",
+      "applicationIntake": {
+        "title": "جمع‌آوری درخواست با هوش مصنوعی",
+        "identity": "هویت",
+        "documents": "مدارک",
+        "profile": "پروفایل",
+        "reviewRequired": "بررسی انسانی لازم است",
+        "createStudent": "ایجاد امن دانشجو",
+        "createApplication": "ایجاد امن درخواست",
+        "actionsDisabled": "برای اجرای این مرحله محافظت‌شده، عملیات محلی پذیرش هوش مصنوعی را فعال کنید.",
+        "executed": "عملیات پذیرش هوش مصنوعی انجام شد",
+        "executeFailed": "عملیات پذیرش هوش مصنوعی ناموفق بود",
+        "phases": {
+          "collecting_identity": "در حال جمع‌آوری هویت",
+          "collecting_documents": "در حال جمع‌آوری مدارک",
+          "collecting_profile": "در حال تکمیل پروفایل",
+          "ready_for_student": "آماده ایجاد دانشجو",
+          "ready_for_application": "آماده ایجاد درخواست",
+          "application_created": "درخواست ایجاد شد",
+          "needs_review": "نیازمند بررسی"
+        }
+      }
     },
     "applicationTab": {
       "noStudent": "دانشجویی لینک نشده",

@@ -8,9 +8,9 @@
 //   2. Idempotently create OR update a native Lead, matched by phone/email so a
 //      duplicate is never produced, link it to the conversation, and advance
 //      the pipeline stage forward (never downgrade).
-//   3. Record inbound media (PDF/photo) as `documents` rows on the lead/student
-//      and compute which level-appropriate documents are still missing so the
-//      bot can prompt for them.
+//   3. Compute which level-appropriate documents are still missing so the bot
+//      can prompt for them. Real inbound files are persisted by
+//      inboundDocumentPersistence.ts after byte-level validation.
 //
 // Everything here is best-effort: callers wrap calls in try/catch so a capture
 // or extraction failure never blocks the auto-reply.
@@ -37,6 +37,7 @@ import { resolveIdentity } from "./identityResolver";
 import { directOrigin } from "../originHelper";
 import { applyLeadAssignmentRules } from "../leadAssignment";
 import { toLatinUpper, normalizePhoneField } from "../textNormalize";
+import crypto from "node:crypto";
 
 // Dedicated extraction model — cheap + structured. Independent of the reply
 // model so cost is bounded.
@@ -69,6 +70,20 @@ export interface StructuredLeadFields {
   budget: string | null;
   /** Raw study level as stated (e.g. "master", "lisans"); normalized later. */
   level: string | null;
+  /** Student-profile fields collected explicitly in chat; never inferred. */
+  dateOfBirth?: string | null;
+  nationality?: string | null;
+  passportNumber?: string | null;
+  passportIssueDate?: string | null;
+  passportExpiry?: string | null;
+  address?: string | null;
+  addressCity?: string | null;
+  postalCode?: string | null;
+  highSchool?: string | null;
+  universityBachelor?: string | null;
+  universityMaster?: string | null;
+  graduationYear?: string | null;
+  gpa?: string | null;
 }
 
 export interface StructuredExtractionInput {
@@ -93,6 +108,19 @@ const EMPTY_FIELDS: StructuredLeadFields = {
   duration: null,
   budget: null,
   level: null,
+  dateOfBirth: null,
+  nationality: null,
+  passportNumber: null,
+  passportIssueDate: null,
+  passportExpiry: null,
+  address: null,
+  addressCity: null,
+  postalCode: null,
+  highSchool: null,
+  universityBachelor: null,
+  universityMaster: null,
+  graduationYear: null,
+  gpa: null,
 };
 
 // Test seam: tests override the extractor to assert capture/upsert behavior
@@ -114,7 +142,9 @@ const STRUCTURED_EXTRACTION_SYSTEM =
   '{ "firstName": string|null, "lastName": string|null, "email": string|null, ' +
   '"motherName": string|null, "fatherName": string|null, "program": string|null, ' +
   '"language": string|null, "country": string|null, "budget": string|null, "level": string|null }\n' +
-  'Also include: "city", "university", "department", "campus", "gender", "checkInDate", "duration" as string|null.\n' +
+  'Also include: "city", "university", "department", "campus", "gender", "checkInDate", "duration", ' +
+  '"dateOfBirth", "nationality", "passportNumber", "passportIssueDate", "passportExpiry", "address", ' +
+  '"addressCity", "postalCode", "highSchool", "universityBachelor", "universityMaster", "graduationYear", "gpa" as string|null.\n' +
   '- "program": the field/program of study they want (e.g. "Computer Engineering").\n' +
   '- "language": preferred language of instruction (e.g. "English").\n' +
   '- "country": destination country they want to study in.\n' +
@@ -139,6 +169,19 @@ const extractionSchema = z.object({
   duration: z.string().nullable(),
   budget: z.string().nullable(),
   level: z.string().nullable(),
+  dateOfBirth: z.string().nullable().optional(),
+  nationality: z.string().nullable().optional(),
+  passportNumber: z.string().nullable().optional(),
+  passportIssueDate: z.string().nullable().optional(),
+  passportExpiry: z.string().nullable().optional(),
+  address: z.string().nullable().optional(),
+  addressCity: z.string().nullable().optional(),
+  postalCode: z.string().nullable().optional(),
+  highSchool: z.string().nullable().optional(),
+  universityBachelor: z.string().nullable().optional(),
+  universityMaster: z.string().nullable().optional(),
+  graduationYear: z.string().nullable().optional(),
+  gpa: z.string().nullable().optional(),
 });
 
 /** Normalize "" / whitespace-only model output to null. */
@@ -167,6 +210,19 @@ function sanitizeFields(raw: StructuredLeadFields): StructuredLeadFields {
     duration: nullifyBlank(raw.duration),
     budget: nullifyBlank(raw.budget),
     level: nullifyBlank(raw.level),
+    dateOfBirth: nullifyBlank(raw.dateOfBirth ?? null),
+    nationality: nullifyBlank(raw.nationality ?? null),
+    passportNumber: nullifyBlank(raw.passportNumber ?? null),
+    passportIssueDate: nullifyBlank(raw.passportIssueDate ?? null),
+    passportExpiry: nullifyBlank(raw.passportExpiry ?? null),
+    address: nullifyBlank(raw.address ?? null),
+    addressCity: nullifyBlank(raw.addressCity ?? null),
+    postalCode: nullifyBlank(raw.postalCode ?? null),
+    highSchool: nullifyBlank(raw.highSchool ?? null),
+    universityBachelor: nullifyBlank(raw.universityBachelor ?? null),
+    universityMaster: nullifyBlank(raw.universityMaster ?? null),
+    graduationYear: nullifyBlank(raw.graduationYear ?? null),
+    gpa: nullifyBlank(raw.gpa ?? null),
   };
 }
 
@@ -222,7 +278,6 @@ export function normalizeLevel(raw: string | null | undefined): string | null {
 // bot writes. maybeAutoReply runs fire-and-forget, so two inbound messages can
 // reach capture concurrently; these locks prevent duplicate leads / document rows.
 const LEAD_CAPTURE_LOCK_NS = 7311;
-const DOC_CAPTURE_LOCK_NS = 7312;
 
 const STAGE_RANK: Record<string, number> = {
   new: 0,
@@ -302,6 +357,36 @@ function mergeAccommodationSlots(
     }
   }
   if (changed) root.accommodationSlots = current;
+
+  // Keep the richer admissions profile in the Lead's existing JSON payload so
+  // the normal Lead -> Student conversion can consume it later. Values are
+  // fill-only: staff edits and earlier verified extraction always win.
+  const profile = root.applicationIntake && typeof root.applicationIntake === "object"
+    ? { ...(root.applicationIntake as Record<string, unknown>) }
+    : {};
+  const profileCandidates: Record<string, string | null | undefined> = {
+    gender: fields.gender,
+    dateOfBirth: fields.dateOfBirth,
+    nationality: fields.nationality,
+    passportNumber: fields.passportNumber?.toUpperCase(),
+    passportIssueDate: fields.passportIssueDate,
+    passportExpiry: fields.passportExpiry,
+    address: fields.address,
+    addressCity: fields.addressCity,
+    postalCode: fields.postalCode,
+    highSchool: fields.highSchool,
+    universityBachelor: fields.universityBachelor,
+    universityMaster: fields.universityMaster,
+    graduationYear: fields.graduationYear,
+    gpa: fields.gpa,
+  };
+  for (const [key, value] of Object.entries(profileCandidates)) {
+    if (value && !profile[key]) {
+      profile[key] = value;
+      changed = true;
+    }
+  }
+  if (Object.keys(profile).length > 0) root.applicationIntake = profile;
   return { value: root, changed };
 }
 
@@ -338,6 +423,8 @@ export interface CaptureResult {
   stage: string | null;
   /** Normalized study level resolved for this contact, if any. */
   level: string | null;
+  /** Confident-only values extracted from the conversation in this pass. */
+  capturedFields: StructuredLeadFields;
 }
 
 const NO_CAPTURE: CaptureResult = {
@@ -346,6 +433,7 @@ const NO_CAPTURE: CaptureResult = {
   created: false,
   stage: null,
   level: null,
+  capturedFields: { ...EMPTY_FIELDS },
 };
 
 async function buildTranscript(conversationId: number): Promise<string> {
@@ -386,25 +474,69 @@ export async function captureLeadFromConversation(opts: {
     .where(eq(externalContactsTable.id, conv.externalContactId));
   if (!contact) return NO_CAPTURE;
 
-  // Already a student — don't create a lead; surface the (live) student id so
-  // document tracking can attach to it.
-  if (contact.studentId != null) {
-    const [stu] = await db
-      .select({ id: studentsTable.id, level: studentsTable.interestedLevel })
-      .from(studentsTable)
-      .where(and(eq(studentsTable.id, contact.studentId), isNull(studentsTable.deletedAt)));
-    if (stu) {
-      return { ...NO_CAPTURE, studentId: stu.id, level: normalizeLevel(stu.level) };
-    }
-  }
-
+  // Extract before resolving Lead vs Student. The old early-return for an
+  // already-linked student meant that useful facts supplied later in chat
+  // (email, parents' names, level, passport/profile fields) were discarded.
   const transcript = await buildTranscript(conversationId);
-  let fields: StructuredLeadFields = EMPTY_FIELDS;
+  let fields: StructuredLeadFields = { ...EMPTY_FIELDS };
   if (transcript.trim()) {
     try {
       fields = await extractStructuredLead({ transcript });
     } catch {
-      fields = EMPTY_FIELDS;
+      fields = { ...EMPTY_FIELDS };
+    }
+  }
+
+  const patchStudentFromFields = async (studentId: number) => {
+    const [student] = await db
+      .select()
+      .from(studentsTable)
+      .where(and(eq(studentsTable.id, studentId), isNull(studentsTable.deletedAt)));
+    if (!student) return null;
+    const patch: Record<string, unknown> = {};
+    const fill = (column: keyof typeof student, value: string | null | undefined) => {
+      if (value && !student[column]) patch[column as string] = value;
+    };
+    fill("email", fields.email?.toLowerCase());
+    fill("phone", contact.phone ? normalizePhoneField(contact.phone) : null);
+    fill("phoneE164", contact.phoneE164);
+    fill("motherName", fields.motherName ? toLatinUpper(fields.motherName) : null);
+    fill("fatherName", fields.fatherName ? toLatinUpper(fields.fatherName) : null);
+    fill("interestedLevel", fields.level);
+    fill("gender", fields.gender?.toLowerCase());
+    fill("dateOfBirth", fields.dateOfBirth);
+    fill("nationality", fields.nationality);
+    fill("passportNumber", fields.passportNumber?.toUpperCase());
+    fill("passportIssueDate", fields.passportIssueDate);
+    fill("passportExpiry", fields.passportExpiry);
+    fill("address", fields.address);
+    fill("addressCity", fields.addressCity);
+    fill("postalCode", fields.postalCode);
+    fill("highSchool", fields.highSchool);
+    fill("universityBachelor", fields.universityBachelor);
+    fill("universityMaster", fields.universityMaster);
+    fill("gpa", fields.gpa);
+    if (fields.graduationYear && !student.graduationYear) {
+      const year = Number.parseInt(fields.graduationYear, 10);
+      if (Number.isInteger(year) && year >= 1900 && year <= 2200) patch.graduationYear = year;
+    }
+    if (Object.keys(patch).length > 0) {
+      await db.update(studentsTable).set(patch).where(eq(studentsTable.id, student.id));
+    }
+    return { ...student, ...patch };
+  };
+
+  // Already a student — never create a duplicate Lead, but continue filling
+  // only empty Student fields from explicit chat facts.
+  if (contact.studentId != null) {
+    const stu = await patchStudentFromFields(contact.studentId);
+    if (stu) {
+      return {
+        ...NO_CAPTURE,
+        studentId: stu.id,
+        level: normalizeLevel(fields.level) ?? normalizeLevel(stu.interestedLevel),
+        capturedFields: fields,
+      };
     }
   }
 
@@ -438,14 +570,12 @@ export async function captureLeadFromConversation(opts: {
         .update(conversationsTable)
         .set({ unmatched: false })
         .where(eq(conversationsTable.id, conversationId));
-      const [stu] = await db
-        .select({ level: studentsTable.interestedLevel })
-        .from(studentsTable)
-        .where(eq(studentsTable.id, studentCandidate.id));
+      const stu = await patchStudentFromFields(studentCandidate.id);
       return {
         ...NO_CAPTURE,
         studentId: studentCandidate.id,
-        level: normalizedLevel ?? normalizeLevel(stu?.level),
+        level: normalizedLevel ?? normalizeLevel(stu?.interestedLevel),
+        capturedFields: fields,
       };
     }
   }
@@ -508,6 +638,7 @@ export async function captureLeadFromConversation(opts: {
       created: false,
       stage: nextStage,
       level: normalizedLevel ?? normalizeLevel(lead.interestedLevel),
+      capturedFields: fields,
     };
   }
 
@@ -642,6 +773,7 @@ export async function captureLeadFromConversation(opts: {
     created: result.created,
     stage: result.stage,
     level: normalizedLevel ?? normalizeLevel(result.lead.interestedLevel),
+    capturedFields: fields,
   };
 }
 
@@ -681,6 +813,7 @@ const WA_MEDIA_TYPES = ["document", "image", "video", "audio"] as const;
 
 interface ParsedMedia {
   mediaId: string;
+  sourceKey: string;
   waType: string;
   filename: string | null;
   caption: string | null;
@@ -694,24 +827,68 @@ interface ParsedMedia {
 export function parseInboundMedia(metadata: unknown): ParsedMedia[] {
   const meta = metadata && typeof metadata === "object" ? (metadata as Record<string, unknown>) : {};
   const raw = meta.raw && typeof meta.raw === "object" ? (meta.raw as Record<string, unknown>) : null;
-  if (!raw) return [];
   const out: ParsedMedia[] = [];
-  for (const t of WA_MEDIA_TYPES) {
-    const obj = raw[t];
-    if (obj && typeof obj === "object") {
-      const o = obj as Record<string, unknown>;
-      const mediaId = typeof o.id === "string" ? o.id : null;
-      if (!mediaId) continue;
-      out.push({
-        mediaId,
-        waType: t,
-        filename: typeof o.filename === "string" ? o.filename : null,
-        caption: typeof o.caption === "string" ? o.caption : null,
-        mimeType: typeof o.mime_type === "string" ? o.mime_type : null,
-      });
+  if (raw) {
+    for (const t of WA_MEDIA_TYPES) {
+      const obj = raw[t];
+      if (obj && typeof obj === "object") {
+        const o = obj as Record<string, unknown>;
+        const mediaId = typeof o.id === "string" ? o.id : null;
+        if (!mediaId) continue;
+        out.push({
+          mediaId,
+          sourceKey: `wa:${mediaId}`,
+          waType: t,
+          filename: typeof o.filename === "string" ? o.filename : null,
+          caption: typeof o.caption === "string" ? o.caption : null,
+          mimeType: typeof o.mime_type === "string" ? o.mime_type : null,
+        });
+      }
     }
   }
+
+  // Zernio/web-chat normalize media into metadata.attachment(s), not
+  // metadata.raw.<type>. Preserve a stable reference so the same webhook is
+  // idempotent even when it is retried.
+  const generic = [
+    ...(isObjectRecord(meta.attachment) ? [meta.attachment] : []),
+    ...(Array.isArray(meta.attachments) ? meta.attachments.filter(isObjectRecord) : []),
+  ];
+  generic.forEach((attachment, index) => {
+    const url = typeof attachment.url === "string"
+      ? attachment.url
+      : typeof attachment.fileUrl === "string"
+        ? attachment.fileUrl
+        : null;
+    const externalId = typeof attachment.id === "string" ? attachment.id : url;
+    if (!externalId) return;
+    const digest = crypto.createHash("sha256").update(externalId).digest("hex").slice(0, 32);
+    const sourceKey = `inbox-ref:${digest}`;
+    if (out.some((item) => item.sourceKey === sourceKey)) return;
+    out.push({
+      mediaId: digest,
+      sourceKey,
+      waType: typeof attachment.type === "string" ? attachment.type : "document",
+      filename: typeof attachment.name === "string"
+        ? attachment.name
+        : typeof attachment.fileName === "string"
+          ? attachment.fileName
+          : typeof attachment.filename === "string"
+            ? attachment.filename
+            : null,
+      caption: typeof attachment.caption === "string" ? attachment.caption : null,
+      mimeType: typeof attachment.mimeType === "string"
+        ? attachment.mimeType
+        : typeof attachment.mime_type === "string"
+          ? attachment.mime_type
+          : null,
+    });
+  });
   return out;
+}
+
+function isObjectRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
 /** Best-effort canonical doc type from a filename + caption. */
@@ -721,55 +898,6 @@ export function detectDocType(filename: string | null, caption: string | null): 
     DOC_KEYWORD_RULES.filter((rule) => rule.re.test(hay)).map((rule) => rule.type),
   );
   return matches.size === 1 ? [...matches][0] : "other_certificates_documents";
-}
-
-/**
- * Record any media attached to an inbound message as `documents` rows on the
- * linked lead/student. Idempotent: a given WhatsApp media id is recorded once
- * (we key on fileKey = `wa:<mediaId>`). Returns the number of NEW rows created.
- */
-export async function recordInboundDocuments(opts: {
-  metadata: unknown;
-  leadId: number | null;
-  studentId: number | null;
-}): Promise<number> {
-  const { metadata, leadId, studentId } = opts;
-  if (leadId == null && studentId == null) return 0;
-  const media = parseInboundMedia(metadata);
-  if (media.length === 0) return 0;
-
-  let created = 0;
-  for (const m of media) {
-    const fileKey = `wa:${m.mediaId}`;
-    // Serialize per-fileKey so concurrent bot invocations can't insert the same
-    // inbound media twice (select-then-insert is otherwise racy).
-    const inserted = await db.transaction(async (tx) => {
-      await tx.execute(
-        sql`select pg_advisory_xact_lock(${DOC_CAPTURE_LOCK_NS}, hashtext(${fileKey}))`,
-      );
-      const [existing] = await tx
-        .select({ id: documentsTable.id })
-        .from(documentsTable)
-        .where(eq(documentsTable.fileKey, fileKey))
-        .limit(1);
-      if (existing) return false;
-
-      const type = detectDocType(m.filename, m.caption);
-      await tx.insert(documentsTable).values({
-        leadId: leadId ?? null,
-        studentId: studentId ?? null,
-        name: m.filename || `WhatsApp ${m.waType}`,
-        type,
-        status: "pending",
-        fileKey,
-        mimeType: m.mimeType || null,
-        notes: m.caption || null,
-      });
-      return true;
-    });
-    if (inserted) created += 1;
-  }
-  return created;
 }
 
 // ---------------------------------------------------------------------------

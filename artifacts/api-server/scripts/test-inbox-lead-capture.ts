@@ -16,8 +16,8 @@
  *     lead — never a duplicate.
  *   - Stage advancement is forward-only: a qualified/converted lead is never
  *     pulled back.
- *   - Document tracking: inbound media → one documents row (idempotent by WA
- *     media id); missing-doc computation reflects what's been provided.
+ *   - Inbound media parsing: WhatsApp and normalized inbox attachment metadata
+ *     yield stable source references without creating placeholder documents.
  *   - Outside the 24h window: an approved re-engagement template is sent (text
  *     reply seam untouched); with no template configured the bot defers.
  *
@@ -33,12 +33,19 @@ import {
   externalContactsTable,
   channelAccountsTable,
   leadsTable,
-  documentsTable,
   messageTemplatesTable,
+  applicationsTable,
+  commissionsTable,
+  documentsTable,
+  programsTable,
+  serviceFeesTable,
+  studentsTable,
+  universitiesTable,
 } from "@workspace/db";
 import { and, eq, like } from "drizzle-orm";
 import {
   maybeAutoReply,
+  isEligibleInboundBotTrigger,
   __setBotReplyOverrideForTests,
   __setBotSendOverrideForTests,
   __setBotTemplateSendOverrideForTests,
@@ -48,14 +55,19 @@ import {
 import {
   extractStructuredLead,
   captureLeadFromConversation,
-  recordInboundDocuments,
-  computeMissingDocGroups,
+  parseInboundMedia,
   detectDocType,
   normalizeLevel,
   advanceStage,
   __setStructuredExtractionOverrideForTests,
   type StructuredLeadFields,
 } from "../src/lib/inbox/leadCapture";
+import {
+  buildApplicationIntakeInstruction,
+  readApplicationIntakeState,
+  type ApplicationIntakeState,
+} from "../src/lib/inbox/applicationIntakeOrchestrator";
+import { executeApplicationIntakePendingActions } from "../src/lib/inbox/applicationIntakeActions";
 
 const RUN_ID = `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
@@ -368,38 +380,228 @@ test("two concurrent captures with mixed identity (email vs phone-only) create O
 });
 
 // ---------------------------------------------------------------------------
-// Document tracking
+// Inbound attachment parsing
 // ---------------------------------------------------------------------------
-test("recordInboundDocuments stores a documents row idempotently; missing-doc list reflects it", async () => {
-  resetMocks();
-  const email = `doc.${RUN_ID}@example.com`;
-  const { conversationId } = await seedConversation({});
-  await seedInbound(conversationId, "here is my passport");
-  nextExtraction = { ...EMPTY, firstName: "Maya", lastName: "Roy", email, level: "bachelor" };
-  const capture = await captureLeadFromConversation({ conversationId });
-  assert.ok(capture.leadId);
-
+test("parseInboundMedia returns stable references for WhatsApp and normalized inbox attachments", () => {
   const mediaId = `wamedia_${RUN_ID}`;
-  const metadata = {
+  const whatsapp = parseInboundMedia({
     raw: { type: "document", document: { id: mediaId, filename: "passport.pdf", mime_type: "application/pdf" } },
+  });
+  assert.equal(whatsapp.length, 1);
+  assert.equal(whatsapp[0].sourceKey, `wa:${mediaId}`);
+  assert.equal(whatsapp[0].filename, "passport.pdf");
+
+  const genericMetadata = {
+    attachments: [{
+      id: `zernio_${RUN_ID}`,
+      url: `https://zernio.com/media/${RUN_ID}`,
+      fileName: "transcript.pdf",
+      mimeType: "application/pdf",
+    }],
   };
-  const created1 = await recordInboundDocuments({ metadata, leadId: capture.leadId, studentId: null });
-  assert.equal(created1, 1);
-  // Idempotent: same WA media id is not recorded twice.
-  const created2 = await recordInboundDocuments({ metadata, leadId: capture.leadId, studentId: null });
-  assert.equal(created2, 0);
+  const genericA = parseInboundMedia(genericMetadata);
+  const genericB = parseInboundMedia(genericMetadata);
+  assert.equal(genericA.length, 1);
+  assert.equal(genericA[0].sourceKey, genericB[0].sourceKey);
+  assert.match(genericA[0].sourceKey, /^inbox-ref:/);
+  assert.equal(genericA[0].filename, "transcript.pdf");
+});
 
-  const docs = await db
-    .select()
-    .from(documentsTable)
-    .where(eq(documentsTable.fileKey, `wa:${mediaId}`));
-  assert.equal(docs.length, 1);
-  assert.equal(docs[0].type, "passport");
-  assert.equal(docs[0].leadId, capture.leadId);
+test("attachment-only inbound messages remain eligible bot triggers", () => {
+  assert.equal(isEligibleInboundBotTrigger({
+    conversationChannel: "whatsapp",
+    messageDirection: "inbound",
+    content: "",
+    metadata: {
+      attachments: [{
+        id: `zernio_attachment_only_${RUN_ID}`,
+        url: `https://zernio.com/media/attachment-only-${RUN_ID}`,
+        fileName: "passport.pdf",
+        mimeType: "application/pdf",
+      }],
+    },
+  }), true);
 
-  const missing = await computeMissingDocGroups({ leadId: capture.leadId, studentId: null, level: "bachelors" });
-  assert.ok(!missing.includes("passport"), "passport already provided → not missing");
-  assert.ok(missing.length > 0, "other level-appropriate docs are still missing");
+  assert.equal(isEligibleInboundBotTrigger({
+    conversationChannel: "whatsapp",
+    messageDirection: "inbound",
+    content: "   ",
+    metadata: {},
+  }), false);
+
+  assert.equal(isEligibleInboundBotTrigger({
+    conversationChannel: "internal",
+    messageDirection: "internal",
+    content: "staff-authored internal note",
+    metadata: { botSent: true },
+  }), false);
+});
+
+test("persistent intake state asks for exactly the next server-owned item", () => {
+  const state: ApplicationIntakeState = {
+    version: 1,
+    phase: "collecting_documents",
+    lastProcessedInboundMessageId: 44,
+    leadId: 12,
+    studentId: null,
+    applicationId: null,
+    level: "masters",
+    missingIdentityFields: [],
+    missingProfileFields: ["motherName", "fatherName"],
+    missingDocumentGroups: ["passport", "bachelors_certificate"],
+    currentDocumentGroup: "passport",
+    currentDocumentType: "passport",
+    programCandidate: null,
+    pendingAction: null,
+    reviewReason: null,
+    updatedAt: new Date(0).toISOString(),
+  };
+  const instruction = buildApplicationIntakeInstruction(state);
+  assert.match(instruction, /Ask only for the passport/);
+  assert.doesNotMatch(instruction, /mother's full name/);
+  assert.equal(
+    readApplicationIntakeState({ aiApplicationIntake: state })?.lastProcessedInboundMessageId,
+    44,
+  );
+});
+
+test("guarded intake action creates one Student and one exact Application idempotently", async () => {
+  const suffix = `AI Intake ${RUN_ID}`;
+  const { conversationId, contactId, phone } = await seedConversation({
+    email: `ai-intake-${RUN_ID}@example.test`,
+    displayName: suffix,
+  });
+  const [university] = await db.insert(universitiesTable).values({
+    name: `${suffix} University`,
+    country: "Turkey",
+  }).returning();
+  const [program] = await db.insert(programsTable).values({
+    universityId: university.id,
+    name: `${suffix} Computer Engineering`,
+    degree: "Bachelor",
+    language: "English",
+    tuitionFee: 5000,
+    discountedFee: 4000,
+    commissionRate: 10,
+    currency: "USD",
+    isActive: true,
+  }).returning();
+  const [lead] = await db.insert(leadsTable).values({
+    firstName: "TEST",
+    lastName: "STUDENT",
+    email: `ai-intake-${RUN_ID}@example.test`,
+    phone,
+    phoneE164: phone,
+    interestedLevel: "bachelors",
+    interestedUniversity: university.name,
+    interestedProgram: program.name,
+    motherName: "TEST MOTHER",
+    fatherName: "TEST FATHER",
+    educationData: {
+      applicationIntake: {
+        gender: "female",
+        nationality: "Testland",
+        dateOfBirth: "2004-02-03",
+        passportNumber: `P${RUN_ID.toUpperCase()}`,
+        passportIssueDate: "2024-01-01",
+        passportExpiry: "2034-01-01",
+        highSchool: "Test High School",
+        graduationYear: "2022",
+        gpa: "88/100",
+      },
+    },
+  }).returning();
+
+  const docTypes = [
+    "passport",
+    "photo",
+    "class_12th_hsc_certificate",
+    "class_12th_hsc_marks_sheet",
+    "ielts_pte_gre_gmat_toefl_duolingo",
+  ];
+  const docs = await db.insert(documentsTable).values(docTypes.map((type) => ({
+    leadId: lead.id,
+    name: `${type}.pdf`,
+    type,
+    status: "pending",
+    fileKey: `local-test/${RUN_ID}/${type}.pdf`,
+    mimeType: "application/pdf",
+    sizeBytes: 128,
+    source: "inbox_ai",
+    sourceConversationId: conversationId,
+  }))).returning({ id: documentsTable.id });
+
+  const initialState: ApplicationIntakeState = {
+    version: 1,
+    phase: "ready_for_student",
+    lastProcessedInboundMessageId: 1,
+    leadId: lead.id,
+    studentId: null,
+    applicationId: null,
+    level: "bachelors",
+    missingIdentityFields: [],
+    missingProfileFields: [],
+    missingDocumentGroups: [],
+    currentDocumentGroup: null,
+    currentDocumentType: null,
+    programCandidate: {
+      programId: program.id,
+      universityId: university.id,
+      programName: program.name,
+      universityName: university.name,
+    },
+    pendingAction: "create_student",
+    reviewReason: null,
+    updatedAt: new Date().toISOString(),
+  };
+  await db.update(externalContactsTable).set({ leadId: lead.id }).where(eq(externalContactsTable.id, contactId));
+  await db.update(conversationsTable).set({ metadata: { aiApplicationIntake: initialState } })
+    .where(eq(conversationsTable.id, conversationId));
+
+  let studentId: number | null = null;
+  let applicationId: number | null = null;
+  try {
+    const first = await executeApplicationIntakePendingActions({
+      conversationId,
+      inboundMessageId: 1,
+    });
+    studentId = first.createdStudentId;
+    applicationId = first.createdApplicationId;
+    assert.ok(studentId, "ready intake must create/link a Student");
+    assert.ok(applicationId, "ready intake must create the exact catalogue Application");
+    assert.equal(first.state.phase, "application_created");
+    assert.equal(first.state.applicationId, applicationId);
+
+    const second = await executeApplicationIntakePendingActions({
+      conversationId,
+      inboundMessageId: 2,
+    });
+    assert.equal(second.createdStudentId, null);
+    assert.equal(second.createdApplicationId, null);
+    const matchingApplications = await db.select({ id: applicationsTable.id })
+      .from(applicationsTable)
+      .where(and(
+        eq(applicationsTable.studentId, studentId!),
+        eq(applicationsTable.programId, program.id),
+      ));
+    assert.equal(matchingApplications.length, 1, "retries must not duplicate the Application");
+    const financeRows = await db.select({ status: commissionsTable.status })
+      .from(commissionsTable)
+      .where(eq(commissionsTable.applicationId, applicationId!));
+    assert.equal(financeRows.length, 1, "central finance sync must create one commission row");
+    assert.equal(financeRows[0].status, "potential");
+  } finally {
+    if (applicationId) {
+      await db.delete(commissionsTable).where(eq(commissionsTable.applicationId, applicationId));
+      await db.delete(serviceFeesTable).where(eq(serviceFeesTable.applicationId, applicationId));
+      await db.delete(applicationsTable).where(eq(applicationsTable.id, applicationId));
+    }
+    for (const doc of docs) await db.delete(documentsTable).where(eq(documentsTable.id, doc.id));
+    if (studentId) await db.delete(studentsTable).where(eq(studentsTable.id, studentId));
+    await db.delete(leadsTable).where(eq(leadsTable.id, lead.id));
+    await db.delete(programsTable).where(eq(programsTable.id, program.id));
+    await db.delete(universitiesTable).where(eq(universitiesTable.id, university.id));
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -466,7 +668,6 @@ test("cleanup", async () => {
   for (const id of createdContactIds) {
     await db.delete(externalContactsTable).where(eq(externalContactsTable.id, id));
   }
-  await db.delete(documentsTable).where(like(documentsTable.fileKey, `wa:wamedia_${RUN_ID}%`));
   await db.delete(leadsTable).where(like(leadsTable.email, `%${RUN_ID}%`));
   await db.delete(messageTemplatesTable).where(eq(messageTemplatesTable.name, `Re-engage ${RUN_ID}`));
   __setStructuredExtractionOverrideForTests(null);

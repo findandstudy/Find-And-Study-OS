@@ -91,6 +91,11 @@ import {
   isAutoReplyChannelSupported,
   runBotReplyTest,
 } from "../lib/inbox/botAutoReply";
+import { readApplicationIntakeState } from "../lib/inbox/applicationIntakeOrchestrator";
+import {
+  executeApplicationIntakePendingActions,
+  isApplicationIntakeActionsEnabled,
+} from "../lib/inbox/applicationIntakeActions";
 import {
   getProgramScopeSource,
   writeProgramScopeSource,
@@ -1748,6 +1753,89 @@ router.patch(
     }
     await logAudit(req.user!.id, "toggle_conversation_bot", "conversation", id, { enabled }, req.ip);
     res.json({ data: { id: updated.id, botEnabled: updated.botEnabled, needsHuman: updated.needsHuman } });
+  },
+);
+
+// Persisted admissions-intake state makes the bot's next expected fact,
+// document and CRM action auditable. Mutations are disabled by default and
+// require an explicit environment feature flag.
+router.get(
+  "/inbox/conversations/:id/application-intake",
+  requireAuth,
+  requireRole(...STAFF_ROLES, ...ADMIN_ROLES),
+  async (req, res): Promise<void> => {
+    const conversationId = Number(req.params.id);
+    if (!Number.isInteger(conversationId) || conversationId < 1) {
+      res.status(400).json({ error: "Invalid conversation id" });
+      return;
+    }
+    const [conversation] = await db.select({ metadata: conversationsTable.metadata })
+      .from(conversationsTable)
+      .where(eq(conversationsTable.id, conversationId));
+    if (!conversation) {
+      res.status(404).json({ error: "Conversation not found" });
+      return;
+    }
+    res.json({
+      enabled: isApplicationIntakeActionsEnabled(),
+      state: readApplicationIntakeState(conversation.metadata),
+    });
+  },
+);
+
+router.post(
+  "/inbox/conversations/:id/application-intake/execute",
+  requireAuth,
+  requireRole(...STAFF_ROLES, ...ADMIN_ROLES),
+  async (req, res): Promise<void> => {
+    const conversationId = Number(req.params.id);
+    if (!Number.isInteger(conversationId) || conversationId < 1) {
+      res.status(400).json({ error: "Invalid conversation id" });
+      return;
+    }
+    if (!isApplicationIntakeActionsEnabled()) {
+      res.status(409).json({
+        code: "AI_APPLICATION_INTAKE_ACTIONS_DISABLED",
+        error: "AI application intake actions are disabled",
+      });
+      return;
+    }
+    const [latestInbound] = await db.select({ id: messagesTable.id })
+      .from(messagesTable)
+      .where(and(
+        eq(messagesTable.conversationId, conversationId),
+        eq(messagesTable.direction, "inbound"),
+      ))
+      .orderBy(desc(messagesTable.id))
+      .limit(1);
+    if (!latestInbound) {
+      res.status(409).json({ error: "Conversation has no inbound message" });
+      return;
+    }
+    try {
+      const result = await executeApplicationIntakePendingActions({
+        conversationId,
+        inboundMessageId: latestInbound.id,
+      });
+      await writeAudit({
+        userId: req.user!.id,
+        action: "inbox_ai_application_intake_execute",
+        resource: "conversation",
+        resourceId: conversationId,
+        changes: {
+          createdStudentId: result.createdStudentId,
+          createdApplicationId: result.createdApplicationId,
+          finalPhase: result.state.phase,
+        },
+        ipAddress: req.ip,
+      });
+      res.json(result);
+    } catch (error) {
+      console.error(`[INBOX] application intake execution failed for conversation #${conversationId}:`, error);
+      res.status(409).json({
+        error: error instanceof Error ? error.message : "Application intake action failed",
+      });
+    }
   },
 );
 

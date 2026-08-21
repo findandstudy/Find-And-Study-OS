@@ -6,6 +6,7 @@ import {
   configuredInboxMediaHosts,
   resolveLocalInboxStorageKey,
 } from "./mediaSource";
+import { isLiveIntegrationsEnabled } from "./liveMode";
 
 /**
  * Single source of truth for Zernio outbound sends.
@@ -40,6 +41,12 @@ export interface ZernioSendOutcome {
   /** Set when any payload failed — can coexist with ok=true (partial send). */
   error?: string;
   externalMessageId?: string;
+  /** True when development mode intentionally skipped the provider call. */
+  simulated?: boolean;
+}
+
+function simulatedZernioMessageId(kind: "text" | "template"): string {
+  return `sim_zernio_${kind}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
 // Test injection seam — unit tests replace the network call.
@@ -114,6 +121,19 @@ function maskApiKey(key: string): string {
  */
 export async function sendViaZernio(params: ZernioSendParams): Promise<ZernioSendOutcome> {
   if (__zernioSendOverride) return __zernioSendOverride(params);
+
+  // Zernio is an external WhatsApp transport just like the direct Meta
+  // sender. Local/dev environments must never reach the live provider unless
+  // the operator explicitly enables live integrations. Returning a simulated
+  // message id keeps the normal pending -> sent pipeline testable without
+  // contacting real students.
+  if (!isLiveIntegrationsEnabled()) {
+    return {
+      ok: true,
+      externalMessageId: simulatedZernioMessageId("text"),
+      simulated: true,
+    };
+  }
 
   const apiKey = await getZernioApiKey();
   if (!apiKey) return { ok: false, error: "zernio_api_key_not_configured" };
@@ -383,6 +403,16 @@ function humanizeZernioTemplateError(raw: string): string {
  * counts as delivered — `{ sent: 0, failed: 1 }` is a failure.
  */
 export async function sendZernioTemplate(params: ZernioTemplateSendParams): Promise<ZernioTemplateSendOutcome> {
+  if (!isLiveIntegrationsEnabled()) {
+    return {
+      ok: true,
+      externalMessageId: simulatedZernioMessageId("template"),
+      simulated: true,
+      sent: 1,
+      failed: 0,
+    };
+  }
+
   const apiKey = await getZernioApiKey();
   if (!apiKey) return { ok: false, error: "Template gönderilemedi: Zernio API anahtarı yapılandırılmamış." };
   if (!params.toPhoneE164 || !params.toPhoneE164.startsWith("+")) {

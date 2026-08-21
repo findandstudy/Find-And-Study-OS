@@ -1268,7 +1268,28 @@
       "existingStudentLinked": "تم ربط ملف الطالب الحالي بهذه المحادثة",
       "studentCreatedWithDocs": "تم إنشاء الطالب — تم حفظ {count} مستند(ات) في الملف",
       "programPendingNote": "سيتم تحديث القائمة عند اختيار البرنامج",
-      "programScopedNote": "متطلبات {name}"
+      "programScopedNote": "متطلبات {name}",
+      "applicationIntake": {
+        "title": "جمع بيانات طلب التقديم بالذكاء الاصطناعي",
+        "identity": "الهوية",
+        "documents": "المستندات",
+        "profile": "الملف الشخصي",
+        "reviewRequired": "مراجعة بشرية مطلوبة",
+        "createStudent": "إنشاء الطالب بأمان",
+        "createApplication": "إنشاء الطلب بأمان",
+        "actionsDisabled": "فعّل إجراءات التقديم المحلية للذكاء الاصطناعي لتنفيذ هذه الخطوة المحمية.",
+        "executed": "اكتمل إجراء التقديم بالذكاء الاصطناعي",
+        "executeFailed": "فشل إجراء التقديم بالذكاء الاصطناعي",
+        "phases": {
+          "collecting_identity": "جمع بيانات الهوية",
+          "collecting_documents": "جمع المستندات",
+          "collecting_profile": "إكمال الملف الشخصي",
+          "ready_for_student": "جاهز لإنشاء الطالب",
+          "ready_for_application": "جاهز لإنشاء الطلب",
+          "application_created": "تم إنشاء الطلب",
+          "needs_review": "يحتاج إلى مراجعة"
+        }
+      }
     },
     "applicationTab": {
       "noStudent": "لا يوجد طالب مرتبط",

@@ -1268,7 +1268,28 @@
       "existingStudentLinked": "Profil siswa yang sudah ada ditautkan ke percakapan ini",
       "studentCreatedWithDocs": "Siswa dibuat — {count} dokumen disimpan ke profil",
       "programPendingNote": "Daftar akan diperbarui setelah program dipilih",
-      "programScopedNote": "Persyaratan untuk {name}"
+      "programScopedNote": "Persyaratan untuk {name}",
+      "applicationIntake": {
+        "title": "Pengumpulan aplikasi dengan AI",
+        "identity": "Identitas",
+        "documents": "Dokumen",
+        "profile": "Profil",
+        "reviewRequired": "Peninjauan manusia diperlukan",
+        "createStudent": "Buat siswa dengan aman",
+        "createApplication": "Buat aplikasi dengan aman",
+        "actionsDisabled": "Aktifkan tindakan penerimaan AI lokal untuk menjalankan langkah terlindungi ini.",
+        "executed": "Tindakan penerimaan AI selesai",
+        "executeFailed": "Tindakan penerimaan AI gagal",
+        "phases": {
+          "collecting_identity": "Mengumpulkan identitas",
+          "collecting_documents": "Mengumpulkan dokumen",
+          "collecting_profile": "Melengkapi profil",
+          "ready_for_student": "Siap membuat siswa",
+          "ready_for_application": "Siap membuat aplikasi",
+          "application_created": "Aplikasi dibuat",
+          "needs_review": "Perlu ditinjau"
+        }
+      }
     },
     "applicationTab": {
       "noStudent": "Belum ada mahasiswa yang ditautkan",

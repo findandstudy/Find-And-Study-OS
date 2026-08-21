@@ -1268,7 +1268,28 @@
       "existingStudentLinked": "मौजूदा छात्र प्रोफ़ाइल को इस बातचीत से जोड़ दिया गया",
       "studentCreatedWithDocs": "छात्र बनाया गया — {count} दस्तावेज़ प्रोफ़ाइल में सहेजे गए",
       "programPendingNote": "प्रोग्राम चुनने पर सूची अपडेट होगी",
-      "programScopedNote": "{name} के लिए आवश्यकताएँ"
+      "programScopedNote": "{name} के लिए आवश्यकताएँ",
+      "applicationIntake": {
+        "title": "AI आवेदन जानकारी संग्रह",
+        "identity": "पहचान",
+        "documents": "दस्तावेज़",
+        "profile": "प्रोफ़ाइल",
+        "reviewRequired": "मानवीय समीक्षा आवश्यक है",
+        "createStudent": "छात्र सुरक्षित रूप से बनाएँ",
+        "createApplication": "आवेदन सुरक्षित रूप से बनाएँ",
+        "actionsDisabled": "इस सुरक्षित चरण को चलाने के लिए स्थानीय AI प्रवेश कार्रवाइयाँ सक्षम करें।",
+        "executed": "AI प्रवेश कार्रवाई पूरी हुई",
+        "executeFailed": "AI प्रवेश कार्रवाई विफल हुई",
+        "phases": {
+          "collecting_identity": "पहचान एकत्र की जा रही है",
+          "collecting_documents": "दस्तावेज़ एकत्र किए जा रहे हैं",
+          "collecting_profile": "प्रोफ़ाइल पूरी की जा रही है",
+          "ready_for_student": "छात्र बनाने के लिए तैयार",
+          "ready_for_application": "आवेदन बनाने के लिए तैयार",
+          "application_created": "आवेदन बनाया गया",
+          "needs_review": "समीक्षा आवश्यक"
+        }
+      }
     },
     "applicationTab": {
       "noStudent": "कोई छात्र लिंक नहीं",
