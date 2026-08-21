@@ -14,6 +14,7 @@ import { getSessionCookieOptions } from "../lib/cookieOptions";
 import { extractBearerToken, lookupApiToken } from "../lib/apiTokenAuth";
 import { applyPermissionOverrides } from "../lib/permissions";
 import { verifyStudentPhotoSignature } from "@workspace/portal-adapters";
+import { getRemainingSessionCookieTtl, resolveSessionIssuedAt } from "../lib/sessionLifetime";
 
 declare global {
   namespace Express {
@@ -35,9 +36,9 @@ declare global {
   }
 }
 
-// admin / super_admin already have isAdmin=true on the frontend → canSee is
-// always true for them, so there is no need to populate agentStaffPermissions.
-const ADMINISH_ROLES = new Set(["admin", "super_admin"]);
+// Only Super Admin bypasses the versioned/configured role package. Admin must
+// receive the same effective permission projection as every other role.
+const ADMINISH_ROLES = new Set(["super_admin"]);
 
 async function resolveRolePerms(
   role: string,
@@ -66,7 +67,7 @@ async function resolveRolePerms(
  * visibility — without this, staff/consultant/accountant roles would always
  * see an empty set and therefore no gated menu items.
  *
- * Skipped for admin/super_admin (they pass the isAdmin short-circuit instead).
+ * Skipped only for super_admin (the sole all-permission short-circuit).
  * Never throws — on error the existing session value is preserved unchanged.
  */
 async function enrichWithEffectivePerms(
@@ -248,14 +249,18 @@ export async function authMiddleware(
   // The helper throttles PostgreSQL writes to once per session per five
   // minutes while user status/role remains checked on every request.
   setImmediate(() => {
-    touchSession(sid).catch(() => {});
+    touchSession(sid, resolveSessionIssuedAt(session.issued_at)).catch(() => {});
   });
 
   // Slide the BROWSER cookie expiry forward to match the server-side session.
   // Without this, the cookie's maxAge is fixed at login time (30 min) and
   // disappears even though the user is actively using the app — leading to
   // unexpected 401 "Authentication required" errors on the next mutation.
-  res.cookie(SESSION_COOKIE, sid, getSessionCookieOptions(req, SESSION_TTL));
+  const remainingCookieTtl = getRemainingSessionCookieTtl(
+    resolveSessionIssuedAt(session.issued_at),
+    SESSION_TTL,
+  );
+  res.cookie(SESSION_COOKIE, sid, getSessionCookieOptions(req, remainingCookieTtl));
 
   next();
 }

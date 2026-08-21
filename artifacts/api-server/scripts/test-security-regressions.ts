@@ -40,6 +40,78 @@ const objectAuthzSource = readFileSync(
   new URL("../src/lib/objectAuthz.ts", import.meta.url),
   "utf8",
 );
+const objectStorageSource = readFileSync(
+  new URL("../src/lib/objectStorage.ts", import.meta.url),
+  "utf8",
+);
+const aiAgentConfigSource = readFileSync(
+  new URL("../src/lib/inbox/aiAgentConfig.ts", import.meta.url),
+  "utf8",
+);
+const botAutoReplySource = readFileSync(
+  new URL("../src/lib/inbox/botAutoReply.ts", import.meta.url),
+  "utf8",
+);
+const aiBotsRouteSource = readFileSync(
+  new URL("../src/routes/aiBots.ts", import.meta.url),
+  "utf8",
+);
+const usersRouteSource = readFileSync(
+  new URL("../src/routes/users.ts", import.meta.url),
+  "utf8",
+);
+const legacyUserManagementPolicySource = readFileSync(
+  new URL("../src/lib/legacyUserManagementPolicy.ts", import.meta.url),
+  "utf8",
+);
+const agentsRouteSource = readFileSync(
+  new URL("../src/routes/agents.ts", import.meta.url),
+  "utf8",
+);
+const rolesRouteSource = readFileSync(
+  new URL("../src/routes/roles.ts", import.meta.url),
+  "utf8",
+);
+const branchesRouteSource = readFileSync(
+  new URL("../src/routes/branches.ts", import.meta.url),
+  "utf8",
+);
+const settingsRouteSource = readFileSync(
+  new URL("../src/routes/settings.ts", import.meta.url),
+  "utf8",
+);
+const authGuardSource = readFileSync(
+  new URL("../src/lib/auth.ts", import.meta.url),
+  "utf8",
+);
+const permissionsSource = readFileSync(
+  new URL("../src/lib/permissions.ts", import.meta.url),
+  "utf8",
+);
+const authMiddlewareSource = readFileSync(
+  new URL("../src/middlewares/authMiddleware.ts", import.meta.url),
+  "utf8",
+);
+const frontendAuthSource = readFileSync(
+  new URL("../../edcons/src/hooks/use-auth.ts", import.meta.url),
+  "utf8",
+);
+const sessionSource = readFileSync(
+  new URL("../src/lib/replitAuth.ts", import.meta.url),
+  "utf8",
+);
+const sessionLifetimeSource = readFileSync(
+  new URL("../src/lib/sessionLifetime.ts", import.meta.url),
+  "utf8",
+);
+const dormBookingFollowupSource = readFileSync(
+  new URL("../src/lib/inbox/dormBookingFollowupWorker.ts", import.meta.url),
+  "utf8",
+);
+const publicObjectResolverSource = objectStorageSource.slice(
+  objectStorageSource.indexOf("async searchPublicObject"),
+  objectStorageSource.indexOf("// ── downloadObject"),
+);
 const emailVerificationSource = readFileSync(
   new URL("../src/lib/emailVerificationToken.ts", import.meta.url),
   "utf8",
@@ -208,6 +280,87 @@ test("local uploads are owner-bound, fail closed, and bounded before buffering",
   assert.doesNotMatch(storageRouteSource, /processUpload failed, storing original/);
   assert.match(objectAuthzSource, /recordObjectOwner[\s\S]*Promise<boolean>/);
   assert.match(objectAuthzSource, /failed to record object owner:[\s\S]*return false/);
+});
+
+test("local public-object lookup cannot fall through to the private namespace", () => {
+  assert.match(
+    publicObjectResolverSource,
+    /resolveExistingLocalPath\(nodePath\.posix\.join\("public", filePath\)\)/,
+  );
+  assert.doesNotMatch(publicObjectResolverSource, /resolveExistingLocalPath\(filePath\)/);
+  assert.match(objectStorageSource, /writeLocalObjectBuffer[\s\S]*mode: 0o700/);
+  assert.match(objectStorageSource, /writeLocalObjectBuffer[\s\S]*mode: 0o600/);
+  assert.match(storageRouteSource, /writeLocalObjectBuffer\(relPath, body, finalContentType\)/);
+  assert.doesNotMatch(storageRouteSource, /fsPromises\.writeFile\(localPath/);
+});
+
+test("external AI delivery fails closed and activation requires Super Admin", () => {
+  assert.match(aiAgentConfigSource, /externalAutoReplyEnabled: false/);
+  assert.match(aiAgentConfigSource, /aiAgentPatchRequiresSuperAdmin/);
+  assert.match(aiAgentConfigSource, /AI_EXTERNAL_AUTO_REPLY_KILL_SWITCH/);
+  assert.match(botAutoReplySource, /isExternalAutoReplyEmergencyStopped/);
+  assert.match(botAutoReplySource, /reason: "external_delivery_disabled"/);
+  assert.match(botAutoReplySource, /getExternalAiDeliveryBlockReason/);
+  assert.match(aiBotsRouteSource, /req\.user!\.role !== "super_admin"/);
+  assert.match(aiBotsRouteSource, /externalAutoReplyEnabled: false/);
+  assert.match(dormBookingFollowupSource, /!config\.externalAutoReplyEnabled/);
+  assert.match(dormBookingFollowupSource, /isExternalAutoReplyEmergencyStopped/);
+});
+
+test("legacy impersonation is branch-scoped and nested sessions are denied", () => {
+  assert.match(usersRouteSource, /evaluateLegacyUserImpersonation/);
+  assert.match(usersRouteSource, /getVisibleBranchIds/);
+  assert.match(usersRouteSource, /currentSession\.originalSid/);
+  assert.match(usersRouteSource, /auth\.impersonate\.denied/);
+  assert.match(agentsRouteSource, /currentSession\.originalSid/);
+  assert.match(agentsRouteSource, /Cannot impersonate an inactive account/);
+});
+
+test("legacy generic user management is branch-scoped and privilege ordered", () => {
+  assert.match(usersRouteSource, /inArray\(usersTable\.branchId, visibleBranchIds\)/);
+  assert.match(usersRouteSource, /notInArray\(usersTable\.role/);
+  assert.match(usersRouteSource, /evaluateLegacyUserManagement/);
+  assert.match(usersRouteSource, /PERMISSION_OVERRIDE_REQUIRES_SUPER_ADMIN/);
+  assert.match(usersRouteSource, /canLegacyActorAssignRole/);
+  assert.match(legacyUserManagementPolicySource, /peer_or_higher_privilege/);
+  assert.match(legacyUserManagementPolicySource, /agent_relationship_route_required/);
+  assert.match(legacyUserManagementPolicySource, /Dynamic role permissions are mutable platform configuration/);
+});
+
+test("long-lived platform configuration writes require Super Admin and audit receipts", () => {
+  assert.match(rolesRouteSource, /router\.post\("\/roles", requireAuth, requireRole\("super_admin"\)/);
+  assert.match(rolesRouteSource, /router\.patch\("\/roles\/:id", requireAuth, requireRole\("super_admin"\)/);
+  assert.match(rolesRouteSource, /router\.delete\("\/roles\/:id", requireAuth, requireRole\("super_admin"\)/);
+  assert.doesNotMatch(rolesRouteSource, /seedDefaultRoles/);
+  assert.match(settingsRouteSource, /router\.patch\("\/settings", requireAuth, requireRole\("super_admin"\)/);
+  assert.match(settingsRouteSource, /platform_config\.settings\.update/);
+  assert.match(settingsRouteSource, /"n8nWebhookUrl"/);
+  const settingsRead = settingsRouteSource.slice(
+    settingsRouteSource.indexOf('router.get("/settings"'),
+    settingsRouteSource.indexOf('router.patch("/settings"'),
+  );
+  assert.doesNotMatch(settingsRead, /db\.insert\(settingsTable\)/);
+  assert.match(branchesRouteSource, /platform_config\.branch\.create/);
+  assert.match(branchesRouteSource, /platform_config\.branch\.update/);
+  assert.match(branchesRouteSource, /platform_config\.branch\.archive/);
+  assert.match(branchesRouteSource, /platform_config\.branch\.unarchive/);
+});
+
+test("permission-backed decisions use stored roles and only Super Admin bypasses them", () => {
+  assert.match(authGuardSource, /getEffectivePermissionSet\(req\.user\)/);
+  assert.doesNotMatch(authGuardSource, /new Set<string>\(\[\.\.\.fromDb, \.\.\.fromDefault\]\)/);
+  assert.match(permissionsSource, /ALL_PERMISSION_ROLES = new Set\(\["super_admin"\]\)/);
+  assert.match(authMiddlewareSource, /ADMINISH_ROLES = new Set\(\["super_admin"\]\)/);
+  assert.match(frontendAuthSource, /if \(role === "super_admin"\) return true/);
+  assert.doesNotMatch(frontendAuthSource, /role === "super_admin" \|\| role === "admin"/);
+});
+
+test("session sliding is capped by a server-issued absolute lifetime", () => {
+  assert.match(sessionLifetimeSource, /ABSOLUTE_SESSION_TTL = 24 \* 60 \* 60 \* 1000/);
+  assert.match(sessionSource, /storedData: SessionData = \{ \.\.\.data, issued_at: issuedAt \}/);
+  assert.match(sessionSource, /isAbsoluteSessionExpired\(issuedAt\)/);
+  assert.match(sessionSource, /getBoundedSessionExpiry\(issuedAt, IDLE_TIMEOUT\)/);
+  assert.match(authMiddlewareSource, /getRemainingSessionCookieTtl/);
 });
 
 test("email verification links are random, hashed, expiring, and one-time", () => {

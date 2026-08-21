@@ -35,6 +35,14 @@
     "test:course-finder-filter-cache": "tsx --test ./scripts/test-course-finder-filter-cache.ts ./scripts/test-course-finder-list-cache.ts",
     "test:public-catalog-list-scaling": "tsx --test ./scripts/test-public-catalog-and-list-scaling.ts",
     "test:ai-agent": "tsx --test ./scripts/test-ai-agent-config.ts",
+    "test:ai-delivery-safety": "tsx --test ./scripts/test-ai-delivery-safety.ts",
+    "test:impersonation-policy": "tsx --test ./scripts/test-impersonation-policy.ts",
+    "test:user-management-policy": "tsx --test ./scripts/test-user-management-policy.ts",
+    "test:session-lifetime": "tsx --test ./scripts/test-session-lifetime.ts",
+    "test:active-tenant-context": "tsx --test ./scripts/test-active-tenant-context.ts",
+    "test:change-set-policy": "tsx --test ./scripts/test-change-set-policy.ts",
+    "test:change-set-command": "tsx --test ./scripts/test-change-set-command.ts",
+    "test:postgres-control-plane-gate": "tsx ./scripts/test-postgres-control-plane-gate.ts",
     "test:ai-agent-admin": "tsx --test ./scripts/test-ai-agent-admin.ts",
     "test:ai-agent-models": "tsx --test ./scripts/test-ai-agent-models.ts",
     "test:academy-knowledge": "tsx --test ./scripts/test-academy-knowledge.ts",
@@ -209,7 +217,9 @@
     "@types/jsdom": "^28.0.3",
     "@types/node": "catalog:",
     "@types/nodemailer": "^7.0.11",
+    "@types/pg": "^8.18.0",
     "esbuild": "^0.28.1",
+    "pg": "^8.20.0",
     "tsx": "catalog:"
   }
 }
