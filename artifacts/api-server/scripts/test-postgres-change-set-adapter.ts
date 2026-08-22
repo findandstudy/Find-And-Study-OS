@@ -1167,9 +1167,13 @@ async function main() {
       }),
       expectedRole: ROLE.contextResolver,
     });
-    const cancelledResolution = cancellationRepository.withLockedCurrentState(
-      { ...issuanceRequest, observedAt: NOW },
-      async () => "must-not-be-issued",
+    const cancelledResolution = mustFail(
+      () =>
+        cancellationRepository.withLockedCurrentState(
+          { ...issuanceRequest, observedAt: NOW },
+          async () => "must-not-be-issued",
+        ),
+      /canceling statement due to user request/,
     );
     const resolverBackendPid = await within(contextCancellationPid, 10_000);
     await withClient(adminUrl, async (admin) => {
@@ -1179,10 +1183,7 @@ async function main() {
       );
       assert.equal(cancelled.rows[0]?.cancelled, true);
     });
-    await mustFail(
-      () => cancelledResolution,
-      /canceling statement due to user request/,
-    );
+    await cancelledResolution;
 
     await withClient(contextResolverUrl, async (resolver) => {
       await mustFail(
