@@ -146,7 +146,6 @@ BEGIN
         OR (
           assignment.scope_type = 'ORGANIZATION'
           AND assignment.organization_id IS NOT DISTINCT FROM p_organization
-          AND p_legacy_branch IS NULL
         )
         OR (
           assignment.scope_type = 'LEGACY_BRANCH'

@@ -142,11 +142,17 @@ const ID = {
   failCompleteChangeSet: "018f5000-0000-7000-8000-000000000059",
   unboundPrincipal: "018f5000-0000-7000-8000-00000000005e",
   activeContextIssuer: "018f5000-0000-7000-8000-00000000005f",
+  organization: "018f5000-0000-7000-8000-000000000060",
+  branchMembership: "018f5000-0000-7000-8000-000000000061",
+  organizationGrantReceipt: "018f5000-0000-7000-8000-000000000062",
+  organizationAssignment: "018f5000-0000-7000-8000-000000000063",
+  organizationBranchContext: "018f5000-0000-7000-8000-000000000064",
   issuedContext: "018f5000-0000-7000-8000-00000000005a",
   issuanceRaceContext: "018f5000-0000-7000-8000-00000000005b",
   membershipDeniedContext: "018f5000-0000-7000-8000-00000000005c",
   policyDeniedContext: "018f5000-0000-7000-8000-00000000005d",
 } as const;
+const LEGACY_BRANCH_ID = 620_001;
 
 const NOW = Date.now();
 const activeContextSecret = crypto.randomBytes(48).toString("base64url");
@@ -731,10 +737,37 @@ async function seedFoundation() {
         [ID.tenant],
       );
       await migrator.query(
+        `INSERT INTO public.organizations
+          (id, tenant_id, legal_name, display_name, organization_type, status)
+         VALUES ($1, $2, 'Adapter Organization', 'Adapter Organization',
+                 'OPERATING_ENTITY', 'ACTIVE')`,
+        [ID.organization, ID.tenant],
+      );
+      await migrator.query(
+        `INSERT INTO public.branches (id, name)
+         VALUES ($1, 'Adapter organization-scope branch')`,
+        [LEGACY_BRANCH_ID],
+      );
+      await migrator.query(
+        `INSERT INTO public.tenant_organization_legacy_branches
+          (tenant_id, organization_id, legacy_branch_id)
+         VALUES ($1, $2, $3)`,
+        [ID.tenant, ID.organization, LEGACY_BRANCH_ID],
+      );
+      await migrator.query(
         `INSERT INTO public.memberships
-          (id, tenant_id, principal_id, status, valid_from)
-         VALUES ($1, $2, $3, 'ACTIVE', statement_timestamp() - interval '1 minute')`,
-        [ID.humanMembership, ID.tenant, ID.humanPrincipal],
+          (id, tenant_id, organization_id, legacy_branch_id, principal_id, status, valid_from)
+         VALUES
+          ($1, $2, NULL, NULL, $3, 'ACTIVE', statement_timestamp() - interval '1 minute'),
+          ($4, $2, $5, $6, $3, 'ACTIVE', statement_timestamp() - interval '1 minute')`,
+        [
+          ID.humanMembership,
+          ID.tenant,
+          ID.humanPrincipal,
+          ID.branchMembership,
+          ID.organization,
+          LEGACY_BRANCH_ID,
+        ],
       );
       await migrator.query(
         `INSERT INTO public.policy_versions
@@ -781,10 +814,11 @@ async function seedFoundation() {
           id, tenant_id, receipt_type, actor_principal_id, actor_membership_id,
           resource_type, resource_id, reason_code, correlation_id, evidence,
           receipt_hash
-        ) VALUES (
-          $1, $2, 'GRANT', $3, $4, 'ACCESS_ASSIGNMENT', $5,
-          'adapter_test', 'adapter-test-grant', '{}'::jsonb, $6
-        )`,
+        ) VALUES
+          ($1, $2, 'GRANT', $3, $4, 'ACCESS_ASSIGNMENT', $5,
+           'adapter_test', 'adapter-test-grant', '{}'::jsonb, $6),
+          ($7, $2, 'GRANT', $3, $4, 'ACCESS_ASSIGNMENT', $8,
+           'adapter_test', 'adapter-test-organization-grant', '{}'::jsonb, $9)`,
         [
           ID.grantReceipt,
           ID.tenant,
@@ -792,17 +826,21 @@ async function seedFoundation() {
           ID.humanMembership,
           ID.assignment,
           sha256("adapter-grant-receipt"),
+          ID.organizationGrantReceipt,
+          ID.organizationAssignment,
+          sha256("adapter-organization-grant-receipt"),
         ],
       );
       await migrator.query(
         `INSERT INTO public.access_assignments (
-          id, tenant_id, membership_id, role_package_version_id, scope_type,
+          id, tenant_id, membership_id, role_package_version_id, scope_type, organization_id,
           constraint_document, status, valid_from, granted_by_principal_id,
           granted_by_membership_id, grant_receipt_id, grant_receipt_type
-        ) VALUES (
-          $1, $2, $3, $4, 'TENANT', '{}'::jsonb, 'ACTIVE',
-          statement_timestamp() - interval '1 minute', $5, $3, $6, 'GRANT'
-        )`,
+        ) VALUES
+          ($1, $2, $3, $4, 'TENANT', NULL, '{}'::jsonb, 'ACTIVE',
+           statement_timestamp() - interval '1 minute', $5, $3, $6, 'GRANT'),
+          ($7, $2, $8, $4, 'ORGANIZATION', $9, '{}'::jsonb, 'ACTIVE',
+           statement_timestamp() - interval '1 minute', $5, $3, $10, 'GRANT')`,
         [
           ID.assignment,
           ID.tenant,
@@ -810,6 +848,10 @@ async function seedFoundation() {
           ID.rolePackage,
           ID.humanPrincipal,
           ID.grantReceipt,
+          ID.organizationAssignment,
+          ID.branchMembership,
+          ID.organization,
+          ID.organizationGrantReceipt,
         ],
       );
       await migrator.query(
@@ -1010,9 +1052,10 @@ async function main() {
     const issueContext = (
       contextId: string,
       signer: ActiveContextExternalSigner = activeContextSigner(),
+      request: unknown = issuanceRequest,
     ) =>
       issueAuthoritativeActiveTenantContext({
-        request: issuanceRequest,
+        request,
         repository: contextRepository,
         audience: "fas.active-context",
         environmentId: "test",
@@ -1051,6 +1094,49 @@ async function main() {
     assert.equal(verifiedIssuedContext.context.membershipId, ID.humanMembership);
     assert.deepEqual(verifiedIssuedContext.context.assignmentIds, [ID.assignment]);
     assert.equal(verifiedIssuedContext.context.policyVersionId, ID.policy);
+
+    const organizationBranchContext = await issueContext(
+      ID.organizationBranchContext,
+      activeContextSigner(),
+      {
+        authenticatedPrincipalId: ID.humanPrincipal,
+        tenantId: ID.tenant,
+        organizationId: ID.organization,
+        legacyBranchId: LEGACY_BRANCH_ID,
+      },
+    );
+    assert.equal(
+      organizationBranchContext.ok,
+      true,
+      organizationBranchContext.ok
+        ? undefined
+        : `organization-scope issuance denied: ${organizationBranchContext.reason}`,
+    );
+    if (!organizationBranchContext.ok) {
+      throw new Error(organizationBranchContext.reason);
+    }
+    const verifiedOrganizationBranch = verifyVersionedActiveTenantContext({
+      token: organizationBranchContext.token,
+      keyRing: [contextKey],
+      expected: {
+        audience: "fas.active-context",
+        environmentId: "test",
+        cellId: "cell-a",
+        issuerId: contextKey.issuerId,
+        tenantId: ID.tenant,
+      },
+      now: NOW,
+    });
+    assert.equal(verifiedOrganizationBranch.ok, true);
+    if (!verifiedOrganizationBranch.ok) {
+      throw new Error(verifiedOrganizationBranch.reason);
+    }
+    assert.equal(verifiedOrganizationBranch.context.organizationId, ID.organization);
+    assert.equal(verifiedOrganizationBranch.context.legacyBranchId, LEGACY_BRANCH_ID);
+    assert.equal(verifiedOrganizationBranch.context.membershipId, ID.branchMembership);
+    assert.deepEqual(verifiedOrganizationBranch.context.assignmentIds, [
+      ID.organizationAssignment,
+    ]);
 
     const signerReady = deferred<void>();
     const releaseSigner = deferred<void>();
