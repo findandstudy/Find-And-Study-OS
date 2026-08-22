@@ -1,7 +1,7 @@
 # ChangeSet PostgreSQL Integration Gate
 
-Status: **61-MIGRATION FOUNDATION, DEFAULT-UNWIRED COMMAND/EVIDENCE ADAPTER,
-AND DURABLE-AUDIT ADAPTER CI GREEN; NO-GO for runtime wiring**.
+Status: **61-MIGRATION FOUNDATION, DEFAULT-UNWIRED CONTEXT-BOUND
+COMMAND/EVIDENCE AND DURABLE-AUDIT ADAPTER CI GREEN; NO-GO for runtime wiring**.
 
 This gate is not a delivery estimate and is not proof that migrations `0055`
 through `0060` have run in a long-lived environment. The approved local
@@ -85,8 +85,9 @@ The gate passes only when CI records all of the following:
    connections;
 6. composite negative cases for tenant, principal membership, organization,
    and legacy branch bindings;
-7. verified-context tenant different from the transaction GUC tenant;
-   principal/membership tenant different from the GUC tenant; and commands
+7. copied, unverified, expired, or in-transaction-expired context; any
+   same-tenant context/principal/membership/policy substitution; verified
+   context tenant different from the transaction GUC tenant; and commands
    racing a membership/assignment revoke or policy-version rotation, all
    failing closed;
 8. concurrent duplicate commands, changed-request conflicts, in-progress
@@ -135,10 +136,12 @@ exercises:
 `test-postgres-change-set-adapter.ts` add the separate real-adapter candidate.
 It uses a pool of one, the exact signed-envelope verifier, separate RPC-only
 roles and fixed-search-path function owners. It proves authoritative snapshot
-create, signed evidence admission, DRAFT to VALIDATED, evidence consumption,
-canonical replay, rollback, same-client tenant-context cleanup and direct-role
-denials. The command validator independently binds artifact count and manifest
-hash into the signed outcome hash.
+create, copied-context and actor-substitution denial, in-transaction context
+expiry, internal-only tenant GUC binding, signed evidence admission, DRAFT to
+VALIDATED, evidence consumption, canonical replay, rollback, same-client
+tenant-context cleanup and direct-role denials. The command validator
+independently binds artifact count and manifest hash into the signed outcome
+hash.
 
 `.github/workflows/postgres-control-plane-audit-gate.yml` and
 `test-postgres-change-set-audit.ts` add the durable outer-attempt candidate.
@@ -148,15 +151,17 @@ domain-separated HMAC chain verification, cross-tenant and no-context denial,
 direct-table denial for the audit login, transaction-local context cleanup, and
 one terminal winner under a same-attempt race.
 
-All checks passed on audit implementation head
-`8579a54f44e5c75537dcd31dba0e661f8223b367`: foundation run `32537777722`,
-command/evidence adapter run `32537777669`, durable-audit run `32537777763`,
-and G0 Linux/Windows run `32537777745`. The checks are not yet required by a
-repository ruleset. The adapter candidate still does not cover signed
-HTTP-to-DB context binding, every cancellation/ambiguous-commit path, both lock
-orders for membership/policy/key revocation, injected failure between every
-write, production KMS/HSM audit-key custody, incomplete-attempt reconciliation,
-or decision/step-up paths. Those gaps keep the full matrix and runtime wiring at
+All checks passed on context-binding implementation head
+`e855f0283f7cc9449da9dc0c19a20d23991cd223`: foundation run `32539460998`,
+command/evidence adapter run `32539460946`, durable-audit run `32539461023`,
+and G0 Linux/Windows run `32539460995`. The checks are not yet required by a
+repository ruleset. The adapter candidate still does not cover HTTP
+authentication-to-branded-context wiring, binding that context into the
+separate audit writer, direct command-credential compromise, every
+cancellation/ambiguous-commit path, both lock orders for
+membership/policy/key revocation, injected failure between every write,
+production KMS/HSM audit-key custody, incomplete-attempt reconciliation, or
+decision/step-up paths. Those gaps keep the full matrix and runtime wiring at
 NO-GO.
 
 ## Runtime-wiring gate
