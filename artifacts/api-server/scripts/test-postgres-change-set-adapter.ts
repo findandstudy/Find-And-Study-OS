@@ -1638,20 +1638,55 @@ async function main() {
       try {
         await migrator.query(`SELECT set_config('app.tenant_id', $1, true)`, [ID.tenant]);
         const evidence = await migrator.query(
-          `SELECT consumed_by_command_receipt_id, consumed_at IS NOT NULL AS consumed
+          `SELECT id, consumed_by_command_receipt_id,
+                  consumed_at IS NOT NULL AS consumed
            FROM public.change_set_evidence_receipts
-           WHERE tenant_id = $1 AND id = $2`,
-          [ID.tenant, ID.evidenceReceipt],
+           WHERE tenant_id = $1 AND id = ANY($2::uuid[])
+           ORDER BY id`,
+          [
+            ID.tenant,
+            [
+              ID.evidenceReceipt,
+              ID.simulationEvidence,
+              ID.testArtifactEvidence,
+              ID.rollbackPlanEvidence,
+              ID.canaryPlanEvidence,
+            ],
+          ],
         );
         assert.deepEqual(evidence.rows, [
-          { consumed_by_command_receipt_id: ID.transitionCommand, consumed: true },
+          {
+            id: ID.evidenceReceipt,
+            consumed_by_command_receipt_id: ID.transitionCommand,
+            consumed: true,
+          },
+          {
+            id: ID.simulationEvidence,
+            consumed_by_command_receipt_id: ID.simulationCommand,
+            consumed: true,
+          },
+          {
+            id: ID.testArtifactEvidence,
+            consumed_by_command_receipt_id: null,
+            consumed: false,
+          },
+          {
+            id: ID.rollbackPlanEvidence,
+            consumed_by_command_receipt_id: null,
+            consumed: false,
+          },
+          {
+            id: ID.canaryPlanEvidence,
+            consumed_by_command_receipt_id: null,
+            consumed: false,
+          },
         ]);
         const state = await migrator.query(
           `SELECT status, version::int FROM public.change_sets
            WHERE tenant_id = $1 AND id = $2`,
           [ID.tenant, ID.changeSet],
         );
-        assert.deepEqual(state.rows, [{ status: "VALIDATED", version: 2 }]);
+        assert.deepEqual(state.rows, [{ status: "SIMULATED", version: 3 }]);
         await migrator.query("ROLLBACK");
       } catch (error) {
         await migrator.query("ROLLBACK");
@@ -1662,7 +1697,7 @@ async function main() {
     await Promise.all([executorPool.end(), issuerPool.end()]);
   }
   console.log(
-    "[postgres-adapter-gate] PASS: EXECUTE-only roles, real command store, ambiguous-commit replay, SQLSTATE 57014 cancellation rollback, signed evidence, and pool cleanup",
+    "[postgres-adapter-gate] PASS: EXECUTE-only roles, real command store, ambiguous-commit replay, SQLSTATE 57014 cancellation rollback, membership/policy/key revoke serialization, signed evidence, and pool cleanup",
   );
 }
 
