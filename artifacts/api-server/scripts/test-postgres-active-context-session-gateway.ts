@@ -254,11 +254,6 @@ async function bootstrapAuthority() {
       GRANT UPDATE (id) ON TABLE
         public.active_session_context_selection_command_receipts
       TO ${ROLE.lifecycleOwner};
-      -- PostgreSQL requires UPDATE privilege for SELECT ... FOR SHARE;
-      -- keep it column-scoped and rely on the immutable trigger to reject writes.
-      GRANT UPDATE (id) ON TABLE
-        public.active_session_context_selection_command_receipts
-      TO ${ROLE.lifecycleOwner};
 
       ALTER FUNCTION fas_session_v1.resolve_session_for_active_context(text, text, bigint)
         OWNER TO ${ROLE.sessionOwner};
