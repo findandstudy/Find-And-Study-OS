@@ -172,6 +172,12 @@ its single-use request commit atomically. After the revocation commits, a
 second signed envelope tied to the same exact grant fails closed: its request
 stays `OPEN` and no evidence receipt is inserted.
 
+The global issuer lifecycle is exercised last because revocation is terminal.
+When issuance owns the issuer verification lock first, the issuer revoker must
+wait until receipt/request commit. After global revoke commits, another validly
+signed envelope from that issuer is rejected as inactive before persistence;
+the denied request stays open and no partial receipt is left behind.
+
 `.github/workflows/postgres-control-plane-audit-gate.yml` and
 `test-postgres-change-set-audit.ts` add the durable outer-attempt candidate.
 They prove a separately committed start event, terminal success and rejection
@@ -189,15 +195,14 @@ its transaction is blocked in a controlled PostgreSQL query. It proves that
 the business transaction has no partial row while the separately committed
 attempt advances exactly once to `TERMINAL/ERROR/INTERNAL_ERROR`.
 
-All checks passed on evidence-tenant-grant-revocation implementation head
-`3539a3c543cdf1e4bc28f4efa7c17f1ddaaa36f4`: foundation run `32544900632`,
-command/evidence adapter run `32544900679`, durable-audit run `32544900649`,
-and G0 Linux/Windows run `32544900634`. The checks are not yet required by a
+All checks passed on evidence-issuer-revocation implementation head
+`9054010c7bffd84bfe549a952c42c26def892faf`: foundation run `32545500893`,
+command/evidence adapter run `32545500898`, durable-audit run `32545500894`,
+and G0 Linux/Windows run `32545500871`. The checks are not yet required by a
 repository ruleset. The adapter candidate still does not cover HTTP
 authentication-to-branded-context wiring, binding that context into the
 separate audit writer, direct command-credential compromise, scheduled repair
-after an unresolved ambiguous commit, both lock orders for global evidence
-issuer revocation, injected failure between every write,
+after an unresolved ambiguous commit, injected failure between every write,
 production KMS/HSM audit-key custody, incomplete-attempt reconciliation, or
 decision/step-up paths. Those gaps keep the full matrix and runtime wiring at
 NO-GO.
