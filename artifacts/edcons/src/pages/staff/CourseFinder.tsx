@@ -546,6 +546,7 @@ export default function CourseFinder() {
     }
     setGeneratingPdf(true);
     try {
+      const proposalPdfImport = import("@/lib/generateProposalPdf");
       let selected = programs.filter(p => selectedIds.has(p.id));
       if (selected.length < selectedIds.size) {
         const allParams = new URLSearchParams();
@@ -565,7 +566,7 @@ export default function CourseFinder() {
         selected = allData.data.filter(p => selectedIds.has(p.id));
       }
       const [{ generateProposalPdf }, settings] = await Promise.all([
-        import("@/lib/generateProposalPdf"),
+        proposalPdfImport,
         queryClient.fetchQuery<PdfSettings>({
           queryKey: ["settings-for-pdf"],
           queryFn: () => apiFetch(`${BASE_URL}/api/settings`),
@@ -718,6 +719,7 @@ export default function CourseFinder() {
   }, [sortedPrograms, colIntakes, colStatus]);
 
   async function exportToExcel() {
+    const excelImport = import("xlsx");
     let exportPrograms = sortedPrograms;
     const total = meta?.total ?? 0;
     if (total > programs.length) {
@@ -760,7 +762,7 @@ export default function CourseFinder() {
       "University Type": p.universityType || "",
       "Status": p.universityStatus || "",
     }));
-    const XLSX = await import("xlsx");
+    const XLSX = await excelImport;
     const ws = XLSX.utils.json_to_sheet(rows);
     const colWidths = Object.keys(rows[0]).map(k => ({ wch: Math.max(k.length, 14) }));
     ws["!cols"] = colWidths;

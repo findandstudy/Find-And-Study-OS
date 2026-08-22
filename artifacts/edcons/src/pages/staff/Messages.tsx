@@ -517,8 +517,10 @@ function InboxTab() {
   const [inboxStaffLoading, setInboxStaffLoading] = useState(true);
   const [convs, setConvs] = useState<InboxConversation[]>([]);
   const [loading, setLoading] = useState(true);
+  const inboxRequestSequenceRef = useRef(0);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [detail, setDetail] = useState<InboxConversationDetailResponse | null>(null);
+  const detailRequestSequenceRef = useRef(0);
   const [reply, setReply] = useState("");
   const [sending, setSending] = useState(false);
   const [blockingContact, setBlockingContact] = useState(false);
@@ -762,8 +764,10 @@ function InboxTab() {
       ? "stale"
       : liveStatus;
 
-  const fetchInbox = useCallback(async () => {
-    setLoading(true);
+  const fetchInbox = useCallback(async (options?: { background?: boolean }) => {
+    const background = options?.background === true;
+    const requestSequence = ++inboxRequestSequenceRef.current;
+    if (!background) setLoading(true);
     try {
       const params = new URLSearchParams({ tab, order: sortOrder });
       if (channel !== "all") params.set("channel", channel);
@@ -772,23 +776,30 @@ function InboxTab() {
       if (assignedStaffId !== null) params.set("assignedToId", String(assignedStaffId));
       const url = `/api/inbox/conversations?${params.toString()}`;
       const res = await customFetch(url);
-      setConvs((res as any)?.data || []);
+      if (requestSequence === inboxRequestSequenceRef.current) {
+        setConvs((res as any)?.data || []);
+      }
     } catch {
-      setConvs([]);
+      // A transient live-refresh failure must not blank an already usable
+      // inbox. Explicit/filter-changing loads retain the previous behavior.
+      if (!background && requestSequence === inboxRequestSequenceRef.current) setConvs([]);
     } finally {
-      setLoading(false);
+      if (requestSequence === inboxRequestSequenceRef.current) setLoading(false);
     }
   }, [tab, channel, sortOrder, showTests, debouncedInboxSearch, assignedStaffId]);
 
   useEffect(() => { fetchInbox(); }, [fetchInbox]);
 
   const fetchDetail = useCallback(async (id: number) => {
+    const requestSequence = ++detailRequestSequenceRef.current;
     try {
       const res = await customFetch(`/api/inbox/conversations/${id}`);
-      setDetail(res as InboxConversationDetailResponse);
-      setHasMoreOlder(Boolean((res as any)?.hasMoreMessages));
+      if (requestSequence === detailRequestSequenceRef.current) {
+        setDetail(res as InboxConversationDetailResponse);
+        setHasMoreOlder(Boolean((res as any)?.hasMoreMessages));
+      }
     } catch {
-      setDetail(null);
+      if (requestSequence === detailRequestSequenceRef.current) setDetail(null);
     }
   }, []);
 
@@ -829,6 +840,7 @@ function InboxTab() {
       // bumped by the messages fetch) — zero the badge immediately in the UI.
       setConvs((prev) => prev.map((c) => (c.id === selectedId && (c.unreadCount ?? 0) > 0 ? { ...c, unreadCount: 0 } : c)));
     } else {
+      detailRequestSequenceRef.current += 1;
       setDetail(null);
     }
     // Reset compose drafts when switching conversations so a half-written
@@ -893,6 +905,8 @@ function InboxTab() {
     setLiveStatus("connecting");
     let failureCount = 0;
     let inboxRefreshTimer: ReturnType<typeof setTimeout> | null = null;
+    let detailRefreshTimer: ReturnType<typeof setTimeout> | null = null;
+    let pendingDetailConversationId: number | null = null;
     const es = new EventSource("/api/inbox/events", { withCredentials: true });
 
     // One inbound action can emit message, assignment and read-state events.
@@ -903,7 +917,20 @@ function InboxTab() {
       if (inboxRefreshTimer !== null) return;
       inboxRefreshTimer = setTimeout(() => {
         inboxRefreshTimer = null;
-        void fetchInboxRef.current();
+        void fetchInboxRef.current({ background: true });
+      }, 200);
+    };
+
+    const scheduleDetailRefresh = (conversationId: number) => {
+      pendingDetailConversationId = conversationId;
+      if (detailRefreshTimer !== null) return;
+      detailRefreshTimer = setTimeout(() => {
+        detailRefreshTimer = null;
+        const pendingId = pendingDetailConversationId;
+        pendingDetailConversationId = null;
+        if (pendingId !== null && selectedIdRef.current === pendingId) {
+          void fetchDetailRef.current(pendingId);
+        }
       }, 200);
     };
 
@@ -918,7 +945,7 @@ function InboxTab() {
       }
       scheduleInboxRefresh();
       if (convId !== null && selectedIdRef.current === convId) {
-        fetchDetailRef.current(convId);
+        scheduleDetailRefresh(convId);
       }
     };
 
@@ -975,6 +1002,7 @@ function InboxTab() {
 
     return () => {
       if (inboxRefreshTimer !== null) clearTimeout(inboxRefreshTimer);
+      if (detailRefreshTimer !== null) clearTimeout(detailRefreshTimer);
       es.removeEventListener("inbox_message", refresh);
       es.removeEventListener("inbox_assigned", refresh);
       es.removeEventListener("inbox_read_state", refreshReadState);

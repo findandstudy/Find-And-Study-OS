@@ -30,6 +30,8 @@ test.afterEach(() => {
   delete process.env.FACET_CACHE_ENABLED;
   delete process.env.FACET_CACHE_TTL_MS;
   delete process.env.FACET_CACHE_MAX_ENTRIES;
+  delete process.env.REQUEST_PERF_SAMPLE_RATE;
+  delete process.env.REQUEST_PERF_SLOW_MS;
 });
 
 test("scope fingerprints are canonical and permission-sensitive", () => {
@@ -261,7 +263,11 @@ test("a rejected read is removed and can be retried", async () => {
 test("request middleware emits timing headers and a PII-safe metric record", async () => {
   process.env.DATABASE_URL = "postgres://test:test@127.0.0.1:1/test";
   process.env.REQUEST_PERF_TELEMETRY_ENABLED = "true";
-  const [{ default: express }, { requestPerformanceMiddleware }] = await Promise.all([
+  process.env.REQUEST_PERF_SAMPLE_RATE = "1";
+  const [{ default: express }, {
+    requestPerformanceMiddleware,
+    stopRequestPerformanceEventLoopMonitor,
+  }] = await Promise.all([
     import("express"),
     import("../src/lib/requestPerformance"),
   ]);
@@ -277,6 +283,7 @@ test("request middleware emits timing headers and a PII-safe metric record", asy
   });
   app.head("/api/head-test", (_req, res) => res.json({ hidden: true }));
   app.get("/api/not-modified", (_req, res) => res.status(304).end());
+  app.get("/api/events", (_req, res) => res.end("event: heartbeat\n\n"));
 
   const records: unknown[][] = [];
   const originalInfo = console.info;
@@ -297,6 +304,12 @@ test("request middleware emits timing headers and a PII-safe metric record", asy
     const notModifiedResponse = await fetch(`http://127.0.0.1:${address.port}/api/not-modified`);
     assert.equal(notModifiedResponse.status, 304);
     await notModifiedResponse.arrayBuffer();
+    const eventStreamResponse = await fetch(`http://127.0.0.1:${address.port}/api/events`, {
+      headers: { Accept: "text/event-stream" },
+    });
+    assert.equal(eventStreamResponse.status, 200);
+    assert.equal(eventStreamResponse.headers.get("server-timing"), null);
+    await eventStreamResponse.arrayBuffer();
     await new Promise((resolve) => setImmediate(resolve));
 
     const metricLine = records.find((entry) => entry[0] === "[request-performance]");
@@ -321,10 +334,30 @@ test("request middleware emits timing headers and a PII-safe metric record", asy
     });
     assert.equal(JSON.parse(String(headMetricLine?.[1])).responseBytes, 0);
     assert.equal(JSON.parse(String(notModifiedMetricLine?.[1])).responseBytes, 0);
+    assert.equal(records.some((entry) => {
+      if (entry[0] !== "[request-performance]") return false;
+      return JSON.parse(String(entry[1])).path === "/api/events";
+    }), false);
   } finally {
     console.info = originalInfo;
+    stopRequestPerformanceEventLoopMonitor();
     delete process.env.REQUEST_PERF_TELEMETRY_ENABLED;
+    delete process.env.REQUEST_PERF_SAMPLE_RATE;
     server.close();
     await once(server, "close");
   }
+});
+
+test("request performance sampling always keeps slow and failed requests", async () => {
+  process.env.REQUEST_PERF_SAMPLE_RATE = "0";
+  process.env.REQUEST_PERF_SLOW_MS = "500";
+  const { shouldLogRequestPerformance } = await import("../src/lib/requestPerformancePolicy");
+
+  assert.equal(shouldLogRequestPerformance(499, 200, () => 0.99), false);
+  assert.equal(shouldLogRequestPerformance(500, 200, () => 0.99), true);
+  assert.equal(shouldLogRequestPerformance(10, 500, () => 0.99), true);
+
+  process.env.REQUEST_PERF_SAMPLE_RATE = "0.25";
+  assert.equal(shouldLogRequestPerformance(10, 200, () => 0.24), true);
+  assert.equal(shouldLogRequestPerformance(10, 200, () => 0.25), false);
 });

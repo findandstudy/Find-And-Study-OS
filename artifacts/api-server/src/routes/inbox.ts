@@ -1074,9 +1074,9 @@ router.get(
       )
       .limit(200);
 
-    const externalIds = rows.map((r) => r.externalContactId).filter((x): x is number => !!x);
-    const assignedIds = rows.map((r) => r.assignedToId).filter((x): x is number => !!x);
-    const channelAccountIds = rows.map((r) => r.channelAccountId).filter((x): x is number => !!x);
+    const externalIds = [...new Set(rows.map((r) => r.externalContactId).filter((x): x is number => !!x))];
+    const assignedIds = [...new Set(rows.map((r) => r.assignedToId).filter((x): x is number => !!x))];
+    const channelAccountIds = [...new Set(rows.map((r) => r.channelAccountId).filter((x): x is number => !!x))];
 
     type AssignedUserSummary = {
       id: number;
@@ -1093,25 +1093,23 @@ router.get(
       metadata: unknown;
     };
 
-    const contactsMap = new Map<number, ExternalContact>();
-    if (externalIds.length > 0) {
-      const contacts = await db
+    // These three enrichment reads are independent. Running them in parallel
+    // removes two avoidable database round trips from the inbox critical path.
+    const [contacts, users, accounts] = await Promise.all([
+      externalIds.length > 0
+        ? db
         .select()
         .from(externalContactsTable)
-        .where(inArray(externalContactsTable.id, externalIds));
-      for (const c of contacts) contactsMap.set(c.id, c);
-    }
-    const usersMap = new Map<number, AssignedUserSummary>();
-    if (assignedIds.length > 0) {
-      const users = await db
+        .where(inArray(externalContactsTable.id, externalIds))
+        : Promise.resolve([] as ExternalContact[]),
+      assignedIds.length > 0
+        ? db
         .select({ id: usersTable.id, firstName: usersTable.firstName, lastName: usersTable.lastName, email: usersTable.email })
         .from(usersTable)
-        .where(inArray(usersTable.id, assignedIds));
-      for (const u of users) usersMap.set(u.id, u);
-    }
-    const channelAccountsMap = new Map<number, ChannelAccountSummary>();
-    if (channelAccountIds.length > 0) {
-      const accounts = await db
+        .where(inArray(usersTable.id, assignedIds))
+        : Promise.resolve([] as AssignedUserSummary[]),
+      channelAccountIds.length > 0
+        ? db
         .select({
           id: channelAccountsTable.id,
           displayName: channelAccountsTable.displayName,
@@ -1121,9 +1119,16 @@ router.get(
           metadata: channelAccountsTable.metadata,
         })
         .from(channelAccountsTable)
-        .where(inArray(channelAccountsTable.id, channelAccountIds));
-      for (const account of accounts) channelAccountsMap.set(account.id, account);
-    }
+        .where(inArray(channelAccountsTable.id, channelAccountIds))
+        : Promise.resolve([] as ChannelAccountSummary[]),
+    ]);
+
+    const contactsMap = new Map<number, ExternalContact>();
+    for (const c of contacts) contactsMap.set(c.id, c);
+    const usersMap = new Map<number, AssignedUserSummary>();
+    for (const u of users) usersMap.set(u.id, u);
+    const channelAccountsMap = new Map<number, ChannelAccountSummary>();
+    for (const account of accounts) channelAccountsMap.set(account.id, account);
 
     const data = rows.map((r) => ({
       ...r,
@@ -1151,11 +1156,29 @@ router.get(
       res.status(404).json({ error: "Not found" });
       return;
     }
-    const [externalContact] = conv.externalContactId
-      ? await db.select().from(externalContactsTable).where(eq(externalContactsTable.id, conv.externalContactId))
-      : [null];
-    const [channelAccount] = conv.channelAccountId
-      ? await db
+    const rawLimit = parseInt(String(req.query.limit ?? ""), 10);
+    const msgLimit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 200) : 50;
+    const beforeId = parseInt(String(req.query.before ?? ""), 10);
+    const msgWhere: SQL[] = [eq(messagesTable.conversationId, id)];
+    if (Number.isFinite(beforeId) && beforeId > 0) {
+      msgWhere.push(sql`${messagesTable.id} < ${beforeId}`);
+    }
+
+    // Contact/account lookup, owner consistency, per-user read state and the
+    // message window do not depend on each other. Overlap their I/O instead of
+    // serially waiting for five database round trips.
+    const [
+      externalContactRows,
+      channelAccountRows,
+      syncedOwner,
+      _readState,
+      newestFirst,
+    ] = await Promise.all([
+      conv.externalContactId
+        ? db.select().from(externalContactsTable).where(eq(externalContactsTable.id, conv.externalContactId))
+        : Promise.resolve([]),
+      conv.channelAccountId
+        ? db
           .select({
             id: channelAccountsTable.id,
             displayName: channelAccountsTable.displayName,
@@ -1166,28 +1189,32 @@ router.get(
           })
           .from(channelAccountsTable)
           .where(eq(channelAccountsTable.id, conv.channelAccountId))
-      : [null];
-    // Single-owner rule: keep the conversation owner in lockstep with the CRM
-    // chain owner (chain wins) so the header always shows the true owner. Runs
-    // inline (cheap: 2-3 point selects) so THIS response already reflects it.
-    if (conv.externalContactId) {
-      const syncedOwner = await syncConversationOwner(id, req.user!.id, req.ip);
-      if (syncedOwner !== (conv.assignedToId ?? null)) {
-        conv.assignedToId = syncedOwner;
-      }
+        : Promise.resolve([]),
+      conv.externalContactId
+        ? syncConversationOwner(id, req.user!.id, req.ip)
+        : Promise.resolve(conv.assignedToId ?? null),
+      db.execute(sql`
+        INSERT INTO conversation_participants (conversation_id, user_id, last_read_at)
+        VALUES (${id}, ${req.user!.id}, now())
+        ON CONFLICT (conversation_id, user_id)
+        DO UPDATE SET last_read_at = EXCLUDED.last_read_at
+      `),
+      db
+        .select()
+        .from(messagesTable)
+        .where(and(...msgWhere))
+        .orderBy(desc(messagesTable.id))
+        .limit(msgLimit + 1),
+    ]);
+    const externalContact = externalContactRows[0] ?? null;
+    const channelAccount = channelAccountRows[0] ?? null;
+    if (syncedOwner !== (conv.assignedToId ?? null)) {
+      conv.assignedToId = syncedOwner;
     }
+
     // Old Zernio attachments were stored without name/size — opportunistically
     // backfill them for this conversation in the background (rate-limited).
     void backfillConversationAttachmentNames(id);
-    // Opening a conversation marks it read for THIS staff user: bump their
-    // participant lastReadAt. Atomic upsert (cp_conv_user_uniq unique index)
-    // so concurrent opens can never race into duplicates. Powers unread badge.
-    await db.execute(sql`
-      INSERT INTO conversation_participants (conversation_id, user_id, last_read_at)
-      VALUES (${id}, ${req.user!.id}, now())
-      ON CONFLICT (conversation_id, user_id)
-      DO UPDATE SET last_read_at = EXCLUDED.last_read_at
-    `);
     const [assignedTo] = conv.assignedToId
       ? await db
           .select({
@@ -1202,19 +1229,6 @@ router.get(
     // Windowed message fetch: newest `limit` messages by default; `before=<id>`
     // pages older history (WhatsApp-style load-older). Rows are returned in
     // ascending order for rendering.
-    const rawLimit = parseInt(String(req.query.limit ?? ""), 10);
-    const msgLimit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 200) : 50;
-    const beforeId = parseInt(String(req.query.before ?? ""), 10);
-    const msgWhere: SQL[] = [eq(messagesTable.conversationId, id)];
-    if (Number.isFinite(beforeId) && beforeId > 0) {
-      msgWhere.push(sql`${messagesTable.id} < ${beforeId}`);
-    }
-    const newestFirst = await db
-      .select()
-      .from(messagesTable)
-      .where(and(...msgWhere))
-      .orderBy(desc(messagesTable.id))
-      .limit(msgLimit + 1);
     const hasMoreMessages = newestFirst.length > msgLimit;
     const rawMessages = newestFirst.slice(0, msgLimit).reverse();
 
@@ -1227,10 +1241,21 @@ router.get(
       const msgIds = rawMessages.map((m) => m.id);
 
       // Reactions: batch-fetch all for this message window.
-      const reactRows = await pool.query<{ message_id: number; emoji: string; user_id: number }>(
-        `SELECT message_id, emoji, user_id FROM message_reactions WHERE message_id = ANY($1)`,
-        [msgIds],
-      );
+      const replyToIds = [...new Set(rawMessages.map((m) => m.replyToId).filter(Boolean) as number[])];
+      const [reactRows, repliedRows] = await Promise.all([
+        pool.query<{ message_id: number; emoji: string; user_id: number }>(
+          `SELECT message_id, emoji, user_id FROM message_reactions WHERE message_id = ANY($1)`,
+          [msgIds],
+        ),
+        replyToIds.length > 0
+          ? pool.query<{ id: number; content: string; first_name: string | null; last_name: string | null }>(
+            `SELECT m.id, m.content, u.first_name, u.last_name
+             FROM messages m LEFT JOIN users u ON u.id = m.sender_id
+             WHERE m.id = ANY($1)`,
+            [replyToIds],
+          )
+          : Promise.resolve({ rows: [] as Array<{ id: number; content: string; first_name: string | null; last_name: string | null }> }),
+      ]);
       const reactMap: Record<number, Record<string, { emoji: string; count: number; userIds: number[] }>> = {};
       for (const r of reactRows.rows) {
         if (!reactMap[r.message_id]) reactMap[r.message_id] = {};
@@ -1240,22 +1265,13 @@ router.get(
       }
 
       // repliedMessage: fetch snippet for each unique replyToId.
-      const replyToIds = [...new Set(rawMessages.map((m) => m.replyToId).filter(Boolean) as number[])];
       const repliedMap: Record<number, { id: number; snippet: string; senderName: string }> = {};
-      if (replyToIds.length > 0) {
-        const repliedRows = await pool.query<{ id: number; content: string; first_name: string | null; last_name: string | null }>(
-          `SELECT m.id, m.content, u.first_name, u.last_name
-           FROM messages m LEFT JOIN users u ON u.id = m.sender_id
-           WHERE m.id = ANY($1)`,
-          [replyToIds],
-        );
-        for (const r of repliedRows.rows) {
-          repliedMap[r.id] = {
-            id: r.id,
-            snippet: r.content.slice(0, 120),
-            senderName: [r.first_name, r.last_name].filter(Boolean).join(" ") || "Unknown",
-          };
-        }
+      for (const r of repliedRows.rows) {
+        repliedMap[r.id] = {
+          id: r.id,
+          snippet: r.content.slice(0, 120),
+          senderName: [r.first_name, r.last_name].filter(Boolean).join(" ") || "Unknown",
+        };
       }
 
       messages = rawMessages.map((m) => ({

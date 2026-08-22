@@ -194,6 +194,11 @@ test("deploy entrypoints use preflight and contain no blind fallback", () => {
 
   const nginx = readFileSync(path.join(__dirname, "nginx.conf"), "utf8");
   assert.match(nginx, /server 127\.0\.0\.1:5057 backup max_fails=0;/);
+  assert.match(nginx, /log_format fasos_upstream_timing/);
+  assert.match(nginx, /access_log \/var\/log\/nginx\/fasos-access\.log fasos_upstream_timing/);
+  assert.match(nginx, /proxy_set_header Connection "";/);
+  assert.doesNotMatch(nginx, /proxy_set_header Upgrade/);
+  assert.doesNotMatch(nginx, /proxy_cache_bypass \$http_upgrade/);
   assert.doesNotMatch(
     nginx,
     /^\s*proxy_next_upstream\s+[^;\n]*non_idempotent/m,

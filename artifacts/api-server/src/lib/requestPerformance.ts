@@ -1,4 +1,5 @@
 import type { NextFunction, Request, Response } from "express";
+import { monitorEventLoopDelay, type IntervalHistogram } from "node:perf_hooks";
 import {
   getDbRequestMetricsSnapshot,
   runWithDbRequestMetrics,
@@ -12,6 +13,17 @@ import {
   recordResponseBytes,
   runWithRequestTelemetry,
 } from "./requestTelemetry";
+import {
+  requestPerformanceEventLoopIntervalMs,
+  requestPerformanceEventLoopResolutionMs,
+  shouldLogRequestPerformance,
+} from "./requestPerformancePolicy";
+
+export {
+  requestPerformanceSampleRate,
+  requestPerformanceSlowThresholdMs,
+  shouldLogRequestPerformance,
+} from "./requestPerformancePolicy";
 
 function elapsedMs(startedAt: bigint): number {
   return Number(process.hrtime.bigint() - startedAt) / 1_000_000;
@@ -21,8 +33,53 @@ function roundMetric(value: number): number {
   return Math.round(value * 10) / 10;
 }
 
+function nanosecondsToMilliseconds(value: number): number {
+  return roundMetric(value / 1_000_000);
+}
+
+let eventLoopDelay: IntervalHistogram | null = null;
+let eventLoopTimer: ReturnType<typeof setInterval> | null = null;
+
 export function isRequestPerformanceEnabled(): boolean {
   return process.env.REQUEST_PERF_TELEMETRY_ENABLED === "true";
+}
+
+function requestMetricPath(req: Request): string {
+  const routePath = req.route?.path;
+  const route = typeof routePath === "string"
+    ? `${req.baseUrl || ""}${routePath}`
+    : req.path;
+  return route
+    .replace(/\/[0-9]+(?=\/|$)/g, "/:id")
+    .replace(/\/[0-9a-f]{8}-[0-9a-f-]{27,}(?=\/|$)/gi, "/:id");
+}
+
+export function stopRequestPerformanceEventLoopMonitor(): void {
+  if (eventLoopTimer) clearInterval(eventLoopTimer);
+  eventLoopTimer = null;
+  eventLoopDelay?.disable();
+  eventLoopDelay = null;
+}
+
+export function startRequestPerformanceEventLoopMonitor(): void {
+  if (!isRequestPerformanceEnabled() || eventLoopDelay || eventLoopTimer) return;
+  const resolution = requestPerformanceEventLoopResolutionMs();
+  const intervalMs = requestPerformanceEventLoopIntervalMs();
+  eventLoopDelay = monitorEventLoopDelay({ resolution });
+  eventLoopDelay.enable();
+  eventLoopTimer = setInterval(() => {
+    if (!eventLoopDelay) return;
+    console.info("[event-loop-performance]", JSON.stringify({
+      releaseId: process.env.RELEASE_ID || "unknown",
+      intervalMs,
+      p50Ms: nanosecondsToMilliseconds(eventLoopDelay.percentile(50)),
+      p95Ms: nanosecondsToMilliseconds(eventLoopDelay.percentile(95)),
+      p99Ms: nanosecondsToMilliseconds(eventLoopDelay.percentile(99)),
+      maxMs: nanosecondsToMilliseconds(eventLoopDelay.max),
+    }));
+    eventLoopDelay.reset();
+  }, intervalMs);
+  eventLoopTimer.unref?.();
 }
 
 export function requestPerformanceMiddleware(
@@ -30,10 +87,13 @@ export function requestPerformanceMiddleware(
   res: Response,
   next: NextFunction,
 ): void {
-  if (!isRequestPerformanceEnabled() || !req.path.startsWith("/api/")) {
+  const isEventStream = req.get("accept")?.toLowerCase().includes("text/event-stream") === true;
+  if (!isRequestPerformanceEnabled() || !req.path.startsWith("/api/") || isEventStream) {
     next();
     return;
   }
+
+  startRequestPerformanceEventLoopMonitor();
 
   runWithReadPathMetrics(() => runWithDbRequestMetrics(() => runWithRequestTelemetry(() => {
     const startedAt = process.hrtime.bigint();
@@ -75,6 +135,7 @@ export function requestPerformanceMiddleware(
 
     res.once("finish", () => {
       const totalMs = elapsedMs(startedAt);
+      if (!shouldLogRequestPerformance(totalMs, res.statusCode)) return;
       const dbMetrics = getDbRequestMetricsSnapshot();
       const requestTelemetry = getRequestTelemetrySnapshot();
       const contentLength = Number(res.getHeader("Content-Length"));
@@ -93,7 +154,7 @@ export function requestPerformanceMiddleware(
         requestId: res.locals.requestId,
         releaseId: process.env.RELEASE_ID || "unknown",
         method: req.method,
-        path: req.path,
+        path: requestMetricPath(req),
         status: res.statusCode,
         totalMs: roundMetric(totalMs),
         dbQueryCount: dbMetrics?.queryCount ?? 0,
