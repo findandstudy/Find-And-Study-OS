@@ -274,10 +274,36 @@ Linux/Windows run `32554158141` all succeeded. These successful runs are
 evidence for the exact implementation tree, not proof that repository rules
 make the checks required.
 
-The adapter candidate still does not cover HTTP authentication/session
+The PostgreSQL adapter candidate itself still does not cover HTTP authentication/session
 extraction, direct resolver-credential compromise detection, scheduled repair
 activation and alert delivery, production KMS/HSM key custody/rotation, or
 decision/step-up paths. Those gaps keep runtime wiring at NO-GO.
+
+The next default-off layer, `activeContextSessionGateway.ts`, now defines the
+HTTP/session-to-authoritative-issuance contract without registering a route.
+It rejects API-token/bearer issuance, untrusted or conflicting Origin/Referer,
+invalid double-submit CSRF, missing/malformed/inactive/rotated/expired or
+impersonated sessions, session-cookie fingerprint mismatch, malformed/expired
+rate-limit permits, rate-limit dependency failure, and gateway deadline
+overrun. Client body/query scope fields are ignored; the locked session
+repository alone supplies principal, tenant, organization, and branch. Its
+rate-limit permit and session lock remain current through resolver and signer
+completion, and token TTL cannot exceed idle or absolute session expiry.
+
+This is still a pure gateway candidate. No PostgreSQL session/context-selection
+repository, durable rate-limit adapter, HTTP response route, browser token
+storage decision, or production credential is present. The PostgreSQL gate must
+gain those repository/rotation/cancellation cases before runtime wiring can be
+considered.
+
+The exact gateway implementation tree
+`dcf62cb5d5fef588dc9b6c5e599fe1144f542dbb` passed foundation run
+`32555803426`, adapter/evidence run `32555803404`, durable-audit run
+`32555803435`, and G0 Linux/Windows run `32555803400` on GitHub head
+`d957791b0ef6307d55e997e691d981100f1e59ba`. Earlier G0 run `32555647367`
+failed only the new static registration audit because it assumed repository-root
+cwd; the corrected test passes under the actual filtered-package cwd and the
+local repository-root cwd. No failed run is treated as evidence.
 
 ## Runtime-wiring gate
 
