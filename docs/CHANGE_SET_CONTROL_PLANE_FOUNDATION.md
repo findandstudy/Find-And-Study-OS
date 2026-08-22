@@ -325,6 +325,12 @@ issuer lifecycle is terminal. An in-flight issuance that already owns the
 issuer lock finishes atomically before revoke; every later envelope from that
 issuer fails closed without changing its open request or creating a receipt.
 
+CREATE write-boundary failure injection covers claim, access receipt,
+ChangeSet insert, and completion. An exception immediately after any boundary
+must leave all three business row classes empty. The normal CREATE scenario
+then produces its canonical DRAFT, demonstrating that the injected failures
+left neither a hidden claim nor an active proposal.
+
 Evidence-key compromise is likewise serialized through the real transition
 adapter. A key update waits while a policy-valid SIMULATION receipt is locked
 and consumed; after the successful SIMULATED commit, the compromise can commit.
@@ -391,15 +397,16 @@ writer quarantines remain authoritative.
 The 62-migration PostgreSQL 16 foundation and default-unwired command, evidence,
 durable-audit, context-bound transaction, ambiguous-commit, query-cancellation,
 membership/policy revocation, evidence-key compromise, exact tenant-grant, and
-global issuer revocation workflows described in
+global issuer revocation workflows, plus CREATE write-boundary rollback,
+described in
 `CHANGE_SET_POSTGRES_INTEGRATION_GATE.md` are green on implementation head
-`9054010c7bffd84bfe549a952c42c26def892faf` (foundation run `32545500893`,
-adapter run `32545500898`, audit run `32545500894`, and G0 Linux/Windows run
-`32545500871`).
+`61065835b6d81f33ee495d147936ed1197fa14b6` (foundation run `32546411632`,
+adapter run `32546411637`, audit run `32546411607`, and G0 Linux/Windows run
+`32546411633`).
 
 The next safe slice is the remaining adapter failure/recovery matrix: scheduled
-repair of unresolved commit outcomes, injected failure at every write boundary,
-and incomplete-attempt repair. The shared runtime role must not
+repair of unresolved commit outcomes and incomplete-attempt repair. The shared
+runtime role must not
 receive generic Control Plane DML. No API route or Super Admin UI may be
 connected before those controls, required checks, production role/bootstrap
 review and independent approval exist. Publisher and configuration
