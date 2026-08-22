@@ -456,4 +456,3 @@ test("request binder uses the versioned verifier without legacy fallback", async
     /change_set_request_binding_configuration_invalid/,
   );
 });
-
