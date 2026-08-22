@@ -4,7 +4,7 @@ Status: **61-MIGRATION FOUNDATION, DEFAULT-UNWIRED CONTEXT-BOUND
 COMMAND/EVIDENCE AND DURABLE-AUDIT ADAPTER CI GREEN; NO-GO for runtime wiring**.
 
 This gate is not a delivery estimate and is not proof that migrations `0055`
-through `0060` have run in a long-lived environment. The approved local
+through `0061` have run in a long-lived environment. The approved local
 PostgreSQL endpoint `127.0.0.1:5433/fasos_apply_local` was unavailable. GitHub
 run `32537777722` applied all 61 reviewed migrations twice to an isolated
 disposable PostgreSQL 16 database and passed the direct-SQL foundation matrix.
