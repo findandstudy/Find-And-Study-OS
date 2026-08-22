@@ -1026,7 +1026,11 @@ async function main() {
       });
 
     const issuedContext = await issueContext(ID.issuedContext);
-    assert.equal(issuedContext.ok, true);
+    assert.equal(
+      issuedContext.ok,
+      true,
+      issuedContext.ok ? undefined : `authoritative context issuance denied: ${issuedContext.reason}`,
+    );
     if (!issuedContext.ok) throw new Error(issuedContext.reason);
     const verifiedIssuedContext = verifyVersionedActiveTenantContext({
       token: issuedContext.token,
