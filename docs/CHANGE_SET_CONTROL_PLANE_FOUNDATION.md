@@ -410,7 +410,7 @@ writer quarantines remain authoritative.
 
 ## Next safe slice
 
-The 63-migration PostgreSQL 16 foundation and default-unwired command, evidence,
+The 64-migration PostgreSQL 16 foundation candidate and default-unwired command, evidence,
 durable-audit, request-context-bound transaction, ambiguous-commit,
 query-cancellation, membership/policy revocation, evidence-key compromise,
 exact tenant-grant, global issuer revocation, CREATE write-boundary rollback,
