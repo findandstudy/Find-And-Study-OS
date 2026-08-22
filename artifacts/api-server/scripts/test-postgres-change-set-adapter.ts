@@ -1288,9 +1288,11 @@ async function main() {
       try {
         await resolver.query(`SELECT set_config('app.tenant_id', $1, true)`, [ID.tenant]);
         const unbound = await resolver.query<{ principal_hidden: boolean }>(
-          `SELECT (fas_auth_v1.resolve_active_context_for_issuance(
-             $1, $2, NULL, NULL, $3
-           )->'principal') IS NULL AS principal_hidden`,
+          `SELECT jsonb_typeof(
+             fas_auth_v1.resolve_active_context_for_issuance(
+               $1, $2, NULL, NULL, $3
+             )->'principal'
+           ) = 'null' AS principal_hidden`,
           [ID.tenant, ID.unboundPrincipal, NOW],
         );
         assert.equal(unbound.rows[0]?.principal_hidden, true);
