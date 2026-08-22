@@ -434,15 +434,24 @@ UUID source, and clock. Client field injection, inactive state, repository
 contract drift, resolver/signing timeout, and revoke-first execution fail before
 a token can escape.
 
-The next safe slice is a default-unwired PostgreSQL implementation of that
-authoritative resolver. It must use a dedicated read/lock-only credential and a
-fixed-search-path facade or exact parameterized queries; set tenant context
-transaction-locally; lock tenant, principal, membership, current policy, and
-the exact assignment set in a documented order; and keep the lock until signer
-completion. Issuance-first and revoke/policy-rotation-first races, pool reuse,
-query cancellation, timeout, cross-tenant/branch lookup, duplicate membership,
-and connection loss must be proven on disposable PostgreSQL. No generic table
-DML, scheduler, HTTP route, Super Admin UI, or production credential may be
-connected before required checks, production role/bootstrap review, and
-independent approval exist. Publisher and configuration materialization
-adapters remain separate and default-off.
+Migration `0063` and `PostgresAuthoritativeActiveContextRepository` implement a
+default-unwired candidate for that boundary. `fas_auth_v1` is fixed-search-path;
+the resolver login has no table privileges and receives only exact RPC execute,
+while a separate NOLOGIN owner holds the row-lock privileges. The adapter pins
+the expected database role, starts a `SERIALIZABLE` transaction, sets tenant and
+timeouts transaction-locally, and holds tenant, principal, exact membership,
+current policy, applicable assignment, package, role-definition, and capability
+locks through signer completion. Global principal state is not projected unless
+one exact tenant-local membership exists. The disposable PostgreSQL matrix
+includes issuance-first membership revoke, membership/policy revoke-first,
+cross-tenant RPC, direct-table deny, SQLSTATE `57014` cancellation, rollback,
+and pool-context cleanup. Final PostgreSQL 16 CI evidence is still required.
+
+The next safe slice after that gate is default-off HTTP authentication/session
+extraction into the already branded request binder, with no public route
+activation. Session principal, server-selected tenant/organization/branch,
+CSRF/origin, rate limit, absolute session age, and resolver/token audience must
+be exact and negative-tested. No generic table DML, scheduler, Super Admin UI,
+publisher, production credential, or production migration may be connected
+before required checks, production role/bootstrap review, and independent
+approval exist.

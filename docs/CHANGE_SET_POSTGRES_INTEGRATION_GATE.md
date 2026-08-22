@@ -119,7 +119,7 @@ The gate passes only when CI records all of the following:
 `artifacts/api-server/scripts/test-postgres-control-plane-gate.ts` define the
 foundation PostgreSQL 16 gate. It uses an immutable official
 image digest, a per-run `fas_it_*` database, separate `fas_migrator` and
-`fas_app` logins. The current candidate targets all 63 migrations twice. It
+`fas_app` logins. The current candidate targets all 64 migrations twice. It
 directly
 exercises:
 
@@ -220,7 +220,7 @@ run `32551335113`, and G0 Linux/Windows run `32551335019`. The checks are not
 yet required by a repository ruleset. Two earlier scheduled-reconciliation
 candidate runs correctly failed because the foundation harness retained the
 prior 62-migration denominator in its main and atomic-rollback assertions; both
-guards now require 63/63.
+guards now require 64/64.
 
 The production-shaped request binder verifies the signed active context once,
 requires exact server-resolved principal, tenant, organization, and branch
@@ -249,11 +249,23 @@ callback exactly-once, returned-token identity, resolver/signing budget,
 client-field injection, inactive/revoked state, and issuance-first/revoke-first
 ordering are covered without an HTTP route.
 
-The adapter candidate still does not cover a real PostgreSQL implementation of
-that locked resolver, HTTP authentication/session extraction, direct
-command-credential compromise, scheduled repair activation and alert delivery,
-production KMS/HSM key custody/rotation, or decision/step-up paths. Those gaps
-keep runtime wiring at NO-GO.
+Migration `0063` and `PostgresAuthoritativeActiveContextRepository` add the
+default-unwired PostgreSQL resolver candidate. A dedicated login receives only
+schema usage and exact function execution; its separate NOLOGIN owner holds the
+minimum table privileges required for `FOR SHARE`, and neither role is inherited
+by the other. The adapter requires a clean connection, a transaction-local
+tenant GUC, and `SERIALIZABLE` isolation. The fixed-search-path function locks
+tenant, principal, exact membership, current policy, applicable assignment,
+package, role-definition, and capability rows in a documented order while the
+external signer runs. It never projects a global principal without one exact
+tenant membership. Direct table reads, missing tenant context, cross-tenant
+calls, query cancellation, pool reuse, issuance-first membership revoke, and
+revoke-first membership/policy paths are disposable-PostgreSQL gate cases.
+
+The adapter candidate still does not cover HTTP authentication/session
+extraction, direct resolver-credential compromise detection, scheduled repair
+activation and alert delivery, production KMS/HSM key custody/rotation, or
+decision/step-up paths. Those gaps keep runtime wiring at NO-GO.
 
 ## Runtime-wiring gate
 
