@@ -445,7 +445,14 @@ locks through signer completion. Global principal state is not projected unless
 one exact tenant-local membership exists. The disposable PostgreSQL matrix
 includes issuance-first membership revoke, membership/policy revoke-first,
 cross-tenant RPC, direct-table deny, SQLSTATE `57014` cancellation, rollback,
-and pool-context cleanup. Final PostgreSQL 16 CI evidence is still required.
+pool-context cleanup, and organization-scope propagation into an exact branch
+context. This implementation passed on GitHub head
+`cde1ef1bedf07eefb96bcf2ccdc933b79d632adb` (local equivalent
+`26f5dc1d12bf8a21b7557c5e829e47d6aa7a43ce`, shared tree
+`f502f2bb812210e2ac1e088f206621558cbc9ff7`): foundation run `32554158137`,
+adapter/evidence run `32554158158`, durable-audit run `32554158114`, and G0
+Linux/Windows run `32554158141` all succeeded. Repository-required checks and
+independent approval remain separate governance gates.
 
 The next safe slice after that gate is default-off HTTP authentication/session
 extraction into the already branded request binder, with no public route

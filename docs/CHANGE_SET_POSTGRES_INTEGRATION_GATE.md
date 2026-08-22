@@ -260,7 +260,19 @@ package, role-definition, and capability rows in a documented order while the
 external signer runs. It never projects a global principal without one exact
 tenant membership. Direct table reads, missing tenant context, cross-tenant
 calls, query cancellation, pool reuse, issuance-first membership revoke, and
-revoke-first membership/policy paths are disposable-PostgreSQL gate cases.
+revoke-first membership/policy paths are disposable-PostgreSQL gate cases. The
+scope matrix also proves that an organization assignment remains applicable in
+an exact branch context while its membership, organization, branch, assignment,
+and policy identities remain bound in the signed token.
+
+The `0063` implementation passed on GitHub head
+`cde1ef1bedf07eefb96bcf2ccdc933b79d632adb` (local equivalent
+`26f5dc1d12bf8a21b7557c5e829e47d6aa7a43ce`, shared tree
+`f502f2bb812210e2ac1e088f206621558cbc9ff7`): foundation run `32554158137`,
+adapter/evidence run `32554158158`, durable-audit run `32554158114`, and G0
+Linux/Windows run `32554158141` all succeeded. These successful runs are
+evidence for the exact implementation tree, not proof that repository rules
+make the checks required.
 
 The adapter candidate still does not cover HTTP authentication/session
 extraction, direct resolver-credential compromise detection, scheduled repair
