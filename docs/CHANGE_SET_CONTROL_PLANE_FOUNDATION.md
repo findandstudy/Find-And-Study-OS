@@ -358,9 +358,10 @@ writer quarantines remain authoritative.
 The 62-migration PostgreSQL 16 foundation and default-unwired command, evidence,
 durable-audit, and context-bound transaction workflows described in
 `CHANGE_SET_POSTGRES_INTEGRATION_GATE.md` are green on context-binding
-implementation head `e855f0283f7cc9449da9dc0c19a20d23991cd223`
-(foundation run `32539460998`, adapter run `32539460946`, audit run
-`32539461023`, and G0 Linux/Windows run `32539460995`).
+and ambiguous-commit implementation head
+`ef35a590f0d8cc7394ada65d7d55e57192085fa4` (foundation run `32541302983`,
+adapter run `32541302979`, audit run `32541302975`, and G0 Linux/Windows run
+`32541302994`).
 
 The next safe slice is the remaining adapter race/failure matrix: cancellation,
 scheduled repair of unresolved commit outcomes,
