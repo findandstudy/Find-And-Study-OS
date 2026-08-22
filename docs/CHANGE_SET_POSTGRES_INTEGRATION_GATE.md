@@ -114,7 +114,7 @@ The gate passes only when CI records all of the following:
 `artifacts/api-server/scripts/test-postgres-control-plane-gate.ts` define the
 foundation PostgreSQL 16 gate. It uses an immutable official
 image digest, a per-run `fas_it_*` database, separate `fas_migrator` and
-`fas_app` logins. The current candidate targets all 61 migrations twice. It
+`fas_app` logins. The current candidate targets all 62 migrations twice. It
 directly
 exercises:
 
@@ -139,7 +139,10 @@ roles and fixed-search-path function owners. It proves authoritative snapshot
 create, copied-context and actor-substitution denial, in-transaction context
 expiry, internal-only tenant GUC binding, signed evidence admission, DRAFT to
 VALIDATED, evidence consumption, canonical replay, rollback, same-client
-tenant-context cleanup and direct-role denials. The command validator
+tenant-context cleanup and direct-role denials. It also simulates a PostgreSQL
+`COMMIT` that succeeds while its acknowledgement is lost, destroys that
+uncertain pool client and proves that one same-identity retry returns the
+canonical replay. The command validator
 independently binds artifact count and manifest hash into the signed outcome
 hash.
 
@@ -149,7 +152,11 @@ They prove a separately committed start event, terminal success and rejection
 after business commit/rollback, terminal-only ChangeSet identity binding,
 domain-separated HMAC chain verification, cross-tenant and no-context denial,
 direct-table denial for the audit login, transaction-local context cleanup, and
-one terminal winner under a same-attempt race.
+one terminal winner under a same-attempt race. Migration `0061` additionally
+proves the only allowed unresolved state is
+`RECONCILIATION/PENDING/COMMIT_OUTCOME_UNKNOWN`, and that it can advance to a
+single `TERMINAL/SUCCESS/COMMAND_RECONCILED` event without actor, context,
+request or hash drift.
 
 All checks passed on context-binding implementation head
 `e855f0283f7cc9449da9dc0c19a20d23991cd223`: foundation run `32539460998`,
@@ -157,8 +164,8 @@ command/evidence adapter run `32539460946`, durable-audit run `32539461023`,
 and G0 Linux/Windows run `32539460995`. The checks are not yet required by a
 repository ruleset. The adapter candidate still does not cover HTTP
 authentication-to-branded-context wiring, binding that context into the
-separate audit writer, direct command-credential compromise, every
-cancellation/ambiguous-commit path, both lock orders for
+separate audit writer, direct command-credential compromise, query cancellation,
+scheduled repair after an unresolved ambiguous commit, both lock orders for
 membership/policy/key revocation, injected failure between every write,
 production KMS/HSM audit-key custody, incomplete-attempt reconciliation, or
 decision/step-up paths. Those gaps keep the full matrix and runtime wiring at

@@ -283,9 +283,21 @@ re-verifies the stored chain head before appending, and fails closed if the
 start event cannot be persisted. The disposable harness gives it a dedicated
 EXECUTE-only login and a separate `NOLOGIN` function owner. It is still
 default-unwired and uses only an ephemeral CI key; production KMS/HSM custody,
-HTTP-to-branded-context and audit-writer context binding, ambiguous-commit
-reconciliation, and the full race/failure matrix remain mandatory before any
-runtime route can use it.
+HTTP-to-branded-context and audit-writer context binding, and the full
+race/failure matrix remain mandatory before any runtime route can use it.
+
+Migration `0061_change_set_commit_reconciliation.sql` and the command adapter
+add the first bounded ambiguous-commit contract. An error returned by the
+PostgreSQL `COMMIT` call is not labelled as a definite rollback or terminal
+error. The command is retried exactly once with the same tenant, actor, request
+hash and hashed idempotency identity. A successful canonical replay is closed
+as `COMMAND_RECONCILED`; an unresolved retry is left non-terminal as
+`RECONCILIATION/PENDING/COMMIT_OUTCOME_UNKNOWN` and exposes its audit attempt
+UUID for a future repair worker. The audit fingerprint is an HMAC of the same
+domain-separated SHA-256 identity stored by the command receipt, so a narrow
+future reconciler can correlate them without storing the raw key. This does
+not yet deliver scheduled incomplete-attempt repair or permission to wire the
+adapter into a route.
 
 Notification template variables must be declared whether referenced in the
 subject or body. Template variables that suggest passwords, secrets, tokens,
@@ -323,7 +335,7 @@ This foundation does not yet deliver:
 - a KMS/HSM-backed production signer, key rotation ceremony, or issuer runtime
   credential;
 - production command-executor/evidence-issuer role bootstrap and credentials;
-- production audit-key custody/rotation, incomplete-attempt reconciliation,
+- production audit-key custody/rotation, scheduled incomplete-attempt repair,
   HTTP-to-branded-context wiring, and signed active-context-to-audit-tenant
   binding;
 - runtime adoption/backfill of the tenant/organization/legacy-branch map;
@@ -343,7 +355,7 @@ writer quarantines remain authoritative.
 
 ## Next safe slice
 
-The 61-migration PostgreSQL 16 foundation and default-unwired command, evidence,
+The 62-migration PostgreSQL 16 foundation and default-unwired command, evidence,
 durable-audit, and context-bound transaction workflows described in
 `CHANGE_SET_POSTGRES_INTEGRATION_GATE.md` are green on context-binding
 implementation head `e855f0283f7cc9449da9dc0c19a20d23991cd223`
@@ -351,7 +363,7 @@ implementation head `e855f0283f7cc9449da9dc0c19a20d23991cd223`
 `32539461023`, and G0 Linux/Windows run `32539460995`).
 
 The next safe slice is the remaining adapter race/failure matrix: cancellation,
-ambiguous commit replay plus durable audit reconciliation,
+scheduled repair of unresolved commit outcomes,
 membership/policy/key revocation in both lock orders, injected failure at every
 write boundary, and incomplete-attempt repair. The shared runtime role must not
 receive generic Control Plane DML. No API route or Super Admin UI may be
