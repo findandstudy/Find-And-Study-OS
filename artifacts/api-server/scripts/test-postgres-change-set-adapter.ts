@@ -545,31 +545,33 @@ async function main() {
   try {
     const evidenceFailures: string[] = [];
     let storeNow = NOW;
-    const store = new PostgresChangeSetCommandStore(
-      loseFirstCommitAcknowledgement(executorPool),
-      {
-        expectedRole: ROLE.commandExecutor,
-        expectedEnvironmentId: "test-ci",
-        expectedCellId: "cell-a",
-        now: () => storeNow,
-        resolveMutationAssurance: async () => ({
-          impersonating: false,
-          stepUpSatisfied: false,
-          stepUpReceiptId: null,
-        }),
-        onEvidenceVerificationFailure: (reason) => evidenceFailures.push(reason),
-      },
+    const storeOptions = {
+      expectedRole: ROLE.commandExecutor,
+      expectedEnvironmentId: "test-ci",
+      expectedCellId: "cell-a",
+      now: () => storeNow,
+      resolveMutationAssurance: async () => ({
+        impersonating: false,
+        stepUpSatisfied: false,
+        stepUpReceiptId: null,
+      }),
+      onEvidenceVerificationFailure: (reason: string) =>
+        evidenceFailures.push(reason),
+    };
+    const contextTestStore = new PostgresChangeSetCommandStore(
+      executorPool,
+      storeOptions,
     );
     const context = verifiedContext();
     await mustFail(
       () =>
-        store.transaction(
+        contextTestStore.transaction(
           { ...context } as VerifiedActiveTenantContext,
           async () => undefined,
         ),
       /transaction_context_unverified/,
     );
-    await store.transaction(context, async (transaction) => {
+    await contextTestStore.transaction(context, async (transaction) => {
       assert.equal("setLocalTenant" in transaction, false);
       await mustFail(
         () =>
@@ -600,6 +602,10 @@ async function main() {
       );
       storeNow = NOW;
     });
+    const store = new PostgresChangeSetCommandStore(
+      loseFirstCommitAcknowledgement(executorPool),
+      storeOptions,
+    );
     const created = await executeCreateR1ChangeSetCommand({
       context,
       command: {
