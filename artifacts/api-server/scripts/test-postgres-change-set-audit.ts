@@ -450,7 +450,7 @@ async function main() {
         proposedConfig: {
           flagKey: "journey.beta",
           enabled: true,
-          cohortPercent: 15,
+          cohortPercent: 10,
           reason: "This command is cancelled before its claim.",
         },
       },
@@ -465,23 +465,18 @@ async function main() {
         ]),
       },
     });
-    let rejectCancellationBeforeReady: (error: unknown) => void = () => undefined;
-    const cancellationBeforeReady = new Promise<never>((_resolve, reject) => {
-      rejectCancellationBeforeReady = reject;
-    });
-    const cancellationAssertion = assert.rejects(
-      cancelledCommand.catch((error: unknown) => {
-        rejectCancellationBeforeReady(error);
-        throw error;
-      }),
-      (error: unknown) => {
-        assert.ok(error instanceof Error);
-        assert.equal((error as Error & { code?: string }).code, "57014");
-        return true;
-      },
+    const cancellationOutcome = cancelledCommand.then(
+      (value) => ({ kind: "resolved" as const, value }),
+      (error: unknown) => ({ kind: "rejected" as const, error }),
     );
     const cancelledPid = await within(
-      Promise.race([cancellationBackendPid, cancellationBeforeReady]),
+      Promise.race([
+        cancellationBackendPid,
+        cancellationOutcome.then((outcome): never => {
+          if (outcome.kind === "rejected") throw outcome.error;
+          throw new Error("audit_cancellation_command_resolved_before_backend_ready");
+        }),
+      ]),
       10_000,
     );
     const cancellation = await withClient(adminUrl, (admin) =>
@@ -491,7 +486,15 @@ async function main() {
       ),
     );
     assert.equal(cancellation.rows[0]?.cancelled, true);
-    await cancellationAssertion;
+    const cancelledOutcome = await cancellationOutcome;
+    assert.equal(cancelledOutcome.kind, "rejected");
+    if (cancelledOutcome.kind === "rejected") {
+      assert.ok(cancelledOutcome.error instanceof Error);
+      assert.equal(
+        (cancelledOutcome.error as Error & { code?: string }).code,
+        "57014",
+      );
+    }
 
     const rows = await loadAuditRows([
       ID.successAttempt,
