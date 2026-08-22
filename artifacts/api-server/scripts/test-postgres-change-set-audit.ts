@@ -465,7 +465,25 @@ async function main() {
         ]),
       },
     });
-    const cancelledPid = await within(cancellationBackendPid, 10_000);
+    let rejectCancellationBeforeReady: (error: unknown) => void = () => undefined;
+    const cancellationBeforeReady = new Promise<never>((_resolve, reject) => {
+      rejectCancellationBeforeReady = reject;
+    });
+    const cancellationAssertion = assert.rejects(
+      cancelledCommand.catch((error: unknown) => {
+        rejectCancellationBeforeReady(error);
+        throw error;
+      }),
+      (error: unknown) => {
+        assert.ok(error instanceof Error);
+        assert.equal((error as Error & { code?: string }).code, "57014");
+        return true;
+      },
+    );
+    const cancelledPid = await within(
+      Promise.race([cancellationBackendPid, cancellationBeforeReady]),
+      10_000,
+    );
     const cancellation = await withClient(adminUrl, (admin) =>
       admin.query<{ cancelled: boolean }>(
         "SELECT pg_cancel_backend($1)::boolean AS cancelled",
@@ -473,11 +491,7 @@ async function main() {
       ),
     );
     assert.equal(cancellation.rows[0]?.cancelled, true);
-    await assert.rejects(cancelledCommand, (error: unknown) => {
-      assert.ok(error instanceof Error);
-      assert.equal((error as Error & { code?: string }).code, "57014");
-      return true;
-    });
+    await cancellationAssertion;
 
     const rows = await loadAuditRows([
       ID.successAttempt,
