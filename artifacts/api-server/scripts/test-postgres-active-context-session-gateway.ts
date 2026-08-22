@@ -254,6 +254,11 @@ async function bootstrapAuthority() {
       GRANT UPDATE (id) ON TABLE
         public.active_session_context_selection_command_receipts
       TO ${ROLE.lifecycleOwner};
+      -- PostgreSQL requires UPDATE privilege for SELECT ... FOR SHARE;
+      -- keep it column-scoped and rely on the immutable trigger to reject writes.
+      GRANT UPDATE (id) ON TABLE
+        public.active_session_context_selection_command_receipts
+      TO ${ROLE.lifecycleOwner};
 
       ALTER FUNCTION fas_session_v1.resolve_session_for_active_context(text, text, bigint)
         OWNER TO ${ROLE.sessionOwner};
@@ -1470,16 +1475,31 @@ async function main() {
       await migrator.query("BEGIN");
       try {
         await migrator.query("SELECT set_config('app.tenant_id', $1, true)", [ID.tenant]);
+        const receiptMutation = await migrator.query(
+          `UPDATE public.active_session_context_selection_command_receipts
+           SET id = id WHERE tenant_id = $1`,
+          [ID.tenant],
+        );
+        assert.equal(receiptMutation.rowCount, 0);
+      } finally {
+        await migrator.query("ROLLBACK");
+      }
+    });
+    await withClient(adminUrl, async (admin) => {
+      await admin.query("BEGIN");
+      try {
+        await admin.query(`SET LOCAL ROLE ${ROLE.lifecycleOwner}`);
+        await admin.query("SELECT set_config('app.tenant_id', $1, true)", [ID.tenant]);
         await mustFail(
-          () => migrator.query(
+          () => admin.query(
             `UPDATE public.active_session_context_selection_command_receipts
-             SET result_hash = $1 WHERE tenant_id = $2`,
-            ["f".repeat(64), ID.tenant],
+             SET id = id WHERE tenant_id = $1`,
+            [ID.tenant],
           ),
           /receipts are immutable/,
         );
       } finally {
-        await migrator.query("ROLLBACK");
+        await admin.query("ROLLBACK");
       }
     });
 
