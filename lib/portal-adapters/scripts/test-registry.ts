@@ -37,6 +37,11 @@ test("TR1 — adapterForUniversity('Istanbul Topkapi University') → topkapi", 
   assert.equal(adapter.key, "topkapi", `Expected key "topkapi", got "${adapter?.key}"`);
 });
 
+test("TR1b — blank university names never resolve to an adapter", () => {
+  assert.equal(adapterForUniversity(""), null);
+  assert.equal(adapterForUniversity("   "), null);
+});
+
 // ---------------------------------------------------------------------------
 // TR2 — SIT allowlist count
 // ---------------------------------------------------------------------------

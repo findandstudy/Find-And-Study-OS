@@ -35,6 +35,7 @@ import {
   setCredsOverride,
   clearCredsOverride,
   isSitMember,
+  assertSubmitResultContract,
   evaluatePortalPreflight,
   evaluateSitSubmissionIdentityGate,
 } from "@workspace/portal-adapters";
@@ -310,6 +311,7 @@ export async function runSubmission(
       files,
       !isDry,
     );
+    assertSubmitResultContract(adapter.key, result);
     const adapterError =
       typeof (result as SubmitResult & { error?: unknown }).error === "string"
         ? (result as SubmitResult & { error: string }).error

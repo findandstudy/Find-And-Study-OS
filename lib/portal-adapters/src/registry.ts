@@ -60,6 +60,7 @@ export const adapters: UniversityAdapter[] = [
 
 /** Returns the first adapter whose matches() returns true for the given name. */
 export function adapterForUniversity(name: string): UniversityAdapter | null {
+  if (typeof name !== "string" || name.trim() === "") return null;
   return adapters.find((a) => a.matches(name)) ?? null;
 }
 

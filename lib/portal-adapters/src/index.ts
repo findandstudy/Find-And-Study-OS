@@ -12,6 +12,11 @@ export type {
   UniversityAdapter,
 } from "./types.js";
 
+export {
+  assertSubmitResultContract,
+  InvalidSubmitResultError,
+} from "./submitResultContract.js";
+
 // Credential helper — reads from process.env (or injected override)
 export {
   portalCreds,
@@ -72,6 +77,7 @@ export {
 export {
   isSitExcludedUniversity,
   isSitMember,
+  matchSitMemberUniversity,
 } from "./universities/sit/helpers.js";
 
 // Multico — Central Asian nationality guard (used by the enqueue hook)

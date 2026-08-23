@@ -25,6 +25,7 @@ import {
   mapEducationLevel,
   formatSitDate,
   matchAllowedUniversity,
+  matchSitMemberUniversity,
   isAllowedUniversity,
   isSitMember,
   isLanguageCompatible,
@@ -825,6 +826,37 @@ test("MEMBER5 — direct-portal exclusion wins over stale DB/env membership", ()
     if (prev === undefined) delete process.env.SIT_MEMBER_UNIVERSITIES;
     else process.env.SIT_MEMBER_UNIVERSITIES = prev;
   }
+});
+
+test("MEMBER6 — a panel-managed SIT member resolves to its canonical DB name", () => {
+  assert.equal(
+    matchSitMemberUniversity("Example International University", [
+      "Example International University",
+    ]),
+    "Example International University",
+  );
+  assert.equal(
+    isSitMember("Example International University", [
+      "Example International University",
+    ]),
+    true,
+  );
+});
+
+test("MEMBER7 — panel matching rejects look-alikes and ambiguous canonical names", () => {
+  assert.equal(
+    matchSitMemberUniversity("Example International University", [
+      "Example International Technical University",
+    ]),
+    null,
+  );
+  assert.equal(
+    matchSitMemberUniversity("Example International University", [
+      "Example International University",
+      "International Example University",
+    ]),
+    null,
+  );
 });
 
 // ---------------------------------------------------------------------------

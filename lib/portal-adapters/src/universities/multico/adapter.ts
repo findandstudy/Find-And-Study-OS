@@ -1654,13 +1654,14 @@ export const multicoAdapter: UniversityAdapter = {
       logger.warn(`[multico] no program match for "${profile.programName}" (${profile.level}), alternatives=${alternatives.length}`);
       return {
         submitted:      false,
-        alreadyExists,
+        alreadyExists:  false,
         programMissing: true,
         resolution:     "not_in_dropdown",
         availablePrograms: candidates.map((c) => ({ value: c.id, name: c.name, enabled: true })),
         meta: {
           dryRun:             isDry,
           wouldCreateStudent: !alreadyExists,
+          studentAlreadyExists: alreadyExists,
           wouldApply:         false,
           alternatives:       alternatives.map((a) => ({ id: a.id, name: a.name })),
         },
@@ -1718,9 +1719,10 @@ export const multicoAdapter: UniversityAdapter = {
     if (missingDocuments.length > 0) {
       return {
         submitted: false,
-        alreadyExists,
+        alreadyExists: false,
         programMissing: false,
         missingDocuments,
+        meta: { studentAlreadyExists: alreadyExists },
         detail:
           "Multico: passport, diploma and transcript are required before application processing",
       };
@@ -1792,10 +1794,11 @@ export const multicoAdapter: UniversityAdapter = {
     if (missingUploads.length > 0) {
       return {
         submitted: false,
-        alreadyExists,
+        alreadyExists: false,
         programMissing: false,
         missingDocuments: missingUploads,
         uploadedSlots: verifiedUploads,
+        meta: { studentAlreadyExists: alreadyExists },
         detail:
           "Multico: required document upload could not be proved; application creation blocked",
       };
@@ -1805,12 +1808,14 @@ export const multicoAdapter: UniversityAdapter = {
     if (existingTarget) {
       return {
         submitted: true,
-        alreadyExists,
+        alreadyExists: false,
         programMissing: false,
         uploadedSlots,
         externalRef: `${studentId}:${existingTarget.applicationId}`,
         meta: {
           studentId,
+          studentAlreadyExists: alreadyExists,
+          existingApplication: true,
           applicationId: existingTarget.applicationId,
           fee: existingTarget.fee,
           status: existingTarget.status,
@@ -1850,13 +1855,14 @@ export const multicoAdapter: UniversityAdapter = {
 
     return {
       submitted:      true,
-      alreadyExists,
+      alreadyExists:  false,
       programMissing: false,
       uploadedSlots,
       // Encode both IDs so checkStatus can split and poll without querying meta.
       externalRef:    `${studentId}:${applicationData.applicationId}`,
       meta: {
         studentId,
+        studentAlreadyExists: alreadyExists,
         applicationId: applicationData.applicationId,
         fee:           applicationData.fee,
         status:        applicationData.status,
