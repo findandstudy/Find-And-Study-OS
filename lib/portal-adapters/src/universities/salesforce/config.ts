@@ -84,7 +84,10 @@ export const SALESFORCE_SCHOOLS: SalesforceSchoolConfig[] = [
     portalUrl: "https://apply.pirireis.edu.tr/partner/s",
     namePatterns: ["piri reis","pirireis"],
     requiredDocs: ["diploma", "transcript", "passport"],
-    strictContract: false,
+    // The adapter exists in code but has not yet been calibrated with live
+    // credentials. Keep it fail-closed until its form/readback proof is
+    // verified instead of accepting a merely plausible submit transition.
+    strictContract: true,
   },
   {
     key: "sabanci",

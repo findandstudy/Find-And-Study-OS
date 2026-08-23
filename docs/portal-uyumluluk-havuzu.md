@@ -68,6 +68,28 @@ Alan bazında, öğrenilen kural ve hata:
 
 > **Not:** Her direct/aggregator portalın kendi zorunlu alan + format kuralları var. Matris portal-başına genişletilmeli; SIT'i referans al.
 
+### 3.1 Eksik okul denetimi — 24 Ağustos 2026
+
+Canlı portal tanımları, aktif kimlik anahtarları, aggregator üyelikleri ve son
+başvuru trafiği salt-okunur olarak karşılaştırıldı. Kimlik bilgisi bulunup da
+adaptör kaydı unutulmuş aktif bir portal yoktur. Bulunan boşluklar iki gruptur:
+
+| Üniversite | Yerel durum | Güvenli sonraki adım |
+|---|---|---|
+| **Piri Reis University** | `pirireis` Salesforce adaptörü kodda vardı fakat `portal_universities` okul kaydı yoktu. Yerelde **inactive**, `auto_process=false` ve strict/fail-closed olacak şekilde eklendi. | Portal kimlik bilgilerini gir; canlı form, program eşleştirme, belge yükleme ve kalıcı başarı kanıtını dry-run ile doğrula; sonra ayrıca aktifleştir. |
+| **Istanbul University** | Resmî ISAD/AKSIS başvuran hesabı var; doğrulanmış acente portalı yok. | Başvuran hesabı/acentelik yetkisi ve canlı form sözleşmesi olmadan adaptör oluşturma. |
+| **Antalya Bilim University** | Ayrı ABU Apply portalı (`abuapply.antalya.edu.tr`); mevcut portal ailelerinden biri olduğu kanıtlanmadı. | Kimlik bilgisiyle kontrollü form yakalama ve özel adaptör. |
+| **OSTİM Technical University** | Ayrı agent login (`obs.ostimteknik.edu.tr/oibs/foa_app/agency/`) ve güvenlik doğrulaması var. | CAPTCHA/güvenlik akışı, oturum ve başarı kanıtı için özel adaptör. |
+| **Acibadem University** | Resmî çevrim içi başvuru formu mevcut; doğrulanmış acente akışı yok. | Yetkili hesap ve uçtan uca canlı form keşfi. |
+| **Izmir Konak Vocational School** | Resmî süreç form/manuel kayıt odaklı; otomasyon portalı doğrulanmadı. | Kurumdan acente portalı/entegrasyon yolu teyidi al. |
+| **Mudanya University** | Genel başvuru formunda `Agent Code` alanı var; ortak adaptör ailesi değil. | Agent Code'u credential `extra` alanında saklayan özel adaptör; çok-adımlı form ve başarı kanıtı doğrulaması. |
+| **TED University** | Resmî IPO başvuran formları var; doğrulanmış acente portalı yok. | Yetkili hesapla başvuran/agent akışını ayır ve özel adaptör sözleşmesi çıkar. |
+
+**Fail-closed kuralı:** Yalnızca üniversite adı veya bir login/form URL'si
+bulunması “adaptör hazır” anlamına gelmez. Profil alanları, program seçenekleri,
+belge yükleme readback'i, nihai başvuru numarası/satırı ve tekrar-gönderim kanıtı
+birlikte doğrulanmadan okul aktif edilemez.
+
 ---
 
 ## 4. Öğrenilen Hata Modları ve Kök Nedenleri (tekrar etmesin)

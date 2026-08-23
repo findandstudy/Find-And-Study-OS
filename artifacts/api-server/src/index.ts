@@ -2227,6 +2227,47 @@ async function seedClaudeIntegration() {
     console.error('[migrate] Multico portal_universities seed:', err);
   }
 
+  // Step 2b12d: Register the existing Piri Reis adapter as a disabled portal
+  // school. The code adapter was already present, but without this row the
+  // school could not be configured in Portal Automation. It deliberately
+  // remains inactive and auto_process=false until credentials and the current
+  // live form/readback contract are calibrated.
+  try {
+    await pool.query(`
+      INSERT INTO portal_universities
+        (university_key, university_name, adapter_key, is_active, auto_process,
+         is_multi_portal, crm_university_id)
+      VALUES
+        (
+          'piri_reis_university',
+          'Piri Reis University',
+          'pirireis',
+          false,
+          false,
+          false,
+          (
+            SELECT id
+              FROM universities
+             WHERE name ILIKE '%Piri Reis%'
+             ORDER BY is_active DESC, id ASC
+             LIMIT 1
+          )
+        )
+      ON CONFLICT (university_key) DO NOTHING
+    `);
+    // Expose a credentials slot without inventing or persisting any secret.
+    // Empty inactive values are intentionally ignored by resolvePortalCreds.
+    await pool.query(`
+      INSERT INTO portal_credentials
+        (portal_key, username_enc, password_enc, is_active)
+      VALUES ('pirireis', '', '', false)
+      ON CONFLICT (portal_key) DO NOTHING
+    `);
+    console.log('[migrate] Piri Reis portal school registered (inactive)');
+  } catch (err) {
+    console.error('[migrate] Piri Reis portal school seed:', err);
+  }
+
   // Step 2b14: Backfill assignedToId consistency across Lead → Student → Application.
   // Runs on every boot; both UPDATEs are idempotent (IS DISTINCT FROM guard ensures
   // only genuinely out-of-sync rows are touched). Logs affected counts so each

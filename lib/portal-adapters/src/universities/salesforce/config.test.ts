@@ -8,6 +8,7 @@ test("requested Salesforce schools use the strict verification contract", () => 
     "uskudar",
     "bau",
     "ozyegin",
+    "pirireis",
     "sabanci",
     "yeditepe",
     "beykent",
@@ -39,4 +40,14 @@ test("Haliç has a dedicated fail-closed Salesforce configuration", () => {
     true,
     "Haliç must require strict readback and completion proof",
   );
+});
+
+test("Piri Reis remains fail-closed until live portal calibration is complete", () => {
+  const piriReis = SALESFORCE_SCHOOLS.find(
+    (school) => school.key === "pirireis",
+  );
+
+  assert.ok(piriReis, "Piri Reis Salesforce configuration must exist");
+  assert.equal(piriReis.portalUrl, "https://apply.pirireis.edu.tr/partner/s");
+  assert.equal(piriReis.strictContract, true);
 });
