@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useLocation } from "wouter";
+import { useQueryClient } from "@tanstack/react-query";
 import { useEntityViewTracker } from "@/hooks/use-entity-view-tracker";
 import {
   customFetch,
@@ -27,6 +28,7 @@ import {
   DropdownMenuItem,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
+import { invalidateAssignmentWorkspaceQueries } from "@/lib/workspaceQueryInvalidation";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -491,6 +493,7 @@ function readPinnedInboxTab(): InboxTabKey | null {
 function InboxTab() {
   const { t, isRTL } = useI18n();
   const { user } = useAuth();
+  const queryClient = useQueryClient();
   const canDeleteConversations = ["super_admin", "admin"].includes(user?.role || "");
   const { toast } = useToast();
   const [, setLocation] = useLocation();
@@ -1196,6 +1199,7 @@ function InboxTab() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ userId }),
       });
+      await invalidateAssignmentWorkspaceQueries(queryClient);
       if (userId === user?.id) {
         setAssignedNotice(true);
         setTimeout(() => setAssignedNotice(false), 3000);
