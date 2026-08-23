@@ -34,6 +34,36 @@ import os from "node:os";
 const PORTAL_URL   = "https://apply.topkapi.edu.tr";
 const STORAGE_PATH = "/tmp/topkapi-portal-state.json";
 
+export type TopkapiStudentCheckOutcome = "exists" | "new" | "unknown";
+
+/** Fail closed when the duplicate endpoint returns HTML or an unknown shape. */
+export function classifyTopkapiStudentCheck(
+  responseBody: string,
+): TopkapiStudentCheckOutcome {
+  const trimmed = responseBody.trim();
+  if (trimmed === "" || trimmed === "null" || trimmed === "{}" || trimmed === "[]") {
+    return "new";
+  }
+
+  try {
+    const parsed: unknown = JSON.parse(trimmed);
+    if (parsed === null) return "new";
+    if (Array.isArray(parsed)) return parsed.length === 0 ? "new" : "unknown";
+    if (typeof parsed !== "object") return "unknown";
+
+    const record = parsed as Record<string, unknown>;
+    const status = typeof record.status === "string"
+      ? record.status.trim().toLowerCase()
+      : "";
+    if (status === "exists") return "exists";
+    if (status === "new" || status === "success") return "new";
+    if (Object.keys(record).length === 0) return "new";
+  } catch {
+    return "unknown";
+  }
+  return "unknown";
+}
+
 // ---------------------------------------------------------------------------
 // Country resolution — nationality text → Topkapi portal dropdown label (Turkish)
 //
@@ -1699,24 +1729,16 @@ export const topkapiAdapter: UniversityAdapter = {
     // Detect existing student from response body.
     // Topkapi returns {"status":"exists","message":"..."} for known students,
     // or {"status":"new"} (or empty/null) for first-time applicants.
-    const bodyLc = checkBody.toLowerCase();
-    // Topkapi returns {"status":"exists"} for known students.
-    // For new students it returns {"status":"new"}, {"status":"success"}, or an empty/null body.
-    const existsByBody = bodyLc.includes('"status":"exists"') || bodyLc.includes('"status": "exists"');
-    const newByBody   = bodyLc.includes('"status":"new"')     || bodyLc.includes('"status": "new"')
-                     || bodyLc.includes('"status":"success"') || bodyLc.includes('"status": "success"')
-                     || checkBody.trim() === "" || checkBody.trim() === "null"
-                     || checkBody.trim() === "{}" || checkBody.trim() === "[]";
+    const studentCheckOutcome = classifyTopkapiStudentCheck(checkBody);
 
-    if (existsByBody) {
+    if (studentCheckOutcome === "exists") {
       logger.warn("[topkapi] check-student-exists: student already registered");
       return { alreadyExists: true, submitted: false, programMissing: false, screenshots };
     }
 
-    if (!newByBody) {
-      // Unknown response format — log and treat as alreadyExists to be safe
-      logger.warn("[topkapi] check-student-exists: unknown response format, treating as exists");
-      return { alreadyExists: true, submitted: false, programMissing: false, screenshots };
+    if (studentCheckOutcome === "unknown") {
+      logger.warn("[topkapi] check-student-exists: outcome could not be proved");
+      throw new Error("TOPKAPI_STUDENT_CHECK_UNPROVED: duplicate endpoint returned an unknown response");
     }
 
     // Student is new — wait for name input field to appear
@@ -1724,8 +1746,8 @@ export const topkapiAdapter: UniversityAdapter = {
     try {
       await page.waitForSelector("input[name=studentName]", { timeout: 20000 });
     } catch {
-      logger.warn("[topkapi] studentName not visible after 20s — treating as already exists");
-      return { alreadyExists: true, submitted: false, programMissing: false, screenshots };
+      logger.warn("[topkapi] studentName not visible after 20s — new-student form unproved");
+      throw new Error("TOPKAPI_NEW_STUDENT_FORM_UNPROVED: studentName field did not appear");
     }
 
     // ── STEP 2: personal info ────────────────────────────────────────────────
@@ -2474,7 +2496,21 @@ export const topkapiAdapter: UniversityAdapter = {
       } else {
         logger.warn("[topkapi] saved but success-url not captured — save=" + saveStatus + " url=" + page.url());
       }
-      return { submitted: true, alreadyExists: false, programMissing: false, externalRef, uploadedSlots, screenshots };
+      return {
+        submitted: true,
+        alreadyExists: false,
+        programMissing: false,
+        externalRef,
+        uploadedSlots,
+        screenshots,
+        meta: {
+          successProof: {
+            verified: true,
+            source: externalRef ? "success_url" : "application_save_response",
+            httpStatus: saveStatus,
+          },
+        },
+      };
     }
 
     // Reactive exclusive-region safety net: some restricted nationalities are

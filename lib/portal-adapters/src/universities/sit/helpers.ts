@@ -806,60 +806,61 @@ export function isAllowedUniversity(name: string): boolean {
 //
 // TODO(Dr. Namazcı): confirm the definitive SIT member university list.
 // ---------------------------------------------------------------------------
-export function isSitMember(
+export function matchSitMemberUniversity(
   universityNameOrId: string | null | undefined,
   dynamicMembers?: readonly string[],
-): boolean {
-  if (universityNameOrId == null) return false;
+): string | null {
+  if (universityNameOrId == null) return null;
   const name = String(universityNameOrId).trim();
-  if (name === "") return false;
+  if (name === "") return null;
 
-  if (isSitExcludedUniversity(name)) return false;
+  if (isSitExcludedUniversity(name)) return null;
 
   // Authoritative agreed list (token-set matched, IDOR-safe).
-  if (isAllowedUniversity(name)) return true;
+  const allowed = matchAllowedUniversity(name);
+  if (allowed) return allowed;
 
   // Dynamic DB "Members" list (portal_account_universities, panel-managed) —
   // matched the same token-set way so a university added via the panel is
   // recognized without a code change. UNION with the agreed list — never
   // removes a member the agreed list already grants (see module doc).
-  if (dynamicMembers && dynamicMembers.length > 0) {
-    const queryTokens = new Set(distinctiveTokens(name));
-    for (const entry of dynamicMembers) {
-      if (fold(entry) === fold(name)) return true;
-      const entryTokens = distinctiveTokens(entry);
-      if (
-        entryTokens.length > 0 &&
-        entryTokens.length === queryTokens.size &&
-        entryTokens.every((t) => queryTokens.has(t))
-      ) {
-        return true;
-      }
-    }
-  }
-
   // Optional env extension — kept a UNION with the agreed list so it can only
   // ADD members, never remove one.
   const extra = (process.env.SIT_MEMBER_UNIVERSITIES ?? "")
     .split(/[,;\n]/)
     .map((s) => s.trim())
     .filter((s) => s.length > 0);
-  if (extra.length === 0) return false;
+  const candidates = [...(dynamicMembers ?? []), ...extra]
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0 && !isSitExcludedUniversity(entry));
+  if (candidates.length === 0) return null;
 
   const folded = fold(name);
   const queryTokens = new Set(distinctiveTokens(name));
-  for (const entry of extra) {
+  const matches = candidates.filter((entry) => {
     if (fold(entry) === folded) return true;
     const entryTokens = distinctiveTokens(entry);
-    if (
+    return (
       entryTokens.length > 0 &&
       entryTokens.length === queryTokens.size &&
       entryTokens.every((t) => queryTokens.has(t))
-    ) {
-      return true;
-    }
+    );
+  });
+
+  // DB/env can contain the same canonical member more than once. Collapse
+  // identical spellings, but fail closed when different members would match.
+  const canonical = new Map<string, string>();
+  for (const entry of matches) {
+    canonical.set(fold(entry), entry);
   }
-  return false;
+  return canonical.size === 1 ? [...canonical.values()][0] ?? null : null;
+}
+
+export function isSitMember(
+  universityNameOrId: string | null | undefined,
+  dynamicMembers?: readonly string[],
+): boolean {
+  return matchSitMemberUniversity(universityNameOrId, dynamicMembers) !== null;
 }
 
 // ---------------------------------------------------------------------------

@@ -57,6 +57,7 @@ import {
   mapEducationLevel,
   formatSitDate,
   matchAllowedUniversity,
+  matchSitMemberUniversity,
   isAllowedUniversity,
   isLanguageCompatible,
   isSitDocumentsStep,
@@ -3401,7 +3402,10 @@ export const sitAdapter: SitAdapter = {
     };
 
     // --- Allowlist guard (IDOR-safe) ---
-    const allowedUni = matchAllowedUniversity(profile.universityName ?? "");
+    const allowedUni = matchSitMemberUniversity(
+      profile.universityName ?? "",
+      profile.memberUniversities,
+    );
     if (!allowedUni) {
       logger.warn(
         `[sit] üniversite izin listesinde değil: "${profile.universityName ?? ""}" — atlanıyor`,
