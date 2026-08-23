@@ -1,6 +1,7 @@
 import { mapDocType } from "./profile.js";
 import { validateIdentityFields } from "./identityValidation.js";
 import type { SubmitFiles, SubmitProfile } from "./types.js";
+import { SALESFORCE_SCHOOLS } from "./universities/salesforce/config.js";
 
 export type PortalPreflightField = keyof SubmitProfile;
 export type PortalPreflightDocument = keyof SubmitFiles;
@@ -55,20 +56,6 @@ const FOUR_CORE_DOCUMENTS: PortalPreflightDocument[] = [
   "photo",
   ...THREE_CORE_DOCUMENTS,
 ];
-
-const salesforceKeys = [
-  "uskudar",
-  "aydin",
-  "bau",
-  "atlas",
-  "dogus",
-  "ozyegin",
-  "pirireis",
-  "sabanci",
-  "yeditepe",
-  "beykent",
-  "isik",
-] as const;
 
 const manifests = new Map<string, PortalPreflightManifest>();
 
@@ -187,7 +174,10 @@ register(
   FOUR_CORE_DOCUMENTS,
 );
 
-for (const key of salesforceKeys) {
+// Keep the shared readiness gate in lock-step with the Salesforce registry.
+// A hand-maintained second key list previously omitted Haliç, allowing that
+// adapter to bypass the common required-field/document preflight.
+for (const { key } of SALESFORCE_SCHOOLS) {
   register(
     key,
     [
