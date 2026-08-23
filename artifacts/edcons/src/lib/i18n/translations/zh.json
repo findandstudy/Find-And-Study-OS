@@ -855,6 +855,7 @@
       "list": "列表视图"
     }
   },
+  "followUps": {"titlePlural":"跟进","new":"新建跟进","rangeLabel":"跟进日期筛选","ranges":{"all":"全部","today":"今天","next7":"未来 7 天","overdue":"已逾期","completed":"已完成"},"loadFailed":"无法加载跟进","search":"搜索标题、备注、姓名或邮箱…","filters":{"allStatuses":"全部状态","allTypes":"全部记录类型","allAssignees":"全部负责人","mine":"分配给我的","from":"开始日期","to":"结束日期","clear":"清除筛选"},"pending":"待处理","completed":"已完成","overdue":"已逾期","lead":"潜在客户","student":"学生","standalone":"独立记录","unassigned":"未分配","selected":"已选择 {count} 项","completeSelected":"完成所选项","assignSelected":"分配所选项","bulkUpdated":"所选跟进已更新","loading":"正在加载跟进…","empty":"未找到跟进","emptyHint":"请尝试其他筛选条件或新建跟进。","selectAll":"选择所有可见跟进","columns":{"followUp":"跟进","related":"关联记录","assignee":"负责人","date":"计划时间","status":"状态","actions":"操作"},"openRecord":"打开关联记录","edit":"编辑跟进","reopen":"重新打开","complete":"标记为完成","page":"第 {page} 页，共 {total} 页","createDescription":"将此跟进关联到潜在客户或学生，使其保留在正确的记录中。","recordType":"记录类型","relatedRecord":"关联记录","searchRecord":"按姓名或邮箱搜索…","searching":"正在搜索…","noRecords":"未找到可访问的记录","requiredFields":"关联记录、标题和日期为必填项","created":"跟进已创建","saveFailed":"无法保存跟进","updated":"跟进已更新","cancel":"取消","saving":"正在保存…","create":"创建跟进","save":"保存","createdBy":"创建者","updatedBy":"最后更新者","title":"标题","scheduledAt":"日期和时间","tomorrow":"明天","nextWeek":"下周","assignee":"负责人","notes":"备注"},
   "campaigns": {
     "title": "营销活动",
     "subtitle": "按大学和代理所在国家设置的限时价格调整",
