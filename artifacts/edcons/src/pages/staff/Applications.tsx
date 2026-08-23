@@ -43,6 +43,7 @@ import {
 import { StageBadgeWithDocs } from "@/components/StageBadgeWithDocs";
 import { useToast } from "@/hooks/use-toast";
 import { usePipelineStages, type PipelineStage, type StageAction } from "@/hooks/use-pipeline-stages";
+import { invalidateAssignmentWorkspaceQueries } from "@/lib/workspaceQueryInvalidation";
 import { BulkActionBar } from "@/components/BulkActionBar";
 import { BulkMessageDialog } from "@/components/BulkMessageDialog";
 import {
@@ -1789,7 +1790,7 @@ export default function ApplicationsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ assignedToId: userId }),
       });
-      queryClient.invalidateQueries({ queryKey: ["applications"] });
+      await invalidateAssignmentWorkspaceQueries(queryClient);
       toast({ title: "Application assigned" });
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
@@ -2080,6 +2081,7 @@ export default function ApplicationsPage() {
       const res = await apiFetch(`${BASE_URL}/api/applications/bulk-action`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ids: Array.from(selectedIds), action: "assign", assignedToId: userId }) });
       const d = res as any;
       toast({ title: `${d.updated} application${d.updated !== 1 ? "s" : ""} assigned` });
+      await invalidateAssignmentWorkspaceQueries(queryClient);
     } catch { toast({ title: "Could not assign applications", variant: "destructive" }); }
     setSelectedIds(new Set());
     queryClient.invalidateQueries({ queryKey: ["applications"] });

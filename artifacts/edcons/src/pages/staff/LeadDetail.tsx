@@ -40,6 +40,7 @@ import { StudentPhotoAvatar } from "@/components/StudentPhotoAvatar";
 import { getLeadSourceLabel } from "@/lib/leadSourceLabel";
 import { usePipelineStages } from "@/hooks/use-pipeline-stages";
 import { humanizePipelineStageKey } from "@/lib/pipelineStageLabel";
+import { invalidateAssignmentWorkspaceQueries, invalidateFollowUpWorkspaceQueries } from "@/lib/workspaceQueryInvalidation";
 
 
 const SOURCES = ["website", "referral", "social_media", "walk_in", "partner", "other"];
@@ -245,8 +246,7 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ assignedTo: targetUserId }),
       });
-      queryClient.invalidateQueries({ queryKey: [`/api/leads/${id}`] });
-      queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
+      await invalidateAssignmentWorkspaceQueries(queryClient);
       toast({ title: targetUserId ? t("leadDetailPage.leadAssigned") : t("leadDetailPage.leadUnassigned") });
     } catch (err: any) {
       toast({ title: t("leadDetailPage.error"), description: err.message, variant: "destructive" });
@@ -268,8 +268,8 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
         credentials: "include",
         body: JSON.stringify(body),
       }).then(r => { if (!r.ok) throw new Error("Failed"); return r.json(); }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [`/api/leads/${id}/follow-ups`] });
+    onSuccess: async () => {
+      await invalidateFollowUpWorkspaceQueries(queryClient);
       resetFollowUpForm();
       toast({ title: "Follow-up scheduled" });
     },
@@ -286,8 +286,8 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
         credentials: "include",
         body: JSON.stringify({ completed }),
       }).then(r => { if (!r.ok) throw new Error("Failed"); return r.json(); }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [`/api/leads/${id}/follow-ups`] });
+    onSuccess: async () => {
+      await invalidateFollowUpWorkspaceQueries(queryClient);
       toast({ title: "Follow-up updated" });
     },
   });
@@ -411,8 +411,8 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
         credentials: "include",
         body: JSON.stringify(body),
       }).then(r => { if (!r.ok) return r.json().then(e => { throw new Error(e.error || "Failed"); }); return r.json(); }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [`/api/leads/${id}/follow-ups`] });
+    onSuccess: async () => {
+      await invalidateFollowUpWorkspaceQueries(queryClient);
       resetFollowUpForm();
       toast({ title: "Follow-up updated" });
     },

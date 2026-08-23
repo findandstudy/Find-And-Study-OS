@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/table";
 import { ColumnHeader } from "@/components/ui/column-header";
 import { Checkbox } from "@/components/ui/checkbox";
+import FollowUpsPanel from "./FollowUpsPanel";
 
 import { ADMIN_ROLES as _ADMIN_ROLES } from "@workspace/roles";
 const ADMIN_ROLES = _ADMIN_ROLES;
@@ -205,7 +206,7 @@ const EMPTY_FORM: TaskFormState = {
   status: "todo",
 };
 
-export default function TasksPage() {
+function TasksTabContent() {
   const { user } = useAuth(true);
   const { t } = useI18n();
   const { toast } = useToast();
@@ -777,13 +778,9 @@ export default function TasksPage() {
 
   return (
     <>
-      <div className="p-4 md:p-6 lg:p-8 space-y-6">
+      <div className="space-y-6">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight" data-testid="text-tasks-title">{t("tasks.title")}</h1>
-            <p className="text-sm text-muted-foreground mt-0.5">{t("tasks.subtitle")}</p>
-          </div>
+        <div className="flex justify-end">
           <div className="flex items-center gap-2">
             <div className="flex items-center border rounded-full overflow-hidden" data-testid="view-toggle">
               <button
@@ -1694,5 +1691,53 @@ export default function TasksPage() {
         </DialogContent>
       </Dialog>
     </>
+  );
+}
+
+export default function TasksPage() {
+  const { t } = useI18n();
+  const [, setLocation] = useLocation();
+  const query = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : new URLSearchParams();
+  const activeTab = query.get("tab") === "follow-ups" || query.has("followUpId")
+    ? "follow-ups"
+    : "tasks";
+
+  function changeTab(tab: "tasks" | "follow-ups") {
+    // Authenticated workspace routes are intentionally not locale-prefixed.
+    // Sending this through localePath() produces /<lang>/staff/tasks, which
+    // is not a registered staff route and falls through to the dashboard.
+    setLocation(`/staff/tasks?tab=${tab}`);
+  }
+
+  return (
+    <div className="p-4 md:p-6 lg:p-8 space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight" data-testid="text-tasks-title">{t("tasks.title")}</h1>
+        <p className="text-sm text-muted-foreground mt-0.5">{t("tasks.subtitle")}</p>
+      </div>
+      <div className="inline-flex items-center rounded-lg border bg-muted/40 p-1" role="tablist" aria-label={t("tasks.subtitle")}>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === "tasks"}
+          onClick={() => changeTab("tasks")}
+          className={`rounded-md px-4 py-2 text-sm font-medium transition ${activeTab === "tasks" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+          data-testid="tab-tasks"
+        >
+          {t("tasks.title")}
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === "follow-ups"}
+          onClick={() => changeTab("follow-ups")}
+          className={`rounded-md px-4 py-2 text-sm font-medium transition ${activeTab === "follow-ups" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+          data-testid="tab-follow-ups"
+        >
+          {t("followUps.titlePlural")}
+        </button>
+      </div>
+      {activeTab === "tasks" ? <TasksTabContent /> : <FollowUpsPanel />}
+    </div>
   );
 }
