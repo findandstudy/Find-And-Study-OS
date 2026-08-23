@@ -50,6 +50,7 @@ import { CountryFlag } from "@/components/CountryFlag";
 import { useCountrySearch } from "@/hooks/use-countries";
 import { OriginBadge } from "@/components/OriginBadge";
 import { cn } from "@/lib/utils";
+import { invalidateAssignmentWorkspaceQueries } from "@/lib/workspaceQueryInvalidation";
 import { usePipelineStages, type PipelineStage } from "@/hooks/use-pipeline-stages";
 import { useI18n } from "@/hooks/use-i18n";
 import { AddStudentModal, NationalityCombobox } from "@/components/AddStudentModal";
@@ -1370,7 +1371,7 @@ export default function StudentsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ assignedToId: userId }),
       });
-      queryClient.invalidateQueries({ queryKey: ["/api/students"] });
+      await invalidateAssignmentWorkspaceQueries(queryClient);
       toast({ title: "Student assigned" });
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
@@ -1525,6 +1526,7 @@ export default function StudentsPage() {
       if (!res.ok) throw new Error("Failed");
       const d = await res.json();
       toast({ title: `${d.updated} student${d.updated !== 1 ? "s" : ""} assigned` });
+      await invalidateAssignmentWorkspaceQueries(queryClient);
     } catch { toast({ title: "Could not assign students", variant: "destructive" }); }
     setSelectedIds(new Set()); invalidate();
   }

@@ -43,6 +43,7 @@ import { useStudyLevels } from "@/hooks/useStudyLevels";
 import { requiredEducationLevels, academicFieldsForLevel, academicGroupForLevel, type EducationLevel } from "@/lib/academicLevels";
 import { usePipelineStages } from "@/hooks/use-pipeline-stages";
 import { humanizePipelineStageKey } from "@/lib/pipelineStageLabel";
+import { invalidateAssignmentWorkspaceQueries, invalidateFollowUpWorkspaceQueries } from "@/lib/workspaceQueryInvalidation";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
@@ -459,8 +460,7 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ assignedToId: targetUserId }),
       });
-      qc.invalidateQueries({ queryKey: [`/api/students/${id}`] });
-      qc.invalidateQueries({ queryKey: ["/api/students"] });
+      await invalidateAssignmentWorkspaceQueries(qc);
       toast({ title: targetUserId ? t("studentDetailPage.studentAssigned") : t("studentDetailPage.studentUnassigned") });
     } catch (err: any) {
       toast({ title: "Error", description: err?.message, variant: "destructive" });
@@ -552,8 +552,8 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
         credentials: "include",
         body: JSON.stringify(body),
       }).then(r => { if (!r.ok) return r.json().then(e => { throw new Error(e.error || "Failed"); }); return r.json(); }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: [`/api/students/${id}/follow-ups`] });
+    onSuccess: async () => {
+      await invalidateFollowUpWorkspaceQueries(qc);
       resetFollowUpForm();
       toast({ title: "Follow-up scheduled" });
     },
@@ -570,8 +570,8 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
         credentials: "include",
         body: JSON.stringify({ completed }),
       }).then(r => { if (!r.ok) throw new Error("Failed"); return r.json(); }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: [`/api/students/${id}/follow-ups`] });
+    onSuccess: async () => {
+      await invalidateFollowUpWorkspaceQueries(qc);
       toast({ title: "Follow-up updated" });
     },
   });
@@ -584,8 +584,8 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
         credentials: "include",
         body: JSON.stringify(body),
       }).then(r => { if (!r.ok) return r.json().then(e => { throw new Error(e.error || "Failed"); }); return r.json(); }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: [`/api/students/${id}/follow-ups`] });
+    onSuccess: async () => {
+      await invalidateFollowUpWorkspaceQueries(qc);
       resetFollowUpForm();
       toast({ title: "Follow-up updated" });
     },

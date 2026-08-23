@@ -100,6 +100,8 @@ export default function StaffDashboard() {
       const j = await r.json();
       return Array.isArray(j) ? j : [];
     },
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 
   const staffDashboardRecentLimit = 20;

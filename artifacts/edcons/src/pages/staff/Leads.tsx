@@ -68,6 +68,7 @@ import {
 } from "@/lib/leadSourceOptions";
 import { LinkedTableCell } from "@/components/LinkedTableCell";
 import { getLeadSourceLabel } from "@/lib/leadSourceLabel";
+import { invalidateAssignmentWorkspaceQueries } from "@/lib/workspaceQueryInvalidation";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
@@ -1432,7 +1433,7 @@ export default function LeadsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ assignedTo: userId }),
       });
-      queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
+      await invalidateAssignmentWorkspaceQueries(queryClient);
       toast({ title: t("leadsPage.leadAssigned") });
     } catch (err: any) {
       toast({ title: t("common.error"), description: err.message, variant: "destructive" });
@@ -1577,6 +1578,7 @@ export default function LeadsPage() {
       if (!res.ok) throw new Error("Failed");
       const data = await res.json();
       toast({ title: t("leadsPage.leadsAssigned", { count: data.updated }) });
+      await invalidateAssignmentWorkspaceQueries(queryClient);
     } catch { toast({ title: t("leadsPage.couldNotAssignLeads"), variant: "destructive" }); }
     setSelectedIds(new Set());
     queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
