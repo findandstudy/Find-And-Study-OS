@@ -2044,7 +2044,7 @@ router.post("/leads/:id/follow-ups", requireAuth, requireRole(...STAFF_ROLES, ..
   res.status(201).json(followUp);
 });
 
-router.patch("/follow-ups/:id", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
+router.patch("/follow-ups/:id", requireAuth, requireRole(...STAFF_ROLES, "agent_staff"), requireAgentStaffPermission("tasks"), async (req, res): Promise<void> => {
   const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const [existingFu] = await db.select().from(followUpsTable).where(eq(followUpsTable.id, id));
@@ -2057,13 +2057,32 @@ router.patch("/follow-ups/:id", requireAuth, requireRole(...STAFF_ROLES), async 
       const visibleIds = await getAgentVisibleIds(fuUser.id, fuUser.role);
       if (!fuLead.agentId || !visibleIds.includes(fuLead.agentId)) { res.status(403).json({ error: "Access denied" }); return; }
     } else if (!(ADMIN_ROLES as readonly string[]).includes(fuUser.role)) {
-      if (fuLead.assignedToId !== null && fuLead.assignedToId !== fuUser.id) { res.status(403).json({ error: "Access denied" }); return; }
+      const perms = await getEffectivePermissionSet(fuUser);
+      if (fuLead.agentId !== null && !perms.has("records.view_others")) {
+        res.status(404).json({ error: "Follow-up not found" });
+        return;
+      }
+      if (!(await isInBranchScope(fuUser.id, fuUser.role, fuLead.branchId, fuUser))) {
+        res.status(404).json({ error: "Follow-up not found" });
+        return;
+      }
+      if (!canAccessAssignedRecord(perms, fuLead.assignedToId, fuUser.id)) {
+        res.status(403).json({ error: "Access denied" });
+        return;
+      }
     }
   } else if (existingFu.studentId) {
     const access = await assertCanAccessStudent(req, existingFu.studentId);
     if (!access.ok) { res.status(access.status).json({ error: access.error }); return; }
+  } else if (
+    !(ADMIN_ROLES as readonly string[]).includes(fuUser.role)
+    && existingFu.assignedToId !== fuUser.id
+    && existingFu.createdById !== fuUser.id
+  ) {
+    res.status(403).json({ error: "Access denied" });
+    return;
   }
-  const { completed, title, scheduledAt, notes } = req.body;
+  const { completed, title, scheduledAt, notes, assignedToId } = req.body;
   const updates: Record<string, unknown> = {};
   let isContentEdit = false;
   let isCompletionToggle = false;
@@ -2087,6 +2106,36 @@ router.patch("/follow-ups/:id", requireAuth, requireRole(...STAFF_ROLES), async 
     isContentEdit = true;
   }
   if (notes !== undefined) { updates.notes = notes ? String(notes).slice(0, 2000) : null; isContentEdit = true; }
+  if (assignedToId !== undefined) {
+    if (!(ADMIN_ROLES as readonly string[]).includes(fuUser.role)) {
+      res.status(403).json({ error: "Only admins can reassign follow-ups" });
+      return;
+    }
+    if (assignedToId === null || assignedToId === "" || assignedToId === "unassigned") {
+      updates.assignedToId = null;
+    } else {
+      const assigneeId = Number.parseInt(String(assignedToId), 10);
+      if (!Number.isFinite(assigneeId) || assigneeId <= 0) {
+        res.status(400).json({ error: "Invalid assignedToId" });
+        return;
+      }
+      const [assignee] = await db.select({ id: usersTable.id })
+        .from(usersTable)
+        .where(and(
+          eq(usersTable.id, assigneeId),
+          eq(usersTable.isActive, true),
+          isNull(usersTable.deletedAt),
+          inArray(usersTable.role, [...STAFF_ROLES]),
+        ))
+        .limit(1);
+      if (!assignee) {
+        res.status(400).json({ error: "Assigned user not found or inactive" });
+        return;
+      }
+      updates.assignedToId = assignee.id;
+    }
+    isContentEdit = true;
+  }
   if (Object.keys(updates).length === 0) {
     res.status(400).json({ error: "No valid fields" });
     return;
@@ -2118,6 +2167,9 @@ router.patch("/follow-ups/:id", requireAuth, requireRole(...STAFF_ROLES), async 
         to: followUp.notes ? String(followUp.notes).slice(0, 200) : null,
       };
     }
+    if (assignedToId !== undefined && existingFu.assignedToId !== followUp.assignedToId) {
+      fuDiff.assignedToChange = { from: existingFu.assignedToId, to: followUp.assignedToId };
+    }
     await logAudit(req.user!.id, "update_follow_up", auditResource, auditResourceId ?? undefined, fuDiff, req.ip);
   }
   if (isCompletionToggle && completed !== existingFu.completed) {
@@ -2135,7 +2187,19 @@ router.patch("/follow-ups/:id", requireAuth, requireRole(...STAFF_ROLES), async 
       scheduledAt: followUpsTable.scheduledAt,
       completed: followUpsTable.completed,
       completedAt: followUpsTable.completedAt,
+      assignedToId: followUpsTable.assignedToId,
+      assignedToName: sql<string | null>`(SELECT NULLIF(CONCAT_WS(' ', au.first_name, au.last_name), '') FROM users au WHERE au.id = ${followUpsTable.assignedToId})`,
       notes: followUpsTable.notes,
+      resourceType: sql<string>`CASE WHEN ${followUpsTable.studentId} IS NOT NULL THEN 'student' WHEN ${followUpsTable.leadId} IS NOT NULL THEN 'lead' ELSE 'standalone' END`,
+      resourceId: sql<number | null>`COALESCE(${followUpsTable.studentId}, ${followUpsTable.leadId})`,
+      relatedName: sql<string | null>`COALESCE(
+        (SELECT NULLIF(CONCAT_WS(' ', fl.first_name, fl.last_name), '') FROM leads fl WHERE fl.id = ${followUpsTable.leadId}),
+        (SELECT NULLIF(CONCAT_WS(' ', fs.first_name, fs.last_name), '') FROM students fs WHERE fs.id = ${followUpsTable.studentId})
+      )`,
+      relatedEmail: sql<string | null>`COALESCE(
+        (SELECT fl.email FROM leads fl WHERE fl.id = ${followUpsTable.leadId}),
+        (SELECT fs.email FROM students fs WHERE fs.id = ${followUpsTable.studentId})
+      )`,
       createdById: followUpsTable.createdById,
       createdByName: sql<string | null>`(SELECT NULLIF(CONCAT_WS(' ', cu.first_name, cu.last_name), '') FROM users cu WHERE cu.id = ${followUpsTable.createdById})`,
       updatedById: followUpsTable.updatedById,
