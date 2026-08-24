@@ -55,6 +55,17 @@ test("R2: complete bachelor applicant → ready", () => {
   assert.equal(r.level, "high_school");
 });
 
+test("R2b: human-readable CRM document labels satisfy SIT readiness", () => {
+  const r = computeReadiness(
+    fullStudent(),
+    [hsRecord()],
+    "sit",
+    ["Passport", "Photo", "Diploma Certificate", "Diploma Transcript"],
+  );
+  assert.deepEqual(r.missing, []);
+  assert.equal(r.ready, true);
+});
+
 test("R3: address-like city + missing docs → missing (soft)", () => {
   const r = computeReadiness(
     fullStudent({ address: "HOUSE NO. 165, Street 4" }),

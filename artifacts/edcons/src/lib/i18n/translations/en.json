@@ -5887,6 +5887,7 @@
       "submitting": "Sending…",
       "enqueuedSuccess": "Queued successfully.",
       "enqueuedError": "Failed to queue submission.",
+      "preflightError": "Complete or correct these portal fields: {fields}",
       "retrySuccess": "Re-queued successfully.",
       "retryError": "Retry failed.",
       "noPortals": "No active portal universities configured.",

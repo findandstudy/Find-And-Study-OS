@@ -62,16 +62,14 @@ export {
 
 // Profile helpers
 export {
-  mapDocType,
   buildProfile,
   normalizeGpaRange,
-  REQUIRED_DOCS,
   extractStudentDocumentRefs,
   selectPriorSchoolName,
   docFetchUrl,
-  type DocType,
   type RawDocumentRow,
 } from "./profile.js";
+export { mapDocType, REQUIRED_DOCS, type DocType } from "./docType.js";
 
 // SIT membership guard (used by the runner to skip non-member universities)
 export {

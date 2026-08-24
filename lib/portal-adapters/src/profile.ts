@@ -1,37 +1,13 @@
 import { fold } from "./programMatch.js";
 import { buildSignedDocumentPath } from "./documentSigning.js";
 import { logger } from "./browser.js";
-import type { SubmitProfile, SubmitFiles, StudentDocumentRef } from "./types.js";
+import { mapDocType, REQUIRED_DOCS, type DocType } from "./docType.js";
+import type { SubmitProfile, StudentDocumentRef } from "./types.js";
 
 // ---------------------------------------------------------------------------
 // Document-type mapping
 // ---------------------------------------------------------------------------
-export type DocType = keyof SubmitFiles;
-
-/**
- * Maps a free-form document label (from CRM, file name, etc.) to one of the
- * four canonical SubmitFiles keys, or null when unrecognised.
- *
- * transcript also matches: marks, marksheet, result, grade
- */
-export function mapDocType(raw: string): DocType | null {
-  const f = fold(raw);
-  if (/photo|resim|fotograf|foto\b/.test(f))                                          return "photo";
-  if (/passport|pasaport/.test(f))                                                    return "passport";
-  // transcript: includes hsc (Higher Secondary Certificate) mark/result documents
-  if (/transcript|marks|marksheet|result|grade|hsc/.test(f))                         return "transcript";
-  // diploma: includes generic certificate types and translated copies of diplomas
-  if (/diploma|degree|mezuniyet|certificate|translation/.test(f))                    return "diploma";
-  if (/ielts|toefl|yds|yokdil|english|language|proficiency|dil belge|dil yeterlilik/.test(f)) return "english";
-  if (/motivation|niyet|statement of purpose|\bsop\b|cover letter|onyazi/.test(f)) return "motivation";
-  if (/recommendation|reference|tavsiye|referans/.test(f)) return "recommendation";
-  return null;
-}
-
-// ---------------------------------------------------------------------------
-// Required document types — used by workers to validate files before submit
-// ---------------------------------------------------------------------------
-export const REQUIRED_DOCS: DocType[] = ["photo", "passport", "transcript", "diploma"];
+export { mapDocType, REQUIRED_DOCS, type DocType };
 
 // ---------------------------------------------------------------------------
 // Document URL extraction — for portals whose CREATE step is a URL-fetching

@@ -88,6 +88,12 @@ function testEquivalenceUnits(): Section {
     details,
   ) && ok;
   ok = assert(
+    getDocEquivalenceGroup("Diploma Certificate") === "hs_certificate" &&
+      getDocEquivalenceGroup("Diploma Transcript") === "hs_transcript",
+    "Human-readable diploma labels normalize to high-school document groups",
+    details,
+  ) && ok;
+  ok = assert(
     getDocEquivalenceGroup("not_a_real_doctype_xyz") === null,
     "Unknown type returns null",
     details,

@@ -1,4 +1,4 @@
-import { mapDocType } from "./profile.js";
+import { mapDocType } from "./docType.js";
 import { validateIdentityFields } from "./identityValidation.js";
 import type { SubmitFiles, SubmitProfile } from "./types.js";
 import { SALESFORCE_SCHOOLS } from "./universities/salesforce/config.js";

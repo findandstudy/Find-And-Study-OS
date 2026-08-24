@@ -29,6 +29,7 @@ import {
   type Student,
   type EducationRecord,
 } from "@workspace/db";
+import { mapDocType } from "@workspace/portal-adapters/doc-type";
 
 export interface ReadinessIncompatibility {
   field: string;
@@ -86,12 +87,15 @@ export function computeReadiness(
   const incompatible: ReadinessIncompatibility[] = [];
   const skipped: string[] = [];
 
-  const docTypesLower = new Set(documentTypes.map((t) => String(t).toLowerCase()));
   const hasDoc = (kind: string): boolean => {
     if (kind === "photo") {
-      return student.hasPhoto || has(student.photoUrl) || docTypesLower.has("photo") || docTypesLower.has("photograph");
+      return (
+        student.hasPhoto ||
+        has(student.photoUrl) ||
+        documentTypes.some((type) => mapDocType(type) === "photo")
+      );
     }
-    return docTypesLower.has(kind);
+    return documentTypes.some((type) => mapDocType(type) === kind);
   };
 
   const eduField = (key: string): {

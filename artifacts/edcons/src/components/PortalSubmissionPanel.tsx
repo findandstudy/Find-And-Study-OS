@@ -8,6 +8,7 @@
 import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
+  ApiError,
   customFetch,
   useGetUniversityPortals,
   useEnqueuePortalSubmission,
@@ -73,6 +74,51 @@ const APPLY_ALL_OUTCOME_COLORS: Record<string, string> = {
 
 /** Roles that may trigger a "real" (non-dry) submission */
 const REAL_SUBMISSION_ROLES = ["super_admin", "admin", "manager", "staff"];
+
+type PortalQueueErrorData = {
+  error?: string;
+  message?: string;
+  missingDocLabels?: string[];
+  preflight?: {
+    missingFields?: string[];
+    missingDocuments?: string[];
+    incompatibleFields?: Array<{ field?: string }>;
+  };
+};
+
+function portalQueueErrorDescription(
+  error: unknown,
+  t: (key: string, vars?: Record<string, unknown>) => string,
+): string | undefined {
+  if (!(error instanceof ApiError)) {
+    return error instanceof Error ? error.message : undefined;
+  }
+
+  const data = error.data as PortalQueueErrorData | null;
+  if (data?.error === "MISSING_MANDATORY_DOCUMENTS") {
+    const docs = (data.missingDocLabels ?? []).filter(Boolean).join(", ");
+    return docs
+      ? t("inbox.applicationTab.missingDocsWarning", { docs })
+      : data.message || error.message;
+  }
+
+  if (data?.error === "PORTAL_PREFLIGHT_NOT_READY") {
+    const fields = [
+      ...(data.preflight?.missingFields ?? []),
+      ...(data.preflight?.missingDocuments ?? []),
+      ...(data.preflight?.incompatibleFields ?? [])
+        .map((item) => item.field)
+        .filter((field): field is string => Boolean(field)),
+    ];
+    if (fields.length > 0) {
+      return t("portalAutomation.panel.preflightError", {
+        fields: [...new Set(fields)].join(", "),
+      });
+    }
+  }
+
+  return data?.message || error.message;
+}
 
 // ---------------------------------------------------------------------------
 // Props
@@ -147,7 +193,12 @@ export default function PortalSubmissionPanel({ applicationId, universityName }:
     )?.key ?? "";
 
   const [selectedKey, setSelectedKey] = useState<string>("");
-  const effectiveKey = selectedKey || defaultKey;
+  const routedKey =
+    resolveInfo?.portalKey &&
+    portals.some((portal) => portal.key === resolveInfo.portalKey)
+      ? resolveInfo.portalKey
+      : "";
+  const effectiveKey = selectedKey || defaultKey || routedKey;
   const [mode, setMode] = useState<"dry" | "real">("dry");
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [applyAllOpen, setApplyAllOpen] = useState(false);
@@ -160,9 +211,10 @@ export default function PortalSubmissionPanel({ applicationId, universityName }:
         toast({ title: t("portalAutomation.panel.enqueuedSuccess") });
         void refetchSubs();
       },
-      onError: () => {
+      onError: (error) => {
         toast({
           title: t("portalAutomation.panel.enqueuedError"),
+          description: portalQueueErrorDescription(error, t),
           variant: "destructive",
         });
       },

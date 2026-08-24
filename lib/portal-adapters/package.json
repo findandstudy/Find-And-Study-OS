@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./doc-type": "./src/docType.ts",
     "./declarative/schema": "./src/declarative/schema.ts",
     "./identity-validation": "./src/identityValidation.ts"
   },

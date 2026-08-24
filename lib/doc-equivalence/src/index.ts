@@ -123,11 +123,30 @@ export const DOC_EQUIVALENCE_GROUPS: DocEquivalenceGroup[] = [
   },
 ];
 
+function normalizeDocTypeLookupKey(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[’']/g, "")
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
+const DOC_TYPE_ALIASES: Record<string, string> = {
+  high_school_diploma: "diploma_certificate",
+  high_school_transcript: "diploma_transcript",
+};
+
+function canonicalDocTypeLookupKey(value: string): string {
+  const normalized = normalizeDocTypeLookupKey(value);
+  return DOC_TYPE_ALIASES[normalized] ?? normalized;
+}
+
 const TYPE_TO_GROUP: Map<string, DocEquivalenceGroupId> = (() => {
   const m = new Map<string, DocEquivalenceGroupId>();
   for (const group of DOC_EQUIVALENCE_GROUPS) {
-    for (const k of group.applyKeys) m.set(k.toLowerCase(), group.id);
-    for (const c of group.canonicalTypes) m.set(c.toLowerCase(), group.id);
+    for (const k of group.applyKeys) m.set(canonicalDocTypeLookupKey(k), group.id);
+    for (const c of group.canonicalTypes) m.set(canonicalDocTypeLookupKey(c), group.id);
   }
   return m;
 })();
@@ -142,7 +161,7 @@ export function getDocEquivalenceGroup(
   type: string | null | undefined,
 ): DocEquivalenceGroupId | null {
   if (!type) return null;
-  return TYPE_TO_GROUP.get(String(type).toLowerCase()) ?? null;
+  return TYPE_TO_GROUP.get(canonicalDocTypeLookupKey(String(type))) ?? null;
 }
 
 /**
@@ -309,15 +328,17 @@ export function findMissingMandatoryTypes(
   uploadedTypes: ReadonlySet<string>,
 ): string[] {
   const uploadedGroups = new Set<DocEquivalenceGroupId>();
+  const normalizedUploaded = new Set<string>();
   uploadedTypes.forEach((t) => {
     const g = getDocEquivalenceGroup(t);
     if (g) uploadedGroups.add(g);
+    normalizedUploaded.add(canonicalDocTypeLookupKey(t));
   });
   const missing: string[] = [];
   for (const m of mandatoryCanonicalTypes) {
     const g = getDocEquivalenceGroup(m);
     if (!g) {
-      if (!uploadedTypes.has(m.toLowerCase())) missing.push(m);
+      if (!normalizedUploaded.has(canonicalDocTypeLookupKey(m))) missing.push(m);
       continue;
     }
     if (!uploadedGroups.has(g)) missing.push(m);

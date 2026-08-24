@@ -5887,6 +5887,7 @@
       "submitting": "Sending…",
       "enqueuedSuccess": "Queued successfully.",
       "enqueuedError": "Failed to queue submission.",
+      "preflightError": "इन पोर्टल फ़ील्ड को पूरा या सही करें: {fields}",
       "retrySuccess": "Re-queued successfully.",
       "retryError": "Retry failed.",
       "noPortals": "No active portal universities configured.",

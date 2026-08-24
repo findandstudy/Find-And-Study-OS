@@ -5887,6 +5887,7 @@
       "submitting": "Gönderiliyor…",
       "enqueuedSuccess": "Başarıyla sıraya alındı.",
       "enqueuedError": "Sıraya alma başarısız.",
+      "preflightError": "Şu portal alanlarını tamamlayın veya düzeltin: {fields}",
       "retrySuccess": "Yeniden sıraya alındı.",
       "retryError": "Yeniden deneme başarısız.",
       "noPortals": "Aktif portal üniversitesi yapılandırılmamış.",

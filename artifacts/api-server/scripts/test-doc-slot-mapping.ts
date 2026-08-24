@@ -15,7 +15,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 // Direct source import — bypasses barrel (which re-exports browser.js → playwright)
-import { mapDocType, REQUIRED_DOCS } from "../../../lib/portal-adapters/src/profile.js";
+import { mapDocType, REQUIRED_DOCS } from "@workspace/portal-adapters/doc-type";
 
 // ===========================================================================
 // TMD1–TMD3: Canonical photo + passport
@@ -92,4 +92,9 @@ test("TMD10: #2103 scenario — all 4 REQUIRED_DOCS slots filled by the student'
     4,
     `Expected 4 unique slots, got ${mappedSlots.size}: [${[...mappedSlots].join(", ")}]`,
   );
+});
+
+test("TMD11: visible diploma labels map to the SIT diploma and transcript slots", () => {
+  assert.equal(mapDocType("Diploma Certificate"), "diploma");
+  assert.equal(mapDocType("Diploma Transcript"), "transcript");
 });

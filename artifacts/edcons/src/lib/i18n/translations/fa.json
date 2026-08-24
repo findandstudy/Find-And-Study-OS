@@ -5887,6 +5887,7 @@
       "submitting": "Sending…",
       "enqueuedSuccess": "Queued successfully.",
       "enqueuedError": "Failed to queue submission.",
+      "preflightError": "این فیلدهای پرتال را تکمیل یا اصلاح کنید: {fields}",
       "retrySuccess": "Re-queued successfully.",
       "retryError": "Retry failed.",
       "noPortals": "No active portal universities configured.",
