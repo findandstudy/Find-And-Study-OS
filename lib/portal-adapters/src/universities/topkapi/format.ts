@@ -120,6 +120,107 @@ export function eduLevelCandidates(level: string, programName = ""): string[] {
   return out;
 }
 
+export type TopkapiProgramLevelRadio = {
+  value: string;
+  label?: string;
+  id?: string;
+  index?: number;
+};
+
+/**
+ * Candidate values/labels used by Topkapı's Step-4 program-level radios.
+ *
+ * The portal has used several English/Turkish spellings over time (for
+ * example `Associate`, `Associate Degree`, `Önlisans` and `Ön Lisans`). The
+ * application level stored in the CRM is stable, so keep the aliases here and
+ * let the browser adapter match the live value/label instead of relying on one
+ * brittle exact radio value.
+ */
+export function topkapiProgramLevelRadioCandidates(
+  level: string,
+  programName = "",
+): string[] {
+  const applied = mapEduLevel(level, programName);
+  const aliases: Record<string, string[]> = {
+    Associate: [
+      "Associate",
+      "Associate Degree",
+      "Foundation",
+      "Önlisans",
+      "Ön Lisans",
+      "Onlisans",
+      "On Lisans",
+    ],
+    Bachelor: ["Bachelor", "Bachelor Degree", "Undergraduate", "Lisans"],
+    "Masters (Thesis)": [
+      "Masters (Thesis)",
+      "Master (Thesis)",
+      "Thesis Master",
+      "Yüksek Lisans (Tezli)",
+      "Yüksek Lisans Tezli",
+    ],
+    "Masters (Non Thesis)": [
+      "Masters (Non Thesis)",
+      "Master (Non Thesis)",
+      "Non Thesis Master",
+      "Yüksek Lisans (Tezsiz)",
+      "Yüksek Lisans Tezsiz",
+    ],
+    Doctorate: ["Doctorate", "Doctoral", "PhD", "Doktora"],
+  };
+
+  const out: string[] = [];
+  for (const candidate of aliases[applied] ?? [applied]) {
+    if (!out.some((existing) => fold(existing) === fold(candidate))) {
+      out.push(candidate);
+    }
+  }
+  return out;
+}
+
+/**
+ * Match a live Topkapı Step-4 radio by value, visible label or id.
+ * Exact normalized matches win. A conservative contains fallback handles
+ * harmless portal suffixes such as "Associate Degree Programs" while keeping
+ * thesis and non-thesis master levels distinct.
+ */
+export function matchTopkapiProgramLevelRadio<T extends TopkapiProgramLevelRadio>(
+  level: string,
+  radios: readonly T[],
+  programName = "",
+): T | null {
+  const candidates = topkapiProgramLevelRadioCandidates(level, programName).map(fold);
+  const fields = (radio: T): string[] =>
+    [radio.value, radio.label ?? "", radio.id ?? ""]
+      .map(fold)
+      .filter(Boolean);
+
+  for (const radio of radios) {
+    if (fields(radio).some((field) => candidates.includes(field))) return radio;
+  }
+
+  const containsPhrase = (haystack: string, needle: string): boolean =>
+    haystack === needle ||
+    haystack.startsWith(`${needle} `) ||
+    haystack.endsWith(` ${needle}`) ||
+    haystack.includes(` ${needle} `);
+
+  for (const radio of radios) {
+    if (
+      fields(radio).some((field) =>
+        candidates.some(
+          (candidate) =>
+            candidate.length >= 5 &&
+            containsPhrase(field, candidate),
+        ),
+      )
+    ) {
+      return radio;
+    }
+  }
+  return null;
+}
+
 // ---------------------------------------------------------------------------
 // True when a <select>'s current value/text is a non-selection placeholder
 // (e.g. "Seçim Yapın", "Seçiniz", "Please Select", "0", empty). Prevents the

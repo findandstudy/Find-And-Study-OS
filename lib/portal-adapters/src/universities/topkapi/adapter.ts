@@ -26,6 +26,7 @@ import {
   mapEduLevel,
   eduLevelCandidates,
   isPlaceholderChoice,
+  matchTopkapiProgramLevelRadio,
 } from "./format.js";
 import { existsSync } from "node:fs";
 import path from "node:path";
@@ -510,6 +511,148 @@ async function gotoWithRetry(
       await page.waitForTimeout(1000);
     }
   }
+}
+
+type TopkapiProgramLevelRadioDom = {
+  value: string;
+  label: string;
+  id: string;
+  index: number;
+};
+
+async function readTopkapiProgramLevelRadios(
+  page: Page,
+): Promise<TopkapiProgramLevelRadioDom[]> {
+  return page.$$eval("input[name=educationLevel]", (elements) =>
+    (elements as HTMLInputElement[]).map((radio, index) => {
+      const explicitLabel = radio.id
+        ? Array.from(document.querySelectorAll<HTMLLabelElement>("label")).find(
+            (label) => label.htmlFor === radio.id,
+          )
+        : null;
+      const wrappingLabel = radio.closest("label");
+      const container = radio.closest(
+        ".form-check, .radio, .custom-control, .col, [class*=radio]",
+      );
+      return {
+        value: (radio.value || "").trim(),
+        label: (
+          explicitLabel?.textContent ||
+          wrappingLabel?.textContent ||
+          container?.textContent ||
+          ""
+        ).trim(),
+        id: (radio.id || "").trim(),
+        index,
+      };
+    }),
+  );
+}
+
+async function triggerTopkapiProgramLevel(
+  page: Page,
+  requestedLevel: string,
+  log: typeof import("../../browser.js").logger,
+  clearProgramOptions = false,
+): Promise<TopkapiProgramLevelRadioDom> {
+  const radios = await readTopkapiProgramLevelRadios(page);
+  const matched = matchTopkapiProgramLevelRadio(requestedLevel, radios);
+  if (!matched) {
+    const available = radios
+      .map(
+        (radio) =>
+          `${radio.value || "(empty)"}:${radio.label || radio.id || "(unlabelled)"}`,
+      )
+      .join(" | ");
+    throw new Error(
+      `TOPKAPI_PROGRAM_LEVEL_NOT_FOUND: requested=${requestedLevel}; available=${available || "none"}`,
+    );
+  }
+
+  await page.evaluate(
+    ({ index, clear }) => {
+      if (clear) {
+        const select = document.querySelector<HTMLSelectElement>(
+          "select[name=programFirstPreference]",
+        );
+        if (select) {
+          while (select.options.length > 1) select.remove(1);
+          select.value = select.options[0]?.value ?? "";
+        }
+      }
+      const radios = Array.from(
+        document.querySelectorAll<HTMLInputElement>("input[name=educationLevel]"),
+      );
+      const radio = radios[index];
+      if (!radio) return;
+      radio.checked = true;
+      radio.dispatchEvent(new Event("input", { bubbles: true }));
+      radio.dispatchEvent(new Event("change", { bubbles: true }));
+      radio.click();
+      const w = window as unknown as {
+        jQuery?: (el: Element) => { trigger: (event: string) => void };
+      };
+      if (w.jQuery) w.jQuery(radio).trigger("change");
+    },
+    { index: matched.index, clear: clearProgramOptions },
+  );
+
+  log.info(
+    `[topkapi] Step 4: program level matched requested=${requestedLevel} value=${matched.value} label=${matched.label || "(none)"}`,
+  );
+  return matched;
+}
+
+async function loadTopkapiProgramOptions(
+  page: Page,
+  requestedLevel: string,
+  log: typeof import("../../browser.js").logger,
+  forceReload = false,
+): Promise<TopkapiProgramLevelRadioDom> {
+  let matched: TopkapiProgramLevelRadioDom | null = null;
+  let lastError: unknown = null;
+
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    matched = await triggerTopkapiProgramLevel(
+      page,
+      requestedLevel,
+      log,
+      forceReload || attempt > 1,
+    );
+    try {
+      await page.waitForFunction(
+        () => {
+          const select = document.querySelector<HTMLSelectElement>(
+            "select[name=programFirstPreference]",
+          );
+          return select !== null && select.options.length > 1;
+        },
+        undefined,
+        { timeout: 12000 },
+      );
+      return matched;
+    } catch (error) {
+      lastError = error;
+      if (attempt === 1) {
+        log.warn(
+          `[topkapi] Step 4: program options did not load for ${requestedLevel}; re-triggering once`,
+        );
+        await page.waitForTimeout(500);
+      }
+    }
+  }
+
+  const optionCount = await page
+    .$eval(
+      "select[name=programFirstPreference]",
+      (select) => (select as HTMLSelectElement).options.length,
+    )
+    .catch(() => 0);
+  const detail =
+    lastError instanceof Error ? lastError.message : String(lastError ?? "unknown");
+  throw new Error(
+    `TOPKAPI_PROGRAM_OPTIONS_TIMEOUT: requested=${requestedLevel}; radio=${matched?.value ?? "none"}; options=${optionCount}; url=${page.url()}; cause=${detail}`,
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -1765,7 +1908,7 @@ export const topkapiAdapter: UniversityAdapter = {
     await page.waitForFunction(() => {
       const s = document.querySelector<HTMLSelectElement>("select[name=countryOfBirth]");
       return !!s && s.options.length > 1;
-    }, { timeout: 30000 }).catch(() => {});
+    }, undefined, { timeout: 30000 }).catch(() => {});
 
     // Country <select>s now carry ONLY English option text (the portal used
     // to be Turkish-only) — try the English translation FIRST, Turkish name
@@ -2040,31 +2183,13 @@ export const topkapiAdapter: UniversityAdapter = {
       logger.warn("[topkapi] STEP4 DBG " + JSON.stringify(d));
     });
 
-    // Trigger the AJAX call by programmatically checking the education-level radio
-    await page.evaluate((lv: string) => {
-      const radios = document.querySelectorAll<HTMLInputElement>(
-        "input[name=educationLevel]",
-      );
-      for (const r of Array.from(radios)) {
-        if (r.value === lv) {
-          r.checked = true;
-          r.dispatchEvent(new Event("change", { bubbles: true }));
-          r.dispatchEvent(new Event("click",  { bubbles: true }));
-          break;
-        }
-      }
-    }, eduLevel);
-
-    // Wait for the program dropdown to populate (>1 option = real options loaded)
-    await page.waitForFunction(
-      () => {
-        const sel = document.querySelector<HTMLSelectElement>(
-          "select[name=programFirstPreference]",
-        );
-        return sel !== null && sel.options.length > 1;
-      },
-      { timeout: 12000 },
-    );
+    try {
+      await loadTopkapiProgramOptions(page, eduLevel, logger);
+    } catch (error) {
+      const shot = await takeShot(page, "step4-program-options-fail");
+      if (shot) screenshots.push(shot);
+      throw error;
+    }
 
     // Read options WITH their enabled/disabled state. The portal marks a full
     // programme with the native `disabled` attribute AND/OR a "(Kontenjan Dolu)"
@@ -2115,30 +2240,11 @@ export const topkapiAdapter: UniversityAdapter = {
       logger.warn(
         "[topkapi] Step 4: program list still Turkish after English switch — re-triggering AJAX to reload in English",
       );
-      await page.evaluate((lv: string) => {
-        const radios = document.querySelectorAll<HTMLInputElement>(
-          "input[name=educationLevel]",
+      await loadTopkapiProgramOptions(page, eduLevel, logger, true).catch((error) => {
+        logger.warn(
+          `[topkapi] Step 4: English program-list reload failed: ${(error as Error).message}`,
         );
-        for (const r of Array.from(radios)) {
-          if (r.value === lv) {
-            r.checked = true;
-            r.dispatchEvent(new Event("change", { bubbles: true }));
-            r.dispatchEvent(new Event("click", { bubbles: true }));
-            break;
-          }
-        }
-      }, eduLevel);
-      await page
-        .waitForFunction(
-          () => {
-            const sel = document.querySelector<HTMLSelectElement>(
-              "select[name=programFirstPreference]",
-            );
-            return sel !== null && sel.options.length > 1;
-          },
-          { timeout: 12000 },
-        )
-        .catch(() => {});
+      });
       const reread = await readProgramOptions();
       if (reread.length > 0) programOptionsRaw = reread;
     }
@@ -2610,6 +2716,7 @@ export const topkapiAdapter: UniversityAdapter = {
           const s = document.querySelector("select[name=countryOfBirth]");
           return !!s && (s as HTMLSelectElement).options.length > 1;
         },
+        undefined,
         { timeout: 30000 },
       )
       .catch(() => {});
@@ -2657,29 +2764,7 @@ export const topkapiAdapter: UniversityAdapter = {
 
     // ── STEP 4: trigger AJAX + extract the program dropdown options ───────────
     await page.waitForSelector("input[name=educationLevel]", { timeout: 15000 });
-    await page.evaluate((lv: string) => {
-      const radios = document.querySelectorAll<HTMLInputElement>(
-        "input[name=educationLevel]",
-      );
-      for (const r of Array.from(radios)) {
-        if (r.value === lv) {
-          r.checked = true;
-          r.dispatchEvent(new Event("change", { bubbles: true }));
-          r.dispatchEvent(new Event("click", { bubbles: true }));
-          break;
-        }
-      }
-    }, eduLevel);
-
-    await page.waitForFunction(
-      () => {
-        const sel = document.querySelector<HTMLSelectElement>(
-          "select[name=programFirstPreference]",
-        );
-        return sel !== null && sel.options.length > 1;
-      },
-      { timeout: 12000 },
-    );
+    await loadTopkapiProgramOptions(page, eduLevel, logger);
 
     const options: ProgramOption[] = await page.$$eval(
       "select[name=programFirstPreference] option",
