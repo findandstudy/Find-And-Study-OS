@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { classifyTopkapiStudentCheck } from "../src/universities/topkapi/adapter.js";
+import {
+  classifyTopkapiStudentCheck,
+  countTopkapiProgramChoices,
+} from "../src/universities/topkapi/adapter.js";
 import {
   matchTopkapiProgramLevelRadio,
   topkapiProgramLevelRadioCandidates,
@@ -22,6 +25,43 @@ test("Topkapi duplicate classifier fails closed on HTML and unknown payloads", (
   assert.equal(classifyTopkapiStudentCheck('{"status":"maybe"}'), "unknown");
   assert.equal(classifyTopkapiStudentCheck("{broken"), "unknown");
   assert.equal(classifyTopkapiStudentCheck('[{"status":"exists"}]'), "unknown");
+});
+
+test("Topkapi Step-4 AJAX classifier accepts a settled empty program list", () => {
+  assert.equal(
+    countTopkapiProgramChoices(JSON.stringify({
+      status: "success",
+      programChoicesHtml: `
+        <select name="programFirstPreference">
+          <option value="0">Not Selected</option>
+        </select>
+        <select name="programSecondPreference"><option value="0">Not Selected</option></select>
+      `,
+    })),
+    0,
+  );
+});
+
+test("Topkapi Step-4 AJAX classifier counts only real first-preference options", () => {
+  assert.equal(
+    countTopkapiProgramChoices(JSON.stringify({
+      status: "success",
+      programChoicesHtml: `
+        <select class="form-select" name='programFirstPreference' required>
+          <option value="0">Not Selected</option>
+          <option value="41">Graphic Design (Associate) - English</option>
+          <option value='42' disabled>Other</option>
+        </select>
+      `,
+    })),
+    2,
+  );
+});
+
+test("Topkapi Step-4 AJAX classifier fails closed on malformed payloads", () => {
+  assert.equal(countTopkapiProgramChoices("<html>502</html>"), null);
+  assert.equal(countTopkapiProgramChoices('{"status":"error"}'), null);
+  assert.equal(countTopkapiProgramChoices('{"status":"success","programChoicesHtml":"<div/>"}'), null);
 });
 
 test("Topkapi Step-4 level matcher accepts Associate portal aliases", () => {

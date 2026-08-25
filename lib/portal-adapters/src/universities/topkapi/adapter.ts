@@ -37,6 +37,41 @@ const STORAGE_PATH = "/tmp/topkapi-portal-state.json";
 
 export type TopkapiStudentCheckOutcome = "exists" | "new" | "unknown";
 
+/**
+ * Read the number of real first-preference options from Topkapı's Step-4 AJAX
+ * response. `0` is a valid, settled response: the portal returned the three
+ * dropdowns but offered no programmes for the selected level/semester/
+ * nationality. `null` means the response cannot be trusted.
+ */
+export function countTopkapiProgramChoices(responseBody: string): number | null {
+  try {
+    const parsed: unknown = JSON.parse(responseBody);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+    const record = parsed as Record<string, unknown>;
+    if (String(record.status ?? "").trim().toLowerCase() !== "success") return null;
+    if (typeof record.programChoicesHtml !== "string") return null;
+
+    const firstPreference = record.programChoicesHtml.match(
+      /<select\b[^>]*\bname\s*=\s*(?:["']programFirstPreference["']|programFirstPreference)[^>]*>([\s\S]*?)<\/select>/i,
+    );
+    if (!firstPreference) return null;
+
+    let count = 0;
+    const optionPattern = /<option\b([^>]*)>/gi;
+    let option: RegExpExecArray | null;
+    while ((option = optionPattern.exec(firstPreference[1])) !== null) {
+      const value = option[1].match(
+        /\bvalue\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i,
+      );
+      const normalized = (value?.[1] ?? value?.[2] ?? value?.[3] ?? "").trim();
+      if (normalized && normalized !== "0") count += 1;
+    }
+    return count;
+  } catch {
+    return null;
+  }
+}
+
 /** Fail closed when the duplicate endpoint returns HTML or an unknown shape. */
 export function classifyTopkapiStudentCheck(
   responseBody: string,
@@ -585,14 +620,17 @@ async function triggerTopkapiProgramLevel(
       );
       const radio = radios[index];
       if (!radio) return;
-      radio.checked = true;
-      radio.dispatchEvent(new Event("input", { bubbles: true }));
-      radio.dispatchEvent(new Event("change", { bubbles: true }));
-      radio.click();
-      const w = window as unknown as {
-        jQuery?: (el: Element) => { trigger: (event: string) => void };
-      };
-      if (w.jQuery) w.jQuery(radio).trigger("change");
+      // One user-like transition is enough. The previous implementation fired
+      // native input/change, click and jQuery change in sequence, producing two
+      // identical AJAX requests per attempt. Besides unnecessary portal load,
+      // racing responses could overwrite a populated dropdown with an empty
+      // one. When retrying an already checked radio, a single bubbling change
+      // deliberately re-runs the portal's delegated handler.
+      if (radio.checked) {
+        radio.dispatchEvent(new Event("change", { bubbles: true }));
+      } else {
+        radio.click();
+      }
     },
     { index: matched.index, clear: clearProgramOptions },
   );
@@ -613,6 +651,15 @@ async function loadTopkapiProgramOptions(
   let lastError: unknown = null;
 
   for (let attempt = 1; attempt <= 2; attempt++) {
+    const responsePromise = page
+      .waitForResponse(
+        (response) =>
+          response.url().includes("application-get-program-choices-select.php") &&
+          response.request().method() === "POST",
+        { timeout: 12000 },
+      )
+      .catch(() => null);
+
     matched = await triggerTopkapiProgramLevel(
       page,
       requestedLevel,
@@ -620,17 +667,48 @@ async function loadTopkapiProgramOptions(
       forceReload || attempt > 1,
     );
     try {
-      await page.waitForFunction(
-        () => {
-          const select = document.querySelector<HTMLSelectElement>(
-            "select[name=programFirstPreference]",
+      const optionsReadyPromise = page
+        .waitForFunction(
+          () => {
+            const select = document.querySelector<HTMLSelectElement>(
+              "select[name=programFirstPreference]",
+            );
+            return select !== null && select.options.length > 1;
+          },
+          undefined,
+          { timeout: 12000 },
+        )
+        .then(() => true)
+        .catch(() => false);
+
+      const firstSignal = await Promise.race([
+        responsePromise.then((response) => ({ kind: "response" as const, response })),
+        optionsReadyPromise.then((ready) => ({ kind: "dom" as const, ready })),
+      ]);
+
+      if (firstSignal.kind === "dom" && firstSignal.ready) return matched;
+
+      if (firstSignal.kind === "response" && firstSignal.response) {
+        const response = firstSignal.response;
+        const responseBody = await response.text().catch(() => "");
+        const responseOptionCount = countTopkapiProgramChoices(responseBody);
+        if (response.ok() && responseOptionCount === 0) {
+          // The portal answered successfully and explicitly supplied an empty
+          // first-preference dropdown. This is not a transport timeout. Let the
+          // caller return the structural `programMissing` result immediately.
+          await page.waitForTimeout(250);
+          log.info(
+            `[topkapi] Step 4: portal returned an empty program list for ${requestedLevel}`,
           );
-          return select !== null && select.options.length > 1;
-        },
-        undefined,
-        { timeout: 12000 },
-      );
-      return matched;
+          return matched;
+        }
+        if (!response.ok()) {
+          throw new Error(`program choices HTTP ${response.status()}`);
+        }
+      }
+
+      if (await optionsReadyPromise) return matched;
+      throw new Error("program choices response did not populate the dropdown");
     } catch (error) {
       lastError = error;
       if (attempt === 1) {
