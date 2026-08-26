@@ -172,13 +172,12 @@ function pnOnly(raw: any, max: number): string | null {
 
 const router: IRouter = Router();
 
-// Embed widget /apply submissions include base64-encoded PDF/image documents
-// in the JSON body (course-finder widget). Base64 inflates payload by ~33%
-// so the global 1mb limit blocks legitimate submissions. Routes are gated by
-// embedSubmitLimiter (applied BEFORE the parser so rate-limited requests
-// never pay the parse cost) and per-widget allowed-domains validation.
-// /lead carries only personal-info text fields, so it keeps a tight limit;
-// only /apply needs the larger envelope for documents.
+// Current widgets persist documents before the final /apply and only send a
+// signed document-session reference on submit. Keep the larger parser on
+// /apply for backwards compatibility with cached/legacy widgets that still
+// carry base64 files in the final request. Routes are gated by step-specific
+// submit limiters (applied before the parser so rejected requests never pay
+// the parse cost) and per-widget allowed-domains validation.
 const embedApplyJson = json({ limit: "30mb" });
 const embedLeadJson = json({ limit: "256kb" });
 const embedChatJson = json({ limit: "64kb" });
@@ -189,15 +188,24 @@ const embedChatMediaBody = express.raw({
 const embedChatMediaStorage = new ObjectStorageService();
 
 const EMBED_WINDOW_MS = 15 * 60 * 1000;
-const embedSubmitLimiter = rateLimit({
-  windowMs: EMBED_WINDOW_MS,
-  max: 15,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: "Too many submissions. Please try again later." },
-  store: new PgRateLimitStore(EMBED_WINDOW_MS, "embed-submit"),
-  keyGenerator: (req) => getRateLimitIp(req),
-});
+function createEmbedSubmitLimiter(prefix: string, max: number) {
+  return rateLimit({
+    windowMs: EMBED_WINDOW_MS,
+    max,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: "Too many submissions. Please try again later." },
+    store: new PgRateLimitStore(EMBED_WINDOW_MS, prefix),
+    // Keep unrelated partner widgets and unrelated steps from consuming one
+    // shared IP bucket. The IP component still prevents anonymous abuse while
+    // the slug component avoids cross-partner interference.
+    keyGenerator: (req) => `${getRateLimitIp(req)}:${String(req.params.slug || "unknown")}`,
+  });
+}
+
+const embedLeadSubmitLimiter = createEmbedSubmitLimiter("embed-lead", 30);
+const embedDocumentSubmitLimiter = createEmbedSubmitLimiter("embed-document", 80);
+const embedApplicationSubmitLimiter = createEmbedSubmitLimiter("embed-application", 30);
 
 const EMBED_CHAT_WINDOW_MS = 60 * 1000;
 const embedChatLimiter = rateLimit({
@@ -452,6 +460,70 @@ async function persistEmbedLeadDocuments(params: {
     saved += 1;
   }
   return saved;
+}
+
+async function readEmbedLeadDraftDocuments(params: {
+  leadId: number;
+  slug: string;
+  email: string;
+  requestedLabels: unknown;
+}): Promise<PreparedEmbedDocument[] | null> {
+  const normalizedEmail = params.email.toLowerCase().trim();
+  const [lead] = await db.select({ id: leadsTable.id })
+    .from(leadsTable)
+    .where(and(
+      eq(leadsTable.id, params.leadId),
+      eq(leadsTable.source, `embed:${params.slug}`),
+      sql`lower(trim(${leadsTable.email})) = ${normalizedEmail}`,
+      isNull(leadsTable.deletedAt),
+    ))
+    .limit(1);
+  if (!lead) return null;
+
+  // The label manifest is deliberately small and contains no file bytes. It
+  // ensures a file removed in the UI is not revived from an older draft row.
+  const requestedTypes = Array.isArray(params.requestedLabels)
+    ? [...new Set(params.requestedLabels
+      .slice(0, 4)
+      .map((label) => String(label || "").toLowerCase())
+      .filter(Boolean))]
+    : [];
+  if (requestedTypes.length === 0) return [];
+
+  const rows = await db.select({
+    label: documentsTable.type,
+    data: documentsTable.fileData,
+    mediaType: documentsTable.mimeType,
+    sizeBytes: documentsTable.sizeBytes,
+  })
+    .from(documentsTable)
+    .where(and(
+      eq(documentsTable.leadId, lead.id),
+      inArray(documentsTable.type, requestedTypes),
+      isNull(documentsTable.studentId),
+      isNull(documentsTable.applicationId),
+      isNull(documentsTable.deletedAt),
+    ))
+    .orderBy(desc(documentsTable.updatedAt), desc(documentsTable.id));
+
+  const byType = new Map<string, PreparedEmbedDocument>();
+  for (const row of rows) {
+    const label = String(row.label || "").toLowerCase();
+    const data = String(row.data || "").replace(/\s/g, "");
+    const mediaType = String(row.mediaType || "").toLowerCase();
+    if (!label || !requestedTypes.includes(label) || !data || !isAllowedMimeType(mediaType) || byType.has(label)) {
+      continue;
+    }
+    byType.set(label, {
+      label,
+      data,
+      mediaType,
+      sizeBytes: row.sizeBytes ? Number(row.sizeBytes) : null,
+    });
+  }
+  return requestedTypes
+    .map((type) => byType.get(type))
+    .filter((doc): doc is PreparedEmbedDocument => Boolean(doc));
 }
 
 const EMBED_TOKEN_WINDOW_MS = 15 * 60 * 1000;
@@ -1583,7 +1655,7 @@ router.get("/public/embed/:slug/filters", async (req, res): Promise<void> => {
 // the widget's allowed-domains list. Called by the widget JS when the user
 // clicks "Continue" on the Personal Info step so the lead lands in the
 // "new" column even if the user abandons the form before submitting docs.
-router.post("/public/embed/:slug/lead", embedSubmitLimiter, embedLeadJson, async (req, res): Promise<void> => {
+router.post("/public/embed/:slug/lead", embedLeadSubmitLimiter, embedLeadJson, async (req, res): Promise<void> => {
   const slug = String(req.params.slug);
   const [widget] = await db.select().from(embedWidgetsTable).where(and(eq(embedWidgetsTable.slug, slug), eq(embedWidgetsTable.isActive, true)));
   if (!widget) { res.status(404).json({ error: "Widget not found" }); return; }
@@ -1695,7 +1767,7 @@ router.post("/public/embed/:slug/lead", embedSubmitLimiter, embedLeadJson, async
 // The session token is opaque, short-lived, slug-bound and HMAC-signed; the
 // endpoint never accepts a public numeric lead id. Final /apply promotes these
 // draft rows to the resulting student/application instead of inserting copies.
-router.post("/public/embed/:slug/lead-documents", embedSubmitLimiter, embedApplyJson, async (req, res): Promise<void> => {
+router.post("/public/embed/:slug/lead-documents", embedDocumentSubmitLimiter, embedApplyJson, async (req, res): Promise<void> => {
   const slug = String(req.params.slug);
   const [widget] = await db.select().from(embedWidgetsTable).where(and(
     eq(embedWidgetsTable.slug, slug),
@@ -1757,7 +1829,7 @@ router.post("/public/embed/:slug/lead-documents", embedSubmitLimiter, embedApply
   res.json({ saved, documentWarnings: prepared.warnings });
 });
 
-router.post("/public/embed/:slug/apply", embedSubmitLimiter, embedApplyJson, async (req, res): Promise<void> => {
+router.post("/public/embed/:slug/apply", embedApplicationSubmitLimiter, embedApplyJson, async (req, res): Promise<void> => {
   const slug = String(req.params.slug);
   const [widget] = await db.select().from(embedWidgetsTable).where(and(eq(embedWidgetsTable.slug, slug), eq(embedWidgetsTable.isActive, true)));
   if (!widget) { res.status(404).json({ error: "Widget not found" }); return; }
@@ -1769,7 +1841,7 @@ router.post("/public/embed/:slug/apply", embedSubmitLimiter, embedApplyJson, asy
   }
   setEmbedCors(res, widget, origin);
 
-  const { firstName, lastName, email, phone, countryCode, nationality, desiredLevel, desiredProgram, preferredUniversity, message, programId, programName, universityName, sourcePageUrl, utmSource, utmMedium, utmCampaign, utmTerm, utmContent, _hp, documents, aiExtractedData, motherName, fatherName, gender, dateOfBirth, passportNumber, passportIssueDate, passportExpiry, address, addressCity, postalCode, highSchool, graduationYear, gpa, languageScore } = req.body;
+  const { firstName, lastName, email, phone, countryCode, nationality, desiredLevel, desiredProgram, preferredUniversity, message, programId, programName, universityName, sourcePageUrl, utmSource, utmMedium, utmCampaign, utmTerm, utmContent, _hp, documents, documentSessionToken, documentLabels, aiExtractedData, motherName, fatherName, gender, dateOfBirth, passportNumber, passportIssueDate, passportExpiry, address, addressCity, postalCode, highSchool, graduationYear, gpa, languageScore } = req.body;
 
   if (_hp) { res.json({ success: true }); return; }
 
@@ -1826,7 +1898,45 @@ router.post("/public/embed/:slug/apply", embedSubmitLimiter, embedApplyJson, asy
     nationality,
   });
 
-  const preparedDocuments = await prepareEmbedDocuments(documents);
+  let documentSessionLeadId: number | null = null;
+  let preparedDocuments: Awaited<ReturnType<typeof prepareEmbedDocuments>>;
+  if (documentSessionToken) {
+    const session = verifyEmbedLeadDocumentSessionToken(
+      getEmbedSigningSecret(),
+      documentSessionToken,
+      slug,
+    );
+    if (!session) {
+      res.status(403).json({
+        error: "Your secure document session expired. Please return to the first step and try again.",
+        code: "EMBED_DOCUMENT_SESSION_INVALID",
+      });
+      return;
+    }
+    const draftDocuments = await readEmbedLeadDraftDocuments({
+      leadId: session.leadId,
+      slug,
+      email: String(email),
+      requestedLabels: documentLabels,
+    });
+    if (draftDocuments === null) {
+      res.status(403).json({
+        error: "The document session does not match this application.",
+        code: "EMBED_DOCUMENT_SESSION_MISMATCH",
+      });
+      return;
+    }
+    documentSessionLeadId = session.leadId;
+    preparedDocuments = {
+      validDocs: draftDocuments,
+      warnings: [],
+      inputCount: draftDocuments.length,
+    };
+  } else {
+    // Compatibility path for cached/legacy iframes that still send the base64
+    // documents in the final request.
+    preparedDocuments = await prepareEmbedDocuments(documents);
+  }
   const validDocs = preparedDocuments.validDocs;
   const documentWarnings = preparedDocuments.warnings;
 
@@ -1845,27 +1955,32 @@ router.post("/public/embed/:slug/apply", embedSubmitLimiter, embedApplyJson, asy
   // row when Step-1 already created one, and preserves the lead-first ->
   // auto-convert UX. Any client-supplied leadId is intentionally ignored.
   const partnerExtras = await widgetPartnerExtras(widget.agentId);
-  const result = await db.transaction(async (tx) => {
-    const upsertResult = await findOrUpsertEmbedLead({
-      slug: widget.slug,
-      ip: req.ip,
-      tx,
-      fields: {
-        firstName: tlu(firstName, 100)!,
-        lastName: tlu(lastName, 100)!,
-        email: s(email, 255)!,
-        phone: pn(phone, countryCode, 50),
-        phoneE164: toE164(pn(phone, countryCode, 50)),
-        nationality: s(nationality, 100),
-        interestedProgram: s(programName || desiredProgram, 255),
-        interestedUniversity: s(universityName || preferredUniversity, 255),
-        notes: s(message, 2000),
-      },
-      extras: partnerExtras,
-    });
-    const lead = upsertResult.lead;
+  let result: { leadId: number; submissionId: number };
+  try {
+    result = await db.transaction(async (tx) => {
+      const upsertResult = await findOrUpsertEmbedLead({
+        slug: widget.slug,
+        ip: req.ip,
+        tx,
+        fields: {
+          firstName: tlu(firstName, 100)!,
+          lastName: tlu(lastName, 100)!,
+          email: s(email, 255)!,
+          phone: pn(phone, countryCode, 50),
+          phoneE164: toE164(pn(phone, countryCode, 50)),
+          nationality: s(nationality, 100),
+          interestedProgram: s(programName || desiredProgram, 255),
+          interestedUniversity: s(universityName || preferredUniversity, 255),
+          notes: s(message, 2000),
+        },
+        extras: partnerExtras,
+      });
+      const lead = upsertResult.lead;
+      if (documentSessionLeadId !== null && lead.id !== documentSessionLeadId) {
+        throw new Error("EMBED_DOCUMENT_SESSION_LEAD_MISMATCH");
+      }
 
-    const [submission] = await tx.insert(embedSubmissionsTable).values({
+      const [submission] = await tx.insert(embedSubmissionsTable).values({
       widgetId: widget.id,
       firstName: tlu(firstName, 100)!,
       lastName: tlu(lastName, 100)!,
@@ -1891,10 +2006,20 @@ router.post("/public/embed/:slug/apply", embedSubmitLimiter, embedApplyJson, asy
       aiExtractedData: aiExtractedData || null,
       documentCount: validDocs.length,
       status: "new",
-    }).returning();
+      }).returning();
 
-    return { leadId: lead.id, submissionId: submission.id };
-  });
+      return { leadId: lead.id, submissionId: submission.id };
+    });
+  } catch (error) {
+    if (error instanceof Error && error.message === "EMBED_DOCUMENT_SESSION_LEAD_MISMATCH") {
+      res.status(403).json({
+        error: "The document session does not match this application.",
+        code: "EMBED_DOCUMENT_SESSION_MISMATCH",
+      });
+      return;
+    }
+    throw error;
+  }
 
   // Step 1 may have created this lead before nationality/full phone details
   // existed. Re-evaluate only while it is still unassigned; the helper never
@@ -5358,7 +5483,7 @@ function showDetailModal(){
     var pid=parseInt(applyBtn.getAttribute('data-apply'));
     closeDetailModal();
     formProgram=programs.find(function(p){return p.id===pid})||null;
-    formOpen=true;formSubmitted=false;formStep='personal';phoneError=false;uploadedDocs={};aiResult=null;extractedFields={};savedFormData={};leadId=null;leadCreating=false;handleNextPersonalInFlight=false;
+    formOpen=true;formSubmitted=false;formStep='personal';phoneError=false;uploadedDocs={};persistedDocumentFingerprints={};aiResult=null;extractedFields={};savedFormData={};leadId=null;leadDocumentSessionToken=null;leadCreating=false;handleNextPersonalInFlight=false;
     showModal();
     loadProgramDocs(pid,function(){if(formOpen)showModal();});
   });
@@ -5579,6 +5704,10 @@ var leadWasCreated=false;
 // Documents step to persist draft files without exposing or trusting a numeric
 // lead id, including when the backend deduplicates onto an existing lead.
 var leadDocumentSessionToken=null;
+// Fingerprint of each exact document already persisted for this session.
+// Final submit calls the persistence helper defensively, but unchanged files
+// must not cross the network a second time.
+var persistedDocumentFingerprints={};
 // Per-form identifier used by the public AI rate limiter. It prevents visitors
 // behind the same school/office NAT from consuming one shared five-request
 // bucket while remaining independent from any database identifier.
@@ -5925,20 +6054,53 @@ function ewBuildDocumentPayload(){
     return {type:d.isImage?'image':'pdf',data:d.base64,mediaType:d.mediaType,label:d.label,sizeBytes:d.sizeBytes};
   });
 }
+function ewDocumentFingerprint(docPayload){
+  return (docPayload||[]).map(function(d){
+    var data=String(d.data||'');
+    return [d.label||'',d.mediaType||'',d.sizeBytes||data.length,data.length,data.slice(0,32),data.slice(-32)].join('|');
+  }).join('||');
+}
 function ewPersistLeadDocuments(docPayload){
   if(!leadDocumentSessionToken||!docPayload||docPayload.length===0)return Promise.resolve();
-  return fetch(addToken(API+'/lead-documents'),{
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({documentSessionToken:leadDocumentSessionToken,documents:docPayload})
-  }).then(function(r){
-    if(r.ok)return r.json();
-    return r.json().catch(function(){return {}}).then(function(d){
-      var err=new Error(d.error||'Documents could not be saved');
-      err.isDocumentSaveError=true;
-      throw err;
-    });
+  var pending=docPayload.map(function(doc){
+    return {doc:doc,fingerprint:ewDocumentFingerprint([doc])};
+  }).filter(function(item){
+    return !item.fingerprint||persistedDocumentFingerprints[item.doc.label]!==item.fingerprint;
   });
+  // Upload one validated document at a time. A four-file application no
+  // longer depends on one fragile 20–27 MB base64 request, and each upsert is
+  // safe to retry once after a transient network/5xx failure.
+  return pending.reduce(function(chain,item){
+    return chain.then(function(){
+      function sendOne(attempt){
+        return fetch(addToken(API+'/lead-documents'),{
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({documentSessionToken:leadDocumentSessionToken,documents:[item.doc]})
+        }).then(function(r){
+          if(r.ok){
+            persistedDocumentFingerprints[item.doc.label]=item.fingerprint;
+            return r.json();
+          }
+          if(attempt===0&&r.status>=500){
+            return new Promise(function(resolve){setTimeout(resolve,500)}).then(function(){return sendOne(1)});
+          }
+          return r.json().catch(function(){return {}}).then(function(d){
+            var err=new Error(d.error||'Documents could not be saved');
+            err.isDocumentSaveError=true;
+            throw err;
+          });
+        }).catch(function(err){
+          if(attempt===0&&!err.isDocumentSaveError){
+            return new Promise(function(resolve){setTimeout(resolve,500)}).then(function(){return sendOne(1)});
+          }
+          err.isDocumentSaveError=true;
+          throw err;
+        });
+      }
+      return sendOne(0);
+    });
+  },Promise.resolve());
 }
 function handleAnalyze(){
   if(!enforceDocGate())return;
@@ -6050,19 +6212,25 @@ function handleFormSubmit(e){
     var params=new URLSearchParams(search);
     Object.keys(utmMap).forEach(function(k){var v=params.get(k);if(v)data[utmMap[k]]=v});
   }catch(ex){}
-  var docKeys=Object.keys(uploadedDocs);
-  if(docKeys.length>0){
-    data.documents=docKeys.map(function(k){
-      var d=uploadedDocs[k];
-      return {label:d.label,data:d.base64,mediaType:d.mediaType,sizeBytes:d.sizeBytes};
-    });
-  }
+  var docPayload=ewBuildDocumentPayload();
   if(aiResult)data.aiExtractedData=aiResult;
   if(leadId)data.leadId=leadId;
-  fetch(addToken(API+'/apply'),{
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body:JSON.stringify(data)
+  // Documents were already validated and persisted at the document step. On
+  // final submit send only the signed session + a tiny label manifest. This
+  // avoids retransmitting up to ~27 MB of base64 through the partner iframe.
+  ewPersistLeadDocuments(docPayload).then(function(){
+    if(leadDocumentSessionToken){
+      data.documentSessionToken=leadDocumentSessionToken;
+      data.documentLabels=docPayload.map(function(d){return d.label});
+    }else if(docPayload.length>0){
+      // Legacy/local fallback when the signing secret is unavailable.
+      data.documents=docPayload;
+    }
+    return fetch(addToken(API+'/apply'),{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(data)
+    });
   }).then(function(r){
     formLoading=false;
     if(!r.ok)return r.json().then(function(d){
@@ -6086,7 +6254,11 @@ function handleFormSubmit(e){
   }).catch(function(err){
     formLoading=false;
     if(formOpen)showModal();else render(false);
-    alert(err.message||(MODE==='lead_form'?LC.genericFailed:'Something went wrong. Please try again.'));
+    var message=err&&err.message;
+    if(!message||/failed to fetch|networkerror|load failed/i.test(message)){
+      message=MODE==='lead_form'?LC.genericFailed:'The connection was interrupted while submitting. Please check your internet connection and press Submit again.';
+    }
+    alert(message);
   });
 }
 
@@ -6111,7 +6283,7 @@ function bindEvents(){
       var pid=parseInt(btn.getAttribute('data-apply'));
       formProgram=programs.find(function(p){return p.id===pid})||null;
       applicationSessionId=(window.crypto&&window.crypto.randomUUID)?window.crypto.randomUUID():('app-'+Date.now()+'-'+Math.random().toString(36).slice(2));
-      formOpen=true;formSubmitted=false;formStep='personal';phoneError=false;uploadedDocs={};aiResult=null;extractedFields={};savedFormData={};leadId=null;leadCreating=false;handleNextPersonalInFlight=false;
+      formOpen=true;formSubmitted=false;formStep='personal';phoneError=false;uploadedDocs={};persistedDocumentFingerprints={};aiResult=null;extractedFields={};savedFormData={};leadId=null;leadDocumentSessionToken=null;leadCreating=false;handleNextPersonalInFlight=false;
       loadProgramDocs(pid,function(){if(formOpen)showModal();else render(false);});
       showModal();
     });
