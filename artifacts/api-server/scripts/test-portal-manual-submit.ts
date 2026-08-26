@@ -232,6 +232,10 @@ test("MSUB3: re-submit same app → skipped ALREADY_QUEUED, no new row", async (
   const server = await listen(buildApp());
   try {
     const before = await db.select().from(portalSubmissionsTable).where(eq(portalSubmissionsTable.applicationId, appA));
+    await db
+      .update(portalSubmissionsTable)
+      .set({ meta: {}, enqueuedBy: null })
+      .where(eq(portalSubmissionsTable.applicationId, appA));
     const res = await sendReq(server, "POST", "/api/portal-automation/submit", {
       applicationIds: [appA],
       mode: "dry",
@@ -243,6 +247,8 @@ test("MSUB3: re-submit same app → skipped ALREADY_QUEUED, no new row", async (
 
     const after2 = await db.select().from(portalSubmissionsTable).where(eq(portalSubmissionsTable.applicationId, appA));
     assert.equal(after2.length, before.length, "no new row should be inserted");
+    assert.equal((after2[0].meta as { manual?: boolean })?.manual, true);
+    assert.equal(after2[0].enqueuedBy, 1);
   } finally {
     await close(server);
   }

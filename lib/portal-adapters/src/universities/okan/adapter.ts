@@ -17,6 +17,7 @@
 import { launchPortal, logger } from "../../browser.js";
 import { portalCreds } from "../../portalCreds.js";
 import { fold, matchProgram } from "../../programMatch.js";
+import type { MatchOptions } from "../../programMatch.js";
 import type {
   UniversityAdapter, LoginOpts, AdapterSession,
   SubmitProfile, SubmitFiles, SubmitResult,
@@ -33,7 +34,53 @@ export function resolveOkanDegreeValue(level: string): string | null {
   return null;
 }
 
-export function chooseOkanProgramIndex(labels: string[], wanted: string): number | null {
+const stripOkanCatalogDegreePrefix = (value: string) =>
+  fold(value)
+    .replace(
+      /^(?:associate|bachelor|undergraduate|master|masters|graduate|phd|doctorate|doctoral)\s+(?:of|in)\s+/,
+      "",
+    )
+    .trim();
+
+export function buildOkanProgramSearchQueries(programName: string): string[] {
+  const withoutTracks = String(programName || "")
+    .replace(/\([^)]*\)/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  const withoutDegreePrefix = withoutTracks
+    .replace(
+      /^(?:associate|bachelor|undergraduate|master|masters|graduate|phd|doctorate|doctoral)\s+(?:of|in)\s+/i,
+      "",
+    )
+    .trim();
+  const afterSeparator = withoutDegreePrefix
+    .split(/\s+[-–—]\s+/)
+    .at(-1)
+    ?.trim();
+  const acronym = withoutDegreePrefix.match(/\b[A-Z][A-Z0-9&]{1,7}\b/)?.[0];
+
+  return [withoutDegreePrefix, afterSeparator, acronym, withoutTracks]
+    .filter((value): value is string => Boolean(value && value.length >= 2))
+    .filter((value, index, all) =>
+      all.findIndex((candidate) => fold(candidate) === fold(value)) === index,
+    );
+}
+
+export function chooseOkanProgramIndex(
+  labels: string[],
+  wanted: string,
+  options?: MatchOptions,
+): number | null {
+  // Okan often omits the CRM catalogue's leading degree phrase. Treat the
+  // otherwise exact portal label as a proven match while retaining thesis and
+  // language markers. More than one exact candidate still fails closed.
+  const wantedPortalLabel = stripOkanCatalogDegreePrefix(wanted);
+  const portalExact = labels
+    .map((label, index) => ({ label, index }))
+    .filter(({ label }) => stripOkanCatalogDegreePrefix(label) === wantedPortalLabel);
+  if (portalExact.length === 1) return portalExact[0].index;
+  if (portalExact.length > 1) return null;
+
   const withoutTrack = (value: string) =>
     fold(value)
       .replace(/\b(non thesis|thesis|tezli|tezsiz|english|turkish|ingilizce|turkce)\b/g, " ")
@@ -45,7 +92,7 @@ export function chooseOkanProgramIndex(labels: string[], wanted: string): number
     return null;
   }
   const candidates = labels.map((name, index) => ({ id: String(index), name }));
-  const matched = matchProgram(wanted, candidates);
+  const matched = matchProgram(wanted, candidates, options);
   if (!matched || matched.conf < 0.6) return null;
   const index = Number(matched.match.id);
   return Number.isInteger(index) && index >= 0 ? index : null;
@@ -259,28 +306,67 @@ export const okanAdapter: UniversityAdapter = {
       await fill("fathersName", (profile as any).fatherName);
       await fill("familyPhoneNumber", String(profile.phone || "").replace(/^\+?90/, "").replace(/^\+/, ""));
       await wait(600); await next(); await wait(1800);
-      // 3 Program Selection — keyword filter → Select
+      // 3 Program Selection — keyword filter → Select. CRM catalogue names
+      // may include a leading degree phrase that Okan omits, so progressively
+      // try narrower, deterministic queries. Every result is still passed
+      // through the strict thesis/language-aware matcher; no first-result guess.
       if (profile.programName) {
-        await fill("programKeyword", profile.programName.replace(/\(.*\)/, "").trim());
-        await wait(2000);
-        const selectButtons = page.locator('button:has-text("Select")');
-        const labels: string[] = [];
-        const visibleIndexes: number[] = [];
-        for (let i = 0; i < await selectButtons.count(); i++) {
-          const button = selectButtons.nth(i);
-          if (!(await button.isVisible().catch(() => false))) continue;
-          const text = await button.evaluate((el: HTMLElement) => {
-            const root = el.closest("tr,.single-table,.card,.program-card,.row") ?? el.parentElement;
-            return String(root?.textContent ?? "").replace(/\s+/g, " ").replace(/\bSelect\b/gi, "").trim();
-          }).catch(() => "");
-          labels.push(text);
-          visibleIndexes.push(i);
+        const queries = buildOkanProgramSearchQueries(profile.programName);
+        const candidateEvidence: string[] = [];
+        let selected = false;
+
+        for (const query of queries) {
+          await fill("programKeyword", query);
+          await wait(1800);
+          const selectButtons = page.locator('button:has-text("Select")');
+          const labels: string[] = [];
+          const visibleIndexes: number[] = [];
+          for (let i = 0; i < await selectButtons.count(); i++) {
+            const button = selectButtons.nth(i);
+            if (!(await button.isVisible().catch(() => false))) continue;
+            const text = await button.evaluate((el: HTMLElement) => {
+              const root =
+                el.closest("tr,.single-table,.card,.program-card") ??
+                el.closest(".row") ??
+                el.parentElement;
+              const preferred = root?.querySelector(
+                ".program-name,.program-title,[data-program-name],h1,h2,h3,h4,h5,strong",
+              );
+              return String(preferred?.textContent ?? root?.textContent ?? "")
+                .replace(/\s+/g, " ")
+                .replace(/\bSelect\b/gi, "")
+                .trim();
+            }).catch(() => "");
+            if (!text) continue;
+            labels.push(text);
+            visibleIndexes.push(i);
+            if (!candidateEvidence.includes(text) && candidateEvidence.length < 30) {
+              candidateEvidence.push(text);
+            }
+          }
+          const selectedIndex = chooseOkanProgramIndex(
+            labels,
+            profile.programName,
+            {
+              nameMap: profile.programNameMap,
+              nameMapGeneral: profile.programNameMapGeneral,
+              synonyms: profile.programSynonyms,
+            },
+          );
+          if (selectedIndex != null) {
+            await selectButtons.nth(visibleIndexes[selectedIndex]).click({ timeout: 6000 });
+            selected = true;
+            break;
+          }
         }
-        const selectedIndex = chooseOkanProgramIndex(labels, profile.programName);
-        if (selectedIndex == null) {
+        result.meta = {
+          ...(result.meta ?? {}),
+          programSearchQueries: queries,
+          programCandidates: candidateEvidence,
+        };
+        if (!selected) {
           result.programMissing = true;
-        } else {
-          await selectButtons.nth(visibleIndexes[selectedIndex]).click({ timeout: 6000 });
+          result.detail = `Okan program could not be matched after ${queries.length} search query(s)`;
         }
         await wait(1000);
       }

@@ -158,7 +158,10 @@ export async function enqueuePortalSubmissions(opts: {
       );
 
       const [existing] = await tx
-        .select({ id: portalSubmissionsTable.id })
+        .select({
+          id: portalSubmissionsTable.id,
+          status: portalSubmissionsTable.status,
+        })
         .from(portalSubmissionsTable)
         .where(
           and(
@@ -171,6 +174,20 @@ export async function enqueuePortalSubmissions(opts: {
         .limit(1);
 
       if (existing) {
+        // A row may already have been created by the automatic lifecycle
+        // guardian while its university has auto-process disabled. Reusing the
+        // row without marking it manual leaves an explicit user request stuck
+        // forever. Upgrade only queued rows; never mutate a running attempt.
+        if (existing.status === "queued") {
+          await tx
+            .update(portalSubmissionsTable)
+            .set({
+              mode: opts.mode,
+              enqueuedBy: opts.userId,
+              meta: sql`coalesce(${portalSubmissionsTable.meta}, '{}'::jsonb) || '{"manual":true}'::jsonb`,
+            })
+            .where(eq(portalSubmissionsTable.id, existing.id));
+        }
         return { kind: "existing" as const, id: existing.id };
       }
 

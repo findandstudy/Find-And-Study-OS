@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { SubmitProfile } from "../../types.js";
 import {
+  buildOkanProgramSearchQueries,
   chooseOkanProgramIndex,
   resolveOkanDegreeValue,
   resolveOkanRequiredFields,
@@ -81,6 +82,27 @@ test("Okan program selection chooses a proven match and refuses ambiguity", () =
       "Business Administration",
     ),
     null,
+  );
+  assert.equal(
+    chooseOkanProgramIndex(
+      ["MBA - Business Administration (Non-Thesis) (English)"],
+      "Master of MBA - Business Administration (Non-Thesis) (English)",
+    ),
+    0,
+  );
+});
+
+test("Okan program search removes CRM-only degree prefixes progressively", () => {
+  assert.deepEqual(
+    buildOkanProgramSearchQueries(
+      "Master of MBA - Business Administration (Non-Thesis) (English)",
+    ),
+    [
+      "MBA - Business Administration",
+      "Business Administration",
+      "MBA",
+      "Master of MBA - Business Administration",
+    ],
   );
 });
 
