@@ -3,6 +3,7 @@ import test from "node:test";
 import type { SubmitProfile } from "../../types.js";
 import {
   buildOkanProgramSearchQueries,
+  chooseOkanDraftHref,
   chooseOkanProgramIndex,
   normalizeOkanProgramIdentity,
   resolveOkanDegreeValue,
@@ -134,6 +135,61 @@ test("Okan progressively searches the CRM-only degree and MBA label", () => {
       "MBA",
       "Master of MBA - Business Administration",
     ],
+  );
+});
+
+test("Okan resumes the newly created draft for the exact applicant", () => {
+  const profile = {
+    firstName: "Lise Vanessa",
+    lastName: "Abaga Diongo",
+    passportNumber: "P1234567",
+    email: "lise@example.com",
+  };
+  assert.equal(
+    chooseOkanDraftHref(
+      [
+        {
+          href: "/Agency/trackwizard?id=110",
+          externalRef: "110",
+          rowText: "Another Student P0000000",
+        },
+        {
+          href: "/Agency/trackwizard?id=111",
+          externalRef: "111",
+          rowText: "LISE VANESSA ABAGA DIONGO P1234567 lise@example.com",
+        },
+        {
+          href: "/Agency/trackwizard?id=109",
+          externalRef: "109",
+          rowText: "LISE VANESSA ABAGA DIONGO P1234567 lise@example.com",
+        },
+      ],
+      new Set(["109", "110"]),
+      profile,
+    ),
+    "/Agency/trackwizard?id=111",
+  );
+});
+
+test("Okan never falls back to another applicant's first draft", () => {
+  assert.equal(
+    chooseOkanDraftHref(
+      [
+        {
+          href: "/Agency/trackwizard?id=110",
+          externalRef: "110",
+          rowText: "Another Student P0000000 other@example.com",
+        },
+      ],
+      new Set(),
+      {
+        firstName: "Lise Vanessa",
+        lastName: "Abaga Diongo",
+        passportNumber: "P1234567",
+        email: "lise@example.com",
+      },
+    ),
+    null,
   );
 });
 

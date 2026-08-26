@@ -14,6 +14,8 @@
 // countryOfResidenceId; required text: familyPhoneNumber. Step-4 country = countryOfSecondarySchoolId.
 // Mandatory docs: Passport + Last High School Transcript (PDF, ≤5MB).
 
+import os from "node:os";
+import path from "node:path";
 import { launchPortal, logger } from "../../browser.js";
 import { portalCreds } from "../../portalCreds.js";
 import { fold, matchProgram } from "../../programMatch.js";
@@ -119,6 +121,40 @@ export interface OkanTrackEvidence {
   status: string;
   completed: string;
   stage: string;
+}
+
+interface OkanTrackDraft {
+  href: string;
+  externalRef: string;
+  rowText: string;
+}
+
+export function chooseOkanDraftHref(
+  drafts: OkanTrackDraft[],
+  existingRefs: ReadonlySet<string>,
+  profile: Pick<SubmitProfile, "firstName" | "lastName" | "passportNumber" | "email">,
+): string | null {
+  const passport = fold(profile.passportNumber || "");
+  const email = fold(profile.email || "");
+  const fullName = fold(`${profile.firstName} ${profile.lastName}`);
+  const reverseName = fold(`${profile.lastName} ${profile.firstName}`);
+  const identityMatches = drafts.filter((draft) => {
+    const row = fold(draft.rowText);
+    return Boolean(
+      (passport && row.includes(passport)) ||
+      (email && row.includes(email)) ||
+      (fullName && row.includes(fullName)) ||
+      (reverseName && row.includes(reverseName)),
+    );
+  });
+  const newlyCreated = identityMatches.filter(
+    (draft) => draft.externalRef && !existingRefs.has(draft.externalRef),
+  );
+  const candidates = newlyCreated.length > 0 ? newlyCreated : identityMatches;
+  if (candidates.length === 0) return null;
+  return [...candidates]
+    .sort((a, b) => Number(b.externalRef || 0) - Number(a.externalRef || 0))[0]
+    .href;
 }
 
 export function verifyOkanSubmissionEvidence(
@@ -273,9 +309,67 @@ export const okanAdapter: UniversityAdapter = {
       if (w) { w.value(v); w.trigger('change'); }
     }, [labelRe, val]).catch(() => {});
     const fill = async (id: string, v?: string) => { const l = page.locator("#" + id); if ((await l.count()) && v != null && v !== "") await l.fill(String(v)).catch(() => {}); };
+    const visible = async (selector: string, timeout = 12000) =>
+      page.locator(selector).first().waitFor({ state: "visible", timeout })
+        .then(() => true)
+        .catch(() => false);
+    const captureDiagnostic = async (label: string) => {
+      const screenshotPath = path.join(
+        os.tmpdir(),
+        `okan-${label.replace(/[^a-z0-9_-]/gi, "-")}-${Date.now()}.png`,
+      );
+      await page.screenshot({ path: screenshotPath, fullPage: true }).catch(() => {});
+      result.screenshots = [
+        ...(Array.isArray(result.screenshots) ? result.screenshots : []),
+        screenshotPath,
+      ];
+      const pathname = (() => {
+        try { return new URL(page.url()).pathname; } catch { return ""; }
+      })();
+      const headings = await page.locator("h1,h2,h3,h4").allInnerTexts().catch(() => []);
+      const actionLabels = await page
+        .locator('button:visible,a.btn:visible,[role="button"]:visible')
+        .allInnerTexts()
+        .catch(() => []);
+      result.meta = {
+        ...(result.meta ?? {}),
+        diagnostic: {
+          label,
+          pathname,
+          headings: headings.map((text: string) => text.replace(/\s+/g, " ").trim()).filter(Boolean).slice(0, 12),
+          actions: actionLabels.map((text: string) => text.replace(/\s+/g, " ").trim()).filter(Boolean).slice(0, 20),
+        },
+      };
+    };
+    const collectTrackDrafts = async (): Promise<OkanTrackDraft[]> => {
+      const rows = page.locator("table tbody tr,.k-grid-content tbody tr");
+      const drafts: OkanTrackDraft[] = [];
+      for (let i = 0; i < await rows.count(); i++) {
+        const row = rows.nth(i);
+        if (!(await row.isVisible().catch(() => false))) continue;
+        const link = row.locator('a[href*="trackwizard" i]').first();
+        const href = (await link.getAttribute("href").catch(() => "")) || "";
+        if (!href) continue;
+        const externalRef =
+          href.match(/[?&](?:id|applicationId)=(\d+)/i)?.[1] ||
+          href.match(/\/(\d+)(?:[/?#]|$)/)?.[1] ||
+          "";
+        drafts.push({
+          href,
+          externalRef,
+          rowText: ((await row.innerText().catch(() => "")) || "").replace(/\s+/g, " ").trim(),
+        });
+      }
+      return drafts;
+    };
 
     try {
       // ===== A) Agency Wizard — create draft =====
+      await page.goto(BASE + "/Agency/TrackApplications", { waitUntil: "domcontentloaded", timeout: 60000 });
+      await wait(2000);
+      const existingDraftRefs = new Set(
+        (await collectTrackDrafts()).map((draft) => draft.externalRef).filter(Boolean),
+      );
       await page.goto(BASE + "/agency/ApplicationWizard", { waitUntil: "domcontentloaded", timeout: 60000 });
       await wait(2500);
       await page.locator(".image-container[data-value]").first().click({ timeout: 8000 }).catch(() => {});
@@ -301,15 +395,38 @@ export const okanAdapter: UniversityAdapter = {
       if (!/trackwizard/i.test(page.url())) {
         await page.goto(BASE + "/Agency/TrackApplications", { waitUntil: "domcontentloaded", timeout: 60000 });
         await wait(2500);
-        await page.locator('a[href*="trackwizard"]').first().click({ timeout: 8000 }).catch(() => {});
+        const draftHref = chooseOkanDraftHref(
+          await collectTrackDrafts(),
+          existingDraftRefs,
+          profile,
+        );
+        if (!draftHref) {
+          result.detail = "Okan newly created draft could not be identified safely";
+          await captureDiagnostic("draft-not-found");
+          return result as SubmitResult;
+        }
+        await page.goto(new URL(draftHref, BASE).toString(), {
+          waitUntil: "domcontentloaded",
+          timeout: 60000,
+        });
         await wait(3000);
       }
 
       // ===== B) Application Form (6 steps) =====
       // 1 Application Type
+      if (!(await visible('.image-container[data-value="1"]'))) {
+        result.detail = "Okan application type step was not reached";
+        await captureDiagnostic("application-type-step");
+        return result as SubmitResult;
+      }
       await page.locator('.image-container[data-value="1"]').first().click({ timeout: 8000 }).catch(() => {});
       await wait(600); await next(); await wait(1500);
       // 2 Personal Details
+      if (!(await visible("#gender"))) {
+        result.detail = "Okan personal details step was not reached";
+        await captureDiagnostic("personal-details-step");
+        return result as SubmitResult;
+      }
       await setKendo("gender", genderText((profile as any).gender));
       await fill("passportNumber", profile.passportNumber);
       await fill("birthdate", (profile.dateOfBirth || "").slice(0, 10));
@@ -328,14 +445,36 @@ export const okanAdapter: UniversityAdapter = {
       // 3 Program Selection — progressively narrow the CRM catalogue label
       // before selecting. Okan omits degree prefixes and may spell MBA as
       // Business Administration, so a single full-name search is insufficient.
+      if (!(await visible("#programKeyword"))) {
+        result.detail = "Okan program selection step was not reached";
+        await captureDiagnostic("program-step-not-reached");
+        return result as SubmitResult;
+      }
       if (profile.programName) {
         const queries = buildOkanProgramSearchQueries(profile.programName);
         const candidateEvidence: string[] = [];
         let selected = false;
+        const programInput = page.locator("#programKeyword").first();
+        const selectControls = () => page.locator([
+          'button:has-text("Select")',
+          'a:has-text("Select")',
+          '[role="button"]:has-text("Select")',
+          'input[type="button"][value*="Select"]',
+          'input[type="submit"][value*="Select"]',
+          'button:has-text("Seç")',
+          'a:has-text("Seç")',
+          '[role="button"]:has-text("Seç")',
+        ].join(","));
         for (const query of queries) {
-          await fill("programKeyword", query);
-          await wait(1800);
-          const selectButtons = page.locator('button:has-text("Select")');
+          await programInput.fill("");
+          await programInput.pressSequentially(query, { delay: 35 });
+          await programInput.dispatchEvent("change").catch(() => {});
+          const searchButton = page.getByRole("button", { name: /^Search$/i }).first();
+          if (await searchButton.isVisible().catch(() => false)) {
+            await searchButton.click({ timeout: 5000 }).catch(() => {});
+          }
+          await wait(2200);
+          const selectButtons = selectControls();
           const labels: string[] = [];
           const visibleIndexes: number[] = [];
           for (let i = 0; i < await selectButtons.count(); i++) {
@@ -351,7 +490,7 @@ export const okanAdapter: UniversityAdapter = {
               );
               return String(preferred?.textContent ?? root?.textContent ?? "")
                 .replace(/\s+/g, " ")
-                .replace(/\bSelect\b/gi, "")
+                .replace(/\b(?:Select|Seç)\b/gi, "")
                 .trim();
             }).catch(() => "");
             if (!text) continue;
@@ -385,6 +524,7 @@ export const okanAdapter: UniversityAdapter = {
           result.programMissing = true;
           result.detail =
             `Okan program could not be matched after ${queries.length} search query(s)`;
+          await captureDiagnostic("program-missing");
         }
         await wait(1000);
       }
