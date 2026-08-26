@@ -586,9 +586,8 @@ export const okanAdapter: UniversityAdapter = {
       );
       if (existingProof) {
         result.submitted = true;
-        result.alreadyExists = true;
         result.externalRef = existingProof.externalRef;
-        result.detail = `Okan application ${existingProof.externalRef} already exists and was verified in Track Applications`;
+        result.detail = `Okan application ${existingProof.externalRef} was verified as already submitted in Track Applications`;
         logger.info("[okan] existing application " + JSON.stringify(result));
         return result as SubmitResult;
       }
