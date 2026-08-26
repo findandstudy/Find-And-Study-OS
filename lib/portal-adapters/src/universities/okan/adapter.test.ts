@@ -5,6 +5,8 @@ import {
   buildOkanProgramSearchQueries,
   chooseOkanDraftHref,
   chooseOkanProgramIndex,
+  chooseOkanSubmissionEvidence,
+  extractOkanApplicationRef,
   normalizeOkanProgramIdentity,
   resolveOkanDegreeValue,
   resolveOkanRequiredFields,
@@ -254,5 +256,89 @@ test("Okan verifies durable evidence when the portal uses its MBA alias", () => 
       },
     ),
     true,
+  );
+});
+
+test("Okan extracts the application number from official report links", () => {
+  assert.equal(
+    extractOkanApplicationRef([
+      "/report/conditionalletter?applicationNo=OKN2026-29236 ",
+      "/report/finalletter?applicationNo=OKN2026-29236 ",
+    ]),
+    "OKN2026-29236",
+  );
+  assert.equal(
+    extractOkanApplicationRef([
+      "/report/finalletter?applicationNo=OKN2026-1",
+      "/report/finalletter?applicationNo=OKN2026-2",
+    ]),
+    "",
+  );
+});
+
+test("Okan safely reuses the exact completed application instead of creating a duplicate", () => {
+  const profile = {
+    firstName: "Lise Vanessa",
+    lastName: "Abaga Diongo",
+    programName:
+      "Master of MBA - Business Administration (Non-Thesis) (English)",
+  };
+  assert.deepEqual(
+    chooseOkanSubmissionEvidence(profile, [
+      {
+        externalRef: "OKN2026-29235",
+        applicantName: "Another Student",
+        programName: "Master of Business Administration (English) non-thesis",
+        status: "-",
+        completed: "Yes",
+        stage: "Evalution",
+      },
+      {
+        externalRef: "OKN2026-29236",
+        applicantName: "LISE VANESSA ABAGA DIONGO",
+        programName: "Master of Business Administration (English) non-thesis",
+        status: "-",
+        completed: "Yes",
+        stage: "Evalution",
+      },
+    ]),
+    {
+      externalRef: "OKN2026-29236",
+      applicantName: "LISE VANESSA ABAGA DIONGO",
+      programName: "Master of Business Administration (English) non-thesis",
+      status: "-",
+      completed: "Yes",
+      stage: "Evalution",
+    },
+  );
+});
+
+test("Okan fails closed when completed evidence is ambiguous", () => {
+  const profile = {
+    firstName: "Lise Vanessa",
+    lastName: "Abaga Diongo",
+    programName:
+      "Master of MBA - Business Administration (Non-Thesis) (English)",
+  };
+  assert.equal(
+    chooseOkanSubmissionEvidence(profile, [
+      {
+        externalRef: "OKN2026-29236",
+        applicantName: "LISE VANESSA ABAGA DIONGO",
+        programName: "Master of Business Administration (English) non-thesis",
+        status: "-",
+        completed: "Yes",
+        stage: "Evalution",
+      },
+      {
+        externalRef: "OKN2026-29237",
+        applicantName: "LISE VANESSA ABAGA DIONGO",
+        programName: "Master of Business Administration (English) non-thesis",
+        status: "-",
+        completed: "Yes",
+        stage: "Evalution",
+      },
+    ]),
+    null,
   );
 });

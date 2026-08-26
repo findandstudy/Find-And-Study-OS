@@ -56,6 +56,30 @@ export const normalizeOkanProgramIdentity = (value: string): string => {
   } else {
     normalized = normalized.replace(/\bmba\b/g, "business administration");
   }
+  if (/\bbusiness administration\b/.test(normalized)) {
+    const qualifierText = normalized
+      .replace(/\bbusiness administration\b/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    const track = /\bnon thesis\b/.test(qualifierText)
+      ? "non thesis"
+      : /\bthesis\b/.test(qualifierText)
+        ? "thesis"
+        : "";
+    const language = /\benglish\b/.test(qualifierText)
+      ? "english"
+      : /\bturkish\b/.test(qualifierText)
+        ? "turkish"
+        : "";
+    const extras = qualifierText
+      .replace(/\bnon thesis\b|\bthesis\b|\benglish\b|\bturkish\b/g, " ")
+      .split(/\s+/)
+      .filter(Boolean)
+      .sort();
+    normalized = ["business administration", track, language, ...extras]
+      .filter(Boolean)
+      .join(" ");
+  }
   return normalized.replace(/\s+/g, " ").trim();
 };
 
@@ -123,6 +147,22 @@ export interface OkanTrackEvidence {
   stage: string;
 }
 
+export function extractOkanApplicationRef(hrefs: string[]): string {
+  const refs = hrefs
+    .map((href) => {
+      const raw = String(href || "").trim();
+      if (!raw) return "";
+      try {
+        return new URL(raw, BASE).searchParams.get("applicationNo")?.trim() || "";
+      } catch {
+        return raw.match(/[?&]applicationNo=([^&#]+)/i)?.[1]?.trim() || "";
+      }
+    })
+    .filter(Boolean);
+  const unique = [...new Set(refs)];
+  return unique.length === 1 ? unique[0] : "";
+}
+
 interface OkanTrackDraft {
   href: string;
   externalRef: string;
@@ -161,7 +201,9 @@ export function verifyOkanSubmissionEvidence(
   profile: Pick<SubmitProfile, "firstName" | "lastName" | "programName">,
   evidence: OkanTrackEvidence,
 ): boolean {
-  if (!/^\d{3,}$/.test(evidence.externalRef.trim())) return false;
+  if (!/^(?:\d{3,}|OKN\d{4}-\d+)$/i.test(evidence.externalRef.trim())) {
+    return false;
+  }
   const expectedNames = new Set([
     fold(`${profile.firstName} ${profile.lastName}`),
     fold(`${profile.lastName} ${profile.firstName}`),
@@ -180,6 +222,18 @@ export function verifyOkanSubmissionEvidence(
     return false;
   }
   return /\b(completed|submitted|received|yes|true)\b/.test(durableState);
+}
+
+export function chooseOkanSubmissionEvidence(
+  profile: Pick<SubmitProfile, "firstName" | "lastName" | "programName">,
+  evidence: OkanTrackEvidence[],
+): OkanTrackEvidence | null {
+  const matches = evidence.filter((candidate) =>
+    verifyOkanSubmissionEvidence(profile, candidate),
+  );
+  const uniqueRefs = [...new Set(matches.map((candidate) => candidate.externalRef))];
+  if (uniqueRefs.length !== 1) return null;
+  return matches.find((candidate) => candidate.externalRef === uniqueRefs[0]) || null;
 }
 const genderText = (g: string) => (/fem|kadın|female/i.test(g || "") ? "Female" : "Male");
 
@@ -387,8 +441,46 @@ export const okanAdapter: UniversityAdapter = {
       }
       return drafts;
     };
-    const collectTrackDraftsAcrossPages = async (): Promise<OkanTrackDraft[]> => {
-      const collected = new Map<string, OkanTrackDraft>();
+    const collectTrackEvidence = async (): Promise<OkanTrackEvidence[]> => {
+      const rows = page.locator("table tbody tr,.k-grid-content tbody tr");
+      const evidence: OkanTrackEvidence[] = [];
+      for (let i = 0; i < await rows.count(); i++) {
+        const row = rows.nth(i);
+        if (!(await row.isVisible().catch(() => false))) continue;
+        const texts = (await row.locator("td").allInnerTexts().catch(() => []))
+          .map((text: string) => text.replace(/\s+/g, " ").trim());
+        if (texts.length < 7) continue;
+
+        const hrefs = await row
+          .locator('a[href*="/report/" i],a[href*="applicationNo" i]')
+          .evaluateAll((links: HTMLAnchorElement[]) =>
+            links.map((link) => link.getAttribute("href") || ""),
+          )
+          .catch(() => [] as string[]);
+        const externalRef = extractOkanApplicationRef(hrefs);
+        if (!externalRef) continue;
+
+        // Okan renders an "App No" grid header but omits that text cell when
+        // the number is carried only by the official report links.
+        const offset = /^(?:OKN\d{4}-\d+|\d{3,})$/i.test(texts[0] || "") ? 1 : 0;
+        evidence.push({
+          externalRef,
+          applicantName: texts[offset] || "",
+          programName: texts[offset + 6] || "",
+          status: texts[offset + 3] || "",
+          completed: texts[offset + 4] || "",
+          stage: texts[offset + 5] || "",
+        });
+      }
+      return evidence;
+    };
+    const collectAcrossTrackPages = async <T>(
+      collectPage: () => Promise<T[]>,
+      itemKey: (item: T) => string,
+      pageMetaKey: string,
+      rowMetaKey: string,
+    ): Promise<T[]> => {
+      const collected = new Map<string, T>();
       const visitedPages = new Set<string>();
 
       for (let guard = 0; guard < 50; guard++) {
@@ -405,9 +497,9 @@ export const okanAdapter: UniversityAdapter = {
           .catch(() => String(guard + 1));
         visitedPages.add(String(currentPage || guard + 1).trim());
 
-        for (const draft of await collectTrackDrafts()) {
-          const key = draft.externalRef || draft.href;
-          if (key && !collected.has(key)) collected.set(key, draft);
+        for (const item of await collectPage()) {
+          const key = itemKey(item);
+          if (key && !collected.has(key)) collected.set(key, item);
         }
 
         const pageControls = page.locator([
@@ -425,12 +517,8 @@ export const okanAdapter: UniversityAdapter = {
         let nextPageNumber = '';
         for (let i = 0; i < await pageControls.count(); i++) {
           const control = pageControls.nth(i);
-          const dataPage = String(
-            (await control.getAttribute('data-page').catch(() => '')) || '',
-          ).trim();
-          const ariaLabel = String(
-            (await control.getAttribute('aria-label').catch(() => '')) || '',
-          ).trim();
+          const dataPage = String((await control.getAttribute('data-page').catch(() => '')) || '').trim();
+          const ariaLabel = String((await control.getAttribute('aria-label').catch(() => '')) || '').trim();
           const text = String((await control.innerText().catch(() => '')) || '').trim();
           const pageNumber = dataPage || ariaLabel.match(/(?:page|sayfa)\s*(\d+)/i)?.[1] || (/^\d+$/.test(text) ? text : '');
           if (!pageNumber || visitedPages.has(pageNumber)) continue;
@@ -441,11 +529,7 @@ export const okanAdapter: UniversityAdapter = {
         }
         if (!nextControl) break;
 
-        const beforeFirstRow = await page
-          .locator('table tbody tr,.k-grid-content tbody tr')
-          .first()
-          .innerText()
-          .catch(() => '');
+        const beforeFirstRow = await page.locator('table tbody tr,.k-grid-content tbody tr').first().innerText().catch(() => '');
         await nextControl.click({ timeout: 8000 });
         await page.waitForFunction(
           ([previousRow, expectedPage]: [string, string]) => {
@@ -467,16 +551,49 @@ export const okanAdapter: UniversityAdapter = {
 
       result.meta = {
         ...(result.meta ?? {}),
-        trackApplicationPagesScanned: visitedPages.size,
-        trackApplicationDraftsScanned: collected.size,
+        [pageMetaKey]: visitedPages.size,
+        [rowMetaKey]: collected.size,
       };
       return [...collected.values()];
+    };
+    const collectTrackEvidenceAcrossPages = () =>
+      collectAcrossTrackPages(
+        collectTrackEvidence,
+        (proof) => [
+          proof.externalRef,
+          fold(proof.applicantName),
+          normalizeOkanProgramIdentity(proof.programName),
+        ].join('|'),
+        "trackApplicationEvidencePagesScanned",
+        "trackApplicationEvidenceRows",
+      );
+    const collectTrackDraftsAcrossPages = async (): Promise<OkanTrackDraft[]> => {
+      return collectAcrossTrackPages(
+        collectTrackDrafts,
+        (draft) => draft.externalRef || draft.href,
+        "trackApplicationPagesScanned",
+        "trackApplicationDraftsScanned",
+      );
     };
 
     try {
       // ===== A) Agency Wizard — create draft =====
       await page.goto(BASE + "/Agency/TrackApplications", { waitUntil: "domcontentloaded", timeout: 60000 });
       await wait(2000);
+      const existingProof = chooseOkanSubmissionEvidence(
+        profile,
+        await collectTrackEvidenceAcrossPages(),
+      );
+      if (existingProof) {
+        result.submitted = true;
+        result.alreadyExists = true;
+        result.externalRef = existingProof.externalRef;
+        result.detail = `Okan application ${existingProof.externalRef} already exists and was verified in Track Applications`;
+        logger.info("[okan] existing application " + JSON.stringify(result));
+        return result as SubmitResult;
+      }
+      await page.goto(BASE + "/Agency/TrackApplications", { waitUntil: "domcontentloaded", timeout: 60000 });
+      await wait(1200);
       const existingDraftRefs = new Set(
         (await collectTrackDrafts()).map((draft) => draft.externalRef).filter(Boolean),
       );
@@ -800,70 +917,9 @@ export const okanAdapter: UniversityAdapter = {
         timeout: 60000,
       });
       await wait(3500);
-      const trackRows = page.locator("table tbody tr,.k-grid-content tbody tr");
-      const proofs: OkanTrackEvidence[] = [];
-      for (let rowIndex = 0; rowIndex < await trackRows.count(); rowIndex++) {
-        const row = trackRows.nth(rowIndex);
-        if (!(await row.isVisible().catch(() => false))) continue;
-        const cells = row.locator("td");
-        if ((await cells.count()) < 3) continue;
-        const texts: string[] = [];
-        for (let cellIndex = 0; cellIndex < await cells.count(); cellIndex++) {
-          texts.push(
-            ((await cells.nth(cellIndex).innerText().catch(() => "")) || "")
-              .replace(/\s+/g, " ")
-              .trim(),
-          );
-        }
-        const applicantName =
-          texts.find((text) => {
-            const value = fold(text);
-            return (
-              value === fold(`${profile.firstName} ${profile.lastName}`) ||
-              value === fold(`${profile.lastName} ${profile.firstName}`)
-            );
-          }) || "";
-        const expectedProgramIdentity = normalizeOkanProgramIdentity(
-          profile.programName,
-        );
-        const programName =
-          texts.find(
-            (text) =>
-              normalizeOkanProgramIdentity(text) === expectedProgramIdentity,
-          ) || "";
-        if (!applicantName || !programName) continue;
-        const proofLink = row
-          .locator('a[href*="trackwizard"],a[href*="application"]')
-          .first();
-        const rowHref =
-          (await proofLink.count()) > 0
-            ? (await proofLink.getAttribute("href").catch(() => "")) || ""
-            : "";
-        const externalRef =
-          rowHref.match(/[?&](?:id|applicationId)=(\d+)/i)?.[1] ||
-          texts.find((text) => /^\d{3,}$/.test(text)) ||
-          "";
-        const status =
-          texts.find((text) =>
-            /\b(submitted|received|approved|pending|rejected)\b/i.test(text),
-          ) || "";
-        const completed =
-          texts.find((text) => /^(?:yes|true|completed)$/i.test(text)) || "";
-        const stage =
-          texts.find((text) =>
-            /\b(completed|submitted|received|evaluation|review)\b/i.test(text),
-          ) || "";
-        proofs.push({
-          externalRef,
-          applicantName,
-          programName,
-          status,
-          completed,
-          stage,
-        });
-      }
-      const proof = proofs.find((candidate) =>
-        verifyOkanSubmissionEvidence(profile, candidate),
+      const proof = chooseOkanSubmissionEvidence(
+        profile,
+        await collectTrackEvidenceAcrossPages(),
       );
       if (proof) {
         result.submitted = true;
