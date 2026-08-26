@@ -348,6 +348,7 @@ export const okanAdapter: UniversityAdapter = {
         const row = rows.nth(i);
         if (!(await row.isVisible().catch(() => false))) continue;
         const link = row.locator('a[href*="trackwizard" i]').first();
+        if ((await link.count()) === 0) continue;
         const href = (await link.getAttribute("href").catch(() => "")) || "";
         if (!href) continue;
         const externalRef =
@@ -684,12 +685,13 @@ export const okanAdapter: UniversityAdapter = {
               normalizeOkanProgramIdentity(text) === expectedProgramIdentity,
           ) || "";
         if (!applicantName || !programName) continue;
+        const proofLink = row
+          .locator('a[href*="trackwizard"],a[href*="application"]')
+          .first();
         const rowHref =
-          (await row
-            .locator('a[href*="trackwizard"],a[href*="application"]')
-            .first()
-            .getAttribute("href")
-            .catch(() => "")) || "";
+          (await proofLink.count()) > 0
+            ? (await proofLink.getAttribute("href").catch(() => "")) || ""
+            : "";
         const externalRef =
           rowHref.match(/[?&](?:id|applicationId)=(\d+)/i)?.[1] ||
           texts.find((text) => /^\d{3,}$/.test(text)) ||
