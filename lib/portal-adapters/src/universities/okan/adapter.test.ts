@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { SubmitProfile } from "../../types.js";
 import {
+  buildOkanProgramSearchQueries,
   chooseOkanProgramIndex,
+  normalizeOkanProgramIdentity,
   resolveOkanDegreeValue,
   resolveOkanRequiredFields,
   verifyOkanSubmissionEvidence,
@@ -84,6 +86,57 @@ test("Okan program selection chooses a proven match and refuses ambiguity", () =
   );
 });
 
+test("Okan resolves the live MBA alias while preserving thesis and language", () => {
+  const crmName =
+    "Master of MBA - Business Administration (Non-Thesis) (English)";
+  assert.equal(
+    normalizeOkanProgramIdentity(crmName),
+    "business administration non thesis english",
+  );
+  assert.equal(
+    chooseOkanProgramIndex(
+      [
+        "Master of Business Administration (Non-Thesis) (Turkish)",
+        "Master of Business Administration (Thesis) (English)",
+        "Master of Business Administration (Non-Thesis) (English)",
+      ],
+      crmName,
+    ),
+    2,
+  );
+  assert.equal(
+    chooseOkanProgramIndex(["MBA (Non-Thesis) (English)"], crmName),
+    0,
+  );
+});
+
+test("Okan MBA alias matching fails closed on duplicate semantic results", () => {
+  assert.equal(
+    chooseOkanProgramIndex(
+      [
+        "Master of Business Administration (Non-Thesis) (English)",
+        "MBA (Non-Thesis) (English)",
+      ],
+      "Master of MBA - Business Administration (Non-Thesis) (English)",
+    ),
+    null,
+  );
+});
+
+test("Okan progressively searches the CRM-only degree and MBA label", () => {
+  assert.deepEqual(
+    buildOkanProgramSearchQueries(
+      "Master of MBA - Business Administration (Non-Thesis) (English)",
+    ),
+    [
+      "MBA - Business Administration",
+      "Business Administration",
+      "MBA",
+      "Master of MBA - Business Administration",
+    ],
+  );
+});
+
 test("Okan submission success requires an exact durable Track Applications row", () => {
   const profile = {
     firstName: "Ada",
@@ -122,5 +175,28 @@ test("Okan submission success requires an exact durable Track Applications row",
       stage: "Completed",
     }),
     false,
+  );
+});
+
+test("Okan verifies durable evidence when the portal uses its MBA alias", () => {
+  assert.equal(
+    verifyOkanSubmissionEvidence(
+      {
+        firstName: "Lise Vanessa",
+        lastName: "Abaga Diongo",
+        programName:
+          "Master of MBA - Business Administration (Non-Thesis) (English)",
+      },
+      {
+        externalRef: "2270",
+        applicantName: "Lise Vanessa Abaga Diongo",
+        programName:
+          "Master of Business Administration (Non-Thesis) (English)",
+        status: "Submitted",
+        completed: "Yes",
+        stage: "Completed",
+      },
+    ),
+    true,
   );
 });
