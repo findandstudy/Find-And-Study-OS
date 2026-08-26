@@ -34,13 +34,37 @@ export function resolveOkanDegreeValue(level: string): string | null {
   return null;
 }
 
-const stripOkanCatalogDegreePrefix = (value: string) =>
-  fold(value)
+/**
+ * Okan's live catalogue does not use one stable spelling for MBA programmes.
+ * CRM imports have historically used all of these forms:
+ *
+ *   - Master of MBA - Business Administration (...)
+ *   - Master of Business Administration (...)
+ *   - MBA (...)
+ *
+ * The portal may expose any of the latter two.  Collapse only that proven MBA
+ * alias while retaining every semantic discriminator (thesis mode, language,
+ * executive/international qualifiers).  This is intentionally Okan-specific;
+ * the shared fuzzy matcher must not silently broaden every university.
+ */
+export const normalizeOkanProgramIdentity = (value: string): string => {
+  let normalized = fold(value)
     .replace(
-      /^(?:associate|bachelor|undergraduate|master|masters|graduate|phd|doctorate|doctoral)\s+(?:of|in)\s+/,
+      /^(?:associate|bachelor|undergraduate|master|masters|graduate|phd|doctorate|doctoral)(?:\s+(?:degree|program|programme))?(?:\s+(?:of|in))?\s+/,
       "",
     )
+    .replace(/\b(?:program|programme)\b/g, " ")
+    .replace(/\s+/g, " ")
     .trim();
+
+  if (/\bbusiness administration\b/.test(normalized)) {
+    normalized = normalized.replace(/\bmba\b/g, " ");
+  } else {
+    normalized = normalized.replace(/\bmba\b/g, "business administration");
+  }
+
+  return normalized.replace(/\s+/g, " ").trim();
+};
 
 export function buildOkanProgramSearchQueries(programName: string): string[] {
   const withoutTracks = String(programName || "")
@@ -74,10 +98,10 @@ export function chooseOkanProgramIndex(
   // Okan often omits the CRM catalogue's leading degree phrase. Treat the
   // otherwise exact portal label as a proven match while retaining thesis and
   // language markers. More than one exact candidate still fails closed.
-  const wantedPortalLabel = stripOkanCatalogDegreePrefix(wanted);
+  const wantedPortalLabel = normalizeOkanProgramIdentity(wanted);
   const portalExact = labels
     .map((label, index) => ({ label, index }))
-    .filter(({ label }) => stripOkanCatalogDegreePrefix(label) === wantedPortalLabel);
+    .filter(({ label }) => normalizeOkanProgramIdentity(label) === wantedPortalLabel);
   if (portalExact.length === 1) return portalExact[0].index;
   if (portalExact.length > 1) return null;
 

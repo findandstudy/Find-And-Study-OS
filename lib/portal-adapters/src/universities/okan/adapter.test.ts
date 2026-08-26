@@ -4,6 +4,7 @@ import type { SubmitProfile } from "../../types.js";
 import {
   buildOkanProgramSearchQueries,
   chooseOkanProgramIndex,
+  normalizeOkanProgramIdentity,
   resolveOkanDegreeValue,
   resolveOkanRequiredFields,
   verifyOkanSubmissionEvidence,
@@ -89,6 +90,46 @@ test("Okan program selection chooses a proven match and refuses ambiguity", () =
       "Master of MBA - Business Administration (Non-Thesis) (English)",
     ),
     0,
+  );
+});
+
+test("Okan canonicalizes the live MBA catalogue aliases without losing track markers", () => {
+  const crmName =
+    "Master of MBA - Business Administration (Non-Thesis) (English)";
+  assert.equal(
+    normalizeOkanProgramIdentity(crmName),
+    "business administration non thesis english",
+  );
+  assert.equal(
+    chooseOkanProgramIndex(
+      [
+        "Master of Business Administration (Non-Thesis) (Turkish)",
+        "Master of Business Administration (Thesis) (English)",
+        "Master of Business Administration (Non-Thesis) (English)",
+      ],
+      crmName,
+    ),
+    2,
+  );
+  assert.equal(
+    chooseOkanProgramIndex(
+      ["MBA (Non-Thesis) (English)"],
+      crmName,
+    ),
+    0,
+  );
+});
+
+test("Okan MBA alias matching fails closed when the semantic result is duplicated", () => {
+  assert.equal(
+    chooseOkanProgramIndex(
+      [
+        "Master of Business Administration (Non-Thesis) (English)",
+        "MBA (Non-Thesis) (English)",
+      ],
+      "Master of MBA - Business Administration (Non-Thesis) (English)",
+    ),
+    null,
   );
 });
 
