@@ -372,6 +372,18 @@ router.get("/pipeline-stages/:entityType", requireAuth, requireRole(...STAFF_ROL
     }
   }
 
+  if (entityType === "application") {
+    const keyById = new Map(stages.map((stage) => [stage.id, stage.key]));
+    res.json(stages.map((stage) => ({
+      ...stage,
+      completionTargetStageId: stage.missingDocsFulfilledTargetStageId,
+      completionTargetStageKey: stage.missingDocsFulfilledTargetStageId
+        ? keyById.get(stage.missingDocsFulfilledTargetStageId) ?? null
+        : null,
+    })));
+    return;
+  }
+
   res.json(stages);
 });
 
@@ -412,16 +424,10 @@ router.put("/pipeline-stages/:entityType", requireAuth, requireRole(...MANAGER_R
     return ALLOWED_FINANCE_STATUS.has(s) ? s : null;
   }
 
-  // Task #187 — `missingDocsFulfilledTargetStageKey` is sent by the UI
-  // (keys survive the delete-and-reinsert cycle, ids do not). Map each
-  // key to the new stage id after insert. Explicitly reject self-
-  // reference and unknown keys with 400 — silent skip would let admins
-  // save a pipeline whose target stage is silently dropped.
-  // Task #187 — preserve existing target stage when UI omits the key.
-  // The dialog only writes `missingDocsFulfilledTargetStageKey` into the
-  // payload when the admin explicitly touches that Select. Otherwise the
-  // field is undefined, which used to cause silent data loss because the
-  // delete-and-reinsert below wiped previously configured target stages.
+  // One completion target belongs to each application stage. Keys survive
+  // the delete-and-reinsert cycle whereas ids do not, so resolve them again
+  // after insertion. The legacy missing-doc aliases remain accepted to avoid
+  // dropping settings saved by older clients.
   // Build an id->key map of CURRENT stages so we can fall back to the id
   // when the key is absent from the payload.
   const existingIdToKey = new Map<number, string>();
@@ -438,22 +444,26 @@ router.put("/pipeline-stages/:entityType", requireAuth, requireRole(...MANAGER_R
   for (let i = 0; i < stages.length; i++) {
     if (entityType !== "application") { targetKeyByStageIdx.push(null); continue; }
     const s: any = stages[i];
-    let raw = s.missingDocsFulfilledTargetStageKey;
+    let raw = s.completionTargetStageKey;
+    if (raw === undefined) raw = s.missingDocsFulfilledTargetStageKey;
     // Key omitted but the payload still carries the id from a prior load?
     // Resolve to the existing row's key so saves preserve the setting.
-    if ((raw === undefined) && typeof s.missingDocsFulfilledTargetStageId === "number") {
-      const fallback = existingIdToKey.get(s.missingDocsFulfilledTargetStageId);
+    const legacyOrCompletionId = typeof s.completionTargetStageId === "number"
+      ? s.completionTargetStageId
+      : s.missingDocsFulfilledTargetStageId;
+    if ((raw === undefined) && typeof legacyOrCompletionId === "number") {
+      const fallback = existingIdToKey.get(legacyOrCompletionId);
       if (fallback) raw = fallback;
     }
     if (raw === null || raw === undefined || raw === "") { targetKeyByStageIdx.push(null); continue; }
     if (typeof raw !== "string" || !raw.trim()) {
-      targetErrors.push(`"${normalizedKeys[i]}": eksik belge hedef aşaması geçersiz.`);
+      targetErrors.push(`"${normalizedKeys[i]}": tamamlanma hedef aşaması geçersiz.`);
       targetKeyByStageIdx.push(null);
       continue;
     }
     const k = raw.toLowerCase().replace(/[^a-z0-9_]/g, "_");
     if (k === normalizedKeys[i]) {
-      targetErrors.push(`"${normalizedKeys[i]}": eksik belge hedef aşaması kendisi olamaz.`);
+      targetErrors.push(`"${normalizedKeys[i]}": tamamlanma hedef aşaması kendisi olamaz.`);
       targetKeyByStageIdx.push(null);
       continue;
     }
@@ -507,7 +517,7 @@ router.put("/pipeline-stages/:entityType", requireAuth, requireRole(...MANAGER_R
         })))
         .returning();
 
-      // Task #187 — second pass to set FK ids now that all new rows exist.
+      // Second pass: set completion-target ids now that all new rows exist.
       if (entityType === "application") {
         const idByKey = new Map(rows.map(r => [r.key, r.id]));
         for (let i = 0; i < rows.length; i++) {
@@ -541,8 +551,22 @@ router.put("/pipeline-stages/:entityType", requireAuth, requireRole(...MANAGER_R
       }
     }
 
+    const responseStages = inserted
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+      .map((stage) => ({
+        ...stage,
+        ...(entityType === "application"
+          ? {
+              completionTargetStageId: stage.missingDocsFulfilledTargetStageId,
+              completionTargetStageKey: stage.missingDocsFulfilledTargetStageId
+                ? inserted.find((candidate) => candidate.id === stage.missingDocsFulfilledTargetStageId)?.key ?? null
+                : null,
+            }
+          : {}),
+      }));
+
     res.json({
-      stages: inserted.sort((a, b) => a.sortOrder - b.sortOrder),
+      stages: responseStages,
       warnings,
     });
   } catch (err: any) {

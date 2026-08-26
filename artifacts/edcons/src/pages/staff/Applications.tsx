@@ -44,6 +44,7 @@ import { StageBadgeWithDocs } from "@/components/StageBadgeWithDocs";
 import { useToast } from "@/hooks/use-toast";
 import { usePipelineStages, type PipelineStage, type StageAction } from "@/hooks/use-pipeline-stages";
 import { invalidateAssignmentWorkspaceQueries } from "@/lib/workspaceQueryInvalidation";
+import { resolveStageCompletionTargetKey } from "@/lib/pipelineStageCompletion";
 import { BulkActionBar } from "@/components/BulkActionBar";
 import { BulkMessageDialog } from "@/components/BulkMessageDialog";
 import {
@@ -1973,11 +1974,14 @@ export default function ApplicationsPage() {
   }
 
   async function handleStageAction(app: ApplicationRow, action: StageAction) {
+    const sourceStage = pipelineStages.find((stage) => stage.key === app.stage);
+    const completionTargetKey = resolveStageCompletionTargetKey(sourceStage, pipelineStages);
     // Older pipeline rows can have a Deposit Receipt quick action without a
     // target. Keep those rows compatible with the canonical lifecycle.
     const actionName = `${action.label || ""} ${action.documentName || ""}`.trim().toLowerCase();
     const isDepositReceiptUpload = action.type === "upload" && /deposit[ _-]*receipt/.test(actionName);
-    const targetKey = action.targetStageKey
+    const targetKey = completionTargetKey
+      ?? action.targetStageKey
       ?? (isDepositReceiptUpload && pipelineStages.some((stage) => stage.key === "upload_payment")
         ? "upload_payment"
         : null);
@@ -2041,13 +2045,13 @@ export default function ApplicationsPage() {
     if (action.type === "missing_docs") {
       // The missing_docs action requests documents via the shared modern modal.
       // Two shapes are supported:
-      //   - Legacy (action has targetStageKey): behaves like a move to that
-      //     stage. We route through performStageMove so the centralized backend
-      //     interceptor prompts for documents and then advances the app.
-      //   - New (no targetStageKey): request documents for the application's
-      //     CURRENT stage in place, with no move (retryTarget = null).
-      if (targetKey) {
-        await performStageMove(app.id, targetKey);
+      //   - New: request documents for the CURRENT stage; the stage-level
+      //     completion target is applied by the fulfillment hook only after
+      //     every requested catalog document is complete.
+      //   - Legacy (no stage-level target, action has targetStageKey): retain
+      //     the previous move-first behavior for already-saved pipelines.
+      if (!completionTargetKey && action.targetStageKey) {
+        await performStageMove(app.id, action.targetStageKey);
         return;
       }
       const required = Array.isArray(action.requiredDocTypes) ? action.requiredDocTypes : [];

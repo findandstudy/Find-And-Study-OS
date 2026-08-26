@@ -1,8 +1,9 @@
 import { pgTable, serial, text, integer, timestamp, uniqueIndex, boolean, jsonb } from "drizzle-orm/pg-core";
 
 // Task #167 — admin-configurable stage action buttons (max 2 per stage).
-// Each action defines a button that appears on the application list rows;
-// completing the action moves the application into `targetStageKey`.
+// `targetStageKey` is retained for backwards compatibility with older
+// per-action transition settings. New configuration uses the owning stage's
+// completion target so every action on the stage shares one lifecycle rule.
 export type StageActionType = "upload" | "download" | "missing_docs";
 export interface StageAction {
   type: StageActionType;
@@ -56,9 +57,12 @@ export const pipelineStagesTable = pgTable("pipeline_stages", {
   autoCancelSiblingsOnWon: boolean("auto_cancel_siblings_on_won").notNull().default(false),
   // Task #167 — up to 2 admin-defined action buttons per stage (application only).
   actions: jsonb("actions").$type<StageAction[]>().notNull().default([]),
-  // Task #187 — when all catalog-based missing-doc requests on an
-  // application have been fulfilled, the application is automatically
-  // moved to this stage. NULL = no auto-advance configured.
+  // Stage-level completion target for application stages. The physical column
+  // keeps its legacy Task #187 name so existing installations and configured
+  // missing-document transitions remain backwards compatible. It now drives
+  // every successful stage action; missing-document actions use it only after
+  // all requested catalog documents have actually been fulfilled.
+  // NULL = no stage transition after completion.
   // Stored as a foreign-key id (not a key) to survive renames of the
   // target stage; resolved to a key at advance-time.
   missingDocsFulfilledTargetStageId: integer("missing_docs_fulfilled_target_stage_id"),

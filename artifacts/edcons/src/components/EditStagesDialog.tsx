@@ -19,15 +19,11 @@ const ACTION_TYPE_OPTIONS: { value: ActionTypeOrNone; labelKey: string; defaultL
 
 function StageActionEditor({
   action,
-  allStages,
-  currentStageKey,
   onChange,
   onRemove,
   index,
 }: {
   action: StageAction;
-  allStages: PipelineStage[];
-  currentStageKey: string;
   onChange: (a: StageAction) => void;
   onRemove: () => void;
   index: number;
@@ -35,7 +31,6 @@ function StageActionEditor({
   const { t } = useI18n();
   const typeOpt = ACTION_TYPE_OPTIONS.find((o) => o.value === action.type);
   const typeDefaultLabel = typeOpt?.defaultLabelKey ? t(typeOpt.defaultLabelKey) : "";
-  const targetOptions = allStages.filter((s) => s.key && s.key !== currentStageKey);
   const showDocName = action.type === "upload" || action.type === "download";
   return (
     <div className="rounded-lg border border-border/70 bg-card p-3 space-y-3">
@@ -119,21 +114,6 @@ function StageActionEditor({
         </div>
       )}
 
-      <div className="space-y-1.5">
-        <Label className="text-xs">{t("editStages.changeStageOnComplete")}</Label>
-        <Select
-          value={action.targetStageKey || "__none__"}
-          onValueChange={(v) => onChange({ ...action, targetStageKey: v === "__none__" ? null : v })}
-        >
-          <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="__none__">{t("editStages.noChange")}</SelectItem>
-            {targetOptions.map((s) => (
-              <SelectItem key={s.key} value={s.key}>{s.label}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
     </div>
   );
 }
@@ -435,18 +415,20 @@ function StageEditForm({ stage, onChange, allStages }: { stage: PipelineStage; o
               onChange={v => onChange({ ...stage, autoCancelSiblingsOnWon: v })}
             />
 
-            {/* Task #187 — when every catalog-based missing-doc request on
-                this stage is fulfilled, auto-advance the application to
-                the selected stage. */}
+            {/* One lifecycle target per application stage. Upload/download
+                actions use it immediately after success; missing-document
+                actions use it only after all requested documents are done. */}
             <div className="space-y-1.5">
               <Label className="text-sm font-medium">
-                {t("editStages.missingDocsFulfilledTarget")}
+                {t("editStages.changeStageOnComplete")}
               </Label>
               <Select
                 value={(() => {
-                  const k = stage.missingDocsFulfilledTargetStageKey;
+                  const k = stage.completionTargetStageKey
+                    ?? stage.missingDocsFulfilledTargetStageKey;
                   if (k) return k;
-                  const id = stage.missingDocsFulfilledTargetStageId;
+                  const id = stage.completionTargetStageId
+                    ?? stage.missingDocsFulfilledTargetStageId;
                   if (id) {
                     const found = allStages.find((s) => s.id === id);
                     if (found?.key) return found.key;
@@ -455,12 +437,12 @@ function StageEditForm({ stage, onChange, allStages }: { stage: PipelineStage; o
                 })()}
                 onValueChange={(v) => onChange({
                   ...stage,
-                  missingDocsFulfilledTargetStageKey: v === "none" ? null : v,
+                  completionTargetStageKey: v === "none" ? null : v,
                 })}
               >
                 <SelectTrigger className="w-full h-9"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">{t("editStages.noChangeStage")}</SelectItem>
+                  <SelectItem value="none">{t("editStages.noChange")}</SelectItem>
                   {allStages
                     .filter((s) => s.entityType === "application" && s.key !== stage.key && !!s.key)
                     .map((s) => (
@@ -468,9 +450,6 @@ function StageEditForm({ stage, onChange, allStages }: { stage: PipelineStage; o
                     ))}
                 </SelectContent>
               </Select>
-              <p className="text-[11px] text-muted-foreground">
-                {t("editStages.missingDocsFulfilledHint")}
-              </p>
             </div>
           </FormSection>
 
@@ -538,8 +517,6 @@ function StageEditForm({ stage, onChange, allStages }: { stage: PipelineStage; o
                   key={i}
                   action={a}
                   index={i}
-                  allStages={allStages}
-                  currentStageKey={stage.key}
                   onChange={(u) => updateActionAt(i, u)}
                   onRemove={() => removeActionAt(i)}
                 />

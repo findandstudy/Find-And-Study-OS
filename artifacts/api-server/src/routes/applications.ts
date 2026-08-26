@@ -1480,14 +1480,31 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, ...AG
       .from(applicationsTable)
       .where(and(eq(applicationsTable.id, id), isNull(applicationsTable.deletedAt)));
     if (currentApp) {
-      const [stageRow] = await db.select({ actions: pipelineStagesTable.actions, uploadPermissionLevel: pipelineStagesTable.uploadPermissionLevel })
+      const [stageRow] = await db.select({
+        actions: pipelineStagesTable.actions,
+        uploadPermissionLevel: pipelineStagesTable.uploadPermissionLevel,
+        completionTargetStageId: pipelineStagesTable.missingDocsFulfilledTargetStageId,
+      })
         .from(pipelineStagesTable)
         .where(and(eq(pipelineStagesTable.entityType, "application"), eq(pipelineStagesTable.key, currentApp.stage)));
       const actions = Array.isArray(stageRow?.actions) ? stageRow!.actions : [];
       const permLevel = stageRow?.uploadPermissionLevel || "none";
       const isAgent = isAgentRole(user.role);
+      let completionTargetStageKey: string | null = null;
+      if (stageRow?.completionTargetStageId) {
+        const [completionTarget] = await db
+          .select({ key: pipelineStagesTable.key })
+          .from(pipelineStagesTable)
+          .where(and(
+            eq(pipelineStagesTable.entityType, "application"),
+            eq(pipelineStagesTable.id, stageRow.completionTargetStageId),
+          ));
+        completionTargetStageKey = completionTarget?.key ?? null;
+      }
       for (const act of actions as Array<{ type?: string; targetStageKey?: string | null }>) {
-        if (!act || act.targetStageKey !== req.body.stage) continue;
+        if (!act) continue;
+        const configuredTarget = completionTargetStageKey ?? act.targetStageKey ?? null;
+        if (configuredTarget !== req.body.stage) continue;
         let ok = false;
         if (act.type === "upload") {
           ok = (

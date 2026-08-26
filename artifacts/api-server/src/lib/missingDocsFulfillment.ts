@@ -12,7 +12,7 @@ import { logAudit } from "./auth";
  *      `fulfilledAt`). Custom (free-text) requests are NEVER auto-matched;
  *      they must be closed manually.
  *   2. If all *catalog* requests on the application's source stage are now
- *      fulfilled AND the source stage has `missingDocsFulfilledTargetStageId`
+ *      fulfilled AND the source stage has a configured completion target
  *      configured, advance the application to that target stage.
  *
  * Wrapped in an advisory lock + transaction so concurrent uploads can't
@@ -136,6 +136,8 @@ export async function handleMissingDocFulfillment(
           .select({
             id: pipelineStagesTable.id,
             sortOrder: pipelineStagesTable.sortOrder,
+            // The physical column keeps its legacy name, but now represents
+            // the generic completion target of the source stage.
             targetId: pipelineStagesTable.missingDocsFulfilledTargetStageId,
           })
           .from(pipelineStagesTable)
