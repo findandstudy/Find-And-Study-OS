@@ -295,6 +295,30 @@ export const okanAdapter: UniversityAdapter = {
       }
       return false;
     };
+    const clickDraftDone = async (): Promise<boolean> => {
+      const controls = page.locator([
+        'button:has-text("Done")',
+        'button:has-text("Finish")',
+        'button:has-text("Complete")',
+        'button:has-text("Tamam")',
+        'button:has-text("Bitir")',
+        'a.btn:has-text("Done")',
+        'a.btn:has-text("Finish")',
+        'a.btn:has-text("Complete")',
+        'a.btn:has-text("Tamam")',
+        'a.btn:has-text("Bitir")',
+        'input[type="submit" i][value*="done" i]',
+        'input[type="submit" i][value*="finish" i]',
+        'input[type="submit" i][value*="complete" i]',
+      ].join(','));
+      for (let i = 0; i < await controls.count(); i++) {
+        const control = controls.nth(i);
+        if (!(await control.isVisible().catch(() => false))) continue;
+        await control.click({ timeout: 8000 });
+        return true;
+      }
+      return false;
+    };
     const next = () => clickVisible("Next");
     const setKendo = (id: string, text: string) => text ? page.evaluate(([i, t]: any) => {
       const w = (window as any).jQuery('#' + i).data('kendoDropDownList'); if (w) { w.text(t); w.trigger('change'); }
@@ -476,9 +500,47 @@ export const okanAdapter: UniversityAdapter = {
         logger.info("[okan] DRY: reached draft Done boundary — stopping. " + JSON.stringify(result));
         return result as SubmitResult;
       }
-      await clickVisible("Done");
+      const draftDoneClicked = await clickDraftDone();
+      result.meta = { ...(result.meta ?? {}), draftDoneClicked };
+      if (!draftDoneClicked) {
+        result.detail = "Okan draft completion control was not found";
+        await captureDiagnostic("draft-done-control-not-found");
+        return result as SubmitResult;
+      }
       await wait(5000);
+      const postDraftPathname = (() => {
+        try { return new URL(page.url()).pathname; } catch { return ""; }
+      })();
+      result.meta = { ...(result.meta ?? {}), postDraftPathname };
+      if (/applicationwizard/i.test(postDraftPathname)) {
+        const validationMessages = await page
+          .locator([
+            '.validation-summary-errors',
+            '.field-validation-error',
+            '.alert-danger',
+            '.alert-warning',
+            '.toast-message',
+            '[role="alert"]',
+          ].join(','))
+          .allInnerTexts()
+          .catch(() => []);
+        result.meta = {
+          ...(result.meta ?? {}),
+          draftValidationMessages: validationMessages
+            .map((text: string) => text.replace(/\s+/g, " ").trim())
+            .filter(Boolean)
+            .slice(0, 10),
+        };
+        result.detail = "Okan draft was not created; the application wizard remained open";
+        await captureDiagnostic("draft-validation");
+        return result as SubmitResult;
+      }
       if (!/trackwizard/i.test(page.url())) {
+        if (!/trackapplications/i.test(postDraftPathname)) {
+          result.detail = `Okan draft completion returned an unexpected page: ${postDraftPathname || "unknown"}`;
+          await captureDiagnostic("draft-unexpected-path");
+          return result as SubmitResult;
+        }
         await page.goto(BASE + "/Agency/TrackApplications", { waitUntil: "domcontentloaded", timeout: 60000 });
         await wait(2500);
         const draftHref = chooseOkanDraftHref(
