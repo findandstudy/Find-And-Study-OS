@@ -673,7 +673,15 @@ async function loadTopkapiProgramOptions(
             const select = document.querySelector<HTMLSelectElement>(
               "select[name=programFirstPreference]",
             );
-            return select !== null && select.options.length > 1;
+            // Some Topkapi levels legitimately expose exactly one program and
+            // omit the usual placeholder option. Waiting for a raw option
+            // count greater than one turns that valid response into a false
+            // timeout. Readiness means at least one selectable portal value,
+            // regardless of whether a placeholder is present.
+            return select !== null && Array.from(select.options).some((option) => {
+              const value = option.value.trim();
+              return value !== "" && value !== "0" && !option.disabled;
+            });
           },
           undefined,
           { timeout: 12000 },

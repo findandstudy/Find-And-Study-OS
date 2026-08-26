@@ -23,6 +23,7 @@ import { claimNextWithLaneLease, type ClaimedSubmission, type ClaimedSubmissionL
 import { isSitFamilyKey } from "@workspace/portal-adapters";
 import { resolvePortalCreds } from "./credResolver.js";
 import { loadPortalLanePolicy } from "./portalLanePolicy.js";
+import { buildPortalWorkerTargetSets } from "./targetPolicy.js";
 
 // ---------------------------------------------------------------------------
 // Config
@@ -111,23 +112,22 @@ async function loadAutoProcessTargets(): Promise<{
     .select({
       universityKey: portalUniversitiesTable.universityKey,
       adapterKey: portalUniversitiesTable.adapterKey,
+      autoProcess: portalUniversitiesTable.autoProcess,
+      isActive: portalUniversitiesTable.isActive,
     })
     .from(portalUniversitiesTable)
-    .where(and(eq(portalUniversitiesTable.autoProcess, true), eq(portalUniversitiesTable.isActive, true), isNull(portalUniversitiesTable.deletedAt)));
+    .where(isNull(portalUniversitiesTable.deletedAt));
 
   // Adapter auto-graduation: exclude universities whose adapter is still
   // experimental (non-graduated). Belt-and-suspenders — the panel's
   // auto-process toggle is already 409-guarded, but a graduation can be
   // "un-earned" (submissions soft-deleted) after the toggle was enabled.
-  const nonGraduated = await getNonGraduatedExperimentalAdapterKeys(unis.map((u) => u.adapterKey));
+  const autoProcessAdapterKeys = unis
+    .filter((u) => u.autoProcess && u.isActive)
+    .map((u) => u.adapterKey);
+  const nonGraduated = await getNonGraduatedExperimentalAdapterKeys(autoProcessAdapterKeys);
 
-  const eligible = unis.filter((u) => !nonGraduated.has(u.adapterKey));
-  return {
-    claimKeys: eligible.map((u) => u.universityKey),
-    // Legacy queue rows sometimes stored the adapter alias as university_key.
-    // Reconciliation may retire those rows, but claimNext stays canonical.
-    reconcileKeys: [...new Set(eligible.flatMap((u) => [u.universityKey, u.adapterKey]))],
-  };
+  return buildPortalWorkerTargetSets(unis, nonGraduated);
 }
 
 /**
@@ -276,7 +276,7 @@ async function tick(): Promise<void> {
   }
 
   const autoProcessTargets = await loadAutoProcessTargets();
-  if (autoProcessTargets.claimKeys.length === 0 || stopping) return;
+  if (stopping) return;
   const triggerStages = await loadTriggerStages();
 
   if (Date.now() >= nextQueueReconcileAt) {
@@ -286,6 +286,8 @@ async function tick(): Promise<void> {
       console.log(`[portal-worker] Reconciled ${reconciled.length} stale automatic queue row(s)` + ` as canceled (stage no longer eligible)`);
     }
   }
+
+  if (autoProcessTargets.claimKeys.length === 0) return;
 
   while (!stopping && activeJobs.size < LANE_POLICY.globalConcurrency) {
     const lease = await claimNextWithLaneLease(WORKER_ID, {

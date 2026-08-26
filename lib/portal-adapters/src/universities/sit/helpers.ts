@@ -283,6 +283,11 @@ const SIT_EXCLUDED_UNIVERSITIES: readonly string[] = [
   "Haliç Üniversitesi",
   "Istanbul Arel University",
   "İstanbul Arel Üniversitesi",
+  // İstanbul Yeni Yüzyıl has no supported SIT membership. A stale database
+  // membership previously routed it to SIT, where the adapter correctly
+  // rejected it only after a queue job had already been created.
+  "Istanbul Yeni Yuzyil University",
+  "İstanbul Yeni Yüzyıl Üniversitesi",
 ] as const;
 
 export function isSitExcludedUniversity(

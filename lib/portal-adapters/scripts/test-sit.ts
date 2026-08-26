@@ -534,6 +534,20 @@ test("AL4 — exact-name guards reject look-alikes", () => {
     isSitMember("Istanbul Arel University", ["Istanbul Arel University"]),
     false,
   );
+  // A stale panel membership must never override a direct/unsupported portal
+  // exclusion. This guards the production İstanbul Yeni Yüzyıl misroute.
+  assert.equal(
+    isSitMember("İstanbul Yeni Yüzyıl Üniversitesi", [
+      "İstanbul Yeni Yüzyıl Üniversitesi",
+    ]),
+    false,
+  );
+  assert.equal(
+    matchSitMemberUniversity("Istanbul Yeni Yuzyil University", [
+      "Istanbul Yeni Yuzyil University",
+    ]),
+    null,
+  );
   // Bare generic token must not match anything.
   assert.equal(matchAllowedUniversity("Üniversitesi"), null);
   // Exact token-set equality: an allowlisted token PLUS extra disambiguating

@@ -58,6 +58,20 @@ test("Topkapi Step-4 AJAX classifier counts only real first-preference options",
   );
 });
 
+test("Topkapi Step-4 accepts one real option without a placeholder", () => {
+  assert.equal(
+    countTopkapiProgramChoices(JSON.stringify({
+      status: "success",
+      programChoicesHtml: `
+        <select name="programFirstPreference">
+          <option value="91">Computer Programming (Associate)</option>
+        </select>
+      `,
+    })),
+    1,
+  );
+});
+
 test("Topkapi Step-4 AJAX classifier fails closed on malformed payloads", () => {
   assert.equal(countTopkapiProgramChoices("<html>502</html>"), null);
   assert.equal(countTopkapiProgramChoices('{"status":"error"}'), null);

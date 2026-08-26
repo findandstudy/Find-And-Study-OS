@@ -47,6 +47,7 @@ import {
   matchProgram,
   levelGroup,
   isSitMember,
+  isSitExcludedUniversity,
   type ProgramCandidate,
 } from "@workspace/portal-adapters";
 import { isAgentRole } from "@workspace/roles";
@@ -4042,7 +4043,7 @@ router.put(
     if (requested.length > 0) {
       // Validate every catalog id exists.
       const existing = await db
-        .select({ id: universitiesTable.id })
+        .select({ id: universitiesTable.id, name: universitiesTable.name })
         .from(universitiesTable)
         .where(inArray(universitiesTable.id, requested));
       const foundIds = new Set(existing.map((r) => r.id));
@@ -4053,6 +4054,23 @@ router.put(
           message: `Unknown catalog university id(s): ${missing.join(", ")}`,
         });
         return;
+      }
+
+      // Explicit direct/unsupported SIT exclusions always win over the panel's
+      // dynamic Members list. Rejecting them at write time prevents a stale or
+      // mistaken membership from creating doomed queue jobs later.
+      if (portal.adapterKey === "sit") {
+        const excluded = existing.filter((row) => isSitExcludedUniversity(row.name));
+        if (excluded.length > 0) {
+          res.status(422).json({
+            error: "SIT_MEMBER_EXCLUDED",
+            message: `These universities cannot be routed through SIT: ${excluded
+              .map((row) => row.name)
+              .join(", ")}`,
+            excluded: excluded.map((row) => ({ id: row.id, name: row.name })),
+          });
+          return;
+        }
       }
 
       // Conflict: a catalog id already owned by a DIFFERENT account.
