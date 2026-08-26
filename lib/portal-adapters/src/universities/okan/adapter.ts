@@ -363,6 +363,91 @@ export const okanAdapter: UniversityAdapter = {
       }
       return drafts;
     };
+    const collectTrackDraftsAcrossPages = async (): Promise<OkanTrackDraft[]> => {
+      const collected = new Map<string, OkanTrackDraft>();
+      const visitedPages = new Set<string>();
+
+      for (let guard = 0; guard < 50; guard++) {
+        const currentPage = await page
+          .locator([
+            '.k-pager-wrap .k-state-selected',
+            '.k-pager-wrap .k-selected',
+            '.k-grid-pager .k-state-selected',
+            '.k-grid-pager .k-selected',
+            '[data-role="pager"] [aria-current="page"]',
+          ].join(','))
+          .first()
+          .innerText()
+          .catch(() => String(guard + 1));
+        visitedPages.add(String(currentPage || guard + 1).trim());
+
+        for (const draft of await collectTrackDrafts()) {
+          const key = draft.externalRef || draft.href;
+          if (key && !collected.has(key)) collected.set(key, draft);
+        }
+
+        const pageControls = page.locator([
+          '.k-pager-wrap [data-page]',
+          '.k-pager-wrap a',
+          '.k-pager-wrap button',
+          '.k-grid-pager [data-page]',
+          '.k-grid-pager a',
+          '.k-grid-pager button',
+          '[data-role="pager"] [data-page]',
+          '[data-role="pager"] a',
+          '[data-role="pager"] button',
+        ].join(','));
+        let nextControl: any = null;
+        let nextPageNumber = '';
+        for (let i = 0; i < await pageControls.count(); i++) {
+          const control = pageControls.nth(i);
+          const dataPage = String(
+            (await control.getAttribute('data-page').catch(() => '')) || '',
+          ).trim();
+          const ariaLabel = String(
+            (await control.getAttribute('aria-label').catch(() => '')) || '',
+          ).trim();
+          const text = String((await control.innerText().catch(() => '')) || '').trim();
+          const pageNumber = dataPage || ariaLabel.match(/(?:page|sayfa)\s*(\d+)/i)?.[1] || (/^\d+$/.test(text) ? text : '');
+          if (!pageNumber || visitedPages.has(pageNumber)) continue;
+          if (!(await control.isVisible().catch(() => false))) continue;
+          nextControl = control;
+          nextPageNumber = pageNumber;
+          break;
+        }
+        if (!nextControl) break;
+
+        const beforeFirstRow = await page
+          .locator('table tbody tr,.k-grid-content tbody tr')
+          .first()
+          .innerText()
+          .catch(() => '');
+        await nextControl.click({ timeout: 8000 });
+        await page.waitForFunction(
+          ([previousRow, expectedPage]: [string, string]) => {
+            const activePage = document.querySelector([
+              '.k-pager-wrap .k-state-selected',
+              '.k-pager-wrap .k-selected',
+              '.k-grid-pager .k-state-selected',
+              '.k-grid-pager .k-selected',
+              '[data-role="pager"] [aria-current="page"]',
+            ].join(','))?.textContent?.trim();
+            const firstRow = document.querySelector('table tbody tr,.k-grid-content tbody tr')?.textContent?.trim() || '';
+            return activePage === expectedPage || Boolean(firstRow && firstRow !== previousRow.trim());
+          },
+          [beforeFirstRow, nextPageNumber],
+          { timeout: 8000 },
+        ).catch(() => {});
+        await wait(300);
+      }
+
+      result.meta = {
+        ...(result.meta ?? {}),
+        trackApplicationPagesScanned: visitedPages.size,
+        trackApplicationDraftsScanned: collected.size,
+      };
+      return [...collected.values()];
+    };
 
     try {
       // ===== A) Agency Wizard — create draft =====
@@ -397,7 +482,7 @@ export const okanAdapter: UniversityAdapter = {
         await page.goto(BASE + "/Agency/TrackApplications", { waitUntil: "domcontentloaded", timeout: 60000 });
         await wait(2500);
         const draftHref = chooseOkanDraftHref(
-          await collectTrackDrafts(),
+          await collectTrackDraftsAcrossPages(),
           existingDraftRefs,
           profile,
         );
