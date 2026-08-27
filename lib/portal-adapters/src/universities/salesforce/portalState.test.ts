@@ -1,12 +1,42 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  chooseSalesforceResumeAction,
   chooseSalesforceBinaryCandidate,
   findSalesforceAppliedProgramMatch,
   hasSalesforceCompletionProof,
   hasSalesforceUploadProof,
   salesforceProgramCardMatchesCandidate,
 } from "./portalState.js";
+
+test("Salesforce resume action accepts one exact button or link and rejects ambiguity", () => {
+  assert.deepEqual(
+    chooseSalesforceResumeAction([
+      { role: "link", index: 2, label: "Continue Application" },
+    ]),
+    { role: "link", index: 2, label: "Continue Application" },
+  );
+  assert.deepEqual(
+    chooseSalesforceResumeAction([
+      { role: "button", index: 1, label: "Create New Application" },
+      { role: "link", index: 3, label: "Dashboard" },
+    ]),
+    { role: "button", index: 1, label: "Create New Application" },
+  );
+  assert.equal(
+    chooseSalesforceResumeAction([
+      { role: "button", index: 1, label: "Edit Application" },
+      { role: "link", index: 2, label: "Continue Application" },
+    ]),
+    null,
+  );
+  assert.equal(
+    chooseSalesforceResumeAction([
+      { role: "link", index: 1, label: "Application Form" },
+    ]),
+    null,
+  );
+});
 
 test("Haliç Applied Programs proves one exact application and rejects ambiguity", () => {
   assert.deepEqual(

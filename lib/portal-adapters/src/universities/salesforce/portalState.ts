@@ -77,6 +77,33 @@ export interface SalesforceAppliedProgramMatch {
   portalProgram: string;
 }
 
+export interface SalesforceResumeActionCandidate {
+  role: "button" | "link";
+  index: number;
+  label: string;
+  hrefPath?: string;
+}
+
+/**
+ * Salesforce Experience Cloud schools do not render the applicant-detail
+ * continuation control consistently. Some expose a lightning button, while
+ * others expose an anchor after "View Application". Only one explicitly
+ * named action may be followed; ambiguity must remain fail-closed so an
+ * existing application is never duplicated by guessing.
+ */
+export function chooseSalesforceResumeAction(
+  candidates: SalesforceResumeActionCandidate[],
+): SalesforceResumeActionCandidate | null {
+  const allowed = candidates.filter((candidate) => {
+    const label = candidate.label.replace(/\s+/g, " ").trim();
+    return (
+      /^(?:complete|continue|edit) application$/i.test(label) ||
+      /^(?:create new|add|new) application$/i.test(label)
+    );
+  });
+  return allowed.length === 1 ? allowed[0] : null;
+}
+
 /**
  * Haliç renders durable application references in the Applicant Detail
  * "Applied Programs" table. The table may omit the language suffix that was

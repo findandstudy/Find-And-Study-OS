@@ -11,6 +11,7 @@ import { portalCreds } from "../../portalCreds.js";
 import { fold } from "../../programMatch.js";
 import { SALESFORCE_SCHOOLS, type SalesforceSchoolConfig } from "./config.js";
 import {
+  chooseSalesforceResumeAction,
   chooseSalesforceBinaryCandidate,
   findSalesforceAppliedProgramMatch,
   hasSalesforceCompletionProof,
@@ -24,6 +25,7 @@ import {
   salesforceDuplicateDisposition,
   salesforceProgramCardMatchesCandidate,
   salesforcePortalProgramCandidates,
+  type SalesforceResumeActionCandidate,
   type SalesforceStage,
 } from "./portalState.js";
 import { basename } from "node:path";
@@ -495,25 +497,61 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
         const wizardAfterAction = await onWizard();
         if (wizardAfterAction) return true;
 
-        // Beykent first opens a read-only detail page from the table. Resume
-        // only through one uniquely named edit/complete action.
-        const detailAction = page.getByRole("button", {
-          name: /complete application|continue application|edit application/i,
-        });
-        const detailActionCount = await detailAction
-          .count()
-          .catch(() => 0);
-        const relevantButtons = (
-          await page
-            .getByRole("button")
-            .allInnerTexts()
-            .catch(() => [])
-        )
-          .map((text: string) => text.replace(/\s+/g, " ").trim())
-          .filter((text: string) =>
-            /application|edit|complete|continue|view/i.test(text),
-          )
-          .slice(0, 12);
+        // Salesforce first opens a read-only applicant detail page. Depending
+        // on the school/theme, the continuation control is a button or a link.
+        // Poll for SPA hydration and follow only one exact, safe action.
+        const visibleResumeCandidates = async (): Promise<
+          SalesforceResumeActionCandidate[]
+        > => {
+          const candidates: SalesforceResumeActionCandidate[] = [];
+          for (const role of ["button", "link"] as const) {
+            const controls = page.getByRole(role);
+            const count = await controls.count().catch(() => 0);
+            for (let index = 0; index < count; index++) {
+              const control = controls.nth(index);
+              if (!(await control.isVisible().catch(() => false))) continue;
+              const label = (
+                (await control.innerText().catch(() => "")) ||
+                (await control.getAttribute("aria-label").catch(() => "")) ||
+                (await control.getAttribute("title").catch(() => "")) ||
+                ""
+              )
+                .replace(/\s+/g, " ")
+                .trim();
+              if (!/application|edit|complete|continue|create|add/i.test(label)) {
+                continue;
+              }
+              let hrefPath = "";
+              if (role === "link") {
+                const href =
+                  (await control.getAttribute("href").catch(() => "")) || "";
+                if (href) {
+                  try {
+                    hrefPath = new URL(href, page.url()).pathname;
+                  } catch {
+                    hrefPath = "";
+                  }
+                }
+              }
+              candidates.push({
+                role,
+                index,
+                label,
+                ...(hrefPath ? { hrefPath } : {}),
+              });
+            }
+          }
+          return candidates;
+        };
+        let detailCandidates: SalesforceResumeActionCandidate[] = [];
+        let selectedDetailAction: SalesforceResumeActionCandidate | null = null;
+        for (let poll = 0; poll < 14; poll++) {
+          if (await onWizard()) return true;
+          detailCandidates = await visibleResumeCandidates();
+          selectedDetailAction = chooseSalesforceResumeAction(detailCandidates);
+          if (selectedDetailAction) break;
+          await page.waitForTimeout(750);
+        }
         logger.info(
           `[salesforce:${cfg.key}] owned application resume state`,
           {
@@ -522,8 +560,8 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
             popup: Boolean(popup),
             path: new URL(page.url()).pathname,
             wizardAfterAction,
-            detailActionCount,
-            relevantButtons,
+            detailActionCount: selectedDetailAction ? 1 : 0,
+            relevantActions: detailCandidates.slice(0, 12),
           },
         );
         const detailText = await readPageText();
@@ -583,10 +621,20 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
             })
             .catch(() => {});
         }
-        if (detailActionCount !== 1) return false;
-        await detailAction.first().click({ timeout: 6000 }).catch(() => {});
-        await page.waitForTimeout(4500);
-        return onWizard();
+        if (!selectedDetailAction) return false;
+        const detailAction = page
+          .getByRole(selectedDetailAction.role)
+          .nth(selectedDetailAction.index);
+        const detailClicked = await detailAction
+          .click({ timeout: 6000 })
+          .then(() => true)
+          .catch(() => false);
+        if (!detailClicked) return false;
+        for (let poll = 0; poll < 14; poll++) {
+          if (await onWizard()) return true;
+          await page.waitForTimeout(750);
+        }
+        return false;
       };
       await tryResumeOwnedApplicant();
       if (ownedCompletedApplication) {
