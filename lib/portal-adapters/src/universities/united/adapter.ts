@@ -12,7 +12,7 @@ import { portalCreds } from "../../portalCreds.js";
 import { fold, matchProgram } from "../../programMatch.js";
 
 // ---------------------------------------------------------------------------
-// United portal allowlist — EXACTLY 3 universities (do not add/remove)
+// United portal allowlist — EXACTLY 4 universities (do not add/remove)
 // Credentials: UNITED_USER + UNITED_PASSWORD (or inject via opts.credentials
 // which the worker resolves from the DB-backed portal_credentials table).
 //
@@ -27,12 +27,13 @@ export const UNITED_ALLOWLIST: readonly string[] = [
   "Biruni Üniversitesi",
   "Nişantaşı Üniversitesi",
   "Ankara Bilim Üniversitesi",
+  "İstanbul Yeni Yüzyıl Üniversitesi",
 ] as const;
 
 /** Pre-folded entries for fast matches() lookup. */
 const UNITED_ALLOWLIST_FOLDED: readonly string[] = UNITED_ALLOWLIST.map(fold);
 
-/** True when `name` is one of the 3 United member universities. Resilient to
+/** True when `name` is one of the 4 United member universities. Resilient to
  * EN↔TR naming: `fold` only does Turkish→ASCII + lowercase, so English
  * "Istanbul Nisantasi University" never substring-matched Turkish "Nişantaşı
  * Üniversitesi" (word diff + extra "istanbul"). We additionally strip
@@ -237,6 +238,16 @@ const UNITED_UNIVERSITY_ALIASES: ReadonlyArray<{
     aliases: ["Biruni Üniversitesi", "Biruni University"],
     portal: "Biruni University",
   },
+  {
+    aliases: [
+      "İstanbul Yeni Yüzyıl Üniversitesi",
+      "Istanbul Yeni Yuzyil University",
+      "Istanbul Yeni Yüzyıl University",
+      "Yeni Yüzyıl Üniversitesi",
+      "Yeni Yuzyil University",
+    ],
+    portal: "Istanbul Yeni Yuzyil University",
+  },
 ];
 
 function normalizeUnitedUniversity(value: string): string {
@@ -278,9 +289,23 @@ export function resolveUnitedUniversityOption(
 ): string | null {
   const requestedPortalLabel = resolveUnitedUniversityLabel(requestedUniversity);
   if (!requestedPortalLabel) return null;
-  const expected = normalizeUnitedUniversity(requestedPortalLabel);
+  const requestedNormalized = normalizeUnitedUniversity(requestedUniversity);
+  const aliasEntry = UNITED_UNIVERSITY_ALIASES.find((entry) =>
+    entry.aliases.some(
+      (alias) => normalizeUnitedUniversity(alias) === requestedNormalized,
+    ),
+  );
+  // Some United labels differ only by Istanbul prefix or Turkish characters.
+  // Accept only the explicitly enumerated aliases for the requested school,
+  // then still require exactly one live option so we never guess.
+  const expectedLabels = new Set(
+    (aliasEntry
+      ? [...aliasEntry.aliases, aliasEntry.portal]
+      : [requestedPortalLabel]
+    ).map(normalizeUnitedUniversity),
+  );
   const matches = optionTexts.filter(
-    (option) => normalizeUnitedUniversity(option) === expected,
+    (option) => expectedLabels.has(normalizeUnitedUniversity(option)),
   );
   return matches.length === 1 ? matches[0] : null;
 }

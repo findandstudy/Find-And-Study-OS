@@ -60,8 +60,8 @@ Alan bazında, öğrenilen kural ve hata:
 ## 3. Portal Haritası (hangi üniversite nereye gider)
 
 **Aggregator portallar (routing bunlardan):**
-- **SIT = "Study in Turkey"** (`sit`, Auto-process açık). Üyeler: Ankara Medipol, Beykoz, Fenerbahce, Istanbul Arel, Istanbul Atlas, Istanbul Aydin, **Istanbul Gelisim**, Istanbul Galata, Istanbul Kent, Istanbul Kultur, Istanbul Yeni Yuzyil, Istinye.
-- **United Education** (`united`): Ankara Bilim, Biruni, Istanbul Nisantasi.
+- **SIT = "Study in Turkey"** (`sit`, Auto-process açık). Üyeler: Ankara Medipol, Beykoz, Fenerbahçe, İstanbul Atlas, İstanbul Aydın, İstanbul Gelişim, Galata, İstanbul Kent, İstanbul Kültür, İstinye ve TED.
+- **United Education** (`united`). Üyeler: Biruni, Nişantaşı, Ankara Bilim ve **İstanbul Yeni Yüzyıl**. Yeni Yüzyıl SIT üzerinden gönderilmez.
 - **Multico (Topkapı CAS)** (`multico`): kimlik bilgisi eksik (şu an gönderemez).
 
 **Direct (tek üniversite kendi portalı):** Altinbas, Aydin, Bahcesehir/BAU, Beykent, Dogus, EMU, Isik, Istanbul Medipol, Okan, Ozyegin, Sabancı, Topkapi (auto-process açık), Uskudar, Yeditepe.

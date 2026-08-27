@@ -68,6 +68,17 @@ test("United resolves CRM university aliases to exact live portal labels", () =>
     "Biruni University",
   );
   assert.equal(
+    resolveUnitedUniversityLabel("İstanbul Yeni Yüzyıl Üniversitesi"),
+    "Istanbul Yeni Yuzyil University",
+  );
+  assert.equal(
+    resolveUnitedUniversityOption(
+      ["Biruni University", "Istanbul Yeni Yüzyıl University"],
+      "İstanbul Yeni Yüzyıl Üniversitesi",
+    ),
+    "Istanbul Yeni Yüzyıl University",
+  );
+  assert.equal(
     resolveUnitedUniversityOption(
       [
         "Istanbul Kent\u200f\u200f University",
@@ -84,6 +95,14 @@ test("United resolves CRM university aliases to exact live portal labels", () =>
       "Ankara Bilim University",
     ),
     null,
+  );
+  assert.equal(
+    resolveUnitedUniversityOption(
+      ["Istanbul Yeni Yuzyil University", "Yeni Yuzyil University"],
+      "İstanbul Yeni Yüzyıl Üniversitesi",
+    ),
+    null,
+    "multiple Yeni Yüzyıl aliases must fail closed rather than guess",
   );
 });
 

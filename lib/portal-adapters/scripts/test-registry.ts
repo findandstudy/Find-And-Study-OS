@@ -3,12 +3,12 @@
  *
  * TR1 — adapterForUniversity("Istanbul Topkapi University") → key "topkapi"
  * TR2 — SIT allowlist length is exactly 11
- * TR3 — United allowlist length is exactly 3
+ * TR3 — United allowlist length is exactly 4
  * TR4 — adapterByKey("topkapi") returns the same adapter as adapterForUniversity
  * TR5 — adapterMetadata() includes family field for all 4 code adapter families
  * TR6 — adapterMetadata() exposes allowlist for SIT and United
  * TR7 — adapterForUniversity("Haliç Üniversitesi") → key "halic"
- * TR8 — adapterForUniversity("Biruni Üniversitesi") → key "united"
+ * TR8 — United member universities resolve to key "united"
  * TR9 — adapters list is non-empty and all entries have key + label
  *
  * Run with:
@@ -58,11 +58,11 @@ test("TR2 — SIT allowlist length is exactly 11", () => {
 // TR3 — United allowlist count
 // ---------------------------------------------------------------------------
 
-test("TR3 — United allowlist length is exactly 3", () => {
+test("TR3 — United allowlist length is exactly 4", () => {
   assert.equal(
     UNITED_ALLOWLIST.length,
-    3,
-    `Expected 3 United universities, got ${UNITED_ALLOWLIST.length}`,
+    4,
+    `Expected 4 United universities, got ${UNITED_ALLOWLIST.length}`,
   );
 });
 
@@ -96,7 +96,7 @@ test("TR5 — adapterMetadata() includes metronic, salesforce, sit, united famil
 // TR6 — adapterMetadata exposes allowlist for SIT and United
 // ---------------------------------------------------------------------------
 
-test("TR6 — adapterMetadata() exposes allowlist for SIT (11) and United (3)", () => {
+test("TR6 — adapterMetadata() exposes allowlist for SIT (11) and United (4)", () => {
   const meta = adapterMetadata();
 
   const sitMeta = meta.find(m => m.family === "sit");
@@ -107,7 +107,7 @@ test("TR6 — adapterMetadata() exposes allowlist for SIT (11) and United (3)", 
   const unitedMeta = meta.find(m => m.family === "united");
   assert.ok(unitedMeta !== undefined,                   "United metadata entry must exist");
   assert.ok(Array.isArray(unitedMeta?.allowlist),       "United allowlist must be an array");
-  assert.equal(unitedMeta?.allowlist?.length, 3,        `United allowlist must have 3 entries, got ${unitedMeta?.allowlist?.length}`);
+  assert.equal(unitedMeta?.allowlist?.length, 4,        `United allowlist must have 4 entries, got ${unitedMeta?.allowlist?.length}`);
 });
 
 // ---------------------------------------------------------------------------
@@ -128,6 +128,21 @@ test("TR8 — adapterForUniversity('Biruni Üniversitesi') → united", () => {
   const adapter = adapterForUniversity("Biruni Üniversitesi");
   assert.ok(adapter !== null,       "Expected a non-null adapter for Biruni");
   assert.equal(adapter?.key, "united", `Expected key "united", got "${adapter?.key}"`);
+});
+
+test("TR8b — İstanbul Yeni Yüzyıl routes to United, never SIT", () => {
+  for (const name of [
+    "İstanbul Yeni Yüzyıl Üniversitesi",
+    "Istanbul Yeni Yuzyil University",
+  ]) {
+    const adapter = adapterForUniversity(name);
+    assert.ok(adapter !== null, `Expected a non-null adapter for ${name}`);
+    assert.equal(
+      adapter?.key,
+      "united",
+      `Expected ${name} to route to United, got ${adapter?.key}`,
+    );
+  }
 });
 
 // ---------------------------------------------------------------------------
