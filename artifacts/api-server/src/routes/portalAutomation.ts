@@ -1661,6 +1661,30 @@ interface CredentialReadyUniversity {
 }
 
 /**
+ * Metadata for a user-initiated fan-out row.
+ *
+ * The queue worker deliberately requires `manual=true` before bypassing the
+ * per-university auto-process and trigger-stage gates. Keep that marker on both
+ * direct portal rows and aggregator-routed rows; `enqueuedBy` alone cannot be
+ * used because automatic stage triggers also retain the acting user id.
+ */
+export function buildManualFanOutMeta(
+  routeVia?: { universityKey: string; adapterKey: string },
+  target?: { crmUniversityId: number; universityName: string },
+): Record<string, unknown> {
+  return {
+    manual: true,
+    ...(routeVia && target
+      ? {
+          targetCatalogUniversityId: target.crmUniversityId,
+          targetUniversityName: target.universityName,
+          routedViaAggregator: routeVia.universityKey,
+        }
+      : {}),
+  };
+}
+
+/**
  * Loads the fan-out target universities: active, not deleted, mapped to a CRM
  * university (crm_university_id set so catalog programmes are resolvable) AND
  * credential-ready (DB row or env vars). Credential gate mirrors
@@ -2017,17 +2041,13 @@ async function fanOutApplicationToUniversities(
               mode,
               status:         "queued",
               enqueuedBy:     userId,
-              // Aggregator routing (SIT): name the member school for the runner
-              // to select inside the portal — mirrors enqueueIfEligible exactly.
-              ...(routeVia
-                ? {
-                    meta: {
-                      targetCatalogUniversityId: crmUniversityId,
-                      targetUniversityName:      uni.universityName,
-                      routedViaAggregator:       routeVia.universityKey,
-                    },
-                  }
-                : {}),
+              // Manual fan-out must bypass the university auto-process and
+              // trigger-stage gates. Aggregator routing additionally names the
+              // member school to select inside the portal.
+              meta: buildManualFanOutMeta(routeVia, {
+                crmUniversityId,
+                universityName: uni.universityName,
+              }),
             })
             .returning({ id: portalSubmissionsTable.id });
 

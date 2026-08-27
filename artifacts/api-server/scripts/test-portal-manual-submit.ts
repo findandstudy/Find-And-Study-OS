@@ -30,7 +30,9 @@ import {
   portalUniversitiesTable,
   portalSubmissionsTable,
 } from "@workspace/db";
-import portalAutomationRouter from "../src/routes/portalAutomation.js";
+import portalAutomationRouter, {
+  buildManualFanOutMeta,
+} from "../src/routes/portalAutomation.js";
 
 // ---------------------------------------------------------------------------
 // Run-specific tag + fixtures
@@ -179,6 +181,22 @@ test("MSUB0: seed fixtures", async () => {
   assert.ok(studentId && portalUniId && appA && appB && appC && appD && appE && appF);
 });
 
+test("MSUB0b: manual fan-out metadata marks direct and aggregator rows as manual", () => {
+  assert.deepEqual(buildManualFanOutMeta(), { manual: true });
+  assert.deepEqual(
+    buildManualFanOutMeta(
+      { universityKey: "sit", adapterKey: "sit" },
+      { crmUniversityId: 42, universityName: "Member University" },
+    ),
+    {
+      manual: true,
+      targetCatalogUniversityId: 42,
+      targetUniversityName: "Member University",
+      routedViaAggregator: "sit",
+    },
+  );
+});
+
 // ---------------------------------------------------------------------------
 // MSUB1 — eligible-applications finds the seeded app
 // ---------------------------------------------------------------------------
@@ -220,6 +238,7 @@ test("MSUB2: POST submit single dry → 201, queued mode=dry", async () => {
     assert.equal(row.status, "queued");
     assert.equal(row.universityKey, UNI_KEY, "universityKey resolved from app's own record");
     assert.equal(row.enqueuedBy, 1);
+    assert.equal((row.meta as Record<string, unknown> | null)?.manual, true);
   } finally {
     await close(server);
   }
