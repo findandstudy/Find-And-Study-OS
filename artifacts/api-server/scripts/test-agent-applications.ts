@@ -105,8 +105,16 @@ test("agency application route preserves exact contract, signature and idempoten
 test("public agency application uses system-backed multi-selects and exposes invalid fields", async () => {
   const here = path.dirname(fileURLToPath(import.meta.url));
   const source = await readFile(path.resolve(here, "../../edcons/src/pages/public/AgencyApplication.tsx"), "utf8");
+  const multiSelectSource = await readFile(path.resolve(here, "../../edcons/src/components/ui/multi-select-filter.tsx"), "utf8");
   assert.match(source, /MultiSelectFilter/);
   assert.match(source, /options=\{countryOptions\}/);
+  assert.match(source, /CountryFlag/);
+  assert.match(source, /countryCodeFromEmoji/);
+  assert.match(source, /PhoneInput/);
+  assert.doesNotMatch(source, /\{country\.flagEmoji\}/);
+  assert.match(multiSelectSource, /icon\?: ReactNode/);
+  assert.match(multiSelectSource, /opt\.icon/);
+  assert.match(multiSelectSource, /singleSelectedOption\.icon/);
   assert.match(source, /operatingCountries: stringList\(form\.operatingCountries\)/);
   assert.match(source, /recruitmentMarkets: stringList\(form\.recruitmentMarkets\)/);
   assert.match(source, /cause\?\.data\?\.details\?\.fieldErrors/);

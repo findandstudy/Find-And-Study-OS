@@ -1,11 +1,11 @@
-import { useState, useRef, useEffect, useLayoutEffect } from "react";
+import { useState, useRef, useEffect, useLayoutEffect, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { ChevronDown, X, Check } from "lucide-react";
 
 interface MultiSelectFilterProps {
   values: string[];
   onChange: (values: string[]) => void;
-  options: { value: string; label: string }[];
+  options: { value: string; label: string; icon?: ReactNode }[];
   placeholder: string;
   className?: string;
   searchable?: boolean;
@@ -132,10 +132,13 @@ export function MultiSelectFilter({
     onChange(values.includes(val) ? values.filter(v => v !== val) : [...values, val]);
   };
 
+  const singleSelectedOption = values.length === 1
+    ? options.find(o => o.value === values[0])
+    : undefined;
   const displayText = values.length === 0
     ? placeholder
     : values.length === 1
-      ? (options.find(o => o.value === values[0])?.label || values[0])
+      ? (singleSelectedOption?.label || values[0])
       : selectedText(values.length);
 
   return (
@@ -149,7 +152,8 @@ export function MultiSelectFilter({
             : "border-input bg-background hover:bg-accent/50"
         }`}
       >
-        <span className={`truncate text-left ${values.length === 0 ? "text-muted-foreground" : "text-primary font-medium"}`}>
+        <span className={`flex min-w-0 items-center gap-2 truncate text-left ${values.length === 0 ? "text-muted-foreground" : "text-primary font-medium"}`}>
+          {singleSelectedOption?.icon ? <span className="shrink-0" aria-hidden="true">{singleSelectedOption.icon}</span> : null}
           {displayText}
         </span>
         <div className="flex items-center gap-1 shrink-0 ml-1">
@@ -217,6 +221,7 @@ export function MultiSelectFilter({
                     }`}>
                       {selected && <Check className="w-2.5 h-2.5 text-white" />}
                     </div>
+                    {opt.icon ? <span className="shrink-0" aria-hidden="true">{opt.icon}</span> : null}
                     <span className="truncate">{opt.label}</span>
                   </button>
                 );
