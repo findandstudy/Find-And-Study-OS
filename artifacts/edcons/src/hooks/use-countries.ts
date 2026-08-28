@@ -52,6 +52,13 @@ export interface CountryOption {
   dialCode?: string | null;
 }
 
+export interface CityOption {
+  id: number;
+  name: string;
+  countryId: number;
+  isActive?: boolean;
+}
+
 /**
  * Server-side (AJAX) debounced search over active countries (no dial-code
  * filter) for nationality / country selectors. Public endpoint so it is usable
@@ -68,6 +75,31 @@ export function useCountrySearch(search: string) {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
       return (json.data ?? json ?? []) as CountryOption[];
+    },
+    staleTime: 5 * 60_000,
+  });
+}
+
+/**
+ * Loads the active city catalog for the selected country. The public agency
+ * application stores the country name for contract rendering, but uses the
+ * catalog id here so localized country names (for example Türkiye/Turkey) do
+ * not break the country-city relationship.
+ */
+export function useCitySearch(countryId?: number) {
+  return useQuery<CityOption[]>({
+    queryKey: ["city-search", countryId ?? null],
+    enabled: Number.isInteger(countryId) && Number(countryId) > 0,
+    queryFn: async () => {
+      const params = new URLSearchParams({
+        countryId: String(countryId),
+        status: "active",
+        limit: "1000",
+      });
+      const res = await apiFetch(`${BASE_URL}/api/cities?${params.toString()}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const json = await res.json();
+      return (json.data ?? json ?? []) as CityOption[];
     },
     staleTime: 5 * 60_000,
   });

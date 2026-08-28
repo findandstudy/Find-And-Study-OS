@@ -522,6 +522,13 @@ export default function Login() {
               >
                 {t("login.studentRegistration")}
               </button>
+              <button
+                type="button"
+                onClick={() => setLocation(localePath("/agency/apply"))}
+                className="flex-1 py-2.5 px-3 rounded-lg text-sm font-semibold text-muted-foreground hover:text-foreground hover:bg-background/70 transition-all"
+              >
+                {({ tr: "Acente Başvurusu", ar: "طلب وكالة", fr: "Candidature agence", ru: "Заявка агентства", es: "Solicitud de agencia", fa: "درخواست نمایندگی", zh: "代理申请", hi: "एजेंसी आवेदन", id: "Aplikasi agensi", en: "Agency Application" } as Record<string, string>)[lang] || "Agency Application"}
+              </button>
             </div>
           )}
 

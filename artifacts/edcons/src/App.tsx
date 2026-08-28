@@ -62,6 +62,7 @@ const CountryDetail = lazyRetry(() => import("@/pages/public/CountryDetail"));
 const Programs = lazyRetry(() => import("@/pages/public/Programs"));
 const Blog = lazyRetry(() => import("@/pages/public/Blog"));
 const Contact = lazyRetry(() => import("@/pages/public/Contact"));
+const AgencyApplication = lazyRetry(() => import("@/pages/public/AgencyApplication"));
 
 const StaffDashboard = lazyRetry(() => import("@/pages/staff/Dashboard"));
 const StaffLeads = lazyRetry(() => import("@/pages/staff/Leads"));
@@ -74,6 +75,7 @@ const StudentDetail = lazyRetry(() => import("@/pages/staff/StudentDetail"));
 const ApplicationDetail = lazyRetry(() => import("@/pages/staff/ApplicationDetail"));
 const StaffCourseFinder = lazyRetry(() => import("@/pages/staff/CourseFinder"));
 const StaffAgents = lazyRetry(() => import("@/pages/staff/Agents"));
+const StaffAgencyApplications = lazyRetry(() => import("@/pages/staff/AgencyApplications"));
 const StaffAgentDetail = lazyRetry(() => import("@/pages/staff/AgentDetail"));
 const StaffMessages = lazyRetry(() => import("@/pages/staff/Messages"));
 const StaffTasks = lazyRetry(() => import("@/pages/staff/Tasks"));
@@ -284,6 +286,8 @@ function PublicRoutes({ lang }: { lang: string }) {
             <Route path={`/${lang}/programs`} component={Programs} />
             <Route path={`/${lang}/blog`} component={Blog} />
             <Route path={`/${lang}/contact`} component={Contact} />
+            <Route path={`/${lang}/agency/apply`} component={AgencyApplication} />
+            <Route path={`/${lang}/agency-application`} component={AgencyApplication} />
             <Route component={AuthFallback} />
           </Switch>
         </PublicLayout>
@@ -448,6 +452,9 @@ function StaffAdminShell() {
           <Route path="/staff/applications" component={StaffApplications} />
           <Route path="/staff/course-finder" component={StaffCourseFinder} />
           <Route path="/staff/agents/:id" component={StaffAgentDetail} />
+          <Route path="/staff/agency-applications">
+            <ProtectedRoute allowedRoles={["super_admin", "admin", "manager"]}><StaffAgencyApplications /></ProtectedRoute>
+          </Route>
           <Route path="/staff/agents">
             <ProtectedRoute allowedRoles={["super_admin", "admin", "manager"]}><StaffAgents /></ProtectedRoute>
           </Route>
@@ -550,6 +557,7 @@ function Router() {
                             location === "/staff" || location.startsWith("/staff/");
   const isStudentPath = location === "/student" || location.startsWith("/student/");
   const isAgentPath = location === "/agent" || location.startsWith("/agent/");
+  const isAgencyApplicationPublic = location === "/agent/apply";
   const isPublicSignPath = location.startsWith("/sign/");
   const isAgentOnboardingPublic = location === "/agent/onboarding" || location.startsWith("/agent/onboarding?");
 
@@ -573,6 +581,16 @@ function Router() {
       <ErrorBoundary>
         <Suspense fallback={<PageLoader />}>
           <AgentOnboardingPublic />
+        </Suspense>
+      </ErrorBoundary>
+    );
+  }
+
+  if (isAgencyApplicationPublic) {
+    return (
+      <ErrorBoundary>
+        <Suspense fallback={<PageLoader />}>
+          <PublicLayout><AgencyApplication /></PublicLayout>
         </Suspense>
       </ErrorBoundary>
     );

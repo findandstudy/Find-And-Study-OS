@@ -14,6 +14,7 @@ import { dispatchNotification } from "../lib/notificationDispatcher";
 import { PgRateLimitStore } from "../lib/pgRateLimiter";
 import { getRateLimitIp, getClientIp } from "../lib/clientIp";
 import { applyContractBranding, publicContractBranding } from "../lib/contractBranding";
+import { markAgentApplicationContractSigned } from "../lib/agentApplicationLifecycle";
 
 const router: IRouter = Router();
 
@@ -504,6 +505,18 @@ router.post("/public/sign/:token/sign", signLimiter, async (req, res): Promise<v
     const doneMs = Date.now() - signStart;
     const doneRss = Math.round(process.memoryUsage().rss / (1024 * 1024));
     console.log(`[public-sign] done signedContractId=${result.signedContractId} ms=${doneMs} rss=${doneRss}MB`);
+
+    try {
+      await markAgentApplicationContractSigned({
+        subjectType: r.session.subjectType,
+        subjectId: r.session.subjectId,
+      });
+    } catch (lifecycleError) {
+      // The signature is already durably committed. Reconciliation also runs
+      // when the applicant/admin reads the application, so never invalidate a
+      // successful signature because a secondary lifecycle update failed.
+      console.error("[public-sign] agency application reconciliation failed", lifecycleError);
+    }
 
     res.json({ data: { signedContractId: result.signedContractId } });
   } catch (err) {

@@ -66,6 +66,7 @@ import educationRecordsRouter from "./education-records";
 import messageCampaignsRouter from "./messageCampaigns";
 import dataQualityRouter from "./dataQuality";
 import aiBotsRouter from "./aiBots";
+import agentApplicationsRouter from "./agentApplications";
 import { tokenScopeGuard } from "../middlewares/tokenScopeGuard";
 
 const router: IRouter = Router();
@@ -217,5 +218,6 @@ router.use(academySsoRouter);
 router.use(educationRecordsRouter);
 router.use(dataQualityRouter);
 router.use(aiBotsRouter);
+router.use(agentApplicationsRouter);
 
 export default router;

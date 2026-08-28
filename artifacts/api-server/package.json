@@ -44,6 +44,7 @@
     "test:ai-schedule": "tsx --test ./scripts/test-ai-schedule.ts",
     "test:contract-signing-scope": "NODE_ENV=test tsx --test ./scripts/test-contract-signing-scope.ts",
     "test:contract-operations": "NODE_ENV=test tsx --test ./scripts/test-contract-operations.ts",
+    "test:agent-applications": "NODE_ENV=test node --experimental-strip-types --test ./scripts/test-agent-applications.ts",
     "test:contract-shell": "tsx --test ./scripts/test-contract-shell.ts",
     "test:net-income-formula": "tsx --test ./scripts/test-net-income-formula.ts",
     "test:rate-limit-ip-security": "tsx --test ./scripts/test-rate-limit-ip-security.ts",

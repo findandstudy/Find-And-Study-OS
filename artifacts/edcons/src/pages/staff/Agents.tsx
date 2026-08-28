@@ -19,8 +19,9 @@ import {
   Building2, Mail, Phone, MapPin, Upload, Eye, EyeOff,
   ChevronLeft, ChevronRight, UserPlus, Network,
   MoreHorizontal, KeyRound, LogIn, Power, ShieldCheck, ShieldOff,
-  ArrowUpDown, ArrowUp, ArrowDown,
+  ArrowUpDown, ArrowUp, ArrowDown, ClipboardCheck,
 } from "lucide-react";
+import { useLocation } from "wouter";
 import { CountryFlag } from "@/components/CountryFlag";
 import { ExportImportToolbar } from "@/components/admin/ExportImportToolbar";
 import { QuickContactButtons } from "@/components/QuickContact";
@@ -146,6 +147,7 @@ export default function AgentsPage() {
   const { user } = useAuth(true);
   const { toast } = useToast();
   const isManager = MANAGER_ROLES.includes(user?.role || "");
+  const [, setLocation] = useLocation();
 
   const [activeTab, setActiveTab] = useState("agents");
   const [agents, setAgents] = useState<Agent[]>([]);
@@ -969,6 +971,11 @@ export default function AgentsPage() {
             <h1 className="text-2xl font-display font-bold text-foreground">{t("staffAgents.title")}</h1>
             <p className="text-muted-foreground text-sm mt-1">{t("staffAgents.subtitle")}</p>
           </div>
+          {isManager && (
+            <Button variant="outline" className="rounded-xl gap-2" onClick={() => setLocation("/staff/agency-applications")}>
+              <ClipboardCheck className="w-4 h-4" /> {t("staffAgents.agencyApplications") === "staffAgents.agencyApplications" ? "Agency Applications" : t("staffAgents.agencyApplications")}
+            </Button>
+          )}
         </div>
 
         {(() => {
