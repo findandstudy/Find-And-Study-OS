@@ -4458,7 +4458,9 @@
     "fieldMappingEmpty": "Add fields above to see their placeholder mapping.",
     "fieldMappingNotInBody": "Not found in contract body",
     "titleLabel": "Titre du PDF",
-    "titlePlaceholder": "Affiché sur le PDF signé et dans l'e-mail de livraison"
+    "titlePlaceholder": "Affiché sur le PDF signé et dans l'e-mail de livraison",
+    "requireEmailVerification": "Exiger la vérification de l’e-mail avant la signature",
+    "requireEmailVerificationHint": "Lorsque cette option est activée, le signataire doit vérifier le code envoyé à son adresse e-mail avant de signer le contrat."
   },
   "agentOnboarding": {
     "verifyEmail": {

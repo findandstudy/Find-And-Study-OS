@@ -8,6 +8,12 @@ export type ContractBrandingConfig = {
   pdfHeaderText?: string;
   pdfFooterText?: string;
   companySignatureDataUrl?: string;
+  /**
+   * Contract policy stored alongside the immutable signing-page snapshot.
+   * Missing means verification is required so legacy templates retain the
+   * secure behaviour they had before this option was introduced.
+   */
+  requireEmailVerification?: boolean;
 };
 
 const HEX_COLOR = /^#[0-9a-f]{6}$/i;
@@ -30,6 +36,9 @@ export function sanitizeContractBranding(value: unknown): ContractBrandingConfig
   const safeSignature = signature && validateCompanySignatureDataUrl(signature) === null
     ? signature
     : undefined;
+  const requireEmailVerification = typeof input.requireEmailVerification === "boolean"
+    ? input.requireEmailVerification
+    : undefined;
   const config: ContractBrandingConfig = {
     brandName: text(input.brandName, 200),
     logoUrl: text(input.logoUrl, 2000),
@@ -40,8 +49,16 @@ export function sanitizeContractBranding(value: unknown): ContractBrandingConfig
     pdfHeaderText: text(input.pdfHeaderText, 500),
     pdfFooterText: text(input.pdfFooterText, 500),
     companySignatureDataUrl: safeSignature,
+    requireEmailVerification,
   };
-  return Object.values(config).some(Boolean) ? config : null;
+  // Explicit false is meaningful and must not be discarded by a truthiness
+  // check. It is the opt-out selected by an administrator for this template.
+  return Object.values(config).some(value => value !== undefined) ? config : null;
+}
+
+/** Legacy templates (no explicit setting) continue to require verification. */
+export function contractRequiresEmailVerification(value: unknown): boolean {
+  return sanitizeContractBranding(value)?.requireEmailVerification !== false;
 }
 
 /**
@@ -51,7 +68,14 @@ export function sanitizeContractBranding(value: unknown): ContractBrandingConfig
  */
 export function validateContractBrandingInput(value: unknown): string | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-  const signature = (value as Record<string, unknown>).companySignatureDataUrl;
+  const input = value as Record<string, unknown>;
+  if (
+    input.requireEmailVerification !== undefined
+    && typeof input.requireEmailVerification !== "boolean"
+  ) {
+    return "Email verification policy must be true or false";
+  }
+  const signature = input.companySignatureDataUrl;
   if (signature === undefined || signature === null || signature === "") return null;
   return validateCompanySignatureDataUrl(signature);
 }
@@ -89,7 +113,7 @@ export function publicContractBranding(value: unknown): ContractBrandingConfig |
   const config = sanitizeContractBranding(value);
   if (!config) return null;
   const { companySignatureDataUrl: _privateSignature, ...publicConfig } = config;
-  return Object.values(publicConfig).some(Boolean) ? publicConfig : null;
+  return Object.values(publicConfig).some(value => value !== undefined) ? publicConfig : null;
 }
 
 export function escapeBrandingHtml(value: string): string {

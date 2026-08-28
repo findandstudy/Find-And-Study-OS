@@ -4407,7 +4407,9 @@
     "fieldMappingEmpty": "Add fields above to see their placeholder mapping.",
     "fieldMappingNotInBody": "Not found in contract body",
     "titleLabel": "PDF शीर्षक",
-    "titlePlaceholder": "हस्ताक्षरित PDF और डिलीवरी ईमेल में दिखाया जाता है"
+    "titlePlaceholder": "हस्ताक्षरित PDF और डिलीवरी ईमेल में दिखाया जाता है",
+    "requireEmailVerification": "हस्ताक्षर से पहले ईमेल सत्यापन आवश्यक करें",
+    "requireEmailVerificationHint": "सक्रिय होने पर, हस्ताक्षरकर्ता को अनुबंध पर हस्ताक्षर करने से पहले ईमेल पर भेजा गया कोड सत्यापित करना होगा।"
   },
   "agentOnboarding": {
     "verifyEmail": {

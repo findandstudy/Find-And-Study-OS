@@ -4458,7 +4458,9 @@
     "fieldMappingEmpty": "Add fields above to see their placeholder mapping.",
     "fieldMappingNotInBody": "Not found in contract body",
     "titleLabel": "Заголовок PDF",
-    "titlePlaceholder": "Отображается в подписанном PDF и в письме о доставке"
+    "titlePlaceholder": "Отображается в подписанном PDF и в письме о доставке",
+    "requireEmailVerification": "Требовать подтверждение электронной почты перед подписанием",
+    "requireEmailVerificationHint": "Если включено, подписант должен подтвердить код, отправленный на его электронную почту, прежде чем подписать договор."
   },
   "agentOnboarding": {
     "verifyEmail": {

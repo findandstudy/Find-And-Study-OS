@@ -4407,7 +4407,9 @@
     "fieldMappingEmpty": "Add fields above to see their placeholder mapping.",
     "fieldMappingNotInBody": "Not found in contract body",
     "titleLabel": "Judul PDF",
-    "titlePlaceholder": "Ditampilkan di PDF yang ditandatangani dan email pengiriman"
+    "titlePlaceholder": "Ditampilkan di PDF yang ditandatangani dan email pengiriman",
+    "requireEmailVerification": "Wajibkan verifikasi email sebelum menandatangani",
+    "requireEmailVerificationHint": "Jika diaktifkan, penanda tangan harus memverifikasi kode yang dikirim ke email sebelum kontrak dapat ditandatangani."
   },
   "agentOnboarding": {
     "verifyEmail": {

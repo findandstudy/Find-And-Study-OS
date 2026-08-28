@@ -4458,7 +4458,9 @@
     "fieldMappingEmpty": "Add fields above to see their placeholder mapping.",
     "fieldMappingNotInBody": "Not found in contract body",
     "titleLabel": "عنوان PDF",
-    "titlePlaceholder": "يظهر في PDF الموقع وفي رسالة التسليم"
+    "titlePlaceholder": "يظهر في PDF الموقع وفي رسالة التسليم",
+    "requireEmailVerification": "طلب التحقق من البريد الإلكتروني قبل التوقيع",
+    "requireEmailVerificationHint": "عند التفعيل، يجب على الموقّع التحقق من الرمز المرسل إلى بريده الإلكتروني قبل توقيع العقد."
   },
   "agentOnboarding": {
     "verifyEmail": {

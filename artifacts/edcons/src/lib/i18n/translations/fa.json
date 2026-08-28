@@ -4407,7 +4407,9 @@
     "fieldMappingEmpty": "Add fields above to see their placeholder mapping.",
     "fieldMappingNotInBody": "Not found in contract body",
     "titleLabel": "عنوان PDF",
-    "titlePlaceholder": "در PDF امضاشده و ایمیل تحویل نمایش داده می‌شود"
+    "titlePlaceholder": "در PDF امضاشده و ایمیل تحویل نمایش داده می‌شود",
+    "requireEmailVerification": "الزام تأیید ایمیل پیش از امضا",
+    "requireEmailVerificationHint": "در صورت فعال بودن، امضاکننده باید پیش از امضای قرارداد کد ارسال‌شده به ایمیل خود را تأیید کند."
   },
   "agentOnboarding": {
     "verifyEmail": {

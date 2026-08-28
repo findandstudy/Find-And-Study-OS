@@ -2378,7 +2378,9 @@
     "fieldMappingEmpty": "Add fields above to see their placeholder mapping.",
     "fieldMappingNotInBody": "Not found in contract body",
     "titleLabel": "PDF Title",
-    "titlePlaceholder": "Shown on the signed PDF and in the delivery email"
+    "titlePlaceholder": "Shown on the signed PDF and in the delivery email",
+    "requireEmailVerification": "Require email verification before signing",
+    "requireEmailVerificationHint": "When enabled, the signer must verify a code sent to their email address before the contract can be signed."
   },
   "universityContracts": {
     "title": "University Contracts",

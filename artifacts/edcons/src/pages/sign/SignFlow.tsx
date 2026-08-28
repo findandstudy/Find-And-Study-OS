@@ -35,6 +35,7 @@ type SessionView = {
   status: "intake_pending" | "review_pending" | "signed" | "revoked";
   signerEmail: string;
   verifiedEmail: string | null;
+  emailVerificationRequired: boolean;
   signerName: string | null;
   expiresAt: string;
   expired: boolean;
@@ -282,6 +283,8 @@ export default function SignFlow({ token }: { token: string }) {
     nameLikeFields.find(f => /contact|person|full|signer|ad\s*soyad|isim/i.test(`${f.key} ${f.label}`)) ||
     nameLikeFields[0];
   const intakeEmailField = fields.find(isEmailLikeField);
+  const emailVerificationRequired = session?.emailVerificationRequired !== false;
+  const emailReady = !emailVerificationRequired || verified;
 
   function setEmailValue(v: string) {
     setEmail(v);
@@ -325,7 +328,14 @@ export default function SignFlow({ token }: { token: string }) {
     try {
       const effectiveName = intakeNameField ? (intake[intakeNameField.key] || "").trim() : signerName;
       if (intakeNameField && effectiveName !== signerName) setSignerName(effectiveName);
-      const intakePayload: Record<string, string> = { ...intake, signerName: effectiveName };
+      const intakePayload: Record<string, string> = {
+        ...intake,
+        signerName: effectiveName,
+        // Keep a signer identity even when this template explicitly opts out
+        // of mailbox verification. The API stores it without marking it as a
+        // verified address.
+        signerEmail: email.trim(),
+      };
       if (intakeEmailField) intakePayload[intakeEmailField.key] = email.trim();
       await customFetch(`/api/public/sign/${encodeURIComponent(token)}/intake`, {
         method: "POST", headers: { "content-type": "application/json" },
@@ -413,7 +423,7 @@ export default function SignFlow({ token }: { token: string }) {
     const nameOk = intakeNameField
       ? (intake[intakeNameField.key] || "").trim().length > 0
       : signerName.trim().length > 0;
-    const canContinue = nameOk && verified;
+    const canContinue = nameOk && EMAIL_RE.test(email.trim()) && emailReady;
     const intakeTitle = brand.pageTitle || t("title");
     const intakeSubtitle = brand.pageSubtitle
       ? <span className="font-semibold text-foreground">{brand.pageSubtitle}</span>
@@ -439,7 +449,7 @@ export default function SignFlow({ token }: { token: string }) {
               <Input className="mt-1.5" value={signerName} onChange={e => setSignerName(e.target.value)} required />
             </div>
           )}
-          {!intakeEmailField && (
+          {!intakeEmailField && (emailVerificationRequired ? (
             <EmailVerify
               t={t}
               label={t("emailLabel")}
@@ -455,25 +465,50 @@ export default function SignFlow({ token }: { token: string }) {
               onSend={sendCode}
               onVerify={verifyCode}
             />
-          )}
+          ) : (
+            <div>
+              <FieldLabel required>{t("emailLabel")}</FieldLabel>
+              <Input
+                className="mt-1.5"
+                type="email"
+                value={email}
+                onChange={e => setEmailValue(e.target.value)}
+                required
+              />
+            </div>
+          ))}
           {fields.map(f =>
             intakeEmailField && f.key === intakeEmailField.key ? (
-              <EmailVerify
-                key={f.key}
-                t={t}
-                label={f.label}
-                email={email}
-                onChangeEmail={setEmailValue}
-                codeSent={codeSent}
-                code={code}
-                onChangeCode={setCode}
-                verified={verified}
-                sendingCode={sendingCode}
-                verifyingCode={verifyingCode}
-                codeError={codeError}
-                onSend={sendCode}
-                onVerify={verifyCode}
-              />
+              emailVerificationRequired ? (
+                <EmailVerify
+                  key={f.key}
+                  t={t}
+                  label={f.label}
+                  email={email}
+                  onChangeEmail={setEmailValue}
+                  codeSent={codeSent}
+                  code={code}
+                  onChangeCode={setCode}
+                  verified={verified}
+                  sendingCode={sendingCode}
+                  verifyingCode={verifyingCode}
+                  codeError={codeError}
+                  onSend={sendCode}
+                  onVerify={verifyCode}
+                />
+              ) : (
+                <div key={f.key}>
+                  <FieldLabel required>{f.label}</FieldLabel>
+                  <Input
+                    className="mt-1.5"
+                    type="email"
+                    placeholder={f.placeholder}
+                    value={email}
+                    onChange={e => setEmailValue(e.target.value)}
+                    required
+                  />
+                </div>
+              )
             ) : (
               <div key={f.key}>
                 <FieldLabel required={f.required}>{f.label}</FieldLabel>
@@ -557,7 +592,7 @@ export default function SignFlow({ token }: { token: string }) {
             )
           )}
         </div>
-        {!verified && (
+        {emailVerificationRequired && !verified && (
           <p className="text-xs text-muted-foreground mt-4">{t("verifyFirst")}</p>
         )}
       </Shell>
@@ -621,7 +656,7 @@ export default function SignFlow({ token }: { token: string }) {
               className="w-full sm:flex-1 bg-[var(--contract-primary)] hover:opacity-90 text-white"
               size="lg"
               onClick={() => sigSubmitRef.current?.()}
-              disabled={!verified || !sigReady || !signerName.trim() || submitting}
+              disabled={!emailReady || !sigReady || !signerName.trim() || submitting}
             >
               {submitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <FileSignature className="w-4 h-4 mr-2" />} {t("signAndSend")}
             </Button>
@@ -630,10 +665,11 @@ export default function SignFlow({ token }: { token: string }) {
         }
       >
         {/* admin_driven sessions skip the intake step, so verification happens
-            here. self_fill sessions are already verified by this point.
+            here. self_fill sessions have already completed the template's
+            configured email step by this point.
             For admin_driven, the email is locked to the invited signer's address
             (the backend enforces the same constraint). */}
-        {!verified && (
+        {emailVerificationRequired && !verified && (
           <div className="mb-4">
             <EmailVerify
               t={t}

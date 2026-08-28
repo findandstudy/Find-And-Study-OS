@@ -13,7 +13,11 @@ import { buildSignVerificationCodeEmail, getAppBaseUrl } from "../lib/email";
 import { dispatchNotification } from "../lib/notificationDispatcher";
 import { PgRateLimitStore } from "../lib/pgRateLimiter";
 import { getRateLimitIp, getClientIp } from "../lib/clientIp";
-import { applyContractBranding, publicContractBranding } from "../lib/contractBranding";
+import {
+  applyContractBranding,
+  contractRequiresEmailVerification,
+  publicContractBranding,
+} from "../lib/contractBranding";
 import { markAgentApplicationContractSigned } from "../lib/agentApplicationLifecycle";
 
 const router: IRouter = Router();
@@ -185,6 +189,7 @@ router.get("/public/sign/:token", signLimiter, async (req, res): Promise<void> =
         status: r.session.status,
         signerEmail: r.session.signerEmail,
         verifiedEmail: r.session.verifiedEmail,
+        emailVerificationRequired: contractRequiresEmailVerification(r.template.signingPageConfig),
         signerName: r.session.signerName,
         expiresAt: r.session.expiresAt,
         expired: r.expired,
@@ -303,6 +308,13 @@ router.post("/public/sign/:token/send-code", codeLimiter, async (req, res): Prom
     if (r.session.status === "signed" || r.session.status === "revoked") {
       res.status(409).json({ error: "Session already finalized" }); return;
     }
+    if (!contractRequiresEmailVerification(r.template.signingPageConfig)) {
+      res.status(409).json({
+        error: "Email verification is disabled for this contract",
+        code: "email_verification_not_required",
+      });
+      return;
+    }
     const email = String(req.body?.email || "").trim().toLowerCase();
     if (!email || email.length > 254 || !EMAIL_RE.test(email)) {
       res.status(400).json({ error: "A valid email is required" }); return;
@@ -384,6 +396,13 @@ router.post("/public/sign/:token/verify-code", codeLimiter, async (req, res): Pr
     if (r.session.status === "signed" || r.session.status === "revoked") {
       res.status(409).json({ error: "Session already finalized" }); return;
     }
+    if (!contractRequiresEmailVerification(r.template.signingPageConfig)) {
+      res.status(409).json({
+        error: "Email verification is disabled for this contract",
+        code: "email_verification_not_required",
+      });
+      return;
+    }
     const email = String(req.body?.email || "").trim().toLowerCase();
     const code = String(req.body?.code || "").trim();
     if (!email || !EMAIL_RE.test(email) || !/^\d{6}$/.test(code)) {
@@ -456,11 +475,29 @@ router.post("/public/sign/:token/intake", signLimiter, async (req, res): Promise
       cleaned[key] = val;
       count++;
     }
-    await db.update(signingSessionsTable).set({
+    const sessionUpdate: Record<string, unknown> = {
       intakeData: cleaned,
       status: "review_pending",
       signerName: cleaned.signerName || cleaned.fullName || r.session.signerName,
-    }).where(eq(signingSessionsTable.id, r.session.id));
+    };
+    if (!contractRequiresEmailVerification(r.template.signingPageConfig)) {
+      const signerEmail = String(cleaned.signerEmail || "").trim().toLowerCase();
+      if (!EMAIL_RE.test(signerEmail)) {
+        res.status(400).json({ error: "A valid signer email is required" }); return;
+      }
+      if (r.session.expectedEmail && signerEmail !== r.session.expectedEmail.trim().toLowerCase()) {
+        res.status(409).json({
+          error: "Email address does not match the address this link was created for",
+          code: "email_mismatch",
+        });
+        return;
+      }
+      // Verification was explicitly disabled by the template owner. Preserve
+      // the supplied identity without falsely marking it as verified.
+      sessionUpdate.signerEmail = signerEmail;
+    }
+    await db.update(signingSessionsTable).set(sessionUpdate)
+      .where(eq(signingSessionsTable.id, r.session.id));
     res.json({ success: true });
   } catch (err) {
     console.error("[public-sign] intake:", err);
@@ -481,7 +518,7 @@ router.post("/public/sign/:token/sign", signLimiter, async (req, res): Promise<v
     if (r.session.mode === "self_fill" && !r.session.intakeData) {
       res.status(400).json({ error: "Intake must be completed first" }); return;
     }
-    if (!r.session.verifiedEmail) {
+    if (contractRequiresEmailVerification(r.template.signingPageConfig) && !r.session.verifiedEmail) {
       res.status(403).json({ error: "Email verification required before signing", code: "email_not_verified" }); return;
     }
     const { signatureImagePngBase64, signerName } = req.body || {};

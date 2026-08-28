@@ -3,7 +3,12 @@ import { db, contractTemplatesTable } from "@workspace/db";
 import { and, desc, eq, isNull } from "drizzle-orm";
 import { requireAuth, requirePermission } from "../lib/auth";
 import { writeAudit } from "../lib/auditLog";
-import { hasContractCompanySignature, sanitizeContractBranding, validateContractBrandingInput } from "../lib/contractBranding";
+import {
+  contractRequiresEmailVerification,
+  hasContractCompanySignature,
+  sanitizeContractBranding,
+  validateContractBrandingInput,
+} from "../lib/contractBranding";
 import { resolveContractTemplateBranding } from "../lib/contractTemplateBranding";
 
 const router: IRouter = Router();
@@ -103,7 +108,13 @@ router.post("/contract-templates", requireAuth, requirePermission("contract_temp
       action: "contract_template.create",
       resource: "contract_template",
       resourceId: row.id,
-      changes: { name: row.name, language: row.language, entityType: row.entityType, version: row.version },
+      changes: {
+        name: row.name,
+        language: row.language,
+        entityType: row.entityType,
+        version: row.version,
+        emailVerificationRequired: contractRequiresEmailVerification(row.signingPageConfig),
+      },
       ipAddress: req.ip,
     });
     res.status(201).json({ data: row });
@@ -147,6 +158,7 @@ router.patch("/contract-templates/:id", requireAuth, requirePermission("contract
       auditChanges.signingPageConfig = {
         configUpdated: true,
         companySignatureConfigured: hasContractCompanySignature(updates.signingPageConfig),
+        emailVerificationRequired: contractRequiresEmailVerification(updates.signingPageConfig),
       };
     }
     await writeAudit({

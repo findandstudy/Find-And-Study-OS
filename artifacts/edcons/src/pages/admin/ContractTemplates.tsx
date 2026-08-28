@@ -104,12 +104,14 @@ type SigningPageConfig = {
   pdfHeaderText: string;
   pdfFooterText: string;
   companySignatureDataUrl: string;
+  requireEmailVerification: boolean;
 };
 
 const EMPTY_SPC: SigningPageConfig = {
   brandName: "", logoUrl: "", primaryColor: "#143591", accentColor: "#0f766e",
   pageTitle: "", pageSubtitle: "", pdfHeaderText: "", pdfFooterText: "",
   companySignatureDataUrl: "",
+  requireEmailVerification: true,
 };
 
 function FieldMappingPanel({ schema, bodyHtml, t }: { schema: IntakeField[]; bodyHtml: string; t: (k: string, p?: any) => string }) {
@@ -232,6 +234,9 @@ export default function ContractTemplatesPage() {
         pdfHeaderText: spc?.pdfHeaderText || "",
         pdfFooterText: spc?.pdfFooterText || "",
         companySignatureDataUrl: spc?.companySignatureDataUrl || "",
+        // Missing is the secure legacy default: existing templates continue
+        // to require mailbox verification until an administrator opts out.
+        requireEmailVerification: spc?.requireEmailVerification !== false,
       },
     });
     setSigningPageOpen(Boolean(spc && Object.values(spc).some(Boolean)));
@@ -257,12 +262,14 @@ export default function ContractTemplatesPage() {
     setSaving(true);
     try {
       const spc = form.signingPageConfig;
-      const hasSpc = Object.values(spc).some(Boolean);
       const payload = {
         ...form,
         // A selected brand profile remains the single source of branding and
-        // the official signature. Do not copy its values into the template.
-        signingPageConfig: form.brandProfileId ? null : (hasSpc ? spc : null),
+        // the official signature. The verification policy is template-owned,
+        // so preserve it even when branding comes from a central profile.
+        signingPageConfig: form.brandProfileId
+          ? { requireEmailVerification: spc.requireEmailVerification }
+          : spc,
       };
       const body = JSON.stringify(payload);
       if (editing) {
@@ -304,7 +311,10 @@ export default function ContractTemplatesPage() {
     setForm(current => ({
       ...current,
       brandProfileId: brand.id,
-      signingPageConfig: EMPTY_SPC,
+      signingPageConfig: {
+        ...EMPTY_SPC,
+        requireEmailVerification: current.signingPageConfig.requireEmailVerification,
+      },
     }));
     setSigningPageOpen(true);
   }
@@ -639,6 +649,33 @@ export default function ContractTemplatesPage() {
                   </>}
                 </div>
               )}
+            </div>
+
+            <div className="rounded-lg border p-4">
+              <div className="flex items-start gap-3">
+                <input
+                  id="requireEmailVerification"
+                  type="checkbox"
+                  className="mt-1"
+                  disabled={editingPublished}
+                  checked={form.signingPageConfig.requireEmailVerification}
+                  onChange={e => setForm(current => ({
+                    ...current,
+                    signingPageConfig: {
+                      ...current.signingPageConfig,
+                      requireEmailVerification: e.target.checked,
+                    },
+                  }))}
+                />
+                <div>
+                  <Label htmlFor="requireEmailVerification">
+                    {t("contractTemplates.requireEmailVerification")}
+                  </Label>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {t("contractTemplates.requireEmailVerificationHint")}
+                  </p>
+                </div>
+              </div>
             </div>
 
             <div className="flex items-center gap-2">

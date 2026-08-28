@@ -1,9 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  contractRequiresEmailVerification,
   hasContractCompanySignature,
   publicContractBranding,
   sanitizeContractBranding,
+  validateContractBrandingInput,
   validateCompanySignatureDataUrl,
 } from "../src/lib/contractBranding";
 
@@ -61,5 +63,42 @@ test("sanitization keeps valid presentation fields and drops invalid colors", ()
     pdfHeaderText: undefined,
     pdfFooterText: undefined,
     companySignatureDataUrl: undefined,
+    requireEmailVerification: undefined,
   });
+});
+
+test("legacy templates require email verification by default", () => {
+  assert.equal(contractRequiresEmailVerification(undefined), true);
+  assert.equal(contractRequiresEmailVerification(null), true);
+  assert.equal(contractRequiresEmailVerification({}), true);
+});
+
+test("explicit email verification opt-out survives sanitization", () => {
+  assert.deepEqual(sanitizeContractBranding({ requireEmailVerification: false }), {
+    brandName: undefined,
+    logoUrl: undefined,
+    primaryColor: undefined,
+    accentColor: undefined,
+    pageTitle: undefined,
+    pageSubtitle: undefined,
+    pdfHeaderText: undefined,
+    pdfFooterText: undefined,
+    companySignatureDataUrl: undefined,
+    requireEmailVerification: false,
+  });
+  assert.equal(contractRequiresEmailVerification({ requireEmailVerification: false }), false);
+  assert.equal(publicContractBranding({ requireEmailVerification: false })?.requireEmailVerification, false);
+});
+
+test("explicit email verification requirement is preserved", () => {
+  assert.equal(contractRequiresEmailVerification({ requireEmailVerification: true }), true);
+  assert.equal(publicContractBranding({ requireEmailVerification: true })?.requireEmailVerification, true);
+});
+
+test("rejects malformed email verification policy values", () => {
+  assert.equal(
+    validateContractBrandingInput({ requireEmailVerification: "false" }),
+    "Email verification policy must be true or false",
+  );
+  assert.equal(validateContractBrandingInput({ requireEmailVerification: false }), null);
 });

@@ -2319,7 +2319,9 @@
     "fieldMappingEmpty": "Eşlemeyi görmek için yukarıya alan ekleyin.",
     "fieldMappingNotInBody": "Sözleşme gövdesinde bulunamadı",
     "titleLabel": "PDF Başlığı",
-    "titlePlaceholder": "İmzalı PDF'de ve teslim e-postasında gösterilir"
+    "titlePlaceholder": "İmzalı PDF'de ve teslim e-postasında gösterilir",
+    "requireEmailVerification": "İmzalamadan önce e-posta doğrulaması zorunlu",
+    "requireEmailVerificationHint": "Açık olduğunda imzalayan kişi, sözleşmeyi imzalamadan önce e-posta adresine gönderilen kodu doğrulamalıdır."
   },
   "universityContracts": {
     "title": "Üniversite Sözleşmeleri",
