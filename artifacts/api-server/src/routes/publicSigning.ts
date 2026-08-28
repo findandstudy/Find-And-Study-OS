@@ -1,6 +1,6 @@
 import express, { Router, type IRouter } from "express";
 import rateLimit from "express-rate-limit";
-import { db, contractTemplatesTable, signingSessionsTable, signedContractsTable, agentsTable, usersTable, emailVerificationCodesTable } from "@workspace/db";
+import { agentApplicationsTable, db, contractTemplatesTable, signingSessionsTable, signedContractsTable, agentsTable, usersTable, emailVerificationCodesTable } from "@workspace/db";
 import { and, eq, gt, inArray } from "drizzle-orm";
 import crypto from "crypto";
 import { hashToken } from "../lib/signingTokens";
@@ -96,6 +96,24 @@ async function resolveByToken(rawToken: string): Promise<ResolvedSession | { err
   const tokenHash = hashToken(rawToken);
   let [session] = await db.select().from(signingSessionsTable).where(eq(signingSessionsTable.tokenHash, tokenHash));
   if (!session) return { error: "Signing link not found", status: 404 };
+  // Backward compatibility for agency signing links created before verified
+  // application emails were copied into the signing session. This is safe only
+  // when the linked application has a verification timestamp and every email
+  // on the session matches that application.
+  if (!session.verifiedEmail && session.subjectType === "agent_application" && session.subjectId) {
+    const [application] = await db.select({
+      email: agentApplicationsTable.email,
+      emailVerifiedAt: agentApplicationsTable.emailVerifiedAt,
+    }).from(agentApplicationsTable).where(eq(agentApplicationsTable.id, session.subjectId));
+    const applicationEmail = application?.email.trim().toLowerCase();
+    const signerEmail = session.signerEmail.trim().toLowerCase();
+    const expectedEmail = (session.expectedEmail || session.signerEmail).trim().toLowerCase();
+    if (application?.emailVerifiedAt && applicationEmail && applicationEmail === signerEmail && applicationEmail === expectedEmail) {
+      await db.update(signingSessionsTable).set({ verifiedEmail: application.email, updatedAt: new Date() })
+        .where(eq(signingSessionsTable.id, session.id));
+      session = { ...session, verifiedEmail: application.email };
+    }
+  }
   if (session.status === "revoked") return { error: "This signing link has been revoked", status: 410, code: "revoked" };
   // Lazy expire: if past expiresAt and still in a non-terminal state, persist
   // status=expired so admin lists/badges/filters reflect reality without

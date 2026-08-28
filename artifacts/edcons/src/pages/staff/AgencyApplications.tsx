@@ -51,7 +51,7 @@ type AgencyApplication = {
   template?: { id: number; name: string; title: string | null; version: number } | null;
 };
 
-type Staff = { id: number; firstName: string | null; lastName: string | null; role: string; isActive?: boolean };
+type Staff = { id: number; email?: string | null; firstName: string | null; lastName: string | null; role: string; isActive?: boolean };
 type Branch = { id: number; name: string };
 type ContractOption = { id: number; name: string; title: string | null; language: string; entityType: string; version: number };
 
@@ -87,6 +87,7 @@ export default function AgencyApplications() {
   const [staff, setStaff] = useState<Staff[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [contractOptions, setContractOptions] = useState<ContractOption[]>([]);
+  const [directoryError, setDirectoryError] = useState("");
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
   const [reviewNotes, setReviewNotes] = useState("");
   const [changeMessage, setChangeMessage] = useState("");
@@ -109,16 +110,35 @@ export default function AgencyApplications() {
 
   useEffect(() => { const timer = window.setTimeout(load, 250); return () => window.clearTimeout(timer); }, [load]);
   useEffect(() => {
-    Promise.all([
-      customFetch<{ data: Staff[] }>("/api/users?limit=100"),
-      customFetch<{ data: Branch[] }>("/api/branches?archived=0"),
-      customFetch<{ data: ContractOption[] }>("/api/agent-applications/contract-options"),
-    ]).then(([users, branchResponse, contractResponse]) => {
-      setStaff((users.data || []).filter((user) => user.isActive !== false && ["super_admin", "admin", "manager", "staff", "consultant"].includes(user.role)));
-      setBranches(branchResponse.data || []);
-      setContractOptions(contractResponse.data || []);
-    }).catch(() => undefined);
-  }, []);
+    let cancelled = false;
+    const failures: string[] = [];
+    const recordFailure = (label: string, cause: unknown) => {
+      console.error(`[agency-applications] ${label} could not be loaded`, cause);
+      failures.push(label);
+      if (!cancelled) setDirectoryError(tr
+        ? `Bazı inceleme seçenekleri yüklenemedi: ${failures.join(", ")}. Sayfayı yenileyin.`
+        : `Some review options could not be loaded: ${failures.join(", ")}. Refresh the page.`);
+    };
+
+    customFetch<{ data: Staff[] }>("/api/users?roles=super_admin,admin,manager,staff,consultant,editor,accountant&limit=200")
+      .then((response) => {
+        if (cancelled) return;
+        setStaff((response.data || [])
+          .filter((user) => user.isActive !== false)
+          .sort((left, right) => `${left.firstName || ""} ${left.lastName || ""}`.localeCompare(`${right.firstName || ""} ${right.lastName || ""}`)));
+      })
+      .catch((cause) => recordFailure(tr ? "personel" : "staff", cause));
+
+    customFetch<{ data: Branch[] }>("/api/branches?archived=0")
+      .then((response) => { if (!cancelled) setBranches(response.data || []); })
+      .catch((cause) => recordFailure(tr ? "şubeler" : "branches", cause));
+
+    customFetch<{ data: ContractOption[] }>("/api/agent-applications/contract-options")
+      .then((response) => { if (!cancelled) setContractOptions(response.data || []); })
+      .catch((cause) => recordFailure(tr ? "sözleşmeler" : "contracts", cause));
+
+    return () => { cancelled = true; };
+  }, [tr]);
 
   const counts = useMemo(() => rows.reduce<Record<string, number>>((result, row) => ({ ...result, [row.status]: (result[row.status] || 0) + 1 }), {}), [rows]);
 
@@ -159,6 +179,27 @@ export default function AgencyApplications() {
     finally { setSaving(false); }
   }
 
+  async function saveAssignment() {
+    if (!selected) return;
+    setSaving(true); setError("");
+    try {
+      const response = await customFetch<{ data: AgencyApplication }>(`/api/agent-applications/${selected.id}/assignment`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          assignedStaffId: assignedStaffId === "none" ? null : Number(assignedStaffId),
+          branchId: branchId === "none" ? null : Number(branchId),
+        }),
+      });
+      setSelected((current) => current ? { ...current, ...response.data } : current);
+      await load();
+    } catch (cause: any) {
+      setError(cause?.data?.error || cause?.message || "Assignment could not be saved");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function review(nextStatus: "under_review" | "changes_requested" | "rejected") {
     if (!selected) return;
     if (nextStatus === "changes_requested" && !changeMessage.trim()) { setError(tr ? "Düzeltme açıklaması zorunludur." : "A change request message is required."); return; }
@@ -195,13 +236,13 @@ export default function AgencyApplications() {
     </Card>
     <Dialog open={Boolean(selected)} onOpenChange={(open) => { if (!open && !saving) { setSelected(null); setError(""); setTemporaryPassword(""); setPortalPath(""); } }}><DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto"><DialogHeader><DialogTitle>{selected?.firstName} {selected?.lastName} · {selected?.referenceCode}</DialogTitle><DialogDescription>{selected ? `${formatStatus(selected.status)} · ${selected.email}` : ""}</DialogDescription></DialogHeader>
       {selected ? <div className="space-y-5">
-        {error ? <ErrorBox message={error} /> : null}{temporaryPassword ? <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4"><strong>{tr ? "Yerel geçici parola" : "Local temporary password"}</strong><code className="block mt-2 text-lg">{temporaryPassword}</code><p className="mt-2 text-xs text-muted-foreground">{tr ? "Bu yalnızca yerel ortamda gösterilir." : "This is displayed only in the local environment."}</p></div> : null}
+        {error ? <ErrorBox message={error} /> : null}{directoryError ? <ErrorBox message={directoryError} /> : null}{temporaryPassword ? <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4"><strong>{tr ? "Yerel geçici parola" : "Local temporary password"}</strong><code className="block mt-2 text-lg">{temporaryPassword}</code><p className="mt-2 text-xs text-muted-foreground">{tr ? "Bu yalnızca yerel ortamda gösterilir." : "This is displayed only in the local environment."}</p></div> : null}
         {portalPath ? <div className="rounded-xl border border-blue-200 bg-blue-50 p-4"><strong>{tr ? "Yerel imza bağlantısı hazır" : "Local signing link is ready"}</strong><a className="mt-2 block break-all text-sm text-primary underline" href={portalPath}>{portalPath}</a></div> : null}
         {selected.changeRequestMessage ? <div className="rounded-xl border border-amber-200 bg-amber-50 p-4"><strong>{tr ? "İstenen düzeltme" : "Requested changes"}</strong><p className="mt-1 text-sm">{selected.changeRequestMessage}</p></div> : null}
         <div className="grid md:grid-cols-3 gap-4 rounded-xl bg-muted/40 p-4"><Detail label={tr ? "Başvuru tipi" : "Entity type"} value={selected.entityType} /><Detail label={tr ? "Sözleşme dili" : "Contract language"} value={selected.preferredLanguage} /><Detail label={tr ? "Sözleşme" : "Contract"} value={selected.template ? `${selected.template.title || selected.template.name} · v${selected.template.version}` : "—"} /><Detail label={tr ? "Şirket" : "Company"} value={selected.companyName || "—"} /><Detail label={tr ? "Ticari ad" : "Trading name"} value={selected.businessName || "—"} /><Detail label={tr ? "Vergi/sicil" : "Tax/registration"} value={selected.taxNumber || "—"} /><Detail label={tr ? "Telefon" : "Phone"} value={selected.phone || "—"} /><Detail label={tr ? "Konum" : "Location"} value={[selected.city, selected.state, selected.country].filter(Boolean).join(", ") || "—"} /><Detail label={tr ? "Yıllık öğrenci" : "Students/year"} value={selected.estimatedStudents == null ? "—" : String(selected.estimatedStudents)} /><Detail label={tr ? "Faaliyet ülkeleri" : "Operating countries"} value={list(selected.operatingCountries)} /><Detail label={tr ? "Öğrenci pazarları" : "Recruitment markets"} value={list(selected.recruitmentMarkets)} /><Detail label={tr ? "İmza" : "Signature"} value={selected.signedAt ? new Date(selected.signedAt).toLocaleString() : (tr ? "Henüz imzalanmadı" : "Not signed yet")} /></div>
         <div className="rounded-xl border p-4 space-y-3"><div className="flex items-center gap-2"><FileSignature className="h-5 w-5" /><strong>{tr ? "Sözleşme hazırlığı" : "Contract preparation"}</strong></div><p className="text-sm text-muted-foreground">{tr ? "Dil ve başvuru tipine göre otomatik seçilen şablonu, imzaya göndermeden önce değiştirebilirsiniz." : "You can override the template selected from language and applicant type before sending it for signature."}</p><Select value={selectedTemplateId} onValueChange={changeContractTemplate} disabled={saving || ["signed", "approved", "rejected"].includes(selected.status)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{contractOptions.filter((option) => option.entityType.toLowerCase() === selected.entityType.toLowerCase()).map((option) => <SelectItem key={option.id} value={String(option.id)}>{option.title || option.name} · {option.language} · v{option.version}</SelectItem>)}</SelectContent></Select><div className="flex flex-wrap gap-2 text-xs text-muted-foreground"><Badge variant="outline">{selected.contractTemplateSelection === "manual" ? (tr ? "Personel seçimi" : "Staff override") : (tr ? "Otomatik seçim" : "Automatic selection")}</Badge>{selected.emailVerifiedAt ? <Badge variant="outline" className="text-emerald-700"><CheckCircle2 className="mr-1 h-3 w-3" />{tr ? "E-posta doğrulandı" : "Email verified"}</Badge> : null}{selected.contractSentAt ? <Badge variant="outline">{tr ? "İmzaya gönderildi" : "Sent for signature"}</Badge> : null}</div></div>
         <div className="rounded-xl border p-4 space-y-3"><strong>{tr ? "Başvuru belgeleri" : "Application documents"}</strong><div className="flex flex-wrap gap-2">{selected.logoFileKey ? <DocumentButton id={selected.id} kind="logo" label={tr ? "Logo" : "Logo"} /> : null}{selected.representativeIdFileKey ? <DocumentButton id={selected.id} kind="representative-id" label={tr ? "Yetkili kimliği" : "Representative ID"} /> : null}{selected.businessRegistrationFileKey ? <DocumentButton id={selected.id} kind="business-registration" label={tr ? "Şirket kayıt belgesi" : "Business registration"} /> : null}</div></div>
-        <div className="grid md:grid-cols-2 gap-4"><div className="space-y-2"><Label>{tr ? "Atanan personel" : "Assigned staff"}</Label><Select value={assignedStaffId} onValueChange={setAssignedStaffId}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="none">—</SelectItem>{staff.map((person) => <SelectItem key={person.id} value={String(person.id)}>{person.firstName} {person.lastName}</SelectItem>)}</SelectContent></Select></div><div className="space-y-2"><Label>{tr ? "Şube" : "Branch"}</Label><Select value={branchId} onValueChange={setBranchId}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="none">—</SelectItem>{branches.map((branch) => <SelectItem key={branch.id} value={String(branch.id)}>{branch.name}</SelectItem>)}</SelectContent></Select></div></div>
+        <div className="space-y-3"><div className="grid md:grid-cols-2 gap-4"><div className="space-y-2"><Label>{tr ? "Atanan personel" : "Assigned staff"}</Label><Select value={assignedStaffId} onValueChange={setAssignedStaffId} disabled={saving || staff.length === 0}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="none">—</SelectItem>{staff.map((person) => <SelectItem key={person.id} value={String(person.id)}>{[person.firstName, person.lastName].filter(Boolean).join(" ") || person.email || `#${person.id}`}</SelectItem>)}</SelectContent></Select></div><div className="space-y-2"><Label>{tr ? "Şube" : "Branch"}</Label><Select value={branchId} onValueChange={setBranchId} disabled={saving || branches.length === 0}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="none">—</SelectItem>{branches.map((branch) => <SelectItem key={branch.id} value={String(branch.id)}>{branch.name}</SelectItem>)}</SelectContent></Select></div></div><div className="flex justify-end"><Button type="button" variant="outline" onClick={saveAssignment} disabled={saving || !selected || selected.status === "approved"}>{saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}{tr ? "Atamayı kaydet" : "Save assignment"}</Button></div></div>
         <div className="space-y-2"><Label>{tr ? "İnceleme notu" : "Review notes"}</Label><Textarea value={reviewNotes} onChange={(event) => setReviewNotes(event.target.value)} rows={3} /></div>
         <div className="space-y-2"><Label>{tr ? "Başvuru sahibinden istenecek düzeltmeler" : "Changes requested from applicant"}</Label><Textarea value={changeMessage} onChange={(event) => setChangeMessage(event.target.value)} rows={3} /></div>
       </div> : null}

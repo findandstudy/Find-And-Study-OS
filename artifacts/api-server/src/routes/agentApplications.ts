@@ -7,6 +7,7 @@ import {
   agentApplicationsTable,
   agentBranchesTable,
   agentsTable,
+  branchesTable,
   contractTemplatesTable,
   db,
   emailVerificationCodesTable,
@@ -16,7 +17,7 @@ import {
 } from "@workspace/db";
 import { and, desc, eq, gt, ilike, inArray, isNull, ne, or, sql } from "drizzle-orm";
 import { requireAuth, requireRole } from "../lib/auth";
-import { MANAGER_ROLES } from "../lib/roles";
+import { MANAGER_ROLES, STAFF_ROLES } from "../lib/roles";
 import { createSigningToken, hashToken } from "../lib/signingTokens";
 import { resolveContractTemplateBranding } from "../lib/contractTemplateBranding";
 import { hasContractCompanySignature } from "../lib/contractBranding";
@@ -225,6 +226,10 @@ async function createApplicationSession(params: {
     },
     signerEmail: params.application.email,
     expectedEmail: params.application.email,
+    // The agency application already proved ownership of this address before
+    // it could reach the signing stage. Carry that evidence into the signing
+    // session so the applicant is not challenged for the same email twice.
+    verifiedEmail: params.application.emailVerifiedAt ? params.application.email : null,
     signerName: `${params.application.firstName} ${params.application.lastName}`.trim(),
     subjectType: "agent_application",
     subjectId: params.application.id,
@@ -864,6 +869,68 @@ router.patch("/agent-applications/:id/contract-template", requireAuth, requireRo
     }).where(eq(agentApplicationsTable.id, id)).returning();
   });
   await writeAudit({ userId: req.user!.id, action: "agent_application.contract_template_changed", resource: "agent_application", resourceId: id, changes: { templateId: template.id }, ipAddress: req.ip });
+  res.json({ data: updated });
+});
+
+router.patch("/agent-applications/:id/assignment", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
+  const id = Number(req.params.id);
+  const parsed = z.object({
+    assignedStaffId: z.number().int().positive().nullable(),
+    branchId: z.number().int().positive().nullable(),
+  }).safeParse(req.body || {});
+  if (!Number.isInteger(id) || !parsed.success) {
+    res.status(400).json({ error: "Invalid assignment update" });
+    return;
+  }
+
+  const [application] = await db.select({ id: agentApplicationsTable.id, status: agentApplicationsTable.status })
+    .from(agentApplicationsTable).where(eq(agentApplicationsTable.id, id));
+  if (!application) {
+    res.status(404).json({ error: "Application not found" });
+    return;
+  }
+  if (application.status === "approved") {
+    res.status(409).json({ error: "An approved application must be reassigned from the agent record" });
+    return;
+  }
+
+  if (parsed.data.assignedStaffId !== null) {
+    const [staffUser] = await db.select({ id: usersTable.id }).from(usersTable).where(and(
+      eq(usersTable.id, parsed.data.assignedStaffId),
+      eq(usersTable.isActive, true),
+      isNull(usersTable.deletedAt),
+      inArray(usersTable.role, STAFF_ROLES),
+    ));
+    if (!staffUser) {
+      res.status(409).json({ error: "The selected staff member is not available" });
+      return;
+    }
+  }
+
+  if (parsed.data.branchId !== null) {
+    const [branch] = await db.select({ id: branchesTable.id }).from(branchesTable).where(and(
+      eq(branchesTable.id, parsed.data.branchId),
+      isNull(branchesTable.archivedAt),
+    ));
+    if (!branch) {
+      res.status(409).json({ error: "The selected branch is not available" });
+      return;
+    }
+  }
+
+  const [updated] = await db.update(agentApplicationsTable).set({
+    assignedStaffId: parsed.data.assignedStaffId,
+    branchId: parsed.data.branchId,
+    updatedAt: new Date(),
+  }).where(eq(agentApplicationsTable.id, id)).returning();
+  await writeAudit({
+    userId: req.user!.id,
+    action: "agent_application.assignment_changed",
+    resource: "agent_application",
+    resourceId: id,
+    changes: parsed.data,
+    ipAddress: req.ip,
+  });
   res.json({ data: updated });
 });
 

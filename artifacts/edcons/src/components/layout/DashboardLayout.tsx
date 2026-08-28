@@ -54,6 +54,7 @@ import {
   BookOpen,
   Layers,
   ClipboardList,
+  ClipboardCheck,
   Megaphone,
   Palette,
   Languages,
@@ -119,6 +120,7 @@ function getMenuForRole(role: string, t: TFunc, agentStaffPerms?: string[], hasP
 
     const agentNetworkItems: MenuItem[] = [
       { title: t("dashboard.agents"), icon: Handshake, url: '/staff/agents' },
+      { title: t("staffAgents.agencyApplications"), icon: ClipboardCheck, url: '/staff/agency-applications' },
       ...(canSee('contracts.view') ? [{ title: t("dashboard.contracts"), icon: FileText, url: '/admin/contracts', permKey: 'contracts.view' }] : []),
       ...(canSee('contract_templates.view') ? [{ title: t("dashboard.contractTemplates"), icon: FileText, url: '/admin/contract-templates', permKey: 'contract_templates.view' }] : []),
       ...(canSee('university_contracts.view') ? [{ title: t("dashboard.universityContracts"), icon: GraduationCap, url: '/admin/university-contracts', permKey: 'university_contracts.view' }] : []),

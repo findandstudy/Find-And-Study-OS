@@ -88,6 +88,9 @@ test("agency application route preserves exact contract, signature and idempoten
   assert.match(source, /normalizeRegistrationKey\(row\.language\) === l/);
   assert.match(source, /agentApplicationContractHash/);
   assert.match(source, /EMAIL_NOT_VERIFIED/);
+  assert.match(source, /verifiedEmail: params\.application\.emailVerifiedAt \? params\.application\.email : null/);
+  assert.match(source, /agent-applications\/:id\/assignment/);
+  assert.match(source, /The selected staff member is not available/);
   assert.match(source, /alreadyApproved: true/);
   assert.match(source, /isLiveIntegrationsEnabled\(\)/);
   assert.doesNotMatch(source, /process\.env\.ALLOW_LIVE_INTEGRATIONS/);
@@ -100,6 +103,25 @@ test("agency application route preserves exact contract, signature and idempoten
       < source.indexOf("const idempotencyKey ="),
     "email ownership must be verified before an idempotent response can rotate an access token",
   );
+});
+
+test("agency applications are directly reachable and load a dynamic staff directory", async () => {
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  const menuSource = await readFile(path.resolve(here, "../../edcons/src/components/layout/DashboardLayout.tsx"), "utf8");
+  const pageSource = await readFile(path.resolve(here, "../../edcons/src/pages/staff/AgencyApplications.tsx"), "utf8");
+  assert.match(menuSource, /staff\/agency-applications/);
+  assert.match(pageSource, /roles=super_admin,admin,manager,staff,consultant,editor,accountant&limit=200/);
+  assert.match(pageSource, /Save assignment/);
+  assert.doesNotMatch(pageSource, /Promise\.all\(\[\s*customFetch<\{ data: Staff\[\] \}>/);
+});
+
+test("agency signing reuses verified application email without a second challenge", async () => {
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  const signingSource = await readFile(path.resolve(here, "../src/routes/publicSigning.ts"), "utf8");
+  assert.match(signingSource, /session\.subjectType === "agent_application"/);
+  assert.match(signingSource, /application\?\.emailVerifiedAt/);
+  assert.match(signingSource, /applicationEmail === signerEmail && applicationEmail === expectedEmail/);
+  assert.match(signingSource, /verifiedEmail: application\.email/);
 });
 
 test("public agency application uses system-backed multi-selects and exposes invalid fields", async () => {
