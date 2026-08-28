@@ -35,7 +35,7 @@ type Copy = {
   submitting: string; applicationSaved: string; status: string; reference: string; pending: string; changesRequested: string;
   updateApplication: string; rejected: string; approved: string; awaitingSignature: string; signContract: string; signing: string;
   startNew: string; errorRequired: string; errorEmail: string; errorVerify: string; errorPhone: string; errorCompany: string;
-  errorDocuments: string; errorConsent: string; security: string; securityText: string;
+  errorDocuments: string; errorConsent: string; errorVerificationDelivery: string; security: string; securityText: string;
 };
 
 const EN: Copy = {
@@ -65,6 +65,7 @@ const EN: Copy = {
   errorEmail: "Enter a valid business email.", errorVerify: "Verify the business email before continuing.",
   errorPhone: "Enter a valid phone number with country code.", errorCompany: "Company name and registration certificate are required for companies.",
   errorDocuments: "Upload the required documents.", errorConsent: "Accept the declaration before submitting.",
+  errorVerificationDelivery: "The verification email could not be delivered. Please try again shortly.",
   security: "Review before signing", securityText: "Submitting does not create an agent account. Staff review the application, may change the contract template, and invite you to sign. The system creates a unique agency code only after final approval.",
 };
 
@@ -93,7 +94,8 @@ const COPY: Partial<Record<Language, Partial<Copy>>> = {
     signing: "Sözleşme açılıyor…", startNew: "Yeni başvuru başlat", errorRequired: "Zorunlu alanları doldurun.",
     errorEmail: "Geçerli bir kurumsal e-posta girin.", errorVerify: "Devam etmeden önce kurumsal e-postayı doğrulayın.",
     errorPhone: "Ülke koduyla birlikte geçerli bir telefon numarası girin.", errorCompany: "Şirket başvurularında şirket unvanı ve kayıt belgesi zorunludur.",
-    errorDocuments: "Zorunlu belgeleri yükleyin.", errorConsent: "Göndermeden önce beyanı kabul edin.", security: "İmzadan önce inceleme",
+    errorDocuments: "Zorunlu belgeleri yükleyin.", errorConsent: "Göndermeden önce beyanı kabul edin.",
+    errorVerificationDelivery: "Doğrulama e-postası gönderilemedi. Lütfen kısa süre sonra tekrar deneyin.", security: "İmzadan önce inceleme",
     securityText: "Başvuruyu göndermek acente hesabı oluşturmaz. Personel başvuruyu inceler, sözleşme şablonunu değiştirebilir ve sizi imzaya davet eder. Benzersiz acente kodu yalnızca son onaydan sonra sistem tarafından oluşturulur.",
   },
   ar: { title: "كن شريكًا لـ Find And Study", steps: ["بيانات العمل", "الاتصال والتحقق", "المستندات", "المراجعة"], continue: "متابعة", back: "رجوع", submit: "إرسال الطلب", language: "لغة الطلب", entityType: "نوع مقدم الطلب", company: "شركة", individual: "فرد", country: "الدولة", city: "المدينة", firstName: "الاسم", lastName: "اسم العائلة", email: "البريد الإلكتروني للعمل", phone: "الهاتف", verifyEmail: "إرسال رمز التحقق", confirmCode: "تحقق" },
@@ -183,7 +185,8 @@ export default function AgencyApplication() {
     if (!/^\S+@\S+\.\S+$/.test(form.email.trim())) { setError(copy.errorEmail); return; }
     setVerifying(true); setError("");
     try {
-      const response = await customFetch<{ data: { developmentCode?: string } }>("/api/public/agent-applications/email-verification/request", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: form.email, firstName: form.firstName }) });
+      const response = await customFetch<{ data: { dispatched: boolean; developmentCode?: string } }>("/api/public/agent-applications/email-verification/request", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: form.email, firstName: form.firstName }) });
+      if (!response.data.dispatched && !response.data.developmentCode) throw new Error(copy.errorVerificationDelivery);
       setVerificationSent(true); if (response.data.developmentCode) setEmailCode(response.data.developmentCode);
     } catch (cause: any) { setError(cause?.data?.error || cause?.message || "Verification code could not be sent"); }
     finally { setVerifying(false); }

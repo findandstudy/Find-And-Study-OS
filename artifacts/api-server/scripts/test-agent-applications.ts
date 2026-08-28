@@ -10,6 +10,25 @@ const {
   normalizeRegistrationKey,
   pickLatestRegistrationTemplates,
 } = await import(policyModuleUrl) as typeof import("../src/lib/agentApplicationPolicy");
+const liveModeModuleUrl = new URL("../src/lib/inbox/liveMode.ts", import.meta.url).href;
+const { isLiveIntegrationsEnabled } = await import(liveModeModuleUrl) as typeof import("../src/lib/inbox/liveMode");
+
+test("production agency emails are live without requiring a redundant override", () => {
+  const previousNodeEnv = process.env.NODE_ENV;
+  const previousAllowLive = process.env.ALLOW_LIVE_INTEGRATIONS;
+  try {
+    delete process.env.ALLOW_LIVE_INTEGRATIONS;
+    process.env.NODE_ENV = "production";
+    assert.equal(isLiveIntegrationsEnabled(), true);
+    process.env.NODE_ENV = "development";
+    assert.equal(isLiveIntegrationsEnabled(), false);
+  } finally {
+    if (previousNodeEnv === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = previousNodeEnv;
+    if (previousAllowLive === undefined) delete process.env.ALLOW_LIVE_INTEGRATIONS;
+    else process.env.ALLOW_LIVE_INTEGRATIONS = previousAllowLive;
+  }
+});
 
 test("sensitive application evidence fails closed in production without a secret", () => {
   const previousNodeEnv = process.env.NODE_ENV;
@@ -70,7 +89,9 @@ test("agency application route preserves exact contract, signature and idempoten
   assert.match(source, /agentApplicationContractHash/);
   assert.match(source, /EMAIL_NOT_VERIFIED/);
   assert.match(source, /alreadyApproved: true/);
-  assert.match(source, /ALLOW_LIVE_INTEGRATIONS === "true"/);
+  assert.match(source, /isLiveIntegrationsEnabled\(\)/);
+  assert.doesNotMatch(source, /process\.env\.ALLOW_LIVE_INTEGRATIONS/);
+  assert.match(source, /Verification email could not be delivered/);
   assert.doesNotMatch(source, /fallbackTemplate|defaultTemplate/);
   assert.ok(
     source.indexOf("readAgentApplicationEmailProof(body.emailVerificationToken)")

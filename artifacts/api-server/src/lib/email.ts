@@ -909,14 +909,14 @@ export async function sendEmail(
   to: string,
   email: { subject: string; html: string; text: string },
   opts?: { attachments?: EmailAttachment[] },
-): Promise<void> {
+): Promise<boolean> {
   // Route-level integration tests use the developer database, which may carry
   // a real SMTP integration copied from another environment. Never persist or
   // deliver mail in test/dry-run mode; synthetic recipients must not escape the
   // test process and the shared local queue must remain clean.
   if (process.env.NODE_ENV === "test" || process.env.EMAIL_DELIVERY_DISABLED === "true") {
     console.log(`[EMAIL] Delivery disabled; skipped: ${email.subject}`);
-    return;
+    return false;
   }
   console.log(`[EMAIL] Queuing email: ${email.subject}`);
 
@@ -944,6 +944,7 @@ export async function sendEmail(
       console.error("[EMAIL] Failed to update queue status:", err);
     }
   }
+  return sent;
 }
 
 export async function processEmailQueue(): Promise<number> {

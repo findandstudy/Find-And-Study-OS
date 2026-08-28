@@ -21,6 +21,7 @@ import { createSigningToken, hashToken } from "../lib/signingTokens";
 import { resolveContractTemplateBranding } from "../lib/contractTemplateBranding";
 import { hasContractCompanySignature } from "../lib/contractBranding";
 import { toE164 } from "../lib/inbox/phone";
+import { isLiveIntegrationsEnabled } from "../lib/inbox/liveMode";
 import { PgRateLimitStore } from "../lib/pgRateLimiter";
 import { getRateLimitIp, getClientIp } from "../lib/clientIp";
 import {
@@ -361,13 +362,16 @@ router.post("/public/agent-applications/email-verification/request", publicLimit
       expiresAt: new Date(Date.now() + 15 * 60 * 1000),
     });
     let dispatched = false;
-    if (process.env.ALLOW_LIVE_INTEGRATIONS === "true") {
-      await sendEmail(email, {
+    if (isLiveIntegrationsEnabled()) {
+      dispatched = await sendEmail(email, {
         subject: "Verify your Find And Study agency application",
         text: `Your verification code is ${code}. It expires in 15 minutes.`,
         html: `<p>Hello ${parsed.data.firstName || "there"},</p><p>Your agency application verification code is:</p><p style="font-size:28px;font-weight:700;letter-spacing:6px">${code}</p><p>This code expires in 15 minutes.</p>`,
       });
-      dispatched = true;
+      if (!dispatched) {
+        res.status(503).json({ error: "Verification email could not be delivered. Please try again shortly." });
+        return;
+      }
     }
     res.json({ data: {
       dispatched,
@@ -566,7 +570,7 @@ router.post("/public/agent-applications", publicLimiter, async (req, res): Promi
       }).returning();
       return application;
     });
-    if (process.env.ALLOW_LIVE_INTEGRATIONS === "true") {
+    if (isLiveIntegrationsEnabled()) {
       const portalPath = `/${body.preferredLanguage}/agency/apply?application=${encodeURIComponent(rawAccessToken)}`;
       sendEmail(email, {
         subject: `Agency application received · ${application.referenceCode}`,
@@ -891,13 +895,12 @@ router.post("/agent-applications/:id/send-contract", requireAuth, requireRole(..
   }).where(eq(agentApplicationsTable.id, id)).returning();
   const portalPath = `/${application.preferredLanguage || "en"}/agency/apply?application=${encodeURIComponent(rawAccessToken)}`;
   let dispatched = false;
-  if (process.env.ALLOW_LIVE_INTEGRATIONS === "true") {
-    await sendEmail(application.email, {
+  if (isLiveIntegrationsEnabled()) {
+    dispatched = await sendEmail(application.email, {
       subject: `Your agency contract is ready · ${application.referenceCode}`,
       text: `Your application was reviewed. Open ${getAppBaseUrl()}${portalPath} to review and sign the contract.`,
       html: `<p>Your agency application <strong>${application.referenceCode}</strong> was reviewed.</p><p><a href="${getAppBaseUrl()}${portalPath}">Review and sign your contract</a></p>`,
     });
-    dispatched = true;
   }
   await writeAudit({ userId: req.user!.id, action: "agent_application.contract_sent", resource: "agent_application", resourceId: id, changes: { templateId: application.contractTemplateId, dispatched }, ipAddress: req.ip });
   res.json({ data: { application: updated, dispatched, portalPath } });
@@ -1064,7 +1067,7 @@ router.post("/agent-applications/:id/approve", requireAuth, requireRole(...MANAG
     await setAgencyStaff(result.agent.id, [{ userId: result.application.assignedStaffId, isPrimary: true }]).catch((error) => console.error("[agent-applications] assign staff", error));
   }
   let credentialsDispatched = false;
-  if (!result.alreadyApproved && process.env.ALLOW_LIVE_INTEGRATIONS === "true") {
+  if (!result.alreadyApproved && isLiveIntegrationsEnabled()) {
     try {
       const content = await buildAgentCredentialsEmail({
         firstName: result.agent.firstName,
@@ -1073,8 +1076,7 @@ router.post("/agent-applications/:id/approve", requireAuth, requireRole(...MANAG
         loginUrl: `${getAppBaseUrl()}/login`,
         hasContract: true,
       });
-      await sendEmail(result.application.email, content);
-      credentialsDispatched = true;
+      credentialsDispatched = await sendEmail(result.application.email, content);
     } catch (error) { console.error("[agent-applications] credentials", error); }
   }
   await writeAudit({ userId: req.user!.id, action: "agent_application.approved", resource: "agent_application", resourceId: id, changes: { agentId: result.agent.id, credentialsDispatched }, ipAddress: req.ip });
