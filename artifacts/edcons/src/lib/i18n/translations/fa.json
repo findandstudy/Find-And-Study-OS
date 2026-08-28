@@ -4409,7 +4409,10 @@
     "titleLabel": "عنوان PDF",
     "titlePlaceholder": "در PDF امضاشده و ایمیل تحویل نمایش داده می‌شود",
     "requireEmailVerification": "الزام تأیید ایمیل پیش از امضا",
-    "requireEmailVerificationHint": "در صورت فعال بودن، امضاکننده باید پیش از امضای قرارداد کد ارسال‌شده به ایمیل خود را تأیید کند."
+    "requireEmailVerificationHint": "در صورت فعال بودن، امضاکننده باید پیش از امضای قرارداد کد ارسال‌شده به ایمیل خود را تأیید کند.",
+    "emailVerificationRequiredBadge": "تأیید ایمیل الزامی است",
+    "emailVerificationOffBadge": "تأیید ایمیل غیرفعال است",
+    "emailVerificationOffWarning": "تأیید ایمیل امضاکننده برای این الگو غیرفعال است. پیش از ارسال این انتخاب را بررسی کنید."
   },
   "agentOnboarding": {
     "verifyEmail": {

@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import { useI18n } from "@/hooks/use-i18n";
 import { formatDateTime } from "@/lib/i18n";
-import { Link2, Loader2, Plus, RotateCw, Ban, Copy, Pencil, Trash2, BellRing } from "lucide-react";
+import { Link2, Loader2, Plus, RotateCw, Ban, Copy, Pencil, Trash2, BellRing, AlertTriangle } from "lucide-react";
 import { ContractAssociationLink } from "@/components/contracts/ContractAssociationLink";
 import { ContractSubjectPicker } from "@/components/contracts/ContractSubjectPicker";
 
@@ -30,6 +30,7 @@ type Template = {
   version: number;
   isActive: boolean;
   publicationStatus: "published";
+  signingPageConfig?: { requireEmailVerification?: boolean } | null;
 };
 
 const LANG_LABELS: Record<string, string> = {
@@ -80,6 +81,7 @@ export default function SelfFillLinksPage() {
   const [showDialog, setShowDialog] = useState(false);
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState(emptyForm);
+  const selectedTemplate = templates.find(template => String(template.id) === form.templateId) || null;
   const [lastUrl, setLastUrl] = useState("");
 
   const [editSession, setEditSession] = useState<Session | null>(null);
@@ -340,6 +342,12 @@ export default function SelfFillLinksPage() {
                 <div className="mt-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-100">
                   No published contract template is available. Save the template, then publish it before creating a signing link.{" "}
                   <a className="font-medium underline underline-offset-2" href="/admin/contract-templates">Open Contract Templates</a>
+                </div>
+              )}
+              {selectedTemplate?.signingPageConfig?.requireEmailVerification === false && (
+                <div className="mt-2 flex gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-100">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                  <span>{t("contractTemplates.emailVerificationOffWarning")}</span>
                 </div>
               )}
             </div>

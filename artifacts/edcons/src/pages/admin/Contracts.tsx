@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { useI18n } from "@/hooks/use-i18n";
-import { Send, Loader2, FileSignature, RotateCw, Ban, Download, Trash2, ChevronUp, ChevronDown, ChevronsUpDown } from "lucide-react";
+import { Send, Loader2, FileSignature, RotateCw, Ban, Download, Trash2, ChevronUp, ChevronDown, ChevronsUpDown, AlertTriangle } from "lucide-react";
 import { ContractAssociationLink } from "@/components/contracts/ContractAssociationLink";
 import { ContractSubjectPicker, type ContractSubjectSearchResult } from "@/components/contracts/ContractSubjectPicker";
 
@@ -37,6 +37,7 @@ type Template = {
   version: number;
   isActive: boolean;
   publicationStatus: "published";
+  signingPageConfig?: { requireEmailVerification?: boolean } | null;
 };
 
 const LANG_LABELS: Record<string, string> = {
@@ -122,6 +123,7 @@ export default function ContractsPage() {
   const [templateId, setTemplateId] = useState<string>("auto");
   const [expiryDays, setExpiryDays] = useState("14");
   const [sending, setSending] = useState(false);
+  const selectedTemplate = templates.find(template => String(template.id) === templateId) || null;
 
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [bulkDeleting, setBulkDeleting] = useState(false);
@@ -568,6 +570,12 @@ export default function ContractsPage() {
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground mt-1">Auto-match is available for linked agents. Otherwise select a template.</p>
+              {selectedTemplate?.signingPageConfig?.requireEmailVerification === false && (
+                <div className="mt-2 flex gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-100">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                  <span>{t("contractTemplates.emailVerificationOffWarning")}</span>
+                </div>
+              )}
             </div>
             <div>
               <Label>Link validity (days)</Label>

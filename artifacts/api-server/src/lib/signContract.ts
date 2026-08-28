@@ -6,6 +6,7 @@ import { ObjectStorageService } from "./objectStorage";
 import { writeAudit } from "./auditLog";
 import { getAppBaseUrl } from "./email";
 import { withRenderLock } from "./renderLock";
+import { resolveContractEmailVerificationEvidence } from "./contractBranding";
 
 // Convert the canonical /objects/<entityId> key returned by uploadBuffer into a
 // browser-openable URL served by GET /api/storage/objects/*path (requireAuth).
@@ -110,6 +111,15 @@ export async function finalizeSign(opts: {
 
   const signedAt = new Date();
   const finalSignerName = opts.signerName ? opts.signerName.slice(0, 200) : (session.signerName || null);
+  const emailVerificationEvidence = resolveContractEmailVerificationEvidence(
+    session.templateSigningPageConfigSnapshot ?? template.signingPageConfig,
+    {
+      verifiedEmail: session.verifiedEmail,
+      method: session.emailVerificationMethod,
+      verifiedAt: session.emailVerifiedAt,
+      authenticatedAt: opts.triggerUserId ? signedAt : null,
+    },
+  );
 
   // Store the signature as a base64 string directly in the DB row. Previously
   // the signature was uploaded to GCS here, but the GCS upload (up to 30 s) was
@@ -149,6 +159,9 @@ export async function finalizeSign(opts: {
         signerName: finalSignerName,
         signerIp: opts.signerIp,
         signerUserAgent: opts.signerUserAgent,
+        emailVerificationRequired: emailVerificationEvidence.required,
+        emailVerificationMethod: emailVerificationEvidence.method,
+        emailVerifiedAt: emailVerificationEvidence.verifiedAt,
         signedAt,
       }).returning();
       return { ok: true, row };
@@ -177,6 +190,9 @@ export async function finalizeSign(opts: {
     changes: {
       sessionId: session.id, templateId: template.id, agentId: session.agentId,
       signerEmail: session.signerEmail,
+      emailVerificationRequired: emailVerificationEvidence.required,
+      emailVerificationMethod: emailVerificationEvidence.method,
+      emailVerifiedAt: emailVerificationEvidence.verifiedAt?.toISOString() ?? null,
       isPrimaryOnboarding: session.isPrimaryOnboarding,
     },
     ipAddress: opts.signerIp,
@@ -290,6 +306,17 @@ export async function ensureSignedContractPdf(
   }
 
   const signedAt = row.signedAt ? new Date(row.signedAt) : new Date();
+  const emailVerificationEvidence = row.emailVerificationRequired === null
+    ? resolveContractEmailVerificationEvidence(resolvedTemplate.signingPageConfig, {
+      verifiedEmail: session?.verifiedEmail,
+      method: session?.emailVerificationMethod,
+      verifiedAt: session?.emailVerifiedAt,
+    })
+    : {
+      required: row.emailVerificationRequired,
+      method: row.emailVerificationMethod,
+      verifiedAt: row.emailVerifiedAt ? new Date(row.emailVerifiedAt) : null,
+    };
   // Single shared final-render path: every signed-PDF producer (this delivery
   // worker, the legacy backfill sweep, and the admin force-regenerate, which all
   // reach this function) funnels through buildFinalSignedContractHtml. That one
@@ -333,6 +360,9 @@ export async function ensureSignedContractPdf(
       signerIp: row.signerIp,
       signerUserAgent: row.signerUserAgent,
       signedAt,
+      emailVerificationRequired: emailVerificationEvidence.required,
+      emailVerificationMethod: emailVerificationEvidence.method,
+      emailVerifiedAt: emailVerificationEvidence.verifiedAt,
     });
 
     const pdfObjectKey = await objectStorage.uploadBuffer({

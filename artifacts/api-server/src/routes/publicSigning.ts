@@ -113,9 +113,19 @@ async function resolveByToken(rawToken: string): Promise<ResolvedSession | { err
     const signerEmail = session.signerEmail.trim().toLowerCase();
     const expectedEmail = (session.expectedEmail || session.signerEmail).trim().toLowerCase();
     if (application?.emailVerifiedAt && applicationEmail && applicationEmail === signerEmail && applicationEmail === expectedEmail) {
-      await db.update(signingSessionsTable).set({ verifiedEmail: application.email, updatedAt: new Date() })
+      await db.update(signingSessionsTable).set({
+        verifiedEmail: application.email,
+        emailVerificationMethod: "verified_agent_application",
+        emailVerifiedAt: application.emailVerifiedAt,
+        updatedAt: new Date(),
+      })
         .where(eq(signingSessionsTable.id, session.id));
-      session = { ...session, verifiedEmail: application.email };
+      session = {
+        ...session,
+        verifiedEmail: application.email,
+        emailVerificationMethod: "verified_agent_application",
+        emailVerifiedAt: application.emailVerifiedAt,
+      };
     }
   }
   if (session.status === "revoked") return { error: "This signing link has been revoked", status: 410, code: "revoked" };
@@ -442,7 +452,11 @@ router.post("/public/sign/:token/verify-code", codeLimiter, async (req, res): Pr
     // self_fill: adopt the verified email as the signer email (signer supplies
     // their own identity). admin_driven: signerEmail is fixed at dispatch time
     // and must NEVER be overwritten — only mark the email as verified.
-    const sessionUpdate: Record<string, unknown> = { verifiedEmail: email };
+    const sessionUpdate: Record<string, unknown> = {
+      verifiedEmail: email,
+      emailVerificationMethod: "one_time_code",
+      emailVerifiedAt: new Date(),
+    };
     if (r.session.mode === "self_fill") sessionUpdate.signerEmail = email;
     await db.update(signingSessionsTable).set(sessionUpdate).where(eq(signingSessionsTable.id, r.session.id));
     res.json({ success: true, verifiedEmail: email });

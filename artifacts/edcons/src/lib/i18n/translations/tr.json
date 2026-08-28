@@ -2321,7 +2321,10 @@
     "titleLabel": "PDF Başlığı",
     "titlePlaceholder": "İmzalı PDF'de ve teslim e-postasında gösterilir",
     "requireEmailVerification": "İmzalamadan önce e-posta doğrulaması zorunlu",
-    "requireEmailVerificationHint": "Açık olduğunda imzalayan kişi, sözleşmeyi imzalamadan önce e-posta adresine gönderilen kodu doğrulamalıdır."
+    "requireEmailVerificationHint": "Açık olduğunda imzalayan kişi, sözleşmeyi imzalamadan önce e-posta adresine gönderilen kodu doğrulamalıdır.",
+    "emailVerificationRequiredBadge": "E-posta doğrulaması zorunlu",
+    "emailVerificationOffBadge": "E-posta doğrulaması kapalı",
+    "emailVerificationOffWarning": "Bu şablonda imzalayan kişinin e-posta doğrulaması kapalıdır. Göndermeden önce bu tercihi kontrol edin."
   },
   "universityContracts": {
     "title": "Üniversite Sözleşmeleri",

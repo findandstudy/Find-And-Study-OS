@@ -230,6 +230,8 @@ async function createApplicationSession(params: {
     // it could reach the signing stage. Carry that evidence into the signing
     // session so the applicant is not challenged for the same email twice.
     verifiedEmail: params.application.emailVerifiedAt ? params.application.email : null,
+    emailVerificationMethod: params.application.emailVerifiedAt ? "verified_agent_application" : null,
+    emailVerifiedAt: params.application.emailVerifiedAt,
     signerName: `${params.application.firstName} ${params.application.lastName}`.trim(),
     subjectType: "agent_application",
     subjectId: params.application.id,
@@ -763,6 +765,7 @@ router.get("/agent-applications/contract-options", requireAuth, requireRole(...M
       language: template.language,
       entityType: template.entityType,
       version: template.version,
+      signingPageConfig: template.signingPageConfig,
     })) });
   } catch (error) {
     console.error("[agent-applications] staff contract options", error);

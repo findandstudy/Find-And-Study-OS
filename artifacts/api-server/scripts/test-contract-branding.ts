@@ -4,6 +4,7 @@ import {
   contractRequiresEmailVerification,
   hasContractCompanySignature,
   publicContractBranding,
+  resolveContractEmailVerificationEvidence,
   sanitizeContractBranding,
   validateContractBrandingInput,
   validateCompanySignatureDataUrl,
@@ -101,4 +102,36 @@ test("rejects malformed email verification policy values", () => {
     "Email verification policy must be true or false",
   );
   assert.equal(validateContractBrandingInput({ requireEmailVerification: false }), null);
+});
+
+test("DormBooking-style templates preserve one-time-code evidence", () => {
+  const verifiedAt = new Date("2026-08-28T12:00:00.000Z");
+  assert.deepEqual(
+    resolveContractEmailVerificationEvidence(
+      { requireEmailVerification: true },
+      { method: "one_time_code", verifiedAt },
+    ),
+    { required: true, method: "one_time_code", verifiedAt },
+  );
+});
+
+test("an already verified agency application does not require a second OTP", () => {
+  const verifiedAt = new Date("2026-08-28T12:30:00.000Z");
+  assert.deepEqual(
+    resolveContractEmailVerificationEvidence(
+      { requireEmailVerification: true },
+      { method: "verified_agent_application", verifiedAt },
+    ),
+    { required: true, method: "verified_agent_application", verifiedAt },
+  );
+});
+
+test("verification-disabled templates record the explicit policy instead of stale evidence", () => {
+  assert.deepEqual(
+    resolveContractEmailVerificationEvidence(
+      { requireEmailVerification: false },
+      { method: "one_time_code", verifiedAt: new Date("2026-08-28T12:00:00.000Z") },
+    ),
+    { required: false, method: "not_required", verifiedAt: null },
+  );
 });

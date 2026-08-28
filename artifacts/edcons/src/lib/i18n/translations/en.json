@@ -2380,7 +2380,10 @@
     "titleLabel": "PDF Title",
     "titlePlaceholder": "Shown on the signed PDF and in the delivery email",
     "requireEmailVerification": "Require email verification before signing",
-    "requireEmailVerificationHint": "When enabled, the signer must verify a code sent to their email address before the contract can be signed."
+    "requireEmailVerificationHint": "When enabled, the signer must verify a code sent to their email address before the contract can be signed.",
+    "emailVerificationRequiredBadge": "Email verification required",
+    "emailVerificationOffBadge": "Email verification off",
+    "emailVerificationOffWarning": "Signer email verification is disabled for this template. Review this choice before sending."
   },
   "universityContracts": {
     "title": "University Contracts",

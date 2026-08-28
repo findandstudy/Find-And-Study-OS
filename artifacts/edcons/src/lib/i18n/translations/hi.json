@@ -4409,7 +4409,10 @@
     "titleLabel": "PDF शीर्षक",
     "titlePlaceholder": "हस्ताक्षरित PDF और डिलीवरी ईमेल में दिखाया जाता है",
     "requireEmailVerification": "हस्ताक्षर से पहले ईमेल सत्यापन आवश्यक करें",
-    "requireEmailVerificationHint": "सक्रिय होने पर, हस्ताक्षरकर्ता को अनुबंध पर हस्ताक्षर करने से पहले ईमेल पर भेजा गया कोड सत्यापित करना होगा।"
+    "requireEmailVerificationHint": "सक्रिय होने पर, हस्ताक्षरकर्ता को अनुबंध पर हस्ताक्षर करने से पहले ईमेल पर भेजा गया कोड सत्यापित करना होगा।",
+    "emailVerificationRequiredBadge": "ईमेल सत्यापन आवश्यक",
+    "emailVerificationOffBadge": "ईमेल सत्यापन बंद",
+    "emailVerificationOffWarning": "इस टेम्पलेट के लिए हस्ताक्षरकर्ता का ईमेल सत्यापन बंद है। भेजने से पहले इस चयन की जाँच करें।"
   },
   "agentOnboarding": {
     "verifyEmail": {

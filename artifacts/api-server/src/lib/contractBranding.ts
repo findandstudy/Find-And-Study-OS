@@ -16,6 +16,19 @@ export type ContractBrandingConfig = {
   requireEmailVerification?: boolean;
 };
 
+export type ContractEmailVerificationMethod =
+  | "one_time_code"
+  | "verified_agent_application"
+  | "authenticated_portal_session"
+  | "legacy_verified_email"
+  | "not_required";
+
+export type ContractEmailVerificationEvidence = {
+  required: boolean;
+  method: ContractEmailVerificationMethod | null;
+  verifiedAt: Date | null;
+};
+
 const HEX_COLOR = /^#[0-9a-f]{6}$/i;
 const IMAGE_DATA_URL = /^data:image\/(png|jpeg);base64,([a-z0-9+/]+={0,2})$/i;
 const MAX_SIGNATURE_BYTES = 2 * 1024 * 1024;
@@ -59,6 +72,53 @@ export function sanitizeContractBranding(value: unknown): ContractBrandingConfig
 /** Legacy templates (no explicit setting) continue to require verification. */
 export function contractRequiresEmailVerification(value: unknown): boolean {
   return sanitizeContractBranding(value)?.requireEmailVerification !== false;
+}
+
+const EMAIL_VERIFICATION_METHODS = new Set<ContractEmailVerificationMethod>([
+  "one_time_code",
+  "verified_agent_application",
+  "authenticated_portal_session",
+  "legacy_verified_email",
+  "not_required",
+]);
+
+function safeDate(value: Date | string | null | undefined): Date | null {
+  if (!value) return null;
+  const parsed = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+/**
+ * Resolve the immutable verification evidence copied onto a signed contract.
+ * Explicit session evidence wins; legacy rows retain a safe, labelled fallback.
+ */
+export function resolveContractEmailVerificationEvidence(
+  config: unknown,
+  input: {
+    verifiedEmail?: string | null;
+    method?: string | null;
+    verifiedAt?: Date | string | null;
+    authenticatedAt?: Date | string | null;
+  } = {},
+): ContractEmailVerificationEvidence {
+  if (!contractRequiresEmailVerification(config)) {
+    return { required: false, method: "not_required", verifiedAt: null };
+  }
+
+  const explicitMethod = input.method && EMAIL_VERIFICATION_METHODS.has(input.method as ContractEmailVerificationMethod)
+    ? input.method as ContractEmailVerificationMethod
+    : null;
+  if (explicitMethod && explicitMethod !== "not_required") {
+    return { required: true, method: explicitMethod, verifiedAt: safeDate(input.verifiedAt) };
+  }
+  if (input.verifiedEmail) {
+    return { required: true, method: "legacy_verified_email", verifiedAt: safeDate(input.verifiedAt) };
+  }
+  const authenticatedAt = safeDate(input.authenticatedAt);
+  if (authenticatedAt) {
+    return { required: true, method: "authenticated_portal_session", verifiedAt: authenticatedAt };
+  }
+  return { required: true, method: null, verifiedAt: null };
 }
 
 /**

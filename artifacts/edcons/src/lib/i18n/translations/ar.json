@@ -4460,7 +4460,10 @@
     "titleLabel": "عنوان PDF",
     "titlePlaceholder": "يظهر في PDF الموقع وفي رسالة التسليم",
     "requireEmailVerification": "طلب التحقق من البريد الإلكتروني قبل التوقيع",
-    "requireEmailVerificationHint": "عند التفعيل، يجب على الموقّع التحقق من الرمز المرسل إلى بريده الإلكتروني قبل توقيع العقد."
+    "requireEmailVerificationHint": "عند التفعيل، يجب على الموقّع التحقق من الرمز المرسل إلى بريده الإلكتروني قبل توقيع العقد.",
+    "emailVerificationRequiredBadge": "التحقق من البريد الإلكتروني مطلوب",
+    "emailVerificationOffBadge": "التحقق من البريد الإلكتروني متوقف",
+    "emailVerificationOffWarning": "تم تعطيل التحقق من بريد الموقّع لهذا القالب. راجع هذا الخيار قبل الإرسال."
   },
   "agentOnboarding": {
     "verifyEmail": {

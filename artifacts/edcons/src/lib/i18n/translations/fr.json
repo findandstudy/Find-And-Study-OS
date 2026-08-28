@@ -4460,7 +4460,10 @@
     "titleLabel": "Titre du PDF",
     "titlePlaceholder": "Affiché sur le PDF signé et dans l'e-mail de livraison",
     "requireEmailVerification": "Exiger la vérification de l’e-mail avant la signature",
-    "requireEmailVerificationHint": "Lorsque cette option est activée, le signataire doit vérifier le code envoyé à son adresse e-mail avant de signer le contrat."
+    "requireEmailVerificationHint": "Lorsque cette option est activée, le signataire doit vérifier le code envoyé à son adresse e-mail avant de signer le contrat.",
+    "emailVerificationRequiredBadge": "Vérification de l’e-mail requise",
+    "emailVerificationOffBadge": "Vérification de l’e-mail désactivée",
+    "emailVerificationOffWarning": "La vérification de l’e-mail du signataire est désactivée pour ce modèle. Vérifiez ce choix avant l’envoi."
   },
   "agentOnboarding": {
     "verifyEmail": {

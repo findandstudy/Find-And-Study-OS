@@ -53,7 +53,15 @@ type AgencyApplication = {
 
 type Staff = { id: number; email?: string | null; firstName: string | null; lastName: string | null; role: string; isActive?: boolean };
 type Branch = { id: number; name: string };
-type ContractOption = { id: number; name: string; title: string | null; language: string; entityType: string; version: number };
+type ContractOption = {
+  id: number;
+  name: string;
+  title: string | null;
+  language: string;
+  entityType: string;
+  version: number;
+  signingPageConfig?: { requireEmailVerification?: boolean } | null;
+};
 
 const STATUS_OPTIONS = ["all", "submitted", "under_review", "changes_requested", "awaiting_signature", "signed", "approved", "rejected"];
 const STATUS_STYLE: Record<string, string> = {
@@ -141,6 +149,7 @@ export default function AgencyApplications() {
   }, [tr]);
 
   const counts = useMemo(() => rows.reduce<Record<string, number>>((result, row) => ({ ...result, [row.status]: (result[row.status] || 0) + 1 }), {}), [rows]);
+  const selectedContractOption = contractOptions.find(option => String(option.id) === selectedTemplateId) || null;
 
   async function openDetails(row: AgencyApplication) {
     setError(""); setTemporaryPassword(""); setPortalPath("");
@@ -240,7 +249,21 @@ export default function AgencyApplications() {
         {portalPath ? <div className="rounded-xl border border-blue-200 bg-blue-50 p-4"><strong>{tr ? "Yerel imza bağlantısı hazır" : "Local signing link is ready"}</strong><a className="mt-2 block break-all text-sm text-primary underline" href={portalPath}>{portalPath}</a></div> : null}
         {selected.changeRequestMessage ? <div className="rounded-xl border border-amber-200 bg-amber-50 p-4"><strong>{tr ? "İstenen düzeltme" : "Requested changes"}</strong><p className="mt-1 text-sm">{selected.changeRequestMessage}</p></div> : null}
         <div className="grid md:grid-cols-3 gap-4 rounded-xl bg-muted/40 p-4"><Detail label={tr ? "Başvuru tipi" : "Entity type"} value={selected.entityType} /><Detail label={tr ? "Sözleşme dili" : "Contract language"} value={selected.preferredLanguage} /><Detail label={tr ? "Sözleşme" : "Contract"} value={selected.template ? `${selected.template.title || selected.template.name} · v${selected.template.version}` : "—"} /><Detail label={tr ? "Şirket" : "Company"} value={selected.companyName || "—"} /><Detail label={tr ? "Ticari ad" : "Trading name"} value={selected.businessName || "—"} /><Detail label={tr ? "Vergi/sicil" : "Tax/registration"} value={selected.taxNumber || "—"} /><Detail label={tr ? "Telefon" : "Phone"} value={selected.phone || "—"} /><Detail label={tr ? "Konum" : "Location"} value={[selected.city, selected.state, selected.country].filter(Boolean).join(", ") || "—"} /><Detail label={tr ? "Yıllık öğrenci" : "Students/year"} value={selected.estimatedStudents == null ? "—" : String(selected.estimatedStudents)} /><Detail label={tr ? "Faaliyet ülkeleri" : "Operating countries"} value={list(selected.operatingCountries)} /><Detail label={tr ? "Öğrenci pazarları" : "Recruitment markets"} value={list(selected.recruitmentMarkets)} /><Detail label={tr ? "İmza" : "Signature"} value={selected.signedAt ? new Date(selected.signedAt).toLocaleString() : (tr ? "Henüz imzalanmadı" : "Not signed yet")} /></div>
-        <div className="rounded-xl border p-4 space-y-3"><div className="flex items-center gap-2"><FileSignature className="h-5 w-5" /><strong>{tr ? "Sözleşme hazırlığı" : "Contract preparation"}</strong></div><p className="text-sm text-muted-foreground">{tr ? "Dil ve başvuru tipine göre otomatik seçilen şablonu, imzaya göndermeden önce değiştirebilirsiniz." : "You can override the template selected from language and applicant type before sending it for signature."}</p><Select value={selectedTemplateId} onValueChange={changeContractTemplate} disabled={saving || ["signed", "approved", "rejected"].includes(selected.status)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{contractOptions.filter((option) => option.entityType.toLowerCase() === selected.entityType.toLowerCase()).map((option) => <SelectItem key={option.id} value={String(option.id)}>{option.title || option.name} · {option.language} · v{option.version}</SelectItem>)}</SelectContent></Select><div className="flex flex-wrap gap-2 text-xs text-muted-foreground"><Badge variant="outline">{selected.contractTemplateSelection === "manual" ? (tr ? "Personel seçimi" : "Staff override") : (tr ? "Otomatik seçim" : "Automatic selection")}</Badge>{selected.emailVerifiedAt ? <Badge variant="outline" className="text-emerald-700"><CheckCircle2 className="mr-1 h-3 w-3" />{tr ? "E-posta doğrulandı" : "Email verified"}</Badge> : null}{selected.contractSentAt ? <Badge variant="outline">{tr ? "İmzaya gönderildi" : "Sent for signature"}</Badge> : null}</div></div>
+        <div className="rounded-xl border p-4 space-y-3">
+          <div className="flex items-center gap-2"><FileSignature className="h-5 w-5" /><strong>{tr ? "Sözleşme hazırlığı" : "Contract preparation"}</strong></div>
+          <p className="text-sm text-muted-foreground">{tr ? "Dil ve başvuru tipine göre otomatik seçilen şablonu, imzaya göndermeden önce değiştirebilirsiniz." : "You can override the template selected from language and applicant type before sending it for signature."}</p>
+          <Select value={selectedTemplateId} onValueChange={changeContractTemplate} disabled={saving || ["signed", "approved", "rejected"].includes(selected.status)}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>{contractOptions.filter((option) => option.entityType.toLowerCase() === selected.entityType.toLowerCase()).map((option) => <SelectItem key={option.id} value={String(option.id)}>{option.title || option.name} · {option.language} · v{option.version}</SelectItem>)}</SelectContent>
+          </Select>
+          {selectedContractOption?.signingPageConfig?.requireEmailVerification === false && (
+            <div className="flex gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-100">
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+              <span>{tr ? "Bu şablonda imzalayan kişinin e-posta doğrulaması kapalıdır. Göndermeden önce bu tercihi kontrol edin." : "Signer email verification is disabled for this template. Review this choice before sending."}</span>
+            </div>
+          )}
+          <div className="flex flex-wrap gap-2 text-xs text-muted-foreground"><Badge variant="outline">{selected.contractTemplateSelection === "manual" ? (tr ? "Personel seçimi" : "Staff override") : (tr ? "Otomatik seçim" : "Automatic selection")}</Badge>{selected.emailVerifiedAt ? <Badge variant="outline" className="text-emerald-700"><CheckCircle2 className="mr-1 h-3 w-3" />{tr ? "E-posta doğrulandı" : "Email verified"}</Badge> : null}{selected.contractSentAt ? <Badge variant="outline">{tr ? "İmzaya gönderildi" : "Sent for signature"}</Badge> : null}</div>
+        </div>
         <div className="rounded-xl border p-4 space-y-3"><strong>{tr ? "Başvuru belgeleri" : "Application documents"}</strong><div className="flex flex-wrap gap-2">{selected.logoFileKey ? <DocumentButton id={selected.id} kind="logo" label={tr ? "Logo" : "Logo"} /> : null}{selected.representativeIdFileKey ? <DocumentButton id={selected.id} kind="representative-id" label={tr ? "Yetkili kimliği" : "Representative ID"} /> : null}{selected.businessRegistrationFileKey ? <DocumentButton id={selected.id} kind="business-registration" label={tr ? "Şirket kayıt belgesi" : "Business registration"} /> : null}</div></div>
         <div className="space-y-3"><div className="grid md:grid-cols-2 gap-4"><div className="space-y-2"><Label>{tr ? "Atanan personel" : "Assigned staff"}</Label><Select value={assignedStaffId} onValueChange={setAssignedStaffId} disabled={saving || staff.length === 0}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="none">—</SelectItem>{staff.map((person) => <SelectItem key={person.id} value={String(person.id)}>{[person.firstName, person.lastName].filter(Boolean).join(" ") || person.email || `#${person.id}`}</SelectItem>)}</SelectContent></Select></div><div className="space-y-2"><Label>{tr ? "Şube" : "Branch"}</Label><Select value={branchId} onValueChange={setBranchId} disabled={saving || branches.length === 0}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="none">—</SelectItem>{branches.map((branch) => <SelectItem key={branch.id} value={String(branch.id)}>{branch.name}</SelectItem>)}</SelectContent></Select></div></div><div className="flex justify-end"><Button type="button" variant="outline" onClick={saveAssignment} disabled={saving || !selected || selected.status === "approved"}>{saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}{tr ? "Atamayı kaydet" : "Save assignment"}</Button></div></div>
         <div className="space-y-2"><Label>{tr ? "İnceleme notu" : "Review notes"}</Label><Textarea value={reviewNotes} onChange={(event) => setReviewNotes(event.target.value)} rows={3} /></div>

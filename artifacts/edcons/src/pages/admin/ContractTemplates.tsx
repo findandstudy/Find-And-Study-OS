@@ -429,6 +429,17 @@ export default function ContractTemplatesPage() {
                       <Badge variant={tpl.publicationStatus === "published" ? "default" : tpl.publicationStatus === "review_pending" ? "secondary" : "outline"}>
                         {tpl.publicationStatus === "review_pending" ? "In review" : tpl.publicationStatus}
                       </Badge>
+                      {tpl.signingPageConfig?.requireEmailVerification === false ? (
+                        <Badge variant="outline" className="border-amber-400 bg-amber-50 text-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
+                          <AlertTriangle className="mr-1 h-3 w-3" />
+                          {t("contractTemplates.emailVerificationOffBadge")}
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="border-emerald-400 bg-emerald-50 text-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-200">
+                          <CheckCircle2 className="mr-1 h-3 w-3" />
+                          {t("contractTemplates.emailVerificationRequiredBadge")}
+                        </Badge>
+                      )}
                       {!tpl.isActive && <Badge variant="secondary">{t("contractTemplates.statusInactive")}</Badge>}
                     </div>
                   </td>

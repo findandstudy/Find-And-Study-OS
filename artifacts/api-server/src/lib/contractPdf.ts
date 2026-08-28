@@ -11,6 +11,9 @@ interface BuildPdfParams {
   signerIp?: string | null;
   signerUserAgent?: string | null;
   signedAt: Date;
+  emailVerificationRequired?: boolean | null;
+  emailVerificationMethod?: string | null;
+  emailVerifiedAt?: Date | null;
 }
 
 interface BuildPdfResult {
@@ -57,6 +60,16 @@ function resolveChromiumPath(): string | undefined {
 function evidencePageHtml(params: BuildPdfParams, evidenceHash: string): string {
   const row = (label: string, value: string) =>
     `<tr><td style="padding:6px 12px 6px 0;color:#64748b;white-space:nowrap;vertical-align:top;">${escapeHtml(label)}</td><td style="padding:6px 0;color:#0f172a;word-break:break-word;">${escapeHtml(value)}</td></tr>`;
+  const verificationMethod: Record<string, string> = {
+    one_time_code: "Tek kullanımlık e-posta kodu / Email one-time code",
+    verified_agent_application: "Doğrulanmış acente başvurusu / Verified agency application",
+    authenticated_portal_session: "Kimliği doğrulanmış portal oturumu / Authenticated portal session",
+    legacy_verified_email: "Eski doğrulanmış e-posta kaydı / Legacy verified email",
+    not_required: "Gerekli değil / Not required",
+  };
+  const methodLabel = params.emailVerificationMethod
+    ? verificationMethod[params.emailVerificationMethod] || params.emailVerificationMethod
+    : "Kayıt yok / Not recorded";
   return `<section style="max-width:920px;margin:0 auto;padding:18px;font-size:12px;color:#0f172a;">
   <h1 style="font-size:20px;margin:0 0 6px;color:#143591;">Delil Sayfası / Evidence Page</h1>
   <p style="margin:0 0 18px;color:#475569;">Bu sayfa imzalanan sözleşmenin kriptografik delilini kaydeder. / This page records the cryptographic evidence for the signed contract.</p>
@@ -66,6 +79,9 @@ function evidencePageHtml(params: BuildPdfParams, evidenceHash: string): string 
     ${row("IP adresi / IP address", params.signerIp || "-")}
     ${row("Tarayıcı / User agent", params.signerUserAgent || "-")}
     ${row("İmza zamanı (UTC) / Signed at", params.signedAt.toISOString())}
+    ${row("E-posta doğrulama politikası / Email verification policy", params.emailVerificationRequired === false ? "Zorunlu değil / Not required" : "Zorunlu / Required")}
+    ${row("Doğrulama yöntemi / Verification method", methodLabel)}
+    ${row("Doğrulama zamanı (UTC) / Verified at", params.emailVerifiedAt?.toISOString() || "-")}
     ${row("Şablon / Template", params.templateName)}
   </table>
   <div style="margin-top:18px;">
@@ -252,6 +268,12 @@ export async function buildSignedPdf(params: BuildPdfParams): Promise<BuildPdfRe
     hasher.update(params.signerName || "");
     hasher.update("|");
     hasher.update(params.signedAt.toISOString());
+    hasher.update("|");
+    hasher.update(params.emailVerificationRequired === false ? "not_required" : "required");
+    hasher.update("|");
+    hasher.update(params.emailVerificationMethod || "");
+    hasher.update("|");
+    hasher.update(params.emailVerifiedAt?.toISOString() || "");
     const evidenceHash = hasher.digest("hex");
 
     browser2 = await chromium.launch({ executablePath, args: CHROMIUM_LAUNCH_ARGS });

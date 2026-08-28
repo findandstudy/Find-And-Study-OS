@@ -946,6 +946,14 @@ async function seedClaudeIntegration() {
     // creation so send-code/verify-code cannot redirect a code to an arbitrary
     // inbox after the link has been issued. Idempotent.
     await pool.query(`ALTER TABLE signing_sessions ADD COLUMN IF NOT EXISTS expected_email TEXT`);
+    // Immutable email-verification evidence. Signing sessions capture how and
+    // when ownership was established; signed contracts snapshot that policy and
+    // evidence so later template edits cannot rewrite the historical record.
+    await pool.query(`ALTER TABLE signing_sessions ADD COLUMN IF NOT EXISTS email_verification_method TEXT`);
+    await pool.query(`ALTER TABLE signing_sessions ADD COLUMN IF NOT EXISTS email_verified_at TIMESTAMPTZ`);
+    await pool.query(`ALTER TABLE signed_contracts ADD COLUMN IF NOT EXISTS email_verification_required BOOLEAN`);
+    await pool.query(`ALTER TABLE signed_contracts ADD COLUMN IF NOT EXISTS email_verification_method TEXT`);
+    await pool.query(`ALTER TABLE signed_contracts ADD COLUMN IF NOT EXISTS email_verified_at TIMESTAMPTZ`);
 
     // Company Contracts: externally-signed agreements with company
     // counterparties. Mirrors university_contracts but the counterparty is

@@ -4409,7 +4409,10 @@
     "titleLabel": "PDF 标题",
     "titlePlaceholder": "显示在已签署的 PDF 和交付邮件中",
     "requireEmailVerification": "签署前必须验证电子邮件",
-    "requireEmailVerificationHint": "启用后，签署人必须先验证发送到其电子邮箱的验证码，才能签署合同。"
+    "requireEmailVerificationHint": "启用后，签署人必须先验证发送到其电子邮箱的验证码，才能签署合同。",
+    "emailVerificationRequiredBadge": "必须验证电子邮件",
+    "emailVerificationOffBadge": "电子邮件验证已关闭",
+    "emailVerificationOffWarning": "此模板已关闭签署人电子邮件验证。发送前请检查此选项。"
   },
   "agentOnboarding": {
     "verifyEmail": {

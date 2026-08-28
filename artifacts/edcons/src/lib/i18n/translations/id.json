@@ -4409,7 +4409,10 @@
     "titleLabel": "Judul PDF",
     "titlePlaceholder": "Ditampilkan di PDF yang ditandatangani dan email pengiriman",
     "requireEmailVerification": "Wajibkan verifikasi email sebelum menandatangani",
-    "requireEmailVerificationHint": "Jika diaktifkan, penanda tangan harus memverifikasi kode yang dikirim ke email sebelum kontrak dapat ditandatangani."
+    "requireEmailVerificationHint": "Jika diaktifkan, penanda tangan harus memverifikasi kode yang dikirim ke email sebelum kontrak dapat ditandatangani.",
+    "emailVerificationRequiredBadge": "Verifikasi email wajib",
+    "emailVerificationOffBadge": "Verifikasi email nonaktif",
+    "emailVerificationOffWarning": "Verifikasi email penanda tangan dinonaktifkan untuk templat ini. Tinjau pilihan ini sebelum mengirim."
   },
   "agentOnboarding": {
     "verifyEmail": {

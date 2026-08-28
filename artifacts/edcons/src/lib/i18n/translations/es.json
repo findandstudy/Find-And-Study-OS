@@ -4409,7 +4409,10 @@
     "titleLabel": "Título del PDF",
     "titlePlaceholder": "Se muestra en el PDF firmado y en el correo de entrega",
     "requireEmailVerification": "Exigir verificación del correo antes de firmar",
-    "requireEmailVerificationHint": "Cuando está activado, el firmante debe verificar el código enviado a su correo electrónico antes de firmar el contrato."
+    "requireEmailVerificationHint": "Cuando está activado, el firmante debe verificar el código enviado a su correo electrónico antes de firmar el contrato.",
+    "emailVerificationRequiredBadge": "Verificación de correo obligatoria",
+    "emailVerificationOffBadge": "Verificación de correo desactivada",
+    "emailVerificationOffWarning": "La verificación del correo del firmante está desactivada para esta plantilla. Revise esta opción antes de enviar."
   },
   "agentOnboarding": {
     "verifyEmail": {

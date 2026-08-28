@@ -4460,7 +4460,10 @@
     "titleLabel": "Заголовок PDF",
     "titlePlaceholder": "Отображается в подписанном PDF и в письме о доставке",
     "requireEmailVerification": "Требовать подтверждение электронной почты перед подписанием",
-    "requireEmailVerificationHint": "Если включено, подписант должен подтвердить код, отправленный на его электронную почту, прежде чем подписать договор."
+    "requireEmailVerificationHint": "Если включено, подписант должен подтвердить код, отправленный на его электронную почту, прежде чем подписать договор.",
+    "emailVerificationRequiredBadge": "Требуется подтверждение e-mail",
+    "emailVerificationOffBadge": "Подтверждение e-mail отключено",
+    "emailVerificationOffWarning": "Для этого шаблона подтверждение e-mail подписанта отключено. Проверьте этот выбор перед отправкой."
   },
   "agentOnboarding": {
     "verifyEmail": {
