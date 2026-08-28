@@ -2661,6 +2661,8 @@
     "whatsappTemplateSyncFailed": "Échec de la synchronisation des modèles WhatsApp",
     "whatsappTemplateSubmitted": "Modèle soumis pour approbation",
     "whatsappTemplateSubmitFailed": "Échec de l'envoi du modèle WhatsApp",
+    "whatsappTemplateBodyLimit": "Meta autorise jusqu'à 1 024 caractères dans le corps d'un modèle WhatsApp.",
+    "whatsappTemplateBodyTooLong": "Le corps du modèle WhatsApp ne peut pas dépasser 1 024 caractères.",
     "failedToSendTemplate": "Échec de l'envoi du modèle",
     "fileUploadFailed": "Échec du téléversement du fichier",
     "selectedCount": "Sélectionnés ({count})",

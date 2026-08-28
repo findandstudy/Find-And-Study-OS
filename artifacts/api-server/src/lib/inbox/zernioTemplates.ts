@@ -17,6 +17,12 @@ import { getZernioApiKey } from "./zernioSend";
 
 const ZERNIO_BASE = "https://zernio.com/api/v1/whatsapp";
 
+export const WHATSAPP_TEMPLATE_BODY_MAX_CHARACTERS = 1024;
+
+export function countUnicodeCharacters(value: string): number {
+  return Array.from(String(value || "")).length;
+}
+
 export interface ZernioTemplateComponent {
   type: string;
   text?: string;
@@ -234,6 +240,7 @@ export interface ZernioTemplateCreateParams {
 export interface ZernioTemplateCreateOutcome {
   ok: boolean;
   status?: string;
+  httpStatus?: number;
   error?: string;
   raw?: any;
 }
@@ -301,7 +308,13 @@ export async function createZernioWhatsAppTemplate(
           components,
         };
 
-  console.log("[ZERNIO create body]", JSON.stringify(body));
+  console.log("[ZERNIO] create template request", {
+    mode: params.mode,
+    name: normalizedName,
+    language: params.language,
+    category: body.category,
+    componentCount: components.length,
+  });
 
   try {
     const resp = await fetch(url, {
@@ -314,7 +327,15 @@ export async function createZernioWhatsAppTemplate(
     try { data = JSON.parse(bodyText); } catch { /* non-JSON */ }
     if (!resp.ok) {
       console.error(`[ZERNIO] create template failed (${resp.status}):`, bodyText.slice(0, 600));
-      return { ok: false, error: data?.error || data?.message || `Zernio template create failed (${resp.status}): ${bodyText.slice(0, 200)}`, raw: data };
+      return {
+        ok: false,
+        httpStatus: resp.status,
+        error:
+          data?.error ||
+          data?.message ||
+          `Zernio template create failed (${resp.status}): ${bodyText.slice(0, 200)}`,
+        raw: data,
+      };
     }
     return { ok: true, status: normalizeStatus(data?.status), raw: data };
   } catch (err: any) {

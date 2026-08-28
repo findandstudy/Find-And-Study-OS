@@ -2917,6 +2917,8 @@
     "whatsappTemplateSyncFailed": "Failed to sync WhatsApp templates",
     "whatsappTemplateSubmitted": "Template submitted for approval",
     "whatsappTemplateSubmitFailed": "Failed to submit WhatsApp template",
+    "whatsappTemplateBodyLimit": "Meta allows up to 1,024 characters in a WhatsApp template body.",
+    "whatsappTemplateBodyTooLong": "The WhatsApp template body cannot exceed 1,024 characters.",
     "failedToSendTemplate": "Failed to send template",
     "fileUploadFailed": "File upload failed",
     "selectedCount": "Selected ({count})",

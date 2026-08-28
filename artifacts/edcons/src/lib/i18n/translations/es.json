@@ -2610,6 +2610,8 @@
     "whatsappTemplateSyncFailed": "Error al sincronizar plantillas de WhatsApp",
     "whatsappTemplateSubmitted": "Plantilla enviada para aprobación",
     "whatsappTemplateSubmitFailed": "Error al enviar la plantilla de WhatsApp",
+    "whatsappTemplateBodyLimit": "Meta permite hasta 1.024 caracteres en el cuerpo de una plantilla de WhatsApp.",
+    "whatsappTemplateBodyTooLong": "El cuerpo de la plantilla de WhatsApp no puede superar los 1.024 caracteres.",
     "failedToSendTemplate": "Error al enviar la plantilla",
     "fileUploadFailed": "Error al subir el archivo",
     "selectedCount": "Seleccionados ({count})",

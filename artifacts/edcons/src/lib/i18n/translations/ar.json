@@ -2661,6 +2661,8 @@
     "whatsappTemplateSyncFailed": "فشل مزامنة قوالب واتساب",
     "whatsappTemplateSubmitted": "تم إرسال القالب للموافقة",
     "whatsappTemplateSubmitFailed": "فشل إرسال قالب واتساب",
+    "whatsappTemplateBodyLimit": "يسمح Meta بما يصل إلى 1,024 حرفًا في نص قالب واتساب.",
+    "whatsappTemplateBodyTooLong": "لا يمكن أن يتجاوز نص قالب واتساب 1,024 حرفًا.",
     "failedToSendTemplate": "فشل إرسال القالب",
     "fileUploadFailed": "فشل رفع الملف",
     "selectedCount": "محدد ({count})",

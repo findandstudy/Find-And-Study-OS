@@ -2661,6 +2661,8 @@
     "whatsappTemplateSyncFailed": "Не удалось синхронизировать шаблоны WhatsApp",
     "whatsappTemplateSubmitted": "Шаблон отправлен на утверждение",
     "whatsappTemplateSubmitFailed": "Не удалось отправить шаблон WhatsApp",
+    "whatsappTemplateBodyLimit": "Meta допускает не более 1 024 символов в тексте шаблона WhatsApp.",
+    "whatsappTemplateBodyTooLong": "Текст шаблона WhatsApp не может превышать 1 024 символа.",
     "failedToSendTemplate": "Не удалось отправить шаблон",
     "fileUploadFailed": "Не удалось загрузить файл",
     "selectedCount": "Выбрано ({count})",

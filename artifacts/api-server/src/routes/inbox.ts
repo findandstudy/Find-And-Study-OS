@@ -66,6 +66,8 @@ import {
   decideWhatsAppTemplateDeletion,
   resolveApprovedZernioTemplate,
   resolveZernioWhatsAppAccount,
+  countUnicodeCharacters,
+  WHATSAPP_TEMPLATE_BODY_MAX_CHARACTERS,
 } from "../lib/inbox/zernioTemplates";
 import { sendZernioConversationMessage } from "../lib/inbox/outboundMessage";
 import { resolveApplicationMessageTarget } from "../lib/inbox/quickContactTarget";
@@ -3646,21 +3648,33 @@ router.post(
       libraryTemplateName?: string;
       channelAccountId?: number;
     };
+    const normalizedBodyText = bodyText?.trim() || "";
+    const normalizedFooterText = footerText?.trim() || undefined;
+    const normalizedLibraryTemplateName = libraryTemplateName?.trim() || "";
     if (!mode || !name || !language) {
       res.status(400).json({ error: "mode, name and language are required" });
       return;
     }
-    if (mode === "custom" && !bodyText?.trim()) {
+    if (mode === "custom" && !normalizedBodyText) {
       res.status(400).json({ error: "bodyText is required for custom templates" });
       return;
     }
-    if (mode === "library" && !libraryTemplateName?.trim()) {
+    if (
+      mode === "custom" &&
+      countUnicodeCharacters(normalizedBodyText) > WHATSAPP_TEMPLATE_BODY_MAX_CHARACTERS
+    ) {
+      res.status(400).json({
+        error: `WhatsApp template body cannot exceed ${WHATSAPP_TEMPLATE_BODY_MAX_CHARACTERS.toLocaleString("en-US")} characters.`,
+      });
+      return;
+    }
+    if (mode === "library" && !normalizedLibraryTemplateName) {
       res.status(400).json({ error: "libraryTemplateName is required for library templates" });
       return;
     }
 
     const placeholderIndexes = mode === "custom"
-      ? numericTemplatePlaceholderIndexes(bodyText || "")
+      ? numericTemplatePlaceholderIndexes(normalizedBodyText)
       : [];
     const expectedIndexes = placeholderIndexes.map((_, index) => index + 1);
     if (placeholderIndexes.some((value, index) => value !== expectedIndexes[index])) {
@@ -3723,14 +3737,18 @@ router.post(
       name,
       language,
       category,
-      bodyText,
-      footerText,
+      bodyText: normalizedBodyText,
+      footerText: normalizedFooterText,
       bodyExamples: normalizedExamples,
       quickReplyButtons: normalizedQuickReplies,
-      libraryTemplateName,
+      libraryTemplateName: normalizedLibraryTemplateName,
     });
     if (!outcome.ok) {
-      res.status(502).json({ error: outcome.error || "Failed to create WhatsApp template" });
+      const responseStatus =
+        outcome.httpStatus && outcome.httpStatus >= 400 && outcome.httpStatus < 500 ? 400 : 502;
+      res.status(responseStatus).json({
+        error: outcome.error || "Failed to create WhatsApp template",
+      });
       return;
     }
 
@@ -3739,7 +3757,10 @@ router.post(
       .values({
         name,
         category: category || "utility",
-        content: mode === "custom" ? (bodyText || "") : `[library: ${libraryTemplateName}]`,
+        content:
+          mode === "custom"
+            ? normalizedBodyText
+            : `[library: ${normalizedLibraryTemplateName}]`,
         channel: "whatsapp",
         language,
         externalTemplateName: name,

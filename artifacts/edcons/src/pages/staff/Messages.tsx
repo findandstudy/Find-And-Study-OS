@@ -87,6 +87,7 @@ interface MessageAttachment {
 }
 
 const TRANSIENT_MEDIA_STATUSES = new Set([502, 503, 504]);
+const WHATSAPP_TEMPLATE_BODY_MAX_CHARACTERS = 1024;
 
 class TransientMediaUploadError extends Error {
   constructor() {
@@ -4896,6 +4897,10 @@ function TemplatesTab() {
     () => whatsappTemplateVariableCount(waBodyText),
     [waBodyText],
   );
+  const waBodyCharacterCount = useMemo(
+    () => Array.from(waBodyText.trim()).length,
+    [waBodyText],
+  );
 
   useEffect(() => {
     setWaVariableMappings((current) =>
@@ -4975,6 +4980,13 @@ function TemplatesTab() {
     }
     if (waMode === "custom" && !waBodyText.trim()) {
       toast({ title: tx("messagesPage.nameAndContentRequired"), variant: "destructive" });
+      return;
+    }
+    if (
+      waMode === "custom" &&
+      waBodyCharacterCount > WHATSAPP_TEMPLATE_BODY_MAX_CHARACTERS
+    ) {
+      toast({ title: tx("messagesPage.whatsappTemplateBodyTooLong"), variant: "destructive" });
       return;
     }
     if (waMode === "library" && !waLibraryName.trim()) {
@@ -5480,9 +5492,30 @@ function TemplatesTab() {
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <Label>{tx("messagesPage.contentRequired")}</Label>
-                    <p className="text-[10px] text-muted-foreground">{"{{1}}, {{2}} ..."}</p>
+                    <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
+                      <span>{"{{1}}, {{2}} ..."}</span>
+                      <span
+                        className={
+                          waBodyCharacterCount > WHATSAPP_TEMPLATE_BODY_MAX_CHARACTERS
+                            ? "font-medium text-destructive"
+                            : ""
+                        }
+                      >
+                        {waBodyCharacterCount}/
+                        {WHATSAPP_TEMPLATE_BODY_MAX_CHARACTERS.toLocaleString("en-US")}
+                      </span>
+                    </div>
                   </div>
-                  <Textarea value={waBodyText} onChange={e => setWaBodyText(e.target.value)} rows={5} className="rounded-xl font-mono text-sm" />
+                  <Textarea
+                    value={waBodyText}
+                    onChange={e => setWaBodyText(e.target.value)}
+                    rows={5}
+                    aria-describedby="whatsapp-template-body-limit"
+                    className="rounded-xl font-mono text-sm"
+                  />
+                  <p id="whatsapp-template-body-limit" className="text-xs text-muted-foreground">
+                    {tx("messagesPage.whatsappTemplateBodyLimit")}
+                  </p>
                 </div>
                 {waVariableCount > 0 && (
                   <div className="space-y-3 rounded-xl border bg-muted/20 p-3">

@@ -2610,6 +2610,8 @@
     "whatsappTemplateSyncFailed": "Gagal menyinkronkan template WhatsApp",
     "whatsappTemplateSubmitted": "Template dikirim untuk persetujuan",
     "whatsappTemplateSubmitFailed": "Gagal mengirim template WhatsApp",
+    "whatsappTemplateBodyLimit": "Meta mengizinkan hingga 1.024 karakter dalam isi template WhatsApp.",
+    "whatsappTemplateBodyTooLong": "Isi template WhatsApp tidak boleh melebihi 1.024 karakter.",
     "failedToSendTemplate": "Gagal mengirim template",
     "fileUploadFailed": "Unggahan file gagal",
     "selectedCount": "Terpilih ({count})",

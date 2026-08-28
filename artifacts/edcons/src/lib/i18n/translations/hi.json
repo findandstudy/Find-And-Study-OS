@@ -2610,6 +2610,8 @@
     "whatsappTemplateSyncFailed": "WhatsApp टेम्पलेट सिंक करने में विफल",
     "whatsappTemplateSubmitted": "टेम्पलेट स्वीकृति हेतु भेजा गया",
     "whatsappTemplateSubmitFailed": "WhatsApp टेम्पलेट भेजने में विफल",
+    "whatsappTemplateBodyLimit": "Meta WhatsApp टेम्पलेट के मुख्य संदेश में अधिकतम 1,024 वर्णों की अनुमति देता है।",
+    "whatsappTemplateBodyTooLong": "WhatsApp टेम्पलेट का मुख्य संदेश 1,024 वर्णों से अधिक नहीं हो सकता।",
     "failedToSendTemplate": "टेम्पलेट भेजने में विफल",
     "fileUploadFailed": "फ़ाइल अपलोड विफल",
     "selectedCount": "चयनित ({count})",

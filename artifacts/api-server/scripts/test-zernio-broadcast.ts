@@ -14,7 +14,11 @@ import {
   resolveZernioProfileId,
   __clearZernioProfileCacheForTests,
 } from "../src/lib/inbox/zernioSend";
-import { buildZernioTemplateComponents } from "../src/lib/inbox/zernioTemplates";
+import {
+  buildZernioTemplateComponents,
+  countUnicodeCharacters,
+  WHATSAPP_TEMPLATE_BODY_MAX_CHARACTERS,
+} from "../src/lib/inbox/zernioTemplates";
 
 type FetchCall = { url: string; init?: RequestInit };
 let calls: FetchCall[] = [];
@@ -67,6 +71,13 @@ test("WhatsApp template components use Zernio's lowercase discriminators", () =>
       buttons: [{ type: "quick_reply", text: "I Will Make Payment" }],
     },
   ]);
+});
+
+test("WhatsApp template body limit matches Meta/Zernio and counts Unicode characters", () => {
+  assert.equal(WHATSAPP_TEMPLATE_BODY_MAX_CHARACTERS, 1024);
+  assert.equal(countUnicodeCharacters("a".repeat(1024)), 1024);
+  assert.equal(countUnicodeCharacters("a".repeat(1025)), 1025);
+  assert.equal(countUnicodeCharacters("👋"), 1);
 });
 
 test("resolveZernioProfileId picks isDefault and caches", async () => {

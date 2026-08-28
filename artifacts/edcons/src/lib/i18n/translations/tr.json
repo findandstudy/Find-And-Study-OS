@@ -2858,6 +2858,8 @@
     "whatsappTemplateSyncFailed": "WhatsApp şablonları senkronize edilemedi",
     "whatsappTemplateSubmitted": "Şablon onaya gönderildi",
     "whatsappTemplateSubmitFailed": "WhatsApp şablonu gönderilemedi",
+    "whatsappTemplateBodyLimit": "Meta, WhatsApp şablon gövdesinde en fazla 1.024 karaktere izin verir.",
+    "whatsappTemplateBodyTooLong": "WhatsApp şablon gövdesi 1.024 karakteri aşamaz.",
     "failedToSendTemplate": "Şablon gönderilemedi",
     "fileUploadFailed": "Dosya yükleme başarısız",
     "selectedCount": "Seçili ({count})",

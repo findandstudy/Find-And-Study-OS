@@ -2610,6 +2610,8 @@
     "whatsappTemplateSyncFailed": "همگام‌سازی قالب‌های واتساپ ناموفق بود",
     "whatsappTemplateSubmitted": "قالب برای تایید ارسال شد",
     "whatsappTemplateSubmitFailed": "ارسال قالب واتساپ ناموفق بود",
+    "whatsappTemplateBodyLimit": "متا در متن قالب واتساپ حداکثر ۱٬۰۲۴ نویسه مجاز می‌داند.",
+    "whatsappTemplateBodyTooLong": "متن قالب واتساپ نمی‌تواند بیشتر از ۱٬۰۲۴ نویسه باشد.",
     "failedToSendTemplate": "ارسال الگو ناموفق بود",
     "fileUploadFailed": "بارگذاری فایل ناموفق بود",
     "selectedCount": "انتخاب شده ({count})",

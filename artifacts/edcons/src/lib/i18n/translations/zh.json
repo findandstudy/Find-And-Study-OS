@@ -2610,6 +2610,8 @@
     "whatsappTemplateSyncFailed": "同步 WhatsApp 模板失败",
     "whatsappTemplateSubmitted": "模板已提交审批",
     "whatsappTemplateSubmitFailed": "提交 WhatsApp 模板失败",
+    "whatsappTemplateBodyLimit": "Meta 允许 WhatsApp 模板正文最多包含 1,024 个字符。",
+    "whatsappTemplateBodyTooLong": "WhatsApp 模板正文不能超过 1,024 个字符。",
     "failedToSendTemplate": "发送模板失败",
     "fileUploadFailed": "文件上传失败",
     "selectedCount": "已选择 ({count})",
