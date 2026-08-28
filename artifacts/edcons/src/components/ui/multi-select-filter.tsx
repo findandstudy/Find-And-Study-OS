@@ -10,9 +10,25 @@ interface MultiSelectFilterProps {
   className?: string;
   searchable?: boolean;
   dropDirection?: "up" | "down" | "auto";
+  searchPlaceholder?: string;
+  noResultsText?: string;
+  clearAllText?: string;
+  selectedText?: (count: number) => string;
 }
 
-export function MultiSelectFilter({ values, onChange, options, placeholder, className = "", searchable = true, dropDirection = "auto" }: MultiSelectFilterProps) {
+export function MultiSelectFilter({
+  values,
+  onChange,
+  options,
+  placeholder,
+  className = "",
+  searchable = true,
+  dropDirection = "auto",
+  searchPlaceholder = "Search...",
+  noResultsText = "No results",
+  clearAllText = "Clear all",
+  selectedText = (count) => `${count} selected`,
+}: MultiSelectFilterProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [openUp, setOpenUp] = useState(false);
@@ -120,7 +136,7 @@ export function MultiSelectFilter({ values, onChange, options, placeholder, clas
     ? placeholder
     : values.length === 1
       ? (options.find(o => o.value === values[0])?.label || values[0])
-      : `${values.length} selected`;
+      : selectedText(values.length);
 
   return (
     <div ref={ref} className={`relative ${className}`}>
@@ -176,14 +192,14 @@ export function MultiSelectFilter({ values, onChange, options, placeholder, clas
                 type="text"
                 value={search}
                 onChange={e => setSearch(e.target.value)}
-                placeholder="Search..."
+                placeholder={searchPlaceholder}
                 className="w-full h-7 px-2 text-xs rounded border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring"
               />
             </div>
           )}
           <div className="max-h-56 overflow-y-auto p-1">
             {filtered.length === 0 ? (
-              <div className="px-3 py-2 text-xs text-muted-foreground text-center">No results</div>
+              <div className="px-3 py-2 text-xs text-muted-foreground text-center">{noResultsText}</div>
             ) : (
               filtered.map(opt => {
                 const selected = values.includes(opt.value);
@@ -214,7 +230,7 @@ export function MultiSelectFilter({ values, onChange, options, placeholder, clas
                 onClick={() => { onChange([]); setOpen(false); }}
                 className="w-full px-2.5 py-1.5 text-xs text-muted-foreground hover:text-destructive rounded-md hover:bg-primary/10 transition-colors text-left"
               >
-                Clear all
+                {clearAllText}
               </button>
             </div>
           )}

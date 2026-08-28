@@ -65,6 +65,15 @@ const publicLimiter = rateLimit({
 
 const text = (max: number) => z.string().trim().min(1).max(max);
 const optionalText = (max: number) => z.string().trim().max(max).optional().nullable();
+const websiteSchema = z.preprocess((value) => {
+  if (typeof value !== "string") return value;
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+  return /^[a-z][a-z\d+.-]*:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+}, z.union([
+  z.string().trim().url().max(1000).refine((value) => /^https?:\/\//i.test(value), "Website must use HTTP or HTTPS"),
+  z.literal(""),
+]).optional().nullable());
 const documentSchema = z.object({
   fileKey: z.string().trim().startsWith("/objects/").max(1000),
   name: text(255),
@@ -85,7 +94,7 @@ const applicationBodySchema = z.object({
   state: optionalText(120),
   city: optionalText(120),
   address: optionalText(1000),
-  website: z.union([z.string().trim().url().max(1000), z.literal("")]).optional().nullable(),
+  website: websiteSchema,
   estimatedStudents: z.coerce.number().int().min(0).max(1_000_000).optional().nullable(),
   operatingCountries: z.array(text(120)).max(100).optional().default([]),
   recruitmentMarkets: z.array(text(120)).max(100).optional().default([]),

@@ -93,11 +93,25 @@ test("agency application route preserves exact contract, signature and idempoten
   assert.doesNotMatch(source, /process\.env\.ALLOW_LIVE_INTEGRATIONS/);
   assert.match(source, /Verification email could not be delivered/);
   assert.doesNotMatch(source, /fallbackTemplate|defaultTemplate/);
+  assert.ok(source.includes("return /^[a-z][a-z\\d+.-]*:\\/\\//i.test(trimmed) ? trimmed : `https://${trimmed}`"));
+  assert.match(source, /Website must use HTTP or HTTPS/);
   assert.ok(
     source.indexOf("readAgentApplicationEmailProof(body.emailVerificationToken)")
       < source.indexOf("const idempotencyKey ="),
     "email ownership must be verified before an idempotent response can rotate an access token",
   );
+});
+
+test("public agency application uses system-backed multi-selects and exposes invalid fields", async () => {
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  const source = await readFile(path.resolve(here, "../../edcons/src/pages/public/AgencyApplication.tsx"), "utf8");
+  assert.match(source, /MultiSelectFilter/);
+  assert.match(source, /options=\{countryOptions\}/);
+  assert.match(source, /operatingCountries: stringList\(form\.operatingCountries\)/);
+  assert.match(source, /recruitmentMarkets: stringList\(form\.recruitmentMarkets\)/);
+  assert.match(source, /cause\?\.data\?\.details\?\.fieldErrors/);
+  assert.match(source, /website: normalizeWebsite\(form\.website\)/);
+  assert.doesNotMatch(source, /hint=\{copy\.commaHint\}/);
 });
 
 test("migration is additive and links application evidence to lifecycle records", async () => {

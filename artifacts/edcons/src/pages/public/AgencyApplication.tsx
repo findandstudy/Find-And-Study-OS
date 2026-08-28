@@ -9,6 +9,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
+import { MultiSelectFilter } from "@/components/ui/multi-select-filter";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AlertCircle, ArrowLeft, ArrowRight, Building2, CheckCircle2, FileCheck2, FileSignature, Loader2, MailCheck, RefreshCw, ShieldCheck, Upload } from "lucide-react";
 
@@ -30,12 +31,14 @@ type Copy = {
   firstName: string; lastName: string; email: string; phone: string; website: string; address: string;
   verifyEmail: string; code: string; confirmCode: string; verified: string; verificationSent: string; contactTitle: string;
   documentsTitle: string; logo: string; representativeId: string; businessRegistration: string; optional: string; required: string;
-  uploadHelp: string; maxFile: string; estimatedStudents: string; operatingCountries: string; recruitmentMarkets: string; commaHint: string;
+  uploadHelp: string; maxFile: string; estimatedStudents: string; operatingCountries: string; recruitmentMarkets: string;
+  selectCountries: string; searchCountries: string; noCountries: string; clearAll: string; selected: string;
   reviewTitle: string; contract: string; automaticContract: string; consent: string; continue: string; back: string; submit: string;
   submitting: string; applicationSaved: string; status: string; reference: string; pending: string; changesRequested: string;
   updateApplication: string; rejected: string; approved: string; awaitingSignature: string; signContract: string; signing: string;
   startNew: string; errorRequired: string; errorEmail: string; errorVerify: string; errorPhone: string; errorCompany: string;
-  errorDocuments: string; errorConsent: string; errorVerificationDelivery: string; security: string; securityText: string;
+  errorDocuments: string; errorConsent: string; errorVerificationDelivery: string; errorWebsite: string;
+  errorInvalidFields: string; security: string; securityText: string;
 };
 
 const EN: Copy = {
@@ -53,7 +56,8 @@ const EN: Copy = {
   businessRegistration: "Business registration certificate", optional: "Optional", required: "Required",
   uploadHelp: "PDF, JPG, JPEG or PNG", maxFile: "Maximum 10 MB per file", estimatedStudents: "Estimated students per year",
   operatingCountries: "Countries where you operate", recruitmentMarkets: "Student recruitment markets",
-  commaHint: "Separate multiple values with commas", reviewTitle: "Review your application", contract: "Contract template",
+  selectCountries: "Select countries", searchCountries: "Search countries…", noCountries: "No countries found",
+  clearAll: "Clear all", selected: "selected", reviewTitle: "Review your application", contract: "Contract template",
   automaticContract: "Selected automatically from applicant type and language. Staff can change it before sending.",
   consent: "I confirm that the information is correct and consent to its use for reviewing this partnership application and preparing the contract.",
   continue: "Continue", back: "Back", submit: "Submit application", submitting: "Submitting…", applicationSaved: "Application received",
@@ -66,6 +70,7 @@ const EN: Copy = {
   errorPhone: "Enter a valid phone number with country code.", errorCompany: "Company name and registration certificate are required for companies.",
   errorDocuments: "Upload the required documents.", errorConsent: "Accept the declaration before submitting.",
   errorVerificationDelivery: "The verification email could not be delivered. Please try again shortly.",
+  errorWebsite: "Enter a valid website address.", errorInvalidFields: "Please review these fields",
   security: "Review before signing", securityText: "Submitting does not create an agent account. Staff review the application, may change the contract template, and invite you to sign. The system creates a unique agency code only after final approval.",
 };
 
@@ -83,7 +88,8 @@ const COPY: Partial<Record<Language, Partial<Copy>>> = {
     contactTitle: "İletişim ve doğrulama", documentsTitle: "Kimlik ve kayıt belgeleri", logo: "Acente paneli logosu",
     representativeId: "Yetkili kimlik belgesi", businessRegistration: "Şirket kayıt belgesi", optional: "İsteğe bağlı", required: "Zorunlu",
     uploadHelp: "PDF, JPG, JPEG veya PNG", maxFile: "Her dosya en fazla 10 MB", estimatedStudents: "Yıllık tahmini öğrenci",
-    operatingCountries: "Faaliyet gösterilen ülkeler", recruitmentMarkets: "Öğrenci sağlanan pazarlar", commaHint: "Birden fazla değeri virgülle ayırın",
+    operatingCountries: "Faaliyet gösterilen ülkeler", recruitmentMarkets: "Öğrenci sağlanan pazarlar",
+    selectCountries: "Ülke seçin", searchCountries: "Ülke ara…", noCountries: "Ülke bulunamadı", clearAll: "Tümünü temizle", selected: "seçildi",
     reviewTitle: "Başvurunuzu kontrol edin", contract: "Sözleşme şablonu", automaticContract: "Başvuru tipi ve dile göre otomatik seçilir. Personel göndermeden önce değiştirebilir.",
     consent: "Bilgilerin doğru olduğunu ve ortaklık başvurusunun incelenmesi ile sözleşmenin hazırlanması amacıyla kullanılmasını kabul ediyorum.",
     continue: "Devam", back: "Geri", submit: "Başvuruyu gönder", submitting: "Gönderiliyor…", applicationSaved: "Başvuru alındı",
@@ -95,7 +101,8 @@ const COPY: Partial<Record<Language, Partial<Copy>>> = {
     errorEmail: "Geçerli bir kurumsal e-posta girin.", errorVerify: "Devam etmeden önce kurumsal e-postayı doğrulayın.",
     errorPhone: "Ülke koduyla birlikte geçerli bir telefon numarası girin.", errorCompany: "Şirket başvurularında şirket unvanı ve kayıt belgesi zorunludur.",
     errorDocuments: "Zorunlu belgeleri yükleyin.", errorConsent: "Göndermeden önce beyanı kabul edin.",
-    errorVerificationDelivery: "Doğrulama e-postası gönderilemedi. Lütfen kısa süre sonra tekrar deneyin.", security: "İmzadan önce inceleme",
+    errorVerificationDelivery: "Doğrulama e-postası gönderilemedi. Lütfen kısa süre sonra tekrar deneyin.",
+    errorWebsite: "Geçerli bir web sitesi adresi girin.", errorInvalidFields: "Lütfen şu alanları kontrol edin", security: "İmzadan önce inceleme",
     securityText: "Başvuruyu göndermek acente hesabı oluşturmaz. Personel başvuruyu inceler, sözleşme şablonunu değiştirebilir ve sizi imzaya davet eder. Benzersiz acente kodu yalnızca son onaydan sonra sistem tarafından oluşturulur.",
   },
   ar: { title: "كن شريكًا لـ Find And Study", steps: ["بيانات العمل", "الاتصال والتحقق", "المستندات", "المراجعة"], continue: "متابعة", back: "رجوع", submit: "إرسال الطلب", language: "لغة الطلب", entityType: "نوع مقدم الطلب", company: "شركة", individual: "فرد", country: "الدولة", city: "المدينة", firstName: "الاسم", lastName: "اسم العائلة", email: "البريد الإلكتروني للعمل", phone: "الهاتف", verifyEmail: "إرسال رمز التحقق", confirmCode: "تحقق" },
@@ -113,6 +120,21 @@ const MAX_FILE_SIZE = 10 * 1024 * 1024;
 const ALLOWED_TYPES = ["application/pdf", "image/jpeg", "image/png"];
 const normalize = (value: string) => value.trim().toLowerCase();
 const arrayText = (value: unknown) => Array.isArray(value) ? value.filter((item) => typeof item === "string").join(", ") : "";
+const stringList = (value: string) => value.split(",").map((item) => item.trim()).filter(Boolean);
+function normalizeWebsite(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+  return /^[a-z][a-z\d+.-]*:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+}
+function isValidWebsite(value: string) {
+  if (!value.trim()) return true;
+  try {
+    const url = new URL(normalizeWebsite(value));
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
 function optionLabel(value: string) {
   const key = normalize(value);
   const meta = Object.values(LANGUAGE_META).find((item) => item.code === key || normalize(item.name) === key || normalize(item.nativeName) === key);
@@ -170,6 +192,10 @@ export default function AgencyApplication() {
   const languages = useMemo(() => [...new Set(matrix.filter((row) => normalize(row.entityType) === normalize(form.entityType)).map((row) => row.language))], [matrix, form.entityType]);
   const selectedTemplate = matrix.find((row) => normalize(row.entityType) === normalize(form.entityType) && normalize(row.language) === normalize(form.preferredLanguage));
   const cityOptions = useMemo(() => cities.map((city) => city.name), [cities]);
+  const countryOptions = useMemo(
+    () => countries.map((country) => ({ value: country.name, label: `${country.flagEmoji || ""} ${country.name}`.trim() })),
+    [countries],
+  );
   const isCompany = normalize(form.entityType) === "company";
 
   function setField(name: keyof typeof EMPTY, value: string | boolean) { setForm((current) => ({ ...current, [name]: value })); setError(""); }
@@ -223,17 +249,36 @@ export default function AgencyApplication() {
       if (!/^\S+@\S+\.\S+$/.test(form.email.trim())) { setError(copy.errorEmail); return false; }
       if (!emailToken) { setError(copy.errorVerify); return false; }
       if (!isPhoneFieldValid(form.phone, true)) { setError(copy.errorPhone); return false; }
+      if (!isValidWebsite(form.website)) { setError(copy.errorWebsite); return false; }
     }
-    if (current === 3 && (!documents.representativeId || (isCompany && !documents.businessRegistration))) { setError(copy.errorDocuments); return false; }
+    if (current === 3) {
+      const estimated = form.estimatedStudents.trim() ? Number(form.estimatedStudents) : null;
+      if (estimated !== null && (!Number.isInteger(estimated) || estimated < 0 || estimated > 1_000_000)) {
+        setError(`${copy.errorInvalidFields}: ${copy.estimatedStudents}.`);
+        return false;
+      }
+      if (!documents.representativeId || (isCompany && !documents.businessRegistration)) { setError(copy.errorDocuments); return false; }
+    }
     setError(""); return true;
   }
   async function submit() {
     if (!form.consentAccepted) { setError(copy.errorConsent); return; }
-    if (!selectedTemplate || !validateStep(3)) { if (!selectedTemplate) setError(copy.unavailable); return; }
+    if (!selectedTemplate) { setError(copy.unavailable); return; }
+    if (!validateStep(1)) { setStep(1); return; }
+    if (!validateStep(2)) { setStep(2); return; }
+    if (!validateStep(3)) { setStep(3); return; }
     setSubmitting(true); setError("");
     const idempotencyKey = localStorage.getItem("fas_agency_application_idempotency") || crypto.randomUUID();
     localStorage.setItem("fas_agency_application_idempotency", idempotencyKey);
-    const payload = { ...form, emailVerificationToken: emailToken, documents: { logo: documents.logo || null, representativeId: documents.representativeId, businessRegistration: documents.businessRegistration || null }, estimatedStudents: form.estimatedStudents ? Number(form.estimatedStudents) : null, operatingCountries: form.operatingCountries.split(",").map((item) => item.trim()).filter(Boolean), recruitmentMarkets: form.recruitmentMarkets.split(",").map((item) => item.trim()).filter(Boolean) };
+    const payload = {
+      ...form,
+      website: normalizeWebsite(form.website),
+      emailVerificationToken: emailToken,
+      documents: { logo: documents.logo || null, representativeId: documents.representativeId, businessRegistration: documents.businessRegistration || null },
+      estimatedStudents: form.estimatedStudents ? Number(form.estimatedStudents) : null,
+      operatingCountries: stringList(form.operatingCountries),
+      recruitmentMarkets: stringList(form.recruitmentMarkets),
+    };
     try {
       const revision = existing?.status === "changes_requested" && accessToken;
       const response = await customFetch<{ data: { application: PublicApplication; accessToken: string | null } }>(revision ? `/api/public/agent-applications/${encodeURIComponent(accessToken)}` : "/api/public/agent-applications", { method: revision ? "PATCH" : "POST", headers: { "Content-Type": "application/json", "Idempotency-Key": idempotencyKey }, body: JSON.stringify(payload) });
@@ -241,7 +286,29 @@ export default function AgencyApplication() {
       if (token) { localStorage.setItem("fas_agency_application_token", token); setAccessToken(token); }
       setExisting(response.data.application);
       window.history.replaceState(null, "", `/${lang}/agency/apply${token ? `?application=${encodeURIComponent(token)}` : ""}`);
-    } catch (cause: any) { setError(cause?.data?.error || cause?.message || "Application could not be submitted"); }
+    } catch (cause: any) {
+      const fieldErrors = cause?.data?.details?.fieldErrors as Record<string, string[] | undefined> | undefined;
+      const invalidKeys = fieldErrors
+        ? Object.entries(fieldErrors).filter(([, messages]) => Array.isArray(messages) && messages.length > 0).map(([field]) => field)
+        : [];
+      if (invalidKeys.length > 0) {
+        const labels: Record<string, string> = {
+          firstName: copy.firstName, lastName: copy.lastName, email: copy.email, phone: copy.phone,
+          entityType: copy.entityType, preferredLanguage: copy.language, companyName: copy.companyName,
+          businessName: copy.displayName, taxNumber: copy.taxNumber, country: copy.country, city: copy.city,
+          state: copy.state, address: copy.address, website: copy.website, estimatedStudents: copy.estimatedStudents,
+          operatingCountries: copy.operatingCountries, recruitmentMarkets: copy.recruitmentMarkets,
+          documents: copy.documentsTitle, consentAccepted: copy.consent,
+        };
+        const first = invalidKeys[0];
+        if (["firstName", "lastName", "email", "phone", "state", "address", "website"].includes(first)) setStep(2);
+        else if (["estimatedStudents", "operatingCountries", "recruitmentMarkets", "documents"].includes(first)) setStep(3);
+        else if (first !== "consentAccepted") setStep(1);
+        setError(`${copy.errorInvalidFields}: ${invalidKeys.map((field) => labels[field] || field).join(", ")}.`);
+      } else {
+        setError(cause?.data?.error || cause?.message || "Application could not be submitted");
+      }
+    }
     finally { setSubmitting(false); }
   }
   async function startSigning() {
@@ -268,7 +335,44 @@ export default function AgencyApplication() {
     <Card className="p-5 md:p-8 shadow-lg border-border/70">
       {step === 1 ? <div className="space-y-6"><div className="grid md:grid-cols-2 gap-5"><Field label={copy.language}><Select value={form.preferredLanguage} onValueChange={(value) => setField("preferredLanguage", value)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{languages.map((value) => <SelectItem key={value} value={value}>{optionLabel(value)}</SelectItem>)}</SelectContent></Select></Field><Field label={copy.entityType}><Select value={form.entityType} onValueChange={selectEntity}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{entityTypes.map((value) => <SelectItem key={value} value={value}>{normalize(value) === "company" ? copy.company : copy.individual}</SelectItem>)}</SelectContent></Select></Field></div><div className="grid md:grid-cols-2 gap-4">{entityTypes.map((value) => <button key={value} type="button" onClick={() => selectEntity(value)} className={`text-start rounded-xl border-2 p-4 ${normalize(form.entityType) === normalize(value) ? "border-primary bg-primary/5" : "border-border"}`}><strong>{normalize(value) === "company" ? copy.company : copy.individual}</strong><span className="block text-sm text-muted-foreground mt-1">{normalize(value) === "company" ? copy.companyHint : copy.individualHint}</span></button>)}</div><div className="grid md:grid-cols-2 gap-5">{isCompany ? <TextField label={copy.companyName} required value={form.companyName} onChange={(value) => setField("companyName", value)} /> : null}<TextField label={copy.displayName} required value={form.businessName} onChange={(value) => setField("businessName", value)} />{isCompany ? <TextField label={copy.taxNumber} value={form.taxNumber} onChange={(value) => setField("taxNumber", value)} /> : null}</div><div className="grid md:grid-cols-2 gap-5"><Field label={`${copy.country} *`}><Select value={form.country} onValueChange={(value) => setForm((current) => ({ ...current, country: value, city: "" }))}><SelectTrigger><SelectValue placeholder={copy.country} /></SelectTrigger><SelectContent className="max-h-72">{countries.map((country) => <SelectItem key={country.id} value={country.name}>{country.flagEmoji} {country.name}</SelectItem>)}</SelectContent></Select></Field><Field label={`${copy.city} *`}><Select value={form.city} onValueChange={(value) => setField("city", value)} disabled={!selectedCountry || citiesLoading || cityOptions.length === 0}><SelectTrigger><SelectValue placeholder={copy.city} /></SelectTrigger><SelectContent className="max-h-72">{cityOptions.map((city) => <SelectItem key={city} value={city}>{city}</SelectItem>)}</SelectContent></Select></Field></div><div className="flex justify-end"><Button onClick={() => { if (validateStep(1)) setStep(2); }}>{copy.continue}<ArrowRight className="ms-2 h-4 w-4" /></Button></div></div> : null}
       {step === 2 ? <div className="space-y-6"><h2 className="text-xl font-bold">{copy.contactTitle}</h2><div className="grid md:grid-cols-2 gap-5"><TextField label={copy.firstName} required value={form.firstName} onChange={(value) => setField("firstName", value)} /><TextField label={copy.lastName} required value={form.lastName} onChange={(value) => setField("lastName", value)} /></div><Field label={`${copy.email} *`}><div className="flex gap-2"><Input type="email" value={form.email} onChange={(event) => changeEmail(event.target.value)} disabled={Boolean(emailToken)} /><Button type="button" variant="outline" onClick={emailToken ? () => { setEmailToken(""); setVerificationSent(false); } : requestVerification} disabled={verifying}>{emailToken ? <RefreshCw className="h-4 w-4" /> : verifying ? <Loader2 className="h-4 w-4 animate-spin" /> : copy.verifyEmail}</Button></div>{verificationSent && !emailToken ? <div className="mt-2 flex flex-col sm:flex-row gap-2"><Input inputMode="numeric" maxLength={6} value={emailCode} onChange={(event) => setEmailCode(event.target.value.replace(/\D/g, ""))} placeholder={copy.code} /><Button type="button" onClick={confirmVerification} disabled={verifying || emailCode.length !== 6}>{copy.confirmCode}</Button></div> : null}{verificationSent && !emailToken ? <p className="text-xs text-muted-foreground">{copy.verificationSent}</p> : null}{emailToken ? <p className="text-sm text-emerald-700 flex items-center gap-2"><MailCheck className="h-4 w-4" />{copy.verified}</p> : null}</Field><Field label={`${copy.phone} *`}><PhoneField value={form.phone} onChange={(value) => setField("phone", value)} required /></Field><div className="grid md:grid-cols-2 gap-5"><TextField label={copy.website} type="url" value={form.website} onChange={(value) => setField("website", value)} /><TextField label={copy.state} value={form.state} onChange={(value) => setField("state", value)} /></div><TextField label={copy.address} required value={form.address} onChange={(value) => setField("address", value)} /><div className="flex justify-between"><Button variant="outline" onClick={() => setStep(1)}><ArrowLeft className="me-2 h-4 w-4" />{copy.back}</Button><Button onClick={() => { if (validateStep(2)) setStep(3); }}>{copy.continue}<ArrowRight className="ms-2 h-4 w-4" /></Button></div></div> : null}
-      {step === 3 ? <div className="space-y-6"><h2 className="text-xl font-bold">{copy.documentsTitle}</h2><div className="grid md:grid-cols-3 gap-4"><DocumentField label={copy.logo} requirement={copy.optional} document={documents.logo} busy={uploading === "logo"} help={`${copy.uploadHelp} · ${copy.maxFile}`} onFile={(file) => uploadDocument("logo", file)} /><DocumentField label={copy.representativeId} requirement={copy.required} document={documents.representativeId} busy={uploading === "representativeId"} help={`${copy.uploadHelp} · ${copy.maxFile}`} onFile={(file) => uploadDocument("representativeId", file)} />{isCompany ? <DocumentField label={copy.businessRegistration} requirement={copy.required} document={documents.businessRegistration} busy={uploading === "businessRegistration"} help={`${copy.uploadHelp} · ${copy.maxFile}`} onFile={(file) => uploadDocument("businessRegistration", file)} /> : null}</div><div className="grid md:grid-cols-3 gap-5"><TextField label={copy.estimatedStudents} type="number" value={form.estimatedStudents} onChange={(value) => setField("estimatedStudents", value)} /><TextField label={copy.operatingCountries} hint={copy.commaHint} value={form.operatingCountries} onChange={(value) => setField("operatingCountries", value)} /><TextField label={copy.recruitmentMarkets} hint={copy.commaHint} value={form.recruitmentMarkets} onChange={(value) => setField("recruitmentMarkets", value)} /></div><div className="flex justify-between"><Button variant="outline" onClick={() => setStep(2)}><ArrowLeft className="me-2 h-4 w-4" />{copy.back}</Button><Button onClick={() => { if (validateStep(3)) setStep(4); }}>{copy.continue}<ArrowRight className="ms-2 h-4 w-4" /></Button></div></div> : null}
+      {step === 3 ? <div className="space-y-6">
+        <h2 className="text-xl font-bold">{copy.documentsTitle}</h2>
+        <div className="grid md:grid-cols-3 gap-4">
+          <DocumentField label={copy.logo} requirement={copy.optional} document={documents.logo} busy={uploading === "logo"} help={`${copy.uploadHelp} · ${copy.maxFile}`} onFile={(file) => uploadDocument("logo", file)} />
+          <DocumentField label={copy.representativeId} requirement={copy.required} document={documents.representativeId} busy={uploading === "representativeId"} help={`${copy.uploadHelp} · ${copy.maxFile}`} onFile={(file) => uploadDocument("representativeId", file)} />
+          {isCompany ? <DocumentField label={copy.businessRegistration} requirement={copy.required} document={documents.businessRegistration} busy={uploading === "businessRegistration"} help={`${copy.uploadHelp} · ${copy.maxFile}`} onFile={(file) => uploadDocument("businessRegistration", file)} /> : null}
+        </div>
+        <div className="grid md:grid-cols-3 gap-5">
+          <TextField label={copy.estimatedStudents} type="number" value={form.estimatedStudents} onChange={(value) => setField("estimatedStudents", value)} />
+          <Field label={copy.operatingCountries}>
+            <MultiSelectFilter
+              values={stringList(form.operatingCountries)}
+              onChange={(values) => setField("operatingCountries", values.join(", "))}
+              options={countryOptions}
+              placeholder={copy.selectCountries}
+              searchPlaceholder={copy.searchCountries}
+              noResultsText={copy.noCountries}
+              clearAllText={copy.clearAll}
+              selectedText={(count) => `${count} ${copy.selected}`}
+              className="[&>button]:h-10"
+            />
+          </Field>
+          <Field label={copy.recruitmentMarkets}>
+            <MultiSelectFilter
+              values={stringList(form.recruitmentMarkets)}
+              onChange={(values) => setField("recruitmentMarkets", values.join(", "))}
+              options={countryOptions}
+              placeholder={copy.selectCountries}
+              searchPlaceholder={copy.searchCountries}
+              noResultsText={copy.noCountries}
+              clearAllText={copy.clearAll}
+              selectedText={(count) => `${count} ${copy.selected}`}
+              className="[&>button]:h-10"
+            />
+          </Field>
+        </div>
+        <div className="flex justify-between"><Button variant="outline" onClick={() => setStep(2)}><ArrowLeft className="me-2 h-4 w-4" />{copy.back}</Button><Button onClick={() => { if (validateStep(3)) setStep(4); }}>{copy.continue}<ArrowRight className="ms-2 h-4 w-4" /></Button></div>
+      </div> : null}
       {step === 4 ? <div className="space-y-6"><h2 className="text-xl font-bold">{copy.reviewTitle}</h2><div className="rounded-xl bg-muted/50 p-5 grid md:grid-cols-2 gap-4 text-sm"><Summary label={copy.entityType} value={isCompany ? copy.company : copy.individual} /><Summary label={copy.language} value={optionLabel(form.preferredLanguage)} /><Summary label={copy.displayName} value={form.businessName} /><Summary label={copy.country} value={`${form.city}, ${form.country}`} /><Summary label={`${copy.firstName} / ${copy.lastName}`} value={`${form.firstName} ${form.lastName}`} /><Summary label={copy.email} value={form.email} /><Summary label={copy.phone} value={form.phone} /><Summary label={copy.contract} value={selectedTemplate ? `${selectedTemplate.title} · v${selectedTemplate.version}` : "—"} /></div><div className="rounded-xl border p-4"><strong>{copy.automaticContract}</strong></div><div className="flex gap-3 rounded-xl border p-4"><Checkbox id="agency-consent" checked={form.consentAccepted} onCheckedChange={(value) => setField("consentAccepted", value === true)} /><Label htmlFor="agency-consent" className="font-normal leading-6 cursor-pointer">{copy.consent}</Label></div><div className="flex gap-3 rounded-xl bg-emerald-50 text-emerald-950 p-4"><ShieldCheck className="h-5 w-5 shrink-0 mt-0.5" /><div><strong>{copy.security}</strong><p className="text-sm mt-1">{copy.securityText}</p></div></div><div className="flex justify-between"><Button variant="outline" onClick={() => setStep(3)}><ArrowLeft className="me-2 h-4 w-4" />{copy.back}</Button><Button onClick={submit} disabled={submitting}>{submitting ? <Loader2 className="me-2 h-4 w-4 animate-spin" /> : <FileCheck2 className="me-2 h-4 w-4" />}{existing ? copy.updateApplication : submitting ? copy.submitting : copy.submit}</Button></div></div> : null}
       {error ? <div className="mt-5"><ErrorBox message={error} /></div> : null}
     </Card>
@@ -276,7 +380,7 @@ export default function AgencyApplication() {
 }
 
 function Field({ label, children }: { label: string; children: ReactNode }) { return <div className="space-y-2"><Label>{label}</Label>{children}</div>; }
-function TextField({ label, value, onChange, required, hint, type = "text" }: { label: string; value: string; onChange: (value: string) => void; required?: boolean; hint?: string; type?: string }) { return <Field label={`${label}${required ? " *" : ""}`}><Input type={type} value={value} onChange={(event) => onChange(event.target.value)} min={type === "number" ? 0 : undefined} />{hint ? <p className="text-xs text-muted-foreground">{hint}</p> : null}</Field>; }
+function TextField({ label, value, onChange, required, hint, type = "text" }: { label: string; value: string; onChange: (value: string) => void; required?: boolean; hint?: string; type?: string }) { return <Field label={`${label}${required ? " *" : ""}`}><Input type={type} value={value} onChange={(event) => onChange(event.target.value)} min={type === "number" ? 0 : undefined} max={type === "number" ? 1_000_000 : undefined} step={type === "number" ? 1 : undefined} />{hint ? <p className="text-xs text-muted-foreground">{hint}</p> : null}</Field>; }
 function DocumentField({ label, requirement, document, busy, help, onFile }: { label: string; requirement: string; document?: UploadDocument | null; busy: boolean; help: string; onFile: (file: File) => void }) { return <div className="rounded-xl border p-4 space-y-3"><div><strong>{label}</strong><span className="ms-2 rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">{requirement}</span></div><label className="min-h-28 rounded-lg border-2 border-dashed flex cursor-pointer flex-col items-center justify-center gap-2 text-center p-3 hover:bg-muted/40"><Input className="sr-only" type="file" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png" disabled={busy} onChange={(event) => { const file = event.target.files?.[0]; if (file) onFile(file); event.currentTarget.value = ""; }} />{busy ? <Loader2 className="h-6 w-6 animate-spin" /> : document ? <FileCheck2 className="h-6 w-6 text-emerald-600" /> : <Upload className="h-6 w-6" />}<span className="text-sm font-medium break-all">{document?.name || label}</span></label><p className="text-xs text-muted-foreground">{help}</p></div>; }
 function Summary({ label, value }: { label: string; value: string }) { return <div><span className="text-muted-foreground block">{label}</span><strong className="mt-1 block break-words">{value}</strong></div>; }
 function ErrorBox({ message }: { message: string }) { return <div role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{message}</div>; }
