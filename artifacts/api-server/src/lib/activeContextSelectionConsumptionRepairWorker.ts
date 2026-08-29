@@ -3,6 +3,7 @@ import type {
   SelectionConsumptionAttemptIdentity,
   SelectionConsumptionAttemptLedger,
 } from "./activeContextSelectionConsumptionAttempt";
+import { ACTIVE_SESSION_SELECTION_COMMAND_RECEIPT_V1 } from "./activeContextSelectionConsumptionAttempt";
 
 const UUID_V7_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -63,7 +64,7 @@ function validAttempt(value: unknown): value is PendingSelectionConsumptionAttem
   if (!isRecord(value)) return false;
   const identityKeys = [
     "attemptId", "cellId", "contextId", "environmentId", "idempotencyKeyHash",
-    "leaseToken", "maxAttempts", "membershipId", "principalId", "requestHash",
+    "leaseToken", "maxAttempts", "membershipId", "outcomeSource", "principalId", "requestHash",
     "selectionId", "sessionGeneration", "status", "tenantId", "attemptCount",
   ];
   return (
@@ -77,6 +78,7 @@ function validAttempt(value: unknown): value is PendingSelectionConsumptionAttem
     Number.isSafeInteger(value.sessionGeneration) && Number(value.sessionGeneration) > 0 &&
     SHA256_RE.test(String(value.idempotencyKeyHash)) &&
     SHA256_RE.test(String(value.requestHash)) &&
+    value.outcomeSource === ACTIVE_SESSION_SELECTION_COMMAND_RECEIPT_V1 &&
     value.status === "PENDING" &&
     Number.isSafeInteger(value.attemptCount) && Number(value.attemptCount) >= 1 &&
     Number.isSafeInteger(value.maxAttempts) && Number(value.maxAttempts) >= Number(value.attemptCount) &&

@@ -5,6 +5,7 @@ import type {
   SelectionConsumptionAttemptIdentity,
   SelectionConsumptionAttemptLedger,
 } from "./activeContextSelectionConsumptionAttempt";
+import { ACTIVE_SESSION_SELECTION_COMMAND_RECEIPT_V1 } from "./activeContextSelectionConsumptionAttempt";
 
 const UUID_V7_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -50,7 +51,7 @@ function validIdentity(value: unknown): value is SelectionConsumptionAttemptIden
   return (
     exactKeys(input, [
       "attemptId", "cellId", "contextId", "environmentId", "idempotencyKeyHash",
-      "membershipId", "principalId", "requestHash", "selectionId", "sessionGeneration",
+      "membershipId", "outcomeSource", "principalId", "requestHash", "selectionId", "sessionGeneration",
       "tenantId",
     ]) &&
     UUID_V7_RE.test(String(input.attemptId)) &&
@@ -64,7 +65,8 @@ function validIdentity(value: unknown): value is SelectionConsumptionAttemptIden
     SHA256_RE.test(String(input.idempotencyKeyHash)) &&
     SHA256_RE.test(String(input.requestHash)) &&
     IDENTIFIER_RE.test(String(input.environmentId)) &&
-    IDENTIFIER_RE.test(String(input.cellId))
+    IDENTIFIER_RE.test(String(input.cellId)) &&
+    input.outcomeSource === ACTIVE_SESSION_SELECTION_COMMAND_RECEIPT_V1
   );
 }
 
@@ -82,12 +84,14 @@ function validResultHash(value: unknown): value is string {
 
 function outcomeForFailure(reason: SelectionConsumptionAttemptFailure): {
   outcome: "DENIED" | "CONFLICT" | "ERROR";
-  reasonCode: SelectionConsumptionAttemptFailure;
+  reasonCode: "AUTHORIZATION_DENIED" | "IDEMPOTENCY_CONFLICT" | "INTERNAL_ERROR";
 } {
   if (reason === "AUTHORIZATION_DENIED") {
     return { outcome: "DENIED", reasonCode: reason };
   }
-  if (reason === "CONFLICT") return { outcome: "CONFLICT", reasonCode: reason };
+  if (reason === "CONFLICT") {
+    return { outcome: "CONFLICT", reasonCode: "IDEMPOTENCY_CONFLICT" };
+  }
   return { outcome: "ERROR", reasonCode: "INTERNAL_ERROR" };
 }
 

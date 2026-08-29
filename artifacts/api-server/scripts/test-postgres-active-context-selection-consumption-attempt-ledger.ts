@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   PostgresActiveContextSelectionConsumptionAttemptLedger,
 } from "../src/lib/postgresActiveContextSelectionConsumptionAttemptLedger.js";
+import { ACTIVE_SESSION_SELECTION_COMMAND_RECEIPT_V1 } from "../src/lib/activeContextSelectionConsumptionAttempt.js";
 
 const ID = {
   attemptId: "018fc000-0000-7000-8000-000000000001",
@@ -61,6 +62,7 @@ function ledgerFixture() {
     requestHash: "b".repeat(64),
     environmentId: "test",
     cellId: "test-cell",
+    outcomeSource: ACTIVE_SESSION_SELECTION_COMMAND_RECEIPT_V1,
   } as const;
 }
 

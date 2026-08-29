@@ -18,6 +18,7 @@ CREATE TABLE public.active_context_selection_consumption_attempts (
   request_hash text NOT NULL,
   environment_id text NOT NULL,
   cell_id text NOT NULL,
+  outcome_source text NOT NULL,
   status text NOT NULL,
   outcome text,
   reason_code text,
@@ -38,6 +39,8 @@ CREATE TABLE public.active_context_selection_consumption_attempts (
     ),
   CONSTRAINT active_context_selection_consumption_attempts_generation_chk
     CHECK (session_generation > 0 AND session_generation <= 9007199254740991),
+  CONSTRAINT active_context_selection_consumption_attempts_source_chk
+    CHECK (outcome_source = 'ACTIVE_SESSION_SELECTION_COMMAND_RECEIPT_V1'),
   CONSTRAINT active_context_selection_consumption_attempts_status_chk
     CHECK (status IN ('STARTED', 'PENDING', 'TERMINAL')),
   CONSTRAINT active_context_selection_consumption_attempts_outcome_chk
@@ -187,15 +190,17 @@ DECLARE
   v_request text;
   v_environment text;
   v_cell text;
+  v_outcome_source text;
 BEGIN
   IF current_setting('transaction_isolation') <> 'serializable'
     OR current_setting('app.tenant_id', true) IS NULL
     OR p_payload IS NULL
-    OR (SELECT count(*) FROM jsonb_object_keys(p_payload)) <> 11
+    OR (SELECT count(*) FROM jsonb_object_keys(p_payload)) <> 12
     OR NOT (p_payload ?& ARRAY[
       'attemptId', 'tenantId', 'contextId', 'selectionId',
       'sessionGeneration', 'principalId', 'membershipId',
-      'idempotencyKeyHash', 'requestHash', 'environmentId', 'cellId'
+      'idempotencyKeyHash', 'requestHash', 'environmentId', 'cellId',
+      'outcomeSource'
     ])
   THEN
     RAISE EXCEPTION 'selection consumption attempt input is invalid';
@@ -211,6 +216,7 @@ BEGIN
   v_request := p_payload->>'requestHash';
   v_environment := p_payload->>'environmentId';
   v_cell := p_payload->>'cellId';
+  v_outcome_source := p_payload->>'outcomeSource';
   IF NULLIF(current_setting('app.tenant_id', true), '')::uuid IS DISTINCT FROM v_tenant
     OR substring(v_attempt::text from 15 for 1) <> '7'
     OR substring(v_context::text from 15 for 1) <> '7'
@@ -220,6 +226,7 @@ BEGIN
     OR v_request !~ '^[0-9a-f]{64}$'
     OR v_environment !~ '^[a-z][a-z0-9-]{1,62}$'
     OR v_cell !~ '^[a-z][a-z0-9-]{1,62}$'
+    OR v_outcome_source IS DISTINCT FROM 'ACTIVE_SESSION_SELECTION_COMMAND_RECEIPT_V1'
   THEN
     RAISE EXCEPTION 'selection consumption attempt identity is invalid';
   END IF;
@@ -237,6 +244,7 @@ BEGIN
       OR attempt_row.membership_id IS DISTINCT FROM v_membership
       OR attempt_row.environment_id IS DISTINCT FROM v_environment
       OR attempt_row.cell_id IS DISTINCT FROM v_cell
+      OR attempt_row.outcome_source IS DISTINCT FROM v_outcome_source
     THEN
       RAISE EXCEPTION 'selection consumption attempt idempotency conflict';
     END IF;
@@ -249,11 +257,11 @@ BEGIN
   INSERT INTO public.active_context_selection_consumption_attempts (
     id, tenant_id, context_id, selection_id, session_generation,
     principal_id, membership_id, idempotency_key_hash, request_hash,
-    environment_id, cell_id, status
+    environment_id, cell_id, outcome_source, status
   ) VALUES (
     v_attempt, v_tenant, v_context, v_selection, v_generation,
     v_principal, v_membership, v_idempotency, v_request,
-    v_environment, v_cell, 'STARTED'
+    v_environment, v_cell, v_outcome_source, 'STARTED'
   );
   INSERT INTO public.active_context_selection_consumption_attempt_receipts (
     tenant_id, attempt_id, sequence, phase, outcome, reason_code

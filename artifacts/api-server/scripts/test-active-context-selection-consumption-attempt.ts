@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  ACTIVE_SESSION_SELECTION_COMMAND_RECEIPT_V1,
   runSelectionConsumptionAttempt,
   SelectionConsumptionAttemptCommitOutcomeUnknownError,
   type SelectionConsumptionAttemptIdentity,
@@ -20,6 +21,7 @@ const ATTEMPT: SelectionConsumptionAttemptIdentity = {
   requestHash: "b".repeat(64),
   environmentId: "test",
   cellId: "test-cell",
+  outcomeSource: ACTIVE_SESSION_SELECTION_COMMAND_RECEIPT_V1,
 };
 
 function ledger() {
