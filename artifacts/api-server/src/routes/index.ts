@@ -97,13 +97,34 @@ const ALLOWLIST_EXACT = new Set([
   "/contracts/me",
   "/contracts/me/intake",
   "/contracts/me/sign",
+  "/contracts/me/pending",
   "/settings/branding",
   "/settings/branding/logo",
   "/settings/available-years",
   "/health",
+]);
+const ALLOWLIST_PREFIX = [
+  "/storage/public-objects/",
+  "/storage/public-branding/",
+  "/auth/",
+  "/contracts/me/session/",
+];
+// Provisional agents may explore their portal in read-only mode while staff
+// review the application. Commercial data and organisation-management tools
+// remain hidden until approval activates the account.
+const PROVISIONAL_COMMERCIAL_EXACT = new Set([
+  "/agents/me/embed-token",
   "/academy-sso",
 ]);
-const ALLOWLIST_PREFIX = ["/storage/", "/auth/"];
+const PROVISIONAL_COMMERCIAL_PREFIX = [
+  "/commissions",
+  "/finance",
+  "/academy",
+  "/agents/me/sub-agents",
+  "/agents/me/staff",
+];
+const PROVISIONAL_WRITE_EXACT = new Set(["/storage/uploads/request-url"]);
+const PROVISIONAL_WRITE_PREFIX = ["/storage/local-upload/"];
 
 router.use(async (req, res, next) => {
   // Public/unauth endpoints just pass through.
@@ -120,6 +141,29 @@ router.use(async (req, res, next) => {
   try {
     const agent = await ONBOARDING_HELPERS.loadAgentForUser(req.user.id, req.user.role);
     if (!agent) { next(); return; }
+    const provisionalCommercialRequest = PROVISIONAL_COMMERCIAL_EXACT.has(path)
+      || PROVISIONAL_COMMERCIAL_PREFIX.some((prefix) => path.startsWith(prefix));
+    const provisionalReadOnlyRequest = req.method === "GET" && !provisionalCommercialRequest;
+    const provisionalProfileUpdate = req.method === "PATCH" && path === "/agents/me";
+    const provisionalContractUploadRequest = (
+      (req.method === "POST" && PROVISIONAL_WRITE_EXACT.has(path))
+      || (req.method === "PUT" && PROVISIONAL_WRITE_PREFIX.some((prefix) => path.startsWith(prefix)))
+    );
+    if (
+      provisionalContractUploadRequest
+      || (agent.accessTier === "provisional" && (provisionalReadOnlyRequest || provisionalProfileUpdate))
+    ) {
+      next();
+      return;
+    }
+    if (agent.accessTier !== "full") {
+      res.status(403).json({
+        error: agent.accessTier === "restricted" ? "Agency portal access is restricted" : "Agency application is awaiting approval",
+        code: agent.accessTier === "restricted" ? "AGENT_PORTAL_RESTRICTED" : "AGENT_COMMERCIAL_ACCESS_RESTRICTED",
+        accessTier: agent.accessTier,
+      });
+      return;
+    }
     let session = await ONBOARDING_HELPERS.loadOnboardingSession(agent.id);
     if (!session) { next(); return; }
     session = await ONBOARDING_HELPERS.lazyExpire(session);

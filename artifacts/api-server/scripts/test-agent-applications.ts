@@ -164,3 +164,47 @@ test("agency codes are database-generated only when an approved agent is inserte
   assert.match(route, /tx\.insert\(agentsTable\)\.values\(\{/);
   assert.doesNotMatch(route, /agencyCode:\s*application\./);
 });
+
+test("provisional agency accounts are created at application time and upgraded in place", async () => {
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  const route = await readFile(path.resolve(here, "../src/routes/agentApplications.ts"), "utf8");
+  const migration = await readFile(path.resolve(here, "../../../lib/db/drizzle/0057_agent_application_provisional_portal.sql"), "utf8");
+  assert.match(route, /accessTier:\s*"provisional"/);
+  assert.match(route, /portalAccessStatus:\s*"provisional"/);
+  assert.match(route, /accessTier:\s*"full"/);
+  assert.match(route, /commercialActivatedAt:\s*now/);
+  assert.match(route, /commissionRate:\s*z\.coerce\.number\(\)\.min\(0\)\.max\(100\)/);
+  assert.match(route, /STAFF_REQUIRED/);
+  assert.match(route, /BRANCH_REQUIRED/);
+  assert.match(route, /COMMISSION_REQUIRED/);
+  assert.match(migration, /ADD COLUMN IF NOT EXISTS access_tier text NOT NULL DEFAULT 'full'/);
+  assert.match(migration, /DROP NOT NULL/);
+  assert.doesNotMatch(migration, /DROP TABLE|TRUNCATE|DELETE FROM/);
+});
+
+test("provisional agents can use the read-only portal but not commercial routes", async () => {
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  const routeIndex = await readFile(path.resolve(here, "../src/routes/index.ts"), "utf8");
+  const agentRoute = await readFile(path.resolve(here, "../src/routes/agents.ts"), "utf8");
+  const menuSource = await readFile(path.resolve(here, "../../edcons/src/components/layout/DashboardLayout.tsx"), "utf8");
+  assert.match(routeIndex, /provisionalReadOnlyRequest/);
+  assert.match(routeIndex, /provisionalProfileUpdate/);
+  assert.match(routeIndex, /AGENT_COMMERCIAL_ACCESS_RESTRICTED/);
+  for (const blockedPath of ["/commissions", "/finance", "/academy", "/agents/me/sub-agents", "/agents/me/staff"]) {
+    assert.ok(routeIndex.includes(`"${blockedPath}"`), `${blockedPath} must be commercially gated`);
+  }
+  assert.match(agentRoute, /agent\.accessTier !== "full"/);
+  assert.match(agentRoute, /commissionRate:\s*null/);
+  assert.match(agentRoute, /agencyCode:\s*null/);
+  assert.match(menuSource, /const commercialAccess = agentAccessTier === "full"/);
+});
+
+test("staff activation UI requires assignment, branch and commission", async () => {
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  const source = await readFile(path.resolve(here, "../../edcons/src/pages/staff/AgencyApplications.tsx"), "utf8");
+  assert.match(source, /Assign a staff member before activating commercial access/);
+  assert.match(source, /Select a branch before activating commercial access/);
+  assert.match(source, /Enter a valid commission rate between 0 and 100/);
+  assert.match(source, /commissionRate:\s*parsedCommissionRate/);
+  assert.match(source, /Approve & activate access/);
+});

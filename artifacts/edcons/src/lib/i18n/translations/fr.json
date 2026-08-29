@@ -1445,6 +1445,10 @@
     "viewAllTasks": "Voir toutes les tâches"
   },
   "agentDash": {
+    "provisionalAccess": {
+      "title": "Votre demande d’agence est en cours d’examen",
+      "body": "Vous pouvez déjà explorer le portail. Les taux de commission et les outils de gestion commerciale seront disponibles après l’approbation du personnel."
+    },
     "title": "Portail agent",
     "subtitle": "Suivez vos étudiants, vos commissions et l'avancement des candidatures",
     "totalStudents": "Total des étudiants",

@@ -1445,6 +1445,10 @@
     "viewAllTasks": "Lihat Semua Tugas"
   },
   "agentDash": {
+    "provisionalAccess": {
+      "title": "Permohonan agensi Anda sedang ditinjau",
+      "body": "Anda sudah dapat menjelajahi portal. Tarif komisi dan alat pengelolaan komersial akan tersedia setelah persetujuan staf."
+    },
     "title": "Portal Agen",
     "subtitle": "Lacak siswa, komisi, dan progres aplikasi Anda",
     "totalStudents": "Total Siswa",

@@ -1445,6 +1445,10 @@
     "viewAllTasks": "Ver todas las tareas"
   },
   "agentDash": {
+    "provisionalAccess": {
+      "title": "Tu solicitud de agencia está en revisión",
+      "body": "Ya puedes explorar el portal. Las tasas de comisión y las herramientas de gestión comercial estarán disponibles tras la aprobación del personal."
+    },
     "title": "Portal de agentes",
     "subtitle": "Haz seguimiento de tus estudiantes, comisiones y el progreso de las solicitudes",
     "totalStudents": "Total de estudiantes",

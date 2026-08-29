@@ -122,6 +122,7 @@ export default function AgentDashboard() {
   const assignedStaff = agentProfile?.assignedStaff;
   const parentAgent = agentProfile?.parentAgent;
   const contactPerson = user?.role === "sub_agent" ? parentAgent : assignedStaff;
+  const commercialAccess = agentProfile?.accessTier === "full";
 
   return (
     <>
@@ -135,6 +136,18 @@ export default function AgentDashboard() {
 
         <OnboardingContractBanner />
         <PendingContractsCard />
+
+        {agentProfile?.accessTier === "provisional" && (
+          <Card className="p-5 border border-blue-500/30 bg-blue-500/5 shadow-md shadow-black/5">
+            <div className="flex items-start gap-3">
+              <Shield className="mt-0.5 h-5 w-5 shrink-0 text-blue-600" />
+              <div>
+                <p className="font-display font-bold text-foreground">{t("agentDash.provisionalAccess.title")}</p>
+                <p className="mt-1 text-sm text-muted-foreground">{t("agentDash.provisionalAccess.body")}</p>
+              </div>
+            </div>
+          </Card>
+        )}
 
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           {[
@@ -337,7 +350,7 @@ export default function AgentDashboard() {
             </Card>
           )}
 
-          <Card className={`p-6 border-none shadow-lg shadow-black/5 ${!contactPerson ? "lg:col-span-1" : ""}`}>
+          {commercialAccess && <Card className={`p-6 border-none shadow-lg shadow-black/5 ${!contactPerson ? "lg:col-span-1" : ""}`}>
             <div className="flex items-center gap-2 mb-5">
               <div className="w-8 h-8 rounded-lg bg-emerald-500/10 flex items-center justify-center">
                 <Plus className="w-4 h-4 text-emerald-500" />
@@ -366,7 +379,7 @@ export default function AgentDashboard() {
                 <span className="text-xs font-medium">{t("agentDash.addStudent")}</span>
               </Button>
             </div>
-          </Card>
+          </Card>}
 
           {quickLinks.length > 0 && (
             <Card className="p-6 border-none shadow-lg shadow-black/5">
@@ -424,13 +437,17 @@ export default function AgentDashboard() {
 
       </div>
 
-      <CreateLeadDialog open={showAddLead} onOpenChange={setShowAddLead} />
-      <AddStudentModal
-        open={showAddStudent}
-        onClose={() => setShowAddStudent(false)}
-        onSuccess={() => setShowAddStudent(false)}
-        defaultStatus={pipelineStages[0]?.key}
-      />
+      {commercialAccess && (
+        <>
+          <CreateLeadDialog open={showAddLead} onOpenChange={setShowAddLead} />
+          <AddStudentModal
+            open={showAddStudent}
+            onClose={() => setShowAddStudent(false)}
+            onSuccess={() => setShowAddStudent(false)}
+            defaultStatus={pipelineStages[0]?.key}
+          />
+        </>
+      )}
     </>
   );
 }

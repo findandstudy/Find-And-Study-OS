@@ -1,7 +1,15 @@
-import { db, agentsTable, usersTable, settingsTable, signingSessionsTable } from "@workspace/db";
+import {
+  agentApplicationsTable,
+  agentsTable,
+  db,
+  settingsTable,
+  signingSessionsTable,
+  usersTable,
+} from "@workspace/db";
 import { and, eq, isNotNull, isNull, inArray, lt, or, sql } from "drizzle-orm";
 import { dispatchNotification } from "./notificationDispatcher";
 import { formatDate } from "@workspace/i18n";
+import { buildAgencyContractReminderEmail, getAppBaseUrl, sendEmail } from "./email";
 
 const CHECK_INTERVAL = 60 * 60 * 1000;
 
@@ -12,6 +20,116 @@ function parseThresholds(csv: string | null | undefined): number[] {
 
 function daysBetween(future: Date, now: Date): number {
   return Math.ceil((future.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+}
+
+const AGENCY_APPLICATION_REMINDER_DAYS = [1, 3, 7] as const;
+
+export function selectAgentApplicationReminderThreshold(
+  deadline: Date,
+  lastReminderAt: Date | null,
+  now: Date,
+): number | null {
+  const daysLeft = daysBetween(deadline, now);
+  if (daysLeft <= 0) return null;
+  const threshold = AGENCY_APPLICATION_REMINDER_DAYS.find((day) => daysLeft <= day);
+  if (!threshold) return null;
+  const windowStart = new Date(deadline.getTime() - threshold * 24 * 60 * 60 * 1000);
+  if (lastReminderAt && lastReminderAt >= windowStart) return null;
+  return threshold;
+}
+
+export async function checkAgentApplicationContractReminders(): Promise<void> {
+  try {
+    if (process.env.ALLOW_LIVE_INTEGRATIONS !== "true") return;
+    const now = new Date();
+    const applications = await db.select({
+      id: agentApplicationsTable.id,
+      referenceCode: agentApplicationsTable.referenceCode,
+      firstName: agentApplicationsTable.firstName,
+      email: agentApplicationsTable.email,
+      contractDeadlineAt: agentApplicationsTable.contractDeadlineAt,
+      lastContractReminderAt: agentApplicationsTable.lastContractReminderAt,
+    }).from(agentApplicationsTable).where(and(
+      eq(agentApplicationsTable.status, "awaiting_signature"),
+      eq(agentApplicationsTable.portalAccessStatus, "contract_pending"),
+      isNotNull(agentApplicationsTable.contractDeadlineAt),
+      isNull(agentApplicationsTable.signedContractId),
+    ));
+
+    for (const application of applications) {
+      if (!application.contractDeadlineAt) continue;
+      const threshold = selectAgentApplicationReminderThreshold(application.contractDeadlineAt, application.lastContractReminderAt, now);
+      if (!threshold) continue;
+      const windowStart = new Date(application.contractDeadlineAt.getTime() - threshold * 24 * 60 * 60 * 1000);
+      const [claimed] = await db.update(agentApplicationsTable).set({
+        lastContractReminderAt: now,
+        updatedAt: now,
+      }).where(and(
+        eq(agentApplicationsTable.id, application.id),
+        eq(agentApplicationsTable.status, "awaiting_signature"),
+        isNull(agentApplicationsTable.signedContractId),
+        or(isNull(agentApplicationsTable.lastContractReminderAt), lt(agentApplicationsTable.lastContractReminderAt, windowStart))!,
+      )).returning({ id: agentApplicationsTable.id });
+      if (!claimed) continue;
+
+      const content = await buildAgencyContractReminderEmail({
+        firstName: application.firstName,
+        referenceCode: application.referenceCode,
+        signUrl: `${getAppBaseUrl()}/agent/my-contract`,
+        expiresAt: application.contractDeadlineAt,
+        daysLeft: daysBetween(application.contractDeadlineAt, now),
+      });
+      const sent = await sendEmail(application.email, content);
+      if (!sent) {
+        await db.update(agentApplicationsTable).set({ lastContractReminderAt: application.lastContractReminderAt, updatedAt: now })
+          .where(eq(agentApplicationsTable.id, application.id));
+        console.error(`[AGENCY-APPLICATION] Contract reminder delivery failed for application ${application.id}`);
+        continue;
+      }
+      console.log(`[AGENCY-APPLICATION] Sent contract reminder for application ${application.id} (${threshold}d milestone)`);
+    }
+  } catch (err) {
+    console.error("[AGENCY-APPLICATION] Contract reminder check error:", err);
+  }
+}
+
+export async function restrictExpiredAgentApplications(): Promise<void> {
+  try {
+    const now = new Date();
+    const expired = await db.select({
+      id: agentApplicationsTable.id,
+      provisionalAgentId: agentApplicationsTable.provisionalAgentId,
+    }).from(agentApplicationsTable).where(and(
+      eq(agentApplicationsTable.status, "awaiting_signature"),
+      isNotNull(agentApplicationsTable.contractDeadlineAt),
+      lt(agentApplicationsTable.contractDeadlineAt, now),
+      isNull(agentApplicationsTable.signedContractId),
+    ));
+    let restricted = 0;
+    for (const application of expired) {
+      await db.transaction(async (tx) => {
+        const [claimed] = await tx.update(agentApplicationsTable).set({
+          portalAccessStatus: "restricted",
+          accessRestrictedAt: now,
+          accessRestrictionReason: "contract_expired",
+          updatedAt: now,
+        }).where(and(
+          eq(agentApplicationsTable.id, application.id),
+          eq(agentApplicationsTable.status, "awaiting_signature"),
+          isNull(agentApplicationsTable.signedContractId),
+        )).returning({ id: agentApplicationsTable.id });
+        if (!claimed) return;
+        restricted++;
+        if (application.provisionalAgentId) {
+          await tx.update(agentsTable).set({ accessTier: "restricted", status: "provisional", updatedAt: now })
+            .where(eq(agentsTable.id, application.provisionalAgentId));
+        }
+      });
+    }
+    if (restricted > 0) console.log(`[AGENCY-APPLICATION] Restricted ${restricted} expired provisional application(s)`);
+  } catch (err) {
+    console.error("[AGENCY-APPLICATION] Expiry restriction error:", err);
+  }
 }
 
 export async function checkContractExpiries(): Promise<void> {
@@ -192,7 +310,12 @@ export function startContractChecker(): () => void {
 
   contractCheckerInitialTimer = setTimeout(() => {
     contractCheckerInitialTimer = null;
-    Promise.all([checkContractExpiries(), sweepExpiredSigningSessions()]).then(() => {
+    Promise.all([
+      checkContractExpiries(),
+      sweepExpiredSigningSessions(),
+      checkAgentApplicationContractReminders(),
+      restrictExpiredAgentApplications(),
+    ]).then(() => {
       console.log("[CONTRACT] Initial check completed");
     });
   }, 12000);
@@ -200,6 +323,8 @@ export function startContractChecker(): () => void {
   contractCheckerInterval = setInterval(() => {
     checkContractExpiries();
     sweepExpiredSigningSessions();
+    checkAgentApplicationContractReminders();
+    restrictExpiredAgentApplications();
   }, CHECK_INTERVAL);
   return stopContractChecker;
 }

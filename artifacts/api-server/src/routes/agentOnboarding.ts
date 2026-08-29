@@ -1,8 +1,8 @@
 import express, { Router, type IRouter, type Request, type Response, type NextFunction } from "express";
 import { getRateLimitIp, getClientIp } from "../lib/clientIp";
 import crypto from "crypto";
-import { db, agentsTable, usersTable, signingSessionsTable, signedContractsTable, contractTemplatesTable, settingsTable, emailVerificationCodesTable } from "@workspace/db";
-import { and, eq, gt, desc, ilike } from "drizzle-orm";
+import { db, agentsTable, usersTable, signingSessionsTable, signedContractsTable, contractTemplatesTable, settingsTable, emailVerificationCodesTable, agentApplicationsTable } from "@workspace/db";
+import { and, eq, gt, desc, ilike, or } from "drizzle-orm";
 import { requireAuth, requireRole } from "../lib/auth";
 import { MANAGER_ROLES } from "../lib/roles";
 import { writeAudit } from "../lib/auditLog";
@@ -134,7 +134,17 @@ router.get("/agents/me/onboarding-status", requireAuth, async (req: Request, res
   if (session) session = await lazyExpire(session);
   // Enforce admin-sent contract deadlines on every panel navigation: expires
   // past-due sessions and suspends the account when a deadline is missed.
-  try { await syncAdminContracts(agent); } catch (err) { console.error("[onboarding-status] admin contract sync:", err); }
+  if (agent.accessTier === "full") {
+    try { await syncAdminContracts(agent); } catch (err) { console.error("[onboarding-status] admin contract sync:", err); }
+  }
+
+  const [application] = await db.select().from(agentApplicationsTable)
+    .where(or(
+      eq(agentApplicationsTable.provisionalAgentId, agent.id),
+      eq(agentApplicationsTable.approvedAgentId, agent.id),
+    ))
+    .orderBy(desc(agentApplicationsTable.createdAt))
+    .limit(1);
 
   // Authoritative signed detection. An agent counts as signed whenever they
   // have ANY signing_sessions row with status='signed', resolved to the
@@ -158,9 +168,35 @@ router.get("/agents/me/onboarding-status", requireAuth, async (req: Request, res
     else if (session.status === "revoked") contractStatus = "revoked";
     else contractStatus = "pending";
   }
+  const provisionalPortal = agent.accessTier !== "full";
+  let portalAccessStatus = application?.portalAccessStatus ?? agent.accessTier ?? "full";
+  let accessRestrictionReason = application?.accessRestrictionReason ?? null;
+  if (provisionalPortal && application) {
+    const rejected = application.status === "rejected";
+    const contractExpired = contractStatus === "expired"
+      || (!!application.contractDeadlineAt && application.contractDeadlineAt.getTime() < Date.now() && contractStatus !== "signed");
+    if (rejected || contractExpired || agent.accessTier === "restricted") {
+      const reason = rejected ? "application_rejected" : (accessRestrictionReason || "contract_expired");
+      const now = new Date();
+      portalAccessStatus = "restricted";
+      accessRestrictionReason = reason;
+      if (application.portalAccessStatus !== "restricted" || agent.accessTier !== "restricted") {
+        await db.transaction(async (tx) => {
+          await tx.update(agentApplicationsTable).set({
+            portalAccessStatus: "restricted",
+            accessRestrictedAt: application.accessRestrictedAt ?? now,
+            accessRestrictionReason: reason,
+            updatedAt: now,
+          }).where(eq(agentApplicationsTable.id, application.id));
+          await tx.update(agentsTable).set({ accessTier: "restricted", status: "provisional", updatedAt: now })
+            .where(eq(agentsTable.id, agent.id));
+        });
+      }
+    }
+  }
   const passwordSet = !!user?.passwordHash;
   res.json({
-    requiresOnboarding: !user?.emailVerified || !passwordSet || (contractStatus !== "signed" && contractStatus !== "none"),
+    requiresOnboarding: provisionalPortal || !user?.emailVerified || !passwordSet || (contractStatus !== "signed" && contractStatus !== "none"),
     emailVerified: !!user?.emailVerified,
     passwordSet,
     email: user?.email || null,
@@ -170,6 +206,18 @@ router.get("/agents/me/onboarding-status", requireAuth, async (req: Request, res
     expiresAt: session?.expiresAt ?? null,
     templateId: session?.templateId ?? null,
     isPrimaryOnboarding: !!session?.isPrimaryOnboarding,
+    accessTier: agent.accessTier,
+    provisionalPortal,
+    portalAccessStatus,
+    applicationStatus: application?.status ?? null,
+    applicationReferenceCode: application?.referenceCode ?? null,
+    applicationDocuments: application ? {
+      logo: !!application.logoFileKey,
+      representativeId: !!application.representativeIdFileKey,
+      businessRegistration: !!application.businessRegistrationFileKey,
+    } : null,
+    contractDeadlineAt: application?.contractDeadlineAt ?? session?.expiresAt ?? null,
+    accessRestrictionReason,
   });
 });
 
@@ -735,6 +783,7 @@ const ADMIN_PENDING_STATUSES = ["review_pending", "intake_pending"];
  * (unsigned and not yet expired). Error-safe so it never breaks its callers.
  */
 async function syncAdminContracts(agent: typeof agentsTable.$inferSelect) {
+  if (agent.accessTier !== "full") return [];
   // agent_staff and sub_agent users should never receive admin-driven contracts
   if (agent.userId) {
     const [linkedUser] = await db.select({ role: usersTable.role }).from(usersTable).where(eq(usersTable.id, agent.userId));

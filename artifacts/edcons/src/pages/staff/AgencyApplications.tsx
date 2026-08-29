@@ -45,6 +45,14 @@ type AgencyApplication = {
   changeRequestMessage: string | null;
   assignedStaffId: number | null;
   branchId: number | null;
+  provisionalUserId?: number | null;
+  provisionalAgentId?: number | null;
+  portalAccessStatus?: string | null;
+  contractDeadlineAt?: string | null;
+  approvedCommissionRate?: string | number | null;
+  commercialActivatedAt?: string | null;
+  accessRestrictedAt?: string | null;
+  accessRestrictionReason?: string | null;
   signedAt: string | null;
   submittedAt: string | null;
   createdAt: string;
@@ -101,9 +109,10 @@ export default function AgencyApplications() {
   const [changeMessage, setChangeMessage] = useState("");
   const [assignedStaffId, setAssignedStaffId] = useState("none");
   const [branchId, setBranchId] = useState("none");
+  const [commissionRate, setCommissionRate] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-  const [temporaryPassword, setTemporaryPassword] = useState("");
+  const [activationMessage, setActivationMessage] = useState("");
   const [portalPath, setPortalPath] = useState("");
 
   const load = useCallback(async () => {
@@ -152,13 +161,14 @@ export default function AgencyApplications() {
   const selectedContractOption = contractOptions.find(option => String(option.id) === selectedTemplateId) || null;
 
   async function openDetails(row: AgencyApplication) {
-    setError(""); setTemporaryPassword(""); setPortalPath("");
+    setError(""); setActivationMessage(""); setPortalPath("");
     try {
       const response = await customFetch<{ data: AgencyApplication }>(`/api/agent-applications/${row.id}`);
       const detail = response.data;
       setSelected(detail); setReviewNotes(detail.reviewNotes || ""); setChangeMessage(detail.changeRequestMessage || "");
       setAssignedStaffId(detail.assignedStaffId ? String(detail.assignedStaffId) : "none");
       setBranchId(detail.branchId ? String(detail.branchId) : "none");
+      setCommissionRate(detail.approvedCommissionRate == null ? "" : String(detail.approvedCommissionRate));
       setSelectedTemplateId(String(detail.contractTemplateId));
     } catch (cause: any) { setError(cause?.data?.error || cause?.message || "Application could not be opened"); }
   }
@@ -227,11 +237,33 @@ export default function AgencyApplications() {
 
   async function approve() {
     if (!selected) return;
-    if (!window.confirm(tr ? "İmzalı başvuruyu onaylayıp acente hesabını oluşturmak istiyor musunuz?" : "Approve the signed application and create the agent account?")) return;
+    if (assignedStaffId === "none") { setError(tr ? "Ticari erişimi açmadan önce bir personel atayın." : "Assign a staff member before activating commercial access."); return; }
+    if (branchId === "none") { setError(tr ? "Ticari erişimi açmadan önce bir şube seçin." : "Select a branch before activating commercial access."); return; }
+    const parsedCommissionRate = Number(commissionRate);
+    if (!commissionRate.trim() || !Number.isFinite(parsedCommissionRate) || parsedCommissionRate < 0 || parsedCommissionRate > 100) {
+      setError(tr ? "0 ile 100 arasında geçerli bir komisyon oranı girin." : "Enter a valid commission rate between 0 and 100.");
+      return;
+    }
+    if (!window.confirm(tr ? "İmzalı başvuruyu onaylayıp acentenin ticari erişimini etkinleştirmek istiyor musunuz?" : "Approve the signed application and activate the agent's commercial access?")) return;
     setSaving(true); setError("");
     try {
-      const response = await customFetch<{ data: { application: AgencyApplication; temporaryPassword?: string; credentialsDispatched: boolean } }>(`/api/agent-applications/${selected.id}/approve`, { method: "POST" });
-      setSelected(response.data.application); setTemporaryPassword(response.data.temporaryPassword || ""); await load();
+      const response = await customFetch<{ data: { application: AgencyApplication; invitationDispatched: boolean; alreadyApproved: boolean } }>(`/api/agent-applications/${selected.id}/approve`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          reviewNotes: reviewNotes.trim() || null,
+          commissionRate: parsedCommissionRate,
+          assignedStaffId: Number(assignedStaffId),
+          branchId: Number(branchId),
+        }),
+      });
+      setSelected(response.data.application);
+      setActivationMessage(response.data.alreadyApproved
+        ? (tr ? "Acente daha önce etkinleştirilmiş." : "The agent was already activated.")
+        : response.data.invitationDispatched
+          ? (tr ? "Acente etkinleştirildi; gerekiyorsa parola oluşturma daveti gönderildi." : "The agent was activated; a password setup invitation was sent when needed.")
+          : (tr ? "Acente etkinleştirildi. Mevcut portal hesabıyla giriş yapabilir." : "The agent was activated and can use the existing portal account."));
+      await load();
     } catch (cause: any) { setError(cause?.data?.error || cause?.message || "Application could not be approved"); }
     finally { setSaving(false); }
   }
@@ -243,12 +275,12 @@ export default function AgencyApplications() {
       {error && !selected ? <ErrorBox message={error} /> : null}
       {loading ? <div className="py-20 grid place-items-center"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div> : rows.length === 0 ? <div className="py-16 text-center text-muted-foreground"><ClipboardCheck className="h-10 w-10 mx-auto mb-3" />{tr ? "Başvuru bulunamadı." : "No applications found."}</div> : <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="border-b text-left text-muted-foreground"><th className="p-3">{tr ? "Başvuru" : "Applicant"}</th><th className="p-3">{tr ? "Kurum" : "Organization"}</th><th className="p-3">{tr ? "Sözleşme" : "Contract"}</th><th className="p-3">{tr ? "Durum" : "Status"}</th><th className="p-3">{tr ? "Tarih" : "Date"}</th><th className="p-3 text-right">{tr ? "İşlem" : "Action"}</th></tr></thead><tbody>{rows.map((row) => <tr key={row.id} className="border-b last:border-0 hover:bg-muted/30"><td className="p-3"><strong>{row.firstName} {row.lastName}</strong><span className="block text-xs text-muted-foreground">{row.email} · {row.referenceCode}</span></td><td className="p-3">{row.companyName || row.businessName || "—"}<span className="block text-xs text-muted-foreground capitalize">{row.entityType}</span></td><td className="p-3 capitalize">{row.preferredLanguage}</td><td className="p-3"><Badge className={STATUS_STYLE[row.status] || ""}>{formatStatus(row.status)}</Badge></td><td className="p-3 text-muted-foreground">{new Date(row.createdAt).toLocaleDateString()}</td><td className="p-3 text-right"><Button size="sm" variant="outline" onClick={() => openDetails(row)}><Eye className="mr-2 h-4 w-4" />{tr ? "İncele" : "Review"}</Button></td></tr>)}</tbody></table></div>}
     </Card>
-    <Dialog open={Boolean(selected)} onOpenChange={(open) => { if (!open && !saving) { setSelected(null); setError(""); setTemporaryPassword(""); setPortalPath(""); } }}><DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto"><DialogHeader><DialogTitle>{selected?.firstName} {selected?.lastName} · {selected?.referenceCode}</DialogTitle><DialogDescription>{selected ? `${formatStatus(selected.status)} · ${selected.email}` : ""}</DialogDescription></DialogHeader>
+    <Dialog open={Boolean(selected)} onOpenChange={(open) => { if (!open && !saving) { setSelected(null); setError(""); setActivationMessage(""); setPortalPath(""); } }}><DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto"><DialogHeader><DialogTitle>{selected?.firstName} {selected?.lastName} · {selected?.referenceCode}</DialogTitle><DialogDescription>{selected ? `${formatStatus(selected.status)} · ${selected.email}` : ""}</DialogDescription></DialogHeader>
       {selected ? <div className="space-y-5">
-        {error ? <ErrorBox message={error} /> : null}{directoryError ? <ErrorBox message={directoryError} /> : null}{temporaryPassword ? <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4"><strong>{tr ? "Yerel geçici parola" : "Local temporary password"}</strong><code className="block mt-2 text-lg">{temporaryPassword}</code><p className="mt-2 text-xs text-muted-foreground">{tr ? "Bu yalnızca yerel ortamda gösterilir." : "This is displayed only in the local environment."}</p></div> : null}
+        {error ? <ErrorBox message={error} /> : null}{directoryError ? <ErrorBox message={directoryError} /> : null}{activationMessage ? <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800"><CheckCircle2 className="mr-2 inline h-4 w-4" />{activationMessage}</div> : null}
         {portalPath ? <div className="rounded-xl border border-blue-200 bg-blue-50 p-4"><strong>{tr ? "Yerel imza bağlantısı hazır" : "Local signing link is ready"}</strong><a className="mt-2 block break-all text-sm text-primary underline" href={portalPath}>{portalPath}</a></div> : null}
-        {selected.changeRequestMessage ? <div className="rounded-xl border border-amber-200 bg-amber-50 p-4"><strong>{tr ? "İstenen düzeltme" : "Requested changes"}</strong><p className="mt-1 text-sm">{selected.changeRequestMessage}</p></div> : null}
         <div className="grid md:grid-cols-3 gap-4 rounded-xl bg-muted/40 p-4"><Detail label={tr ? "Başvuru tipi" : "Entity type"} value={selected.entityType} /><Detail label={tr ? "Sözleşme dili" : "Contract language"} value={selected.preferredLanguage} /><Detail label={tr ? "Sözleşme" : "Contract"} value={selected.template ? `${selected.template.title || selected.template.name} · v${selected.template.version}` : "—"} /><Detail label={tr ? "Şirket" : "Company"} value={selected.companyName || "—"} /><Detail label={tr ? "Ticari ad" : "Trading name"} value={selected.businessName || "—"} /><Detail label={tr ? "Vergi/sicil" : "Tax/registration"} value={selected.taxNumber || "—"} /><Detail label={tr ? "Telefon" : "Phone"} value={selected.phone || "—"} /><Detail label={tr ? "Konum" : "Location"} value={[selected.city, selected.state, selected.country].filter(Boolean).join(", ") || "—"} /><Detail label={tr ? "Yıllık öğrenci" : "Students/year"} value={selected.estimatedStudents == null ? "—" : String(selected.estimatedStudents)} /><Detail label={tr ? "Faaliyet ülkeleri" : "Operating countries"} value={list(selected.operatingCountries)} /><Detail label={tr ? "Öğrenci pazarları" : "Recruitment markets"} value={list(selected.recruitmentMarkets)} /><Detail label={tr ? "İmza" : "Signature"} value={selected.signedAt ? new Date(selected.signedAt).toLocaleString() : (tr ? "Henüz imzalanmadı" : "Not signed yet")} /></div>
+        <div className="grid md:grid-cols-3 gap-4 rounded-xl border border-blue-100 bg-blue-50/70 p-4"><Detail label={tr ? "Portal erişimi" : "Portal access"} value={selected.portalAccessStatus ? formatStatus(selected.portalAccessStatus) : (tr ? "Geçici" : "Provisional")} /><Detail label={tr ? "Sözleşme son tarihi" : "Contract deadline"} value={selected.contractDeadlineAt ? new Date(selected.contractDeadlineAt).toLocaleString() : "—"} /><Detail label={tr ? "Onaylı komisyon" : "Approved commission"} value={selected.approvedCommissionRate == null ? "—" : `%${selected.approvedCommissionRate}`} /></div>
         <div className="rounded-xl border p-4 space-y-3">
           <div className="flex items-center gap-2"><FileSignature className="h-5 w-5" /><strong>{tr ? "Sözleşme hazırlığı" : "Contract preparation"}</strong></div>
           <p className="text-sm text-muted-foreground">{tr ? "Dil ve başvuru tipine göre otomatik seçilen şablonu, imzaya göndermeden önce değiştirebilirsiniz." : "You can override the template selected from language and applicant type before sending it for signature."}</p>
@@ -265,11 +297,11 @@ export default function AgencyApplications() {
           <div className="flex flex-wrap gap-2 text-xs text-muted-foreground"><Badge variant="outline">{selected.contractTemplateSelection === "manual" ? (tr ? "Personel seçimi" : "Staff override") : (tr ? "Otomatik seçim" : "Automatic selection")}</Badge>{selected.emailVerifiedAt ? <Badge variant="outline" className="text-emerald-700"><CheckCircle2 className="mr-1 h-3 w-3" />{tr ? "E-posta doğrulandı" : "Email verified"}</Badge> : null}{selected.contractSentAt ? <Badge variant="outline">{tr ? "İmzaya gönderildi" : "Sent for signature"}</Badge> : null}</div>
         </div>
         <div className="rounded-xl border p-4 space-y-3"><strong>{tr ? "Başvuru belgeleri" : "Application documents"}</strong><div className="flex flex-wrap gap-2">{selected.logoFileKey ? <DocumentButton id={selected.id} kind="logo" label={tr ? "Logo" : "Logo"} /> : null}{selected.representativeIdFileKey ? <DocumentButton id={selected.id} kind="representative-id" label={tr ? "Yetkili kimliği" : "Representative ID"} /> : null}{selected.businessRegistrationFileKey ? <DocumentButton id={selected.id} kind="business-registration" label={tr ? "Şirket kayıt belgesi" : "Business registration"} /> : null}</div></div>
-        <div className="space-y-3"><div className="grid md:grid-cols-2 gap-4"><div className="space-y-2"><Label>{tr ? "Atanan personel" : "Assigned staff"}</Label><Select value={assignedStaffId} onValueChange={setAssignedStaffId} disabled={saving || staff.length === 0}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="none">—</SelectItem>{staff.map((person) => <SelectItem key={person.id} value={String(person.id)}>{[person.firstName, person.lastName].filter(Boolean).join(" ") || person.email || `#${person.id}`}</SelectItem>)}</SelectContent></Select></div><div className="space-y-2"><Label>{tr ? "Şube" : "Branch"}</Label><Select value={branchId} onValueChange={setBranchId} disabled={saving || branches.length === 0}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="none">—</SelectItem>{branches.map((branch) => <SelectItem key={branch.id} value={String(branch.id)}>{branch.name}</SelectItem>)}</SelectContent></Select></div></div><div className="flex justify-end"><Button type="button" variant="outline" onClick={saveAssignment} disabled={saving || !selected || selected.status === "approved"}>{saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}{tr ? "Atamayı kaydet" : "Save assignment"}</Button></div></div>
+        <div className="space-y-3"><div className="grid md:grid-cols-3 gap-4"><div className="space-y-2"><Label>{tr ? "Atanan personel" : "Assigned staff"}</Label><Select value={assignedStaffId} onValueChange={setAssignedStaffId} disabled={saving || staff.length === 0}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="none">—</SelectItem>{staff.map((person) => <SelectItem key={person.id} value={String(person.id)}>{[person.firstName, person.lastName].filter(Boolean).join(" ") || person.email || `#${person.id}`}</SelectItem>)}</SelectContent></Select></div><div className="space-y-2"><Label>{tr ? "Şube" : "Branch"}</Label><Select value={branchId} onValueChange={setBranchId} disabled={saving || branches.length === 0}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="none">—</SelectItem>{branches.map((branch) => <SelectItem key={branch.id} value={String(branch.id)}>{branch.name}</SelectItem>)}</SelectContent></Select></div><div className="space-y-2"><Label>{tr ? "Komisyon oranı (%)" : "Commission rate (%)"}</Label><Input type="number" min="0" max="100" step="0.01" value={commissionRate} onChange={(event) => setCommissionRate(event.target.value)} disabled={saving || selected.status === "approved"} placeholder="15" /></div></div><div className="flex justify-end"><Button type="button" variant="outline" onClick={saveAssignment} disabled={saving || !selected || selected.status === "approved"}>{saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}{tr ? "Atamayı kaydet" : "Save assignment"}</Button></div></div>
         <div className="space-y-2"><Label>{tr ? "İnceleme notu" : "Review notes"}</Label><Textarea value={reviewNotes} onChange={(event) => setReviewNotes(event.target.value)} rows={3} /></div>
         <div className="space-y-2"><Label>{tr ? "Başvuru sahibinden istenecek düzeltmeler" : "Changes requested from applicant"}</Label><Textarea value={changeMessage} onChange={(event) => setChangeMessage(event.target.value)} rows={3} /></div>
       </div> : null}
-      <DialogFooter className="gap-2 flex-wrap sm:justify-between"><div className="flex flex-wrap gap-2"><Button variant="outline" onClick={() => review("under_review")} disabled={saving || !selected || !["submitted", "under_review", "changes_requested"].includes(selected.status)}>{tr ? "İncelemeye al" : "Start review"}</Button><Button variant="outline" onClick={() => review("changes_requested")} disabled={saving || !selected || !["submitted", "under_review", "changes_requested"].includes(selected.status)}><AlertCircle className="mr-2 h-4 w-4" />{tr ? "Düzeltme iste" : "Request changes"}</Button><Button variant="destructive" onClick={() => review("rejected")} disabled={saving || !selected || !["submitted", "under_review", "changes_requested"].includes(selected.status)}><XCircle className="mr-2 h-4 w-4" />{tr ? "Reddet" : "Reject"}</Button></div><div className="flex flex-wrap gap-2"><Button variant="outline" onClick={sendContract} disabled={saving || !selected || !["submitted", "under_review", "awaiting_signature"].includes(selected.status)}><Send className="mr-2 h-4 w-4" />{selected?.status === "awaiting_signature" ? (tr ? "Sözleşmeyi yeniden gönder" : "Resend contract") : (tr ? "Sözleşmeyi gönder" : "Send contract")}</Button><Button onClick={approve} disabled={saving || !selected || selected.status !== "signed"}>{saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}{tr ? "Onayla ve acente oluştur" : "Approve & create agent"}</Button></div></DialogFooter>
+      <DialogFooter className="gap-2 flex-wrap sm:justify-between"><div className="flex flex-wrap gap-2"><Button variant="outline" onClick={() => review("under_review")} disabled={saving || !selected || !["submitted", "under_review", "changes_requested"].includes(selected.status)}>{tr ? "İncelemeye al" : "Start review"}</Button><Button variant="outline" onClick={() => review("changes_requested")} disabled={saving || !selected || !["submitted", "under_review", "changes_requested"].includes(selected.status)}><AlertCircle className="mr-2 h-4 w-4" />{tr ? "Düzeltme iste" : "Request changes"}</Button><Button variant="destructive" onClick={() => review("rejected")} disabled={saving || !selected || !["submitted", "under_review", "changes_requested"].includes(selected.status)}><XCircle className="mr-2 h-4 w-4" />{tr ? "Reddet" : "Reject"}</Button></div><div className="flex flex-wrap gap-2"><Button variant="outline" onClick={sendContract} disabled={saving || !selected || !["submitted", "under_review", "awaiting_signature"].includes(selected.status)}><Send className="mr-2 h-4 w-4" />{selected?.status === "awaiting_signature" ? (tr ? "Sözleşmeyi yeniden gönder" : "Resend contract") : (tr ? "Sözleşmeyi gönder" : "Send contract")}</Button><Button onClick={approve} disabled={saving || !selected || selected.status !== "signed"}>{saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}{tr ? "Onayla ve ticari erişimi aç" : "Approve & activate access"}</Button></div></DialogFooter>
     </DialogContent></Dialog></div>;
 }
 

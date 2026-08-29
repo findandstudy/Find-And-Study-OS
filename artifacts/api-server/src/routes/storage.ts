@@ -8,6 +8,8 @@ import { callerOwnsObject, canAccessGenericObject, recordObjectOwner } from "../
 import { checkAndIncrementRateLimit } from "../lib/pgRateLimiter";
 import { validateApplicationDocumentFile, validateUploadedFile } from "../lib/fileUploadValidation";
 import { processUpload, UploadTooLargeError } from "../lib/uploads/processUpload";
+import { agentsTable, db } from "@workspace/db";
+import { eq } from "drizzle-orm";
 
 const RequestUploadUrlBody = z.object({
   name: z.string(),
@@ -53,6 +55,15 @@ const EMBED_LOGO_RULES: Record<string, Set<string>> = {
 };
 const EMBED_LOGO_MAX_BYTES = 5 * 1024 * 1024;
 
+async function isProvisionalAgentUser(userId: number): Promise<boolean> {
+  const [agent] = await db
+    .select({ accessTier: agentsTable.accessTier })
+    .from(agentsTable)
+    .where(eq(agentsTable.userId, userId))
+    .limit(1);
+  return !!agent && agent.accessTier !== "full";
+}
+
 router.post("/storage/uploads/request-url", requireAuth, async (req: Request, res: Response) => {
   const userId = req.user!.id;
   const allowed = await checkAndIncrementRateLimit(`upload:${userId}`, UPLOAD_LIMIT, UPLOAD_WINDOW_MS);
@@ -69,6 +80,18 @@ router.post("/storage/uploads/request-url", requireAuth, async (req: Request, re
 
   try {
     const { name, size, contentType, prefix } = parsed.data;
+
+    // Provisional applicants only need storage for the contract/onboarding
+    // evidence shown in their limited portal. Do not let the generic upload
+    // endpoint become a bypass around the provisional API gate.
+    if (await isProvisionalAgentUser(userId)) {
+      const isAgentOnboardingUpload = prefix === "agent-onboarding"
+        || prefix?.startsWith("agent-onboarding/");
+      if (!isAgentOnboardingUpload) {
+        res.status(403).json({ error: "Only agency onboarding uploads are available before approval" });
+        return;
+      }
+    }
 
     // Staff document uploads use STAFF_DOC_RULES (PDF/DOC/DOCX/JPG/PNG, up
     // to 25MB) — admin-only, gated by prefix `staff-documents/{userId}/`.
@@ -192,6 +215,11 @@ router.put("/storage/local-upload/:encoded", requireAuth, async (req: Request, r
 
   if (relPath.includes("..") || relPath.includes("\\") || relPath.startsWith("/")) {
     res.status(400).json({ error: "Invalid path" });
+    return;
+  }
+
+  if (await isProvisionalAgentUser(req.user!.id) && !relPath.startsWith("agent-onboarding/")) {
+    res.status(403).json({ error: "Only agency onboarding uploads are available before approval" });
     return;
   }
 

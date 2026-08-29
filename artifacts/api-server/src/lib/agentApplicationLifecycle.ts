@@ -1,5 +1,6 @@
 import {
   agentApplicationsTable,
+  agentsTable,
   db,
   signedContractsTable,
   signingSessionsTable,
@@ -30,17 +31,29 @@ export async function reconcileAgentApplicationSignature(applicationId: number):
   if (!signedContractId) return;
 
   const now = new Date();
-  await db.update(agentApplicationsTable).set({
-    status: "signed",
-    signedContractId,
-    signedAt: session.signedAt,
-    submittedAt: application.submittedAt || now,
-    changeRequestMessage: null,
-    updatedAt: now,
-  }).where(and(
-    eq(agentApplicationsTable.id, application.id),
-    eq(agentApplicationsTable.signingSessionId, session.id),
-  ));
+  await db.transaction(async (tx) => {
+    await tx.update(agentApplicationsTable).set({
+      status: "signed",
+      signedContractId,
+      signedAt: session.signedAt,
+      portalAccessStatus: "signed_pending_approval",
+      submittedAt: application.submittedAt || now,
+      changeRequestMessage: null,
+      accessRestrictedAt: null,
+      accessRestrictionReason: null,
+      updatedAt: now,
+    }).where(and(
+      eq(agentApplicationsTable.id, application.id),
+      eq(agentApplicationsTable.signingSessionId, session.id),
+    ));
+    if (application.provisionalAgentId) {
+      await tx.update(agentsTable).set({
+        status: "provisional",
+        accessTier: "provisional",
+        updatedAt: now,
+      }).where(eq(agentsTable.id, application.provisionalAgentId));
+    }
+  });
 }
 
 export async function markAgentApplicationContractSigned(params: {

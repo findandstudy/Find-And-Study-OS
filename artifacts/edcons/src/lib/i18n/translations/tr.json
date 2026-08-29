@@ -1388,6 +1388,10 @@
   "agentDash": {
     "title": "Acente Portalı",
     "subtitle": "Öğrencilerinizi, komisyonlarınızı ve başvuru durumunu takip edin",
+    "provisionalAccess": {
+      "title": "Acente başvurunuz inceleniyor",
+      "body": "Portalı şimdiden inceleyebilirsiniz. Komisyon oranları ve ticari yönetim araçları personel onayından sonra açılacaktır."
+    },
     "totalStudents": "Toplam Öğrenci",
     "activeApplications": "Aktif Başvurular",
     "enrolled": "Kayıtlı",

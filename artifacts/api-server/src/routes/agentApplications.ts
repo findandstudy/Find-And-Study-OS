@@ -1,7 +1,6 @@
 import { Router, raw as rawBody, type IRouter } from "express";
 import rateLimit from "express-rate-limit";
 import crypto from "crypto";
-import bcrypt from "bcryptjs";
 import { z } from "zod";
 import {
   agentApplicationsTable,
@@ -34,7 +33,7 @@ import {
 } from "../lib/agentApplicationPolicy";
 import { reconcileAgentApplicationSignature } from "../lib/agentApplicationLifecycle";
 import { setAgencyStaff } from "../lib/agencyStaff";
-import { buildAgentCredentialsEmail, getAppBaseUrl, sendEmail } from "../lib/email";
+import { buildAgencyPortalInvitationEmail, getAppBaseUrl, sendEmail } from "../lib/email";
 import { writeAudit } from "../lib/auditLog";
 import { ObjectStorageService } from "../lib/objectStorage";
 import { validateUploadedFileBuffer } from "../lib/fileUploadValidation";
@@ -117,6 +116,18 @@ const applicationBodySchema = z.object({
 
 type ApplicationBody = z.infer<typeof applicationBodySchema>;
 type Template = typeof contractTemplatesTable.$inferSelect;
+
+const PASSWORD_SETUP_TTL_MS = 48 * 60 * 60 * 1000;
+const CONTRACT_SIGNING_TTL_MS = 14 * 24 * 60 * 60 * 1000;
+
+function createPasswordSetupToken() {
+  const rawToken = crypto.randomBytes(32).toString("base64url");
+  return {
+    rawToken,
+    tokenHash: crypto.createHash("sha256").update(rawToken).digest("hex"),
+    expiresAt: new Date(Date.now() + PASSWORD_SETUP_TTL_MS),
+  };
+}
 
 function clean(value: string | null | undefined): string | null {
   const v = value?.trim();
@@ -206,7 +217,7 @@ async function createApplicationSession(params: {
   const branding = await resolveContractTemplateBranding(params.template);
   if (!hasContractCompanySignature(branding)) throw new Error("CONTRACT_SIGNATURE_MISSING");
   const { rawToken, tokenHash } = createSigningToken();
-  const expiresAt = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
+  const expiresAt = params.application.contractDeadlineAt || new Date(Date.now() + CONTRACT_SIGNING_TTL_MS);
   const [session] = await writer.insert(signingSessionsTable).values({
     templateId: params.template.id,
     templateVersionSnapshot: params.template.version,
@@ -216,7 +227,7 @@ async function createApplicationSession(params: {
     templateBodyHtmlSnapshot: params.template.bodyHtml,
     templateIntakeSchemaSnapshot: params.template.intakeSchema,
     templateSigningPageConfigSnapshot: branding,
-    agentId: null,
+    agentId: params.application.provisionalAgentId,
     tokenHash,
     mode: "self_fill",
     status: "review_pending",
@@ -243,6 +254,10 @@ async function createApplicationSession(params: {
   await writer.update(agentApplicationsTable).set({
     signingSessionId: session.id,
     status: "awaiting_signature",
+    portalAccessStatus: "contract_pending",
+    contractDeadlineAt: expiresAt,
+    accessRestrictedAt: null,
+    accessRestrictionReason: null,
     updatedAt: new Date(),
   }).where(eq(agentApplicationsTable.id, params.application.id));
   return { session, rawToken, signPath: `/sign/${rawToken}` };
@@ -340,6 +355,13 @@ function safeApplication(row: typeof agentApplicationsTable.$inferSelect) {
     contractTemplateSelection: row.contractTemplateSelection,
     contractPreparedAt: row.contractPreparedAt,
     contractSentAt: row.contractSentAt,
+    portalAccessStatus: row.portalAccessStatus,
+    contractDeadlineAt: row.contractDeadlineAt,
+    passwordSetupSentAt: row.passwordSetupSentAt,
+    approvedCommissionRate: row.approvedCommissionRate,
+    commercialActivatedAt: row.commercialActivatedAt,
+    accessRestrictedAt: row.accessRestrictedAt,
+    accessRestrictionReason: row.accessRestrictionReason,
     canStartSigning: row.status === "awaiting_signature" && Boolean(row.contractSentAt),
     changeRequestMessage: row.changeRequestMessage,
     signedAt: row.signedAt,
@@ -546,9 +568,14 @@ router.post("/public/agent-applications", publicLimiter, async (req, res): Promi
     }
     const rawAccessToken = crypto.randomBytes(32).toString("base64url");
     const accessTokenHash = hashToken(rawAccessToken);
+    const passwordSetup = createPasswordSetupToken();
     const now = new Date();
     const fields = contractFields(body, template.id);
-    const application = await db.transaction(async (tx) => {
+    const created = await db.transaction(async (tx) => {
+      const [existingUser] = await tx.select({ id: usersTable.id }).from(usersTable)
+        .where(ilike(usersTable.email, email));
+      if (existingUser) throw Object.assign(new Error("EMAIL_EXISTS"), { status: 409 });
+
       const [application] = await tx.insert(agentApplicationsTable).values({
         referenceCode: agentApplicationReference(),
         accessTokenHash,
@@ -584,22 +611,88 @@ router.post("/public/agent-applications", publicLimiter, async (req, res): Promi
         submittedAt: now,
         consentIpHash: hashSensitiveEvidence(getClientIp(req) || "unknown", "consent-ip"),
       }).returning();
-      return application;
+
+      const [user] = await tx.insert(usersTable).values({
+        email,
+        firstName: body.firstName.trim(),
+        lastName: body.lastName.trim(),
+        role: "agent",
+        phone: clean(body.phone),
+        phoneE164: toE164(clean(body.phone)),
+        language: fields.preferredLanguage,
+        emailVerified: true,
+        isActive: true,
+        passwordResetToken: passwordSetup.tokenHash,
+        passwordResetExpires: passwordSetup.expiresAt,
+        createdFromSource: "agency_application",
+      }).returning();
+
+      const [agent] = await tx.insert(agentsTable).values({
+        userId: user.id,
+        agencyCode: null,
+        firstName: body.firstName.trim(),
+        lastName: body.lastName.trim(),
+        email,
+        phone: clean(body.phone),
+        phoneE164: toE164(clean(body.phone)),
+        entityType: fields.entityType,
+        preferredContractLanguage: fields.preferredLanguage,
+        assignedContractTemplateId: template.id,
+        companyName: clean(body.companyName),
+        businessName: clean(body.businessName),
+        taxNumber: clean(body.taxNumber),
+        country: clean(body.country),
+        state: clean(body.state),
+        city: clean(body.city),
+        address: clean(body.address),
+        logoUrl: body.documents.logo?.fileKey || null,
+        agentIdProofUrl: body.documents.representativeId.fileKey,
+        businessCertUrl: body.documents.businessRegistration?.fileKey || null,
+        status: "provisional",
+        accessTier: "provisional",
+        canManageStaff: false,
+        embedToken: crypto.randomUUID(),
+      }).returning();
+
+      const [linkedApplication] = await tx.update(agentApplicationsTable).set({
+        provisionalUserId: user.id,
+        provisionalAgentId: agent.id,
+        portalAccessStatus: "provisional",
+        passwordSetupSentAt: now,
+        updatedAt: now,
+      }).where(eq(agentApplicationsTable.id, application.id)).returning();
+      return { application: linkedApplication || application, user, agent };
     });
+    const application = created.application;
+    const language = fields.preferredLanguage || "en";
+    const portalPath = `/${language}/agency/apply?application=${encodeURIComponent(rawAccessToken)}`;
+    const passwordSetupPath = `/${language}/login?token=${encodeURIComponent(passwordSetup.rawToken)}`;
+    let invitationDispatched = false;
     if (isLiveIntegrationsEnabled()) {
-      const portalPath = `/${body.preferredLanguage}/agency/apply?application=${encodeURIComponent(rawAccessToken)}`;
-      sendEmail(email, {
-        subject: `Agency application received · ${application.referenceCode}`,
-        text: `Your agency application ${application.referenceCode} was received. Track it at ${getAppBaseUrl()}${portalPath}`,
-        html: `<p>Your agency application <strong>${application.referenceCode}</strong> was received.</p><p><a href="${getAppBaseUrl()}${portalPath}">Track your application</a></p>`,
-      }).catch((error) => console.error("[agent-applications] confirmation email", error));
+      try {
+        const content = await buildAgencyPortalInvitationEmail({
+          firstName: application.firstName,
+          referenceCode: application.referenceCode,
+          passwordSetupUrl: `${getAppBaseUrl()}${passwordSetupPath}`,
+          trackingUrl: `${getAppBaseUrl()}${portalPath}`,
+        });
+        invitationDispatched = await sendEmail(email, content);
+      } catch (error) {
+        console.error("[agent-applications] portal invitation email", error);
+      }
     }
     res.status(201).json({ data: {
       application: safeApplication(application),
       accessToken: rawAccessToken,
       signPath: null,
+      invitationDispatched,
+      ...(process.env.NODE_ENV !== "production" && !invitationDispatched ? { passwordSetupPath } : {}),
     } });
   } catch (error: any) {
+    if (error?.message === "EMAIL_EXISTS") {
+      res.status(409).json({ error: "An account with this email already exists" });
+      return;
+    }
     if (error?.code === "23505") {
       res.status(409).json({ error: "This application was already received" });
       return;
@@ -697,6 +790,8 @@ router.patch("/public/agent-applications/:token", publicLimiter, async (req, res
     const template = await resolveTemplate(body.entityType, body.preferredLanguage);
     if (!template) { res.status(409).json({ error: "No published contract is available for the selected type and language" }); return; }
     const fields = contractFields(body, template.id);
+    const passwordSetup = createPasswordSetupToken();
+    const revisedAt = new Date();
     const revision = await db.transaction(async (tx) => {
       const [updated] = await tx.update(agentApplicationsTable).set({
         status: "submitted",
@@ -718,7 +813,7 @@ router.patch("/public/agent-applications/:token", publicLimiter, async (req, res
         estimatedStudents: body.estimatedStudents ?? null,
         operatingCountries: body.operatingCountries,
         recruitmentMarkets: body.recruitmentMarkets,
-        emailVerifiedAt: email === application.email.trim().toLowerCase() ? application.emailVerifiedAt : new Date(),
+        emailVerifiedAt: email === application.email.trim().toLowerCase() ? application.emailVerifiedAt : revisedAt,
         logoFileKey: body.documents.logo?.fileKey || null,
         representativeIdFileKey: body.documents.representativeId.fileKey,
         businessRegistrationFileKey: body.documents.businessRegistration?.fileKey || null,
@@ -733,21 +828,89 @@ router.patch("/public/agent-applications/:token", publicLimiter, async (req, res
         signingSessionId: null,
         signedContractId: null,
         signedAt: null,
-        submittedAt: new Date(),
+        portalAccessStatus: "provisional",
+        contractDeadlineAt: null,
+        lastContractReminderAt: null,
+        passwordSetupSentAt: revisedAt,
+        accessRestrictedAt: null,
+        accessRestrictionReason: null,
+        submittedAt: revisedAt,
         changeRequestMessage: null,
-        consentedAt: new Date(),
+        consentedAt: revisedAt,
         consentIpHash: hashSensitiveEvidence(getClientIp(req) || "unknown", "consent-ip"),
-        updatedAt: new Date(),
+        updatedAt: revisedAt,
       }).where(and(eq(agentApplicationsTable.id, application.id), eq(agentApplicationsTable.status, "changes_requested"))).returning();
       if (!updated) return null;
       if (application.signingSessionId) {
         await tx.update(signingSessionsTable).set({ status: "cancelled", updatedAt: new Date() })
           .where(and(eq(signingSessionsTable.id, application.signingSessionId), ne(signingSessionsTable.status, "signed")));
       }
+      if (application.provisionalUserId) {
+        await tx.update(usersTable).set({
+          email,
+          firstName: body.firstName.trim(),
+          lastName: body.lastName.trim(),
+          phone: clean(body.phone),
+          phoneE164: toE164(clean(body.phone)),
+          language: fields.preferredLanguage,
+          emailVerified: true,
+          isActive: true,
+          passwordResetToken: passwordSetup.tokenHash,
+          passwordResetExpires: passwordSetup.expiresAt,
+          updatedAt: revisedAt,
+        }).where(eq(usersTable.id, application.provisionalUserId));
+      }
+      if (application.provisionalAgentId) {
+        await tx.update(agentsTable).set({
+          firstName: body.firstName.trim(),
+          lastName: body.lastName.trim(),
+          email,
+          phone: clean(body.phone),
+          phoneE164: toE164(clean(body.phone)),
+          entityType: fields.entityType,
+          preferredContractLanguage: fields.preferredLanguage,
+          assignedContractTemplateId: template.id,
+          companyName: clean(body.companyName),
+          businessName: clean(body.businessName),
+          taxNumber: clean(body.taxNumber),
+          country: clean(body.country),
+          state: clean(body.state),
+          city: clean(body.city),
+          address: clean(body.address),
+          logoUrl: body.documents.logo?.fileKey || null,
+          agentIdProofUrl: body.documents.representativeId.fileKey,
+          businessCertUrl: body.documents.businessRegistration?.fileKey || null,
+          status: "provisional",
+          accessTier: "provisional",
+          canManageStaff: false,
+          updatedAt: revisedAt,
+        }).where(eq(agentsTable.id, application.provisionalAgentId));
+      }
       return updated;
     });
     if (!revision) { res.status(409).json({ error: "Application state changed" }); return; }
-    res.json({ data: { application: safeApplication(revision), accessToken: String(req.params.token), signPath: null } });
+    const passwordSetupPath = `/${fields.preferredLanguage || "en"}/login?token=${encodeURIComponent(passwordSetup.rawToken)}`;
+    let invitationDispatched = false;
+    if (application.provisionalUserId && isLiveIntegrationsEnabled()) {
+      try {
+        const content = await buildAgencyPortalInvitationEmail({
+          firstName: revision.firstName,
+          referenceCode: revision.referenceCode,
+          passwordSetupUrl: `${getAppBaseUrl()}${passwordSetupPath}`,
+          trackingUrl: `${getAppBaseUrl()}/${fields.preferredLanguage || "en"}/agency/apply?application=${encodeURIComponent(String(req.params.token))}`,
+        });
+        invitationDispatched = await sendEmail(email, content);
+      } catch (error) {
+        console.error("[agent-applications] revised portal invitation", error);
+      }
+    }
+    res.json({ data: {
+      application: safeApplication(revision),
+      accessToken: String(req.params.token),
+      signPath: null,
+      invitationDispatched,
+      ...(process.env.NODE_ENV !== "production" && !invitationDispatched ? { passwordSetupPath } : {}),
+    } });
   } catch (error: any) {
     if (error?.code === "23505") { res.status(409).json({ error: "This email or signing session is already in use" }); return; }
     console.error("[agent-applications] resubmit", error);
@@ -826,6 +989,37 @@ router.get("/agent-applications/:id/documents/:kind", requireAuth, requireRole(.
     res.send(buffer);
   } catch (error) {
     console.error("[agent-applications] document download", error);
+    res.status(404).json({ error: "Document not found" });
+  }
+});
+
+router.get("/agents/me/agency-application/documents/:kind", requireAuth, async (req, res): Promise<void> => {
+  if (req.user!.role !== "agent") { res.status(403).json({ error: "Forbidden" }); return; }
+  const [agent] = await db.select({ id: agentsTable.id }).from(agentsTable)
+    .where(eq(agentsTable.userId, req.user!.id));
+  if (!agent) { res.status(404).json({ error: "Agency application not found" }); return; }
+  const [application] = await db.select().from(agentApplicationsTable)
+    .where(or(
+      eq(agentApplicationsTable.provisionalAgentId, agent.id),
+      eq(agentApplicationsTable.approvedAgentId, agent.id),
+    ))
+    .orderBy(desc(agentApplicationsTable.createdAt))
+    .limit(1);
+  if (!application) { res.status(404).json({ error: "Agency application not found" }); return; }
+  const document = applicationDocument(application, String(req.params.kind || ""));
+  if (!document?.key) { res.status(404).json({ error: "Document not found" }); return; }
+  try {
+    const file = await objectStorageService.getObjectEntityFile(document.key);
+    const [[buffer], [metadata]] = await Promise.all([file.download(), file.getMetadata()]);
+    const contentType = String(document.metadata?.contentType || metadata.contentType || "application/octet-stream");
+    const name = safeDownloadName(document.metadata?.name);
+    res.setHeader("Content-Type", contentType);
+    res.setHeader("Content-Length", String(buffer.length));
+    res.setHeader("Content-Disposition", `inline; filename="${name}"`);
+    res.setHeader("Cache-Control", "private, no-store");
+    res.send(buffer);
+  } catch (error) {
+    console.error("[agent-applications] applicant document download", error);
     res.status(404).json({ error: "Document not found" });
   }
 });
@@ -962,16 +1156,33 @@ router.post("/agent-applications/:id/send-contract", requireAuth, requireRole(..
   }
   const rawAccessToken = crypto.randomBytes(32).toString("base64url");
   const now = new Date();
-  const [updated] = await db.update(agentApplicationsTable).set({
-    status: "awaiting_signature",
-    accessTokenHash: hashToken(rawAccessToken),
-    contractPreparedAt: now,
-    contractSentAt: now,
-    changeRequestMessage: null,
-    reviewedAt: now,
-    reviewedByUserId: req.user!.id,
-    updatedAt: now,
-  }).where(eq(agentApplicationsTable.id, id)).returning();
+  const contractDeadlineAt = new Date(now.getTime() + CONTRACT_SIGNING_TTL_MS);
+  const [updated] = await db.transaction(async (tx) => {
+    const rows = await tx.update(agentApplicationsTable).set({
+      status: "awaiting_signature",
+      accessTokenHash: hashToken(rawAccessToken),
+      portalAccessStatus: "contract_pending",
+      contractPreparedAt: now,
+      contractSentAt: now,
+      contractDeadlineAt,
+      lastContractReminderAt: null,
+      accessRestrictedAt: null,
+      accessRestrictionReason: null,
+      changeRequestMessage: null,
+      reviewedAt: now,
+      reviewedByUserId: req.user!.id,
+      updatedAt: now,
+    }).where(eq(agentApplicationsTable.id, id)).returning();
+    if (application.provisionalAgentId) {
+      await tx.update(agentsTable).set({
+        status: "provisional",
+        accessTier: "provisional",
+        assignedContractTemplateId: application.contractTemplateId,
+        updatedAt: now,
+      }).where(eq(agentsTable.id, application.provisionalAgentId));
+    }
+    return rows;
+  });
   const portalPath = `/${application.preferredLanguage || "en"}/agency/apply?application=${encodeURIComponent(rawAccessToken)}`;
   let dispatched = false;
   if (isLiveIntegrationsEnabled()) {
@@ -981,7 +1192,7 @@ router.post("/agent-applications/:id/send-contract", requireAuth, requireRole(..
       html: `<p>Your agency application <strong>${application.referenceCode}</strong> was reviewed.</p><p><a href="${getAppBaseUrl()}${portalPath}">Review and sign your contract</a></p>`,
     });
   }
-  await writeAudit({ userId: req.user!.id, action: "agent_application.contract_sent", resource: "agent_application", resourceId: id, changes: { templateId: application.contractTemplateId, dispatched }, ipAddress: req.ip });
+  await writeAudit({ userId: req.user!.id, action: "agent_application.contract_sent", resource: "agent_application", resourceId: id, changes: { templateId: application.contractTemplateId, contractDeadlineAt, dispatched }, ipAddress: req.ip });
   res.json({ data: { application: updated, dispatched, portalPath } });
 });
 
@@ -997,40 +1208,64 @@ router.patch("/agent-applications/:id/review", requireAuth, requireRole(...MANAG
   const parsed = schema.safeParse(req.body || {});
   if (!Number.isInteger(id) || !parsed.success) { res.status(400).json({ error: "Invalid review update" }); return; }
   const now = new Date();
-  const [updated] = await db.update(agentApplicationsTable).set({
-    status: parsed.data.status,
-    reviewNotes: clean(parsed.data.reviewNotes),
-    changeRequestMessage: parsed.data.status === "changes_requested" ? clean(parsed.data.changeRequestMessage) : null,
-    assignedStaffId: parsed.data.assignedStaffId === undefined ? undefined : parsed.data.assignedStaffId,
-    branchId: parsed.data.branchId === undefined ? undefined : parsed.data.branchId,
-    reviewedByUserId: req.user!.id,
-    reviewedAt: now,
-    rejectedAt: parsed.data.status === "rejected" ? now : null,
-    updatedAt: now,
-  }).where(and(eq(agentApplicationsTable.id, id), inArray(agentApplicationsTable.status, ["submitted", "under_review", "changes_requested"]))).returning();
+  const [updated] = await db.transaction(async (tx) => {
+    await tx.execute(sql`SELECT id FROM agent_applications WHERE id = ${id} FOR UPDATE`);
+    const [current] = await tx.select().from(agentApplicationsTable).where(eq(agentApplicationsTable.id, id));
+    if (!current || !["submitted", "under_review", "changes_requested"].includes(current.status)) return [];
+    const rejected = parsed.data.status === "rejected";
+    const rows = await tx.update(agentApplicationsTable).set({
+      status: parsed.data.status,
+      portalAccessStatus: rejected ? "restricted" : "provisional",
+      reviewNotes: clean(parsed.data.reviewNotes),
+      changeRequestMessage: parsed.data.status === "changes_requested" ? clean(parsed.data.changeRequestMessage) : null,
+      assignedStaffId: parsed.data.assignedStaffId === undefined ? undefined : parsed.data.assignedStaffId,
+      branchId: parsed.data.branchId === undefined ? undefined : parsed.data.branchId,
+      reviewedByUserId: req.user!.id,
+      reviewedAt: now,
+      rejectedAt: rejected ? now : null,
+      contractDeadlineAt: parsed.data.status === "under_review" ? undefined : null,
+      lastContractReminderAt: parsed.data.status === "under_review" ? undefined : null,
+      accessRestrictedAt: rejected ? now : null,
+      accessRestrictionReason: rejected ? "application_rejected" : null,
+      updatedAt: now,
+    }).where(eq(agentApplicationsTable.id, id)).returning();
+    if (current.signingSessionId && ["changes_requested", "rejected"].includes(parsed.data.status)) {
+      await tx.update(signingSessionsTable).set({ status: "cancelled", updatedAt: now })
+        .where(and(eq(signingSessionsTable.id, current.signingSessionId), ne(signingSessionsTable.status, "signed")));
+    }
+    if (current.provisionalAgentId) {
+      await tx.update(agentsTable).set({
+        status: rejected ? "rejected" : "provisional",
+        accessTier: rejected ? "restricted" : "provisional",
+        assignedStaffId: parsed.data.assignedStaffId === undefined ? current.assignedStaffId : parsed.data.assignedStaffId,
+        canManageStaff: false,
+        updatedAt: now,
+      }).where(eq(agentsTable.id, current.provisionalAgentId));
+    }
+    return rows;
+  });
   if (!updated) { res.status(409).json({ error: "Application state changed or cannot be reviewed" }); return; }
   await writeAudit({ userId: req.user!.id, action: `agent_application.${parsed.data.status}`, resource: "agent_application", resourceId: id, changes: parsed.data, ipAddress: req.ip });
   res.json({ data: updated });
 });
 
-function generatePassword(): string {
-  const upper = "ABCDEFGHJKLMNPQRSTUVWXYZ";
-  const lower = "abcdefghijkmnpqrstuvwxyz";
-  const digits = "23456789";
-  const all = upper + lower + digits;
-  const pick = (chars: string) => chars[crypto.randomInt(0, chars.length)];
-  const chars = [pick(upper), pick(lower), pick(digits)];
-  while (chars.length < 14) chars.push(pick(all));
-  return chars.sort(() => crypto.randomInt(0, 3) - 1).join("");
-}
-
 router.post("/agent-applications/:id/approve", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
   const id = Number(req.params.id);
-  if (!Number.isInteger(id)) { res.status(400).json({ error: "Invalid application id" }); return; }
+  const parsed = z.object({
+    reviewNotes: z.string().trim().max(4000).optional().nullable(),
+    commissionRate: z.coerce.number().min(0).max(100).optional(),
+    assignedStaffId: z.coerce.number().int().positive().optional().nullable(),
+    branchId: z.coerce.number().int().positive().optional().nullable(),
+  }).safeParse(req.body || {});
+  if (!Number.isInteger(id) || !parsed.success) { res.status(400).json({ error: "Invalid approval data" }); return; }
   await reconcileAgentApplicationSignature(id);
-  const temporaryPassword = generatePassword();
-  const passwordHash = await bcrypt.hash(temporaryPassword, 10);
-  let result: { agent: typeof agentsTable.$inferSelect; application: typeof agentApplicationsTable.$inferSelect; alreadyApproved: boolean } | null = null;
+  const passwordSetup = createPasswordSetupToken();
+  let result: {
+    agent: typeof agentsTable.$inferSelect;
+    application: typeof agentApplicationsTable.$inferSelect;
+    alreadyApproved: boolean;
+    passwordSetupRequired: boolean;
+  } | null = null;
   try {
     result = await db.transaction(async (tx) => {
       await tx.execute(sql`SELECT id FROM agent_applications WHERE id = ${id} FOR UPDATE`);
@@ -1039,9 +1274,13 @@ router.post("/agent-applications/:id/approve", requireAuth, requireRole(...MANAG
       if (application.approvedAgentId) {
         const [agent] = await tx.select().from(agentsTable).where(eq(agentsTable.id, application.approvedAgentId));
         if (!agent) throw Object.assign(new Error("APPROVED_AGENT_MISSING"), { status: 409 });
-        return { agent, application, alreadyApproved: true };
+        return { agent, application, alreadyApproved: true, passwordSetupRequired: false };
       }
       if (application.status !== "signed") throw Object.assign(new Error("NOT_READY"), { status: 409 });
+      if (!application.emailVerifiedAt) throw Object.assign(new Error("EMAIL_NOT_VERIFIED"), { status: 409 });
+      if (!application.representativeIdFileKey || (application.entityType === "company" && !application.businessRegistrationFileKey)) {
+        throw Object.assign(new Error("DOCUMENTS_REQUIRED"), { status: 409 });
+      }
       if (!application.signingSessionId || !application.signedContractId) throw Object.assign(new Error("SIGNATURE_REQUIRED"), { status: 409 });
       const [[session], [signed], [template]] = await Promise.all([
         tx.select().from(signingSessionsTable).where(eq(signingSessionsTable.id, application.signingSessionId)),
@@ -1072,23 +1311,100 @@ router.post("/agent-applications/:id/approve", requireAuth, requireRole(...MANAG
         website: application.website,
       });
       if (currentContractHash !== application.contractDataHash) throw Object.assign(new Error("SIGNED_DATA_CHANGED"), { status: 409 });
-      const [existingUser] = await tx.select().from(usersTable).where(ilike(usersTable.email, application.email));
-      if (existingUser) throw Object.assign(new Error("EMAIL_EXISTS"), { status: 409 });
-      const [user] = await tx.insert(usersTable).values({
-        email: application.email,
+      const assignedStaffId = parsed.data.assignedStaffId === undefined ? application.assignedStaffId : parsed.data.assignedStaffId;
+      const branchId = parsed.data.branchId === undefined ? application.branchId : parsed.data.branchId;
+      const [existingAgentForRate] = application.provisionalAgentId
+        ? await tx.select().from(agentsTable).where(eq(agentsTable.id, application.provisionalAgentId))
+        : [];
+      const commissionRate = parsed.data.commissionRate ?? application.approvedCommissionRate ?? existingAgentForRate?.commissionRate;
+      if (!assignedStaffId) throw Object.assign(new Error("STAFF_REQUIRED"), { status: 409 });
+      if (!branchId) throw Object.assign(new Error("BRANCH_REQUIRED"), { status: 409 });
+      if (commissionRate == null || !Number.isFinite(commissionRate) || commissionRate < 0 || commissionRate > 100) {
+        throw Object.assign(new Error("COMMISSION_REQUIRED"), { status: 409 });
+      }
+      const [[staffUser], [branch]] = await Promise.all([
+        tx.select().from(usersTable).where(eq(usersTable.id, assignedStaffId)),
+        tx.select().from(branchesTable).where(and(eq(branchesTable.id, branchId), isNull(branchesTable.archivedAt))),
+      ]);
+      if (!staffUser || !staffUser.isActive || !new Set<string>(STAFF_ROLES).has(staffUser.role)) {
+        throw Object.assign(new Error("STAFF_INVALID"), { status: 409 });
+      }
+      if (!branch) throw Object.assign(new Error("BRANCH_INVALID"), { status: 409 });
+
+      let [user] = application.provisionalUserId
+        ? await tx.select().from(usersTable).where(eq(usersTable.id, application.provisionalUserId))
+        : [];
+      if (!user) [user] = await tx.select().from(usersTable).where(ilike(usersTable.email, application.email));
+      if (user && user.role !== "agent") throw Object.assign(new Error("EMAIL_EXISTS"), { status: 409 });
+      if (!user) {
+        [user] = await tx.insert(usersTable).values({
+          email: application.email,
+          firstName: application.firstName,
+          lastName: application.lastName,
+          role: "agent",
+          phone: application.phone,
+          phoneE164: application.phoneE164,
+          passwordHash: null,
+          passwordResetToken: passwordSetup.tokenHash,
+          passwordResetExpires: passwordSetup.expiresAt,
+          language: application.preferredLanguage,
+          emailVerified: true,
+          isActive: true,
+          createdFromSource: "agency_application",
+        }).returning();
+      }
+      const passwordSetupRequired = !user.passwordHash;
+      await tx.update(usersTable).set({
         firstName: application.firstName,
         lastName: application.lastName,
-        role: "agent",
         phone: application.phone,
         phoneE164: application.phoneE164,
-        passwordHash,
         language: application.preferredLanguage,
         emailVerified: true,
         isActive: true,
-        createdFromSource: "agency_application",
-      }).returning();
-      const [agent] = await tx.insert(agentsTable).values({
+        ...(passwordSetupRequired ? {
+          passwordResetToken: passwordSetup.tokenHash,
+          passwordResetExpires: passwordSetup.expiresAt,
+        } : {}),
+        updatedAt: new Date(),
+      }).where(eq(usersTable.id, user.id));
+
+      let [agent] = application.provisionalAgentId
+        ? await tx.select().from(agentsTable).where(eq(agentsTable.id, application.provisionalAgentId))
+        : [];
+      if (!agent) [agent] = await tx.select().from(agentsTable).where(eq(agentsTable.userId, user.id));
+      const now = new Date();
+      if (!agent) {
+        [agent] = await tx.insert(agentsTable).values({
+          userId: user.id,
+          firstName: application.firstName,
+          lastName: application.lastName,
+          email: application.email,
+          phone: application.phone,
+          phoneE164: application.phoneE164,
+          entityType: application.entityType,
+          preferredContractLanguage: application.preferredLanguage,
+          assignedContractTemplateId: application.contractTemplateId,
+          companyName: application.companyName,
+          businessName: application.businessName,
+          taxNumber: application.taxNumber,
+          country: application.country,
+          state: application.state,
+          city: application.city,
+          address: application.address,
+          logoUrl: application.logoFileKey,
+          agentIdProofUrl: application.representativeIdFileKey,
+          businessCertUrl: application.businessRegistrationFileKey,
+          status: "provisional",
+          accessTier: "provisional",
+          canManageStaff: false,
+          assignedStaffId,
+          embedToken: crypto.randomUUID(),
+        }).returning();
+      }
+      const [activatedAgent] = await tx.update(agentsTable).set({
         userId: user.id,
+        agencyCode: sql`COALESCE(${agentsTable.agencyCode}, 'AG-' || LPAD(nextval('agent_agency_code_seq')::text, 6, '0'))`,
         firstName: application.firstName,
         lastName: application.lastName,
         email: application.email,
@@ -1107,23 +1423,38 @@ router.post("/agent-applications/:id/approve", requireAuth, requireRole(...MANAG
         logoUrl: application.logoFileKey,
         agentIdProofUrl: application.representativeIdFileKey,
         businessCertUrl: application.businessRegistrationFileKey,
+        commissionRate,
+        assignedStaffId,
         status: "active",
-        assignedStaffId: application.assignedStaffId,
-        embedToken: crypto.randomUUID(),
-      }).returning();
-      if (application.branchId) await tx.insert(agentBranchesTable).values({ agentId: agent.id, branchId: application.branchId }).onConflictDoNothing();
-      await tx.update(signingSessionsTable).set({ agentId: agent.id, updatedAt: new Date() }).where(eq(signingSessionsTable.id, session.id));
+        accessTier: "full",
+        commercialActivatedAt: now,
+        canManageStaff: true,
+        updatedAt: now,
+      }).where(eq(agentsTable.id, agent.id)).returning();
+      agent = activatedAgent;
+      await tx.insert(agentBranchesTable).values({ agentId: agent.id, branchId }).onConflictDoNothing();
+      await tx.update(signingSessionsTable).set({ agentId: agent.id, updatedAt: now }).where(eq(signingSessionsTable.id, session.id));
       await tx.update(signedContractsTable).set({ agentId: agent.id }).where(eq(signedContractsTable.id, signed.id));
-      const now = new Date();
       const [approved] = await tx.update(agentApplicationsTable).set({
         status: "approved",
+        provisionalUserId: user.id,
+        provisionalAgentId: agent.id,
         approvedAgentId: agent.id,
+        assignedStaffId,
+        branchId,
+        approvedCommissionRate: commissionRate,
+        portalAccessStatus: "active",
+        commercialActivatedAt: now,
+        accessRestrictedAt: null,
+        accessRestrictionReason: null,
+        ...(passwordSetupRequired ? { passwordSetupSentAt: now } : {}),
+        reviewNotes: parsed.data.reviewNotes === undefined ? application.reviewNotes : clean(parsed.data.reviewNotes),
         approvedAt: now,
         reviewedAt: now,
         reviewedByUserId: req.user!.id,
         updatedAt: now,
       }).where(eq(agentApplicationsTable.id, application.id)).returning();
-      return { agent, application: approved, alreadyApproved: false };
+      return { agent, application: approved, alreadyApproved: false, passwordSetupRequired };
     });
   } catch (error: any) {
     const status = Number(error?.status) || (error?.code === "23505" ? 409 : 500);
@@ -1136,6 +1467,12 @@ router.post("/agent-applications/:id/approve", requireAuth, requireRole(...MANAG
       CONTRACT_MISMATCH: "Signed contract does not match the selected type and language",
       SIGNED_DATA_CHANGED: "Contract-relevant application data changed after signing; a new signature is required",
       EMAIL_EXISTS: "An account with this email already exists",
+      DOCUMENTS_REQUIRED: "All required agency documents must be present before approval",
+      STAFF_REQUIRED: "Assigned staff is required before commercial activation",
+      BRANCH_REQUIRED: "Branch is required before commercial activation",
+      COMMISSION_REQUIRED: "Commission rate is required before commercial activation",
+      STAFF_INVALID: "Assigned staff must be an active staff or manager user",
+      BRANCH_INVALID: "The selected branch is not available",
       APPROVED_AGENT_MISSING: "The previously approved agent record is missing",
     };
     res.status(status).json({ error: messages[error?.message] || "Application could not be approved" });
@@ -1145,26 +1482,26 @@ router.post("/agent-applications/:id/approve", requireAuth, requireRole(...MANAG
   if (!result.alreadyApproved && result.application.assignedStaffId) {
     await setAgencyStaff(result.agent.id, [{ userId: result.application.assignedStaffId, isPrimary: true }]).catch((error) => console.error("[agent-applications] assign staff", error));
   }
-  let credentialsDispatched = false;
-  if (!result.alreadyApproved && isLiveIntegrationsEnabled()) {
+  let invitationDispatched = false;
+  const passwordSetupPath = `/${result.application.preferredLanguage || "en"}/login?token=${encodeURIComponent(passwordSetup.rawToken)}`;
+  if (!result.alreadyApproved && result.passwordSetupRequired && isLiveIntegrationsEnabled()) {
     try {
-      const content = await buildAgentCredentialsEmail({
+      const content = await buildAgencyPortalInvitationEmail({
         firstName: result.agent.firstName,
-        email: result.application.email,
-        password: temporaryPassword,
-        loginUrl: `${getAppBaseUrl()}/login`,
-        hasContract: true,
+        referenceCode: result.application.referenceCode,
+        passwordSetupUrl: `${getAppBaseUrl()}${passwordSetupPath}`,
+        trackingUrl: `${getAppBaseUrl()}/agent`,
       });
-      credentialsDispatched = await sendEmail(result.application.email, content);
-    } catch (error) { console.error("[agent-applications] credentials", error); }
+      invitationDispatched = await sendEmail(result.application.email, content);
+    } catch (error) { console.error("[agent-applications] password setup invitation", error); }
   }
-  await writeAudit({ userId: req.user!.id, action: "agent_application.approved", resource: "agent_application", resourceId: id, changes: { agentId: result.agent.id, credentialsDispatched }, ipAddress: req.ip });
+  await writeAudit({ userId: req.user!.id, action: "agent_application.approved", resource: "agent_application", resourceId: id, changes: { agentId: result.agent.id, invitationDispatched, commissionRate: result.application.approvedCommissionRate, assignedStaffId: result.application.assignedStaffId, branchId: result.application.branchId }, ipAddress: req.ip });
   res.json({ data: {
     application: result.application,
     agent: result.agent,
-    credentialsDispatched,
+    invitationDispatched,
     alreadyApproved: result.alreadyApproved,
-    ...(process.env.NODE_ENV !== "production" && !credentialsDispatched && !result.alreadyApproved ? { temporaryPassword } : {}),
+    ...(process.env.NODE_ENV !== "production" && result.passwordSetupRequired && !invitationDispatched ? { passwordSetupPath } : {}),
   } });
 });
 

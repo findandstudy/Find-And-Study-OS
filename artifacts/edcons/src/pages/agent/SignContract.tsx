@@ -87,7 +87,7 @@ async function uploadFileToStorage(file: File): Promise<string> {
   const urlRes = await customFetch<any>(`/api/storage/uploads/request-url`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name: file.name, size: file.size, contentType: file.type }),
+    body: JSON.stringify({ name: file.name, size: file.size, contentType: file.type, prefix: "agent-onboarding" }),
   });
   if (!urlRes.uploadURL || !urlRes.objectPath) throw new Error("Failed to get upload URL");
   const putRes = await fetch(urlRes.uploadURL, { method: "PUT", body: file, headers: { "Content-Type": file.type } });

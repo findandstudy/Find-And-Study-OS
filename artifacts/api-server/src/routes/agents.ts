@@ -461,6 +461,24 @@ router.get("/agents/me", requireAuth, requireRole(...AGENT_ROLES), async (req, r
     console.error(`[agents/me] failed to resolve newest contract url for agent ${agent.id}:`, err);
   }
 
+  if (agent.accessTier !== "full") {
+    res.json({
+      ...agent,
+      agencyCode: null,
+      commissionRate: null,
+      subAgentCommissionRate: null,
+      embedToken: null,
+      commercialActivatedAt: null,
+      contractUrl,
+      assignedStaff,
+      assignedStaffList,
+      parentAgent,
+      effectiveCommissionRate: null,
+      effectiveHideServiceFees: true,
+    });
+    return;
+  }
+
   res.json({ ...agent, contractUrl, assignedStaff, assignedStaffList, parentAgent, effectiveCommissionRate, effectiveHideServiceFees });
 });
 

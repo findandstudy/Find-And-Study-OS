@@ -1445,6 +1445,10 @@
     "viewAllTasks": "查看所有任务"
   },
   "agentDash": {
+    "provisionalAccess": {
+      "title": "您的代理申请正在审核中",
+      "body": "您现在可以浏览门户。工作人员批准后，佣金比例和商业管理工具将开放。"
+    },
     "title": "代理门户",
     "subtitle": "跟踪您的学生、佣金及申请进度",
     "totalStudents": "学生总数",

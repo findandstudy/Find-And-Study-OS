@@ -94,7 +94,7 @@ type TFunc = (key: string, params?: Record<string, string | number>) => string;
 // Sidebar groups that start collapsed by default (long, less-frequently used).
 const DEFAULT_CLOSED_GROUPS = new Set(["website", "ai", "system"]);
 
-function getMenuForRole(role: string, t: TFunc, agentStaffPerms?: string[], hasPermFn?: (key: string) => boolean): { groups: { id?: string; label: string; items: MenuItem[] }[] } {
+function getMenuForRole(role: string, t: TFunc, agentStaffPerms?: string[], hasPermFn?: (key: string) => boolean, agentAccessTier?: string): { groups: { id?: string; label: string; items: MenuItem[] }[] } {
   const showFinance = (FINANCE_ROLES as readonly string[]).includes(role);
 
   if (role === 'super_admin' || role === 'admin' || role === 'manager') {
@@ -255,6 +255,7 @@ function getMenuForRole(role: string, t: TFunc, agentStaffPerms?: string[], hasP
   }
 
   if (role === 'agent' || role === 'sub_agent' || role === 'agent_staff') {
+    const commercialAccess = agentAccessTier === "full";
     let agentItems: MenuItem[] = [
       { title: t("dashboard.dashboard"),    icon: LayoutDashboard, url: '/agent' },
       { title: t("dashboard.leads"),        icon: UserCheck,       url: '/agent/leads',         permKey: 'leads' },
@@ -262,9 +263,11 @@ function getMenuForRole(role: string, t: TFunc, agentStaffPerms?: string[], hasP
       { title: t("dashboard.applications"), icon: FileText,        url: '/agent/applications',  permKey: 'applications' },
       { title: t("dashboard.courseFinder"), icon: Search,          url: '/agent/course-finder', permKey: 'course_finder' },
       { title: t("dashboard.messages"),     icon: MessageSquare,   url: '/agent/messages',      permKey: 'messages' },
-      { title: t("dashboard.commissions"),  icon: TrendingUp,      url: '/agent/commissions',   permKey: 'commissions' },
+      ...(commercialAccess ? [{ title: t("dashboard.commissions"), icon: TrendingUp, url: '/agent/commissions', permKey: 'commissions' }] : []),
       ...(
-        role === 'agent_staff'
+        !commercialAccess
+          ? []
+          : role === 'agent_staff'
           ? [{ title: t("dashboard.academy"), icon: ExternalLink, url: '/agent/__academy__', externalHref: '/api/academy-sso', permKey: 'academy' }]
           : hasPermFn?.('academy.access')
             ? [{ title: t("dashboard.academy"), icon: ExternalLink, url: '/agent/__academy__', externalHref: '/api/academy-sso' }]
@@ -277,10 +280,10 @@ function getMenuForRole(role: string, t: TFunc, agentStaffPerms?: string[], hasP
     const accountItems: MenuItem[] = [
       { title: t("dashboard.myAccount"), icon: UserCircle, url: '/agent/account' },
     ];
-    if (role === 'agent') {
+    if (commercialAccess && role === 'agent') {
       accountItems.push({ title: t("dashboard.subAgents"), icon: Users, url: '/agent/sub-agents' });
     }
-    if (role === 'agent' || role === 'sub_agent') {
+    if (commercialAccess && (role === 'agent' || role === 'sub_agent')) {
       accountItems.push({ title: t("dashboard.myTeam"), icon: Briefcase, url: '/agent/team' });
     }
     return {
@@ -547,7 +550,7 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
   }
 
   const staffPerms = (user as unknown as Record<string, unknown>).agentStaffPermissions as string[] | undefined;
-  const { groups } = getMenuForRole(user.role, t, staffPerms, hasPermission);
+  const { groups } = getMenuForRole(user.role, t, staffPerms, hasPermission, (agentProfile as any)?.accessTier);
   const allItems = groups.flatMap(g => g.items);
 
   const togglePin = (url: string) => {

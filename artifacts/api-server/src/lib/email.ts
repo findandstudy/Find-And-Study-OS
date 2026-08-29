@@ -541,6 +541,65 @@ For your security, we recommend changing your password from your panel after log
   return { subject, html, text };
 }
 
+export async function buildAgencyPortalInvitationEmail(params: {
+  firstName: string;
+  referenceCode: string;
+  passwordSetupUrl: string;
+  trackingUrl: string;
+}): Promise<{ subject: string; html: string; text: string }> {
+  const brand = await getEmailBranding();
+  const subject = `Agency application portal · ${params.referenceCode}`;
+  const body = `
+    <h2 style="margin:0 0 16px;color:#111827;font-size:20px;">Your application portal is ready</h2>
+    <p style="margin:0 0 16px;color:#374151;font-size:15px;line-height:1.6;">
+      Hi ${escapeNotifText(params.firstName)}, your agency application <strong>${escapeNotifText(params.referenceCode)}</strong> was received.
+      Create your password to enter the applicant portal and follow the review and contract process.
+    </p>
+    ${emailButton("Create password & open portal", params.passwordSetupUrl, brand.buttonColor)}
+    <p style="margin:16px 0 8px;color:#6b7280;font-size:13px;">You can also track the public application here:</p>
+    <p style="margin:0 0 16px;color:#6b7280;font-size:12px;word-break:break-all;"><a href="${params.trackingUrl}" style="color:${brand.buttonColor};">${params.trackingUrl}</a></p>
+    <p style="margin:0;color:#9ca3af;font-size:12px;text-align:center;">
+      The password setup link expires in 48 hours. You may request a new password link from the login page afterwards.
+    </p>`;
+  const html = emailShell(brand, "Agency Application Portal", body);
+  const text = `Hi ${params.firstName},
+Your agency application ${params.referenceCode} was received.
+Create your password and enter the applicant portal:
+${params.passwordSetupUrl}
+Track the application:
+${params.trackingUrl}
+The password setup link expires in 48 hours.`;
+  return { subject, html, text };
+}
+
+export async function buildAgencyContractReminderEmail(params: {
+  firstName: string;
+  referenceCode: string;
+  signUrl: string;
+  expiresAt: Date;
+  daysLeft: number;
+}): Promise<{ subject: string; html: string; text: string }> {
+  const brand = await getEmailBranding();
+  const subject = `Action required: Sign your agency contract · ${params.referenceCode}`;
+  const expiry = params.expiresAt.toUTCString();
+  const body = `
+    <h2 style="margin:0 0 16px;color:#111827;font-size:20px;">Your agency contract is waiting</h2>
+    <p style="margin:0 0 16px;color:#374151;font-size:15px;line-height:1.6;">
+      Hi ${escapeNotifText(params.firstName)}, your agency application <strong>${escapeNotifText(params.referenceCode)}</strong>
+      is still waiting for the contract signature. ${params.daysLeft} day${params.daysLeft === 1 ? "" : "s"} remain before limited portal access is restricted.
+    </p>
+    ${emailButton("Open portal & sign contract", params.signUrl, brand.buttonColor)}
+    <p style="margin:0;color:#6b7280;font-size:13px;">Signing deadline: <strong>${expiry}</strong>.</p>
+    <p style="margin:12px 0 0;color:#9ca3af;font-size:12px;">Your account will remain available after the deadline so you can view the application status and contact support.</p>`;
+  const html = emailShell(brand, "Agency contract reminder", body);
+  const text = `Hi ${params.firstName},
+Your agency application ${params.referenceCode} is waiting for the contract signature.
+${params.daysLeft} day${params.daysLeft === 1 ? "" : "s"} remain.
+Open the portal and sign: ${params.signUrl}
+Deadline: ${expiry}`;
+  return { subject, html, text };
+}
+
 export async function buildExistingAccountEmail(params: {
   firstName: string;
   loginUrl: string;

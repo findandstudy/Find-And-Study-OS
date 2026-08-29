@@ -4,6 +4,7 @@ import {
   serial,
   timestamp,
   integer,
+  real,
   jsonb,
   index,
   uniqueIndex,
@@ -16,10 +17,9 @@ import { branchesTable } from "./branches";
 import { contractTemplatesTable, signedContractsTable, signingSessionsTable } from "./contracts";
 
 /**
- * A public agency application is deliberately separate from `agents`.
- * Applicants only become users/agents after a manager approves a verified,
- * signed application. This keeps incomplete public submissions out of the
- * operational agent hierarchy and makes approval idempotent.
+ * A public agency application remains the source of truth for onboarding.
+ * Verified applicants receive a deliberately restricted portal identity;
+ * commercial agent access is activated only after staff approval.
  */
 export const agentApplicationsTable = pgTable("agent_applications", {
   id: serial("id").primaryKey(),
@@ -70,6 +70,16 @@ export const agentApplicationsTable = pgTable("agent_applications", {
   changeRequestMessage: text("change_request_message"),
   reviewedByUserId: integer("reviewed_by_user_id").references(() => usersTable.id, { onDelete: "set null" }),
   approvedAgentId: integer("approved_agent_id").references(() => agentsTable.id, { onDelete: "set null" }),
+  provisionalUserId: integer("provisional_user_id").references(() => usersTable.id, { onDelete: "set null" }),
+  provisionalAgentId: integer("provisional_agent_id").references(() => agentsTable.id, { onDelete: "set null" }),
+  portalAccessStatus: text("portal_access_status").notNull().default("provisional"),
+  contractDeadlineAt: timestamp("contract_deadline_at", { withTimezone: true }),
+  lastContractReminderAt: timestamp("last_contract_reminder_at", { withTimezone: true }),
+  passwordSetupSentAt: timestamp("password_setup_sent_at", { withTimezone: true }),
+  approvedCommissionRate: real("approved_commission_rate"),
+  commercialActivatedAt: timestamp("commercial_activated_at", { withTimezone: true }),
+  accessRestrictedAt: timestamp("access_restricted_at", { withTimezone: true }),
+  accessRestrictionReason: text("access_restriction_reason"),
 
   consentVersion: text("consent_version").notNull().default("agency-application-v1"),
   consentedAt: timestamp("consented_at", { withTimezone: true }).notNull(),
@@ -88,10 +98,13 @@ export const agentApplicationsTable = pgTable("agent_applications", {
   uniqueIndex("agent_applications_signing_session_unique").on(table.signingSessionId),
   uniqueIndex("agent_applications_signed_contract_unique").on(table.signedContractId),
   uniqueIndex("agent_applications_approved_agent_unique").on(table.approvedAgentId),
+  uniqueIndex("agent_applications_provisional_user_unique").on(table.provisionalUserId),
+  uniqueIndex("agent_applications_provisional_agent_unique").on(table.provisionalAgentId),
   index("agent_applications_status_created_idx").on(table.status, table.createdAt),
   index("agent_applications_email_idx").on(table.email),
   index("agent_applications_template_idx").on(table.contractTemplateId),
   index("agent_applications_assigned_staff_idx").on(table.assignedStaffId),
+  index("agent_applications_portal_access_idx").on(table.portalAccessStatus, table.contractDeadlineAt),
 ]);
 
 export const insertAgentApplicationSchema = createInsertSchema(agentApplicationsTable).omit({

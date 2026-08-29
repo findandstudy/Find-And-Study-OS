@@ -24,6 +24,8 @@ export const agentsTable = pgTable("agents", {
   subAgentCommissionRate: real("sub_agent_commission_rate"),
   hideServiceFees: boolean("hide_service_fees").notNull().default(false),
   status: text("status").notNull().default("active"),
+  accessTier: text("access_tier").notNull().default("full"),
+  commercialActivatedAt: timestamp("commercial_activated_at", { withTimezone: true }),
   logoUrl: text("logo_url"),
   agentIdProofUrl: text("agent_id_proof_url"),
   businessCertUrl: text("business_cert_url"),
@@ -48,6 +50,7 @@ export const agentsTable = pgTable("agents", {
   index("agents_user_id_idx").on(table.userId),
   index("agents_parent_agent_id_idx").on(table.parentAgentId),
   index("agents_status_idx").on(table.status),
+  index("agents_access_tier_idx").on(table.accessTier),
   uniqueIndex("agents_embed_token_idx").on(table.embedToken),
   index("agents_phone_e164_idx").on(table.phoneE164),
 ]);

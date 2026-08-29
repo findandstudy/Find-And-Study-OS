@@ -1447,6 +1447,10 @@
   "agentDash": {
     "title": "Agent Portal",
     "subtitle": "Track your students, commissions, and application progress",
+    "provisionalAccess": {
+      "title": "Your agency application is under review",
+      "body": "You can explore the portal now. Commission rates and commercial management tools will become available after staff approval."
+    },
     "totalStudents": "Total Students",
     "activeApplications": "Active Applications",
     "enrolled": "Enrolled",
