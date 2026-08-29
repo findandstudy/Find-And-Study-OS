@@ -1,7 +1,20 @@
-import { db, messageCampaignsTable, messageCampaignRecipientsTable, messageTemplatesTable, pool, usersTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import {
+  channelAccountsTable,
+  db,
+  messageCampaignsTable,
+  messageCampaignRecipientsTable,
+  messageTemplatesTable,
+  pipelineStageMessageDispatchesTable,
+  pool,
+  usersTable,
+} from "@workspace/db";
+import { and, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import type { AuthUser } from "../auth";
-import { sendWhatsAppTemplateToEntity, WhatsAppTemplateSendError } from "./startWhatsAppTemplate";
+import {
+  loadWhatsAppEntitySnapshot,
+  sendWhatsAppTemplateToEntity,
+  WhatsAppTemplateSendError,
+} from "./startWhatsAppTemplate";
 import type { MessageTemplateEntityType } from "./templateVariableContext";
 
 const POLL_MS = 1_500;
@@ -22,6 +35,42 @@ interface ClaimedRecipient {
   attempts: number;
   template_id: number;
   created_by_id: number;
+}
+
+interface ClaimedStageDispatch {
+  id: number;
+  entity_type: MessageTemplateEntityType;
+  entity_id: number;
+  stage_key: string;
+  template_id: number | null;
+  channel_account_id: number | null;
+  attempts: number;
+}
+
+async function claimStageDispatch(): Promise<ClaimedStageDispatch | null> {
+  const result = await pool.query<ClaimedStageDispatch>(`
+    UPDATE pipeline_stage_message_dispatches AS dispatch
+       SET status = 'processing',
+           attempts = dispatch.attempts + 1,
+           updated_at = now()
+     WHERE dispatch.id = (
+       SELECT candidate.id
+         FROM pipeline_stage_message_dispatches candidate
+        WHERE candidate.status IN ('queued', 'retrying')
+          AND candidate.next_attempt_at <= now()
+        ORDER BY candidate.next_attempt_at, candidate.id
+        FOR UPDATE SKIP LOCKED
+        LIMIT 1
+     )
+    RETURNING dispatch.id,
+              dispatch.entity_type,
+              dispatch.entity_id,
+              dispatch.stage_key,
+              dispatch.template_id,
+              dispatch.channel_account_id,
+              dispatch.attempts
+  `);
+  return result.rows[0] || null;
 }
 
 async function claimRecipient(): Promise<ClaimedRecipient | null> {
@@ -90,6 +139,11 @@ function retryDelay(attempt: number): Date {
   return new Date(Date.now() + (delays[Math.max(0, attempt - 1)] || delays[delays.length - 1]));
 }
 
+function dispatchRetryDelay(attempt: number): Date {
+  const delays = [15_000, 60_000, 5 * 60_000, 20 * 60_000, 60 * 60_000];
+  return new Date(Date.now() + (delays[Math.max(0, attempt - 1)] || delays[delays.length - 1]));
+}
+
 function isRetryable(error: unknown): boolean {
   // Retry only a failure that is proven to have happened before the provider
   // send request. Network/provider send failures are ambiguous: the provider
@@ -146,7 +200,182 @@ async function processRecipient(recipient: ClaimedRecipient): Promise<void> {
   await refreshCampaign(recipient.campaign_id);
 }
 
+async function finishStageDispatch(
+  dispatchId: number,
+  status: "skipped" | "failed",
+  errorCode: string,
+  errorDetail: string,
+): Promise<void> {
+  await db.update(pipelineStageMessageDispatchesTable).set({
+    status,
+    nextAttemptAt: new Date(0),
+    errorCode,
+    errorDetail,
+    processedAt: new Date(),
+  }).where(eq(pipelineStageMessageDispatchesTable.id, dispatchId));
+}
+
+async function processStageDispatch(dispatch: ClaimedStageDispatch): Promise<void> {
+  if (!dispatch.template_id || !dispatch.channel_account_id) {
+    await finishStageDispatch(
+      dispatch.id,
+      "skipped",
+      "configuration_missing",
+      "The stage template or sender line was removed before the automation ran.",
+    );
+    return;
+  }
+
+  const [template] = await db
+    .select()
+    .from(messageTemplatesTable)
+    .where(and(
+      eq(messageTemplatesTable.id, dispatch.template_id),
+      eq(messageTemplatesTable.isActive, true),
+      inArray(messageTemplatesTable.channel, ["whatsapp", "all"]),
+      isNotNull(messageTemplatesTable.externalTemplateName),
+      sql`lower(coalesce(${messageTemplatesTable.approvalStatus}, '')) = 'approved'`,
+      sql`btrim(coalesce(${messageTemplatesTable.externalTemplateName}, '')) <> ''`,
+    ))
+    .limit(1);
+  const [account] = await db
+    .select()
+    .from(channelAccountsTable)
+    .where(and(
+      eq(channelAccountsTable.id, dispatch.channel_account_id),
+      eq(channelAccountsTable.channel, "whatsapp"),
+      eq(channelAccountsTable.provider, "zernio"),
+      eq(channelAccountsTable.isActive, true),
+      isNotNull(channelAccountsTable.externalAccountId),
+      sql`btrim(coalesce(${channelAccountsTable.externalAccountId}, '')) <> ''`,
+    ))
+    .limit(1);
+  if (!template || !account) {
+    await finishStageDispatch(
+      dispatch.id,
+      "skipped",
+      "configuration_invalid",
+      "The approved template or active sender line is no longer available.",
+    );
+    return;
+  }
+
+  const [actor] = await db
+    .select()
+    .from(usersTable)
+    .where(and(
+      eq(usersTable.isActive, true),
+      isNull(usersTable.deletedAt),
+      inArray(usersTable.role, ["super_admin", "admin", "manager"]),
+    ))
+    .orderBy(sql`CASE ${usersTable.role} WHEN 'super_admin' THEN 0 WHEN 'admin' THEN 1 ELSE 2 END`, usersTable.id)
+    .limit(1);
+  if (!actor) {
+    throw new Error("No active administrative automation actor is available.");
+  }
+
+  let snapshot;
+  try {
+    snapshot = await loadWhatsAppEntitySnapshot(
+      actor as AuthUser,
+      dispatch.entity_type,
+      dispatch.entity_id,
+    );
+  } catch (error) {
+    if (error instanceof WhatsAppTemplateSendError) {
+      await finishStageDispatch(
+        dispatch.id,
+        "skipped",
+        error.code,
+        error.detail || "The CRM record is not eligible for WhatsApp delivery.",
+      );
+      return;
+    }
+    throw error;
+  }
+
+  const automationKey = `pipeline-stage-dispatch:${dispatch.id}`;
+  await db.transaction(async (tx) => {
+    const [created] = await tx
+      .insert(messageCampaignsTable)
+      .values({
+        name: `${dispatch.entity_type} #${dispatch.entity_id} · ${dispatch.stage_key}`,
+        channel: "whatsapp",
+        sourceEntityType: dispatch.entity_type,
+        automationKey,
+        templateId: template.id,
+        status: "queued",
+        createdById: actor.id,
+        scheduledAt: new Date(),
+        totalCount: 1,
+        queuedCount: 1,
+        metadata: {
+          automation: "pipeline_stage",
+          stageKey: dispatch.stage_key,
+          templateName: template.externalTemplateName,
+          channelAccountId: account.id,
+          senderLine: {
+            displayName: account.displayName,
+            brandLabel: (account.metadata as any)?.brandLabel || account.displayName,
+            brandColor: (account.metadata as any)?.brandColor || null,
+          },
+        },
+      })
+      .onConflictDoNothing({ target: messageCampaignsTable.automationKey })
+      .returning({ id: messageCampaignsTable.id });
+
+    const existing = created || (await tx
+      .select({ id: messageCampaignsTable.id })
+      .from(messageCampaignsTable)
+      .where(eq(messageCampaignsTable.automationKey, automationKey))
+      .limit(1))[0];
+    if (!existing) throw new Error("Unable to create or recover the automatic message campaign.");
+
+    await tx
+      .insert(messageCampaignRecipientsTable)
+      .values({
+        campaignId: existing.id,
+        entityType: dispatch.entity_type,
+        entityId: dispatch.entity_id,
+        recipientKey: `${dispatch.entity_type}:${dispatch.entity_id}`,
+        leadId: dispatch.entity_type === "lead" ? dispatch.entity_id : null,
+        studentId: dispatch.entity_type === "student" ? dispatch.entity_id : snapshot.resolvedStudentId,
+        applicationId: dispatch.entity_type === "application" ? dispatch.entity_id : null,
+        displayName: snapshot.displayName || null,
+        phoneE164: snapshot.phoneE164,
+        channelAccountId: account.id,
+        status: "queued",
+        sourceSnapshot: {
+          entityType: dispatch.entity_type,
+          entityId: dispatch.entity_id,
+          stageKey: dispatch.stage_key,
+          displayName: snapshot.displayName,
+          phoneE164: snapshot.phoneE164,
+        },
+      })
+      .onConflictDoNothing();
+
+    await tx.update(pipelineStageMessageDispatchesTable).set({
+      status: "completed",
+      campaignId: existing.id,
+      errorCode: null,
+      errorDetail: null,
+      processedAt: new Date(),
+    }).where(eq(pipelineStageMessageDispatchesTable.id, dispatch.id));
+  });
+}
+
 async function recoverStaleProcessing(): Promise<void> {
+  await pool.query(`
+    UPDATE pipeline_stage_message_dispatches
+       SET status = 'retrying',
+           next_attempt_at = now(),
+           error_code = 'worker_interrupted',
+           error_detail = 'The worker stopped before campaign creation completed; the idempotent dispatch will resume safely.',
+           updated_at = now()
+     WHERE status = 'processing'
+       AND updated_at < now() - interval '${STALE_PROCESSING_MINUTES} minutes'
+  `);
   await pool.query(`
     UPDATE message_campaign_recipients
        SET status = 'failed',
@@ -167,6 +396,21 @@ async function tick(): Promise<void> {
     if (now - lastStaleRecoveryAt >= STALE_RECOVERY_INTERVAL_MS) {
       lastStaleRecoveryAt = now;
       await recoverStaleProcessing();
+    }
+    const dispatch = await claimStageDispatch();
+    if (dispatch) {
+      try {
+        await processStageDispatch(dispatch);
+      } catch (error) {
+        const shouldRetry = dispatch.attempts < 5;
+        await db.update(pipelineStageMessageDispatchesTable).set({
+          status: shouldRetry ? "retrying" : "failed",
+          nextAttemptAt: shouldRetry ? dispatchRetryDelay(dispatch.attempts) : new Date(0),
+          errorCode: "campaign_creation_failed",
+          errorDetail: error instanceof Error ? error.message : "Unknown campaign creation error",
+          processedAt: shouldRetry ? null : new Date(),
+        }).where(eq(pipelineStageMessageDispatchesTable.id, dispatch.id));
+      }
     }
     const recipient = await claimRecipient();
     if (recipient) await processRecipient(recipient);

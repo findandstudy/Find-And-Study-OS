@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { customFetch } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -137,6 +138,21 @@ interface EditStagesDialogProps {
   studentStages?: PipelineStage[];
 }
 
+interface ApprovedTemplate {
+  id: number;
+  name: string;
+  language?: string | null;
+  externalTemplateName?: string | null;
+  approvalStatus?: string | null;
+}
+
+interface WhatsAppAccount {
+  id: number;
+  displayName: string;
+  isDefault: boolean;
+  metadata?: { brandLabel?: string | null; brandColor?: string | null } | null;
+}
+
 const VARIANT_OPTIONS = [
   { value: "none", labelKey: "editStages.variantNone", dotClass: "bg-muted-foreground/40" },
   { value: "won", labelKey: "editStages.variantWon", dotClass: "bg-emerald-500" },
@@ -212,7 +228,23 @@ const FINANCE_STATUS_OPTIONS = [
   { value: "excluded", labelKey: "editStages.financeExcluded" },
 ];
 
-function StageEditForm({ stage, onChange, allStages }: { stage: PipelineStage; onChange: (s: PipelineStage) => void; allStages: PipelineStage[] }) {
+function StageEditForm({
+  stage,
+  onChange,
+  allStages,
+  approvedTemplates,
+  whatsappAccounts,
+  automaticMessageOptionsLoading,
+  automaticMessageOptionsError,
+}: {
+  stage: PipelineStage;
+  onChange: (s: PipelineStage) => void;
+  allStages: PipelineStage[];
+  approvedTemplates: ApprovedTemplate[];
+  whatsappAccounts: WhatsAppAccount[];
+  automaticMessageOptionsLoading: boolean;
+  automaticMessageOptionsError: string | null;
+}) {
   const { t } = useI18n();
   const isApplicationStage = stage.entityType === "application";
   const actions: StageAction[] = Array.isArray(stage.actions) ? stage.actions : [];
@@ -369,6 +401,93 @@ function StageEditForm({ stage, onChange, allStages }: { stage: PipelineStage; o
               onChange={v => onChange({ ...stage, isFileUploadMandatory: v })}
               required
             />
+          </div>
+        )}
+      </FormSection>
+
+      <FormSection
+        title={t("editStages.sectionAutomaticMessage")}
+        description={t("editStages.automaticMessageDescription")}
+      >
+        <RadioGroup
+          label={t("editStages.automaticMessageEnabled")}
+          value={stage.automaticMessage?.enabled === true}
+          onChange={(enabled) => onChange({
+            ...stage,
+            automaticMessage: enabled ? {
+              enabled: true,
+              templateId: stage.automaticMessage?.templateId
+                ?? approvedTemplates[0]?.id
+                ?? null,
+              channelAccountId: stage.automaticMessage?.channelAccountId
+                ?? whatsappAccounts.find((account) => account.isDefault)?.id
+                ?? whatsappAccounts[0]?.id
+                ?? null,
+            } : null,
+          })}
+        />
+        {stage.automaticMessage?.enabled && (
+          <div className="ml-2 border-l-2 border-primary/30 pl-4 space-y-4">
+            {automaticMessageOptionsLoading && (
+              <p className="text-xs text-muted-foreground">{t("editStages.automaticMessageLoading")}</p>
+            )}
+            {automaticMessageOptionsError && (
+              <p className="text-xs text-destructive">{t("editStages.automaticMessageLoadFailed")}</p>
+            )}
+            <div className="space-y-1.5">
+              <Label className="text-sm font-medium">{t("editStages.automaticMessageTemplate")}</Label>
+              <Select
+                value={stage.automaticMessage.templateId ? String(stage.automaticMessage.templateId) : ""}
+                onValueChange={(value) => onChange({
+                  ...stage,
+                  automaticMessage: { ...stage.automaticMessage!, templateId: Number(value) },
+                })}
+                disabled={automaticMessageOptionsLoading || approvedTemplates.length === 0}
+              >
+                <SelectTrigger className="w-full h-9">
+                  <SelectValue placeholder={t("editStages.automaticMessageSelectTemplate")} />
+                </SelectTrigger>
+                <SelectContent>
+                  {approvedTemplates.map((template) => (
+                    <SelectItem key={template.id} value={String(template.id)}>
+                      {template.name}{template.language ? ` · ${template.language.toUpperCase()}` : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {!automaticMessageOptionsLoading && approvedTemplates.length === 0 && (
+                <p className="text-[11px] text-destructive">{t("editStages.automaticMessageNoTemplates")}</p>
+              )}
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-sm font-medium">{t("editStages.automaticMessageSender")}</Label>
+              <Select
+                value={stage.automaticMessage.channelAccountId ? String(stage.automaticMessage.channelAccountId) : ""}
+                onValueChange={(value) => onChange({
+                  ...stage,
+                  automaticMessage: { ...stage.automaticMessage!, channelAccountId: Number(value) },
+                })}
+                disabled={automaticMessageOptionsLoading || whatsappAccounts.length === 0}
+              >
+                <SelectTrigger className="w-full h-9">
+                  <SelectValue placeholder={t("editStages.automaticMessageSelectSender")} />
+                </SelectTrigger>
+                <SelectContent>
+                  {whatsappAccounts.map((account) => (
+                    <SelectItem key={account.id} value={String(account.id)}>
+                      {(account.metadata?.brandLabel || account.displayName)}
+                      {account.isDefault ? ` · ${t("editStages.automaticMessageDefaultSender")}` : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {!automaticMessageOptionsLoading && whatsappAccounts.length === 0 && (
+                <p className="text-[11px] text-destructive">{t("editStages.automaticMessageNoAccounts")}</p>
+              )}
+            </div>
+            <p className="text-[11px] text-muted-foreground leading-relaxed">
+              {t("editStages.automaticMessageOnceHint")}
+            </p>
           </div>
         )}
       </FormSection>
@@ -534,6 +653,10 @@ export function EditStagesDialog({ open, onClose, stages, onSave, isSaving, enti
   const [localStages, setLocalStages] = useState<PipelineStage[]>([]);
   const [error, setError] = useState("");
   const [editIndex, setEditIndex] = useState<number | null>(null);
+  const [approvedTemplates, setApprovedTemplates] = useState<ApprovedTemplate[]>([]);
+  const [whatsappAccounts, setWhatsappAccounts] = useState<WhatsAppAccount[]>([]);
+  const [automaticMessageOptionsLoading, setAutomaticMessageOptionsLoading] = useState(false);
+  const [automaticMessageOptionsError, setAutomaticMessageOptionsError] = useState<string | null>(null);
   const { toast } = useToast();
   const { t } = useI18n();
 
@@ -543,6 +666,28 @@ export function EditStagesDialog({ open, onClose, stages, onSave, isSaving, enti
       setError("");
       setEditIndex(null);
     }
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    setAutomaticMessageOptionsLoading(true);
+    setAutomaticMessageOptionsError(null);
+    void Promise.all([
+      customFetch("/api/message-templates?channel=whatsapp&activeOnly=true"),
+      customFetch("/api/inbox/whatsapp-accounts"),
+    ])
+      .then(([templateResponse, accountResponse]: any[]) => {
+        const templateRows = templateResponse?.data ?? templateResponse ?? [];
+        setApprovedTemplates((Array.isArray(templateRows) ? templateRows : []).filter((template: ApprovedTemplate) => (
+          Boolean(template.externalTemplateName)
+          && String(template.approvalStatus || "").toLowerCase() === "approved"
+        )));
+        setWhatsappAccounts(Array.isArray(accountResponse?.accounts) ? accountResponse.accounts : []);
+      })
+      .catch((loadError: unknown) => {
+        setAutomaticMessageOptionsError(loadError instanceof Error ? loadError.message : "load_failed");
+      })
+      .finally(() => setAutomaticMessageOptionsLoading(false));
   }, [open]);
 
   function addStage() {
@@ -568,6 +713,7 @@ export function EditStagesDialog({ open, onClose, stages, onSave, isSaving, enti
       commissionFinanceStatus: null,
       serviceFeeFinanceStatus: null,
       autoCancelSiblingsOnWon: false,
+      automaticMessage: null,
     }]);
     setEditIndex(localStages.length);
   }
@@ -611,6 +757,14 @@ export function EditStagesDialog({ open, onClose, stages, onSave, isSaving, enti
     const keys = localStages.map(s => s.key);
     if (new Set(keys).size !== keys.length) {
       setError(t("editStages.duplicateKeys"));
+      return;
+    }
+    const incompleteAutomaticMessage = localStages.find((stage) => (
+      stage.automaticMessage?.enabled
+      && (!stage.automaticMessage.templateId || !stage.automaticMessage.channelAccountId)
+    ));
+    if (incompleteAutomaticMessage) {
+      setError(t("editStages.automaticMessageRequired", { stage: incompleteAutomaticMessage.label }));
       return;
     }
     try {
@@ -662,6 +816,10 @@ export function EditStagesDialog({ open, onClose, stages, onSave, isSaving, enti
               stage={editingStage}
               onChange={updated => updateStageAtIndex(editIndex, updated)}
               allStages={localStages}
+              approvedTemplates={approvedTemplates}
+              whatsappAccounts={whatsappAccounts}
+              automaticMessageOptionsLoading={automaticMessageOptionsLoading}
+              automaticMessageOptionsError={automaticMessageOptionsError}
             />
           </div>
         ) : (

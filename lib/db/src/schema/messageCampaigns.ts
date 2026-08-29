@@ -29,6 +29,7 @@ export const messageCampaignsTable = pgTable("message_campaigns", {
   name: text("name").notNull(),
   channel: text("channel").notNull().default("whatsapp"),
   sourceEntityType: text("source_entity_type").notNull(),
+  automationKey: text("automation_key"),
   templateId: integer("template_id")
     .notNull()
     .references(() => messageTemplatesTable.id, { onDelete: "restrict" }),
@@ -50,6 +51,33 @@ export const messageCampaignsTable = pgTable("message_campaigns", {
 }, (table) => [
   index("message_campaigns_status_scheduled_idx").on(table.status, table.scheduledAt),
   index("message_campaigns_created_by_idx").on(table.createdById, table.createdAt),
+  uniqueIndex("message_campaigns_automation_key_uidx").on(table.automationKey),
+]);
+
+/**
+ * Durable stage-transition outbox. A CRM write only inserts one row here;
+ * it never calls WhatsApp synchronously. The worker turns the row into the
+ * ordinary, audited campaign/recipient pipeline used by manual broadcasts.
+ */
+export const pipelineStageMessageDispatchesTable = pgTable("pipeline_stage_message_dispatches", {
+  id: serial("id").primaryKey(),
+  entityType: text("entity_type").notNull(),
+  entityId: integer("entity_id").notNull(),
+  stageKey: text("stage_key").notNull(),
+  templateId: integer("template_id").references(() => messageTemplatesTable.id, { onDelete: "set null" }),
+  channelAccountId: integer("channel_account_id").references(() => channelAccountsTable.id, { onDelete: "set null" }),
+  status: text("status").notNull().default("queued"),
+  attempts: integer("attempts").notNull().default(0),
+  nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true }).notNull().defaultNow(),
+  campaignId: integer("campaign_id").references(() => messageCampaignsTable.id, { onDelete: "set null" }),
+  errorCode: text("error_code"),
+  errorDetail: text("error_detail"),
+  processedAt: timestamp("processed_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
+}, (table) => [
+  uniqueIndex("pipeline_stage_message_dispatch_entity_stage_uidx").on(table.entityType, table.entityId, table.stageKey),
+  index("pipeline_stage_message_dispatch_claim_idx").on(table.status, table.nextAttemptAt, table.id),
 ]);
 
 export const messageCampaignRecipientsTable = pgTable("message_campaign_recipients", {
@@ -89,3 +117,4 @@ export const messageCampaignRecipientsTable = pgTable("message_campaign_recipien
 
 export type MessageCampaign = typeof messageCampaignsTable.$inferSelect;
 export type MessageCampaignRecipient = typeof messageCampaignRecipientsTable.$inferSelect;
+export type PipelineStageMessageDispatch = typeof pipelineStageMessageDispatchesTable.$inferSelect;

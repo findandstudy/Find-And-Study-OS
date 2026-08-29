@@ -14,6 +14,12 @@ export interface StageAction {
   requiredDocTypes?: string[];
 }
 
+export interface StageAutomaticMessage {
+  enabled: boolean;
+  templateId: number | null;
+  channelAccountId: number | null;
+}
+
 export interface PipelineStage {
   id?: number;
   entityType: string;
@@ -38,6 +44,7 @@ export interface PipelineStage {
   commissionFinanceStatus?: string | null;
   serviceFeeFinanceStatus?: string | null;
   autoCancelSiblingsOnWon?: boolean;
+  automaticMessage?: StageAutomaticMessage | null;
   // Task #167 — up to 2 admin-defined action buttons (application only).
   actions?: StageAction[];
   // Stage-level target used after a configured action is completed.

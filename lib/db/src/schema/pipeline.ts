@@ -20,6 +20,12 @@ export interface StageAction {
   requiredDocTypes?: string[];
 }
 
+export interface StageAutomaticMessage {
+  enabled: boolean;
+  templateId: number | null;
+  channelAccountId: number | null;
+}
+
 export const pipelineStagesTable = pgTable("pipeline_stages", {
   id: serial("id").primaryKey(),
   entityType: text("entity_type").notNull(),
@@ -57,6 +63,10 @@ export const pipelineStagesTable = pgTable("pipeline_stages", {
   autoCancelSiblingsOnWon: boolean("auto_cancel_siblings_on_won").notNull().default(false),
   // Task #167 — up to 2 admin-defined action buttons per stage (application only).
   actions: jsonb("actions").$type<StageAction[]>().notNull().default([]),
+  // Optional WhatsApp automation executed when an entity enters this stage.
+  // The database transition trigger snapshots these ids into a durable
+  // dispatch row; delivery itself remains asynchronous and fail-safe.
+  automaticMessage: jsonb("automatic_message").$type<StageAutomaticMessage | null>(),
   // Stage-level completion target for application stages. The physical column
   // keeps its legacy Task #187 name so existing installations and configured
   // missing-document transitions remain backwards compatible. It now drives

@@ -1,7 +1,13 @@
 import { Router, type IRouter } from "express";
-import { db, pipelineStagesTable, programDocumentRequirementsTable } from "@workspace/db";
-import type { StageAction } from "@workspace/db";
-import { eq, asc, sql } from "drizzle-orm";
+import {
+  channelAccountsTable,
+  db,
+  messageTemplatesTable,
+  pipelineStagesTable,
+  programDocumentRequirementsTable,
+} from "@workspace/db";
+import type { StageAction, StageAutomaticMessage } from "@workspace/db";
+import { and, asc, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import { requireAuth, requireRole } from "../lib/auth";
 import { STAFF_ROLES, AGENT_ROLES } from "../lib/roles";
 import { clearStageFinanceCache } from "../lib/stageFinance";
@@ -479,6 +485,77 @@ router.put("/pipeline-stages/:entityType", requireAuth, requireRole(...MANAGER_R
     return;
   }
 
+  const requestedAutomaticMessages = stages.map((stage: any): StageAutomaticMessage | null => {
+    const raw = stage?.automaticMessage;
+    if (!raw || raw.enabled !== true) return null;
+    const templateId = Number(raw.templateId);
+    const channelAccountId = Number(raw.channelAccountId);
+    return {
+      enabled: true,
+      templateId: Number.isSafeInteger(templateId) && templateId > 0 ? templateId : null,
+      channelAccountId: Number.isSafeInteger(channelAccountId) && channelAccountId > 0
+        ? channelAccountId
+        : null,
+    };
+  });
+  const invalidAutomaticMessageIndex = requestedAutomaticMessages.findIndex(
+    (config) => config !== null
+      && (config.templateId == null || config.channelAccountId == null),
+  );
+  if (invalidAutomaticMessageIndex >= 0) {
+    res.status(400).json({
+      error: `Stage "${stages[invalidAutomaticMessageIndex]?.label || normalizedKeys[invalidAutomaticMessageIndex]}": an approved WhatsApp template and sender line are required.`,
+    });
+    return;
+  }
+
+  const requestedTemplateIds = Array.from(new Set(
+    requestedAutomaticMessages.flatMap((config) => config?.templateId ? [config.templateId] : []),
+  ));
+  const requestedAccountIds = Array.from(new Set(
+    requestedAutomaticMessages.flatMap((config) => config?.channelAccountId ? [config.channelAccountId] : []),
+  ));
+
+  if (requestedTemplateIds.length > 0) {
+    const approvedTemplates = await db
+      .select({ id: messageTemplatesTable.id })
+      .from(messageTemplatesTable)
+      .where(and(
+        inArray(messageTemplatesTable.id, requestedTemplateIds),
+        eq(messageTemplatesTable.isActive, true),
+        inArray(messageTemplatesTable.channel, ["whatsapp", "all"]),
+        isNotNull(messageTemplatesTable.externalTemplateName),
+        sql`lower(coalesce(${messageTemplatesTable.approvalStatus}, '')) = 'approved'`,
+        sql`btrim(coalesce(${messageTemplatesTable.externalTemplateName}, '')) <> ''`,
+      ));
+    const approvedIds = new Set(approvedTemplates.map((template) => template.id));
+    const invalidId = requestedTemplateIds.find((id) => !approvedIds.has(id));
+    if (invalidId !== undefined) {
+      res.status(400).json({ error: "The selected WhatsApp template is not active and approved." });
+      return;
+    }
+  }
+
+  if (requestedAccountIds.length > 0) {
+    const activeAccounts = await db
+      .select({ id: channelAccountsTable.id })
+      .from(channelAccountsTable)
+      .where(and(
+        inArray(channelAccountsTable.id, requestedAccountIds),
+        eq(channelAccountsTable.channel, "whatsapp"),
+        eq(channelAccountsTable.provider, "zernio"),
+        eq(channelAccountsTable.isActive, true),
+        isNotNull(channelAccountsTable.externalAccountId),
+        sql`btrim(coalesce(${channelAccountsTable.externalAccountId}, '')) <> ''`,
+      ));
+    const activeIds = new Set(activeAccounts.map((account) => account.id));
+    const invalidId = requestedAccountIds.find((id) => !activeIds.has(id));
+    if (invalidId !== undefined) {
+      res.status(400).json({ error: "The selected WhatsApp sender line is not active." });
+      return;
+    }
+  }
+
   try {
     const inserted = await db.transaction(async (tx) => {
       await tx.delete(pipelineStagesTable).where(eq(pipelineStagesTable.entityType, entityType));
@@ -506,6 +583,7 @@ router.put("/pipeline-stages/:entityType", requireAuth, requireRole(...MANAGER_R
           commissionFinanceStatus: entityType === "application" ? normFinance(s.commissionFinanceStatus) : null,
           serviceFeeFinanceStatus: entityType === "application" ? normFinance(s.serviceFeeFinanceStatus) : null,
           autoCancelSiblingsOnWon: entityType === "application" && !!s.autoCancelSiblingsOnWon,
+          automaticMessage: requestedAutomaticMessages[i],
           actions: entityType === "application"
             ? normActions(
                 s.actions,

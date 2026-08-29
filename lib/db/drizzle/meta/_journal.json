@@ -407,6 +407,13 @@
       "when": 1788022800000,
       "tag": "0057_agent_application_provisional_portal",
       "breakpoints": true
+    },
+    {
+      "idx": 58,
+      "version": "7",
+      "when": 1788109200000,
+      "tag": "0058_pipeline_stage_auto_messages",
+      "breakpoints": true
     }
   ]
 }
