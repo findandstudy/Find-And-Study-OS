@@ -78,6 +78,8 @@ const ID = {
   issuer: "018fc000-0000-7000-8000-000000000004",
   impersonatedSelection: "018fc000-0000-7000-8000-000000000006",
   consumptionAttempt: "018fc000-0000-7000-8000-000000000007",
+  deniedConsumptionAttempt: "018fc000-0000-7000-8000-000000000008",
+  conflictingConsumptionAttempt: "018fc000-0000-7000-8000-000000000009",
 } as const;
 
 const USER_ID = 910_001;
@@ -801,6 +803,70 @@ async function main() {
       resultHash: "c".repeat(64),
     });
     await selectionConsumptionAttemptLedger.start(attemptIdentity);
+    await assert.rejects(
+      selectionConsumptionAttemptLedger.start({
+        ...attemptIdentity,
+        attemptId: ID.conflictingConsumptionAttempt,
+        environmentId: "other-test",
+      }),
+      /idempotency conflict/,
+    );
+
+    const deniedAttemptIdentity = {
+      ...attemptIdentity,
+      attemptId: ID.deniedConsumptionAttempt,
+      idempotencyKeyHash: "d".repeat(64),
+      requestHash: "e".repeat(64),
+    } as const;
+    await selectionConsumptionAttemptLedger.start(deniedAttemptIdentity);
+    await selectionConsumptionAttemptLedger.fail({
+      tenantId: ID.tenant,
+      attemptId: ID.deniedConsumptionAttempt,
+      reason: "AUTHORIZATION_DENIED",
+    });
+    await selectionConsumptionAttemptLedger.start(deniedAttemptIdentity);
+    const deniedAttemptEvidence = await withClient(
+      migratorUrl,
+      async (migrator) => {
+        await migrator.query("BEGIN");
+        try {
+          await migrator.query("SELECT set_config('app.tenant_id', $1, true)", [
+            ID.tenant,
+          ]);
+          const evidence = await migrator.query<{
+            status: string;
+            outcome: string;
+            reason_code: string;
+            result_hash: string | null;
+            sequences: number[];
+          }>(
+            `SELECT attempt.status, attempt.outcome, attempt.reason_code,
+                    attempt.result_hash,
+                    array_agg(receipt.sequence ORDER BY receipt.sequence) AS sequences
+             FROM public.active_context_selection_consumption_attempts attempt
+             JOIN public.active_context_selection_consumption_attempt_receipts receipt
+               ON receipt.tenant_id = attempt.tenant_id
+              AND receipt.attempt_id = attempt.id
+             WHERE attempt.tenant_id = $1 AND attempt.id = $2
+             GROUP BY attempt.status, attempt.outcome, attempt.reason_code,
+                      attempt.result_hash`,
+            [ID.tenant, ID.deniedConsumptionAttempt],
+          );
+          await migrator.query("ROLLBACK");
+          return evidence.rows[0]!;
+        } catch (error) {
+          await migrator.query("ROLLBACK");
+          throw error;
+        }
+      },
+    );
+    assert.deepEqual(deniedAttemptEvidence, {
+      status: "TERMINAL",
+      outcome: "DENIED",
+      reason_code: "AUTHORIZATION_DENIED",
+      result_hash: null,
+      sequences: [1, 2],
+    });
 
     let selectionConsumptionPid: (pid: number) => void = () => undefined;
     const selectionConsumptionPidReady = new Promise<number>((resolve) => {

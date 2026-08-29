@@ -97,5 +97,9 @@ test("rejects malformed identity before opening a transaction", async () => {
     ledger.start({ ...ledgerFixture(), sessionGeneration: 0 }),
     /identity_invalid/,
   );
+  await assert.rejects(
+    ledger.start({ ...ledgerFixture(), environmentId: "INVALID" }),
+    /identity_invalid/,
+  );
   assert.equal(fixture.queries.some((query) => query.text.startsWith("BEGIN")), false);
 });

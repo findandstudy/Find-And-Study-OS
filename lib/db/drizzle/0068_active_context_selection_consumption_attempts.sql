@@ -50,7 +50,10 @@ CREATE TABLE public.active_context_selection_consumption_attempts (
           'COMMAND_COMPLETED', 'COMMAND_RECONCILED',
           'AUTHORIZATION_DENIED', 'IDEMPOTENCY_CONFLICT', 'INTERNAL_ERROR'
         )
-        AND (result_hash IS NULL OR result_hash ~ '^[0-9a-f]{64}$')
+        AND (
+          (outcome = 'COMPLETED' AND result_hash ~ '^[0-9a-f]{64}$')
+          OR (outcome IN ('DENIED', 'CONFLICT', 'ERROR') AND result_hash IS NULL)
+        )
       )
     ),
   CONSTRAINT active_context_selection_consumption_attempts_transition_chk
@@ -112,7 +115,12 @@ CREATE TABLE public.active_context_selection_consumption_attempt_receipts (
       )
     ),
   CONSTRAINT active_context_selection_consumption_receipts_hash_chk
-    CHECK (result_hash IS NULL OR result_hash ~ '^[0-9a-f]{64}$'),
+    CHECK (
+      (phase = 'TERMINAL' AND outcome = 'COMPLETED'
+        AND result_hash ~ '^[0-9a-f]{64}$')
+      OR (NOT (phase = 'TERMINAL' AND outcome = 'COMPLETED')
+        AND result_hash IS NULL)
+    ),
   CONSTRAINT active_context_selection_consumption_receipts_attempt_fk
     FOREIGN KEY (tenant_id, attempt_id)
     REFERENCES public.active_context_selection_consumption_attempts(tenant_id, id)
@@ -220,12 +228,15 @@ BEGIN
   WHERE tenant_id = v_tenant AND idempotency_key_hash = v_idempotency
   FOR UPDATE;
   IF FOUND THEN
-    IF attempt_row.request_hash IS DISTINCT FROM v_request
+    IF attempt_row.id IS DISTINCT FROM v_attempt
+      OR attempt_row.request_hash IS DISTINCT FROM v_request
       OR attempt_row.context_id IS DISTINCT FROM v_context
       OR attempt_row.selection_id IS DISTINCT FROM v_selection
       OR attempt_row.session_generation IS DISTINCT FROM v_generation
       OR attempt_row.principal_id IS DISTINCT FROM v_principal
       OR attempt_row.membership_id IS DISTINCT FROM v_membership
+      OR attempt_row.environment_id IS DISTINCT FROM v_environment
+      OR attempt_row.cell_id IS DISTINCT FROM v_cell
     THEN
       RAISE EXCEPTION 'selection consumption attempt idempotency conflict';
     END IF;
@@ -285,7 +296,14 @@ BEGIN
   v_result := p_payload->>'resultHash';
   IF NULLIF(current_setting('app.tenant_id', true), '')::uuid IS DISTINCT FROM v_tenant
     OR v_phase NOT IN ('RECONCILIATION', 'TERMINAL')
-    OR (v_phase = 'TERMINAL' AND (v_result IS NULL OR v_result !~ '^[0-9a-f]{64}$'))
+    OR (
+      v_phase = 'TERMINAL' AND v_outcome = 'COMPLETED'
+      AND (v_result IS NULL OR v_result !~ '^[0-9a-f]{64}$')
+    )
+    OR (
+      NOT (v_phase = 'TERMINAL' AND v_outcome = 'COMPLETED')
+      AND v_result IS NOT NULL
+    )
     OR NOT (
       (v_phase = 'RECONCILIATION' AND v_outcome = 'PENDING' AND v_reason = 'COMMIT_OUTCOME_UNKNOWN')
       OR (v_phase = 'TERMINAL' AND v_outcome = 'COMPLETED' AND v_reason IN ('COMMAND_COMPLETED', 'COMMAND_RECONCILED'))

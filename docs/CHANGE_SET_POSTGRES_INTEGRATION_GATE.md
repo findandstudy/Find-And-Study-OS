@@ -1,14 +1,14 @@
 # ChangeSet PostgreSQL Integration Gate
 
-Status: **67-MIGRATION FOUNDATION CANDIDATE, DEFAULT-UNWIRED CONTEXT-BOUND
+Status: **69-MIGRATION FOUNDATION CANDIDATE, DEFAULT-UNWIRED CONTEXT-BOUND
 COMMAND/EVIDENCE, QUERY-CANCELLATION ROLLBACK, MEMBERSHIP/POLICY REVOCATION
 SERIALIZATION, EVIDENCE-KEY COMPROMISE SERIALIZATION, AMBIGUOUS-COMMIT
 AND SCHEDULED RECEIPT-ONLY RECONCILIATION, DURABLE-AUDIT ADAPTER CI GREEN,
-AND DEFAULT-UNWIRED SESSION/RATE-LIMIT ADAPTER CI GREEN; SELECTION-LIFECYCLE
-CANDIDATE AWAITS POSTGRESQL CI; NO-GO for runtime wiring**.
+AND DEFAULT-UNWIRED SESSION/RATE-LIMIT ADAPTER CI GREEN; SELECTION-CONSUMPTION
+ATTEMPT/REPAIR CANDIDATE AWAITS POSTGRESQL CI; NO-GO for runtime wiring**.
 
 This gate is not a delivery estimate and is not proof that migrations `0055`
-through `0066` have run in a long-lived environment. The approved local
+through `0068` have run in a long-lived environment. The approved local
 PostgreSQL endpoint `127.0.0.1:5433/fasos_apply_local` was unavailable. GitHub
 run `32547890515` applied the prior 63 reviewed migrations twice to an isolated
 disposable PostgreSQL 16 database and passed the direct-SQL foundation matrix.
@@ -49,7 +49,7 @@ credential rollout.
 The test environment must use a disposable PostgreSQL instance matching the
 production major version and pinned by immutable image digest. It must create a
 random `fas_it_*` database, set statement, lock, and idle-transaction timeouts,
-and apply the real migration runner from `0000` through `0061` using only the
+and apply the real migration runner from `0000` through `0068` using only the
 migrator role.
 
 The harness is opt-in and must fail closed unless all of these are true:
@@ -120,7 +120,7 @@ The gate passes only when CI records all of the following:
 `artifacts/api-server/scripts/test-postgres-control-plane-gate.ts` define the
 foundation PostgreSQL 16 gate. It uses an immutable official
 image digest, a per-run `fas_it_*` database, separate `fas_migrator` and
-`fas_app` logins. The current candidate targets all 67 migrations twice. It
+`fas_app` logins. The current candidate targets all 69 migrations twice. It
 directly
 exercises:
 
@@ -221,7 +221,7 @@ run `32551335113`, and G0 Linux/Windows run `32551335019`. The checks are not
 yet required by a repository ruleset. Two earlier scheduled-reconciliation
 candidate runs correctly failed because the foundation harness retained the
 prior 62-migration denominator in its main and atomic-rollback assertions; both
-guards now require the current 67/67 ledger denominator.
+guards now require the current 69/69 ledger denominator.
 
 The production-shaped request binder verifies the signed active context once,
 requires exact server-resolved principal, tenant, organization, and branch

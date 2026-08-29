@@ -11,6 +11,7 @@ const UUID_V7_RE =
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const SHA256_RE = /^[0-9a-f]{64}$/;
+const IDENTIFIER_RE = /^[a-z][a-z0-9-]{1,62}$/;
 const ROLE_RE = /^[a-z_][a-z0-9_]{0,62}$/;
 const DEFAULT_LOCK_TIMEOUT_MS = 2_500;
 const DEFAULT_STATEMENT_TIMEOUT_MS = 4_000;
@@ -61,7 +62,9 @@ function validIdentity(value: unknown): value is SelectionConsumptionAttemptIden
     Number.isSafeInteger(input.sessionGeneration) &&
     Number(input.sessionGeneration) > 0 &&
     SHA256_RE.test(String(input.idempotencyKeyHash)) &&
-    SHA256_RE.test(String(input.requestHash))
+    SHA256_RE.test(String(input.requestHash)) &&
+    IDENTIFIER_RE.test(String(input.environmentId)) &&
+    IDENTIFIER_RE.test(String(input.cellId))
   );
 }
 
