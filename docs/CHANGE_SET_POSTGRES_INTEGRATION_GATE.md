@@ -1,14 +1,14 @@
 # ChangeSet PostgreSQL Integration Gate
 
-Status: **67-MIGRATION FOUNDATION CANDIDATE, DEFAULT-UNWIRED CONTEXT-BOUND
+Status: **69-MIGRATION FOUNDATION CANDIDATE, DEFAULT-UNWIRED CONTEXT-BOUND
 COMMAND/EVIDENCE, QUERY-CANCELLATION ROLLBACK, MEMBERSHIP/POLICY REVOCATION
 SERIALIZATION, EVIDENCE-KEY COMPROMISE SERIALIZATION, AMBIGUOUS-COMMIT
 AND SCHEDULED RECEIPT-ONLY RECONCILIATION, DURABLE-AUDIT ADAPTER CI GREEN,
-AND DEFAULT-UNWIRED SESSION/RATE-LIMIT ADAPTER CI GREEN; SELECTION-LIFECYCLE
-CANDIDATE AWAITS POSTGRESQL CI; NO-GO for runtime wiring**.
+AND DEFAULT-UNWIRED SESSION/RATE-LIMIT ADAPTER CI GREEN; SELECTION-CONSUMPTION
+ATTEMPT/REPAIR CANDIDATE AWAITS POSTGRESQL CI; NO-GO for runtime wiring**.
 
 This gate is not a delivery estimate and is not proof that migrations `0055`
-through `0066` have run in a long-lived environment. The approved local
+through `0068` have run in a long-lived environment. The approved local
 PostgreSQL endpoint `127.0.0.1:5433/fasos_apply_local` was unavailable. GitHub
 run `32547890515` applied the prior 63 reviewed migrations twice to an isolated
 disposable PostgreSQL 16 database and passed the direct-SQL foundation matrix.
@@ -49,7 +49,7 @@ credential rollout.
 The test environment must use a disposable PostgreSQL instance matching the
 production major version and pinned by immutable image digest. It must create a
 random `fas_it_*` database, set statement, lock, and idle-transaction timeouts,
-and apply the real migration runner from `0000` through `0061` using only the
+and apply the real migration runner from `0000` through `0068` using only the
 migrator role.
 
 The harness is opt-in and must fail closed unless all of these are true:
@@ -120,7 +120,7 @@ The gate passes only when CI records all of the following:
 `artifacts/api-server/scripts/test-postgres-control-plane-gate.ts` define the
 foundation PostgreSQL 16 gate. It uses an immutable official
 image digest, a per-run `fas_it_*` database, separate `fas_migrator` and
-`fas_app` logins. The current candidate targets all 67 migrations twice. It
+`fas_app` logins. The current candidate targets all 69 migrations twice. It
 directly
 exercises:
 
@@ -221,7 +221,7 @@ run `32551335113`, and G0 Linux/Windows run `32551335019`. The checks are not
 yet required by a repository ruleset. Two earlier scheduled-reconciliation
 candidate runs correctly failed because the foundation harness retained the
 prior 62-migration denominator in its main and atomic-rollback assertions; both
-guards now require the current 67/67 ledger denominator.
+guards now require the current 69/69 ledger denominator.
 
 The production-shaped request binder verifies the signed active context once,
 requires exact server-resolved principal, tenant, organization, and branch
@@ -366,6 +366,58 @@ for `SELECT ... FOR SHARE`; the immutable trigger rejects every actual update
 or delete, and the EXECUTE-only login receives no receipt-table privilege.
 This candidate has no positive CI claim until an exact PostgreSQL 16 final-head
 run passes.
+
+The next local candidate, `0067_active_context_selection_consumption`, adds a
+fixed-search-path `fas_session_v1.lock_selection_for_consumption` RPC. It locks
+the exact tenant/selection row with `FOR UPDATE` inside a `SERIALIZABLE`
+transaction and returns only the authoritative binding fields. The
+default-unwired TypeScript repository keeps that transaction open while the
+privileged callback runs, exposes only parameterized queries to the callback,
+and treats operation failure as rollback and commit acknowledgement loss as a
+typed unknown outcome. The pure consumption contract rejects any terminal,
+rotated, generation, tenant, principal, membership, organization, or branch
+mismatch before the callback runs. Its PostgreSQL harness now also cancels the
+locked RPC with `pg_cancel_backend`, requires SQLSTATE `57014`, and proves the
+same pool backend returns with a cleared tenant-local GUC. This local candidate
+is not a production or route-wiring claim until a fresh PostgreSQL 16 run proves
+the RPC grants, lock/cancel behavior, rollback, connection cleanup, and
+stale-binding case.
+
+The following local candidate adds the pure outer-attempt coordinator
+`runSelectionConsumptionAttempt`. It requires a server-issued attempt identity,
+starts the ledger before the privileged callback, records only a fixed result
+hash on success, and converts commit ambiguity into a typed `PENDING` outcome
+with an opaque attempt ID. Ordinary failures use a bounded reason enum; raw
+errors, request bodies, session IDs, and idempotency keys are never sent to the
+ledger. This is a contract/test slice only: the PostgreSQL attempt table,
+append-only receipt RPC, scheduled worker, and receipt-only reconciliation are
+still required before any runtime wiring.
+
+The local additive migration, `0068_active_context_selection_consumption_attempts`,
+adds tenant-scoped attempt identity plus an immutable receipt stream. Its
+fixed-search-path RPCs permit only `STARTED -> PENDING -> TERMINAL` (or direct
+terminal) transitions, bind the attempt to the exact selection generation and
+principal/membership, and make same-idempotency replay deterministic. The
+PostgreSQL ledger adapter uses a separate serializable transaction, clean
+tenant-local GUC, and fixed reason/outcome enums; it never stores raw session
+IDs, request bodies, or free-form errors. This migration and adapter are still
+default-unwired and require a fresh PostgreSQL 16 grant/RLS/transition/race
+run before they can be considered an integration result.
+
+The session-gateway PostgreSQL harness also reads the persisted attempt and
+receipt rows after the lifecycle race: it requires `TERMINAL/COMPLETED`, the
+`COMMAND_RECONCILED` reason, the exact `STARTED -> PENDING -> TERMINAL`
+sequence, the reconciled result hash, and absence of the raw session ID or raw
+idempotency key. This is a test assertion only; it does not replace the fresh
+PostgreSQL 16 run or authorize a runtime repair worker.
+
+The pure `ActiveContextSelectionConsumptionRepairWorker` now claims a bounded
+pending attempt, reads a stored outcome only, reconciles by result hash, and
+never replays the business mutation. `NOT_FOUND`/`IN_PROGRESS` outcomes are
+rescheduled within a maximum attempt budget; malformed or exhausted outcomes
+escalate through a fixed error reason. The worker has no scheduler registration
+and no production credentials; a PostgreSQL repair-job queue and worker
+bootstrap remain a separate gate.
 
 Selection lifecycle CI does not authorize runtime wiring. Migration 0066 and
 the gateway candidate bind newly issued token version 2 to the exact

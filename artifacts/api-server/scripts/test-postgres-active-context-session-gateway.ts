@@ -18,6 +18,9 @@ import {
   ActiveContextSelectionCommitOutcomeUnknownError,
   PostgresActiveContextSelectionLifecycle,
 } from "../src/lib/postgresActiveContextSelectionLifecycle.js";
+import { withLockedSelectionBoundActiveContext } from "../src/lib/activeContextSelectionConsumption.js";
+import { PostgresActiveContextSelectionConsumptionRepository } from "../src/lib/postgresActiveContextSelectionConsumptionRepository.js";
+import { PostgresActiveContextSelectionConsumptionAttemptLedger } from "../src/lib/postgresActiveContextSelectionConsumptionAttemptLedger.js";
 import { PostgresActiveContextSessionRepository } from "../src/lib/postgresActiveContextSessionRepository.js";
 import { PostgresAuthoritativeActiveContextRepository } from "../src/lib/postgresAuthoritativeActiveContextRepository.js";
 
@@ -74,12 +77,20 @@ const ID = {
   otherSelection: "018fc000-0000-7000-8000-000000000003",
   issuer: "018fc000-0000-7000-8000-000000000004",
   impersonatedSelection: "018fc000-0000-7000-8000-000000000006",
+  consumptionAttempt: "018fc000-0000-7000-8000-000000000007",
+  deniedConsumptionAttempt: "018fc000-0000-7000-8000-000000000008",
+  conflictingConsumptionAttempt: "018fc000-0000-7000-8000-000000000009",
 } as const;
 
 const USER_ID = 910_001;
 const SID = "a".repeat(64);
 const OTHER_SID = "b".repeat(64);
 const IMPERSONATED_SID = "d".repeat(64);
+const CONSUMPTION_IDEMPOTENCY_KEY_HASH = "1".repeat(64);
+const CONSUMPTION_REQUEST_HASH = "2".repeat(64);
+const CONSUMPTION_RESULT_HASH = "3".repeat(64);
+const DENIED_CONSUMPTION_IDEMPOTENCY_KEY_HASH = "4".repeat(64);
+const DENIED_CONSUMPTION_REQUEST_HASH = "5".repeat(64);
 const CSRF = "c".repeat(64);
 const TRUSTED_ORIGIN = "https://apply.findandstudy.test";
 const NOW = Date.now();
@@ -255,10 +266,22 @@ async function bootstrapAuthority() {
       GRANT UPDATE (id) ON TABLE
         public.active_session_context_selection_command_receipts
       TO ${ROLE.lifecycleOwner};
+      GRANT SELECT, INSERT, UPDATE ON TABLE
+        public.active_context_selection_consumption_attempts
+      TO ${ROLE.sessionOwner};
+      GRANT SELECT, INSERT ON TABLE
+        public.active_context_selection_consumption_attempt_receipts
+      TO ${ROLE.sessionOwner};
 
       ALTER FUNCTION fas_session_v1.resolve_session_for_active_context(text, text, bigint)
         OWNER TO ${ROLE.sessionOwner};
       ALTER FUNCTION fas_session_v1.resolve_session_for_active_context_bound(text, text, bigint)
+        OWNER TO ${ROLE.sessionOwner};
+      ALTER FUNCTION fas_session_v1.lock_selection_for_consumption(uuid, uuid, bigint)
+        OWNER TO ${ROLE.sessionOwner};
+      ALTER FUNCTION fas_session_v1.start_selection_consumption_attempt(jsonb)
+        OWNER TO ${ROLE.sessionOwner};
+      ALTER FUNCTION fas_session_v1.finish_selection_consumption_attempt(jsonb)
         OWNER TO ${ROLE.sessionOwner};
       ALTER FUNCTION fas_rate_limit_v1.consume_active_context_issuance(
         uuid, text, text, bigint, uuid, bigint, uuid
@@ -278,6 +301,15 @@ async function bootstrapAuthority() {
       TO ${ROLE.sessionResolver};
       GRANT EXECUTE ON FUNCTION
         fas_session_v1.resolve_session_for_active_context_bound(text, text, bigint)
+      TO ${ROLE.sessionResolver};
+      GRANT EXECUTE ON FUNCTION
+        fas_session_v1.lock_selection_for_consumption(uuid, uuid, bigint)
+      TO ${ROLE.sessionResolver};
+      GRANT EXECUTE ON FUNCTION
+        fas_session_v1.start_selection_consumption_attempt(jsonb)
+      TO ${ROLE.sessionResolver};
+      GRANT EXECUTE ON FUNCTION
+        fas_session_v1.finish_selection_consumption_attempt(jsonb)
       TO ${ROLE.sessionResolver};
       GRANT EXECUTE ON FUNCTION
         fas_rate_limit_v1.consume_active_context_issuance(
@@ -514,8 +546,11 @@ function request() {
 function cancellationPool(input: {
   pool: pg.Pool;
   ready: (pid: number) => void;
+  queryFragment?: string;
 }): pg.Pool {
   let armed = true;
+  const queryFragment =
+    input.queryFragment ?? "fas_session_v1.resolve_session_for_active_context";
   return {
     connect: async () => {
       const client = await input.pool.connect();
@@ -525,7 +560,7 @@ function cancellationPool(input: {
             return async (text: string, values?: unknown[]) => {
               if (
                 armed &&
-                text.includes("fas_session_v1.resolve_session_for_active_context")
+                text.includes(queryFragment)
               ) {
                 armed = false;
                 const backend = await target.query<{ pid: number }>(
@@ -655,6 +690,16 @@ async function main() {
       pool: sessionPool,
       expectedRole: ROLE.sessionResolver,
     });
+    const selectionConsumptionRepository =
+      new PostgresActiveContextSelectionConsumptionRepository({
+        pool: sessionPool,
+        expectedRole: ROLE.sessionResolver,
+      });
+    const selectionConsumptionAttemptLedger =
+      new PostgresActiveContextSelectionConsumptionAttemptLedger({
+        pool: sessionPool,
+        expectedRole: ROLE.sessionResolver,
+      });
     const nextPermit = nextUuidV7Factory();
     const rateLimiter = new PostgresActiveContextIssuanceRateLimiter({
       pool: ratePool,
@@ -716,6 +761,177 @@ async function main() {
     });
     assert.equal(verified.ok, true, verified.ok ? undefined : verified.reason);
     if (!verified.ok) throw new Error(`gateway_token_denied_${verified.reason}`);
+
+    let consumptionOperationCalled = false;
+    const consumed = await withLockedSelectionBoundActiveContext({
+      context: verified.context,
+      repository: selectionConsumptionRepository,
+      now: () => NOW,
+      operation: async (context, state, transaction) => {
+        consumptionOperationCalled = true;
+        assert.equal(context.selectionId, ID.selection);
+        assert.equal(context.sessionGeneration, SESSION_GENERATION);
+        assert.equal(state.status, "ACTIVE");
+        assert.ok(transaction);
+        const tenant = await transaction.query<{ tenant_id: string }>(
+          "SELECT current_setting('app.tenant_id', true) AS tenant_id",
+        );
+        assert.equal(tenant.rows[0]?.tenant_id, ID.tenant);
+        return "selection-consumption-ok";
+      },
+    });
+    assert.equal(consumed, "selection-consumption-ok");
+    assert.equal(consumptionOperationCalled, true);
+
+    const attemptIdentity = {
+      attemptId: ID.consumptionAttempt,
+      tenantId: ID.tenant,
+      contextId: verified.context.contextId,
+      selectionId: verified.context.selectionId,
+      sessionGeneration: verified.context.sessionGeneration,
+      principalId: verified.context.principalId,
+      membershipId: verified.context.membershipId,
+      idempotencyKeyHash: CONSUMPTION_IDEMPOTENCY_KEY_HASH,
+      requestHash: CONSUMPTION_REQUEST_HASH,
+      environmentId: ENVIRONMENT,
+      cellId: CELL,
+    } as const;
+    await selectionConsumptionAttemptLedger.start(attemptIdentity);
+    await selectionConsumptionAttemptLedger.pending({
+      tenantId: ID.tenant,
+      attemptId: ID.consumptionAttempt,
+      reason: "COMMIT_OUTCOME_UNKNOWN",
+    });
+    await selectionConsumptionAttemptLedger.reconcile({
+      tenantId: ID.tenant,
+      attemptId: ID.consumptionAttempt,
+      resultHash: CONSUMPTION_RESULT_HASH,
+    });
+    await selectionConsumptionAttemptLedger.start(attemptIdentity);
+    await assert.rejects(
+      selectionConsumptionAttemptLedger.start({
+        ...attemptIdentity,
+        attemptId: ID.conflictingConsumptionAttempt,
+        environmentId: "other-test",
+      }),
+      /idempotency conflict/,
+    );
+
+    const deniedAttemptIdentity = {
+      ...attemptIdentity,
+      attemptId: ID.deniedConsumptionAttempt,
+      idempotencyKeyHash: DENIED_CONSUMPTION_IDEMPOTENCY_KEY_HASH,
+      requestHash: DENIED_CONSUMPTION_REQUEST_HASH,
+    } as const;
+    await selectionConsumptionAttemptLedger.start(deniedAttemptIdentity);
+    await selectionConsumptionAttemptLedger.fail({
+      tenantId: ID.tenant,
+      attemptId: ID.deniedConsumptionAttempt,
+      reason: "AUTHORIZATION_DENIED",
+    });
+    await selectionConsumptionAttemptLedger.start(deniedAttemptIdentity);
+    const deniedAttemptEvidence = await withClient(
+      migratorUrl,
+      async (migrator) => {
+        await migrator.query("BEGIN");
+        try {
+          await migrator.query("SELECT set_config('app.tenant_id', $1, true)", [
+            ID.tenant,
+          ]);
+          const evidence = await migrator.query<{
+            status: string;
+            outcome: string;
+            reason_code: string;
+            result_hash: string | null;
+            sequences: number[];
+          }>(
+            `SELECT attempt.status, attempt.outcome, attempt.reason_code,
+                    attempt.result_hash,
+                    array_agg(receipt.sequence ORDER BY receipt.sequence) AS sequences
+             FROM public.active_context_selection_consumption_attempts attempt
+             JOIN public.active_context_selection_consumption_attempt_receipts receipt
+               ON receipt.tenant_id = attempt.tenant_id
+              AND receipt.attempt_id = attempt.id
+             WHERE attempt.tenant_id = $1 AND attempt.id = $2
+             GROUP BY attempt.status, attempt.outcome, attempt.reason_code,
+                      attempt.result_hash`,
+            [ID.tenant, ID.deniedConsumptionAttempt],
+          );
+          await migrator.query("ROLLBACK");
+          return evidence.rows[0]!;
+        } catch (error) {
+          await migrator.query("ROLLBACK");
+          throw error;
+        }
+      },
+    );
+    assert.deepEqual(deniedAttemptEvidence, {
+      status: "TERMINAL",
+      outcome: "DENIED",
+      reason_code: "AUTHORIZATION_DENIED",
+      result_hash: null,
+      sequences: [1, 2],
+    });
+
+    let selectionConsumptionPid: (pid: number) => void = () => undefined;
+    const selectionConsumptionPidReady = new Promise<number>((resolve) => {
+      selectionConsumptionPid = resolve;
+    });
+    const cancellableSelectionConsumptionRepository =
+      new PostgresActiveContextSelectionConsumptionRepository({
+        pool: cancellationPool({
+          pool: sessionPool,
+          ready: selectionConsumptionPid,
+          queryFragment: "fas_session_v1.lock_selection_for_consumption",
+        }),
+        expectedRole: ROLE.sessionResolver,
+      });
+    const cancelledSelectionConsumption =
+      withLockedSelectionBoundActiveContext({
+        context: verified.context,
+        repository: cancellableSelectionConsumptionRepository,
+        now: () => NOW,
+        operation: async () => "must-not-complete",
+      }).then(
+        (value) => ({ kind: "resolved" as const, value }),
+        (error: unknown) => ({ kind: "rejected" as const, error }),
+      );
+    const selectionConsumptionBackendPid = await within(
+      selectionConsumptionPidReady,
+      10_000,
+    );
+    await withClient(adminUrl, async (admin) => {
+      const cancelled = await admin.query<{ cancelled: boolean }>(
+        "SELECT pg_cancel_backend($1)::boolean AS cancelled",
+        [selectionConsumptionBackendPid],
+      );
+      assert.equal(cancelled.rows[0]?.cancelled, true);
+    });
+    const cancelledSelectionConsumptionResult =
+      await cancelledSelectionConsumption;
+    assert.equal(cancelledSelectionConsumptionResult.kind, "rejected");
+    if (cancelledSelectionConsumptionResult.kind === "rejected") {
+      assert.equal(
+        (cancelledSelectionConsumptionResult.error as Error & { code?: string })
+          .code,
+        "57014",
+      );
+    }
+    const reusedAfterSelectionConsumptionCancellation =
+      await sessionPool.connect();
+    try {
+      const clean = await reusedAfterSelectionConsumptionCancellation.query<{
+        pid: number;
+        tenant_setting: string | null;
+      }>(
+        `SELECT pg_backend_pid()::int AS pid,
+                nullif(current_setting('app.tenant_id', true), '') AS tenant_setting`,
+      );
+      assert.equal(clean.rows[0]?.pid, selectionConsumptionBackendPid);
+      assert.equal(clean.rows[0]?.tenant_setting, null);
+    } finally {
+      reusedAfterSelectionConsumptionCancellation.release();
+    }
 
     await withClient(sessionResolverUrl, async (resolver) => {
       await mustFail(
@@ -1389,6 +1605,16 @@ async function main() {
     assert.equal(rotated.sessionGeneration, 2);
 
     await mustFail(
+      () => withLockedSelectionBoundActiveContext({
+        context: verified.context,
+        repository: selectionConsumptionRepository,
+        now: () => NOW,
+        operation: async () => "must-not-run",
+      }),
+      /active_context_selection_consumption_binding_stale/,
+    );
+
+    await mustFail(
       () => lifecycle.execute({
         sessionId: SID,
         idempotencyKey: "lifecycle-cross-tenant-0003",
@@ -1530,6 +1756,13 @@ async function main() {
           active_count: number;
           receipt_count: number;
           generations: number[];
+          attempt_status: string | null;
+          attempt_outcome: string | null;
+          attempt_reason: string | null;
+          attempt_result_hash: string | null;
+          attempt_receipt_sequences: number[] | null;
+          attempt_receipt_phases: string[] | null;
+          attempt_persisted: string;
           states: Array<{
             generation: number;
             previousSelectionId: string | null;
@@ -1547,6 +1780,30 @@ async function main() {
              (SELECT array_agg(session_generation::int ORDER BY session_generation)
               FROM public.active_session_context_selections
               WHERE session_fingerprint = $1) AS generations,
+             (SELECT status
+              FROM public.active_context_selection_consumption_attempts
+              WHERE id = $2 AND tenant_id = $3) AS attempt_status,
+             (SELECT outcome
+              FROM public.active_context_selection_consumption_attempts
+              WHERE id = $2 AND tenant_id = $3) AS attempt_outcome,
+             (SELECT reason_code
+              FROM public.active_context_selection_consumption_attempts
+              WHERE id = $2 AND tenant_id = $3) AS attempt_reason,
+             (SELECT result_hash
+              FROM public.active_context_selection_consumption_attempts
+              WHERE id = $2 AND tenant_id = $3) AS attempt_result_hash,
+             (SELECT array_agg(sequence ORDER BY sequence)
+              FROM public.active_context_selection_consumption_attempt_receipts
+              WHERE attempt_id = $2 AND tenant_id = $3) AS attempt_receipt_sequences,
+             (SELECT array_agg(phase ORDER BY sequence)
+              FROM public.active_context_selection_consumption_attempt_receipts
+              WHERE attempt_id = $2 AND tenant_id = $3) AS attempt_receipt_phases,
+             (SELECT coalesce(string_agg(row_to_json(attempt)::text, ''), '')
+              FROM public.active_context_selection_consumption_attempts attempt
+              WHERE attempt.id = $2 AND attempt.tenant_id = $3)
+             || (SELECT coalesce(string_agg(row_to_json(receipt)::text, ''), '')
+                 FROM public.active_context_selection_consumption_attempt_receipts receipt
+                 WHERE receipt.attempt_id = $2 AND receipt.tenant_id = $3) AS attempt_persisted,
              (SELECT jsonb_agg(jsonb_build_object(
                 'generation', session_generation::int,
                 'previousSelectionId', previous_selection_id,
@@ -1559,7 +1816,7 @@ async function main() {
              (SELECT coalesce(string_agg(row_to_json(receipt)::text, ''), '')
               FROM public.active_session_context_selection_command_receipts receipt
               WHERE session_fingerprint = $1) AS persisted`,
-          [fingerprint(SID)],
+          [fingerprint(SID), ID.consumptionAttempt, ID.tenant],
         );
         await migrator.query("ROLLBACK");
         return evidence.rows[0]!;
@@ -1570,6 +1827,32 @@ async function main() {
     });
     assert.equal(lifecycleEvidence.active_count, 0);
     assert.equal(lifecycleEvidence.receipt_count, 7);
+    assert.equal(lifecycleEvidence.attempt_status, "TERMINAL");
+    assert.equal(lifecycleEvidence.attempt_outcome, "COMPLETED");
+    assert.equal(lifecycleEvidence.attempt_reason, "COMMAND_RECONCILED");
+    assert.equal(lifecycleEvidence.attempt_result_hash, CONSUMPTION_RESULT_HASH);
+    assert.deepEqual(lifecycleEvidence.attempt_receipt_sequences, [1, 2, 3]);
+    assert.deepEqual(lifecycleEvidence.attempt_receipt_phases, [
+      "ATTEMPT_STARTED",
+      "RECONCILIATION",
+      "TERMINAL",
+    ]);
+    assert.equal(lifecycleEvidence.attempt_persisted.includes(SID), false);
+    assert.equal(lifecycleEvidence.attempt_persisted.includes(OTHER_SID), false);
+    assert.equal(lifecycleEvidence.attempt_persisted.includes(IMPERSONATED_SID), false);
+    assert.equal(lifecycleEvidence.attempt_persisted.includes("lifecycle-consumption"), false);
+    assert.equal(
+      lifecycleEvidence.attempt_persisted.includes(CONSUMPTION_IDEMPOTENCY_KEY_HASH),
+      true,
+    );
+    assert.equal(
+      lifecycleEvidence.attempt_persisted.includes(CONSUMPTION_REQUEST_HASH),
+      true,
+    );
+    assert.equal(
+      lifecycleEvidence.attempt_persisted.includes(CONSUMPTION_RESULT_HASH),
+      true,
+    );
     assert.deepEqual(lifecycleEvidence.generations, [1, 2, 3]);
     assert.deepEqual(lifecycleEvidence.states, [
       {
