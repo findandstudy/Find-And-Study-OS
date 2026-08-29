@@ -225,20 +225,18 @@ export async function authMiddleware(
     return;
   }
 
-  // b) Deactivated account
-  if (dbUser.isActive === false) {
+  // b) Deactivated account. A public-application student may log in only to
+  // finish email verification; the central student verification gate keeps the
+  // rest of the API closed until verification activates the account.
+  const isPublicApplyPendingVerification = (
+    dbUser.role === "student"
+    && dbUser.createdFromSource === "public_apply"
+    && dbUser.emailVerified === false
+    && Boolean(dbUser.passwordHash)
+  );
+  if (dbUser.isActive === false && !isPublicApplyPendingVerification) {
     await clearSession(res, sid, req);
     res.status(403).json({ error: "Account deactivated" });
-    return;
-  }
-
-  // c) Unverified email — only enforced for students. Staff, admin, agent and
-  // other internal roles are onboarded by an administrator and are allowed in
-  // even without confirming their email address (matches the behaviour of the
-  // frontend EmailVerificationGuard, which also only blocks the student role).
-  if (dbUser.emailVerified === false && dbUser.role === "student") {
-    await clearSession(res, sid, req);
-    res.status(403).json({ error: "Email not verified" });
     return;
   }
 

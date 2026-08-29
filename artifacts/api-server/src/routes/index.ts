@@ -68,8 +68,13 @@ import dataQualityRouter from "./dataQuality";
 import aiBotsRouter from "./aiBots";
 import agentApplicationsRouter from "./agentApplications";
 import { tokenScopeGuard } from "../middlewares/tokenScopeGuard";
+import { studentEmailVerificationGate } from "../middlewares/studentEmailVerificationGate";
 
 const router: IRouter = Router();
+
+// Keep unverified student sessions usable for the verification screen, but
+// fail closed for all other API access until the address has been confirmed.
+router.use(studentEmailVerificationGate);
 
 // ────────────────────────────────────────────────────────────────────────────
 // Agent onboarding gate. Runs after the global authMiddleware. For users in
