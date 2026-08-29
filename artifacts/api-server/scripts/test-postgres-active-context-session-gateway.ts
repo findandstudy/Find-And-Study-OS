@@ -21,6 +21,9 @@ import {
 import { withLockedSelectionBoundActiveContext } from "../src/lib/activeContextSelectionConsumption.js";
 import { PostgresActiveContextSelectionConsumptionRepository } from "../src/lib/postgresActiveContextSelectionConsumptionRepository.js";
 import { PostgresActiveContextSelectionConsumptionAttemptLedger } from "../src/lib/postgresActiveContextSelectionConsumptionAttemptLedger.js";
+import { ACTIVE_SESSION_SELECTION_COMMAND_RECEIPT_V1 } from "../src/lib/activeContextSelectionConsumptionAttempt.js";
+import { ActiveContextSelectionConsumptionRepairWorker } from "../src/lib/activeContextSelectionConsumptionRepairWorker.js";
+import { PostgresActiveContextSelectionConsumptionRepairStore } from "../src/lib/postgresActiveContextSelectionConsumptionRepairStore.js";
 import { PostgresActiveContextSessionRepository } from "../src/lib/postgresActiveContextSessionRepository.js";
 import { PostgresAuthoritativeActiveContextRepository } from "../src/lib/postgresAuthoritativeActiveContextRepository.js";
 
@@ -37,6 +40,7 @@ const migratorUrl = requiredUrl("PG_GATE_MIGRATOR_URL");
 const sessionResolverUrl = requiredUrl("PG_GATE_SESSION_RESOLVER_URL");
 const rateLimitUrl = requiredUrl("PG_GATE_RATE_LIMIT_URL");
 const lifecycleUrl = requiredUrl("PG_GATE_SESSION_LIFECYCLE_URL");
+const repairUrl = requiredUrl("PG_GATE_SESSION_REPAIR_URL");
 const contextResolverUrl = requiredUrl("PG_GATE_CONTEXT_RESOLVER_URL");
 const databaseName = new URL(adminUrl).pathname.slice(1);
 
@@ -47,6 +51,7 @@ for (const value of [
   sessionResolverUrl,
   rateLimitUrl,
   lifecycleUrl,
+  repairUrl,
   contextResolverUrl,
 ]) {
   const parsed = new URL(value);
@@ -64,6 +69,8 @@ const ROLE = {
   rateExecutor: "fas_rate_limit_executor",
   lifecycleOwner: "fas_session_lifecycle_owner",
   lifecycleExecutor: "fas_session_lifecycle_executor",
+  repairOwner: "fas_session_repair_owner",
+  repairExecutor: "fas_session_repair_executor",
 } as const;
 
 const ID = {
@@ -80,17 +87,19 @@ const ID = {
   consumptionAttempt: "018fc000-0000-7000-8000-000000000007",
   deniedConsumptionAttempt: "018fc000-0000-7000-8000-000000000008",
   conflictingConsumptionAttempt: "018fc000-0000-7000-8000-000000000009",
+  missingConsumptionAttempt: "018fc000-0000-7000-8000-000000000010",
 } as const;
 
 const USER_ID = 910_001;
 const SID = "a".repeat(64);
 const OTHER_SID = "b".repeat(64);
 const IMPERSONATED_SID = "d".repeat(64);
-const CONSUMPTION_IDEMPOTENCY_KEY_HASH = "1".repeat(64);
-const CONSUMPTION_REQUEST_HASH = "2".repeat(64);
-const CONSUMPTION_RESULT_HASH = "3".repeat(64);
+const CONSUMPTION_IDEMPOTENCY_KEY = "lifecycle-repair-0001";
+const LIFECYCLE_IDEMPOTENCY_SECRET = Buffer.alloc(32, 0x5a);
 const DENIED_CONSUMPTION_IDEMPOTENCY_KEY_HASH = "4".repeat(64);
 const DENIED_CONSUMPTION_REQUEST_HASH = "5".repeat(64);
+const MISSING_CONSUMPTION_IDEMPOTENCY_KEY_HASH = "6".repeat(64);
+const MISSING_CONSUMPTION_REQUEST_HASH = "7".repeat(64);
 const CSRF = "c".repeat(64);
 const TRUSTED_ORIGIN = "https://apply.findandstudy.test";
 const NOW = Date.now();
@@ -109,6 +118,39 @@ const publicKeyPem = keys.publicKey
 
 function fingerprint(sid: string): string {
   return crypto.createHash("sha256").update(sid, "ascii").digest("hex");
+}
+
+function lifecycleIdempotencyKeyHash(key: string): string {
+  return crypto
+    .createHmac("sha256", LIFECYCLE_IDEMPOTENCY_SECRET)
+    .update("fas.active-context-selection-idempotency.v1\0", "utf8")
+    .update(key, "utf8")
+    .digest("hex");
+}
+
+function lifecycleRequestHash(input: {
+  sessionFingerprint: string;
+  type: "SELECT" | "REVOKE";
+  targetTenantId?: string;
+  targetMembershipId?: string;
+  expectedSelectionId: string;
+  expectedGeneration: number;
+}): string {
+  const hash = crypto.createHash("sha256").update(
+    "fas.active-context-selection-request.v1",
+    "utf8",
+  );
+  for (const part of [
+    input.sessionFingerprint,
+    input.type,
+    input.type === "SELECT" ? input.targetTenantId!.toLowerCase() : "",
+    input.type === "SELECT" ? input.targetMembershipId!.toLowerCase() : "",
+    input.expectedSelectionId.toLowerCase(),
+    String(input.expectedGeneration),
+  ]) {
+    hash.update("\0", "ascii").update(part, "utf8");
+  }
+  return hash.digest("hex");
 }
 
 function subjectHash(input: {
@@ -221,22 +263,27 @@ async function bootstrapAuthority() {
   await withClient(adminUrl, async (admin) => {
     await admin.query(`
       GRANT CONNECT ON DATABASE ${databaseName} TO
-        ${ROLE.sessionResolver}, ${ROLE.rateExecutor}, ${ROLE.lifecycleExecutor};
+        ${ROLE.sessionResolver}, ${ROLE.rateExecutor}, ${ROLE.lifecycleExecutor},
+        ${ROLE.repairExecutor};
       GRANT USAGE ON SCHEMA public, fas_session_v1 TO ${ROLE.sessionOwner};
       GRANT USAGE ON SCHEMA public, fas_rate_limit_v1 TO ${ROLE.rateOwner};
       GRANT USAGE ON SCHEMA public, fas_session_lifecycle_v1 TO ${ROLE.lifecycleOwner};
+      GRANT USAGE ON SCHEMA public, fas_session_repair_v1 TO ${ROLE.repairOwner};
       GRANT USAGE ON SCHEMA fas_session_v1 TO ${ROLE.sessionResolver};
       GRANT USAGE ON SCHEMA fas_rate_limit_v1 TO ${ROLE.rateExecutor};
       GRANT USAGE ON SCHEMA fas_session_lifecycle_v1 TO ${ROLE.lifecycleExecutor};
+      GRANT USAGE ON SCHEMA fas_session_repair_v1 TO ${ROLE.repairExecutor};
 
       REVOKE ALL ON ALL TABLES IN SCHEMA public FROM
         ${ROLE.sessionOwner}, ${ROLE.sessionResolver},
         ${ROLE.rateOwner}, ${ROLE.rateExecutor},
-        ${ROLE.lifecycleOwner}, ${ROLE.lifecycleExecutor};
+        ${ROLE.lifecycleOwner}, ${ROLE.lifecycleExecutor},
+        ${ROLE.repairOwner}, ${ROLE.repairExecutor};
       REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM
         ${ROLE.sessionOwner}, ${ROLE.sessionResolver},
         ${ROLE.rateOwner}, ${ROLE.rateExecutor},
-        ${ROLE.lifecycleOwner}, ${ROLE.lifecycleExecutor};
+        ${ROLE.lifecycleOwner}, ${ROLE.lifecycleExecutor},
+        ${ROLE.repairOwner}, ${ROLE.repairExecutor};
 
       GRANT SELECT, UPDATE ON TABLE
         public.sessions, public.users, public.principals, public.memberships,
@@ -272,6 +319,15 @@ async function bootstrapAuthority() {
       GRANT SELECT, INSERT ON TABLE
         public.active_context_selection_consumption_attempt_receipts
       TO ${ROLE.sessionOwner};
+      GRANT SELECT ON TABLE
+        public.active_context_selection_consumption_attempts,
+        public.active_context_selection_consumption_attempt_receipts,
+        public.active_session_context_selections,
+        public.active_session_context_selection_command_receipts
+      TO ${ROLE.repairOwner};
+      GRANT SELECT, INSERT, UPDATE ON TABLE
+        public.active_context_selection_consumption_repair_jobs
+      TO ${ROLE.repairOwner};
 
       ALTER FUNCTION fas_session_v1.resolve_session_for_active_context(text, text, bigint)
         OWNER TO ${ROLE.sessionOwner};
@@ -290,12 +346,28 @@ async function bootstrapAuthority() {
         text, text, text, uuid, uuid, uuid, bigint, text, text,
         uuid, uuid, text, text, bigint
       ) OWNER TO ${ROLE.lifecycleOwner};
+      ALTER FUNCTION public.schedule_active_context_selection_consumption_repair()
+        OWNER TO ${ROLE.repairOwner};
+      ALTER FUNCTION fas_session_repair_v1.assert_tenant(uuid)
+        OWNER TO ${ROLE.repairOwner};
+      ALTER FUNCTION fas_session_repair_v1.claim_due_attempt(uuid, text, integer)
+        OWNER TO ${ROLE.repairOwner};
+      ALTER FUNCTION fas_session_repair_v1.load_selection_command_outcome(uuid, uuid, text)
+        OWNER TO ${ROLE.repairOwner};
+      ALTER FUNCTION fas_session_repair_v1.reschedule_attempt(uuid, uuid, text, integer, text)
+        OWNER TO ${ROLE.repairOwner};
+      ALTER FUNCTION fas_session_repair_v1.complete_attempt(uuid, uuid, text, text, text, text)
+        OWNER TO ${ROLE.repairOwner};
       REVOKE ALL ON ALL FUNCTIONS IN SCHEMA fas_session_v1
         FROM PUBLIC, ${ROLE.sessionResolver};
       REVOKE ALL ON ALL FUNCTIONS IN SCHEMA fas_rate_limit_v1
         FROM PUBLIC, ${ROLE.rateExecutor};
       REVOKE ALL ON ALL FUNCTIONS IN SCHEMA fas_session_lifecycle_v1
         FROM PUBLIC, ${ROLE.lifecycleExecutor};
+      REVOKE ALL ON ALL FUNCTIONS IN SCHEMA fas_session_repair_v1
+        FROM PUBLIC, ${ROLE.repairExecutor};
+      REVOKE ALL ON FUNCTION public.schedule_active_context_selection_consumption_repair()
+        FROM PUBLIC, ${ROLE.repairExecutor};
       GRANT EXECUTE ON FUNCTION
         fas_session_v1.resolve_session_for_active_context(text, text, bigint)
       TO ${ROLE.sessionResolver};
@@ -322,6 +394,12 @@ async function bootstrapAuthority() {
           uuid, uuid, text, text, bigint
         )
       TO ${ROLE.lifecycleExecutor};
+      GRANT EXECUTE ON FUNCTION
+        fas_session_repair_v1.claim_due_attempt(uuid, text, integer),
+        fas_session_repair_v1.load_selection_command_outcome(uuid, uuid, text),
+        fas_session_repair_v1.reschedule_attempt(uuid, uuid, text, integer, text),
+        fas_session_repair_v1.complete_attempt(uuid, uuid, text, text, text, text)
+      TO ${ROLE.repairExecutor};
     `);
 
     const roles = await admin.query(
@@ -335,9 +413,11 @@ async function bootstrapAuthority() {
         ROLE.rateExecutor,
         ROLE.lifecycleOwner,
         ROLE.lifecycleExecutor,
+        ROLE.repairOwner,
+        ROLE.repairExecutor,
       ]],
     );
-    assert.equal(roles.rowCount, 6);
+    assert.equal(roles.rowCount, 8);
     for (const role of roles.rows) {
       assert.equal(role.rolsuper, false);
       assert.equal(role.rolcreatedb, false);
@@ -349,7 +429,8 @@ async function bootstrapAuthority() {
         role.rolcanlogin,
         role.rolname === ROLE.sessionResolver ||
           role.rolname === ROLE.rateExecutor ||
-          role.rolname === ROLE.lifecycleExecutor,
+          role.rolname === ROLE.lifecycleExecutor ||
+          role.rolname === ROLE.repairExecutor,
       );
     }
     const lifecycleSecurity = await admin.query<{
@@ -684,6 +765,7 @@ async function main() {
   const sessionPool = new Pool({ connectionString: sessionResolverUrl, max: 1 });
   const ratePool = new Pool({ connectionString: rateLimitUrl, max: 8 });
   const lifecyclePool = new Pool({ connectionString: lifecycleUrl, max: 4 });
+  const repairPool = new Pool({ connectionString: repairUrl, max: 2 });
   const contextPool = new Pool({ connectionString: contextResolverUrl, max: 1 });
   try {
     const sessionRepository = new PostgresActiveContextSessionRepository({
@@ -700,6 +782,16 @@ async function main() {
         pool: sessionPool,
         expectedRole: ROLE.sessionResolver,
       });
+    const selectionConsumptionRepairStore =
+      new PostgresActiveContextSelectionConsumptionRepairStore({
+        pool: repairPool,
+        expectedRole: ROLE.repairExecutor,
+      });
+    const selectionConsumptionRepairWorker =
+      new ActiveContextSelectionConsumptionRepairWorker({
+        store: selectionConsumptionRepairStore,
+        ledger: selectionConsumptionAttemptLedger,
+      });
     const nextPermit = nextUuidV7Factory();
     const rateLimiter = new PostgresActiveContextIssuanceRateLimiter({
       pool: ratePool,
@@ -715,7 +807,7 @@ async function main() {
       expectedRole: ROLE.lifecycleExecutor,
       environmentId: ENVIRONMENT,
       cellId: CELL,
-      idempotencySecret: Buffer.alloc(32, 0x5a),
+      idempotencySecret: LIFECYCLE_IDEMPOTENCY_SECRET,
       nextUuidV7: nextUuidV7Factory(),
     });
     const issueGateway = (tokenTtlMs = 60_000) =>
@@ -783,6 +875,17 @@ async function main() {
     assert.equal(consumed, "selection-consumption-ok");
     assert.equal(consumptionOperationCalled, true);
 
+    const repairCommand = {
+      type: "SELECT" as const,
+      targetTenantId: ID.tenant,
+      targetMembershipId: ID.membership,
+      expectedSelectionId: verified.context.selectionId,
+      expectedGeneration: verified.context.sessionGeneration,
+    };
+    const repairRequestHash = lifecycleRequestHash({
+      sessionFingerprint: fingerprint(SID),
+      ...repairCommand,
+    });
     const attemptIdentity = {
       attemptId: ID.consumptionAttempt,
       tenantId: ID.tenant,
@@ -791,22 +894,89 @@ async function main() {
       sessionGeneration: verified.context.sessionGeneration,
       principalId: verified.context.principalId,
       membershipId: verified.context.membershipId,
-      idempotencyKeyHash: CONSUMPTION_IDEMPOTENCY_KEY_HASH,
-      requestHash: CONSUMPTION_REQUEST_HASH,
+      idempotencyKeyHash: lifecycleIdempotencyKeyHash(CONSUMPTION_IDEMPOTENCY_KEY),
+      requestHash: repairRequestHash,
       environmentId: ENVIRONMENT,
       cellId: CELL,
+      outcomeSource: ACTIVE_SESSION_SELECTION_COMMAND_RECEIPT_V1,
     } as const;
     await selectionConsumptionAttemptLedger.start(attemptIdentity);
+    const repairReceipt = await lifecycle.execute({
+      sessionId: SID,
+      idempotencyKey: CONSUMPTION_IDEMPOTENCY_KEY,
+      command: repairCommand,
+    });
+    assert.equal(repairReceipt.outcome, "UNCHANGED");
+    assert.equal(repairReceipt.requestHash, repairRequestHash);
     await selectionConsumptionAttemptLedger.pending({
       tenantId: ID.tenant,
       attemptId: ID.consumptionAttempt,
       reason: "COMMIT_OUTCOME_UNKNOWN",
     });
-    await selectionConsumptionAttemptLedger.reconcile({
-      tenantId: ID.tenant,
+    assert.deepEqual(await selectionConsumptionRepairWorker.runOnce(ID.tenant), {
+      kind: "RESOLVED",
       attemptId: ID.consumptionAttempt,
-      resultHash: CONSUMPTION_RESULT_HASH,
     });
+    assert.deepEqual(await selectionConsumptionRepairWorker.runOnce(ID.tenant), {
+      kind: "EMPTY",
+    });
+    const missingAttemptIdentity = {
+      ...attemptIdentity,
+      attemptId: ID.missingConsumptionAttempt,
+      idempotencyKeyHash: MISSING_CONSUMPTION_IDEMPOTENCY_KEY_HASH,
+      requestHash: MISSING_CONSUMPTION_REQUEST_HASH,
+    } as const;
+    await selectionConsumptionAttemptLedger.start(missingAttemptIdentity);
+    await selectionConsumptionAttemptLedger.pending({
+      tenantId: ID.tenant,
+      attemptId: ID.missingConsumptionAttempt,
+      reason: "COMMIT_OUTCOME_UNKNOWN",
+    });
+    assert.deepEqual(await selectionConsumptionRepairWorker.runOnce(ID.tenant), {
+      kind: "RETRY",
+      attemptId: ID.missingConsumptionAttempt,
+      reason: "NOT_FOUND",
+    });
+    await withClient(adminUrl, (admin) => admin.query(
+      `UPDATE public.active_context_selection_consumption_repair_jobs
+       SET max_attempts = 2, available_at = statement_timestamp()
+       WHERE tenant_id = $1 AND attempt_id = $2`,
+      [ID.tenant, ID.missingConsumptionAttempt],
+    ));
+    assert.deepEqual(await selectionConsumptionRepairWorker.runOnce(ID.tenant), {
+      kind: "ESCALATED",
+      attemptId: ID.missingConsumptionAttempt,
+      reason: "NOT_FOUND",
+    });
+    const missingRepairEvidence = await withClient(adminUrl, (admin) =>
+      admin.query<{
+        job_status: string;
+        attempt_count: number;
+        resolution: string;
+        last_error_code: string;
+        attempt_status: string;
+        outcome: string;
+        reason_code: string;
+      }>(
+        `SELECT job.status AS job_status, job.attempt_count, job.resolution,
+                job.last_error_code, attempt.status AS attempt_status,
+                attempt.outcome, attempt.reason_code
+         FROM public.active_context_selection_consumption_repair_jobs job
+         JOIN public.active_context_selection_consumption_attempts attempt
+           ON attempt.tenant_id = job.tenant_id AND attempt.id = job.attempt_id
+         WHERE job.tenant_id = $1 AND job.attempt_id = $2`,
+        [ID.tenant, ID.missingConsumptionAttempt],
+      ),
+    );
+    assert.deepEqual(missingRepairEvidence.rows, [{
+      job_status: "ESCALATED",
+      attempt_count: 2,
+      resolution: "NO_RECEIPT",
+      last_error_code: "OUTCOME_NOT_FOUND",
+      attempt_status: "TERMINAL",
+      outcome: "CONFLICT",
+      reason_code: "IDEMPOTENCY_CONFLICT",
+    }]);
     await selectionConsumptionAttemptLedger.start(attemptIdentity);
     await assert.rejects(
       selectionConsumptionAttemptLedger.start({
@@ -979,6 +1149,13 @@ async function main() {
         ),
         /permission denied/,
       );
+      await mustFail(
+        () => resolver.query(
+          "SELECT fas_session_repair_v1.claim_due_attempt($1,$2,$3)",
+          [ID.tenant, "0".repeat(64), 60],
+        ),
+        /permission denied/,
+      );
     });
     await withClient(rateLimitUrl, async (executor) => {
       await mustFail(
@@ -1139,6 +1316,40 @@ async function main() {
           await executor.query("ROLLBACK");
         }
       }
+    });
+    await withClient(repairUrl, async (executor) => {
+      await mustFail(
+        () => executor.query(
+          "SELECT * FROM public.active_context_selection_consumption_repair_jobs",
+        ),
+        /permission denied/,
+      );
+      await mustFail(
+        () => executor.query(
+          "SELECT * FROM public.active_context_selection_consumption_attempts",
+        ),
+        /permission denied/,
+      );
+      await mustFail(
+        () => executor.query(
+          "SELECT * FROM public.active_session_context_selection_command_receipts",
+        ),
+        /permission denied/,
+      );
+      await mustFail(
+        () => executor.query(
+          "SELECT fas_session_v1.resolve_session_for_active_context($1,$2,$3)",
+          [SID, fingerprint(SID), NOW],
+        ),
+        /permission denied/,
+      );
+      await mustFail(
+        () => executor.query(
+          "SELECT fas_session_repair_v1.claim_due_attempt($1,$2,$3)",
+          [ID.tenant, "0".repeat(64), 60],
+        ),
+        /tenant context mismatch/,
+      );
     });
     await withClient(migratorUrl, async (migrator) => {
       await migrator.query("BEGIN");
@@ -1762,6 +1973,11 @@ async function main() {
           attempt_result_hash: string | null;
           attempt_receipt_sequences: number[] | null;
           attempt_receipt_phases: string[] | null;
+          repair_status: string | null;
+          repair_resolution: string | null;
+          repair_attempt_count: number | null;
+          repair_last_error: string | null;
+          repair_lease: string | null;
           attempt_persisted: string;
           states: Array<{
             generation: number;
@@ -1798,6 +2014,21 @@ async function main() {
              (SELECT array_agg(phase ORDER BY sequence)
               FROM public.active_context_selection_consumption_attempt_receipts
               WHERE attempt_id = $2 AND tenant_id = $3) AS attempt_receipt_phases,
+             (SELECT status
+              FROM public.active_context_selection_consumption_repair_jobs
+              WHERE attempt_id = $2 AND tenant_id = $3) AS repair_status,
+             (SELECT resolution
+              FROM public.active_context_selection_consumption_repair_jobs
+              WHERE attempt_id = $2 AND tenant_id = $3) AS repair_resolution,
+             (SELECT attempt_count
+              FROM public.active_context_selection_consumption_repair_jobs
+              WHERE attempt_id = $2 AND tenant_id = $3) AS repair_attempt_count,
+             (SELECT last_error_code
+              FROM public.active_context_selection_consumption_repair_jobs
+              WHERE attempt_id = $2 AND tenant_id = $3) AS repair_last_error,
+             (SELECT lease_token_hash
+              FROM public.active_context_selection_consumption_repair_jobs
+              WHERE attempt_id = $2 AND tenant_id = $3) AS repair_lease,
              (SELECT coalesce(string_agg(row_to_json(attempt)::text, ''), '')
               FROM public.active_context_selection_consumption_attempts attempt
               WHERE attempt.id = $2 AND attempt.tenant_id = $3)
@@ -1826,31 +2057,36 @@ async function main() {
       }
     });
     assert.equal(lifecycleEvidence.active_count, 0);
-    assert.equal(lifecycleEvidence.receipt_count, 7);
+    assert.equal(lifecycleEvidence.receipt_count, 8);
     assert.equal(lifecycleEvidence.attempt_status, "TERMINAL");
     assert.equal(lifecycleEvidence.attempt_outcome, "COMPLETED");
     assert.equal(lifecycleEvidence.attempt_reason, "COMMAND_RECONCILED");
-    assert.equal(lifecycleEvidence.attempt_result_hash, CONSUMPTION_RESULT_HASH);
+    assert.equal(lifecycleEvidence.attempt_result_hash, repairReceipt.resultHash);
     assert.deepEqual(lifecycleEvidence.attempt_receipt_sequences, [1, 2, 3]);
     assert.deepEqual(lifecycleEvidence.attempt_receipt_phases, [
       "ATTEMPT_STARTED",
       "RECONCILIATION",
       "TERMINAL",
     ]);
+    assert.equal(lifecycleEvidence.repair_status, "RESOLVED");
+    assert.equal(lifecycleEvidence.repair_resolution, "RECEIPT_CONFIRMED");
+    assert.equal(lifecycleEvidence.repair_attempt_count, 1);
+    assert.equal(lifecycleEvidence.repair_last_error, null);
+    assert.equal(lifecycleEvidence.repair_lease, null);
     assert.equal(lifecycleEvidence.attempt_persisted.includes(SID), false);
     assert.equal(lifecycleEvidence.attempt_persisted.includes(OTHER_SID), false);
     assert.equal(lifecycleEvidence.attempt_persisted.includes(IMPERSONATED_SID), false);
     assert.equal(lifecycleEvidence.attempt_persisted.includes("lifecycle-consumption"), false);
     assert.equal(
-      lifecycleEvidence.attempt_persisted.includes(CONSUMPTION_IDEMPOTENCY_KEY_HASH),
+      lifecycleEvidence.attempt_persisted.includes(attemptIdentity.idempotencyKeyHash),
       true,
     );
     assert.equal(
-      lifecycleEvidence.attempt_persisted.includes(CONSUMPTION_REQUEST_HASH),
+      lifecycleEvidence.attempt_persisted.includes(repairRequestHash),
       true,
     );
     assert.equal(
-      lifecycleEvidence.attempt_persisted.includes(CONSUMPTION_RESULT_HASH),
+      lifecycleEvidence.attempt_persisted.includes(repairReceipt.resultHash),
       true,
     );
     assert.deepEqual(lifecycleEvidence.generations, [1, 2, 3]);
@@ -1880,6 +2116,7 @@ async function main() {
     assert.equal(lifecycleEvidence.persisted.includes(SID), false);
     for (const rawKey of [
       "lifecycle-unchanged-0001",
+      CONSUMPTION_IDEMPOTENCY_KEY,
       "lifecycle-precommit-0002",
       "lifecycle-ack-loss-0003",
       "lifecycle-ambiguous-0004",
@@ -1910,6 +2147,7 @@ async function main() {
       sessionPool.end(),
       ratePool.end(),
       lifecyclePool.end(),
+      repairPool.end(),
       contextPool.end(),
     ]);
   }

@@ -7,6 +7,7 @@ import {
   type SelectionConsumptionRepairStore,
 } from "../src/lib/activeContextSelectionConsumptionRepairWorker.js";
 import type { SelectionConsumptionAttemptLedger } from "../src/lib/activeContextSelectionConsumptionAttempt.js";
+import { ACTIVE_SESSION_SELECTION_COMMAND_RECEIPT_V1 } from "../src/lib/activeContextSelectionConsumptionAttempt.js";
 
 const ATTEMPT: PendingSelectionConsumptionAttempt = {
   attemptId: "018fc000-0000-7000-8000-000000000001",
@@ -20,6 +21,7 @@ const ATTEMPT: PendingSelectionConsumptionAttempt = {
   requestHash: "b".repeat(64),
   environmentId: "test",
   cellId: "test-cell",
+  outcomeSource: ACTIVE_SESSION_SELECTION_COMMAND_RECEIPT_V1,
   status: "PENDING",
   attemptCount: 1,
   maxAttempts: 3,

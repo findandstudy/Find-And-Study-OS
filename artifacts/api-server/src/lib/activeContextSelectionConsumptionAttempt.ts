@@ -5,6 +5,9 @@ const UUID_RE =
 const SHA256_RE = /^[0-9a-f]{64}$/;
 const IDENTIFIER_RE = /^[a-z][a-z0-9-]{1,62}$/;
 
+export const ACTIVE_SESSION_SELECTION_COMMAND_RECEIPT_V1 =
+  "ACTIVE_SESSION_SELECTION_COMMAND_RECEIPT_V1" as const;
+
 export type SelectionConsumptionAttemptIdentity = {
   attemptId: string;
   tenantId: string;
@@ -17,6 +20,7 @@ export type SelectionConsumptionAttemptIdentity = {
   requestHash: string;
   environmentId: string;
   cellId: string;
+  outcomeSource: typeof ACTIVE_SESSION_SELECTION_COMMAND_RECEIPT_V1;
 };
 
 export type SelectionConsumptionAttemptFailure =
@@ -86,6 +90,7 @@ function validIdentity(value: unknown): value is SelectionConsumptionAttemptIden
       "environmentId",
       "idempotencyKeyHash",
       "membershipId",
+      "outcomeSource",
       "principalId",
       "requestHash",
       "selectionId",
@@ -107,7 +112,8 @@ function validIdentity(value: unknown): value is SelectionConsumptionAttemptIden
     SHA256_RE.test(String(value.idempotencyKeyHash)) &&
     SHA256_RE.test(String(value.requestHash)) &&
     IDENTIFIER_RE.test(String(value.environmentId)) &&
-    IDENTIFIER_RE.test(String(value.cellId))
+    IDENTIFIER_RE.test(String(value.cellId)) &&
+    value.outcomeSource === ACTIVE_SESSION_SELECTION_COMMAND_RECEIPT_V1
   );
 }
 

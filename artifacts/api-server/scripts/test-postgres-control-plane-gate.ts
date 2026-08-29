@@ -62,6 +62,8 @@ const rateLimitOwnerRole = "fas_rate_limit_owner";
 const rateLimitExecutorRole = "fas_rate_limit_executor";
 const sessionLifecycleOwnerRole = "fas_session_lifecycle_owner";
 const sessionLifecycleExecutorRole = "fas_session_lifecycle_executor";
+const sessionRepairOwnerRole = "fas_session_repair_owner";
+const sessionRepairExecutorRole = "fas_session_repair_executor";
 
 async function withClient<T>(
   url: string,
@@ -131,6 +133,10 @@ async function setup() {
         NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS;
       CREATE ROLE ${sessionLifecycleExecutorRole}
         LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS;
+      CREATE ROLE ${sessionRepairOwnerRole}
+        NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS;
+      CREATE ROLE ${sessionRepairExecutorRole}
+        LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS;
       ALTER DATABASE ${databaseName} OWNER TO ${migratorRole};
       REVOKE TEMPORARY ON DATABASE ${databaseName} FROM PUBLIC;
       REVOKE CREATE ON SCHEMA public FROM PUBLIC;
@@ -161,7 +167,9 @@ async function setup() {
       ALTER ROLE ${sessionLifecycleExecutorRole} SET lock_timeout = '5s';
       ALTER ROLE ${sessionLifecycleExecutorRole} SET idle_in_transaction_session_timeout = '15s';
       ALTER ROLE ${sessionLifecycleExecutorRole} SET timezone = 'Pacific/Kiritimati';
-      ALTER ROLE ${sessionLifecycleExecutorRole} SET timezone = 'Pacific/Kiritimati';
+      ALTER ROLE ${sessionRepairExecutorRole} SET statement_timeout = '15s';
+      ALTER ROLE ${sessionRepairExecutorRole} SET lock_timeout = '5s';
+      ALTER ROLE ${sessionRepairExecutorRole} SET idle_in_transaction_session_timeout = '15s';
     `);
   });
   console.log("[postgres-gate] disposable authority split prepared");
@@ -679,7 +687,7 @@ async function verifyAtomicDdlRollback(migrator: pg.Client) {
         "SELECT count(*)::int AS count FROM drizzle.__drizzle_migrations",
       )
     ).rows[0].count,
-    69,
+    70,
   );
 }
 
@@ -1630,7 +1638,7 @@ async function verify() {
     const migrationCount = await migrator.query(
       "SELECT count(*)::int AS count FROM drizzle.__drizzle_migrations",
     );
-    assert.equal(migrationCount.rows[0].count, 69);
+    assert.equal(migrationCount.rows[0].count, 70);
     await verifyAtomicDdlRollback(migrator);
     await migrator.query(
       `INSERT INTO public.branches (id, name) VALUES
