@@ -86,6 +86,11 @@ const USER_ID = 910_001;
 const SID = "a".repeat(64);
 const OTHER_SID = "b".repeat(64);
 const IMPERSONATED_SID = "d".repeat(64);
+const CONSUMPTION_IDEMPOTENCY_KEY_HASH = "1".repeat(64);
+const CONSUMPTION_REQUEST_HASH = "2".repeat(64);
+const CONSUMPTION_RESULT_HASH = "3".repeat(64);
+const DENIED_CONSUMPTION_IDEMPOTENCY_KEY_HASH = "4".repeat(64);
+const DENIED_CONSUMPTION_REQUEST_HASH = "5".repeat(64);
 const CSRF = "c".repeat(64);
 const TRUSTED_ORIGIN = "https://apply.findandstudy.test";
 const NOW = Date.now();
@@ -786,8 +791,8 @@ async function main() {
       sessionGeneration: verified.context.sessionGeneration,
       principalId: verified.context.principalId,
       membershipId: verified.context.membershipId,
-      idempotencyKeyHash: "a".repeat(64),
-      requestHash: "b".repeat(64),
+      idempotencyKeyHash: CONSUMPTION_IDEMPOTENCY_KEY_HASH,
+      requestHash: CONSUMPTION_REQUEST_HASH,
       environmentId: ENVIRONMENT,
       cellId: CELL,
     } as const;
@@ -800,7 +805,7 @@ async function main() {
     await selectionConsumptionAttemptLedger.reconcile({
       tenantId: ID.tenant,
       attemptId: ID.consumptionAttempt,
-      resultHash: "c".repeat(64),
+      resultHash: CONSUMPTION_RESULT_HASH,
     });
     await selectionConsumptionAttemptLedger.start(attemptIdentity);
     await assert.rejects(
@@ -815,8 +820,8 @@ async function main() {
     const deniedAttemptIdentity = {
       ...attemptIdentity,
       attemptId: ID.deniedConsumptionAttempt,
-      idempotencyKeyHash: "d".repeat(64),
-      requestHash: "e".repeat(64),
+      idempotencyKeyHash: DENIED_CONSUMPTION_IDEMPOTENCY_KEY_HASH,
+      requestHash: DENIED_CONSUMPTION_REQUEST_HASH,
     } as const;
     await selectionConsumptionAttemptLedger.start(deniedAttemptIdentity);
     await selectionConsumptionAttemptLedger.fail({
@@ -1825,7 +1830,7 @@ async function main() {
     assert.equal(lifecycleEvidence.attempt_status, "TERMINAL");
     assert.equal(lifecycleEvidence.attempt_outcome, "COMPLETED");
     assert.equal(lifecycleEvidence.attempt_reason, "COMMAND_RECONCILED");
-    assert.equal(lifecycleEvidence.attempt_result_hash, "c".repeat(64));
+    assert.equal(lifecycleEvidence.attempt_result_hash, CONSUMPTION_RESULT_HASH);
     assert.deepEqual(lifecycleEvidence.attempt_receipt_sequences, [1, 2, 3]);
     assert.deepEqual(lifecycleEvidence.attempt_receipt_phases, [
       "ATTEMPT_STARTED",
@@ -1833,10 +1838,21 @@ async function main() {
       "TERMINAL",
     ]);
     assert.equal(lifecycleEvidence.attempt_persisted.includes(SID), false);
+    assert.equal(lifecycleEvidence.attempt_persisted.includes(OTHER_SID), false);
+    assert.equal(lifecycleEvidence.attempt_persisted.includes(IMPERSONATED_SID), false);
     assert.equal(lifecycleEvidence.attempt_persisted.includes("lifecycle-consumption"), false);
-    assert.equal(lifecycleEvidence.attempt_persisted.includes("a".repeat(64)), true);
-    assert.equal(lifecycleEvidence.attempt_persisted.includes("b".repeat(64)), true);
-    assert.equal(lifecycleEvidence.attempt_persisted.includes("c".repeat(64)), true);
+    assert.equal(
+      lifecycleEvidence.attempt_persisted.includes(CONSUMPTION_IDEMPOTENCY_KEY_HASH),
+      true,
+    );
+    assert.equal(
+      lifecycleEvidence.attempt_persisted.includes(CONSUMPTION_REQUEST_HASH),
+      true,
+    );
+    assert.equal(
+      lifecycleEvidence.attempt_persisted.includes(CONSUMPTION_RESULT_HASH),
+      true,
+    );
     assert.deepEqual(lifecycleEvidence.generations, [1, 2, 3]);
     assert.deepEqual(lifecycleEvidence.states, [
       {
