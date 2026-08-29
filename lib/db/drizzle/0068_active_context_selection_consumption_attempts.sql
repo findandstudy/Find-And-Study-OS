@@ -24,6 +24,8 @@ CREATE TABLE public.active_context_selection_consumption_attempts (
   result_hash text,
   occurred_at timestamp with time zone DEFAULT statement_timestamp() NOT NULL,
   updated_at timestamp with time zone DEFAULT statement_timestamp() NOT NULL,
+  CONSTRAINT active_context_selection_consumption_attempts_tenant_id_uq
+    UNIQUE (tenant_id, id),
   CONSTRAINT active_context_selection_consumption_attempts_id_uuidv7_chk
     CHECK (substring(id::text from 15 for 1) = '7'),
   CONSTRAINT active_context_selection_consumption_attempts_context_uuidv7_chk
