@@ -5170,9 +5170,7 @@ function renderCard(p){
   /* Actions */
   h+='<div class="ew-card-actions">';
   h+='<button type="button" class="ew-btn-info" aria-label="Details" data-info="'+p.id+'">'+ICON_INFO+'</button>';
-  if(MODE!=='course_finder'){
-    h+='<button class="ew-btn" data-apply="'+p.id+'">Apply Now \u2192</button>';
-  }
+  h+='<button type="button" class="ew-btn" data-apply="'+p.id+'">Apply Now \u2192</button>';
   h+='</div>';
 
   h+='</div></div>';
@@ -5638,9 +5636,7 @@ function renderDetailContent(p){
     h+='<a class="ew-detail-link" href="'+esc(p.universityWebsite)+'" target="_blank" rel="noopener noreferrer">'+ICON_INFO+'Visit university website</a>';
   }
 
-  if(MODE!=='course_finder'){
-    h+='<div style="margin-top:18px;display:flex;gap:8px"><button type="button" class="ew-btn-back" id="ew-detail-close-btn">Close</button><button type="button" class="ew-btn" id="ew-detail-apply" data-apply="'+p.id+'">Apply Now</button></div>';
-  }
+  h+='<div style="margin-top:18px;display:flex;gap:8px"><button type="button" class="ew-btn-back" id="ew-detail-close-btn">Close</button><button type="button" class="ew-btn" id="ew-detail-apply" data-apply="'+p.id+'">Apply Now</button></div>';
 
   return h;
 }

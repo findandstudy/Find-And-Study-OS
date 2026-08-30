@@ -98,11 +98,17 @@ test("agency embed is tenant-scoped and AI is entitlement gated", async () => {
   assert.match(route, /features\.embed_ai/);
   assert.match(route, /value === "combined"/);
   assert.match(route, /value === "course_finder"/);
+  assert.match(route, /normalizeAgentEmbedFilters/);
+  assert.match(route, /values\.presetFilters = normalizedFilters\.presetFilters/);
+  assert.match(route, /values\.lockedFilters = normalizedFilters\.lockedFilters/);
   assert.match(route, /embedApiKey: _secret/);
   assert.doesNotMatch(route, /theme\.logoUrl/);
   assert.match(account, /AI study assistant/);
   assert.match(account, /Course finder \+ application form/);
-  assert.match(account, /Program catalog only/);
+  assert.match(account, /Program catalog \+ Apply/);
+  assert.match(account, /Program catalog filters/);
+  assert.match(account, /Select universities/);
+  assert.match(account, /presetFilters/);
   assert.match(account, /data-edcons-widget/);
   assert.match(account, /data-edcons-token-url/);
   assert.match(account, /onsubmit="this\.phone\.value=this\.phoneCode\.value\+this\.phoneNumber\.value/);
@@ -112,6 +118,7 @@ test("agency embed is tenant-scoped and AI is entitlement gated", async () => {
   assert.match(publicEmbed, /originMatchesAllowedDomains/);
   assert.match(publicEmbed, /eq\(leadsTable\.agentId, widget\.agentId\)/);
   assert.match(publicEmbed, /eq\(studentsTable\.agentId, widget\.agentId\)/);
+  assert.doesNotMatch(publicEmbed, /if\(MODE!=='course_finder'\)\{\s*h\+='<button class="ew-btn" data-apply=/);
 });
 
 test("agency message channels are capability-driven and API-enforced", async () => {

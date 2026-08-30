@@ -10,6 +10,73 @@ const router: IRouter = Router();
 
 type AgentEmbedMode = "lead_form" | "combined" | "course_finder" | "ai_chatbot";
 
+const AGENT_EMBED_FILTER_KEYS = [
+  "country",
+  "city",
+  "universityType",
+  "universityId",
+  "level",
+  "language",
+  "field",
+] as const;
+
+type AgentEmbedPresetFilters = {
+  country?: string;
+  city?: string;
+  universityType?: string;
+  universityScope: "all" | "selected";
+  universityIds?: number[];
+  universityId?: number;
+  level?: string;
+  language?: string;
+  field?: string;
+};
+
+function cleanFilterText(value: unknown, maxLength = 160): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const cleaned = value.trim().slice(0, maxLength);
+  return cleaned || undefined;
+}
+
+function normalizeAgentEmbedFilters(value: unknown): {
+  presetFilters: AgentEmbedPresetFilters;
+  lockedFilters: string[];
+} | null {
+  const source = value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+  const requestedScope = source.universityScope === "selected" ? "selected" : "all";
+  const universityIds = Array.isArray(source.universityIds)
+    ? [...new Set(source.universityIds
+      .map((id: unknown) => Number(id))
+      .filter((id: number) => Number.isInteger(id) && id > 0))]
+      .slice(0, 100)
+    : [];
+  if (requestedScope === "selected" && universityIds.length === 0) return null;
+
+  const presetFilters: AgentEmbedPresetFilters = { universityScope: requestedScope };
+  const lockedFilters: string[] = [];
+  const assignText = (key: "country" | "city" | "universityType" | "level" | "language" | "field") => {
+    const cleaned = cleanFilterText(source[key]);
+    if (!cleaned) return;
+    presetFilters[key] = cleaned;
+    lockedFilters.push(key);
+  };
+  assignText("country");
+  assignText("city");
+  assignText("universityType");
+  assignText("level");
+  assignText("language");
+  assignText("field");
+
+  if (requestedScope === "selected") {
+    presetFilters.universityIds = universityIds;
+    if (universityIds.length === 1) presetFilters.universityId = universityIds[0];
+    lockedFilters.push("universityId");
+  }
+  return { presetFilters, lockedFilters };
+}
+
 function resolveAgentEmbedMode(value: unknown): AgentEmbedMode {
   if (
     value === "combined" ||
@@ -79,6 +146,14 @@ router.put("/agents/me/embed-widget", requireAuth, requireRole("agent", "sub_age
       .filter((value: string) => /^(?:[a-z0-9-]+\.)*[a-z0-9-]+(?::\d+)?$/.test(value))
       .slice(0, 20)
     : [];
+  const hasPresetFilters = Object.prototype.hasOwnProperty.call(req.body || {}, "presetFilters");
+  const normalizedFilters = hasPresetFilters
+    ? normalizeAgentEmbedFilters(req.body?.presetFilters)
+    : undefined;
+  if (hasPresetFilters && !normalizedFilters) {
+    res.status(400).json({ error: "Selected university scope requires at least one university." });
+    return;
+  }
 
   let defaultBotId: number | null = null;
   if (requestedMode === "ai_chatbot") {
@@ -120,6 +195,12 @@ router.put("/agents/me/embed-widget", requireAuth, requireRole("agent", "sub_age
     isActive: req.body?.isActive !== false,
     agentId: agent.id,
   };
+  if (normalizedFilters) {
+    values.presetFilters = normalizedFilters.presetFilters;
+    values.lockedFilters = normalizedFilters.lockedFilters;
+    values.hiddenFilters = [];
+    values.visibleFilters = [...AGENT_EMBED_FILTER_KEYS];
+  }
 
   let widget: any;
   if (current) {
@@ -131,10 +212,10 @@ router.put("/agents/me/embed-widget", requireAuth, requireRole("agent", "sub_age
     const rows = await db.insert(embedWidgetsTable).values({
       ...values,
       slug: `fas-${agent.id}-${crypto.randomBytes(4).toString("hex")}`,
-      presetFilters: {},
-      lockedFilters: [],
+      presetFilters: normalizedFilters?.presetFilters || { universityScope: "all" },
+      lockedFilters: normalizedFilters?.lockedFilters || [],
       hiddenFilters: [],
-      visibleFilters: [],
+      visibleFilters: normalizedFilters ? [...AGENT_EMBED_FILTER_KEYS] : [],
     } as any).returning();
     widget = rows[0];
   }
@@ -142,6 +223,7 @@ router.put("/agents/me/embed-widget", requireAuth, requireRole("agent", "sub_age
     agentId: agent.id,
     mode: requestedMode,
     allowedDomains,
+    ...(normalizedFilters ? { presetFilters: normalizedFilters.presetFilters } : {}),
   }, req.ip);
   res.json({ widget: publicWidget(widget), features });
 });

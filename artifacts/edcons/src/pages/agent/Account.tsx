@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { CountryFlag } from "@/components/CountryFlag";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
+import { MultiSelectFilter } from "@/components/admin/MultiSelectFilter";
 
 const BASE_URL = (import.meta.env.BASE_URL || "/").replace(/\/$/, "");
 
@@ -953,6 +954,16 @@ function AgencyIntegrationsTab({ features }: { features: Record<string, boolean>
 
 type AgentEmbedMode = "lead_form" | "combined" | "course_finder" | "ai_chatbot";
 
+type AgentEmbedFilterOptions = {
+  countries: string[];
+  cities: string[];
+  universityTypes: string[];
+  universities: Array<{ id: number; name: string }>;
+  degrees: string[];
+  languages: string[];
+  fields: string[];
+};
+
 function WebToLeadTab({ agentProfile }: { agentProfile?: any }) {
   const { t } = useI18n();
   const { toast } = useToast();
@@ -961,6 +972,14 @@ function WebToLeadTab({ agentProfile }: { agentProfile?: any }) {
   const [copied, setCopied] = useState(false);
   const [embedMode, setEmbedMode] = useState<AgentEmbedMode>("lead_form");
   const [allowedDomains, setAllowedDomains] = useState("");
+  const [presetCountry, setPresetCountry] = useState("");
+  const [presetCity, setPresetCity] = useState("");
+  const [presetUniversityType, setPresetUniversityType] = useState("");
+  const [universityScope, setUniversityScope] = useState<"all" | "selected">("all");
+  const [presetUniversityIds, setPresetUniversityIds] = useState<string[]>([]);
+  const [presetLevel, setPresetLevel] = useState("");
+  const [presetLanguage, setPresetLanguage] = useState("");
+  const [presetField, setPresetField] = useState("");
   const [savingEmbed, setSavingEmbed] = useState(false);
 
   const { data: tokenData, isLoading } = useQuery<{ embedToken: string }>({
@@ -972,6 +991,13 @@ function WebToLeadTab({ agentProfile }: { agentProfile?: any }) {
     queryFn: () => customFetch("/api/agents/me/embed-widget"),
     enabled: agentProfile?.effectiveFeatures?.embed_standard === true,
   });
+  const catalogMode = embedMode === "combined" || embedMode === "course_finder";
+  const { data: filterOptions, isLoading: filterOptionsLoading } = useQuery<AgentEmbedFilterOptions>({
+    queryKey: ["agent-embed-filter-options"],
+    queryFn: () => customFetch("/api/course-finder/filters") as Promise<AgentEmbedFilterOptions>,
+    enabled: agentProfile?.effectiveFeatures?.embed_standard === true && catalogMode,
+    staleTime: 5 * 60 * 1000,
+  });
 
   useEffect(() => {
     if (!embedData?.widget) return;
@@ -982,6 +1008,20 @@ function WebToLeadTab({ agentProfile }: { agentProfile?: any }) {
         : "lead_form",
     );
     setAllowedDomains(Array.isArray(embedData.widget.allowedDomains) ? embedData.widget.allowedDomains.join(", ") : "");
+    const presetFilters = embedData.widget.presetFilters || {};
+    setPresetCountry(typeof presetFilters.country === "string" ? presetFilters.country : "");
+    setPresetCity(typeof presetFilters.city === "string" ? presetFilters.city : "");
+    setPresetUniversityType(typeof presetFilters.universityType === "string" ? presetFilters.universityType : "");
+    const selectedUniversityIds = Array.isArray(presetFilters.universityIds)
+      ? presetFilters.universityIds.map(String).filter((id: string) => /^\d+$/.test(id) && Number(id) > 0)
+      : (Number.isInteger(Number(presetFilters.universityId)) && Number(presetFilters.universityId) > 0
+        ? [String(presetFilters.universityId)]
+        : []);
+    setUniversityScope(presetFilters.universityScope === "selected" && selectedUniversityIds.length > 0 ? "selected" : "all");
+    setPresetUniversityIds(selectedUniversityIds);
+    setPresetLevel(typeof presetFilters.level === "string" ? presetFilters.level : "");
+    setPresetLanguage(typeof presetFilters.language === "string" ? presetFilters.language : "");
+    setPresetField(typeof presetFilters.field === "string" ? presetFilters.field : "");
   }, [embedData?.widget]);
 
   const apiDomain = window.location.origin;
@@ -1037,6 +1077,27 @@ function WebToLeadTab({ agentProfile }: { agentProfile?: any }) {
   };
 
   async function saveEmbedWidget() {
+    if (catalogMode && universityScope === "selected" && presetUniversityIds.length === 0) {
+      toast({
+        title: "Select at least one university",
+        description: "Choose one or more universities, or switch the scope to All Universities.",
+        variant: "destructive",
+      });
+      return;
+    }
+    const universityIds = [...new Set(presetUniversityIds
+      .map(Number)
+      .filter(id => Number.isInteger(id) && id > 0))];
+    const presetFilters: Record<string, string | number | number[]> = {
+      universityScope,
+    };
+    if (presetCountry) presetFilters.country = presetCountry;
+    if (presetCity) presetFilters.city = presetCity;
+    if (presetUniversityType) presetFilters.universityType = presetUniversityType;
+    if (universityScope === "selected") presetFilters.universityIds = universityIds;
+    if (presetLevel) presetFilters.level = presetLevel;
+    if (presetLanguage) presetFilters.language = presetLanguage;
+    if (presetField) presetFilters.field = presetField;
     setSavingEmbed(true);
     try {
       await customFetch("/api/agents/me/embed-widget", {
@@ -1045,6 +1106,7 @@ function WebToLeadTab({ agentProfile }: { agentProfile?: any }) {
         body: JSON.stringify({
           mode: embedMode,
           allowedDomains: allowedDomains.split(",").map(value => value.trim()).filter(Boolean),
+          presetFilters,
         }),
       });
       await qc.invalidateQueries({ queryKey: ["agent-embed-widget"] });
@@ -1082,13 +1144,13 @@ function WebToLeadTab({ agentProfile }: { agentProfile?: any }) {
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="combined">Course finder + application form</SelectItem>
-                  <SelectItem value="course_finder">Program catalog only</SelectItem>
+                  <SelectItem value="course_finder">Program catalog + Apply</SelectItem>
                   <SelectItem value="lead_form">Standard lead form</SelectItem>
                   {agentProfile?.effectiveFeatures?.embed_ai && <SelectItem value="ai_chatbot">AI study assistant</SelectItem>}
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
-                Let visitors browse programs and apply, show the program catalog only, or collect a lead directly.
+                Let visitors browse programs and apply, use a focused program catalog, or collect a lead directly.
               </p>
             </div>
             <div className="space-y-1.5">
@@ -1097,6 +1159,121 @@ function WebToLeadTab({ agentProfile }: { agentProfile?: any }) {
               <p className="text-xs text-muted-foreground">Leave empty to allow any website.</p>
             </div>
           </div>
+          {catalogMode && (
+            <div className="space-y-4 rounded-xl border bg-secondary/20 p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h4 className="text-sm font-semibold">Program catalog filters</h4>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Selected values restrict this embed to matching programs. Empty fields remain available to visitors.
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    setPresetCountry(""); setPresetCity(""); setPresetUniversityType("");
+                    setUniversityScope("all"); setPresetUniversityIds([]); setPresetLevel("");
+                    setPresetLanguage(""); setPresetField("");
+                  }}
+                >
+                  Clear filters
+                </Button>
+              </div>
+              {filterOptionsLoading ? (
+                <div className="flex items-center gap-2 py-4 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" /> Loading catalog filters…
+                </div>
+              ) : (
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  <div className="space-y-1.5">
+                    <Label>Country</Label>
+                    <Select value={presetCountry || "__all__"} onValueChange={value => setPresetCountry(value === "__all__" ? "" : value)}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__all__">All Countries</SelectItem>
+                        {(filterOptions?.countries || []).map(value => <SelectItem key={value} value={value}>{value}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>City</Label>
+                    <Select value={presetCity || "__all__"} onValueChange={value => setPresetCity(value === "__all__" ? "" : value)}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__all__">All Cities</SelectItem>
+                        {(filterOptions?.cities || []).map(value => <SelectItem key={value} value={value}>{value}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>University type</Label>
+                    <Select value={presetUniversityType || "__all__"} onValueChange={value => setPresetUniversityType(value === "__all__" ? "" : value)}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__all__">All Types</SelectItem>
+                        {(filterOptions?.universityTypes || []).map(value => <SelectItem key={value} value={value}>{value}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5 sm:col-span-2 lg:col-span-3">
+                    <Label>University scope</Label>
+                    <div className="grid max-w-md grid-cols-2 rounded-lg border bg-background p-1">
+                      <Button type="button" size="sm" variant={universityScope === "all" ? "default" : "ghost"} onClick={() => setUniversityScope("all")}>
+                        All Universities
+                      </Button>
+                      <Button type="button" size="sm" variant={universityScope === "selected" ? "default" : "ghost"} onClick={() => setUniversityScope("selected")}>
+                        Selected Universities
+                      </Button>
+                    </div>
+                    {universityScope === "selected" && (
+                      <MultiSelectFilter
+                        className="max-w-md"
+                        options={(filterOptions?.universities || []).map(university => ({ value: String(university.id), label: university.name }))}
+                        value={presetUniversityIds}
+                        onChange={setPresetUniversityIds}
+                        placeholder="Select universities"
+                        searchPlaceholder="Search universities…"
+                        emptyText="No universities found"
+                        selectedText={count => `${count} ${count === 1 ? "university" : "universities"} selected`}
+                      />
+                    )}
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Level</Label>
+                    <Select value={presetLevel || "__all__"} onValueChange={value => setPresetLevel(value === "__all__" ? "" : value)}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__all__">All Levels</SelectItem>
+                        {(filterOptions?.degrees || []).map(value => <SelectItem key={value} value={value}>{value}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Language</Label>
+                    <Select value={presetLanguage || "__all__"} onValueChange={value => setPresetLanguage(value === "__all__" ? "" : value)}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__all__">All Languages</SelectItem>
+                        {(filterOptions?.languages || []).map(value => <SelectItem key={value} value={value}>{value}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Field of study</Label>
+                    <Select value={presetField || "__all__"} onValueChange={value => setPresetField(value === "__all__" ? "" : value)}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__all__">All Fields</SelectItem>
+                        {(filterOptions?.fields || []).map(value => <SelectItem key={value} value={value}>{value}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
           {["agent", "sub_agent"].includes(user?.role || "") && (
             <div className="flex justify-end">
               <Button onClick={saveEmbedWidget} disabled={savingEmbed} className="gap-2">
