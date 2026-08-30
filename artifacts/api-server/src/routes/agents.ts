@@ -19,7 +19,7 @@ import {
   toAgentInsertValues,
   type AgentCatalog,
 } from "../lib/exportImportExcel";
-import { db, agentsTable, agentIntegrationsTable, usersTable, DEFAULT_ROLE_PERMISSIONS, commissionsTable, agentBranchesTable, branchesTable, contractTemplatesTable, signingSessionsTable, settingsTable, emailVerificationCodesTable, conversationsTable, messagesTable, broadcastsTable, messageTemplatesTable, notesTable, applicationStageDocumentsTable } from "@workspace/db";
+import { db, agentsTable, agentIntegrationsTable, usersTable, rolesTable, DEFAULT_ROLE_PERMISSIONS, getAllPermissions, commissionsTable, agentBranchesTable, branchesTable, contractTemplatesTable, signingSessionsTable, settingsTable, emailVerificationCodesTable, conversationsTable, messagesTable, broadcastsTable, messageTemplatesTable, notesTable, applicationStageDocumentsTable } from "@workspace/db";
 import { getNewestSignedContractUrl } from "../lib/signContract";
 import { eq, sql, isNull, isNotNull, and, or, ilike, inArray, desc, type SQL } from "drizzle-orm";
 import { requireAuth, requireRole, requireAgentStaffPermission, logAudit, AGENT_STAFF_PERMISSIONS as PERM_KEYS } from "../lib/auth";
@@ -50,6 +50,7 @@ import {
 } from "../lib/agentFeatures";
 import { decryptConfig, encryptConfig } from "../lib/encryption";
 import { maskSecrets, mergeConfig } from "../lib/configMasking";
+import { applyPermissionOverrides } from "../lib/permissions";
 
 const router: IRouter = Router();
 
@@ -173,35 +174,67 @@ function webToLeadPreviewHtml(agent: typeof agentsTable.$inferSelect): string {
 </form></body></html>`;
 }
 
+async function setUserAcademyAccessOverride(userId: number, enabled: boolean): Promise<void> {
+  // Persist the administrator's explicit choice. Removing the override when it
+  // happens to match a static role default is unsafe because DB-managed roles
+  // are authoritative and may intentionally differ from those seed defaults.
+  await db.execute(sql`
+    UPDATE users
+    SET permission_overrides = COALESCE(permission_overrides, '{}'::jsonb)
+      || ${JSON.stringify({ "academy.access": enabled })}::jsonb
+    WHERE id = ${userId}
+  `);
+}
+
+async function resolveAcademyAccessByUserIds(userIds: number[]): Promise<Map<number, boolean>> {
+  const uniqueUserIds = [...new Set(userIds)];
+  const accessByUserId = new Map<number, boolean>();
+  if (uniqueUserIds.length === 0) return accessByUserId;
+
+  const users = await db
+    .select({
+      id: usersTable.id,
+      role: usersTable.role,
+      permissionOverrides: usersTable.permissionOverrides,
+    })
+    .from(usersTable)
+    .where(inArray(usersTable.id, uniqueUserIds));
+
+  const roleNames = [...new Set(users.map((user) => user.role))];
+  const roleRows = roleNames.length > 0
+    ? await db
+      .select({ name: rolesTable.name, permissions: rolesTable.permissions })
+      .from(rolesTable)
+      .where(inArray(rolesTable.name, roleNames))
+    : [];
+  const permissionsByRole = new Map<string, string[]>(
+    roleRows.map((role) => [role.name, (role.permissions as string[] | null) ?? []] as const),
+  );
+
+  for (const user of users) {
+    const basePermissions = user.role === "super_admin" || user.role === "admin"
+      ? getAllPermissions()
+      : permissionsByRole.get(user.role)
+        ?? ((DEFAULT_ROLE_PERMISSIONS as Record<string, string[]>)[user.role] ?? []);
+    const effectivePermissions = applyPermissionOverrides(
+      basePermissions,
+      user.permissionOverrides as Record<string, boolean> | null,
+    );
+    accessByUserId.set(user.id, effectivePermissions.has("academy.access"));
+  }
+
+  return accessByUserId;
+}
+
 async function syncAgentAcademyPermission(agent: typeof agentsTable.$inferSelect): Promise<void> {
   if (!agent.userId) return;
-  const [user] = await db.select({ role: usersTable.role }).from(usersTable).where(eq(usersTable.id, agent.userId));
-  if (!user) return;
   const enabled = resolveAgentFeatures(agent.planTier, agent.featureOverrides).academy;
-  const roleDefault = ((DEFAULT_ROLE_PERMISSIONS as Record<string, string[]>)[user.role] ?? []).includes("academy.access");
-  if (enabled === roleDefault) {
-    await db.execute(sql`UPDATE users SET permission_overrides = COALESCE(permission_overrides, '{}'::jsonb) - 'academy.access' WHERE id = ${agent.userId}`);
-  } else {
-    await db.execute(sql`UPDATE users SET permission_overrides = COALESCE(permission_overrides, '{}'::jsonb) || ${JSON.stringify({ "academy.access": enabled })}::jsonb WHERE id = ${agent.userId}`);
-  }
+  await setUserAcademyAccessOverride(agent.userId, enabled);
 }
 
 async function withAcademyAccess<T extends { userId: number | null }>(agents: T[]): Promise<Array<T & { academyAccess: boolean | null }>> {
   const userIds = agents.map((agent) => agent.userId).filter((id): id is number => id != null);
-  const accessByUserId = new Map<number, boolean>();
-
-  if (userIds.length > 0) {
-    const rows = await db
-      .select({ id: usersTable.id, role: usersTable.role, permissionOverrides: usersTable.permissionOverrides })
-      .from(usersTable)
-      .where(inArray(usersTable.id, userIds));
-
-    for (const row of rows) {
-      const overrides = (row.permissionOverrides as Record<string, boolean> | null) ?? {};
-      const roleDefault = ((DEFAULT_ROLE_PERMISSIONS as Record<string, string[]>)[row.role] ?? []).includes("academy.access");
-      accessByUserId.set(row.id, "academy.access" in overrides ? overrides["academy.access"] : roleDefault);
-    }
-  }
+  const accessByUserId = await resolveAcademyAccessByUserIds(userIds);
 
   return agents.map((agent) => ({
     ...agent,
@@ -1490,13 +1523,7 @@ router.patch("/agents/:id/academy-access", requireAuth, async (req, res): Promis
   } else if (!(await isAgentInScope(actor.id, actor.role, agentId))) {
     res.status(403).json({ error: "Agent not in your branch scope" }); return;
   }
-  const [uRow] = await db.select({ role: usersTable.role }).from(usersTable).where(eq(usersTable.id, targetAgent.userId));
-  const roleDefault = ((DEFAULT_ROLE_PERMISSIONS as Record<string, string[]>)[uRow?.role ?? ""] ?? []).includes("academy.access");
-  if (parsed.data.academyAccess === roleDefault) {
-    await db.execute(sql`UPDATE users SET permission_overrides = COALESCE(permission_overrides, '{}'::jsonb) - 'academy.access' WHERE id = ${targetAgent.userId}`);
-  } else {
-    await db.execute(sql`UPDATE users SET permission_overrides = COALESCE(permission_overrides, '{}'::jsonb) || ${JSON.stringify({ "academy.access": parsed.data.academyAccess })}::jsonb WHERE id = ${targetAgent.userId}`);
-  }
+  await setUserAcademyAccessOverride(targetAgent.userId, parsed.data.academyAccess);
   logAudit(actor.id, "agent.academy_access.update", "agent", agentId, { academyAccess: parsed.data.academyAccess }, req.ip);
   res.json({ success: true });
 });
@@ -1800,16 +1827,9 @@ router.get("/agents/:id", requireAuth, requireRole(...STAFF_ROLES), async (req, 
   const links = await db.select({ branchId: agentBranchesTable.branchId }).from(agentBranchesTable).where(eq(agentBranchesTable.agentId, id));
   const assignedStaffList = await getAgencyStaffWithLegacy(id, agent.assignedStaffId ?? null);
   const primary = assignedStaffList.find(s => s.isPrimary) || assignedStaffList[0] || null;
-  // Include academyAccess computed from permissionOverrides + role default
-  let academyAccess: boolean | null = null;
-  if (agent.userId) {
-    const [uRow] = await db.select({ role: usersTable.role, permissionOverrides: usersTable.permissionOverrides }).from(usersTable).where(eq(usersTable.id, agent.userId));
-    if (uRow) {
-      const overrides = (uRow.permissionOverrides as Record<string, boolean> | null) ?? {};
-      const roleDefault = ((DEFAULT_ROLE_PERMISSIONS as Record<string, string[]>)[uRow.role] ?? []).includes("academy.access");
-      academyAccess = "academy.access" in overrides ? overrides["academy.access"] : roleDefault;
-    }
-  }
+  // Resolve from the same DB role + per-user override model used by auth.
+  const academyAccessByUserId = await resolveAcademyAccessByUserIds(agent.userId ? [agent.userId] : []);
+  const academyAccess = agent.userId ? (academyAccessByUserId.get(agent.userId) ?? null) : null;
   res.json({
     ...agent,
     logoUrl: browserStorageUrl(agent.logoUrl),

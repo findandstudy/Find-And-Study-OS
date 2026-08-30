@@ -16,10 +16,11 @@ interface FollowUpRow {
 
 export function UpcomingFollowUpsWidget({ detailHrefPrefix }: { detailHrefPrefix: string }) {
   const { t, lang } = useI18n();
-  const { data = [], isLoading } = useQuery<FollowUpRow[]>({
+  const { data = [], isLoading, isError, isFetching, refetch } = useQuery<FollowUpRow[]>({
     queryKey: ["/api/follow-ups/upcoming", detailHrefPrefix],
     queryFn: () => customFetch("/api/follow-ups/upcoming"),
-    staleTime: 30_000,
+    staleTime: 0,
+    refetchOnMount: "always",
   });
   const now = Date.now();
 
@@ -36,6 +37,18 @@ export function UpcomingFollowUpsWidget({ detailHrefPrefix }: { detailHrefPrefix
       </div>
       {isLoading ? (
         <p className="text-xs text-muted-foreground py-4 text-center">{t("common.loading")}</p>
+      ) : isError ? (
+        <div role="alert" className="py-4 text-center space-y-2">
+          <p className="text-xs text-red-600">{t("common.error")}</p>
+          <button
+            type="button"
+            className="text-xs font-medium text-primary hover:underline disabled:opacity-50"
+            onClick={() => void refetch()}
+            disabled={isFetching}
+          >
+            {t("common.retry")}
+          </button>
+        </div>
       ) : data.length === 0 ? (
         <p className="text-xs text-muted-foreground py-4 text-center">{t("staffDash.noFollowUps")}</p>
       ) : (

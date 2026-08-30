@@ -177,6 +177,12 @@ test("academy and agency favicon branding are tenant capability scoped", async (
   assert.match(sso, /tenantAcademyEnabled/);
   assert.match(sso, /resolveAgentFeatures/);
   assert.match(agents, /async function withAcademyAccess/);
+  assert.match(agents, /async function resolveAcademyAccessByUserIds/);
+  assert.match(agents, /rolesTable\.permissions/);
+  assert.match(agents, /applyPermissionOverrides/);
+  assert.match(agents, /async function setUserAcademyAccessOverride/);
+  assert.match(agents, /await setUserAcademyAccessOverride\(targetAgent\.userId, parsed\.data\.academyAccess\)/);
+  assert.doesNotMatch(agents, /parsed\.data\.academyAccess === roleDefault/);
   assert.match(agents, /data: dataWithAcademyAccess/);
   assert.match(agents, /Not your sub-agent/);
   assert.match(layout, /academyAvailable/);

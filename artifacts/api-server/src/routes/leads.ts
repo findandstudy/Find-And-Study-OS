@@ -2306,9 +2306,10 @@ router.get("/follow-ups/upcoming", requireAuth, requireRole(...STAFF_ROLES, ...A
   if (isAgentRole(userRole)) {
     const visibleAgentIds = await getAgentVisibleIds(userId, userRole);
     const scopedAgentIds = visibleAgentIds.length > 0 ? visibleAgentIds : [0];
+    const scopedAgentIdList = sql.join(scopedAgentIds.map((id) => sql`${id}`), sql`, `);
     baseConditions.push(or(
-      sql`EXISTS (SELECT 1 FROM leads afl WHERE afl.id = ${followUpsTable.leadId} AND afl.deleted_at IS NULL AND afl.agent_id = ANY(${scopedAgentIds}))`,
-      sql`EXISTS (SELECT 1 FROM students afs WHERE afs.id = ${followUpsTable.studentId} AND afs.deleted_at IS NULL AND afs.agent_id = ANY(${scopedAgentIds}))`,
+      sql`EXISTS (SELECT 1 FROM leads afl WHERE afl.id = ${followUpsTable.leadId} AND afl.deleted_at IS NULL AND afl.agent_id IN (${scopedAgentIdList}))`,
+      sql`EXISTS (SELECT 1 FROM students afs WHERE afs.id = ${followUpsTable.studentId} AND afs.deleted_at IS NULL AND afs.agent_id IN (${scopedAgentIdList}))`,
       eq(followUpsTable.assignedToId, userId),
     )!);
 

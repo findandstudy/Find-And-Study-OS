@@ -110,6 +110,20 @@ test("follow-up and assignment changes invalidate cross-page workspace caches", 
   assert.match(invalidation, /predicate: query => queryKeyMatchesAnyRoot\(query\.queryKey, roots\)/);
 });
 
+test("agent dashboard follow-ups use safe tenant scoping and surface request failures", () => {
+  const route = source(resolve(apiRoot, "src/routes/leads.ts"));
+  const widget = source(resolve(uiRoot, "src/components/UpcomingFollowUpsWidget.tsx"));
+
+  assert.match(route, /const scopedAgentIdList = sql\.join/);
+  assert.match(route, /afl\.agent_id IN \(\$\{scopedAgentIdList\}\)/);
+  assert.match(route, /afs\.agent_id IN \(\$\{scopedAgentIdList\}\)/);
+  assert.doesNotMatch(route, /agent_id = ANY\(\$\{scopedAgentIds\}\)/);
+  assert.match(widget, /isError, isFetching, refetch/);
+  assert.match(widget, /refetchOnMount: "always"/);
+  assert.ok(widget.indexOf(") : isError ? (") < widget.indexOf(") : data.length === 0 ? ("));
+  assert.match(widget, /t\("common\.retry"\)/);
+});
+
 test("follow-up translations have identical structure in all ten locales", () => {
   const locales = ["en", "tr", "fr", "es", "ru", "ar", "fa", "hi", "id", "zh"];
   const values = locales.map(locale => JSON.parse(source(resolve(uiRoot, `src/lib/i18n/translations/${locale}.json`))).followUps);
