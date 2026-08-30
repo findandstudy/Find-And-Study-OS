@@ -96,9 +96,13 @@ test("agency embed is tenant-scoped and AI is entitlement gated", async () => {
   assert.match(route, /eq\(embedWidgetsTable\.agentId, agent\.id\)/);
   assert.match(route, /features\.embed_standard/);
   assert.match(route, /features\.embed_ai/);
+  assert.match(route, /value === "combined"/);
+  assert.match(route, /value === "course_finder"/);
   assert.match(route, /embedApiKey: _secret/);
   assert.doesNotMatch(route, /theme\.logoUrl/);
   assert.match(account, /AI study assistant/);
+  assert.match(account, /Course finder \+ application form/);
+  assert.match(account, /Program catalog only/);
   assert.match(account, /data-edcons-widget/);
   assert.match(account, /data-edcons-token-url/);
   assert.match(account, /onsubmit="this\.phone\.value=this\.phoneCode\.value\+this\.phoneNumber\.value/);

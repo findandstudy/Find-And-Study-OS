@@ -8,6 +8,19 @@ import { resolveAgentFeatures } from "../lib/agentFeatures";
 
 const router: IRouter = Router();
 
+type AgentEmbedMode = "lead_form" | "combined" | "course_finder" | "ai_chatbot";
+
+function resolveAgentEmbedMode(value: unknown): AgentEmbedMode {
+  if (
+    value === "combined" ||
+    value === "course_finder" ||
+    value === "ai_chatbot"
+  ) {
+    return value;
+  }
+  return "lead_form";
+}
+
 async function getAgentForActor(userId: number, role: string) {
   if (role === "agent_staff") {
     const [staff] = await db.select({ managingAgentId: usersTable.managingAgentId })
@@ -55,7 +68,7 @@ router.put("/agents/me/embed-widget", requireAuth, requireRole("agent", "sub_age
     res.status(403).json({ error: "Embed is not enabled for this agency", code: "AGENT_FEATURE_DISABLED" });
     return;
   }
-  const requestedMode = req.body?.mode === "ai_chatbot" ? "ai_chatbot" : "lead_form";
+  const requestedMode = resolveAgentEmbedMode(req.body?.mode);
   if (requestedMode === "ai_chatbot" && !features.embed_ai) {
     res.status(403).json({ error: "AI Embed is not enabled for this agency", code: "AGENT_FEATURE_DISABLED" });
     return;
@@ -91,8 +104,15 @@ router.put("/agents/me/embed-widget", requireAuth, requireRole("agent", "sub_age
     theme.welcomeMessage = "How can we help with your study plans?";
     theme.assistantName = agent.companyName || agent.businessName || "Study Assistant";
   }
+  const experienceName = requestedMode === "ai_chatbot"
+    ? "AI Assistant"
+    : requestedMode === "combined"
+      ? "Course Finder"
+      : requestedMode === "course_finder"
+        ? "Program Catalog"
+        : "Lead Form";
   const values: Record<string, any> = {
-    name: String(req.body?.name || `${agent.companyName || agent.businessName || "Agency"} ${requestedMode === "ai_chatbot" ? "AI Assistant" : "Lead Form"}`).slice(0, 160),
+    name: String(req.body?.name || `${agent.companyName || agent.businessName || "Agency"} ${experienceName}`).slice(0, 160),
     mode: requestedMode,
     allowedDomains,
     theme,

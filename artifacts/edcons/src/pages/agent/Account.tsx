@@ -951,13 +951,15 @@ function AgencyIntegrationsTab({ features }: { features: Record<string, boolean>
   );
 }
 
+type AgentEmbedMode = "lead_form" | "combined" | "course_finder" | "ai_chatbot";
+
 function WebToLeadTab({ agentProfile }: { agentProfile?: any }) {
   const { t } = useI18n();
   const { toast } = useToast();
   const { user } = useAuth();
   const qc = useQueryClient();
   const [copied, setCopied] = useState(false);
-  const [embedMode, setEmbedMode] = useState<"lead_form" | "ai_chatbot">("lead_form");
+  const [embedMode, setEmbedMode] = useState<AgentEmbedMode>("lead_form");
   const [allowedDomains, setAllowedDomains] = useState("");
   const [savingEmbed, setSavingEmbed] = useState(false);
 
@@ -973,7 +975,12 @@ function WebToLeadTab({ agentProfile }: { agentProfile?: any }) {
 
   useEffect(() => {
     if (!embedData?.widget) return;
-    setEmbedMode(embedData.widget.mode === "ai_chatbot" ? "ai_chatbot" : "lead_form");
+    const savedMode = embedData.widget.mode;
+    setEmbedMode(
+      savedMode === "combined" || savedMode === "course_finder" || savedMode === "ai_chatbot"
+        ? savedMode
+        : "lead_form",
+    );
     setAllowedDomains(Array.isArray(embedData.widget.allowedDomains) ? embedData.widget.allowedDomains.join(", ") : "");
   }, [embedData?.widget]);
 
@@ -1071,13 +1078,18 @@ function WebToLeadTab({ agentProfile }: { agentProfile?: any }) {
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label>Experience</Label>
-              <Select value={embedMode} onValueChange={value => setEmbedMode(value as "lead_form" | "ai_chatbot")}>
+              <Select value={embedMode} onValueChange={value => setEmbedMode(value as AgentEmbedMode)}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="combined">Course finder + application form</SelectItem>
+                  <SelectItem value="course_finder">Program catalog only</SelectItem>
                   <SelectItem value="lead_form">Standard lead form</SelectItem>
                   {agentProfile?.effectiveFeatures?.embed_ai && <SelectItem value="ai_chatbot">AI study assistant</SelectItem>}
                 </SelectContent>
               </Select>
+              <p className="text-xs text-muted-foreground">
+                Let visitors browse programs and apply, show the program catalog only, or collect a lead directly.
+              </p>
             </div>
             <div className="space-y-1.5">
               <Label>Allowed domains</Label>
