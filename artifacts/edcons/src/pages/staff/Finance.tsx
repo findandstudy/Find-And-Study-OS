@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useRef, useEffect } from "react";
+import { Fragment, useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { useSeason } from "@/contexts/SeasonContext";
 import {
   useListCommissions, useListServiceFees, useGetFinanceSummary,
@@ -52,6 +52,17 @@ async function downloadExcel(url: string, filename: string): Promise<void> {
 const toNum = (v: any) => parseFloat(String(v ?? 0)) || 0;
 const fmt = (v: any, currency: string | null | undefined = "USD") =>
   formatMoney(v, currency);
+const agentName = (agent: any) =>
+  agent?.companyName
+  || agent?.businessName
+  || [agent?.firstName, agent?.lastName].filter(Boolean).join(" ").trim()
+  || agent?.name
+  || `Agent #${agent?.id}`;
+const agentOptionLabel = (agent: any) => {
+  const name = agentName(agent);
+  const code = agent?.agencyCode || agent?.legacyAgencyCode;
+  return code ? `${name} · ${code}` : name;
+};
 const pct = (num: number, den: number) =>
   den > 0 ? Math.round((num / den) * 100) : 0;
 
@@ -518,7 +529,7 @@ function CommissionModal({
                 <SelectItem value="none">{t("financePage.noAgent")}</SelectItem>
                 {parentAgents.map((a: any) => (
                   <SelectItem key={a.id} value={String(a.id)}>
-                    {a.firstName} {a.lastName}{a.companyName ? ` (${a.companyName})` : ""}
+                    {agentOptionLabel(a)}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -679,10 +690,14 @@ function CommissionModal({
 }
 
 interface ServiceFeeForm {
+  studentId: string;
+  applicationId: string;
+  agentId: string;
   studentName: string;
   universityName: string;
   isStateUniversity: boolean;
   payerType: string;
+  financeStatus: string;
   season: string;
   currency: string;
   totalAmount: string;
@@ -692,8 +707,9 @@ interface ServiceFeeForm {
 }
 
 const EMPTY_FEE: ServiceFeeForm = {
+  studentId: "", applicationId: "", agentId: "",
   studentName: "", universityName: "",
-  isStateUniversity: false, payerType: "student",
+  isStateUniversity: false, payerType: "student", financeStatus: "potential",
   season: currentYear, currency: "USD", totalAmount: "",
   firstInstallmentPaidAt: "", secondInstallmentPaidAt: "",
   notes: "",
@@ -710,15 +726,61 @@ function ServiceFeeModal({
   const [form, setForm] = useState<ServiceFeeForm>(initial || EMPTY_FEE);
   const [saving, setSaving] = useState(false);
   const currencyOpts = useCatalogCurrencies();
+  const [studentPickerOpen, setStudentPickerOpen] = useState(false);
+  const [studentQuery, setStudentQuery] = useState("");
+  const [studentResults, setStudentResults] = useState<any[]>([]);
+  const [studentSearching, setStudentSearching] = useState(false);
+
+  const { data: studentApplicationsResponse, isLoading: applicationsLoading } = useQuery({
+    queryKey: ["finance-student-apps", form.studentId],
+    queryFn: () => customFetch<any>(`${BASE}/api/finance/student-applications/${form.studentId}`),
+    enabled: open && !!form.studentId,
+  });
+  const studentApplications: any[] = (studentApplicationsResponse as any)?.data || [];
+
+  useEffect(() => {
+    if (studentQuery.length < 2) {
+      setStudentResults([]);
+      setStudentSearching(false);
+      return;
+    }
+    setStudentSearching(true);
+    const timer = setTimeout(async () => {
+      try {
+        const response = await customFetch<any>(`${BASE}/api/finance/student-search?q=${encodeURIComponent(studentQuery)}&limit=10`);
+        setStudentResults(response?.data || []);
+      } catch {
+        setStudentResults([]);
+      } finally {
+        setStudentSearching(false);
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [studentQuery]);
+
+  useEffect(() => {
+    if (!open) return;
+    setForm(initial || EMPTY_FEE);
+    setStudentQuery("");
+    setStudentResults([]);
+    setStudentPickerOpen(false);
+  }, [open, initial]);
 
   const set = (k: keyof ServiceFeeForm) => (e: any) =>
     setForm(f => ({ ...f, [k]: e?.target ? e.target.value : e }));
 
   async function save() {
+    if (!editId && (!form.studentId || !form.applicationId)) {
+      toast({ title: "Select a student and application", variant: "destructive" });
+      return;
+    }
     setSaving(true);
     try {
       const body: Record<string, any> = {
         ...form,
+        studentId: form.studentId ? parseInt(form.studentId, 10) : null,
+        applicationId: form.applicationId ? parseInt(form.applicationId, 10) : null,
+        agentId: form.agentId ? parseInt(form.agentId, 10) : null,
         totalAmount: toNum(form.totalAmount),
         isStateUniversity: form.isStateUniversity,
         firstInstallmentPaidAt: form.firstInstallmentPaidAt || null,
@@ -739,6 +801,8 @@ function ServiceFeeModal({
 
   const total = toNum(form.totalAmount);
   const half = total / 2;
+  const selectedFeeApplication = studentApplications.find((application: any) => String(application.id) === form.applicationId);
+  const usesLinkedServiceFeeAmount = !editId && toNum(selectedFeeApplication?.serviceFeeAmount) > 0;
 
   return (
     <>
@@ -748,14 +812,83 @@ function ServiceFeeModal({
           <DialogTitle>{editId ? t("financePage.editServiceFee") : t("financePage.newServiceFee")}</DialogTitle>
         </DialogHeader>
         <div className="grid grid-cols-2 gap-3 py-2">
-          <div>
+          <div className="col-span-2">
             <Label>{t("financePage.studentName")}</Label>
-            <Input value={form.studentName} onChange={set("studentName")} />
+            <Popover open={studentPickerOpen} onOpenChange={setStudentPickerOpen}>
+              <PopoverTrigger asChild>
+                <Button variant="outline" role="combobox" className="w-full justify-between font-normal h-9 text-left">
+                  <span className={form.studentId ? "text-slate-800 dark:text-slate-100" : "text-slate-400"}>
+                    {form.studentName || t("financePage.searchStudent")}
+                  </span>
+                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-[440px] p-0" align="start">
+                <Command shouldFilter={false}>
+                  <CommandInput placeholder={t("financePage.searchStudent")} value={studentQuery} onValueChange={setStudentQuery} />
+                  <CommandList>
+                    {studentSearching && <div className="p-3 flex justify-center"><Loader2 className="w-4 h-4 animate-spin" /></div>}
+                    {!studentSearching && studentQuery.length < 2 && <CommandEmpty>{t("financePage.typeToSearch")}</CommandEmpty>}
+                    {!studentSearching && studentQuery.length >= 2 && studentResults.length === 0 && <CommandEmpty>{t("financePage.noStudentFound")}</CommandEmpty>}
+                    <CommandGroup>
+                      {studentResults.map((student: any) => (
+                        <CommandItem key={student.id} value={String(student.id)} onSelect={() => {
+                          setForm(current => ({
+                            ...current,
+                            studentId: String(student.id),
+                            applicationId: "",
+                            agentId: "",
+                            studentName: student.name,
+                            universityName: "",
+                            totalAmount: "",
+                          }));
+                          setStudentPickerOpen(false);
+                          setStudentQuery("");
+                          setStudentResults([]);
+                        }}>
+                          <Check className={`mr-2 h-4 w-4 ${form.studentId === String(student.id) ? "opacity-100" : "opacity-0"}`} />
+                          <span>{student.name}</span>
+                          {student.email && <span className="ml-2 text-xs text-slate-400">{student.email}</span>}
+                        </CommandItem>
+                      ))}
+                    </CommandGroup>
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
           </div>
-          <div>
-            <Label>{t("financePage.universityName")}</Label>
-            <Input value={form.universityName} onChange={set("universityName")} />
+          <div className="col-span-2">
+            <Label>{t("financePage.selectApplication")}</Label>
+            <Select value={form.applicationId || undefined} disabled={!form.studentId || applicationsLoading} onValueChange={(value) => {
+              const application = studentApplications.find((item: any) => String(item.id) === value);
+              if (!application) return;
+              setForm(current => ({
+                ...current,
+                applicationId: value,
+                agentId: application.agentId ? String(application.agentId) : "",
+                universityName: application.universityName || "",
+                season: application.season || current.season,
+                currency: application.currency || current.currency,
+                totalAmount: application.serviceFeeAmount != null ? String(application.serviceFeeAmount) : "",
+                isStateUniversity: !!application.isStateUniversity,
+              }));
+            }}>
+              <SelectTrigger><SelectValue placeholder={applicationsLoading ? "Loading applications…" : t("financePage.selectApplication")} /></SelectTrigger>
+              <SelectContent>
+                {studentApplications.map((application: any) => (
+                  <SelectItem key={application.id} value={String(application.id)}>
+                    {[application.universityName, application.programName, application.season].filter(Boolean).join(" · ") || `Application #${application.id}`}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
+          {form.applicationId && (
+            <div className="col-span-2 rounded-lg border bg-slate-50 dark:bg-slate-900/40 px-3 py-2 text-sm">
+              <span className="font-medium">{form.universityName || "—"}</span>
+              <span className="text-slate-500 ml-2">Linked to application #{form.applicationId}</span>
+            </div>
+          )}
           <div>
             <Label>{t("financePage.payer")}</Label>
             <Select value={form.payerType} onValueChange={set("payerType")}>
@@ -763,6 +896,17 @@ function ServiceFeeModal({
               <SelectContent>
                 <SelectItem value="student">{t("financePage.student")}</SelectItem>
                 <SelectItem value="agent">{t("financePage.agent")}</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label>{t("financePage.statusLabel")}</Label>
+            <Select value={form.financeStatus} onValueChange={set("financeStatus")}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="potential">{t("financePage.statusPotential")}</SelectItem>
+                <SelectItem value="confirmed">{t("financePage.statusConfirmed")}</SelectItem>
+                <SelectItem value="excluded">{t("financePage.statusExcluded")}</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -784,7 +928,16 @@ function ServiceFeeModal({
           </div>
           <div>
             <Label>{t("financePage.totalAmount")}</Label>
-            <Input type="number" value={form.totalAmount} onChange={set("totalAmount")} placeholder="0" />
+            <Input
+              type="number"
+              value={form.totalAmount}
+              onChange={set("totalAmount")}
+              placeholder="0"
+              disabled={usesLinkedServiceFeeAmount}
+            />
+            {usesLinkedServiceFeeAmount && (
+              <p className="mt-1 text-xs text-slate-500">Amount linked from the selected application.</p>
+            )}
           </div>
 
           {total > 0 && (
@@ -827,7 +980,7 @@ function ServiceFeeModal({
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>{t("financePage.cancel")}</Button>
-          <Button onClick={save} disabled={saving}>
+          <Button onClick={save} disabled={saving || (!editId && (!form.studentId || !form.applicationId || total <= 0))}>
             {saving ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}
             {editId ? t("financePage.update") : t("financePage.create")}
           </Button>
@@ -839,13 +992,12 @@ function ServiceFeeModal({
 }
 
 function TransactionModal({
-  open, onClose, type, commissionId, commissionLabel, universityName,
+  open, onClose, type, commissionId, commissionLabel,
 }: {
   open: boolean; onClose: () => void;
   type: "collection" | "agent_payment" | "sub_agent_payment";
   commissionId?: number;
   commissionLabel?: string;
-  universityName?: string;
 }) {
   const { t } = useI18n();
   const { toast } = useToast();
@@ -853,7 +1005,6 @@ function TransactionModal({
   const [amount, setAmount] = useState("");
   const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
   const [reference, setReference] = useState("");
-  const [agentName, setAgentName] = useState("");
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
   const [file, setFile] = useState<File | null>(null);
@@ -910,8 +1061,6 @@ function TransactionModal({
           amount: toNum(amount),
           transactionDate: date,
           reference: reference || null,
-          universityName: universityName || null,
-          agentName: (type === "agent_payment" || type === "sub_agent_payment") ? agentName || null : null,
           fileUrl, fileName,
           notes: notes || null,
         }),
@@ -920,9 +1069,13 @@ function TransactionModal({
       qc.invalidateQueries({ queryKey: ["finance-summary"] });
       qc.invalidateQueries({ queryKey: ["financial-transactions"] });
       qc.invalidateQueries({ queryKey: ["university-breakdown"] });
+      qc.invalidateQueries({ queryKey: ["uni-receivables"] });
+      qc.invalidateQueries({ queryKey: ["agent-payables"] });
       toast({ title: type === "collection" ? t("financePage.recordedCollection") : type === "agent_payment" ? t("financePage.recordedAgentPayment") : t("financePage.recordedSubAgentPayment") });
       onClose();
-    } catch { toast({ title: t("financePage.errorSavingTransaction"), variant: "destructive" }); }
+    } catch (error: any) {
+      toast({ title: t("financePage.errorSavingTransaction"), description: error?.message, variant: "destructive" });
+    }
     finally { setSaving(false); }
   }
 
@@ -954,12 +1107,6 @@ function TransactionModal({
             <Label>{t("financePage.referenceLabel")}</Label>
             <Input value={reference} onChange={e => setReference(e.target.value)} placeholder="INV-2025-001" />
           </div>
-          {!isCollection && (
-            <div className="col-span-2">
-              <Label>{isSubAgentPayment ? t("financePage.subAgentNameLabel") : t("financePage.agentNameLabel")}</Label>
-              <Input value={agentName} onChange={e => setAgentName(e.target.value)} placeholder={isSubAgentPayment ? "Sub agent name" : "Agent name"} />
-            </div>
-          )}
           <div className="col-span-2">
             <Label>{t("financePage.attachDocument")}</Label>
             <div
@@ -1374,6 +1521,7 @@ function AgentPaymentModal({ open, onClose }: { open: boolean; onClose: () => vo
           transactionDate: date,
           reference: reference || null,
           notes: notes || null,
+          season,
         }),
       });
       qc.invalidateQueries({ queryKey: ["commissions"] });
@@ -1568,6 +1716,7 @@ function UniversityCollectionModal({ open, onClose }: { open: boolean; onClose: 
           transactionDate: date,
           reference: reference || null,
           notes: notes || null,
+          season,
         }),
       });
       qc.invalidateQueries({ queryKey: ["commissions"] });
@@ -1704,7 +1853,7 @@ export default function FinancePage() {
   const [feeModal, setFeeModal] = useState<{ open: boolean; id?: number; initial?: ServiceFeeForm }>({ open: false });
   const [txModal, setTxModal] = useState<{
     open: boolean; type: "collection" | "agent_payment" | "sub_agent_payment";
-    commissionId?: number; commissionLabel?: string; universityName?: string;
+    commissionId?: number; commissionLabel?: string;
   }>({ open: false, type: "collection" });
   const [uniCollModal, setUniCollModal] = useState(false);
   const [agentPayModal, setAgentPayModal] = useState(false);
@@ -1722,6 +1871,7 @@ export default function FinancePage() {
   const [feeExporting, setFeeExporting] = useState(false);
   const [uniSort, setUniSort] = useState<{ key: string; dir: "asc" | "desc" }>({ key: "", dir: "asc" });
   const [uniFilter, setUniFilter] = useState("");
+  const [expandedUniversities, setExpandedUniversities] = useState<Set<string>>(new Set());
   const [feeSort, setFeeSort] = useState<{ key: string; dir: "asc" | "desc" }>({ key: "", dir: "asc" });
   const [feeUniFilter, setFeeUniFilter] = useState("");
   const [feeStatusFilter, setFeeStatusFilter] = useState("all");
@@ -1745,7 +1895,10 @@ export default function FinancePage() {
     queryFn: () => customFetch<any>(`${BASE}/api/agents?limit=500`),
     staleTime: 5 * 60 * 1000,
   });
-  const filterAgents: any[] = Array.isArray(filterAgentsResp) ? filterAgentsResp : ((filterAgentsResp as any)?.data || []);
+  const filterAgentRows: any[] = Array.isArray(filterAgentsResp) ? filterAgentsResp : ((filterAgentsResp as any)?.data || []);
+  const filterAgents = useMemo(() => filterAgentRows
+    .map(agent => ({ ...agent, name: agentName(agent), optionLabel: agentOptionLabel(agent) }))
+    .sort((a, b) => a.name.localeCompare(b.name)), [filterAgentsResp]);
 
   const { data: filterStaffResp } = useQuery({
     queryKey: ["staff-users-filter"],
@@ -1759,8 +1912,12 @@ export default function FinancePage() {
   );
 
   const { data: uniBreakdownData } = useQuery({
-    queryKey: ["university-breakdown", season],
-    queryFn: () => customFetch<any>(`${BASE}/api/finance/university-breakdown?season=${season}`),
+    queryKey: ["university-breakdown", season, currency],
+    queryFn: () => {
+      const params = new URLSearchParams({ season });
+      if (currency !== "all") params.set("currency", currency);
+      return customFetch<any>(`${BASE}/api/finance/university-breakdown?${params}`);
+    },
   });
 
   const { data: staffBonusGlobal } = useQuery({
@@ -1806,8 +1963,38 @@ export default function FinancePage() {
       return { label: c, value: fmt(toNum(b[field]), c) };
     });
   }
+  const summaryCommissionByCurrency: Record<string, any> = summary?.commissions?.byCurrency || {};
+  const summaryFeeByCurrency: Record<string, any> = summary?.serviceFees?.byCurrency || {};
+  const detectedCashFlowCurrencies = currency === "all"
+    ? [...new Set([...Object.keys(summaryCommissionByCurrency), ...Object.keys(summaryFeeByCurrency)])]
+    : [currency];
+  const cashFlowCurrencies = detectedCashFlowCurrencies.length > 0 ? detectedCashFlowCurrencies : ["USD"];
+  const cashFlowRows = cashFlowCurrencies.map(code => {
+    const commissionBucket = summaryCommissionByCurrency[code] || {};
+    const feeBucket = summaryFeeByCurrency[code] || {};
+    const universityCollected = toNum(commissionBucket.totalUniversityCollected);
+    const serviceFeeCollected = toNum(feeBucket.totalCollected);
+    const agentPaid = toNum(commissionBucket.totalAgentPaid);
+    const subAgentPaid = toNum(commissionBucket.totalSubAgentPaid);
+    const staffPaid = toNum(commissionBucket.totalStaffPayouts);
+    const bonusPaid = code === "USD" ? toNum(staffBonusGlobal?.totalPaid) : 0;
+    return {
+      code,
+      universityCollected,
+      serviceFeeCollected,
+      agentPaid,
+      subAgentPaid,
+      staffPaid,
+      net: universityCollected + serviceFeeCollected - agentPaid - subAgentPaid - staffPaid - bonusPaid,
+    };
+  });
   const uniBreakdown: any[] = uniBreakdownData?.breakdown || [];
   const uniTotals: any = uniBreakdownData?.totals || {};
+  const uniTotalsByCurrency: Record<string, any> = uniBreakdownData?.totalsByCurrency || {};
+  const universityCurrencyRows = (field: string) => Object.entries(uniTotalsByCurrency).map(([code, totals]) => ({
+    code,
+    value: toNum((totals as any)?.[field]),
+  }));
 
   const sortedCommissions = useMemo(() => {
     let rows: any[] = commissions;
@@ -2203,7 +2390,7 @@ export default function FinancePage() {
                 <SelectTrigger className="w-44"><SelectValue placeholder={t("financePage.agentFilter")} /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">{t("financePage.agentFilter")}</SelectItem>
-                  {filterAgents.map((a: any) => <SelectItem key={a.id} value={String(a.id)}>{a.name || `Agent #${a.id}`}</SelectItem>)}
+                  {filterAgents.map((a: any) => <SelectItem key={a.id} value={String(a.id)}>{a.optionLabel}</SelectItem>)}
                 </SelectContent>
               </Select>
               <Select value={commStaffId} onValueChange={setCommStaffId}>
@@ -2354,7 +2541,7 @@ export default function FinancePage() {
                                         <SelectContent>
                                           <SelectItem value="all">{t("financePage.agentFilter")}</SelectItem>
                                           {filterAgents.map((a: any) => (
-                                            <SelectItem key={a.id} value={String(a.id)}>{a.name || `Agent #${a.id}`}</SelectItem>
+                                            <SelectItem key={a.id} value={String(a.id)}>{a.optionLabel}</SelectItem>
                                           ))}
                                         </SelectContent>
                                       </Select>
@@ -2537,7 +2724,6 @@ export default function FinancePage() {
                                     open: true, type: "collection",
                                     commissionId: c.id,
                                     commissionLabel: `${c.studentName || "—"} — ${c.universityName || "—"}`,
-                                    universityName: c.universityName,
                                   })}
                                 >
                                   <Landmark className="w-3 h-3 mr-1" /> Collect
@@ -2551,7 +2737,6 @@ export default function FinancePage() {
                                     open: true, type: "agent_payment",
                                     commissionId: c.id,
                                     commissionLabel: `${c.studentName || "—"} — ${c.universityName || "—"}`,
-                                    universityName: c.universityName,
                                   })}
                                 >
                                   <CreditCard className="w-3 h-3 mr-1" /> Pay Agent
@@ -2565,7 +2750,6 @@ export default function FinancePage() {
                                     open: true, type: "sub_agent_payment",
                                     commissionId: c.id,
                                     commissionLabel: `${c.studentName || "—"} — ${c.universityName || "—"}`,
-                                    universityName: c.universityName,
                                   })}
                                 >
                                   <CreditCard className="w-3 h-3 mr-1" /> Pay Sub Agent
@@ -2709,25 +2893,25 @@ export default function FinancePage() {
                   <Card className="bg-blue-50 border-blue-200 dark:bg-blue-900/20 dark:border-blue-700/40">
                     <CardContent className="p-4 text-center">
                       <p className="text-xs text-blue-600 font-medium uppercase dark:text-blue-400">{t("financePage.totalReceivable")}</p>
-                      <p className="text-xl font-bold text-blue-700 dark:text-blue-300">{fmt(uniTotals.totalCommission)}</p>
+                      {universityCurrencyRows("totalCommission").map(row => <p key={row.code} className="text-xl font-bold text-blue-700 dark:text-blue-300">{fmt(row.value, row.code)}</p>)}
                     </CardContent>
                   </Card>
                   <Card className="bg-green-50 border-green-200 dark:bg-green-900/20 dark:border-green-700/40">
                     <CardContent className="p-4 text-center">
                       <p className="text-xs text-green-600 font-medium uppercase dark:text-green-400">{t("financePage.totalCollected")}</p>
-                      <p className="text-xl font-bold text-green-700 dark:text-green-300">{fmt(uniTotals.totalCollected)}</p>
+                      {universityCurrencyRows("totalCollected").map(row => <p key={row.code} className="text-xl font-bold text-green-700 dark:text-green-300">{fmt(row.value, row.code)}</p>)}
                     </CardContent>
                   </Card>
                   <Card className="bg-amber-50 border-amber-200 dark:bg-amber-900/20 dark:border-amber-700/40">
                     <CardContent className="p-4 text-center">
                       <p className="text-xs text-amber-600 font-medium uppercase dark:text-amber-400">{t("financePage.agentPayouts")}</p>
-                      <p className="text-xl font-bold text-amber-700 dark:text-amber-300">{fmt(uniTotals.totalAgentPaid)}</p>
+                      {universityCurrencyRows("totalAgentPaid").map(row => <p key={row.code} className="text-xl font-bold text-amber-700 dark:text-amber-300">{fmt(row.value, row.code)}</p>)}
                     </CardContent>
                   </Card>
                   <Card className="bg-emerald-50 border-emerald-200 dark:bg-emerald-900/20 dark:border-emerald-700/40">
                     <CardContent className="p-4 text-center">
                       <p className="text-xs text-emerald-600 font-medium uppercase dark:text-emerald-400">{t("financePage.netIncome")}</p>
-                      <p className="text-xl font-bold text-emerald-700 dark:text-emerald-300">{fmt(uniTotals.totalNetIncome)}</p>
+                      {universityCurrencyRows("totalNetIncome").map(row => <p key={row.code} className="text-xl font-bold text-emerald-700 dark:text-emerald-300">{fmt(row.value, row.code)}</p>)}
                     </CardContent>
                   </Card>
                 </div>
@@ -2815,8 +2999,11 @@ export default function FinancePage() {
                       {sortedUniBreakdown.map((u: any) => {
                         const collPct = pct(u.totalCollected, u.totalCommission);
                         const isOverdue = u.oldestUnpaid && ((Date.now() - new Date(u.oldestUnpaid).getTime()) / (1000 * 60 * 60 * 24) > 90);
+                        const universityKey = u.key || `${u.universityName}::${u.currency || "USD"}`;
+                        const isExpanded = expandedUniversities.has(universityKey);
                         return (
-                          <tr key={u.universityName} className={`hover:bg-slate-50 transition-colors ${uniSelected.has(u.universityName) ? "bg-blue-50/50" : ""}`}>
+                          <Fragment key={universityKey}>
+                          <tr className={`hover:bg-slate-50 transition-colors ${uniSelected.has(u.universityName) ? "bg-blue-50/50" : ""}`}>
                             <td className="px-3 py-3">
                               <Checkbox
                                 checked={uniSelected.has(u.universityName)}
@@ -2832,30 +3019,30 @@ export default function FinancePage() {
                                   <Badge className="text-xs bg-rose-100 text-rose-700 border-rose-200">{t("financePage.overdue")}</Badge>
                                 )}
                               </div>
-                              <div className="text-xs text-slate-400 mt-0.5">{u.commissionCount} commission{u.commissionCount !== 1 ? "s" : ""}</div>
+                              <div className="text-xs text-slate-400 mt-0.5">{u.commissionCount} confirmed commission{u.commissionCount !== 1 ? "s" : ""} · {u.currency}</div>
                             </td>
                             <td className="px-4 py-3 text-right font-medium text-blue-700 tabular-nums">
-                              {fmt(u.totalCommission)}
+                              {fmt(u.totalCommission, u.currency)}
                             </td>
                             <td className="px-4 py-3 text-right text-green-700 tabular-nums">
-                              {fmt(u.totalCollected)}
+                              {fmt(u.totalCollected, u.currency)}
                             </td>
                             <td className="px-4 py-3 text-right tabular-nums">
                               <span className={u.totalRemaining > 0 ? "text-rose-600 font-medium" : "text-slate-400"}>
-                                {fmt(u.totalRemaining)}
+                                {fmt(u.totalRemaining, u.currency)}
                               </span>
                             </td>
                             <td className="px-4 py-3 text-right text-amber-700 tabular-nums">
-                              <div>{fmt(u.totalAgentPaid)}</div>
+                              <div>{fmt(u.totalAgentPaid, u.currency)}</div>
                               {u.totalAgentRemaining > 0 && (
-                                <div className="text-xs text-slate-400">{fmt(u.totalAgentRemaining)} unpaid</div>
+                                <div className="text-xs text-slate-400">{fmt(u.totalAgentRemaining, u.currency)} unpaid</div>
                               )}
                             </td>
                             <td className="px-4 py-3 text-right text-violet-700 tabular-nums">
-                              {u.totalStaffPaid > 0 ? fmt(u.totalStaffPaid) : <span className="text-slate-300">—</span>}
+                              {u.totalStaffPaid > 0 ? fmt(u.totalStaffPaid, u.currency) : <span className="text-slate-300">—</span>}
                             </td>
                             <td className="px-4 py-3 text-right font-semibold text-emerald-700 tabular-nums">
-                              {fmt(u.netIncome)}
+                              {fmt(u.netIncome, u.currency)}
                             </td>
                             <td className="px-4 py-3">
                               <div className="w-20 mx-auto">
@@ -2867,8 +3054,77 @@ export default function FinancePage() {
                                 />
                               </div>
                             </td>
-                            <td className="px-4 py-3 text-center text-slate-600">{u.studentCount}</td>
+                            <td className="px-4 py-3 text-center">
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="h-8 text-blue-700 hover:text-blue-800 hover:bg-blue-50"
+                                onClick={() => setExpandedUniversities(current => {
+                                  const next = new Set(current);
+                                  if (next.has(universityKey)) next.delete(universityKey);
+                                  else next.add(universityKey);
+                                  return next;
+                                })}
+                              >
+                                {u.studentCount} {isExpanded ? <ArrowUp className="ml-1 h-3.5 w-3.5" /> : <ArrowDown className="ml-1 h-3.5 w-3.5" />}
+                              </Button>
+                            </td>
                           </tr>
+                          {isExpanded && (
+                            <tr className="bg-slate-50/70">
+                              <td colSpan={10} className="px-6 py-4">
+                                <div className="rounded-lg border border-slate-200 bg-white overflow-hidden">
+                                  <div className="flex items-center justify-between gap-3 px-4 py-3 border-b bg-slate-50">
+                                    <div>
+                                      <p className="font-semibold text-slate-800">Confirmed students · {u.universityName}</p>
+                                      <p className="text-xs text-slate-500">Passport and programme details for university reconciliation</p>
+                                    </div>
+                                    <Button variant="outline" size="sm" onClick={async () => {
+                                      try {
+                                        const params = new URLSearchParams({ season, universityName: u.universityName, currency: u.currency });
+                                        await downloadExcel(
+                                          `${BASE}/api/finance/export/university-breakdown?${params}`,
+                                          `${u.universityName.replace(/[^a-z0-9]+/gi, "_")}_${season}_reconciliation.xlsx`,
+                                        );
+                                      } catch {
+                                        toast({ title: "Student list export failed", variant: "destructive" });
+                                      }
+                                    }}>
+                                      <Download className="w-4 h-4 mr-1" /> Export students
+                                    </Button>
+                                  </div>
+                                  <div className="overflow-x-auto">
+                                    <table className="w-full text-xs">
+                                      <thead className="bg-slate-50 text-slate-500">
+                                        <tr>
+                                          <th className="text-left px-4 py-2">First name</th>
+                                          <th className="text-left px-4 py-2">Last name</th>
+                                          <th className="text-left px-4 py-2">Passport number</th>
+                                          <th className="text-left px-4 py-2">Program / Department</th>
+                                          <th className="text-right px-4 py-2">Confirmed commission</th>
+                                          <th className="text-right px-4 py-2">Remaining</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody className="divide-y divide-slate-100">
+                                        {(u.students || []).map((student: any, index: number) => (
+                                          <tr key={`${student.studentId || student.applicationId || student.studentName}-${index}`}>
+                                            <td className="px-4 py-2 text-slate-700">{student.firstName || "—"}</td>
+                                            <td className="px-4 py-2 text-slate-700">{student.lastName || "—"}</td>
+                                            <td className="px-4 py-2 font-mono text-slate-700">{student.passportNumber || "—"}</td>
+                                            <td className="px-4 py-2 text-slate-700">{student.programName || "—"}</td>
+                                            <td className="px-4 py-2 text-right font-medium text-blue-700">{fmt(student.confirmedCommission, student.currency)}</td>
+                                            <td className="px-4 py-2 text-right text-rose-600">{fmt(student.remaining, student.currency)}</td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                          </Fragment>
                         );
                       })}
                     </tbody>
@@ -2876,16 +3132,16 @@ export default function FinancePage() {
                       <tr>
                         <td className="px-3 py-3" />
                         <td className="px-4 py-3 text-slate-600">{sortedUniBreakdown.length} Universities{uniFilter ? ` (filtered from ${uniBreakdown.length})` : ""}</td>
-                        <td className="px-4 py-3 text-right text-blue-700 tabular-nums">{fmt(uniTotals.totalCommission)}</td>
-                        <td className="px-4 py-3 text-right text-green-700 tabular-nums">{fmt(uniTotals.totalCollected)}</td>
-                        <td className="px-4 py-3 text-right text-rose-600 tabular-nums">{fmt(uniTotals.totalRemaining)}</td>
-                        <td className="px-4 py-3 text-right text-amber-700 tabular-nums">{fmt(uniTotals.totalAgentPaid)}</td>
-                        <td className="px-4 py-3 text-right text-violet-700 tabular-nums">{fmt(uniTotals.totalStaffPaid || 0)}</td>
-                        <td className="px-4 py-3 text-right text-emerald-700 tabular-nums">{fmt(uniTotals.totalNetIncome)}</td>
+                        <td className="px-4 py-3 text-right text-blue-700 tabular-nums">{universityCurrencyRows("totalCommission").map(row => <div key={row.code}>{fmt(row.value, row.code)}</div>)}</td>
+                        <td className="px-4 py-3 text-right text-green-700 tabular-nums">{universityCurrencyRows("totalCollected").map(row => <div key={row.code}>{fmt(row.value, row.code)}</div>)}</td>
+                        <td className="px-4 py-3 text-right text-rose-600 tabular-nums">{universityCurrencyRows("totalRemaining").map(row => <div key={row.code}>{fmt(row.value, row.code)}</div>)}</td>
+                        <td className="px-4 py-3 text-right text-amber-700 tabular-nums">{universityCurrencyRows("totalAgentPaid").map(row => <div key={row.code}>{fmt(row.value, row.code)}</div>)}</td>
+                        <td className="px-4 py-3 text-right text-violet-700 tabular-nums">{universityCurrencyRows("totalStaffPaid").map(row => <div key={row.code}>{fmt(row.value, row.code)}</div>)}</td>
+                        <td className="px-4 py-3 text-right text-emerald-700 tabular-nums">{universityCurrencyRows("totalNetIncome").map(row => <div key={row.code}>{fmt(row.value, row.code)}</div>)}</td>
                         <td className="px-4 py-3 text-center text-slate-600">
-                          {pct(uniTotals.totalCollected, uniTotals.totalCommission)}%
+                          {Object.entries(uniTotalsByCurrency).map(([code, totals]: [string, any]) => <div key={code}>{code} {pct(totals.totalCollected, totals.totalCommission)}%</div>)}
                         </td>
-                        <td />
+                        <td className="px-4 py-3 text-center text-slate-600">{uniTotals.studentCount || 0}</td>
                       </tr>
                     </tfoot>
                   </table>
@@ -2909,7 +3165,7 @@ export default function FinancePage() {
                 <SelectTrigger className="w-44"><SelectValue placeholder={t("financePage.agentFilter")} /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">{t("financePage.agentFilter")}</SelectItem>
-                  {filterAgents.map((a: any) => <SelectItem key={a.id} value={String(a.id)}>{a.name || `Agent #${a.id}`}</SelectItem>)}
+                  {filterAgents.map((a: any) => <SelectItem key={a.id} value={String(a.id)}>{a.optionLabel}</SelectItem>)}
                 </SelectContent>
               </Select>
               <Select value={feeStaffId} onValueChange={setFeeStaffId}>
@@ -3113,7 +3369,7 @@ export default function FinancePage() {
                                         <SelectContent>
                                           <SelectItem value="all">{t("financePage.agentFilter")}</SelectItem>
                                           {filterAgents.map((a: any) => (
-                                            <SelectItem key={a.id} value={String(a.id)}>{a.name || `Agent #${a.id}`}</SelectItem>
+                                            <SelectItem key={a.id} value={String(a.id)}>{a.optionLabel}</SelectItem>
                                           ))}
                                         </SelectContent>
                                       </Select>
@@ -3241,10 +3497,14 @@ export default function FinancePage() {
                                 onClick={() => setFeeModal({
                                   open: true, id: f.id,
                                   initial: {
+                                    studentId: f.studentId ? String(f.studentId) : "",
+                                    applicationId: f.applicationId ? String(f.applicationId) : "",
+                                    agentId: f.agentId ? String(f.agentId) : "",
                                     studentName: f.studentName || "",
                                     universityName: f.universityName || "",
                                     isStateUniversity: !!f.isStateUniversity,
                                     payerType: f.payerType,
+                                    financeStatus: f.financeStatus || "potential",
                                     season: f.season,
                                     currency: f.currency,
                                     totalAmount: f.totalAmount || "",
@@ -3343,22 +3603,20 @@ export default function FinancePage() {
                     <div className="grid grid-cols-2 gap-3">
                       <div className="rounded-lg bg-blue-50 border border-blue-200 p-3 text-center">
                         <p className="text-xs text-blue-600 font-medium uppercase">{t("financePage.inflowCollected")}</p>
-                        <p className="text-lg font-bold text-blue-700">
-                          {fmt(summary?.commissions?.totalUniversityCollected || 0)}
-                        </p>
+                        {cashFlowRows.map(row => <p key={row.code} className="text-lg font-bold text-blue-700">{fmt(row.universityCollected, row.code)}</p>)}
+                      </div>
+                      <div className="rounded-lg bg-emerald-50 border border-emerald-200 p-3 text-center">
+                        <p className="text-xs text-emerald-600 font-medium uppercase">Service Fee Income</p>
+                        {cashFlowRows.map(row => <p key={row.code} className="text-lg font-bold text-emerald-700">{fmt(row.serviceFeeCollected, row.code)}</p>)}
                       </div>
                       <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 text-center">
                         <p className="text-xs text-amber-600 font-medium uppercase">{t("financePage.outflowAgentPaid")}</p>
-                        <p className="text-lg font-bold text-amber-700">
-                          {fmt(summary?.commissions?.totalAgentPaid || 0)}
-                        </p>
+                        {cashFlowRows.map(row => <p key={row.code} className="text-lg font-bold text-amber-700">{fmt(row.agentPaid, row.code)}</p>)}
                       </div>
                       {toNum(summary?.commissions?.totalSubAgentCommission) > 0 && (
                         <div className="rounded-lg bg-purple-50 border border-purple-200 p-3 text-center">
                           <p className="text-xs text-purple-600 font-medium uppercase">{t("financePage.subAgentPaid")}</p>
-                          <p className="text-lg font-bold text-purple-700">
-                            {fmt(summary?.commissions?.totalSubAgentPaid || 0)}
-                          </p>
+                          {cashFlowRows.map(row => <p key={row.code} className="text-lg font-bold text-purple-700">{fmt(row.subAgentPaid, row.code)}</p>)}
                         </div>
                       )}
                       {toNum(summary?.commissions?.totalStaffPayouts) > 0 && (
@@ -3380,15 +3638,7 @@ export default function FinancePage() {
                     </div>
                     <div className="rounded-lg bg-emerald-50 border border-emerald-200 p-4 text-center">
                       <p className="text-xs text-emerald-600 font-medium uppercase">{t("financePage.netCashPosition")}</p>
-                      <p className="text-2xl font-bold text-emerald-700">
-                        {fmt(
-                          (toNum(summary?.commissions?.totalUniversityCollected) + toNum(summary?.serviceFees?.collected))
-                          - toNum(summary?.commissions?.totalAgentPaid)
-                          - toNum(summary?.commissions?.totalSubAgentPaid)
-                          - toNum(summary?.commissions?.totalStaffPayouts)
-                          - toNum(staffBonusGlobal?.totalPaid)
-                        )}
-                      </p>
+                      {cashFlowRows.map(row => <p key={row.code} className="text-2xl font-bold text-emerald-700">{fmt(row.net, row.code)}</p>)}
                       <p className="text-xs text-emerald-500 mt-1">{t("financePage.includesServiceFee")}</p>
                     </div>
 
@@ -3443,12 +3693,12 @@ export default function FinancePage() {
                         <div key={u.universityName}>
                           <div className="flex justify-between text-sm mb-1">
                             <span className="text-slate-600 truncate mr-2">{i + 1}. {u.universityName}</span>
-                            <span className="font-semibold text-slate-800 shrink-0">{fmt(u.totalCommission)}</span>
+                            <span className="font-semibold text-slate-800 shrink-0">{fmt(u.totalCommission, u.currency)}</span>
                           </div>
                           <ProgressBar value={u.totalCommission} max={uniBreakdown[0]?.totalCommission || 1} color="bg-indigo-500" />
                           <div className="flex justify-between text-xs text-slate-400 mt-0.5">
-                            <span>{t("financePage.studentsCount", { count: u.commissionCount })}</span>
-                            <span>{t("financePage.netLabel", { value: fmt(u.netIncome) })}</span>
+                            <span>{t("financePage.studentsCount", { count: u.studentCount })}</span>
+                            <span>{t("financePage.netLabel", { value: fmt(u.netIncome, u.currency) })}</span>
                           </div>
                         </div>
                       ))}
@@ -3513,7 +3763,6 @@ export default function FinancePage() {
           type={txModal.type}
           commissionId={txModal.commissionId}
           commissionLabel={txModal.commissionLabel}
-          universityName={txModal.universityName}
         />
       )}
       <UniversityCollectionModal open={uniCollModal} onClose={() => setUniCollModal(false)} />

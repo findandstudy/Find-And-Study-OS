@@ -51,6 +51,7 @@
     "test:staff-commission-column": "tsx --test ./scripts/test-staff-commission-column.ts",
     "test:application-commission-total": "tsx --test ./scripts/test-application-commission-total.ts",
     "test:finance-faz3": "tsx --test ./scripts/test-finance-faz3.ts",
+    "test:finance-reconciliation": "node --test ./scripts/test-finance-reconciliation.mjs",
     "test:university-collection": "tsx --test ./scripts/test-university-collection.ts",
     "test:agent-payment": "tsx --test ./scripts/test-agent-payment.ts",
     "test:staff-commission-payment": "tsx --test ./scripts/test-staff-commission-payment.ts",

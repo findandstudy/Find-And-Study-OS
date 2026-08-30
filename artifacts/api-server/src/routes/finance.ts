@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { db, invoicesTable, commissionsTable, serviceFeesTable, financialTransactionsTable, agentsTable, programsTable, usersTable, studentsTable, applicationsTable, settingsTable, staffCommissionsTable, staffCommissionPayoutsTable } from "@workspace/db";
+import { db, invoicesTable, commissionsTable, serviceFeesTable, financialTransactionsTable, agentsTable, programsTable, universitiesTable, usersTable, studentsTable, applicationsTable, settingsTable, staffCommissionsTable, staffCommissionPayoutsTable } from "@workspace/db";
 import { eq, sql, and, desc, asc, inArray, isNull, or } from "drizzle-orm";
 import { requireAuth, requireRole, requireAgentStaffPermission, logAudit } from "../lib/auth";
 import { FINANCE_ROLES, STAFF_ROLES, AGENT_ROLES } from "../lib/roles";
@@ -12,6 +12,24 @@ import { loadCurrencyCatalog } from "../lib/currencyCatalog";
 import * as XLSX from "xlsx";
 
 const router: IRouter = Router();
+
+const CONFIRMED_COMMISSION_STATUSES = ["confirmed", "collected_partial", "collected_full", "settled"] as const;
+
+function isConfirmedCommissionStatus(status: string | null | undefined): boolean {
+  return CONFIRMED_COMMISSION_STATUSES.includes(status as typeof CONFIRMED_COMMISSION_STATUSES[number]);
+}
+
+function agentDisplayName(agent: {
+  companyName?: string | null;
+  businessName?: string | null;
+  firstName?: string | null;
+  lastName?: string | null;
+}): string | null {
+  return agent.companyName
+    || agent.businessName
+    || [agent.firstName, agent.lastName].filter(Boolean).join(" ").trim()
+    || null;
+}
 
 function generateInvoiceNumber() {
   const ts = Date.now().toString(36).toUpperCase();
@@ -82,22 +100,22 @@ function buildCommissionsByCurrency(rows: any[]): Record<string, CommBucket> {
     const saAmt = toNum(c.subAgentCommissionAmount);
     const saPaid = toNum(c.subAgentPaid);
     const staffAmt = toNum(c.staffCommissionAmount);
-    b.totalUniversityCommission += uAmt;
-    b.totalUniversityCollected += uColl;
-    b.totalAgentCommission += aAmt;
-    b.totalAgentPaid += aPaid;
-    b.totalSubAgentCommission += saAmt;
-    b.totalSubAgentPaid += saPaid;
-    b.totalNetAgency += uAmt - aAmt - saAmt - staffAmt;
-    b.totalOffsetAmount += toNum(c.offsetAmount);
-    b.paidToAgents += aPaid;
-    b.paidToSubAgents += saPaid;
-    b.collectedFromUniversities += uColl;
     if (c.status === "potential") {
       b.potentialUniversityCommission += uAmt;
       b.potentialAgentCommission += aAmt;
-    } else {
-      // Only confirmed (non-potential) rows count toward staff commission totals
+    } else if (isConfirmedCommissionStatus(c.status)) {
+      // Only explicitly confirmed lifecycle states feed actual finance totals.
+      b.totalUniversityCommission += uAmt;
+      b.totalUniversityCollected += uColl;
+      b.totalAgentCommission += aAmt;
+      b.totalAgentPaid += aPaid;
+      b.totalSubAgentCommission += saAmt;
+      b.totalSubAgentPaid += saPaid;
+      b.totalNetAgency += uAmt - aAmt - saAmt - staffAmt;
+      b.totalOffsetAmount += toNum(c.offsetAmount);
+      b.paidToAgents += aPaid;
+      b.paidToSubAgents += saPaid;
+      b.collectedFromUniversities += uColl;
       b.totalStaffCommission += staffAmt;
       b.confirmedUniversityCommission += uAmt;
       b.confirmedAgentCommission += aAmt;
@@ -126,9 +144,11 @@ function buildFeesByCurrency(rows: any[]): Record<string, FeeBucket> {
     const total = toNum(f.totalAmount);
     const collected = toNum(f.firstInstallmentPaidAt ? f.firstInstallmentAmount : 0) + toNum(f.secondInstallmentPaidAt ? f.secondInstallmentAmount : 0);
     b.totalServiceFees += total;
-    b.totalCollected += collected;
     if (f.financeStatus === "potential") b.potentialTotal += total;
-    else if (f.financeStatus === "confirmed") b.confirmedTotal += total;
+    else if (f.financeStatus === "confirmed") {
+      b.confirmedTotal += total;
+      b.totalCollected += collected;
+    }
   }
   return buckets;
 }
@@ -165,13 +185,20 @@ function buildAgentFeeByCurrency(rows: any[]): Record<string, AgentCommBucket> {
 
 async function enrichWithNames<T extends { agentId?: number | null; applicationId?: number | null; studentId?: number | null }>(
   rows: T[]
-): Promise<(T & { agentName: string | null; staffName: string | null })[]> {
-  if (rows.length === 0) return rows.map(r => ({ ...r, agentName: null, staffName: null }));
+): Promise<(T & { agentName: string | null; agentCode: string | null; staffName: string | null })[]> {
+  if (rows.length === 0) return rows.map(r => ({ ...r, agentName: null, agentCode: null, staffName: null }));
   const agentIds = [...new Set(rows.map(r => r.agentId).filter((x): x is number => x != null))];
   const appIds = [...new Set(rows.map(r => r.applicationId).filter((x): x is number => x != null))];
   const stuIds = [...new Set(rows.map(r => r.studentId).filter((x): x is number => x != null))];
   const [agents, apps, stus] = await Promise.all([
-    agentIds.length > 0 ? db.select({ id: agentsTable.id, firstName: agentsTable.firstName, lastName: agentsTable.lastName, companyName: agentsTable.companyName }).from(agentsTable).where(inArray(agentsTable.id, agentIds)) : Promise.resolve([]),
+    agentIds.length > 0 ? db.select({
+      id: agentsTable.id,
+      firstName: agentsTable.firstName,
+      lastName: agentsTable.lastName,
+      companyName: agentsTable.companyName,
+      businessName: agentsTable.businessName,
+      agencyCode: agentsTable.agencyCode,
+    }).from(agentsTable).where(inArray(agentsTable.id, agentIds)) : Promise.resolve([]),
     appIds.length > 0 ? db.select({ id: applicationsTable.id, assignedToId: applicationsTable.assignedToId }).from(applicationsTable).where(inArray(applicationsTable.id, appIds)) : Promise.resolve([]),
     stuIds.length > 0 ? db.select({ id: studentsTable.id, assignedToId: studentsTable.assignedToId }).from(studentsTable).where(inArray(studentsTable.id, stuIds)) : Promise.resolve([]),
   ]);
@@ -182,19 +209,24 @@ async function enrichWithNames<T extends { agentId?: number | null; applicationI
   const staffUsers = staffUserIds.length > 0
     ? await db.select({ id: usersTable.id, firstName: usersTable.firstName, lastName: usersTable.lastName }).from(usersTable).where(inArray(usersTable.id, staffUserIds))
     : [];
-  const agentMap = new Map<number, string | null>(agents.map(a => [a.id, `${a.firstName || ""} ${a.lastName || ""}`.trim() || a.companyName || null]));
+  const agentMap = new Map<number, { name: string | null; code: string | null }>(agents.map(a => [a.id, {
+    name: agentDisplayName(a),
+    code: a.agencyCode || null,
+  }]));
   const appToStaff = new Map<number, number | null>(apps.map(a => [a.id, a.assignedToId]));
   const stuToStaff = new Map<number, number | null>(stus.map(s => [s.id, s.assignedToId]));
   const staffMap = new Map<number, string | null>(staffUsers.map(u => [u.id, `${u.firstName || ""} ${u.lastName || ""}`.trim() || null]));
   return rows.map(r => {
-    const agentName = r.agentId != null ? (agentMap.get(r.agentId) ?? null) : null;
+    const agent = r.agentId != null ? agentMap.get(r.agentId) : null;
+    const agentName = agent?.name ?? null;
+    const agentCode = agent?.code ?? null;
     const suid = r.applicationId != null && appToStaff.has(r.applicationId)
       ? appToStaff.get(r.applicationId) ?? null
       : r.studentId != null && stuToStaff.has(r.studentId)
         ? stuToStaff.get(r.studentId) ?? null
         : null;
     const staffName = suid != null ? (staffMap.get(suid) ?? null) : null;
-    return { ...r, agentName, staffName };
+    return { ...r, agentName, agentCode, staffName };
   });
 }
 
@@ -273,12 +305,24 @@ router.get("/finance/student-applications/:studentId", requireAuth, requireRole(
     programName: applicationsTable.programName,
     stage: applicationsTable.stage,
     season: applicationsTable.season,
+    agentId: applicationsTable.agentId,
+    universityId: applicationsTable.universityId,
+    programId: applicationsTable.programId,
+    currency: applicationsTable.currency,
+    serviceFeeAmount: applicationsTable.serviceFeeAmount,
+    universityType: universitiesTable.universityType,
   })
   .from(applicationsTable)
+  .leftJoin(universitiesTable, eq(universitiesTable.id, applicationsTable.universityId))
   .where(and(isNull(applicationsTable.deletedAt), eq(applicationsTable.studentId, studentId)))
   .orderBy(desc(applicationsTable.createdAt))
   .limit(30);
-  res.json({ data: rows });
+  res.json({
+    data: rows.map(row => ({
+      ...row,
+      isStateUniversity: ["state", "public"].includes(String(row.universityType || "").toLowerCase()),
+    })),
+  });
 });
 
 /* ─── UNIVERSITY RECEIVABLES & COLLECTION ───────────────────── */
@@ -286,8 +330,7 @@ router.get("/finance/student-applications/:studentId", requireAuth, requireRole(
 router.get("/finance/university-receivables", requireAuth, requireRole(...FINANCE_ROLES), async (req, res): Promise<void> => {
   const { season } = req.query as Record<string, string>;
   const conditions: any[] = [
-    sql`${commissionsTable.status} != 'potential'`,
-    sql`${commissionsTable.status} != 'excluded'`,
+    sql`${commissionsTable.status} IN ('confirmed', 'collected_partial', 'collected_full', 'settled')`,
   ];
   if (season) conditions.push(eq(commissionsTable.season, season));
 
@@ -324,20 +367,23 @@ const uniCollectionBodySchema = z.object({
   transactionDate: z.string().min(1),
   reference: z.string().optional().nullable(),
   notes: z.string().optional().nullable(),
+  season: z.string().optional(),
 });
 
 router.post("/finance/university-collection", requireAuth, requireRole(...FINANCE_ROLES), validate({ body: uniCollectionBodySchema }), async (req, res): Promise<void> => {
-  const { universityName, currency, amount, transactionDate, reference, notes } =
+  const { universityName, currency, amount, transactionDate, reference, notes, season } =
     getValidated<{ body: typeof uniCollectionBodySchema }>(req).body;
 
   // FIFO: confirmed/partial/full rows for this university+currency with remaining > 0
-  const rows = await db.select().from(commissionsTable)
-    .where(and(
+  const collectionConditions: any[] = [
       eq(commissionsTable.universityName, universityName),
       eq(commissionsTable.currency, currency),
       sql`${commissionsTable.status} IN ('confirmed', 'collected_partial', 'collected_full')`,
       sql`${commissionsTable.universityCommissionAmount}::numeric > ${commissionsTable.universityCollected}::numeric`,
-    ))
+    ];
+  if (season) collectionConditions.push(eq(commissionsTable.season, season));
+  const rows = await db.select().from(commissionsTable)
+    .where(and(...collectionConditions))
     .orderBy(asc(commissionsTable.confirmedAt), asc(commissionsTable.id));
 
   if (rows.length === 0) {
@@ -433,9 +479,9 @@ router.get("/finance/agent-payables", requireAuth, requireRole(...FINANCE_ROLES)
     SELECT
       c.agent_id AS "agentId",
       COALESCE(
-        NULLIF(TRIM(CONCAT(a.first_name, ' ', a.last_name)), ''),
         a.company_name,
         a.business_name,
+        NULLIF(TRIM(CONCAT(a.first_name, ' ', a.last_name)), ''),
         CONCAT('Agent #', c.agent_id::text)
       ) AS "agentName",
       c.currency,
@@ -463,10 +509,11 @@ const agentPaymentBodySchema = z.object({
   transactionDate: z.string().min(1),
   reference: z.string().optional().nullable(),
   notes: z.string().optional().nullable(),
+  season: z.string().optional(),
 });
 
 router.post("/finance/agent-payment", requireAuth, requireRole(...FINANCE_ROLES), validate({ body: agentPaymentBodySchema }), async (req, res): Promise<void> => {
-  const { agentId, currency, amount, transactionDate, reference, notes } =
+  const { agentId, currency, amount, transactionDate, reference, notes, season } =
     getValidated<{ body: typeof agentPaymentBodySchema }>(req).body;
 
   const [agent] = await db.select().from(agentsTable).where(eq(agentsTable.id, agentId));
@@ -475,13 +522,15 @@ router.post("/finance/agent-payment", requireAuth, requireRole(...FINANCE_ROLES)
     return;
   }
 
-  const rows = await db.select().from(commissionsTable)
-    .where(and(
+  const paymentConditions: any[] = [
       eq(commissionsTable.agentId, agentId),
       eq(commissionsTable.currency, currency),
       sql`${commissionsTable.status} IN ('confirmed', 'collected_partial', 'collected_full', 'settled')`,
       sql`${commissionsTable.agentCommissionAmount}::numeric > ${commissionsTable.agentPaid}::numeric`,
-    ))
+    ];
+  if (season) paymentConditions.push(eq(commissionsTable.season, season));
+  const rows = await db.select().from(commissionsTable)
+    .where(and(...paymentConditions))
     .orderBy(asc(commissionsTable.confirmedAt), asc(commissionsTable.id));
 
   if (rows.length === 0) {
@@ -507,7 +556,7 @@ router.post("/finance/agent-payment", requireAuth, requireRole(...FINANCE_ROLES)
     toDistribute -= take;
   }
 
-  const agentDisplayName = [agent.firstName, agent.lastName].filter(Boolean).join(" ") || agent.companyName || agent.businessName || null;
+  const resolvedAgentName = agentDisplayName(agent);
 
   for (const d of distributed) {
     const [comm] = await db.select().from(commissionsTable).where(eq(commissionsTable.id, d.commissionId));
@@ -520,7 +569,7 @@ router.post("/finance/agent-payment", requireAuth, requireRole(...FINANCE_ROLES)
       transactionDate: new Date(transactionDate),
       reference: reference || null,
       agentId,
-      agentName: agentDisplayName,
+      agentName: resolvedAgentName,
       notes: notes || null,
     });
 
@@ -1031,28 +1080,71 @@ router.get("/service-fees", requireAuth, requireRole(...FINANCE_ROLES), async (r
 
 router.post("/service-fees", requireAuth, requireRole(...FINANCE_ROLES), async (req, res): Promise<void> => {
   const {
-    applicationId, studentId, agentId,
-    studentName, universityName, isStateUniversity,
+    applicationId, studentId,
     payerType = "student",
-    season: bodySeason,
-    currency = "USD",
+    financeStatus = "potential",
     totalAmount, notes,
   } = req.body;
-  const season = bodySeason || (await getCurrentSeason());
+  const parsedApplicationId = Number(applicationId);
+  const parsedStudentId = Number(studentId);
+  if (!Number.isInteger(parsedApplicationId) || parsedApplicationId <= 0 || !Number.isInteger(parsedStudentId) || parsedStudentId <= 0) {
+    res.status(400).json({ error: "A linked student and application are required" });
+    return;
+  }
 
-  if (!totalAmount) { res.status(400).json({ error: "totalAmount is required" }); return; }
-  const total = toNum(totalAmount);
+  const [application] = await db.select({
+    id: applicationsTable.id,
+    studentId: applicationsTable.studentId,
+    agentId: applicationsTable.agentId,
+    universityId: applicationsTable.universityId,
+    universityName: applicationsTable.universityName,
+    season: applicationsTable.season,
+    currency: applicationsTable.currency,
+    serviceFeeAmount: applicationsTable.serviceFeeAmount,
+    universityType: universitiesTable.universityType,
+  })
+    .from(applicationsTable)
+    .leftJoin(universitiesTable, eq(universitiesTable.id, applicationsTable.universityId))
+    .where(and(
+      eq(applicationsTable.id, parsedApplicationId),
+      eq(applicationsTable.studentId, parsedStudentId),
+      isNull(applicationsTable.deletedAt),
+    ));
+  if (!application) {
+    res.status(400).json({ error: "The selected application does not belong to this student" });
+    return;
+  }
+  const [student] = await db.select({
+    id: studentsTable.id,
+    firstName: studentsTable.firstName,
+    lastName: studentsTable.lastName,
+  }).from(studentsTable).where(and(eq(studentsTable.id, parsedStudentId), isNull(studentsTable.deletedAt)));
+  if (!student) {
+    res.status(400).json({ error: "Student not found" });
+    return;
+  }
+
+  const linkedAmount = toNum(application.serviceFeeAmount);
+  const total = linkedAmount > 0 ? linkedAmount : toNum(totalAmount);
   if (total <= 0) { res.status(400).json({ error: "totalAmount must be positive" }); return; }
-
   const half = total / 2;
+  const studentName = `${student.firstName || ""} ${student.lastName || ""}`.trim();
+  const universityName = application.universityName || null;
+  const season = application.season || (await getCurrentSeason());
+  const currency = normCurrency(application.currency);
+  const isStateUniversity = ["state", "public"].includes(String(application.universityType || "").toLowerCase());
+  if (!["potential", "confirmed", "excluded"].includes(financeStatus)) {
+    res.status(400).json({ error: "Invalid financeStatus" });
+    return;
+  }
 
   const [fee] = await db.insert(serviceFeesTable).values({
-    applicationId: applicationId || null,
-    studentId: studentId || null,
-    agentId: agentId || null,
-    studentName: studentName || null,
-    universityName: universityName || null,
-    isStateUniversity: isStateUniversity ?? false,
+    applicationId: application.id,
+    studentId: student.id,
+    agentId: application.agentId || null,
+    studentName,
+    universityName,
+    isStateUniversity,
     payerType,
     season,
     currency,
@@ -1061,11 +1153,17 @@ router.post("/service-fees", requireAuth, requireRole(...FINANCE_ROLES), async (
     firstInstallmentPaidAt: null,
     secondInstallmentAmount: String(half),
     secondInstallmentPaidAt: null,
+    financeStatus,
     status: "pending",
     notes: notes || null,
   }).returning();
 
-  await logAudit(req.user!.id, "create_service_fee", "service_fee", fee.id, { studentName, totalAmount }, req.ip);
+  await logAudit(req.user!.id, "create_service_fee", "service_fee", fee.id, {
+    studentId: student.id,
+    applicationId: application.id,
+    studentName,
+    totalAmount: total,
+  }, req.ip);
   res.status(201).json(fee);
 });
 
@@ -1137,6 +1235,37 @@ router.delete("/service-fees/:id", requireAuth, requireRole(...FINANCE_ROLES), a
 
 /* ─── FINANCIAL TRANSACTIONS (collections & agent payments) ── */
 
+async function recalculateCommissionFinancials(commissionId: number): Promise<void> {
+  const [comm] = await db.select().from(commissionsTable).where(eq(commissionsTable.id, commissionId));
+  if (!comm) return;
+  const transactions = await db.select().from(financialTransactionsTable)
+    .where(eq(financialTransactionsTable.commissionId, commissionId));
+  const totalCollected = transactions.filter(t => t.type === "collection").reduce((sum, tx) => sum + toNum(tx.amount), 0);
+  const totalAgentPaid = transactions.filter(t => t.type === "agent_payment").reduce((sum, tx) => sum + toNum(tx.amount), 0);
+  const totalSubAgentPaid = transactions.filter(t => t.type === "sub_agent_payment").reduce((sum, tx) => sum + toNum(tx.amount), 0);
+  const universityTotal = toNum(comm.universityCommissionAmount);
+  const agentTotal = toNum(comm.agentCommissionAmount);
+  const subAgentTotal = toNum(comm.subAgentCommissionAmount);
+
+  let status = comm.status;
+  if (isConfirmedCommissionStatus(comm.status)) {
+    const universityPaid = universityTotal <= 0 || totalCollected >= universityTotal - 0.001;
+    const agentPaid = agentTotal <= 0 || totalAgentPaid >= agentTotal - 0.001;
+    const subAgentPaid = subAgentTotal <= 0 || totalSubAgentPaid >= subAgentTotal - 0.001;
+    if (universityPaid && agentPaid && subAgentPaid) status = "settled";
+    else if (universityPaid) status = "collected_full";
+    else if (totalCollected > 0) status = "collected_partial";
+    else status = "confirmed";
+  }
+
+  await db.update(commissionsTable).set({
+    universityCollected: String(totalCollected),
+    agentPaid: String(totalAgentPaid),
+    subAgentPaid: String(totalSubAgentPaid),
+    status,
+  }).where(eq(commissionsTable.id, commissionId));
+}
+
 router.get("/financial-transactions", requireAuth, requireRole(...FINANCE_ROLES), async (req, res): Promise<void> => {
   const { commissionId, type, page = "1", limit = "100" } = req.query as Record<string, string>;
   const pageNum = Math.max(1, parseInt(page, 10));
@@ -1157,13 +1286,14 @@ router.get("/financial-transactions", requireAuth, requireRole(...FINANCE_ROLES)
 
 router.post("/financial-transactions", requireAuth, requireRole(...FINANCE_ROLES), async (req, res): Promise<void> => {
   const {
-    commissionId, type, amount, currency = "USD", transactionDate,
-    reference, universityName, agentId, agentName, studentName,
+    commissionId, type, amount, transactionDate,
+    reference,
     fileUrl, fileName, notes,
   } = req.body;
 
-  if (!type || amount === undefined || amount === null || !transactionDate) {
-    res.status(400).json({ error: "type, amount, and transactionDate are required" });
+  const parsedCommissionId = Number(commissionId);
+  if (!Number.isInteger(parsedCommissionId) || parsedCommissionId <= 0 || !type || amount === undefined || amount === null || !transactionDate) {
+    res.status(400).json({ error: "commissionId, type, amount, and transactionDate are required" });
     return;
   }
 
@@ -1178,62 +1308,73 @@ router.post("/financial-transactions", requireAuth, requireRole(...FINANCE_ROLES
     return;
   }
 
+  const parsedDate = new Date(transactionDate);
+  if (Number.isNaN(parsedDate.getTime())) {
+    res.status(400).json({ error: "transactionDate is invalid" });
+    return;
+  }
+  const [commission] = await db.select().from(commissionsTable).where(eq(commissionsTable.id, parsedCommissionId));
+  if (!commission) {
+    res.status(404).json({ error: "Commission not found" });
+    return;
+  }
+  if (!isConfirmedCommissionStatus(commission.status)) {
+    res.status(400).json({ error: "Transactions can only be recorded for confirmed commissions" });
+    return;
+  }
+
+  const totalForType = type === "collection"
+    ? toNum(commission.universityCommissionAmount)
+    : type === "agent_payment"
+      ? toNum(commission.agentCommissionAmount)
+      : toNum(commission.subAgentCommissionAmount);
+  const paidForType = type === "collection"
+    ? toNum(commission.universityCollected)
+    : type === "agent_payment"
+      ? toNum(commission.agentPaid)
+      : toNum(commission.subAgentPaid);
+  const remainingForType = Math.max(0, totalForType - paidForType);
+  if (remainingForType <= 0.001) {
+    res.status(400).json({ error: "This balance is already fully paid" });
+    return;
+  }
+  if (parsedAmount > remainingForType + 0.001) {
+    res.status(400).json({ error: "Amount exceeds remaining balance", remaining: remainingForType });
+    return;
+  }
+
+  const authoritativeAgentId = type === "agent_payment"
+    ? commission.agentId
+    : type === "sub_agent_payment"
+      ? commission.subAgentId
+      : null;
+  let authoritativeAgentName: string | null = null;
+  if (authoritativeAgentId) {
+    const [agent] = await db.select({
+      firstName: agentsTable.firstName,
+      lastName: agentsTable.lastName,
+      companyName: agentsTable.companyName,
+      businessName: agentsTable.businessName,
+    }).from(agentsTable).where(eq(agentsTable.id, authoritativeAgentId));
+    authoritativeAgentName = agent ? agentDisplayName(agent) : null;
+  }
+
   const [tx] = await db.insert(financialTransactionsTable).values({
-    commissionId: commissionId || null,
+    commissionId: parsedCommissionId,
     type,
     amount: String(parsedAmount),
-    currency,
-    transactionDate,
+    currency: normCurrency(commission.currency),
+    transactionDate: parsedDate,
     reference: reference || null,
-    universityName: universityName || null,
-    agentId: agentId || null,
-    agentName: agentName || null,
-    studentName: studentName || null,
+    universityName: commission.universityName || null,
+    agentId: authoritativeAgentId,
+    agentName: authoritativeAgentName,
+    studentName: commission.studentName || null,
     fileUrl: fileUrl || null,
     fileName: fileName || null,
     notes: notes || null,
   }).returning();
-
-  if (commissionId && parsedAmount > 0) {
-    const [comm] = await db.select().from(commissionsTable).where(eq(commissionsTable.id, parseInt(commissionId, 10)));
-    if (comm) {
-      const allTxForComm = await db.select().from(financialTransactionsTable)
-        .where(eq(financialTransactionsTable.commissionId, parseInt(commissionId, 10)));
-
-      const totalCollected = allTxForComm
-        .filter(t => t.type === "collection")
-        .reduce((s, t) => s + toNum(t.amount), 0);
-      const totalPaid = allTxForComm
-        .filter(t => t.type === "agent_payment")
-        .reduce((s, t) => s + toNum(t.amount), 0);
-      const totalSubAgentPaid = allTxForComm
-        .filter(t => t.type === "sub_agent_payment")
-        .reduce((s, t) => s + toNum(t.amount), 0);
-      const uTotal = toNum(comm.universityCommissionAmount);
-      const aTotal = toNum(comm.agentCommissionAmount);
-      const saTotal = toNum(comm.subAgentCommissionAmount);
-
-      let newStatus = comm.status;
-      const agentFullyPaid = totalPaid >= aTotal;
-      const subAgentFullyPaid = saTotal <= 0 || totalSubAgentPaid >= saTotal;
-      if (totalCollected >= uTotal && agentFullyPaid && subAgentFullyPaid && uTotal > 0) {
-        newStatus = "settled";
-      } else if (totalCollected >= uTotal && uTotal > 0) {
-        newStatus = "collected_full";
-      } else if (totalCollected > 0) {
-        newStatus = "collected_partial";
-      } else if (comm.status !== "potential") {
-        newStatus = "confirmed";
-      }
-
-      await db.update(commissionsTable).set({
-        universityCollected: String(totalCollected),
-        agentPaid: String(totalPaid),
-        subAgentPaid: String(totalSubAgentPaid),
-        status: newStatus,
-      }).where(eq(commissionsTable.id, parseInt(commissionId, 10)));
-    }
-  }
+  await recalculateCommissionFinancials(parsedCommissionId);
 
   await logAudit(req.user!.id, "create_financial_transaction", "financial_transaction", tx.id, { type, amount }, req.ip);
 
@@ -1243,14 +1384,14 @@ router.post("/financial-transactions", requireAuth, requireRole(...FINANCE_ROLES
         actorUserId: req.user!.id,
         event: "finance.agent_payout",
         title: "Agent Payout Processed",
-        body: `A ${type === "sub_agent_payment" ? "sub-agent" : "agent"} payout of ${parsedAmount} ${currency} has been processed.${agentName ? ` Agent: ${agentName}.` : ""}`,
+        body: `A ${type === "sub_agent_payment" ? "sub-agent" : "agent"} payout of ${parsedAmount} ${normCurrency(commission.currency)} has been processed.${authoritativeAgentName ? ` Agent: ${authoritativeAgentName}.` : ""}`,
         actionUrl: `/staff/finance`,
         icon: "BadgeDollarSign",
         templateVars: {
           type,
           amount: String(parsedAmount),
-          currency,
-          agentName: agentName || "",
+          currency: normCurrency(commission.currency),
+          agentName: authoritativeAgentName || "",
         },
       });
     } catch (err) {
@@ -1270,39 +1411,7 @@ router.delete("/financial-transactions/:id", requireAuth, requireRole(...FINANCE
 
   await db.delete(financialTransactionsTable).where(eq(financialTransactionsTable.id, id));
 
-  if (tx.commissionId) {
-    const [comm] = await db.select().from(commissionsTable).where(eq(commissionsTable.id, tx.commissionId));
-    const remaining = await db.select().from(financialTransactionsTable)
-      .where(eq(financialTransactionsTable.commissionId, tx.commissionId));
-    const totalCollected = remaining.filter(t => t.type === "collection").reduce((s, t) => s + toNum(t.amount), 0);
-    const totalPaid = remaining.filter(t => t.type === "agent_payment").reduce((s, t) => s + toNum(t.amount), 0);
-    const totalSubAgentPaid = remaining.filter(t => t.type === "sub_agent_payment").reduce((s, t) => s + toNum(t.amount), 0);
-
-    let newStatus = comm?.status || "confirmed";
-    if (comm) {
-      const uTotal = toNum(comm.universityCommissionAmount);
-      const aTotal = toNum(comm.agentCommissionAmount);
-      const saTotal = toNum(comm.subAgentCommissionAmount);
-      const agentFullyPaid = totalPaid >= aTotal;
-      const subAgentFullyPaid = saTotal <= 0 || totalSubAgentPaid >= saTotal;
-      if (totalCollected >= uTotal && agentFullyPaid && subAgentFullyPaid && uTotal > 0) {
-        newStatus = "settled";
-      } else if (totalCollected >= uTotal && uTotal > 0) {
-        newStatus = "collected_full";
-      } else if (totalCollected > 0) {
-        newStatus = "collected_partial";
-      } else if (comm.status !== "potential") {
-        newStatus = "confirmed";
-      }
-    }
-
-    await db.update(commissionsTable).set({
-      universityCollected: String(totalCollected),
-      agentPaid: String(totalPaid),
-      subAgentPaid: String(totalSubAgentPaid),
-      status: newStatus,
-    }).where(eq(commissionsTable.id, tx.commissionId));
-  }
+  if (tx.commissionId) await recalculateCommissionFinancials(tx.commissionId);
 
   await logAudit(req.user!.id, "delete_financial_transaction", "financial_transaction", id, {}, req.ip);
   res.sendStatus(204);
@@ -1311,12 +1420,13 @@ router.delete("/financial-transactions/:id", requireAuth, requireRole(...FINANCE
 /* ─── UNIVERSITY BREAKDOWN ──────────────────────────────────── */
 
 router.get("/finance/university-breakdown", requireAuth, requireRole(...FINANCE_ROLES), async (req, res): Promise<void> => {
-  const { season } = req.query as Record<string, string>;
-  const conditions = [sql`${commissionsTable.status} != 'excluded'`];
+  const { season, currency } = req.query as Record<string, string>;
+  const conditions: any[] = [sql`${commissionsTable.status} IN ('confirmed', 'collected_partial', 'collected_full', 'settled')`];
   if (season) conditions.push(eq(commissionsTable.season, season));
-  const whereClause = and(...conditions);
-
-  const allComm = await db.select().from(commissionsTable).where(whereClause);
+  if (currency && currency !== "all" && /^[A-Za-z]{2,5}$/.test(currency)) {
+    conditions.push(eq(commissionsTable.currency, currency.toUpperCase()));
+  }
+  const allComm = await db.select().from(commissionsTable).where(and(...conditions));
 
   // Build commissionId → staff payout total map (from staffCommissionPayoutsTable, deletedAt IS NULL)
   const uniBreakdownCommIds = allComm.map(c => c.id);
@@ -1338,9 +1448,44 @@ router.get("/finance/university-breakdown", requireAuth, requireRole(...FINANCE_
     }
   }
 
-  const uniStudentsSeen: Record<string, Set<number>> = {};
+  const studentIds = [...new Set(allComm.map(c => c.studentId).filter((id): id is number => id != null))];
+  const applicationIds = [...new Set(allComm.map(c => c.applicationId).filter((id): id is number => id != null))];
+  const [studentRows, applicationRows] = await Promise.all([
+    studentIds.length > 0
+      ? db.select({
+          id: studentsTable.id,
+          firstName: studentsTable.firstName,
+          lastName: studentsTable.lastName,
+          passportNumber: studentsTable.passportNumber,
+        }).from(studentsTable).where(inArray(studentsTable.id, studentIds))
+      : Promise.resolve([]),
+    applicationIds.length > 0
+      ? db.select({
+          id: applicationsTable.id,
+          programName: applicationsTable.programName,
+        }).from(applicationsTable).where(inArray(applicationsTable.id, applicationIds))
+      : Promise.resolve([]),
+  ]);
+  const studentMap = new Map(studentRows.map(student => [student.id, student]));
+  const applicationMap = new Map(applicationRows.map(application => [application.id, application]));
+
+  type ReconciliationStudent = {
+    studentId: number | null;
+    applicationId: number | null;
+    firstName: string;
+    lastName: string;
+    studentName: string;
+    passportNumber: string | null;
+    programName: string | null;
+    currency: string;
+    confirmedCommission: number;
+    collected: number;
+    remaining: number;
+  };
   const uniMap: Record<string, {
+    key: string;
     universityName: string;
+    currency: string;
     totalCommission: number;
     totalCollected: number;
     totalRemaining: number;
@@ -1356,22 +1501,28 @@ router.get("/finance/university-breakdown", requireAuth, requireRole(...FINANCE_
     commissionCount: number;
     statuses: Record<string, number>;
     oldestUnpaid: Date | null;
+    studentsByKey: Map<string, ReconciliationStudent>;
   }> = {};
 
   for (const c of allComm) {
     const name = c.universityName || "Unknown";
-    if (!uniMap[name]) {
-      uniMap[name] = {
+    const rowCurrency = normCurrency(c.currency);
+    const key = `${name}::${rowCurrency}`;
+    if (!uniMap[key]) {
+      uniMap[key] = {
+        key,
         universityName: name,
+        currency: rowCurrency,
         totalCommission: 0, totalCollected: 0, totalRemaining: 0,
         totalAgentCommission: 0, totalAgentPaid: 0, totalAgentRemaining: 0,
         totalSubAgentCommission: 0, totalSubAgentPaid: 0,
         totalStaffCommission: 0, totalStaffPayouts: 0,
         netIncome: 0, studentCount: 0, commissionCount: 0,
         statuses: {}, oldestUnpaid: null,
+        studentsByKey: new Map(),
       };
     }
-    const u = uniMap[name];
+    const u = uniMap[key];
     const uAmt = toNum(c.universityCommissionAmount);
     const uColl = toNum(c.universityCollected);
     const aAmt = toNum(c.agentCommissionAmount);
@@ -1387,19 +1538,45 @@ router.get("/finance/university-breakdown", requireAuth, requireRole(...FINANCE_
     u.totalAgentRemaining += aAmt - aPaid;
     u.totalSubAgentCommission += saAmt;
     u.totalSubAgentPaid += saPaid;
-    // Only confirmed (non-potential) rows count toward staff commission totals
-    if (c.status !== "potential") {
-      u.totalStaffCommission += staffAmt;
-      u.totalStaffPayouts += staffPayoutsByCommission[c.id] ?? 0;
-    }
+    u.totalStaffCommission += staffAmt;
+    u.totalStaffPayouts += staffPayoutsByCommission[c.id] ?? 0;
     // Net Income per commission: University − Agent − SubAgent − Staff
     u.netIncome += uAmt - aAmt - saAmt - staffAmt;
-    if (c.studentId != null && !uniStudentsSeen[name]) uniStudentsSeen[name] = new Set();
-    if (c.studentId != null && !uniStudentsSeen[name].has(c.studentId)) {
-      uniStudentsSeen[name].add(c.studentId);
-    }
     u.commissionCount++;
     u.statuses[c.status] = (u.statuses[c.status] || 0) + 1;
+
+    const linkedStudent = c.studentId != null ? studentMap.get(c.studentId) : null;
+    const linkedApplication = c.applicationId != null ? applicationMap.get(c.applicationId) : null;
+    const snapshotName = String(c.studentName || "").trim();
+    const fullName = linkedStudent
+      ? `${linkedStudent.firstName || ""} ${linkedStudent.lastName || ""}`.trim()
+      : snapshotName;
+    const studentKey = c.studentId != null
+      ? `student:${c.studentId}`
+      : c.applicationId != null
+        ? `application:${c.applicationId}`
+        : `name:${snapshotName.toLowerCase() || c.id}`;
+    const existingStudent = u.studentsByKey.get(studentKey);
+    if (existingStudent) {
+      existingStudent.confirmedCommission += uAmt;
+      existingStudent.collected += uColl;
+      existingStudent.remaining += Math.max(0, uAmt - uColl);
+    } else {
+      const nameParts = fullName.split(/\s+/).filter(Boolean);
+      u.studentsByKey.set(studentKey, {
+        studentId: c.studentId ?? null,
+        applicationId: c.applicationId ?? null,
+        firstName: linkedStudent?.firstName || nameParts[0] || "",
+        lastName: linkedStudent?.lastName || nameParts.slice(1).join(" "),
+        studentName: fullName || "—",
+        passportNumber: linkedStudent?.passportNumber || null,
+        programName: linkedApplication?.programName || c.programName || null,
+        currency: rowCurrency,
+        confirmedCommission: uAmt,
+        collected: uColl,
+        remaining: Math.max(0, uAmt - uColl),
+      });
+    }
 
     if (uAmt > uColl && c.confirmedAt) {
       if (!u.oldestUnpaid || c.confirmedAt < u.oldestUnpaid) {
@@ -1408,18 +1585,11 @@ router.get("/finance/university-breakdown", requireAuth, requireRole(...FINANCE_
     }
   }
 
-  const students = new Set<string>();
-  for (const c of allComm) {
-    if (c.studentName) students.add(`${c.universityName}::${c.studentName}`);
-  }
-  for (const key of Object.keys(uniMap)) {
-    uniMap[key].studentCount = [...students].filter(s => s.startsWith(key + "::")).length;
-    // netIncome is already accumulated per-commission above (uni - agent - subAgent - staffCommissionAmount)
-  }
-
-  // Add per-row staffPayable so consumers don't need to derive it client-side
-  const breakdown = Object.values(uniMap).map(u => ({
+  const breakdown = Object.values(uniMap).map(({ studentsByKey, ...u }) => ({
     ...u,
+    studentCount: studentsByKey.size,
+    students: [...studentsByKey.values()].sort((a, b) => a.studentName.localeCompare(b.studentName)),
+    totalStaffPaid: u.totalStaffPayouts,
     staffPayable: Math.max(0, u.totalStaffCommission - u.totalStaffPayouts),
   })).sort((a, b) => b.totalCommission - a.totalCommission);
 
@@ -1435,12 +1605,39 @@ router.get("/finance/university-breakdown", requireAuth, requireRole(...FINANCE_
     totalSubAgentPaid: breakdown.reduce((s, u) => s + u.totalSubAgentPaid, 0),
     totalStaffCommission: uniTotalStaffCommission,
     totalStaffPayouts: uniTotalStaffPayouts,
+    totalStaffPaid: uniTotalStaffPayouts,
     staffPayable: Math.max(0, uniTotalStaffCommission - uniTotalStaffPayouts),
     totalNetIncome: breakdown.reduce((s, u) => s + u.netIncome, 0),
     universityCount: breakdown.length,
+    studentCount: breakdown.reduce((sum, university) => sum + university.studentCount, 0),
   };
 
-  res.json({ breakdown, totals });
+  const totalsByCurrency = breakdown.reduce<Record<string, typeof totals>>((buckets, university) => {
+    const bucket = buckets[university.currency] ?? (buckets[university.currency] = {
+      totalCommission: 0, totalCollected: 0, totalRemaining: 0,
+      totalAgentCommission: 0, totalAgentPaid: 0,
+      totalSubAgentCommission: 0, totalSubAgentPaid: 0,
+      totalStaffCommission: 0, totalStaffPayouts: 0, totalStaffPaid: 0,
+      staffPayable: 0, totalNetIncome: 0, universityCount: 0, studentCount: 0,
+    });
+    bucket.totalCommission += university.totalCommission;
+    bucket.totalCollected += university.totalCollected;
+    bucket.totalRemaining += university.totalRemaining;
+    bucket.totalAgentCommission += university.totalAgentCommission;
+    bucket.totalAgentPaid += university.totalAgentPaid;
+    bucket.totalSubAgentCommission += university.totalSubAgentCommission;
+    bucket.totalSubAgentPaid += university.totalSubAgentPaid;
+    bucket.totalStaffCommission += university.totalStaffCommission;
+    bucket.totalStaffPayouts += university.totalStaffPayouts;
+    bucket.totalStaffPaid += university.totalStaffPayouts;
+    bucket.staffPayable += university.staffPayable;
+    bucket.totalNetIncome += university.netIncome;
+    bucket.universityCount += 1;
+    bucket.studentCount += university.studentCount;
+    return buckets;
+  }, {});
+
+  res.json({ breakdown, totals, totalsByCurrency });
 });
 
 /* ─── FINANCE SUMMARY ────────────────────────────────────────── */
@@ -1460,7 +1657,7 @@ router.get("/finance/summary", requireAuth, requireRole(...FINANCE_ROLES), async
   const fees = await db.select().from(serviceFeesTable).where(whereSF);
 
   // Aggregate staff commission payouts for these commissions (deletedAt IS NULL)
-  const allCommissionIds = commissions.map(c => c.id);
+  const allCommissionIds = commissions.filter(c => isConfirmedCommissionStatus(c.status)).map(c => c.id);
   const staffSummaryPayoutsByCurrency: Record<string, number> = {};
   let summaryTotalStaffPayouts = 0;
   if (allCommissionIds.length > 0) {
@@ -1480,7 +1677,8 @@ router.get("/finance/summary", requireAuth, requireRole(...FINANCE_ROLES), async
     }
   }
 
-  const confirmedCommissions = commissions.filter(c => c.status === "confirmed" || c.status === "collected_partial" || c.status === "collected_full" || c.status === "settled");
+  const confirmedCommissions = commissions.filter(c => isConfirmedCommissionStatus(c.status));
+  const confirmedFees = fees.filter(f => f.financeStatus === "confirmed");
   const totalConfirmedCommission = confirmedCommissions.reduce((s, c) => s + toNum(c.universityCommissionAmount), 0);
   const totalOffsetUsed = commissions.reduce((s, c) => s + toNum(c.offsetAmount), 0);
   const availableOffset = Math.min(totalConfirmedCommission * 0.7, totalConfirmedCommission - totalOffsetUsed);
@@ -1497,11 +1695,11 @@ router.get("/finance/summary", requireAuth, requireRole(...FINANCE_ROLES), async
   });
 
   const potentialComms = commissions.filter(c => c.status === "potential");
-  const confirmedComms = commissions.filter(c => c.status !== "potential");
+  const confirmedComms = confirmedCommissions;
   const paidComms = commissions.filter(c => c.status === "collected_partial" || c.status === "collected_full" || c.status === "settled");
 
   // Only confirmed (non-potential) rows count toward staff commission totals
-  const summaryTotalStaffCommission = commissions.filter(c => c.status !== "potential").reduce((s, c) => s + toNum(c.staffCommissionAmount), 0);
+  const summaryTotalStaffCommission = confirmedCommissions.reduce((s, c) => s + toNum(c.staffCommissionAmount), 0);
 
   // Build byCurrency and enrich each bucket with staffPayable
   const summaryByCurrency = buildCommissionsByCurrency(commissions);
@@ -1515,30 +1713,30 @@ router.get("/finance/summary", requireAuth, requireRole(...FINANCE_ROLES), async
     commissions: {
       potential: potentialComms.length,
       confirmed: confirmedComms.length,
-      totalUniversityCommission: commissions.reduce((s, c) => s + toNum(c.universityCommissionAmount), 0),
-      totalUniversityCollected: commissions.reduce((s, c) => s + toNum(c.universityCollected), 0),
-      totalUniversityPending: commissions.reduce((s, c) => s + (toNum(c.universityCommissionAmount) - toNum(c.universityCollected)), 0),
-      totalAgentCommission: commissions.reduce((s, c) => s + toNum(c.agentCommissionAmount), 0),
-      totalAgentPaid: commissions.reduce((s, c) => s + toNum(c.agentPaid), 0),
-      totalAgentPending: commissions.reduce((s, c) => s + (toNum(c.agentCommissionAmount) - toNum(c.agentPaid)), 0),
-      totalSubAgentCommission: commissions.reduce((s, c) => s + toNum(c.subAgentCommissionAmount), 0),
-      totalSubAgentPaid: commissions.reduce((s, c) => s + toNum(c.subAgentPaid), 0),
-      totalSubAgentPending: commissions.reduce((s, c) => s + (toNum(c.subAgentCommissionAmount) - toNum(c.subAgentPaid)), 0),
+      totalUniversityCommission: confirmedCommissions.reduce((s, c) => s + toNum(c.universityCommissionAmount), 0),
+      totalUniversityCollected: confirmedCommissions.reduce((s, c) => s + toNum(c.universityCollected), 0),
+      totalUniversityPending: confirmedCommissions.reduce((s, c) => s + (toNum(c.universityCommissionAmount) - toNum(c.universityCollected)), 0),
+      totalAgentCommission: confirmedCommissions.reduce((s, c) => s + toNum(c.agentCommissionAmount), 0),
+      totalAgentPaid: confirmedCommissions.reduce((s, c) => s + toNum(c.agentPaid), 0),
+      totalAgentPending: confirmedCommissions.reduce((s, c) => s + (toNum(c.agentCommissionAmount) - toNum(c.agentPaid)), 0),
+      totalSubAgentCommission: confirmedCommissions.reduce((s, c) => s + toNum(c.subAgentCommissionAmount), 0),
+      totalSubAgentPaid: confirmedCommissions.reduce((s, c) => s + toNum(c.subAgentPaid), 0),
+      totalSubAgentPending: confirmedCommissions.reduce((s, c) => s + (toNum(c.subAgentCommissionAmount) - toNum(c.subAgentPaid)), 0),
       // Only confirmed rows
       totalStaffCommission: summaryTotalStaffCommission,
       totalStaffPayouts: summaryTotalStaffPayouts,
       staffPayable: Math.max(0, summaryTotalStaffCommission - summaryTotalStaffPayouts),
       // Net Income = University − Agent − SubAgent − Staff
-      totalNetAgency: commissions.reduce((s, c) => s + (toNum(c.universityCommissionAmount) - toNum(c.agentCommissionAmount) - toNum(c.subAgentCommissionAmount) - toNum(c.staffCommissionAmount)), 0),
+      totalNetAgency: confirmedCommissions.reduce((s, c) => s + (toNum(c.universityCommissionAmount) - toNum(c.agentCommissionAmount) - toNum(c.subAgentCommissionAmount) - toNum(c.staffCommissionAmount)), 0),
       overdueCount: overdueItems.length,
       overdueAmount: overdueItems.reduce((s, c) => s + (toNum(c.universityCommissionAmount) - toNum(c.universityCollected)), 0),
       potentialUniversityCommission: potentialComms.reduce((s, c) => s + toNum(c.universityCommissionAmount), 0),
       potentialAgentCommission: potentialComms.reduce((s, c) => s + toNum(c.agentCommissionAmount), 0),
       confirmedUniversityCommission: confirmedComms.reduce((s, c) => s + toNum(c.universityCommissionAmount), 0),
       confirmedAgentCommission: confirmedComms.reduce((s, c) => s + toNum(c.agentCommissionAmount), 0),
-      paidToAgents: commissions.reduce((s, c) => s + toNum(c.agentPaid), 0),
-      paidToSubAgents: commissions.reduce((s, c) => s + toNum(c.subAgentPaid), 0),
-      collectedFromUniversities: commissions.reduce((s, c) => s + toNum(c.universityCollected), 0),
+      paidToAgents: confirmedCommissions.reduce((s, c) => s + toNum(c.agentPaid), 0),
+      paidToSubAgents: confirmedCommissions.reduce((s, c) => s + toNum(c.subAgentPaid), 0),
+      collectedFromUniversities: confirmedCommissions.reduce((s, c) => s + toNum(c.universityCollected), 0),
       pendingToCollect: confirmedComms.reduce((s, c) => s + (toNum(c.universityCommissionAmount) - toNum(c.universityCollected)), 0),
       pendingToPay: confirmedComms.reduce((s, c) => s + (toNum(c.agentCommissionAmount) - toNum(c.agentPaid)), 0),
       pendingToPaySubAgents: confirmedComms.reduce((s, c) => s + (toNum(c.subAgentCommissionAmount) - toNum(c.subAgentPaid)), 0),
@@ -1546,7 +1744,7 @@ router.get("/finance/summary", requireAuth, requireRole(...FINANCE_ROLES), async
     },
     serviceFees: {
       total: fees.reduce((s, f) => s + toNum(f.totalAmount), 0),
-      collected: fees.reduce((s, f) => {
+      collected: confirmedFees.reduce((s, f) => {
         return s + toNum(f.firstInstallmentPaidAt ? f.firstInstallmentAmount : 0) + toNum(f.secondInstallmentPaidAt ? f.secondInstallmentAmount : 0);
       }, 0),
       pending: fees.filter(f => f.status === "pending").length,
@@ -1821,6 +2019,26 @@ function sendXlsx(res: any, data: Record<string, any>[], filename: string, sheet
   res.send(Buffer.from(buf));
 }
 
+function sendXlsxSheets(
+  res: any,
+  sheets: { name: string; data: Record<string, any>[] }[],
+  filename: string,
+) {
+  const workbook = XLSX.utils.book_new();
+  for (const sheet of sheets) {
+    const rows = sheet.data.length > 0 ? sheet.data : [{ "No Data": "No records found" }];
+    const worksheet = XLSX.utils.json_to_sheet(rows);
+    worksheet["!cols"] = Object.keys(rows[0] || {}).map(key => ({
+      wch: Math.min(Math.max(key.length, ...rows.map(row => String(row[key] ?? "").length)) + 2, 50),
+    }));
+    XLSX.utils.book_append_sheet(workbook, worksheet, sheet.name.slice(0, 31));
+  }
+  const buffer = XLSX.write(workbook, { type: "buffer", bookType: "xlsx" });
+  res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+  res.send(Buffer.from(buffer));
+}
+
 function xlsxDate(v: any): string {
   if (!v) return "";
   const d = typeof v === "string" ? new Date(v) : v;
@@ -1873,17 +2091,29 @@ router.get("/finance/export/commissions", requireAuth, requireRole(...FINANCE_RO
 });
 
 router.get("/finance/export/university-breakdown", requireAuth, requireRole(...FINANCE_ROLES), async (req, res): Promise<void> => {
-  const { season, currency } = req.query as Record<string, string>;
-  const conditions: any[] = [sql`${commissionsTable.status} != 'excluded'`];
+  const { season, currency, universityName } = req.query as Record<string, string>;
+  const conditions: any[] = [sql`${commissionsTable.status} IN ('confirmed', 'collected_partial', 'collected_full', 'settled')`];
   if (season) conditions.push(eq(commissionsTable.season, season));
   if (currency && currency !== "all" && /^[A-Za-z]{2,5}$/.test(currency)) {
     conditions.push(eq(commissionsTable.currency, currency.toUpperCase()));
   }
+  if (universityName) conditions.push(eq(commissionsTable.universityName, universityName));
 
   const allComm = await db.select().from(commissionsTable).where(and(...conditions));
+  const studentIds = [...new Set(allComm.map(c => c.studentId).filter((id): id is number => id != null))];
+  const students = studentIds.length > 0
+    ? await db.select({
+        id: studentsTable.id,
+        firstName: studentsTable.firstName,
+        lastName: studentsTable.lastName,
+        passportNumber: studentsTable.passportNumber,
+      }).from(studentsTable).where(inArray(studentsTable.id, studentIds))
+    : [];
+  const studentMap = new Map(students.map(student => [student.id, student]));
 
   const uniMap: Record<string, {
     universityName: string;
+    currency: string;
     commissionCount: number;
     studentCount: number;
     totalCommission: number;
@@ -1899,10 +2129,12 @@ router.get("/finance/export/university-breakdown", requireAuth, requireRole(...F
   const studentKeys = new Set<string>();
   for (const c of allComm) {
     const name = c.universityName || "Unknown";
-    if (!uniMap[name]) {
-      uniMap[name] = { universityName: name, commissionCount: 0, studentCount: 0, totalCommission: 0, totalCollected: 0, totalRemaining: 0, totalAgentCommission: 0, totalAgentPaid: 0, totalSubAgentCommission: 0, totalStaffCommission: 0, netIncome: 0 };
+    const rowCurrency = normCurrency(c.currency);
+    const universityKey = `${name}::${rowCurrency}`;
+    if (!uniMap[universityKey]) {
+      uniMap[universityKey] = { universityName: name, currency: rowCurrency, commissionCount: 0, studentCount: 0, totalCommission: 0, totalCollected: 0, totalRemaining: 0, totalAgentCommission: 0, totalAgentPaid: 0, totalSubAgentCommission: 0, totalStaffCommission: 0, netIncome: 0 };
     }
-    const u = uniMap[name];
+    const u = uniMap[universityKey];
     const uAmt = toNum(c.universityCommissionAmount);
     const uColl = toNum(c.universityCollected);
     const aAmt = toNum(c.agentCommissionAmount);
@@ -1919,8 +2151,8 @@ router.get("/finance/export/university-breakdown", requireAuth, requireRole(...F
     // Net Income = University − Agent − SubAgent − Staff
     u.netIncome += uAmt - aAmt - saAmt - staffAmt;
     u.commissionCount++;
-    if (c.studentName) {
-      const key = `${name}::${c.studentName}`;
+    if (c.studentId || c.studentName) {
+      const key = `${universityKey}::${c.studentId || String(c.studentName).toLowerCase()}`;
       if (!studentKeys.has(key)) { studentKeys.add(key); u.studentCount++; }
     }
   }
@@ -1929,6 +2161,7 @@ router.get("/finance/export/university-breakdown", requireAuth, requireRole(...F
 
   const data = breakdown.map(u => ({
     "University": u.universityName,
+    "Currency": u.currency,
     "Commissions": u.commissionCount,
     "Students": u.studentCount,
     "Total Commission": u.totalCommission.toFixed(2),
@@ -1942,7 +2175,32 @@ router.get("/finance/export/university-breakdown", requireAuth, requireRole(...F
     "Collection %": u.totalCommission > 0 ? Math.round((u.totalCollected / u.totalCommission) * 100) + "%" : "0%",
   }));
 
-  sendXlsx(res, data, `university_breakdown_${season || "all"}_${new Date().toISOString().slice(0, 10)}.xlsx`, "University Breakdown");
+  const studentData = allComm.map(commission => {
+    const student = commission.studentId != null ? studentMap.get(commission.studentId) : null;
+    const snapshotParts = String(commission.studentName || "").trim().split(/\s+/).filter(Boolean);
+    return {
+      "University": commission.universityName || "",
+      "First Name": student?.firstName || snapshotParts[0] || "",
+      "Last Name": student?.lastName || snapshotParts.slice(1).join(" "),
+      "Passport Number": student?.passportNumber || "",
+      "Program / Department": commission.programName || "",
+      "Student ID": commission.studentId || "",
+      "Application ID": commission.applicationId || "",
+      "Currency": normCurrency(commission.currency),
+      "Confirmed Commission": toNum(commission.universityCommissionAmount).toFixed(2),
+      "Collected": toNum(commission.universityCollected).toFixed(2),
+      "Remaining": Math.max(0, toNum(commission.universityCommissionAmount) - toNum(commission.universityCollected)).toFixed(2),
+      "Commission Status": commission.status,
+    };
+  });
+
+  const suffix = universityName
+    ? universityName.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "")
+    : "all";
+  sendXlsxSheets(res, [
+    { name: "University Summary", data },
+    { name: "Confirmed Students", data: studentData },
+  ], `university_reconciliation_${suffix}_${season || "all"}_${new Date().toISOString().slice(0, 10)}.xlsx`);
 });
 
 router.get("/finance/export/service-fees", requireAuth, requireRole(...FINANCE_ROLES), async (req, res): Promise<void> => {
