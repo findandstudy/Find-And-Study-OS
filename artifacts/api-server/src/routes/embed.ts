@@ -79,6 +79,10 @@ import {
   createEmbedLeadDocumentSessionToken,
   verifyEmbedLeadDocumentSessionToken,
 } from "../lib/embedLeadDocumentSession";
+import {
+  EMBED_DOCUMENT_MANIFEST_LIMIT,
+  normalizeEmbedDocumentManifest,
+} from "../lib/embedDocumentManifest";
 import { isAnthropicConnectionKey } from "../lib/documentAiConnection";
 import { getEmbedSigningSecret } from "../lib/embedSigningSecret";
 import { rejectInvalidPhone } from "../lib/phoneValidation";
@@ -329,7 +333,9 @@ async function prepareEmbedDocuments(rawDocuments: unknown): Promise<{
   warnings: string[];
   inputCount: number;
 }> {
-  const rawDocs = Array.isArray(rawDocuments) ? rawDocuments.slice(0, 4) : [];
+  const rawDocs = Array.isArray(rawDocuments)
+    ? rawDocuments.slice(0, EMBED_DOCUMENT_MANIFEST_LIMIT)
+    : [];
   const docArray = rawDocs
     .filter((d: any) => d && typeof d === "object" && d.label && d.data && typeof d.data === "string")
     .map((d: any) => ({ ...d }));
@@ -482,12 +488,7 @@ async function readEmbedLeadDraftDocuments(params: {
 
   // The label manifest is deliberately small and contains no file bytes. It
   // ensures a file removed in the UI is not revived from an older draft row.
-  const requestedTypes = Array.isArray(params.requestedLabels)
-    ? [...new Set(params.requestedLabels
-      .slice(0, 4)
-      .map((label) => String(label || "").toLowerCase())
-      .filter(Boolean))]
-    : [];
+  const requestedTypes = normalizeEmbedDocumentManifest(params.requestedLabels);
   if (requestedTypes.length === 0) return [];
 
   const rows = await db.select({
@@ -2079,10 +2080,12 @@ router.post("/public/embed/:slug/apply", embedApplicationSubmitLimiter, embedApp
       .where(eq(leadsTable.id, result.leadId)).limit(1);
   }
 
-  // Save valid files on the lead before any mandatory-document rejection or
-  // downstream student/application work. This guarantees that a failed final
-  // submit still leaves the documents visible to staff on the lead detail.
-  if (validDocs.length > 0) {
+  // Legacy clients still send file bytes only on the final request, so persist
+  // those before any mandatory-document rejection. Session-based clients have
+  // already persisted every file one at a time in /lead-documents; rewriting
+  // the whole set here would add avoidable DB load and could reintroduce an
+  // aggregate-size failure for programs with many document slots.
+  if (validDocs.length > 0 && documentSessionLeadId === null) {
     await persistEmbedLeadDocuments({
       leadId: result.leadId,
       firstName: tlu(firstName, 100)!,
