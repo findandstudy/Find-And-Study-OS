@@ -39,5 +39,11 @@ test("new service fees require an authoritative student/application link", () =>
 test("finance UI shows agency names and confirmed cash-flow additions", () => {
   assert.match(uiSource, /agent\?\.companyName[\s\S]*agent\?\.businessName/);
   assert.match(uiSource, /Service Fee Income/);
+  assert.match(uiSource, /financePage\.subAgentPaid/);
+  assert.doesNotMatch(
+    uiSource,
+    /totalSubAgentCommission\)\s*>\s*0\s*&&\s*\([\s\S]{0,500}financePage\.subAgentPaid/,
+    "Sub Agent Paid must remain visible even when its confirmed amount is zero",
+  );
   assert.match(uiSource, /studentsCount", \{ count: u\.studentCount \}/);
 });

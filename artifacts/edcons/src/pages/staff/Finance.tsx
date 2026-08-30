@@ -3613,12 +3613,10 @@ export default function FinancePage() {
                         <p className="text-xs text-amber-600 font-medium uppercase">{t("financePage.outflowAgentPaid")}</p>
                         {cashFlowRows.map(row => <p key={row.code} className="text-lg font-bold text-amber-700">{fmt(row.agentPaid, row.code)}</p>)}
                       </div>
-                      {toNum(summary?.commissions?.totalSubAgentCommission) > 0 && (
-                        <div className="rounded-lg bg-purple-50 border border-purple-200 p-3 text-center">
-                          <p className="text-xs text-purple-600 font-medium uppercase">{t("financePage.subAgentPaid")}</p>
-                          {cashFlowRows.map(row => <p key={row.code} className="text-lg font-bold text-purple-700">{fmt(row.subAgentPaid, row.code)}</p>)}
-                        </div>
-                      )}
+                      <div className="rounded-lg bg-purple-50 border border-purple-200 p-3 text-center">
+                        <p className="text-xs text-purple-600 font-medium uppercase">{t("financePage.subAgentPaid")}</p>
+                        {cashFlowRows.map(row => <p key={row.code} className="text-lg font-bold text-purple-700">{fmt(row.subAgentPaid, row.code)}</p>)}
+                      </div>
                       {toNum(summary?.commissions?.totalStaffPayouts) > 0 && (
                         <div className="rounded-lg bg-rose-50 border border-rose-200 p-3 text-center">
                           <p className="text-xs text-rose-600 font-medium uppercase">{t("financePage.staffCommPaid")}</p>
