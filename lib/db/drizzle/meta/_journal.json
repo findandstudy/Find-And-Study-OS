@@ -414,6 +414,34 @@
       "when": 1788109200000,
       "tag": "0058_pipeline_stage_auto_messages",
       "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "7",
+      "when": 1788112800000,
+      "tag": "0059_fas_agency_codes",
+      "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "7",
+      "when": 1788116400000,
+      "tag": "0060_scoped_record_assignments",
+      "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "7",
+      "when": 1788120000000,
+      "tag": "0061_pipeline_stage_audiences",
+      "breakpoints": true
+    },
+    {
+      "idx": 62,
+      "version": "7",
+      "when": 1788123600000,
+      "tag": "0062_agent_tenant_capabilities",
+      "breakpoints": true
     }
   ]
 }

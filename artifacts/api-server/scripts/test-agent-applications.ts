@@ -154,13 +154,15 @@ test("migration is additive and links application evidence to lifecycle records"
   assert.doesNotMatch(migration, /DROP TABLE|TRUNCATE|DELETE FROM/);
 });
 
-test("agency codes are database-generated only when an approved agent is inserted", async () => {
+test("agency codes are database-generated with the FAS date format", async () => {
   const here = path.dirname(fileURLToPath(import.meta.url));
-  const migration = await readFile(path.resolve(here, "../../../lib/db/drizzle/0055_agent_application_review_then_sign.sql"), "utf8");
+  const migration = await readFile(path.resolve(here, "../../../lib/db/drizzle/0059_fas_agency_codes.sql"), "utf8");
   const route = await readFile(path.resolve(here, "../src/routes/agentApplications.ts"), "utf8");
   assert.match(migration, /CREATE SEQUENCE IF NOT EXISTS agent_agency_code_seq/);
   assert.match(migration, /ALTER COLUMN agency_code SET DEFAULT/);
-  assert.match(migration, /CREATE UNIQUE INDEX IF NOT EXISTS agents_agency_code_unique/);
+  assert.match(migration, /FAS-/);
+  assert.match(migration, /TO_CHAR\(CURRENT_TIMESTAMP AT TIME ZONE 'UTC', 'YYYYMMDD'\)/);
+  assert.match(migration, /CREATE UNIQUE INDEX IF NOT EXISTS agents_fas_agency_code_unique/);
   assert.match(route, /tx\.insert\(agentsTable\)\.values\(\{/);
   assert.doesNotMatch(route, /agencyCode:\s*application\./);
 });

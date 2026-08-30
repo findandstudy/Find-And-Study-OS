@@ -1,9 +1,12 @@
 import crypto from "crypto";
+import { lookup } from "node:dns/promises";
+import { isIP } from "node:net";
 import nodemailer from "nodemailer";
 import type { Transporter } from "nodemailer";
 import { db, emailQueueTable, integrationsTable, settingsTable } from "@workspace/db";
 import { pool } from "@workspace/db";
 import { eq } from "drizzle-orm";
+import { isLiveIntegrationsEnabled } from "./inbox/liveMode";
 
 let cachedTransporter: Transporter | null = null;
 let transporterConfigHash = "";
@@ -15,6 +18,59 @@ interface SmtpConfig {
   password: string;
   fromEmail?: string;
   fromName?: string;
+  tlsServername?: string;
+}
+
+export interface TenantSmtpConfig extends SmtpConfig {}
+
+const TENANT_SMTP_PORTS = new Set([465, 587, 2525]);
+
+function isPrivateOrReservedIp(address: string): boolean {
+  if (isIP(address) === 4) {
+    const [a, b] = address.split(".").map(Number);
+    return (
+      a === 0 || a === 10 || a === 127 ||
+      (a === 100 && b >= 64 && b <= 127) ||
+      (a === 169 && b === 254) ||
+      (a === 172 && b >= 16 && b <= 31) ||
+      (a === 192 && (b === 0 || b === 168)) ||
+      (a === 198 && (b === 18 || b === 19)) ||
+      a >= 224
+    );
+  }
+  if (isIP(address) === 6) {
+    const normalized = address.toLowerCase();
+    if (normalized === "::" || normalized === "::1") return true;
+    if (normalized.startsWith("fc") || normalized.startsWith("fd") || normalized.startsWith("fe8") || normalized.startsWith("fe9") || normalized.startsWith("fea") || normalized.startsWith("feb")) return true;
+    const mapped = normalized.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
+    return mapped ? isPrivateOrReservedIp(mapped[1]) : false;
+  }
+  return true;
+}
+
+/**
+ * Tenant-owned SMTP settings are untrusted network destinations. Resolve the
+ * hostname before connecting and reject local/private/reserved targets so an
+ * agency cannot use the mail integration as an SSRF tunnel into our network.
+ */
+export async function assertSafeTenantSmtpDestination(host: string, port: number): Promise<string> {
+  const normalizedHost = String(host || "").trim().replace(/^\[|\]$/g, "").toLowerCase();
+  if (!normalizedHost || normalizedHost === "localhost" || normalizedHost.endsWith(".localhost") || normalizedHost.endsWith(".local")) {
+    throw new Error("unsafe_smtp_destination");
+  }
+  if (!TENANT_SMTP_PORTS.has(Number(port))) {
+    throw new Error("unsupported_smtp_port");
+  }
+  let addresses: Array<{ address: string }>;
+  try {
+    addresses = await lookup(normalizedHost, { all: true, verbatim: true });
+  } catch {
+    throw new Error("smtp_host_unresolvable");
+  }
+  if (addresses.length === 0 || addresses.some(({ address }) => isPrivateOrReservedIp(address))) {
+    throw new Error("unsafe_smtp_destination");
+  }
+  return addresses[0].address;
 }
 
 async function getSmtpConfig(): Promise<SmtpConfig | null> {
@@ -75,8 +131,50 @@ export async function createSmtpTransporter(config: SmtpConfig): Promise<Transpo
       // links (password reset, verification, contract signing).
       rejectUnauthorized: true,
       minVersion: "TLSv1.2",
+      ...(config.tlsServername ? { servername: config.tlsServername } : {}),
     },
   });
+}
+
+/**
+ * Deliver through an agency-owned SMTP connection. Tenant credentials never
+ * enter the shared queue because that queue is retried with the platform SMTP
+ * configuration. Live delivery is explicitly disabled in local/test runs.
+ */
+export async function sendTenantEmail(
+  config: TenantSmtpConfig,
+  to: string,
+  email: { subject: string; html: string; text: string },
+): Promise<boolean> {
+  if (
+    process.env.NODE_ENV === "test"
+    || process.env.EMAIL_DELIVERY_DISABLED === "true"
+    || !isLiveIntegrationsEnabled()
+  ) {
+    console.log(`[TENANT EMAIL] Live delivery disabled; skipped: ${email.subject}`);
+    return false;
+  }
+  const originalHost = String(config.host).trim().replace(/^\[|\]$/g, "");
+  const resolvedHost = await assertSafeTenantSmtpDestination(originalHost, Number(config.port));
+  // Pin the already-validated address so a second DNS lookup cannot redirect
+  // the connection to a private service. TLS still verifies the tenant's
+  // configured hostname rather than the numeric address.
+  const transporter = await createSmtpTransporter({
+    ...config,
+    host: resolvedHost,
+    tlsServername: isIP(originalHost) === 0 ? originalHost : undefined,
+  });
+  await transporter.sendMail({
+    from: {
+      name: config.fromName || "Agency",
+      address: config.fromEmail || config.username,
+    },
+    to,
+    subject: email.subject,
+    html: email.html,
+    text: email.text,
+  });
+  return true;
 }
 
 async function getTransporter(): Promise<{ transporter: Transporter; fromEmail: string; fromName: string; replyTo?: string } | null> {

@@ -2,6 +2,7 @@ export * from "./users";
 export * from "./leads";
 export * from "./students";
 export * from "./agents";
+export * from "./agentIntegrations";
 export * from "./applications";
 export * from "./documents";
 export * from "./universities";

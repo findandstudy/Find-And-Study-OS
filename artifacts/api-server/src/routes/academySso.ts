@@ -4,6 +4,7 @@ import { requireAuth, requireRole } from "../lib/auth";
 import { userHasPermission } from "../lib/permissions";
 import { db, agentsTable, usersTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
+import { resolveAgentFeatures } from "../lib/agentFeatures";
 
 const router = Router();
 
@@ -55,13 +56,29 @@ router.get("/academy-sso", requireAuth, requireRole("super_admin", "admin", "man
 
   // Access gate: fetch fresh user row (session may not carry new columns).
   const [freshUser] = await db
-    .select({ agentStaffPermissions: usersTable.agentStaffPermissions })
+    .select({
+      agentStaffPermissions: usersTable.agentStaffPermissions,
+      managingAgentId: usersTable.managingAgentId,
+    })
     .from(usersTable)
     .where(eq(usersTable.id, u.id));
 
-  const allowed = u.role === "agent_staff"
+  let tenantAcademyEnabled = true;
+  if (["agent", "sub_agent", "agent_staff"].includes(u.role)) {
+    const [tenantAgent] = u.role === "agent_staff"
+      ? freshUser?.managingAgentId
+        ? await db.select({ planTier: agentsTable.planTier, featureOverrides: agentsTable.featureOverrides })
+          .from(agentsTable).where(eq(agentsTable.id, freshUser.managingAgentId))
+        : []
+      : await db.select({ planTier: agentsTable.planTier, featureOverrides: agentsTable.featureOverrides })
+        .from(agentsTable).where(eq(agentsTable.userId, u.id));
+    tenantAcademyEnabled = !!tenantAgent && resolveAgentFeatures(tenantAgent.planTier, tenantAgent.featureOverrides).academy;
+  }
+
+  const rolePermission = u.role === "agent_staff"
     ? Array.isArray(freshUser?.agentStaffPermissions) && (freshUser.agentStaffPermissions as string[]).includes("academy")
     : await userHasPermission(u, "academy.access");
+  const allowed = tenantAcademyEnabled && rolePermission;
 
   if (!allowed) {
     res.status(403).send("Academy access not granted");

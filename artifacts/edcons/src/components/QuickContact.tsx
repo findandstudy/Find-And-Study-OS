@@ -10,6 +10,7 @@ import { useI18n } from "@/hooks/use-i18n";
 import { Mail, Phone, MessageSquare, Send, Loader2, Instagram, AlertTriangle } from "lucide-react";
 import { useLocation } from "wouter";
 import { WhatsAppTemplatePicker } from "@/components/inbox/WhatsAppTemplatePicker";
+import { useAuth } from "@/hooks/use-auth";
 
 const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
@@ -32,8 +33,43 @@ interface QuickContactProps {
   hideWhatsApp?: boolean;
 }
 
+type ChannelAvailability = Record<"email" | "whatsapp" | "instagram", boolean>;
+
+function useAgentChannelAvailability() {
+  const { user } = useAuth();
+  const isAgentSide = ["agent", "sub_agent", "agent_staff"].includes(user?.role || "");
+  const [availability, setAvailability] = useState<ChannelAvailability>({
+    email: false,
+    whatsapp: false,
+    instagram: false,
+  });
+
+  useEffect(() => {
+    if (!isAgentSide) return;
+    let cancelled = false;
+    fetch(`${BASE}/api/agents/me/integrations`, { credentials: "include" })
+      .then(async response => response.ok ? response.json() : Promise.reject(new Error("channel availability unavailable")))
+      .then(data => {
+        if (!cancelled) {
+          setAvailability({
+            email: data?.channelAvailability?.email === true,
+            whatsapp: data?.channelAvailability?.whatsapp === true,
+            instagram: data?.channelAvailability?.instagram === true,
+          });
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setAvailability({ email: false, whatsapp: false, instagram: false });
+      });
+    return () => { cancelled = true; };
+  }, [isAgentSide]);
+
+  return { isAgentSide, availability };
+}
+
 export function QuickContactButtons({ name, email, phone, entityType, entityId, hideEmail, hideWhatsApp }: QuickContactProps) {
   const { t } = useI18n();
+  const { isAgentSide, availability } = useAgentChannelAvailability();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [channel, setChannel] = useState<Channel>("internal");
 
@@ -52,7 +88,7 @@ export function QuickContactButtons({ name, email, phone, entityType, entityId, 
         >
           <MessageSquare className="w-3.5 h-3.5" />
         </button>
-        {email && !hideEmail && (
+        {email && !hideEmail && (!isAgentSide || availability.email) && (
           <button
             onClick={() => openDialog("email")}
             title={t("common.email")}
@@ -61,7 +97,7 @@ export function QuickContactButtons({ name, email, phone, entityType, entityId, 
             <Mail className="w-3.5 h-3.5" />
           </button>
         )}
-        {phone && !hideWhatsApp && (
+        {phone && !hideWhatsApp && (!isAgentSide || availability.whatsapp) && (
           <button
             onClick={() => openDialog("whatsapp")}
             title={t("quickContact.whatsapp")}
@@ -115,6 +151,7 @@ export function QuickContactDialog({
 }) {
   const { toast } = useToast();
   const { t } = useI18n();
+  const { isAgentSide, availability } = useAgentChannelAvailability();
   const [, navigate] = useLocation();
   const [message, setMessage] = useState("");
   const [subject, setSubject] = useState("");
@@ -132,7 +169,7 @@ export function QuickContactDialog({
 
   // Load window status when WhatsApp channel is active and dialog is open
   useEffect(() => {
-    if (!open || channel !== "whatsapp" || !phone) {
+    if (!open || channel !== "whatsapp" || !phone || isAgentSide) {
       setWindowStatus(null);
       return;
     }
@@ -145,7 +182,12 @@ export function QuickContactDialog({
       .then(data => setWindowStatus(data))
       .catch(() => setWindowStatus({ hasConversation: false, isWithin24h: false }))
       .finally(() => setWindowLoading(false));
-  }, [open, channel, entityType, entityId, phone]);
+  }, [open, channel, entityType, entityId, phone, isAgentSide]);
+
+  useEffect(() => {
+    if (!open || !isAgentSide || channel === "internal") return;
+    if (!availability[channel]) setChannel("internal");
+  }, [availability, channel, isAgentSide, open, setChannel]);
 
   const channelMeta = CHANNELS.find(c => c.key === channel)!;
   const channelLabel = t(channelMeta.labelKey);
@@ -197,7 +239,7 @@ export function QuickContactDialog({
             <Button
               size="sm"
               variant="outline"
-              onClick={() => navigate(`/staff/messages?conversation=${conversationId}`)}
+              onClick={() => navigate(`${isAgentSide ? "/agent" : "/staff"}/messages?conversation=${conversationId}`)}
             >
               {t("quickContact.openConversation")}
             </Button>
@@ -233,7 +275,7 @@ export function QuickContactDialog({
       setTplOpen(false);
       onClose();
       if (body?.conversationId) {
-        navigate(`/staff/messages?conversation=${body.conversationId}`);
+        navigate(`${isAgentSide ? "/agent" : "/staff"}/messages?conversation=${body.conversationId}`);
       }
     } finally {
       setTplSending(false);
@@ -258,7 +300,12 @@ export function QuickContactDialog({
             <div>
               <Label className="text-xs text-muted-foreground mb-2 block">{t("quickContact.channel")}</Label>
               <div className="flex gap-2">
-                {CHANNELS.filter(ch => !(ch.key === "email" && hideEmail) && !(ch.key === "whatsapp" && hideWhatsApp)).map(ch => {
+                {CHANNELS.filter(ch => {
+                  if (ch.key === "internal") return true;
+                  if (ch.key === "email" && hideEmail) return false;
+                  if (ch.key === "whatsapp" && hideWhatsApp) return false;
+                  return !isAgentSide || availability[ch.key] === true;
+                }).map(ch => {
                   const disabled = (ch.key === "email" && !email) || (ch.key === "whatsapp" && !phone);
                   return (
                     <Badge

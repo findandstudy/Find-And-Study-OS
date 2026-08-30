@@ -487,7 +487,7 @@ function CreateStaffDialog({ open, onOpenChange, onSuccess }: { open: boolean; o
   return (
     <>
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+      <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{t("teamPage.addStaffTitle")}</DialogTitle>
           <DialogDescription>{t("teamPage.addStaffDescription")}</DialogDescription>
@@ -538,7 +538,7 @@ function CreateStaffDialog({ open, onOpenChange, onSuccess }: { open: boolean; o
             <PermissionsChecklist value={permissions} onChange={setPermissions} />
           </div>
 
-          <div className="flex justify-end gap-2 pt-2">
+          <div className="sticky bottom-0 z-10 -mx-6 -mb-6 flex justify-end gap-2 border-t bg-background px-6 py-4 shadow-[0_-8px_18px_-16px_rgba(0,0,0,0.5)]">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>{t("common.cancel")}</Button>
             <Button type="submit" disabled={saving} className="gap-2">
               {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
@@ -580,7 +580,7 @@ function EditStaffDialog({ open, onOpenChange, staff, onSuccess }: { open: boole
   return (
     <>
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+      <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{t("teamPage.editStaffTitle")}</DialogTitle>
           <DialogDescription>{t("teamPage.editStaffDescription", { name: `${staff.firstName ?? ""} ${staff.lastName ?? ""}`.trim() })}</DialogDescription>
@@ -612,7 +612,7 @@ function EditStaffDialog({ open, onOpenChange, staff, onSuccess }: { open: boole
             <PermissionsChecklist value={permissions} onChange={setPermissions} />
           </div>
 
-          <div className="flex justify-end gap-2 pt-2">
+          <div className="sticky bottom-0 z-10 -mx-6 -mb-6 flex justify-end gap-2 border-t bg-background px-6 py-4 shadow-[0_-8px_18px_-16px_rgba(0,0,0,0.5)]">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>{t("common.cancel")}</Button>
             <Button type="submit" disabled={saving} className="gap-2">
               {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}

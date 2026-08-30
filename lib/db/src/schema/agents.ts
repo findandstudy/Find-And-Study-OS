@@ -1,4 +1,4 @@
-import { pgTable, text, serial, timestamp, integer, real, boolean, index, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, integer, real, boolean, index, uniqueIndex, jsonb } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { usersTable } from "./users";
@@ -8,6 +8,7 @@ export const agentsTable = pgTable("agents", {
   userId: integer("user_id").references(() => usersTable.id, { onDelete: "set null" }),
   parentAgentId: integer("parent_agent_id"),
   agencyCode: text("agency_code"),
+  legacyAgencyCode: text("legacy_agency_code"),
   firstName: text("first_name").notNull(),
   lastName: text("last_name").notNull(),
   email: text("email"),
@@ -25,6 +26,10 @@ export const agentsTable = pgTable("agents", {
   hideServiceFees: boolean("hide_service_fees").notNull().default(false),
   status: text("status").notNull().default("active"),
   accessTier: text("access_tier").notNull().default("full"),
+  planTier: text("plan_tier").notNull().default("standard"),
+  featureOverrides: jsonb("feature_overrides").$type<Record<string, boolean>>().notNull().default({}),
+  primaryBrandColor: text("primary_brand_color").notNull().default("#1D4ED8"),
+  secondaryBrandColor: text("secondary_brand_color").notNull().default("#10B981"),
   commercialActivatedAt: timestamp("commercial_activated_at", { withTimezone: true }),
   logoUrl: text("logo_url"),
   agentIdProofUrl: text("agent_id_proof_url"),
@@ -49,6 +54,7 @@ export const agentsTable = pgTable("agents", {
 }, (table) => [
   index("agents_user_id_idx").on(table.userId),
   index("agents_parent_agent_id_idx").on(table.parentAgentId),
+  index("agents_legacy_agency_code_idx").on(table.legacyAgencyCode),
   index("agents_status_idx").on(table.status),
   index("agents_access_tier_idx").on(table.accessTier),
   uniqueIndex("agents_embed_token_idx").on(table.embedToken),

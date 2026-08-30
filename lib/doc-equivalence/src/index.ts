@@ -172,8 +172,14 @@ export function areEquivalentDocTypes(
   a: string | null | undefined,
   b: string | null | undefined,
 ): boolean {
+  if (!a || !b) return false;
   const ga = getDocEquivalenceGroup(a);
-  if (!ga) return false;
+  // Dynamic catalog types may not be part of the built-in equivalence map.
+  // Exact normalized identity must still fulfill the matching request without
+  // making two different unknown types equivalent.
+  if (!ga) {
+    return canonicalDocTypeLookupKey(String(a)) === canonicalDocTypeLookupKey(String(b));
+  }
   return ga === getDocEquivalenceGroup(b);
 }
 

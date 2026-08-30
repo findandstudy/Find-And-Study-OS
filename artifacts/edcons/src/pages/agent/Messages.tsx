@@ -28,6 +28,7 @@ export default function AgentMessages() {
   const [staffSearch, setStaffSearch] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const deepLinkHandledRef = useRef(false);
 
   const { data: conversationsResp } = useQuery<any>({
     queryKey: ["agent-conversations"],
@@ -63,8 +64,11 @@ export default function AgentMessages() {
   });
 
   const staffContacts: any[] = staffResp?.data || [];
+  const normalizedContactSearch = staffSearch.trim().toLocaleLowerCase();
   const filteredStaff = staffContacts.filter((s: any) =>
-    `${s.firstName} ${s.lastName}`.toLowerCase().includes(staffSearch.toLowerCase())
+    `${s.firstName || ""} ${s.lastName || ""} ${s.email || ""} ${(s.role || "").replace(/_/g, " ")}`
+      .toLocaleLowerCase()
+      .includes(normalizedContactSearch)
   );
 
   const uploadFile = async (file: File) => {
@@ -121,6 +125,22 @@ export default function AgentMessages() {
       toast({ title: t("agentMessages.couldNotStart"), description: err.message, variant: "destructive" });
     }
   }
+
+  useEffect(() => {
+    if (!user || deepLinkHandledRef.current) return;
+    const params = new URLSearchParams(window.location.search);
+    const conversationParam = Number(params.get("conversation"));
+    const recipientParam = Number(params.get("recipient"));
+    if (Number.isInteger(conversationParam) && conversationParam > 0) {
+      deepLinkHandledRef.current = true;
+      setConversationId(conversationParam);
+      return;
+    }
+    if (Number.isInteger(recipientParam) && recipientParam > 0) {
+      deepLinkHandledRef.current = true;
+      void startConversation(recipientParam);
+    }
+  }, [user]);
 
   async function handleSend() {
     if ((!message.trim() && !pendingFile) || !conversationId) return;

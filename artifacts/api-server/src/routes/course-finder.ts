@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { db, programsTable, universitiesTable, wishlistsTable, applicationsTable, commissionsTable, serviceFeesTable, studentsTable, pipelineStagesTable, settingsTable } from "@workspace/db";
+import { db, programsTable, universitiesTable, wishlistsTable, applicationsTable, commissionsTable, serviceFeesTable, studentsTable, pipelineStagesTable, settingsTable, documentsTable } from "@workspace/db";
 import { eq, ilike, sql, and, inArray, isNull, desc, or, notInArray } from "drizzle-orm";
 import { requireAuth, requireRole, requireAgentStaffPermission, logAudit } from "../lib/auth";
 import { STAFF_ROLES, AGENT_ROLES, ADMIN_ROLES, isAgentRole } from "../lib/roles";
@@ -791,7 +791,7 @@ router.get("/course-finder/students", requireAuth, requireAgentStaffPermission("
 });
 
 router.post("/course-finder/apply", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES, "student"), requireAgentStaffPermission("course_finder"), async (req, res): Promise<void> => {
-  const { studentId, programId, notes } = req.body;
+  const { studentId, programId, notes, uploadedDocumentIds: requestedDocumentIds } = req.body;
   const isStudentRole = req.user!.role === "student";
 
   let resolvedStudentId = studentId;
@@ -819,6 +819,21 @@ router.post("/course-finder/apply", requireAuth, requireRole(...STAFF_ROLES, ...
 
   const [student] = await db.select().from(studentsTable).where(eq(studentsTable.id, Number(resolvedStudentId)));
   if (!student) { res.status(404).json({ error: "Student not found" }); return; }
+
+  if (requestedDocumentIds !== undefined && !Array.isArray(requestedDocumentIds)) {
+    res.status(400).json({ error: "uploadedDocumentIds must be an array" });
+    return;
+  }
+  const requestedDocumentIdCount = Array.isArray(requestedDocumentIds) ? requestedDocumentIds.length : 0;
+  const uploadedDocumentIds = Array.from(new Set(
+    (Array.isArray(requestedDocumentIds) ? requestedDocumentIds : [])
+      .map((value: unknown) => Number(value))
+      .filter((value: number) => Number.isInteger(value) && value > 0),
+  ));
+  if (uploadedDocumentIds.length > 50 || uploadedDocumentIds.length !== requestedDocumentIdCount) {
+    res.status(400).json({ error: "uploadedDocumentIds contains invalid or duplicate document ids" });
+    return;
+  }
 
   // Authorization — verify the caller may act on this student. The student
   // self-apply branch above already guarantees ownership; admins are
@@ -861,6 +876,21 @@ router.post("/course-finder/apply", requireAuth, requireRole(...STAFF_ROLES, ...
         return;
       }
     }
+  }
+
+  // Only profile documents belonging to the resolved student may be bound to
+  // this application. This prevents guessed cross-student document ids.
+  const uploadedDocuments = uploadedDocumentIds.length > 0
+    ? await db.select().from(documentsTable).where(and(
+        inArray(documentsTable.id, uploadedDocumentIds),
+        eq(documentsTable.studentId, student.id),
+        isNull(documentsTable.applicationId),
+        isNull(documentsTable.deletedAt),
+      ))
+    : [];
+  if (uploadedDocuments.length !== uploadedDocumentIds.length) {
+    res.status(400).json({ error: "One or more uploaded documents are invalid for this student" });
+    return;
   }
 
   const [program] = await db
@@ -941,6 +971,10 @@ router.post("/course-finder/apply", requireAuth, requireRole(...STAFF_ROLES, ...
     programId: program.id,
     universityId: program.universityId,
     agentId: student.agentId || null,
+    // Preserve the platform ownership lane when an agency-owned student
+    // applies through Course Finder. Agency-internal assignment remains on
+    // students.agency_assigned_to_id and is intentionally not copied here.
+    assignedToId: student.assignedToId || null,
     season: currentYear,
     stage: "inquiry",
     // Authenticated panel Course Finder "apply" = staff/admin (also agents).
@@ -963,6 +997,27 @@ router.post("/course-finder/apply", requireAuth, requireRole(...STAFF_ROLES, ...
     intake: program.intakes || null,
     notes: notes || null,
   }).returning();
+
+  // Keep a reusable profile copy and bind only this request's newly uploaded
+  // records to the application by referencing the same stored object.
+  if (uploadedDocuments.length > 0) {
+    await db.insert(documentsTable).values(uploadedDocuments.map((document) => ({
+      studentId: student.id,
+      applicationId: application.id,
+      name: document.name,
+      type: document.type,
+      status: document.status,
+      fileKey: document.fileKey,
+      fileUrl: document.fileUrl,
+      mimeType: document.mimeType,
+      sizeBytes: document.sizeBytes,
+      extractedData: document.extractedData,
+      confidenceScore: document.confidenceScore,
+      fileData: document.fileData,
+      notes: document.notes,
+      source: "course_finder",
+    })));
+  }
 
   // Portal automation auto-trigger (fire-and-forget — never blocks response).
   maybeEnqueuePortalSubmission({

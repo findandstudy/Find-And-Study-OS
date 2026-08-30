@@ -31,6 +31,7 @@ import {
 import { resolveApplicationCommissionTotal } from "../lib/applicationCommissionTotals";
 import { buildStableSignedStudentPhotoThumbnailPath, parseUniversityApplicationId } from "@workspace/portal-adapters";
 import { recordRequestSpan } from "../lib/requestTelemetry";
+import { canTransitionToPipelineStage } from "../lib/pipelineAudience";
 import { buildFacetFilterInput, loadFacetValue } from "../lib/facetCache";
 import { studentHasServablePhotoSql } from "../lib/studentPhoto";
 import { syncApplicationFinance } from "@workspace/portal-runner";
@@ -1587,6 +1588,17 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, ...AG
     return;
   }
 
+  if (
+    updates.stage !== undefined
+    && !(await canTransitionToPipelineStage("application", String(updates.stage), user.role))
+  ) {
+    res.status(403).json({
+      error: "Your role cannot transition applications to this pipeline stage",
+      code: "PIPELINE_STAGE_TRANSITION_FORBIDDEN",
+    });
+    return;
+  }
+
   if (updates.stage && (await isStageFileUploadMandatory(updates.stage as string))) {
     const targetStage = updates.stage as string;
     const existingDocs = await db.select({ id: applicationStageDocumentsTable.id })
@@ -1956,6 +1968,14 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, ...AG
 
   if (updates.stage !== undefined) {
     const stageStr = String(updates.stage);
+    const [stageMeta] = await db.select({ label: pipelineStagesTable.label })
+      .from(pipelineStagesTable)
+      .where(and(
+        eq(pipelineStagesTable.entityType, "application"),
+        eq(pipelineStagesTable.key, stageStr),
+      ))
+      .limit(1);
+    const stageLabel = stageMeta?.label?.trim() || stageStr;
     const [studentRec3] = await db.select({ firstName: studentsTable.firstName, lastName: studentsTable.lastName, userId: studentsTable.userId }).from(studentsTable).where(eq(studentsTable.id, app.studentId));
     const sName3 = studentRec3 ? `${studentRec3.firstName || ""} ${studentRec3.lastName || ""}`.trim() : "";
     const recipientIds: number[] = [];
@@ -1978,11 +1998,12 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, ...AG
       actorUserId: req.user!.id,
       event: "application.stage_changed",
       title: "Application Status Changed",
-      body: `Application for ${sName3 || "student"} — ${app.universityName || "University"} has moved to "${stageStr}".`,
+      body: `Application for ${sName3 || "student"} — ${app.universityName || "University"} has moved to "${stageLabel}".`,
       actionUrl: `/staff/applications/${app.id}`,
       icon: "ArrowRight",
       recipientUserIds: recipientIds.length > 0 ? recipientIds : undefined,
-      templateVars: { studentName: sName3, universityName: app.universityName || "", programName: app.programName || "", newStage: stageStr },
+      templateVars: { studentName: sName3, universityName: app.universityName || "", programName: app.programName || "", newStage: stageLabel, newStageKey: stageStr },
+      data: { stage: stageStr, stageLabel },
       createdSource: app.createdSource,
     }).catch(() => {});
   }
@@ -2120,6 +2141,13 @@ router.post("/applications/bulk-action", requireAuth, requireRole(...STAFF_ROLES
     await logAudit(user.id, "bulk_assign_applications", "application", undefined, { ids: idsToUpdate, assignedToId }, req.ip);
     res.json({ success: true, updated, skipped }); return;
   } else if (action === "move" && stage) {
+    if (!(await canTransitionToPipelineStage("application", String(stage), user.role))) {
+      res.status(403).json({
+        error: "Your role cannot transition applications to this pipeline stage",
+        code: "PIPELINE_STAGE_TRANSITION_FORBIDDEN",
+      });
+      return;
+    }
     const allApps = await db.select().from(applicationsTable).where(and(inArray(applicationsTable.id, numericIds), isNull(applicationsTable.deletedAt)));
     // Task #269 — bulk move cannot prompt a per-application document
     // selection modal, so it instead SKIPS any application that would need

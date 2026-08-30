@@ -1080,7 +1080,11 @@ router.patch("/agent-applications/:id/assignment", requireAuth, requireRole(...M
     return;
   }
 
-  const [application] = await db.select({ id: agentApplicationsTable.id, status: agentApplicationsTable.status })
+  const [application] = await db.select({
+    id: agentApplicationsTable.id,
+    status: agentApplicationsTable.status,
+    provisionalAgentId: agentApplicationsTable.provisionalAgentId,
+  })
     .from(agentApplicationsTable).where(eq(agentApplicationsTable.id, id));
   if (!application) {
     res.status(404).json({ error: "Application not found" });
@@ -1120,6 +1124,12 @@ router.patch("/agent-applications/:id/assignment", requireAuth, requireRole(...M
     branchId: parsed.data.branchId,
     updatedAt: new Date(),
   }).where(eq(agentApplicationsTable.id, id)).returning();
+  if (application.provisionalAgentId) {
+    await setAgencyStaff(
+      application.provisionalAgentId,
+      parsed.data.assignedStaffId ? [{ userId: parsed.data.assignedStaffId, isPrimary: true }] : [],
+    );
+  }
   await writeAudit({
     userId: req.user!.id,
     action: "agent_application.assignment_changed",
@@ -1245,6 +1255,12 @@ router.patch("/agent-applications/:id/review", requireAuth, requireRole(...MANAG
     return rows;
   });
   if (!updated) { res.status(409).json({ error: "Application state changed or cannot be reviewed" }); return; }
+  if (updated.provisionalAgentId && parsed.data.assignedStaffId !== undefined) {
+    await setAgencyStaff(
+      updated.provisionalAgentId,
+      parsed.data.assignedStaffId ? [{ userId: parsed.data.assignedStaffId, isPrimary: true }] : [],
+    );
+  }
   await writeAudit({ userId: req.user!.id, action: `agent_application.${parsed.data.status}`, resource: "agent_application", resourceId: id, changes: parsed.data, ipAddress: req.ip });
   res.json({ data: updated });
 });
@@ -1404,7 +1420,7 @@ router.post("/agent-applications/:id/approve", requireAuth, requireRole(...MANAG
       }
       const [activatedAgent] = await tx.update(agentsTable).set({
         userId: user.id,
-        agencyCode: sql`COALESCE(${agentsTable.agencyCode}, 'AG-' || LPAD(nextval('agent_agency_code_seq')::text, 6, '0'))`,
+        agencyCode: sql`COALESCE(${agentsTable.agencyCode}, 'FAS-' || TO_CHAR(CURRENT_TIMESTAMP AT TIME ZONE 'UTC', 'YYYYMMDD') || '-' || LPAD(nextval('agent_agency_code_seq')::text, 6, '0'))`,
         firstName: application.firstName,
         lastName: application.lastName,
         email: application.email,

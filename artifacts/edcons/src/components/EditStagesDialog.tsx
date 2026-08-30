@@ -221,6 +221,52 @@ const UPLOAD_PERMISSION_OPTIONS = [
   { value: "everyone", labelKey: "editStages.uploadPermEveryone" },
 ];
 
+const DEFAULT_STAGE_AUDIENCE = ["super_admin", "admin", "staff", "agent", "sub_agent", "agent_staff"];
+const STAGE_AUDIENCE_OPTIONS = [
+  { value: "super_admin", label: "Super Admin" },
+  { value: "admin", label: "Admin / Manager" },
+  { value: "staff", label: "Staff" },
+  { value: "agent", label: "Agent" },
+  { value: "sub_agent", label: "Sub-Agent" },
+  { value: "agent_staff", label: "Agency Team Members" },
+];
+const MESSAGE_ORIGIN_OPTIONS = [
+  { value: "direct", label: "Direct" },
+  { value: "agent", label: "Agent" },
+  { value: "sub_agent", label: "Sub-Agent" },
+] as const;
+
+function MultiCheckGrid({
+  values,
+  options,
+  onChange,
+}: {
+  values: string[];
+  options: ReadonlyArray<{ value: string; label: string }>;
+  onChange: (values: string[]) => void;
+}) {
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+      {options.map((option) => {
+        const checked = values.includes(option.value);
+        return (
+          <label key={option.value} className="flex items-center gap-2 rounded-lg border px-3 py-2 cursor-pointer hover:bg-muted/40">
+            <input
+              type="checkbox"
+              checked={checked}
+              onChange={() => onChange(checked
+                ? values.filter((value) => value !== option.value)
+                : [...values, option.value])}
+              className="h-4 w-4 accent-primary"
+            />
+            <span className="text-sm">{option.label}</span>
+          </label>
+        );
+      })}
+    </div>
+  );
+}
+
 const FINANCE_STATUS_OPTIONS = [
   { value: "auto", labelKey: "editStages.financeAuto" },
   { value: "potential", labelKey: "editStages.financePotential" },
@@ -367,6 +413,28 @@ function StageEditForm({
         />
       </FormSection>
 
+      <FormSection
+        title="Stage audience"
+        description="Control who can see this stage and, separately, who may move a record into it."
+      >
+        <div className="space-y-2">
+          <Label className="text-sm font-medium">Who can view this stage?</Label>
+          <MultiCheckGrid
+            values={stage.visibleToRoles ?? DEFAULT_STAGE_AUDIENCE}
+            options={STAGE_AUDIENCE_OPTIONS}
+            onChange={(visibleToRoles) => onChange({ ...stage, visibleToRoles })}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label className="text-sm font-medium">Who can transition records to this stage?</Label>
+          <MultiCheckGrid
+            values={stage.transitionAllowedRoles ?? DEFAULT_STAGE_AUDIENCE}
+            options={STAGE_AUDIENCE_OPTIONS}
+            onChange={(transitionAllowedRoles) => onChange({ ...stage, transitionAllowedRoles })}
+          />
+        </div>
+      </FormSection>
+
       <FormSection title={t("editStages.sectionFileAttachments")}>
         <RadioGroup
           label={t("editStages.canAttachFile")}
@@ -423,6 +491,7 @@ function StageEditForm({
                 ?? whatsappAccounts.find((account) => account.isDefault)?.id
                 ?? whatsappAccounts[0]?.id
                 ?? null,
+              originTypes: stage.automaticMessage?.originTypes ?? ["direct"],
             } : null,
           })}
         />
@@ -484,6 +553,21 @@ function StageEditForm({
               {!automaticMessageOptionsLoading && whatsappAccounts.length === 0 && (
                 <p className="text-[11px] text-destructive">{t("editStages.automaticMessageNoAccounts")}</p>
               )}
+            </div>
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">Send for record origins</Label>
+              <MultiCheckGrid
+                values={stage.automaticMessage.originTypes ?? ["direct"]}
+                options={MESSAGE_ORIGIN_OPTIONS}
+                onChange={(originTypes) => onChange({
+                  ...stage,
+                  automaticMessage: {
+                    ...stage.automaticMessage!,
+                    originTypes: originTypes as Array<"direct" | "agent" | "sub_agent">,
+                  },
+                })}
+              />
+              <p className="text-[11px] text-muted-foreground">Direct is the default. Agent and Sub-Agent records are included only when selected.</p>
             </div>
             <p className="text-[11px] text-muted-foreground leading-relaxed">
               {t("editStages.automaticMessageOnceHint")}
@@ -714,6 +798,8 @@ export function EditStagesDialog({ open, onClose, stages, onSave, isSaving, enti
       serviceFeeFinanceStatus: null,
       autoCancelSiblingsOnWon: false,
       automaticMessage: null,
+      visibleToRoles: [...DEFAULT_STAGE_AUDIENCE],
+      transitionAllowedRoles: [...DEFAULT_STAGE_AUDIENCE],
     }]);
     setEditIndex(localStages.length);
   }
@@ -765,6 +851,13 @@ export function EditStagesDialog({ open, onClose, stages, onSave, isSaving, enti
     ));
     if (incompleteAutomaticMessage) {
       setError(t("editStages.automaticMessageRequired", { stage: incompleteAutomaticMessage.label }));
+      return;
+    }
+    const automaticMessageWithoutOrigin = localStages.find((stage) => (
+      stage.automaticMessage?.enabled && (stage.automaticMessage.originTypes?.length ?? 0) === 0
+    ));
+    if (automaticMessageWithoutOrigin) {
+      setError(`Select at least one record origin for ${automaticMessageWithoutOrigin.label}.`);
       return;
     }
     try {

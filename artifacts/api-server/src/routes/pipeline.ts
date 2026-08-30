@@ -11,6 +11,10 @@ import { and, asc, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import { requireAuth, requireRole } from "../lib/auth";
 import { STAFF_ROLES, AGENT_ROLES } from "../lib/roles";
 import { clearStageFinanceCache } from "../lib/stageFinance";
+import {
+  normalizeStageAudienceRoles,
+  stageAudienceAllows,
+} from "../lib/pipelineAudience";
 
 const router: IRouter = Router();
 
@@ -378,6 +382,12 @@ router.get("/pipeline-stages/:entityType", requireAuth, requireRole(...STAFF_ROL
     }
   }
 
+  const includeHidden = req.query.includeHidden === "1"
+    && (MANAGER_ROLES as readonly string[]).includes(req.user!.role);
+  if (!includeHidden) {
+    stages = stages.filter((stage) => stageAudienceAllows(stage.visibleToRoles, req.user!.role));
+  }
+
   if (entityType === "application") {
     const keyById = new Map(stages.map((stage) => [stage.id, stage.key]));
     res.json(stages.map((stage) => ({
@@ -496,6 +506,12 @@ router.put("/pipeline-stages/:entityType", requireAuth, requireRole(...MANAGER_R
       channelAccountId: Number.isSafeInteger(channelAccountId) && channelAccountId > 0
         ? channelAccountId
         : null,
+      originTypes: Array.from(new Set(
+        (Array.isArray(raw.originTypes) ? raw.originTypes : ["direct"])
+          .filter((origin: unknown): origin is "direct" | "agent" | "sub_agent" => (
+            origin === "direct" || origin === "agent" || origin === "sub_agent"
+          )),
+      )),
     };
   });
   const invalidAutomaticMessageIndex = requestedAutomaticMessages.findIndex(
@@ -584,6 +600,8 @@ router.put("/pipeline-stages/:entityType", requireAuth, requireRole(...MANAGER_R
           serviceFeeFinanceStatus: entityType === "application" ? normFinance(s.serviceFeeFinanceStatus) : null,
           autoCancelSiblingsOnWon: entityType === "application" && !!s.autoCancelSiblingsOnWon,
           automaticMessage: requestedAutomaticMessages[i],
+          visibleToRoles: normalizeStageAudienceRoles(s.visibleToRoles),
+          transitionAllowedRoles: normalizeStageAudienceRoles(s.transitionAllowedRoles),
           actions: entityType === "application"
             ? normActions(
                 s.actions,

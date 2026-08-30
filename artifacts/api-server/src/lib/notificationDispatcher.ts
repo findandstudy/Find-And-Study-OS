@@ -1,11 +1,12 @@
-import { db, notificationRulesTable, notificationsTable, usersTable, integrationsTable, settingsTable } from "@workspace/db";
-import { eq, and, inArray } from "drizzle-orm";
-import { sendEmail, buildNotificationEmail } from "./email";
+import { db, notificationRulesTable, notificationsTable, usersTable, integrationsTable, settingsTable, studentsTable, agentsTable, agentIntegrationsTable } from "@workspace/db";
+import { eq, and, inArray, isNull } from "drizzle-orm";
+import { sendEmail, sendTenantEmail, buildNotificationEmail, type TenantSmtpConfig } from "./email";
 import { notificationBus } from "./notificationBus";
 import { decryptConfig } from "./encryption";
 import { sendWhatsAppText, type WhatsAppConfig } from "./inbox/channels/whatsapp";
 import { invalidateNotificationCounts } from "./notificationCountCache";
 import { notificationPriority } from "./notificationPriority";
+import { resolveAgentFeatures } from "./agentFeatures";
 
 // ---------------------------------------------------------------------------
 // Cached settings helper — suppress_automation_app_notifications
@@ -181,6 +182,77 @@ async function getWhatsAppConfig(): Promise<WhatsAppConfig | null> {
   }
 }
 
+async function getStudentTenantSmtp(userId: number): Promise<TenantSmtpConfig | null> {
+  const [owned] = await db.select({
+    agentId: studentsTable.agentId,
+    companyName: agentsTable.companyName,
+    businessName: agentsTable.businessName,
+    planTier: agentsTable.planTier,
+    featureOverrides: agentsTable.featureOverrides,
+  })
+    .from(studentsTable)
+    .innerJoin(agentsTable, eq(studentsTable.agentId, agentsTable.id))
+    .where(and(
+      eq(studentsTable.userId, userId),
+      isNull(studentsTable.deletedAt),
+      isNull(agentsTable.deletedAt),
+      eq(agentsTable.status, "active"),
+    ))
+    .limit(1);
+  if (!owned?.agentId || !resolveAgentFeatures(owned.planTier, owned.featureOverrides).email_integration) {
+    return null;
+  }
+  const [integration] = await db.select().from(agentIntegrationsTable).where(and(
+    eq(agentIntegrationsTable.agentId, owned.agentId),
+    eq(agentIntegrationsTable.kind, "email"),
+    eq(agentIntegrationsTable.isEnabled, true),
+  )).limit(1);
+  if (!integration) return null;
+  const config = decryptConfig((integration.config as Record<string, any>) || {});
+  if (!config.host || !config.username || !config.password) return null;
+  return {
+    host: String(config.host),
+    port: Number(config.port) || 587,
+    username: String(config.username),
+    password: String(config.password),
+    fromEmail: String(config.fromEmail || config.username),
+    fromName: String(config.fromName || owned.companyName || owned.businessName || "Agency"),
+  };
+}
+
+async function getStudentTenantWhatsApp(userId: number): Promise<WhatsAppConfig | null> {
+  const [owned] = await db.select({
+    agentId: studentsTable.agentId,
+    planTier: agentsTable.planTier,
+    featureOverrides: agentsTable.featureOverrides,
+  })
+    .from(studentsTable)
+    .innerJoin(agentsTable, eq(studentsTable.agentId, agentsTable.id))
+    .where(and(
+      eq(studentsTable.userId, userId),
+      isNull(studentsTable.deletedAt),
+      isNull(agentsTable.deletedAt),
+      eq(agentsTable.status, "active"),
+    ))
+    .limit(1);
+  if (!owned?.agentId || !resolveAgentFeatures(owned.planTier, owned.featureOverrides).whatsapp_integration) {
+    return null;
+  }
+  const [integration] = await db.select().from(agentIntegrationsTable).where(and(
+    eq(agentIntegrationsTable.agentId, owned.agentId),
+    eq(agentIntegrationsTable.kind, "whatsapp"),
+    eq(agentIntegrationsTable.isEnabled, true),
+  )).limit(1);
+  if (!integration) return null;
+  const config = decryptConfig((integration.config as Record<string, any>) || {});
+  if (!config.phoneNumberId || !config.accessToken) return null;
+  return {
+    phoneNumberId: String(config.phoneNumberId),
+    accessToken: String(config.accessToken),
+    businessAccountId: config.businessAccountId ? String(config.businessAccountId) : undefined,
+  };
+}
+
 export async function dispatchNotification(ctx: DispatchContext): Promise<void> {
   try {
     if (ctx.event.startsWith("application.") && ctx.createdSource === "automation") {
@@ -276,7 +348,7 @@ export async function dispatchNotification(ctx: DispatchContext): Promise<void> 
     if (channels.includes("email")) {
       (async () => {
         try {
-          const users = await db.select({ id: usersTable.id, email: usersTable.email, language: usersTable.language })
+          const users = await db.select({ id: usersTable.id, email: usersTable.email, language: usersTable.language, role: usersTable.role })
             .from(usersTable)
             .where(and(
               inArray(usersTable.id, userIds),
@@ -303,7 +375,12 @@ export async function dispatchNotification(ctx: DispatchContext): Promise<void> 
                   subtitle: "Notification",
                 });
               }
-              await sendEmail(user.email, emailContent);
+              const tenantSmtp = user.role === "student" ? await getStudentTenantSmtp(user.id) : null;
+              if (tenantSmtp) {
+                await sendTenantEmail(tenantSmtp, user.email, emailContent);
+              } else {
+                await sendEmail(user.email, emailContent);
+              }
             } catch (err) {
               console.error("[NOTIFY] Failed to send user email:", err);
             }
@@ -323,7 +400,7 @@ export async function dispatchNotification(ctx: DispatchContext): Promise<void> 
       (async () => {
         try {
           const waUsers = await db
-            .select({ id: usersTable.id, phoneE164: usersTable.phoneE164, language: usersTable.language })
+            .select({ id: usersTable.id, phoneE164: usersTable.phoneE164, language: usersTable.language, role: usersTable.role })
             .from(usersTable)
             .where(and(
               inArray(usersTable.id, userIds),
@@ -331,28 +408,29 @@ export async function dispatchNotification(ctx: DispatchContext): Promise<void> 
             ));
           const recipients = waUsers.filter(u => u.phoneE164);
           if (recipients.length > 0) {
-            const config = await getWhatsAppConfig();
-            if (!config) {
-              console.error(`[NOTIFY] WhatsApp channel enabled for ${ctx.event} but no integration configured`);
-            } else {
-              for (const user of recipients) {
-                try {
-                  const localized = resolveTemplate(template, user.language);
-                  const rawBody = localized?.body
-                    ? replaceVars(localized.body, vars)
-                    : ctx.body;
-                  const text = stripHtml(rawBody) || ctx.title;
-                  const result = await sendWhatsAppText({
-                    config,
-                    toPhoneE164: user.phoneE164!,
-                    text,
-                  });
-                  if (!result.ok) {
-                    console.error(`[NOTIFY] WhatsApp send failed to user ${user.id}: ${result.error}`);
-                  }
-                } catch (err) {
-                  console.error(`[NOTIFY] WhatsApp send error to user ${user.id}:`, err);
+            for (const user of recipients) {
+              try {
+                const tenantConfig = user.role === "student" ? await getStudentTenantWhatsApp(user.id) : null;
+                const config = tenantConfig || await getWhatsAppConfig();
+                if (!config) {
+                  console.error(`[NOTIFY] WhatsApp channel enabled for ${ctx.event} but no integration configured`);
+                  continue;
                 }
+                const localized = resolveTemplate(template, user.language);
+                const rawBody = localized?.body
+                  ? replaceVars(localized.body, vars)
+                  : ctx.body;
+                const text = stripHtml(rawBody) || ctx.title;
+                const result = await sendWhatsAppText({
+                  config,
+                  toPhoneE164: user.phoneE164!,
+                  text,
+                });
+                if (!result.ok) {
+                  console.error(`[NOTIFY] WhatsApp send failed to user ${user.id}: ${result.error}`);
+                }
+              } catch (err) {
+                console.error(`[NOTIFY] WhatsApp send error to user ${user.id}:`, err);
               }
             }
           }

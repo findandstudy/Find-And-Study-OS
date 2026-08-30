@@ -18,6 +18,7 @@ export interface StageAutomaticMessage {
   enabled: boolean;
   templateId: number | null;
   channelAccountId: number | null;
+  originTypes: Array<"direct" | "agent" | "sub_agent">;
 }
 
 export interface PipelineStage {
@@ -45,6 +46,8 @@ export interface PipelineStage {
   serviceFeeFinanceStatus?: string | null;
   autoCancelSiblingsOnWon?: boolean;
   automaticMessage?: StageAutomaticMessage | null;
+  visibleToRoles?: string[];
+  transitionAllowedRoles?: string[];
   // Task #167 — up to 2 admin-defined action buttons (application only).
   actions?: StageAction[];
   // Stage-level target used after a configured action is completed.
@@ -56,8 +59,9 @@ export interface PipelineStage {
   missingDocsFulfilledTargetStageKey?: string | null;
 }
 
-async function fetchStages(entityType: string): Promise<PipelineStage[]> {
-  const r = await fetch(`${BASE_URL}/api/pipeline-stages/${entityType}`, { credentials: "include" });
+async function fetchStages(entityType: string, includeHidden: boolean): Promise<PipelineStage[]> {
+  const suffix = includeHidden ? "?includeHidden=1" : "";
+  const r = await fetch(`${BASE_URL}/api/pipeline-stages/${entityType}${suffix}`, { credentials: "include" });
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
   return r.json();
 }
@@ -91,12 +95,12 @@ async function saveStages(entityType: string, stages: PipelineStage[]): Promise<
   return { stages: body.stages || [], warnings: Array.isArray(body.warnings) ? body.warnings : [] };
 }
 
-export function usePipelineStages(entityType: string) {
+export function usePipelineStages(entityType: string, includeHidden = false) {
   const queryClient = useQueryClient();
 
   const query = useQuery<PipelineStage[]>({
-    queryKey: ["pipeline-stages", entityType],
-    queryFn: () => fetchStages(entityType),
+    queryKey: ["pipeline-stages", entityType, includeHidden],
+    queryFn: () => fetchStages(entityType, includeHidden),
     staleTime: 30_000,
     refetchOnWindowFocus: true,
   });
@@ -109,7 +113,7 @@ export function usePipelineStages(entityType: string) {
   const mutation = useMutation({
     mutationFn: (stages: PipelineStage[]) => saveStages(entityType, stages),
     onSuccess: (data) => {
-      queryClient.setQueryData(["pipeline-stages", entityType], data.stages);
+      queryClient.setQueryData(["pipeline-stages", entityType, includeHidden], data.stages);
     },
   });
 

@@ -41,6 +41,7 @@ import { getLeadSourceLabel } from "@/lib/leadSourceLabel";
 import { usePipelineStages } from "@/hooks/use-pipeline-stages";
 import { humanizePipelineStageKey } from "@/lib/pipelineStageLabel";
 import { invalidateAssignmentWorkspaceQueries, invalidateFollowUpWorkspaceQueries } from "@/lib/workspaceQueryInvalidation";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 
 
 const SOURCES = ["website", "referral", "social_media", "walk_in", "partner", "other"];
@@ -112,6 +113,15 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
   const canChangeAssigned = !!isAdmin || hasPermission("records.change_assigned");
   const isStaffUser = user && ["super_admin", "admin", "manager", "staff"].includes(user.role);
   const isAgent = basePath === "/agent";
+  const { data: agencyProfile } = useQuery<any>({
+    queryKey: ["/api/agents/me", "lead-document-capability"],
+    queryFn: () => customFetch("/api/agents/me"),
+    enabled: isAgent,
+    staleTime: 5 * 60_000,
+  });
+  const canUploadLeadDocuments = Boolean(isStaffUser || (
+    isAgent && agencyProfile?.effectiveFeatures?.lead_document_upload === true
+  ));
   const [noteTab, setNoteTab] = useState<"general" | "internal">("general");
 
   // Lead stage change is governed by the leads.change_stage permission for all
@@ -184,7 +194,7 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
   const { data: catalogResp } = useQuery<any>({
     queryKey: ["catalog-options"],
     queryFn: () => customFetch("/api/catalog-options"),
-    enabled: !!isStaffUser,
+    enabled: canUploadLeadDocuments,
     staleTime: 5 * 60_000,
   });
   const docCatalogOptions = useMemo(() => {
@@ -531,7 +541,7 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
 
         {mainTab === "documents" ? (
           <div className="space-y-3">
-            {isStaffUser && (
+            {canUploadLeadDocuments && (
               <div className="flex justify-end">
                 <Button size="sm" onClick={() => setUploadOpen(true)} data-testid="lead-doc-add">
                   <Plus className="w-4 h-4 mr-1.5" /> {t("leadDetailPage.addDocument")}
@@ -1035,7 +1045,7 @@ export default function LeadDetail({ id, basePath = "/staff" }: Props) {
           leadId={id}
         />
       )}
-      {isStaffUser && (
+      {canUploadLeadDocuments && (
         <LeadDocUploadDialog
           open={uploadOpen}
           onClose={() => setUploadOpen(false)}
@@ -1587,16 +1597,16 @@ function LeadDocUploadDialog({ open, onClose, leadId, docOptions, onUploaded }: 
             {docOptions.length === 0 ? (
               <p className="text-xs text-muted-foreground">{t("leadDetailPage.noDocTypes")}</p>
             ) : (
-              <Select value={docType} onValueChange={setDocType} disabled={uploading}>
-                <SelectTrigger data-testid="lead-doc-type-select">
-                  <SelectValue placeholder={t("leadDetailPage.selectDocType")} />
-                </SelectTrigger>
-                <SelectContent>
-                  {docOptions.map((o) => (
-                    <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <SearchableSelect
+                value={docType}
+                onValueChange={setDocType}
+                options={docOptions}
+                placeholder={t("leadDetailPage.selectDocType")}
+                searchPlaceholder="Search document types..."
+                disabled={uploading}
+                minDropdownWidth={320}
+                className="mt-1"
+              />
             )}
           </div>
           <div className="space-y-1.5">

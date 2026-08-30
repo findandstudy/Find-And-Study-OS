@@ -159,10 +159,11 @@ test("credentialed CORS is fail-closed in production", () => {
 test("generated form previews execute in sandboxed iframes", () => {
   for (const source of [staffSettingsSource, agentAccountSource]) {
     assert.doesNotMatch(source, /dangerouslySetInnerHTML=\{\{\s*__html:\s*formCode/);
-    assert.match(source, /srcDoc=\{formCode\}/);
     assert.match(source, /sandbox=""/);
     assert.match(source, /referrerPolicy="no-referrer"/);
   }
+  assert.match(staffSettingsSource, /srcDoc=\{formCode\}/);
+  assert.match(agentAccountSource, /\/api\/agents\/me\/web-to-lead-preview/);
 });
 
 test("permanent conversation deletion is admin-only and explicitly confirmed", () => {

@@ -1,6 +1,7 @@
 import {
   db,
   applicationsTable,
+  applicationStageDocumentsTable,
   documentsTable,
   programsTable,
 } from "@workspace/db";
@@ -178,6 +179,21 @@ export async function reEvaluateMandatoryDocs(
     .where(eq(applicationsTable.id, applicationId));
 
   if (!app || app.stage !== "missing_docs") return false;
+
+  // Generic program requirements must not close independent catalog requests
+  // created by a pipeline action. Those rows are fulfilled one by one by the
+  // application-scoped fulfillment hook.
+  const openStageRequests = await db
+    .select({ id: applicationStageDocumentsTable.id })
+    .from(applicationStageDocumentsTable)
+    .where(and(
+      eq(applicationStageDocumentsTable.applicationId, applicationId),
+      eq(applicationStageDocumentsTable.isMissingDocNote, true),
+      eq(applicationStageDocumentsTable.isCustom, false),
+      isNull(applicationStageDocumentsTable.fulfilledAt),
+    ))
+    .limit(1);
+  if (openStageRequests.length > 0) return false;
 
   const { missing } = await checkMandatoryDocsForStudent(
     app.programId,

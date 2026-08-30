@@ -1,12 +1,14 @@
 import { db, leadAssignmentRulesTable, leadsTable, studentsTable, applicationsTable, universitiesTable, type LeadAssignmentRule } from "@workspace/db";
 import { and, asc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import { logAudit } from "./auth";
+import { resolveAgencyPlatformAssignee } from "./agencyStaff";
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 type DbLike = typeof db | Tx;
 
 interface LeadLike {
   id: number;
+  agentId?: number | null;
   source?: string | null;
   nationality?: string | null;
   country?: string | null;
@@ -137,6 +139,31 @@ async function pickStaffAtomic(rule: LeadAssignmentRule): Promise<number | null>
 export async function applyLeadAssignmentRules(lead: LeadLike & { assignedToId?: number | null }, ipAddress?: string): Promise<number | null> {
   try {
     if (lead.assignedToId) return null;
+
+    // Agency ownership has priority over generic round-robin rules. The value
+    // is written only to the platform lane; the agency's internal assignee is
+    // stored separately in agencyAssignedToId.
+    if (lead.agentId) {
+      const platformStaffId = await resolveAgencyPlatformAssignee(lead.agentId);
+      if (platformStaffId) {
+        const [assigned] = await db.update(leadsTable)
+          .set({ assignedToId: platformStaffId })
+          .where(and(eq(leadsTable.id, lead.id), isNull(leadsTable.assignedToId)))
+          .returning({ convertedStudentId: leadsTable.convertedStudentId });
+        if (assigned) {
+          logAudit(null, "lead.agency_contact_auto_assigned", "lead", lead.id, { agentId: lead.agentId, staffId: platformStaffId }, ipAddress);
+          await cascadeLeadAssignment({
+            leadId: lead.id,
+            convertedStudentId: assigned.convertedStudentId,
+            newAssignedToId: platformStaffId,
+            actorUserId: null,
+            ipAddress,
+            nullFillOnly: true,
+          });
+          return platformStaffId;
+        }
+      }
+    }
 
     const rule = await findMatchingLeadAssignmentRule(lead);
     if (rule) {

@@ -4,7 +4,8 @@ import { eq, and, inArray, desc, isNull, isNotNull, or } from "drizzle-orm";
 import { requireAuth, requireRole, requireAgentStaffPermission, logAudit } from "../lib/auth";
 import { STAFF_ROLES, AGENT_ROLES, ADMIN_ROLES, isAgentRole } from "../lib/roles";
 import { assertCanAccessStudent } from "../lib/studentAccess";
-import { getAgentVisibleIds } from "../lib/agentVisibility";
+import { getAgentRecord, getAgentVisibleIds } from "../lib/agentVisibility";
+import { resolveAgentFeatures } from "../lib/agentFeatures";
 import { dispatchNotification } from "../lib/notificationDispatcher";
 import { validateStudentDocumentFile, validateStudentDocumentBuffer, sanitizeFileName, isPdf } from "../lib/fileUploadValidation";
 import { buildDocNameFromParts, normalizeDocumentTypeKey } from "../lib/docNaming";
@@ -168,6 +169,11 @@ router.post("/documents", requireAuth, requireAgentStaffPermission("documents"),
         }
       }
     } else if (isAgentRole(user.role)) {
+      const agent = await getAgentRecord(user.id, user.role);
+      if (!agent || !resolveAgentFeatures(agent.planTier, agent.featureOverrides).lead_document_upload) {
+        res.status(403).json({ error: "Document uploads are not enabled for this agency", code: "AGENT_FEATURE_DISABLED" });
+        return;
+      }
       if (studentId) {
         const visibleIds = await getAgentVisibleIds(user.id, user.role);
         const [student] = await db.select().from(studentsTable).where(eq(studentsTable.id, studentId));

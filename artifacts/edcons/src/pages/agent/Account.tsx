@@ -18,6 +18,7 @@ import {
   Loader2, Phone, Mail, TrendingUp, MapPin,
   Upload, X, FileText, Download, Image as ImageIcon, Eye,
   Camera, Lock, KeyRound, LogOut, Code, Copy, ExternalLink,
+  Plug,
 } from "lucide-react";
 import { CountryFlag } from "@/components/CountryFlag";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
@@ -257,7 +258,13 @@ export default function AgentAccount() {
             {[
               { value: "profile", label: "Profile", icon: User },
               { value: "agency", label: "Agency", icon: Briefcase },
-              { value: "web-to-lead", label: "Web to Lead", icon: Code },
+              ...(agentProfile?.effectiveFeatures?.web_to_lead !== false
+                ? [{ value: "web-to-lead", label: "Web to Lead", icon: Code }]
+                : []),
+              ...(["agent", "sub_agent"].includes(user?.role || "")
+                && (agentProfile?.effectiveFeatures?.email_integration || agentProfile?.effectiveFeatures?.whatsapp_integration)
+                ? [{ value: "integrations", label: "Integrations", icon: Plug }]
+                : []),
               { value: "language", label: "Language", icon: Globe },
               { value: "security", label: "Security", icon: Shield },
             ].map(tab => (
@@ -414,7 +421,11 @@ export default function AgentAccount() {
 
           {/* ── Web to Lead Tab ── */}
           <TabsContent value="web-to-lead" className="pt-6">
-            <WebToLeadTab />
+            <WebToLeadTab agentProfile={agentProfile} />
+          </TabsContent>
+
+          <TabsContent value="integrations" className="pt-6">
+            <AgencyIntegrationsTab features={agentProfile?.effectiveFeatures || {}} />
           </TabsContent>
 
           {/* ── Language Tab ── */}
@@ -495,11 +506,15 @@ function AgencyTab({ agentProfile, agentLoading, isStaff = false }: { agentProfi
   const { toast } = useToast();
   const qc = useQueryClient();
   const [businessName, setBusinessName] = useState("");
+  const [primaryBrandColor, setPrimaryBrandColor] = useState("#1D4ED8");
+  const [secondaryBrandColor, setSecondaryBrandColor] = useState("#10B981");
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (agentProfile) {
       setBusinessName(agentProfile.businessName || "");
+      setPrimaryBrandColor(agentProfile.primaryBrandColor || "#1D4ED8");
+      setSecondaryBrandColor(agentProfile.secondaryBrandColor || "#10B981");
     }
   }, [agentProfile]);
 
@@ -509,7 +524,12 @@ function AgencyTab({ agentProfile, agentLoading, isStaff = false }: { agentProfi
       await customFetch("/api/agents/me", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ businessName }),
+        body: JSON.stringify({
+          businessName,
+          ...(agentProfile?.effectiveFeatures?.custom_branding
+            ? { primaryBrandColor, secondaryBrandColor }
+            : {}),
+        }),
       });
       await qc.invalidateQueries({ queryKey: ["agent-me"] });
       toast({ title: "Agency updated", description: "Your business name has been saved." });
@@ -611,6 +631,23 @@ function AgencyTab({ agentProfile, agentLoading, isStaff = false }: { agentProfi
               </p>
             </div>
 
+            {agentProfile?.effectiveFeatures?.custom_branding && <div className="grid sm:grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium text-muted-foreground">Primary brand color</Label>
+                <div className="flex gap-2">
+                  <input type="color" value={primaryBrandColor} onChange={e => !isStaff && setPrimaryBrandColor(e.target.value.toUpperCase())} disabled={isStaff} className="h-10 w-12 rounded border p-1" />
+                  <Input value={primaryBrandColor} onChange={e => !isStaff && setPrimaryBrandColor(e.target.value.toUpperCase())} disabled={isStaff} className="h-10 font-mono" />
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium text-muted-foreground">Secondary brand color</Label>
+                <div className="flex gap-2">
+                  <input type="color" value={secondaryBrandColor} onChange={e => !isStaff && setSecondaryBrandColor(e.target.value.toUpperCase())} disabled={isStaff} className="h-10 w-12 rounded border p-1" />
+                  <Input value={secondaryBrandColor} onChange={e => !isStaff && setSecondaryBrandColor(e.target.value.toUpperCase())} disabled={isStaff} className="h-10 font-mono" />
+                </div>
+              </div>
+            </div>}
+
             {!isStaff && (
               <div className="flex justify-end pt-3 border-t border-border/50">
                 <Button onClick={handleSaveAgency} disabled={saving} size="sm" className="gap-2 px-6">
@@ -647,7 +684,7 @@ function AgencyTab({ agentProfile, agentLoading, isStaff = false }: { agentProfi
 
       <Card className="border shadow-sm p-6">
         <h3 className="font-display font-semibold text-base mb-5">Documents</h3>
-        <div className="grid sm:grid-cols-3 gap-5">
+        <div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-5">
           <DocumentUploader
             label="Logo for Agent Panel"
             accept="image/*"
@@ -655,12 +692,19 @@ function AgencyTab({ agentProfile, agentLoading, isStaff = false }: { agentProfi
             onUpload={file => handleDocUpload("logoUrl", file)}
             onRemove={() => handleDocRemove("logoUrl")}
             icon={<ImageIcon className="w-5 h-5" />}
+            previewAsImage
+            readOnly={isStaff}
+          />
+          <DocumentViewer
+            label="Representative ID"
+            value={agentProfile.agentIdProofUrl}
           />
           <DocumentViewer
             label="Contract"
             value={agentProfile.contractUrl}
             startDate={agentProfile.contractStartDate}
             endDate={agentProfile.contractEndDate}
+            adminOnly
           />
           <DocumentUploader
             label="Business Certificate"
@@ -669,6 +713,7 @@ function AgencyTab({ agentProfile, agentLoading, isStaff = false }: { agentProfi
             onUpload={file => handleDocUpload("businessCertUrl", file)}
             onRemove={() => handleDocRemove("businessCertUrl")}
             icon={<FileText className="w-5 h-5" />}
+            readOnly={isStaff}
           />
         </div>
       </Card>
@@ -677,11 +722,13 @@ function AgencyTab({ agentProfile, agentLoading, isStaff = false }: { agentProfi
 }
 
 function DocumentUploader({
-  label, accept, value, onUpload, onRemove, icon,
+  label, accept, value, onUpload, onRemove, icon, previewAsImage = false, readOnly = false,
 }: {
   label: string; accept: string; value?: string | null;
   onUpload: (file: File) => void; onRemove: () => void;
   icon: React.ReactNode;
+  previewAsImage?: boolean;
+  readOnly?: boolean;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
@@ -701,30 +748,33 @@ function DocumentUploader({
       <div className="relative w-full aspect-[4/3] rounded-lg border-2 border-dashed border-border/60 hover:border-primary/40 transition-colors flex items-center justify-center overflow-hidden bg-secondary/30">
         {value ? (
           <>
-            {accept.includes("image") && !value.match(/\.pdf$/i) ? (
+            {previewAsImage ? (
               <img src={value} alt={label} className="max-h-full max-w-full object-contain p-2" />
             ) : (
               <div className="flex flex-col items-center gap-1.5 text-primary">
                 <FileText className="w-7 h-7" />
-                <span className="text-[10px] font-medium">Uploaded</span>
               </div>
             )}
-            <div className="absolute top-1.5 right-1.5 flex gap-1">
-              <a href={value} target="_blank" rel="noopener noreferrer"
-                className="w-6 h-6 rounded-full bg-primary text-white flex items-center justify-center hover:bg-primary/90 shadow-sm">
-                <Eye className="w-3 h-3" />
-              </a>
+            <a
+              href={value}
+              target="_blank"
+              rel="noopener noreferrer"
+              download
+              aria-label={`Download ${label}`}
+              className="absolute inset-0 z-0 cursor-pointer"
+            />
+            {!readOnly && <div className="absolute top-1.5 right-1.5 z-10 flex gap-1">
               <button onClick={onRemove}
                 className="w-6 h-6 rounded-full bg-destructive text-white flex items-center justify-center hover:bg-destructive/90 shadow-sm">
                 <X className="w-3 h-3" />
               </button>
-            </div>
+            </div>}
           </>
         ) : (
-          <button onClick={() => inputRef.current?.click()} disabled={uploading}
-            className="flex flex-col items-center gap-1.5 text-muted-foreground hover:text-primary transition-colors p-4">
+          <button onClick={() => inputRef.current?.click()} disabled={uploading || readOnly}
+            className="flex flex-col items-center gap-1.5 text-muted-foreground hover:text-primary transition-colors p-4 disabled:cursor-default disabled:hover:text-muted-foreground">
             {uploading ? <Loader2 className="w-5 h-5 animate-spin" /> : icon || <Upload className="w-5 h-5" />}
-            <span className="text-[10px] font-medium">{uploading ? "Uploading..." : "Upload"}</span>
+            <span className="text-[10px] font-medium">{uploading ? "Uploading..." : readOnly ? "Not uploaded" : "Upload"}</span>
           </button>
         )}
       </div>
@@ -735,12 +785,13 @@ function DocumentUploader({
 }
 
 function DocumentViewer({
-  label, value, startDate, endDate,
+  label, value, adminOnly = false,
 }: {
   label: string;
   value?: string | null;
   startDate?: string | null;
   endDate?: string | null;
+  adminOnly?: boolean;
 }) {
   // Derive a friendly file name from the storage URL (strip query/hash, take
   // last path segment, decode URI). Falls back to "contract" if unparseable.
@@ -755,25 +806,11 @@ function DocumentViewer({
     }
   })();
 
-  function fmtDate(d?: string | null) {
-    if (!d) return null;
-    try {
-      const dt = new Date(d);
-      if (isNaN(dt.getTime())) return d;
-      return `${String(dt.getDate()).padStart(2, "0")}.${String(dt.getMonth() + 1).padStart(2, "0")}.${dt.getFullYear()}`;
-    } catch {
-      return d;
-    }
-  }
-
-  const start = fmtDate(startDate);
-  const end = fmtDate(endDate);
-
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-2">
         <Label className="text-xs font-medium text-muted-foreground">{label}</Label>
-        <Badge variant="outline" className="text-[9px] px-1.5 py-0">Admin Only</Badge>
+        {adminOnly && <Badge variant="outline" className="text-[9px] px-1.5 py-0">Admin Only</Badge>}
       </div>
       <div className="relative w-full aspect-[4/3] rounded-lg border-2 border-dashed border-border/60 bg-secondary/30 flex items-center justify-center overflow-hidden">
         {value ? (
@@ -783,63 +820,174 @@ function DocumentViewer({
             ) : (
               <div className="flex flex-col items-center gap-1.5 text-green-600 px-3 text-center">
                 <FileText className="w-7 h-7" />
-                <span className="text-[10px] font-medium break-all line-clamp-2" title={fileName}>{fileName}</span>
               </div>
             )}
-            <div className="absolute top-1.5 right-1.5">
-              <a href={value} target="_blank" rel="noopener noreferrer" download={fileName}
-                className="w-6 h-6 rounded-full bg-primary text-white flex items-center justify-center hover:bg-primary/90 shadow-sm">
-                <Download className="w-3 h-3" />
-              </a>
-            </div>
+            <a
+              href={value}
+              target="_blank"
+              rel="noopener noreferrer"
+              download={fileName}
+              aria-label={`Download ${label}`}
+              className="absolute inset-0 cursor-pointer"
+            />
+            <Download className="absolute top-2 right-2 w-4 h-4 text-primary pointer-events-none" />
           </>
         ) : (
           <div className="flex flex-col items-center gap-1.5 text-muted-foreground/40 p-4">
             <FileText className="w-7 h-7" />
-            <span className="text-[10px] font-medium text-center">No contract<br />Uploaded by admin</span>
+            <span className="text-[10px] font-medium text-center">Not uploaded</span>
           </div>
         )}
       </div>
-      {value && (
-        <div className="space-y-0.5">
-          <p className="text-[11px] font-medium text-foreground break-all" title={fileName}>{fileName}</p>
-          {(start || end) && (
-            <p className="text-[10px] text-muted-foreground">
-              {start ? `Start: ${start}` : ""}
-              {start && end ? "  ·  " : ""}
-              {end ? `End: ${end}` : ""}
-            </p>
-          )}
-          <a
-            href={value}
-            target="_blank"
-            rel="noopener noreferrer"
-            download={fileName}
-            className="inline-flex items-center gap-1 text-[11px] font-medium text-primary hover:underline"
-          >
-            <Download className="w-3 h-3" />
-            Download
-          </a>
+    </div>
+  );
+}
+
+type AgencyIntegrationRecord = {
+  kind: "email" | "whatsapp";
+  isEnabled: boolean;
+  config: Record<string, any>;
+};
+
+function AgencyIntegrationCard({
+  kind,
+  title,
+  record,
+  onSaved,
+}: {
+  kind: "email" | "whatsapp";
+  title: string;
+  record?: AgencyIntegrationRecord;
+  onSaved: () => void;
+}) {
+  const { toast } = useToast();
+  const [enabled, setEnabled] = useState(false);
+  const [config, setConfig] = useState<Record<string, string>>({});
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    setEnabled(record?.isEnabled === true);
+    setConfig((record?.config || {}) as Record<string, string>);
+  }, [record]);
+
+  const fields = kind === "email"
+    ? [
+        ["host", "SMTP host"], ["port", "SMTP port"], ["username", "Username"],
+        ["password", "Password"], ["fromEmail", "From email"], ["fromName", "From name"],
+      ]
+    : [
+        ["businessAccountId", "Business account ID"], ["phoneNumberId", "Phone number ID"],
+        ["accessToken", "Access token"], ["displayNumber", "Display number"],
+      ];
+
+  async function save() {
+    setSaving(true);
+    try {
+      await customFetch(`/api/agents/me/integrations/${kind}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isEnabled: enabled, config }),
+      });
+      onSaved();
+      toast({ title: `${title} saved` });
+    } catch (error: any) {
+      toast({ title: "Integration could not be saved", description: error.message, variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Card className="border shadow-sm p-6 space-y-4">
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <h3 className="font-display font-semibold">{title}</h3>
+          <p className="text-xs text-muted-foreground mt-1">Credentials are encrypted and isolated to this agency.</p>
         </div>
+        <label className="flex items-center gap-2 text-sm cursor-pointer">
+          <input type="checkbox" checked={enabled} onChange={event => setEnabled(event.target.checked)} className="h-4 w-4 accent-primary" />
+          Enabled
+        </label>
+      </div>
+      <div className="grid sm:grid-cols-2 gap-3">
+        {fields.map(([key, label]) => (
+          <div key={key} className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">{label}</Label>
+            <Input
+              type={key.toLowerCase().includes("password") || key.toLowerCase().includes("token") ? "password" : "text"}
+              value={config[key] || ""}
+              onChange={event => setConfig(current => ({ ...current, [key]: event.target.value }))}
+              className="h-10"
+            />
+          </div>
+        ))}
+      </div>
+      <div className="flex justify-end pt-2">
+        <Button onClick={save} disabled={saving} className="gap-2">
+          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+          Save integration
+        </Button>
+      </div>
+    </Card>
+  );
+}
+
+function AgencyIntegrationsTab({ features }: { features: Record<string, boolean> }) {
+  const query = useQuery<{ integrations: AgencyIntegrationRecord[] }>({
+    queryKey: ["agent-integrations"],
+    queryFn: () => customFetch("/api/agents/me/integrations"),
+  });
+  const integrations = query.data?.integrations || [];
+  if (query.isLoading) return <Card className="p-8"><Loader2 className="h-6 w-6 animate-spin mx-auto" /></Card>;
+  return (
+    <div className="space-y-6">
+      {features.email_integration && (
+        <AgencyIntegrationCard kind="email" title="Agency Email" record={integrations.find(item => item.kind === "email")} onSaved={() => query.refetch()} />
+      )}
+      {features.whatsapp_integration && (
+        <AgencyIntegrationCard kind="whatsapp" title="Agency WhatsApp" record={integrations.find(item => item.kind === "whatsapp")} onSaved={() => query.refetch()} />
       )}
     </div>
   );
 }
 
-function WebToLeadTab() {
+function WebToLeadTab({ agentProfile }: { agentProfile?: any }) {
   const { t } = useI18n();
   const { toast } = useToast();
+  const { user } = useAuth();
+  const qc = useQueryClient();
   const [copied, setCopied] = useState(false);
+  const [embedMode, setEmbedMode] = useState<"lead_form" | "ai_chatbot">("lead_form");
+  const [allowedDomains, setAllowedDomains] = useState("");
+  const [savingEmbed, setSavingEmbed] = useState(false);
 
   const { data: tokenData, isLoading } = useQuery<{ embedToken: string }>({
     queryKey: ["embed-token"],
     queryFn: () => customFetch(`/api/agents/me/embed-token`) as Promise<{ embedToken: string }>,
   });
+  const { data: embedData } = useQuery<any>({
+    queryKey: ["agent-embed-widget"],
+    queryFn: () => customFetch("/api/agents/me/embed-widget"),
+    enabled: agentProfile?.effectiveFeatures?.embed_standard === true,
+  });
+
+  useEffect(() => {
+    if (!embedData?.widget) return;
+    setEmbedMode(embedData.widget.mode === "ai_chatbot" ? "ai_chatbot" : "lead_form");
+    setAllowedDomains(Array.isArray(embedData.widget.allowedDomains) ? embedData.widget.allowedDomains.join(", ") : "");
+  }, [embedData?.widget]);
 
   const apiDomain = window.location.origin;
   const token = tokenData?.embedToken || "";
+  const canCustomizeBrand = agentProfile?.effectiveFeatures?.custom_branding === true;
+  const primaryColor = canCustomizeBrand && /^#[0-9a-f]{6}$/i.test(agentProfile?.primaryBrandColor || "")
+    ? agentProfile.primaryBrandColor
+    : "#2563EB";
+  const secondaryColor = canCustomizeBrand && /^#[0-9a-f]{6}$/i.test(agentProfile?.secondaryBrandColor || "")
+    ? agentProfile.secondaryBrandColor
+    : "#1D4ED8";
 
-  const formCode = `<form action="${apiDomain}/api/public/lead/${token}" method="POST" style="max-width:440px;margin:0 auto;font-family:system-ui,-apple-system,sans-serif;padding:32px;border-radius:16px;background:#ffffff;box-shadow:0 4px 24px rgba(0,0,0,0.08);border:1px solid #e5e7eb" onsubmit="var ins=this.querySelectorAll('input[type=text]');for(var i=0;i<ins.length;i++){ins[i].value=ins[i].value.toUpperCase();}">
+  const formCode = `<form action="${apiDomain}/api/public/lead/${token}" method="POST" style="max-width:440px;margin:0 auto;font-family:system-ui,-apple-system,sans-serif;padding:32px;border-radius:16px;background:#ffffff;box-shadow:0 4px 24px rgba(0,0,0,0.08);border:1px solid #e5e7eb" onsubmit="this.phone.value=this.phoneCode.value+this.phoneNumber.value;var ins=this.querySelectorAll('input[type=text]');for(var i=0;i<ins.length;i++){ins[i].value=ins[i].value.toUpperCase();}">
   <h3 style="margin:0 0 4px;font-size:20px;font-weight:700;color:#111827;text-align:center">Get in Touch</h3>
   <p style="margin:0 0 20px;font-size:13px;color:#6b7280;text-align:center">Fill in your details and we'll contact you shortly.</p>
   <div style="display:flex;gap:10px;margin-bottom:14px">
@@ -866,9 +1014,13 @@ function WebToLeadTab() {
     <label style="display:block;font-size:12px;font-weight:600;color:#374151;margin-bottom:4px">Email <span style="color:#ef4444">*</span></label>
     <input name="email" type="email" required placeholder="you@example.com" style="width:100%;padding:10px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;box-sizing:border-box;outline:none;transition:border-color 0.2s" onfocus="this.style.borderColor='#3b82f6'" onblur="this.style.borderColor='#d1d5db'" />
   </div>
-  <button type="submit" style="width:100%;padding:12px;background:linear-gradient(135deg,#2563eb,#1d4ed8);color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;transition:opacity 0.2s" onmouseover="this.style.opacity='0.9'" onmouseout="this.style.opacity='1'" onclick="var f=this.closest('form');f.phone.value=f.phoneCode.value+f.phoneNumber.value;">Submit</button>
+  <button type="submit" style="width:100%;padding:12px;background:linear-gradient(135deg,${primaryColor},${secondaryColor});color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;transition:opacity 0.2s" onmouseover="this.style.opacity='0.9'" onmouseout="this.style.opacity='1'">Submit</button>
   <p style="margin:12px 0 0;font-size:11px;color:#9ca3af;text-align:center">Your information is secure and will not be shared.</p>
 </form>`;
+  const widget = embedData?.widget;
+  const embedCode = widget
+    ? `<div data-edcons-widget="${widget.slug}" data-edcons-token-url="${apiDomain}/api/public/embed/${widget.slug}/agent-token"></div>\n<script src="${apiDomain}/api/public/embed/embed.js"></script>`
+    : "";
 
   const handleCopy = () => {
     navigator.clipboard.writeText(formCode);
@@ -876,6 +1028,26 @@ function WebToLeadTab() {
     toast({ title: "Copied!", description: "Form code copied to clipboard." });
     setTimeout(() => setCopied(false), 2000);
   };
+
+  async function saveEmbedWidget() {
+    setSavingEmbed(true);
+    try {
+      await customFetch("/api/agents/me/embed-widget", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mode: embedMode,
+          allowedDomains: allowedDomains.split(",").map(value => value.trim()).filter(Boolean),
+        }),
+      });
+      await qc.invalidateQueries({ queryKey: ["agent-embed-widget"] });
+      toast({ title: "Embed widget saved" });
+    } catch (error: any) {
+      toast({ title: "Embed widget could not be saved", description: error.message, variant: "destructive" });
+    } finally {
+      setSavingEmbed(false);
+    }
+  }
 
   if (isLoading) {
     return (
@@ -887,6 +1059,51 @@ function WebToLeadTab() {
 
   return (
     <div className="space-y-6">
+      {agentProfile?.effectiveFeatures?.embed_standard && (
+        <Card className="border shadow-sm p-6 space-y-5">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h3 className="font-display font-semibold text-base">Embed Widget</h3>
+              <p className="text-sm text-muted-foreground mt-1">Use the same responsive embed infrastructure as Find & Study. Tenant branding is applied automatically.</p>
+            </div>
+            <Badge variant="outline">{agentProfile.planTier || "standard"}</Badge>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label>Experience</Label>
+              <Select value={embedMode} onValueChange={value => setEmbedMode(value as "lead_form" | "ai_chatbot")}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="lead_form">Standard lead form</SelectItem>
+                  {agentProfile?.effectiveFeatures?.embed_ai && <SelectItem value="ai_chatbot">AI study assistant</SelectItem>}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Allowed domains</Label>
+              <Input value={allowedDomains} onChange={event => setAllowedDomains(event.target.value)} placeholder="example.com, apply.example.com" />
+              <p className="text-xs text-muted-foreground">Leave empty to allow any website.</p>
+            </div>
+          </div>
+          {["agent", "sub_agent"].includes(user?.role || "") && (
+            <div className="flex justify-end">
+              <Button onClick={saveEmbedWidget} disabled={savingEmbed} className="gap-2">
+                {savingEmbed ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                {widget ? "Update embed" : "Create embed"}
+              </Button>
+            </div>
+          )}
+          {embedCode && (
+            <div className="relative">
+              <Button size="sm" variant="secondary" className="absolute right-3 top-3 z-10 gap-1.5" onClick={() => {
+                navigator.clipboard.writeText(embedCode);
+                toast({ title: "Embed code copied" });
+              }}><Copy className="h-3.5 w-3.5" /> Copy embed</Button>
+              <pre className="max-h-48 overflow-auto whitespace-pre-wrap break-all rounded-xl border bg-secondary/50 p-4 pr-32 text-xs">{embedCode}</pre>
+            </div>
+          )}
+        </Card>
+      )}
       <Card className="border shadow-sm p-6">
         <div className="flex items-center gap-3 mb-2">
           <div className="w-8 h-8 rounded-lg bg-blue-500/10 flex items-center justify-center">
@@ -920,11 +1137,11 @@ function WebToLeadTab() {
         </div>
         <div className="bg-secondary/30 rounded-xl p-4">
           <iframe
-            title={t("agentAccount.formPreview")}
-            srcDoc={formCode}
+            title="Web to Lead form preview"
+            src={`${BASE_URL}/api/agents/me/web-to-lead-preview`}
             sandbox=""
             referrerPolicy="no-referrer"
-            className="w-full min-h-[640px] rounded-xl border bg-white"
+            className="block h-[520px] w-full rounded-xl border-0 bg-transparent"
           />
         </div>
       </Card>

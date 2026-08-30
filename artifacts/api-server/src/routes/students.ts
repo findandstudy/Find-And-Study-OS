@@ -7,7 +7,7 @@ import { getAgentVisibleIds, getAgentRecord } from "../lib/agentVisibility";
 import { getAssignmentVisibility, getEffectivePermissionSet, canAccessAssignedRecord, userHasPermission } from "../lib/permissions";
 import { cascadeStudentAssignment } from "../lib/leadAssignment";
 import { resolveAgentCommission } from "../lib/agentCommission";
-import { getAgencyMemberAgentIds } from "../lib/agencyStaff";
+import { getAgencyMemberAgentIds, resolveAgencyPlatformAssignee } from "../lib/agencyStaff";
 import { getVisibleBranchIds, isInBranchScope, resolveCreateBranchId } from "../lib/branchScope";
 import { assertCanAccessStudent } from "../lib/studentAccess";
 import { streamDocumentToResponse } from "../lib/documentBytes";
@@ -29,6 +29,7 @@ import {
   toLegacyEducationRecord,
 } from "../lib/studentEducationInput";
 import { resolveResidenceAddress } from "../lib/studentAddressDefaults";
+import { canTransitionToPipelineStage } from "../lib/pipelineAudience";
 import {
   buildStudentEducationRecordsFromLegacy,
   hydrateStudentEducationRecords,
@@ -57,6 +58,14 @@ const STUDENT_PATCH_FIELDS = [
   "photoUrl", "nextFollowup", "interestedLevel",
   "transferStudent", "hasTcId", "hasBlueCard",
 ];
+
+function studentForViewer<T extends { assignedToId?: number | null; agencyAssignedToId?: number | null }>(student: T, role: string): T {
+  if (!isAgentRole(role)) return student;
+  return {
+    ...student,
+    assignedToId: student.agencyAssignedToId ?? null,
+  };
+}
 
 function addDateRangeCondition(conditions: any[], column: any, range?: string): void {
   if (!range || range === "all") return;
@@ -459,13 +468,14 @@ router.get("/students", requireAuth, requireRole(...STAFF_ROLES, "student", ...A
   }
   if (appSource === "agent") conditions.push(isNotNull(studentsTable.agentId));
   else if (appSource === "staff") conditions.push(isNull(studentsTable.agentId));
-  if (assignment === "mine") conditions.push(eq(studentsTable.assignedToId, user.id));
-  else if (assignment === "unassigned") conditions.push(isNull(studentsTable.assignedToId));
+  const viewerAssignmentColumn = isAgentRole(user.role) ? studentsTable.agencyAssignedToId : studentsTable.assignedToId;
+  if (assignment === "mine") conditions.push(eq(viewerAssignmentColumn, user.id));
+  else if (assignment === "unassigned") conditions.push(isNull(viewerAssignmentColumn));
   else if (assignment === "mine_unassigned") {
-    conditions.push(or(eq(studentsTable.assignedToId, user.id), isNull(studentsTable.assignedToId))!);
+    conditions.push(or(eq(viewerAssignmentColumn, user.id), isNull(viewerAssignmentColumn))!);
   } else if (assignment && assignment !== "all") {
     const parsed = parseInt(assignment, 10);
-    if (Number.isFinite(parsed)) conditions.push(eq(studentsTable.assignedToId, parsed));
+    if (Number.isFinite(parsed)) conditions.push(eq(viewerAssignmentColumn, parsed));
   }
   if (nationality && nationality !== "all") conditions.push(eq(studentsTable.nationality, nationality));
   if (name) {
@@ -548,12 +558,12 @@ router.get("/students", requireAuth, requireRole(...STAFF_ROLES, "student", ...A
   const { statusRows, nationalityRows, agentRows } = facetRows;
   const count = countRows[0]?.count ?? 0;
 
-  const data = rows.map(r => ({
+  const data = rows.map(r => studentForViewer({
     ...r.student,
     agentName: r.agentName || null,
     hasPhoto: !!r.studentHasPhoto,
     photoUrl: r.studentHasPhoto ? buildStableSignedStudentPhotoThumbnailPath(r.student.id) : null,
-  }));
+  }, user.role));
 
   res.json({
     data,
@@ -658,6 +668,7 @@ router.post("/students", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES
     id: number;
     branchId: number | null;
     assignedToId: number | null;
+    agencyAssignedToId: number | null;
     agentId: number | null;
     season: string;
     convertedStudentId: number | null;
@@ -678,6 +689,7 @@ router.post("/students", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES
         id: leadsTable.id,
         branchId: leadsTable.branchId,
         assignedToId: leadsTable.assignedToId,
+        agencyAssignedToId: leadsTable.agencyAssignedToId,
         agentId: leadsTable.agentId,
         season: leadsTable.season,
         convertedStudentId: leadsTable.convertedStudentId,
@@ -794,6 +806,8 @@ router.post("/students", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES
     return;
   }
   const resolvedSeason = season || sourceLead?.season || (await getCurrentSeason());
+  const platformAssignedToId = sourceLead?.assignedToId
+    ?? (resolvedAgentId ? await resolveAgencyPlatformAssignee(resolvedAgentId) : null);
   const student = await db.transaction(async (tx) => {
     const [insertedStudent] = await tx.insert(studentsTable).values({
       branchId: inheritedBranchId,
@@ -815,7 +829,8 @@ router.post("/students", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES
       postalCode: residence.postalCode,
       needsVisaSupport: typeof needsVisaSupport === "boolean" ? needsVisaSupport : null,
       agentId: resolvedAgentId,
-      assignedToId: sourceLead?.assignedToId ?? null,
+      assignedToId: platformAssignedToId,
+      agencyAssignedToId: sourceLead?.agencyAssignedToId ?? null,
       userId: userId || null,
       notes: notes || null,
       highSchool: normBody.highSchool ? (normBody.highSchool as string) : null,
@@ -857,7 +872,7 @@ router.post("/students", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES
     templateVars: { firstName: student.firstName, lastName: student.lastName, email: student.email || "", nationality: student.nationality || "" },
   }).catch(() => {});
 
-  res.status(201).json(student);
+  res.status(201).json(studentForViewer(student, user.role));
 });
 
 router.post("/students/bulk", requireAuth, requireRole(...STAFF_ROLES, "agent" as any), async (req, res): Promise<void> => {
@@ -931,7 +946,7 @@ router.get("/students/:id", requireAuth, requireAgentStaffPermission("students")
   const access = await assertCanAccessStudent(req, id);
   if (!access.ok) { res.status(access.status).json({ error: access.error }); return; }
   const residence = resolveResidenceAddress(access.student);
-  res.json({ ...access.student, ...residence });
+  res.json(studentForViewer({ ...access.student, ...residence }, req.user!.role));
 });
 
 // --- Education records (FAZ 2) -------------------------------------------
@@ -1101,12 +1116,13 @@ router.patch("/students/:id", requireAuth, requireAgentStaffPermission("students
   const [existing] = await db.select().from(studentsTable).where(and(eq(studentsTable.id, id), isNull(studentsTable.deletedAt)));
   if (!existing) { res.status(404).json({ error: "Student not found" }); return; }
 
+  let visibleAgentIds: number[] = [];
   if (isStudent) {
     if (existing.userId !== req.user!.id) {
       res.status(403).json({ error: "You can only edit your own record" }); return;
     }
   } else if (isAgent) {
-    const visibleAgentIds = await getAgentVisibleIds(req.user!.id, role);
+    visibleAgentIds = await getAgentVisibleIds(req.user!.id, role);
     if (visibleAgentIds.length === 0) { res.status(403).json({ error: "Agent profile not found" }); return; }
     if (!existing.agentId || !visibleAgentIds.includes(existing.agentId)) {
       res.status(403).json({ error: "You can only edit your own students" }); return;
@@ -1161,9 +1177,42 @@ router.patch("/students/:id", requireAuth, requireAgentStaffPermission("students
       return;
     }
   }
+  let agencyAssignmentTarget: number | null | undefined;
+  if (isAgent && req.body.assignedToId !== undefined) {
+    const rawTarget = req.body.assignedToId;
+    agencyAssignmentTarget = rawTarget === null || rawTarget === "" || rawTarget === "unassigned"
+      ? null
+      : Number(rawTarget);
+    const isAgentManagerRole = role === "agent" || role === "sub_agent";
+    if (!isAgentManagerRole) {
+      if (agencyAssignmentTarget !== req.user!.id || existing.agencyAssignedToId !== null) {
+        res.status(403).json({ error: "Access denied" });
+        return;
+      }
+    } else if (agencyAssignmentTarget !== null) {
+      let allowed = Number.isInteger(agencyAssignmentTarget) && agencyAssignmentTarget === req.user!.id;
+      if (!allowed && Number.isInteger(agencyAssignmentTarget) && visibleAgentIds.length > 0) {
+        const [staffRow] = await db.select({ id: usersTable.id }).from(usersTable).where(and(
+          eq(usersTable.id, agencyAssignmentTarget),
+          eq(usersTable.role, "agent_staff"),
+          inArray(usersTable.managingAgentId, visibleAgentIds),
+          eq(usersTable.isActive, true),
+          isNull(usersTable.deletedAt),
+        ));
+        allowed = !!staffRow;
+      }
+      if (!allowed) {
+        res.status(403).json({ error: "Access denied" });
+        return;
+      }
+    }
+  }
   const updates: Record<string, unknown> = {};
   for (const key of allowedFields) {
     if (req.body[key] !== undefined) updates[key] = req.body[key];
+  }
+  if (agencyAssignmentTarget !== undefined) {
+    updates.agencyAssignedToId = agencyAssignmentTarget;
   }
   if (isAdmin && req.body.originType !== undefined) {
     const validOrigin = ["direct", "agent", "sub_agent"];
@@ -1247,14 +1296,28 @@ router.patch("/students/:id", requireAuth, requireAgentStaffPermission("students
     (normUpdates as any).phone = rawPhone ? normalizePhoneField(rawPhone) : rawPhone;
     (normUpdates as any).phoneE164 = toE164((normUpdates as any).phone);
   }
+  if (
+    Object.prototype.hasOwnProperty.call(normUpdates, "status")
+    && existing.status !== normUpdates.status
+    && !(await canTransitionToPipelineStage("student", String(normUpdates.status), role))
+  ) {
+    res.status(403).json({
+      error: "Your role cannot transition students to this pipeline stage",
+      code: "PIPELINE_STAGE_TRANSITION_FORBIDDEN",
+    });
+    return;
+  }
   const studentAssignmentChanged =
     Object.prototype.hasOwnProperty.call(normUpdates, "assignedToId") &&
     existing.assignedToId !== normUpdates.assignedToId;
+  const agencyStudentAssignmentChanged =
+    Object.prototype.hasOwnProperty.call(normUpdates, "agencyAssignedToId") &&
+    existing.agencyAssignedToId !== normUpdates.agencyAssignedToId;
   const canCascadeAssignment = studentAssignmentChanged
     ? await userHasPermission({ id: req.user!.id, role }, "records.cascade_assignment")
     : false;
   const studentStatusChanged = Object.prototype.hasOwnProperty.call(normUpdates, "status") && existing.status !== normUpdates.status;
-  const student = studentAssignmentChanged || studentStatusChanged
+  const student = studentAssignmentChanged || agencyStudentAssignmentChanged || studentStatusChanged
     ? await db.transaction(async (tx) => {
         const [updatedStudent] = await tx.update(studentsTable).set(normUpdates).where(eq(studentsTable.id, id)).returning();
         if (!updatedStudent) return null;
@@ -1274,6 +1337,14 @@ router.patch("/students/:id", requireAuth, requireAgentStaffPermission("students
             throwOnError: true,
             executor: tx,
           });
+        }
+        if (agencyStudentAssignmentChanged) {
+          await tx.update(leadsTable)
+            .set({ agencyAssignedToId: updatedStudent.agencyAssignedToId })
+            .where(and(
+              eq(leadsTable.convertedStudentId, updatedStudent.id),
+              isNull(leadsTable.deletedAt),
+            ));
         }
         return updatedStudent;
       })
@@ -1389,7 +1460,7 @@ router.patch("/students/:id", requireAuth, requireAgentStaffPermission("students
     }
   }
 
-  res.json(student);
+  res.json(studentForViewer(student, role));
 });
 
 // Transfer a student (and its full ownership chain) from the acting parent agent
@@ -1547,6 +1618,13 @@ router.post("/students/bulk-action", requireAuth, requireRole(...STAFF_ROLES), a
     await logAudit(user.id, "bulk_assign_students", "student", undefined, { ids: idsToUpdate, assignedToId }, req.ip);
     res.json({ success: true, updated, skipped }); return;
   } else if (action === "move" && status) {
+    if (!(await canTransitionToPipelineStage("student", String(status), user.role))) {
+      res.status(403).json({
+        error: "Your role cannot transition students to this pipeline stage",
+        code: "PIPELINE_STAGE_TRANSITION_FORBIDDEN",
+      });
+      return;
+    }
     updated = await db.transaction(async (tx) => {
       const result = await tx.update(studentsTable).set({ status })
         .where(and(inArray(studentsTable.id, numericIds), isNull(studentsTable.deletedAt)));

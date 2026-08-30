@@ -6,9 +6,9 @@ import { setActiveAgencyBusinessName } from "@/lib/agency-branding-store";
 
 import { AGENT_ROLES as _AGENT_ROLES_ARR } from "@workspace/roles";
 const AGENT_ROLES = new Set<string>(_AGENT_ROLES_ARR);
-const STATIC_FAVICON = "/favicon.svg";
-const STATIC_TITLE = "Find And Study";
 const BASE_URL = (import.meta.env.BASE_URL || "/").replace(/\/$/, "");
+const STATIC_FAVICON = `${BASE_URL}/favicon.svg`;
+const STATIC_TITLE = "Find And Study";
 
 function setIcon(href: string, type?: string) {
   document.querySelectorAll<HTMLLinkElement>(
@@ -54,7 +54,10 @@ export function useAgencyBranding() {
 
   // Agent's own profile only when the logged-in user is an agent role.
   const { data: agentProfile } = useQuery({
-    queryKey: ["agent-me", "branding"],
+    // Share the same cache entry as the dashboard/account screens. Besides
+    // avoiding a duplicate request, this makes a newly uploaded logo update
+    // the tab branding as soon as those screens invalidate `agent-me`.
+    queryKey: ["agent-me"],
     queryFn: () => customFetch<any>("/api/agents/me"),
     enabled: isAgent,
     staleTime: 30_000,

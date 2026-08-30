@@ -554,15 +554,34 @@ function setEmbedCors(res: any, widget: any, origin: string | undefined): void {
     return;
   }
   if (!origin) return;
+  if (originMatchesAllowedDomains(origin, domains)) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+  }
+  // No match → no ACAO header → browser enforces CORS block.
+}
+
+function originMatchesAllowedDomains(origin: string | undefined, domains: string[]): boolean {
+  if (!origin || !Array.isArray(domains) || domains.length === 0) return false;
   try {
-    const url = new URL(origin);
-    const matched = domains.some(d => url.hostname === d || url.hostname.endsWith(`.${d}`));
-    if (matched) {
-      res.setHeader("Access-Control-Allow-Origin", origin);
-    }
-    // No match → no ACAO header → browser enforces CORS block.
+    const originUrl = new URL(origin);
+    const originHostname = originUrl.hostname.toLowerCase();
+    const originHost = originUrl.host.toLowerCase();
+    return domains.some((rawDomain) => {
+      const value = String(rawDomain || "").trim().toLowerCase();
+      if (!value) return false;
+      let allowedHost = value;
+      try {
+        allowedHost = new URL(value.includes("://") ? value : `https://${value}`).host.toLowerCase();
+      } catch {
+        return false;
+      }
+      const hasPort = allowedHost.includes(":");
+      const allowedHostname = hasPort ? allowedHost.slice(0, allowedHost.lastIndexOf(":")) : allowedHost;
+      if (hasPort) return originHost === allowedHost;
+      return originHostname === allowedHostname || originHostname.endsWith(`.${allowedHostname}`);
+    });
   } catch {
-    // Unparseable origin → no ACAO header.
+    return false;
   }
 }
 
@@ -1378,14 +1397,9 @@ router.get("/public/embed/:slug/token", embedTokenLimiter, async (req, res): Pro
     // Defense-in-depth: if Origin header is present it must be in allowedDomains.
     // Legitimate server-to-server calls from partner backends do not send Origin.
     const requestOrigin = req.headers.origin as string | undefined;
-    if (requestOrigin) {
-      let originHostname = "";
-      try { originHostname = new URL(requestOrigin).hostname; } catch { /* ignore */ }
-      const inAllowed = domains.some((d: string) => originHostname === d || originHostname.endsWith(`.${d}`));
-      if (!inAllowed) {
-        res.status(403).json({ error: "Origin not in widget's allowedDomains" });
-        return;
-      }
+    if (requestOrigin && !originMatchesAllowedDomains(requestOrigin, domains)) {
+      res.status(403).json({ error: "Origin not in widget's allowedDomains" });
+      return;
     }
   }
 
@@ -1399,6 +1413,39 @@ router.get("/public/embed/:slug/token", embedTokenLimiter, async (req, res): Pro
     return;
   }
   res.json({ token, expiresIn: Math.floor(EMBED_TOKEN_TTL_MS / 1000) });
+});
+
+// Self-service agency widgets use a browser-origin exchange so the copied
+// snippet works without asking an agency to build a backend token relay. This
+// endpoint is deliberately limited to widgets owned by an agent. Restricted
+// widgets only receive a token when the browser Origin matches allowedDomains;
+// unrestricted agency widgets remain open, matching the standard embed model.
+router.get("/public/embed/:slug/agent-token", embedTokenLimiter, async (req, res): Promise<void> => {
+  const slug = String(req.params.slug);
+  const [widget] = await db.select().from(embedWidgetsTable).where(and(
+    eq(embedWidgetsTable.slug, slug),
+    eq(embedWidgetsTable.isActive, true),
+  ));
+  if (!widget || !widget.agentId) {
+    res.status(404).json({ error: "Agency widget not found" });
+    return;
+  }
+
+  const domains = widget.allowedDomains as string[];
+  const origin = req.headers.origin as string | undefined;
+  if (Array.isArray(domains) && domains.length > 0 && !originMatchesAllowedDomains(origin, domains)) {
+    res.status(403).json({ error: "Origin not in widget's allowedDomains" });
+    return;
+  }
+  setEmbedCors(res, widget, origin);
+
+  try {
+    const token = createEmbedToken(String(widget.slug));
+    res.json({ token, expiresIn: Math.floor(EMBED_TOKEN_TTL_MS / 1000) });
+  } catch (err: any) {
+    console.error("[AGENT EMBED] Token issuance failed:", err.message);
+    res.status(500).json({ error: "Embed security not configured on this server" });
+  }
 });
 
 router.get("/public/embed/:slug/config", async (req, res): Promise<void> => {
@@ -2024,10 +2071,12 @@ router.post("/public/embed/:slug/apply", embedApplicationSubmitLimiter, embedApp
   // Step 1 may have created this lead before nationality/full phone details
   // existed. Re-evaluate only while it is still unassigned; the helper never
   // overwrites an explicit owner and now checks both phone and phoneE164.
-  const [enrichedLead] = await db.select().from(leadsTable)
+  let [enrichedLead] = await db.select().from(leadsTable)
     .where(eq(leadsTable.id, result.leadId)).limit(1);
   if (enrichedLead?.assignedToId == null) {
     await applyLeadAssignmentRules(enrichedLead, req.ip);
+    [enrichedLead] = await db.select().from(leadsTable)
+      .where(eq(leadsTable.id, result.leadId)).limit(1);
   }
 
   // Save valid files on the lead before any mandatory-document rejection or
@@ -2174,6 +2223,7 @@ router.post("/public/embed/:slug/apply", embedApplicationSubmitLimiter, embedApp
           languageScore: s(languageScore, 20),
           agentId: enrichedLead?.agentId ?? null,
           assignedToId: enrichedLead?.assignedToId ?? null,
+          agencyAssignedToId: enrichedLead?.agencyAssignedToId ?? null,
           branchId: enrichedLead?.branchId ?? null,
           originType: enrichedLead?.originType || "direct",
           originEntityType: enrichedLead?.originEntityType ?? null,
@@ -2695,9 +2745,31 @@ router.post(
 
     try {
       const identity = await resolveIdentity({ phone: phoneE164, email: cleanEmail });
-      const strong = identity.outcome === "strong"
+      let strong = identity.outcome === "strong"
         ? identity.candidates.find((candidate) => candidate.type === "student" || candidate.type === "lead")
         : null;
+      // A globally unique email/phone may already belong to another agency or
+      // to Find & Study directly. Never attach an agency widget chat to that
+      // other tenant's CRM record. Only accept the identity candidate when its
+      // persisted owner is this widget's agency; otherwise create/reuse the
+      // widget-scoped lead below.
+      if (strong && widget.agentId) {
+        if (strong.type === "lead") {
+          const [ownedLead] = await db.select({ id: leadsTable.id }).from(leadsTable).where(and(
+            eq(leadsTable.id, strong.id),
+            eq(leadsTable.agentId, widget.agentId),
+            isNull(leadsTable.deletedAt),
+          )).limit(1);
+          if (!ownedLead) strong = null;
+        } else {
+          const [ownedStudent] = await db.select({ id: studentsTable.id }).from(studentsTable).where(and(
+            eq(studentsTable.id, strong.id),
+            eq(studentsTable.agentId, widget.agentId),
+            isNull(studentsTable.deletedAt),
+          )).limit(1);
+          if (!ownedStudent) strong = null;
+        }
+      }
       let leadId: number | null = strong?.type === "lead" ? strong.id : null;
       const studentId: number | null = strong?.type === "student" ? strong.id : null;
       if (!leadId && !studentId) {

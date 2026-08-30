@@ -188,6 +188,16 @@ function testEquivalenceUnits(): Section {
     "hs_diploma ≢ bachelors_certificate",
     details,
   ) && ok;
+  ok = assert(
+    areEquivalentDocTypes("Custom Financial Statement", "custom_financial_statement"),
+    "identical dynamic catalog types match after normalization",
+    details,
+  ) && ok;
+  ok = assert(
+    !areEquivalentDocTypes("custom_financial_statement", "custom_sponsor_letter"),
+    "different dynamic catalog types remain independent",
+    details,
+  ) && ok;
 
   // findEquivalentDoc on a mixed library
   const lib = [

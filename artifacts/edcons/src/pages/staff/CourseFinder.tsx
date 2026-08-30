@@ -2253,8 +2253,31 @@ function ApplyDialog({ program: p, onClose, currentUser, agentShareRate, hideSer
   const [success, setSuccess] = useState(false);
   const [step, setStep] = useState<"select" | "new_student" | "documents">("select");
   const [docs, setDocs] = useState<Record<string, UploadedDoc>>({});
+  const [submittedDocumentCount, setSubmittedDocumentCount] = useState(0);
   const [newStudentForm, setNewStudentForm] = useState({ firstName: "", lastName: "", email: "", phone: "", nationality: "" });
   const [creatingStudent, setCreatingStudent] = useState(false);
+
+  // A signed-in student's auth user id and students.id are separate keys.
+  // Resolve (or lazily create) the actual student profile before loading or
+  // registering documents; using currentUser.id here made existing files look
+  // missing and caused uploads to be rejected as belonging to another student.
+  const { data: selfStudentProfile } = useQuery<any>({
+    queryKey: ["course-finder-self-student", currentUser?.id],
+    queryFn: async () => {
+      try {
+        return await apiFetch(`${BASE_URL}/api/students/me`);
+      } catch (error) {
+        if (!(error instanceof CourseFinderApiError) || error.status !== 404) throw error;
+        return apiFetch(`${BASE_URL}/api/students/me`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({}),
+        });
+      }
+    },
+    enabled: isStudentUser && !!p && !!currentUser?.id,
+    staleTime: 30_000,
+  });
 
   const level = p ? degreeToLevel(p.degree) : "undergraduate";
   // Pull program-specific document requirements from the catalog. Falls
@@ -2280,7 +2303,6 @@ function ApplyDialog({ program: p, onClose, currentUser, agentShareRate, hideSer
     }
     return LEVEL_DOCS[level];
   }, [programReqs, programReqsFetched, level, resolveDocMeta]);
-  const uploadedCount = Object.keys(docs).length;
   const requiredDocKeys = currentDocs.filter(d => d.required).map(d => d.key);
 
   // Documents the selected student already has on file satisfy required
@@ -2293,7 +2315,11 @@ function ApplyDialog({ program: p, onClose, currentUser, agentShareRate, hideSer
     staleTime: 30_000,
   });
   const existingDocTypes = useMemo(
-    () => new Set<string>(existingStudentDocs.map((d) => (d.type || "").toLowerCase())),
+    () => new Set<string>(
+      existingStudentDocs
+        .filter((d) => String(d.status || "").toLowerCase() !== "rejected")
+        .map((d) => (d.type || "").toLowerCase()),
+    ),
     [existingStudentDocs],
   );
   const onFileSatisfiedKeys = useMemo(() => {
@@ -2304,22 +2330,23 @@ function ApplyDialog({ program: p, onClose, currentUser, agentShareRate, hideSer
     return set;
   }, [requiredDocKeys, existingDocTypes]);
   const missingRequiredCount = requiredDocKeys.filter(k => !docs[k] && !onFileSatisfiedKeys.has(k)).length;
+  const satisfiedRequiredCount = requiredDocKeys.length - missingRequiredCount;
   const allRequiredUploaded = missingRequiredCount === 0;
 
   const debouncedSearch = useMemo(() => searchTerm.trim(), [searchTerm]);
 
   useEffect(() => {
-    if (isStudentUser && currentUser && p) {
+    if (isStudentUser && currentUser && selfStudentProfile?.id && p) {
       setSelectedStudent({
-        id: currentUser.id,
-        firstName: currentUser.firstName || "",
-        lastName: currentUser.lastName || "",
-        email: currentUser.email || "",
-        nationality: null,
-        createdAt: currentUser.createdAt || new Date().toISOString(),
+        id: selfStudentProfile.id,
+        firstName: selfStudentProfile.firstName || currentUser.firstName || "",
+        lastName: selfStudentProfile.lastName || currentUser.lastName || "",
+        email: selfStudentProfile.email || currentUser.email || "",
+        nationality: selfStudentProfile.nationality || null,
+        createdAt: selfStudentProfile.createdAt || currentUser.createdAt || new Date().toISOString(),
       });
     }
-  }, [isStudentUser, currentUser, p]);
+  }, [isStudentUser, currentUser, selfStudentProfile, p]);
 
   const { data: recentStudents = [], isLoading: loadingRecent } = useQuery<StudentOption[]>({
     queryKey: ["apply-recent-students"],
@@ -2346,6 +2373,7 @@ function ApplyDialog({ program: p, onClose, currentUser, agentShareRate, hideSer
     setSuccess(false);
     setStep("select");
     setDocs({});
+    setSubmittedDocumentCount(0);
     setNewStudentForm({ firstName: "", lastName: "", email: "", phone: "", nationality: "" });
     setCreatingStudent(false);
     onClose();
@@ -2388,10 +2416,10 @@ function ApplyDialog({ program: p, onClose, currentUser, agentShareRate, hideSer
     }
   }
 
-  async function saveDocumentsForApplication(studentId: number, applicationId: number, studentFirstName: string, studentLastName: string): Promise<number> {
+  async function saveDocumentsForStudent(studentId: number, studentFirstName: string, studentLastName: string): Promise<number[]> {
     const uploadedDocs = Object.values(docs);
-    if (uploadedDocs.length === 0) return 0;
-    let savedCount = 0;
+    if (uploadedDocs.length === 0) return [];
+    const savedDocumentIds: number[] = [];
     for (const d of uploadedDocs) {
       try {
         const docName = `${studentFirstName}-${studentLastName}-${d.label}`;
@@ -2403,23 +2431,23 @@ function ApplyDialog({ program: p, onClose, currentUser, agentShareRate, hideSer
           || (d.label ? d.label.toLowerCase().replace(/\s+/g, "_") : "other");
         if (docType === "photograph") docType = "photo";
         const { fileKey, mimeType, sizeBytes } = await uploadDocumentFile(d.file);
-        await createDocumentRecord({
+        const createdDocument = await createDocumentRecord({
           name: docName,
           type: docType,
           status: "pending",
           studentId,
-          applicationId,
           fileKey,
           mimeType,
           sizeBytes,
           originalFileName: d.file?.name ?? null,
         });
-        savedCount++;
-      } catch (err) {
+        savedDocumentIds.push(createdDocument.id);
+      } catch (err: any) {
         console.error(`Document upload error for ${d.label}:`, err);
+        throw new Error(`${d.label}: ${err?.message || "Document upload failed"}`);
       }
     }
-    return savedCount;
+    return savedDocumentIds;
   }
 
   async function handleSubmit() {
@@ -2427,32 +2455,33 @@ function ApplyDialog({ program: p, onClose, currentUser, agentShareRate, hideSer
     if (!allRequiredUploaded) return;
     setSubmitting(true);
     try {
-      const result = await apiFetch(`${BASE_URL}/api/course-finder/apply`, {
+      // Mandatory-document and portal-readiness gates inspect the student's
+      // persisted library. Save selected files first, then tell the API which
+      // new records should also be bound to the created application.
+      const uploadedDocumentIds = await saveDocumentsForStudent(
+        selectedStudent.id,
+        selectedStudent.firstName,
+        selectedStudent.lastName,
+      );
+      setSubmittedDocumentCount(uploadedDocumentIds.length);
+      await apiFetch(`${BASE_URL}/api/course-finder/apply`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           studentId: selectedStudent.id,
           programId: p.id,
           notes: notes || null,
+          uploadedDocumentIds,
         }),
       });
-
-      const application = (result as any)?.application;
-      const applicationId = application?.id;
-      const resolvedStudentId: number | undefined = application?.studentId ?? selectedStudent.id;
-      const docCount = Object.keys(docs).length;
-      if (docCount > 0 && applicationId && resolvedStudentId) {
-        const savedCount = await saveDocumentsForApplication(resolvedStudentId, applicationId, selectedStudent.firstName, selectedStudent.lastName);
-        if (savedCount < docCount) {
-          toast({ title: t("courseFinderPage.warning"), description: t("courseFinderPage.documentsUploadedPartial", { saved: savedCount, total: docCount }), variant: "destructive" });
-        }
-      }
 
       setSuccess(true);
       queryClient.invalidateQueries({ queryKey: ["applications"] });
       queryClient.invalidateQueries({ queryKey: ["students"] });
       queryClient.invalidateQueries({ queryKey: ["/api/documents"] });
-      const docMsg = docCount > 0 ? t("courseFinderPage.withDocuments", { n: docCount }) : "";
+      const docMsg = uploadedDocumentIds.length > 0
+        ? t("courseFinderPage.withDocuments", { n: uploadedDocumentIds.length })
+        : "";
       toast({ title: t("courseFinderPage.applicationCreated"), description: t("courseFinderPage.applicationCreatedDesc", { student: `${selectedStudent.firstName} ${selectedStudent.lastName}`, program: p.name, docs: docMsg }) });
       setTimeout(() => handleClose(), 1500);
     } catch (err: any) {
@@ -2494,8 +2523,8 @@ function ApplyDialog({ program: p, onClose, currentUser, agentShareRate, hideSer
             <p className="text-sm text-muted-foreground text-center">
               {isStudentUser ? "Your application has been submitted for review." : "Application, commission and service fee records have been created automatically."}
             </p>
-            {uploadedCount > 0 && (
-              <p className="text-xs text-muted-foreground">{uploadedCount} document{uploadedCount !== 1 ? "s" : ""} uploaded successfully.</p>
+            {submittedDocumentCount > 0 && (
+              <p className="text-xs text-muted-foreground">{submittedDocumentCount} document{submittedDocumentCount !== 1 ? "s" : ""} uploaded successfully.</p>
             )}
           </div>
         ) : (
@@ -2708,7 +2737,7 @@ function ApplyDialog({ program: p, onClose, currentUser, agentShareRate, hideSer
                 <div>
                   <div className="flex items-center justify-between mb-2">
                     <p className="text-sm font-semibold text-foreground">{t("courseFinderPage.requiredDocuments")}</p>
-                    <p className="text-xs text-muted-foreground">{t("courseFinderPage.uploadedCount", { n: uploadedCount, total: currentDocs.length })}</p>
+                    <p className="text-xs text-muted-foreground">{t("courseFinderPage.uploadedCount", { n: satisfiedRequiredCount, total: requiredDocKeys.length })}</p>
                   </div>
                   <div className="mb-2 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 dark:border-amber-900/60 dark:bg-amber-950/20">
                     <p className="text-[11px] text-amber-900 dark:text-amber-200">{APPLICATION_DOCUMENT_HELP_TEXT}</p>

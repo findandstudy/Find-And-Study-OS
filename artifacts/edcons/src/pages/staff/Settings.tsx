@@ -451,7 +451,7 @@ export default function SettingsPage() {
       case "language": return LanguageTab();
       case "notifications": return NotificationsTab();
       case "security": return SecurityTab();
-      case "pipeline": return isManager ? <PipelineTabContent /> : null;
+      case "pipeline": return isManager ? <PipelineTab qc={qc} /> : null;
       case "seasons": return isManager ? <SeasonsTabContent /> : null;
       case "branding": return isManager ? BrandingTab() : null;
       case "company": return isManager ? CompanyTab() : null;
@@ -715,10 +715,6 @@ export default function SettingsPage() {
         </div>
       </Card>
     );
-  }
-
-  function PipelineTabContent() {
-    return <PipelineTab qc={qc} />;
   }
 
   function SeasonsTabContent() {
@@ -1288,9 +1284,9 @@ export default function SettingsPage() {
 }
 
 function PipelineTab({ qc }: { qc: ReturnType<typeof useQueryClient> }) {
-  const leadPipeline = usePipelineStages("lead");
-  const applicationPipeline = usePipelineStages("application");
-  const studentPipeline = usePipelineStages("student");
+  const leadPipeline = usePipelineStages("lead", true);
+  const applicationPipeline = usePipelineStages("application", true);
+  const studentPipeline = usePipelineStages("student", true);
   const [editingType, setEditingType] = useState<string | null>(null);
   const { toast } = useToast();
 

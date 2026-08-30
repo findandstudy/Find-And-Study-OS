@@ -21,6 +21,7 @@ export const leadsTable = pgTable("leads", {
   season: text("season").notNull().default("2026"),
   agentId: integer("agent_id").references(() => agentsTable.id, { onDelete: "set null" }),
   assignedToId: integer("assigned_to_id").references(() => usersTable.id, { onDelete: "set null" }),
+  agencyAssignedToId: integer("agency_assigned_to_id").references(() => usersTable.id, { onDelete: "set null" }),
   interestedProgram: text("interested_program"),
   interestedUniversity: text("interested_university"),
   interestedCountry: text("interested_country"),
@@ -51,6 +52,7 @@ export const leadsTable = pgTable("leads", {
 }, (table) => [
   index("leads_agent_id_idx").on(table.agentId),
   index("leads_assigned_to_id_idx").on(table.assignedToId),
+  index("leads_agency_assigned_to_id_idx").on(table.agencyAssignedToId),
   index("leads_status_idx").on(table.status),
   index("leads_season_idx").on(table.season),
   index("leads_origin_type_idx").on(table.originType),

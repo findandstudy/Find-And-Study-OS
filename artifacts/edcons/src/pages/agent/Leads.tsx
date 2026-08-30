@@ -69,7 +69,7 @@ function useCountries() {
   });
 }
 
-const SOURCES = ["website", "referral", "social_media", "walk_in", "partner", "other"];
+type LeadSourceOption = { value: string; label: string; kind?: string };
 
 type ColVariant = "default" | "won" | "lost";
 
@@ -296,10 +296,11 @@ function DroppableColumn({ col, leads, showRevenue, onView }: {
 
 
 /* ── FilterPopover ────────────────────────────────────────── */
-function FilterPopover({ filters, onChange, columns }: {
+function FilterPopover({ filters, onChange, columns, sourceOptions }: {
   filters: { source: string; status: string };
   onChange: (f: { source: string; status: string }) => void;
   columns: ColDef[];
+  sourceOptions: LeadSourceOption[];
 }) {
   const [open, setOpen] = useState(false);
   const hasActive = filters.source !== "all" || filters.status !== "all";
@@ -340,8 +341,8 @@ function FilterPopover({ filters, onChange, columns }: {
             <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All</SelectItem>
-              {SOURCES.map(s => (
-                <SelectItem key={s} value={s} className="capitalize">{s.replace(/_/g, " ")}</SelectItem>
+              {sourceOptions.map(source => (
+                <SelectItem key={source.value} value={source.value}>{source.label}</SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -510,8 +511,8 @@ function MultiCountrySelect({ value, onChange }: { value: string; onChange: (v: 
 }
 
 /* ── EditLeadDialog ───────────────────────────────────────── */
-function EditLeadDialog({ open, onClose, lead, canSeeRevenue, columns }: {
-  open: boolean; onClose: () => void; lead: any; canSeeRevenue: boolean; columns: ColDef[];
+function EditLeadDialog({ open, onClose, lead, canSeeRevenue, columns, sourceOptions }: {
+  open: boolean; onClose: () => void; lead: any; canSeeRevenue: boolean; columns: ColDef[]; sourceOptions: LeadSourceOption[];
 }) {
   const [form, setForm] = useState({ ...EMPTY_FORM, status: "new" });
   const updateLead = useUpdateLead();
@@ -594,8 +595,8 @@ function EditLeadDialog({ open, onClose, lead, canSeeRevenue, columns }: {
             <Select value={form.source} onValueChange={v => setForm({ ...form, source: v })}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
-                {SOURCES.map(s => (
-                  <SelectItem key={s} value={s} className="capitalize">{s.replace(/_/g, " ")}</SelectItem>
+                {sourceOptions.map(source => (
+                  <SelectItem key={source.value} value={source.value}>{source.label}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -817,6 +818,21 @@ export default function AgentLeadsPage() {
   );
 
   const allLeads = data?.data || [];
+  const { data: sourceResponse } = useQuery<{ data: LeadSourceOption[] }>({
+    queryKey: ["agent-lead-distinct-sources"],
+    queryFn: () => customFetch("/api/leads/distinct-sources") as Promise<{ data: LeadSourceOption[] }>,
+    staleTime: 5 * 60_000,
+  });
+  const sourceOptions = useMemo(() => {
+    const rows = sourceResponse?.data || [];
+    const byValue = new Map(rows.map(row => [row.value, row]));
+    for (const lead of allLeads) {
+      const value = String(lead.source || "").trim();
+      if (value && !byValue.has(value)) byValue.set(value, { value, label: value.replace(/_/g, " ") });
+    }
+    if (!byValue.has("website")) byValue.set("website", { value: "website", label: "Website" });
+    return [...byValue.values()];
+  }, [allLeads, sourceResponse?.data]);
 
   const columns: ColDef[] = pipelineStages.map(s => ({
     id: s.key,
@@ -1046,7 +1062,7 @@ export default function AgentLeadsPage() {
                 className="pl-9 bg-white dark:bg-black/20 border-border rounded-full"
               />
             </div>
-            <FilterPopover filters={filters} onChange={setFilters} columns={columns} />
+            <FilterPopover filters={filters} onChange={setFilters} columns={columns} sourceOptions={sourceOptions} />
 
             <Button variant="outline" className="rounded-full gap-2" onClick={() => handleExport("all")} title={t("agentLeads.export.button")}>
               <Download className="w-4 h-4" /> {t("agentLeads.export.button")}
@@ -1286,6 +1302,7 @@ export default function AgentLeadsPage() {
         lead={editLead}
         canSeeRevenue={canSeeRevenue}
         columns={columns}
+        sourceOptions={sourceOptions}
       />
 
       {/* ── Delete Confirm Dialog ──────────────────────────── */}
@@ -1297,7 +1314,7 @@ export default function AgentLeadsPage() {
         isPending={deleteInProgress}
       />
 
-      <CreateLeadDialog open={createOpen} onOpenChange={setCreateOpen} />
+      <CreateLeadDialog open={createOpen} onOpenChange={setCreateOpen} sourceOptions={sourceOptions} />
     </>
   );
 }

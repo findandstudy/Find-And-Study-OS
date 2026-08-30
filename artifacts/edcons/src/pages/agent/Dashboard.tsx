@@ -25,6 +25,7 @@ import { useSeason } from "@/contexts/SeasonContext";
 import { usePipelineStages } from "@/hooks/use-pipeline-stages";
 import SignContract from "@/pages/agent/SignContract";
 import { localizeNotification } from "@/lib/notificationLocalization";
+import { UpcomingFollowUpsWidget } from "@/components/UpcomingFollowUpsWidget";
 
 const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
@@ -343,7 +344,7 @@ export default function AgentDashboard() {
               <Button
                 size="sm"
                 className="w-full gap-2"
-                onClick={() => setLocation("/agent/messages")}
+                onClick={() => setLocation(`/agent/messages?recipient=${contactPerson.id}`)}
               >
                 <MessageCircle className="w-4 h-4" /> {t("agentDash.sendMessage")}
               </Button>
@@ -407,6 +408,11 @@ export default function AgentDashboard() {
           )}
         </div>
 
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <OfferDeadlinesWidget detailHrefPrefix="/agent/applications" />
+          <UpcomingFollowUpsWidget detailHrefPrefix="/agent" />
+        </div>
+
         <Card className="p-6 border-none shadow-lg shadow-black/5">
           <h3 className="font-display font-bold text-lg mb-6">{t("agentDash.growthOverview")}</h3>
           <div className="h-[250px] w-full">
@@ -432,8 +438,6 @@ export default function AgentDashboard() {
             </ResponsiveContainer>
           </div>
         </Card>
-
-        <OfferDeadlinesWidget detailHrefPrefix="/agent/apps" />
 
       </div>
 

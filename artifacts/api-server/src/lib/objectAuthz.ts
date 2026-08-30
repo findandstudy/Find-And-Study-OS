@@ -244,15 +244,20 @@ export async function canAccessGenericObject(user: RequestUser, wildcardPath: st
     if (userDoc.id === user.id && consistent(userDoc.id)) return true;
   }
 
-  // 6. Agent business certificate — written by the agent themselves or by an
-  //    admin. The DB reference (agents.businessCertUrl) is the authority; no
+  // 6. Agent onboarding evidence (logo, representative ID, business
+  //    certificate) — written by the agent themselves or by an admin/onboarding
+  //    flow. The DB reference is the authority; no
   //    uploader-consistency check is needed because the write route is already
   //    protected (callerOwnsObject / admin-only). Visible to admins, or to any
   //    user whose agent-visibility scope includes the owning agent.
   const [agentSelfDoc] = await db
     .select({ id: agentsTable.id })
     .from(agentsTable)
-    .where(matchKey(agentsTable.businessCertUrl, key))
+    .where(or(
+      matchKey(agentsTable.logoUrl, key),
+      matchKey(agentsTable.agentIdProofUrl, key),
+      matchKey(agentsTable.businessCertUrl, key),
+    )!)
     .limit(1);
   if (agentSelfDoc) {
     if (isAdmin) return true;

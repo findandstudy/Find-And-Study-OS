@@ -35,6 +35,8 @@ import { buildStableSignedStudentPhotoThumbnailPath } from "@workspace/portal-ad
 import { recordRequestSpan } from "../lib/requestTelemetry";
 import { buildFacetFilterInput, loadFacetValue } from "../lib/facetCache";
 import { isFtcEmbedSource, trackFtcLeadStageChange } from "../lib/ga4LeadTracking";
+import { canTransitionToPipelineStage } from "../lib/pipelineAudience";
+import { resolveAgentFeatures } from "../lib/agentFeatures";
 
 const router: IRouter = Router();
 
@@ -70,6 +72,14 @@ const LEAD_PATCH_FIELDS = [
   "educationData",
 ];
 
+function leadForViewer<T extends { assignedToId?: number | null; agencyAssignedToId?: number | null }>(lead: T, role: string): T {
+  if (!isAgentRole(role)) return lead;
+  return {
+    ...lead,
+    assignedToId: lead.agencyAssignedToId ?? null,
+  };
+}
+
 function addDateRangeCondition(conditions: any[], column: any, range?: string): void {
   if (!range || range === "all") return;
   const now = new Date();
@@ -96,16 +106,25 @@ function addDateRangeCondition(conditions: any[], column: any, range?: string): 
   }
 }
 
-router.get("/leads/distinct-sources", requireAuth, requireRole(...STAFF_ROLES), async (_req, res): Promise<void> => {
+router.get("/leads/distinct-sources", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), requireAgentStaffPermission("leads"), async (req, res): Promise<void> => {
+  const agentSide = isAgentRole(req.user!.role);
+  const visibleAgentIds = agentSide ? await getAgentVisibleIds(req.user!.id, req.user!.role) : [];
+  const leadScope = agentSide
+    ? inArray(leadsTable.agentId, visibleAgentIds.length > 0 ? visibleAgentIds : [0])
+    : sql`TRUE`;
+  const widgetScope = agentSide
+    ? inArray(embedWidgetsTable.agentId, visibleAgentIds.length > 0 ? visibleAgentIds : [0])
+    : sql`TRUE`;
   const [leadRows, widgetRows, accountRows] = await Promise.all([
     db
       .selectDistinct({ source: leadsTable.source })
       .from(leadsTable)
-      .where(sql`${leadsTable.source} IS NOT NULL AND ${leadsTable.source} != ''`),
+      .where(and(leadScope, sql`${leadsTable.source} IS NOT NULL AND ${leadsTable.source} != ''`)),
     db
       .select({ slug: embedWidgetsTable.slug, name: embedWidgetsTable.name, mode: embedWidgetsTable.mode })
-      .from(embedWidgetsTable),
-    db
+      .from(embedWidgetsTable)
+      .where(widgetScope),
+    agentSide ? Promise.resolve([]) : db
       .select({
         id: channelAccountsTable.id,
         channel: channelAccountsTable.channel,
@@ -261,9 +280,14 @@ router.post("/public/lead", publicLeadLimiter, async (req, res): Promise<void> =
 
 router.post("/public/lead/:token", publicLeadLimiter, async (req, res): Promise<void> => {
   const token = String(req.params.token);
-  const [agent] = await db.select({ id: agentsTable.id, status: agentsTable.status })
+  const [agent] = await db.select({
+    id: agentsTable.id,
+    status: agentsTable.status,
+    planTier: agentsTable.planTier,
+    featureOverrides: agentsTable.featureOverrides,
+  })
     .from(agentsTable).where(eq(agentsTable.embedToken, token));
-  if (!agent || agent.status !== "active") {
+  if (!agent || agent.status !== "active" || !resolveAgentFeatures(agent.planTier, agent.featureOverrides).web_to_lead) {
     res.status(404).json({ error: "Invalid or inactive form" });
     return;
   }
@@ -442,13 +466,14 @@ router.get("/leads", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), r
   }
   if (appSource === "agent") conditions.push(isNotNull(leadsTable.agentId));
   else if (appSource === "staff") conditions.push(isNull(leadsTable.agentId));
-  if (assignment === "mine") conditions.push(eq(leadsTable.assignedToId, user.id));
-  else if (assignment === "unassigned") conditions.push(isNull(leadsTable.assignedToId));
+  const viewerAssignmentColumn = isAgentRole(user.role) ? leadsTable.agencyAssignedToId : leadsTable.assignedToId;
+  if (assignment === "mine") conditions.push(eq(viewerAssignmentColumn, user.id));
+  else if (assignment === "unassigned") conditions.push(isNull(viewerAssignmentColumn));
   else if (assignment === "mine_unassigned") {
-    conditions.push(or(eq(leadsTable.assignedToId, user.id), isNull(leadsTable.assignedToId))!);
+    conditions.push(or(eq(viewerAssignmentColumn, user.id), isNull(viewerAssignmentColumn))!);
   } else if (assignment && assignment !== "all") {
     const parsed = parseInt(assignment, 10);
-    if (Number.isFinite(parsed)) conditions.push(eq(leadsTable.assignedToId, parsed));
+    if (Number.isFinite(parsed)) conditions.push(eq(viewerAssignmentColumn, parsed));
   }
   if (nationality && nationality !== "all") conditions.push(eq(leadsTable.nationality, nationality));
   if (name) {
@@ -596,7 +621,7 @@ router.get("/leads", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), r
     fuRows.forEach(r => { if (r.leadId) nextFollowupMap.set(r.leadId, r.nextDate); });
   }
 
-  const data = rows.map(r => ({
+  const data = rows.map(r => leadForViewer({
     ...r.lead,
     agentName: r.agentName || null,
     nextFollowup: nextFollowupMap.get(r.lead.id) || null,
@@ -604,7 +629,7 @@ router.get("/leads", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), r
     convertedStudentPhotoUrl: r.studentHasPhoto && r.lead.convertedStudentId
       ? buildStableSignedStudentPhotoThumbnailPath(r.lead.convertedStudentId)
       : null,
-  }));
+  }, user.role));
 
   res.json({
     data,
@@ -659,7 +684,8 @@ router.post("/leads", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), 
     interestedUniversity: interestedUniversity || null,
     interestedCountry: interestedCountry || null,
     source: source || null, notes: notes || null,
-    assignedToId: assignedTo || null,
+    assignedToId: isAgentRole(user.role) ? null : (assignedTo || null),
+    agencyAssignedToId: isAgentRole(user.role) ? (assignedTo || null) : null,
     agentId: resolvedAgentId,
     season: season || currentYear,
     interestedLevel: interestedLevel || null,
@@ -688,7 +714,7 @@ router.post("/leads", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), 
   }
   dispatchNotification(leadCreatedCtx).catch(() => {});
 
-  res.status(201).json(lead);
+  res.status(201).json(leadForViewer(lead, user.role));
 });
 
 router.post("/leads/bulk", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), requireAgentStaffPermission("leads"), async (req, res): Promise<void> => {
@@ -795,7 +821,7 @@ router.get("/leads/:id", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES
       return;
     }
   }
-  res.json(lead);
+  res.json(leadForViewer(lead, user.role));
 });
 
 // GET /api/leads/:id/documents — list documents tied to a lead.
@@ -873,6 +899,11 @@ router.post("/leads/:id/documents", requireAuth, requireRole(...STAFF_ROLES, ...
   if (!lead) { res.status(404).json({ error: "Lead not found" }); return; }
   const user = req.user!;
   if (isAgentRole(user.role)) {
+    const agent = await getAgentRecord(user.id, user.role);
+    if (!agent || !resolveAgentFeatures(agent.planTier, agent.featureOverrides).lead_document_upload) {
+      res.status(403).json({ error: "Document uploads are not enabled for this agency", code: "AGENT_FEATURE_DISABLED" });
+      return;
+    }
     const visibleIds = await getAgentVisibleIds(user.id, user.role);
     if (!lead.agentId || !visibleIds.includes(lead.agentId)) {
       res.status(403).json({ error: "Access denied" });
@@ -1093,7 +1124,7 @@ router.patch("/leads/:id", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROL
     const target = req.body.assignedTo;
     if (!isAgentManagerRole) {
       // agent_staff: only self-claim of an unassigned lead.
-      if (target === null || Number(target) !== user.id || existing.assignedToId !== null) {
+      if (target === null || Number(target) !== user.id || existing.agencyAssignedToId !== null) {
         res.status(403).json({ error: "Access denied" }); return;
       }
       allowedFields = [...allowedFields, "assignedTo"];
@@ -1132,7 +1163,7 @@ router.patch("/leads/:id", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROL
   for (const key of allowedFields) {
     if (req.body[key] !== undefined) {
       if (key === "assignedTo") {
-        updates["assignedToId"] = req.body[key];
+        updates[isAgent ? "agencyAssignedToId" : "assignedToId"] = req.body[key];
       } else {
         updates[key] = req.body[key];
       }
@@ -1160,14 +1191,28 @@ router.patch("/leads/:id", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROL
     (normUpdates as any).phone = rawPhone ? normalizePhoneField(rawPhone) : rawPhone;
     (normUpdates as any).phoneE164 = toE164((normUpdates as any).phone);
   }
+  if (
+    Object.prototype.hasOwnProperty.call(normUpdates, "status")
+    && existing.status !== normUpdates.status
+    && !(await canTransitionToPipelineStage("lead", String(normUpdates.status), user.role))
+  ) {
+    res.status(403).json({
+      error: "Your role cannot transition leads to this pipeline stage",
+      code: "PIPELINE_STAGE_TRANSITION_FORBIDDEN",
+    });
+    return;
+  }
   const assignmentChanged =
     Object.prototype.hasOwnProperty.call(normUpdates, "assignedToId") &&
     existing.assignedToId !== normUpdates.assignedToId;
+  const agencyAssignmentChanged =
+    Object.prototype.hasOwnProperty.call(normUpdates, "agencyAssignedToId") &&
+    existing.agencyAssignedToId !== normUpdates.agencyAssignedToId;
   const canCascadeAssignment = assignmentChanged
     ? await userHasPermission({ id: user.id, role: user.role }, "records.cascade_assignment")
     : false;
   const statusChanged = Object.prototype.hasOwnProperty.call(normUpdates, "status") && existing.status !== normUpdates.status;
-  const lead = assignmentChanged || statusChanged
+  const lead = assignmentChanged || agencyAssignmentChanged || statusChanged
     ? await db.transaction(async (tx) => {
         const [updatedLead] = await tx.update(leadsTable).set(normUpdates).where(eq(leadsTable.id, id)).returning();
         if (!updatedLead) return null;
@@ -1190,6 +1235,17 @@ router.patch("/leads/:id", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROL
             throwOnError: true,
             executor: tx,
           });
+        }
+        if (agencyAssignmentChanged && updatedLead.convertedStudentId) {
+          await tx.update(studentsTable)
+            .set({ agencyAssignedToId: updatedLead.agencyAssignedToId })
+            .where(eq(studentsTable.id, updatedLead.convertedStudentId));
+          await tx.update(leadsTable)
+            .set({ agencyAssignedToId: updatedLead.agencyAssignedToId })
+            .where(and(
+              eq(leadsTable.convertedStudentId, updatedLead.convertedStudentId),
+              isNull(leadsTable.deletedAt),
+            ));
         }
         return updatedLead;
       })
@@ -1291,7 +1347,7 @@ router.patch("/leads/:id", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROL
     }
   }
 
-  res.json(lead);
+  res.json(leadForViewer(lead, user.role));
 });
 
 router.delete("/leads/:id", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), requireAgentStaffPermission("leads"), async (req, res): Promise<void> => {
@@ -1423,6 +1479,13 @@ router.post("/leads/bulk-action", requireAuth, requireRole(...STAFF_ROLES), asyn
     await logAudit(user.id, "bulk_assign_leads", "lead", undefined, { ids: idsToUpdate, assignedToId }, req.ip);
     res.json({ success: true, updated, skipped }); return;
   } else if (action === "move" && status) {
+    if (!(await canTransitionToPipelineStage("lead", String(status), user.role))) {
+      res.status(403).json({
+        error: "Your role cannot transition leads to this pipeline stage",
+        code: "PIPELINE_STAGE_TRANSITION_FORBIDDEN",
+      });
+      return;
+    }
     const affectedLeads = await db.select().from(leadsTable)
       .where(and(inArray(leadsTable.id, numericIds), isNull(leadsTable.deletedAt)));
     updated = await db.transaction(async (tx) => {
@@ -1558,6 +1621,7 @@ router.post("/leads/:id/convert", requireAuth, requireRole(...STAFF_ROLES, ...AG
     nationality: lead.nationality || s(aiData.nationality) || null,
     agentId: (lead as any).agentId || null,
     assignedToId: lead.assignedToId || null,
+    agencyAssignedToId: lead.agencyAssignedToId || null,
     branchId: lead.branchId || null,
     status: "active",
     motherName: s(aiData.motherName) || null,
@@ -1655,6 +1719,7 @@ router.post("/leads/:id/convert", requireAuth, requireRole(...STAFF_ROLES, ...AG
       if (student) {
         const mergeUpdates: any = {};
         if (!student.assignedToId && lockedLead.assignedToId) mergeUpdates.assignedToId = lockedLead.assignedToId;
+        if (!student.agencyAssignedToId && lockedLead.agencyAssignedToId) mergeUpdates.agencyAssignedToId = lockedLead.agencyAssignedToId;
         if (!student.branchId && lockedLead.branchId) mergeUpdates.branchId = lockedLead.branchId;
         if (!student.motherName && studentValues.motherName) mergeUpdates.motherName = studentValues.motherName;
         if (!student.fatherName && studentValues.fatherName) mergeUpdates.fatherName = studentValues.fatherName;
@@ -2212,7 +2277,7 @@ router.patch("/follow-ups/:id", requireAuth, requireRole(...STAFF_ROLES, "agent_
   res.json(enriched || followUp);
 });
 
-router.get("/follow-ups/upcoming", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
+router.get("/follow-ups/upcoming", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), async (req, res): Promise<void> => {
   const userId = req.user!.id;
   const userRole = req.user!.role;
   const isAdmin = ADMIN_ROLES.includes(userRole);
@@ -2238,7 +2303,33 @@ router.get("/follow-ups/upcoming", requireAuth, requireRole(...STAFF_ROLES), asy
     }
   }
 
-  if (!isAdmin) {
+  if (isAgentRole(userRole)) {
+    const visibleAgentIds = await getAgentVisibleIds(userId, userRole);
+    const scopedAgentIds = visibleAgentIds.length > 0 ? visibleAgentIds : [0];
+    baseConditions.push(or(
+      sql`EXISTS (SELECT 1 FROM leads afl WHERE afl.id = ${followUpsTable.leadId} AND afl.deleted_at IS NULL AND afl.agent_id = ANY(${scopedAgentIds}))`,
+      sql`EXISTS (SELECT 1 FROM students afs WHERE afs.id = ${followUpsTable.studentId} AND afs.deleted_at IS NULL AND afs.agent_id = ANY(${scopedAgentIds}))`,
+      eq(followUpsTable.assignedToId, userId),
+    )!);
+
+    // An agent team member may only see follow-ups for modules the agency has
+    // explicitly granted to that account. Tenant visibility alone is not
+    // sufficient: otherwise the dashboard widget would leak a lead/student
+    // name even when the corresponding sidebar module is disabled.
+    if (userRole === "agent_staff") {
+      const staffPermissions = new Set(req.user!.agentStaffPermissions ?? []);
+      const permittedResourceTypes = [
+        staffPermissions.has("leads")
+          ? sql`${followUpsTable.leadId} IS NOT NULL`
+          : null,
+        staffPermissions.has("students")
+          ? sql`${followUpsTable.studentId} IS NOT NULL`
+          : null,
+        and(isNull(followUpsTable.leadId), isNull(followUpsTable.studentId)),
+      ].filter(Boolean) as any[];
+      baseConditions.push(or(...permittedResourceTypes)!);
+    }
+  } else if (!isAdmin) {
     const leadAssignedOrUnassigned = or(
       sql`(SELECT assigned_to_id FROM leads WHERE leads.id = ${followUpsTable.leadId}) = ${userId}`,
       sql`(SELECT assigned_to_id FROM leads WHERE leads.id = ${followUpsTable.leadId}) IS NULL`

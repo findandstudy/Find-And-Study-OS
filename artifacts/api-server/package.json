@@ -156,7 +156,8 @@
     "audit:sit-passport-identity": "tsx scripts/audit-sit-passport-identity.ts",
     "audit:dormbooking-ai": "tsx scripts/audit-dormbooking-ai.ts",
     "reconcile:portal-passport-identities": "tsx scripts/reconcile-portal-passport-identities.ts",
-    "test:program-import-headers": "tsx --test ./scripts/test-program-import-headers.ts"
+    "test:program-import-headers": "tsx --test ./scripts/test-program-import-headers.ts",
+    "test:agency-platform-overhaul": "tsx --test ./scripts/test-agency-platform-overhaul.ts"
   },
   "dependencies": {
     "@workspace/corporate-facts": "workspace:*",

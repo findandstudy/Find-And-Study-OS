@@ -1,5 +1,6 @@
 import { db, agencyAssignedStaffTable, agentsTable, usersTable } from "@workspace/db";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, isNull } from "drizzle-orm";
+import { STAFF_ROLES } from "@workspace/roles";
 
 export interface StaffEntry { userId: number; isPrimary?: boolean }
 
@@ -176,6 +177,40 @@ export async function getAgencyMemberAgentIds(userId: number): Promise<number[]>
   const set = new Set<number>();
   for (const r of rows) if (r.agentId != null) set.add(r.agentId);
   return Array.from(set);
+}
+
+/**
+ * Resolve the platform-side contact responsible for records originating from
+ * an agency. A sub-agent inherits the first configured primary contact found
+ * while walking up its parent chain. Only active internal staff accounts are
+ * eligible; agency team members are intentionally excluded.
+ */
+export async function resolveAgencyPlatformAssignee(agentId: number): Promise<number | null> {
+  const visited = new Set<number>();
+  let currentId: number | null = agentId;
+  while (currentId && !visited.has(currentId)) {
+    visited.add(currentId);
+    const [agent] = await db.select({
+      id: agentsTable.id,
+      parentAgentId: agentsTable.parentAgentId,
+      assignedStaffId: agentsTable.assignedStaffId,
+    }).from(agentsTable).where(eq(agentsTable.id, currentId));
+    if (!agent) return null;
+
+    const staff = await getAgencyStaffWithLegacy(agent.id, agent.assignedStaffId ?? null);
+    const ordered = [...staff].sort((a, b) => Number(b.isPrimary) - Number(a.isPrimary));
+    for (const candidate of ordered) {
+      const [active] = await db.select({ id: usersTable.id }).from(usersTable).where(and(
+        eq(usersTable.id, candidate.userId),
+        eq(usersTable.isActive, true),
+        isNull(usersTable.deletedAt),
+        inArray(usersTable.role, STAFF_ROLES),
+      ));
+      if (active) return active.id;
+    }
+    currentId = agent.parentAgentId ?? null;
+  }
+  return null;
 }
 
 export function staffDisplayName(s: { firstName: string | null; lastName: string | null }): string {

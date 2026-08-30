@@ -19,12 +19,12 @@ import {
   toAgentInsertValues,
   type AgentCatalog,
 } from "../lib/exportImportExcel";
-import { db, agentsTable, usersTable, DEFAULT_ROLE_PERMISSIONS, commissionsTable, agentBranchesTable, branchesTable, contractTemplatesTable, signingSessionsTable, settingsTable, emailVerificationCodesTable, conversationsTable, messagesTable, broadcastsTable, messageTemplatesTable, notesTable, applicationStageDocumentsTable } from "@workspace/db";
+import { db, agentsTable, agentIntegrationsTable, usersTable, DEFAULT_ROLE_PERMISSIONS, commissionsTable, agentBranchesTable, branchesTable, contractTemplatesTable, signingSessionsTable, settingsTable, emailVerificationCodesTable, conversationsTable, messagesTable, broadcastsTable, messageTemplatesTable, notesTable, applicationStageDocumentsTable } from "@workspace/db";
 import { getNewestSignedContractUrl } from "../lib/signContract";
 import { eq, sql, isNull, isNotNull, and, or, ilike, inArray, desc, type SQL } from "drizzle-orm";
 import { requireAuth, requireRole, requireAgentStaffPermission, logAudit, AGENT_STAFF_PERMISSIONS as PERM_KEYS } from "../lib/auth";
 import { writeAudit } from "../lib/auditLog";
-import { sendEmail, buildAgentCredentialsEmail, getAppBaseUrl } from "../lib/email";
+import { assertSafeTenantSmtpDestination, sendEmail, buildAgentCredentialsEmail, getAppBaseUrl } from "../lib/email";
 import { createSigningToken } from "../lib/signingTokens";
 import { ONBOARDING_HELPERS } from "./agentOnboarding";
 import { STAFF_ROLES, MANAGER_ROLES, AGENT_ROLES } from "../lib/roles";
@@ -40,6 +40,16 @@ import { toE164 } from "../lib/inbox/phone";
 import { getCurrentSeason } from "../lib/season";
 import { setAgencyStaff, getAgencyStaff, getAgencyStaffWithLegacy, getAgencyStaffMap, parseStaffInput, staffDisplayName } from "../lib/agencyStaff";
 import { validatePassword } from "../lib/passwordPolicy";
+import { callerOwnsObject, canonicalizeKey } from "../lib/objectAuthz";
+import {
+  isHexBrandColor,
+  normalizeAgentPlan,
+  normalizeFeatureOverrides,
+  resolveAgentFeatures,
+  type AgentFeatureKey,
+} from "../lib/agentFeatures";
+import { decryptConfig, encryptConfig } from "../lib/encryption";
+import { maskSecrets, mergeConfig } from "../lib/configMasking";
 
 const router: IRouter = Router();
 
@@ -68,21 +78,148 @@ function generateAgentPassword(): string {
 const AGENT_PATCH_FIELDS = [
   "firstName", "lastName", "email", "phone",
   "status", "commissionRate", "notes", "companyName", "country",
-  "agencyCode", "state", "city", "address", "businessName",
+  "state", "city", "address", "businessName",
   "entityType", "taxNumber", "preferredContractLanguage", "assignedContractTemplateId",
   "category", "logoUrl", "agentIdProofUrl", "businessCertUrl",
   "contractUrl", "contractStartDate", "contractEndDate",
   "branch", "parentAgentId",
   "subAgentCommissionRate", "hideServiceFees", "assignedStaffId", "canManageStaff",
+  "planTier", "featureOverrides", "primaryBrandColor", "secondaryBrandColor",
 ];
 
 const AGENT_SELF_PATCH_FIELDS = [
   "businessName", "logoUrl", "businessCertUrl",
+  "primaryBrandColor", "secondaryBrandColor",
 ];
+
+const AGENT_INTEGRATION_FEATURE: Record<string, AgentFeatureKey> = {
+  email: "email_integration",
+  whatsapp: "whatsapp_integration",
+};
+
+async function getAgentForActor(userId: number, role: string) {
+  if (role === "agent_staff") {
+    const [staff] = await db.select({ managingAgentId: usersTable.managingAgentId })
+      .from(usersTable).where(eq(usersTable.id, userId));
+    if (!staff?.managingAgentId) return null;
+    const [agent] = await db.select().from(agentsTable).where(and(
+      eq(agentsTable.id, staff.managingAgentId), isNull(agentsTable.deletedAt),
+    ));
+    return agent ?? null;
+  }
+  const [agent] = await db.select().from(agentsTable).where(and(
+    eq(agentsTable.userId, userId), isNull(agentsTable.deletedAt),
+  ));
+  return agent ?? null;
+}
+
+function publicAgentIntegration(row: typeof agentIntegrationsTable.$inferSelect) {
+  return {
+    id: row.id,
+    agentId: row.agentId,
+    kind: row.kind,
+    isEnabled: row.isEnabled,
+    config: maskSecrets(decryptConfig((row.config as Record<string, any>) || {})),
+    updatedAt: row.updatedAt,
+  };
+}
+
+function isAgentIntegrationReady(row: typeof agentIntegrationsTable.$inferSelect): boolean {
+  if (!row.isEnabled) return false;
+  const config = decryptConfig((row.config as Record<string, any>) || {});
+  if (row.kind === "email") {
+    return Boolean(config.host && config.username && config.password && (config.fromEmail || config.username));
+  }
+  if (row.kind === "whatsapp") {
+    return Boolean(config.phoneNumberId && config.accessToken);
+  }
+  return false;
+}
+
+function escapePreviewText(value: unknown): string {
+  return String(value ?? "").replace(/[&<>"']/g, (character) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    "\"": "&quot;",
+    "'": "&#39;",
+  })[character] || character);
+}
+
+function webToLeadPreviewHtml(agent: typeof agentsTable.$inferSelect): string {
+  const features = resolveAgentFeatures(agent.planTier, agent.featureOverrides);
+  const primary = features.custom_branding && isHexBrandColor(agent.primaryBrandColor)
+    ? agent.primaryBrandColor
+    : "#2563EB";
+  const secondary = features.custom_branding && isHexBrandColor(agent.secondaryBrandColor)
+    ? agent.secondaryBrandColor
+    : "#1D4ED8";
+  const agencyName = escapePreviewText(agent.businessName || agent.companyName || "Find & Study");
+  return `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  *{box-sizing:border-box}html,body{margin:0;min-height:100%;background:transparent;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#111827}
+  body{padding:16px}.form{max-width:440px;margin:0 auto;padding:32px;border:1px solid #e5e7eb;border-radius:16px;background:#fff;box-shadow:0 4px 24px rgba(15,23,42,.08)}
+  h1{margin:0 0 4px;text-align:center;font-size:20px;line-height:1.35}p{margin:0 0 20px;text-align:center;color:#6b7280;font-size:13px}.row{display:grid;grid-template-columns:1fr 1fr;gap:10px}.field{margin-bottom:14px}
+  label{display:block;margin-bottom:4px;color:#374151;font-size:12px;font-weight:600}.required{color:#ef4444}input,select{width:100%;min-width:0;padding:10px 12px;border:1px solid #d1d5db;border-radius:8px;background:#fff;color:#111827;font:inherit;font-size:14px;outline:none}.phone{display:grid;grid-template-columns:105px 1fr;gap:6px}
+  button{width:100%;padding:12px;border:0;border-radius:8px;background:linear-gradient(135deg,${primary},${secondary});color:#fff;font-size:15px;font-weight:700}.privacy{margin:12px 0 0;color:#9ca3af;font-size:11px}.brand{margin-top:8px;color:#94a3b8;font-size:10px}
+  @media(max-width:480px){body{padding:8px}.form{padding:22px}.row{grid-template-columns:1fr}}
+</style></head><body><form class="form">
+  <h1>Get in Touch</h1><p>Fill in your details and we'll contact you shortly.</p>
+  <div class="row"><div class="field"><label>First Name <span class="required">*</span></label><input type="text" autocomplete="off"></div><div class="field"><label>Last Name <span class="required">*</span></label><input type="text" autocomplete="off"></div></div>
+  <div class="field"><label>Phone <span class="required">*</span></label><div class="phone"><select><option>🇹🇷 +90</option></select><input type="tel" placeholder="555 000 0000"></div></div>
+  <div class="field"><label>Email <span class="required">*</span></label><input type="email" placeholder="you@example.com"></div>
+  <button type="button">Submit</button><p class="privacy">Your information is secure and will not be shared.</p><p class="brand">${agencyName}</p>
+</form></body></html>`;
+}
+
+async function syncAgentAcademyPermission(agent: typeof agentsTable.$inferSelect): Promise<void> {
+  if (!agent.userId) return;
+  const [user] = await db.select({ role: usersTable.role }).from(usersTable).where(eq(usersTable.id, agent.userId));
+  if (!user) return;
+  const enabled = resolveAgentFeatures(agent.planTier, agent.featureOverrides).academy;
+  const roleDefault = ((DEFAULT_ROLE_PERMISSIONS as Record<string, string[]>)[user.role] ?? []).includes("academy.access");
+  if (enabled === roleDefault) {
+    await db.execute(sql`UPDATE users SET permission_overrides = COALESCE(permission_overrides, '{}'::jsonb) - 'academy.access' WHERE id = ${agent.userId}`);
+  } else {
+    await db.execute(sql`UPDATE users SET permission_overrides = COALESCE(permission_overrides, '{}'::jsonb) || ${JSON.stringify({ "academy.access": enabled })}::jsonb WHERE id = ${agent.userId}`);
+  }
+}
+
+async function withAcademyAccess<T extends { userId: number | null }>(agents: T[]): Promise<Array<T & { academyAccess: boolean | null }>> {
+  const userIds = agents.map((agent) => agent.userId).filter((id): id is number => id != null);
+  const accessByUserId = new Map<number, boolean>();
+
+  if (userIds.length > 0) {
+    const rows = await db
+      .select({ id: usersTable.id, role: usersTable.role, permissionOverrides: usersTable.permissionOverrides })
+      .from(usersTable)
+      .where(inArray(usersTable.id, userIds));
+
+    for (const row of rows) {
+      const overrides = (row.permissionOverrides as Record<string, boolean> | null) ?? {};
+      const roleDefault = ((DEFAULT_ROLE_PERMISSIONS as Record<string, string[]>)[row.role] ?? []).includes("academy.access");
+      accessByUserId.set(row.id, "academy.access" in overrides ? overrides["academy.access"] : roleDefault);
+    }
+  }
+
+  return agents.map((agent) => ({
+    ...agent,
+    academyAccess: agent.userId != null ? (accessByUserId.get(agent.userId) ?? null) : null,
+  }));
+}
 
 function isValidStorageUrl(url: string): boolean {
   if (!url) return true;
   return url.startsWith("/api/storage/objects/") || url.startsWith("https://");
+}
+
+function browserStorageUrl(value: string | null | undefined): string | null {
+  if (!value) return null;
+  if (/^https:\/\//i.test(value) && !value.includes("/api/storage/objects/")) return value;
+  const key = canonicalizeKey(value);
+  if (!key) return value;
+  return `/api/storage/objects/${key.split("/").map(encodeURIComponent).join("/")}`;
 }
 
 router.get("/agents/contract-alerts", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
@@ -402,7 +539,7 @@ router.get("/agents/me", requireAuth, requireRole(...AGENT_ROLES), async (req, r
         parentAgent = {
           ...parentUser,
           companyName: parentAgentRow.companyName,
-          logoUrl: parentAgentRow.logoUrl,
+          logoUrl: browserStorageUrl(parentAgentRow.logoUrl),
         };
       }
     }
@@ -461,9 +598,17 @@ router.get("/agents/me", requireAuth, requireRole(...AGENT_ROLES), async (req, r
     console.error(`[agents/me] failed to resolve newest contract url for agent ${agent.id}:`, err);
   }
 
+  const browserAgent = {
+    ...agent,
+    logoUrl: browserStorageUrl(agent.logoUrl),
+    agentIdProofUrl: browserStorageUrl(agent.agentIdProofUrl),
+    businessCertUrl: browserStorageUrl(agent.businessCertUrl),
+    effectiveFeatures: resolveAgentFeatures(agent.planTier, agent.featureOverrides),
+  };
+
   if (agent.accessTier !== "full") {
     res.json({
-      ...agent,
+      ...browserAgent,
       agencyCode: null,
       commissionRate: null,
       subAgentCommissionRate: null,
@@ -479,18 +624,14 @@ router.get("/agents/me", requireAuth, requireRole(...AGENT_ROLES), async (req, r
     return;
   }
 
-  res.json({ ...agent, contractUrl, assignedStaff, assignedStaffList, parentAgent, effectiveCommissionRate, effectiveHideServiceFees });
+  res.json({ ...browserAgent, contractUrl, assignedStaff, assignedStaffList, parentAgent, effectiveCommissionRate, effectiveHideServiceFees });
 });
 
-router.patch("/agents/me", requireAuth, requireRole(...AGENT_ROLES), async (req, res): Promise<void> => {
+router.patch("/agents/me", requireAuth, requireRole("agent", "sub_agent"), async (req, res): Promise<void> => {
   const userId = req.user!.id;
-  const userRole = (req.user as any).role as string;
   const [agent] = await db.select().from(agentsTable).where(eq(agentsTable.userId, userId));
   if (!agent) { res.status(404).json({ error: "Agent profile not found" }); return; }
-  if (userRole === "agent_staff" && req.body.businessName !== undefined) {
-    res.status(403).json({ error: "Staff members cannot change the business name" });
-    return;
-  }
+  const features = resolveAgentFeatures(agent.planTier, agent.featureOverrides);
   const updates: Record<string, unknown> = {};
   for (const key of AGENT_SELF_PATCH_FIELDS) {
     if (req.body[key] !== undefined) {
@@ -499,8 +640,20 @@ router.patch("/agents/me", requireAuth, requireRole(...AGENT_ROLES), async (req,
         res.status(400).json({ error: `Invalid URL for ${key}` });
         return;
       }
+      if ((key === "logoUrl" || key === "businessCertUrl") && val && !(await callerOwnsObject(userId, val))) {
+        res.status(403).json({ error: `The uploaded object does not belong to this account (${key})` });
+        return;
+      }
       if (key === "businessName" && val && typeof val === "string" && val.length > 200) {
         res.status(400).json({ error: "Business name too long (max 200 characters)" });
+        return;
+      }
+      if ((key === "primaryBrandColor" || key === "secondaryBrandColor") && !isHexBrandColor(val)) {
+        res.status(400).json({ error: `Invalid brand color (${key})` });
+        return;
+      }
+      if ((key === "primaryBrandColor" || key === "secondaryBrandColor") && !features.custom_branding) {
+        res.status(403).json({ error: "Custom branding is not enabled for this agency", code: "AGENT_FEATURE_DISABLED" });
         return;
       }
       updates[key] = val;
@@ -543,9 +696,12 @@ router.patch("/agents/me", requireAuth, requireRole(...AGENT_ROLES), async (req,
 });
 
 router.get("/agents/me/embed-token", requireAuth, async (req, res): Promise<void> => {
-  const userId = req.user!.id;
-  const [agent] = await db.select().from(agentsTable).where(eq(agentsTable.userId, userId));
+  const agent = await getAgentForActor(req.user!.id, req.user!.role);
   if (!agent) { res.status(404).json({ error: "Agent profile not found" }); return; }
+  if (!resolveAgentFeatures(agent.planTier, agent.featureOverrides).web_to_lead) {
+    res.status(403).json({ error: "Web to Lead is not enabled for this agency", code: "AGENT_FEATURE_DISABLED" });
+    return;
+  }
   if (!agent.embedToken) {
     const token = crypto.randomUUID();
     await db.update(agentsTable).set({ embedToken: token }).where(eq(agentsTable.id, agent.id));
@@ -553,6 +709,98 @@ router.get("/agents/me/embed-token", requireAuth, async (req, res): Promise<void
     return;
   }
   res.json({ embedToken: agent.embedToken });
+});
+
+// A srcDoc frame inherits the SPA's strict `style-src 'self'` policy, which
+// strips the generated form's inline styling in production. This real,
+// same-origin preview document has its own narrow CSP: CSS is allowed while
+// scripts, navigation and form submission remain disabled.
+router.get("/agents/me/web-to-lead-preview", requireAuth, requireRole(...AGENT_ROLES), async (req, res): Promise<void> => {
+  const agent = await getAgentForActor(req.user!.id, req.user!.role);
+  if (!agent || !resolveAgentFeatures(agent.planTier, agent.featureOverrides).web_to_lead) {
+    res.status(404).send("Preview unavailable");
+    return;
+  }
+  res.setHeader("Content-Security-Policy", "sandbox; default-src 'none'; style-src 'unsafe-inline'; script-src 'none'; img-src data:; form-action 'none'; base-uri 'none'; frame-ancestors 'self'");
+  res.setHeader("Cache-Control", "private, no-store");
+  res.type("html").send(webToLeadPreviewHtml(agent));
+});
+
+router.get("/agents/me/integrations", requireAuth, requireRole(...AGENT_ROLES), async (req, res): Promise<void> => {
+  const agent = await getAgentForActor(req.user!.id, req.user!.role);
+  if (!agent) { res.status(404).json({ error: "Agent profile not found" }); return; }
+  const features = resolveAgentFeatures(agent.planTier, agent.featureOverrides);
+  const rows = await db.select().from(agentIntegrationsTable).where(eq(agentIntegrationsTable.agentId, agent.id));
+  res.json({
+    planTier: agent.planTier,
+    features,
+    // Agency staff only need channel availability for Quick Contact. Do not
+    // expose even masked connector configuration to non-owner team accounts.
+    integrations: req.user!.role === "agent_staff" ? [] : rows.map(publicAgentIntegration),
+    channelAvailability: {
+      email: features.email_integration && rows.some(row => row.kind === "email" && isAgentIntegrationReady(row)),
+      whatsapp: features.whatsapp_integration && rows.some(row => row.kind === "whatsapp" && isAgentIntegrationReady(row)),
+      // Social channels stay absent until a tenant-scoped connector is both
+      // entitled and implemented. They must never leak the platform account.
+      instagram: false,
+    },
+  });
+});
+
+router.put("/agents/me/integrations/:kind", requireAuth, requireRole("agent", "sub_agent"), async (req, res): Promise<void> => {
+  const kind = String(req.params.kind);
+  const featureKey = AGENT_INTEGRATION_FEATURE[kind];
+  if (!featureKey) { res.status(400).json({ error: "Unsupported integration kind" }); return; }
+  const agent = await getAgentForActor(req.user!.id, req.user!.role);
+  if (!agent) { res.status(404).json({ error: "Agent profile not found" }); return; }
+  const features = resolveAgentFeatures(agent.planTier, agent.featureOverrides);
+  if (!features[featureKey]) {
+    res.status(403).json({ error: "This integration is not enabled for your agency plan", code: "AGENT_FEATURE_DISABLED" });
+    return;
+  }
+  const incoming = req.body?.config;
+  if (!incoming || typeof incoming !== "object" || Array.isArray(incoming)) {
+    res.status(400).json({ error: "config object is required" }); return;
+  }
+  const [existing] = await db.select().from(agentIntegrationsTable).where(and(
+    eq(agentIntegrationsTable.agentId, agent.id),
+    eq(agentIntegrationsTable.kind, kind),
+  ));
+  const existingPlain = existing ? decryptConfig((existing.config as Record<string, any>) || {}) : {};
+  const merged = mergeConfig(existingPlain, incoming as Record<string, any>);
+  if (kind === "email" && req.body?.isEnabled === true) {
+    const port = Number(merged.port) || 587;
+    if (!merged.host || !merged.username || !merged.password) {
+      res.status(400).json({ error: "Email host, username and password are required" }); return;
+    }
+    try {
+      await assertSafeTenantSmtpDestination(String(merged.host), port);
+    } catch (error) {
+      res.status(400).json({ error: error instanceof Error ? error.message : "unsafe_smtp_destination" }); return;
+    }
+    merged.port = port;
+  }
+  const encrypted = encryptConfig(merged);
+  const [saved] = await db.insert(agentIntegrationsTable).values({
+    agentId: agent.id,
+    kind,
+    isEnabled: req.body?.isEnabled === true,
+    config: encrypted,
+  }).onConflictDoUpdate({
+    target: [agentIntegrationsTable.agentId, agentIntegrationsTable.kind],
+    set: { isEnabled: req.body?.isEnabled === true, config: encrypted, updatedAt: new Date() },
+  }).returning();
+  await logAudit(req.user!.id, "agent.integration.update", "agent", agent.id, { kind, isEnabled: saved.isEnabled }, req.ip);
+  res.json(publicAgentIntegration(saved));
+});
+
+router.get("/agents/:id/integrations", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
+  const agentId = Number(req.params.id);
+  if (!Number.isSafeInteger(agentId) || !(await isAgentInScope(req.user!.id, req.user!.role, agentId))) {
+    res.status(404).json({ error: "Agent not found" }); return;
+  }
+  const rows = await db.select().from(agentIntegrationsTable).where(eq(agentIntegrationsTable.agentId, agentId));
+  res.json(rows.map(publicAgentIntegration));
 });
 
 router.get("/agents/:agentId/embed-token", requireAuth, requireRole("super_admin"), async (req, res): Promise<void> => {
@@ -606,8 +854,9 @@ router.get("/agents/me/sub-agents", requireAuth, requireRole("agent"), async (re
     .offset(offset)
     .orderBy(desc(agentsTable.createdAt));
 
+  const dataWithAcademyAccess = await withAcademyAccess(data);
   res.json({
-    data,
+    data: dataWithAcademyAccess,
     meta: { total: Number(count), page: pageNum, limit: limitNum, totalPages: Math.ceil(Number(count) / limitNum) },
   });
 });
@@ -650,7 +899,7 @@ router.post("/agents/me/sub-agents", requireAuth, requireRole("agent"), async (r
     phoneE164: toE164(phone || null),
     commissionRate: commissionRate ? parseFloat(commissionRate) : (parentAgent.subAgentCommissionRate || null),
     status: "active",
-    agencyCode: parentAgent.agencyCode || null,
+    agencyCode: sql`('FAS-' || TO_CHAR(CURRENT_TIMESTAMP AT TIME ZONE 'UTC', 'YYYYMMDD') || '-' || LPAD(nextval('agent_agency_code_seq')::text, 6, '0'))`,
     country: parentAgent.country || null,
     companyName: companyName || parentAgent.companyName || null,
     businessName: parentAgent.businessName || null,
@@ -963,8 +1212,8 @@ router.post("/agents/me/staff", requireAuth, requireRole("agent", "sub_agent"), 
     return;
   }
 
-  const validPerms = Array.isArray(permissions) 
-    ? permissions.filter((p: string) => AGENT_STAFF_PERMISSIONS.some(asp => asp.key === p)) 
+  const validPerms = Array.isArray(permissions)
+    ? permissions.filter((p: string) => AGENT_STAFF_PERMISSIONS.some(asp => asp.key === p))
     : ["leads", "students", "applications", "documents", "course_finder"];
 
   const passwordHash = await bcrypt.hash(password, 10);
@@ -1119,6 +1368,7 @@ router.get("/agents", requireAuth, requireRole(...STAFF_ROLES), async (req, res)
         ilike(agentsTable.email, `%${search}%`),
         ilike(agentsTable.companyName, `%${search}%`),
         ilike(agentsTable.agencyCode, `%${search}%`),
+        ilike(agentsTable.legacyAgencyCode, `%${search}%`),
         ilike(agentsTable.businessName, `%${search}%`),
       )!
     );
@@ -1184,6 +1434,9 @@ router.get("/agents", requireAuth, requireRole(...STAFF_ROLES), async (req, res)
     const primary = list.find(s => s.isPrimary) || list[0] || null;
     return {
       ...r,
+      logoUrl: browserStorageUrl(r.logoUrl),
+      agentIdProofUrl: browserStorageUrl(r.agentIdProofUrl),
+      businessCertUrl: browserStorageUrl(r.businessCertUrl),
       branchIds: branchesByAgent.get(r.id) || [],
       assignedStaffId: primary ? primary.userId : r.assignedStaffId,
       assignedStaffName: primary ? staffDisplayName(primary) : null,
@@ -1213,18 +1466,7 @@ router.get("/agents/:id/sub-agents", requireAuth, requireRole(...STAFF_ROLES), a
   const limitNum = Math.min(200, Math.max(1, parseInt(limit, 10)));
   const offset = (pageNum - 1) * limitNum;
   const subs = await db.select().from(agentsTable).where(eq(agentsTable.parentAgentId, parentId)).orderBy(desc(agentsTable.createdAt)).limit(limitNum).offset(offset);
-  // Attach academyAccess from users table (single batch lookup)
-  const userIds = subs.map(s => s.userId).filter((id): id is number => id != null);
-  const userMap = new Map<number, boolean | null>();
-  if (userIds.length > 0) {
-    const rows = await db.select({ id: usersTable.id, role: usersTable.role, permissionOverrides: usersTable.permissionOverrides }).from(usersTable).where(inArray(usersTable.id, userIds));
-    for (const r of rows) {
-      const overrides = (r.permissionOverrides as Record<string, boolean> | null) ?? {};
-      const roleDefault = ((DEFAULT_ROLE_PERMISSIONS as Record<string, string[]>)[r.role] ?? []).includes("academy.access");
-      userMap.set(r.id, "academy.access" in overrides ? overrides["academy.access"] : roleDefault);
-    }
-  }
-  res.json(subs.map(s => ({ ...s, academyAccess: s.userId != null ? (userMap.get(s.userId) ?? null) : null })));
+  res.json(await withAcademyAccess(subs));
 });
 
 // PATCH /agents/:id/academy-access — süper admin (herkes için) veya agent (sadece kendi sub_agent'ı için)
@@ -1262,7 +1504,7 @@ router.patch("/agents/:id/academy-access", requireAuth, async (req, res): Promis
 router.post("/agents", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
   const {
     firstName, lastName, status = "active", email, phone,
-    companyName, country, commissionRate, agencyCode,
+    companyName, country, commissionRate,
     state, city, address, businessName, category,
     logoUrl, agentIdProofUrl, businessCertUrl, contractUrl, branch,
     parentAgentId, subAgentCommissionRate, hideServiceFees,
@@ -1270,6 +1512,7 @@ router.post("/agents", requireAuth, requireRole(...MANAGER_ROLES), async (req, r
     entityType, taxNumber, preferredContractLanguage,
     assignedContractTemplateId,
     contractStartDate, contractEndDate, notes,
+    planTier, featureOverrides, primaryBrandColor, secondaryBrandColor,
   } = req.body;
 
   const parseDate = (v: unknown): Date | null => {
@@ -1330,6 +1573,14 @@ router.post("/agents", requireAuth, requireRole(...MANAGER_ROLES), async (req, r
     res.status(400).json({ error: "Email is required to send onboarding verification" });
     return;
   }
+  if (primaryBrandColor !== undefined && !isHexBrandColor(primaryBrandColor)) {
+    res.status(400).json({ error: "Invalid primary brand color" }); return;
+  }
+  if (secondaryBrandColor !== undefined && !isHexBrandColor(secondaryBrandColor)) {
+    res.status(400).json({ error: "Invalid secondary brand color" }); return;
+  }
+  const normalizedPlanTier = normalizeAgentPlan(planTier);
+  const normalizedFeatureOverrides = normalizeFeatureOverrides(featureOverrides);
   // Normalize at the source: the email_verification_codes row created below
   // uses the lowercase address, and the public verify-with-link endpoint
   // resolves the user via that same address. Storing the user with mixed
@@ -1391,7 +1642,7 @@ router.post("/agents", requireAuth, requireRole(...MANAGER_ROLES), async (req, r
     companyName: companyName || null,
     country: country || null,
     commissionRate: commissionRate ? parseFloat(commissionRate) : null,
-    agencyCode: agencyCode || null,
+    agencyCode: sql`('FAS-' || TO_CHAR(CURRENT_TIMESTAMP AT TIME ZONE 'UTC', 'YYYYMMDD') || '-' || LPAD(nextval('agent_agency_code_seq')::text, 6, '0'))`,
     state: state || null,
     city: city || null,
     address: address || null,
@@ -1408,8 +1659,13 @@ router.post("/agents", requireAuth, requireRole(...MANAGER_ROLES), async (req, r
     parentAgentId: parentAgentId ? parseInt(parentAgentId, 10) : null,
     subAgentCommissionRate: subAgentCommissionRate ? parseFloat(subAgentCommissionRate) : null,
     hideServiceFees: hideServiceFees === true || hideServiceFees === "true" ? true : false,
+    planTier: normalizedPlanTier,
+    featureOverrides: normalizedFeatureOverrides,
+    primaryBrandColor: primaryBrandColor ? String(primaryBrandColor).toUpperCase() : "#1D4ED8",
+    secondaryBrandColor: secondaryBrandColor ? String(secondaryBrandColor).toUpperCase() : "#10B981",
     embedToken: crypto.randomUUID(),
   }).returning();
+  await syncAgentAcademyPermission(agent);
 
   // Persist agency-assigned staff (multi). Accepts either the new
   // `assignedStaff: [{userId, isPrimary}]` array or the legacy single
@@ -1556,6 +1812,9 @@ router.get("/agents/:id", requireAuth, requireRole(...STAFF_ROLES), async (req, 
   }
   res.json({
     ...agent,
+    logoUrl: browserStorageUrl(agent.logoUrl),
+    agentIdProofUrl: browserStorageUrl(agent.agentIdProofUrl),
+    businessCertUrl: browserStorageUrl(agent.businessCertUrl),
     academyAccess,
     branchIds: links.map(l => l.branchId),
     assignedStaffList,
@@ -1576,6 +1835,15 @@ router.patch("/agents/:id", requireAuth, requireRole(...MANAGER_ROLES), async (r
         updates[key] = req.body[key] !== null && req.body[key] !== "" ? parseFloat(req.body[key]) : null;
       } else if (key === "hideServiceFees" || key === "canManageStaff") {
         updates[key] = req.body[key] === true || req.body[key] === "true";
+      } else if (key === "planTier") {
+        updates[key] = normalizeAgentPlan(req.body[key]);
+      } else if (key === "featureOverrides") {
+        updates[key] = normalizeFeatureOverrides(req.body[key]);
+      } else if (key === "primaryBrandColor" || key === "secondaryBrandColor") {
+        if (!isHexBrandColor(req.body[key])) {
+          res.status(400).json({ error: `Invalid brand color (${key})` }); return;
+        }
+        updates[key] = String(req.body[key]).toUpperCase();
       } else if (key === "parentAgentId") {
         updates[key] = req.body[key] ? parseInt(req.body[key], 10) : null;
       } else if (key === "assignedStaffId") {
@@ -1634,6 +1902,9 @@ router.patch("/agents/:id", requireAuth, requireRole(...MANAGER_ROLES), async (r
   let agent = oldAgent;
   if (Object.keys(updates).length > 0) {
     [agent] = await db.update(agentsTable).set(updates).where(eq(agentsTable.id, id)).returning();
+  }
+  if (updates.planTier !== undefined || updates.featureOverrides !== undefined) {
+    await syncAgentAcademyPermission(agent);
   }
   if (hasStaffUpdate) {
     const staff = parseStaffInput(

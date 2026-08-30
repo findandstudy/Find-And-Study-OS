@@ -80,6 +80,34 @@ test("staff profile upload surfaces use canonical types and downstream lifecycle
   assert.match(leadDocumentsRoute, /reEvaluateMandatoryDocsForStudent\(doc\.studentId\)/);
 });
 
+test("missing-document parking waits for every independent catalog request", () => {
+  const mandatoryDocs = readFileSync(
+    new URL("../src/lib/mandatoryDocs.ts", import.meta.url),
+    "utf8",
+  );
+  const guardIndex = mandatoryDocs.indexOf("const openStageRequests");
+  const advanceIndex = mandatoryDocs.indexOf('.set({ stage: "inquiry"', guardIndex);
+
+  assert.ok(guardIndex > 0, "open request guard must exist");
+  assert.ok(advanceIndex > guardIndex, "open requests must be checked before advancing");
+  assert.match(mandatoryDocs, /eq\(applicationStageDocumentsTable\.isMissingDocNote, true\)/);
+  assert.match(mandatoryDocs, /isNull\(applicationStageDocumentsTable\.fulfilledAt\)/);
+  assert.match(mandatoryDocs, /if \(openStageRequests\.length > 0\) return false/);
+});
+
+test("course finder validates and binds only the newly persisted student documents", () => {
+  const route = readFileSync(
+    new URL("../src/routes/course-finder.ts", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(route, /uploadedDocumentIds: requestedDocumentIds/);
+  assert.match(route, /eq\(documentsTable\.studentId, student\.id\)/);
+  assert.match(route, /isNull\(documentsTable\.applicationId\)/);
+  assert.match(route, /applicationId: application\.id/);
+  assert.match(route, /source: "course_finder"/);
+});
+
 test("Add Student flows persist canonical document keys", () => {
   const staffAddStudent = readFileSync(
     new URL("../../edcons/src/components/AddStudentModal.tsx", import.meta.url),

@@ -24,7 +24,14 @@ export interface StageAutomaticMessage {
   enabled: boolean;
   templateId: number | null;
   channelAccountId: number | null;
+  originTypes: Array<"direct" | "agent" | "sub_agent">;
 }
+
+export type StageAudienceRole = "super_admin" | "admin" | "staff" | "agent" | "sub_agent" | "agent_staff";
+
+export const DEFAULT_STAGE_AUDIENCE_ROLES: StageAudienceRole[] = [
+  "super_admin", "admin", "staff", "agent", "sub_agent", "agent_staff",
+];
 
 export const pipelineStagesTable = pgTable("pipeline_stages", {
   id: serial("id").primaryKey(),
@@ -67,6 +74,13 @@ export const pipelineStagesTable = pgTable("pipeline_stages", {
   // The database transition trigger snapshots these ids into a durable
   // dispatch row; delivery itself remains asynchronous and fail-safe.
   automaticMessage: jsonb("automatic_message").$type<StageAutomaticMessage | null>(),
+  // Viewing and transitioning are intentionally separate controls.  The
+  // values are audience groups rather than raw application roles so new
+  // platform staff roles inherit the expected "staff" behaviour.
+  visibleToRoles: jsonb("visible_to_roles").$type<StageAudienceRole[]>()
+    .notNull().default(DEFAULT_STAGE_AUDIENCE_ROLES),
+  transitionAllowedRoles: jsonb("transition_allowed_roles").$type<StageAudienceRole[]>()
+    .notNull().default(DEFAULT_STAGE_AUDIENCE_ROLES),
   // Stage-level completion target for application stages. The physical column
   // keeps its legacy Task #187 name so existing installations and configured
   // missing-document transitions remain backwards compatible. It now drives

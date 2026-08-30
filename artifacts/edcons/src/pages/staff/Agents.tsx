@@ -35,9 +35,37 @@ function fixStorageUrl(url: string | null | undefined): string | null {
   return url.replace(/\/api\/storage\/objects\/objects\//, "/api/storage/objects/");
 }
 
-import { MANAGER_ROLES as _MANAGER_ROLES } from "@workspace/roles";
+import { MANAGER_ROLES as _MANAGER_ROLES, STAFF_ROLES as _STAFF_ROLES } from "@workspace/roles";
 const MANAGER_ROLES = _MANAGER_ROLES;
+const STAFF_ROLES = _STAFF_ROLES;
 const CATEGORIES = ["Big", "Medium", "Small"];
+const AGENT_FEATURE_OPTIONS = [
+  { key: "web_to_lead", label: "Web to Lead" },
+  { key: "embed_standard", label: "Standard Embed" },
+  { key: "embed_ai", label: "AI Embed" },
+  { key: "email_integration", label: "Agency Email Integration" },
+  { key: "whatsapp_integration", label: "Agency WhatsApp Integration" },
+  { key: "custom_branding", label: "Custom Branding" },
+  { key: "academy", label: "Academy" },
+  { key: "lead_document_upload", label: "Lead Document Upload" },
+] as const;
+const PLAN_FEATURE_DEFAULTS: Record<string, Record<string, boolean>> = {
+  standard: {
+    web_to_lead: true, embed_standard: true, embed_ai: false,
+    email_integration: false, whatsapp_integration: false,
+    custom_branding: true, academy: true, lead_document_upload: true,
+  },
+  premium: {
+    web_to_lead: true, embed_standard: true, embed_ai: true,
+    email_integration: true, whatsapp_integration: true,
+    custom_branding: true, academy: true, lead_document_upload: true,
+  },
+  enterprise: {
+    web_to_lead: true, embed_standard: true, embed_ai: true,
+    email_integration: true, whatsapp_integration: true,
+    custom_branding: true, academy: true, lead_document_upload: true,
+  },
+};
 
 const PHONE_CODES = [
   { code: "+90", country: "TR" },
@@ -115,6 +143,10 @@ type Agent = {
   assignedStaffId: number | null;
   assignedStaffName: string | null;
   assignedStaffList?: Array<{ userId: number; isPrimary: boolean; firstName: string | null; lastName: string | null; role: string | null }>;
+  planTier?: string;
+  featureOverrides?: Record<string, boolean>;
+  primaryBrandColor?: string;
+  secondaryBrandColor?: string;
 };
 
 const emptyForm = {
@@ -129,6 +161,10 @@ const emptyForm = {
   branchIds: [] as number[],
   entityType: "company", taxNumber: "", preferredContractLanguage: "",
   assignedContractTemplateId: "",
+  planTier: "standard",
+  featureOverrides: {} as Record<string, boolean>,
+  primaryBrandColor: "#1D4ED8",
+  secondaryBrandColor: "#10B981",
 };
 
 function splitPhone(phone: string | null) {
@@ -238,12 +274,14 @@ export default function AgentsPage() {
 
   async function fetchStaffMembers() {
     try {
-      const res: any = await customFetch(`/api/users?limit=100`);
-      const staff = (res.data || []).filter((u: any) =>
-        ["super_admin", "admin", "manager", "staff", "consultant"].includes(u.role) && u.isActive !== false
-      );
+      const roles = encodeURIComponent(STAFF_ROLES.join(","));
+      const res: any = await customFetch(`/api/users?roles=${roles}&limit=500`);
+      const staff = (res.data || []).filter((u: any) => u.isActive !== false);
       setStaffMembers(staff);
-    } catch {}
+    } catch (error: any) {
+      setStaffMembers([]);
+      toast({ title: "Staff list could not be loaded", description: error?.message, variant: "destructive" });
+    }
   }
 
   useEffect(() => { fetchAgents(); }, [page, search, countryFilter]);
@@ -315,6 +353,10 @@ export default function AgentsPage() {
       taxNumber: (agent as any).taxNumber || "",
       preferredContractLanguage: (agent as any).preferredContractLanguage || "",
       assignedContractTemplateId: (agent as any).assignedContractTemplateId?.toString() || "",
+      planTier: agent.planTier || "standard",
+      featureOverrides: { ...(agent.featureOverrides || {}) },
+      primaryBrandColor: agent.primaryBrandColor || "#1D4ED8",
+      secondaryBrandColor: agent.secondaryBrandColor || "#10B981",
     });
     if (agent.country) {
       const c = countries.find(ct => ct.name === agent.country);
@@ -383,7 +425,6 @@ export default function AgentsPage() {
     setSaving(true);
     const phone = form.phone.trim() ? `${form.phoneCode}${form.phone.trim()}` : "";
     const body: Record<string, any> = {
-      agencyCode: form.agencyCode.trim() || null,
       firstName: form.firstName.trim(),
       lastName: form.lastName.trim(),
       email: form.email.trim(),
@@ -412,6 +453,10 @@ export default function AgentsPage() {
       taxNumber: form.taxNumber.trim() || null,
       preferredContractLanguage: form.preferredContractLanguage || null,
       assignedContractTemplateId: form.assignedContractTemplateId ? parseInt(form.assignedContractTemplateId, 10) : null,
+      planTier: form.planTier,
+      featureOverrides: form.featureOverrides,
+      primaryBrandColor: form.primaryBrandColor,
+      secondaryBrandColor: form.secondaryBrandColor,
     };
 
     try {
@@ -1186,7 +1231,7 @@ export default function AgentsPage() {
               {/* Agency Code */}
               <div className="space-y-1.5">
                 <Label>{t("agentsPage.agencyCode")}</Label>
-                <Input value={form.agencyCode} onChange={e => setForm(f => ({ ...f, agencyCode: e.target.value }))} className="rounded-xl" placeholder="e.g. AG-001" />
+                <Input value={form.agencyCode} readOnly disabled className="rounded-xl font-mono" placeholder="Generated as FAS-YYYYMMDD-NNNNNN" />
               </div>
 
               {/* Name */}
@@ -1276,6 +1321,79 @@ export default function AgentsPage() {
                   </Select>
                 </div>
               </div>
+
+              {!isSubAgent && (
+                <div className="space-y-4 rounded-xl border border-border/60 p-4">
+                  <div>
+                    <h3 className="font-display font-semibold text-sm">Agency package and capabilities</h3>
+                    <p className="text-xs text-muted-foreground mt-1">The package provides defaults. Individual switches below override those defaults for this agency only.</p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Package</Label>
+                    <Select value={form.planTier} onValueChange={value => setForm(f => ({ ...f, planTier: value }))}>
+                      <SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="standard">Standard</SelectItem>
+                        <SelectItem value="premium">Premium</SelectItem>
+                        <SelectItem value="enterprise">Enterprise</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="grid sm:grid-cols-2 gap-2">
+                    {AGENT_FEATURE_OPTIONS.map(option => {
+                      const defaults = PLAN_FEATURE_DEFAULTS[form.planTier] || PLAN_FEATURE_DEFAULTS.standard;
+                      const checked = Object.prototype.hasOwnProperty.call(form.featureOverrides, option.key)
+                        ? form.featureOverrides[option.key]
+                        : defaults[option.key];
+                      const overridden = Object.prototype.hasOwnProperty.call(form.featureOverrides, option.key);
+                      return (
+                        <label key={option.key} className="flex items-center gap-2 rounded-lg border px-3 py-2 cursor-pointer hover:bg-secondary/30">
+                          <Checkbox
+                            checked={checked}
+                            onCheckedChange={value => setForm(f => ({
+                              ...f,
+                              featureOverrides: { ...f.featureOverrides, [option.key]: value === true },
+                            }))}
+                          />
+                          <span className="text-xs flex-1">{option.label}</span>
+                          {overridden && (
+                            <button
+                              type="button"
+                              className="text-[10px] text-primary hover:underline"
+                              onClick={(event) => {
+                                event.preventDefault();
+                                setForm(f => {
+                                  const next = { ...f.featureOverrides };
+                                  delete next[option.key];
+                                  return { ...f, featureOverrides: next };
+                                });
+                              }}
+                            >
+                              Default
+                            </button>
+                          )}
+                        </label>
+                      );
+                    })}
+                  </div>
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <Label>Primary brand color</Label>
+                      <div className="flex gap-2">
+                        <input type="color" value={form.primaryBrandColor} onChange={e => setForm(f => ({ ...f, primaryBrandColor: e.target.value.toUpperCase() }))} className="h-10 w-12 rounded border p-1" />
+                        <Input value={form.primaryBrandColor} onChange={e => setForm(f => ({ ...f, primaryBrandColor: e.target.value.toUpperCase() }))} className="rounded-xl font-mono" />
+                      </div>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>Secondary brand color</Label>
+                      <div className="flex gap-2">
+                        <input type="color" value={form.secondaryBrandColor} onChange={e => setForm(f => ({ ...f, secondaryBrandColor: e.target.value.toUpperCase() }))} className="h-10 w-12 rounded border p-1" />
+                        <Input value={form.secondaryBrandColor} onChange={e => setForm(f => ({ ...f, secondaryBrandColor: e.target.value.toUpperCase() }))} className="rounded-xl font-mono" />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Contract identity */}
               <div className="grid sm:grid-cols-2 gap-4">

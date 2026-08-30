@@ -3782,7 +3782,8 @@ function InboxTab() {
 function ConversationList({
   conversations, selectedId, onSelect, onNewConversation, search, setSearch,
   sortOrder, onToggleSort, selectMode, onToggleSelectMode, selectedIds,
-  onToggleSelected, onSelectAll, onBulkArchive, onBulkDelete, bulkBusy
+  onToggleSelected, onSelectAll, onBulkArchive, onBulkDelete, bulkBusy,
+  audienceFilter, setAudienceFilter, readFilter, setReadFilter, archivedFilter, setArchivedFilter,
 }: {
   conversations: Conversation[];
   selectedId: number | null;
@@ -3800,6 +3801,12 @@ function ConversationList({
   onBulkArchive: () => void;
   onBulkDelete: () => void;
   bulkBusy: boolean;
+  audienceFilter: "all" | "agent" | "student";
+  setAudienceFilter: (value: "all" | "agent" | "student") => void;
+  readFilter: "all" | "read" | "unread";
+  setReadFilter: (value: "all" | "read" | "unread") => void;
+  archivedFilter: boolean;
+  setArchivedFilter: (value: boolean) => void;
 }) {
   const { user } = useAuth();
   const { t } = useI18n();
@@ -3819,6 +3826,31 @@ function ConversationList({
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
           <Input value={search} onChange={e => setSearch(e.target.value)}
             placeholder={t("messagesPage.searchConversations")} className="pl-9 h-8 text-sm rounded-lg" />
+        </div>
+        <div className="grid grid-cols-3 gap-1.5">
+          <Select value={audienceFilter} onValueChange={value => setAudienceFilter(value as "all" | "agent" | "student")}>
+            <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All people</SelectItem>
+              <SelectItem value="agent">Agents</SelectItem>
+              <SelectItem value="student">Students</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={readFilter} onValueChange={value => setReadFilter(value as "all" | "read" | "unread")}>
+            <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All states</SelectItem>
+              <SelectItem value="unread">Unread</SelectItem>
+              <SelectItem value="read">Read</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={archivedFilter ? "archived" : "active"} onValueChange={value => setArchivedFilter(value === "archived")}>
+            <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="active">Active</SelectItem>
+              <SelectItem value="archived">Archived</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
         <div className="flex items-center gap-1">
           <Button
@@ -3866,7 +3898,8 @@ function ConversationList({
               onClick={onBulkArchive}
               data-testid="button-internal-bulk-archive"
             >
-              <Archive className="w-3 h-3" /> {t("inbox.bulk.archive")}
+              {archivedFilter ? <ArchiveRestore className="w-3 h-3" /> : <Archive className="w-3 h-3" />}
+              {archivedFilter ? t("inbox.bulk.restore") : t("inbox.bulk.archive")}
             </Button>
             {canDeleteConversations && (
               <Button
@@ -5740,8 +5773,20 @@ function MessageConvTracker({ convId }: { convId: number | null }) {
 
 export default function MessagesPage() {
   const { t, isRTL } = useI18n();
+  const initialInternalConversation = (() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const id = Number(params.get("conversation"));
+      return params.get("tab") === "internal" && Number.isInteger(id) && id > 0 ? id : null;
+    } catch {
+      return null;
+    }
+  })();
   const [conversations, setConversations] = useState<Conversation[]>([]);
-  const [selectedConv, setSelectedConv] = useState<number | null>(null);
+  const [selectedConv, setSelectedConv] = useState<number | null>(initialInternalConversation);
+  const [activeMessageTab, setActiveMessageTab] = useState(
+    initialInternalConversation !== null ? "messages" : "inbox",
+  );
   const [search, setSearch] = useState("");
   const [newConvOpen, setNewConvOpen] = useState(false);
   const [userSearch, setUserSearch] = useState("");
@@ -5754,9 +5799,12 @@ export default function MessagesPage() {
   const [internalSort, setInternalSort] = useState<"desc" | "asc">(() => {
     try { return localStorage.getItem("internal_sort_order") === "asc" ? "asc" : "desc"; } catch { return "desc"; }
   });
+  const [internalAudience, setInternalAudience] = useState<"all" | "agent" | "student">("all");
+  const [internalReadState, setInternalReadState] = useState<"all" | "read" | "unread">("all");
+  const [internalArchived, setInternalArchived] = useState(false);
   const [internalSelectMode, setInternalSelectMode] = useState(false);
   const [internalSelectedIds, setInternalSelectedIds] = useState<Set<number>>(new Set());
-  const [internalBulkConfirm, setInternalBulkConfirm] = useState<"archive" | "delete" | "delete-final" | null>(null);
+  const [internalBulkConfirm, setInternalBulkConfirm] = useState<"archive" | "unarchive" | "delete" | "delete-final" | null>(null);
   const [internalBulkBusy, setInternalBulkBusy] = useState(false);
   const [internalListWidth, setInternalListWidth] = useState<number>(() => readStoredListWidth(INTERNAL_LIST_WIDTH_STORAGE_KEY));
   const internalListResizeCleanupRef = useRef<(() => void) | null>(null);
@@ -5807,10 +5855,17 @@ export default function MessagesPage() {
 
   const fetchConversations = useCallback(async () => {
     try {
-      const res = await customFetch(`/api/conversations?order=${internalSort}${search ? `&search=${search}` : ""}`);
+      const params = new URLSearchParams({
+        order: internalSort,
+        audience: internalAudience,
+        readState: internalReadState,
+        archived: String(internalArchived),
+      });
+      if (search) params.set("search", search);
+      const res = await customFetch(`/api/conversations?${params}`);
       setConversations((res as any)?.data || res || []);
     } catch {}
-  }, [search, internalSort]);
+  }, [search, internalSort, internalAudience, internalReadState, internalArchived]);
 
   const toggleInternalSelected = (id: number) => {
     setInternalSelectedIds((prev) => {
@@ -5821,12 +5876,12 @@ export default function MessagesPage() {
     });
   };
 
-  async function runInternalBulk(type: "archive" | "delete") {
+  async function runInternalBulk(type: "archive" | "unarchive" | "delete") {
     const ids = Array.from(internalSelectedIds);
     if (ids.length === 0) return;
     setInternalBulkBusy(true);
     try {
-      const path = type === "delete" ? "bulk-delete" : "bulk-archive";
+      const path = type === "delete" ? "bulk-delete" : type === "unarchive" ? "bulk-unarchive" : "bulk-archive";
       await customFetch(`/api/inbox/conversations/${path}`, {
         method: "POST",
         body: JSON.stringify(type === "delete" ? { ids, confirm: "DELETE_CONVERSATIONS" } : { ids }),
@@ -5834,7 +5889,9 @@ export default function MessagesPage() {
       toast({
         title: type === "delete"
           ? t("inbox.bulk.deletedToast", { count: ids.length })
-          : t("inbox.bulk.archivedToast", { count: ids.length }),
+          : type === "unarchive"
+            ? t("inbox.bulk.restoredToast", { count: ids.length })
+            : t("inbox.bulk.archivedToast", { count: ids.length }),
       });
       setInternalBulkConfirm(null);
       setInternalSelectMode(false);
@@ -5906,7 +5963,7 @@ export default function MessagesPage() {
   return (
     <>
       <div className="min-h-0">
-        <Tabs defaultValue="inbox" className="space-y-3">
+        <Tabs value={activeMessageTab} onValueChange={setActiveMessageTab} className="space-y-3">
           <TabsList className="h-10 max-w-full justify-start overflow-x-auto rounded-xl p-1 sm:w-fit">
             <TabsTrigger value="inbox" className="shrink-0 gap-2 px-3 sm:px-4">
               <InboxIcon className="w-4 h-4" /> Inbox
@@ -5965,9 +6022,19 @@ export default function MessagesPage() {
                           : new Set(conversations.map((c) => c.id)),
                       )
                     }
-                    onBulkArchive={() => setInternalBulkConfirm("archive")}
                     onBulkDelete={() => setInternalBulkConfirm("delete")}
                     bulkBusy={internalBulkBusy}
+                    audienceFilter={internalAudience}
+                    setAudienceFilter={setInternalAudience}
+                    readFilter={internalReadState}
+                    setReadFilter={setInternalReadState}
+                    archivedFilter={internalArchived}
+                    setArchivedFilter={(value) => {
+                      setInternalArchived(value);
+                      setSelectedConv(null);
+                      setInternalSelectedIds(new Set());
+                    }}
+                    onBulkArchive={() => setInternalBulkConfirm(internalArchived ? "unarchive" : "archive")}
                   />
                 </div>
 
@@ -6078,6 +6145,8 @@ export default function MessagesPage() {
                 ? t("inbox.bulk.deleteConfirmTitle2")
                 : internalBulkConfirm === "delete"
                   ? t("inbox.bulk.deleteConfirmTitle")
+                  : internalBulkConfirm === "unarchive"
+                    ? t("inbox.bulk.restoreConfirmTitle")
                   : t("inbox.bulk.archiveConfirmTitle")}
             </DialogTitle>
           </DialogHeader>
@@ -6086,7 +6155,9 @@ export default function MessagesPage() {
               ? t("inbox.bulk.deleteConfirmBody2", { count: internalSelectedIds.size })
               : internalBulkConfirm === "delete"
                 ? t("inbox.bulk.deleteConfirmBody", { count: internalSelectedIds.size })
-                : t("inbox.bulk.archiveConfirmBody", { count: internalSelectedIds.size })}
+                : internalBulkConfirm === "unarchive"
+                  ? t("inbox.bulk.restoreConfirmBody", { count: internalSelectedIds.size })
+                  : t("inbox.bulk.archiveConfirmBody", { count: internalSelectedIds.size })}
           </p>
           <DialogFooter>
             <Button variant="outline" disabled={internalBulkBusy} onClick={() => setInternalBulkConfirm(null)}>
@@ -6098,7 +6169,7 @@ export default function MessagesPage() {
               onClick={() => {
                 if (internalBulkConfirm === "delete") setInternalBulkConfirm("delete-final");
                 else if (internalBulkConfirm === "delete-final") void runInternalBulk("delete");
-                else void runInternalBulk("archive");
+                else void runInternalBulk(internalBulkConfirm === "unarchive" ? "unarchive" : "archive");
               }}
               className="gap-1"
               data-testid="button-internal-bulk-confirm"
@@ -6108,7 +6179,9 @@ export default function MessagesPage() {
                 ? t("inbox.bulk.deleteForever")
                 : internalBulkConfirm === "delete"
                   ? t("inbox.bulk.deleteContinue")
-                  : t("inbox.bulk.archive")}
+                  : internalBulkConfirm === "unarchive"
+                    ? t("inbox.bulk.restore")
+                    : t("inbox.bulk.archive")}
             </Button>
           </DialogFooter>
         </DialogContent>

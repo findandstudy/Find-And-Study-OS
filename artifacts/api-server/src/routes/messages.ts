@@ -15,19 +15,25 @@ import {
   applicationsTable,
   channelAccountsTable,
   externalContactsTable,
+  agentIntegrationsTable,
 } from "@workspace/db";
 import { eq, and, desc, asc, sql, inArray, ilike, or, isNull, ne } from "drizzle-orm";
 import { requireAuth, requireRole, requireAgentStaffPermission, logAudit } from "../lib/auth";
-import { STAFF_ROLES, ADMIN_ROLES } from "../lib/roles";
+import { STAFF_ROLES, ADMIN_ROLES, AGENT_ROLES, isAgentRole } from "../lib/roles";
 import { dispatchNotification } from "../lib/notificationDispatcher";
 import { sendZernioConversationMessage } from "../lib/inbox/outboundMessage";
 import { sendZernioTemplate } from "../lib/inbox/zernioSend";
 import { resolveZernioWhatsAppAccount } from "../lib/inbox/zernioTemplates";
-import { isWithin24hWindow } from "../lib/inbox/channels/whatsapp";
+import { isWithin24hWindow, sendWhatsAppText } from "../lib/inbox/channels/whatsapp";
 import { toE164 } from "../lib/inbox/phone";
 import { isAgentSourcedAndBlockedForStaff } from "../lib/rbac/agentSourceScope";
 import { maybeAutoReply } from "../lib/inbox/botAutoReply";
 import { invalidateNotificationCounts } from "../lib/notificationCountCache";
+import { getAgencyStaffWithLegacy } from "../lib/agencyStaff";
+import { getAgentRecord, getAgentVisibleIds } from "../lib/agentVisibility";
+import { resolveAgentFeatures } from "../lib/agentFeatures";
+import { decryptConfig } from "../lib/encryption";
+import { sendTenantEmail } from "../lib/email";
 
 const router: IRouter = Router();
 
@@ -82,11 +88,35 @@ router.get("/conversations", requireAuth, requireRole(...STAFF_ROLES, ...ADMIN_R
   const order = String(req.query.order || "desc") === "asc" ? "asc" : "desc";
   const showTests = String(req.query.showTests || "") === "true";
   const archived = String(req.query.archived || "") === "true";
+  const audience = ["agent", "student"].includes(String(req.query.audience)) ? String(req.query.audience) : "all";
+  const readState = ["read", "unread"].includes(String(req.query.readState)) ? String(req.query.readState) : "all";
 
   const myConvIds = db
     .select({ conversationId: conversationParticipantsTable.conversationId })
     .from(conversationParticipantsTable)
     .where(eq(conversationParticipantsTable.userId, userId));
+
+  const audienceRoles = audience === "student"
+    ? ["student"]
+    : audience === "agent"
+      ? ["agent", "sub_agent", "agent_staff"]
+      : [];
+  const audienceConvIds = audienceRoles.length > 0
+    ? db.select({ conversationId: conversationParticipantsTable.conversationId })
+      .from(conversationParticipantsTable)
+      .innerJoin(usersTable, eq(conversationParticipantsTable.userId, usersTable.id))
+      .where(inArray(usersTable.role, audienceRoles))
+    : null;
+
+  const unreadExists = sql`EXISTS (
+    SELECT 1
+      FROM conversation_participants current_participant
+      JOIN messages unread_message ON unread_message.conversation_id = current_participant.conversation_id
+     WHERE current_participant.conversation_id = ${conversationsTable.id}
+       AND current_participant.user_id = ${userId}
+       AND unread_message.sender_id IS DISTINCT FROM ${userId}
+       AND (current_participant.last_read_at IS NULL OR unread_message.created_at > current_participant.last_read_at)
+  )`;
 
   let query = db
     .select({
@@ -112,6 +142,8 @@ router.get("/conversations", requireAuth, requireRole(...STAFF_ROLES, ...ADMIN_R
         // would otherwise leak them into this list.
         eq(conversationsTable.channel, "internal"),
         eq(conversationsTable.isArchived, archived),
+        audienceConvIds ? inArray(conversationsTable.id, audienceConvIds) : undefined,
+        readState === "unread" ? unreadExists : readState === "read" ? sql`NOT (${unreadExists})` : undefined,
         search ? ilike(conversationsTable.title, `%${search}%`) : undefined,
         // Hide test/junk conversations by default (quick-contact WhatsApp
         // stubs stuck in 'queued' and e2e-suite artifacts).
@@ -366,6 +398,19 @@ router.get("/conversations/:id/messages", requireAuth, requireRole(...STAFF_ROLE
       )
     );
 
+  // Keep the bell/dashboard notification state aligned with the thread read
+  // state.  Only message notifications for this exact recipient and
+  // conversation are acknowledged; unrelated notifications are untouched.
+  await db.update(notificationsTable)
+    .set({ isRead: true, readAt: new Date() })
+    .where(and(
+      eq(notificationsTable.userId, userId),
+      eq(notificationsTable.type, "message.new"),
+      eq(notificationsTable.isRead, false),
+      sql`(${notificationsTable.data} ->> 'conversationId') = ${String(conversationId)}`,
+    ));
+  invalidateNotificationCounts(userId);
+
   const reversed = messages.reverse();
   const studentSenders = reversed.filter(m => m.senderRole === "student" && !m.senderAvatarUrl && m.senderId);
   if (studentSenders.length > 0) {
@@ -514,7 +559,11 @@ router.post("/conversations/:id/messages", requireAuth, requireRole(...STAFF_ROL
     : [];
   const recipientRoleMap = new Map(recipientUsers.map(u => [u.id, u.role]));
   const studentRecipientIds = otherParticipants.filter(p => recipientRoleMap.get(p.userId) === "student").map(p => p.userId);
-  const staffRecipientIds = otherParticipants.filter(p => recipientRoleMap.get(p.userId) !== "student").map(p => p.userId);
+  const agentRecipientIds = otherParticipants.filter(p => AGENT_ROLE_LIST.includes(recipientRoleMap.get(p.userId) || "")).map(p => p.userId);
+  const staffRecipientIds = otherParticipants.filter(p => {
+    const role = recipientRoleMap.get(p.userId) || "";
+    return role !== "student" && !AGENT_ROLE_LIST.includes(role);
+  }).map(p => p.userId);
   const messageDispatchBase = {
     event: "message.new",
     title: `New message from ${senderName}`,
@@ -525,10 +574,13 @@ router.post("/conversations/:id/messages", requireAuth, requireRole(...STAFF_ROL
     data: { conversationId, messageId: message.id },
   };
   if (staffRecipientIds.length > 0) {
-    await dispatchNotification({ ...messageDispatchBase, actionUrl: "/staff/messages", recipientUserIds: staffRecipientIds });
+    await dispatchNotification({ ...messageDispatchBase, actionUrl: `/staff/messages?tab=internal&conversation=${conversationId}`, recipientUserIds: staffRecipientIds });
   }
   if (studentRecipientIds.length > 0) {
-    await dispatchNotification({ ...messageDispatchBase, actionUrl: "/student/messages", recipientUserIds: studentRecipientIds });
+    await dispatchNotification({ ...messageDispatchBase, actionUrl: `/student/messages?conversation=${conversationId}`, recipientUserIds: studentRecipientIds });
+  }
+  if (agentRecipientIds.length > 0) {
+    await dispatchNotification({ ...messageDispatchBase, actionUrl: `/agent/messages?conversation=${conversationId}`, recipientUserIds: agentRecipientIds });
   }
 
   const MENTION_RE = /@\[([^\]]*)\]\((\d+)\)/g;
@@ -539,13 +591,21 @@ router.post("/conversations/:id/messages", requireAuth, requireRole(...STAFF_ROL
     if (uid && uid !== userId) mentionedIds.add(uid);
   }
   for (const mentionedUserId of mentionedIds) {
+    const mentionedRole = recipientRoleMap.get(mentionedUserId);
+    // A mention must never grant access to somebody outside the conversation.
+    if (!mentionedRole) continue;
+    const mentionActionUrl = mentionedRole === "student"
+      ? `/student/messages?conversation=${conversationId}`
+      : AGENT_ROLE_LIST.includes(mentionedRole)
+        ? `/agent/messages?conversation=${conversationId}`
+        : `/staff/messages?tab=internal&conversation=${conversationId}`;
     try {
       await dispatchNotification({
         event: "message.mention",
         title: `${senderName} mentioned you`,
         body: messageContent.substring(0, 150),
         icon: "at-sign",
-        actionUrl: "/staff/messages",
+        actionUrl: mentionActionUrl,
         actorUserId: userId,
         recipientUserIds: [mentionedUserId],
         templateVars: { senderName },
@@ -762,6 +822,19 @@ router.get("/broadcasts", requireAuth, requireRole(...ADMIN_ROLES), async (_req,
 
 /* ─── QUICK CONTACT ────────────────────────────────────────── */
 
+function escapeEmailText(value: unknown): string {
+  const entities: Record<string, string> = {
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    "\"": "&quot;",
+    "'": "&#39;",
+  };
+  return String(value ?? "")
+    .replace(/[&<>"']/g, character => entities[character] || character)
+    .replace(/\n/g, "<br>");
+}
+
 async function createQuickContactConversation(
   userId: number, title: string, channel: string, status: string,
   content: string, metadata: Record<string, any>, recipientUserId?: number | null
@@ -808,21 +881,98 @@ async function createQuickContactConversation(
   return conv;
 }
 
-router.post("/quick-contact", requireAuth, requireRole(...STAFF_ROLES, ...ADMIN_ROLES), async (req, res): Promise<void> => {
+router.post("/quick-contact", requireAuth, requireRole(...STAFF_ROLES, ...ADMIN_ROLES, ...AGENT_ROLES), requireAgentStaffPermission("messages"), async (req, res): Promise<void> => {
   const userId = req.user!.id;
   const { channel, recipientName, recipientEmail, recipientPhone, subject, message, entityType, entityId } = req.body;
+  const agentActor = isAgentRole(req.user!.role);
+  let tenantRecipientEmail: string | null = null;
+  let tenantRecipientUserId: number | null = null;
 
   if (!channel || !message) {
     res.status(400).json({ error: "channel and message are required" });
     return;
   }
-  if (channel === "email" && !recipientEmail) {
+  if (!agentActor && channel === "email" && !recipientEmail) {
     res.status(400).json({ error: "recipientEmail is required for email channel" });
     return;
   }
-  if (channel === "whatsapp" && !recipientPhone) {
+  if (!agentActor && channel === "whatsapp" && !recipientPhone) {
     res.status(400).json({ error: "recipientPhone is required for WhatsApp channel" });
     return;
+  }
+
+  if (agentActor) {
+    const numericEntityId = Number(entityId);
+    const visibleAgentIds = await getAgentVisibleIds(userId, req.user!.role);
+    let ownerAgentId: number | null = null;
+    if (entityType === "lead") {
+      const [row] = await db.select({
+        agentId: leadsTable.agentId,
+        convertedStudentId: leadsTable.convertedStudentId,
+        email: leadsTable.email,
+      }).from(leadsTable).where(eq(leadsTable.id, numericEntityId));
+      ownerAgentId = row?.agentId ?? null;
+      tenantRecipientEmail = row?.email ?? null;
+      if (row?.convertedStudentId) {
+        const [student] = await db.select({ userId: studentsTable.userId, email: studentsTable.email })
+          .from(studentsTable).where(eq(studentsTable.id, row.convertedStudentId));
+        tenantRecipientUserId = student?.userId ?? null;
+        tenantRecipientEmail = student?.email ?? tenantRecipientEmail;
+      } else if (row?.email) {
+        const [recipient] = await db.select({ id: usersTable.id }).from(usersTable)
+          .where(eq(usersTable.email, row.email));
+        tenantRecipientUserId = recipient?.id ?? null;
+      }
+    } else if (entityType === "student") {
+      const [row] = await db.select({
+        agentId: studentsTable.agentId,
+        userId: studentsTable.userId,
+        email: studentsTable.email,
+      }).from(studentsTable).where(eq(studentsTable.id, numericEntityId));
+      ownerAgentId = row?.agentId ?? null;
+      tenantRecipientUserId = row?.userId ?? null;
+      tenantRecipientEmail = row?.email ?? null;
+    } else if (entityType === "application") {
+      const [row] = await db.select({
+        agentId: applicationsTable.agentId,
+        studentId: applicationsTable.studentId,
+      }).from(applicationsTable).where(eq(applicationsTable.id, numericEntityId));
+      const [student] = row?.studentId
+        ? await db.select({ agentId: studentsTable.agentId, userId: studentsTable.userId, email: studentsTable.email })
+          .from(studentsTable).where(eq(studentsTable.id, row.studentId))
+        : [];
+      ownerAgentId = row?.agentId ?? student?.agentId ?? null;
+      tenantRecipientUserId = student?.userId ?? null;
+      tenantRecipientEmail = student?.email ?? null;
+    } else if (entityType === "agent") {
+      ownerAgentId = numericEntityId;
+      const [row] = await db.select({ userId: agentsTable.userId, email: agentsTable.email })
+        .from(agentsTable).where(eq(agentsTable.id, numericEntityId));
+      tenantRecipientUserId = row?.userId ?? null;
+      tenantRecipientEmail = row?.email ?? null;
+    }
+    if (!Number.isSafeInteger(numericEntityId) || !ownerAgentId || !visibleAgentIds.includes(ownerAgentId)) {
+      res.status(404).json({ error: "entity_not_found" });
+      return;
+    }
+    if (channel === "instagram") {
+      res.status(403).json({ error: "channel_not_enabled", channel });
+      return;
+    }
+    if (channel === "email" || channel === "whatsapp") {
+      const agent = await getAgentRecord(userId, req.user!.role);
+      const features = agent ? resolveAgentFeatures(agent.planTier, agent.featureOverrides) : null;
+      const featureEnabled = channel === "email" ? features?.email_integration : features?.whatsapp_integration;
+      const [integration] = agent ? await db.select().from(agentIntegrationsTable).where(and(
+        eq(agentIntegrationsTable.agentId, agent.id),
+        eq(agentIntegrationsTable.kind, channel),
+        eq(agentIntegrationsTable.isEnabled, true),
+      )) : [];
+      if (!featureEnabled || !integration) {
+        res.status(403).json({ error: "channel_not_enabled", channel });
+        return;
+      }
+    }
   }
 
   // ── WhatsApp / Instagram → real dispatch through an existing inbox
@@ -894,6 +1044,75 @@ router.post("/quick-contact", requireAuth, requireRole(...STAFF_ROLES, ...ADMIN_
 
       if (entityAgentId !== undefined && isAgentSourcedAndBlockedForStaff(req.user!, entityAgentId)) {
         res.status(404).json({ error: "entity_not_found", channel });
+        return;
+      }
+
+      if (agentActor) {
+        if (channel !== "whatsapp" || !entityPhoneE164) {
+          res.status(400).json({ error: channel === "whatsapp" ? "recipient_phone_missing" : "channel_not_enabled", channel });
+          return;
+        }
+        const agent = await getAgentRecord(userId, req.user!.role);
+        const [integration] = agent ? await db.select().from(agentIntegrationsTable).where(and(
+          eq(agentIntegrationsTable.agentId, agent.id),
+          eq(agentIntegrationsTable.kind, "whatsapp"),
+          eq(agentIntegrationsTable.isEnabled, true),
+        )) : [];
+        const config = integration ? decryptConfig((integration.config as Record<string, any>) || {}) : {};
+        if (!config.phoneNumberId || !config.accessToken) {
+          res.status(409).json({ error: "channel_not_ready", channel });
+          return;
+        }
+        const result = await sendWhatsAppText({
+          config: {
+            phoneNumberId: String(config.phoneNumberId),
+            accessToken: String(config.accessToken),
+            businessAccountId: config.businessAccountId ? String(config.businessAccountId) : undefined,
+          },
+          toPhoneE164: entityPhoneE164,
+          text: String(message),
+        });
+        if (!result.ok) {
+          res.status(502).json({ error: "whatsapp_send_failed", detail: result.error || null, channel });
+          return;
+        }
+        if (result.simulated) {
+          const simulated = await createQuickContactConversation(
+            userId,
+            `WhatsApp to ${recipientName}`,
+            "whatsapp",
+            "queued",
+            String(message),
+            {
+              entityType,
+              entityId,
+              recipientName,
+              tenantAgentId: agent?.id,
+              simulated: true,
+            },
+            tenantRecipientUserId,
+          );
+          await logAudit(userId, "quick_contact", entityType, entityId, {
+            channel,
+            recipientName,
+            tenantAgentId: agent?.id,
+            liveIntegrationsDisabled: true,
+          }, req.ip);
+          res.json({
+            success: true,
+            conversationId: simulated.id,
+            dispatched: false,
+            simulated: true,
+          });
+          return;
+        }
+        await logAudit(userId, "quick_contact", entityType, entityId, {
+          channel,
+          recipientName,
+          tenantAgentId: agent?.id,
+          providerMessageId: result.externalMessageId || null,
+        }, req.ip);
+        res.json({ success: true, dispatched: true, providerMessageId: result.externalMessageId || null });
         return;
       }
 
@@ -987,13 +1206,72 @@ router.post("/quick-contact", requireAuth, requireRole(...STAFF_ROLES, ...ADMIN_
     let conv;
     let note: string | undefined;
 
-    let recipientUserId: number | null = null;
-    if (entityType === "student" && entityId) {
+    let recipientUserId: number | null = agentActor ? tenantRecipientUserId : null;
+    if (!agentActor && entityType === "student" && entityId) {
       const [s] = await db.select({ userId: studentsTable.userId }).from(studentsTable).where(eq(studentsTable.id, parseInt(String(entityId), 10)));
       if (s?.userId) recipientUserId = s.userId;
-    } else if (entityType === "lead" && entityId && recipientEmail) {
+    } else if (!agentActor && entityType === "lead" && entityId && recipientEmail) {
       const [u] = await db.select({ id: usersTable.id }).from(usersTable).where(eq(usersTable.email, recipientEmail));
       if (u) recipientUserId = u.id;
+    }
+
+    if (agentActor && channel === "internal") {
+      if (!recipientUserId) {
+        res.status(409).json({ error: "internal_recipient_unavailable" });
+        return;
+      }
+      const allowedContacts = await getAgentContactUserIds(userId, req.user!.role);
+      if (!allowedContacts.has(recipientUserId)) {
+        res.status(403).json({ error: "internal_recipient_forbidden" });
+        return;
+      }
+    }
+
+    if (agentActor && channel === "email") {
+      const agent = await getAgentRecord(userId, req.user!.role);
+      const [integration] = agent ? await db.select().from(agentIntegrationsTable).where(and(
+        eq(agentIntegrationsTable.agentId, agent.id),
+        eq(agentIntegrationsTable.kind, "email"),
+        eq(agentIntegrationsTable.isEnabled, true),
+      )) : [];
+      const config = integration ? decryptConfig((integration.config as Record<string, any>) || {}) : {};
+      if (!config.host || !config.username || !config.password || !tenantRecipientEmail) {
+        res.status(409).json({ error: "channel_not_ready", channel });
+        return;
+      }
+      let dispatched = false;
+      try {
+        dispatched = await sendTenantEmail({
+          host: String(config.host),
+          port: Number(config.port) || 587,
+          username: String(config.username),
+          password: String(config.password),
+          fromEmail: String(config.fromEmail || config.username),
+          fromName: String(config.fromName || agent?.companyName || "Agency"),
+        }, tenantRecipientEmail, {
+          subject: String(subject || `Message from ${agent?.companyName || "your agency"}`),
+          html: `<p>${escapeEmailText(message)}</p>`,
+          text: String(message),
+        });
+      } catch (error) {
+        res.status(400).json({
+          error: error instanceof Error ? error.message : "tenant_email_delivery_failed",
+          channel,
+        });
+        return;
+      }
+      const sentConversation = await createQuickContactConversation(
+        userId,
+        `Email to ${recipientName}: ${subject || "(no subject)"}`,
+        "email",
+        dispatched ? "sent" : "queued",
+        message,
+        { entityType, entityId, recipientName, recipientEmail: tenantRecipientEmail, subject, tenantAgentId: agent?.id },
+        recipientUserId,
+      );
+      await logAudit(userId, "quick_contact", entityType, entityId, { channel, recipientName, tenantAgentId: agent?.id }, req.ip);
+      res.json({ success: true, conversationId: sentConversation.id, dispatched });
+      return;
     }
 
     if (channel === "internal") {
@@ -1003,6 +1281,26 @@ router.post("/quick-contact", requireAuth, requireRole(...STAFF_ROLES, ...ADMIN_
         { entityType, entityId, recipientName, recipientEmail, recipientPhone },
         recipientUserId
       );
+      if (recipientUserId && recipientUserId !== userId) {
+        const [recipient] = await db.select({ role: usersTable.role }).from(usersTable).where(eq(usersTable.id, recipientUserId));
+        const actionUrl = recipient?.role === "student"
+          ? `/student/messages?conversation=${conv.id}`
+          : recipient?.role && AGENT_ROLE_LIST.includes(recipient.role)
+            ? `/agent/messages?conversation=${conv.id}`
+            : `/staff/messages?tab=internal&conversation=${conv.id}`;
+        const senderName = `${req.user!.firstName} ${req.user!.lastName}`.trim();
+        await dispatchNotification({
+          event: "message.new",
+          title: `New message from ${senderName}`,
+          body: String(message).substring(0, 150),
+          icon: "message-circle",
+          actionUrl,
+          actorUserId: userId,
+          recipientUserIds: [recipientUserId],
+          templateVars: { senderName },
+          data: { conversationId: conv.id },
+        });
+      }
     } else if (channel === "email") {
       const title = `Email to ${recipientName}: ${subject || "(no subject)"}`;
       conv = await createQuickContactConversation(
@@ -1253,7 +1551,10 @@ router.get("/student/conversations", requireAuth, async (req, res): Promise<void
   if (req.user!.role !== "student") { res.status(403).json({ error: "Students only" }); return; }
 
   const myParticipations = await db
-    .select({ conversationId: conversationParticipantsTable.conversationId })
+    .select({
+      conversationId: conversationParticipantsTable.conversationId,
+      lastReadAt: conversationParticipantsTable.lastReadAt,
+    })
     .from(conversationParticipantsTable)
     .where(eq(conversationParticipantsTable.userId, userId));
 
@@ -1268,6 +1569,7 @@ router.get("/student/conversations", requireAuth, async (req, res): Promise<void
 
   const result = [];
   for (const conv of conversations) {
+    const myParticipation = myParticipations.find(item => item.conversationId === conv.id);
     const participants = await db
       .select({ userId: conversationParticipantsTable.userId, firstName: usersTable.firstName, lastName: usersTable.lastName, role: usersTable.role, avatarUrl: usersTable.avatarUrl })
       .from(conversationParticipantsTable)
@@ -1279,7 +1581,13 @@ router.get("/student/conversations", requireAuth, async (req, res): Promise<void
       .orderBy(desc(messagesTable.createdAt)).limit(1);
 
     const unread = await db.select({ count: sql<number>`count(*)::int` }).from(messagesTable)
-      .where(and(eq(messagesTable.conversationId, conv.id), ne(messagesTable.senderId, userId), eq(messagesTable.status, "sent")));
+      .where(and(
+        eq(messagesTable.conversationId, conv.id),
+        sql`${messagesTable.senderId} IS DISTINCT FROM ${userId}`,
+        myParticipation?.lastReadAt
+          ? sql`${messagesTable.createdAt} > ${myParticipation.lastReadAt}`
+          : sql`TRUE`,
+      ));
 
     result.push({ ...conv, participants, lastMessage: lastMsg[0] || null, unreadCount: unread[0]?.count || 0 });
   }
@@ -1311,9 +1619,21 @@ router.get("/student/conversations/:id/messages", requireAuth, async (req, res):
     .where(eq(messagesTable.conversationId, conversationId))
     .orderBy(asc(messagesTable.createdAt));
 
-  await db.update(messagesTable)
-    .set({ status: "read" })
-    .where(and(eq(messagesTable.conversationId, conversationId), ne(messagesTable.senderId, userId), eq(messagesTable.status, "sent")));
+  await db.update(conversationParticipantsTable)
+    .set({ lastReadAt: new Date() })
+    .where(and(
+      eq(conversationParticipantsTable.conversationId, conversationId),
+      eq(conversationParticipantsTable.userId, userId),
+    ));
+  await db.update(notificationsTable)
+    .set({ isRead: true, readAt: new Date() })
+    .where(and(
+      eq(notificationsTable.userId, userId),
+      eq(notificationsTable.type, "message.new"),
+      eq(notificationsTable.isRead, false),
+      sql`${notificationsTable.data}->>'conversationId' = ${String(conversationId)}`,
+    ));
+  invalidateNotificationCounts(userId);
 
   res.json({ data: messages });
 });
@@ -1388,19 +1708,28 @@ router.post("/student/conversations/:id/messages", requireAuth, async (req, res)
 
   const senderUser = await db.select({ firstName: usersTable.firstName, lastName: usersTable.lastName }).from(usersTable).where(eq(usersTable.id, userId));
   const senderName = senderUser[0] ? `${senderUser[0].firstName} ${senderUser[0].lastName}` : "Student";
-  const studentMsgRecipientIds = otherParticipants.map(p => p.odUserId);
-  if (studentMsgRecipientIds.length > 0) {
-    await dispatchNotification({
-      event: "message.new",
-      title: `New message from ${senderName}`,
-      body: messageContent.substring(0, 150),
-      icon: "message-circle",
-      actionUrl: `/staff/messages`,
-      actorUserId: userId,
-      recipientUserIds: studentMsgRecipientIds,
-      templateVars: { senderName },
-      data: { conversationId, messageId: message.id },
-    });
+  const studentRecipientUsers = otherParticipants.length > 0
+    ? await db.select({ id: usersTable.id, role: usersTable.role })
+        .from(usersTable)
+        .where(inArray(usersTable.id, otherParticipants.map(p => p.odUserId)))
+    : [];
+  const recipientRoles = new Map(studentRecipientUsers.map(recipient => [recipient.id, recipient.role]));
+  const agentRecipients = otherParticipants.filter(p => AGENT_ROLE_LIST.includes(recipientRoles.get(p.odUserId) || "")).map(p => p.odUserId);
+  const staffRecipients = otherParticipants.filter(p => !AGENT_ROLE_LIST.includes(recipientRoles.get(p.odUserId) || "")).map(p => p.odUserId);
+  const studentDispatchBase = {
+    event: "message.new",
+    title: `New message from ${senderName}`,
+    body: messageContent.substring(0, 150),
+    icon: "message-circle",
+    actorUserId: userId,
+    templateVars: { senderName },
+    data: { conversationId, messageId: message.id },
+  };
+  if (staffRecipients.length > 0) {
+    await dispatchNotification({ ...studentDispatchBase, actionUrl: `/staff/messages?tab=internal&conversation=${conversationId}`, recipientUserIds: staffRecipients });
+  }
+  if (agentRecipients.length > 0) {
+    await dispatchNotification({ ...studentDispatchBase, actionUrl: `/agent/messages?conversation=${conversationId}`, recipientUserIds: agentRecipients });
   }
 
   res.status(201).json(message);
@@ -1429,11 +1758,25 @@ async function getAgentContactUserIds(userId: number, userRole: string): Promise
 
   const contactUserIds = new Set<number>();
 
+  const assignedPlatformStaff = await getAgencyStaffWithLegacy(agentRec.id, agentRec.assignedStaffId ?? null);
+  for (const staff of assignedPlatformStaff) contactUserIds.add(staff.userId);
+
+  // Agency team membership stays inside the current tenant. This includes the
+  // owner (for an agency staff caller) and all staff managed by this agency.
+  if (agentRec.userId) contactUserIds.add(agentRec.userId);
+  const ownTeam = await db.select({ id: usersTable.id })
+    .from(usersTable)
+    .where(eq(usersTable.managingAgentId, agentRec.id));
+  for (const member of ownTeam) contactUserIds.add(member.id);
+
+  if (agentRec.parentAgentId) {
+    const [parentAgent] = await db.select({ userId: agentsTable.userId })
+      .from(agentsTable)
+      .where(eq(agentsTable.id, agentRec.parentAgentId));
+    if (parentAgent?.userId) contactUserIds.add(parentAgent.userId);
+  }
+
   if (userRole === "sub_agent") {
-    if (agentRec.parentAgentId) {
-      const [parentAgent] = await db.select({ userId: agentsTable.userId }).from(agentsTable).where(eq(agentsTable.id, agentRec.parentAgentId));
-      if (parentAgent?.userId) contactUserIds.add(parentAgent.userId);
-    }
     const myStudents = await db
       .select({ userId: studentsTable.userId })
       .from(studentsTable)
@@ -1446,6 +1789,12 @@ async function getAgentContactUserIds(userId: number, userRole: string): Promise
     const agentIds = [agentRec.id];
     const subAgents = await db.select({ id: agentsTable.id }).from(agentsTable).where(eq(agentsTable.parentAgentId, agentRec.id));
     for (const sa of subAgents) agentIds.push(sa.id);
+    const subAgentUsers = await db.select({ userId: agentsTable.userId })
+      .from(agentsTable)
+      .where(eq(agentsTable.parentAgentId, agentRec.id));
+    for (const subAgent of subAgentUsers) {
+      if (subAgent.userId) contactUserIds.add(subAgent.userId);
+    }
 
     const myStudents = await db
       .select({ userId: studentsTable.userId })
@@ -1463,7 +1812,10 @@ router.get("/agent/conversations", requireAuth, requireAgentStaffPermission("mes
   if (!AGENT_ROLE_LIST.includes(req.user!.role)) { res.status(403).json({ error: "Agents only" }); return; }
 
   const myParticipations = await db
-    .select({ conversationId: conversationParticipantsTable.conversationId })
+    .select({
+      conversationId: conversationParticipantsTable.conversationId,
+      lastReadAt: conversationParticipantsTable.lastReadAt,
+    })
     .from(conversationParticipantsTable)
     .where(eq(conversationParticipantsTable.userId, userId));
 
@@ -1478,6 +1830,7 @@ router.get("/agent/conversations", requireAuth, requireAgentStaffPermission("mes
 
   const result = [];
   for (const conv of conversations) {
+    const myParticipation = myParticipations.find(item => item.conversationId === conv.id);
     const participants = await db
       .select({ userId: conversationParticipantsTable.userId, firstName: usersTable.firstName, lastName: usersTable.lastName, role: usersTable.role, avatarUrl: usersTable.avatarUrl })
       .from(conversationParticipantsTable)
@@ -1489,7 +1842,13 @@ router.get("/agent/conversations", requireAuth, requireAgentStaffPermission("mes
       .orderBy(desc(messagesTable.createdAt)).limit(1);
 
     const unread = await db.select({ count: sql<number>`count(*)::int` }).from(messagesTable)
-      .where(and(eq(messagesTable.conversationId, conv.id), ne(messagesTable.senderId, userId), eq(messagesTable.status, "sent")));
+      .where(and(
+        eq(messagesTable.conversationId, conv.id),
+        sql`${messagesTable.senderId} IS DISTINCT FROM ${userId}`,
+        myParticipation?.lastReadAt
+          ? sql`${messagesTable.createdAt} > ${myParticipation.lastReadAt}`
+          : sql`TRUE`,
+      ));
 
     result.push({ ...conv, participants, lastMessage: lastMsg[0] || null, unreadCount: unread[0]?.count || 0 });
   }
@@ -1522,6 +1881,21 @@ router.get("/agent/conversations/:id/messages", requireAuth, requireAgentStaffPe
   await db.update(messagesTable)
     .set({ status: "read" })
     .where(and(eq(messagesTable.conversationId, conversationId), ne(messagesTable.senderId, userId), eq(messagesTable.status, "sent")));
+  await db.update(conversationParticipantsTable)
+    .set({ lastReadAt: new Date() })
+    .where(and(
+      eq(conversationParticipantsTable.conversationId, conversationId),
+      eq(conversationParticipantsTable.userId, userId),
+    ));
+  await db.update(notificationsTable)
+    .set({ isRead: true, readAt: new Date() })
+    .where(and(
+      eq(notificationsTable.userId, userId),
+      eq(notificationsTable.type, "message.new"),
+      eq(notificationsTable.isRead, false),
+      sql`${notificationsTable.data}->>'conversationId' = ${String(conversationId)}`,
+    ));
+  invalidateNotificationCounts(userId);
 
   res.json({ data: messages });
 });
@@ -1619,19 +1993,37 @@ router.post("/agent/conversations/:id/messages", requireAuth, requireAgentStaffP
 
   const senderUser = await db.select({ firstName: usersTable.firstName, lastName: usersTable.lastName }).from(usersTable).where(eq(usersTable.id, userId));
   const senderName = senderUser[0] ? `${senderUser[0].firstName} ${senderUser[0].lastName}` : "Agent";
-  const agentMsgRecipientIds = otherParticipants.map(p => p.odUserId);
-  if (agentMsgRecipientIds.length > 0) {
-    await dispatchNotification({
-      event: "message.new",
-      title: `New message from ${senderName}`,
-      body: messageContent.substring(0, 150),
-      icon: "message-circle",
-      actionUrl: `/staff/messages`,
-      actorUserId: userId,
-      recipientUserIds: agentMsgRecipientIds,
-      templateVars: { senderName },
-      data: { conversationId, messageId: message.id },
-    });
+  const agentRecipientUsers = otherParticipants.length > 0
+    ? await db.select({ id: usersTable.id, role: usersTable.role })
+        .from(usersTable)
+        .where(inArray(usersTable.id, otherParticipants.map(p => p.odUserId)))
+    : [];
+  const agentRecipientRoles = new Map(agentRecipientUsers.map(recipient => [recipient.id, recipient.role]));
+  const portalRecipients = {
+    student: otherParticipants.filter(p => agentRecipientRoles.get(p.odUserId) === "student").map(p => p.odUserId),
+    agent: otherParticipants.filter(p => AGENT_ROLE_LIST.includes(agentRecipientRoles.get(p.odUserId) || "")).map(p => p.odUserId),
+    staff: otherParticipants.filter(p => {
+      const role = agentRecipientRoles.get(p.odUserId) || "";
+      return role !== "student" && !AGENT_ROLE_LIST.includes(role);
+    }).map(p => p.odUserId),
+  };
+  const agentDispatchBase = {
+    event: "message.new",
+    title: `New message from ${senderName}`,
+    body: messageContent.substring(0, 150),
+    icon: "message-circle",
+    actorUserId: userId,
+    templateVars: { senderName },
+    data: { conversationId, messageId: message.id },
+  };
+  if (portalRecipients.staff.length > 0) {
+    await dispatchNotification({ ...agentDispatchBase, actionUrl: `/staff/messages?tab=internal&conversation=${conversationId}`, recipientUserIds: portalRecipients.staff });
+  }
+  if (portalRecipients.agent.length > 0) {
+    await dispatchNotification({ ...agentDispatchBase, actionUrl: `/agent/messages?conversation=${conversationId}`, recipientUserIds: portalRecipients.agent });
+  }
+  if (portalRecipients.student.length > 0) {
+    await dispatchNotification({ ...agentDispatchBase, actionUrl: `/student/messages?conversation=${conversationId}`, recipientUserIds: portalRecipients.student });
   }
 
   res.status(201).json(message);

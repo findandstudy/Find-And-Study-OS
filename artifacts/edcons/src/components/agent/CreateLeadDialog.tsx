@@ -37,10 +37,6 @@ function useCountries() {
   });
 }
 
-const SOURCES = ["website", "referral", "social_media", "walk_in", "partner", "other"];
-
-
-
 const EMPTY_FORM = {
   firstName: "", lastName: "", email: "",
   phone: "",
@@ -181,9 +177,10 @@ function MultiCountrySelect({ value, onChange }: { value: string; onChange: (v: 
   );
 }
 
-export function CreateLeadDialog({ open, onOpenChange }: {
+export function CreateLeadDialog({ open, onOpenChange, sourceOptions }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  sourceOptions?: Array<{ value: string; label: string }>;
 }) {
   const { toast } = useToast();
   const [form, setForm] = useState(EMPTY_FORM);
@@ -247,8 +244,8 @@ export function CreateLeadDialog({ open, onOpenChange }: {
             <Select value={form.source} onValueChange={(v) => setForm({ ...form, source: v })}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
-                {SOURCES.map((s) => (
-                  <SelectItem key={s} value={s} className="capitalize">{s.replace(/_/g, " ")}</SelectItem>
+                {(sourceOptions?.length ? sourceOptions : [{ value: "website", label: "Website" }]).map((source) => (
+                  <SelectItem key={source.value} value={source.value}>{source.label}</SelectItem>
                 ))}
               </SelectContent>
             </Select>

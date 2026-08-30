@@ -395,15 +395,25 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
 
   const { toast } = useToast();
   const { user, hasPermission } = useAuth();
+  const { data: agencyProfile } = useQuery<any>({
+    queryKey: ["/api/agents/me", "student-document-capability"],
+    queryFn: () => customFetch("/api/agents/me"),
+    enabled: isAgent,
+    staleTime: 5 * 60_000,
+  });
   const isAdmin = user && ["super_admin", "admin", "manager"].includes(user.role);
   const canChangeStage = !!isAdmin || hasPermission("students.change_stage");
   const canChangeAssigned = !!isAdmin || hasPermission("records.change_assigned");
   // Task #494: strict rule — assignment dropdown only for admin or current assignee
   const isCurrentStudentAssignee = !!(student?.assignedToId && student.assignedToId === user?.id);
-  const canManageAssignment = !!isAdmin || isCurrentStudentAssignee;
+  const isAgentManager = isAgent && !!user && ["agent", "sub_agent"].includes(user.role);
+  const canManageAssignment = isAgent ? isAgentManager : (!!isAdmin || isCurrentStudentAssignee);
   const isStudent = user?.role === "student";
-  const canSelfAssign = !isAdmin && !isStudent && !isCurrentStudentAssignee && hasPermission("records.assign_button") && !student?.assignedToId;
+  const canSelfAssign = isAgent
+    ? user?.role === "agent_staff" && !student?.assignedToId
+    : !isAdmin && !isStudent && !isCurrentStudentAssignee && hasPermission("records.assign_button") && !student?.assignedToId;
   const isStaffUser = user && ["super_admin", "admin", "manager", "staff"].includes(user.role);
+  const canUploadStudentDocuments = Boolean(!isAgent || agencyProfile?.effectiveFeatures?.lead_document_upload === true);
   const { data: catalogResp } = useQuery<any>({
     queryKey: ["catalog-options"],
     queryFn: () => customFetch("/api/catalog-options"),
@@ -438,15 +448,35 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
     queryKey: ["/api/users"],
     queryFn: () => customFetch("/api/users?roles=super_admin,admin,manager,staff,consultant,accountant,editor&limit=100"),
     // Task #494: load for admin AND for the current assignee so they can reassign/unassign
-    enabled: !!(isAdmin || (student?.assignedToId && student?.assignedToId === user?.id)),
+    enabled: !isAgent && !!(isAdmin || (student?.assignedToId && student?.assignedToId === user?.id)),
     staleTime: 5 * 60_000,
   });
 
+  const { data: agentStaffData } = useQuery<any>({
+    queryKey: ["/api/agents/me/staff"],
+    queryFn: () => customFetch("/api/agents/me/staff?limit=100"),
+    enabled: isAgentManager,
+    staleTime: 5 * 60_000,
+  });
+  const assigneeOptions = useMemo(() => {
+    if (isAgent) {
+      const staff = ((agentStaffData?.data || []) as any[])
+        .filter((u: any) => u.isActive !== false)
+        .map((u: any) => ({ id: u.id, firstName: u.firstName, lastName: u.lastName, email: u.email }));
+      if (user && !staff.some((entry: any) => entry.id === user.id)) {
+        staff.unshift({ id: user.id, firstName: user.firstName, lastName: user.lastName, email: user.email });
+      }
+      return staff;
+    }
+    const list = Array.isArray(staffUsersData) ? staffUsersData : staffUsersData?.data || [];
+    const staffRoles = ["super_admin", "admin", "manager", "staff", "consultant", "accountant", "editor"];
+    return list.filter((entry: any) => staffRoles.includes(entry.role));
+  }, [isAgent, agentStaffData, staffUsersData, user]);
+
   function getAssignedUserName(assignedToId: number | null | undefined): string | null {
     if (!assignedToId) return null;
-    if (staffUsersData) {
-      const list = Array.isArray(staffUsersData) ? staffUsersData : staffUsersData?.data || [];
-      const found = list.find((u: any) => u.id === assignedToId);
+    if (assigneeOptions.length > 0) {
+      const found = assigneeOptions.find((u: any) => u.id === assignedToId);
       if (found) return `${found.firstName || ''} ${found.lastName || ''}`.trim() || found.email;
     }
     return null;
@@ -1152,17 +1182,11 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="unassigned">{t("studentDetailPage.unassigned")}</SelectItem>
-                        {(() => {
-                          const list = Array.isArray(staffUsersData) ? staffUsersData : staffUsersData?.data || [];
-                          const staffRoles = ["super_admin", "admin", "manager", "staff", "consultant"];
-                          return list
-                            .filter((u: any) => staffRoles.includes(u.role))
-                            .map((u: any) => (
-                              <SelectItem key={u.id} value={String(u.id)}>
-                                {u.id === user?.id ? `${u.firstName || ''} ${u.lastName || ''} (You)`.trim() : `${u.firstName || ''} ${u.lastName || ''}`.trim() || u.email}
-                              </SelectItem>
-                            ));
-                        })()}
+                        {assigneeOptions.map((u: any) => (
+                          <SelectItem key={u.id} value={String(u.id)}>
+                            {u.id === user?.id ? `${u.firstName || ''} ${u.lastName || ''} (You)`.trim() : `${u.firstName || ''} ${u.lastName || ''}`.trim() || u.email}
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   ) : canSelfAssign ? (
@@ -1485,6 +1509,7 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
               applications={applications}
               basePath={basePath}
               openUpload={openUpload}
+              canUpload={canUploadStudentDocuments}
               qc={qc}
             />
             <ApplicationStageDocumentsSection studentId={id} basePath={basePath} />
@@ -1645,23 +1670,22 @@ export default function StudentDetail({ id, basePath = "/staff" }: Props) {
           <div className="space-y-4 py-2">
             <div>
               <Label className="text-xs font-medium text-muted-foreground">Document Type</Label>
-              <Select value={uploadType} onValueChange={v => {
-                setUploadType(v);
-                setUploadFile(null);
-                const type = (documentTypeOptions.find(d => d.key === v)?.label ?? "document").toLowerCase();
-                const first = (student?.firstName ?? "").toLowerCase();
-                const last = (student?.lastName ?? "").toLowerCase();
-                setUploadName(`${type}-${first}-${last}`);
-              }}>
-                <SelectTrigger className="mt-1">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {documentTypeOptions.map(d => (
-                    <SelectItem key={d.key} value={d.key}>{d.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <SearchableSelect
+                value={uploadType}
+                onValueChange={v => {
+                  setUploadType(v);
+                  setUploadFile(null);
+                  const type = (documentTypeOptions.find(d => d.key === v)?.label ?? "document").toLowerCase();
+                  const first = (student?.firstName ?? "").toLowerCase();
+                  const last = (student?.lastName ?? "").toLowerCase();
+                  setUploadName(`${type}-${first}-${last}`);
+                }}
+                options={documentTypeOptions.map(d => ({ value: d.key, label: d.label }))}
+                placeholder="Select document type"
+                searchPlaceholder="Search document types..."
+                className="mt-1"
+                minDropdownWidth={320}
+              />
             </div>
 
             <div>
@@ -2191,13 +2215,14 @@ const DETAIL_DOC_TYPE_LABELS: Record<string, string> = {
   diploma_recognition: "Diploma Recognition",
 };
 
-function StudentDocumentsSection({ studentId, student, documents, applications, basePath, openUpload, qc }: {
+function StudentDocumentsSection({ studentId, student, documents, applications, basePath, openUpload, canUpload, qc }: {
   studentId: number;
   student: any;
   documents: any[];
   applications: any[];
   basePath: string;
   openUpload: () => void;
+  canUpload: boolean;
   qc: any;
 }) {
   const { toast } = useToast();
@@ -2369,22 +2394,24 @@ function StudentDocumentsSection({ studentId, student, documents, applications, 
               {t("studentDetailPage.mergePdfs")} ({selectedForMerge.length})
             </Button>
           )}
-          <Button size="sm" onClick={openUpload}>
-            <Upload className="w-4 h-4 mr-2" />
-            {t("studentDetailPage.uploadDocs")}
-          </Button>
+          {canUpload && (
+            <Button size="sm" onClick={openUpload}>
+              <Upload className="w-4 h-4 mr-2" />
+              {t("studentDetailPage.uploadDocs")}
+            </Button>
+          )}
         </div>
       </div>
 
       <div className="bg-card rounded-2xl border shadow-sm overflow-hidden">
         {profileDocs.length === 0 ? (
           <div
-            className="p-16 text-center text-muted-foreground cursor-pointer hover:bg-secondary/30 transition-colors"
-            onClick={openUpload}
+            className={`p-16 text-center text-muted-foreground transition-colors ${canUpload ? "cursor-pointer hover:bg-secondary/30" : ""}`}
+            onClick={canUpload ? openUpload : undefined}
           >
             <Upload className="w-10 h-10 mx-auto mb-3 opacity-30" />
             <p className="font-medium">{t("studentDetailPage.noDocsYet")}</p>
-            <p className="text-xs mt-1">{t("studentDetailPage.clickToUpload")}</p>
+            {canUpload && <p className="text-xs mt-1">{t("studentDetailPage.clickToUpload")}</p>}
           </div>
         ) : (
           <table className="w-full text-sm">

@@ -13,6 +13,7 @@
     "test:voice-recorder": "tsx --test ./scripts/test-voice-recorder-errors.ts",
     "test:application-creation-error": "tsx --test ./scripts/test-application-creation-error.ts",
     "test:document-registration": "tsx --test ./scripts/test-document-registration.ts",
+    "test:course-finder-document-flow": "tsx --test ./scripts/test-course-finder-document-flow.ts",
     "test:notification-localization": "tsx --test ./scripts/test-notification-localization.ts",
     "test:portal-bulk-run-feedback": "tsx --test ./scripts/test-portal-bulk-run-feedback.ts",
     "test:portal-submission-panel": "tsx --test ./scripts/test-portal-submission-panel.ts",

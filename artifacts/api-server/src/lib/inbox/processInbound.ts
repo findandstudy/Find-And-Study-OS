@@ -142,7 +142,7 @@ export async function processInboundMessage(opts: {
       const [matched] = await db
         .select({ id: agentsTable.id, code: agentsTable.agencyCode, name: agentsTable.companyName })
         .from(agentsTable)
-        .where(sql`lower(${agentsTable.agencyCode}) = lower(${agentRef})`)
+        .where(sql`lower(${agentsTable.agencyCode}) = lower(${agentRef}) OR lower(${agentsTable.legacyAgencyCode}) = lower(${agentRef})`)
         .limit(1);
       if (matched) {
         // Split displayName into first/last; fall back to channel handle.
@@ -170,6 +170,7 @@ export async function processInboundMessage(opts: {
         if (createdLead) {
           await applyLeadAssignmentRules({
             id: createdLead.id,
+            agentId: matched.id,
             source: `web_form:${agentRef}`,
             phone: contact.phone || null,
             country: null,
