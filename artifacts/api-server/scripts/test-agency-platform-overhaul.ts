@@ -106,6 +106,10 @@ test("agency embed is tenant-scoped and AI is entitlement gated", async () => {
   assert.match(account, /AI study assistant/);
   assert.match(account, /Course finder \+ application form/);
   assert.match(account, /Program catalog \+ Apply/);
+  assert.match(account, /Website Widgets/);
+  assert.match(account, /Contact \/ Lead Form/);
+  assert.match(account, /Legacy HTML Form/);
+  assert.match(account, /<Collapsible open=\{legacyFormOpen\}/);
   assert.match(account, /Program catalog filters/);
   assert.match(account, /Select universities/);
   assert.match(account, /presetFilters/);

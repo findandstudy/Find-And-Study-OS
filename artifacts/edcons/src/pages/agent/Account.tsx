@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { PhoneCodePicker } from "@/components/ui/phone-code-picker";
 import { useToast } from "@/hooks/use-toast";
 import { useI18n } from "@/hooks/use-i18n";
@@ -18,7 +19,7 @@ import {
   Loader2, Phone, Mail, TrendingUp, MapPin,
   Upload, X, FileText, Download, Image as ImageIcon, Eye,
   Camera, Lock, KeyRound, LogOut, Code, Copy, ExternalLink,
-  Plug,
+  Plug, ChevronDown,
 } from "lucide-react";
 import { CountryFlag } from "@/components/CountryFlag";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
@@ -260,7 +261,7 @@ export default function AgentAccount() {
               { value: "profile", label: "Profile", icon: User },
               { value: "agency", label: "Agency", icon: Briefcase },
               ...(agentProfile?.effectiveFeatures?.web_to_lead !== false
-                ? [{ value: "web-to-lead", label: "Web to Lead", icon: Code }]
+                ? [{ value: "web-to-lead", label: "Website Widgets", icon: Code }]
                 : []),
               ...(["agent", "sub_agent"].includes(user?.role || "")
                 && (agentProfile?.effectiveFeatures?.email_integration || agentProfile?.effectiveFeatures?.whatsapp_integration)
@@ -980,6 +981,7 @@ function WebToLeadTab({ agentProfile }: { agentProfile?: any }) {
   const [presetLevel, setPresetLevel] = useState("");
   const [presetLanguage, setPresetLanguage] = useState("");
   const [presetField, setPresetField] = useState("");
+  const [legacyFormOpen, setLegacyFormOpen] = useState(false);
   const [savingEmbed, setSavingEmbed] = useState(false);
 
   const { data: tokenData, isLoading } = useQuery<{ embedToken: string }>({
@@ -1132,8 +1134,8 @@ function WebToLeadTab({ agentProfile }: { agentProfile?: any }) {
         <Card className="border shadow-sm p-6 space-y-5">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <h3 className="font-display font-semibold text-base">Embed Widget</h3>
-              <p className="text-sm text-muted-foreground mt-1">Use the same responsive embed infrastructure as Find & Study. Tenant branding is applied automatically.</p>
+              <h3 className="font-display font-semibold text-base">Website Widget</h3>
+              <p className="text-sm text-muted-foreground mt-1">Create a responsive website experience with your agency branding applied automatically.</p>
             </div>
             <Badge variant="outline">{agentProfile.planTier || "standard"}</Badge>
           </div>
@@ -1145,7 +1147,7 @@ function WebToLeadTab({ agentProfile }: { agentProfile?: any }) {
                 <SelectContent>
                   <SelectItem value="combined">Course finder + application form</SelectItem>
                   <SelectItem value="course_finder">Program catalog + Apply</SelectItem>
-                  <SelectItem value="lead_form">Standard lead form</SelectItem>
+                  <SelectItem value="lead_form">Contact / Lead Form</SelectItem>
                   {agentProfile?.effectiveFeatures?.embed_ai && <SelectItem value="ai_chatbot">AI study assistant</SelectItem>}
                 </SelectContent>
               </Select>
@@ -1293,63 +1295,78 @@ function WebToLeadTab({ agentProfile }: { agentProfile?: any }) {
           )}
         </Card>
       )}
-      <Card className="border shadow-sm p-6">
-        <div className="flex items-center gap-3 mb-2">
-          <div className="w-8 h-8 rounded-lg bg-blue-500/10 flex items-center justify-center">
-            <Code className="w-4 h-4 text-blue-600" />
-          </div>
-          <h3 className="font-display font-semibold text-base">{t("agentAccount.webToLeadTitle")}</h3>
-        </div>
-        <p className="text-sm text-muted-foreground mb-5">
-          {t("agentAccount.webToLeadDesc")}
-        </p>
+      <Collapsible open={legacyFormOpen} onOpenChange={setLegacyFormOpen}>
+        <Card className="border shadow-sm p-6">
+          <CollapsibleTrigger asChild>
+            <button type="button" className="flex w-full items-center justify-between gap-4 text-left">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-blue-500/10 flex items-center justify-center">
+                  <Code className="w-4 h-4 text-blue-600" />
+                </div>
+                <div>
+                  <h3 className="font-display font-semibold text-base">Legacy HTML Form</h3>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Keep using this only for websites that already contain the older copied HTML form.
+                  </p>
+                </div>
+              </div>
+              <ChevronDown className={`h-5 w-5 shrink-0 text-muted-foreground transition-transform ${legacyFormOpen ? "rotate-180" : ""}`} />
+            </button>
+          </CollapsibleTrigger>
 
-        <div className="relative">
-          <div className="absolute top-3 right-3 z-10">
-            <Button size="sm" variant="secondary" onClick={handleCopy} className="gap-1.5 text-xs shadow-sm">
-              {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-              {copied ? t("agentAccount.copied") : t("agentAccount.copyCode")}
-            </Button>
-          </div>
-          <pre className="bg-secondary/50 border rounded-xl p-4 pr-28 text-xs text-foreground/80 overflow-x-auto whitespace-pre-wrap break-all max-h-72 overflow-y-auto font-mono leading-relaxed">
-            {formCode}
-          </pre>
-        </div>
-      </Card>
+          <CollapsibleContent className="space-y-6 pt-6">
+            <div>
+              <h4 className="font-display font-semibold text-sm">{t("agentAccount.webToLeadTitle")}</h4>
+              <p className="mb-4 mt-1 text-sm text-muted-foreground">{t("agentAccount.webToLeadDesc")}</p>
+              <div className="relative">
+                <div className="absolute top-3 right-3 z-10">
+                  <Button size="sm" variant="secondary" onClick={handleCopy} className="gap-1.5 text-xs shadow-sm">
+                    {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                    {copied ? t("agentAccount.copied") : t("agentAccount.copyCode")}
+                  </Button>
+                </div>
+                <pre className="bg-secondary/50 border rounded-xl p-4 pr-28 text-xs text-foreground/80 overflow-x-auto whitespace-pre-wrap break-all max-h-72 overflow-y-auto font-mono leading-relaxed">
+                  {formCode}
+                </pre>
+              </div>
+            </div>
 
-      <Card className="border shadow-sm p-6">
-        <div className="flex items-center gap-3 mb-4">
-          <div className="w-8 h-8 rounded-lg bg-green-500/10 flex items-center justify-center">
-            <Eye className="w-4 h-4 text-green-600" />
-          </div>
-          <h3 className="font-display font-semibold text-base">{t("agentAccount.formPreview")}</h3>
-        </div>
-        <div className="bg-secondary/30 rounded-xl p-4">
-          <iframe
-            title="Web to Lead form preview"
-            src={`${BASE_URL}/api/agents/me/web-to-lead-preview`}
-            sandbox=""
-            referrerPolicy="no-referrer"
-            className="block h-[520px] w-full rounded-xl border-0 bg-transparent"
-          />
-        </div>
-      </Card>
+            <div className="border-t pt-6">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-8 h-8 rounded-lg bg-green-500/10 flex items-center justify-center">
+                  <Eye className="w-4 h-4 text-green-600" />
+                </div>
+                <h4 className="font-display font-semibold text-sm">{t("agentAccount.formPreview")}</h4>
+              </div>
+              <div className="bg-secondary/30 rounded-xl p-4">
+                <iframe
+                  title="Legacy HTML lead form preview"
+                  src={`${BASE_URL}/api/agents/me/web-to-lead-preview`}
+                  sandbox=""
+                  referrerPolicy="no-referrer"
+                  className="block h-[520px] w-full rounded-xl border-0 bg-transparent"
+                />
+              </div>
+            </div>
 
-      <Card className="border shadow-sm p-6">
-        <div className="flex items-center gap-3 mb-3">
-          <div className="w-8 h-8 rounded-lg bg-amber-500/10 flex items-center justify-center">
-            <ExternalLink className="w-4 h-4 text-amber-600" />
-          </div>
-          <h3 className="font-display font-semibold text-base">{t("agentAccount.howToUse")}</h3>
-        </div>
-        <ol className="text-sm text-muted-foreground space-y-2 list-decimal list-inside">
-          <li>{t("agentAccount.howToStep1")}</li>
-          <li>{t("agentAccount.howToStep2")}</li>
-          <li>{t("agentAccount.howToStep3")}</li>
-          <li>{t("agentAccount.howToStep4")}</li>
-          <li>{t("agentAccount.howToStep5")}</li>
-        </ol>
-      </Card>
+            <div className="border-t pt-6">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-8 h-8 rounded-lg bg-amber-500/10 flex items-center justify-center">
+                  <ExternalLink className="w-4 h-4 text-amber-600" />
+                </div>
+                <h4 className="font-display font-semibold text-sm">{t("agentAccount.howToUse")}</h4>
+              </div>
+              <ol className="text-sm text-muted-foreground space-y-2 list-decimal list-inside">
+                <li>{t("agentAccount.howToStep1")}</li>
+                <li>{t("agentAccount.howToStep2")}</li>
+                <li>{t("agentAccount.howToStep3")}</li>
+                <li>{t("agentAccount.howToStep4")}</li>
+                <li>{t("agentAccount.howToStep5")}</li>
+              </ol>
+            </div>
+          </CollapsibleContent>
+        </Card>
+      </Collapsible>
     </div>
   );
 }
