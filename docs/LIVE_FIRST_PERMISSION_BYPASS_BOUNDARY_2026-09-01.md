@@ -30,11 +30,10 @@ versioned capabilities and signed active context.
 - API TypeScript check: pass.
 - Edcons TypeScript check: pass.
 - Diff check: pass.
-- The Agency platform suite's Academy scenario passes. The aggregate suite is
-  `14/15`; its unrelated SMTP scenario still expects an older
-  `tlsServername: isIP(originalHost)` source shape while the live code uses an
-  explicit, stricter TLS servername/certificate-validation expression. This
-  stale assertion was not weakened or counted as a pass.
+- Agency platform suite: `15/15`. Its stale SMTP source-shape assertion was
+  replaced with explicit checks for pinned resolved-host delivery,
+  `rejectUnauthorized`, TLS 1.2 minimum and hostname-aware SNI selection; the
+  security contract was strengthened rather than bypassed.
 
 No production role, permission, session, database, VPS, GitHub or `Next` state
 was changed.
