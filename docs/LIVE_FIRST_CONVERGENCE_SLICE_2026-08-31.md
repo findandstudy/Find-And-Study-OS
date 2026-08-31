@@ -26,6 +26,11 @@ Included:
    exact `pnpm@10.33.2` and preserving foreign lockfiles on failure.
 6. Align the existing finance reconciliation assertion with the production
    implementation's transaction-bound recalculation and advisory lock.
+7. Port the reviewed migration runner's endpoint, database and direct-role
+   identity checks onto the live-first branch.
+8. Require exact `pnpm@10.33.2` in the migration runner on Windows and Linux,
+   with an explicit absolute `pnpm.cjs` path for isolated verification hosts.
+9. Add a fail-closed disposable production-prefix adoption harness.
 
 Excluded:
 
@@ -43,21 +48,31 @@ Excluded:
 - Product migration Git blob comparison for `0054-0065`: `12/12` exact.
 - Package-manager guard: `6/6`.
 - Frozen install with `pnpm@10.33.2`: pass; lockfile unchanged.
-- Migration-authority: `10` pass, `1` Bash-unavailable skip on Windows.
+- Migration-authority: `12` pass, `1` Bash-unavailable skip on Windows.
 - Full workspace typecheck: pass.
 - Live security regressions: `29/29`.
 - Rate-limit/IP security: `5/5`.
 - Agent application/onboarding: `14/14`.
 - Finance reconciliation: `5/5` after updating the stale assertion; runtime
   finance code is unchanged.
+- Portable EDB PostgreSQL `16.15` on `127.0.0.1:5433`, database
+  `fasos_apply_local`, direct `fas_migrator`: pass.
+- Fresh PostgreSQL application: `0 -> 82`; reviewed runner replay:
+  `82 -> 82`.
+- Production-prefix adoption: `66/66 -> 82/82 -> clean replay`.
+- Wrong package-manager proof: `pnpm 11.19.0` rejected; exact
+  `pnpm 10.33.2` accepted.
+- Finance Faz 3 DB suite: `8/8`; the fixture now proves the audit receipt and
+  cleans it before deleting its seeded user.
+- Contract signing scope DB suite: `14/14` with delivery disabled.
+- Contract render/sign suite: `18/18`.
 
-## Open gate
+## Remaining gates
 
-Fresh and production-prefix adoption on disposable PostgreSQL 16 remains
-required. The local Docker Desktop engine cannot start because its Windows IPC
-socket cannot be recreated. Tests that require `DATABASE_URL`, including the
-finance and contract DB suites, remain pending rather than receiving a fake or
-production target.
+The local PostgreSQL gate is complete without Docker and without a long-lived
+database. The EDB archive was extracted without installing a Windows service;
+the disposable cluster was bound only to loopback and used no production dump,
+credential, secret or PII.
 
-Until the PostgreSQL gate, exact-head CI and review pass, this branch is a local
+Exact-head GitHub CI and review still remain. This branch is therefore a local
 convergence candidate only. It is not merge-, `Next`-sync- or deploy-ready.

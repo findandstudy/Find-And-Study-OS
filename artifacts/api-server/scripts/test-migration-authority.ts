@@ -350,6 +350,96 @@ test("migration command requires explicit approval and has no push fallback", ()
   );
 });
 
+test("reviewed migration runner pins target identity and package manager", () => {
+  const runner = path.join(root, "lib/db/run-migrations.mjs");
+  const remote = spawnSync(process.execPath, [runner], {
+    cwd: root,
+    encoding: "utf8",
+    env: {
+      PATH: process.env.PATH ?? "",
+      ALLOW_REVIEWED_MIGRATIONS: "true",
+      MIGRATION_TARGET_ENV: "development",
+      DATABASE_URL:
+        "postgresql://fas_migrator:blocked@db.example.test:5433/fas_dev_blocked",
+      MIGRATION_CONFIRMED_HOST: "db.example.test",
+      MIGRATION_CONFIRMED_PORT: "5433",
+      MIGRATION_CONFIRMED_DATABASE: "fas_dev_blocked",
+      MIGRATION_CONFIRMED_USER: "fas_migrator",
+    },
+  });
+  assert.equal(remote.status, 1);
+  assert.match(remote.stderr, /local\/development migrations require loopback/);
+
+  const production = spawnSync(process.execPath, [runner], {
+    cwd: root,
+    encoding: "utf8",
+    env: {
+      PATH: process.env.PATH ?? "",
+      ALLOW_REVIEWED_MIGRATIONS: "true",
+      MIGRATION_TARGET_ENV: "production",
+      DATABASE_URL:
+        "postgresql://fas_migrator:blocked@db.example.test:5432/fasos",
+    },
+  });
+  assert.equal(production.status, 1);
+  assert.match(production.stderr, /dedicated long-lived adoption runner/);
+
+  const malformed = spawnSync(process.execPath, [runner], {
+    cwd: root,
+    encoding: "utf8",
+    env: {
+      PATH: process.env.PATH ?? "",
+      ALLOW_REVIEWED_MIGRATIONS: "true",
+      MIGRATION_TARGET_ENV: "test",
+      DATABASE_URL: "postgresql://do-not-print-this@[",
+    },
+  });
+  assert.equal(malformed.status, 1);
+  assert.match(malformed.stderr, /DATABASE_URL is malformed/);
+  assert.doesNotMatch(malformed.stderr, /do-not-print-this/);
+
+  const source = readFileSync(runner, "utf8");
+  assert.match(source, /identityClient\.connectionParameters/);
+  assert.match(source, /current_database\(\) AS database_name/);
+  assert.match(source, /pg_auth_members/);
+  assert.match(source, /MIGRATION_CONFIRMED_DATABASE/);
+  assert.match(source, /EXPECTED_PNPM_VERSION = "10\.33\.2"/);
+  assert.match(source, /FAS_REVIEWED_PNPM_CLI/);
+  assert.match(source, /process\.platform === "win32"/);
+});
+
+test("production-prefix adoption harness is explicit and loopback-only", () => {
+  const harness = path.join(
+    root,
+    "lib/db/test-production-prefix-adoption.mjs",
+  );
+  const unapproved = spawnSync(process.execPath, [harness], {
+    cwd: root,
+    encoding: "utf8",
+    env: { PATH: process.env.PATH ?? "" },
+  });
+  assert.equal(unapproved.status, 1);
+  assert.match(unapproved.stderr, /ALLOW_DISPOSABLE_PREFIX_ADOPTION=true/);
+
+  const remote = spawnSync(process.execPath, [harness], {
+    cwd: root,
+    encoding: "utf8",
+    env: {
+      PATH: process.env.PATH ?? "",
+      ALLOW_DISPOSABLE_PREFIX_ADOPTION: "true",
+      DATABASE_URL:
+        "postgresql://fas_migrator:blocked@db.example.test:5433/fasos_apply_local",
+    },
+  });
+  assert.equal(remote.status, 1);
+  assert.match(remote.stderr, /only postgresql:\/\/fas_migrator@127\.0\.0\.1:5433/);
+
+  const source = readFileSync(harness, "utf8");
+  assert.match(source, /prefix adoption requires a fresh disposable database/);
+  assert.match(source, /productionEntries\.length, 66/);
+  assert.match(source, /count: 82/);
+});
+
 test("ledger baseline requires explicit audit and exact database confirmation before DB access", () => {
   const baseline = spawnSync(
     process.execPath,
