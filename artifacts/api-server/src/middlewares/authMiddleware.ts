@@ -36,9 +36,9 @@ declare global {
   }
 }
 
-// admin / super_admin already have isAdmin=true on the frontend → canSee is
-// always true for them, so there is no need to populate agentStaffPermissions.
-const ADMINISH_ROLES = new Set(["admin", "super_admin"]);
+// Only Super Admin bypasses the versioned/configured role package. Admin must
+// receive the same effective permission projection as every other role.
+const ADMINISH_ROLES = new Set(["super_admin"]);
 
 async function resolveRolePerms(
   role: string,
@@ -67,7 +67,7 @@ async function resolveRolePerms(
  * visibility — without this, staff/consultant/accountant roles would always
  * see an empty set and therefore no gated menu items.
  *
- * Skipped for admin/super_admin (they pass the isAdmin short-circuit instead).
+ * Skipped only for super_admin (the sole all-permission short-circuit).
  * Never throws — on error the existing session value is preserved unchanged.
  */
 async function enrichWithEffectivePerms(
@@ -96,11 +96,13 @@ async function enrichWithEffectivePerms(
       configurable: true,
     });
 
-    // Union: role-level perms ∪ per-user agent_staff column (for agent_staff rows)
+    // Use the override-aware projection for every role. Agent staff also have
+    // their portal-specific switches in the legacy column until that surface
+    // is migrated to the versioned package model.
     const own = Array.isArray(dbUser.agentStaffPermissions)
       ? (dbUser.agentStaffPermissions as string[])
       : [];
-    user.agentStaffPermissions = Array.from(new Set([...rolePerms, ...own]));
+    user.agentStaffPermissions = Array.from(new Set([...effective, ...own]));
   } catch {
     // Preserve whatever buildSessionUser already set on error.
   }

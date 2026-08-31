@@ -47,6 +47,23 @@ test("pre-resolved request permissions preserve grants and revocations without a
   );
 });
 
+test("admin uses its resolved package while only Super Admin bypasses", async () => {
+  const adminPermissions = await getEffectivePermissionSet({
+    id: 7,
+    role: "admin",
+    effectivePermissions: ["students.view"],
+  });
+  const superAdminPermissions = await getEffectivePermissionSet({
+    id: 1,
+    role: "super_admin",
+    effectivePermissions: [],
+  });
+
+  assert.deepEqual([...adminPermissions], ["students.view"]);
+  assert.equal(superAdminPermissions.has("students.view"), true);
+  assert.equal(superAdminPermissions.size > adminPermissions.size, true);
+});
+
 test("permission overrides remain authoritative over role permissions", () => {
   const permissions = applyPermissionOverrides(
     ["students.view", "records.view_others"],

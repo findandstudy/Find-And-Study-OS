@@ -100,6 +100,22 @@ const authSource = readFileSync(
   new URL("../src/lib/auth.ts", import.meta.url),
   "utf8",
 );
+const permissionsSource = readFileSync(
+  new URL("../src/lib/permissions.ts", import.meta.url),
+  "utf8",
+);
+const authMiddlewareSource = readFileSync(
+  new URL("../src/middlewares/authMiddleware.ts", import.meta.url),
+  "utf8",
+);
+const authHookSource = readFileSync(
+  new URL("../../edcons/src/hooks/use-auth.ts", import.meta.url),
+  "utf8",
+);
+const protectedRouteSource = readFileSync(
+  new URL("../../edcons/src/components/auth/ProtectedRoute.tsx", import.meta.url),
+  "utf8",
+);
 const safeOutboundSource = readFileSync(
   new URL("../src/lib/safeOutboundRequest.ts", import.meta.url),
   "utf8",
@@ -304,6 +320,11 @@ test("user and role routes enforce permission and hierarchy boundaries", () => {
   assert.doesNotMatch(rolesRouteSource, /seedDefaultRoles/);
   assert.match(authSource, /getEffectivePermissionSet\(req\.user\)/);
   assert.doesNotMatch(authSource, /\.\.\.fromDb, \.\.\.fromDefault/);
+  assert.match(permissionsSource, /ALL_PERMISSION_ROLES = new Set\(\["super_admin"\]\)/);
+  assert.match(authMiddlewareSource, /ADMINISH_ROLES = new Set\(\["super_admin"\]\)/);
+  assert.match(authMiddlewareSource, /new Set\(\[\.\.\.effective, \.\.\.own\]\)/);
+  assert.doesNotMatch(authHookSource, /role === "super_admin" \|\| role === "admin"/);
+  assert.doesNotMatch(protectedRouteSource, /effectiveUser\.role !== "super_admin" && effectiveUser\.role !== "admin"/);
 });
 
 test("external AI delivery fails closed and activation requires Super Admin", () => {
