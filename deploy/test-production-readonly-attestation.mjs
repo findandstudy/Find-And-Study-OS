@@ -11,6 +11,7 @@ import {
   isWithin,
   parseProcessInventory,
   safeErrorMessage,
+  validateSourceProvenance,
 } from "./production-readonly-attestation.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -33,6 +34,55 @@ test("database connection strings are redacted from error output", () => {
   );
   assert.doesNotMatch(message, /super-secret|db_user/);
   assert.match(message, /REDACTED/);
+});
+
+test("source provenance requires the exact reviewed commit and a clean checkout", () => {
+  const reviewedCommit = "a".repeat(40);
+  assert.deepEqual(
+    validateSourceProvenance({
+      expectedCommit: reviewedCommit,
+      actualCommit: reviewedCommit,
+      porcelain: "",
+    }),
+    { commit: reviewedCommit, worktreeClean: true },
+  );
+  assert.throws(
+    () =>
+      validateSourceProvenance({
+        expectedCommit: reviewedCommit,
+        actualCommit: "b".repeat(40),
+        porcelain: "",
+      }),
+    /does not match the reviewed commit/,
+  );
+  assert.throws(
+    () =>
+      validateSourceProvenance({
+        expectedCommit: reviewedCommit,
+        actualCommit: reviewedCommit,
+        porcelain: " M deploy\/production-readonly-attestation.mjs\n",
+      }),
+    /source checkout is not clean/,
+  );
+});
+
+test("source provenance rejects abbreviated, uppercase, or malformed commit identities", () => {
+  for (const expectedCommit of [
+    "a".repeat(12),
+    "A".repeat(40),
+    `${"a".repeat(39)}z`,
+    "",
+  ]) {
+    assert.throws(
+      () =>
+        validateSourceProvenance({
+          expectedCommit,
+          actualCommit: "a".repeat(40),
+          porcelain: "",
+        }),
+      /full lowercase commit SHA/,
+    );
+  }
 });
 
 test("release and process paths must remain under the resolved current release", () => {
@@ -120,6 +170,14 @@ test("attestation implementation exposes no mutation command or file-write surfa
   assert.match(source, /PRODUCTION_ATTESTATION_READ_ONLY/);
   assert.match(source, /method: "GET"/);
   assert.match(source, /execFileSync\("ps", \["-eo"/);
+  assert.equal((source.match(/execFileSync\(\s*"git"/g) ?? []).length, 2);
+  assert.match(source, /\["-C", sourceRoot, "rev-parse", "--verify", "HEAD"\]/);
+  assert.match(source, /"status",\s*"--porcelain=v1"/);
+  assert.match(source, /GIT_OPTIONAL_LOCKS: "0"/);
+  assert.doesNotMatch(
+    source,
+    /"(?:checkout|switch|reset|clean|pull|fetch|merge|rebase|commit|push)"/,
+  );
   assert.doesNotMatch(
     source,
     /execFileSync\("(?:pm2|systemctl|service|sudo|sh|bash)"/,

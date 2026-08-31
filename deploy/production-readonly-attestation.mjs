@@ -9,6 +9,9 @@ import {
 } from "../lib/db/verify-migration-state.mjs";
 
 const modulePath = fileURLToPath(import.meta.url);
+const sourceRoot = fs.realpathSync(
+  path.resolve(path.dirname(modulePath), ".."),
+);
 const DEFAULT_MAX_PRIVATE_ENTRIES = 100_000;
 
 function fail(message) {
@@ -32,6 +35,59 @@ export function assertReadOnlyOptIn(value) {
   if (value !== "1") {
     fail("PRODUCTION_ATTESTATION_READ_ONLY=1 is required");
   }
+}
+
+export function validateSourceProvenance({
+  expectedCommit,
+  actualCommit,
+  porcelain,
+}) {
+  if (!/^[0-9a-f]{40}$/.test(expectedCommit ?? "")) {
+    fail(
+      "ATTESTATION_EXPECTED_SOURCE_COMMIT must be a full lowercase commit SHA",
+    );
+  }
+  if (!/^[0-9a-f]{40}$/.test(actualCommit ?? "")) {
+    fail("source checkout HEAD is not a full lowercase commit SHA");
+  }
+  if (actualCommit !== expectedCommit) {
+    fail("source checkout HEAD does not match the reviewed commit");
+  }
+  if (String(porcelain).trim().length > 0) {
+    fail("source checkout is not clean");
+  }
+  return { commit: actualCommit, worktreeClean: true };
+}
+
+function collectSourceProvenance() {
+  const gitEnvironment = {
+    ...process.env,
+    GIT_OPTIONAL_LOCKS: "0",
+    GIT_PAGER: "cat",
+  };
+  const actualCommit = execFileSync(
+    "git",
+    ["-C", sourceRoot, "rev-parse", "--verify", "HEAD"],
+    {
+      encoding: "utf8",
+      env: gitEnvironment,
+      maxBuffer: 1024 * 1024,
+    },
+  ).trim();
+  const porcelain = execFileSync(
+    "git",
+    ["-C", sourceRoot, "status", "--porcelain=v1", "--untracked-files=normal"],
+    {
+      encoding: "utf8",
+      env: gitEnvironment,
+      maxBuffer: 1024 * 1024,
+    },
+  );
+  return validateSourceProvenance({
+    expectedCommit: process.env.ATTESTATION_EXPECTED_SOURCE_COMMIT,
+    actualCommit,
+    porcelain,
+  });
 }
 
 function increment(record, key) {
@@ -228,6 +284,7 @@ export async function createProductionAttestation() {
     fail("production attestation runs only on Linux");
   if (!process.env.DATABASE_URL)
     fail("DATABASE_URL is required but is never emitted");
+  const source = collectSourceProvenance();
 
   const releasesDir = requiredAbsolutePath("RELEASES_DIR", "directory");
   const currentRelease = requiredAbsolutePath(
@@ -292,6 +349,7 @@ export async function createProductionAttestation() {
     schemaVersion: 1,
     generatedAt: new Date().toISOString(),
     readOnly: true,
+    source,
     release: {
       currentReleasePath: currentRelease.resolved,
       releaseDirectoryName: path.basename(currentRelease.resolved),

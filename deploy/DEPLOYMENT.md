@@ -156,13 +156,20 @@ The safe transition sequence is:
 No environment flag bypasses this boundary. A failed preflight is a NO-GO.
 
 Before planning the production transition, collect a metadata-only attestation
-from the checked-out reviewed release. It opens the database transaction as
-`READ ONLY`, verifies the Drizzle ledger against repository hashes, calls only
-the localhost health `GET`, reads process/path/filesystem metadata and emits no
-private filenames, file contents, environment values or database credentials:
+from a separate, clean source checkout at the exact reviewed 40-character
+commit. The source checkout is evidence tooling, not the deployed release. The
+tool independently verifies the live `CURRENT_RELEASE_LINK`, process working
+directories and health release identity. It opens the database transaction as
+`READ ONLY`, verifies the Drizzle ledger against the reviewed source hashes,
+calls only the localhost health `GET`, reads process/path/filesystem metadata
+and emits no private filenames, file contents, environment values or database
+credentials:
 
 ```bash
-cd /opt/findandstudy/current
+cd /opt/findandstudy/source
+reviewed_commit="<approved-40-character-commit>"
+test "$(git rev-parse --verify HEAD)" = "$reviewed_commit"
+test -z "$(git status --porcelain=v1 --untracked-files=normal)"
 export RUNTIME_ENV_FILE=/etc/findandstudy.env
 set -a
 # shellcheck disable=SC1091
@@ -170,15 +177,20 @@ source "$RUNTIME_ENV_FILE"
 set +a
 umask 077
 attestation_file="$(mktemp /tmp/fasos-attestation.XXXXXX.json)"
-PRODUCTION_ATTESTATION_READ_ONLY=1 \
+ATTESTATION_EXPECTED_SOURCE_COMMIT="$reviewed_commit" \
+  PRODUCTION_ATTESTATION_READ_ONLY=1 \
   node deploy/production-readonly-attestation.mjs > "$attestation_file"
 printf 'Attestation written to %s\n' "$attestation_file"
 ```
 
-Review the JSON before moving it off-host. The command is evidence collection,
-not approval to deploy or change ownership. A ledger mismatch, duplicate API or
-worker, missing path, unreachable local health endpoint or exceeded private-tree
-limit fails closed.
+Preparing or updating `/opt/findandstudy/source` is a separate, explicitly
+reviewed source-only operation; it is not a deploy and must not change the
+`current` symlink or any process. Use a frozen dependency install matching the
+reviewed lockfile. Never run the attestation from an ambiguous or dirty source
+tree. Review the JSON before moving it off-host. The command is evidence
+collection, not approval to deploy or change ownership. A source-commit or
+cleanliness mismatch, ledger mismatch, duplicate API or worker, missing path,
+unreachable local health endpoint or exceeded private-tree limit fails closed.
 
 ---
 
