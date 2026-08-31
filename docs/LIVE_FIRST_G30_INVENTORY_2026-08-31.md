@@ -40,7 +40,7 @@ conservatively as high-risk, mixed-legacy and quarantine-required:
 - `requireAuth` references: `706`.
 - Fixed `requireRole(...)`: `473`.
 - `requirePermission(...)`: `44`.
-- Direct role checks: `25`.
+- Direct role checks: `26`.
 - Auth-only route candidates: `127`.
 - Public route candidates: `128`.
 - Files in legacy quarantine: `71`; `70` contain route registrations.

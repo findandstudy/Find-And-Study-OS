@@ -56,6 +56,14 @@ const usersRouteSource = readFileSync(
   new URL("../src/routes/users.ts", import.meta.url),
   "utf8",
 );
+const agentsRouteSource = readFileSync(
+  new URL("../src/routes/agents.ts", import.meta.url),
+  "utf8",
+);
+const legacyUserManagementPolicySource = readFileSync(
+  new URL("../src/lib/legacyUserManagementPolicy.ts", import.meta.url),
+  "utf8",
+);
 const rolesRouteSource = readFileSync(
   new URL("../src/routes/roles.ts", import.meta.url),
   "utf8",
@@ -262,11 +270,24 @@ test("user and role routes enforce permission and hierarchy boundaries", () => {
   assert.match(usersRouteSource, /You cannot change your own role/);
   assert.match(usersRouteSource, /canManageTargetAccount\(req\.user!\.role, existing\.role\)/);
   assert.match(usersRouteSource, /canManageTargetAccount\(req\.user!\.role, user\.role\)/);
-  assert.match(usersRouteSource, /canManageTargetAccount\(req\.user!\.role, targetUser\.role\)/);
+  assert.match(usersRouteSource, /evaluateLegacyUserManagement/);
+  assert.match(usersRouteSource, /evaluateLegacyUserImpersonation/);
+  assert.match(usersRouteSource, /PERMISSION_OVERRIDE_REQUIRES_SUPER_ADMIN/);
+  assert.match(usersRouteSource, /notInArray\(usersTable\.role/);
+  assert.match(legacyUserManagementPolicySource, /peer_or_higher_privilege/);
+  assert.match(legacyUserManagementPolicySource, /agent_relationship_route_required/);
   assert.match(rolesRouteSource, /requirePermission\("users\.manage_roles"\)/);
   assert.doesNotMatch(rolesRouteSource, /requireRole\(\.\.\.ADMIN_ROLES\)/);
   assert.match(authSource, /getEffectivePermissionSet\(req\.user\)/);
   assert.doesNotMatch(authSource, /\.\.\.fromDb, \.\.\.fromDefault/);
+});
+
+test("legacy impersonation is branch-scoped and nested sessions are denied", () => {
+  assert.match(usersRouteSource, /getVisibleBranchIds/);
+  assert.match(usersRouteSource, /currentSession\.originalSid/);
+  assert.match(usersRouteSource, /auth\.impersonate\.denied/);
+  assert.match(agentsRouteSource, /currentSession\.originalSid/);
+  assert.match(agentsRouteSource, /Cannot impersonate an inactive account/);
 });
 
 test("outbound URL policy blocks local, metadata and alternate IP notations", () => {

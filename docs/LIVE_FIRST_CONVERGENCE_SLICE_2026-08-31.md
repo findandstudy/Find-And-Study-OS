@@ -93,6 +93,9 @@ Excluded:
 - Live-first G30 denominators are frozen at `163` writer files / `2,101`
   conservative surfaces and `71` route files / `762` registrations. Normal
   drift gates pass; strict writer and route gates remain expected NO-GO.
+- Canonical legacy user-management and impersonation policies are bound to the
+  live `users`/`agents` routes with `4/4` exact policy/test blobs; direct policy
+  suites `11/11`, live security regressions `30/30` and API typecheck pass.
 
 ## Remaining gates
 

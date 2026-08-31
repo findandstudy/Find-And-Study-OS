@@ -13,7 +13,7 @@
     "requireRole": 473,
     "requirePermission": 44,
     "requireScope": 0,
-    "directRoleChecks": 25,
+    "directRoleChecks": 26,
     "authOnlyRouteCandidates": 127,
     "publicRouteCandidates": 128
   },
@@ -110,7 +110,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/agents.ts",
-      "sha256": "ee9b6c98818449a159cf34e48dc6bfb4c7a8ea90a448e818439e040aeb064bae",
+      "sha256": "f88877df30aa7b841ccb9a1941af228d609c47f471bfe9b009663d383768a120",
       "routeRegistrations": 38,
       "requireAuth": 39,
       "requireRole": 33,
@@ -1040,13 +1040,13 @@
     },
     {
       "path": "artifacts/api-server/src/routes/users.ts",
-      "sha256": "85d2ab676a630365fdf9a114cacb6a39bee0122fb9775bec929a254a8c896ba4",
+      "sha256": "33f5c2f512975e2482bedcb5ffda94a95f1d65e672cba085a20adccd98a29578",
       "routeRegistrations": 10,
       "requireAuth": 11,
       "requireRole": 3,
       "requirePermission": 4,
       "requireScope": 0,
-      "directRoleChecks": 1,
+      "directRoleChecks": 2,
       "authOnlyRouteCandidates": 3,
       "publicRouteCandidates": 0,
       "enforcement": "legacy_quarantine",
