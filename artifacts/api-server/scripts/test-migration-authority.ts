@@ -477,6 +477,7 @@ test("disposable database reset is explicit and fixed to the local test identity
   assert.match(source, /fas_evidence_issuer/);
   assert.match(source, /fas_auth_context_owner/);
   assert.match(source, /fas_auth_context_resolver/);
+  assert.match(source, /fas_app/);
   assert.match(source, /fas_audit_owner/);
   assert.match(source, /fas_audit_writer/);
   assert.match(source, /fas_repair_owner/);
@@ -517,6 +518,36 @@ test("PostgreSQL adapter integration is explicit and fixed to the disposable tar
     source,
     /\[contextResolverUrl, "fas_auth_context_resolver"\]/,
   );
+});
+
+test("comprehensive Control Plane gate is explicit and fixed to the disposable target", () => {
+  const controlPlaneTest = path.join(
+    root,
+    "artifacts/api-server/scripts/test-postgres-control-plane-gate.ts",
+  );
+  const unapproved = spawnSync(
+    process.execPath,
+    ["--import", "tsx", controlPlaneTest],
+    {
+      cwd: path.join(root, "artifacts/api-server"),
+      encoding: "utf8",
+      env: { PATH: process.env.PATH ?? "" },
+    },
+  );
+  assert.equal(unapproved.status, 1);
+  assert.match(
+    unapproved.stderr,
+    /ALLOW_DISPOSABLE_CONTROL_PLANE_GATE=true is required/,
+  );
+
+  const source = readFileSync(controlPlaneTest, "utf8");
+  assert.match(
+    source,
+    /assert\.equal\(target\.pathname\.slice\(1\), "fasos_apply_local"\)/,
+  );
+  assert.match(source, /assert\.equal\(target\.port, "5433"\)/);
+  assert.match(source, /assert\.equal\(migrationCount\.rows\[0\]\.count, 82\)/);
+  assert.doesNotMatch(source, /CREATE ROLE \$\{/);
 });
 
 test("durable audit integration is explicit and fixed to the disposable target", () => {
@@ -588,7 +619,11 @@ test("live-first CI pins actions and PostgreSQL while replaying both adoption pa
   );
   assert.match(workflow, /prepare-disposable-migration-database\.mjs/);
   assert.equal(workflow.match(/node \.\/run-migrations\.mjs/g)?.length, 2);
-  assert.match(workflow, /test-production-prefix-adoption\.mjs/);
+  assert.equal(
+    workflow.match(/test-production-prefix-adoption\.mjs/g)?.length,
+    2,
+    "foundation and adapter fixtures must use isolated prefix-adoption databases",
+  );
   assert.doesNotMatch(workflow, /uses:\s+[^\s@]+@(?![a-f0-9]{40}\b)/);
 });
 

@@ -178,7 +178,35 @@ jobs:
           PG_DISPOSABLE_ADMIN_URL: postgresql://postgres@127.0.0.1:5433/postgres
         run: node lib/db/prepare-disposable-migration-database.mjs
 
+      - name: Prepare the comprehensive Control Plane authority split
+        env:
+          ALLOW_DISPOSABLE_CONTROL_PLANE_GATE: "true"
+          PG_GATE_ADMIN_URL: postgresql://postgres@127.0.0.1:5433/fasos_apply_local
+          PG_GATE_APP_URL: postgresql://fas_app@127.0.0.1:5433/fasos_apply_local
+          PG_GATE_MIGRATOR_URL: postgresql://fas_migrator@127.0.0.1:5433/fasos_apply_local
+        run: pnpm --filter @workspace/api-server run test:postgres-control-plane-gate -- setup
+
       - name: Prove production 66/66 to canonical 82/82 adoption
+        env:
+          ALLOW_DISPOSABLE_PREFIX_ADOPTION: "true"
+          DATABASE_URL: postgresql://fas_migrator@127.0.0.1:5433/fasos_apply_local
+        run: node lib/db/test-production-prefix-adoption.mjs
+
+      - name: Run comprehensive Control Plane foundation checks
+        env:
+          ALLOW_DISPOSABLE_CONTROL_PLANE_GATE: "true"
+          PG_GATE_ADMIN_URL: postgresql://postgres@127.0.0.1:5433/fasos_apply_local
+          PG_GATE_APP_URL: postgresql://fas_app@127.0.0.1:5433/fasos_apply_local
+          PG_GATE_MIGRATOR_URL: postgresql://fas_migrator@127.0.0.1:5433/fasos_apply_local
+        run: pnpm --filter @workspace/api-server run test:postgres-control-plane-gate -- verify
+
+      - name: Reset the disposable database after foundation fixtures
+        env:
+          ALLOW_DISPOSABLE_DATABASE_RESET: "true"
+          PG_DISPOSABLE_ADMIN_URL: postgresql://postgres@127.0.0.1:5433/postgres
+        run: node lib/db/prepare-disposable-migration-database.mjs
+
+      - name: Rebuild the production-prefix adoption state for adapter checks
         env:
           ALLOW_DISPOSABLE_PREFIX_ADOPTION: "true"
           DATABASE_URL: postgresql://fas_migrator@127.0.0.1:5433/fasos_apply_local

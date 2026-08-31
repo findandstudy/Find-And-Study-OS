@@ -86,6 +86,10 @@ Excluded:
 - Canonical PostgreSQL session/rate-limit/lifecycle/consumption/repair runtime
   and direct-test blobs: `13/13` exact; direct suites `16/16` and the fresh
   PostgreSQL `0→82` session/lifecycle/repair integration chain passed.
+- The comprehensive PostgreSQL foundation gate is target-adapted to the
+  converged `82` denominator and exact local identity. Foundation fixtures and
+  adapter fixtures are separated by an explicit reset plus second `66→82`
+  replay; the full CI-order candidate passed.
 
 ## Remaining gates
 
