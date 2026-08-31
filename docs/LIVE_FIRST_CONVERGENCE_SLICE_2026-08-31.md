@@ -90,6 +90,9 @@ Excluded:
   converged `82` denominator and exact local identity. Foundation fixtures and
   adapter fixtures are separated by an explicit reset plus second `66→82`
   replay; the full CI-order candidate passed.
+- Live-first G30 denominators are frozen at `163` writer files / `2,101`
+  conservative surfaces and `71` route files / `762` registrations. Normal
+  drift gates pass; strict writer and route gates remain expected NO-GO.
 
 ## Remaining gates
 

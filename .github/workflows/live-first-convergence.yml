@@ -67,6 +67,12 @@ jobs:
       - name: Type-check the workspace
         run: pnpm run typecheck
 
+      - name: Detect tenant-writer inventory drift
+        run: pnpm run audit:tenant-writers
+
+      - name: Detect legacy role-gate inventory drift
+        run: pnpm run audit:legacy-role-gates
+
       - name: Run live security regressions
         run: pnpm --filter @workspace/api-server run test:security-regressions
 
