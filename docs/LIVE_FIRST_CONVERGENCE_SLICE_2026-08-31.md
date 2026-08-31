@@ -2,7 +2,12 @@
 
 ## Frozen inputs
 
-- Production source commit: `d8f385ca018161cf6330232f5840d3a29c3581ce`.
+- Last salt-read verified VPS source commit:
+  `d8f385ca018161cf6330232f5840d3a29c3581ce`.
+- Latest GitHub live branch head:
+  `6dca1f951590dce297bb4d3579bd17d8d9f92e5f` (`fix: restore inbound
+  media and embed logos`). The convergence branch incorporates it through
+  merge commit `3ff2f50b90e1c451bab6d21321e213eebdc315d9` without conflict.
 - Control Plane source head: `eb577b780c8ca680ffb07395cd0dfacdffbf494b`.
 - Canonicalization source commit: `02a32146b0dcd42c48a1b03335a7145de0542bf2`.
 - Merge base between the live and canonicalization lines:
@@ -11,6 +16,12 @@
 This branch starts directly from the production source commit. It does not
 merge the stale `Find-And-Study-OS-Next/main` snapshot and does not change the
 live release, VPS, database, workers or integrations.
+
+The 1 September Hostinger overview confirms that the VPS is running and shows
+approximately `90 GB / 100 GB` disk usage. The web console did not establish a
+fresh terminal session, so the exact currently deployed release SHA has not
+been re-attested after the GitHub live branch advanced. GitHub head and deployed
+VPS release therefore remain explicitly separate facts.
 
 ## Slice boundary
 
@@ -125,6 +136,16 @@ Excluded:
   plus explicit user overrides, including the batched Academy access
   projection; direct legacy role-gated screens/routes remain G30-quarantined
   rather than being treated as converted.
+- The latest live inbound-media/embed fix was merged after a clean merge-tree
+  preview. Post-merge full workspace typecheck, API production build and Edcons
+  production build pass. Edcons remains at `4,873` used keys, `6,106` English
+  keys and `10` synchronized languages.
+- Post-merge live security regressions pass `31/31`, agency platform regression
+  checks pass `15/15`, embed/chatbot checks pass `18/18`, and the package-manager
+  guard passes `6/6`.
+- The embed route identity was re-frozen after review. G30 normal gates still
+  pass at `163 / 2,099` writer files/surfaces and `71 / 762` route
+  files/registrations; strict gates remain intentionally NO-GO.
 
 ## Remaining gates
 
@@ -133,5 +154,6 @@ database. The EDB archive was extracted without installing a Windows service;
 the disposable cluster was bound only to loopback and used no production dump,
 credential, secret or PII.
 
-Exact-head GitHub CI and review still remain. This branch is therefore a local
-convergence candidate only. It is not merge-, `Next`-sync- or deploy-ready.
+Exact-head GitHub CI, review and a fresh VPS release attestation still remain.
+This branch is therefore a local convergence candidate only. It is not merge-,
+`Next`-sync- or deploy-ready.
