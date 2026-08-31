@@ -102,6 +102,10 @@ Excluded:
   safety tests pass `5/5`; live security regressions pass `31/31`.
 - G30 route registration totals remain `71 / 762`; the two explicit activation
   checks increase the conservative direct-role count from `26` to `28`.
+- Canonical integration-DB safety and hardened signed-contract object-authz
+  test blobs are `3/3` exact. Targeting tests pass `11/11`; the real loopback
+  disposable PostgreSQL object-authorization suite passes `4/4` with cleanup
+  and natural exit-code preservation.
 
 ## Remaining gates
 
