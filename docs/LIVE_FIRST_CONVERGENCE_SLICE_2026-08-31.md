@@ -78,6 +78,8 @@ Excluded:
   exact; issuance coordinator `5/5`.
 - Canonical PostgreSQL command/evidence/context repository blobs: `3/3` exact;
   isolated EXECUTE-only adapter integration passed on PostgreSQL `16.15`.
+- Canonical durable-audit/reconciliation runtime blobs: `2/2` exact; chained
+  audit, cancellation, rollback-survival and repair integration passed.
 
 ## Remaining gates
 

@@ -185,3 +185,13 @@ jobs:
           PG_GATE_EXECUTOR_URL: postgresql://fas_cp_executor@127.0.0.1:5433/fasos_apply_local
           PG_GATE_MIGRATOR_URL: postgresql://fas_migrator@127.0.0.1:5433/fasos_apply_local
         run: pnpm --filter @workspace/api-server run test:postgres-change-set-adapter
+
+      - name: Run durable audit and scheduled reconciliation checks
+        env:
+          ALLOW_DISPOSABLE_AUDIT_TEST: "true"
+          PG_GATE_ADMIN_URL: postgresql://postgres@127.0.0.1:5433/fasos_apply_local
+          PG_GATE_AUDIT_WRITER_URL: postgresql://fas_audit_writer@127.0.0.1:5433/fasos_apply_local
+          PG_GATE_EXECUTOR_URL: postgresql://fas_cp_executor@127.0.0.1:5433/fasos_apply_local
+          PG_GATE_MIGRATOR_URL: postgresql://fas_migrator@127.0.0.1:5433/fasos_apply_local
+          PG_GATE_REPAIR_WORKER_URL: postgresql://fas_repair_worker@127.0.0.1:5433/fasos_apply_local
+        run: pnpm --filter @workspace/api-server run test:postgres-change-set-audit
