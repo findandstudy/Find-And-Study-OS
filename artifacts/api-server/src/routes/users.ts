@@ -676,6 +676,7 @@ router.post("/users/:id/impersonate", requireAuth, requirePermission("users.edit
     },
     access_token: `impersonation-${Date.now()}`,
     originalSid: currentSid,
+    issued_at: currentSession.issued_at,
   };
 
   const sid = await createSession(sessionData);

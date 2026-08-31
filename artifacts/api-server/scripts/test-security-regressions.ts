@@ -308,6 +308,7 @@ test("user and role routes enforce permission and hierarchy boundaries", () => {
   assert.match(usersRouteSource, /canManageTargetAccount\(req\.user!\.role, user\.role\)/);
   assert.match(usersRouteSource, /evaluateLegacyUserManagement/);
   assert.match(usersRouteSource, /evaluateLegacyUserImpersonation/);
+  assert.match(usersRouteSource, /issued_at: currentSession\.issued_at/);
   assert.match(usersRouteSource, /PERMISSION_OVERRIDE_REQUIRES_SUPER_ADMIN/);
   assert.match(usersRouteSource, /notInArray\(usersTable\.role/);
   assert.match(legacyUserManagementPolicySource, /peer_or_higher_privilege/);
@@ -326,6 +327,7 @@ test("user and role routes enforce permission and hierarchy boundaries", () => {
   assert.doesNotMatch(authHookSource, /role === "super_admin" \|\| role === "admin"/);
   assert.doesNotMatch(protectedRouteSource, /effectiveUser\.role !== "super_admin" && effectiveUser\.role !== "admin"/);
   assert.doesNotMatch(agentsRouteSource, /user\.role === "super_admin" \|\| user\.role === "admin"/);
+  assert.equal((agentsRouteSource.match(/issued_at: currentSession\.issued_at/g) ?? []).length, 2);
 });
 
 test("external AI delivery fails closed and activation requires Super Admin", () => {

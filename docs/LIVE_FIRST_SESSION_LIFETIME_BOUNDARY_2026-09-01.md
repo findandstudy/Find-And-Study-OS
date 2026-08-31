@@ -17,6 +17,9 @@ non-sliding across every write helper.
 - `updateSession` first reloads the current server-side session and preserves
   its issued-at value. Omitting the value can no longer restart the absolute
   clock.
+- Every legacy impersonation child session inherits the verified parent
+  session's issued-at value; switching identity cannot start a fresh absolute
+  24-hour window.
 - The existing live public-application student verification exception remains
   unchanged.
 
@@ -27,6 +30,8 @@ ending normalization.
 ## Evidence
 
 - Session lifetime tests: `3/3`.
+- Impersonation policy tests: `5/5`.
+- User-management policy tests: `6/6`.
 - Live security regressions: `31/31`.
 - API TypeScript check: pass.
 - Diff check: pass.

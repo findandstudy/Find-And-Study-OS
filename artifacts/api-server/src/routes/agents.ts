@@ -1142,6 +1142,7 @@ router.post("/agents/me/sub-agents/:id/impersonate", requireAuth, requireRole("a
     },
     access_token: `agent-impersonation-${Date.now()}`,
     originalSid: currentSid,
+    issued_at: currentSession.issued_at,
   };
 
   const sid = await createSession(sessionData);
@@ -2340,6 +2341,7 @@ router.post("/agents/:id/impersonate", requireAuth, async (req, res, next): Prom
     },
     access_token: `impersonation-${Date.now()}`,
     originalSid: currentSid,
+    issued_at: currentSession.issued_at,
   };
 
   const sid = await createSession(sessionData);
