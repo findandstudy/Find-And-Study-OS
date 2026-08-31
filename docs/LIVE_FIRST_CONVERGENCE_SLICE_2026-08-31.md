@@ -111,6 +111,10 @@ Excluded:
   and settings bootstrap writes are removed, n8n endpoint data is redacted and
   bounded config audit events are emitted. Current route counts are `476`
   fixed-role / `41` permission references; strict G30 remains NO-GO.
+- Session creation, reads, idle touches, browser-cookie renewal and the dormant
+  update helper now share one server-issued 24-hour absolute issued-at clock.
+  The update path cannot restart that clock when callers omit the timestamp;
+  the current live public-application verification behavior is preserved.
 
 ## Remaining gates
 

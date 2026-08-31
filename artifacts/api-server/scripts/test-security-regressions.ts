@@ -537,8 +537,9 @@ test("sensitive settings, AI work, sessions, assets and webhooks fail closed", (
   assert.match(branchesRouteSource, /platform_config\.branch\.unarchive/);
   assert.match(aiExtractRouteSource, /requireRole\(\.\.\.STAFF_ROLES, \.\.\.AGENT_ROLES\)/);
   assert.match(aiExtractRouteSource, /new PgRateLimitStore\(AI_RATE_WINDOW_MS, bucket\)/);
-  assert.match(sessionSource, /ABSOLUTE_SESSION_TTL/);
-  assert.match(sessionSource, /sessionCreatedAt/);
+  assert.match(sessionSource, /getBoundedSessionExpiry/);
+  assert.match(sessionSource, /const current = await getSession\(sid\)/);
+  assert.match(sessionSource, /data\.issued_at \?\? current\.issued_at/);
   assert.match(assetSigningSource, /NODE_ENV === "production"\) return ""/);
   assert.match(webhooksSource, /cfg\.secret\.length < 16/);
   assert.match(webhooksSource, /status\(503\)\.json\(\{ error: "Webhook authentication is not configured" \}\)/);
