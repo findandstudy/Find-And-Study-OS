@@ -76,6 +76,8 @@ Excluded:
   command orchestration `25/25`, request binding `4/4`.
 - Canonical authoritative active-context issuance source/test blobs: `2/2`
   exact; issuance coordinator `5/5`.
+- Canonical PostgreSQL command/evidence/context repository blobs: `3/3` exact;
+  isolated EXECUTE-only adapter integration passed on PostgreSQL `16.15`.
 
 ## Remaining gates
 

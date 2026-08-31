@@ -471,6 +471,40 @@ test("disposable database reset is explicit and fixed to the local test identity
   assert.match(source, /CREATE DATABASE fasos_apply_local OWNER fas_migrator/);
   assert.match(source, /NOINHERIT NOREPLICATION NOBYPASSRLS/);
   assert.match(source, /pg_auth_members/);
+  assert.match(source, /fas_cp_owner/);
+  assert.match(source, /fas_cp_executor/);
+  assert.match(source, /fas_evidence_owner/);
+  assert.match(source, /fas_evidence_issuer/);
+  assert.match(source, /fas_auth_context_owner/);
+  assert.match(source, /fas_auth_context_resolver/);
+});
+
+test("PostgreSQL adapter integration is explicit and fixed to the disposable target", () => {
+  const adapterTest = path.join(
+    root,
+    "artifacts/api-server/scripts/test-postgres-change-set-adapter.ts",
+  );
+  const unapproved = spawnSync(
+    process.execPath,
+    ["--import", "tsx", adapterTest],
+    {
+      cwd: path.join(root, "artifacts/api-server"),
+      encoding: "utf8",
+      env: { PATH: process.env.PATH ?? "" },
+    },
+  );
+  assert.equal(unapproved.status, 1);
+  assert.match(unapproved.stderr, /ALLOW_DISPOSABLE_ADAPTER_TEST=true is required/);
+
+  const source = readFileSync(adapterTest, "utf8");
+  assert.match(source, /assert\.equal\(databaseName, "fasos_apply_local"\)/);
+  assert.match(source, /assert\.equal\(parsed\.port, "5433"\)/);
+  assert.match(source, /\[executorUrl, "fas_cp_executor"\]/);
+  assert.match(source, /\[evidenceIssuerUrl, "fas_evidence_issuer"\]/);
+  assert.match(
+    source,
+    /\[contextResolverUrl, "fas_auth_context_resolver"\]/,
+  );
 });
 
 test("live-first CI pins actions and PostgreSQL while replaying both adoption paths", () => {

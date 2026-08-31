@@ -18,6 +18,7 @@
     "test:change-set-command": "tsx --test ./scripts/test-change-set-command.ts",
     "test:change-set-request-context": "tsx --test ./scripts/test-change-set-request-context.ts",
     "test:authoritative-active-context-issuance": "tsx --test ./scripts/test-authoritative-active-context-issuance.ts",
+    "test:postgres-change-set-adapter": "tsx ./scripts/test-postgres-change-set-adapter.ts",
     "test:inbox-create-student-add-doc": "tsx --test ./scripts/test-inbox-create-student-add-doc.ts",
     "test:student-creation-source": "tsx --test ./scripts/test-student-creation-source.ts",
     "test:inbox-student-extraction": "tsx --test ./scripts/test-inbox-student-extraction.ts",
@@ -221,7 +222,9 @@
     "@types/jsdom": "^28.0.3",
     "@types/node": "catalog:",
     "@types/nodemailer": "^7.0.11",
+    "@types/pg": "^8.18.0",
     "esbuild": "^0.28.1",
+    "pg": "^8.20.0",
     "tsx": "catalog:"
   }
 }

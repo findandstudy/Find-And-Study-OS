@@ -175,3 +175,13 @@ jobs:
           ALLOW_DISPOSABLE_PREFIX_ADOPTION: "true"
           DATABASE_URL: postgresql://fas_migrator@127.0.0.1:5433/fasos_apply_local
         run: node lib/db/test-production-prefix-adoption.mjs
+
+      - name: Run EXECUTE-only command, evidence, and context adapter checks
+        env:
+          ALLOW_DISPOSABLE_ADAPTER_TEST: "true"
+          PG_GATE_ADMIN_URL: postgresql://postgres@127.0.0.1:5433/fasos_apply_local
+          PG_GATE_CONTEXT_RESOLVER_URL: postgresql://fas_auth_context_resolver@127.0.0.1:5433/fasos_apply_local
+          PG_GATE_EVIDENCE_ISSUER_URL: postgresql://fas_evidence_issuer@127.0.0.1:5433/fasos_apply_local
+          PG_GATE_EXECUTOR_URL: postgresql://fas_cp_executor@127.0.0.1:5433/fasos_apply_local
+          PG_GATE_MIGRATOR_URL: postgresql://fas_migrator@127.0.0.1:5433/fasos_apply_local
+        run: pnpm --filter @workspace/api-server run test:postgres-change-set-adapter
