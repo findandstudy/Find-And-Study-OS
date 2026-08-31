@@ -2,12 +2,16 @@
 
 ## Frozen inputs
 
-- Last salt-read verified VPS source commit:
+- Last web-terminal-verified VPS source commit:
   `d8f385ca018161cf6330232f5840d3a29c3581ce`.
-- Latest GitHub live branch head:
+- Current public-health-attested production and GitHub live branch head:
   `6dca1f951590dce297bb4d3579bd17d8d9f92e5f` (`fix: restore inbound
   media and embed logos`). The convergence branch incorporates it through
   merge commit `3ff2f50b90e1c451bab6d21321e213eebdc315d9` without conflict.
+- Public production `/api/health` returned HTTP `200`, `dbConnected=true` and
+  `releaseId=20260831T115424Z-6dca1f951590` on 1 September. The production
+  migration ledger remains last verified at `66/66`; the web console did not
+  establish a fresh session for a current ledger query.
 - Control Plane source head: `eb577b780c8ca680ffb07395cd0dfacdffbf494b`.
 - Canonicalization source commit: `02a32146b0dcd42c48a1b03335a7145de0542bf2`.
 - Merge base between the live and canonicalization lines:
@@ -18,10 +22,10 @@ merge the stale `Find-And-Study-OS-Next/main` snapshot and does not change the
 live release, VPS, database, workers or integrations.
 
 The 1 September Hostinger overview confirms that the VPS is running and shows
-approximately `90 GB / 100 GB` disk usage. The web console did not establish a
-fresh terminal session, so the exact currently deployed release SHA has not
-been re-attested after the GitHub live branch advanced. GitHub head and deployed
-VPS release therefore remain explicitly separate facts.
+approximately `90 GB / 100 GB` disk usage. The public health response closes the
+deployed-release identity gap, but it does not prove the current migration
+ledger, filesystem attribution, process identity, backup restoreability or
+`0066+` namespace absence.
 
 ## Slice boundary
 
@@ -158,6 +162,14 @@ Excluded:
 - The embed route identity was re-frozen after review. G30 normal gates still
   pass at `163 / 2,099` writer files/surfaces and `71 / 762` route
   files/registrations; strict gates remain intentionally NO-GO.
+- Final static review finds no Control Plane imports or references in the API
+  app bootstrap, legacy index bootstrap or registered route directory. The
+  workflow uses SHA-pinned actions, `contents: read`, disabled credential
+  persistence and `ALLOW_LIVE_INTEGRATIONS=false`.
+- Production-dependency audit reports no known vulnerabilities. GitHub reports
+  no repository rulesets, no protection on the live base branch, no requested
+  reviewer/team and no submitted review; these absences are release blockers,
+  not evidence that review is unnecessary.
 
 ## Remaining gates
 
@@ -166,6 +178,6 @@ database. The EDB archive was extracted without installing a Windows service;
 the disposable cluster was bound only to loopback and used no production dump,
 credential, secret or PII.
 
-Independent review and a fresh VPS release/ledger attestation still remain.
-The branch is therefore a CI-verified draft convergence candidate only. It is
-not merge-, `Next`-sync- or deploy-ready.
+Independent review and a fresh production ledger/`0066+` namespace attestation
+still remain. The branch is therefore a CI-verified draft convergence candidate
+only. It is not merge-, `Next`-sync- or deploy-ready.
