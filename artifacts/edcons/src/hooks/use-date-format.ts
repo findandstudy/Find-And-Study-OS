@@ -5,12 +5,12 @@ import type { DateFormatKey } from "@workspace/i18n";
 /**
  * Returns the org-wide date format key from settings (e.g. "DD.MM.YYYY").
  * Falls back to "DD.MM.YYYY" when settings are unavailable or loading.
- * Reads from the authenticated /api/settings cache (shared with Settings page).
+ * Reads only the deliberately narrow authenticated client-settings DTO.
  */
 export function useDateFormat(): DateFormatKey {
   const { data } = useQuery<any>({
-    queryKey: ["/api/settings"],
-    queryFn: () => customFetch("/api/settings"),
+    queryKey: ["/api/settings/client"],
+    queryFn: () => customFetch("/api/settings/client"),
     staleTime: 5 * 60_000,
   });
   return (data?.dateFormat as DateFormatKey) || "DD.MM.YYYY";

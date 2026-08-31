@@ -18,6 +18,16 @@ export const SESSION_COOKIE = "sid";
  */
 export const IDLE_TIMEOUT = 8 * 60 * 60 * 1000;
 
+/**
+ * Hard session lifetime. Sliding the idle timeout must never make a stolen
+ * cookie valid forever. Operators may tune this between one hour and seven
+ * days; the secure default is one day.
+ */
+const configuredAbsoluteTtl = Number(process.env.SESSION_ABSOLUTE_TTL_MS);
+export const ABSOLUTE_SESSION_TTL = Number.isFinite(configuredAbsoluteTtl)
+  ? Math.min(7 * 24 * 60 * 60 * 1000, Math.max(60 * 60 * 1000, configuredAbsoluteTtl))
+  : 24 * 60 * 60 * 1000;
+
 /** Backward-compatible alias — do not remove (imported by routes). */
 export const SESSION_TTL = IDLE_TIMEOUT;
 
@@ -53,6 +63,8 @@ export interface SessionData {
   access_token: string;
   refresh_token?: string;
   expires_at?: number;
+  /** Epoch milliseconds; injected by createSession, never trusted from HTTP. */
+  sessionCreatedAt?: number;
   /**
    * If this session was created via impersonation, this points to the
    * original (admin) session id so the user can return to it.
@@ -97,10 +109,12 @@ export async function createSession(
   }
 
   const sid = crypto.randomBytes(32).toString("hex");
+  const sessionCreatedAt = Date.now();
+  const persistedData: SessionData = { ...data, sessionCreatedAt };
   await db.insert(sessionsTable).values({
     sid,
-    sess: data as unknown as Record<string, unknown>,
-    expire: new Date(Date.now() + IDLE_TIMEOUT),
+    sess: persistedData as unknown as Record<string, unknown>,
+    expire: new Date(Math.min(sessionCreatedAt + IDLE_TIMEOUT, sessionCreatedAt + ABSOLUTE_SESSION_TTL)),
     userId: userId ?? null,
   });
   return sid;
@@ -117,7 +131,22 @@ export async function getSession(sid: string): Promise<SessionData | null> {
     return null;
   }
 
-  return row.sess as unknown as SessionData;
+  const session = row.sess as unknown as SessionData;
+  const now = Date.now();
+  // Legacy sessions pre-date the absolute timestamp. Give them one fresh,
+  // bounded window and persist it; every subsequent request enforces it.
+  if (!Number.isFinite(session.sessionCreatedAt)) {
+    session.sessionCreatedAt = now;
+    await db.update(sessionsTable).set({
+      sess: session as unknown as Record<string, unknown>,
+      expire: new Date(Math.min(row.expire.getTime(), now + ABSOLUTE_SESSION_TTL)),
+    }).where(eq(sessionsTable.sid, sid));
+  }
+  if (now >= session.sessionCreatedAt! + ABSOLUTE_SESSION_TTL) {
+    await deleteSession(sid);
+    return null;
+  }
+  return session;
 }
 
 /**
@@ -130,7 +159,7 @@ const SESSION_TOUCH_INTERVAL = 5 * 60 * 1000;
 const MAX_TRACKED_SESSION_TOUCHES = 10_000;
 const recentSessionTouches = new Map<string, number>();
 
-export async function touchSession(sid: string): Promise<void> {
+export async function touchSession(sid: string, sessionCreatedAt?: number): Promise<void> {
   const now = Date.now();
   const lastTouch = recentSessionTouches.get(sid) ?? 0;
   if (now - lastTouch < SESSION_TOUCH_INTERVAL) return;
@@ -147,9 +176,12 @@ export async function touchSession(sid: string): Promise<void> {
   }
 
   try {
+    const absoluteExpiry = Number.isFinite(sessionCreatedAt)
+      ? sessionCreatedAt! + ABSOLUTE_SESSION_TTL
+      : now + ABSOLUTE_SESSION_TTL;
     await db
       .update(sessionsTable)
-      .set({ expire: new Date(Date.now() + IDLE_TIMEOUT) })
+      .set({ expire: new Date(Math.min(Date.now() + IDLE_TIMEOUT, absoluteExpiry)) })
       .where(eq(sessionsTable.sid, sid));
   } catch (error) {
     recentSessionTouches.delete(sid);
@@ -161,11 +193,14 @@ export async function updateSession(
   sid: string,
   data: SessionData,
 ): Promise<void> {
+  const now = Date.now();
+  const sessionCreatedAt = Number.isFinite(data.sessionCreatedAt) ? data.sessionCreatedAt! : now;
+  const persistedData: SessionData = { ...data, sessionCreatedAt };
   await db
     .update(sessionsTable)
     .set({
-      sess: data as unknown as Record<string, unknown>,
-      expire: new Date(Date.now() + IDLE_TIMEOUT),
+      sess: persistedData as unknown as Record<string, unknown>,
+      expire: new Date(Math.min(now + IDLE_TIMEOUT, sessionCreatedAt + ABSOLUTE_SESSION_TTL)),
     })
     .where(eq(sessionsTable.sid, sid));
 }

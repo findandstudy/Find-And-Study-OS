@@ -1,5 +1,6 @@
 import { loadMainAgencySignatureDataUrl } from "./mainAgencySignature";
 import { applyContractBranding, sanitizeContractBranding } from "./contractBranding";
+import { sanitizeContractTemplateHtml } from "./contractHtmlSanitizer";
 
 type Ctx = Record<string, any>;
 
@@ -82,13 +83,15 @@ function escapeHtml(s: string): string {
 }
 
 /**
- * Renders a Handlebars-flavored template (no logic, just `{{path.to.value}}`
- * and `{{{path.to.value}}}` for raw HTML). Missing values resolve to "".
+ * Renders a Handlebars-flavored template (no logic, just `{{path.to.value}}`).
+ * Legacy triple-brace placeholders are accepted but escaped identically; no
+ * signer-controlled context value is ever treated as raw HTML.
  */
 export function renderTemplate(body: string, ctx: Ctx): string {
-  let out = body.replace(/\{\{\{\s*([\w.]+)\s*\}\}\}/g, (_m, path) => lookup(ctx, path));
+  let out = sanitizeContractTemplateHtml(body)
+    .replace(/\{\{\{\s*([\w.]+)\s*\}\}\}/g, (_m, path) => escapeHtml(lookup(ctx, path)));
   out = out.replace(/\{\{\s*([\w.]+)\s*\}\}/g, (_m, path) => escapeHtml(lookup(ctx, path)));
-  return out;
+  return sanitizeContractTemplateHtml(out);
 }
 
 /**

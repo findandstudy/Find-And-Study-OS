@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import { db, auditLogsTable, usersTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
+import { getEffectivePermissionSet } from "./permissions";
 
 export type AuthUser = {
   id: number;
@@ -98,13 +99,10 @@ export function requireScope(...required: string[]) {
   };
 }
 
-const SUPER_ROLES = new Set(["super_admin"]);
-
 /**
- * Permission gate. Super admin bypasses, otherwise the user's role must be in
- * a whitelisted "all-perms" set OR the role must explicitly grant the perm via
- * the roles table. Falls back to the static DEFAULT_ROLE_PERMISSIONS map for
- * users whose role row was never customised.
+ * Permission gate backed by the canonical resolver. Stored role permissions
+ * are authoritative and per-user false overrides remain revocations; static
+ * defaults are used only when the role has no database row.
  */
 export function requirePermission(...required: string[]) {
   return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
@@ -112,15 +110,8 @@ export function requirePermission(...required: string[]) {
       res.status(401).json({ error: "Authentication required" });
       return;
     }
-    if (SUPER_ROLES.has(req.user.role)) { next(); return; }
     try {
-      const { rolesTable, DEFAULT_ROLE_PERMISSIONS } = await import("@workspace/db");
-      const [{ eq }] = [await import("drizzle-orm")];
-      const [roleRow] = await db.select({ permissions: rolesTable.permissions })
-        .from(rolesTable).where(eq(rolesTable.name, req.user.role));
-      const fromDb = (roleRow?.permissions as string[] | null) || [];
-      const fromDefault = (DEFAULT_ROLE_PERMISSIONS as Record<string, string[]>)[req.user.role] || [];
-      const have = new Set<string>([...fromDb, ...fromDefault]);
+      const have = await getEffectivePermissionSet(req.user);
       const ok = required.every(p => have.has(p));
       if (!ok) {
         res.status(403).json({ error: "You do not have permission to perform this action" });

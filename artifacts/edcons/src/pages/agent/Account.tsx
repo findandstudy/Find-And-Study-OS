@@ -24,6 +24,7 @@ import {
 import { CountryFlag } from "@/components/CountryFlag";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { MultiSelectFilter } from "@/components/admin/MultiSelectFilter";
+import { performLogout } from "@/lib/logout";
 
 const BASE_URL = (import.meta.env.BASE_URL || "/").replace(/\/$/, "");
 
@@ -490,11 +491,9 @@ export default function AgentAccount() {
                   <h3 className="font-display font-semibold text-base">Session</h3>
                 </div>
                 <p className="text-sm text-muted-foreground mb-5 flex-1">Sign out of your current session on this device. You will need to log in again to access your account.</p>
-                <Button variant="outline" className="w-full text-destructive hover:bg-destructive/5 hover:border-destructive/30 gap-2" asChild>
-                  <a href="/api/auth/logout">
-                    <LogOut className="w-4 h-4" />
-                    Sign Out
-                  </a>
+                <Button variant="outline" className="w-full text-destructive hover:bg-destructive/5 hover:border-destructive/30 gap-2" onClick={() => void performLogout()}>
+                  <LogOut className="w-4 h-4" />
+                  Sign Out
                 </Button>
               </Card>
             </div>

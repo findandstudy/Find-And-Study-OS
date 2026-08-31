@@ -327,7 +327,7 @@ router.post("/quality/run-batch", requireAuth, requireRole(...ADMIN_ROLES), asyn
     const result = await runQualityBatch({ limit });
     res.json(result);
   } catch (err: any) {
-    res.status(500).json({ error: "QUALITY_BATCH_FAILED", message: String(err?.message || err) });
+    res.status(500).json({ error: "QUALITY_BATCH_FAILED", message: "Quality batch processing failed" });
   }
 });
 

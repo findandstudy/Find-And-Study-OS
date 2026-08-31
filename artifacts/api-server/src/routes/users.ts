@@ -2,7 +2,7 @@ import { Router, type IRouter } from "express";
 import { db, usersTable, rolesTable, studentsTable, softDelete, agentsTable, branchesTable } from "@workspace/db";
 import { eq, ilike, or, sql, and, isNull, desc, inArray } from "drizzle-orm";
 import bcrypt from "bcryptjs";
-import { requireAuth, requireRole, logAudit } from "../lib/auth";
+import { requireAuth, requireRole, requirePermission, logAudit } from "../lib/auth";
 import { writeAudit } from "../lib/auditLog";
 import { ADMIN_ROLES, MANAGER_ROLES, STAFF_ROLES, AGENT_ROLES, requiresDirectBranch } from "../lib/roles";
 import { getVisibleBranchIds } from "../lib/branchScope";
@@ -14,6 +14,8 @@ import { validatePassword } from "../lib/passwordPolicy";
 import { parsePaginationParams, buildPageMeta } from "@workspace/pagination";
 import { z } from "zod";
 import { validate, getValidated } from "../middlewares/validate";
+import { userHasPermission } from "../lib/permissions";
+import { canAssignUserRole, canManageTargetAccount } from "../lib/userAccountSecurity";
 
 const createUserBodySchema = z.object({
   email: z.string().trim().toLowerCase().email(),
@@ -117,7 +119,7 @@ router.get("/users", requireAuth, requireRole(...STAFF_ROLES), async (req, res):
   res.json({ data, meta: buildPageMeta(Number(count), pageParams) });
 });
 
-router.post("/users", requireAuth, requireRole(...ADMIN_ROLES), validate({ body: createUserBodySchema }), async (req, res): Promise<void> => {
+router.post("/users", requireAuth, requirePermission("users.create"), validate({ body: createUserBodySchema }), async (req, res): Promise<void> => {
   const { email: normalizedEmail, firstName, lastName, role, phone, language, password, avatarUrl, branchId } =
     getValidated<{ body: typeof createUserBodySchema }>(req).body;
 
@@ -126,6 +128,10 @@ router.post("/users", requireAuth, requireRole(...ADMIN_ROLES), validate({ body:
   const validRoles = [...new Set([...BUILTIN_ROLES, ...dbRoles.map(r => r.name)])];
   if (!validRoles.includes(role)) {
     res.status(400).json({ error: "Invalid role" });
+    return;
+  }
+  if (!canAssignUserRole(req.user!.role, role)) {
+    res.status(403).json({ error: "You cannot assign this role." });
     return;
   }
 
@@ -193,7 +199,7 @@ router.get("/users/:id", requireAuth, requireRole(...MANAGER_ROLES), async (req,
 
 router.patch("/users/:id", requireAuth, async (req, res): Promise<void> => {
   const id = parseInt(String(req.params.id), 10);
-  const isAdmin = ADMIN_ROLES.includes(req.user!.role as any);
+  const isAdmin = await userHasPermission(req.user!, "users.edit");
   const isSelf = req.user!.id === id;
 
   if (!isAdmin && !isSelf) {
@@ -201,7 +207,8 @@ router.patch("/users/:id", requireAuth, async (req, res): Promise<void> => {
     return;
   }
 
-  // SEC-002: prevent non-super_admin from modifying a super_admin account
+  // Resolve the target before accepting privileged fields. Account tiers are
+  // strict: an actor may manage only lower-tier accounts (super_admin excepted).
   const [targetCheck] = await db.select({ role: usersTable.role, branchId: usersTable.branchId })
     .from(usersTable).where(eq(usersTable.id, id));
   if (!targetCheck) {
@@ -209,11 +216,9 @@ router.patch("/users/:id", requireAuth, async (req, res): Promise<void> => {
     return;
   }
 
-  if (req.user!.role !== "super_admin") {
-    if (targetCheck?.role === "super_admin") {
-      res.status(403).json({ error: "Only a super administrator may modify another super administrator account." });
-      return;
-    }
+  if (!isSelf && !canManageTargetAccount(req.user!.role, targetCheck.role)) {
+    res.status(403).json({ error: "You cannot modify an account at or above your privilege level." });
+    return;
   }
 
   const AGENT_IMMUTABLE_ROLES = ["agent", "sub_agent"];
@@ -252,6 +257,20 @@ router.patch("/users/:id", requireAuth, async (req, res): Promise<void> => {
       res.status(400).json({ error: "Invalid role" });
       return;
     }
+    if (isSelf) {
+      res.status(403).json({ error: "You cannot change your own role." });
+      return;
+    }
+    if (!canAssignUserRole(req.user!.role, updates.role as string)) {
+      res.status(403).json({ error: "You cannot assign this role." });
+      return;
+    }
+  }
+
+  if (updates.permissionOverrides !== undefined &&
+      !(await userHasPermission(req.user!, "users.manage_roles"))) {
+    res.status(403).json({ error: "Role-management permission is required to change permission overrides." });
+    return;
   }
 
 
@@ -364,16 +383,20 @@ router.patch("/users/:id", requireAuth, async (req, res): Promise<void> => {
   res.json(safePatchUser);
 });
 
-router.delete("/users/:id", requireAuth, requireRole(...ADMIN_ROLES), async (req, res): Promise<void> => {
+router.delete("/users/:id", requireAuth, requirePermission("users.delete"), async (req, res): Promise<void> => {
   const id = parseInt(String(req.params.id), 10);
   if (req.user!.id === id) {
     res.status(400).json({ error: "Cannot delete your own account" });
     return;
   }
-  const [existing] = await db.select({ id: usersTable.id, email: usersTable.email })
+  const [existing] = await db.select({ id: usersTable.id, email: usersTable.email, role: usersTable.role })
     .from(usersTable)
     .where(and(eq(usersTable.id, id), isNull(usersTable.deletedAt)));
   if (!existing) { res.status(404).json({ error: "User not found" }); return; }
+  if (!canManageTargetAccount(req.user!.role, existing.role)) {
+    res.status(403).json({ error: "You cannot delete an account at or above your privilege level." });
+    return;
+  }
 
   // Soft-delete: set deletedAt/deletedBy, deactivate, and free the email so
   // a fresh account can reuse the same address. Original is preserved with a
@@ -405,8 +428,12 @@ router.post("/users/:id/purge", requireAuth, requireRole("super_admin"), async (
   res.json({ success: true, deleted: result.rowCount ?? 0 });
 });
 
-router.post("/users/:id/set-password", requireAuth, requireRole(...ADMIN_ROLES), async (req, res): Promise<void> => {
+router.post("/users/:id/set-password", requireAuth, requirePermission("users.edit"), async (req, res): Promise<void> => {
   const id = parseInt(String(req.params.id), 10);
+  if (req.user!.id === id) {
+    res.status(400).json({ error: "Use the authenticated change-password flow for your own account." });
+    return;
+  }
   const { password } = req.body;
   const pwd = validatePassword(password);
   if (!pwd.ok) {
@@ -415,6 +442,10 @@ router.post("/users/:id/set-password", requireAuth, requireRole(...ADMIN_ROLES),
   }
   const [user] = await db.select().from(usersTable).where(eq(usersTable.id, id));
   if (!user) { res.status(404).json({ error: "User not found" }); return; }
+  if (!canManageTargetAccount(req.user!.role, user.role)) {
+    res.status(403).json({ error: "You cannot reset the password of an account at or above your privilege level." });
+    return;
+  }
   const hash = await bcrypt.hash(pwd.value, 10);
   await db.update(usersTable).set({ passwordHash: hash, passwordResetToken: null, passwordResetExpires: null }).where(eq(usersTable.id, id));
   await deleteSessionsForUser(id);
@@ -460,7 +491,7 @@ router.post("/users/me/change-password", requireAuth, async (req, res): Promise<
   res.json({ success: true });
 });
 
-router.post("/users/:id/impersonate", requireAuth, requireRole(...ADMIN_ROLES), async (req, res): Promise<void> => {
+router.post("/users/:id/impersonate", requireAuth, requirePermission("users.edit"), async (req, res): Promise<void> => {
   const id = parseInt(String(req.params.id), 10);
   if (req.user!.id === id) {
     res.status(400).json({ error: "Cannot impersonate yourself" });
@@ -469,9 +500,8 @@ router.post("/users/:id/impersonate", requireAuth, requireRole(...ADMIN_ROLES), 
   const [targetUser] = await db.select().from(usersTable).where(eq(usersTable.id, id));
   if (!targetUser) { res.status(404).json({ error: "User not found" }); return; }
 
-  // Prevent privilege escalation: only super_admin may impersonate super_admin
-  if (targetUser.role === "super_admin" && req.user!.role !== "super_admin") {
-    res.status(403).json({ error: "Cannot impersonate a super administrator" });
+  if (!canManageTargetAccount(req.user!.role, targetUser.role)) {
+    res.status(403).json({ error: "You cannot impersonate an account at or above your privilege level." });
     return;
   }
 

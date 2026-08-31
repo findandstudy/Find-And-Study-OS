@@ -48,6 +48,7 @@ import { applyLeadAssignmentRules, cascadeLeadAssignment, cascadeStudentAssignme
 import { userHasPermission } from "../lib/permissions";
 import { dispatchNotification } from "../lib/notificationDispatcher";
 import { sendEmail } from "../lib/email";
+import { safeOutboundRequest } from "../lib/safeOutboundRequest";
 import { resolveOutboundConfig } from "../lib/inbox/channelAccountConfig";
 import { decryptConfig } from "../lib/encryption";
 import { sendViaZernio, getZernioApiKey, resolveZernioAccount, sendZernioTemplate } from "../lib/inbox/zernioSend";
@@ -607,12 +608,16 @@ router.get(
     }
 
     try {
-      const upstream = await fetch(parsed.toString(), {
+      const upstream = await safeOutboundRequest(parsed.toString(), {
         headers: { Authorization: `Bearer ${apiKey}` },
-        redirect: "follow",
+        allowedProtocols: ["https:"],
+        allowedHostnames: ["zernio.com"],
+        timeoutMs: 15_000,
+        maxBytes: 50 * 1024 * 1024,
+        maxRedirects: 3,
       });
       if (!upstream.ok) {
-        const body = await upstream.text().catch(() => "");
+        const body = upstream.body.toString("utf8");
         console.error(`[ZERNIO] media proxy upstream ${upstream.status} for message ${messageId}[${index}]:`, body.slice(0, 300));
         const clientStatus = zernioMediaFailureStatus(upstream.status, body);
         res.status(clientStatus).json({
@@ -620,8 +625,8 @@ router.get(
         });
         return;
       }
-      const upstreamContentType = upstream.headers.get("content-type") || "application/octet-stream";
-      const dispo = upstream.headers.get("content-disposition");
+      const upstreamContentType = upstream.headers["content-type"] || "application/octet-stream";
+      const dispo = upstream.headers["content-disposition"] || null;
       const upstreamFilename = parseContentDispositionFilename(dispo);
       const downloadFilename = normalizeJpegDownloadFilename(upstreamFilename);
       const normalizedJpegName = Boolean(
@@ -630,7 +635,7 @@ router.get(
 
       res.status(200);
       res.setHeader("Content-Type", normalizedJpegName ? "image/jpeg" : upstreamContentType);
-      const len = upstream.headers.get("content-length");
+      const len = upstream.headers["content-length"] || String(upstream.body.length);
       if (len) res.setHeader("Content-Length", len);
       res.setHeader("Cache-Control", "private, max-age=300");
       // Forward the upstream filename (RFC 5987 aware) so browser downloads
@@ -652,12 +657,7 @@ router.get(
           size: Number.isFinite(sizeNum) && sizeNum > 0 ? sizeNum : null,
         });
       } catch { /* best-effort only */ }
-      if (upstream.body) {
-        const { Readable } = await import("node:stream");
-        Readable.fromWeb(upstream.body as unknown as Parameters<typeof Readable.fromWeb>[0]).pipe(res);
-      } else {
-        res.end();
-      }
+      res.end(upstream.body);
     } catch (err: any) {
       console.error(`[ZERNIO] media proxy error for message ${messageId}[${index}]:`, err?.message || err);
       res.status(502).json({ error: "Failed to fetch media" });
@@ -772,39 +772,19 @@ router.get(
           return;
         }
 
-        // Follow redirects manually so every hop stays on https://zernio.com
-        // (SSRF guard).
-        let hopUrl = parsed;
-        let upstream: Response | null = null;
-        for (let hop = 0; hop < 4; hop++) {
-          const r = await fetch(hopUrl.toString(), {
-            headers: { Authorization: `Bearer ${apiKey}` },
-            redirect: "manual",
-          });
-          if (r.status >= 300 && r.status < 400) {
-            const loc = r.headers.get("location");
-            if (!loc) break;
-            let next: URL;
-            try {
-              next = new URL(loc, hopUrl);
-            } catch {
-              break;
-            }
-            if (next.protocol !== "https:" || next.hostname !== "zernio.com") {
-              res.status(404).json({ error: "Attachment not proxied" });
-              return;
-            }
-            hopUrl = next;
-            continue;
-          }
-          upstream = r;
-          break;
-        }
+        const upstream = await safeOutboundRequest(parsed.toString(), {
+          headers: { Authorization: `Bearer ${apiKey}` },
+          allowedProtocols: ["https:"],
+          allowedHostnames: ["zernio.com"],
+          timeoutMs: 15_000,
+          maxBytes: 25 * 1024 * 1024,
+          maxRedirects: 3,
+        });
         if (!upstream || !upstream.ok) {
           res.status(404).json({ error: "Failed to fetch media" });
           return;
         }
-        buf = Buffer.from(await upstream.arrayBuffer());
+        buf = upstream.body;
       }
       // Only render actual PDFs (magic check) and cap at 25 MB.
       if (buf.length > 25 * 1024 * 1024 || !buf.subarray(0, 5).toString("latin1").startsWith("%PDF")) {
@@ -5066,15 +5046,19 @@ router.post(
         resolvedMimeType = attachMimeType || mediaInfo.mime_type || "application/octet-stream";
 
         // Step 2: download the media bytes with the same Bearer token
-        const mediaRes = await fetch(mediaInfo.url, {
-          headers: { Authorization: `Bearer ${accessToken}` }
+        const mediaRes = await safeOutboundRequest(mediaInfo.url, {
+          headers: { Authorization: `Bearer ${accessToken}` },
+          allowedProtocols: ["https:"],
+          timeoutMs: 15_000,
+          maxBytes: 25 * 1024 * 1024,
+          maxRedirects: 2,
         });
         if (!mediaRes.ok) {
           console.error(`[INBOX save-as-doc] WA media download failed ${mediaRes.status}`);
           res.status(502).json({ error: "Failed to download WhatsApp media" });
           return;
         }
-        fileBuffer = Buffer.from(await mediaRes.arrayBuffer());
+        fileBuffer = mediaRes.body;
         resolvedFilename = ensureAttachmentFilenameExtension(
           attachName || `attachment.${mimeToExt(resolvedMimeType)}`,
           resolvedMimeType,
@@ -5105,14 +5089,20 @@ router.post(
             }
           } catch { /* non-parseable URL — will fail on fetch below */ }
 
-          const mediaRes = await fetch(attachUrl!, { headers: fetchHeaders, redirect: "follow" });
+          const mediaRes = await safeOutboundRequest(attachUrl!, {
+            headers: fetchHeaders,
+            allowedProtocols: ["https:"],
+            timeoutMs: 15_000,
+            maxBytes: 25 * 1024 * 1024,
+            maxRedirects: 2,
+          });
           if (!mediaRes.ok) {
-            console.error(`[INBOX save-as-doc] Attachment download failed ${mediaRes.status}: ${attachUrl}`);
+            console.error(`[INBOX save-as-doc] Attachment download failed (${mediaRes.status})`);
             res.status(502).json({ error: "Failed to download attachment" });
             return;
           }
-          const contentType = mediaRes.headers.get("content-type") || "application/octet-stream";
-          fileBuffer = Buffer.from(await mediaRes.arrayBuffer());
+          const contentType = mediaRes.headers["content-type"] || "application/octet-stream";
+          fileBuffer = mediaRes.body;
           resolvedMimeType = attachMimeType || contentType.split(";")[0].trim();
         }
         resolvedFilename = ensureAttachmentFilenameExtension(
@@ -5359,13 +5349,19 @@ router.post(
           return;
         }
         resolvedMimeType = attachMimeType || mediaInfo.mime_type || "application/octet-stream";
-        const mediaRes = await fetch(mediaInfo.url, { headers: { Authorization: `Bearer ${accessToken}` } });
+        const mediaRes = await safeOutboundRequest(mediaInfo.url, {
+          headers: { Authorization: `Bearer ${accessToken}` },
+          allowedProtocols: ["https:"],
+          timeoutMs: 15_000,
+          maxBytes: 25 * 1024 * 1024,
+          maxRedirects: 2,
+        });
         if (!mediaRes.ok) {
           console.warn(`[INBOX extract-for-student] WA media download failed ${mediaRes.status}`);
           res.json({ extracted: {} });
           return;
         }
-        fileBuffer = Buffer.from(await mediaRes.arrayBuffer());
+        fileBuffer = mediaRes.body;
       } else {
         const localKey = resolveLocalInboxStorageKey(
           attachUrl!,
@@ -5387,14 +5383,20 @@ router.post(
             }
           } catch { /* non-parseable URL */ }
 
-          const mediaRes = await fetch(attachUrl!, { headers: fetchHeaders, redirect: "follow" });
+          const mediaRes = await safeOutboundRequest(attachUrl!, {
+            headers: fetchHeaders,
+            allowedProtocols: ["https:"],
+            timeoutMs: 15_000,
+            maxBytes: 25 * 1024 * 1024,
+            maxRedirects: 2,
+          });
           if (!mediaRes.ok) {
-            console.warn(`[INBOX extract-for-student] Attachment download failed ${mediaRes.status}: ${attachUrl}`);
+            console.warn(`[INBOX extract-for-student] Attachment download failed (${mediaRes.status})`);
             res.json({ extracted: {} });
             return;
           }
-          const contentType = mediaRes.headers.get("content-type") || "application/octet-stream";
-          fileBuffer = Buffer.from(await mediaRes.arrayBuffer());
+          const contentType = mediaRes.headers["content-type"] || "application/octet-stream";
+          fileBuffer = mediaRes.body;
           resolvedMimeType = attachMimeType || contentType.split(";")[0].trim();
         }
       }

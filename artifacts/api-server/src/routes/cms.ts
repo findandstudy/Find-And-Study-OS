@@ -31,7 +31,7 @@ router.get("/cms/team-members", async (req: Request, res: Response): Promise<voi
     });
     res.json(resolved);
   } catch (e: unknown) {
-    res.status(500).json({ error: e instanceof Error ? e.message : "Internal server error" });
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
@@ -55,7 +55,7 @@ router.post("/cms/team-members", ...adminOnly, async (req: Request, res: Respons
     logAudit(req.user!.id, "cms.team_member.create", "website_collections_team_members", row.id, { name: row.name });
     res.status(201).json(row);
   } catch (e: unknown) {
-    res.status(500).json({ error: e instanceof Error ? e.message : "Internal server error" });
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
@@ -82,7 +82,7 @@ router.patch("/cms/team-members/:id", ...adminOnly, async (req: Request, res: Re
     logAudit(req.user!.id, "cms.team_member.update", "website_collections_team_members", id, updates);
     res.json(row);
   } catch (e: unknown) {
-    res.status(500).json({ error: e instanceof Error ? e.message : "Internal server error" });
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
@@ -95,7 +95,7 @@ router.delete("/cms/team-members/:id", ...adminOnly, async (req: Request, res: R
     logAudit(req.user!.id, "cms.team_member.delete", "website_collections_team_members", id, { name: row.name });
     res.json({ success: true });
   } catch (e: unknown) {
-    res.status(500).json({ error: e instanceof Error ? e.message : "Internal server error" });
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
@@ -123,7 +123,7 @@ router.get("/cms/offices", async (req: Request, res: Response): Promise<void> =>
     });
     res.json(resolved);
   } catch (e: unknown) {
-    res.status(500).json({ error: e instanceof Error ? e.message : "Internal server error" });
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
@@ -149,7 +149,7 @@ router.post("/cms/offices", ...adminOnly, async (req: Request, res: Response): P
     logAudit(req.user!.id, "cms.office.create", "website_collections_offices", row.id, { name: row.name });
     res.status(201).json(row);
   } catch (e: unknown) {
-    res.status(500).json({ error: e instanceof Error ? e.message : "Internal server error" });
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
@@ -178,7 +178,7 @@ router.patch("/cms/offices/:id", ...adminOnly, async (req: Request, res: Respons
     logAudit(req.user!.id, "cms.office.update", "website_collections_offices", id, updates);
     res.json(row);
   } catch (e: unknown) {
-    res.status(500).json({ error: e instanceof Error ? e.message : "Internal server error" });
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
@@ -191,7 +191,7 @@ router.delete("/cms/offices/:id", ...adminOnly, async (req: Request, res: Respon
     logAudit(req.user!.id, "cms.office.delete", "website_collections_offices", id, { name: row.name });
     res.json({ success: true });
   } catch (e: unknown) {
-    res.status(500).json({ error: e instanceof Error ? e.message : "Internal server error" });
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 

@@ -676,10 +676,9 @@ async function handleLogout(req: Request, res: Response) {
     logAudit(req.user.id, "auth.logout", "user", req.user.id, {}, req.ip);
   }
   await clearSession(res, sid, req);
-  res.redirect("/login");
+  res.status(204).end();
 }
 
-router.get("/auth/logout", handleLogout);
 router.post("/auth/logout", handleLogout);
 
 export default router;

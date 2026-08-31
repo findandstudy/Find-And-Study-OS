@@ -1,6 +1,7 @@
 import { db, messagesTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { getZernioApiKey } from "./zernioSend";
+import { safeOutboundRequest } from "../safeOutboundRequest";
 
 /**
  * Parse a filename out of a Content-Disposition header value.
@@ -145,15 +146,18 @@ export async function backfillConversationAttachmentNames(conversationId: number
         if (attempted.size > MAX_ATTEMPT_CACHE) attempted.clear();
         attempted.add(key);
         try {
-          const upstream = await fetch(job.url, {
+          const upstream = await safeOutboundRequest(job.url, {
             headers: { Authorization: `Bearer ${apiKey}` },
-            redirect: "follow",
+            allowedProtocols: ["https:"],
+            allowedHostnames: ["zernio.com"],
+            timeoutMs: 10_000,
+            maxBytes: 25 * 1024 * 1024,
+            maxRedirects: 3,
+            headersOnly: true,
           });
-          const name = parseContentDispositionFilename(upstream.headers.get("content-disposition"));
-          const sizeRaw = Number(upstream.headers.get("content-length"));
+          const name = parseContentDispositionFilename(upstream.headers["content-disposition"]);
+          const sizeRaw = Number(upstream.headers["content-length"]);
           const size = Number.isFinite(sizeRaw) && sizeRaw > 0 ? sizeRaw : null;
-          // We only need headers — drop the body without downloading it.
-          try { await upstream.body?.cancel(); } catch { /* ignore */ }
           if (upstream.ok && (name || size)) {
             await persistAttachmentMeta(job.messageId, job.index, { name, size });
           }

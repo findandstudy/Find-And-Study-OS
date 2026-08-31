@@ -20,7 +20,7 @@ import assert from "node:assert/strict";
 import http from "http";
 import express, { type Express } from "express";
 import { eq, inArray } from "drizzle-orm";
-import { db, usersTable, commissionsTable, financialTransactionsTable } from "@workspace/db";
+import { db, usersTable, commissionsTable, financialTransactionsTable, financeMutationRequestsTable } from "@workspace/db";
 
 import financeRouter from "../src/routes/finance.js";
 
@@ -55,6 +55,7 @@ function sendReq(
   method: "GET" | "POST" | "PATCH",
   path: string,
   body?: unknown,
+  headers?: Record<string, string>,
 ): Promise<{ status: number; body: any }> {
   return new Promise((resolve, reject) => {
     const addr = server.address() as { port: number };
@@ -63,7 +64,7 @@ function sendReq(
       port: addr.port,
       path,
       method,
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...headers },
     };
     const req = http.request(opts, res => {
       let data = "";
@@ -96,6 +97,7 @@ function toNum(v: any) { return parseFloat(String(v ?? 0)) || 0; }
 // ---------------------------------------------------------------------------
 const createdCommissionIds: number[] = [];
 const createdTxIds: number[] = [];
+const createdUserIds: number[] = [];
 
 async function seedCommission(overrides: Record<string, any>): Promise<number> {
   const [row] = await db.insert(commissionsTable).values({
@@ -117,11 +119,17 @@ async function seedCommission(overrides: Record<string, any>): Promise<number> {
 }
 
 after(async () => {
+  if (createdUserIds.length) {
+    await db.delete(financeMutationRequestsTable).where(inArray(financeMutationRequestsTable.createdBy, createdUserIds));
+  }
   if (createdTxIds.length) {
     await db.delete(financialTransactionsTable).where(inArray(financialTransactionsTable.id, createdTxIds));
   }
   if (createdCommissionIds.length) {
     await db.delete(commissionsTable).where(inArray(commissionsTable.id, createdCommissionIds));
+  }
+  if (createdUserIds.length) {
+    await db.delete(usersTable).where(inArray(usersTable.id, createdUserIds));
   }
 });
 
@@ -272,4 +280,63 @@ test("UC-4: amount > remaining returns 400 with error", async () => {
     assert.equal(r.status, 400, `Expected 400, got ${r.status}: ${JSON.stringify(r.body)}`);
     assert.ok(r.body?.error, `Expected error message in body, got: ${JSON.stringify(r.body)}`);
   });
+});
+
+// ---------------------------------------------------------------------------
+// UC-5: same idempotency key under concurrency mutates the ledger only once
+// ---------------------------------------------------------------------------
+test("UC-5: concurrent retries with one Idempotency-Key create one collection", async () => {
+  const IDEMPOTENT_UNI = `IdempotentUni_${RUN_ID}`;
+  const commissionId = await seedCommission({
+    universityName: IDEMPOTENT_UNI,
+    universityCommissionAmount: "300.00",
+    universityCollected: "0",
+    confirmedAt: new Date("2099-04-01"),
+  });
+  const [user] = await db.insert(usersTable).values({
+    email: `finance-idempotency-${RUN_ID}@example.test`,
+    role: "super_admin",
+    isActive: true,
+  }).returning({ id: usersTable.id });
+  createdUserIds.push(user.id);
+  currentUser = { id: user.id, role: "super_admin", isActive: true };
+
+  const app = buildApp();
+  await withServer(app, async server => {
+    const body = {
+      universityName: IDEMPOTENT_UNI,
+      currency: "USD",
+      amount: 100,
+      transactionDate: "2099-06-01",
+      season: SEASON,
+    };
+    const headers = { "Idempotency-Key": `uc-${RUN_ID}` };
+    const [first, retry] = await Promise.all([
+      sendReq(server, "POST", "/api/finance/university-collection", body, headers),
+      sendReq(server, "POST", "/api/finance/university-collection", body, headers),
+    ]);
+    assert.deepEqual([first.status, retry.status].sort(), [200, 201]);
+    assert.equal([first.body?.replayed, retry.body?.replayed].filter(Boolean).length, 1);
+
+    const txs = await db.select({ id: financialTransactionsTable.id })
+      .from(financialTransactionsTable)
+      .where(eq(financialTransactionsTable.commissionId, commissionId));
+    assert.equal(txs.length, 1, "concurrent retry must create exactly one ledger row");
+    createdTxIds.push(...txs.map(t => t.id));
+
+    const [updated] = await db.select({ collected: commissionsTable.universityCollected })
+      .from(commissionsTable)
+      .where(eq(commissionsTable.id, commissionId));
+    assert.equal(toNum(updated.collected), 100);
+
+    const conflict = await sendReq(
+      server,
+      "POST",
+      "/api/finance/university-collection",
+      { ...body, amount: 101 },
+      headers,
+    );
+    assert.equal(conflict.status, 409, "reusing a key for another payload must be rejected");
+  });
+  currentUser = { id: 0, role: "super_admin", isActive: true };
 });

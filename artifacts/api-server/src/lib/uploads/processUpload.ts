@@ -7,6 +7,77 @@ import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
 
+function boundedEnvInt(name: string, fallback: number, min: number, max: number): number {
+  const parsed = Number.parseInt(process.env[name] ?? "", 10);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.min(max, Math.max(min, parsed));
+}
+
+const GHOSTSCRIPT_MAX_CONCURRENCY = boundedEnvInt("GHOSTSCRIPT_MAX_CONCURRENCY", 2, 1, 4);
+const GHOSTSCRIPT_MAX_QUEUE = boundedEnvInt("GHOSTSCRIPT_MAX_QUEUE", 20, 1, 50);
+const GHOSTSCRIPT_QUEUE_TIMEOUT_MS = boundedEnvInt("GHOSTSCRIPT_QUEUE_TIMEOUT_MS", 30_000, 1_000, 60_000);
+const GHOSTSCRIPT_TIMEOUT_MS = boundedEnvInt("GHOSTSCRIPT_TIMEOUT_MS", 20_000, 1_000, 60_000);
+const GHOSTSCRIPT_MAX_BUFFER_BYTES = boundedEnvInt("GHOSTSCRIPT_MAX_BUFFER_BYTES", 1024 * 1024, 64 * 1024, 4 * 1024 * 1024);
+
+type GhostscriptWaiter = {
+  grant: () => void;
+  reject: (error: Error) => void;
+  timer: NodeJS.Timeout;
+};
+
+let activeGhostscriptJobs = 0;
+const ghostscriptWaiters: GhostscriptWaiter[] = [];
+
+export class UploadProcessingBusyError extends Error {
+  constructor() {
+    super("PDF processing is busy. Please try again shortly.");
+    this.name = "UploadProcessingBusyError";
+  }
+}
+
+async function acquireGhostscriptSlot(): Promise<() => void> {
+  if (activeGhostscriptJobs < GHOSTSCRIPT_MAX_CONCURRENCY) {
+    activeGhostscriptJobs++;
+  } else {
+    if (ghostscriptWaiters.length >= GHOSTSCRIPT_MAX_QUEUE) {
+      throw new UploadProcessingBusyError();
+    }
+    await new Promise<void>((resolve, reject) => {
+      const waiter: GhostscriptWaiter = {
+        grant: () => {
+          clearTimeout(waiter.timer);
+          resolve();
+        },
+        reject,
+        timer: setTimeout(() => {
+          const index = ghostscriptWaiters.indexOf(waiter);
+          if (index >= 0) ghostscriptWaiters.splice(index, 1);
+          reject(new UploadProcessingBusyError());
+        }, GHOSTSCRIPT_QUEUE_TIMEOUT_MS),
+      };
+      ghostscriptWaiters.push(waiter);
+    });
+  }
+
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    const next = ghostscriptWaiters.shift();
+    if (next) next.grant();
+    else activeGhostscriptJobs--;
+  };
+}
+
+async function withGhostscriptSlot<T>(work: () => Promise<T>): Promise<T> {
+  const release = await acquireGhostscriptSlot();
+  try {
+    return await work();
+  } finally {
+    release();
+  }
+}
+
 // ── Config (env-driven, never hardcoded) ────────────────────────────────────
 
 export function getMaxUploadBytes(): number {
@@ -217,56 +288,70 @@ async function compressPdf(
     };
   }
 
-  const tmpDir = await fsPromises.mkdtemp(path.join(os.tmpdir(), "pdf-compress-"));
-  const inPath = path.join(tmpDir, "in.pdf");
-  const outPath = path.join(tmpDir, "out.pdf");
+  return withGhostscriptSlot(async () => {
+    const tmpDir = await fsPromises.mkdtemp(path.join(os.tmpdir(), "pdf-compress-"));
+    const inPath = path.join(tmpDir, "in.pdf");
+    const outPath = path.join(tmpDir, "out.pdf");
 
-  try {
-    await fsPromises.writeFile(inPath, input);
+    try {
+      await fsPromises.writeFile(inPath, input, { mode: 0o600 });
 
-    let best = input;
-    for (const settings of ["/ebook", "/screen"]) {
-      try {
-        await execFileAsync("gs", [
-          "-sDEVICE=pdfwrite",
-          "-dCompatibilityLevel=1.4",
-          `-dPDFSETTINGS=${settings}`,
-          "-dNOPAUSE",
-          "-dBATCH",
-          "-dQUIET",
-          `-sOutputFile=${outPath}`,
-          inPath,
-        ]);
-        const candidate = await fsPromises.readFile(outPath);
-        if (candidate.length < best.length) best = candidate;
-        if (best.length <= target) break;
-      } catch (err) {
-        console.error(`[processUpload] ghostscript pass (${settings}) failed:`, (err as Error).message);
+      let best = input;
+      for (const settings of ["/ebook", "/screen"]) {
+        try {
+          await execFileAsync("gs", [
+            "-dSAFER",
+            "-sDEVICE=pdfwrite",
+            "-dCompatibilityLevel=1.4",
+            `-dPDFSETTINGS=${settings}`,
+            "-dNOPAUSE",
+            "-dBATCH",
+            "-dQUIET",
+            "-dDetectDuplicateImages=true",
+            `-sOutputFile=${outPath}`,
+            inPath,
+          ], {
+            timeout: GHOSTSCRIPT_TIMEOUT_MS,
+            maxBuffer: GHOSTSCRIPT_MAX_BUFFER_BYTES,
+            killSignal: "SIGKILL",
+            windowsHide: true,
+          });
+          const candidate = await fsPromises.readFile(outPath);
+          if (candidate.length < best.length) best = candidate;
+          if (best.length <= target) break;
+        } catch (err) {
+          console.error(`[processUpload] ghostscript pass (${settings}) failed:`, (err as Error).message);
+        }
       }
-    }
 
-    return {
-      buffer: best,
-      mime: "application/pdf",
-      filename,
-      meta: {
-        originalBytes,
-        finalBytes: best.length,
-        compressed: best.length < originalBytes,
-        method: "ghostscript",
-        stillOverTarget: best.length > target,
-      },
-    };
-  } finally {
-    await fsPromises.rm(tmpDir, { recursive: true, force: true }).catch(() => {});
-  }
+      return {
+        buffer: best,
+        mime: "application/pdf" as const,
+        filename,
+        meta: {
+          originalBytes,
+          finalBytes: best.length,
+          compressed: best.length < originalBytes,
+          method: "ghostscript" as const,
+          stillOverTarget: best.length > target,
+        },
+      };
+    } finally {
+      await fsPromises.rm(tmpDir, { recursive: true, force: true }).catch(() => {});
+    }
+  });
 }
 
 let _gsAvailable: boolean | null = null;
 async function isGhostscriptAvailable(): Promise<boolean> {
   if (_gsAvailable !== null) return _gsAvailable;
   try {
-    await execFileAsync("gs", ["--version"]);
+    await execFileAsync("gs", ["--version"], {
+      timeout: 3_000,
+      maxBuffer: 64 * 1024,
+      killSignal: "SIGKILL",
+      windowsHide: true,
+    });
     _gsAvailable = true;
   } catch {
     _gsAvailable = false;

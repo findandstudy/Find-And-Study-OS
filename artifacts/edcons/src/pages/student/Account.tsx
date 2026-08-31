@@ -26,6 +26,7 @@ import { PhoneInput } from "@/components/ui/phone-input";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { validateFileObj as validateFile, sanitizeFileName, ACCEPT_ATTRIBUTE, FILE_UPLOAD_HELP_TEXT } from "@/lib/fileUploadValidation";
 import { StudentDocChecklist } from "@/components/StudentDocChecklist";
+import { performLogout } from "@/lib/logout";
 import { DocumentScanner } from "@/components/DocumentScanner";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
@@ -463,8 +464,8 @@ export default function StudentAccount() {
                     <span className="font-mono text-foreground">#{user?.id}</span>
                   </div>
                 </div>
-                <Button variant="outline" className="w-full rounded-xl text-destructive hover:bg-destructive/5 hover:border-destructive/30" asChild>
-                  <a href="/api/auth/logout">{t("account.signOut")}</a>
+                <Button variant="outline" className="w-full rounded-xl text-destructive hover:bg-destructive/5 hover:border-destructive/30" onClick={() => void performLogout()}>
+                  {t("account.signOut")}
                 </Button>
               </div>
             </Card>

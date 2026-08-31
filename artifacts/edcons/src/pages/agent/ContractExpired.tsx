@@ -1,6 +1,7 @@
 import { useI18n } from "@/hooks/use-i18n";
 import { Button } from "@/components/ui/button";
 import { AlertCircle, LogOut } from "lucide-react";
+import { performLogout } from "@/lib/logout";
 
 export default function ContractExpired() {
   const { t } = useI18n();
@@ -14,8 +15,8 @@ export default function ContractExpired() {
         <p className="text-sm text-muted-foreground">
           {t("agentOnboarding.expired.body") || "Your onboarding contract was not signed in time. Please contact your administrator to have a new signing link issued."}
         </p>
-        <Button variant="outline" asChild className="w-full">
-          <a href="/api/auth/logout"><LogOut className="w-4 h-4 mr-2" /> {t("common.signOut") || "Sign out"}</a>
+        <Button variant="outline" className="w-full" onClick={() => void performLogout()}>
+          <LogOut className="w-4 h-4 mr-2" /> {t("common.signOut") || "Sign out"}
         </Button>
       </div>
     </div>

@@ -7,6 +7,7 @@ import * as nodePath from "node:path";
 import { JSDOM } from "jsdom";
 import { Readability } from "@mozilla/readability";
 import { ObjectStorageService } from "../objectStorage";
+import { safeOutboundRequest } from "../safeOutboundRequest";
 
 const objectStorageService = new ObjectStorageService();
 
@@ -107,54 +108,24 @@ export async function extractFileText(config: FileSourceConfig): Promise<string>
  * timeout-bounded. Private/loopback hosts are rejected.
  */
 export async function extractUrlText(config: UrlSourceConfig): Promise<{ text: string; title: string | null }> {
-  const parsed = new URL(config.url);
-  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-    throw new Error("Only http/https URLs are supported.");
+  const response = await safeOutboundRequest(config.url, {
+    allowedProtocols: ["http:", "https:"],
+    timeoutMs: URL_FETCH_TIMEOUT_MS,
+    maxBytes: MAX_URL_BYTES,
+    maxRedirects: 3,
+    headers: { "User-Agent": "Mozilla/5.0 (compatible; EduConsultBot/1.0)" },
+  });
+  if (!response.ok) {
+    throw new Error(`Fetch failed: HTTP ${response.status}`);
   }
-  const hostname = parsed.hostname.toLowerCase();
-  if (
-    hostname === "localhost" ||
-    hostname === "127.0.0.1" ||
-    hostname === "::1" ||
-    hostname.endsWith(".local") ||
-    /^10\./.test(hostname) ||
-    /^192\.168\./.test(hostname) ||
-    /^172\.(1[6-9]|2\d|3[01])\./.test(hostname) ||
-    /^169\.254\./.test(hostname)
-  ) {
-    throw new Error("URL points to a private/local address — not allowed.");
+  const html = response.body.toString("utf-8");
+  const dom = new JSDOM(html, { url: response.url });
+  const reader = new Readability(dom.window.document);
+  const article = reader.parse();
+  if (!article || !article.textContent || !article.textContent.trim()) {
+    throw new Error("Could not extract readable article content from this URL.");
   }
-
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), URL_FETCH_TIMEOUT_MS);
-  try {
-    const response = await fetch(parsed.toString(), {
-      signal: controller.signal,
-      redirect: "follow",
-      headers: { "User-Agent": "Mozilla/5.0 (compatible; EduConsultBot/1.0)" },
-    });
-    if (!response.ok) {
-      throw new Error(`Fetch failed: HTTP ${response.status}`);
-    }
-    const contentLength = response.headers.get("content-length");
-    if (contentLength && Number(contentLength) > MAX_URL_BYTES) {
-      throw new Error("Page too large (>5MB).");
-    }
-    const buffer = await response.arrayBuffer();
-    if (buffer.byteLength > MAX_URL_BYTES) {
-      throw new Error("Page too large (>5MB).");
-    }
-    const html = Buffer.from(buffer).toString("utf-8");
-    const dom = new JSDOM(html, { url: parsed.toString() });
-    const reader = new Readability(dom.window.document);
-    const article = reader.parse();
-    if (!article || !article.textContent || !article.textContent.trim()) {
-      throw new Error("Could not extract readable article content from this URL.");
-    }
-    return { text: article.textContent.trim(), title: article.title || null };
-  } finally {
-    clearTimeout(timeout);
-  }
+  return { text: article.textContent.trim(), title: article.title || null };
 }
 
 /** Free-text sources need no extraction — the admin-typed text IS the content. */

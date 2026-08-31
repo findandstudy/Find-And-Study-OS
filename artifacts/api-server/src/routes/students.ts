@@ -881,6 +881,10 @@ router.post("/students/bulk", requireAuth, requireRole(...STAFF_ROLES, "agent" a
     res.status(400).json({ error: "students array is required" });
     return;
   }
+  if (students.length > 200) {
+    res.status(413).json({ error: "A maximum of 200 students can be created per request" });
+    return;
+  }
 
   const bulkUser = req.user!;
   const bulkOrigin = await inferOriginFromUser({ role: bulkUser.role, id: bulkUser.id, managingAgentId: (bulkUser as any).managingAgentId });

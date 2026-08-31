@@ -53,6 +53,7 @@ import {
   FORMS_KIND,
   type FormsCatalog,
 } from "../lib/exportImportExcel";
+import { safeOutboundRequest } from "../lib/safeOutboundRequest";
 
 const router = Router();
 const WEBSITE_ROLES = ["super_admin", "admin"] as const;
@@ -947,16 +948,18 @@ router.post("/public/website-forms/:slug/submit", publicFormLimiter, async (req:
 
     if (form.submitAction === "webhook" && form.submitWebhookUrl) {
       const webhookUrl = form.submitWebhookUrl;
-      const isValidWebhook = /^https:\/\/[^\/]/.test(webhookUrl) && !/(localhost|127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01]))/i.test(webhookUrl);
-      if (!isValidWebhook) {
-        console.warn(`[FORM] Blocked webhook to private/non-HTTPS URL: ${webhookUrl}`);
-      } else {
-        fetch(webhookUrl, {
+      safeOutboundRequest(webhookUrl, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ formSlug: form.slug, submissionId: submission.id, data: formData }),
+          timeoutMs: 10_000,
+          maxBytes: 256 * 1024,
+          maxRedirects: 0,
+          allowedProtocols: ["https:"],
+          allowedPorts: [443],
+        }).then((response) => {
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
         }).catch(err => console.error(`[FORM] Webhook delivery failed for ${form.slug}:`, err.message));
-      }
     }
 
     if (form.submitAction === "email" && form.submitEmail) {

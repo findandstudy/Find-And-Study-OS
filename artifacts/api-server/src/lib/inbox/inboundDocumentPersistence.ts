@@ -27,6 +27,7 @@ import {
   resolveLocalInboxStorageKey,
 } from "./mediaSource";
 import { getZernioApiKey } from "./zernioSend";
+import { safeOutboundRequest } from "../safeOutboundRequest";
 
 const DOCUMENT_PERSIST_LOCK_NS = 7313;
 
@@ -117,11 +118,15 @@ async function downloadAttachment(opts: {
     const info = await infoResponse.json() as { url?: string; mime_type?: string };
     if (!info.url) throw new Error("WhatsApp media URL was not returned");
     mimeType = descriptor.mimeType || info.mime_type || mimeType;
-    const mediaResponse = await fetch(info.url, {
+    const mediaResponse = await safeOutboundRequest(info.url, {
       headers: { Authorization: `Bearer ${accessToken}` },
+      allowedProtocols: ["https:"],
+      timeoutMs: 15_000,
+      maxBytes: 25 * 1024 * 1024,
+      maxRedirects: 2,
     });
     if (!mediaResponse.ok) throw new Error(`WhatsApp media download failed (${mediaResponse.status})`);
-    buffer = Buffer.from(await mediaResponse.arrayBuffer());
+    buffer = mediaResponse.body;
   } else {
     const url = descriptor.url!;
     const localKey = resolveLocalInboxStorageKey(url, configuredInboxMediaHosts());
@@ -141,11 +146,17 @@ async function downloadAttachment(opts: {
       } catch {
         throw new Error("Attachment URL is invalid");
       }
-      const response = await fetch(url, { headers, redirect: "follow" });
+      const response = await safeOutboundRequest(url, {
+        headers,
+        allowedProtocols: ["https:"],
+        timeoutMs: 15_000,
+        maxBytes: 25 * 1024 * 1024,
+        maxRedirects: 2,
+      });
       if (!response.ok) throw new Error(`Attachment download failed (${response.status})`);
-      buffer = Buffer.from(await response.arrayBuffer());
+      buffer = response.body;
       mimeType = descriptor.mimeType
-        || response.headers.get("content-type")?.split(";")[0]?.trim()
+        || response.headers["content-type"]?.split(";")[0]?.trim()
         || mimeType;
     }
   }

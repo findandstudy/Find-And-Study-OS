@@ -3,6 +3,23 @@ import { Bold, Braces, Heading1, Heading2, Italic, List, ListOrdered, Pilcrow, R
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import DOMPurify from "isomorphic-dompurify";
+
+const CONTRACT_EDITOR_SANITIZE_CONFIG = {
+  FORBID_TAGS: [
+    "script", "iframe", "object", "embed", "form", "input", "button",
+    "textarea", "select", "option", "template", "svg", "math",
+  ],
+  FORBID_ATTR: ["srcdoc", "srcset", "formaction", "action", "ping"],
+};
+
+function sanitizeEditorHtml(value: string): string {
+  return String(DOMPurify.sanitize(value, CONTRACT_EDITOR_SANITIZE_CONFIG))
+    .replace(/@import\s+[^;]+;?/gi, "")
+    .replace(/url\s*\([^)]*\)/gi, "none")
+    .replace(/expression\s*\([^)]*\)/gi, "")
+    .replace(/(?:behavior|-moz-binding)\s*:[^;]+;?/gi, "");
+}
 
 const COMMON_PLACEHOLDERS = [
   ["Signer name", "{{contract.signerName}}"],
@@ -24,8 +41,9 @@ export function ContractRichTextEditor({ value, onChange, disabled = false }: Pr
   const editorRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (mode === "visual" && editorRef.current && editorRef.current.innerHTML !== value) {
-      editorRef.current.innerHTML = value;
+    const safeValue = sanitizeEditorHtml(value);
+    if (mode === "visual" && editorRef.current && editorRef.current.innerHTML !== safeValue) {
+      editorRef.current.innerHTML = safeValue;
     }
   }, [mode, value]);
 
@@ -33,7 +51,7 @@ export function ContractRichTextEditor({ value, onChange, disabled = false }: Pr
     if (disabled) return;
     editorRef.current?.focus();
     document.execCommand(command, false, argument);
-    onChange(editorRef.current?.innerHTML || "");
+    onChange(sanitizeEditorHtml(editorRef.current?.innerHTML || ""));
   }
 
   function insertPlaceholder(placeholder: string) {
@@ -79,7 +97,7 @@ export function ContractRichTextEditor({ value, onChange, disabled = false }: Pr
           ref={editorRef}
           contentEditable={!disabled}
           suppressContentEditableWarning
-          onInput={event => onChange(event.currentTarget.innerHTML)}
+          onInput={event => onChange(sanitizeEditorHtml(event.currentTarget.innerHTML))}
           className="contract-editor min-h-[360px] max-h-[55vh] overflow-y-auto p-6 text-sm leading-7 outline-none prose prose-sm dark:prose-invert max-w-none [&_h1]:text-2xl [&_h1]:font-bold [&_h2]:text-xl [&_h2]:font-semibold [&_h3]:text-lg [&_ul]:list-disc [&_ol]:list-decimal [&_ul]:pl-6 [&_ol]:pl-6"
         />
       ) : (

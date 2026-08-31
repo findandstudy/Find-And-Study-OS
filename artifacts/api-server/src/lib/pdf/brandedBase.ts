@@ -1,4 +1,5 @@
 import { db, settingsTable } from "@workspace/db";
+import { safeOutboundRequest } from "../safeOutboundRequest";
 
 export interface BrandedPdfSettings {
   companyName?: string | null;
@@ -27,25 +28,35 @@ export async function loadBrandedPdfSettings(): Promise<BrandedPdfSettings> {
   return row ?? {};
 }
 
-const PRIVATE_HOST_RE = /^(localhost|127\.|10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|169\.254\.|::1$|0\.0\.0\.0|fd[0-9a-f]{2}:|fc[0-9a-f]{2}:)/i;
-
 async function fetchAsDataUri(rawUrl: string | null | undefined): Promise<string | null> {
   if (!rawUrl) return null;
   try {
     let url: string;
     if (rawUrl.startsWith("http")) {
-      const parsed = new URL(rawUrl);
-      if (parsed.protocol !== "https:") return null;
-      if (PRIVATE_HOST_RE.test(parsed.hostname)) return null;
       url = rawUrl;
     } else {
       const port = process.env.PORT || "3001";
       url = `http://localhost:${port}${rawUrl}`;
     }
-    const resp = await fetch(url, { signal: AbortSignal.timeout(4000) });
+    const external = rawUrl.startsWith("http");
+    const resp = external
+      ? await safeOutboundRequest(url, {
+          allowedProtocols: ["https:"],
+          timeoutMs: 4_000,
+          maxBytes: 5 * 1024 * 1024,
+          maxRedirects: 2,
+        })
+      : await (async () => {
+          const localResponse = await fetch(url, { signal: AbortSignal.timeout(4000), redirect: "error" });
+          return {
+            ok: localResponse.ok,
+            body: Buffer.from(await localResponse.arrayBuffer()),
+            headers: { "content-type": localResponse.headers.get("content-type") || "" },
+          };
+        })();
     if (!resp.ok) return null;
-    const buf = Buffer.from(await resp.arrayBuffer());
-    const ct = resp.headers.get("content-type") || "image/png";
+    const buf = resp.body;
+    const ct = resp.headers["content-type"] || "image/png";
     if (!ct.startsWith("image/")) return null;
     return `data:${ct};base64,${buf.toString("base64")}`;
   } catch {

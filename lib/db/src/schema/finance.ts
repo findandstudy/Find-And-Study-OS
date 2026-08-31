@@ -1,4 +1,5 @@
-import { pgTable, text, serial, timestamp, integer, numeric, boolean, index } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+import { pgTable, text, serial, timestamp, integer, numeric, boolean, index, uniqueIndex, jsonb, check } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { studentsTable } from "./students";
@@ -23,6 +24,9 @@ export const invoicesTable = pgTable("invoices", {
   index("invoices_student_id_idx").on(table.studentId),
   index("invoices_application_id_idx").on(table.applicationId),
   index("invoices_status_idx").on(table.status),
+  check("invoices_amount_positive_chk", sql`${table.amount} > 0`),
+  check("invoices_currency_chk", sql`${table.currency} ~ '^[A-Z]{3}$'`),
+  check("invoices_status_chk", sql`${table.status} IN ('draft', 'sent', 'paid', 'overdue', 'cancelled')`),
 ]);
 
 export const commissionsTable = pgTable("commissions", {
@@ -127,6 +131,26 @@ export const financialTransactionsTable = pgTable("financial_transactions", {
   index("fin_tx_commission_id_idx").on(table.commissionId),
   index("fin_tx_agent_id_idx").on(table.agentId),
   index("fin_tx_type_idx").on(table.type),
+  check("fin_tx_amount_positive_chk", sql`${table.amount} > 0`),
+  check("fin_tx_type_chk", sql`${table.type} IN ('collection', 'agent_payment', 'sub_agent_payment')`),
+]);
+
+/**
+ * Durable request-level idempotency for finance mutations. The response is
+ * written in the same database transaction as the ledger rows, so a retry can
+ * return the original result without applying money twice.
+ */
+export const financeMutationRequestsTable = pgTable("finance_mutation_requests", {
+  id: serial("id").primaryKey(),
+  keyHash: text("key_hash").notNull(),
+  scope: text("scope").notNull(),
+  requestHash: text("request_hash").notNull(),
+  response: jsonb("response").$type<Record<string, unknown>>().notNull(),
+  createdBy: integer("created_by").references(() => usersTable.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  uniqueIndex("finance_mutation_requests_key_uidx").on(table.keyHash),
+  index("finance_mutation_requests_created_at_idx").on(table.createdAt),
 ]);
 
 export const staffCommissionPayoutsTable = pgTable("staff_commission_payouts", {

@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useI18n } from "@/hooks/use-i18n";
 import { MailCheck, Loader2, CheckCircle2, AlertCircle, RefreshCw, LogOut } from "lucide-react";
+import { performLogout } from "@/lib/logout";
 
 interface Props {
   email: string;
@@ -108,8 +109,8 @@ export default function VerifyEmail({ email, onVerified }: Props) {
             {resending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <RefreshCw className="w-4 h-4 mr-2" />}
             {resendCooldown > 0 ? `${t("agentOnboarding.verifyEmail.resendIn") || "Resend in"} ${resendCooldown}s` : (t("agentOnboarding.verifyEmail.resend") || "Resend code")}
           </Button>
-          <Button type="button" variant="ghost" asChild>
-            <a href="/api/auth/logout"><LogOut className="w-4 h-4 mr-2" /> {t("common.signOut") || "Sign out"}</a>
+          <Button type="button" variant="ghost" onClick={() => void performLogout()}>
+            <LogOut className="w-4 h-4 mr-2" /> {t("common.signOut") || "Sign out"}
           </Button>
         </div>
       </form>

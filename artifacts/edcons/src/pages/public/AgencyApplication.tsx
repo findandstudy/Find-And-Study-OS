@@ -175,8 +175,14 @@ export default function AgencyApplication() {
 
   useEffect(() => {
     const queryToken = new URLSearchParams(window.location.search).get("application") || "";
-    const token = queryToken || localStorage.getItem("fas_agency_application_token") || "";
-    if (queryToken) localStorage.setItem("fas_agency_application_token", queryToken);
+    const fragmentToken = new URLSearchParams(window.location.hash.replace(/^#/, "")).get("application") || "";
+    const legacyStoredToken = localStorage.getItem("fas_agency_application_token") || "";
+    const token = fragmentToken || queryToken || sessionStorage.getItem("fas_agency_application_token") || legacyStoredToken;
+    if (token) sessionStorage.setItem("fas_agency_application_token", token);
+    if (legacyStoredToken) localStorage.removeItem("fas_agency_application_token");
+    // Remove secrets from browser history immediately. Query support remains
+    // only to consume legacy email links issued before fragment links existed.
+    if (fragmentToken || queryToken) window.history.replaceState(null, "", `/${lang}/agency/apply`);
     setAccessToken(token);
     Promise.all([
       customFetch<{ data: { matrix: MatrixRow[] } }>("/api/public/agent-applications/options"),
@@ -297,9 +303,9 @@ export default function AgencyApplication() {
       const revision = existing?.status === "changes_requested" && accessToken;
       const response = await customFetch<{ data: { application: PublicApplication; accessToken: string | null } }>(revision ? `/api/public/agent-applications/${encodeURIComponent(accessToken)}` : "/api/public/agent-applications", { method: revision ? "PATCH" : "POST", headers: { "Content-Type": "application/json", "Idempotency-Key": idempotencyKey }, body: JSON.stringify(payload) });
       const token = response.data.accessToken || accessToken;
-      if (token) { localStorage.setItem("fas_agency_application_token", token); setAccessToken(token); }
+      if (token) { sessionStorage.setItem("fas_agency_application_token", token); setAccessToken(token); }
       setExisting(response.data.application);
-      window.history.replaceState(null, "", `/${lang}/agency/apply${token ? `?application=${encodeURIComponent(token)}` : ""}`);
+      window.history.replaceState(null, "", `/${lang}/agency/apply`);
     } catch (cause: any) {
       const fieldErrors = cause?.data?.details?.fieldErrors as Record<string, string[] | undefined> | undefined;
       const invalidKeys = fieldErrors
@@ -333,7 +339,13 @@ export default function AgencyApplication() {
       window.location.assign(response.data.signPath);
     } catch (cause: any) { setError(cause?.data?.error || cause?.message || "Contract could not be opened"); setSigning(false); }
   }
-  function reset() { ["fas_agency_application_token", "fas_agency_application_idempotency"].forEach((key) => localStorage.removeItem(key)); window.location.assign(`/${lang}/agency/apply`); }
+  function reset() {
+    ["fas_agency_application_token", "fas_agency_application_idempotency"].forEach((key) => {
+      sessionStorage.removeItem(key);
+      localStorage.removeItem(key); // remove values left by older releases
+    });
+    window.location.assign(`/${lang}/agency/apply`);
+  }
 
   if (loading) return <div className="min-h-[70vh] grid place-items-center"><Loader2 className="h-8 w-8 animate-spin text-primary" /><span className="sr-only">{copy.loading}</span></div>;
   if (existing && existing.status !== "changes_requested") {

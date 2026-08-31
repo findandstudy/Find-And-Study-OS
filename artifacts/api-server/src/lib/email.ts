@@ -7,6 +7,7 @@ import { db, emailQueueTable, integrationsTable, settingsTable } from "@workspac
 import { pool } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { isLiveIntegrationsEnabled } from "./inbox/liveMode";
+import { isBlockedOutboundIp } from "./safeOutboundRequest";
 
 let cachedTransporter: Transporter | null = null;
 let transporterConfigHash = "";
@@ -24,29 +25,6 @@ interface SmtpConfig {
 export interface TenantSmtpConfig extends SmtpConfig {}
 
 const TENANT_SMTP_PORTS = new Set([465, 587, 2525]);
-
-function isPrivateOrReservedIp(address: string): boolean {
-  if (isIP(address) === 4) {
-    const [a, b] = address.split(".").map(Number);
-    return (
-      a === 0 || a === 10 || a === 127 ||
-      (a === 100 && b >= 64 && b <= 127) ||
-      (a === 169 && b === 254) ||
-      (a === 172 && b >= 16 && b <= 31) ||
-      (a === 192 && (b === 0 || b === 168)) ||
-      (a === 198 && (b === 18 || b === 19)) ||
-      a >= 224
-    );
-  }
-  if (isIP(address) === 6) {
-    const normalized = address.toLowerCase();
-    if (normalized === "::" || normalized === "::1") return true;
-    if (normalized.startsWith("fc") || normalized.startsWith("fd") || normalized.startsWith("fe8") || normalized.startsWith("fe9") || normalized.startsWith("fea") || normalized.startsWith("feb")) return true;
-    const mapped = normalized.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
-    return mapped ? isPrivateOrReservedIp(mapped[1]) : false;
-  }
-  return true;
-}
 
 /**
  * Tenant-owned SMTP settings are untrusted network destinations. Resolve the
@@ -67,7 +45,7 @@ export async function assertSafeTenantSmtpDestination(host: string, port: number
   } catch {
     throw new Error("smtp_host_unresolvable");
   }
-  if (addresses.length === 0 || addresses.some(({ address }) => isPrivateOrReservedIp(address))) {
+  if (addresses.length === 0 || addresses.some(({ address }) => isBlockedOutboundIp(address))) {
     throw new Error("unsafe_smtp_destination");
   }
   return addresses[0].address;
@@ -114,8 +92,12 @@ function buildConfigHash(host: string, port: number, user: string, pass: string)
 export async function createSmtpTransporter(config: SmtpConfig): Promise<Transporter> {
   const port = Number(config.port);
   const secure = port === 465;
+  const originalHost = String(config.host).trim().replace(/^\[|\]$/g, "");
+  const resolvedHost = await assertSafeTenantSmtpDestination(originalHost, port);
   return nodemailer.createTransport({
-    host: config.host,
+    // Pin the vetted address so a later DNS lookup cannot rebound to an
+    // internal service. Certificate validation still uses the original host.
+    host: resolvedHost,
     port,
     secure,
     // Force STARTTLS on non-implicit-TLS ports so credentials and message
@@ -131,7 +113,9 @@ export async function createSmtpTransporter(config: SmtpConfig): Promise<Transpo
       // links (password reset, verification, contract signing).
       rejectUnauthorized: true,
       minVersion: "TLSv1.2",
-      ...(config.tlsServername ? { servername: config.tlsServername } : {}),
+      ...((config.tlsServername || isIP(originalHost) === 0)
+        ? { servername: config.tlsServername || originalHost }
+        : {}),
     },
   });
 }
@@ -154,16 +138,7 @@ export async function sendTenantEmail(
     console.log(`[TENANT EMAIL] Live delivery disabled; skipped: ${email.subject}`);
     return false;
   }
-  const originalHost = String(config.host).trim().replace(/^\[|\]$/g, "");
-  const resolvedHost = await assertSafeTenantSmtpDestination(originalHost, Number(config.port));
-  // Pin the already-validated address so a second DNS lookup cannot redirect
-  // the connection to a private service. TLS still verifies the tenant's
-  // configured hostname rather than the numeric address.
-  const transporter = await createSmtpTransporter({
-    ...config,
-    host: resolvedHost,
-    tlsServername: isIP(originalHost) === 0 ? originalHost : undefined,
-  });
+  const transporter = await createSmtpTransporter(config);
   await transporter.sendMail({
     from: {
       name: config.fromName || "Agency",

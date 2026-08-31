@@ -1,8 +1,10 @@
-import { Router, type IRouter, type Request, type Response, type NextFunction, json } from "express";
+import { Router, type IRouter, type Request, type Response, json } from "express";
+import rateLimit from "express-rate-limit";
 import * as XLSX from "xlsx";
 import { z } from "zod";
 import { requireAuth, requireRole, requireAgentStaffPermission, logAudit } from "../lib/auth";
-import { STAFF_ROLES } from "../lib/roles";
+import { AGENT_ROLES, STAFF_ROLES, isAgentRole } from "../lib/roles";
+import { PgRateLimitStore } from "../lib/pgRateLimiter";
 import { validate, getValidated } from "../middlewares/validate";
 import { normalizeGpaEvidenceTo100 } from "../lib/gpaNormalize";
 import { canonicalCountry, cleanCity } from "@workspace/db";
@@ -80,24 +82,24 @@ function applyExtractorNormalize(extractor: { fields: any[] }, extracted: Record
 
 const router: IRouter = Router();
 
-const aiRateLimitMap = new Map<string, { count: number; resetAt: number }>();
-function aiRateLimit(maxRequests: number, windowMs: number) {
-  return (req: Request, res: Response, next: NextFunction) => {
-    const key = `ai:${(req as any).user?.id || req.ip}`;
-    const now = Date.now();
-    const entry = aiRateLimitMap.get(key);
-    if (!entry || now > entry.resetAt) {
-      aiRateLimitMap.set(key, { count: 1, resetAt: now + windowMs });
-      return next();
-    }
-    if (entry.count >= maxRequests) {
-      res.status(429).json({ error: "Too many requests. Please try again later." });
-      return;
-    }
-    entry.count++;
-    next();
-  };
+const AI_RATE_WINDOW_MS = 15 * 60 * 1000;
+function aiRateLimit(maxRequests: number, bucket: string) {
+  return rateLimit({
+    windowMs: AI_RATE_WINDOW_MS,
+    max: maxRequests,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: "Too many requests. Please try again later." },
+    store: new PgRateLimitStore(AI_RATE_WINDOW_MS, bucket),
+    keyGenerator: (req) => String(req.user?.id ?? req.ip),
+  });
 }
+
+const aiPanelAccess = [
+  requireAuth,
+  requireRole(...STAFF_ROLES, ...AGENT_ROLES),
+  requireAgentStaffPermission("documents"),
+] as const;
 
 const DEFAULT_VISION_MODEL = "claude-sonnet-4-6";
 const DEFAULT_CSV_MODEL = "claude-haiku-4-5";
@@ -106,8 +108,8 @@ const DEFAULT_CSV_MODEL = "claude-haiku-4-5";
 
 router.post(
   "/ai/merge-document-parts",
-  requireAuth,
-  aiRateLimit(30, 15 * 60 * 1000),
+  ...aiPanelAccess,
+  aiRateLimit(30, "ai-authenticated-merge"),
   aiJson,
   async (req, res): Promise<void> => {
     try {
@@ -134,14 +136,12 @@ router.post(
   },
 );
 
-router.post("/ai/extract-document", requireAuth, aiRateLimit(10, 15 * 60 * 1000), aiJson, async (req, res): Promise<void> => {
+router.post("/ai/extract-document", ...aiPanelAccess, aiRateLimit(10, "ai-authenticated-extract"), aiJson, async (req, res): Promise<void> => {
   const runStart = Date.now();
   const requestedLang = ((req as any).body?.lang || req.headers["accept-language"] || "en").toString().slice(0, 2);
-  // The authenticated /ai/extract-document endpoint is shared between staff
-  // and agent panels. Clients may pass a `scope` field so admins can wire a
-  // separate extractor (prompt, fields, model) per audience.
-  const requestedScope = ((req as any).body?.scope || "staff").toString();
-  const scope: "staff" | "agent" = requestedScope === "agent" ? "agent" : "staff";
+  // Scope is a server-side authorization decision. Never let a client select
+  // the staff prompt/model (or its cost/accounting lane) by changing JSON.
+  const scope: "staff" | "agent" = isAgentRole(req.user!.role) ? "agent" : "staff";
   const extractor = await getActiveExtractor(scope);
   try {
     const { documents } = req.body as {
@@ -584,7 +584,13 @@ function parseCsvRows(csvData: string): string[][] {
   });
 }
 
-router.post("/ai/extract-bulk-csv", requireAuth, aiRateLimit(20, 15 * 60 * 1000), aiJson, async (req, res): Promise<void> => {
+router.post(
+  "/ai/extract-bulk-csv",
+  requireAuth,
+  requireRole(...STAFF_ROLES, ...AGENT_ROLES),
+  aiRateLimit(20, "ai-authenticated-csv"),
+  aiJson,
+  async (req, res): Promise<void> => {
   try {
     const { csvData, entity } = req.body as { csvData: string; entity?: "student" | "lead" };
     if (!csvData || !csvData.trim()) {
@@ -671,7 +677,8 @@ Headers: ${JSON.stringify(unmappedIdx.map((i) => headers[i]))}`,
     console.error("CSV parse error:", err);
     res.status(500).json({ error: "CSV parsing failed" });
   }
-});
+  },
+);
 
 // ---------------------------------------------------------------------------
 // FAZ 1 — POST /ai/students/:id/extract-education
@@ -699,7 +706,7 @@ router.post(
   requireAuth,
   requireRole(...STAFF_ROLES),
   requireAgentStaffPermission("students"),
-  aiRateLimit(10, 15 * 60 * 1000),
+  aiRateLimit(10, "ai-student-education"),
   validate({ params: extractEducationParamsSchema }),
   async (req, res): Promise<void> => {
     const { id: studentId } = getValidated<{ params: typeof extractEducationParamsSchema }>(req).params;

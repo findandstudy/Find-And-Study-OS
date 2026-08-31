@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { MailCheck, RefreshCw, Loader2, ShieldAlert, CheckCircle2 } from "lucide-react";
+import { performLogout } from "@/lib/logout";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
@@ -83,8 +84,8 @@ export function EmailVerificationGuard({ children }: Props) {
             <Button variant="outline" className="flex-1 rounded-xl" onClick={() => window.location.reload()}>
               I've Verified
             </Button>
-            <Button variant="ghost" className="flex-1 rounded-xl" asChild>
-              <a href="/api/auth/logout">Sign Out</a>
+            <Button variant="ghost" className="flex-1 rounded-xl" onClick={() => void performLogout()}>
+              Sign Out
             </Button>
           </div>
         </div>

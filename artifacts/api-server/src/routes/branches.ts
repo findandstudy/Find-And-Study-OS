@@ -108,7 +108,7 @@ router.post("/branches", requireAuth, requireRole("super_admin"), validate({ bod
       res.status(409).json({ error: "Bu isimde bir şube zaten var." });
       return;
     }
-    res.status(500).json({ error: err?.message || "Failed to create branch" });
+    res.status(500).json({ error: "Failed to create branch" });
   }
 });
 
@@ -135,7 +135,7 @@ router.patch("/branches/:id", requireAuth, requireRole("super_admin"), validate(
       res.status(409).json({ error: "Bu isimde bir şube zaten var." });
       return;
     }
-    res.status(500).json({ error: err?.message || "Failed" });
+    res.status(500).json({ error: "Failed to update branch" });
   }
 });
 

@@ -1055,6 +1055,7 @@ function TransactionModal({
       }
       await customFetch(`${BASE}/api/financial-transactions`, {
         method: "POST",
+        headers: { "Idempotency-Key": crypto.randomUUID() },
         body: JSON.stringify({
           commissionId: commissionId || null,
           type,
@@ -1514,6 +1515,7 @@ function AgentPaymentModal({ open, onClose }: { open: boolean; onClose: () => vo
     try {
       const result: any = await customFetch(`${BASE}/api/finance/agent-payment`, {
         method: "POST",
+        headers: { "Idempotency-Key": crypto.randomUUID() },
         body: JSON.stringify({
           agentId: selAgentId,
           currency: selCurrency,
@@ -1709,6 +1711,7 @@ function UniversityCollectionModal({ open, onClose }: { open: boolean; onClose: 
     try {
       const result: any = await customFetch(`${BASE}/api/finance/university-collection`, {
         method: "POST",
+        headers: { "Idempotency-Key": crypto.randomUUID() },
         body: JSON.stringify({
           universityName: selectedUni,
           currency: selCurrency,

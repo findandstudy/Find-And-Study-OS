@@ -8,6 +8,7 @@ import {
   touchSession,
   SESSION_COOKIE,
   SESSION_TTL,
+  ABSOLUTE_SESSION_TTL,
   type SessionUser,
 } from "../lib/replitAuth";
 import { getSessionCookieOptions } from "../lib/cookieOptions";
@@ -246,14 +247,22 @@ export async function authMiddleware(
   // The helper throttles PostgreSQL writes to once per session per five
   // minutes while user status/role remains checked on every request.
   setImmediate(() => {
-    touchSession(sid).catch(() => {});
+    touchSession(sid, session.sessionCreatedAt).catch(() => {});
   });
 
   // Slide the BROWSER cookie expiry forward to match the server-side session.
   // Without this, the cookie's maxAge is fixed at login time (30 min) and
   // disappears even though the user is actively using the app — leading to
   // unexpected 401 "Authentication required" errors on the next mutation.
-  res.cookie(SESSION_COOKIE, sid, getSessionCookieOptions(req, SESSION_TTL));
+  const remainingAbsoluteMs = Math.max(
+    0,
+    (session.sessionCreatedAt ?? Date.now()) + ABSOLUTE_SESSION_TTL - Date.now(),
+  );
+  res.cookie(
+    SESSION_COOKIE,
+    sid,
+    getSessionCookieOptions(req, Math.min(SESSION_TTL, remainingAbsoluteMs)),
+  );
 
   next();
 }

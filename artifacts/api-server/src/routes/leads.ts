@@ -724,6 +724,10 @@ router.post("/leads/bulk", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROL
     res.status(400).json({ error: "leads array is required" });
     return;
   }
+  if (leads.length > 200) {
+    res.status(413).json({ error: "A maximum of 200 leads can be created per request" });
+    return;
+  }
 
   const currentYear = await getCurrentSeason();
   let resolvedAgentId: number | null = null;

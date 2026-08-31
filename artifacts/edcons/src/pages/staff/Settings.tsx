@@ -26,6 +26,7 @@ import {
   Calendar,
 } from "lucide-react";
 import { DATE_FORMAT_OPTIONS, type DateFormatKey } from "@workspace/i18n";
+import { performLogout } from "@/lib/logout";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import {
   DropdownMenu,
@@ -709,8 +710,8 @@ export default function SettingsPage() {
               <Badge className="bg-green-500/10 text-green-600 border-green-200 text-xs">{t("settingsPage.active")}</Badge>
             </div>
           </div>
-          <Button variant="outline" className="w-full rounded-xl text-destructive hover:bg-destructive/5 hover:border-destructive/30" asChild>
-            <a href="/api/auth/logout">{t("settingsPage.signOut")}</a>
+          <Button variant="outline" className="w-full rounded-xl text-destructive hover:bg-destructive/5 hover:border-destructive/30" onClick={() => void performLogout()}>
+            {t("settingsPage.signOut")}
           </Button>
         </div>
       </Card>

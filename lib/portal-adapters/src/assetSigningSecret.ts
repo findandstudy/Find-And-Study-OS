@@ -7,15 +7,17 @@
 // verifies on another (api-server) even when only a subset of these env vars
 // is configured on a given deploy target.
 //
-// Precedence: ASSET_URL_SIGNING_SECRET (dedicated, preferred) → SESSION_SECRET
-// → EMBED_TOKEN_SECRET (both already required elsewhere, so this never forces
-// a NEW production env var — ASSET_URL_SIGNING_SECRET is an optional upgrade).
+// Production requires a domain-separated ASSET_URL_SIGNING_SECRET. Reusing a
+// session/embed secret would unnecessarily couple independent trust domains.
+// Development/test retain the legacy fallback so local tooling stays usable.
 // Returns "" when none are configured; callers then skip signing entirely
 // (documents/photo become best-effort-omitted, never a hard failure).
 // ---------------------------------------------------------------------------
 export function getAssetSigningSecret(): string {
+  const dedicated = (process.env.ASSET_URL_SIGNING_SECRET || "").trim();
+  if (dedicated) return dedicated;
+  if (process.env.NODE_ENV === "production") return "";
   return (
-    process.env.ASSET_URL_SIGNING_SECRET ||
     process.env.SESSION_SECRET ||
     process.env.EMBED_TOKEN_SECRET ||
     ""

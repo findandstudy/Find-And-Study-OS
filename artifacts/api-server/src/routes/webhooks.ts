@@ -382,7 +382,7 @@ router.post("/webhooks/whatsapp", webhookLimiter, rawJson, async (req: Request, 
           text: m.text,
           externalThreadId: m.externalThreadId,
           receivedAt: m.receivedAt,
-          metadata: { raw: m.raw },
+          metadata: { raw: safeWhatsAppMediaMetadata(m.raw) },
         },
       });
       processed++;
@@ -540,7 +540,7 @@ router.post("/webhooks/meta", webhookLimiter, rawJson, async (req: Request, res:
           // the sender's page-/IG-scoped id.
           externalThreadId: m.externalUserId,
           receivedAt: m.timestamp,
-          metadata: { raw: m.raw, attachments: m.attachments },
+          metadata: { attachments: m.attachments },
         },
       });
       processed++;
@@ -577,6 +577,44 @@ function timingSafeEq(a: string | undefined, b: string | undefined): boolean {
   }
 }
 
+function safeWhatsAppMediaMetadata(raw: unknown): Record<string, unknown> {
+  if (!raw || typeof raw !== "object") return {};
+  const source = raw as Record<string, unknown>;
+  const type = typeof source.type === "string" ? source.type.slice(0, 40) : "";
+  const safe: Record<string, unknown> = type ? { type } : {};
+  if (!["image", "document", "video", "audio"].includes(type)) return safe;
+  const media = source[type];
+  if (!media || typeof media !== "object") return safe;
+  const input = media as Record<string, unknown>;
+  const picked: Record<string, unknown> = {};
+  for (const key of ["id", "mime_type", "filename", "file_name", "caption"]) {
+    if (typeof input[key] === "string") picked[key] = String(input[key]).slice(0, 500);
+  }
+  safe[type] = picked;
+  return safe;
+}
+
+function safeZernioAttachmentMetadata(body: unknown): Record<string, unknown> {
+  if (!body || typeof body !== "object") return {};
+  const message = (body as Record<string, any>).message;
+  if (!message || typeof message !== "object" || !Array.isArray(message.attachments)) return {};
+  return {
+    message: {
+      attachments: message.attachments.slice(0, 20).map((item: unknown) => {
+        if (!item || typeof item !== "object") return {};
+        const att = item as Record<string, any>;
+        const payload = att.payload && typeof att.payload === "object" ? att.payload : {};
+        const pick = (source: Record<string, any>) => Object.fromEntries(
+          ["id", "name", "fileName", "filename", "mimeType", "mime_type"]
+            .filter((key) => typeof source[key] === "string")
+            .map((key) => [key, String(source[key]).slice(0, 500)]),
+        );
+        return { ...pick(att), payload: pick(payload) };
+      }),
+    },
+  };
+}
+
 async function handleWebFormPost(req: Request, res: Response): Promise<void> {
   const [integ] = await db.select().from(integrationsTable).where(eq(integrationsTable.key, "web_form"));
   if (!integ || !integ.isEnabled) {
@@ -593,7 +631,8 @@ async function handleWebFormPost(req: Request, res: Response): Promise<void> {
     return;
   }
 
-  // Mandatory secret enforcement when a secret is configured.
+  // Web-form ingestion is server-to-server. An enabled integration without a
+  // secret is a dangerous misconfiguration, not an invitation to fail open.
   // Authenticators are accepted ONLY via request headers, which a server-to-server
   // caller controls but a public browser embed cannot supply without exposing the
   // secret. Accepts either:
@@ -603,7 +642,12 @@ async function handleWebFormPost(req: Request, res: Response): Promise<void> {
   // or `secret` fields): a body field that ships inside public website HTML is
   // visible to every visitor and provides no real authentication. All comparisons
   // are constant-time.
-  if (cfg.secret) {
+  if (!cfg.secret || typeof cfg.secret !== "string" || cfg.secret.length < 16) {
+    console.error("[WEBHOOK] web_form is enabled without a strong secret");
+    res.status(503).json({ error: "Webhook authentication is not configured" });
+    return;
+  }
+  {
     const sig = req.headers["x-webform-signature"] as string | undefined;
     const raw = (req as RequestWithRawBody).rawBody;
     const tokenHeader = (req.headers["x-webform-token"] as string | undefined) || undefined;
@@ -841,7 +885,7 @@ router.post("/webhooks/zernio", webhookLimiter, rawJson, async (req, res): Promi
           text: m.text ?? "",
           externalThreadId: String(m.conversationId ?? body?.conversation?.id ?? ""),
           receivedAt: m.sentAt ? new Date(m.sentAt) : new Date(),
-          metadata: { raw: body, ...attachments },
+          metadata: { raw: safeZernioAttachmentMetadata(body), ...attachments },
         },
       });
 

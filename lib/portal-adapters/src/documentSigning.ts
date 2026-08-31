@@ -22,8 +22,8 @@ function documentSigningSecret(): string {
   return getAssetSigningSecret();
 }
 
-/** Default validity window for a signed document URL (7 days). */
-const DEFAULT_TTL_SECONDS = 7 * 24 * 60 * 60;
+/** Default validity window for a signed document URL (15 minutes). */
+const DEFAULT_TTL_SECONDS = 15 * 60;
 
 function computeSignature(documentId: number, exp: number, secret: string): string {
   return crypto
@@ -45,6 +45,7 @@ export function buildSignedDocumentPath(
   ttlSeconds: number = DEFAULT_TTL_SECONDS,
 ): string | null {
   if (!Number.isFinite(documentId) || documentId <= 0) return null;
+  if (!Number.isFinite(ttlSeconds) || ttlSeconds <= 0 || ttlSeconds > 60 * 60) return null;
   const secret = documentSigningSecret();
   if (!secret) return null;
   const exp = Math.floor(Date.now() / 1000) + ttlSeconds;
@@ -65,6 +66,7 @@ export function verifyDocumentSignature(
   if (!secret) return false;
   if (!Number.isFinite(documentId) || documentId <= 0) return false;
   if (!Number.isFinite(exp) || exp * 1000 < Date.now()) return false;
+  if (exp > Math.floor(Date.now() / 1000) + 60 * 60) return false;
   if (typeof sig !== "string" || sig.length === 0) return false;
   const expected = computeSignature(documentId, exp, secret);
   try {

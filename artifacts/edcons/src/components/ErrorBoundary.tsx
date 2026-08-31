@@ -1,6 +1,7 @@
 import { Component, type ReactNode } from "react";
 import { GraduationCap, RefreshCw, AlertTriangle, ChevronDown, LogOut } from "lucide-react";
 import { getTranslation, type Language } from "@/lib/i18n/index";
+import { performLogout } from "@/lib/logout";
 
 const SUPPORTED_LANGS = new Set(["en", "tr", "ar", "fr", "ru", "fa", "zh", "hi", "es", "id"]);
 
@@ -197,17 +198,9 @@ export class ErrorBoundary extends Component<Props, State> {
   };
 
   handleLogout = async () => {
-    // Hard logout — call the server, clear all client state, and bounce
-    // to the login page. Survives a broken dashboard so the user can
-    // always escape.
-    try { sessionStorage.clear(); } catch {}
-    try { localStorage.removeItem("edcons_user"); } catch {}
     const base = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
-    try {
-      await fetch(`${base}/api/auth/logout`, { method: "POST", credentials: "include" });
-    } catch {}
     const lang = this.state.lang;
-    window.location.href = `${base}/${lang}/login?_cb=${Date.now()}`;
+    await performLogout(`${base}/${lang}/login?_cb=${Date.now()}`);
   };
 
   toggleDetails = () => this.setState((s) => ({ showDetails: !s.showDetails }));

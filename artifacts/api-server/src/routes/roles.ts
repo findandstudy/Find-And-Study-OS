@@ -10,9 +10,8 @@ import {
 } from "@workspace/db";
 import { eq, sql } from "drizzle-orm";
 import { z } from "zod";
-import { requireAuth, requireRole, logAudit } from "../lib/auth";
+import { requireAuth, requirePermission, logAudit } from "../lib/auth";
 import { validate, getValidated } from "../middlewares/validate";
-import { ADMIN_ROLES } from "../lib/roles";
 
 const createRoleBodySchema = z.object({
   name: z.string().trim().min(1),
@@ -47,16 +46,16 @@ async function seedDefaultRoles() {
 
 seedDefaultRoles().catch((err) => console.error("[roles] Seed error:", err));
 
-router.get("/roles", requireAuth, requireRole(...ADMIN_ROLES), async (_req, res): Promise<void> => {
+router.get("/roles", requireAuth, requirePermission("users.view"), async (_req, res): Promise<void> => {
   const roles = await db.select().from(rolesTable).orderBy(rolesTable.id);
   res.json({ data: roles });
 });
 
-router.get("/roles/permissions-schema", requireAuth, requireRole(...ADMIN_ROLES), async (_req, res): Promise<void> => {
+router.get("/roles/permissions-schema", requireAuth, requirePermission("users.manage_roles"), async (_req, res): Promise<void> => {
   res.json({ data: PERMISSION_CATEGORIES });
 });
 
-router.get("/roles/:id", requireAuth, requireRole(...ADMIN_ROLES), async (req, res): Promise<void> => {
+router.get("/roles/:id", requireAuth, requirePermission("users.view"), async (req, res): Promise<void> => {
   const id = parseInt(String(req.params.id), 10);
   const [role] = await db.select().from(rolesTable).where(eq(rolesTable.id, id));
   if (!role) {
@@ -66,7 +65,7 @@ router.get("/roles/:id", requireAuth, requireRole(...ADMIN_ROLES), async (req, r
   res.json(role);
 });
 
-router.post("/roles", requireAuth, requireRole(...ADMIN_ROLES), validate({ body: createRoleBodySchema }), async (req, res): Promise<void> => {
+router.post("/roles", requireAuth, requirePermission("users.manage_roles"), validate({ body: createRoleBodySchema }), async (req, res): Promise<void> => {
   const { name, displayName, description, color, permissions } = getValidated<{ body: typeof createRoleBodySchema }>(req).body;
 
   const slug = name
@@ -99,7 +98,7 @@ router.post("/roles", requireAuth, requireRole(...ADMIN_ROLES), validate({ body:
   res.status(201).json(role);
 });
 
-router.patch("/roles/:id", requireAuth, requireRole(...ADMIN_ROLES), validate({ body: patchRoleBodySchema }), async (req, res): Promise<void> => {
+router.patch("/roles/:id", requireAuth, requirePermission("users.manage_roles"), validate({ body: patchRoleBodySchema }), async (req, res): Promise<void> => {
   const id = parseInt(String(req.params.id), 10);
   const [existing] = await db.select().from(rolesTable).where(eq(rolesTable.id, id));
   if (!existing) {
@@ -130,7 +129,7 @@ router.patch("/roles/:id", requireAuth, requireRole(...ADMIN_ROLES), validate({ 
   res.json(role);
 });
 
-router.delete("/roles/:id", requireAuth, requireRole(...ADMIN_ROLES), async (req, res): Promise<void> => {
+router.delete("/roles/:id", requireAuth, requirePermission("users.manage_roles"), async (req, res): Promise<void> => {
   const id = parseInt(String(req.params.id), 10);
   const [existing] = await db.select().from(rolesTable).where(eq(rolesTable.id, id));
   if (!existing) {

@@ -550,6 +550,10 @@ const embedTokenLimiter = rateLimit({
 function setEmbedCors(res: any, widget: any, origin: string | undefined): void {
   const domains = widget.allowedDomains as string[];
   res.setHeader("Vary", "Origin");
+  // The app-level public CORS middleware may already have reflected Origin.
+  // Clear it before applying the widget-specific allow-list so a mismatch
+  // cannot inherit a permissive header from an earlier middleware.
+  res.removeHeader("Access-Control-Allow-Origin");
   if (!domains || domains.length === 0) {
     res.setHeader("Access-Control-Allow-Origin", "*");
     return;
@@ -1580,7 +1584,12 @@ router.get("/public/embed/:slug/programs", async (req, res): Promise<void> => {
     .limit(limitNum)
     .offset(offset);
 
-  res.json({ data: rows, meta: { total: Number(count), page: pageNum, limit: limitNum, totalPages: Math.ceil(Number(count) / limitNum) } });
+  const safeRows = rows.map((row) => ({
+    ...row,
+    universityLogoUrl: sanitizePublicUrl(row.universityLogoUrl),
+    universityWebsite: sanitizePublicUrl(row.universityWebsite),
+  }));
+  res.json({ data: safeRows, meta: { total: Number(count), page: pageNum, limit: limitNum, totalPages: Math.ceil(Number(count) / limitNum) } });
 });
 
 /**
@@ -1694,7 +1703,7 @@ router.get("/public/embed/:slug/filters", async (req, res): Promise<void> => {
     });
   } catch (err: any) {
     console.error("[embed/filters] failed:", err?.message || err);
-    res.status(500).json({ error: err?.message || "Failed to load filters" });
+    res.status(500).json({ error: "Failed to load filters" });
   }
 });
 
@@ -5056,7 +5065,7 @@ function renderFilters(){
   var hidden=config.hiddenFilters||[];
   var h='<div class="ew-filters">';
 
-  h+='<div class="ew-filter-group" style="min-width:200px"><label>Search</label><input type="text" id="ew-search" placeholder="Search programs..." value="'+(userFilters.search||'')+'"></div>';
+  h+='<div class="ew-filter-group" style="min-width:200px"><label>Search</label><input type="text" id="ew-search" placeholder="Search programs..." value="'+esc(userFilters.search||'')+'"></div>';
 
   if(!hidden.includes('country')&&!pf.country){
     h+='<div class="ew-filter-group"><label>Country</label><select id="ew-f-country"'+(locked.includes('country')?' disabled':'')+'><option value="">All Countries</option>';
@@ -5307,7 +5316,7 @@ function renderFormContent(prog){
     }
     h+='<div class="ew-form-actions" style="margin-top:14px">';
     var nextLabel=(MODE==='lead_form')?(formLoading?LC.submitting:LC.submit):'Next \\u2192';
-    h+='<button type="button" class="ew-btn" id="ew-next-personal"'+(formLoading?' disabled':'')+' style="background:linear-gradient(135deg,${primaryColor},${secondaryColor})">'+nextLabel+'</button>';
+    h+='<button type="button" class="ew-btn" id="ew-next-personal"'+(formLoading?' disabled':'')+' style="background:linear-gradient(135deg,${primaryColor},${secondaryColor})">'+esc(nextLabel)+'</button>';
     if(formOpen)h+='<button type="button" class="ew-btn ew-btn-outline" id="ew-cancel">'+esc(MODE==='lead_form'?LC.cancel:'Cancel')+'</button>';
     h+='</div></form>';
   } else if(formStep==='documents'){

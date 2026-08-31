@@ -52,6 +52,8 @@ const AGENCY_DOCUMENT_MAX_BYTES = 10 * 1024 * 1024;
 const AGENCY_DOCUMENT_MIMES = new Set(["application/pdf", "image/jpeg", "image/png"]);
 const AGENCY_DOCUMENT_EXTENSIONS = new Set(["pdf", "jpg", "jpeg", "png"]);
 const AGENCY_DOCUMENT_KINDS = ["logo", "representative_id", "business_registration"] as const;
+const APPLICATION_ACCESS_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const applicationTokenExpiry = (from = Date.now()) => new Date(from + APPLICATION_ACCESS_TOKEN_TTL_MS);
 const publicLimiter = rateLimit({
   windowMs: PUBLIC_WINDOW_MS,
   max: 20,
@@ -540,7 +542,11 @@ router.post("/public/agent-applications", publicLimiter, async (req, res): Promi
         const rawAccessToken = crypto.randomBytes(32).toString("base64url");
         const accessTokenHash = hashToken(rawAccessToken);
         let repeatedApplication = existing;
-        const [rotated] = await db.update(agentApplicationsTable).set({ accessTokenHash, updatedAt: new Date() })
+        const [rotated] = await db.update(agentApplicationsTable).set({
+          accessTokenHash,
+          accessTokenExpiresAt: applicationTokenExpiry(),
+          updatedAt: new Date(),
+        })
           .where(eq(agentApplicationsTable.id, existing.id)).returning();
         repeatedApplication = rotated || existing;
         res.status(200).json({ data: {
@@ -579,6 +585,7 @@ router.post("/public/agent-applications", publicLimiter, async (req, res): Promi
       const [application] = await tx.insert(agentApplicationsTable).values({
         referenceCode: agentApplicationReference(),
         accessTokenHash,
+        accessTokenExpiresAt: applicationTokenExpiry(now.getTime()),
         idempotencyKeyHash,
         status: "submitted",
         firstName: body.firstName.trim(),
@@ -665,7 +672,9 @@ router.post("/public/agent-applications", publicLimiter, async (req, res): Promi
     });
     const application = created.application;
     const language = fields.preferredLanguage || "en";
-    const portalPath = `/${language}/agency/apply?application=${encodeURIComponent(rawAccessToken)}`;
+    // Fragment tokens never reach access logs, reverse proxies, referrers or
+    // analytics. The SPA exchanges the fragment for the public API calls.
+    const portalPath = `/${language}/agency/apply#application=${encodeURIComponent(rawAccessToken)}`;
     const passwordSetupPath = `/${language}/login?token=${encodeURIComponent(passwordSetup.rawToken)}`;
     let invitationDispatched = false;
     if (isLiveIntegrationsEnabled()) {
@@ -709,7 +718,10 @@ router.post("/public/agent-applications", publicLimiter, async (req, res): Promi
 router.get("/public/agent-applications/:token", publicLimiter, async (req, res): Promise<void> => {
   const tokenHash = hashToken(String(req.params.token || ""));
   const [application] = await db.select().from(agentApplicationsTable)
-    .where(eq(agentApplicationsTable.accessTokenHash, tokenHash));
+    .where(and(
+      eq(agentApplicationsTable.accessTokenHash, tokenHash),
+      gt(agentApplicationsTable.accessTokenExpiresAt, new Date()),
+    ));
   if (!application) { res.status(404).json({ error: "Application not found" }); return; }
   await reconcileAgentApplicationSignature(application.id);
   const [fresh] = await db.select().from(agentApplicationsTable).where(eq(agentApplicationsTable.id, application.id));
@@ -720,7 +732,10 @@ router.post("/public/agent-applications/:token/sign", publicLimiter, async (req,
   try {
     const tokenHash = hashToken(String(req.params.token || ""));
     const [application] = await db.select().from(agentApplicationsTable)
-      .where(eq(agentApplicationsTable.accessTokenHash, tokenHash));
+      .where(and(
+        eq(agentApplicationsTable.accessTokenHash, tokenHash),
+        gt(agentApplicationsTable.accessTokenExpiresAt, new Date()),
+      ));
     if (!application) { res.status(404).json({ error: "Application not found" }); return; }
     if (application.status !== "awaiting_signature" || !application.contractSentAt) {
       res.status(409).json({ error: "The contract is not ready for signing" });
@@ -765,7 +780,10 @@ router.patch("/public/agent-applications/:token", publicLimiter, async (req, res
     if (!parsed.success) { res.status(400).json({ error: "Application details are invalid", details: parsed.error.flatten() }); return; }
     const tokenHash = hashToken(String(req.params.token || ""));
     const [application] = await db.select().from(agentApplicationsTable)
-      .where(eq(agentApplicationsTable.accessTokenHash, tokenHash));
+      .where(and(
+        eq(agentApplicationsTable.accessTokenHash, tokenHash),
+        gt(agentApplicationsTable.accessTokenExpiresAt, new Date()),
+      ));
     if (!application) { res.status(404).json({ error: "Application not found" }); return; }
     if (application.status !== "changes_requested") {
       res.status(409).json({ error: "Only an application returned for changes can be edited" });
@@ -838,6 +856,7 @@ router.patch("/public/agent-applications/:token", publicLimiter, async (req, res
         changeRequestMessage: null,
         consentedAt: revisedAt,
         consentIpHash: hashSensitiveEvidence(getClientIp(req) || "unknown", "consent-ip"),
+        accessTokenExpiresAt: applicationTokenExpiry(revisedAt.getTime()),
         updatedAt: revisedAt,
       }).where(and(eq(agentApplicationsTable.id, application.id), eq(agentApplicationsTable.status, "changes_requested"))).returning();
       if (!updated) return null;
@@ -897,7 +916,7 @@ router.patch("/public/agent-applications/:token", publicLimiter, async (req, res
           firstName: revision.firstName,
           referenceCode: revision.referenceCode,
           passwordSetupUrl: `${getAppBaseUrl()}${passwordSetupPath}`,
-          trackingUrl: `${getAppBaseUrl()}/${fields.preferredLanguage || "en"}/agency/apply?application=${encodeURIComponent(String(req.params.token))}`,
+          trackingUrl: `${getAppBaseUrl()}/${fields.preferredLanguage || "en"}/agency/apply#application=${encodeURIComponent(String(req.params.token))}`,
         });
         invitationDispatched = await sendEmail(email, content);
       } catch (error) {
@@ -1171,6 +1190,7 @@ router.post("/agent-applications/:id/send-contract", requireAuth, requireRole(..
     const rows = await tx.update(agentApplicationsTable).set({
       status: "awaiting_signature",
       accessTokenHash: hashToken(rawAccessToken),
+      accessTokenExpiresAt: applicationTokenExpiry(now.getTime()),
       portalAccessStatus: "contract_pending",
       contractPreparedAt: now,
       contractSentAt: now,
@@ -1193,7 +1213,7 @@ router.post("/agent-applications/:id/send-contract", requireAuth, requireRole(..
     }
     return rows;
   });
-  const portalPath = `/${application.preferredLanguage || "en"}/agency/apply?application=${encodeURIComponent(rawAccessToken)}`;
+  const portalPath = `/${application.preferredLanguage || "en"}/agency/apply#application=${encodeURIComponent(rawAccessToken)}`;
   let dispatched = false;
   if (isLiveIntegrationsEnabled()) {
     dispatched = await sendEmail(application.email, {

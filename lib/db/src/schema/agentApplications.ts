@@ -10,6 +10,7 @@ import {
   uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
+import { sql } from "drizzle-orm";
 import { z } from "zod/v4";
 import { usersTable } from "./users";
 import { agentsTable } from "./agents";
@@ -25,6 +26,9 @@ export const agentApplicationsTable = pgTable("agent_applications", {
   id: serial("id").primaryKey(),
   referenceCode: text("reference_code").notNull(),
   accessTokenHash: text("access_token_hash").notNull(),
+  accessTokenExpiresAt: timestamp("access_token_expires_at", { withTimezone: true })
+    .notNull()
+    .default(sql`now() + interval '7 days'`),
   idempotencyKeyHash: text("idempotency_key_hash"),
   status: text("status").notNull().default("submitted"),
 
@@ -101,6 +105,7 @@ export const agentApplicationsTable = pgTable("agent_applications", {
   uniqueIndex("agent_applications_provisional_user_unique").on(table.provisionalUserId),
   uniqueIndex("agent_applications_provisional_agent_unique").on(table.provisionalAgentId),
   index("agent_applications_status_created_idx").on(table.status, table.createdAt),
+  index("agent_applications_access_token_expiry_idx").on(table.accessTokenExpiresAt),
   index("agent_applications_email_idx").on(table.email),
   index("agent_applications_template_idx").on(table.contractTemplateId),
   index("agent_applications_assigned_staff_idx").on(table.assignedStaffId),

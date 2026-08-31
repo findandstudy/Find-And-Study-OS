@@ -6,7 +6,7 @@ import { useSeo } from "@/hooks/use-seo";
 import { useSeason } from "@/contexts/SeasonContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { clearAuthCache } from "@/lib/auth-cache";
+import { performLogout } from "@/lib/logout";
 import { customFetch } from "@workspace/api-client-react";
 import { FINANCE_ROLES } from "@workspace/roles";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -863,9 +863,8 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
                   <DropdownMenuItem
                     className="text-destructive focus:text-destructive cursor-pointer"
                     onSelect={() => {
-                      clearAuthCache();
                       queryClient.clear();
-                      window.location.href = "/api/auth/logout";
+                      void performLogout();
                     }}
                   >
                     <LogOut className="w-4 h-4 mr-2" />

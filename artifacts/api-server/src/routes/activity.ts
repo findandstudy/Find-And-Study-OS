@@ -40,6 +40,40 @@ function resolveLocale(l?: string): string {
   return (l && LOCALE_MAP[l]) || "en-GB";
 }
 
+let cachedChromiumPath: string | undefined;
+let chromiumPathResolved = false;
+function resolveChromium(): string | undefined {
+  if (chromiumPathResolved) return cachedChromiumPath;
+  chromiumPathResolved = true;
+  const fromEnv = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH;
+  if (fromEnv) {
+    cachedChromiumPath = fromEnv;
+    return cachedChromiumPath;
+  }
+  try {
+    const nixDir = "/nix/store";
+    if (fs.existsSync(nixDir)) {
+      for (const entry of fs.readdirSync(nixDir)) {
+        if (!entry.includes("chromium")) continue;
+        const candidate = `${nixDir}/${entry}/bin/chromium`;
+        if (fs.existsSync(candidate)) {
+          cachedChromiumPath = candidate;
+          return cachedChromiumPath;
+        }
+      }
+    }
+  } catch {
+    // Fall through to PATH resolution.
+  }
+  try {
+    const found = execSync("which chromium", { stdio: ["ignore", "pipe", "ignore"] }).toString().trim();
+    if (found) cachedChromiumPath = found;
+  } catch {
+    // Playwright will apply its own executable lookup.
+  }
+  return cachedChromiumPath;
+}
+
 function capSessionWallClock<T extends {
   startedAt: Date | string | null;
   endedAt: Date | string | null;
@@ -691,28 +725,6 @@ ${sessions.length > 0 ? `
   });
   const footerTemplate = buildBrandedFooterTemplate(brandSettings, locale);
 
-  function resolveChromium(): string | undefined {
-    const fromEnv = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH;
-    if (fromEnv) return fromEnv;
-    // Nix store chromium (Replit / NixOS environment)
-    try {
-      const nixDir = "/nix/store";
-      if (fs.existsSync(nixDir)) {
-        const entries = fs.readdirSync(nixDir);
-        for (const entry of entries) {
-          if (!entry.includes("chromium")) continue;
-          const candidate = `${nixDir}/${entry}/bin/chromium`;
-          if (fs.existsSync(candidate)) return candidate;
-        }
-      }
-    } catch { /* fall through */ }
-    try {
-      const found = execSync("which chromium 2>/dev/null", { stdio: ["ignore", "pipe", "ignore"] }).toString().trim();
-      if (found) return found;
-    } catch { /* fall through */ }
-    return undefined;
-  }
-
   const LAUNCH_ARGS = [
     "--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage",
     "--disable-accelerated-2d-canvas", "--no-first-run", "--no-zygote",
@@ -727,6 +739,13 @@ ${sessions.length > 0 ? `
       try {
         const page = await browser.newPage();
         page.setDefaultTimeout(30000);
+        await page.route("**/*", (route: any) => {
+          const url = route.request().url();
+          if (url.startsWith("data:") || url.startsWith("blob:") || url.startsWith("about:")) {
+            return route.continue();
+          }
+          return route.abort();
+        });
         await page.setContent(html, { waitUntil: "domcontentloaded" });
         return await page.pdf({
           format: "A4",
@@ -748,7 +767,7 @@ ${sessions.length > 0 ? `
   } catch (err: any) {
     console.error("[ActivityPDF] Failed to generate PDF:", err?.message || err);
     if (!res.headersSent) {
-      res.status(500).json({ error: "Failed to generate PDF", detail: String(err?.message || err) });
+      res.status(500).json({ error: "Failed to generate PDF" });
     }
   }
 });

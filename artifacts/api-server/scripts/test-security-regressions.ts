@@ -3,6 +3,10 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { isCredentialedCorsOriginAllowed } from "../src/lib/requestOrigin";
 import { getDatabaseName, isSafeE2eDatabaseUrl } from "./e2e-database-safety";
+import { canAssignUserRole, canManageTargetAccount } from "../src/lib/userAccountSecurity";
+import { isBlockedOutboundIp, parseSafeOutboundUrl } from "../src/lib/safeOutboundRequest";
+import { sanitizeContractTemplateHtml } from "../src/lib/contractHtmlSanitizer";
+import { renderTemplate } from "../src/lib/contractRenderer";
 
 const appSource = readFileSync(
   new URL("../src/app.ts", import.meta.url),
@@ -46,6 +50,86 @@ const emailVerificationSource = readFileSync(
 );
 const mainAgencySignatureSource = readFileSync(
   new URL("../src/lib/mainAgencySignature.ts", import.meta.url),
+  "utf8",
+);
+const usersRouteSource = readFileSync(
+  new URL("../src/routes/users.ts", import.meta.url),
+  "utf8",
+);
+const rolesRouteSource = readFileSync(
+  new URL("../src/routes/roles.ts", import.meta.url),
+  "utf8",
+);
+const universitiesRouteSource = readFileSync(
+  new URL("../src/routes/universities.ts", import.meta.url),
+  "utf8",
+);
+const embedRouteSource = readFileSync(
+  new URL("../src/routes/embed.ts", import.meta.url),
+  "utf8",
+);
+const authSource = readFileSync(
+  new URL("../src/lib/auth.ts", import.meta.url),
+  "utf8",
+);
+const safeOutboundSource = readFileSync(
+  new URL("../src/lib/safeOutboundRequest.ts", import.meta.url),
+  "utf8",
+);
+const financeRouteSource = readFileSync(
+  new URL("../src/routes/finance.ts", import.meta.url),
+  "utf8",
+);
+const financeUiSource = readFileSync(
+  new URL("../../edcons/src/pages/staff/Finance.tsx", import.meta.url),
+  "utf8",
+);
+const financeMigrationSource = readFileSync(
+  new URL("../../../lib/db/drizzle/0063_finance_mutation_integrity.sql", import.meta.url),
+  "utf8",
+);
+const uploadProcessingSource = readFileSync(
+  new URL("../src/lib/uploads/processUpload.ts", import.meta.url),
+  "utf8",
+);
+const authRouteSource = readFileSync(
+  new URL("../src/routes/auth.ts", import.meta.url),
+  "utf8",
+);
+const logoutClientSource = readFileSync(
+  new URL("../../edcons/src/lib/logout.ts", import.meta.url),
+  "utf8",
+);
+const contractPdfSource = readFileSync(
+  new URL("../src/lib/contractPdf.ts", import.meta.url),
+  "utf8",
+);
+const settingsRouteSource = readFileSync(
+  new URL("../src/routes/settings.ts", import.meta.url),
+  "utf8",
+);
+const aiExtractRouteSource = readFileSync(
+  new URL("../src/routes/ai-extract.ts", import.meta.url),
+  "utf8",
+);
+const sessionSource = readFileSync(
+  new URL("../src/lib/replitAuth.ts", import.meta.url),
+  "utf8",
+);
+const assetSigningSource = readFileSync(
+  new URL("../../../lib/portal-adapters/src/assetSigningSecret.ts", import.meta.url),
+  "utf8",
+);
+const webhooksSource = readFileSync(
+  new URL("../src/routes/webhooks.ts", import.meta.url),
+  "utf8",
+);
+const agentApplicationsSource = readFileSync(
+  new URL("../src/routes/agentApplications.ts", import.meta.url),
+  "utf8",
+);
+const activityRouteSource = readFileSync(
+  new URL("../src/routes/activity.ts", import.meta.url),
   "utf8",
 );
 
@@ -156,6 +240,88 @@ test("credentialed CORS is fail-closed in production", () => {
   );
 });
 
+test("privileged users can manage and grant only lower account tiers", () => {
+  assert.equal(canManageTargetAccount("manager", "staff"), true);
+  assert.equal(canManageTargetAccount("manager", "manager"), false);
+  assert.equal(canManageTargetAccount("manager", "admin"), false);
+  assert.equal(canManageTargetAccount("admin", "manager"), true);
+  assert.equal(canManageTargetAccount("admin", "admin"), false);
+  assert.equal(canManageTargetAccount("admin", "super_admin"), false);
+  assert.equal(canManageTargetAccount("super_admin", "super_admin"), true);
+  assert.equal(canAssignUserRole("manager", "staff"), true);
+  assert.equal(canAssignUserRole("manager", "admin"), false);
+  assert.equal(canAssignUserRole("manager", "custom_privileged_role"), false);
+  assert.equal(canAssignUserRole("admin", "manager"), true);
+  assert.equal(canAssignUserRole("admin", "admin"), false);
+  assert.equal(canAssignUserRole("super_admin", "super_admin"), true);
+});
+
+test("user and role routes enforce permission and hierarchy boundaries", () => {
+  assert.match(usersRouteSource, /requirePermission\("users\.create"\)/);
+  assert.match(usersRouteSource, /canAssignUserRole\(req\.user!\.role, role\)/);
+  assert.match(usersRouteSource, /You cannot change your own role/);
+  assert.match(usersRouteSource, /canManageTargetAccount\(req\.user!\.role, existing\.role\)/);
+  assert.match(usersRouteSource, /canManageTargetAccount\(req\.user!\.role, user\.role\)/);
+  assert.match(usersRouteSource, /canManageTargetAccount\(req\.user!\.role, targetUser\.role\)/);
+  assert.match(rolesRouteSource, /requirePermission\("users\.manage_roles"\)/);
+  assert.doesNotMatch(rolesRouteSource, /requireRole\(\.\.\.ADMIN_ROLES\)/);
+  assert.match(authSource, /getEffectivePermissionSet\(req\.user\)/);
+  assert.doesNotMatch(authSource, /\.\.\.fromDb, \.\.\.fromDefault/);
+});
+
+test("outbound URL policy blocks local, metadata and alternate IP notations", () => {
+  for (const address of [
+    "0.0.0.0",
+    "10.0.0.1",
+    "127.0.0.1",
+    "169.254.169.254",
+    "172.16.0.1",
+    "192.168.1.1",
+    "::1",
+    "fc00::1",
+    "fe80::1",
+  ]) assert.equal(isBlockedOutboundIp(address), true, address);
+  assert.throws(() => parseSafeOutboundUrl("https://169.254.169.254/latest/meta-data"));
+  assert.throws(() => parseSafeOutboundUrl("https://[::1]/"));
+  assert.throws(() => parseSafeOutboundUrl("https://2130706433/"));
+  assert.throws(() => parseSafeOutboundUrl("https://0x7f000001/"));
+  assert.throws(() => parseSafeOutboundUrl("https://example.com:8443", { allowedPorts: [443] }));
+  assert.equal(parseSafeOutboundUrl("https://example.com/path", { allowedPorts: [443] }).hostname, "example.com");
+  assert.throws(() => parseSafeOutboundUrl("https://other.example/path", { allowedHostnames: ["example.com"] }));
+  assert.match(safeOutboundSource, /hostname: resolved\.address/);
+  assert.match(safeOutboundSource, /servername: isIP\(hostname\)/);
+  assert.match(safeOutboundSource, /new URL\(nextUrl\)\.origin !== url\.origin/);
+});
+
+test("contract HTML and rendered placeholders cannot persist executable markup", () => {
+  const clean = sanitizeContractTemplateHtml(`
+    <style>@import url(https://evil.example/a.css); .x{background:url(https://evil.example/a)}</style>
+    <script>alert(1)</script><svg onload="alert(2)"></svg>
+    <a href="javascript:alert(3)" onclick="alert(4)">link</a>
+    <img src="https://cdn.example/logo.png" onerror="alert(5)">
+    <table><tr><td>{{intake.name}}</td></tr></table>
+  `);
+  assert.doesNotMatch(clean, /<script|<svg|onload=|onclick=|onerror=|javascript:|@import|url\s*\(/i);
+  assert.match(clean, /<table>/);
+  assert.match(clean, /\{\{intake\.name\}\}/);
+
+  const rendered = renderTemplate("<p>{{{intake.name}}}</p><a href=\"{{intake.url}}\">x</a>", {
+    intake: { name: "<img src=x onerror=alert(1)>", url: "javascript:alert(2)" },
+  });
+  assert.match(rendered, /&lt;img src=x onerror=alert\(1\)&gt;/);
+  assert.doesNotMatch(rendered, /javascript:|href=/i);
+});
+
+test("legacy public program routes strip commercial fields for anonymous callers", () => {
+  assert.match(universitiesRouteSource, /const visibleRows: any\[\] = req\.user/);
+  assert.match(universitiesRouteSource, /sanitizeCourseFinderProgram\(row/);
+  assert.match(universitiesRouteSource, /const visibleProgram = req\.user/);
+});
+
+test("widget-specific CORS clears permissive headers before applying its allow-list", () => {
+  assert.match(embedRouteSource, /res\.removeHeader\("Access-Control-Allow-Origin"\)/);
+});
+
 test("generated form previews execute in sandboxed iframes", () => {
   for (const source of [staffSettingsSource, agentAccountSource]) {
     assert.doesNotMatch(source, /dangerouslySetInnerHTML=\{\{\s*__html:\s*formCode/);
@@ -211,6 +377,43 @@ test("local uploads are owner-bound, fail closed, and bounded before buffering",
   assert.match(objectAuthzSource, /failed to record object owner:[\s\S]*return false/);
 });
 
+test("legacy public-object URLs require a session and object-level authorization", () => {
+  assert.match(
+    storageRouteSource,
+    /router\.get\("\/storage\/public-objects\/\*filePath", requireAuth/,
+  );
+  assert.match(storageRouteSource, /canonicalizeKey\(filePath\)/);
+  assert.match(storageRouteSource, /canAccessGenericObject\([\s\S]*objectKey/);
+  assert.doesNotMatch(
+    storageRouteSource,
+    /storage\/public-objects\/\*filePath[\s\S]{0,1000}searchPublicObject\(filePath\)/,
+  );
+  assert.match(storageRouteSource, /storage\/public-branding\/\*filePath/);
+});
+
+test("finance ledger mutations are serialized, positive, and idempotent", () => {
+  assert.match(financeRouteSource, /prepareFinanceMutation/);
+  assert.match(financeRouteSource, /persistFinanceMutation/);
+  assert.match(financeRouteSource, /pg_advisory_xact_lock/);
+  assert.match(financeRouteSource, /finance:university:/);
+  assert.match(financeRouteSource, /finance:agent:/);
+  assert.match(financeRouteSource, /finance:commission:/);
+  assert.match(financeRouteSource, /db\.transaction\(async/);
+  assert.match(financeUiSource, /"Idempotency-Key": crypto\.randomUUID\(\)/);
+  assert.match(financeMigrationSource, /CHECK \("amount" > 0\) NOT VALID/);
+  assert.match(financeMigrationSource, /finance_mutation_requests_key_uidx/);
+});
+
+test("untrusted PDF processing is sandboxed and resource-bounded", () => {
+  assert.match(uploadProcessingSource, /GHOSTSCRIPT_MAX_CONCURRENCY/);
+  assert.match(uploadProcessingSource, /GHOSTSCRIPT_MAX_QUEUE/);
+  assert.match(uploadProcessingSource, /withGhostscriptSlot/);
+  assert.match(uploadProcessingSource, /"-dSAFER"/);
+  assert.match(uploadProcessingSource, /timeout: GHOSTSCRIPT_TIMEOUT_MS/);
+  assert.match(uploadProcessingSource, /maxBuffer: GHOSTSCRIPT_MAX_BUFFER_BYTES/);
+  assert.match(uploadProcessingSource, /killSignal: "SIGKILL"/);
+});
+
 test("email verification links are random, hashed, expiring, and one-time", () => {
   assert.match(emailVerificationSource, /randomBytes\(32\)\.toString\("base64url"\)/);
   assert.match(emailVerificationSource, /createHash\("sha256"\)/);
@@ -226,4 +429,47 @@ test("the reusable main-agency signature is external to source and release artif
   assert.match(mainAgencySignatureSource, /must be an absolute path/);
   assert.match(mainAgencySignatureSource, /must be outside the runtime release directory/);
   assert.match(mainAgencySignatureSource, /valid PNG or JPEG/);
+});
+
+test("logout is a CSRF-protected POST and no longer mutates state through GET", () => {
+  assert.match(authRouteSource, /router\.post\("\/auth\/logout", handleLogout\)/);
+  assert.doesNotMatch(authRouteSource, /router\.get\("\/auth\/logout"/);
+  assert.match(authRouteSource, /res\.status\(204\)\.end\(\)/);
+  assert.match(logoutClientSource, /customFetch\("\/api\/auth\/logout", \{ method: "POST" \}\)/);
+  assert.match(logoutClientSource, /clearAuthCache\(\)/);
+});
+
+test("contract PDF rendering is network-isolated and does not log signer PII", () => {
+  assert.match(contractPdfSource, /Contract rendering is intentionally network-isolated/);
+  assert.match(contractPdfSource, /return route\.abort\(\)/);
+  assert.doesNotMatch(contractPdfSource, /route\.continue\(\);\s*\n\s*\}\);/);
+  assert.doesNotMatch(contractPdfSource, /render start signer=/);
+});
+
+test("activity PDF rendering blocks network access and returns generic errors", () => {
+  assert.match(activityRouteSource, /await page\.route\("\*\*\/\*"/);
+  assert.match(activityRouteSource, /return route\.abort\(\)/);
+  assert.match(activityRouteSource, /res\.status\(500\)\.json\(\{ error: "Failed to generate PDF" \}\)/);
+  assert.doesNotMatch(activityRouteSource, /Failed to generate PDF", detail:/);
+  assert.match(activityRouteSource, /chromiumPathResolved/);
+});
+
+test("public embed output sanitizes URLs and escapes visitor-controlled attributes", () => {
+  assert.match(embedRouteSource, /universityLogoUrl: sanitizePublicUrl\(row\.universityLogoUrl\)/);
+  assert.match(embedRouteSource, /universityWebsite: sanitizePublicUrl\(row\.universityWebsite\)/);
+  assert.match(embedRouteSource, /value="'\+esc\(userFilters\.search\|\|''\)\+'"/);
+  assert.match(embedRouteSource, /'\+esc\(nextLabel\)\+'<\/button>'/);
+});
+
+test("sensitive settings, AI work, sessions, assets and webhooks fail closed", () => {
+  assert.match(settingsRouteSource, /router\.get\("\/settings\/client", requireAuth/);
+  assert.match(settingsRouteSource, /router\.get\("\/settings", requireAuth, requireRole\(\.\.\.MANAGER_ROLES\)/);
+  assert.match(aiExtractRouteSource, /requireRole\(\.\.\.STAFF_ROLES, \.\.\.AGENT_ROLES\)/);
+  assert.match(aiExtractRouteSource, /new PgRateLimitStore\(AI_RATE_WINDOW_MS, bucket\)/);
+  assert.match(sessionSource, /ABSOLUTE_SESSION_TTL/);
+  assert.match(sessionSource, /sessionCreatedAt/);
+  assert.match(assetSigningSource, /NODE_ENV === "production"\) return ""/);
+  assert.match(webhooksSource, /cfg\.secret\.length < 16/);
+  assert.match(webhooksSource, /status\(503\)\.json\(\{ error: "Webhook authentication is not configured" \}\)/);
+  assert.match(agentApplicationsSource, /gt\(agentApplicationsTable\.accessTokenExpiresAt, new Date\(\)\)/);
 });

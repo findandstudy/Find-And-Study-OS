@@ -569,7 +569,7 @@ export default function CourseFinder() {
         proposalPdfImport,
         queryClient.fetchQuery<PdfSettings>({
           queryKey: ["settings-for-pdf"],
-          queryFn: () => apiFetch(`${BASE_URL}/api/settings`),
+          queryFn: () => apiFetch(`${BASE_URL}/api/settings/client`),
           staleTime: 10 * 60_000,
           gcTime: 30 * 60_000,
         }),

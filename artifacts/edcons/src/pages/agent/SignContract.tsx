@@ -9,6 +9,7 @@ import { PhoneInput } from "@/components/ui/phone-input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { useI18n } from "@/hooks/use-i18n";
 import { Loader2, FileSignature, Eraser, AlertCircle, LogOut, Upload, X, Lock } from "lucide-react";
+import { performLogout } from "@/lib/logout";
 
 const BASE_URL = (import.meta.env.BASE_URL || "/").replace(/\/$/, "");
 const CURRENT_YEAR = String(new Date().getFullYear());
@@ -215,7 +216,7 @@ export default function SignContract({ onSigned, asModal = false, sessionId, onC
         {dismissible ? (
           <Button variant="outline" onClick={onClose}>{t("common.close") || "Close"}</Button>
         ) : (
-          <Button variant="outline" asChild><a href="/api/auth/logout"><LogOut className="w-4 h-4 mr-2" /> {t("common.signOut") || "Sign out"}</a></Button>
+          <Button variant="outline" onClick={() => void performLogout()}><LogOut className="w-4 h-4 mr-2" /> {t("common.signOut") || "Sign out"}</Button>
         )}
       </div>
     </div>
@@ -224,7 +225,7 @@ export default function SignContract({ onSigned, asModal = false, sessionId, onC
   const exitButton = dismissible ? (
     <Button variant="ghost" onClick={onClose}>{t("common.later") || "Later"}</Button>
   ) : (
-    <Button variant="ghost" asChild><a href="/api/auth/logout"><LogOut className="w-4 h-4 mr-2" /> {t("common.signOut") || "Sign out"}</a></Button>
+    <Button variant="ghost" onClick={() => void performLogout()}><LogOut className="w-4 h-4 mr-2" /> {t("common.signOut") || "Sign out"}</Button>
   );
 
   const innerContent = data ? (

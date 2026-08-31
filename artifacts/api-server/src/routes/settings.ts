@@ -91,7 +91,38 @@ router.get("/settings/branding", async (req, res): Promise<void> => {
   res.json(settings || {});
 });
 
-router.get("/settings", requireAuth, async (req, res): Promise<void> => {
+/**
+ * Non-sensitive settings needed by authenticated application surfaces. Keep
+ * this projection deliberately small: the full settings row contains internal
+ * integration endpoints and identifiers that ordinary staff/agents must not
+ * be able to enumerate.
+ */
+router.get("/settings/client", requireAuth, async (_req, res): Promise<void> => {
+  const [settings] = await db.select({
+    dateFormat: settingsTable.dateFormat,
+    companyName: settingsTable.companyName,
+    publicBrandName: settingsTable.publicBrandName,
+    companyEmail: settingsTable.companyEmail,
+    supportEmail: settingsTable.supportEmail,
+    salesEmail: settingsTable.salesEmail,
+    companyPhone: settingsTable.companyPhone,
+    whatsappNumber: settingsTable.whatsappNumber,
+    companyWebsite: settingsTable.companyWebsite,
+    canonicalBaseUrl: settingsTable.canonicalBaseUrl,
+    logoUrl: settingsTable.logoUrl,
+    logoSquareUrl: settingsTable.logoSquareUrl,
+    pdfLogoUrl: settingsTable.pdfLogoUrl,
+    pdfPrimaryColor: settingsTable.pdfPrimaryColor,
+    pdfAccentColor: settingsTable.pdfAccentColor,
+    themePrimary: settingsTable.themePrimary,
+    themeSecondary: settingsTable.themeSecondary,
+    themeAccent: settingsTable.themeAccent,
+    themeSuccess: settingsTable.themeSuccess,
+  }).from(settingsTable);
+  res.json(settings || {});
+});
+
+router.get("/settings", requireAuth, requireRole(...MANAGER_ROLES), async (_req, res): Promise<void> => {
   const [settings] = await db.select().from(settingsTable);
   if (!settings) {
     const [created] = await db.insert(settingsTable).values({
@@ -263,7 +294,7 @@ router.post("/settings/admin/wipe-crm", requireAuth, requireRole("super_admin"),
     res.json({ success: true, deleted: result });
   } catch (err: any) {
     console.error("[ADMIN-WIPE] Failed:", err);
-    res.status(500).json({ error: err?.message || "Wipe failed" });
+    res.status(500).json({ error: "Wipe failed" });
   }
 });
 
@@ -274,7 +305,7 @@ router.post("/settings/admin/backfill-assignments", requireAuth, requireRole("su
     res.json({ ok: true, ...result });
   } catch (err: any) {
     console.error("[ADMIN-BACKFILL-ASSIGNMENTS] Failed:", err);
-    res.status(500).json({ error: err?.message || "Backfill failed" });
+    res.status(500).json({ error: "Backfill failed" });
   }
 });
 

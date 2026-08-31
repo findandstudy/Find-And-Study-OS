@@ -39,18 +39,25 @@ function escapeHtml(s: string): string {
  * we fall back to whatever `chromium` resolves to on PATH. Returning
  * `undefined` lets playwright-core try its own bundled lookup as a last resort.
  */
+let cachedChromiumPath: string | undefined;
+let chromiumPathResolved = false;
 function resolveChromiumPath(): string | undefined {
+  if (chromiumPathResolved) return cachedChromiumPath;
+  chromiumPathResolved = true;
   const fromEnv = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH;
-  if (fromEnv) return fromEnv;
+  if (fromEnv) {
+    cachedChromiumPath = fromEnv;
+    return cachedChromiumPath;
+  }
   try {
     const found = execSync("which chromium", { stdio: ["ignore", "pipe", "ignore"] })
       .toString()
       .trim();
-    if (found) return found;
+    if (found) cachedChromiumPath = found;
   } catch {
     /* fall through */
   }
-  return undefined;
+  return cachedChromiumPath;
 }
 
 // The print-ready document shell that both the PDF and the on-screen signing
@@ -89,37 +96,6 @@ function evidencePageHtml(params: BuildPdfParams, evidenceHash: string): string 
     <div style="font-family:'DejaVu Sans Mono',ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11px;word-break:break-all;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px;">${escapeHtml(evidenceHash)}</div>
   </div>
 </section>`;
-}
-
-/**
- * SSRF guard: decide whether Chromium may fetch a subresource URL referenced by
- * the contract HTML (logo image, fonts, etc.). The document itself is supplied
- * via `setContent` (not fetched), so this only governs subresources.
- *
- * We allow inline `data:`/`blob:` payloads and public http(s) origins (the
- * templates legitimately load a remote brand logo), but block private,
- * loopback, link-local and cloud-metadata targets plus any non-web scheme so a
- * crafted URL can't turn PDF rendering into a server-side request primitive.
- */
-function isBlockedSubresourceHost(host: string): boolean {
-  const h = host.toLowerCase().replace(/^\[|\]$/g, "");
-  if (!h) return true;
-  if (h === "localhost" || h === "metadata.google.internal") return true;
-  if (h.endsWith(".internal") || h.endsWith(".local")) return true;
-  if (h === "::1" || h === "0:0:0:0:0:0:0:1") return true;
-  // IPv6 unique-local (fc00::/7) and link-local (fe80::/10)
-  if (/^f[cd][0-9a-f]{2}:/.test(h) || /^fe[89ab][0-9a-f]:/.test(h)) return true;
-  const m = h.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
-  if (m) {
-    const a = Number(m[1]);
-    const b = Number(m[2]);
-    if (a === 0 || a === 127 || a === 10) return true;
-    if (a === 169 && b === 254) return true; // link-local + cloud metadata
-    if (a === 172 && b >= 16 && b <= 31) return true;
-    if (a === 192 && b === 168) return true;
-    if (a === 100 && b >= 64 && b <= 127) return true; // CGNAT
-  }
-  return false;
 }
 
 // Memory-minimizing launch args. See buildSignedPdf for the rationale behind
@@ -163,19 +139,11 @@ async function renderHtmlToPdf(browser: any, html: string): Promise<Uint8Array> 
       if (url.startsWith("data:") || url.startsWith("blob:") || url.startsWith("about:")) {
         return route.continue();
       }
-      let parsed: URL;
-      try {
-        parsed = new URL(url);
-      } catch {
-        return route.abort();
-      }
-      if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-        return route.abort();
-      }
-      if (isBlockedSubresourceHost(parsed.hostname)) {
-        return route.abort();
-      }
-      return route.continue();
+      // Contract rendering is intentionally network-isolated. Branding assets
+      // must already be embedded as data URIs by the renderer. Blocking every
+      // external request removes DNS-rebinding and redirect-based SSRF classes
+      // rather than trying to maintain a hostname/IP deny list in Chromium.
+      return route.abort();
     });
     try {
       await page.setContent(html, { waitUntil: "networkidle", timeout: 15000 });
@@ -245,7 +213,7 @@ export async function buildSignedPdf(params: BuildPdfParams): Promise<BuildPdfRe
 
   const renderStart = Date.now();
   const rssMb = () => Math.round(process.memoryUsage().rss / (1024 * 1024));
-  console.log(`[contract-pdf] render start signer=${params.signerEmail} rss=${rssMb()}MB`);
+  console.log(`[contract-pdf] render start rss=${rssMb()}MB`);
   const deadline = Date.now() + RENDER_TIMEOUT_MS;
   const remainingMs = () => Math.max(1, deadline - Date.now());
   try {

@@ -4,7 +4,12 @@ import * as fsPromises from "node:fs/promises";
 import * as nodePath from "node:path";
 import { ObjectStorageService, ObjectNotFoundError } from "../lib/objectStorage";
 import { requireAuth } from "../lib/auth";
-import { callerOwnsObject, canAccessGenericObject, recordObjectOwner } from "../lib/objectAuthz";
+import {
+  callerOwnsObject,
+  canAccessGenericObject,
+  canonicalizeKey,
+  recordObjectOwner,
+} from "../lib/objectAuthz";
 import { checkAndIncrementRateLimit } from "../lib/pgRateLimiter";
 import { validateApplicationDocumentFile, validateUploadedFile } from "../lib/fileUploadValidation";
 import { processUpload, UploadTooLargeError } from "../lib/uploads/processUpload";
@@ -317,7 +322,11 @@ router.put("/storage/local-upload/:encoded", requireAuth, async (req: Request, r
   }
 });
 
-router.get("/storage/public-objects/*filePath", async (req: Request, res: Response) => {
+// Historical inbox rows still reference /storage/public-objects/* even though
+// the underlying objects were never public. Keep the route as a compatibility
+// alias, but enforce the exact same session and object-level authorization as
+// /storage/objects/*. Truly public branding has its own narrow route below.
+router.get("/storage/public-objects/*filePath", requireAuth, async (req: Request, res: Response) => {
   try {
     const raw = req.params.filePath;
     const filePath = Array.isArray(raw) ? raw.join("/") : raw;
@@ -327,16 +336,30 @@ router.get("/storage/public-objects/*filePath", async (req: Request, res: Respon
       return;
     }
 
-    const file = await objectStorageService.searchPublicObject(filePath);
-    if (!file) {
-      res.status(404).json({ error: "File not found" });
+    const objectKey = canonicalizeKey(filePath);
+    if (!objectKey) {
+      res.status(400).json({ error: "Invalid path" });
       return;
     }
 
-    await objectStorageService.streamObjectToResponse(req, res, file);
+    const allowed = await canAccessGenericObject(
+      { id: req.user!.id, role: (req.user as { role?: string }).role ?? "" },
+      objectKey,
+    );
+    if (!allowed) {
+      res.status(403).json({ error: "Access denied" });
+      return;
+    }
+
+    const objectFile = await objectStorageService.getObjectEntityFile(`/objects/${objectKey}`);
+    await objectStorageService.streamObjectToResponse(req, res, objectFile);
   } catch (error) {
-    console.error("Error serving public object:", error);
-    res.status(500).json({ error: "Failed to serve public object" });
+    console.error("Error serving legacy object URL:", error);
+    if (error instanceof ObjectNotFoundError) {
+      res.status(404).json({ error: "Object not found" });
+      return;
+    }
+    res.status(500).json({ error: "Failed to serve object" });
   }
 });
 

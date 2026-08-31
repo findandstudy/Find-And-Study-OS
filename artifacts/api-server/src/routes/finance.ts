@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
-import { db, invoicesTable, commissionsTable, serviceFeesTable, financialTransactionsTable, agentsTable, programsTable, universitiesTable, usersTable, studentsTable, applicationsTable, settingsTable, staffCommissionsTable, staffCommissionPayoutsTable } from "@workspace/db";
+import { createHash } from "node:crypto";
+import { db, invoicesTable, commissionsTable, serviceFeesTable, financialTransactionsTable, financeMutationRequestsTable, agentsTable, programsTable, universitiesTable, usersTable, studentsTable, applicationsTable, settingsTable, staffCommissionsTable, staffCommissionPayoutsTable } from "@workspace/db";
 import { eq, sql, and, desc, asc, inArray, isNull, or } from "drizzle-orm";
 import { requireAuth, requireRole, requireAgentStaffPermission, logAudit } from "../lib/auth";
 import { FINANCE_ROLES, STAFF_ROLES, AGENT_ROLES } from "../lib/roles";
@@ -14,6 +15,20 @@ import * as XLSX from "xlsx";
 const router: IRouter = Router();
 
 const CONFIRMED_COMMISSION_STATUSES = ["confirmed", "collected_partial", "collected_full", "settled"] as const;
+const INVOICE_STATUSES = ["draft", "sent", "paid", "overdue", "cancelled"] as const;
+const invoiceCreateSchema = z.object({
+  studentId: z.coerce.number().int().positive(),
+  amount: z.coerce.number().finite().positive().max(1_000_000_000),
+  currency: z.string().trim().toUpperCase().regex(/^[A-Z]{3}$/).default("USD"),
+  status: z.enum(INVOICE_STATUSES).default("draft"),
+  dueDate: z.coerce.date().optional().nullable(),
+  notes: z.string().trim().max(4000).optional().nullable(),
+});
+const invoiceUpdateSchema = invoiceCreateSchema
+  .omit({ studentId: true })
+  .extend({ paidAt: z.coerce.date().optional().nullable() })
+  .partial()
+  .refine((value) => Object.keys(value).length > 0, "At least one field is required");
 
 function isConfirmedCommissionStatus(status: string | null | undefined): boolean {
   return CONFIRMED_COMMISSION_STATUSES.includes(status as typeof CONFIRMED_COMMISSION_STATUSES[number]);
@@ -39,6 +54,84 @@ function generateInvoiceNumber() {
 
 function toNum(v: any): number {
   return parseFloat(String(v ?? 0)) || 0;
+}
+
+class FinanceMutationError extends Error {
+  constructor(
+    readonly status: number,
+    message: string,
+    readonly details?: Record<string, unknown>,
+  ) {
+    super(message);
+  }
+}
+
+function financeHash(value: string): string {
+  return createHash("sha256").update(value).digest("hex");
+}
+
+function stableFinancePayload(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stableFinancePayload).join(",")}]`;
+  if (value && typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    return `{${Object.keys(record).sort().map(key => `${JSON.stringify(key)}:${stableFinancePayload(record[key])}`).join(",")}}`;
+  }
+  return JSON.stringify(value) ?? "null";
+}
+
+async function prepareFinanceMutation(
+  tx: any,
+  scope: string,
+  rawKey: string,
+  payload: unknown,
+): Promise<{
+  keyHash: string | null;
+  requestHash: string | null;
+  replay: Record<string, unknown> | null;
+}> {
+  const key = rawKey.trim();
+  if (!key) return { keyHash: null, requestHash: null, replay: null };
+  if (key.length > 128 || !/^[A-Za-z0-9._:-]+$/.test(key)) {
+    throw new FinanceMutationError(400, "Idempotency-Key is invalid");
+  }
+  const keyHash = financeHash(`${scope}\0${key}`);
+  const requestHash = financeHash(stableFinancePayload(payload));
+
+  // The advisory lock makes the read/claim atomic even before a row exists.
+  await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${`finance-idempotency:${keyHash}`}, 0))`);
+  const [existing] = await tx
+    .select()
+    .from(financeMutationRequestsTable)
+    .where(eq(financeMutationRequestsTable.keyHash, keyHash))
+    .limit(1);
+  if (!existing) return { keyHash, requestHash, replay: null };
+  if (existing.scope !== scope || existing.requestHash !== requestHash) {
+    throw new FinanceMutationError(409, "Idempotency-Key was already used for a different finance request");
+  }
+  return { keyHash, requestHash, replay: existing.response as Record<string, unknown> };
+}
+
+async function persistFinanceMutation(
+  tx: any,
+  context: { keyHash: string | null; requestHash: string | null },
+  scope: string,
+  response: Record<string, unknown>,
+  createdBy: number,
+): Promise<void> {
+  if (!context.keyHash || !context.requestHash) return;
+  await tx.insert(financeMutationRequestsTable).values({
+    keyHash: context.keyHash,
+    scope,
+    requestHash: context.requestHash,
+    response,
+    createdBy,
+  });
+}
+
+function sendFinanceMutationError(res: any, error: unknown): boolean {
+  if (!(error instanceof FinanceMutationError)) return false;
+  res.status(error.status).json({ error: error.message, ...(error.details ?? {}) });
+  return true;
 }
 
 // Currency normalization preserves any valid ISO-shaped code so that
@@ -373,94 +466,91 @@ const uniCollectionBodySchema = z.object({
 router.post("/finance/university-collection", requireAuth, requireRole(...FINANCE_ROLES), validate({ body: uniCollectionBodySchema }), async (req, res): Promise<void> => {
   const { universityName, currency, amount, transactionDate, reference, notes, season } =
     getValidated<{ body: typeof uniCollectionBodySchema }>(req).body;
-
-  // FIFO: confirmed/partial/full rows for this university+currency with remaining > 0
-  const collectionConditions: any[] = [
-      eq(commissionsTable.universityName, universityName),
-      eq(commissionsTable.currency, currency),
-      sql`${commissionsTable.status} IN ('confirmed', 'collected_partial', 'collected_full')`,
-      sql`${commissionsTable.universityCommissionAmount}::numeric > ${commissionsTable.universityCollected}::numeric`,
-    ];
-  if (season) collectionConditions.push(eq(commissionsTable.season, season));
-  const rows = await db.select().from(commissionsTable)
-    .where(and(...collectionConditions))
-    .orderBy(asc(commissionsTable.confirmedAt), asc(commissionsTable.id));
-
-  if (rows.length === 0) {
-    res.status(400).json({ error: "No receivable balance for this university/currency" });
+  const parsedDate = new Date(transactionDate);
+  if (Number.isNaN(parsedDate.getTime())) {
+    res.status(400).json({ error: "transactionDate is invalid" });
     return;
   }
 
-  const totalRemaining = rows.reduce((s, r) =>
-    s + Math.max(0, toNum(r.universityCommissionAmount) - toNum(r.universityCollected)), 0);
+  const scope = "university-collection";
+  const payload = { universityName, currency, amount, transactionDate, reference: reference ?? null, notes: notes ?? null, season: season ?? null };
+  try {
+    const result = await db.transaction(async (tx) => {
+      const mutation = await prepareFinanceMutation(
+        tx,
+        scope,
+        String(req.headers["idempotency-key"] ?? ""),
+        payload,
+      );
+      if (mutation.replay) return { response: mutation.replay, replayed: true };
 
-  if (amount > totalRemaining + 0.001) {
-    res.status(400).json({ error: "Amount exceeds remaining balance", remaining: totalRemaining });
-    return;
-  }
+      const businessLock = `finance:university:${universityName}:${normCurrency(currency)}:${season ?? "all"}`;
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${businessLock}, 0))`);
 
-  // FIFO distribution
-  let leftover = amount;
-  const distributed: { commissionId: number; amount: number }[] = [];
-  for (const row of rows) {
-    if (leftover <= 0.001) break;
-    const rowRemaining = Math.max(0, toNum(row.universityCommissionAmount) - toNum(row.universityCollected));
-    if (rowRemaining <= 0.001) continue;
-    const toApply = Math.min(rowRemaining, leftover);
-    leftover -= toApply;
-    distributed.push({ commissionId: row.id, amount: toApply });
-  }
+      const collectionConditions: any[] = [
+        eq(commissionsTable.universityName, universityName),
+        eq(commissionsTable.currency, currency),
+        sql`${commissionsTable.status} IN ('confirmed', 'collected_partial', 'collected_full')`,
+        sql`${commissionsTable.universityCommissionAmount}::numeric > ${commissionsTable.universityCollected}::numeric`,
+      ];
+      if (season) collectionConditions.push(eq(commissionsTable.season, season));
+      const rows = await tx.select().from(commissionsTable)
+        .where(and(...collectionConditions))
+        .orderBy(asc(commissionsTable.confirmedAt), asc(commissionsTable.id));
+      if (rows.length === 0) {
+        throw new FinanceMutationError(400, "No receivable balance for this university/currency");
+      }
 
-  // Create transactions + recompute each row's denormalised totals
-  for (const d of distributed) {
-    const [comm] = await db.select().from(commissionsTable).where(eq(commissionsTable.id, d.commissionId));
+      const totalRemaining = rows.reduce((sum, row) =>
+        sum + Math.max(0, toNum(row.universityCommissionAmount) - toNum(row.universityCollected)), 0);
+      if (amount > totalRemaining + 0.001) {
+        throw new FinanceMutationError(400, "Amount exceeds remaining balance", { remaining: totalRemaining });
+      }
 
-    await db.insert(financialTransactionsTable).values({
-      commissionId: d.commissionId,
-      type: "collection",
-      amount: String(d.amount),
-      currency,
-      transactionDate: new Date(transactionDate),
-      reference: reference || null,
-      universityName,
-      notes: notes || null,
+      let leftover = amount;
+      const distributed: { commissionId: number; amount: number }[] = [];
+      for (const row of rows) {
+        if (leftover <= 0.001) break;
+        const rowRemaining = Math.max(0, toNum(row.universityCommissionAmount) - toNum(row.universityCollected));
+        if (rowRemaining <= 0.001) continue;
+        const toApply = Math.min(rowRemaining, leftover);
+        leftover -= toApply;
+        distributed.push({ commissionId: row.id, amount: Number(toApply.toFixed(2)) });
+      }
+
+      for (const distribution of distributed) {
+        await tx.insert(financialTransactionsTable).values({
+          commissionId: distribution.commissionId,
+          type: "collection",
+          amount: String(distribution.amount),
+          currency: normCurrency(currency),
+          transactionDate: parsedDate,
+          reference: reference || null,
+          universityName,
+          notes: notes || null,
+        });
+        await recalculateCommissionFinancials(distribution.commissionId, tx);
+      }
+
+      const response: Record<string, unknown> = {
+        distributed,
+        updatedRemaining: Math.max(0, totalRemaining - amount),
+      };
+      await persistFinanceMutation(tx, mutation, scope, response, req.user!.id);
+      return { response, replayed: false };
     });
 
-    const allTx = await db.select().from(financialTransactionsTable)
-      .where(eq(financialTransactionsTable.commissionId, d.commissionId));
-
-    const totalColl = allTx.filter(t => t.type === "collection").reduce((s, t) => s + toNum(t.amount), 0);
-    const totalPaid = allTx.filter(t => t.type === "agent_payment").reduce((s, t) => s + toNum(t.amount), 0);
-    const totalSubPaid = allTx.filter(t => t.type === "sub_agent_payment").reduce((s, t) => s + toNum(t.amount), 0);
-    const uTotal = toNum(comm.universityCommissionAmount);
-    const aTotal = toNum(comm.agentCommissionAmount);
-    const saTotal = toNum(comm.subAgentCommissionAmount);
-    const agentFullyPaid = totalPaid >= aTotal;
-    const subAgentFullyPaid = saTotal <= 0 || totalSubPaid >= saTotal;
-
-    let newStatus = comm.status;
-    if (totalColl >= uTotal && agentFullyPaid && subAgentFullyPaid && uTotal > 0) {
-      newStatus = "settled";
-    } else if (totalColl >= uTotal && uTotal > 0) {
-      newStatus = "collected_full";
-    } else if (totalColl > 0) {
-      newStatus = "collected_partial";
+    if (!result.replayed) {
+      const distributed = result.response.distributed as Array<{ commissionId: number; amount: number }>;
+      await logAudit(req.user!.id, "record_university_collection", "commission",
+        distributed[0]?.commissionId,
+        { universityName, currency, amount, count: distributed.length }, req.ip);
     }
-
-    await db.update(commissionsTable).set({
-      universityCollected: String(totalColl),
-      agentPaid: String(totalPaid),
-      subAgentPaid: String(totalSubPaid),
-      status: newStatus,
-    }).where(eq(commissionsTable.id, d.commissionId));
+    res.status(result.replayed ? 200 : 201).json({ ...result.response, replayed: result.replayed });
+  } catch (error) {
+    if (sendFinanceMutationError(res, error)) return;
+    throw error;
   }
-
-  await logAudit(req.user!.id, "record_university_collection", "commission",
-    distributed[0]?.commissionId,
-    { universityName, currency, amount, count: distributed.length }, req.ip);
-
-  const updatedRemaining = Math.max(0, totalRemaining - amount);
-  res.status(201).json({ distributed, updatedRemaining });
 });
 
 /* ─── AGENT PAYABLES & AGENT PAYMENT ────────────────────────── */
@@ -515,95 +605,93 @@ const agentPaymentBodySchema = z.object({
 router.post("/finance/agent-payment", requireAuth, requireRole(...FINANCE_ROLES), validate({ body: agentPaymentBodySchema }), async (req, res): Promise<void> => {
   const { agentId, currency, amount, transactionDate, reference, notes, season } =
     getValidated<{ body: typeof agentPaymentBodySchema }>(req).body;
-
-  const [agent] = await db.select().from(agentsTable).where(eq(agentsTable.id, agentId));
-  if (!agent) {
-    res.status(400).json({ error: "Agent not found" });
+  const parsedDate = new Date(transactionDate);
+  if (Number.isNaN(parsedDate.getTime())) {
+    res.status(400).json({ error: "transactionDate is invalid" });
     return;
   }
 
-  const paymentConditions: any[] = [
-      eq(commissionsTable.agentId, agentId),
-      eq(commissionsTable.currency, currency),
-      sql`${commissionsTable.status} IN ('confirmed', 'collected_partial', 'collected_full', 'settled')`,
-      sql`${commissionsTable.agentCommissionAmount}::numeric > ${commissionsTable.agentPaid}::numeric`,
-    ];
-  if (season) paymentConditions.push(eq(commissionsTable.season, season));
-  const rows = await db.select().from(commissionsTable)
-    .where(and(...paymentConditions))
-    .orderBy(asc(commissionsTable.confirmedAt), asc(commissionsTable.id));
+  const scope = "agent-payment";
+  const payload = { agentId, currency, amount, transactionDate, reference: reference ?? null, notes: notes ?? null, season: season ?? null };
+  try {
+    const result = await db.transaction(async (tx) => {
+      const mutation = await prepareFinanceMutation(
+        tx,
+        scope,
+        String(req.headers["idempotency-key"] ?? ""),
+        payload,
+      );
+      if (mutation.replay) return { response: mutation.replay, replayed: true };
 
-  if (rows.length === 0) {
-    res.status(400).json({ error: "No agent commission balance for this agent/currency" });
-    return;
-  }
+      const businessLock = `finance:agent:${agentId}:${normCurrency(currency)}:${season ?? "all"}`;
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${businessLock}, 0))`);
 
-  const totalRemaining = rows.reduce((s, r) => s + toNum(r.agentCommissionAmount) - toNum(r.agentPaid), 0);
-  if (amount > totalRemaining + 0.001) {
-    res.status(400).json({ error: "Amount exceeds remaining agent balance" });
-    return;
-  }
+      const [agent] = await tx.select().from(agentsTable).where(eq(agentsTable.id, agentId));
+      if (!agent) throw new FinanceMutationError(400, "Agent not found");
 
-  let toDistribute = amount;
-  const distributed: { commissionId: number; amount: number }[] = [];
+      const paymentConditions: any[] = [
+        eq(commissionsTable.agentId, agentId),
+        eq(commissionsTable.currency, currency),
+        sql`${commissionsTable.status} IN ('confirmed', 'collected_partial', 'collected_full', 'settled')`,
+        sql`${commissionsTable.agentCommissionAmount}::numeric > ${commissionsTable.agentPaid}::numeric`,
+      ];
+      if (season) paymentConditions.push(eq(commissionsTable.season, season));
+      const rows = await tx.select().from(commissionsTable)
+        .where(and(...paymentConditions))
+        .orderBy(asc(commissionsTable.confirmedAt), asc(commissionsTable.id));
+      if (rows.length === 0) {
+        throw new FinanceMutationError(400, "No agent commission balance for this agent/currency");
+      }
 
-  for (const row of rows) {
-    if (toDistribute <= 0.001) break;
-    const rowRemaining = toNum(row.agentCommissionAmount) - toNum(row.agentPaid);
-    if (rowRemaining <= 0.001) continue;
-    const take = Math.min(toDistribute, rowRemaining);
-    distributed.push({ commissionId: row.id, amount: parseFloat(take.toFixed(6)) });
-    toDistribute -= take;
-  }
+      const totalRemaining = rows.reduce((sum, row) =>
+        sum + Math.max(0, toNum(row.agentCommissionAmount) - toNum(row.agentPaid)), 0);
+      if (amount > totalRemaining + 0.001) {
+        throw new FinanceMutationError(400, "Amount exceeds remaining agent balance", { remaining: totalRemaining });
+      }
 
-  const resolvedAgentName = agentDisplayName(agent);
+      let toDistribute = amount;
+      const distributed: { commissionId: number; amount: number }[] = [];
+      for (const row of rows) {
+        if (toDistribute <= 0.001) break;
+        const rowRemaining = Math.max(0, toNum(row.agentCommissionAmount) - toNum(row.agentPaid));
+        if (rowRemaining <= 0.001) continue;
+        const take = Math.min(toDistribute, rowRemaining);
+        distributed.push({ commissionId: row.id, amount: Number(take.toFixed(2)) });
+        toDistribute -= take;
+      }
 
-  for (const d of distributed) {
-    const [comm] = await db.select().from(commissionsTable).where(eq(commissionsTable.id, d.commissionId));
+      const resolvedAgentName = agentDisplayName(agent);
+      for (const distribution of distributed) {
+        await tx.insert(financialTransactionsTable).values({
+          commissionId: distribution.commissionId,
+          type: "agent_payment",
+          amount: String(distribution.amount),
+          currency: normCurrency(currency),
+          transactionDate: parsedDate,
+          reference: reference || null,
+          agentId,
+          agentName: resolvedAgentName,
+          notes: notes || null,
+        });
+        await recalculateCommissionFinancials(distribution.commissionId, tx);
+      }
 
-    await db.insert(financialTransactionsTable).values({
-      commissionId: d.commissionId,
-      type: "agent_payment",
-      amount: String(d.amount),
-      currency,
-      transactionDate: new Date(transactionDate),
-      reference: reference || null,
-      agentId,
-      agentName: resolvedAgentName,
-      notes: notes || null,
+      const response: Record<string, unknown> = {
+        distributed,
+        updatedRemaining: Math.max(0, totalRemaining - amount),
+      };
+      await persistFinanceMutation(tx, mutation, scope, response, req.user!.id);
+      return { response, replayed: false };
     });
 
-    const allTx = await db.select().from(financialTransactionsTable)
-      .where(eq(financialTransactionsTable.commissionId, d.commissionId));
-
-    const totalCollected = allTx.filter(t => t.type === "collection").reduce((s, t) => s + toNum(t.amount), 0);
-    const totalPaid = allTx.filter(t => t.type === "agent_payment").reduce((s, t) => s + toNum(t.amount), 0);
-    const totalSubPaid = allTx.filter(t => t.type === "sub_agent_payment").reduce((s, t) => s + toNum(t.amount), 0);
-
-    const uTotal = toNum(comm.universityCommissionAmount);
-    const aTotal = toNum(comm.agentCommissionAmount);
-    const saTotal = toNum(comm.subAgentCommissionAmount);
-
-    let newStatus = comm.status;
-    const agentFullyPaid = aTotal <= 0 || totalPaid >= aTotal;
-    const subAgentFullyPaid = saTotal <= 0 || totalSubPaid >= saTotal;
-    if (totalCollected >= uTotal && agentFullyPaid && subAgentFullyPaid && uTotal > 0) {
-      newStatus = "settled";
-    } else if (totalCollected >= uTotal && uTotal > 0) {
-      newStatus = "collected_full";
-    } else if (totalCollected > 0) {
-      newStatus = "collected_partial";
+    if (!result.replayed) {
+      await logAudit(req.user!.id, "create_agent_payment", "financial_transaction", agentId, { agentId, currency, amount }, req.ip);
     }
-
-    await db.update(commissionsTable).set({
-      agentPaid: String(totalPaid),
-      status: newStatus,
-    }).where(eq(commissionsTable.id, d.commissionId));
+    res.status(result.replayed ? 200 : 201).json({ ...result.response, replayed: result.replayed });
+  } catch (error) {
+    if (sendFinanceMutationError(res, error)) return;
+    throw error;
   }
-
-  await logAudit(req.user!.id, "create_agent_payment", "financial_transaction", agentId, { agentId, currency, amount }, req.ip);
-
-  res.status(201).json({ distributed, updatedRemaining: Math.max(0, totalRemaining - amount) });
 });
 
 /* ─── STAFF COMMISSION PAYABLES ─────────────────────────────── */
@@ -1235,14 +1323,14 @@ router.delete("/service-fees/:id", requireAuth, requireRole(...FINANCE_ROLES), a
 
 /* ─── FINANCIAL TRANSACTIONS (collections & agent payments) ── */
 
-async function recalculateCommissionFinancials(commissionId: number): Promise<void> {
-  const [comm] = await db.select().from(commissionsTable).where(eq(commissionsTable.id, commissionId));
+async function recalculateCommissionFinancials(commissionId: number, client: any = db): Promise<void> {
+  const [comm] = await client.select().from(commissionsTable).where(eq(commissionsTable.id, commissionId));
   if (!comm) return;
-  const transactions = await db.select().from(financialTransactionsTable)
+  const transactions = await client.select().from(financialTransactionsTable)
     .where(eq(financialTransactionsTable.commissionId, commissionId));
-  const totalCollected = transactions.filter(t => t.type === "collection").reduce((sum, tx) => sum + toNum(tx.amount), 0);
-  const totalAgentPaid = transactions.filter(t => t.type === "agent_payment").reduce((sum, tx) => sum + toNum(tx.amount), 0);
-  const totalSubAgentPaid = transactions.filter(t => t.type === "sub_agent_payment").reduce((sum, tx) => sum + toNum(tx.amount), 0);
+  const totalCollected = transactions.filter((t: any) => t.type === "collection").reduce((sum: number, tx: any) => sum + toNum(tx.amount), 0);
+  const totalAgentPaid = transactions.filter((t: any) => t.type === "agent_payment").reduce((sum: number, tx: any) => sum + toNum(tx.amount), 0);
+  const totalSubAgentPaid = transactions.filter((t: any) => t.type === "sub_agent_payment").reduce((sum: number, tx: any) => sum + toNum(tx.amount), 0);
   const universityTotal = toNum(comm.universityCommissionAmount);
   const agentTotal = toNum(comm.agentCommissionAmount);
   const subAgentTotal = toNum(comm.subAgentCommissionAmount);
@@ -1258,7 +1346,7 @@ async function recalculateCommissionFinancials(commissionId: number): Promise<vo
     else status = "confirmed";
   }
 
-  await db.update(commissionsTable).set({
+  await client.update(commissionsTable).set({
     universityCollected: String(totalCollected),
     agentPaid: String(totalAgentPaid),
     subAgentPaid: String(totalSubAgentPaid),
@@ -1313,85 +1401,130 @@ router.post("/financial-transactions", requireAuth, requireRole(...FINANCE_ROLES
     res.status(400).json({ error: "transactionDate is invalid" });
     return;
   }
-  const [commission] = await db.select().from(commissionsTable).where(eq(commissionsTable.id, parsedCommissionId));
-  if (!commission) {
-    res.status(404).json({ error: "Commission not found" });
-    return;
-  }
-  if (!isConfirmedCommissionStatus(commission.status)) {
-    res.status(400).json({ error: "Transactions can only be recorded for confirmed commissions" });
-    return;
-  }
-
-  const totalForType = type === "collection"
-    ? toNum(commission.universityCommissionAmount)
-    : type === "agent_payment"
-      ? toNum(commission.agentCommissionAmount)
-      : toNum(commission.subAgentCommissionAmount);
-  const paidForType = type === "collection"
-    ? toNum(commission.universityCollected)
-    : type === "agent_payment"
-      ? toNum(commission.agentPaid)
-      : toNum(commission.subAgentPaid);
-  const remainingForType = Math.max(0, totalForType - paidForType);
-  if (remainingForType <= 0.001) {
-    res.status(400).json({ error: "This balance is already fully paid" });
-    return;
-  }
-  if (parsedAmount > remainingForType + 0.001) {
-    res.status(400).json({ error: "Amount exceeds remaining balance", remaining: remainingForType });
-    return;
-  }
-
-  const authoritativeAgentId = type === "agent_payment"
-    ? commission.agentId
-    : type === "sub_agent_payment"
-      ? commission.subAgentId
-      : null;
-  let authoritativeAgentName: string | null = null;
-  if (authoritativeAgentId) {
-    const [agent] = await db.select({
-      firstName: agentsTable.firstName,
-      lastName: agentsTable.lastName,
-      companyName: agentsTable.companyName,
-      businessName: agentsTable.businessName,
-    }).from(agentsTable).where(eq(agentsTable.id, authoritativeAgentId));
-    authoritativeAgentName = agent ? agentDisplayName(agent) : null;
-  }
-
-  const [tx] = await db.insert(financialTransactionsTable).values({
+  const scope = "financial-transaction";
+  const payload = {
     commissionId: parsedCommissionId,
     type,
-    amount: String(parsedAmount),
-    currency: normCurrency(commission.currency),
-    transactionDate: parsedDate,
-    reference: reference || null,
-    universityName: commission.universityName || null,
-    agentId: authoritativeAgentId,
-    agentName: authoritativeAgentName,
-    studentName: commission.studentName || null,
-    fileUrl: fileUrl || null,
-    fileName: fileName || null,
-    notes: notes || null,
-  }).returning();
-  await recalculateCommissionFinancials(parsedCommissionId);
+    amount: parsedAmount,
+    transactionDate,
+    reference: reference ?? null,
+    fileUrl: fileUrl ?? null,
+    fileName: fileName ?? null,
+    notes: notes ?? null,
+  };
 
-  await logAudit(req.user!.id, "create_financial_transaction", "financial_transaction", tx.id, { type, amount }, req.ip);
+  let result: {
+    response: Record<string, unknown>;
+    replayed: boolean;
+    notification?: { authoritativeAgentName: string | null; currency: string };
+  };
+  try {
+    result = await db.transaction(async (databaseTx) => {
+      const mutation = await prepareFinanceMutation(
+        databaseTx,
+        scope,
+        String(req.headers["idempotency-key"] ?? ""),
+        payload,
+      );
+      if (mutation.replay) return { response: mutation.replay, replayed: true };
 
-  if (type === "agent_payment" || type === "sub_agent_payment") {
+      await databaseTx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${`finance:commission:${parsedCommissionId}`}, 0))`);
+      const [commission] = await databaseTx.select().from(commissionsTable)
+        .where(eq(commissionsTable.id, parsedCommissionId));
+      if (!commission) throw new FinanceMutationError(404, "Commission not found");
+      if (!isConfirmedCommissionStatus(commission.status)) {
+        throw new FinanceMutationError(400, "Transactions can only be recorded for confirmed commissions");
+      }
+
+      const totalForType = type === "collection"
+        ? toNum(commission.universityCommissionAmount)
+        : type === "agent_payment"
+          ? toNum(commission.agentCommissionAmount)
+          : toNum(commission.subAgentCommissionAmount);
+      const paidForType = type === "collection"
+        ? toNum(commission.universityCollected)
+        : type === "agent_payment"
+          ? toNum(commission.agentPaid)
+          : toNum(commission.subAgentPaid);
+      const remainingForType = Math.max(0, totalForType - paidForType);
+      if (remainingForType <= 0.001) {
+        throw new FinanceMutationError(400, "This balance is already fully paid");
+      }
+      if (parsedAmount > remainingForType + 0.001) {
+        throw new FinanceMutationError(400, "Amount exceeds remaining balance", { remaining: remainingForType });
+      }
+
+      const authoritativeAgentId = type === "agent_payment"
+        ? commission.agentId
+        : type === "sub_agent_payment"
+          ? commission.subAgentId
+          : null;
+      let authoritativeAgentName: string | null = null;
+      if (authoritativeAgentId) {
+        const [agent] = await databaseTx.select({
+          firstName: agentsTable.firstName,
+          lastName: agentsTable.lastName,
+          companyName: agentsTable.companyName,
+          businessName: agentsTable.businessName,
+        }).from(agentsTable).where(eq(agentsTable.id, authoritativeAgentId));
+        authoritativeAgentName = agent ? agentDisplayName(agent) : null;
+      }
+
+      const [createdTransaction] = await databaseTx.insert(financialTransactionsTable).values({
+        commissionId: parsedCommissionId,
+        type,
+        amount: String(parsedAmount),
+        currency: normCurrency(commission.currency),
+        transactionDate: parsedDate,
+        reference: reference || null,
+        universityName: commission.universityName || null,
+        agentId: authoritativeAgentId,
+        agentName: authoritativeAgentName,
+        studentName: commission.studentName || null,
+        fileUrl: fileUrl || null,
+        fileName: fileName || null,
+        notes: notes || null,
+      }).returning();
+      await recalculateCommissionFinancials(parsedCommissionId, databaseTx);
+
+      const response = createdTransaction as unknown as Record<string, unknown>;
+      await persistFinanceMutation(databaseTx, mutation, scope, response, req.user!.id);
+      return {
+        response,
+        replayed: false,
+        notification: { authoritativeAgentName, currency: normCurrency(commission.currency) },
+      };
+    });
+  } catch (error) {
+    if (sendFinanceMutationError(res, error)) return;
+    throw error;
+  }
+
+  if (!result.replayed) {
+    await logAudit(
+      req.user!.id,
+      "create_financial_transaction",
+      "financial_transaction",
+      Number(result.response.id),
+      { type, amount: parsedAmount },
+      req.ip,
+    );
+  }
+
+  if (!result.replayed && (type === "agent_payment" || type === "sub_agent_payment")) {
     try {
       await dispatchNotification({
         actorUserId: req.user!.id,
         event: "finance.agent_payout",
         title: "Agent Payout Processed",
-        body: `A ${type === "sub_agent_payment" ? "sub-agent" : "agent"} payout of ${parsedAmount} ${normCurrency(commission.currency)} has been processed.${authoritativeAgentName ? ` Agent: ${authoritativeAgentName}.` : ""}`,
+        body: `A ${type === "sub_agent_payment" ? "sub-agent" : "agent"} payout of ${parsedAmount} ${result.notification?.currency ?? ""} has been processed.${result.notification?.authoritativeAgentName ? ` Agent: ${result.notification.authoritativeAgentName}.` : ""}`,
         actionUrl: `/staff/finance`,
         icon: "BadgeDollarSign",
         templateVars: {
           type,
           amount: String(parsedAmount),
-          currency: normCurrency(commission.currency),
-          agentName: authoritativeAgentName || "",
+          currency: result.notification?.currency ?? "",
+          agentName: result.notification?.authoritativeAgentName || "",
         },
       });
     } catch (err) {
@@ -1399,19 +1532,30 @@ router.post("/financial-transactions", requireAuth, requireRole(...FINANCE_ROLES
     }
   }
 
-  res.status(201).json(tx);
+  res.status(result.replayed ? 200 : 201).json({ ...result.response, replayed: result.replayed });
 });
 
 router.delete("/financial-transactions/:id", requireAuth, requireRole(...FINANCE_ROLES), async (req, res): Promise<void> => {
   const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
 
-  const [tx] = await db.select().from(financialTransactionsTable).where(eq(financialTransactionsTable.id, id));
-  if (!tx) { res.status(404).json({ error: "Transaction not found" }); return; }
-
-  await db.delete(financialTransactionsTable).where(eq(financialTransactionsTable.id, id));
-
-  if (tx.commissionId) await recalculateCommissionFinancials(tx.commissionId);
+  try {
+    await db.transaction(async (databaseTx) => {
+      const [financialTransaction] = await databaseTx.select().from(financialTransactionsTable)
+        .where(eq(financialTransactionsTable.id, id));
+      if (!financialTransaction) throw new FinanceMutationError(404, "Transaction not found");
+      if (financialTransaction.commissionId) {
+        await databaseTx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${`finance:commission:${financialTransaction.commissionId}`}, 0))`);
+      }
+      await databaseTx.delete(financialTransactionsTable).where(eq(financialTransactionsTable.id, id));
+      if (financialTransaction.commissionId) {
+        await recalculateCommissionFinancials(financialTransaction.commissionId, databaseTx);
+      }
+    });
+  } catch (error) {
+    if (sendFinanceMutationError(res, error)) return;
+    throw error;
+  }
 
   await logAudit(req.user!.id, "delete_financial_transaction", "financial_transaction", id, {}, req.ip);
   res.sendStatus(204);
@@ -1860,11 +2004,18 @@ router.get("/invoices", requireAuth, requireRole(...FINANCE_ROLES), async (req, 
 });
 
 router.post("/invoices", requireAuth, requireRole(...FINANCE_ROLES), async (req, res): Promise<void> => {
-  const { studentId, amount, currency = "USD", status = "draft", dueDate, notes } = req.body;
-  if (!studentId || !amount) { res.status(400).json({ error: "studentId and amount are required" }); return; }
+  const parsed = invoiceCreateSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid invoice", details: parsed.error.flatten() });
+    return;
+  }
+  const { studentId, amount, currency, status, dueDate, notes } = parsed.data;
+  const [student] = await db.select({ id: studentsTable.id }).from(studentsTable)
+    .where(and(eq(studentsTable.id, studentId), isNull(studentsTable.deletedAt)));
+  if (!student) { res.status(404).json({ error: "Student not found" }); return; }
   const [invoice] = await db.insert(invoicesTable).values({
-    studentId, amount: String(amount), currency, status, invoiceNumber: generateInvoiceNumber(),
-    dueDate: dueDate || null, notes: notes || null,
+    studentId, amount: amount.toFixed(2), currency, status, invoiceNumber: generateInvoiceNumber(),
+    dueDate: dueDate ?? null, notes: notes ?? null,
   }).returning();
   await logAudit(req.user!.id, "create_invoice", "invoice", invoice.id, { studentId, amount }, req.ip);
   res.status(201).json(invoice);
@@ -1873,12 +2024,13 @@ router.post("/invoices", requireAuth, requireRole(...FINANCE_ROLES), async (req,
 router.patch("/invoices/:id", requireAuth, requireRole(...FINANCE_ROLES), async (req, res): Promise<void> => {
   const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
-  const FIELDS = ["status", "amount", "currency", "dueDate", "paidAt", "notes"];
-  const updates: Record<string, unknown> = {};
-  for (const key of FIELDS) {
-    if (req.body[key] !== undefined) updates[key] = req.body[key];
+  const parsed = invoiceUpdateSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid invoice update", details: parsed.error.flatten() });
+    return;
   }
-  if (Object.keys(updates).length === 0) { res.status(400).json({ error: "No valid fields" }); return; }
+  const updates: Record<string, unknown> = { ...parsed.data };
+  if (parsed.data.amount !== undefined) updates.amount = parsed.data.amount.toFixed(2);
   const [invoice] = await db.update(invoicesTable).set(updates).where(eq(invoicesTable.id, id)).returning();
   if (!invoice) { res.status(404).json({ error: "Invoice not found" }); return; }
   res.json(invoice);

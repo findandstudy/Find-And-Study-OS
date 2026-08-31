@@ -321,7 +321,7 @@ router.get("/programs/import-template", requireAuth, requireRole(...MANAGER_ROLE
     res.send(Buffer.from(buf));
   } catch (err: any) {
     console.error("[programs/import-template] failed:", err?.message || err);
-    res.status(500).json({ error: err?.message || "Failed to build template" });
+    res.status(500).json({ error: "Failed to build template" });
   }
 });
 

@@ -13,6 +13,7 @@ import {
   resolveLocalInboxStorageKey,
   zernioMediaFailureStatus,
 } from "../src/lib/inbox/mediaSource";
+import { __setSafeOutboundRequestOverrideForTests } from "../src/lib/safeOutboundRequest";
 
 type FetchCall = { url: string; init?: RequestInit };
 const realFetch = globalThis.fetch;
@@ -30,10 +31,28 @@ beforeEach(() => {
   calls = [];
   process.env.ALLOW_LIVE_INTEGRATIONS = "true";
   __setZernioApiKeyOverrideForTests("test-key");
+  __setSafeOutboundRequestOverrideForTests(async (url, options) => {
+    const response = await globalThis.fetch(url, {
+      method: options.method,
+      headers: options.headers,
+      body: options.body,
+      redirect: "manual",
+    });
+    const headers: Record<string, string> = {};
+    response.headers.forEach((value, key) => { headers[key.toLowerCase()] = value; });
+    return {
+      ok: response.ok,
+      status: response.status,
+      headers,
+      body: Buffer.from(await response.arrayBuffer()),
+      url,
+    };
+  });
 });
 
 after(() => {
   __setZernioApiKeyOverrideForTests(null);
+  __setSafeOutboundRequestOverrideForTests(null);
   globalThis.fetch = realFetch;
   if (originalAllowLiveIntegrations === undefined) {
     delete process.env.ALLOW_LIVE_INTEGRATIONS;

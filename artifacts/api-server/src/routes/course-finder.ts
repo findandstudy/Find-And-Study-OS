@@ -623,7 +623,7 @@ router.get("/course-finder/filters", async (req, res): Promise<void> => {
     res.json(payload);
   } catch (err: any) {
     console.error("[course-finder/filters] failed:", err?.message || err);
-    res.status(500).json({ error: err?.message || "Failed to load filters" });
+    res.status(500).json({ error: "Failed to load filters" });
   }
 });
 

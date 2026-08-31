@@ -7,6 +7,7 @@ import {
   resolveLocalInboxStorageKey,
 } from "./mediaSource";
 import { isLiveIntegrationsEnabled } from "./liveMode";
+import { safeOutboundRequest } from "../safeOutboundRequest";
 
 /**
  * Single source of truth for Zernio outbound sends.
@@ -324,7 +325,7 @@ export async function resolveZernioProfileId(
 
   const url = "https://zernio.com/api/v1/profiles";
   try {
-    console.log("[ZERNIO] resolve profile request:", JSON.stringify({ url, auth: `Bearer ${maskApiKey(apiKey)}` }));
+    console.log("[ZERNIO] resolve profile request", { authConfigured: Boolean(apiKey) });
     const resp = await fetch(url, { headers: { Authorization: `Bearer ${apiKey}` } });
     const bodyText = await resp.text().catch(() => "");
     console.log(`[ZERNIO] resolve profile response (${resp.status}):`, bodyText.slice(0, 600));
@@ -479,7 +480,7 @@ export async function sendZernioTemplate(params: ZernioTemplateSendParams): Prom
 
     // ── Step 2: add recipient ────────────────────────────────────────────
     const recUrl = `${baseUrl}/${encodeURIComponent(String(broadcastId))}/recipients`;
-    console.log("[ZERNIO] broadcast recipients request:", JSON.stringify({ url: recUrl, recipientCount: 1 }));
+    console.log("[ZERNIO] broadcast recipients request", { recipientCount: 1 });
     const recResp = await fetch(recUrl, { method: "POST", headers, body: JSON.stringify({ phones: [params.toPhoneE164] }) });
     const recText = await recResp.text().catch(() => "");
     console.log(`[ZERNIO] broadcast recipients response (${recResp.status}):`, recText.slice(0, 600));
@@ -494,7 +495,7 @@ export async function sendZernioTemplate(params: ZernioTemplateSendParams): Prom
 
     // ── Step 3: send ─────────────────────────────────────────────────────
     const sendUrl = `${baseUrl}/${encodeURIComponent(String(broadcastId))}/send`;
-    console.log("[ZERNIO] broadcast send request:", JSON.stringify({ url: sendUrl }));
+    console.log("[ZERNIO] broadcast send request");
     const sendResp = await fetch(sendUrl, { method: "POST", headers, body: JSON.stringify({}) });
     const sendText = await sendResp.text().catch(() => "");
     console.log(`[ZERNIO] broadcast send response (${sendResp.status}):`, sendText.slice(0, 600));
@@ -593,16 +594,18 @@ async function downloadAttachmentBytes(
       const u = new URL(attUrl);
       isZernioHost = u.protocol === "https:" && u.hostname === "zernio.com";
     } catch { /* not a valid absolute URL — plain fetch will fail below */ }
-    const resp = await fetch(attUrl, {
+    const resp = await safeOutboundRequest(attUrl, {
       headers: isZernioHost && apiKey ? { Authorization: `Bearer ${apiKey}` } : undefined,
-      redirect: "follow",
+      allowedProtocols: ["https:"],
+      timeoutMs: 15_000,
+      maxBytes: 25 * 1024 * 1024,
+      maxRedirects: 2,
     });
     if (!resp.ok) {
       console.warn(`[ZERNIO] attachment fetch failed (${resp.status}) for external URL`);
       return null;
     }
-    const buf = Buffer.from(await resp.arrayBuffer());
-    return { buf, contentType: resp.headers.get("content-type") || "application/octet-stream" };
+    return { buf: resp.body, contentType: resp.headers["content-type"] || "application/octet-stream" };
   } catch (err: any) {
     console.warn("[ZERNIO] attachment byte load error:", err?.message || err);
     return null;

@@ -442,6 +442,27 @@
       "when": 1788123600000,
       "tag": "0062_agent_tenant_capabilities",
       "breakpoints": true
+    },
+    {
+      "idx": 63,
+      "version": "7",
+      "when": 1788127200000,
+      "tag": "0063_finance_mutation_integrity",
+      "breakpoints": true
+    },
+    {
+      "idx": 64,
+      "version": "7",
+      "when": 1788130800000,
+      "tag": "0064_agent_application_token_expiry",
+      "breakpoints": true
+    },
+    {
+      "idx": 65,
+      "version": "7",
+      "when": 1788134400000,
+      "tag": "0065_invoice_integrity",
+      "breakpoints": true
     }
   ]
 }

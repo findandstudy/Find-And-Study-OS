@@ -10,6 +10,7 @@ import {
   validateContractBrandingInput,
 } from "../lib/contractBranding";
 import { resolveContractTemplateBranding } from "../lib/contractTemplateBranding";
+import { sanitizeContractTemplateHtml } from "../lib/contractHtmlSanitizer";
 
 const router: IRouter = Router();
 router.use("/contract-templates", express.json({ limit: "3mb" }));
@@ -29,7 +30,10 @@ router.get("/contract-templates", requireAuth, requirePermission("contract_templ
     const rows = await db.select().from(contractTemplatesTable)
       .where(and(...filters))
       .orderBy(desc(contractTemplatesTable.updatedAt));
-    res.json({ data: rows });
+    res.json({ data: rows.map((row) => ({
+      ...row,
+      bodyHtml: sanitizeContractTemplateHtml(row.bodyHtml),
+    })) });
   } catch (err) {
     console.error("[contract-templates] list:", err);
     res.status(500).json({ error: "Failed to list contract templates" });
@@ -75,7 +79,7 @@ router.get("/contract-templates/:id", requireAuth, requirePermission("contract_t
     const [row] = await db.select().from(contractTemplatesTable)
       .where(and(eq(contractTemplatesTable.id, id), isNull(contractTemplatesTable.deletedAt)));
     if (!row) { res.status(404).json({ error: "Not found" }); return; }
-    res.json({ data: row });
+    res.json({ data: { ...row, bodyHtml: sanitizeContractTemplateHtml(row.bodyHtml) } });
   } catch (err) {
     console.error("[contract-templates] get:", err);
     res.status(500).json({ error: "Failed to fetch contract template" });
@@ -95,7 +99,7 @@ router.post("/contract-templates", requireAuth, requirePermission("contract_temp
       language: language && typeof language === "string" ? language.slice(0, 8) : "en",
       entityType: entityType === "individual" ? "individual" : "company",
       version: Number.isInteger(version) && version > 0 ? version : 1,
-      bodyHtml: String(bodyHtml),
+      bodyHtml: sanitizeContractTemplateHtml(String(bodyHtml)),
       intakeSchema: Array.isArray(intakeSchema) ? intakeSchema : null,
       isActive: isActive !== false,
       signingPageConfig: sanitizeContractBranding(signingPageConfig),
@@ -132,6 +136,13 @@ router.patch("/contract-templates/:id", requireAuth, requirePermission("contract
     const allowed = ["name", "title", "language", "entityType", "version", "bodyHtml", "intakeSchema", "isActive", "signingPageConfig", "brandProfileId"];
     for (const k of allowed) {
       if (k in (req.body || {})) updates[k] = req.body[k];
+    }
+    if ("bodyHtml" in updates) {
+      if (typeof updates.bodyHtml !== "string" || !updates.bodyHtml.trim()) {
+        res.status(400).json({ error: "bodyHtml must be a non-empty string" });
+        return;
+      }
+      updates.bodyHtml = sanitizeContractTemplateHtml(updates.bodyHtml);
     }
     if (updates.entityType && updates.entityType !== "individual") updates.entityType = "company";
     if (updates.intakeSchema != null && !Array.isArray(updates.intakeSchema)) updates.intakeSchema = null;
@@ -230,7 +241,7 @@ router.post("/contract-templates/:id/new-version", requireAuth, requirePermissio
       language: source.language,
       entityType: source.entityType,
       version: source.version + 1,
-      bodyHtml: source.bodyHtml,
+      bodyHtml: sanitizeContractTemplateHtml(source.bodyHtml),
       intakeSchema: source.intakeSchema,
       signingPageConfig: source.signingPageConfig,
       brandProfileId: source.brandProfileId,
