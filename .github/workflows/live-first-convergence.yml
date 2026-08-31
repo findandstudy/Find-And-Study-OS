@@ -49,6 +49,9 @@ jobs:
           node lib/db/validate-migrations.mjs
           pnpm --filter @workspace/api-server run test:migration-authority
           pnpm --filter @workspace/api-server run test:control-plane-schema-bindings
+          pnpm --filter @workspace/api-server run test:active-tenant-context
+          pnpm --filter @workspace/api-server run test:change-set-policy
+          pnpm --filter @workspace/api-server run test:change-set-evidence-envelope
 
       - name: Type-check the workspace
         run: pnpm run typecheck
