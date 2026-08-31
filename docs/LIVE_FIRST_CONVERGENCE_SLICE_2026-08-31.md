@@ -80,6 +80,9 @@ Excluded:
   isolated EXECUTE-only adapter integration passed on PostgreSQL `16.15`.
 - Canonical durable-audit/reconciliation runtime blobs: `2/2` exact; chained
   audit, cancellation, rollback-survival and repair integration passed.
+- Canonical key-ring, selection-consumption, session lifetime and default-off
+  HTTP gateway source/test blobs: `6/6` exact; direct suites `21/21` and API
+  typecheck passed without route or bootstrap wiring.
 
 ## Remaining gates
 
