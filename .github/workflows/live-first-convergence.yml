@@ -1,0 +1,171 @@
+name: Live-first Convergence Gate
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: live-first-convergence-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  ALLOW_LIVE_INTEGRATIONS: "false"
+  CI: "true"
+  NODE_ENV: test
+  NO_COLOR: "1"
+
+jobs:
+  static-gate:
+    name: Ledger, typecheck, and security regressions
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out the pull request
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+          package-manager-cache: false
+
+      - name: Activate the repository-pinned pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.33.2 --activate
+          test "$(pnpm --version)" = "10.33.2"
+
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify package-manager and migration authority
+        run: |
+          pnpm run test:package-manager
+          node lib/db/validate-migrations.mjs
+          pnpm --filter @workspace/api-server run test:migration-authority
+          pnpm --filter @workspace/api-server run test:control-plane-schema-bindings
+
+      - name: Type-check the workspace
+        run: pnpm run typecheck
+
+      - name: Run live security regressions
+        run: pnpm --filter @workspace/api-server run test:security-regressions
+
+  windows-portability:
+    name: Windows locked install and typecheck
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out the pull request
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+          package-manager-cache: false
+
+      - name: Activate the repository-pinned pnpm
+        shell: pwsh
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.33.2 --activate
+          if ((pnpm --version) -ne "10.33.2") { throw "Unexpected pnpm version" }
+
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify Windows portability
+        run: |
+          pnpm run test:package-manager
+          node lib/db/validate-migrations.mjs
+          pnpm run typecheck
+
+  postgres-adoption:
+    name: PostgreSQL 16 fresh and production-prefix adoption
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16.15@sha256:e17e86066e5ef83e0952a9347f5c792b7ece00972e2aa787a6986f471b3dd3d5
+        env:
+          POSTGRES_DB: postgres
+          POSTGRES_HOST_AUTH_METHOD: trust
+          POSTGRES_USER: postgres
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+
+    steps:
+      - name: Check out the pull request
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+          package-manager-cache: false
+
+      - name: Activate the repository-pinned pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.33.2 --activate
+          test "$(pnpm --version)" = "10.33.2"
+
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Prepare the disposable database
+        env:
+          ALLOW_DISPOSABLE_DATABASE_RESET: "true"
+          PG_DISPOSABLE_ADMIN_URL: postgresql://postgres@127.0.0.1:5433/postgres
+        run: node lib/db/prepare-disposable-migration-database.mjs
+
+      - name: Apply all 82 migrations to a fresh database
+        env:
+          ALLOW_REVIEWED_MIGRATIONS: "true"
+          DATABASE_URL: postgresql://fas_migrator@127.0.0.1:5433/fasos_apply_local
+          MIGRATION_CONFIRMED_DATABASE: fasos_apply_local
+          MIGRATION_CONFIRMED_HOST: 127.0.0.1
+          MIGRATION_CONFIRMED_PORT: "5433"
+          MIGRATION_CONFIRMED_USER: fas_migrator
+          MIGRATION_TARGET_ENV: local
+        working-directory: lib/db
+        run: node ./run-migrations.mjs
+
+      - name: Prove reviewed-runner replay is clean
+        env:
+          ALLOW_REVIEWED_MIGRATIONS: "true"
+          DATABASE_URL: postgresql://fas_migrator@127.0.0.1:5433/fasos_apply_local
+          MIGRATION_CONFIRMED_DATABASE: fasos_apply_local
+          MIGRATION_CONFIRMED_HOST: 127.0.0.1
+          MIGRATION_CONFIRMED_PORT: "5433"
+          MIGRATION_CONFIRMED_USER: fas_migrator
+          MIGRATION_TARGET_ENV: local
+        working-directory: lib/db
+        run: node ./run-migrations.mjs
+
+      - name: Reset the disposable database for prefix adoption
+        env:
+          ALLOW_DISPOSABLE_DATABASE_RESET: "true"
+          PG_DISPOSABLE_ADMIN_URL: postgresql://postgres@127.0.0.1:5433/postgres
+        run: node lib/db/prepare-disposable-migration-database.mjs
+
+      - name: Prove production 66/66 to canonical 82/82 adoption
+        env:
+          ALLOW_DISPOSABLE_PREFIX_ADOPTION: "true"
+          DATABASE_URL: postgresql://fas_migrator@127.0.0.1:5433/fasos_apply_local
+        run: node lib/db/test-production-prefix-adoption.mjs

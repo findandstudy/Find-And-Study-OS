@@ -440,6 +440,56 @@ test("production-prefix adoption harness is explicit and loopback-only", () => {
   assert.match(source, /count: 82/);
 });
 
+test("disposable database reset is explicit and fixed to the local test identity", () => {
+  const resetTool = path.join(
+    root,
+    "lib/db/prepare-disposable-migration-database.mjs",
+  );
+  const unapproved = spawnSync(process.execPath, [resetTool], {
+    cwd: root,
+    encoding: "utf8",
+    env: { PATH: process.env.PATH ?? "" },
+  });
+  assert.equal(unapproved.status, 1);
+  assert.match(unapproved.stderr, /ALLOW_DISPOSABLE_DATABASE_RESET=true/);
+
+  const remote = spawnSync(process.execPath, [resetTool], {
+    cwd: root,
+    encoding: "utf8",
+    env: {
+      PATH: process.env.PATH ?? "",
+      ALLOW_DISPOSABLE_DATABASE_RESET: "true",
+      PG_DISPOSABLE_ADMIN_URL:
+        "postgresql://postgres:blocked@db.example.test:5433/postgres",
+    },
+  });
+  assert.equal(remote.status, 1);
+  assert.match(remote.stderr, /only postgresql:\/\/postgres@127\.0\.0\.1:5433/);
+
+  const source = readFileSync(resetTool, "utf8");
+  assert.match(source, /DROP DATABASE IF EXISTS fasos_apply_local/);
+  assert.match(source, /CREATE DATABASE fasos_apply_local OWNER fas_migrator/);
+  assert.match(source, /NOINHERIT NOREPLICATION NOBYPASSRLS/);
+  assert.match(source, /pg_auth_members/);
+});
+
+test("live-first CI pins actions and PostgreSQL while replaying both adoption paths", () => {
+  const workflow = readFileSync(
+    path.join(root, ".github/workflows/live-first-convergence.yml"),
+    "utf8",
+  );
+  assert.match(workflow, /runs-on: ubuntu-latest/);
+  assert.match(workflow, /runs-on: windows-latest/);
+  assert.match(
+    workflow,
+    /postgres:16\.15@sha256:e17e86066e5ef83e0952a9347f5c792b7ece00972e2aa787a6986f471b3dd3d5/,
+  );
+  assert.match(workflow, /prepare-disposable-migration-database\.mjs/);
+  assert.equal(workflow.match(/node \.\/run-migrations\.mjs/g)?.length, 2);
+  assert.match(workflow, /test-production-prefix-adoption\.mjs/);
+  assert.doesNotMatch(workflow, /uses:\s+[^\s@]+@(?![a-f0-9]{40}\b)/);
+});
+
 test("ledger baseline requires explicit audit and exact database confirmation before DB access", () => {
   const baseline = spawnSync(
     process.execPath,

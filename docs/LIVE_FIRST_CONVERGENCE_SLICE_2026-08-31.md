@@ -48,7 +48,7 @@ Excluded:
 - Product migration Git blob comparison for `0054-0065`: `12/12` exact.
 - Package-manager guard: `6/6`.
 - Frozen install with `pnpm@10.33.2`: pass; lockfile unchanged.
-- Migration-authority: `12` pass, `1` Bash-unavailable skip on Windows.
+- Migration-authority: `14` pass, `1` Bash-unavailable skip on Windows.
 - Full workspace typecheck: pass.
 - Live security regressions: `29/29`.
 - Rate-limit/IP security: `5/5`.
@@ -66,6 +66,10 @@ Excluded:
   cleans it before deleting its seeded user.
 - Contract signing scope DB suite: `14/14` with delivery disabled.
 - Contract render/sign suite: `18/18`.
+- Exact-head CI workflow prepared locally with pinned Node actions and
+  PostgreSQL `16.15` image digest; GitHub run is still pending.
+- Canonical authorization and Control Plane Drizzle schema blobs: `2/2` exact.
+- Default-unwired schema binding regression: `3/3`.
 
 ## Remaining gates
 
