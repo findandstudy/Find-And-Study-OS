@@ -212,7 +212,7 @@ async function resolveAcademyAccessByUserIds(userIds: number[]): Promise<Map<num
   );
 
   for (const user of users) {
-    const basePermissions = user.role === "super_admin" || user.role === "admin"
+    const basePermissions = user.role === "super_admin"
       ? getAllPermissions()
       : permissionsByRole.get(user.role)
         ?? ((DEFAULT_ROLE_PERMISSIONS as Record<string, string[]>)[user.role] ?? []);

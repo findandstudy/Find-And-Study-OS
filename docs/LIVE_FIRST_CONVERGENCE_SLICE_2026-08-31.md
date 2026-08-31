@@ -117,8 +117,9 @@ Excluded:
   the current live public-application verification behavior is preserved.
 - Only `super_admin` now bypasses the central effective-permission resolver and
   shared frontend permission guards. `admin` uses its stored/fallback package
-  plus explicit user overrides; direct legacy role-gated screens/routes remain
-  G30-quarantined rather than being treated as converted.
+  plus explicit user overrides, including the batched Academy access
+  projection; direct legacy role-gated screens/routes remain G30-quarantined
+  rather than being treated as converted.
 
 ## Remaining gates
 

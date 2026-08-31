@@ -325,6 +325,7 @@ test("user and role routes enforce permission and hierarchy boundaries", () => {
   assert.match(authMiddlewareSource, /new Set\(\[\.\.\.effective, \.\.\.own\]\)/);
   assert.doesNotMatch(authHookSource, /role === "super_admin" \|\| role === "admin"/);
   assert.doesNotMatch(protectedRouteSource, /effectiveUser\.role !== "super_admin" && effectiveUser\.role !== "admin"/);
+  assert.doesNotMatch(agentsRouteSource, /user\.role === "super_admin" \|\| user\.role === "admin"/);
 });
 
 test("external AI delivery fails closed and activation requires Super Admin", () => {
