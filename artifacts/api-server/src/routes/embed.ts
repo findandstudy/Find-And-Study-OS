@@ -617,6 +617,16 @@ function sanitizePublicUrl(value: unknown): string {
   }
 }
 
+function publicUniversityLogoPath(universityId: unknown, storedLogo: unknown): string {
+  const id = Number(universityId);
+  if (!Number.isInteger(id) || id <= 0) return "";
+  if (typeof storedLogo !== "string" || !storedLogo.trim()) return "";
+  // Never expose stored data: URLs or arbitrary logo URLs in public embed
+  // JSON. The dedicated logo endpoint validates/decodes the stored value and
+  // serves it with nosniff + restrictive CSP headers.
+  return `/api/universities/${id}/logo`;
+}
+
 function sanitizeTheme(theme: any): Record<string, string> {
   if (!theme || typeof theme !== "object") return {};
   const safe: Record<string, string> = {};
@@ -1586,7 +1596,7 @@ router.get("/public/embed/:slug/programs", async (req, res): Promise<void> => {
 
   const safeRows = rows.map((row) => ({
     ...row,
-    universityLogoUrl: sanitizePublicUrl(row.universityLogoUrl),
+    universityLogoUrl: publicUniversityLogoPath(row.universityId, row.universityLogoUrl),
     universityWebsite: sanitizePublicUrl(row.universityWebsite),
   }));
   res.json({ data: safeRows, meta: { total: Number(count), page: pageNum, limit: limitNum, totalPages: Math.ceil(Number(count) / limitNum) } });
@@ -3630,7 +3640,7 @@ export function generateChatbotWidgetHTML(
   const primaryColor = theme.primaryColor || "#123f9c";
   const buttonColor = theme.buttonColor || primaryColor;
   const radius = theme.borderRadius || "18px";
-  const logoUrl = theme.logoUrl || sanitizePublicUrl(university.logoUrl) || "";
+  const logoUrl = theme.logoUrl || publicUniversityLogoPath(university.id, university.logoUrl);
   const assistantName =
     theme.assistantName || copy.assistantName(university.name);
   const safeConfig = JSON.stringify({

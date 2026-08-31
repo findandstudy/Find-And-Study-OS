@@ -370,6 +370,12 @@ test("outbound URL policy blocks local, metadata and alternate IP notations", ()
     "fc00::1",
     "fe80::1",
   ]) assert.equal(isBlockedOutboundIp(address), true, address);
+  for (const address of [
+    "8.8.8.8",
+    "216.150.1.1",
+    "2606:4700:4700::1111",
+  ]) assert.equal(isBlockedOutboundIp(address), false, address);
+  assert.equal(isBlockedOutboundIp("::ffff:8.8.8.8"), true);
   assert.throws(() => parseSafeOutboundUrl("https://169.254.169.254/latest/meta-data"));
   assert.throws(() => parseSafeOutboundUrl("https://[::1]/"));
   assert.throws(() => parseSafeOutboundUrl("https://2130706433/"));
@@ -544,7 +550,8 @@ test("activity PDF rendering blocks network access and returns generic errors", 
 });
 
 test("public embed output sanitizes URLs and escapes visitor-controlled attributes", () => {
-  assert.match(embedRouteSource, /universityLogoUrl: sanitizePublicUrl\(row\.universityLogoUrl\)/);
+  assert.match(embedRouteSource, /universityLogoUrl: publicUniversityLogoPath\(row\.universityId, row\.universityLogoUrl\)/);
+  assert.match(embedRouteSource, /return `\/api\/universities\/\$\{id\}\/logo`/);
   assert.match(embedRouteSource, /universityWebsite: sanitizePublicUrl\(row\.universityWebsite\)/);
   assert.match(embedRouteSource, /value="'\+esc\(userFilters\.search\|\|''\)\+'"/);
   assert.match(embedRouteSource, /'\+esc\(nextLabel\)\+'<\/button>'/);
