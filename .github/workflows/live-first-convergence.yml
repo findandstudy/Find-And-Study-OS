@@ -58,6 +58,11 @@ jobs:
           pnpm --filter @workspace/api-server run test:change-set-request-context
           pnpm --filter @workspace/api-server run test:authoritative-active-context-issuance
           pnpm --filter @workspace/api-server run test:active-context-session-gateway
+          pnpm --filter @workspace/api-server run test:active-context-selection-consumption
+          pnpm --filter @workspace/api-server run test:active-context-selection-attempt
+          pnpm --filter @workspace/api-server run test:active-context-selection-attempt-ledger
+          pnpm --filter @workspace/api-server run test:active-context-selection-repair
+          pnpm --filter @workspace/api-server run test:active-context-selection-repair-store
 
       - name: Type-check the workspace
         run: pnpm run typecheck
@@ -198,3 +203,15 @@ jobs:
           PG_GATE_MIGRATOR_URL: postgresql://fas_migrator@127.0.0.1:5433/fasos_apply_local
           PG_GATE_REPAIR_WORKER_URL: postgresql://fas_repair_worker@127.0.0.1:5433/fasos_apply_local
         run: pnpm --filter @workspace/api-server run test:postgres-change-set-audit
+
+      - name: Run active-context session, lifecycle, and repair checks
+        env:
+          ALLOW_DISPOSABLE_SESSION_GATEWAY_TEST: "true"
+          PG_GATE_ADMIN_URL: postgresql://postgres@127.0.0.1:5433/fasos_apply_local
+          PG_GATE_CONTEXT_RESOLVER_URL: postgresql://fas_auth_context_resolver@127.0.0.1:5433/fasos_apply_local
+          PG_GATE_MIGRATOR_URL: postgresql://fas_migrator@127.0.0.1:5433/fasos_apply_local
+          PG_GATE_RATE_LIMIT_URL: postgresql://fas_rate_limit_executor@127.0.0.1:5433/fasos_apply_local
+          PG_GATE_SESSION_LIFECYCLE_URL: postgresql://fas_session_lifecycle_executor@127.0.0.1:5433/fasos_apply_local
+          PG_GATE_SESSION_REPAIR_URL: postgresql://fas_session_repair_executor@127.0.0.1:5433/fasos_apply_local
+          PG_GATE_SESSION_RESOLVER_URL: postgresql://fas_session_resolver@127.0.0.1:5433/fasos_apply_local
+        run: pnpm --filter @workspace/api-server run test:postgres-active-context-session-gateway

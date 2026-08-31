@@ -83,6 +83,9 @@ Excluded:
 - Canonical key-ring, selection-consumption, session lifetime and default-off
   HTTP gateway source/test blobs: `6/6` exact; direct suites `21/21` and API
   typecheck passed without route or bootstrap wiring.
+- Canonical PostgreSQL session/rate-limit/lifecycle/consumption/repair runtime
+  and direct-test blobs: `13/13` exact; direct suites `16/16` and the fresh
+  PostgreSQL `0→82` session/lifecycle/repair integration chain passed.
 
 ## Remaining gates
 

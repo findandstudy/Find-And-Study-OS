@@ -481,6 +481,14 @@ test("disposable database reset is explicit and fixed to the local test identity
   assert.match(source, /fas_audit_writer/);
   assert.match(source, /fas_repair_owner/);
   assert.match(source, /fas_repair_worker/);
+  assert.match(source, /fas_session_owner/);
+  assert.match(source, /fas_session_resolver/);
+  assert.match(source, /fas_rate_limit_owner/);
+  assert.match(source, /fas_rate_limit_executor/);
+  assert.match(source, /fas_session_lifecycle_owner/);
+  assert.match(source, /fas_session_lifecycle_executor/);
+  assert.match(source, /fas_session_repair_owner/);
+  assert.match(source, /fas_session_repair_executor/);
 });
 
 test("PostgreSQL adapter integration is explicit and fixed to the disposable target", () => {
@@ -533,6 +541,38 @@ test("durable audit integration is explicit and fixed to the disposable target",
   assert.match(source, /assert\.equal\(parsed\.port, "5433"\)/);
   assert.match(source, /\[auditWriterUrl, "fas_audit_writer"\]/);
   assert.match(source, /\[repairWorkerUrl, "fas_repair_worker"\]/);
+});
+
+test("active-context PostgreSQL session integration is explicit and fixed to the disposable target", () => {
+  const sessionTest = path.join(
+    root,
+    "artifacts/api-server/scripts/test-postgres-active-context-session-gateway.ts",
+  );
+  const unapproved = spawnSync(
+    process.execPath,
+    ["--import", "tsx", sessionTest],
+    {
+      cwd: path.join(root, "artifacts/api-server"),
+      encoding: "utf8",
+      env: { PATH: process.env.PATH ?? "" },
+    },
+  );
+  assert.equal(unapproved.status, 1);
+  assert.match(
+    unapproved.stderr,
+    /ALLOW_DISPOSABLE_SESSION_GATEWAY_TEST=true is required/,
+  );
+
+  const source = readFileSync(sessionTest, "utf8");
+  assert.match(source, /assert\.equal\(databaseName, "fasos_apply_local"\)/);
+  assert.match(source, /assert\.equal\(parsed\.port, "5433"\)/);
+  assert.match(source, /\[sessionResolverUrl, "fas_session_resolver"\]/);
+  assert.match(source, /\[rateLimitUrl, "fas_rate_limit_executor"\]/);
+  assert.match(
+    source,
+    /\[lifecycleUrl, "fas_session_lifecycle_executor"\]/,
+  );
+  assert.match(source, /\[repairUrl, "fas_session_repair_executor"\]/);
 });
 
 test("live-first CI pins actions and PostgreSQL while replaying both adoption paths", () => {
