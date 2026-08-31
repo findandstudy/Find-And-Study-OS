@@ -47,9 +47,12 @@ Excluded:
   source commit.
 - Product migration Git blob comparison for `0054-0065`: `12/12` exact.
 - Package-manager guard: `6/6`.
-- Frozen install with `pnpm@10.33.2`: pass; lockfile unchanged.
+- Frozen install with `pnpm@10.33.2`: pass; the four reviewed Windows x64
+  native packages are present and the lockfile remains stable on replay.
 - Migration-authority: `14` pass, `1` Bash-unavailable skip on Windows.
 - Full workspace typecheck: pass.
+- API and Edcons production builds: pass; Edcons i18n has `4,873` used keys,
+  `6,106` English keys and `10` synchronized languages.
 - Live security regressions: `29/29`.
 - Rate-limit/IP security: `5/5`.
 - Agent application/onboarding: `14/14`.
