@@ -324,6 +324,9 @@ test("user and role routes enforce permission and hierarchy boundaries", () => {
   assert.match(permissionsSource, /ALL_PERMISSION_ROLES = new Set\(\["super_admin"\]\)/);
   assert.match(authMiddlewareSource, /ADMINISH_ROLES = new Set\(\["super_admin"\]\)/);
   assert.match(authMiddlewareSource, /new Set\(\[\.\.\.effective, \.\.\.own\]\)/);
+  assert.match(authMiddlewareSource, /isAuthoritativeImpersonationParent/);
+  assert.match(authMiddlewareSource, /issuedAt: session\.issued_at/);
+  assert.match(authMiddlewareSource, /isActive: parentAuthRow\.dbUser\.isActive !== false/);
   assert.doesNotMatch(authHookSource, /role === "super_admin" \|\| role === "admin"/);
   assert.doesNotMatch(protectedRouteSource, /effectiveUser\.role !== "super_admin" && effectiveUser\.role !== "admin"/);
   assert.doesNotMatch(agentsRouteSource, /user\.role === "super_admin" \|\| user\.role === "admin"/);

@@ -32,6 +32,42 @@ const ADMIN_ACTOR_ROLES = new Set(["super_admin", "admin", "manager"]);
 const PRIVILEGED_TARGET_ROLES = new Set(["super_admin", "admin", "manager"]);
 const AGENT_TARGET_ROLES = new Set(["agent", "sub_agent", "agent_staff"]);
 
+export type ImpersonationChildSession = {
+  userId: number;
+  issuedAt?: number;
+};
+
+export type ImpersonationParentSession = {
+  userId: number;
+  role: string;
+  issuedAt?: number;
+  originalSid?: string;
+};
+
+export type ImpersonationParentActor = {
+  id: number;
+  role: string;
+  isActive: boolean;
+  isDeleted: boolean;
+};
+
+/**
+ * An impersonation child is valid only while its direct parent session and
+ * parent actor still describe the exact authority that created it.
+ */
+export function isAuthoritativeImpersonationParent(
+  child: ImpersonationChildSession,
+  parent: ImpersonationParentSession | null,
+  actor: ImpersonationParentActor | null,
+): boolean {
+  if (!parent || !actor || parent.originalSid) return false;
+  if (!Number.isFinite(child.issuedAt) || !Number.isFinite(parent.issuedAt)) return false;
+  if (child.issuedAt !== parent.issuedAt) return false;
+  if (child.userId === parent.userId || actor.id !== parent.userId) return false;
+  if (!actor.isActive || actor.isDeleted) return false;
+  return actor.role === parent.role;
+}
+
 /**
  * Transitional, fail-closed policy for the legacy /users/:id/impersonate
  * route. This does not claim to be the target grant engine. It prevents the

@@ -20,6 +20,9 @@ non-sliding across every write helper.
 - Every legacy impersonation child session inherits the verified parent
   session's issued-at value; switching identity cannot start a fresh absolute
   24-hour window.
+- Every impersonated request revalidates the parent session and actor. Missing
+  or nested parent state, mismatched issued-at/identity/role, deleted actor or
+  inactive actor clears the child session before authorization continues.
 - The existing live public-application student verification exception remains
   unchanged.
 
@@ -30,12 +33,12 @@ ending normalization.
 ## Evidence
 
 - Session lifetime tests: `3/3`.
-- Impersonation policy tests: `5/5`.
+- Impersonation policy and parent-authority tests: `6/6`.
 - User-management policy tests: `6/6`.
 - Live security regressions: `31/31`.
 - API TypeScript check: pass.
 - Diff check: pass.
 
-This does not add MFA, step-up, JIT/PAM, browser active-context token storage or
-production Control Plane wiring. No production session, database, VPS, GitHub
-or `Next` state was changed.
+This does not add MFA, step-up, JIT/PAM, full relationship-grant re-evaluation,
+browser active-context token storage or production Control Plane wiring. No
+production session, database, VPS, GitHub or `Next` state was changed.

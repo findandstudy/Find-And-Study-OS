@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { evaluateLegacyUserImpersonation } from "../src/lib/impersonationPolicy.js";
+import {
+  evaluateLegacyUserImpersonation,
+  isAuthoritativeImpersonationParent,
+} from "../src/lib/impersonationPolicy.js";
 
 const target = {
   id: 20,
@@ -84,4 +87,20 @@ test("all linked target branches must be inside the actor scope", () => {
     ).reason,
     "cross_branch",
   );
+});
+
+test("impersonation child requires the exact live parent session and actor", () => {
+  const child = { userId: 20, issuedAt: 1_000 };
+  const parent = { userId: 1, role: "admin", issuedAt: 1_000 };
+  const actor = { id: 1, role: "admin", isActive: true, isDeleted: false };
+
+  assert.equal(isAuthoritativeImpersonationParent(child, parent, actor), true);
+  assert.equal(isAuthoritativeImpersonationParent(child, null, actor), false);
+  assert.equal(isAuthoritativeImpersonationParent(child, { ...parent, originalSid: "nested" }, actor), false);
+  assert.equal(isAuthoritativeImpersonationParent(child, { ...parent, issuedAt: 999 }, actor), false);
+  assert.equal(isAuthoritativeImpersonationParent({ ...child, issuedAt: undefined }, parent, actor), false);
+  assert.equal(isAuthoritativeImpersonationParent({ ...child, userId: 1 }, parent, actor), false);
+  assert.equal(isAuthoritativeImpersonationParent(child, parent, { ...actor, role: "manager" }), false);
+  assert.equal(isAuthoritativeImpersonationParent(child, parent, { ...actor, isActive: false }), false);
+  assert.equal(isAuthoritativeImpersonationParent(child, parent, { ...actor, isDeleted: true }), false);
 });

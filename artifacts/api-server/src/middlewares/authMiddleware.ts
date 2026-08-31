@@ -15,6 +15,7 @@ import { extractBearerToken, lookupApiToken } from "../lib/apiTokenAuth";
 import { applyPermissionOverrides } from "../lib/permissions";
 import { verifyStudentPhotoSignature } from "@workspace/portal-adapters";
 import { getRemainingSessionCookieTtl, resolveSessionIssuedAt } from "../lib/sessionLifetime";
+import { isAuthoritativeImpersonationParent } from "../lib/impersonationPolicy";
 
 declare global {
   namespace Express {
@@ -211,6 +212,37 @@ export async function authMiddleware(
     await clearSession(res, sid, req);
     next();
     return;
+  }
+
+  if (session.originalSid) {
+    const parentSession = await getSession(session.originalSid);
+    const parentAuthRow = parentSession?.user?.id
+      ? await fetchDbUser(parentSession.user.id)
+      : null;
+    const parentStillAuthoritative = isAuthoritativeImpersonationParent(
+      { userId: session.user.id, issuedAt: session.issued_at },
+      parentSession?.user?.id
+        ? {
+            userId: parentSession.user.id,
+            role: parentSession.user.role,
+            issuedAt: parentSession.issued_at,
+            originalSid: parentSession.originalSid,
+          }
+        : null,
+      parentAuthRow
+        ? {
+            id: parentAuthRow.dbUser.id,
+            role: parentAuthRow.dbUser.role,
+            isActive: parentAuthRow.dbUser.isActive !== false,
+            isDeleted: parentAuthRow.dbUser.deletedAt !== null,
+          }
+        : null,
+    );
+    if (!parentStillAuthoritative) {
+      await clearSession(res, sid, req);
+      next();
+      return;
+    }
   }
 
   const authUserRow = await fetchDbUser(session.user.id);
