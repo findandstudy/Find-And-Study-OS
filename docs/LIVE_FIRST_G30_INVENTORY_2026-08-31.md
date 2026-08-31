@@ -9,8 +9,8 @@ review surfaces, never authorization or evidence that a path is safe.
 ## Tenant writer inventory
 
 - Production TypeScript files with a detected surface: `163`.
-- Conservative surfaces: `2,101`.
-- Database ORM writes: `1,400`.
+- Conservative surfaces: `2,099`.
+- Database ORM writes: `1,398`.
 - Raw SQL writes: `383`.
 - Object/file writes: `26`.
 - External side effects: `179`.
@@ -38,8 +38,8 @@ conservatively as high-risk, mixed-legacy and quarantine-required:
 - Route files: `71`.
 - Route registrations: `762`.
 - `requireAuth` references: `706`.
-- Fixed `requireRole(...)`: `473`.
-- `requirePermission(...)`: `44`.
+- Fixed `requireRole(...)`: `476`.
+- `requirePermission(...)`: `41`.
 - Direct role checks: `28`.
 - Auth-only route candidates: `127`.
 - Public route candidates: `128`.

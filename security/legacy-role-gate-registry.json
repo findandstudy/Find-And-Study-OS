@@ -10,8 +10,8 @@
   "totals": {
     "routeRegistrations": 762,
     "requireAuth": 706,
-    "requireRole": 473,
-    "requirePermission": 44,
+    "requireRole": 476,
+    "requirePermission": 41,
     "requireScope": 0,
     "directRoleChecks": 28,
     "authOnlyRouteCandidates": 127,
@@ -275,7 +275,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/branches.ts",
-      "sha256": "e04f77dc12f812aea5a0d6a0a21ecb576550f301c42e0f850a7b7d923f32245e",
+      "sha256": "906b4f2b734b3688a39bed182521466499d8757f885276629fff56f357a84be5",
       "routeRegistrations": 6,
       "requireAuth": 7,
       "requireRole": 6,
@@ -905,11 +905,11 @@
     },
     {
       "path": "artifacts/api-server/src/routes/roles.ts",
-      "sha256": "2be546a668fa9a2609220998254827974fdc3a905764589208197adc83e5f444",
+      "sha256": "497585c44365870bb01c165166be4e27462982cf20d4489c849516cf025af233",
       "routeRegistrations": 6,
       "requireAuth": 7,
-      "requireRole": 0,
-      "requirePermission": 6,
+      "requireRole": 3,
+      "requirePermission": 3,
       "requireScope": 0,
       "directRoleChecks": 0,
       "authOnlyRouteCandidates": 0,
@@ -920,7 +920,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/settings.ts",
-      "sha256": "95c34edb93b211c785207a95b5b4c7df756a75bb118d8ca722e890d085dd6aee",
+      "sha256": "ae48ab96ddc96358ea9f4285689709916d6897c60201acf40ce38f016e1de544",
       "routeRegistrations": 8,
       "requireAuth": 7,
       "requireRole": 4,

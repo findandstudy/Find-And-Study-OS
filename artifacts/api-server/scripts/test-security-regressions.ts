@@ -84,6 +84,10 @@ const rolesRouteSource = readFileSync(
   new URL("../src/routes/roles.ts", import.meta.url),
   "utf8",
 );
+const branchesRouteSource = readFileSync(
+  new URL("../src/routes/branches.ts", import.meta.url),
+  "utf8",
+);
 const universitiesRouteSource = readFileSync(
   new URL("../src/routes/universities.ts", import.meta.url),
   "utf8",
@@ -294,6 +298,10 @@ test("user and role routes enforce permission and hierarchy boundaries", () => {
   assert.match(legacyUserManagementPolicySource, /agent_relationship_route_required/);
   assert.match(rolesRouteSource, /requirePermission\("users\.manage_roles"\)/);
   assert.doesNotMatch(rolesRouteSource, /requireRole\(\.\.\.ADMIN_ROLES\)/);
+  assert.match(rolesRouteSource, /router\.post\("\/roles", requireAuth, requireRole\("super_admin"\)/);
+  assert.match(rolesRouteSource, /router\.patch\("\/roles\/:id", requireAuth, requireRole\("super_admin"\)/);
+  assert.match(rolesRouteSource, /router\.delete\("\/roles\/:id", requireAuth, requireRole\("super_admin"\)/);
+  assert.doesNotMatch(rolesRouteSource, /seedDefaultRoles/);
   assert.match(authSource, /getEffectivePermissionSet\(req\.user\)/);
   assert.doesNotMatch(authSource, /\.\.\.fromDb, \.\.\.fromDefault/);
 });
@@ -518,6 +526,15 @@ test("public embed output sanitizes URLs and escapes visitor-controlled attribut
 test("sensitive settings, AI work, sessions, assets and webhooks fail closed", () => {
   assert.match(settingsRouteSource, /router\.get\("\/settings\/client", requireAuth/);
   assert.match(settingsRouteSource, /router\.get\("\/settings", requireAuth, requireRole\(\.\.\.MANAGER_ROLES\)/);
+  assert.match(settingsRouteSource, /router\.patch\("\/settings", requireAuth, requireRole\("super_admin"\)/);
+  assert.match(settingsRouteSource, /CREDENTIAL_FIELDS = \["smtpPassword", "whatsappToken", "n8nWebhookUrl"\]/);
+  assert.match(settingsRouteSource, /Read paths must never bootstrap mutable platform configuration/);
+  assert.match(settingsRouteSource, /platform_config\.settings\.update/);
+  assert.match(settingsRouteSource, /"\/settings\/admin\/backfill-assignments", requireAuth, requireRole\("super_admin"\)/);
+  assert.match(branchesRouteSource, /platform_config\.branch\.create/);
+  assert.match(branchesRouteSource, /platform_config\.branch\.update/);
+  assert.match(branchesRouteSource, /platform_config\.branch\.archive/);
+  assert.match(branchesRouteSource, /platform_config\.branch\.unarchive/);
   assert.match(aiExtractRouteSource, /requireRole\(\.\.\.STAFF_ROLES, \.\.\.AGENT_ROLES\)/);
   assert.match(aiExtractRouteSource, /new PgRateLimitStore\(AI_RATE_WINDOW_MS, bucket\)/);
   assert.match(sessionSource, /ABSOLUTE_SESSION_TTL/);

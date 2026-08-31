@@ -90,7 +90,7 @@ Excluded:
   converged `82` denominator and exact local identity. Foundation fixtures and
   adapter fixtures are separated by an explicit reset plus second `66→82`
   replay; the full CI-order candidate passed.
-- Live-first G30 denominators are frozen at `163` writer files / `2,101`
+- Live-first G30 denominators are frozen at `163` writer files / `2,099`
   conservative surfaces and `71` route files / `762` registrations. Normal
   drift gates pass; strict writer and route gates remain expected NO-GO.
 - Canonical legacy user-management and impersonation policies are bound to the
@@ -106,6 +106,11 @@ Excluded:
   test blobs are `3/3` exact. Targeting tests pass `11/11`; the real loopback
   disposable PostgreSQL object-authorization suite passes `4/4` with cleanup
   and natural exit-code preservation.
+- Legacy role mutations, global settings mutation, assignment backfill and
+  branch lifecycle writes are temporarily Super Admin-bound; read-time role
+  and settings bootstrap writes are removed, n8n endpoint data is redacted and
+  bounded config audit events are emitted. Current route counts are `476`
+  fixed-role / `41` permission references; strict G30 remains NO-GO.
 
 ## Remaining gates
 
