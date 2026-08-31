@@ -155,6 +155,31 @@ The safe transition sequence is:
 
 No environment flag bypasses this boundary. A failed preflight is a NO-GO.
 
+Before planning the production transition, collect a metadata-only attestation
+from the checked-out reviewed release. It opens the database transaction as
+`READ ONLY`, verifies the Drizzle ledger against repository hashes, calls only
+the localhost health `GET`, reads process/path/filesystem metadata and emits no
+private filenames, file contents, environment values or database credentials:
+
+```bash
+cd /opt/findandstudy/current
+export RUNTIME_ENV_FILE=/etc/findandstudy.env
+set -a
+# shellcheck disable=SC1091
+source "$RUNTIME_ENV_FILE"
+set +a
+umask 077
+attestation_file="$(mktemp /tmp/fasos-attestation.XXXXXX.json)"
+PRODUCTION_ATTESTATION_READ_ONLY=1 \
+  node deploy/production-readonly-attestation.mjs > "$attestation_file"
+printf 'Attestation written to %s\n' "$attestation_file"
+```
+
+Review the JSON before moving it off-host. The command is evidence collection,
+not approval to deploy or change ownership. A ledger mismatch, duplicate API or
+worker, missing path, unreachable local health endpoint or exceeded private-tree
+limit fails closed.
+
 ---
 
 ## Environment Configuration
