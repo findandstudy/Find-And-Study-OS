@@ -6,9 +6,11 @@ import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import {
+  assertExpectedProductionState,
   assertReadOnlyOptIn,
   collectPrivateTreeInventory,
   isWithin,
+  parseProductionExpectations,
   parseProcessInventory,
   safeErrorMessage,
   validateSourceProvenance,
@@ -34,6 +36,84 @@ test("database connection strings are redacted from error output", () => {
   );
   assert.doesNotMatch(message, /super-secret|db_user/);
   assert.match(message, /REDACTED/);
+});
+
+test("production expectations require an exact release and canonical migration prefix", () => {
+  assert.deepEqual(
+    parseProductionExpectations({
+      expectedReleaseId: "20260831T115424Z-6dca1f951590",
+      expectedAppliedMigrations: "66",
+    }),
+    {
+      releaseId: "20260831T115424Z-6dca1f951590",
+      appliedMigrations: 66,
+    },
+  );
+  for (const expectedReleaseId of ["", "../current", "/absolute", "a/b"]) {
+    assert.throws(
+      () =>
+        parseProductionExpectations({
+          expectedReleaseId,
+          expectedAppliedMigrations: "66",
+        }),
+      /EXPECTED_RELEASE_ID/,
+    );
+  }
+  for (const expectedAppliedMigrations of ["", "066", "-1", "66.0", "1e2"]) {
+    assert.throws(
+      () =>
+        parseProductionExpectations({
+          expectedReleaseId: "release-1",
+          expectedAppliedMigrations,
+        }),
+      /EXPECTED_APPLIED_MIGRATIONS/,
+    );
+  }
+});
+
+test("attestation rejects unexpected live release or migration-prefix drift", () => {
+  const expectations = {
+    releaseId: "expected-release",
+    appliedMigrations: 66,
+  };
+  assert.doesNotThrow(() =>
+    assertExpectedProductionState({
+      expectations,
+      actualReleaseId: "expected-release",
+      actualAppliedMigrations: 66,
+      repositoryMigrations: 82,
+    }),
+  );
+  assert.throws(
+    () =>
+      assertExpectedProductionState({
+        expectations,
+        actualReleaseId: "unexpected-release",
+        actualAppliedMigrations: 66,
+        repositoryMigrations: 82,
+      }),
+    /does not match the explicitly expected release/,
+  );
+  assert.throws(
+    () =>
+      assertExpectedProductionState({
+        expectations,
+        actualReleaseId: "expected-release",
+        actualAppliedMigrations: 67,
+        repositoryMigrations: 82,
+      }),
+    /does not match the explicitly expected prefix/,
+  );
+  assert.throws(
+    () =>
+      assertExpectedProductionState({
+        expectations: { ...expectations, appliedMigrations: 83 },
+        actualReleaseId: "expected-release",
+        actualAppliedMigrations: 83,
+        repositoryMigrations: 82,
+      }),
+    /exceeds the reviewed source ledger/,
+  );
 });
 
 test("source provenance requires the exact reviewed commit and a clean checkout", () => {
@@ -168,6 +248,8 @@ test("attestation implementation exposes no mutation command or file-write surfa
   );
   assert.match(source, /verifyDatabaseMigrationState/);
   assert.match(source, /PRODUCTION_ATTESTATION_READ_ONLY/);
+  assert.match(source, /ATTESTATION_EXPECTED_RELEASE_ID/);
+  assert.match(source, /ATTESTATION_EXPECTED_APPLIED_MIGRATIONS/);
   assert.match(source, /method: "GET"/);
   assert.match(source, /execFileSync\("ps", \["-eo"/);
   assert.equal((source.match(/execFileSync\(\s*"git"/g) ?? []).length, 2);

@@ -168,6 +168,8 @@ credentials:
 ```bash
 cd /opt/findandstudy/source
 reviewed_commit="<approved-40-character-commit>"
+expected_release_id="<approved-live-release-directory-name>"
+expected_applied_migrations="<approved-production-prefix-count>"
 test "$(git rev-parse --verify HEAD)" = "$reviewed_commit"
 test -z "$(git status --porcelain=v1 --untracked-files=normal)"
 export RUNTIME_ENV_FILE=/etc/findandstudy.env
@@ -178,6 +180,8 @@ set +a
 umask 077
 attestation_file="$(mktemp /tmp/fasos-attestation.XXXXXX.json)"
 ATTESTATION_EXPECTED_SOURCE_COMMIT="$reviewed_commit" \
+  ATTESTATION_EXPECTED_RELEASE_ID="$expected_release_id" \
+  ATTESTATION_EXPECTED_APPLIED_MIGRATIONS="$expected_applied_migrations" \
   PRODUCTION_ATTESTATION_READ_ONLY=1 \
   node deploy/production-readonly-attestation.mjs > "$attestation_file"
 printf 'Attestation written to %s\n' "$attestation_file"
@@ -189,8 +193,13 @@ reviewed source-only operation; it is not a deploy and must not change the
 reviewed lockfile. Never run the attestation from an ambiguous or dirty source
 tree. Review the JSON before moving it off-host. The command is evidence
 collection, not approval to deploy or change ownership. A source-commit or
-cleanliness mismatch, ledger mismatch, duplicate API or worker, missing path,
-unreachable local health endpoint or exceeded private-tree limit fails closed.
+cleanliness mismatch, unexpected release identity, applied migration count
+other than the explicitly approved prefix, ledger hash mismatch, duplicate API
+or worker, missing path, unreachable local health endpoint or exceeded
+private-tree limit fails closed. For the current convergence decision, the
+reviewed expectation is the separately verified live release identity and
+exactly `66` applied production-prefix migrations; do not copy these values
+from an unreviewed host observation.
 
 ---
 

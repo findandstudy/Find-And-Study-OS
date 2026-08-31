@@ -37,6 +37,52 @@ export function assertReadOnlyOptIn(value) {
   }
 }
 
+export function parseProductionExpectations({
+  expectedReleaseId,
+  expectedAppliedMigrations,
+}) {
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(expectedReleaseId ?? "")) {
+    fail(
+      "ATTESTATION_EXPECTED_RELEASE_ID must be a bounded release directory name",
+    );
+  }
+  if (!/^(?:0|[1-9]\d*)$/.test(expectedAppliedMigrations ?? "")) {
+    fail(
+      "ATTESTATION_EXPECTED_APPLIED_MIGRATIONS must be a canonical non-negative integer",
+    );
+  }
+  const appliedMigrations = Number(expectedAppliedMigrations);
+  if (!Number.isSafeInteger(appliedMigrations)) {
+    fail("expected applied migration count exceeds the safe integer range");
+  }
+  return { releaseId: expectedReleaseId, appliedMigrations };
+}
+
+export function assertExpectedProductionState({
+  expectations,
+  actualReleaseId,
+  actualAppliedMigrations,
+  repositoryMigrations,
+}) {
+  if (
+    !Number.isSafeInteger(repositoryMigrations) ||
+    repositoryMigrations < 0 ||
+    expectations.appliedMigrations > repositoryMigrations
+  ) {
+    fail("expected migration prefix exceeds the reviewed source ledger");
+  }
+  if (actualReleaseId !== expectations.releaseId) {
+    fail(
+      "live release identity does not match the explicitly expected release",
+    );
+  }
+  if (actualAppliedMigrations !== expectations.appliedMigrations) {
+    fail(
+      "live applied migration count does not match the explicitly expected prefix",
+    );
+  }
+}
+
 export function validateSourceProvenance({
   expectedCommit,
   actualCommit,
@@ -285,6 +331,11 @@ export async function createProductionAttestation() {
   if (!process.env.DATABASE_URL)
     fail("DATABASE_URL is required but is never emitted");
   const source = collectSourceProvenance();
+  const expectedProductionState = parseProductionExpectations({
+    expectedReleaseId: process.env.ATTESTATION_EXPECTED_RELEASE_ID,
+    expectedAppliedMigrations:
+      process.env.ATTESTATION_EXPECTED_APPLIED_MIGRATIONS,
+  });
 
   const releasesDir = requiredAbsolutePath("RELEASES_DIR", "directory");
   const currentRelease = requiredAbsolutePath(
@@ -336,6 +387,12 @@ export async function createProductionAttestation() {
       "localhost health releaseId does not match CURRENT_RELEASE_LINK target",
     );
   }
+  assertExpectedProductionState({
+    expectations: expectedProductionState,
+    actualReleaseId: health.releaseId,
+    actualAppliedMigrations: migration.applied,
+    repositoryMigrations,
+  });
   const processes = collectProcessMetadata();
   for (const processInfo of processes) {
     if (!isWithin(currentRelease.resolved, processInfo.cwd)) {
@@ -346,10 +403,11 @@ export async function createProductionAttestation() {
   }
 
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     generatedAt: new Date().toISOString(),
     readOnly: true,
     source,
+    expectedProductionState,
     release: {
       currentReleasePath: currentRelease.resolved,
       releaseDirectoryName: path.basename(currentRelease.resolved),
