@@ -49,8 +49,13 @@ const lifecycleUrl = requiredUrl("PG_GATE_SESSION_LIFECYCLE_URL");
 const repairUrl = requiredUrl("PG_GATE_SESSION_REPAIR_URL");
 const contextResolverUrl = requiredUrl("PG_GATE_CONTEXT_RESOLVER_URL");
 const databaseName = new URL(adminUrl).pathname.slice(1);
+// The validated client endpoint can be host-port mapped to a different
+// PostgreSQL listener port inside the disposable CI container.
+const expectedServerPort = Number(process.env.PG_GATE_SERVER_PORT ?? "5433");
 
 assert.equal(databaseName, "fasos_apply_local");
+assert.ok(Number.isSafeInteger(expectedServerPort));
+assert.ok(expectedServerPort >= 1 && expectedServerPort <= 65_535);
 for (const [value, expectedUser] of [
   [adminUrl, "postgres"],
   [migratorUrl, "fas_migrator"],
@@ -237,7 +242,7 @@ async function withClient<T>(url: string, operation: (client: pg.Client) => Prom
     );
     assert.equal(identity.rows[0]?.current_user, new URL(url).username);
     assert.equal(identity.rows[0]?.current_database, databaseName);
-    assert.equal(identity.rows[0]?.server_port, 5433);
+    assert.equal(identity.rows[0]?.server_port, expectedServerPort);
     return await operation(client);
   } finally {
     await client.end();

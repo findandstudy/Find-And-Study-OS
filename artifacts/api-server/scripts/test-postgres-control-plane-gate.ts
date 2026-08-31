@@ -37,6 +37,11 @@ function safeTarget(value: string, label: string) {
 const adminTarget = safeTarget(adminUrl, "PG_GATE_ADMIN_URL");
 const migratorTarget = safeTarget(migratorUrl, "PG_GATE_MIGRATOR_URL");
 const appTarget = safeTarget(appUrl, "PG_GATE_APP_URL");
+// CI reaches the disposable container through loopback 5433 while PostgreSQL
+// itself listens on 5432. Keep endpoint and server identity checks explicit.
+const expectedServerPort = Number(process.env.PG_GATE_SERVER_PORT ?? "5433");
+assert.ok(Number.isSafeInteger(expectedServerPort));
+assert.ok(expectedServerPort >= 1 && expectedServerPort <= 65_535);
 assert.equal(process.env.ALLOW_LIVE_INTEGRATIONS, "false");
 assert.equal(adminTarget.pathname, migratorTarget.pathname);
 assert.equal(adminTarget.pathname, appTarget.pathname);
@@ -88,7 +93,7 @@ async function withClient<T>(
     );
     assert.equal(identity.rows[0].current_user, new URL(url).username);
     assert.equal(identity.rows[0].current_database, databaseName);
-    assert.equal(identity.rows[0].server_port, 5433);
+    assert.equal(identity.rows[0].server_port, expectedServerPort);
     return await fn(client);
   } finally {
     await client.end();
