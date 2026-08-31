@@ -60,6 +60,7 @@ export NGINX_APP_HOST
 # unless deployment and the owning PM2 daemon run under the dedicated service
 # account and persistent private objects are not readable by other VPS users.
 node "$SOURCE_ROOT/deploy/runtime-boundary-preflight.cjs"
+node "$SOURCE_ROOT/deploy/disk-capacity-preflight.cjs"
 
 cd "$SOURCE_ROOT"
 git diff --quiet || fail "tracked working tree changes must be committed and reviewed before release"

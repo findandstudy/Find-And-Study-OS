@@ -155,6 +155,14 @@ The safe transition sequence is:
 
 No environment flag bypasses this boundary. A failed preflight is a NO-GO.
 
+The deploy also stops before release creation or build unless every relevant
+filesystem has both at least `15 GiB` and at least `15%` space available to the
+non-root runtime account. `RELEASES_DIR`, `LOG_DIR` and, for local storage,
+`STORAGE_LOCAL_DIR` are checked with filesystem metadata only. These are hard
+minimums with no environment bypass. Freeing space requires a separately
+reviewed attribution/retention plan; the deploy never deletes releases, logs,
+backups or private objects automatically.
+
 Before planning the production transition, collect a metadata-only attestation
 from a separate, clean source checkout at the exact reviewed 40-character
 commit. The source checkout is evidence tooling, not the deployed release. The
