@@ -80,6 +80,9 @@ jobs:
         env:
           DATABASE_URL: postgresql://test:test@127.0.0.1:5432/test
         run: |
+          pnpm run test:pm2-safety
+          pnpm run test:data-boundaries
+          pnpm run test:runtime-boundary
           pnpm --filter @workspace/api-server run test:ai-delivery-safety
           pnpm --filter @workspace/api-server run test:security-regressions
 

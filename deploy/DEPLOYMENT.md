@@ -10,17 +10,18 @@ storage. Production actions require an approved preflight and fresh backup.
 3. [PostgreSQL Setup](#postgresql-setup)
 4. [Node.js Installation](#nodejs-installation)
 5. [Project Setup](#project-setup)
-6. [Environment Configuration](#environment-configuration)
-7. [First Deploy](#first-deploy)
-8. [Nginx Setup](#nginx-setup)
-9. [SSL with Let's Encrypt](#ssl-with-lets-encrypt)
-10. [PM2 Auto-Start & Log Rotation](#pm2-auto-start--log-rotation)
-11. [Zero-Downtime Updates](#zero-downtime-updates)
-12. [Database Migrations](#database-migrations)
-13. [Public Endpoints (Anonim Yüzey)](#public-endpoints-anonim-yüzey)
-14. [Rollback](#rollback)
-15. [Monitoring](#monitoring)
-16. [Troubleshooting](#troubleshooting)
+6. [Non-root Runtime Boundary](#non-root-runtime-boundary)
+7. [Environment Configuration](#environment-configuration)
+8. [First Deploy](#first-deploy)
+9. [Nginx Setup](#nginx-setup)
+10. [SSL with Let's Encrypt](#ssl-with-lets-encrypt)
+11. [PM2 Auto-Start & Log Rotation](#pm2-auto-start--log-rotation)
+12. [Zero-Downtime Updates](#zero-downtime-updates)
+13. [Database Migrations](#database-migrations)
+14. [Public Endpoints (Anonim Yüzey)](#public-endpoints-anonim-yüzey)
+15. [Rollback](#rollback)
+16. [Monitoring](#monitoring)
+17. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -103,26 +104,65 @@ pm2 --version
 ## Project Setup
 
 ```bash
-# Source, immutable releases and persistent runtime paths are separate.
-sudo mkdir -p /opt/findandstudy/source /opt/findandstudy/releases
-sudo mkdir -p /var/lib/findandstudy/storage /var/log/findandstudy
-sudo chown -R $USER:$USER /opt/findandstudy /var/lib/findandstudy /var/log/findandstudy
+# One-time setup only, after an approved non-root migration change window.
+sudo useradd --system --create-home --home-dir /var/lib/findandstudy \
+  --shell /usr/sbin/nologin findandstudy
+sudo install -d -o findandstudy -g findandstudy -m 0750 \
+  /opt/findandstudy/source /opt/findandstudy/releases /var/log/findandstudy
+sudo install -d -o findandstudy -g findandstudy -m 0700 \
+  /var/lib/findandstudy/storage /var/lib/findandstudy/storage/private
 
 # Projeyi klonlayın veya yükleyin
-cd /opt/findandstudy/source
-git clone https://your-repo-url.git .
+sudo -u findandstudy git clone https://your-repo-url.git /opt/findandstudy/source
 
 # Install dependencies
-pnpm install --frozen-lockfile
+sudo -u findandstudy pnpm --dir /opt/findandstudy/source install --frozen-lockfile
 ```
+
+---
+
+## Non-root Runtime Boundary
+
+`deploy/deploy.sh` now fails before creating a release, installing dependencies
+or touching a process unless all of these statements are true:
+
+- the operator is the explicit `RUNTIME_SERVICE_USER`, never `root`;
+- release, log and local-storage roots are owned by that service uid/gid and
+  grant no access to unrelated VPS users;
+- `RUNTIME_ENV_FILE` is either service-owned `0600` or root:service `0640`;
+- every private object and directory is service-owned, user-only (`0600` files,
+  `0700` directories), non-executable and not a symbolic link;
+- the bounded private-tree scan completes before the configured entry limit.
+
+This is a deployment gate, not an automatic migration. The current production
+host was last observed with root-owned `0644/0755` private storage and root-owned
+PM2 processes. Do not merge and deploy this boundary until an approved change
+plan has captured a fresh DB/storage backup, exact ownership inventory, disk
+headroom, two-session recovery access, PM2 startup ownership and a rollback
+path. Do not run recursive `chown`/`chmod`, stop root PM2 or change SSH policy as
+part of an ordinary application release.
+
+The safe transition sequence is:
+
+1. Read-only inventory and backup verification.
+2. Create and verify the dedicated account and its recovery path.
+3. Copy no data; change only the exact reviewed runtime roots and private tree.
+4. Start one candidate API as the service account with background jobs disabled.
+5. Prove HTTP/DB readiness, storage read/write and portal-worker ownership.
+6. Cut over the canonical PM2 processes once, then verify reboot persistence.
+7. Keep the previous code release and recorded ownership manifest for rollback.
+8. Harden root/password SSH only in a later, separately approved change.
+
+No environment flag bypasses this boundary. A failed preflight is a NO-GO.
 
 ---
 
 ## Environment Configuration
 
 ```bash
-# Runtime secrets are external to source and every release.
-sudo install -m 600 /dev/null /etc/findandstudy.env
+# Runtime secrets are external to source and every release. The service account
+# can read the file through its exact group but cannot modify it.
+sudo install -o root -g findandstudy -m 0640 /dev/null /etc/findandstudy.env
 sudo nano /etc/findandstudy.env
 ```
 
@@ -132,6 +172,7 @@ sudo nano /etc/findandstudy.env
 
 - `DATABASE_URL` — PostgreSQL bağlantı dizisi
 - `PORT` — `5000` (nginx.conf upstream ile eşleşmeli)
+- `RUNTIME_SERVICE_USER` — dedicated non-root Unix account (`findandstudy`)
 - `SESSION_SECRET` — Üret: `openssl rand -hex 32`
 - `ENCRYPTION_KEY` — Üret: `openssl rand -hex 32`
 - `EMBED_TOKEN_SECRET` — Üret: `openssl rand -hex 32`

@@ -171,12 +171,20 @@ test("release cutover rejects canonical processes outside the current symlink", 
 });
 
 test("deploy entrypoints use preflight and contain no blind fallback", () => {
-  const deploy = readFileSync(path.join(__dirname, "deploy.sh"), "utf8");
+  const deploy = readFileSync(
+    path.join(__dirname, "deploy.sh"),
+    "utf8",
+  ).replace(/\r\n/g, "\n");
   const compatibility = readFileSync(
     path.join(root, "scripts/deploy.sh"),
     "utf8",
   );
   assert.match(deploy, /node deploy\/pm2-preflight\.cjs/);
+  assert.match(deploy, /runtime-boundary-preflight\.cjs/);
+  assert.ok(
+    deploy.indexOf("runtime-boundary-preflight.cjs") <
+      deploy.indexOf('git archive "$SOURCE_COMMIT"'),
+  );
   assert.match(deploy, /node deploy\/nginx-preflight\.cjs/);
   assert.match(deploy, /CANDIDATE_PORT/);
   assert.match(deploy, /Keep the validated candidate alive/);
@@ -195,7 +203,10 @@ test("deploy entrypoints use preflight and contain no blind fallback", () => {
   const nginx = readFileSync(path.join(__dirname, "nginx.conf"), "utf8");
   assert.match(nginx, /server 127\.0\.0\.1:5057 backup max_fails=0;/);
   assert.match(nginx, /log_format fasos_upstream_timing/);
-  assert.match(nginx, /access_log \/var\/log\/nginx\/fasos-access\.log fasos_upstream_timing/);
+  assert.match(
+    nginx,
+    /access_log \/var\/log\/nginx\/fasos-access\.log fasos_upstream_timing/,
+  );
   assert.match(nginx, /proxy_set_header Connection "";/);
   assert.doesNotMatch(nginx, /proxy_set_header Upgrade/);
   assert.doesNotMatch(nginx, /proxy_cache_bypass \$http_upgrade/);
@@ -273,72 +284,78 @@ test("Nginx preflight rejects direct, missing-backup and unrelated host routes",
   );
 });
 
-test("Nginx installer changes only explicit files and keeps rollback copies", () => {
-  const directory = mkdtempSync(
-    path.join(tmpdir(), "fasos-nginx-install-test-"),
-  );
-  const binDirectory = path.join(directory, "bin");
-  const siteConfig = path.join(directory, "apply.conf");
-  const unrelatedConfig = path.join(directory, "unrelated.conf");
-  const upstreamConfig = path.join(directory, "findandstudy-upstream.conf");
-  const envFile = path.join(directory, "runtime.env");
-  const backupDirectory = path.join(directory, "backup");
-  require("node:fs").mkdirSync(binDirectory);
-  writeFileSync(
-    siteConfig,
-    "server { server_name apply.findandstudy.com; location / { proxy_pass http://127.0.0.1:5057; } }\n",
-  );
-  writeFileSync(
-    unrelatedConfig,
-    "server { server_name unrelated.example.com; location / { proxy_pass http://127.0.0.1:5057; } }\n",
-  );
-  writeFileSync(
-    envFile,
-    "PORT=5057\nCANDIDATE_PORT=5058\nAPP_BASE_URL=https://apply.findandstudy.com\n",
-  );
-  const fakeCommands = {
-    id: '#!/bin/sh\n[ "$1" = "-u" ] && echo 0\n',
-    nginx:
-      '#!/bin/sh\nif [ "$1" = "-T" ]; then cat "$TEST_UPSTREAM" "$TEST_SITE"; fi\nexit 0\n',
-    systemctl: "#!/bin/sh\nexit 0\n",
-  };
-  for (const [name, source] of Object.entries(fakeCommands)) {
-    const commandPath = path.join(binDirectory, name);
-    writeFileSync(commandPath, source);
-    chmodSync(commandPath, 0o755);
-  }
+test(
+  "Nginx installer changes only explicit files and keeps rollback copies",
+  {
+    skip: process.platform === "win32",
+  },
+  () => {
+    const directory = mkdtempSync(
+      path.join(tmpdir(), "fasos-nginx-install-test-"),
+    );
+    const binDirectory = path.join(directory, "bin");
+    const siteConfig = path.join(directory, "apply.conf");
+    const unrelatedConfig = path.join(directory, "unrelated.conf");
+    const upstreamConfig = path.join(directory, "findandstudy-upstream.conf");
+    const envFile = path.join(directory, "runtime.env");
+    const backupDirectory = path.join(directory, "backup");
+    require("node:fs").mkdirSync(binDirectory);
+    writeFileSync(
+      siteConfig,
+      "server { server_name apply.findandstudy.com; location / { proxy_pass http://127.0.0.1:5057; } }\n",
+    );
+    writeFileSync(
+      unrelatedConfig,
+      "server { server_name unrelated.example.com; location / { proxy_pass http://127.0.0.1:5057; } }\n",
+    );
+    writeFileSync(
+      envFile,
+      "PORT=5057\nCANDIDATE_PORT=5058\nAPP_BASE_URL=https://apply.findandstudy.com\n",
+    );
+    const fakeCommands = {
+      id: '#!/bin/sh\n[ "$1" = "-u" ] && echo 0\n',
+      nginx:
+        '#!/bin/sh\nif [ "$1" = "-T" ]; then cat "$TEST_UPSTREAM" "$TEST_SITE"; fi\nexit 0\n',
+      systemctl: "#!/bin/sh\nexit 0\n",
+    };
+    for (const [name, source] of Object.entries(fakeCommands)) {
+      const commandPath = path.join(binDirectory, name);
+      writeFileSync(commandPath, source);
+      chmodSync(commandPath, 0o755);
+    }
 
-  const result = spawnSync("bash", [nginxInstallerPath], {
-    cwd: root,
-    encoding: "utf8",
-    env: {
-      ...process.env,
-      PATH: `${binDirectory}:${process.env.PATH}`,
-      RUNTIME_ENV_FILE: envFile,
-      NGINX_SITE_CONFIGS: siteConfig,
-      NGINX_UPSTREAM_FILE: upstreamConfig,
-      NGINX_CONFIG_BACKUP_DIR: backupDirectory,
-      TEST_UPSTREAM: upstreamConfig,
-      TEST_SITE: siteConfig,
-    },
-  });
-  assert.equal(result.status, 0, result.stderr);
-  assert.match(
-    readFileSync(siteConfig, "utf8"),
-    /proxy_pass http:\/\/fasos_backend;/,
-  );
-  assert.match(
-    readFileSync(upstreamConfig, "utf8"),
-    /127\.0\.0\.1:5058 backup max_fails=0;/,
-  );
-  assert.match(
-    readFileSync(upstreamConfig, "utf8"),
-    /127\.0\.0\.1:5057 max_fails=0;/,
-  );
-  assert.match(
-    readFileSync(path.join(backupDirectory, "site-0.conf"), "utf8"),
-    /proxy_pass http:\/\/127\.0\.0\.1:5057;/,
-  );
-  assert.match(readFileSync(unrelatedConfig, "utf8"), /127\.0\.0\.1:5057/);
-  rmSync(directory, { recursive: true, force: true });
-});
+    const result = spawnSync("bash", [nginxInstallerPath], {
+      cwd: root,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        PATH: `${binDirectory}:${process.env.PATH}`,
+        RUNTIME_ENV_FILE: envFile,
+        NGINX_SITE_CONFIGS: siteConfig,
+        NGINX_UPSTREAM_FILE: upstreamConfig,
+        NGINX_CONFIG_BACKUP_DIR: backupDirectory,
+        TEST_UPSTREAM: upstreamConfig,
+        TEST_SITE: siteConfig,
+      },
+    });
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(
+      readFileSync(siteConfig, "utf8"),
+      /proxy_pass http:\/\/fasos_backend;/,
+    );
+    assert.match(
+      readFileSync(upstreamConfig, "utf8"),
+      /127\.0\.0\.1:5058 backup max_fails=0;/,
+    );
+    assert.match(
+      readFileSync(upstreamConfig, "utf8"),
+      /127\.0\.0\.1:5057 max_fails=0;/,
+    );
+    assert.match(
+      readFileSync(path.join(backupDirectory, "site-0.conf"), "utf8"),
+      /proxy_pass http:\/\/127\.0\.0\.1:5057;/,
+    );
+    assert.match(readFileSync(unrelatedConfig, "utf8"), /127\.0\.0\.1:5057/);
+    rmSync(directory, { recursive: true, force: true });
+  },
+);
