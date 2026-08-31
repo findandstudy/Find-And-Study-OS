@@ -530,7 +530,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/embed.ts",
-      "sha256": "a0c5abe6f6cfd7a700b03795f1cdc8c87d3e199369eb2cce75d4ae8ca4d008b3",
+      "sha256": "9d7e29f5358dde6ce971a253b4b6553cebb8bd779965f66abeeba9dd03a5b1a5",
       "routeRegistrations": 29,
       "requireAuth": 14,
       "requireRole": 13,
