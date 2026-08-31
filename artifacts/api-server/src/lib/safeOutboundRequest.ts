@@ -3,7 +3,12 @@ import http from "node:http";
 import https from "node:https";
 import { BlockList, isIP } from "node:net";
 
-const blockedAddresses = new BlockList();
+// Keep IPv4 and IPv6 rules in separate BlockLists. Node's BlockList maps an
+// IPv4 address into the IPv4-mapped IPv6 range while checking a mixed-family
+// list. Consequently, an IPv6 rule such as ::ffff:0:0/96 would otherwise
+// classify every ordinary public IPv4 address as blocked.
+const blockedIpv4Addresses = new BlockList();
+const blockedIpv6Addresses = new BlockList();
 
 for (const [network, prefix] of [
   ["0.0.0.0", 8],
@@ -22,7 +27,7 @@ for (const [network, prefix] of [
   ["224.0.0.0", 4],
   ["240.0.0.0", 4],
 ] as const) {
-  blockedAddresses.addSubnet(network, prefix, "ipv4");
+  blockedIpv4Addresses.addSubnet(network, prefix, "ipv4");
 }
 
 for (const [network, prefix] of [
@@ -37,7 +42,7 @@ for (const [network, prefix] of [
   ["fe80::", 10],
   ["ff00::", 8],
 ] as const) {
-  blockedAddresses.addSubnet(network, prefix, "ipv6");
+  blockedIpv6Addresses.addSubnet(network, prefix, "ipv6");
 }
 
 export interface SafeOutboundRequestOptions {
@@ -81,8 +86,8 @@ function normalizedHostname(url: URL): string {
 
 export function isBlockedOutboundIp(address: string): boolean {
   const family = isIP(address);
-  if (family === 4) return blockedAddresses.check(address, "ipv4");
-  if (family === 6) return blockedAddresses.check(address, "ipv6");
+  if (family === 4) return blockedIpv4Addresses.check(address, "ipv4");
+  if (family === 6) return blockedIpv6Addresses.check(address, "ipv6");
   return true;
 }
 
