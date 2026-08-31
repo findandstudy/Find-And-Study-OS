@@ -74,6 +74,8 @@ Excluded:
   exact; active-context `13/13`, R1 policy `12/12`, evidence envelope `8/8`.
 - Canonical command/request-context source and direct-test blobs: `4/4` exact;
   command orchestration `25/25`, request binding `4/4`.
+- Canonical authoritative active-context issuance source/test blobs: `2/2`
+  exact; issuance coordinator `5/5`.
 
 ## Remaining gates
 

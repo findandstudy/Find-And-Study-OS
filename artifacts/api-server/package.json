@@ -17,6 +17,7 @@
     "test:change-set-evidence-envelope": "tsx --test ./scripts/test-change-set-evidence-envelope.ts",
     "test:change-set-command": "tsx --test ./scripts/test-change-set-command.ts",
     "test:change-set-request-context": "tsx --test ./scripts/test-change-set-request-context.ts",
+    "test:authoritative-active-context-issuance": "tsx --test ./scripts/test-authoritative-active-context-issuance.ts",
     "test:inbox-create-student-add-doc": "tsx --test ./scripts/test-inbox-create-student-add-doc.ts",
     "test:student-creation-source": "tsx --test ./scripts/test-student-creation-source.ts",
     "test:inbox-student-extraction": "tsx --test ./scripts/test-inbox-student-extraction.ts",

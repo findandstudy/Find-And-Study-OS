@@ -54,6 +54,7 @@ jobs:
           pnpm --filter @workspace/api-server run test:change-set-evidence-envelope
           pnpm --filter @workspace/api-server run test:change-set-command
           pnpm --filter @workspace/api-server run test:change-set-request-context
+          pnpm --filter @workspace/api-server run test:authoritative-active-context-issuance
 
       - name: Type-check the workspace
         run: pnpm run typecheck
