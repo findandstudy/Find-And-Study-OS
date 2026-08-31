@@ -21,10 +21,14 @@ test("reconciliation data includes passport, programme, student expansion, and t
   assert.match(uiSource, /expandedUniversities/);
 });
 
-test("row transactions parse dates, cap remaining balance, and recompute commission totals", () => {
+test("row transactions parse dates, cap remaining balance, and recompute commission totals atomically", () => {
   assert.match(apiSource, /const parsedDate = new Date\(transactionDate\)/);
   assert.match(apiSource, /Amount exceeds remaining balance/);
-  assert.match(apiSource, /await recalculateCommissionFinancials\(parsedCommissionId\)/);
+  assert.match(apiSource, /finance:commission:\$\{parsedCommissionId\}/);
+  assert.match(
+    apiSource,
+    /await recalculateCommissionFinancials\(parsedCommissionId, databaseTx\)/,
+  );
   assert.match(apiSource, /transactionDate:\s*parsedDate/);
 });
 
