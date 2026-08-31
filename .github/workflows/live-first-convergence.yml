@@ -76,7 +76,11 @@ jobs:
         run: pnpm run audit:legacy-role-gates
 
       - name: Run live security regressions
-        run: pnpm --filter @workspace/api-server run test:security-regressions
+        env:
+          DATABASE_URL: postgresql://test:test@127.0.0.1:5432/test
+        run: |
+          pnpm --filter @workspace/api-server run test:ai-delivery-safety
+          pnpm --filter @workspace/api-server run test:security-regressions
 
   windows-portability:
     name: Windows locked install and typecheck

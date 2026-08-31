@@ -96,6 +96,12 @@ Excluded:
 - Canonical legacy user-management and impersonation policies are bound to the
   live `users`/`agents` routes with `4/4` exact policy/test blobs; direct policy
   suites `11/11`, live security regressions `30/30` and API typecheck pass.
+- External AI delivery is independently default-off, requires an explicit
+  Super Admin activation on both current configuration routes, is rechecked at
+  provider boundaries and has a stop-only infrastructure kill switch. Direct
+  safety tests pass `5/5`; live security regressions pass `31/31`.
+- G30 route registration totals remain `71 / 762`; the two explicit activation
+  checks increase the conservative direct-role count from `26` to `28`.
 
 ## Remaining gates
 

@@ -60,6 +60,22 @@ const agentsRouteSource = readFileSync(
   new URL("../src/routes/agents.ts", import.meta.url),
   "utf8",
 );
+const aiAgentConfigSource = readFileSync(
+  new URL("../src/lib/inbox/aiAgentConfig.ts", import.meta.url),
+  "utf8",
+);
+const botAutoReplySource = readFileSync(
+  new URL("../src/lib/inbox/botAutoReply.ts", import.meta.url),
+  "utf8",
+);
+const aiBotsRouteSource = readFileSync(
+  new URL("../src/routes/aiBots.ts", import.meta.url),
+  "utf8",
+);
+const dormBookingFollowupSource = readFileSync(
+  new URL("../src/lib/inbox/dormBookingFollowupWorker.ts", import.meta.url),
+  "utf8",
+);
 const legacyUserManagementPolicySource = readFileSync(
   new URL("../src/lib/legacyUserManagementPolicy.ts", import.meta.url),
   "utf8",
@@ -280,6 +296,23 @@ test("user and role routes enforce permission and hierarchy boundaries", () => {
   assert.doesNotMatch(rolesRouteSource, /requireRole\(\.\.\.ADMIN_ROLES\)/);
   assert.match(authSource, /getEffectivePermissionSet\(req\.user\)/);
   assert.doesNotMatch(authSource, /\.\.\.fromDb, \.\.\.fromDefault/);
+});
+
+test("external AI delivery fails closed and activation requires Super Admin", () => {
+  assert.match(aiAgentConfigSource, /externalAutoReplyEnabled: false/);
+  assert.match(aiAgentConfigSource, /aiAgentPatchRequiresSuperAdmin/);
+  assert.match(aiAgentConfigSource, /stripAlreadyEnabledAiAgentControls/);
+  assert.match(aiAgentConfigSource, /AI_EXTERNAL_AUTO_REPLY_KILL_SWITCH/);
+  assert.match(botAutoReplySource, /isExternalAutoReplyEmergencyStopped/);
+  assert.match(botAutoReplySource, /reason: "external_delivery_disabled"/);
+  assert.match(botAutoReplySource, /getExternalAiDeliveryBlockReason/);
+  assert.match(aiBotsRouteSource, /req\.user!\.role === "super_admin"/);
+  assert.match(aiBotsRouteSource, /externalAutoReplyEnabled: false/);
+  assert.match(aiBotsRouteSource, /stripAlreadyEnabledAiAgentControls/);
+  assert.match(inboxRouteSource, /aiAgentPatchRequiresSuperAdmin/);
+  assert.match(inboxRouteSource, /stripAlreadyEnabledAiAgentControls/);
+  assert.match(dormBookingFollowupSource, /!config\.externalAutoReplyEnabled/);
+  assert.match(dormBookingFollowupSource, /isExternalAutoReplyEmergencyStopped/);
 });
 
 test("legacy impersonation is branch-scoped and nested sessions are denied", () => {
