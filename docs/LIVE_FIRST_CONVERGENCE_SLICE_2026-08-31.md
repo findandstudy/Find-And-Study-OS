@@ -49,7 +49,8 @@ Excluded:
 - HTTP routes, browser/session wiring, workers, publishers and repair schedulers;
 - migration application to any long-lived or production database;
 - `Find-And-Study-OS-Next` code synchronization;
-- GitHub push, PR, merge, deployment or production configuration changes.
+- GitHub merge, deployment or production configuration changes. The feature
+  branch push and draft PR are evidence-only and do not change production.
 
 ## Local evidence
 
@@ -80,8 +81,19 @@ Excluded:
   cleans it before deleting its seeded user.
 - Contract signing scope DB suite: `14/14` with delivery disabled.
 - Contract render/sign suite: `18/18`.
-- Exact-head CI workflow prepared locally with pinned Node actions and
-  PostgreSQL `16.15` image digest; GitHub run is still pending.
+- Draft PR [#30](https://github.com/findandstudy/Find-And-Study-OS/pull/30)
+  is open against `hotfix/embed-release-20260830` at head
+  `a18b11f145cdcb1ad0cbeb2e8bc626aefb92864b`; GitHub reports it mergeable and
+  `clean`. It remains draft and has not been merged.
+- Exact-head GitHub Actions run
+  [33446613024](https://github.com/findandstudy/Find-And-Study-OS/actions/runs/33446613024)
+  passed all three jobs: Linux ledger/typecheck/security, Windows locked
+  install/typecheck, and PostgreSQL `16.15` fresh/prefix/foundation/adapter/
+  audit/session verification.
+- The first PR run exposed a CI-only host-port mapping mismatch: clients use
+  loopback `5433`, while the PostgreSQL container listens internally on `5432`.
+  The endpoint allowlist remains fixed at `127.0.0.1:5433`; the disposable
+  server-listener identity is now separately explicit and range-validated.
 - Canonical authorization and Control Plane Drizzle schema blobs: `2/2` exact.
 - Default-unwired schema binding regression: `3/3`.
 - Canonical pure authorization/ChangeSet source and direct-test blobs: `6/6`
@@ -154,6 +166,6 @@ database. The EDB archive was extracted without installing a Windows service;
 the disposable cluster was bound only to loopback and used no production dump,
 credential, secret or PII.
 
-Exact-head GitHub CI, review and a fresh VPS release attestation still remain.
-This branch is therefore a local convergence candidate only. It is not merge-,
-`Next`-sync- or deploy-ready.
+Independent review and a fresh VPS release/ledger attestation still remain.
+The branch is therefore a CI-verified draft convergence candidate only. It is
+not merge-, `Next`-sync- or deploy-ready.
