@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
+import { isIP } from "node:net";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -40,6 +41,9 @@ export function assertReadOnlyOptIn(value) {
 export function parseProductionExpectations({
   expectedReleaseId,
   expectedAppliedMigrations,
+  expectedDatabaseName,
+  expectedDatabaseAddress,
+  expectedDatabasePort,
 }) {
   if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(expectedReleaseId ?? "")) {
     fail(
@@ -55,7 +59,34 @@ export function parseProductionExpectations({
   if (!Number.isSafeInteger(appliedMigrations)) {
     fail("expected applied migration count exceeds the safe integer range");
   }
-  return { releaseId: expectedReleaseId, appliedMigrations };
+  if (!/^[a-z][a-z0-9_]{0,62}$/.test(expectedDatabaseName ?? "")) {
+    fail(
+      "ATTESTATION_EXPECTED_DATABASE_NAME must be a bounded lowercase PostgreSQL identifier",
+    );
+  }
+  if (isIP(expectedDatabaseAddress ?? "") === 0) {
+    fail(
+      "ATTESTATION_EXPECTED_DATABASE_ADDRESS must be an exact IPv4 or IPv6 address",
+    );
+  }
+  if (
+    !/^(?:[1-9]\d{0,3}|[1-5]\d{4}|6[0-4]\d{3}|65[0-4]\d{2}|655[0-2]\d|6553[0-5])$/.test(
+      expectedDatabasePort ?? "",
+    )
+  ) {
+    fail(
+      "ATTESTATION_EXPECTED_DATABASE_PORT must be a canonical port from 1 through 65535",
+    );
+  }
+  return {
+    releaseId: expectedReleaseId,
+    appliedMigrations,
+    database: {
+      name: expectedDatabaseName,
+      address: expectedDatabaseAddress,
+      port: Number(expectedDatabasePort),
+    },
+  };
 }
 
 export function assertExpectedProductionState({
@@ -63,6 +94,7 @@ export function assertExpectedProductionState({
   actualReleaseId,
   actualAppliedMigrations,
   repositoryMigrations,
+  actualDatabaseIdentity,
 }) {
   if (
     !Number.isSafeInteger(repositoryMigrations) ||
@@ -79,6 +111,15 @@ export function assertExpectedProductionState({
   if (actualAppliedMigrations !== expectations.appliedMigrations) {
     fail(
       "live applied migration count does not match the explicitly expected prefix",
+    );
+  }
+  if (
+    actualDatabaseIdentity?.name !== expectations.database.name ||
+    actualDatabaseIdentity?.address !== expectations.database.address ||
+    actualDatabaseIdentity?.port !== expectations.database.port
+  ) {
+    fail(
+      "connected database identity does not match the explicitly expected target",
     );
   }
 }
@@ -335,6 +376,9 @@ export async function createProductionAttestation() {
     expectedReleaseId: process.env.ATTESTATION_EXPECTED_RELEASE_ID,
     expectedAppliedMigrations:
       process.env.ATTESTATION_EXPECTED_APPLIED_MIGRATIONS,
+    expectedDatabaseName: process.env.ATTESTATION_EXPECTED_DATABASE_NAME,
+    expectedDatabaseAddress: process.env.ATTESTATION_EXPECTED_DATABASE_ADDRESS,
+    expectedDatabasePort: process.env.ATTESTATION_EXPECTED_DATABASE_PORT,
   });
 
   const releasesDir = requiredAbsolutePath("RELEASES_DIR", "directory");
@@ -392,6 +436,7 @@ export async function createProductionAttestation() {
     actualReleaseId: health.releaseId,
     actualAppliedMigrations: migration.applied,
     repositoryMigrations,
+    actualDatabaseIdentity: migration.databaseIdentity,
   });
   const processes = collectProcessMetadata();
   for (const processInfo of processes) {
@@ -403,7 +448,7 @@ export async function createProductionAttestation() {
   }
 
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     generatedAt: new Date().toISOString(),
     readOnly: true,
     source,

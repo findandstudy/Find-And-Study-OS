@@ -170,6 +170,9 @@ cd /opt/findandstudy/source
 reviewed_commit="<approved-40-character-commit>"
 expected_release_id="<approved-live-release-directory-name>"
 expected_applied_migrations="<approved-production-prefix-count>"
+expected_database_name="<approved-production-database-name>"
+expected_database_address="<approved-server-ip-as-seen-by-postgresql>"
+expected_database_port="<approved-postgresql-port>"
 test "$(git rev-parse --verify HEAD)" = "$reviewed_commit"
 test -z "$(git status --porcelain=v1 --untracked-files=normal)"
 export RUNTIME_ENV_FILE=/etc/findandstudy.env
@@ -182,6 +185,9 @@ attestation_file="$(mktemp /tmp/fasos-attestation.XXXXXX.json)"
 ATTESTATION_EXPECTED_SOURCE_COMMIT="$reviewed_commit" \
   ATTESTATION_EXPECTED_RELEASE_ID="$expected_release_id" \
   ATTESTATION_EXPECTED_APPLIED_MIGRATIONS="$expected_applied_migrations" \
+  ATTESTATION_EXPECTED_DATABASE_NAME="$expected_database_name" \
+  ATTESTATION_EXPECTED_DATABASE_ADDRESS="$expected_database_address" \
+  ATTESTATION_EXPECTED_DATABASE_PORT="$expected_database_port" \
   PRODUCTION_ATTESTATION_READ_ONLY=1 \
   node deploy/production-readonly-attestation.mjs > "$attestation_file"
 printf 'Attestation written to %s\n' "$attestation_file"
@@ -194,12 +200,13 @@ reviewed lockfile. Never run the attestation from an ambiguous or dirty source
 tree. Review the JSON before moving it off-host. The command is evidence
 collection, not approval to deploy or change ownership. A source-commit or
 cleanliness mismatch, unexpected release identity, applied migration count
-other than the explicitly approved prefix, ledger hash mismatch, duplicate API
-or worker, missing path, unreachable local health endpoint or exceeded
-private-tree limit fails closed. For the current convergence decision, the
-reviewed expectation is the separately verified live release identity and
+other than the explicitly approved prefix, database name/server IP/port drift,
+ledger hash mismatch, duplicate API or worker, missing path, unreachable local
+health endpoint or exceeded private-tree limit fails closed. For the current
+convergence decision, the reviewed expectation is the separately verified live
+release identity, `fasos_apply`, the approved local PostgreSQL IP/port and
 exactly `66` applied production-prefix migrations; do not copy these values
-from an unreviewed host observation.
+from an unreviewed host observation or use a DNS alias.
 
 ---
 

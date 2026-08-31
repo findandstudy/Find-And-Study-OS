@@ -43,10 +43,18 @@ test("production expectations require an exact release and canonical migration p
     parseProductionExpectations({
       expectedReleaseId: "20260831T115424Z-6dca1f951590",
       expectedAppliedMigrations: "66",
+      expectedDatabaseName: "fasos_apply",
+      expectedDatabaseAddress: "127.0.0.1",
+      expectedDatabasePort: "5432",
     }),
     {
       releaseId: "20260831T115424Z-6dca1f951590",
       appliedMigrations: 66,
+      database: {
+        name: "fasos_apply",
+        address: "127.0.0.1",
+        port: 5432,
+      },
     },
   );
   for (const expectedReleaseId of ["", "../current", "/absolute", "a/b"]) {
@@ -55,6 +63,9 @@ test("production expectations require an exact release and canonical migration p
         parseProductionExpectations({
           expectedReleaseId,
           expectedAppliedMigrations: "66",
+          expectedDatabaseName: "fasos_apply",
+          expectedDatabaseAddress: "127.0.0.1",
+          expectedDatabasePort: "5432",
         }),
       /EXPECTED_RELEASE_ID/,
     );
@@ -65,8 +76,39 @@ test("production expectations require an exact release and canonical migration p
         parseProductionExpectations({
           expectedReleaseId: "release-1",
           expectedAppliedMigrations,
+          expectedDatabaseName: "fasos_apply",
+          expectedDatabaseAddress: "127.0.0.1",
+          expectedDatabasePort: "5432",
         }),
       /EXPECTED_APPLIED_MIGRATIONS/,
+    );
+  }
+});
+
+test("database expectations reject ambiguous names, DNS aliases, and invalid ports", () => {
+  const valid = {
+    expectedReleaseId: "release-1",
+    expectedAppliedMigrations: "66",
+    expectedDatabaseName: "fasos_apply",
+    expectedDatabaseAddress: "127.0.0.1",
+    expectedDatabasePort: "5432",
+  };
+  for (const expectedDatabaseName of ["", "FASOS_APPLY", "fasos-apply"]) {
+    assert.throws(
+      () => parseProductionExpectations({ ...valid, expectedDatabaseName }),
+      /EXPECTED_DATABASE_NAME/,
+    );
+  }
+  for (const expectedDatabaseAddress of ["", "localhost", "db.internal"]) {
+    assert.throws(
+      () => parseProductionExpectations({ ...valid, expectedDatabaseAddress }),
+      /EXPECTED_DATABASE_ADDRESS/,
+    );
+  }
+  for (const expectedDatabasePort of ["", "05432", "0", "65536"]) {
+    assert.throws(
+      () => parseProductionExpectations({ ...valid, expectedDatabasePort }),
+      /EXPECTED_DATABASE_PORT/,
     );
   }
 });
@@ -75,6 +117,7 @@ test("attestation rejects unexpected live release or migration-prefix drift", ()
   const expectations = {
     releaseId: "expected-release",
     appliedMigrations: 66,
+    database: { name: "fasos_apply", address: "127.0.0.1", port: 5432 },
   };
   assert.doesNotThrow(() =>
     assertExpectedProductionState({
@@ -82,6 +125,7 @@ test("attestation rejects unexpected live release or migration-prefix drift", ()
       actualReleaseId: "expected-release",
       actualAppliedMigrations: 66,
       repositoryMigrations: 82,
+      actualDatabaseIdentity: expectations.database,
     }),
   );
   assert.throws(
@@ -91,6 +135,7 @@ test("attestation rejects unexpected live release or migration-prefix drift", ()
         actualReleaseId: "unexpected-release",
         actualAppliedMigrations: 66,
         repositoryMigrations: 82,
+        actualDatabaseIdentity: expectations.database,
       }),
     /does not match the explicitly expected release/,
   );
@@ -101,6 +146,7 @@ test("attestation rejects unexpected live release or migration-prefix drift", ()
         actualReleaseId: "expected-release",
         actualAppliedMigrations: 67,
         repositoryMigrations: 82,
+        actualDatabaseIdentity: expectations.database,
       }),
     /does not match the explicitly expected prefix/,
   );
@@ -111,9 +157,35 @@ test("attestation rejects unexpected live release or migration-prefix drift", ()
         actualReleaseId: "expected-release",
         actualAppliedMigrations: 83,
         repositoryMigrations: 82,
+        actualDatabaseIdentity: expectations.database,
       }),
     /exceeds the reviewed source ledger/,
   );
+});
+
+test("attestation rejects a different database name, server address, or port", () => {
+  const expectations = {
+    releaseId: "expected-release",
+    appliedMigrations: 66,
+    database: { name: "fasos_apply", address: "127.0.0.1", port: 5432 },
+  };
+  for (const actualDatabaseIdentity of [
+    { ...expectations.database, name: "postgres" },
+    { ...expectations.database, address: "127.0.0.2" },
+    { ...expectations.database, port: 5433 },
+  ]) {
+    assert.throws(
+      () =>
+        assertExpectedProductionState({
+          expectations,
+          actualReleaseId: expectations.releaseId,
+          actualAppliedMigrations: expectations.appliedMigrations,
+          repositoryMigrations: 82,
+          actualDatabaseIdentity,
+        }),
+      /database identity does not match/,
+    );
+  }
 });
 
 test("source provenance requires the exact reviewed commit and a clean checkout", () => {
@@ -250,6 +322,9 @@ test("attestation implementation exposes no mutation command or file-write surfa
   assert.match(source, /PRODUCTION_ATTESTATION_READ_ONLY/);
   assert.match(source, /ATTESTATION_EXPECTED_RELEASE_ID/);
   assert.match(source, /ATTESTATION_EXPECTED_APPLIED_MIGRATIONS/);
+  assert.match(source, /ATTESTATION_EXPECTED_DATABASE_NAME/);
+  assert.match(source, /ATTESTATION_EXPECTED_DATABASE_ADDRESS/);
+  assert.match(source, /ATTESTATION_EXPECTED_DATABASE_PORT/);
   assert.match(source, /method: "GET"/);
   assert.match(source, /execFileSync\("ps", \["-eo"/);
   assert.equal((source.match(/execFileSync\(\s*"git"/g) ?? []).length, 2);
@@ -273,6 +348,9 @@ test("attestation implementation exposes no mutation command or file-write surfa
     /\b(?:INSERT|UPDATE|DELETE|DROP|TRUNCATE|ALTER|CREATE)\b/,
   );
   assert.match(migrationVerifier, /BEGIN READ ONLY/);
+  assert.match(migrationVerifier, /current_database\(\)/);
+  assert.match(migrationVerifier, /inet_server_addr\(\)/);
+  assert.match(migrationVerifier, /inet_server_port\(\)/);
   assert.match(migrationVerifier, /ROLLBACK/);
   assert.doesNotMatch(
     migrationVerifier,
