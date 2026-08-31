@@ -1,0 +1,80 @@
+{
+  "schemaVersion": 1,
+  "sourceRepository": "findandstudy/Find-And-Study-OS",
+  "sourceCommit": "d8f385ca018161cf6330232f5840d3a29c3581ce",
+  "authoritativeThrough": 65,
+  "entries": [
+    {
+      "idx": 54,
+      "tag": "0054_agent_applications",
+      "when": 1787850000000,
+      "sha256Lf": "5ecb126ad1dce98eb05bac926b4d04effd319858fc3096932479e4f92ef92a37"
+    },
+    {
+      "idx": 55,
+      "tag": "0055_agent_application_review_then_sign",
+      "when": 1787936400000,
+      "sha256Lf": "ca3f3d95d1c211237116f48ab890ec789d0dc96b4e256d5b514a4c0af1013f8b"
+    },
+    {
+      "idx": 56,
+      "tag": "0056_contract_email_verification_evidence",
+      "when": 1787940000000,
+      "sha256Lf": "7709c8936e5a463cf385991f3f6bb66abdc721d90c89b1bb9e13fad4642165d2"
+    },
+    {
+      "idx": 57,
+      "tag": "0057_agent_application_provisional_portal",
+      "when": 1788022800000,
+      "sha256Lf": "0edf7f6ffa21382cb1b2c15a9d82c530babccac8a8a1adc0161a1ac46de115c2"
+    },
+    {
+      "idx": 58,
+      "tag": "0058_pipeline_stage_auto_messages",
+      "when": 1788109200000,
+      "sha256Lf": "4b188ddf36c2a673a1a73c9255b1997fc0c662920955c47175410f21612e6064"
+    },
+    {
+      "idx": 59,
+      "tag": "0059_fas_agency_codes",
+      "when": 1788112800000,
+      "sha256Lf": "20b9b9332643d122b8bfb6e6d834688d761d23324be9128895e9091941157a2c"
+    },
+    {
+      "idx": 60,
+      "tag": "0060_scoped_record_assignments",
+      "when": 1788116400000,
+      "sha256Lf": "8d9f74a97029697e989f6af7c9782cc6d4bfbabd4fe256fc5de77743d800fff5"
+    },
+    {
+      "idx": 61,
+      "tag": "0061_pipeline_stage_audiences",
+      "when": 1788120000000,
+      "sha256Lf": "d780522f1c0217f65be025e3119736ebde7734856ae284d657ccb2536cd9c7ef"
+    },
+    {
+      "idx": 62,
+      "tag": "0062_agent_tenant_capabilities",
+      "when": 1788123600000,
+      "sha256Lf": "f0eaf61ff83f07aa5c4c766d4e9b5334d9ac3fb7a47a6c600f2afcb304b73ffc"
+    },
+    {
+      "idx": 63,
+      "tag": "0063_finance_mutation_integrity",
+      "when": 1788127200000,
+      "sha256Lf": "f8a7242f13f9337be37c50dfe733326c378b363aaa01b99decba455deab2e056"
+    },
+    {
+      "idx": 64,
+      "tag": "0064_agent_application_token_expiry",
+      "when": 1788130800000,
+      "sha256Lf": "ad346726a6e89656928857e0a80c9928c7d8e986d6873aa4209922b47cdfcfd3"
+    },
+    {
+      "idx": 65,
+      "tag": "0065_invoice_integrity",
+      "when": 1788134400000,
+      "sha256Lf": "f26c013ca8c1e510250daf4a7a6b78c2ca361ad6fffaf5b41afbfd4a39524cba"
+    }
+  ]
+}
