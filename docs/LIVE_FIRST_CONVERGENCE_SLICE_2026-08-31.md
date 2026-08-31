@@ -72,6 +72,8 @@ Excluded:
 - Default-unwired schema binding regression: `3/3`.
 - Canonical pure authorization/ChangeSet source and direct-test blobs: `6/6`
   exact; active-context `13/13`, R1 policy `12/12`, evidence envelope `8/8`.
+- Canonical command/request-context source and direct-test blobs: `4/4` exact;
+  command orchestration `25/25`, request binding `4/4`.
 
 ## Remaining gates
 
