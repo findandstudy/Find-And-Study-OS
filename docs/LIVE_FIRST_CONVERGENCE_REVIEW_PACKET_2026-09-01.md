@@ -18,6 +18,7 @@ NO-GO.
 
 | Fact | Frozen value |
 |---|---|
+| Base branch | `hotfix/embed-release-20260830` |
 | Base commit | `6dca1f951590dce297bb4d3579bd17d8d9f92e5f` |
 | Reviewed-through commit | `cf22635609f3537b22a2f41c677b5a3c7fba8802` |
 | Reviewed tree | `99ce24343bf0112d79aae41a899ec9be31ef5993` |
@@ -107,9 +108,9 @@ agent's self-review:
 - the exact final source head accepted after review-infrastructure-only changes.
 
 Approval is invalid if the manifest verifier reports drift, if any group is
-unclassified, if a post-review code path appears, if the PR event target base
-differs from the frozen base commit, or if the reviewer reviewed a different
-base/tree/patch.
+unclassified, if a post-review code path appears, if the PR event target branch
+or commit differs from the frozen base identity, or if the reviewer reviewed a
+different base/tree/patch.
 
 The verifier, manifest and workflow are source-controlled review aids, not an
 external trust root. A later edit to any of them requires renewed human review
@@ -136,12 +137,12 @@ The command:
    commit;
 7. rejects every post-review path outside the frozen review-infrastructure
    allowlist;
-8. requires the actual PR event target-base commit to equal the frozen review
-   base and rejects a missing target-base assertion in CI.
+8. requires the actual PR event target-base branch and commit to equal the
+   frozen review base identity and rejects a missing assertion in CI.
 
 The Linux exact-head CI checkout uses full history and supplies the actual PR
 source head rather than the synthetic merge commit, together with the actual PR
-target-base SHA. A manual run falls back only to the same frozen base commit.
-Clean-worktree and mandatory target-base enforcement are enabled in CI. This
-verifier does not request a review, merge a PR, deploy a release or inspect
-production.
+target-base ref and SHA. A manual workflow run falls back only to the same
+frozen base identity. Clean-worktree and mandatory target-base enforcement are
+enabled in CI. This verifier does not request a review, merge a PR, deploy a
+release or inspect production.

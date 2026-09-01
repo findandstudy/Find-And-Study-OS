@@ -7,6 +7,7 @@ import {
   compareExpected,
   verifyAllowedReviewInfrastructurePaths,
   verifyTargetBase,
+  verifyTargetBaseRef,
 } from "./verify-convergence-review-manifest.mjs";
 
 const repositoryRoot = new URL("../", import.meta.url);
@@ -97,6 +98,25 @@ test("the event target base must equal the frozen review base", () => {
   );
 });
 
+test("the event target ref must equal the frozen review branch", () => {
+  assert.equal(
+    verifyTargetBaseRef(manifest.baseRef, manifest.baseRef),
+    manifest.baseRef,
+  );
+  assert.throws(
+    () => verifyTargetBaseRef("master", manifest.baseRef),
+    /target base ref drift/,
+  );
+  assert.throws(
+    () => verifyTargetBaseRef("refs/heads/../master", manifest.baseRef),
+    /canonical Git branch name/,
+  );
+  assert.throws(
+    () => verifyTargetBaseRef(".hidden", manifest.baseRef),
+    /canonical Git branch name/,
+  );
+});
+
 test("the frozen review groups reconcile to the exact reviewed file denominator", () => {
   const counts = Object.values(manifest.expected.groupCounts);
   assert.equal(
@@ -120,6 +140,7 @@ test("the repository verifier reconstructs the pinned base-to-reviewed patch", (
         CONVERGENCE_REVIEW_REQUIRE_CLEAN: "0",
         CONVERGENCE_REVIEW_REQUIRE_TARGET_BASE: "1",
         CONVERGENCE_REVIEW_TARGET_BASE: manifest.baseCommit,
+        CONVERGENCE_REVIEW_TARGET_BASE_REF: manifest.baseRef,
       },
     },
   );
@@ -131,6 +152,7 @@ test("the repository verifier reconstructs the pinned base-to-reviewed patch", (
   );
   assert.equal(payload.reviewedThroughCommit, manifest.reviewedThroughCommit);
   assert.equal(payload.targetBase, manifest.baseCommit);
+  assert.equal(payload.targetBaseRef, manifest.baseRef);
   assert.equal(
     payload.postReviewPaths.every((file) =>
       manifest.allowedPostReviewPaths.includes(file),
@@ -152,5 +174,22 @@ test("required target-base evidence cannot be omitted", () => {
     { cwd: repositoryRoot, encoding: "utf8", env },
   );
   assert.notEqual(result.status, 0);
-  assert.match(result.stderr, /target base is required/);
+  assert.match(result.stderr, /target base commit and ref are required/);
+});
+
+test("required target-base ref evidence cannot be omitted", () => {
+  const env = {
+    ...process.env,
+    CONVERGENCE_REVIEW_REQUIRE_CLEAN: "0",
+    CONVERGENCE_REVIEW_REQUIRE_TARGET_BASE: "1",
+    CONVERGENCE_REVIEW_TARGET_BASE: manifest.baseCommit,
+  };
+  delete env.CONVERGENCE_REVIEW_TARGET_BASE_REF;
+  const result = spawnSync(
+    process.execPath,
+    ["scripts/verify-convergence-review-manifest.mjs"],
+    { cwd: repositoryRoot, encoding: "utf8", env },
+  );
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /target base commit and ref are required/);
 });

@@ -1,5 +1,6 @@
 {
   "schemaVersion": 1,
+  "baseRef": "hotfix/embed-release-20260830",
   "baseCommit": "6dca1f951590dce297bb4d3579bd17d8d9f92e5f",
   "reviewedThroughCommit": "cf22635609f3537b22a2f41c677b5a3c7fba8802",
   "expected": {

@@ -67,6 +67,37 @@ export function verifyTargetBase(targetBaseInput, expectedBaseCommit) {
   return targetBase;
 }
 
+export function verifyTargetBaseRef(targetBaseRefInput, expectedBaseRef) {
+  if (
+    typeof targetBaseRefInput !== "string" ||
+    !/^[A-Za-z0-9][A-Za-z0-9._/-]{0,254}$/.test(targetBaseRefInput) ||
+    targetBaseRefInput.includes("..") ||
+    targetBaseRefInput.includes("//") ||
+    targetBaseRefInput.includes("@{") ||
+    targetBaseRefInput.endsWith("/") ||
+    targetBaseRefInput.endsWith(".") ||
+    targetBaseRefInput.endsWith(".lock")
+  ) {
+    throw new Error("targetBaseRef must be a canonical Git branch name");
+  }
+  try {
+    const checked = String(
+      runGit(["check-ref-format", "--branch", targetBaseRefInput]),
+    ).trim();
+    if (checked !== targetBaseRefInput) {
+      throw new Error("Git normalized the target branch name");
+    }
+  } catch {
+    throw new Error("targetBaseRef must be a canonical Git branch name");
+  }
+  if (targetBaseRefInput !== expectedBaseRef) {
+    throw new Error(
+      `target base ref drift: expected ${expectedBaseRef}, received ${targetBaseRefInput}`,
+    );
+  }
+  return targetBaseRefInput;
+}
+
 function sha256(buffer) {
   return crypto.createHash("sha256").update(buffer).digest("hex");
 }
@@ -274,11 +305,20 @@ function verifyManifest(manifest, sourceHeadInput) {
     );
   }
   const targetBaseInput = process.env.CONVERGENCE_REVIEW_TARGET_BASE;
-  if (requireTargetBaseValue === "1" && !targetBaseInput) {
-    throw new Error("target base is required for review verification");
+  const targetBaseRefInput = process.env.CONVERGENCE_REVIEW_TARGET_BASE_REF;
+  if (
+    requireTargetBaseValue === "1" &&
+    (!targetBaseInput || !targetBaseRefInput)
+  ) {
+    throw new Error(
+      "target base commit and ref are required for review verification",
+    );
   }
   const targetBase = targetBaseInput
     ? verifyTargetBase(targetBaseInput, observation.baseCommit)
+    : null;
+  const targetBaseRef = targetBaseRefInput
+    ? verifyTargetBaseRef(targetBaseRefInput, manifest.baseRef)
     : null;
   const sourceHead = exactCommit(sourceHeadInput, "sourceHead");
   const ancestor = spawnSync(
@@ -312,6 +352,7 @@ function verifyManifest(manifest, sourceHeadInput) {
   return {
     sourceHead,
     targetBase,
+    targetBaseRef,
     reviewedThroughCommit: observation.reviewedThroughCommit,
     reviewedTree: observation.reviewedTree,
     patchSha256: observation.patchSha256,
