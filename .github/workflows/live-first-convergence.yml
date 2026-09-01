@@ -69,6 +69,7 @@ jobs:
           pnpm --filter @workspace/api-server run test:student-journey-projection
           pnpm --filter @workspace/api-server run test:student-journey-milestone-contract
           pnpm --filter @workspace/api-server run test:consent-communication-contract
+          pnpm --filter @workspace/api-server run test:student-journey-authorization
 
       - name: Type-check the workspace
         run: pnpm run typecheck
@@ -130,6 +131,7 @@ jobs:
           pnpm --filter @workspace/api-server run test:student-journey-projection
           pnpm --filter @workspace/api-server run test:student-journey-milestone-contract
           pnpm --filter @workspace/api-server run test:consent-communication-contract
+          pnpm --filter @workspace/api-server run test:student-journey-authorization
           pnpm run typecheck
 
   postgres-adoption:

@@ -96,7 +96,9 @@ baseline is frozen.
 2. Approve milestone weights, eligibility/cohort freeze policy and versioned
    quality-factor rules with Product, Ops and Data owners.
 3. Bind application ownership to signed active tenant context; do not infer a
-   tenant from a client parameter or a global default.
+   tenant from a client parameter or a global default. Use the default-unwired
+   [Student Journey authorization boundary](./STUDENT_JOURNEY_AUTHORIZATION_BOUNDARY_2026-09-01.md)
+   only after canonical tenant ownership exists.
 4. Add an additive tenant-owned milestone/denominator schema with immutable
    receipt/evidence references and DB uniqueness on the dedup identity.
 5. Write the milestone and the state transition/receipt in one transaction;

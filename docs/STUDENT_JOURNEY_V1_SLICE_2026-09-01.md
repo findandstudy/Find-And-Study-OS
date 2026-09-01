@@ -95,7 +95,10 @@ slices are:
 2. explicit requirement/readiness facts for dossier and application preflight;
 3. safe student acknowledgement and document-request response commands with
    idempotency, audit and concurrency tests;
-4. signed active-context authorization for the student corridor;
+4. adopt the default-unwired
+   [Student Journey authorization boundary](./STUDENT_JOURNEY_AUTHORIZATION_BOUNDARY_2026-09-01.md)
+   only after canonical tenant ownership, capability catalogue and current
+   PostgreSQL session-selection resolution exist;
 5. adopt the default-unwired
    [consent and communication decision contract](./CONSENT_COMMUNICATION_CONTRACT_2026-09-01.md)
    only after Privacy/Legal policy inputs and a tenant-owned transactional
