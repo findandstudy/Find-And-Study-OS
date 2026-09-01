@@ -39,6 +39,22 @@ function validateIdentity({ effectiveUid, expectedUid, serviceUser }) {
   }
 }
 
+function parsePrivateScanLimit(value) {
+  const raw = value ?? String(DEFAULT_MAX_PRIVATE_ENTRIES);
+  if (!/^[1-9]\d*$/.test(raw)) {
+    fail(
+      "RUNTIME_PRIVATE_SCAN_MAX_ENTRIES must be a canonical positive integer",
+    );
+  }
+  const limit = Number(raw);
+  if (!Number.isSafeInteger(limit) || limit > DEFAULT_MAX_PRIVATE_ENTRIES) {
+    fail(
+      `RUNTIME_PRIVATE_SCAN_MAX_ENTRIES must not exceed the hard ${DEFAULT_MAX_PRIVATE_ENTRIES}-entry ceiling`,
+    );
+  }
+  return limit;
+}
+
 function validateWritableDirectory({ label, stat, expectedUid, expectedGid }) {
   if (!stat.isDirectory()) fail(`${label} must be a directory`);
   if (stat.uid !== expectedUid || stat.gid !== expectedGid) {
@@ -229,13 +245,9 @@ function main() {
       expectedUid,
       expectedGid,
     });
-    const configuredLimit = Number(
-      process.env.RUNTIME_PRIVATE_SCAN_MAX_ENTRIES ??
-        DEFAULT_MAX_PRIVATE_ENTRIES,
+    const configuredLimit = parsePrivateScanLimit(
+      process.env.RUNTIME_PRIVATE_SCAN_MAX_ENTRIES,
     );
-    if (!Number.isSafeInteger(configuredLimit) || configuredLimit < 1) {
-      fail("RUNTIME_PRIVATE_SCAN_MAX_ENTRIES must be a positive safe integer");
-    }
     scan = scanPrivateTree({
       privateRoot,
       expectedUid,
@@ -260,6 +272,7 @@ if (require.main === module) {
 }
 
 module.exports = {
+  parsePrivateScanLimit,
   scanPrivateTree,
   validateIdentity,
   validatePrivateEntry,

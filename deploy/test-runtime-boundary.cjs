@@ -15,6 +15,7 @@ const { tmpdir } = require("node:os");
 const path = require("node:path");
 const test = require("node:test");
 const {
+  parsePrivateScanLimit,
   scanPrivateTree,
   validateIdentity,
   validatePrivateEntry,
@@ -59,6 +60,15 @@ test("runtime identity rejects root and actor substitution", () => {
       serviceUser: "findandstudy",
     }),
   );
+});
+
+test("private scan limit has a canonical non-bypassable 100000-entry ceiling", () => {
+  assert.equal(parsePrivateScanLimit(undefined), 100_000);
+  assert.equal(parsePrivateScanLimit("100000"), 100_000);
+  assert.equal(parsePrivateScanLimit("1"), 1);
+  for (const value of ["", "0", "0100", "1e5", "100000.0", "100001"]) {
+    assert.throws(() => parsePrivateScanLimit(value));
+  }
 });
 
 test("deploy invokes the runtime boundary before release creation or build", () => {

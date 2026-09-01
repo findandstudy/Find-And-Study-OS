@@ -10,6 +10,7 @@ import {
   assertReadOnlyOptIn,
   collectPrivateTreeInventory,
   isWithin,
+  parsePrivateInventoryLimit,
   parseProductionExpectations,
   parseProcessInventory,
   safeErrorMessage,
@@ -36,6 +37,15 @@ test("database connection strings are redacted from error output", () => {
   );
   assert.doesNotMatch(message, /super-secret|db_user/);
   assert.match(message, /REDACTED/);
+});
+
+test("private inventory limit cannot exceed the canonical 100000-entry ceiling", () => {
+  assert.equal(parsePrivateInventoryLimit(undefined), 100_000);
+  assert.equal(parsePrivateInventoryLimit("100000"), 100_000);
+  assert.equal(parsePrivateInventoryLimit("1"), 1);
+  for (const value of ["", "0", "0100", "1e5", "100000.0", "100001"]) {
+    assert.throws(() => parsePrivateInventoryLimit(value));
+  }
 });
 
 test("production expectations require an exact release and canonical migration prefix", () => {
@@ -303,6 +313,10 @@ test("private inventory reports aggregate metadata without file names or content
     assert.throws(
       () => collectPrivateTreeInventory({ privateRoot, maxEntries: 1 }),
       /bounded limit/,
+    );
+    assert.throws(
+      () => collectPrivateTreeInventory({ privateRoot, maxEntries: 100_001 }),
+      /hard 100000-entry ceiling/,
     );
   } finally {
     fs.rmSync(fixture, { recursive: true, force: true });

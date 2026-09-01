@@ -191,6 +191,22 @@ export function isWithin(parent, candidate) {
   );
 }
 
+export function parsePrivateInventoryLimit(value) {
+  const raw = value ?? String(DEFAULT_MAX_PRIVATE_ENTRIES);
+  if (!/^[1-9]\d*$/.test(raw)) {
+    fail(
+      "RUNTIME_PRIVATE_SCAN_MAX_ENTRIES must be a canonical positive integer",
+    );
+  }
+  const limit = Number(raw);
+  if (!Number.isSafeInteger(limit) || limit > DEFAULT_MAX_PRIVATE_ENTRIES) {
+    fail(
+      `RUNTIME_PRIVATE_SCAN_MAX_ENTRIES must not exceed the hard ${DEFAULT_MAX_PRIVATE_ENTRIES}-entry ceiling`,
+    );
+  }
+  return limit;
+}
+
 function safeStat(stat) {
   return {
     uid: stat.uid,
@@ -210,8 +226,14 @@ export function collectPrivateTreeInventory({
   privateRoot,
   maxEntries = DEFAULT_MAX_PRIVATE_ENTRIES,
 }) {
-  if (!Number.isSafeInteger(maxEntries) || maxEntries < 1) {
-    fail("private inventory limit must be a positive safe integer");
+  if (
+    !Number.isSafeInteger(maxEntries) ||
+    maxEntries < 1 ||
+    maxEntries > DEFAULT_MAX_PRIVATE_ENTRIES
+  ) {
+    fail(
+      `private inventory limit must be between 1 and the hard ${DEFAULT_MAX_PRIVATE_ENTRIES}-entry ceiling`,
+    );
   }
   const resolvedRoot = fs.realpathSync(privateRoot);
   const pending = [resolvedRoot];
@@ -409,9 +431,8 @@ export async function createProductionAttestation() {
     ) {
       fail("PRIVATE_OBJECT_DIR must be a child of STORAGE_LOCAL_DIR");
     }
-    const maxEntries = Number(
-      process.env.RUNTIME_PRIVATE_SCAN_MAX_ENTRIES ??
-        DEFAULT_MAX_PRIVATE_ENTRIES,
+    const maxEntries = parsePrivateInventoryLimit(
+      process.env.RUNTIME_PRIVATE_SCAN_MAX_ENTRIES,
     );
     privateStorage = {
       storageRoot: storageDir,

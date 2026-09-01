@@ -134,6 +134,10 @@ or touching a process unless all of these statements are true:
   `0700` directories), non-executable and not a symbolic link;
 - the bounded private-tree scan completes before the configured entry limit.
 
+`RUNTIME_PRIVATE_SCAN_MAX_ENTRIES` may lower the scan budget but must be a
+canonical positive integer and can never raise the hard `100000`-entry ceiling.
+Scientific notation, decimals, leading zeros and larger values fail closed.
+
 This is a deployment gate, not an automatic migration. The current production
 host was last observed with root-owned `0644/0755` private storage and root-owned
 PM2 processes. Do not merge and deploy this boundary until an approved change
