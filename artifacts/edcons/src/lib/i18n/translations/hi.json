@@ -536,6 +536,8 @@
     "signInSubtitle": "अपने पोर्टल तक पहुँचने के लिए साइन इन करें।",
     "emailLabel": "ईमेल",
     "passwordLabel": "पासवर्ड",
+    "showPassword": "पासवर्ड दिखाएं",
+    "hidePassword": "पासवर्ड छिपाएं",
     "signInButton": "साइन इन",
     "createAccount": "खाता बनाएँ",
     "registerSubtitle": "शुरू करने के लिए छात्र के रूप में पंजीकरण करें।",

@@ -536,6 +536,8 @@
     "signInSubtitle": "برای دسترسی به پورتال وارد شوید.",
     "emailLabel": "ایمیل",
     "passwordLabel": "رمز عبور",
+    "showPassword": "نمایش رمز عبور",
+    "hidePassword": "پنهان کردن رمز عبور",
     "signInButton": "ورود",
     "createAccount": "ایجاد حساب",
     "registerSubtitle": "به عنوان دانشجو ثبت‌نام کنید.",

@@ -536,6 +536,8 @@
     "signInSubtitle": "登录以访问您的门户。",
     "emailLabel": "邮箱",
     "passwordLabel": "密码",
+    "showPassword": "显示密码",
+    "hidePassword": "隐藏密码",
     "signInButton": "登录",
     "createAccount": "创建账户",
     "registerSubtitle": "注册为学生以开始使用。",

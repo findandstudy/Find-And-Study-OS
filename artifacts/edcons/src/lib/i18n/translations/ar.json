@@ -536,6 +536,8 @@
     "signInSubtitle": "سجل دخولك للوصول إلى بوابتك.",
     "emailLabel": "البريد الإلكتروني",
     "passwordLabel": "كلمة المرور",
+    "showPassword": "إظهار كلمة المرور",
+    "hidePassword": "إخفاء كلمة المرور",
     "signInButton": "تسجيل الدخول",
     "createAccount": "إنشاء حساب",
     "registerSubtitle": "سجل كطالب للبدء.",

@@ -536,6 +536,8 @@
     "signInSubtitle": "Sign in to access your portal.",
     "emailLabel": "Email",
     "passwordLabel": "Password",
+    "showPassword": "Show password",
+    "hidePassword": "Hide password",
     "signInButton": "Sign In",
     "createAccount": "Create Account",
     "registerSubtitle": "Register as a student to get started.",

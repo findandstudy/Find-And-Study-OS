@@ -536,6 +536,8 @@
     "signInSubtitle": "Войдите для доступа к порталу.",
     "emailLabel": "Электронная почта",
     "passwordLabel": "Пароль",
+    "showPassword": "Показать пароль",
+    "hidePassword": "Скрыть пароль",
     "signInButton": "Войти",
     "createAccount": "Создать аккаунт",
     "registerSubtitle": "Зарегистрируйтесь как студент.",

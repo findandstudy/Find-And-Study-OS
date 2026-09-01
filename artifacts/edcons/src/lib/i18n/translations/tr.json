@@ -536,6 +536,8 @@
     "signInSubtitle": "Portalınıza erişmek için giriş yapın.",
     "emailLabel": "E-posta",
     "passwordLabel": "Şifre",
+    "showPassword": "Şifreyi göster",
+    "hidePassword": "Şifreyi gizle",
     "signInButton": "Giriş Yap",
     "createAccount": "Hesap Oluştur",
     "registerSubtitle": "Başlamak için öğrenci olarak kayıt olun.",

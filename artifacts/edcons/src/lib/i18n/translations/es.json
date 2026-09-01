@@ -536,6 +536,8 @@
     "signInSubtitle": "Inicia sesión para acceder a tu portal.",
     "emailLabel": "Correo",
     "passwordLabel": "Contraseña",
+    "showPassword": "Mostrar contraseña",
+    "hidePassword": "Ocultar contraseña",
     "signInButton": "Iniciar sesión",
     "createAccount": "Crear cuenta",
     "registerSubtitle": "Regístrate como estudiante para comenzar.",

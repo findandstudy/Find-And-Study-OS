@@ -807,6 +807,7 @@ test("staging CI is isolated, exact-source and integration-disabled", () => {
   assert.match(workflow, /FASOS_SOURCE_COMMIT="\$\{GITHUB_SHA\}"/);
   assert.match(workflow, /test:migration-authority/);
   assert.match(workflow, /test:rate-limit-ip-security/);
+  assert.match(workflow, /test:login-accessibility/);
   assert.match(workflow, /runs-on: windows-latest/);
   assert.doesNotMatch(workflow, /\b(?:ssh|scp|rsync|kubectl)\b/i);
   assert.doesNotMatch(workflow, /uses:\s+[^\s@]+@(?![a-f0-9]{40}\b)/);

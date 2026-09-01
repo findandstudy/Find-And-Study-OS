@@ -536,6 +536,8 @@
     "signInSubtitle": "Masuk untuk mengakses portal Anda.",
     "emailLabel": "Email",
     "passwordLabel": "Kata Sandi",
+    "showPassword": "Tampilkan kata sandi",
+    "hidePassword": "Sembunyikan kata sandi",
     "signInButton": "Masuk",
     "createAccount": "Buat Akun",
     "registerSubtitle": "Daftar sebagai siswa untuk memulai.",

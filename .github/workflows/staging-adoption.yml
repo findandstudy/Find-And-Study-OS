@@ -74,6 +74,7 @@ jobs:
         run: |
           pnpm run typecheck
           pnpm --filter @workspace/edcons run check:i18n
+          pnpm --filter @workspace/edcons run test:login-accessibility
           pnpm --filter @workspace/api-server run build
           pnpm --filter @workspace/edcons run build
 

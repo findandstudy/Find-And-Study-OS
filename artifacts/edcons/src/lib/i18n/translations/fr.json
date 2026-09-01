@@ -536,6 +536,8 @@
     "signInSubtitle": "Connectez-vous pour accéder à votre portail.",
     "emailLabel": "E-mail",
     "passwordLabel": "Mot de passe",
+    "showPassword": "Afficher le mot de passe",
+    "hidePassword": "Masquer le mot de passe",
     "signInButton": "Se connecter",
     "createAccount": "Créer un compte",
     "registerSubtitle": "Inscrivez-vous en tant qu'étudiant pour commencer.",
