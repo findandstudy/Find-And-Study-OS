@@ -2,35 +2,35 @@
   "schemaVersion": 1,
   "baseRef": "hotfix/embed-release-20260830",
   "baseCommit": "6dca1f951590dce297bb4d3579bd17d8d9f92e5f",
-  "reviewedThroughCommit": "cf22635609f3537b22a2f41c677b5a3c7fba8802",
+  "reviewedThroughCommit": "929dc02af15149367715616f9e6cf146462eb0bc",
   "expected": {
-    "reviewedTree": "99ce24343bf0112d79aae41a899ec9be31ef5993",
-    "patchSha256": "1a8316bd5a8af111ae67e2c4107abf5c407a1d4b6bfa8afa66d66b672569e929",
-    "commitCount": 60,
-    "fileCount": 181,
-    "insertions": 52266,
+    "reviewedTree": "aa7704b5f1a7053ed240368d35ca42725ddda0f5",
+    "patchSha256": "4b51c3cb924041fbce8f97fc3acf4a539650de8d25245295ac6071c38e567341",
+    "commitCount": 65,
+    "fileCount": 191,
+    "insertions": 58891,
     "deletions": 290,
     "groupCounts": {
-      "migration_data_authority": 27,
+      "migration_data_authority": 29,
       "deployment_attestation": 13,
-      "student_journey": 21,
+      "student_journey": 25,
       "control_plane_authorization": 58,
       "live_api_boundary": 13,
       "frontend": 12,
-      "security_inventory": 4,
+      "security_inventory": 7,
       "ci_supply_chain": 8,
       "tests": 16,
-      "documentation": 9,
+      "documentation": 10,
       "other": 0
     }
   },
   "postReviewInfrastructure": {
     "pinnedPaths": {
-      ".github/workflows/live-first-convergence.yml": "ce6a63ed393c00cc00d8071ef03ec298a0bd095c",
-      "docs/LIVE_FIRST_CONVERGENCE_REVIEW_PACKET_2026-09-01.md": "ca09f06640869f25601d85b054c4e67473eae4ba",
+      ".github/workflows/live-first-convergence.yml": "88246cf39e4be4ee5a2e4fa26fb840919a55ad3e",
+      "docs/LIVE_FIRST_CONVERGENCE_REVIEW_PACKET_2026-09-01.md": "1ebb7c9f53effc4ae723853306438648d9ecd578",
       "package.json": "8c2805a568f927511e8d2a8b50a56f3273b477fe",
-      "scripts/test-convergence-review-manifest.mjs": "867b3da72ffdddfff2af8641aae21b5b2eb8acf9",
-      "scripts/verify-convergence-review-manifest.mjs": "89265df0a974834d840f694613ce159c7f96db5d"
+      "scripts/test-convergence-review-manifest.mjs": "926d05758550b337da682155aee8024aece926fe",
+      "scripts/verify-convergence-review-manifest.mjs": "4ccbc183eb0b1cbf2aa2f2e0a6eaf81d21eea8f2"
     }
   },
   "allowedPostReviewPaths": [
