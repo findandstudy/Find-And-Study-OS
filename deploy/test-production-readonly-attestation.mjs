@@ -19,6 +19,7 @@ import {
   readBoundedHealthBody,
   safeErrorMessage,
   validateHealthResponseMetadata,
+  validateStableProcessSnapshot,
   validateSourceProvenance,
 } from "./production-readonly-attestation.mjs";
 
@@ -338,9 +339,7 @@ test("proc start-time identity rejects pid reuse and malformed snapshots", () =>
     (source.match(/readProcIdentity\(record\.pid\)/g) ?? []).length,
     2,
   );
-  assert.match(source, /procDirectoryStat\.uid !== record\.uid/);
-  assert.match(source, /procDirectoryStat\.gid !== record\.gid/);
-  assert.match(source, /after\.startTimeTicks !== before\.startTimeTicks/);
+  assert.match(source, /validateStableProcessSnapshot\(\{/);
 });
 
 test(
@@ -355,6 +354,58 @@ test(
     assert.match(identity.startTimeTicks, /^(?:0|[1-9]\d*)$/);
   },
 );
+
+test("process snapshot rejects uid, inode, cwd, or start-time drift", () => {
+  const record = { pid: 101, uid: 1001, gid: 1001 };
+  const identity = { pid: 101, startTimeTicks: "123456" };
+  const procStat = {
+    uid: 1001,
+    gid: 1001,
+    dev: 7,
+    ino: 101,
+    isDirectory: () => true,
+  };
+  const valid = {
+    record,
+    identityBefore: identity,
+    identityAfter: { ...identity },
+    procStatBefore: procStat,
+    procStatAfter: { ...procStat },
+    cwdBefore: path.resolve("release", "api"),
+    cwdAfter: path.resolve("release", "api"),
+  };
+  assert.equal(
+    validateStableProcessSnapshot(valid),
+    path.resolve("release", "api"),
+  );
+  for (const mutation of [
+    { procStatAfter: { ...procStat, uid: 1002 } },
+    { procStatAfter: { ...procStat, ino: 102 } },
+    { identityAfter: { ...identity, startTimeTicks: "123457" } },
+    { cwdAfter: path.resolve("release", "worker") },
+  ]) {
+    assert.throws(
+      () => validateStableProcessSnapshot({ ...valid, ...mutation }),
+      /identity changed/,
+    );
+  }
+
+  const source = fs.readFileSync(
+    path.join(here, "production-readonly-attestation.mjs"),
+    "utf8",
+  );
+  assert.equal(
+    (source.match(/fs\.statSync\(`\/proc\/\$\{record\.pid\}`\)/g) ?? []).length,
+    2,
+  );
+  assert.equal(
+    (
+      source.match(/fs\.realpathSync\(`\/proc\/\$\{record\.pid\}\/cwd`\)/g) ??
+      []
+    ).length,
+    2,
+  );
+});
 
 test("private inventory reports aggregate metadata without file names or contents", () => {
   const fixture = fs.mkdtempSync(path.join(os.tmpdir(), "fasos-attestation-"));

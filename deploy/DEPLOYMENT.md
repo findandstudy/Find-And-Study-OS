@@ -157,8 +157,9 @@ rejected, so the probe cannot follow a local redirect to another host. Only an
 exact HTTP `200` response with the `application/json` media type is admitted.
 Each selected process is also revalidated against its `/proc` directory
 uid/gid and kernel start-time identity before and after resolving its cwd. PID
-reuse or process replacement blocks the attestation and no process arguments
-are added to the emitted evidence.
+reuse, process replacement, uid/gid drift, `/proc` inode replacement or cwd
+change blocks the attestation. Process arguments are not added to the emitted
+evidence.
 
 This is a deployment gate, not an automatic migration. The current production
 host was last observed with root-owned `0644/0755` private storage and root-owned

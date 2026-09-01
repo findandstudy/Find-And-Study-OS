@@ -420,6 +420,38 @@ function readProcIdentity(pid) {
   );
 }
 
+export function validateStableProcessSnapshot({
+  record,
+  identityBefore,
+  identityAfter,
+  procStatBefore,
+  procStatAfter,
+  cwdBefore,
+  cwdAfter,
+}) {
+  for (const stat of [procStatBefore, procStatAfter]) {
+    if (
+      !stat?.isDirectory?.() ||
+      stat.uid !== record.uid ||
+      stat.gid !== record.gid
+    ) {
+      fail("process identity changed during attestation");
+    }
+  }
+  if (
+    identityBefore.pid !== record.pid ||
+    identityAfter.pid !== record.pid ||
+    identityAfter.startTimeTicks !== identityBefore.startTimeTicks ||
+    procStatAfter.dev !== procStatBefore.dev ||
+    procStatAfter.ino !== procStatBefore.ino ||
+    !path.isAbsolute(cwdBefore) ||
+    cwdAfter !== cwdBefore
+  ) {
+    fail("process identity changed during attestation");
+  }
+  return cwdBefore;
+}
+
 function collectProcessMetadata() {
   const raw = execFileSync("ps", ["-eo", "pid=,uid=,gid=,args="], {
     encoding: "utf8",
@@ -428,20 +460,21 @@ function collectProcessMetadata() {
     killSignal: "SIGKILL",
   });
   return parseProcessInventory(raw).map((record) => {
-    const before = readProcIdentity(record.pid);
-    const procDirectoryStat = fs.statSync(`/proc/${record.pid}`);
-    if (
-      !procDirectoryStat.isDirectory() ||
-      procDirectoryStat.uid !== record.uid ||
-      procDirectoryStat.gid !== record.gid
-    ) {
-      fail("process identity changed during attestation");
-    }
-    const cwd = fs.realpathSync(`/proc/${record.pid}/cwd`);
-    const after = readProcIdentity(record.pid);
-    if (after.startTimeTicks !== before.startTimeTicks) {
-      fail("process identity changed during attestation");
-    }
+    const identityBefore = readProcIdentity(record.pid);
+    const procStatBefore = fs.statSync(`/proc/${record.pid}`);
+    const cwdBefore = fs.realpathSync(`/proc/${record.pid}/cwd`);
+    const cwdAfter = fs.realpathSync(`/proc/${record.pid}/cwd`);
+    const procStatAfter = fs.statSync(`/proc/${record.pid}`);
+    const identityAfter = readProcIdentity(record.pid);
+    const cwd = validateStableProcessSnapshot({
+      record,
+      identityBefore,
+      identityAfter,
+      procStatBefore,
+      procStatAfter,
+      cwdBefore,
+      cwdAfter,
+    });
     return { ...record, cwd };
   });
 }
