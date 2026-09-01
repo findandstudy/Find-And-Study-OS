@@ -18,6 +18,7 @@ RUN apt-get update \
 
 WORKDIR /workspace
 COPY --chown=${APP_UID}:${APP_GID} . .
+RUN chown "${APP_UID}:${APP_GID}" /workspace
 USER findandstudy
 
 RUN test -n "${FASOS_SOURCE_COMMIT}" \
