@@ -12,6 +12,7 @@
     "test:data-boundaries": "node --test deploy/test-data-boundaries.cjs",
     "test:runtime-boundary": "node --test deploy/test-runtime-boundary.cjs",
     "test:disk-capacity": "node --test deploy/test-disk-capacity.cjs",
+    "test:disk-attribution": "node --test deploy/test-disk-attribution.mjs",
     "test:production-attestation": "node --test deploy/test-production-readonly-attestation.mjs",
     "test:package-manager": "node --test scripts/test-enforce-pnpm.cjs",
     "audit:tenant-writers": "node scripts/audit-tenant-writers.mjs",

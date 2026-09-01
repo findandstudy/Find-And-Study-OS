@@ -84,6 +84,7 @@ jobs:
           pnpm run test:data-boundaries
           pnpm run test:runtime-boundary
           pnpm run test:disk-capacity
+          pnpm run test:disk-attribution
           pnpm run test:production-attestation
           pnpm --filter @workspace/api-server run test:ai-delivery-safety
           pnpm --filter @workspace/api-server run test:security-regressions

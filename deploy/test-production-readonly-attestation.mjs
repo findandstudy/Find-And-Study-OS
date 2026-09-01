@@ -334,6 +334,27 @@ test("private inventory reports aggregate metadata without file names or content
   }
 });
 
+test("bounded tree scans start only after live target and process verification", () => {
+  const source = fs.readFileSync(
+    path.join(here, "production-readonly-attestation.mjs"),
+    "utf8",
+  );
+  const expectedState = source.lastIndexOf("assertExpectedProductionState({");
+  const processes = source.indexOf(
+    "const processes = collectProcessMetadata()",
+  );
+  const privateScan = source.indexOf(
+    "inventory: collectPrivateTreeInventory({",
+  );
+  const diskScan = source.indexOf("diskAttribution = collectDiskAttribution({");
+  for (const index of [expectedState, processes, privateScan, diskScan]) {
+    assert.ok(index >= 0);
+  }
+  assert.ok(expectedState < processes);
+  assert.ok(processes < privateScan);
+  assert.ok(processes < diskScan);
+});
+
 test("attestation implementation exposes no mutation command or file-write surface", () => {
   const source = fs.readFileSync(
     path.join(here, "production-readonly-attestation.mjs"),
@@ -350,6 +371,10 @@ test("attestation implementation exposes no mutation command or file-write surfa
   assert.match(source, /ATTESTATION_EXPECTED_DATABASE_NAME/);
   assert.match(source, /ATTESTATION_EXPECTED_DATABASE_ADDRESS/);
   assert.match(source, /ATTESTATION_EXPECTED_DATABASE_PORT/);
+  assert.match(source, /ATTESTATION_INCLUDE_DISK_ATTRIBUTION/);
+  assert.match(source, /DISK_ATTRIBUTION_MAX_ENTRIES/);
+  assert.match(source, /DISK_ATTRIBUTION_MAX_DURATION_MS/);
+  assert.match(source, /schemaVersion: 4/);
   assert.match(source, /method: "GET"/);
   assert.match(source, /execFileSync\("ps", \["-eo"/);
   assert.equal((source.match(/execFileSync\(\s*"git"/g) ?? []).length, 2);

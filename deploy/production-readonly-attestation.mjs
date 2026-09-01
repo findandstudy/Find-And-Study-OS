@@ -8,6 +8,11 @@ import {
   readExpectedMigrations,
   verifyDatabaseMigrationState,
 } from "../lib/db/verify-migration-state.mjs";
+import {
+  collectDiskAttribution,
+  parseDiskAttributionLimits,
+  parseDiskAttributionOptIn,
+} from "./disk-attribution.mjs";
 
 const modulePath = fileURLToPath(import.meta.url);
 const sourceRoot = fs.realpathSync(
@@ -359,6 +364,11 @@ function requiredAbsolutePath(name, expectedType) {
   return { configured: value, resolved, stat: safeStat(stat) };
 }
 
+function optionalAbsoluteDirectory(name) {
+  if (process.env[name] === undefined || process.env[name] === "") return null;
+  return requiredAbsolutePath(name, "directory");
+}
+
 function collectDiskInventory() {
   if (typeof fs.statfsSync !== "function")
     fail("filesystem capacity API is unavailable");
@@ -428,6 +438,7 @@ export async function createProductionAttestation() {
   const paths = { releasesDir, currentRelease, logDir, runtimeEnv };
 
   let privateStorage = null;
+  let privateScanMaxEntries = null;
   if ((process.env.STORAGE_DRIVER ?? "replit") === "local") {
     const storageDir = requiredAbsolutePath("STORAGE_LOCAL_DIR", "directory");
     const privateRoot = requiredAbsolutePath("PRIVATE_OBJECT_DIR", "directory");
@@ -443,16 +454,13 @@ export async function createProductionAttestation() {
     ) {
       fail("PRIVATE_OBJECT_DIR must be a child of STORAGE_LOCAL_DIR");
     }
-    const maxEntries = parsePrivateInventoryLimit(
+    privateScanMaxEntries = parsePrivateInventoryLimit(
       process.env.RUNTIME_PRIVATE_SCAN_MAX_ENTRIES,
     );
     privateStorage = {
       storageRoot: storageDir,
       privateRoot,
-      inventory: collectPrivateTreeInventory({
-        privateRoot: privateRoot.resolved,
-        maxEntries,
-      }),
+      inventory: null,
     };
   }
 
@@ -480,8 +488,42 @@ export async function createProductionAttestation() {
     }
   }
 
+  if (privateStorage) {
+    privateStorage = {
+      ...privateStorage,
+      inventory: collectPrivateTreeInventory({
+        privateRoot: privateStorage.privateRoot.resolved,
+        maxEntries: privateScanMaxEntries,
+      }),
+    };
+  }
+
+  let diskAttribution = null;
+  if (
+    parseDiskAttributionOptIn(process.env.ATTESTATION_INCLUDE_DISK_ATTRIBUTION)
+  ) {
+    const limits = parseDiskAttributionLimits({
+      maxEntries: process.env.DISK_ATTRIBUTION_MAX_ENTRIES,
+      maxDurationMs: process.env.DISK_ATTRIBUTION_MAX_DURATION_MS,
+    });
+    const databaseDir = optionalAbsoluteDirectory(
+      "DISK_ATTRIBUTION_DATABASE_DIR",
+    );
+    const backupDir = optionalAbsoluteDirectory("DISK_ATTRIBUTION_BACKUP_DIR");
+    diskAttribution = collectDiskAttribution({
+      roots: {
+        releases: releasesDir.resolved,
+        logs: logDir.resolved,
+        storage: privateStorage?.storageRoot.resolved,
+        database: databaseDir?.resolved,
+        backups: backupDir?.resolved,
+      },
+      ...limits,
+    });
+  }
+
   return {
-    schemaVersion: 3,
+    schemaVersion: 4,
     generatedAt: new Date().toISOString(),
     readOnly: true,
     source,
@@ -502,6 +544,7 @@ export async function createProductionAttestation() {
       processes,
       paths,
       privateStorage,
+      diskAttribution,
       rootFilesystem: collectDiskInventory(),
     },
   };

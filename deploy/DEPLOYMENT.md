@@ -207,6 +207,33 @@ ATTESTATION_EXPECTED_SOURCE_COMMIT="$reviewed_commit" \
 printf 'Attestation written to %s\n' "$attestation_file"
 ```
 
+Disk attribution is optional and remains part of the same exact-source,
+exact-release and exact-database read-only attestation. Enable it only after the
+fixed category roots and I/O budget have been reviewed:
+
+```bash
+export ATTESTATION_INCLUDE_DISK_ATTRIBUTION=1
+export DISK_ATTRIBUTION_MAX_ENTRIES=20000
+export DISK_ATTRIBUTION_MAX_DURATION_MS=5000
+
+# Optional categories; use only reviewed, existing, narrow absolute roots.
+# export DISK_ATTRIBUTION_DATABASE_DIR=/var/lib/postgresql/16/main
+# export DISK_ATTRIBUTION_BACKUP_DIR=/var/backups/findandstudy
+```
+
+The entry and duration values are mandatory when attribution is enabled. They
+cannot exceed the hard `100000`-entry and `30000ms` ceilings. Releases, logs and
+local storage are fixed categories; database and backup roots are optional.
+Roots must be at least three path segments deep, may not overlap and may not
+cross a filesystem boundary. Directory entries are streamed, symlinks are not
+followed, and the result contains only category counts and logical/allocated
+byte totals—never filenames or contents. `filesystemTotalBytes` and
+`filesystemAvailableBytes` describe the containing filesystem and can repeat
+when categories share a filesystem; do not sum those capacity fields. Any
+budget, path, mount or read error fails the attribution instead of returning an
+apparently complete partial result. This tool never deletes or rotates data and
+does not itself approve a retention action.
+
 Preparing or updating `/opt/findandstudy/source` is a separate, explicitly
 reviewed source-only operation; it is not a deploy and must not change the
 `current` symlink or any process. Use a frozen dependency install matching the
