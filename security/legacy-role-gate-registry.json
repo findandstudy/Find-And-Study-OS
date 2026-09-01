@@ -980,7 +980,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/students.ts",
-      "sha256": "31f4f9321e533a7927dac0a5ae3b99e71069a72971d6d4b497256f24a63bf498",
+      "sha256": "436079a3e29c0486994a91830f25ea00897c9e4eed495e198edcc8aba58130a7",
       "routeRegistrations": 27,
       "requireAuth": 27,
       "requireRole": 16,

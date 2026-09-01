@@ -26,6 +26,7 @@ const STAGE_META: Record<string, { labelKey: string; color: string; step: number
 const STEPS = ["inquiry", "documents_collected", "submitted", "offer_received", "visa_applied", "visa_approved", "enrolled"];
 
 type StudentJourneyProjection = {
+  enabled: true;
   schemaVersion: 1;
   source: "pipeline_projection" | "legacy_fallback";
   application: {
@@ -59,6 +60,11 @@ type StudentJourneyProjection = {
     rejectedDocuments: number;
     openRequests: number;
   };
+};
+
+type StudentJourneyResponse = StudentJourneyProjection | {
+  enabled: false;
+  schemaVersion: 1;
 };
 
 function getInitials(first?: string | null, last?: string | null) {
@@ -105,7 +111,7 @@ export default function StudentDashboard() {
     isLoading: journeyLoading,
     isError: journeyError,
     refetch: refetchJourney,
-  } = useQuery<StudentJourneyProjection>({
+  } = useQuery<StudentJourneyResponse>({
     queryKey: ["/api/students/me/journey"],
     queryFn: () => customFetch("/api/students/me/journey"),
     enabled: !!user,
@@ -142,7 +148,7 @@ export default function StudentDashboard() {
           </div>
         </div>
 
-        {journeyLoading ? (
+        {journey?.enabled === false ? null : journeyLoading ? (
           <Card className="p-6 border-primary/20 shadow-lg shadow-primary/5" aria-busy="true">
             <div className="h-4 w-32 rounded-full bg-secondary animate-pulse mb-4" />
             <div className="h-7 w-2/3 rounded-full bg-secondary animate-pulse mb-3" />

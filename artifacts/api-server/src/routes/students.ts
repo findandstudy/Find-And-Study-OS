@@ -45,6 +45,7 @@ import { buildFacetFilterInput, loadFacetValue } from "../lib/facetCache";
 import { getStudentPhotoThumbnail } from "../lib/studentPhotoThumbnail";
 import { studentHasServablePhotoSql } from "../lib/studentPhoto";
 import { buildStudentJourneyProjection } from "../lib/studentJourneyProjection";
+import { isStudentJourneyEnabled } from "../lib/studentJourneyFeature";
 
 const router: IRouter = Router();
 
@@ -107,8 +108,13 @@ router.get("/students/me", requireAuth, async (req, res): Promise<void> => {
 // explicit legacy fallback instead of manufacturing progress certainty.
 router.get("/students/me/journey", requireAuth, async (req, res): Promise<void> => {
   const user = req.user!;
+  res.setHeader("Cache-Control", "private, no-store");
   if (user.role !== "student") {
     res.status(403).json({ error: "Only students can call this endpoint" });
+    return;
+  }
+  if (!isStudentJourneyEnabled(user.id)) {
+    res.json({ schemaVersion: 1, enabled: false });
     return;
   }
 
@@ -178,13 +184,15 @@ router.get("/students/me/journey", requireAuth, async (req, res): Promise<void> 
       )),
   ]);
 
-  res.setHeader("Cache-Control", "private, no-store");
-  res.json(buildStudentJourneyProjection({
-    applications,
-    pipelineStages,
-    documents,
-    missingRequests,
-  }));
+  res.json({
+    enabled: true,
+    ...buildStudentJourneyProjection({
+      applications,
+      pipelineStages,
+      documents,
+      missingRequests,
+    }),
+  });
 });
 
 // Task #187 — list every open missing-doc request across all of the

@@ -5,6 +5,7 @@ import {
   buildStudentJourneyProjection,
   type JourneyPipelineStageInput,
 } from "../src/lib/studentJourneyProjection";
+import { resolveStudentJourneyFeature } from "../src/lib/studentJourneyFeature";
 
 const PIPELINE: JourneyPipelineStageInput[] = [
   { key: "inquiry", label: "Inquiry", sortOrder: 10 },
@@ -32,11 +33,24 @@ test("journey endpoint remains student-only, self-owned and non-cacheable", () =
   const journeyRoute = routesSource.slice(routeStart, routeEnd);
   assert.match(journeyRoute, /router\.get\("\/students\/me\/journey", requireAuth/);
   assert.match(journeyRoute, /user\.role !== "student"/);
+  assert.match(journeyRoute, /!isStudentJourneyEnabled\(user\.id\)/);
   assert.match(journeyRoute, /eq\(studentsTable\.userId, user\.id\)/);
   assert.match(journeyRoute, /eq\(applicationsTable\.studentId, student\.id\)/);
   assert.match(journeyRoute, /eq\(documentsTable\.studentId, student\.id\)/);
   assert.match(journeyRoute, /Cache-Control", "private, no-store"/);
   assert.doesNotMatch(journeyRoute, /req\.params|req\.query|req\.body/);
+});
+
+test("journey rollout is default-off, cohort-bound and fail-closed", () => {
+  assert.deepEqual(
+    resolveStudentJourneyFeature({ userId: 42 }),
+    { enabled: false, mode: "off", reason: "disabled" },
+  );
+  assert.equal(resolveStudentJourneyFeature({ mode: "all", userId: 42 }).enabled, true);
+  assert.equal(resolveStudentJourneyFeature({ mode: "allowlist", allowlist: "7,42", userId: 42 }).enabled, true);
+  assert.equal(resolveStudentJourneyFeature({ mode: "allowlist", allowlist: "7,42", userId: 43 }).enabled, false);
+  assert.equal(resolveStudentJourneyFeature({ mode: "allowlist", allowlist: "42,invalid", userId: 42 }).enabled, false);
+  assert.equal(resolveStudentJourneyFeature({ mode: "unexpected", userId: 42 }).enabled, false);
 });
 
 test("no application produces a deterministic discovery action without false progress", () => {

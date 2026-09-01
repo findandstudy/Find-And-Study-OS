@@ -12,7 +12,10 @@ that currently needs the most attention and reports:
 - an observed document/request status;
 - a normalized deadline and overdue signal when the source date is parseable.
 
-This is a local, default-safe product slice. It does not add a migration,
+This is a local, default-off product slice. Server-side rollout uses
+`STUDENT_JOURNEY_V1_MODE=off|allowlist|all`; the default and every invalid
+configuration fail closed. `allowlist` mode accepts only a bounded list of
+internal numeric user IDs through `STUDENT_JOURNEY_V1_USER_IDS`. It does not add a migration,
 activate an integration, contact a customer, merge a branch, deploy a release
 or change production/VPS state.
 
@@ -64,7 +67,7 @@ escaped text. Journey copy is synchronized across all ten supported locales.
 
 ## Verification
 
-- Journey projection and route-boundary contract: `9/9` pass.
+- Journey projection, route-boundary and rollout contract: `10/10` pass.
 - IPv4/IPv6 rate-limit security: `6/6` pass.
 - Live security regressions: `31/31` pass.
 - External AI delivery safety: `5/5` pass with live delivery disabled.
