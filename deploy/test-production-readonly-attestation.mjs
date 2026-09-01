@@ -17,6 +17,7 @@ import {
   parseProcessInventory,
   readBoundedHealthBody,
   safeErrorMessage,
+  validateHealthResponseMetadata,
   validateSourceProvenance,
 } from "./production-readonly-attestation.mjs";
 
@@ -452,6 +453,37 @@ test("local health target rejects ambiguous ports and all redirects", () => {
   assert.doesNotMatch(source, /redirect: "follow"/);
 });
 
+test("local health metadata requires exact HTTP 200 and JSON media type", () => {
+  assert.doesNotThrow(() =>
+    validateHealthResponseMetadata(
+      new Response("{}", {
+        status: 200,
+        headers: { "content-type": "application/json; charset=utf-8" },
+      }),
+    ),
+  );
+  assert.throws(
+    () =>
+      validateHealthResponseMetadata(
+        new Response("{}", {
+          status: 201,
+          headers: { "content-type": "application/json" },
+        }),
+      ),
+    /expected 200/,
+  );
+  for (const contentType of [null, "text/plain", "application/problem+json"]) {
+    const headers = contentType ? { "content-type": contentType } : undefined;
+    assert.throws(
+      () =>
+        validateHealthResponseMetadata(
+          new Response("{}", { status: 200, headers }),
+        ),
+      /must return application\/json/,
+    );
+  }
+});
+
 test("attestation implementation exposes no mutation command or file-write surface", () => {
   const source = fs.readFileSync(
     path.join(here, "production-readonly-attestation.mjs"),
@@ -482,6 +514,8 @@ test("attestation implementation exposes no mutation command or file-write surfa
   assert.match(source, /READ_ONLY_PROBE_TIMEOUT_MS = 10_000/);
   assert.match(source, /DEFAULT_MAX_HEALTH_BODY_BYTES = 64 \* 1024/);
   assert.match(source, /redirect: "error"/);
+  assert.match(source, /response\.status !== 200/);
+  assert.match(source, /mediaType !== "application\/json"/);
   assert.doesNotMatch(
     source,
     /"(?:checkout|switch|reset|clean|pull|fetch|merge|rebase|commit|push)"/,

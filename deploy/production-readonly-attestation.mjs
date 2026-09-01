@@ -502,6 +502,19 @@ export function parseHealthPort(value) {
   return port;
 }
 
+export function validateHealthResponseMetadata(response) {
+  if (response.status !== 200) {
+    fail(
+      `local health endpoint returned HTTP ${response.status}; expected 200`,
+    );
+  }
+  const contentType = response.headers.get("content-type");
+  const mediaType = contentType?.split(";", 1)[0]?.trim().toLowerCase();
+  if (mediaType !== "application/json") {
+    fail("local health endpoint must return application/json");
+  }
+}
+
 async function collectHealth() {
   const port = parseHealthPort(process.env.PORT);
   const healthUrl = new URL(`http://127.0.0.1:${port}/api/health`).href;
@@ -513,8 +526,7 @@ async function collectHealth() {
   if (response.url !== healthUrl) {
     fail("local health endpoint response URL changed unexpectedly");
   }
-  if (!response.ok)
-    fail(`local health endpoint returned HTTP ${response.status}`);
+  validateHealthResponseMetadata(response);
   const body = await readBoundedHealthBody(response);
   let payload;
   try {

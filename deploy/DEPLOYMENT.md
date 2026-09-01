@@ -153,7 +153,8 @@ evidence. The localhost health response is streamed under a fixed `65536`-byte
 ceiling before JSON parsing; the limit cannot be raised by environment
 configuration and an oversized body blocks the attestation. Its target is an
 exact canonical port on `127.0.0.1`; redirects and a changed response URL are
-rejected, so the probe cannot follow a local redirect to another host.
+rejected, so the probe cannot follow a local redirect to another host. Only an
+exact HTTP `200` response with the `application/json` media type is admitted.
 
 This is a deployment gate, not an automatic migration. The current production
 host was last observed with root-owned `0644/0755` private storage and root-owned
