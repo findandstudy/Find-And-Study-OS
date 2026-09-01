@@ -71,6 +71,17 @@ test("private scan limit has a canonical non-bypassable 100000-entry ceiling", (
   }
 });
 
+test("private scan streams directory entries within the discovery budget", () => {
+  const source = readFileSync(
+    path.join(__dirname, "runtime-boundary-preflight.cjs"),
+    "utf8",
+  );
+  assert.match(source, /opendirSync/);
+  assert.match(source, /\.readSync\(\)/);
+  assert.doesNotMatch(source, /readdirSync/);
+  assert.match(source, /directories \+ files \+ pending\.length >= maxEntries/);
+});
+
 test("deploy invokes the runtime boundary before release creation or build", () => {
   const deploy = readFileSync(
     path.join(__dirname, "deploy.sh"),

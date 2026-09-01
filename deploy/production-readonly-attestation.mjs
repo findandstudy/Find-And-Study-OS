@@ -271,8 +271,20 @@ export function collectPrivateTreeInventory({
     }
     if (stat.isDirectory()) {
       inventory.directories += 1;
-      for (const entry of fs.readdirSync(target))
-        pending.push(path.join(target, entry));
+      const directory = fs.opendirSync(target);
+      try {
+        let entry;
+        while ((entry = directory.readSync()) !== null) {
+          if (inventory.entries + pending.length >= maxEntries) {
+            fail(
+              `private inventory exceeded the bounded limit of ${maxEntries} entries`,
+            );
+          }
+          pending.push(path.join(target, entry.name));
+        }
+      } finally {
+        directory.closeSync();
+      }
       continue;
     }
     if (stat.isFile()) {

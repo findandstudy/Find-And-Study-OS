@@ -146,8 +146,20 @@ function scanPrivateTree({
     validatePrivateEntry({ label, stat, expectedUid, expectedGid });
     if (stat.isDirectory()) {
       directories += 1;
-      for (const entry of fs.readdirSync(target))
-        pending.push(path.join(target, entry));
+      const directory = fs.opendirSync(target);
+      try {
+        let entry;
+        while ((entry = directory.readSync()) !== null) {
+          if (directories + files + pending.length >= maxEntries) {
+            fail(
+              `private object scan exceeded the bounded limit of ${maxEntries} entries`,
+            );
+          }
+          pending.push(path.join(target, entry.name));
+        }
+      } finally {
+        directory.closeSync();
+      }
     } else {
       files += 1;
     }

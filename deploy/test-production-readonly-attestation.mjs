@@ -48,6 +48,17 @@ test("private inventory limit cannot exceed the canonical 100000-entry ceiling",
   }
 });
 
+test("private inventory streams directory entries within the discovery budget", () => {
+  const source = fs.readFileSync(
+    path.join(here, "production-readonly-attestation.mjs"),
+    "utf8",
+  );
+  assert.match(source, /opendirSync/);
+  assert.match(source, /\.readSync\(\)/);
+  assert.doesNotMatch(source, /readdirSync/);
+  assert.match(source, /inventory\.entries \+ pending\.length >= maxEntries/);
+});
+
 test("production expectations require an exact release and canonical migration prefix", () => {
   assert.deepEqual(
     parseProductionExpectations({

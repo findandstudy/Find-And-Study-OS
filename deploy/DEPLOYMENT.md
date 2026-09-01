@@ -137,6 +137,8 @@ or touching a process unless all of these statements are true:
 `RUNTIME_PRIVATE_SCAN_MAX_ENTRIES` may lower the scan budget but must be a
 canonical positive integer and can never raise the hard `100000`-entry ceiling.
 Scientific notation, decimals, leading zeros and larger values fail closed.
+Directory entries are streamed and counted before queueing, so one very large
+directory cannot first materialize an unbounded filename list in memory.
 
 This is a deployment gate, not an automatic migration. The current production
 host was last observed with root-owned `0644/0755` private storage and root-owned
