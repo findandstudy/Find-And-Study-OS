@@ -657,6 +657,15 @@
       "externalPilot": "quarantine"
     },
     {
+      "path": "artifacts/api-server/src/lib/postgresStudentDocumentRequestResponseStore.ts",
+      "ownership": "tenant_owned",
+      "enforcement": "quarantine_required",
+      "risk": "high",
+      "owner": "Student Experience",
+      "externalPilot": "quarantine",
+      "note": "Default-unwired G45 writer; production/live PII adoption remains blocked behind explicit rollout and review gates."
+    },
+    {
       "path": "artifacts/api-server/src/lib/replitAuth.ts",
       "ownership": "privileged_config",
       "enforcement": "quarantine_required",

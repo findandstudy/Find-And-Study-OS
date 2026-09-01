@@ -185,6 +185,11 @@ export interface StudentDocumentRequestResponseTransaction {
   consumeIngestReceipt(input: {
     tenantId: string;
     ingestReceiptId: string;
+    ingestReceiptHash: string;
+    subjectRef: string;
+    applicationRef: string;
+    requestRef: string;
+    occurredAt: string;
     commandReceiptId: string;
   }): Promise<boolean>;
   updateRequest(input: {
@@ -782,6 +787,11 @@ export async function executeStudentDocumentRequestResponse(
         const consumed = await tx.consumeIngestReceipt({
           tenantId: authority.tenantId,
           ingestReceiptId: ingestReceipt.id,
+          ingestReceiptHash: ingestReceipt.receiptHash,
+          subjectRef: authority.subjectRef,
+          applicationRef: authority.applicationRef,
+          requestRef: authority.requestRef,
+          occurredAt,
           commandReceiptId: responseReceiptId,
         });
         if (!consumed) deny("ingest_receipt_already_consumed");

@@ -189,6 +189,7 @@ test("production migration tail and canonical Control Plane range are pinned", (
       "0079_active_context_selection_consumption",
       "0080_active_context_selection_consumption_attempts",
       "0081_active_context_selection_consumption_repair",
+      "0082_student_journey_g45_foundation",
     ],
   );
 
@@ -207,6 +208,31 @@ test("production migration tail and canonical Control Plane range are pinned", (
     attemptMigration,
     /FOREIGN KEY \(tenant_id, attempt_id\)\s+REFERENCES public\.active_context_selection_consumption_attempts\(tenant_id, id\)/,
   );
+});
+
+test("Student Journey G45 migration remains additive, tenant-forced and default-off", () => {
+  const migration = readFileSync(
+    path.join(
+      root,
+      "lib/db/drizzle/0082_student_journey_g45_foundation.sql",
+    ),
+    "utf8",
+  );
+  assert.match(migration, /'student\.journey\.read'/);
+  assert.match(migration, /'student\.document_request\.respond'/);
+  assert.match(migration, /'student\.dossier\.verify'/);
+  assert.doesNotMatch(migration, /INSERT INTO\s+role_package_capabilities/i);
+  assert.match(migration, /ALTER TABLE public\.%I FORCE ROW LEVEL SECURITY/);
+  assert.match(migration, /journey_notification_intents_default_off_chk/);
+  assert.match(migration, /consent_evidence_kind" = 'VERIFIED_EVIDENCE'/);
+  assert.match(migration, /DEFERRABLE INITIALLY DEFERRED/);
+  assert.match(migration, /SECURITY DEFINER/);
+  assert.match(migration, /SET row_security TO on/);
+  assert.match(
+    migration,
+    /REVOKE ALL ON FUNCTION "fas_journey_v1"\."revalidate_document_request_response_authority"/,
+  );
+  assert.doesNotMatch(migration, /https?:\/\//);
 });
 
 test("migration validator rejects duplicate ids and non-monotonic journal timestamps", () => {
@@ -437,7 +463,7 @@ test("production-prefix adoption harness is explicit and loopback-only", () => {
   const source = readFileSync(harness, "utf8");
   assert.match(source, /prefix adoption requires a fresh disposable database/);
   assert.match(source, /productionEntries\.length, 66/);
-  assert.match(source, /count: 82/);
+  assert.match(source, /count: 83/);
 });
 
 test("disposable database reset is explicit and fixed to the local test identity", () => {
@@ -490,6 +516,8 @@ test("disposable database reset is explicit and fixed to the local test identity
   assert.match(source, /fas_session_lifecycle_executor/);
   assert.match(source, /fas_session_repair_owner/);
   assert.match(source, /fas_session_repair_executor/);
+  assert.match(source, /fas_journey_owner/);
+  assert.match(source, /fas_journey_executor/);
 });
 
 test("PostgreSQL adapter integration is explicit and fixed to the disposable target", () => {
@@ -546,8 +574,39 @@ test("comprehensive Control Plane gate is explicit and fixed to the disposable t
     /assert\.equal\(target\.pathname\.slice\(1\), "fasos_apply_local"\)/,
   );
   assert.match(source, /assert\.equal\(target\.port, "5433"\)/);
-  assert.match(source, /assert\.equal\(migrationCount\.rows\[0\]\.count, 82\)/);
+  assert.match(source, /assert\.equal\(migrationCount\.rows\[0\]\.count, 83\)/);
   assert.doesNotMatch(source, /CREATE ROLE \$\{/);
+});
+
+test("Student Journey G45 PostgreSQL integration is explicit and loopback-only", () => {
+  const journeyTest = path.join(
+    root,
+    "artifacts/api-server/scripts/test-postgres-student-journey-g45.ts",
+  );
+  const unapproved = spawnSync(
+    process.execPath,
+    ["--import", "tsx", journeyTest],
+    {
+      cwd: path.join(root, "artifacts/api-server"),
+      encoding: "utf8",
+      env: { PATH: process.env.PATH ?? "" },
+    },
+  );
+  assert.equal(unapproved.status, 1);
+  assert.match(
+    unapproved.stderr,
+    /ALLOW_DISPOSABLE_STUDENT_JOURNEY_G45_TEST=true is required/,
+  );
+
+  const source = readFileSync(journeyTest, "utf8");
+  assert.match(source, /target\.hostname, "127\.0\.0\.1"/);
+  assert.match(source, /target\.port, "5433"/);
+  assert.match(source, /target\.pathname, "\/fasos_apply_local"/);
+  assert.match(source, /safeTarget\(executorUrl, "fas_journey_executor"\)/);
+  assert.match(source, /ALLOW_LIVE_INTEGRATIONS/);
+  assert.match(source, /migrationCount\.rows\[0\]\?\.count, 83/);
+  assert.match(source, /journey_notification_intents_default_off_chk/);
+  assert.match(source, /REVOKE ALL ON TABLE public\.\$\{table\} FROM fas_journey_executor/);
 });
 
 test("durable audit integration is explicit and fixed to the disposable target", () => {
@@ -624,6 +683,9 @@ test("live-first CI pins actions and PostgreSQL while replaying both adoption pa
     2,
     "foundation and adapter fixtures must use isolated prefix-adoption databases",
   );
+  assert.match(workflow, /test:postgres-student-journey-g45/);
+  assert.match(workflow, /ALLOW_DISPOSABLE_STUDENT_JOURNEY_G45_TEST/);
+  assert.match(workflow, /ALLOW_LIVE_INTEGRATIONS: "false"/);
   assert.doesNotMatch(workflow, /uses:\s+[^\s@]+@(?![a-f0-9]{40}\b)/);
 });
 

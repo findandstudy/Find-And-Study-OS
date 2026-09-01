@@ -1154,6 +1154,10 @@ export const accessDecisionReceiptsTable = pgTable(
       .defaultNow(),
   },
   (table) => [
+    unique("access_decision_receipts_tenant_id_id_uq").on(
+      table.tenantId,
+      table.id,
+    ),
     foreignKey({
       columns: [table.tenantId, table.membershipId],
       foreignColumns: [membershipsTable.tenantId, membershipsTable.id],

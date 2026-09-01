@@ -79,6 +79,7 @@ jobs:
           pnpm --filter @workspace/api-server run test:consent-communication-contract
           pnpm --filter @workspace/api-server run test:student-journey-authorization
           pnpm --filter @workspace/api-server run test:student-journey-readiness-projection
+          pnpm --filter @workspace/api-server run test:student-privacy-sharing-projection
           pnpm --filter @workspace/api-server run test:student-document-request-response-command
           pnpm --filter @workspace/api-server run test:student-journey-evaluation-contract
 
@@ -144,6 +145,7 @@ jobs:
           pnpm --filter @workspace/api-server run test:consent-communication-contract
           pnpm --filter @workspace/api-server run test:student-journey-authorization
           pnpm --filter @workspace/api-server run test:student-journey-readiness-projection
+          pnpm --filter @workspace/api-server run test:student-privacy-sharing-projection
           pnpm --filter @workspace/api-server run test:student-document-request-response-command
           pnpm --filter @workspace/api-server run test:student-journey-evaluation-contract
           pnpm run typecheck
@@ -196,7 +198,7 @@ jobs:
           PG_DISPOSABLE_ADMIN_URL: postgresql://postgres@127.0.0.1:5433/postgres
         run: node lib/db/prepare-disposable-migration-database.mjs
 
-      - name: Apply all 82 migrations to a fresh database
+      - name: Apply all 83 migrations to a fresh database
         env:
           ALLOW_REVIEWED_MIGRATIONS: "true"
           DATABASE_URL: postgresql://fas_migrator@127.0.0.1:5433/fasos_apply_local
@@ -234,7 +236,7 @@ jobs:
           PG_GATE_MIGRATOR_URL: postgresql://fas_migrator@127.0.0.1:5433/fasos_apply_local
         run: pnpm --filter @workspace/api-server run test:postgres-control-plane-gate -- setup
 
-      - name: Prove production 66/66 to canonical 82/82 adoption
+      - name: Prove production 66/66 to canonical 83/83 adoption
         env:
           ALLOW_DISPOSABLE_PREFIX_ADOPTION: "true"
           DATABASE_URL: postgresql://fas_migrator@127.0.0.1:5433/fasos_apply_local
@@ -247,6 +249,16 @@ jobs:
           PG_GATE_APP_URL: postgresql://fas_app@127.0.0.1:5433/fasos_apply_local
           PG_GATE_MIGRATOR_URL: postgresql://fas_migrator@127.0.0.1:5433/fasos_apply_local
         run: pnpm --filter @workspace/api-server run test:postgres-control-plane-gate -- verify
+
+      - name: Run default-off Student Journey G45 PostgreSQL checks
+        env:
+          ALLOW_DISPOSABLE_STUDENT_JOURNEY_G45_TEST: "true"
+          ALLOW_LIVE_INTEGRATIONS: "false"
+          PG_JOURNEY_ADMIN_URL: postgresql://postgres@127.0.0.1:5433/fasos_apply_local
+          PG_JOURNEY_EXECUTOR_URL: postgresql://fas_journey_executor@127.0.0.1:5433/fasos_apply_local
+          PG_JOURNEY_MIGRATOR_URL: postgresql://fas_migrator@127.0.0.1:5433/fasos_apply_local
+          PG_JOURNEY_SERVER_PORT: "5432"
+        run: pnpm --filter @workspace/api-server run test:postgres-student-journey-g45
 
       - name: Reset the disposable database after foundation fixtures
         env:

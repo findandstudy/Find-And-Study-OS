@@ -212,9 +212,19 @@ class InMemoryStore
   async consumeIngestReceipt(input: {
     tenantId: string;
     ingestReceiptId: string;
+    ingestReceiptHash: string;
+    subjectRef: string;
+    applicationRef: string;
+    requestRef: string;
+    occurredAt: string;
     commandReceiptId: string;
   }): Promise<boolean> {
     void input.tenantId;
+    void input.ingestReceiptHash;
+    void input.subjectRef;
+    void input.applicationRef;
+    void input.requestRef;
+    void input.occurredAt;
     void input.commandReceiptId;
     if (this.consumedIngestReceiptIds.has(input.ingestReceiptId)) return false;
     this.consumedIngestReceiptIds.add(input.ingestReceiptId);

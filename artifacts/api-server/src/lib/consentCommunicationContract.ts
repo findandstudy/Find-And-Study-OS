@@ -537,6 +537,24 @@ function assertSuppressionIntegrity(
   }
 }
 
+export function assertConsentReceiptIntegrity(
+  receipt: ConsentReceipt,
+): void {
+  assertConsentIntegrity(receipt);
+}
+
+export function assertCommunicationPreferenceReceiptIntegrity(
+  receipt: CommunicationPreferenceReceipt,
+): void {
+  assertPreferenceIntegrity(receipt);
+}
+
+export function assertCommunicationSuppressionReceiptIntegrity(
+  receipt: CommunicationSuppressionReceipt,
+): void {
+  assertSuppressionIntegrity(receipt);
+}
+
 function validateReceiptChain<
   T extends {
     sequence: number;
