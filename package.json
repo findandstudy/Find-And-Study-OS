@@ -19,6 +19,7 @@
     "audit:tenant-writers": "node scripts/audit-tenant-writers.mjs",
     "audit:legacy-role-gates": "node scripts/audit-legacy-role-gates.mjs",
     "test:e2e": "E2E_ALLOW_DATABASE_MUTATION=1 PLAYWRIGHT_BASE_URL=http://localhost:25197 playwright test",
+    "test:e2e:staging-rbac": "playwright test --config=playwright.staging.config.ts artifacts/edcons/tests/e2e/rbac-functional.spec.ts",
     "portal:dry": "pnpm --filter @workspace/portal-automation-worker run portal:dry"
   },
   "private": true,

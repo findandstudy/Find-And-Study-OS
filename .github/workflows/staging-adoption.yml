@@ -71,10 +71,15 @@ jobs:
           docker compose -f deploy/staging/compose.yml config --quiet
 
       - name: Type-check and build the deployable applications
+        env:
+          ALLOW_STAGING_RBAC_UAT: "true"
+          PLAYWRIGHT_BASE_URL: https://staging.srv1110168.hstgr.cloud
+          RBAC_E2E_PASSWORD: ${{ github.run_id }}-configuration-only-never-used
         run: |
           pnpm run typecheck
           pnpm --filter @workspace/edcons run check:i18n
           pnpm --filter @workspace/edcons run test:login-accessibility
+          pnpm exec playwright test --config=playwright.staging.config.ts --list
           pnpm --filter @workspace/api-server run build
           pnpm --filter @workspace/edcons run build
 

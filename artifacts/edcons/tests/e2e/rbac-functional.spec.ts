@@ -20,26 +20,30 @@ import {
   test,
   expect,
   type APIRequestContext,
+  type Page,
 } from "@playwright/test";
 
 // ─── Sabitler ────────────────────────────────────────────────────────────────
 
-const BASE_URL = process.env.PLAYWRIGHT_BASE_URL || "http://localhost:25197";
-const API = "http://localhost:8080/api";
+const BASE_URL = (
+  process.env.PLAYWRIGHT_BASE_URL || "http://localhost:25197"
+).replace(/\/$/, "");
+const API = new URL("/api", BASE_URL).toString().replace(/\/$/, "");
 const PASS = process.env.RBAC_E2E_PASSWORD || "";
+const ERROR_RELOAD = /reload|yeniden yükle/i;
 
 const A = {
-  superadmin:  "audit-superadmin@audit.test",
-  admin:       "audit-admin@audit.test",
-  manager:     "audit-manager@audit.test",
-  staff:       "audit-staff@audit.test",
-  consultant:  "audit-consultant@audit.test",
-  editor:      "audit-editor@audit.test",
-  accountant:  "audit-accountant@audit.test",
-  agent:       "audit-agent@audit.test",
-  subagent:    "audit-subagent@audit.test",
-  agentstaff:  "audit-agentstaff@audit.test",
-  student:     "audit-student@audit.test",
+  superadmin: "audit-superadmin@audit.test",
+  admin: "audit-admin@audit.test",
+  manager: "audit-manager@audit.test",
+  staff: "audit-staff@audit.test",
+  consultant: "audit-consultant@audit.test",
+  editor: "audit-editor@audit.test",
+  accountant: "audit-accountant@audit.test",
+  agent: "audit-agent@audit.test",
+  subagent: "audit-subagent@audit.test",
+  agentstaff: "audit-agentstaff@audit.test",
+  student: "audit-student@audit.test",
 } as const;
 
 // ─── Yardımcı fonksiyonlar ───────────────────────────────────────────────────
@@ -51,7 +55,9 @@ async function loginAs(
   password: string,
 ): Promise<void> {
   if (!password) {
-    throw new Error("RBAC_E2E_PASSWORD is required for RBAC functional E2E tests");
+    throw new Error(
+      "RBAC_E2E_PASSWORD is required for RBAC functional E2E tests",
+    );
   }
   await request.get(`${API}/auth/me`);
   const state = await request.storageState();
@@ -61,7 +67,9 @@ async function loginAs(
     data: { email, password },
   });
   if (!res.ok() && res.status() !== 200) {
-    throw new Error(`Login failed for ${email}: ${res.status()} ${await res.text()}`);
+    throw new Error(
+      `Login failed for ${email}: ${res.status()} ${await res.text()}`,
+    );
   }
 }
 
@@ -79,6 +87,18 @@ async function getStatus(
   return res.status();
 }
 
+async function loginInUi(page: Page, email: string): Promise<void> {
+  if (!PASS) {
+    throw new Error(
+      "RBAC_E2E_PASSWORD is required for RBAC functional E2E tests",
+    );
+  }
+  await page.goto(`${BASE_URL}/login`);
+  await page.getByLabel(/email|e-posta/i).fill(email);
+  await page.getByLabel(/password|şifre/i).fill(PASS);
+  await page.getByRole("button", { name: /sign in|log in|giriş yap/i }).click();
+}
+
 // ─── Area 1: Finans ──────────────────────────────────────────────────────────
 // FINANCE_ROLES = ["super_admin", "admin", "accountant"]
 // Diğer tüm roller → 403
@@ -92,7 +112,9 @@ test.describe("AREA 1 — Finans RBAC", () => {
     ["admin", A.admin],
     ["accountant", A.accountant],
   ] as const) {
-    test(`${label} → 200 on GET /api${FINANCE_ENDPOINT}`, async ({ request }) => {
+    test(`${label} → 200 on GET /api${FINANCE_ENDPOINT}`, async ({
+      request,
+    }) => {
       const status = await getStatus(request, email, FINANCE_ENDPOINT);
       expect(status, `${label} should access finance`).toBe(200);
     });
@@ -109,7 +131,9 @@ test.describe("AREA 1 — Finans RBAC", () => {
     ["subagent", A.subagent],
     ["agentstaff", A.agentstaff],
   ] as const) {
-    test(`${label} → 403 on GET /api${FINANCE_ENDPOINT}`, async ({ request }) => {
+    test(`${label} → 403 on GET /api${FINANCE_ENDPOINT}`, async ({
+      request,
+    }) => {
       const status = await getStatus(request, email, FINANCE_ENDPOINT);
       expect(status, `${label} should NOT access finance`).toBe(403);
     });
@@ -117,30 +141,28 @@ test.describe("AREA 1 — Finans RBAC", () => {
 
   // UI: accountant /staff/finance sayfasını açabilmeli
   test("UI — accountant /staff/finance sayfası yüklenir", async ({ page }) => {
-    await page.goto(`${BASE_URL}/login`);
-    await page.getByLabel(/email/i).fill(A.accountant);
-    await page.getByLabel(/password/i).fill(PASS);
-    await page.getByRole("button", { name: /sign in|log in/i }).click();
+    await loginInUi(page, A.accountant);
     await page.waitForURL(/\/(staff|admin)/i, { timeout: 20_000 });
     await page.goto(`${BASE_URL}/staff/finance`);
     await page.waitForTimeout(2_000);
     const url = page.url();
     expect(url, "accountant stays on finance page").toContain("finance");
-    const errBoundary = page.getByRole("button", { name: /^reload$/i });
+    const errBoundary = page.getByRole("button", { name: ERROR_RELOAD });
     await expect(errBoundary).not.toBeVisible({ timeout: 3_000 });
   });
 
   // UI: staff /staff/finance'a erişemez → yönlendirme
-  test("UI — staff /staff/finance'a erişemez (yönlendirme)", async ({ page }) => {
-    await page.goto(`${BASE_URL}/login`);
-    await page.getByLabel(/email/i).fill(A.staff);
-    await page.getByLabel(/password/i).fill(PASS);
-    await page.getByRole("button", { name: /sign in|log in/i }).click();
+  test("UI — staff /staff/finance'a erişemez (yönlendirme)", async ({
+    page,
+  }) => {
+    await loginInUi(page, A.staff);
     await page.waitForURL(/\/(staff|admin)/i, { timeout: 20_000 });
     await page.goto(`${BASE_URL}/staff/finance`);
     await page.waitForTimeout(2_000);
     const url = page.url();
-    expect(url, "staff redirected away from /staff/finance").not.toContain("/staff/finance");
+    expect(url, "staff redirected away from /staff/finance").not.toContain(
+      "/staff/finance",
+    );
   });
 });
 
@@ -184,28 +206,24 @@ test.describe("AREA 2 — AI Modları RBAC", () => {
 
   // UI: admin /admin/ai-personas sayfası yüklenir
   test("UI — admin /admin/ai-personas sayfası yüklenir", async ({ page }) => {
-    await page.goto(`${BASE_URL}/login`);
-    await page.getByLabel(/email/i).fill(A.admin);
-    await page.getByLabel(/password/i).fill(PASS);
-    await page.getByRole("button", { name: /sign in|log in/i }).click();
+    await loginInUi(page, A.admin);
     await page.waitForURL(/\/(staff|admin)/i, { timeout: 20_000 });
     await page.goto(`${BASE_URL}/admin/ai-personas`);
     await page.waitForTimeout(2_000);
-    const errBoundary = page.getByRole("button", { name: /^reload$/i });
+    const errBoundary = page.getByRole("button", { name: ERROR_RELOAD });
     await expect(errBoundary).not.toBeVisible({ timeout: 3_000 });
   });
 
   // UI: staff /admin/ai-personas'a erişemez
   test("UI — staff /admin/ai-personas'a erişemez", async ({ page }) => {
-    await page.goto(`${BASE_URL}/login`);
-    await page.getByLabel(/email/i).fill(A.staff);
-    await page.getByLabel(/password/i).fill(PASS);
-    await page.getByRole("button", { name: /sign in|log in/i }).click();
+    await loginInUi(page, A.staff);
     await page.waitForURL(/\/(staff|admin)/i, { timeout: 20_000 });
     await page.goto(`${BASE_URL}/admin/ai-personas`);
     await page.waitForTimeout(2_000);
     const url = page.url();
-    expect(url, "staff redirected away from /admin/ai-personas").not.toContain("ai-personas");
+    expect(url, "staff redirected away from /admin/ai-personas").not.toContain(
+      "ai-personas",
+    );
   });
 });
 
@@ -227,8 +245,14 @@ test.describe("AREA 3 — Bildirimler RBAC", () => {
     ["agent", A.agent],
     ["agentstaff", A.agentstaff],
   ] as const) {
-    test(`${label} → 200 on GET /api/notifications/unread-count`, async ({ request }) => {
-      const status = await getStatus(request, email, "/notifications/unread-count");
+    test(`${label} → 200 on GET /api/notifications/unread-count`, async ({
+      request,
+    }) => {
+      const status = await getStatus(
+        request,
+        email,
+        "/notifications/unread-count",
+      );
       expect(status, `${label} should read unread-count`).toBe(200);
     });
   }
@@ -239,7 +263,9 @@ test.describe("AREA 3 — Bildirimler RBAC", () => {
     ["admin", A.admin],
     ["manager", A.manager],
   ] as const) {
-    test(`${label} → 200 on GET /api/notification-rules`, async ({ request }) => {
+    test(`${label} → 200 on GET /api/notification-rules`, async ({
+      request,
+    }) => {
       const status = await getStatus(request, email, "/notification-rules");
       expect(status, `${label} should access notification-rules`).toBe(200);
     });
@@ -252,14 +278,18 @@ test.describe("AREA 3 — Bildirimler RBAC", () => {
     ["student", A.student],
     ["agent", A.agent],
   ] as const) {
-    test(`${label} → 403 on GET /api/notification-rules`, async ({ request }) => {
+    test(`${label} → 403 on GET /api/notification-rules`, async ({
+      request,
+    }) => {
       const status = await getStatus(request, email, "/notification-rules");
       expect(status, `${label} should NOT access notification-rules`).toBe(403);
     });
   }
 
   // Bildirim listesi + badge sayısı (list endpoint)
-  test("admin → notifications listesi alınabilir (array)", async ({ request }) => {
+  test("admin → notifications listesi alınabilir (array)", async ({
+    request,
+  }) => {
     await loginAs(request, A.admin, PASS);
     const res = await request.get(`${API}/notifications`);
     expect(res.status()).toBe(200);
@@ -269,7 +299,9 @@ test.describe("AREA 3 — Bildirimler RBAC", () => {
     expect(Array.isArray(list)).toBe(true);
   });
 
-  test("student → kendi notification listesi alınabilir", async ({ request }) => {
+  test("student → kendi notification listesi alınabilir", async ({
+    request,
+  }) => {
     await loginAs(request, A.student, PASS);
     const res = await request.get(`${API}/notifications`);
     expect(res.status()).toBe(200);
@@ -344,7 +376,9 @@ test.describe("AREA 4 — Mesajlaşma / Inbox RBAC", () => {
     ["staff", A.staff],
     ["accountant", A.accountant],
   ] as const) {
-    test(`${label} → 200 on GET /api/message-templates`, async ({ request }) => {
+    test(`${label} → 200 on GET /api/message-templates`, async ({
+      request,
+    }) => {
       const status = await getStatus(request, email, "/message-templates");
       expect(status, `${label} should access message-templates`).toBe(200);
     });
@@ -354,22 +388,23 @@ test.describe("AREA 4 — Mesajlaşma / Inbox RBAC", () => {
     ["student", A.student],
     ["agent", A.agent],
   ] as const) {
-    test(`${label} → 403 on GET /api/message-templates`, async ({ request }) => {
+    test(`${label} → 403 on GET /api/message-templates`, async ({
+      request,
+    }) => {
       const status = await getStatus(request, email, "/message-templates");
       expect(status, `${label} should NOT access message-templates`).toBe(403);
     });
   }
 
   // UI: Staff mesaj sayfası yüklenir
-  test("UI — staff /staff/messages sayfası hata olmadan açılır", async ({ page }) => {
-    await page.goto(`${BASE_URL}/login`);
-    await page.getByLabel(/email/i).fill(A.staff);
-    await page.getByLabel(/password/i).fill(PASS);
-    await page.getByRole("button", { name: /sign in|log in/i }).click();
+  test("UI — staff /staff/messages sayfası hata olmadan açılır", async ({
+    page,
+  }) => {
+    await loginInUi(page, A.staff);
     await page.waitForURL(/\/(staff|admin)/i, { timeout: 20_000 });
     await page.goto(`${BASE_URL}/staff/messages`);
     await page.waitForTimeout(2_000);
-    const errBoundary = page.getByRole("button", { name: /^reload$/i });
+    const errBoundary = page.getByRole("button", { name: ERROR_RELOAD });
     await expect(errBoundary).not.toBeVisible({ timeout: 3_000 });
   });
 });
@@ -403,7 +438,9 @@ test.describe("AREA 5 — Süreç Takibi RBAC", () => {
   });
 
   // agent_staff (all perms) → leads görebilir
-  test("agentstaff (all perms) → 200 on GET /api/leads", async ({ request }) => {
+  test("agentstaff (all perms) → 200 on GET /api/leads", async ({
+    request,
+  }) => {
     const status = await getStatus(request, A.agentstaff, "/leads");
     expect(status, "agentstaff with leads perm should access leads").toBe(200);
   });
@@ -420,12 +457,16 @@ test.describe("AREA 5 — Süreç Takibi RBAC", () => {
     });
   }
 
-  test("student → 200 on GET /api/students (kendi kayıtları)", async ({ request }) => {
+  test("student → 200 on GET /api/students (kendi kayıtları)", async ({
+    request,
+  }) => {
     const status = await getStatus(request, A.student, "/students");
     expect(status, "student should access students (own)").toBe(200);
   });
 
-  test("agentstaff (students perm) → 200 on GET /api/students", async ({ request }) => {
+  test("agentstaff (students perm) → 200 on GET /api/students", async ({
+    request,
+  }) => {
     const status = await getStatus(request, A.agentstaff, "/students");
     expect(status, "agentstaff with students perm").toBe(200);
   });
@@ -444,28 +485,26 @@ test.describe("AREA 5 — Süreç Takibi RBAC", () => {
   }
 
   // UI: Admin öğrenci listesini görebilir
-  test("UI — admin /staff/students listesi hata olmadan açılır", async ({ page }) => {
-    await page.goto(`${BASE_URL}/login`);
-    await page.getByLabel(/email/i).fill(A.admin);
-    await page.getByLabel(/password/i).fill(PASS);
-    await page.getByRole("button", { name: /sign in|log in/i }).click();
+  test("UI — admin /staff/students listesi hata olmadan açılır", async ({
+    page,
+  }) => {
+    await loginInUi(page, A.admin);
     await page.waitForURL(/\/(staff|admin)/i, { timeout: 20_000 });
     await page.goto(`${BASE_URL}/staff/students`);
     await page.waitForTimeout(2_000);
-    const errBoundary = page.getByRole("button", { name: /^reload$/i });
+    const errBoundary = page.getByRole("button", { name: ERROR_RELOAD });
     await expect(errBoundary).not.toBeVisible({ timeout: 3_000 });
   });
 
   // UI: Student kendi başvurularını görebilir
-  test("UI — student /student/applications hata olmadan açılır", async ({ page }) => {
-    await page.goto(`${BASE_URL}/login`);
-    await page.getByLabel(/email/i).fill(A.student);
-    await page.getByLabel(/password/i).fill(PASS);
-    await page.getByRole("button", { name: /sign in|log in/i }).click();
+  test("UI — student /student/applications hata olmadan açılır", async ({
+    page,
+  }) => {
+    await loginInUi(page, A.student);
     await page.waitForURL(/\/student/i, { timeout: 20_000 });
     await page.goto(`${BASE_URL}/student/applications`);
     await page.waitForTimeout(2_000);
-    const errBoundary = page.getByRole("button", { name: /^reload$/i });
+    const errBoundary = page.getByRole("button", { name: ERROR_RELOAD });
     await expect(errBoundary).not.toBeVisible({ timeout: 3_000 });
   });
 });
@@ -492,14 +531,22 @@ test.describe("AREA 6 — Agent Network RBAC", () => {
   // Staff/student agents/me'ye erişemez
   // Note: /agents/me uses requireAuth but no requireRole guard;
   // non-agent roles have no agent record → 404 (not 403). Both 403+404 = access denied.
-  test("staff → non-200 on GET /api/agents/me (no agent record)", async ({ request }) => {
+  test("staff → non-200 on GET /api/agents/me (no agent record)", async ({
+    request,
+  }) => {
     const status = await getStatus(request, A.staff, "/agents/me");
-    expect(status, "staff should NOT successfully access agents/me").not.toBe(200);
+    expect(status, "staff should NOT successfully access agents/me").not.toBe(
+      200,
+    );
   });
 
-  test("student → non-200 on GET /api/agents/me (no agent record)", async ({ request }) => {
+  test("student → non-200 on GET /api/agents/me (no agent record)", async ({
+    request,
+  }) => {
     const status = await getStatus(request, A.student, "/agents/me");
-    expect(status, "student should NOT successfully access agents/me").not.toBe(200);
+    expect(status, "student should NOT successfully access agents/me").not.toBe(
+      200,
+    );
   });
 
   // Agent 7 izin sınırı — agentstaff (all perms) tüm endpoint'lere erişebilir
@@ -507,7 +554,7 @@ test.describe("AREA 6 — Agent Network RBAC", () => {
     ["leads", "/leads"],
     ["students", "/students"],
     ["applications", "/applications"],
-    ["messages", "/conversations"],   // messages perm → conversations STAFF_ROLES (403 for agent_staff)
+    ["messages", "/conversations"], // messages perm → conversations STAFF_ROLES (403 for agent_staff)
     ["course_finder", "/course-finder/filters"],
   ];
 
@@ -517,13 +564,17 @@ test.describe("AREA 6 — Agent Network RBAC", () => {
     expect(res.status()).toBe(200);
   });
 
-  test("agentstaff (all perms) → students endpoint 200", async ({ request }) => {
+  test("agentstaff (all perms) → students endpoint 200", async ({
+    request,
+  }) => {
     await loginAs(request, A.agentstaff, PASS);
     const res = await request.get(`${API}/students`);
     expect(res.status()).toBe(200);
   });
 
-  test("agentstaff (all perms) → applications endpoint 200", async ({ request }) => {
+  test("agentstaff (all perms) → applications endpoint 200", async ({
+    request,
+  }) => {
     await loginAs(request, A.agentstaff, PASS);
     const res = await request.get(`${API}/applications`);
     expect(res.status()).toBe(200);
@@ -544,52 +595,59 @@ test.describe("AREA 6 — Agent Network RBAC", () => {
   });
 
   // agent commissions görebilir
-  test("agent → GET /api/commissions 403 (FINANCE_ROLES gate)", async ({ request }) => {
+  test("agent → GET /api/commissions 403 (FINANCE_ROLES gate)", async ({
+    request,
+  }) => {
     await loginAs(request, A.agent, PASS);
     const res = await request.get(`${API}/commissions`);
-    expect(res.status(), "agent cannot access commissions (FINANCE_ROLES gate)").toBe(403);
+    expect(
+      res.status(),
+      "agent cannot access commissions (FINANCE_ROLES gate)",
+    ).toBe(403);
   });
 
   // agentstaff commissions endpoint → FINANCE_ROLES guard blocks
-  test("agentstaff → GET /api/commissions 403 (FINANCE_ROLES gate)", async ({ request }) => {
+  test("agentstaff → GET /api/commissions 403 (FINANCE_ROLES gate)", async ({
+    request,
+  }) => {
     const status = await getStatus(request, A.agentstaff, "/commissions");
-    expect(status, "agentstaff commissions blocked by FINANCE_ROLES guard").toBe(403);
+    expect(
+      status,
+      "agentstaff commissions blocked by FINANCE_ROLES guard",
+    ).toBe(403);
   });
 
   // UI: agent portalı yüklenir
-  test("UI — agent /agent dashboard hata olmadan yüklenir", async ({ page }) => {
-    await page.goto(`${BASE_URL}/login`);
-    await page.getByLabel(/email/i).fill(A.agent);
-    await page.getByLabel(/password/i).fill(PASS);
-    await page.getByRole("button", { name: /sign in|log in/i }).click();
+  test("UI — agent /agent dashboard hata olmadan yüklenir", async ({
+    page,
+  }) => {
+    await loginInUi(page, A.agent);
     // agent portal → /agent after login
     await page.waitForURL(/\/agent/i, { timeout: 20_000 });
     await page.waitForTimeout(2_000);
-    const errBoundary = page.getByRole("button", { name: /^reload$/i });
+    const errBoundary = page.getByRole("button", { name: ERROR_RELOAD });
     await expect(errBoundary).not.toBeVisible({ timeout: 5_000 });
   });
 
   // UI: sub_agent portalı yüklenir
-  test("UI — subagent /agent dashboard hata olmadan yüklenir", async ({ page }) => {
-    await page.goto(`${BASE_URL}/login`);
-    await page.getByLabel(/email/i).fill(A.subagent);
-    await page.getByLabel(/password/i).fill(PASS);
-    await page.getByRole("button", { name: /sign in|log in/i }).click();
+  test("UI — subagent /agent dashboard hata olmadan yüklenir", async ({
+    page,
+  }) => {
+    await loginInUi(page, A.subagent);
     await page.waitForURL(/\/agent/i, { timeout: 20_000 });
     await page.waitForTimeout(2_000);
-    const errBoundary = page.getByRole("button", { name: /^reload$/i });
+    const errBoundary = page.getByRole("button", { name: ERROR_RELOAD });
     await expect(errBoundary).not.toBeVisible({ timeout: 5_000 });
   });
 
   // UI: agent_staff portalı yüklenir
-  test("UI — agentstaff /agent dashboard hata olmadan yüklenir", async ({ page }) => {
-    await page.goto(`${BASE_URL}/login`);
-    await page.getByLabel(/email/i).fill(A.agentstaff);
-    await page.getByLabel(/password/i).fill(PASS);
-    await page.getByRole("button", { name: /sign in|log in/i }).click();
+  test("UI — agentstaff /agent dashboard hata olmadan yüklenir", async ({
+    page,
+  }) => {
+    await loginInUi(page, A.agentstaff);
     await page.waitForURL(/\/agent/i, { timeout: 20_000 });
     await page.waitForTimeout(2_000);
-    const errBoundary = page.getByRole("button", { name: /^reload$/i });
+    const errBoundary = page.getByRole("button", { name: ERROR_RELOAD });
     await expect(errBoundary).not.toBeVisible({ timeout: 5_000 });
   });
 });

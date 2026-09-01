@@ -77,13 +77,13 @@ test("PostgreSQL rate limiters use the migration-owned table without boot DDL", 
       ),
     )
     .join("\n");
-  assert.equal(
-    routeSources.match(/new RateLimiterPostgres\s*\(/g)?.length,
-    4,
-  );
+  assert.equal(routeSources.match(/new RateLimiterPostgres\s*\(/g)?.length, 4);
   assert.equal(routeSources.match(/tableCreated:\s*true/g)?.length, 4);
   assert.match(
-    readFileSync(path.join(root, "lib/db/drizzle/0001_silly_patriot.sql"), "utf8"),
+    readFileSync(
+      path.join(root, "lib/db/drizzle/0001_silly_patriot.sql"),
+      "utf8",
+    ),
     /CREATE TABLE "rate_limits"/,
   );
 });
@@ -168,10 +168,7 @@ test("repository migration history is complete, ordered and duplicate-free", () 
 
 test("production migration tail and canonical Control Plane range are pinned", () => {
   const journal = JSON.parse(
-    readFileSync(
-      path.join(root, "lib/db/drizzle/meta/_journal.json"),
-      "utf8",
-    ),
+    readFileSync(path.join(root, "lib/db/drizzle/meta/_journal.json"), "utf8"),
   );
   assert.deepEqual(
     journal.entries.slice(54, 66).map((entry: { tag: string }) => entry.tag),
@@ -232,10 +229,7 @@ test("production migration tail and canonical Control Plane range are pinned", (
 
 test("Student Journey G45 migration remains additive, tenant-forced and default-off", () => {
   const migration = readFileSync(
-    path.join(
-      root,
-      "lib/db/drizzle/0082_student_journey_g45_foundation.sql",
-    ),
+    path.join(root, "lib/db/drizzle/0082_student_journey_g45_foundation.sql"),
     "utf8",
   );
   assert.match(migration, /'student\.journey\.read'/);
@@ -516,6 +510,119 @@ test("staging seed is synthetic, explicit and pinned to the fresh 83/83 database
   assert.match(source, /await client\.query\("ROLLBACK"\)/);
 });
 
+test("staging RBAC UAT fixtures are explicit, synthetic and denominator-bound", () => {
+  const seed = path.join(root, "deploy/staging/seed-staging-rbac-uat.mjs");
+  const unapproved = spawnSync(process.execPath, [seed], {
+    cwd: root,
+    encoding: "utf8",
+    env: { PATH: process.env.PATH ?? "" },
+  });
+  assert.equal(unapproved.status, 1);
+  assert.match(
+    unapproved.stderr,
+    /ALLOW_STAGING_RBAC_UAT_SEED=true is required/,
+  );
+
+  const remote = spawnSync(process.execPath, [seed], {
+    cwd: root,
+    encoding: "utf8",
+    env: {
+      PATH: process.env.PATH ?? "",
+      ALLOW_STAGING_RBAC_UAT_SEED: "true",
+      STAGING_TARGET_ENV: "staging",
+      ALLOW_LIVE_INTEGRATIONS: "false",
+      RBAC_E2E_PASSWORD: "Not-A-Real-Staging-Password-2026!",
+      STAGING_EXPECTED_SOURCE_COMMIT:
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      STAGING_UAT_CHANGE_ID: "stg-uat-20260902T120000Z-aaaaaaaaaaaa",
+      STAGING_UAT_EXPECTED_PRE_USER_COUNT: "1",
+      DATABASE_URL:
+        "postgresql://fas_migrator:do-not-print-this@db.example.test:5432/fasos_staging",
+    },
+  });
+  assert.equal(remote.status, 1);
+  assert.match(remote.stderr, /exact loopback:5432\/fasos_staging/);
+  assert.doesNotMatch(remote.stderr, /do-not-print-this/);
+
+  const source = readFileSync(seed, "utf8");
+  assert.match(source, /target\.hostname !== "127\.0\.0\.1"/);
+  assert.match(source, /target\.port !== "5432"/);
+  assert.match(source, /target\.pathname !== "\/fasos_staging"/);
+  assert.match(source, /STAGING_TARGET_ENV !== "staging"/);
+  assert.match(source, /ALLOW_LIVE_INTEGRATIONS !== "false"/);
+  assert.match(source, /identityRow\?\.migration_count !== 83/);
+  assert.match(source, /STAGING_UAT_EXPECTED_PRE_USER_COUNT/);
+  assert.match(source, /a non-synthetic or unrecognized user exists/);
+  assert.match(source, /created_from_source = 'staging_rbac_uat'/);
+  assert.match(source, /fixture_users !== 11/);
+  assert.match(source, /total_users !== 12/);
+  assert.match(source, /await client\.query\("BEGIN"\)/);
+  assert.match(source, /await client\.query\("ROLLBACK"\)/);
+  assert.doesNotMatch(source, /TRUNCATE|DROP\s+(?:TABLE|DATABASE)/i);
+});
+
+test("staging RBAC browser gate targets only exact HTTPS staging and read surfaces", () => {
+  const config = readFileSync(
+    path.join(root, "playwright.staging.config.ts"),
+    "utf8",
+  );
+  const spec = readFileSync(
+    path.join(root, "artifacts/edcons/tests/e2e/rbac-functional.spec.ts"),
+    "utf8",
+  );
+  assert.match(
+    config,
+    /EXACT_STAGING_ORIGIN = "https:\/\/staging\.srv1110168\.hstgr\.cloud"/,
+  );
+  assert.match(config, /ALLOW_STAGING_RBAC_UAT !== "true"/);
+  assert.match(config, /ALLOW_LIVE_INTEGRATIONS !== "false"/);
+  assert.match(config, /fullyParallel: false/);
+  assert.match(config, /workers: 1/);
+  assert.match(config, /trace: "off"/);
+  assert.doesNotMatch(config, /globalSetup|globalTeardown|webServer/);
+  assert.match(spec, /new URL\("\/api", BASE_URL\)/);
+  assert.equal(
+    spec.match(/request\.post\(/g)?.length,
+    1,
+    "only the synthetic login request may use POST",
+  );
+  assert.doesNotMatch(spec, /request\.(?:put|patch|delete)\(/);
+});
+
+test("staging RBAC API runner is release-bound and performs no business mutation", () => {
+  const runner = path.join(root, "deploy/staging/run-staging-rbac-uat.mjs");
+  const unapproved = spawnSync(process.execPath, [runner], {
+    cwd: root,
+    encoding: "utf8",
+    env: { PATH: process.env.PATH ?? "" },
+  });
+  assert.equal(unapproved.status, 1);
+  assert.match(unapproved.stderr, /ALLOW_STAGING_RBAC_UAT=true is required/);
+
+  const source = readFileSync(runner, "utf8");
+  assert.match(
+    source,
+    /EXACT_STAGING_ORIGIN = "https:\/\/staging\.srv1110168\.hstgr\.cloud"/,
+  );
+  assert.match(source, /ALLOW_LIVE_INTEGRATIONS !== "false"/);
+  assert.match(source, /STAGING_EXPECTED_SOURCE_COMMIT/);
+  assert.match(source, /STAGING_EXPECTED_RELEASE_ID/);
+  assert.match(source, /healthBody\?\.dbConnected !== true/);
+  assert.match(source, /healthBody\?\.releaseId !== expectedReleaseId/);
+  assert.equal(
+    source.match(/method: "POST"/g)?.length,
+    2,
+    "only synthetic login and logout may use POST",
+  );
+  assert.doesNotMatch(source, /method: "(?:PUT|PATCH|DELETE)"/);
+  assert.match(source, /redirect: "error"/);
+  assert.match(source, /AbortSignal\.timeout\(10_000\)/);
+  assert.doesNotMatch(
+    source,
+    /console\.(?:log|error)\([^\n]*(?:password|cookie|sid)/i,
+  );
+});
+
 test("staging database initialization creates only fixed least-privilege identities", () => {
   const init = readFileSync(
     path.join(root, "deploy/staging/init-staging-db.sh"),
@@ -533,10 +640,7 @@ test("staging database initialization creates only fixed least-privilege identit
 });
 
 test("production-prefix adoption harness is explicit and loopback-only", () => {
-  const harness = path.join(
-    root,
-    "lib/db/test-production-prefix-adoption.mjs",
-  );
+  const harness = path.join(root, "lib/db/test-production-prefix-adoption.mjs");
   const unapproved = spawnSync(process.execPath, [harness], {
     cwd: root,
     encoding: "utf8",
@@ -556,7 +660,10 @@ test("production-prefix adoption harness is explicit and loopback-only", () => {
     },
   });
   assert.equal(remote.status, 1);
-  assert.match(remote.stderr, /only postgresql:\/\/fas_migrator@127\.0\.0\.1:5433/);
+  assert.match(
+    remote.stderr,
+    /only postgresql:\/\/fas_migrator@127\.0\.0\.1:5433/,
+  );
 
   const source = readFileSync(harness, "utf8");
   assert.match(source, /prefix adoption requires a fresh disposable database/);
@@ -633,17 +740,17 @@ test("PostgreSQL adapter integration is explicit and fixed to the disposable tar
     },
   );
   assert.equal(unapproved.status, 1);
-  assert.match(unapproved.stderr, /ALLOW_DISPOSABLE_ADAPTER_TEST=true is required/);
+  assert.match(
+    unapproved.stderr,
+    /ALLOW_DISPOSABLE_ADAPTER_TEST=true is required/,
+  );
 
   const source = readFileSync(adapterTest, "utf8");
   assert.match(source, /assert\.equal\(databaseName, "fasos_apply_local"\)/);
   assert.match(source, /assert\.equal\(parsed\.port, "5433"\)/);
   assert.match(source, /\[executorUrl, "fas_cp_executor"\]/);
   assert.match(source, /\[evidenceIssuerUrl, "fas_evidence_issuer"\]/);
-  assert.match(
-    source,
-    /\[contextResolverUrl, "fas_auth_context_resolver"\]/,
-  );
+  assert.match(source, /\[contextResolverUrl, "fas_auth_context_resolver"\]/);
 });
 
 test("comprehensive Control Plane gate is explicit and fixed to the disposable target", () => {
@@ -704,7 +811,10 @@ test("Student Journey G45 PostgreSQL integration is explicit and loopback-only",
   assert.match(source, /ALLOW_LIVE_INTEGRATIONS/);
   assert.match(source, /migrationCount\.rows\[0\]\?\.count, 83/);
   assert.match(source, /journey_notification_intents_default_off_chk/);
-  assert.match(source, /REVOKE ALL ON TABLE public\.\$\{table\} FROM fas_journey_executor/);
+  assert.match(
+    source,
+    /REVOKE ALL ON TABLE public\.\$\{table\} FROM fas_journey_executor/,
+  );
 });
 
 test("durable audit integration is explicit and fixed to the disposable target", () => {
@@ -722,7 +832,10 @@ test("durable audit integration is explicit and fixed to the disposable target",
     },
   );
   assert.equal(unapproved.status, 1);
-  assert.match(unapproved.stderr, /ALLOW_DISPOSABLE_AUDIT_TEST=true is required/);
+  assert.match(
+    unapproved.stderr,
+    /ALLOW_DISPOSABLE_AUDIT_TEST=true is required/,
+  );
 
   const source = readFileSync(auditTest, "utf8");
   assert.match(source, /assert\.equal\(databaseName, "fasos_apply_local"\)/);
@@ -756,10 +869,7 @@ test("active-context PostgreSQL session integration is explicit and fixed to the
   assert.match(source, /assert\.equal\(parsed\.port, "5433"\)/);
   assert.match(source, /\[sessionResolverUrl, "fas_session_resolver"\]/);
   assert.match(source, /\[rateLimitUrl, "fas_rate_limit_executor"\]/);
-  assert.match(
-    source,
-    /\[lifecycleUrl, "fas_session_lifecycle_executor"\]/,
-  );
+  assert.match(source, /\[lifecycleUrl, "fas_session_lifecycle_executor"\]/);
   assert.match(source, /\[repairUrl, "fas_session_repair_executor"\]/);
 });
 
@@ -808,6 +918,10 @@ test("staging CI is isolated, exact-source and integration-disabled", () => {
   assert.match(workflow, /test:migration-authority/);
   assert.match(workflow, /test:rate-limit-ip-security/);
   assert.match(workflow, /test:login-accessibility/);
+  assert.match(
+    workflow,
+    /playwright test --config=playwright\.staging\.config\.ts --list/,
+  );
   assert.match(workflow, /runs-on: windows-latest/);
   assert.doesNotMatch(workflow, /\b(?:ssh|scp|rsync|kubectl)\b/i);
   assert.doesNotMatch(workflow, /uses:\s+[^\s@]+@(?![a-f0-9]{40}\b)/);

@@ -137,6 +137,58 @@ Required acceptance evidence:
   capabilities dropped and `no-new-privileges` enabled;
 - no external delivery, background job or portal automation worker is active.
 
+## Synthetic RBAC UAT
+
+Run role UAT only after the base deployment is healthy and a fresh staging-only
+backup has passed an isolated restore drill. Do not reuse the generic E2E setup:
+that setup is intentionally restricted to disposable databases whose names
+contain `e2e` or `test`.
+
+`deploy/staging/seed-staging-rbac-uat.mjs` provisions the fixed `@audit.test`
+matrix used by `rbac-functional.spec.ts`. The seed refuses every target except
+`fas_migrator@127.0.0.1:5432/fasos_staging`, requires the exact `83/83` ledger,
+accepts only the original staging admin plus its known fixture identities, and
+reconciles to exactly 11 UAT users, two agent profiles, one student profile and
+12 total users. Keep the UAT password and its complete runner env in
+`/opt/findandstudy-staging/secrets` with `root:findandstudy-staging 0640`; never
+put either value in Git or a command-line argument.
+
+Run the seed from the exact reviewed staging image with the database container's
+network namespace so its database target remains loopback. Required opt-ins are
+`ALLOW_STAGING_RBAC_UAT_SEED=true`, `STAGING_TARGET_ENV=staging`,
+`ALLOW_LIVE_INTEGRATIONS=false`, an exact source-bound
+`STAGING_UAT_CHANGE_ID`, and the observed exact pre-user count (`1` initially,
+`12` for an idempotent rerun).
+
+The operator-side browser gate is:
+
+```text
+pnpm run test:e2e:staging-rbac
+```
+
+It requires exact `PLAYWRIGHT_BASE_URL=https://staging.srv1110168.hstgr.cloud`,
+`ALLOW_STAGING_RBAC_UAT=true`, `ALLOW_LIVE_INTEGRATIONS=false`, and the
+host-only `RBAC_E2E_PASSWORD`. The dedicated Playwright config has no fixture
+setup/teardown, no local web servers, no tracing or video, runs one worker, and
+targets only the RBAC suite. The suite performs synthetic login/logout-style
+session activity and GET authorization checks; it has no payment, message,
+email, portal-submit, role-mutation or data-delete request.
+
+Run `deploy/staging/run-staging-rbac-uat.mjs` from the exact staging image before
+the browser gate. It is pinned to the exact public HTTPS origin and expected
+release ID, verifies the health release/database contract, then checks the 11
+roles across finance, AI, notification, inbox, pipeline, student and agent
+boundaries. It performs only GET requests plus synthetic login and CSRF-bound
+logout, emits aggregate counts without credentials/session values, and rejects
+redirects or non-JSON identity responses. Supply its password and release-bound
+environment through the same restricted host-only env file, not command-line
+arguments.
+
+After the run, verify the ledger remains `83/83`, the six integration/worker
+kill switches remain off, app logs contain no fatal/unhandled error, and all
+unrelated VPS containers retain their pre-run health. Create and restore-drill a
+new checksum-attested backup for the accepted 12-user synthetic state.
+
 ## Backup and isolated restore drill
 
 Create a custom-format dump with `pg_dump`, restrict it to
@@ -150,8 +202,9 @@ then verify at minimum:
 
 - database name is the drill-only name;
 - ledger count is exactly `83`;
-- exactly one synthetic staging user and one active synthetic Super Admin are
-  present;
+- the attested synthetic denominator is exact: either the initial one-user
+  state, or the accepted RBAC UAT state with 12 users, two active agent
+  profiles and one active student profile;
 - the public schema is non-empty.
 
 Always remove the drill container through an EXIT trap, and confirm it is absent
