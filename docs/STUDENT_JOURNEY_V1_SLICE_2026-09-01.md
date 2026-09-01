@@ -92,7 +92,10 @@ slices are:
 
 1. wire the now-frozen milestone/QAVJP contract to a tenant-owned durable
    schema and transactional receipts, then expose a redacted timeline;
-2. explicit requirement/readiness facts for dossier and application preflight;
+2. adopt the now-frozen, default-unwired
+   [requirement/readiness projection](./STUDENT_JOURNEY_READINESS_PROJECTION_2026-09-01.md)
+   only after a versioned tenant-owned requirement set and dossier revision
+   exist;
 3. safe student acknowledgement and document-request response commands with
    idempotency, audit and concurrency tests;
 4. adopt the default-unwired
