@@ -492,6 +492,86 @@ function requiredAbsolutePath(name, expectedType) {
   return { configured: value, resolved, stat: safeStat(stat) };
 }
 
+function statIdentity(stat) {
+  return {
+    ...safeStat(stat),
+    device: String(stat.dev),
+    inode: String(stat.ino),
+  };
+}
+
+const STAT_IDENTITY_FIELDS = [
+  "device",
+  "inode",
+  "uid",
+  "gid",
+  "mode",
+  "type",
+];
+
+function statIdentityMatches(before, after) {
+  return STAT_IDENTITY_FIELDS.every(
+    (field) => before?.[field] === after?.[field],
+  );
+}
+
+function requiredReleaseLinkSnapshot(name) {
+  const configured = process.env[name];
+  if (!configured || !path.isAbsolute(configured)) {
+    fail(`${name} must be an absolute path`);
+  }
+  const linkStatBefore = fs.lstatSync(configured);
+  if (!linkStatBefore.isSymbolicLink()) {
+    fail(`${name} must be a symbolic link`);
+  }
+  const resolved = fs.realpathSync(configured);
+  const targetStat = fs.statSync(resolved);
+  if (!targetStat.isDirectory()) {
+    fail(`${name} must target a directory`);
+  }
+  const linkStatAfter = fs.lstatSync(configured);
+  const linkIdentityBefore = statIdentity(linkStatBefore);
+  const linkIdentityAfter = statIdentity(linkStatAfter);
+  if (
+    linkIdentityAfter.type !== "symlink" ||
+    !statIdentityMatches(linkIdentityBefore, linkIdentityAfter)
+  ) {
+    fail(`${name} identity changed while it was being read`);
+  }
+  return {
+    path: {
+      configured,
+      resolved,
+      stat: safeStat(targetStat),
+    },
+    identity: {
+      configured,
+      resolved,
+      link: linkIdentityAfter,
+      target: statIdentity(targetStat),
+    },
+  };
+}
+
+export function validateStableReleaseLinkSnapshot(before, after) {
+  for (const field of ["configured", "resolved"]) {
+    if (before.identity?.[field] !== after.identity?.[field]) {
+      fail("CURRENT_RELEASE_LINK identity changed during attestation");
+    }
+  }
+  for (const section of ["link", "target"]) {
+    if (
+      !statIdentityMatches(
+        before.identity?.[section],
+        after.identity?.[section],
+      )
+    ) {
+      fail("CURRENT_RELEASE_LINK identity changed during attestation");
+    }
+  }
+  return before.path;
+}
+
 function optionalAbsoluteDirectory(name) {
   if (process.env[name] === undefined || process.env[name] === "") return null;
   return requiredAbsolutePath(name, "directory");
@@ -638,10 +718,10 @@ export async function createProductionAttestation() {
   });
 
   const releasesDir = requiredAbsolutePath("RELEASES_DIR", "directory");
-  const currentRelease = requiredAbsolutePath(
+  const currentReleaseBefore = requiredReleaseLinkSnapshot(
     "CURRENT_RELEASE_LINK",
-    "directory",
   );
+  const currentRelease = currentReleaseBefore.path;
   if (!isWithin(releasesDir.resolved, currentRelease.resolved)) {
     fail("CURRENT_RELEASE_LINK target must be inside RELEASES_DIR");
   }
@@ -739,6 +819,12 @@ export async function createProductionAttestation() {
     });
   }
 
+  const rootFilesystem = collectDiskInventory();
+  validateStableReleaseLinkSnapshot(
+    currentReleaseBefore,
+    requiredReleaseLinkSnapshot("CURRENT_RELEASE_LINK"),
+  );
+
   return {
     schemaVersion: 4,
     generatedAt: new Date().toISOString(),
@@ -762,7 +848,7 @@ export async function createProductionAttestation() {
       paths,
       privateStorage,
       diskAttribution,
-      rootFilesystem: collectDiskInventory(),
+      rootFilesystem,
     },
   };
 }

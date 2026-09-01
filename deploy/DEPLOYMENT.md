@@ -263,7 +263,8 @@ tree. Review the JSON before moving it off-host. The command is evidence
 collection, not approval to deploy or change ownership. A source-commit or
 cleanliness mismatch, unexpected release identity, applied migration count
 other than the explicitly approved prefix, database name/server IP/port drift,
-ledger hash mismatch, duplicate API or worker, missing path, unreachable local
+ledger hash mismatch, `CURRENT_RELEASE_LINK` symlink/target replacement during
+the measurement, duplicate API or worker, missing path, unreachable local
 health endpoint or exceeded private-tree limit fails closed. For the current
 convergence decision, the reviewed expectation is the separately verified live
 release identity, `fasos_apply`, the approved local PostgreSQL IP/port and

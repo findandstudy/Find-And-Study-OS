@@ -19,6 +19,7 @@ import {
   readBoundedHealthBody,
   safeErrorMessage,
   validateHealthResponseMetadata,
+  validateStableReleaseLinkSnapshot,
   validateStableProcessSnapshot,
   validateSourceProvenance,
 } from "./production-readonly-attestation.mjs";
@@ -289,6 +290,79 @@ test("release and process paths must remain under the resolved current release",
     true,
   );
   assert.equal(isWithin(current, path.join(current, "..", "release-2")), false);
+});
+
+test("current release link rejects symlink or target replacement during attestation", () => {
+  const link = {
+    device: "7",
+    inode: "101",
+    uid: 1001,
+    gid: 1001,
+    mode: "0777",
+    type: "symlink",
+  };
+  const target = {
+    ...link,
+    inode: "202",
+    mode: "0750",
+    type: "directory",
+  };
+  const before = {
+    path: {
+      configured: path.resolve("current"),
+      resolved: path.resolve("releases", "release-1"),
+      stat: { uid: 1001, gid: 1001, mode: "0750", type: "directory" },
+    },
+    identity: {
+      configured: path.resolve("current"),
+      resolved: path.resolve("releases", "release-1"),
+      link,
+      target,
+    },
+  };
+  assert.equal(validateStableReleaseLinkSnapshot(before, before), before.path);
+  for (const after of [
+    {
+      ...before,
+      identity: {
+        ...before.identity,
+        resolved: path.resolve("releases", "release-2"),
+      },
+    },
+    {
+      ...before,
+      identity: {
+        ...before.identity,
+        link: { ...link, inode: "102" },
+      },
+    },
+    {
+      ...before,
+      identity: {
+        ...before.identity,
+        target: { ...target, inode: "203" },
+      },
+    },
+  ]) {
+    assert.throws(
+      () => validateStableReleaseLinkSnapshot(before, after),
+      /CURRENT_RELEASE_LINK identity changed/,
+    );
+  }
+
+  const source = fs.readFileSync(
+    path.join(here, "production-readonly-attestation.mjs"),
+    "utf8",
+  );
+  assert.equal(
+    (
+      source.match(
+        /requiredReleaseLinkSnapshot\(\s*"CURRENT_RELEASE_LINK",?\s*\)/g,
+      ) ?? []
+    ).length,
+    2,
+  );
+  assert.match(source, /validateStableReleaseLinkSnapshot\(/);
 });
 
 test("process inventory emits only exact API/worker pid and uid/gid metadata", () => {
