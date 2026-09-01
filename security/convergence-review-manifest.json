@@ -24,6 +24,15 @@
       "other": 0
     }
   },
+  "postReviewInfrastructure": {
+    "pinnedPaths": {
+      ".github/workflows/live-first-convergence.yml": "ce6a63ed393c00cc00d8071ef03ec298a0bd095c",
+      "docs/LIVE_FIRST_CONVERGENCE_REVIEW_PACKET_2026-09-01.md": "ca09f06640869f25601d85b054c4e67473eae4ba",
+      "package.json": "8c2805a568f927511e8d2a8b50a56f3273b477fe",
+      "scripts/test-convergence-review-manifest.mjs": "867b3da72ffdddfff2af8641aae21b5b2eb8acf9",
+      "scripts/verify-convergence-review-manifest.mjs": "89265df0a974834d840f694613ce159c7f96db5d"
+    }
+  },
   "allowedPostReviewPaths": [
     ".github/workflows/live-first-convergence.yml",
     "docs/LIVE_FIRST_CONVERGENCE_REVIEW_PACKET_2026-09-01.md",

@@ -6,6 +6,7 @@ import {
   classifyReviewPath,
   compareExpected,
   verifyAllowedReviewInfrastructurePaths,
+  verifyPinnedPostReviewInfrastructure,
   verifyTargetBase,
   verifyTargetBaseRef,
 } from "./verify-convergence-review-manifest.mjs";
@@ -126,6 +127,44 @@ test("the frozen review groups reconcile to the exact reviewed file denominator"
   assert.equal(manifest.expected.groupCounts.other, 0);
   assert.equal(manifest.expected.commitCount, 60);
   assert.equal(manifest.expected.patchSha256.length, 64);
+});
+
+test("every mutable post-review infrastructure path except the manifest is blob-pinned", () => {
+  const observed = verifyPinnedPostReviewInfrastructure(
+    process.env.CONVERGENCE_REVIEW_SOURCE_HEAD ||
+      spawnSync("git", ["rev-parse", "HEAD"], {
+        cwd: repositoryRoot,
+        encoding: "utf8",
+      }).stdout.trim(),
+    manifest.postReviewInfrastructure.pinnedPaths,
+    manifest.allowedPostReviewPaths,
+  );
+  assert.deepEqual(
+    Object.keys(observed).sort(),
+    manifest.allowedPostReviewPaths
+      .filter((file) => file !== "security/convergence-review-manifest.json")
+      .sort(),
+  );
+});
+
+test("post-review infrastructure blob drift fails closed", () => {
+  const altered = {
+    ...manifest.postReviewInfrastructure.pinnedPaths,
+    "package.json": "0000000000000000000000000000000000000000",
+  };
+  assert.throws(
+    () =>
+      verifyPinnedPostReviewInfrastructure(
+        process.env.CONVERGENCE_REVIEW_SOURCE_HEAD ||
+          spawnSync("git", ["rev-parse", "HEAD"], {
+            cwd: repositoryRoot,
+            encoding: "utf8",
+          }).stdout.trim(),
+        altered,
+        manifest.allowedPostReviewPaths,
+      ),
+    /post-review infrastructure blob drift/,
+  );
 });
 
 test("the repository verifier reconstructs the pinned base-to-reviewed patch", () => {

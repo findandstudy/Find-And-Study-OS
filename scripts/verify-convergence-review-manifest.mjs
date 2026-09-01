@@ -30,6 +30,29 @@ function normalizePath(value) {
   return value.replaceAll("\\", "/");
 }
 
+function canonicalRepositoryPath(value, field) {
+  if (
+    typeof value !== "string" ||
+    value.length === 0 ||
+    value.length > 512 ||
+    value.startsWith("/") ||
+    value.endsWith("/") ||
+    value.includes("//") ||
+    value.includes(":") ||
+    value.includes("\0")
+  ) {
+    throw new Error(`${field} must be a canonical repository-relative path`);
+  }
+  const normalized = normalizePath(value);
+  if (
+    normalized !== value ||
+    normalized.split("/").some((segment) => segment === "." || segment === "..")
+  ) {
+    throw new Error(`${field} must be a canonical repository-relative path`);
+  }
+  return normalized;
+}
+
 function runGit(args, options = {}) {
   const result = spawnSync("git", args, {
     cwd: REPOSITORY_ROOT,
@@ -212,6 +235,72 @@ export function compareExpected(actual, expected, field = "manifest") {
   }
 }
 
+export function verifyPinnedPostReviewInfrastructure(
+  sourceHeadInput,
+  pinnedPathsInput,
+  allowedPathsInput,
+) {
+  const sourceHead = exactCommit(sourceHeadInput, "sourceHead");
+  if (
+    !pinnedPathsInput ||
+    typeof pinnedPathsInput !== "object" ||
+    Array.isArray(pinnedPathsInput)
+  ) {
+    throw new Error("post-review pinned paths must be an object");
+  }
+  if (!Array.isArray(allowedPathsInput)) {
+    throw new Error("allowed post-review paths must be an array");
+  }
+  const manifestPath = "security/convergence-review-manifest.json";
+  const expectedPaths = allowedPathsInput
+    .map((file, index) =>
+      canonicalRepositoryPath(file, `allowedPostReviewPaths[${index}]`),
+    )
+    .filter((file) => file !== manifestPath)
+    .sort();
+  const pinnedPaths = Object.keys(pinnedPathsInput)
+    .map((file, index) =>
+      canonicalRepositoryPath(file, `pinnedPaths[${index}]`),
+    )
+    .sort();
+  compareExpected(
+    pinnedPaths,
+    expectedPaths,
+    "post-review pinned-path denominator",
+  );
+  const observed = {};
+  for (const file of expectedPaths) {
+    const expectedBlob = pinnedPathsInput[file];
+    if (
+      typeof expectedBlob !== "string" ||
+      !/^[0-9a-f]{40}$/.test(expectedBlob)
+    ) {
+      throw new Error(
+        `post-review blob for ${file} must be a lowercase Git id`,
+      );
+    }
+    const actualBlob = String(
+      runGit(["rev-parse", "--verify", `${sourceHead}:${file}`]),
+    ).trim();
+    if (!/^[0-9a-f]{40}$/.test(actualBlob)) {
+      throw new Error(
+        `post-review path ${file} did not resolve to a Git object`,
+      );
+    }
+    const objectType = String(runGit(["cat-file", "-t", actualBlob])).trim();
+    if (objectType !== "blob") {
+      throw new Error(`post-review path ${file} must resolve to a blob`);
+    }
+    if (actualBlob !== expectedBlob) {
+      throw new Error(
+        `post-review infrastructure blob drift for ${file}: expected ${expectedBlob}, received ${actualBlob}`,
+      );
+    }
+    observed[file] = actualBlob;
+  }
+  return observed;
+}
+
 export function buildReviewObservation(baseCommitInput, reviewedCommitInput) {
   const baseCommit = exactCommit(baseCommitInput, "baseCommit");
   const reviewedThroughCommit = exactCommit(
@@ -344,6 +433,11 @@ function verifyManifest(manifest, sourceHeadInput) {
     postReviewPaths,
     manifest.allowedPostReviewPaths,
   );
+  const pinnedPostReviewInfrastructure = verifyPinnedPostReviewInfrastructure(
+    sourceHead,
+    manifest.postReviewInfrastructure?.pinnedPaths,
+    manifest.allowedPostReviewPaths,
+  );
   if (process.env.CONVERGENCE_REVIEW_REQUIRE_CLEAN === "1") {
     const status = String(runGit(["status", "--porcelain=v1"]));
     if (status !== "")
@@ -362,6 +456,7 @@ function verifyManifest(manifest, sourceHeadInput) {
     deletions: observation.deletions,
     groupCounts: observation.groupCounts,
     postReviewPaths: postReviewPaths.map(normalizePath).sort(),
+    pinnedPostReviewInfrastructure,
   };
 }
 

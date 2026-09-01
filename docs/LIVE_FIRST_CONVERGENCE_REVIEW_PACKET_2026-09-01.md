@@ -118,6 +118,14 @@ and a newly pinned final source head. Repository branch protection and required
 independent approval remain necessary to prevent an author from weakening the
 check in a subsequent commit.
 
+The manifest separately pins the exact Git blob identity of every allowed
+post-review infrastructure file except the manifest itself: the workflow,
+package script, verifier, verifier tests and this review packet. The manifest
+cannot cryptographically pin its own blob without a circular identity. A change
+to any pinned file therefore requires both refreshed blob evidence and renewed
+human review of the manifest change; the manifest remains non-authoritative
+until an external reviewer accepts the exact final source head.
+
 ## Mechanical verification
 
 Run from a full-history checkout:
@@ -138,7 +146,10 @@ The command:
 7. rejects every post-review path outside the frozen review-infrastructure
    allowlist;
 8. requires the actual PR event target-base branch and commit to equal the
-   frozen review base identity and rejects a missing assertion in CI.
+   frozen review base identity and rejects a missing assertion in CI;
+9. resolves every non-manifest post-review infrastructure path at the exact
+   source head, requires an ordinary Git blob and compares its identity against
+   the manifest's complete pinned-path denominator.
 
 The Linux exact-head CI checkout uses full history and supplies the actual PR
 source head rather than the synthetic merge commit, together with the actual PR
