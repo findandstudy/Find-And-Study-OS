@@ -19,6 +19,7 @@ const sourceRoot = fs.realpathSync(
   path.resolve(path.dirname(modulePath), ".."),
 );
 const DEFAULT_MAX_PRIVATE_ENTRIES = 100_000;
+const DEFAULT_MAX_PRIVATE_DURATION_MS = 30_000;
 
 function fail(message) {
   throw new Error(`[production-readonly-attestation] BLOCKED: ${message}`);
@@ -212,6 +213,34 @@ export function parsePrivateInventoryLimit(value) {
   return limit;
 }
 
+export function parsePrivateInventoryDurationLimit(value) {
+  const raw = value ?? String(DEFAULT_MAX_PRIVATE_DURATION_MS);
+  if (!/^[1-9]\d*$/.test(raw)) {
+    fail(
+      "RUNTIME_PRIVATE_SCAN_MAX_DURATION_MS must be a canonical positive integer",
+    );
+  }
+  const limit = Number(raw);
+  if (!Number.isSafeInteger(limit) || limit > DEFAULT_MAX_PRIVATE_DURATION_MS) {
+    fail(
+      `RUNTIME_PRIVATE_SCAN_MAX_DURATION_MS must not exceed the hard ${DEFAULT_MAX_PRIVATE_DURATION_MS}-millisecond ceiling`,
+    );
+  }
+  return limit;
+}
+
+function enforcePrivateInventoryDeadline({ startedAt, maxDurationMs, now }) {
+  const currentTime = now();
+  if (!Number.isFinite(currentTime) || currentTime < startedAt) {
+    fail("private inventory clock is invalid");
+  }
+  if (currentTime - startedAt >= maxDurationMs) {
+    fail(
+      `private inventory exceeded the bounded duration of ${maxDurationMs} milliseconds`,
+    );
+  }
+}
+
 function safeStat(stat) {
   return {
     uid: stat.uid,
@@ -230,6 +259,8 @@ function safeStat(stat) {
 export function collectPrivateTreeInventory({
   privateRoot,
   maxEntries = DEFAULT_MAX_PRIVATE_ENTRIES,
+  maxDurationMs = DEFAULT_MAX_PRIVATE_DURATION_MS,
+  now = Date.now,
 }) {
   if (
     !Number.isSafeInteger(maxEntries) ||
@@ -240,7 +271,19 @@ export function collectPrivateTreeInventory({
       `private inventory limit must be between 1 and the hard ${DEFAULT_MAX_PRIVATE_ENTRIES}-entry ceiling`,
     );
   }
+  if (
+    !Number.isSafeInteger(maxDurationMs) ||
+    maxDurationMs < 1 ||
+    maxDurationMs > DEFAULT_MAX_PRIVATE_DURATION_MS
+  ) {
+    fail(
+      `private inventory duration must be between 1 and the hard ${DEFAULT_MAX_PRIVATE_DURATION_MS}-millisecond ceiling`,
+    );
+  }
+  const startedAt = now();
+  if (!Number.isFinite(startedAt)) fail("private inventory clock is invalid");
   const resolvedRoot = fs.realpathSync(privateRoot);
+  enforcePrivateInventoryDeadline({ startedAt, maxDurationMs, now });
   const pending = [resolvedRoot];
   const inventory = {
     entries: 0,
@@ -255,8 +298,10 @@ export function collectPrivateTreeInventory({
   };
 
   while (pending.length) {
+    enforcePrivateInventoryDeadline({ startedAt, maxDurationMs, now });
     const target = pending.pop();
     const stat = fs.lstatSync(target);
+    enforcePrivateInventoryDeadline({ startedAt, maxDurationMs, now });
     inventory.entries += 1;
     if (inventory.entries > maxEntries) {
       fail(
@@ -280,6 +325,7 @@ export function collectPrivateTreeInventory({
       try {
         let entry;
         while ((entry = directory.readSync()) !== null) {
+          enforcePrivateInventoryDeadline({ startedAt, maxDurationMs, now });
           if (inventory.entries + pending.length >= maxEntries) {
             fail(
               `private inventory exceeded the bounded limit of ${maxEntries} entries`,
@@ -290,14 +336,17 @@ export function collectPrivateTreeInventory({
       } finally {
         directory.closeSync();
       }
+      enforcePrivateInventoryDeadline({ startedAt, maxDurationMs, now });
       continue;
     }
     if (stat.isFile()) {
       inventory.files += 1;
       inventory.fileBytes += BigInt(stat.size);
+      enforcePrivateInventoryDeadline({ startedAt, maxDurationMs, now });
       continue;
     }
     inventory.other += 1;
+    enforcePrivateInventoryDeadline({ startedAt, maxDurationMs, now });
   }
 
   return {
@@ -439,6 +488,7 @@ export async function createProductionAttestation() {
 
   let privateStorage = null;
   let privateScanMaxEntries = null;
+  let privateScanMaxDurationMs = null;
   if ((process.env.STORAGE_DRIVER ?? "replit") === "local") {
     const storageDir = requiredAbsolutePath("STORAGE_LOCAL_DIR", "directory");
     const privateRoot = requiredAbsolutePath("PRIVATE_OBJECT_DIR", "directory");
@@ -456,6 +506,9 @@ export async function createProductionAttestation() {
     }
     privateScanMaxEntries = parsePrivateInventoryLimit(
       process.env.RUNTIME_PRIVATE_SCAN_MAX_ENTRIES,
+    );
+    privateScanMaxDurationMs = parsePrivateInventoryDurationLimit(
+      process.env.RUNTIME_PRIVATE_SCAN_MAX_DURATION_MS,
     );
     privateStorage = {
       storageRoot: storageDir,
@@ -494,6 +547,7 @@ export async function createProductionAttestation() {
       inventory: collectPrivateTreeInventory({
         privateRoot: privateStorage.privateRoot.resolved,
         maxEntries: privateScanMaxEntries,
+        maxDurationMs: privateScanMaxDurationMs,
       }),
     };
   }

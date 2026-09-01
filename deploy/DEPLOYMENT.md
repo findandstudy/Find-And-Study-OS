@@ -132,13 +132,18 @@ or touching a process unless all of these statements are true:
 - `RUNTIME_ENV_FILE` is either service-owned `0600` or root:service `0640`;
 - every private object and directory is service-owned, user-only (`0600` files,
   `0700` directories), non-executable and not a symbolic link;
-- the bounded private-tree scan completes before the configured entry limit.
+- the bounded private-tree scan completes before the configured entry and
+  duration limits.
 
 `RUNTIME_PRIVATE_SCAN_MAX_ENTRIES` may lower the scan budget but must be a
 canonical positive integer and can never raise the hard `100000`-entry ceiling.
-Scientific notation, decimals, leading zeros and larger values fail closed.
-Directory entries are streamed and counted before queueing, so one very large
-directory cannot first materialize an unbounded filename list in memory.
+`RUNTIME_PRIVATE_SCAN_MAX_DURATION_MS` follows the same canonical format and may
+lower, but never raise, the hard `30000`-millisecond ceiling. Scientific
+notation, decimals, leading zeros and larger values fail closed. Directory
+entries are streamed and counted before queueing, so one very large directory
+cannot first materialize an unbounded filename list in memory. Both the
+deployment preflight and read-only production attestation enforce these same
+private-tree ceilings.
 
 This is a deployment gate, not an automatic migration. The current production
 host was last observed with root-owned `0644/0755` private storage and root-owned

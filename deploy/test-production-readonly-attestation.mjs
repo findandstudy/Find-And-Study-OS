@@ -10,6 +10,7 @@ import {
   assertReadOnlyOptIn,
   collectPrivateTreeInventory,
   isWithin,
+  parsePrivateInventoryDurationLimit,
   parsePrivateInventoryLimit,
   parseProductionExpectations,
   parseProcessInventory,
@@ -48,6 +49,15 @@ test("private inventory limit cannot exceed the canonical 100000-entry ceiling",
   }
 });
 
+test("private inventory duration cannot exceed the canonical 30000ms ceiling", () => {
+  assert.equal(parsePrivateInventoryDurationLimit(undefined), 30_000);
+  assert.equal(parsePrivateInventoryDurationLimit("30000"), 30_000);
+  assert.equal(parsePrivateInventoryDurationLimit("1"), 1);
+  for (const value of ["", "0", "0300", "3e4", "30000.0", "30001"]) {
+    assert.throws(() => parsePrivateInventoryDurationLimit(value));
+  }
+});
+
 test("private inventory streams directory entries within the discovery budget", () => {
   const source = fs.readFileSync(
     path.join(here, "production-readonly-attestation.mjs"),
@@ -57,6 +67,7 @@ test("private inventory streams directory entries within the discovery budget", 
   assert.match(source, /\.readSync\(\)/);
   assert.doesNotMatch(source, /readdirSync/);
   assert.match(source, /inventory\.entries \+ pending\.length >= maxEntries/);
+  assert.match(source, /RUNTIME_PRIVATE_SCAN_MAX_DURATION_MS/);
 });
 
 test("production expectations require an exact release and canonical migration prefix", () => {
@@ -329,6 +340,20 @@ test("private inventory reports aggregate metadata without file names or content
       () => collectPrivateTreeInventory({ privateRoot, maxEntries: 100_001 }),
       /hard 100000-entry ceiling/,
     );
+    let currentTime = 0;
+    assert.throws(
+      () =>
+        collectPrivateTreeInventory({
+          privateRoot,
+          maxEntries: 2,
+          maxDurationMs: 50,
+          now: () => {
+            currentTime += 25;
+            return currentTime;
+          },
+        }),
+      /bounded duration/,
+    );
   } finally {
     fs.rmSync(fixture, { recursive: true, force: true });
   }
@@ -374,6 +399,7 @@ test("attestation implementation exposes no mutation command or file-write surfa
   assert.match(source, /ATTESTATION_INCLUDE_DISK_ATTRIBUTION/);
   assert.match(source, /DISK_ATTRIBUTION_MAX_ENTRIES/);
   assert.match(source, /DISK_ATTRIBUTION_MAX_DURATION_MS/);
+  assert.match(source, /RUNTIME_PRIVATE_SCAN_MAX_DURATION_MS/);
   assert.match(source, /schemaVersion: 4/);
   assert.match(source, /method: "GET"/);
   assert.match(source, /execFileSync\("ps", \["-eo"/);

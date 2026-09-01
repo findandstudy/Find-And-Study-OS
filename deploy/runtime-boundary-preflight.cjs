@@ -6,6 +6,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const DEFAULT_MAX_PRIVATE_ENTRIES = 100_000;
+const DEFAULT_MAX_PRIVATE_DURATION_MS = 30_000;
 
 function fail(message) {
   throw new Error(`[runtime-boundary-preflight] ${message}`);
@@ -53,6 +54,34 @@ function parsePrivateScanLimit(value) {
     );
   }
   return limit;
+}
+
+function parsePrivateScanDurationLimit(value) {
+  const raw = value ?? String(DEFAULT_MAX_PRIVATE_DURATION_MS);
+  if (!/^[1-9]\d*$/.test(raw)) {
+    fail(
+      "RUNTIME_PRIVATE_SCAN_MAX_DURATION_MS must be a canonical positive integer",
+    );
+  }
+  const limit = Number(raw);
+  if (!Number.isSafeInteger(limit) || limit > DEFAULT_MAX_PRIVATE_DURATION_MS) {
+    fail(
+      `RUNTIME_PRIVATE_SCAN_MAX_DURATION_MS must not exceed the hard ${DEFAULT_MAX_PRIVATE_DURATION_MS}-millisecond ceiling`,
+    );
+  }
+  return limit;
+}
+
+function enforcePrivateScanDeadline({ startedAt, maxDurationMs, now }) {
+  const currentTime = now();
+  if (!Number.isFinite(currentTime) || currentTime < startedAt) {
+    fail("private object scan clock is invalid");
+  }
+  if (currentTime - startedAt >= maxDurationMs) {
+    fail(
+      `private object scan exceeded the bounded duration of ${maxDurationMs} milliseconds`,
+    );
+  }
 }
 
 function validateWritableDirectory({ label, stat, expectedUid, expectedGid }) {
@@ -134,14 +163,29 @@ function scanPrivateTree({
   expectedUid,
   expectedGid,
   maxEntries,
+  maxDurationMs = DEFAULT_MAX_PRIVATE_DURATION_MS,
+  now = Date.now,
 }) {
+  if (
+    !Number.isSafeInteger(maxDurationMs) ||
+    maxDurationMs < 1 ||
+    maxDurationMs > DEFAULT_MAX_PRIVATE_DURATION_MS
+  ) {
+    fail(
+      `private object scan duration must be between 1 and the hard ${DEFAULT_MAX_PRIVATE_DURATION_MS}-millisecond ceiling`,
+    );
+  }
+  const startedAt = now();
+  if (!Number.isFinite(startedAt)) fail("private object scan clock is invalid");
   const pending = [privateRoot];
   let directories = 0;
   let files = 0;
 
   while (pending.length) {
+    enforcePrivateScanDeadline({ startedAt, maxDurationMs, now });
     const target = pending.pop();
     const stat = fs.lstatSync(target);
+    enforcePrivateScanDeadline({ startedAt, maxDurationMs, now });
     const label = path.relative(privateRoot, target) || "PRIVATE_OBJECT_DIR";
     validatePrivateEntry({ label, stat, expectedUid, expectedGid });
     if (stat.isDirectory()) {
@@ -150,6 +194,7 @@ function scanPrivateTree({
       try {
         let entry;
         while ((entry = directory.readSync()) !== null) {
+          enforcePrivateScanDeadline({ startedAt, maxDurationMs, now });
           if (directories + files + pending.length >= maxEntries) {
             fail(
               `private object scan exceeded the bounded limit of ${maxEntries} entries`,
@@ -168,6 +213,7 @@ function scanPrivateTree({
         `private object scan exceeded the bounded limit of ${maxEntries} entries`,
       );
     }
+    enforcePrivateScanDeadline({ startedAt, maxDurationMs, now });
   }
 
   return { directories, files };
@@ -260,11 +306,15 @@ function main() {
     const configuredLimit = parsePrivateScanLimit(
       process.env.RUNTIME_PRIVATE_SCAN_MAX_ENTRIES,
     );
+    const configuredDurationLimit = parsePrivateScanDurationLimit(
+      process.env.RUNTIME_PRIVATE_SCAN_MAX_DURATION_MS,
+    );
     scan = scanPrivateTree({
       privateRoot,
       expectedUid,
       expectedGid,
       maxEntries: configuredLimit,
+      maxDurationMs: configuredDurationLimit,
     });
   }
 
@@ -284,6 +334,7 @@ if (require.main === module) {
 }
 
 module.exports = {
+  parsePrivateScanDurationLimit,
   parsePrivateScanLimit,
   scanPrivateTree,
   validateIdentity,

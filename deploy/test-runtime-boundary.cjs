@@ -15,6 +15,7 @@ const { tmpdir } = require("node:os");
 const path = require("node:path");
 const test = require("node:test");
 const {
+  parsePrivateScanDurationLimit,
   parsePrivateScanLimit,
   scanPrivateTree,
   validateIdentity,
@@ -71,6 +72,15 @@ test("private scan limit has a canonical non-bypassable 100000-entry ceiling", (
   }
 });
 
+test("private scan duration has a canonical non-bypassable 30000ms ceiling", () => {
+  assert.equal(parsePrivateScanDurationLimit(undefined), 30_000);
+  assert.equal(parsePrivateScanDurationLimit("30000"), 30_000);
+  assert.equal(parsePrivateScanDurationLimit("1"), 1);
+  for (const value of ["", "0", "0300", "3e4", "30000.0", "30001"]) {
+    assert.throws(() => parsePrivateScanDurationLimit(value));
+  }
+});
+
 test("private scan streams directory entries within the discovery budget", () => {
   const source = readFileSync(
     path.join(__dirname, "runtime-boundary-preflight.cjs"),
@@ -80,6 +90,7 @@ test("private scan streams directory entries within the discovery budget", () =>
   assert.match(source, /\.readSync\(\)/);
   assert.doesNotMatch(source, /readdirSync/);
   assert.match(source, /directories \+ files \+ pending\.length >= maxEntries/);
+  assert.match(source, /RUNTIME_PRIVATE_SCAN_MAX_DURATION_MS/);
 });
 
 test("deploy invokes the runtime boundary before release creation or build", () => {
@@ -219,6 +230,22 @@ test(
             maxEntries: 2,
           }),
         /bounded limit/,
+      );
+      let currentTime = 0;
+      assert.throws(
+        () =>
+          scanPrivateTree({
+            privateRoot: fixture,
+            expectedUid,
+            expectedGid,
+            maxEntries: 3,
+            maxDurationMs: 50,
+            now: () => {
+              currentTime += 25;
+              return currentTime;
+            },
+          }),
+        /bounded duration/,
       );
       const link = path.join(fixture, "outside-link");
       symlinkSync(tmpdir(), link, "dir");
