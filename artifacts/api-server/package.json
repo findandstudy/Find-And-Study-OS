@@ -165,6 +165,7 @@
     "test:security-regressions": "tsx --test ./scripts/test-security-regressions.ts",
     "test:student-email-verification": "tsx --test ./scripts/test-student-email-verification-gate.ts",
     "test:student-journey-projection": "tsx --test ./scripts/test-student-journey-projection.ts",
+    "test:student-journey-milestone-contract": "tsx --test ./scripts/test-student-journey-milestone-contract.ts",
     "test:staff-scope-performance": "DATABASE_URL=postgres://test:test@127.0.0.1:5432/test tsx --test ./scripts/test-staff-scope-performance.ts",
     "test:read-path-performance": "tsx --test ./scripts/test-read-path-performance.ts",
     "test:notification-attention": "tsx --test ./scripts/test-notification-attention.ts",

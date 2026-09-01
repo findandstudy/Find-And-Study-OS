@@ -90,8 +90,8 @@ escaped text. Journey copy is synchronized across all ten supported locales.
 This first slice is not the complete G45 Student Journey. The next safe local
 slices are:
 
-1. a canonical milestone/event timeline backed by durable receipts rather
-   than inferred stage labels;
+1. wire the now-frozen milestone/QAVJP contract to a tenant-owned durable
+   schema and transactional receipts, then expose a redacted timeline;
 2. explicit requirement/readiness facts for dossier and application preflight;
 3. safe student acknowledgement and document-request response commands with
    idempotency, audit and concurrency tests;

@@ -67,6 +67,7 @@ jobs:
           pnpm --filter @workspace/api-server run test:active-context-selection-repair-store
           pnpm --filter @workspace/api-server run test:integration-database-safety
           pnpm --filter @workspace/api-server run test:student-journey-projection
+          pnpm --filter @workspace/api-server run test:student-journey-milestone-contract
 
       - name: Type-check the workspace
         run: pnpm run typecheck
@@ -126,6 +127,7 @@ jobs:
           node lib/db/validate-migrations.mjs
           pnpm --filter @workspace/api-server run test:integration-database-safety
           pnpm --filter @workspace/api-server run test:student-journey-projection
+          pnpm --filter @workspace/api-server run test:student-journey-milestone-contract
           pnpm run typecheck
 
   postgres-adoption:
