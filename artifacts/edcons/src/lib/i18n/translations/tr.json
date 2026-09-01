@@ -1458,6 +1458,104 @@
     "docStatusRequested": "Talep Edildi",
     "docStatusUnderReview": "İncelemede"
   },
+  "studentJourney": {
+    "nextBestAction": "Sıradaki en önemli adımın",
+    "whyImportant": "Neden önemli:",
+    "currentStage": "Mevcut aşama",
+    "deadline": "Son tarih",
+    "overdue": "İlgilenmen gerekiyor",
+    "continue": "Devam et",
+    "viewStatus": "Durumu gör",
+    "journeyProgress": "Yolculuk ilerlemesi",
+    "progressPercent": "%{percent}",
+    "progressUnknown": "Doğrulama bekleniyor",
+    "needsReview": "Danışman doğrulaması gerekli",
+    "unavailableTitle": "Yolculuk bilgini şu anda yükleyemedik.",
+    "unavailableDescription": "Başvuru verilerin güvende. Tekrar deneyebilir veya Başvurularım ekranından devam edebilirsin.",
+    "retry": "Tekrar dene",
+    "waitingParty": {
+      "student": "Senden bekleniyor",
+      "find_and_study": "Find & Study inceliyor",
+      "university": "Üniversiteden bekleniyor",
+      "external_authority": "Yetkili kurumdan bekleniyor",
+      "completed": "Tamamlandı",
+      "unknown": "Beklenen taraf doğrulanmadı"
+    },
+    "evidenceStatus": {
+      "not_started": "Henüz kanıt/belge eklenmedi",
+      "action_required": "{requested} belge talebi ilgini bekliyor",
+      "in_review": "{pending} belge inceleniyor",
+      "verified": "{verified} belge doğrulandı",
+      "unknown": "Kanıt durumu incelenmeli"
+    },
+    "actions": {
+      "explore_programs": {
+        "title": "Başlamak için bir program seç",
+        "description": "Hedeflerine uygun programları incele ve başvurunu başlat.",
+        "reason": "Başvuru yolculuğunun başlayabilmesi için program ve dönem seçimi gerekiyor."
+      },
+      "upload_requested_documents": {
+        "title": "Talep edilen {count} belgeyi yükle",
+        "description": "Başvurun, kabul ekibinin istediği belgeleri bekliyor.",
+        "reason": "Bu talepler yanıtlanmadan ekip başvurunu güvenle ilerletemez."
+      },
+      "replace_rejected_documents": {
+        "title": "Düzeltilmesi gereken belgeyi yenile",
+        "description": "Belge geri bildirimini incele ve düzeltilmiş kopyayı yükle.",
+        "reason": "Doğru kanıt, önlenebilir gecikmeleri ve gönderim hatalarını engeller."
+      },
+      "complete_dossier": {
+        "title": "Başvuru dosyanı tamamla",
+        "description": "Danışmanın inceleyebilsin diye profil ve destekleyici belgelerini ekle.",
+        "reason": "Başvurunun değerlendirilip hazırlanabilmesi için eksiksiz ve doğru bir dosya gerekir."
+      },
+      "await_document_review": {
+        "title": "Belgelerin inceleniyor",
+        "description": "Danışmanın düzeltme istemedikçe şu anda yeni bir işlem yapman gerekmiyor.",
+        "reason": "Find & Study sonraki iş akışı adımından önce kanıtları kontrol ediyor."
+      },
+      "await_submission": {
+        "title": "Başvurun gönderime hazırlanıyor",
+        "description": "Danışmanın gönderim öncesi kontrolleri tamamlıyor.",
+        "reason": "Gönderilmeden önce başvuru detayları ve kanıtlar kontrol edilmelidir."
+      },
+      "await_university_decision": {
+        "title": "Başvurun üniversitede",
+        "description": "Üniversite başvurunu incelerken en güncel durumu görüntüleyebilirsin.",
+        "reason": "Sıradaki karar artık üniversiteye ait."
+      },
+      "review_offer": {
+        "title": "Teklifini ve koşullarını incele",
+        "description": "Teklifi, koşulları ve varsa son tarihi görmek için başvurunu aç.",
+        "reason": "Teklif koşulları ve son tarihler zamanında karar vermeni gerektirebilir."
+      },
+      "await_visa_decision": {
+        "title": "Vize başvurun inceleniyor",
+        "description": "En güncel durumu kontrol et ve iletişim bilgilerini erişilebilir tut.",
+        "reason": "Sıradaki karardan yetkili dış kurum sorumlu."
+      },
+      "prepare_enrollment": {
+        "title": "Kayıt için hazırlan",
+        "description": "Başvurunu incele ve kalan kayıt adımlarını tamamla.",
+        "reason": "Gerekli adımları bitirmek kaydın zamanında tamamlanmasına yardımcı olur."
+      },
+      "journey_complete": {
+        "title": "Başvuru yolculuğun tamamlandı",
+        "description": "Tamamlanan başvuruyu ve belgelerini görüntüleyebilirsin.",
+        "reason": "Bu başvuru tamamlanmış bir iş akışı aşamasına ulaştı."
+      },
+      "contact_advisor": {
+        "title": "Sonraki seçenekleri danışmanınla değerlendir",
+        "description": "Durumuna özel ve net bir sonraki adım için danışmanına mesaj gönder.",
+        "reason": "Yeni bir işlem önerilmeden önce bu başvurunun insan tarafından incelenmesi gerekiyor."
+      },
+      "track_application": {
+        "title": "Başvuru durumunu takip et",
+        "description": "Doğrulanmış en güncel durumu görmek için başvurunu aç.",
+        "reason": "Mevcut iş akışı adımı Find & Study tarafından yürütülüyor."
+      }
+    }
+  },
   "studentWishlist": {
     "title": "Favori Listem",
     "subtitle": "Daha sonrası için kaydettiğin programlar — {count} program",

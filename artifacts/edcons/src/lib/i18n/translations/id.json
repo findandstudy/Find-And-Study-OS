@@ -1517,6 +1517,104 @@
     "docStatusRequested": "Diminta",
     "docStatusUnderReview": "Dalam Peninjauan"
   },
+  "studentJourney": {
+    "nextBestAction": "Langkah terpenting Anda berikutnya",
+    "whyImportant": "Mengapa ini penting:",
+    "currentStage": "Tahap saat ini",
+    "deadline": "Batas waktu",
+    "overdue": "Perlu perhatian Anda",
+    "continue": "Lanjutkan",
+    "viewStatus": "Lihat status",
+    "journeyProgress": "Progres perjalanan",
+    "progressPercent": "{percent}%",
+    "progressUnknown": "Menunggu konfirmasi",
+    "needsReview": "Perlu konfirmasi konsultan",
+    "unavailableTitle": "Kami belum dapat memuat perjalanan Anda saat ini.",
+    "unavailableDescription": "Data aplikasi Anda aman. Coba lagi atau buka Aplikasi Saya untuk melanjutkan.",
+    "retry": "Coba lagi",
+    "waitingParty": {
+      "student": "Menunggu Anda",
+      "find_and_study": "Find & Study sedang meninjau",
+      "university": "Menunggu universitas",
+      "external_authority": "Menunggu otoritas eksternal",
+      "completed": "Selesai",
+      "unknown": "Pihak yang ditunggu belum dikonfirmasi"
+    },
+    "evidenceStatus": {
+      "not_started": "Belum ada bukti yang ditambahkan",
+      "action_required": "{requested} permintaan memerlukan perhatian Anda",
+      "in_review": "{pending} dokumen sedang ditinjau",
+      "verified": "{verified} dokumen terverifikasi",
+      "unknown": "Status bukti perlu ditinjau"
+    },
+    "actions": {
+      "explore_programs": {
+        "title": "Pilih program untuk memulai",
+        "description": "Jelajahi program dan mulai aplikasi yang sesuai dengan tujuan Anda.",
+        "reason": "Program dan periode penerimaan diperlukan sebelum perjalanan aplikasi dimulai."
+      },
+      "upload_requested_documents": {
+        "title": "Unggah {count} dokumen yang diminta",
+        "description": "Aplikasi Anda menunggu dokumen yang diminta tim penerimaan.",
+        "reason": "Tim tidak dapat melanjutkan aplikasi dengan aman sebelum permintaan ini dipenuhi."
+      },
+      "replace_rejected_documents": {
+        "title": "Ganti dokumen yang perlu diperbaiki",
+        "description": "Tinjau umpan balik dokumen lalu unggah salinan yang sudah diperbaiki.",
+        "reason": "Bukti yang benar mencegah keterlambatan dan kesalahan pengiriman."
+      },
+      "complete_dossier": {
+        "title": "Lengkapi berkas aplikasi Anda",
+        "description": "Tambahkan profil dan dokumen pendukung agar konsultan dapat meninjau kasus Anda.",
+        "reason": "Berkas yang lengkap dan akurat diperlukan untuk menilai serta menyiapkan aplikasi."
+      },
+      "await_document_review": {
+        "title": "Dokumen Anda sedang ditinjau",
+        "description": "Tidak ada tindakan baru kecuali konsultan meminta perbaikan.",
+        "reason": "Find & Study memeriksa bukti sebelum langkah alur kerja berikutnya."
+      },
+      "await_submission": {
+        "title": "Aplikasi Anda sedang disiapkan",
+        "description": "Konsultan Anda sedang menyelesaikan pemeriksaan sebelum pengiriman.",
+        "reason": "Detail dan bukti aplikasi harus diperiksa sebelum dikirim."
+      },
+      "await_university_decision": {
+        "title": "Aplikasi Anda sedang berada di universitas",
+        "description": "Lihat status terbaru saat universitas meninjau aplikasi Anda.",
+        "reason": "Keputusan berikutnya kini berada pada pihak universitas."
+      },
+      "review_offer": {
+        "title": "Tinjau penawaran dan persyaratannya",
+        "description": "Buka aplikasi untuk meninjau penawaran, persyaratan, dan batas waktu.",
+        "reason": "Persyaratan dan batas waktu penawaran mungkin membutuhkan keputusan cepat."
+      },
+      "await_visa_decision": {
+        "title": "Aplikasi visa Anda sedang ditinjau",
+        "description": "Periksa status terbaru dan pastikan detail kontak Anda dapat dihubungi.",
+        "reason": "Otoritas eksternal bertanggung jawab atas keputusan berikutnya."
+      },
+      "prepare_enrollment": {
+        "title": "Bersiap untuk pendaftaran",
+        "description": "Tinjau aplikasi dan selesaikan langkah pendaftaran yang tersisa.",
+        "reason": "Menyelesaikan langkah wajib membantu pendaftaran selesai tepat waktu."
+      },
+      "journey_complete": {
+        "title": "Perjalanan aplikasi Anda selesai",
+        "description": "Anda dapat meninjau aplikasi yang selesai beserta dokumennya.",
+        "reason": "Aplikasi ini telah mencapai tahap alur kerja yang selesai."
+      },
+      "contact_advisor": {
+        "title": "Tinjau opsi berikutnya bersama konsultan",
+        "description": "Kirim pesan kepada konsultan untuk mendapatkan langkah berikutnya yang jelas.",
+        "reason": "Aplikasi ini perlu ditinjau manusia sebelum tindakan lain disarankan."
+      },
+      "track_application": {
+        "title": "Pantau status aplikasi Anda",
+        "description": "Buka aplikasi untuk melihat status terverifikasi terbaru.",
+        "reason": "Langkah alur kerja saat ini sedang ditangani oleh Find & Study."
+      }
+    }
+  },
   "studentWishlist": {
     "title": "Daftar Keinginan Saya",
     "subtitle": "Program yang Anda simpan untuk nanti — {count} program",

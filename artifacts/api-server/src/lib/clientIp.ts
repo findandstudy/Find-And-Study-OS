@@ -1,4 +1,5 @@
 import type { Request } from "express";
+import { ipKeyGenerator } from "express-rate-limit";
 
 /**
  * Resolve the real client IP from a request.
@@ -37,5 +38,6 @@ export function getClientIp(req: Request): string | null {
  * still limited rather than ungated.
  */
 export function getRateLimitIp(req: Request): string {
-  return getClientIp(req) ?? "anon";
+  const ip = getClientIp(req);
+  return ip ? ipKeyGenerator(ip) : "anon";
 }

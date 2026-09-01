@@ -66,9 +66,13 @@ jobs:
           pnpm --filter @workspace/api-server run test:active-context-selection-repair
           pnpm --filter @workspace/api-server run test:active-context-selection-repair-store
           pnpm --filter @workspace/api-server run test:integration-database-safety
+          pnpm --filter @workspace/api-server run test:student-journey-projection
 
       - name: Type-check the workspace
         run: pnpm run typecheck
+
+      - name: Verify synchronized UI translations
+        run: pnpm --filter @workspace/edcons run check:i18n
 
       - name: Detect tenant-writer inventory drift
         run: pnpm run audit:tenant-writers
@@ -87,6 +91,7 @@ jobs:
           pnpm run test:disk-attribution
           pnpm run test:production-attestation
           pnpm --filter @workspace/api-server run test:ai-delivery-safety
+          pnpm --filter @workspace/api-server run test:rate-limit-ip-security
           pnpm --filter @workspace/api-server run test:security-regressions
 
   windows-portability:
@@ -120,6 +125,7 @@ jobs:
           pnpm run test:package-manager
           node lib/db/validate-migrations.mjs
           pnpm --filter @workspace/api-server run test:integration-database-safety
+          pnpm --filter @workspace/api-server run test:student-journey-projection
           pnpm run typecheck
 
   postgres-adoption:

@@ -1517,6 +1517,104 @@
     "docStatusRequested": "Demandé",
     "docStatusUnderReview": "En cours d'examen"
   },
+  "studentJourney": {
+    "nextBestAction": "Votre prochaine action prioritaire",
+    "whyImportant": "Pourquoi c'est important :",
+    "currentStage": "Étape actuelle",
+    "deadline": "Date limite",
+    "overdue": "Votre attention est requise",
+    "continue": "Continuer",
+    "viewStatus": "Voir le statut",
+    "journeyProgress": "Progression du parcours",
+    "progressPercent": "{percent} %",
+    "progressUnknown": "En attente de confirmation",
+    "needsReview": "Confirmation du conseiller requise",
+    "unavailableTitle": "Nous ne pouvons pas charger votre parcours pour le moment.",
+    "unavailableDescription": "Les données de votre candidature sont en sécurité. Réessayez ou ouvrez Mes candidatures pour continuer.",
+    "retry": "Réessayer",
+    "waitingParty": {
+      "student": "En attente de votre action",
+      "find_and_study": "Find & Study examine votre dossier",
+      "university": "En attente de l'université",
+      "external_authority": "En attente de l'autorité externe",
+      "completed": "Terminé",
+      "unknown": "Responsable en attente non confirmé"
+    },
+    "evidenceStatus": {
+      "not_started": "Aucun justificatif ajouté",
+      "action_required": "{requested} demande(s) nécessitent votre attention",
+      "in_review": "{pending} document(s) en cours d'examen",
+      "verified": "{verified} document(s) vérifiés",
+      "unknown": "Le statut des justificatifs doit être examiné"
+    },
+    "actions": {
+      "explore_programs": {
+        "title": "Choisissez un programme pour commencer",
+        "description": "Explorez les programmes et démarrez la candidature adaptée à vos objectifs.",
+        "reason": "Un programme et une période d'admission sont nécessaires pour commencer votre parcours."
+      },
+      "upload_requested_documents": {
+        "title": "Téléversez {count} document(s) demandé(s)",
+        "description": "Votre candidature attend les documents demandés par l'équipe des admissions.",
+        "reason": "L'équipe ne peut pas faire avancer votre candidature en toute sécurité sans ces documents."
+      },
+      "replace_rejected_documents": {
+        "title": "Remplacez un document à corriger",
+        "description": "Consultez les commentaires et téléversez une copie corrigée.",
+        "reason": "Des justificatifs corrects évitent les retards et erreurs de soumission."
+      },
+      "complete_dossier": {
+        "title": "Complétez votre dossier de candidature",
+        "description": "Ajoutez votre profil et vos justificatifs pour permettre l'examen par votre conseiller.",
+        "reason": "Un dossier complet et exact est nécessaire pour évaluer et préparer la candidature."
+      },
+      "await_document_review": {
+        "title": "Vos documents sont en cours d'examen",
+        "description": "Aucune action n'est requise sauf si votre conseiller demande une correction.",
+        "reason": "Find & Study vérifie les justificatifs avant l'étape suivante."
+      },
+      "await_submission": {
+        "title": "Votre candidature est en préparation",
+        "description": "Votre conseiller termine les vérifications avant soumission.",
+        "reason": "Les informations et justificatifs doivent être vérifiés avant l'envoi."
+      },
+      "await_university_decision": {
+        "title": "Votre candidature est auprès de l'université",
+        "description": "Consultez le dernier statut pendant que l'université examine votre candidature.",
+        "reason": "La prochaine décision appartient maintenant à l'université."
+      },
+      "review_offer": {
+        "title": "Examinez votre offre et ses conditions",
+        "description": "Ouvrez votre candidature pour consulter l'offre, les conditions et la date limite.",
+        "reason": "Les conditions et dates limites peuvent nécessiter une décision rapide."
+      },
+      "await_visa_decision": {
+        "title": "Votre demande de visa est en cours d'examen",
+        "description": "Consultez le dernier statut et gardez vos coordonnées disponibles.",
+        "reason": "L'autorité externe est responsable de la prochaine décision."
+      },
+      "prepare_enrollment": {
+        "title": "Préparez votre inscription",
+        "description": "Examinez votre candidature et terminez les étapes d'inscription restantes.",
+        "reason": "Terminer les étapes requises facilite une inscription dans les délais."
+      },
+      "journey_complete": {
+        "title": "Votre parcours de candidature est terminé",
+        "description": "Vous pouvez consulter la candidature terminée et ses documents.",
+        "reason": "Cette candidature a atteint une étape finale du processus."
+      },
+      "contact_advisor": {
+        "title": "Examinez les prochaines options avec votre conseiller",
+        "description": "Écrivez à votre conseiller pour obtenir une prochaine étape claire et adaptée.",
+        "reason": "Cette candidature nécessite un examen humain avant toute nouvelle recommandation."
+      },
+      "track_application": {
+        "title": "Suivez le statut de votre candidature",
+        "description": "Ouvrez votre candidature pour voir son dernier statut vérifié.",
+        "reason": "L'étape actuelle est prise en charge par Find & Study."
+      }
+    }
+  },
   "studentWishlist": {
     "title": "Ma liste de souhaits",
     "subtitle": "Programmes que vous avez enregistrés pour plus tard — {count} programme",

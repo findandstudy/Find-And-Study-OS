@@ -8,13 +8,13 @@
     "defaultEnforcement": "legacy_quarantine"
   },
   "totals": {
-    "routeRegistrations": 762,
-    "requireAuth": 706,
+    "routeRegistrations": 763,
+    "requireAuth": 707,
     "requireRole": 476,
     "requirePermission": 41,
     "requireScope": 0,
     "directRoleChecks": 28,
-    "authOnlyRouteCandidates": 127,
+    "authOnlyRouteCandidates": 128,
     "publicRouteCandidates": 128
   },
   "files": [
@@ -140,7 +140,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/ai-extract.ts",
-      "sha256": "00f5f16ac69c157dc966a1c430c85cf23155fc00fdc96885a848919ce4b03d45",
+      "sha256": "80394d9f69f1badf9a768c9b34f5c0970b4725257af44a8d10fce2bd2c3976a2",
       "routeRegistrations": 4,
       "requireAuth": 5,
       "requireRole": 3,
@@ -980,14 +980,14 @@
     },
     {
       "path": "artifacts/api-server/src/routes/students.ts",
-      "sha256": "2ad64d65b56710718b3317a208fe847ec25d8953b4fdfd3e753351f21a2cd192",
-      "routeRegistrations": 26,
-      "requireAuth": 26,
+      "sha256": "31f4f9321e533a7927dac0a5ae3b99e71069a72971d6d4b497256f24a63bf498",
+      "routeRegistrations": 27,
+      "requireAuth": 27,
       "requireRole": 16,
       "requirePermission": 0,
       "requireScope": 0,
       "directRoleChecks": 1,
-      "authOnlyRouteCandidates": 8,
+      "authOnlyRouteCandidates": 9,
       "publicRouteCandidates": 2,
       "enforcement": "legacy_quarantine",
       "owner": "Platform Engineering",

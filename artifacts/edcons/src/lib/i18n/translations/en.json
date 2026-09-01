@@ -1517,6 +1517,104 @@
     "docStatusRequested": "Requested",
     "docStatusUnderReview": "Under Review"
   },
+  "studentJourney": {
+    "nextBestAction": "Your next best action",
+    "whyImportant": "Why this matters:",
+    "currentStage": "Current stage",
+    "deadline": "Deadline",
+    "overdue": "Needs attention",
+    "continue": "Continue",
+    "viewStatus": "View status",
+    "journeyProgress": "Journey progress",
+    "progressPercent": "{percent}%",
+    "progressUnknown": "Awaiting confirmation",
+    "needsReview": "Advisor confirmation needed",
+    "unavailableTitle": "We couldn't load your journey right now.",
+    "unavailableDescription": "Your application data is safe. Try again or open My Applications to continue.",
+    "retry": "Try again",
+    "waitingParty": {
+      "student": "Waiting on you",
+      "find_and_study": "Find & Study is reviewing",
+      "university": "Waiting on university",
+      "external_authority": "Waiting on external authority",
+      "completed": "Completed",
+      "unknown": "Waiting party not confirmed"
+    },
+    "evidenceStatus": {
+      "not_started": "No evidence added yet",
+      "action_required": "{requested} request(s) need your attention",
+      "in_review": "{pending} document(s) are being reviewed",
+      "verified": "{verified} document(s) verified",
+      "unknown": "Evidence status needs review"
+    },
+    "actions": {
+      "explore_programs": {
+        "title": "Choose a program to begin",
+        "description": "Explore programs and start the application that fits your goals.",
+        "reason": "A program and intake are needed before your application journey can begin."
+      },
+      "upload_requested_documents": {
+        "title": "Upload {count} requested document(s)",
+        "description": "Your application is waiting for documents requested by the admissions team.",
+        "reason": "The team cannot safely move your application forward until these requests are answered."
+      },
+      "replace_rejected_documents": {
+        "title": "Replace a document that needs correction",
+        "description": "Review the document feedback and upload a corrected copy.",
+        "reason": "Correct evidence prevents avoidable delays and submission errors."
+      },
+      "complete_dossier": {
+        "title": "Complete your application dossier",
+        "description": "Add your profile and supporting documents so your advisor can review your case.",
+        "reason": "A complete, accurate dossier is required to assess and prepare your application."
+      },
+      "await_document_review": {
+        "title": "Your documents are being reviewed",
+        "description": "No new action is required unless your advisor requests a correction.",
+        "reason": "Find & Study is checking the evidence before the next workflow step."
+      },
+      "await_submission": {
+        "title": "Your application is being prepared",
+        "description": "Your advisor is completing the submission checks.",
+        "reason": "Submission details and evidence must be checked before they are sent."
+      },
+      "await_university_decision": {
+        "title": "Your application is with the university",
+        "description": "You can view the latest status while the university reviews your application.",
+        "reason": "The next decision now belongs to the university."
+      },
+      "review_offer": {
+        "title": "Review your offer and conditions",
+        "description": "Open your application to review the offer, conditions and any deadline.",
+        "reason": "Offer conditions and deadlines may require a time-sensitive decision."
+      },
+      "await_visa_decision": {
+        "title": "Your visa application is being reviewed",
+        "description": "Check the latest status and keep your contact details available.",
+        "reason": "The external authority is responsible for the next decision."
+      },
+      "prepare_enrollment": {
+        "title": "Prepare for enrollment",
+        "description": "Review your application and complete the remaining enrollment steps.",
+        "reason": "Finishing the required steps helps secure a timely enrollment."
+      },
+      "journey_complete": {
+        "title": "Your application journey is complete",
+        "description": "You can review the completed application and its documents.",
+        "reason": "This application has reached a completed workflow stage."
+      },
+      "contact_advisor": {
+        "title": "Review next options with your advisor",
+        "description": "Message your advisor for a clear, case-specific next step.",
+        "reason": "This application needs human review before another action is recommended."
+      },
+      "track_application": {
+        "title": "Track your application status",
+        "description": "Open your application to see its latest verified status.",
+        "reason": "The current workflow step is being handled by Find & Study."
+      }
+    }
+  },
   "studentWishlist": {
     "title": "My Wishlist",
     "subtitle": "Programs you've saved for later — {count} program",
