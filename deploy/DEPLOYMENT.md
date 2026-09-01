@@ -151,7 +151,9 @@ Source provenance and process metadata remain exact read-only probes. Each
 configuration; a timeout blocks attestation instead of producing partial
 evidence. The localhost health response is streamed under a fixed `65536`-byte
 ceiling before JSON parsing; the limit cannot be raised by environment
-configuration and an oversized body blocks the attestation.
+configuration and an oversized body blocks the attestation. Its target is an
+exact canonical port on `127.0.0.1`; redirects and a changed response URL are
+rejected, so the probe cannot follow a local redirect to another host.
 
 This is a deployment gate, not an automatic migration. The current production
 host was last observed with root-owned `0644/0755` private storage and root-owned

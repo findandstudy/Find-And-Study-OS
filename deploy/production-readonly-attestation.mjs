@@ -490,13 +490,29 @@ export async function readBoundedHealthBody(
   return Buffer.concat(chunks, totalBytes).toString("utf8");
 }
 
+export function parseHealthPort(value) {
+  const raw = value ?? "5000";
+  if (!/^[1-9]\d{0,4}$/.test(raw)) {
+    fail("PORT must be a canonical port from 1 through 65535");
+  }
+  const port = Number(raw);
+  if (!Number.isSafeInteger(port) || port > 65_535) {
+    fail("PORT must be a canonical port from 1 through 65535");
+  }
+  return port;
+}
+
 async function collectHealth() {
-  const rawPort = process.env.PORT ?? "5000";
-  if (!/^\d{2,5}$/.test(rawPort)) fail("PORT must be numeric");
-  const response = await fetch(`http://127.0.0.1:${rawPort}/api/health`, {
+  const port = parseHealthPort(process.env.PORT);
+  const healthUrl = new URL(`http://127.0.0.1:${port}/api/health`).href;
+  const response = await fetch(healthUrl, {
     method: "GET",
+    redirect: "error",
     signal: AbortSignal.timeout(5_000),
   });
+  if (response.url !== healthUrl) {
+    fail("local health endpoint response URL changed unexpectedly");
+  }
   if (!response.ok)
     fail(`local health endpoint returned HTTP ${response.status}`);
   const body = await readBoundedHealthBody(response);

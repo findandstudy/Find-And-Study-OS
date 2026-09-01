@@ -12,6 +12,7 @@ import {
   isWithin,
   parsePrivateInventoryDurationLimit,
   parsePrivateInventoryLimit,
+  parseHealthPort,
   parseProductionExpectations,
   parseProcessInventory,
   readBoundedHealthBody,
@@ -424,6 +425,33 @@ test("local health response is streamed under a hard 64 KiB body ceiling", async
   assert.doesNotMatch(source, /process\.env\.[A-Z_]*HEALTH_BODY/);
 });
 
+test("local health target rejects ambiguous ports and all redirects", () => {
+  assert.equal(parseHealthPort(undefined), 5000);
+  assert.equal(parseHealthPort("1"), 1);
+  assert.equal(parseHealthPort("65535"), 65_535);
+  for (const value of [
+    "",
+    "0",
+    "05000",
+    "+5000",
+    "5000.0",
+    "1e3",
+    "65536",
+    "99999",
+  ]) {
+    assert.throws(() => parseHealthPort(value), /canonical port/);
+  }
+
+  const source = fs.readFileSync(
+    path.join(here, "production-readonly-attestation.mjs"),
+    "utf8",
+  );
+  assert.match(source, /const healthUrl = new URL\(`http:\/\/127\.0\.0\.1:/);
+  assert.match(source, /redirect: "error"/);
+  assert.match(source, /response\.url !== healthUrl/);
+  assert.doesNotMatch(source, /redirect: "follow"/);
+});
+
 test("attestation implementation exposes no mutation command or file-write surface", () => {
   const source = fs.readFileSync(
     path.join(here, "production-readonly-attestation.mjs"),
@@ -453,6 +481,7 @@ test("attestation implementation exposes no mutation command or file-write surfa
   assert.match(source, /GIT_OPTIONAL_LOCKS: "0"/);
   assert.match(source, /READ_ONLY_PROBE_TIMEOUT_MS = 10_000/);
   assert.match(source, /DEFAULT_MAX_HEALTH_BODY_BYTES = 64 \* 1024/);
+  assert.match(source, /redirect: "error"/);
   assert.doesNotMatch(
     source,
     /"(?:checkout|switch|reset|clean|pull|fetch|merge|rebase|commit|push)"/,
