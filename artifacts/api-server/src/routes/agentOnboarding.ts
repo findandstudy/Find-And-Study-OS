@@ -35,6 +35,7 @@ const rateLimiter = new RateLimiterPostgres({
   storeClient: pool,
   storeType: "pool",
   tableName: "rate_limits",
+  tableCreated: true,
   points: 5,
   duration: 900,
 });

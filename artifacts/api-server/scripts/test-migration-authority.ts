@@ -68,6 +68,26 @@ test("route imports do not invoke the legacy pipeline DDL/backfill block", () =>
   );
 });
 
+test("PostgreSQL rate limiters use the migration-owned table without boot DDL", () => {
+  const routeSources = ["auth.ts", "agentOnboarding.ts", "inbox.ts"]
+    .map((file) =>
+      readFileSync(
+        path.join(root, "artifacts/api-server/src/routes", file),
+        "utf8",
+      ),
+    )
+    .join("\n");
+  assert.equal(
+    routeSources.match(/new RateLimiterPostgres\s*\(/g)?.length,
+    4,
+  );
+  assert.equal(routeSources.match(/tableCreated:\s*true/g)?.length, 4);
+  assert.match(
+    readFileSync(path.join(root, "lib/db/drizzle/0001_silly_patriot.sql"), "utf8"),
+    /CREATE TABLE "rate_limits"/,
+  );
+});
+
 test("migration validator accepts a coherent disposable ledger fixture", () => {
   const fixture = mkdtempSync(
     path.join(os.tmpdir(), "fasos-migration-ledger-"),

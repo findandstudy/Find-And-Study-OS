@@ -313,6 +313,7 @@ const summarizeRateLimiter = new RateLimiterPostgres({
   storeClient: pool,
   storeType: "pool",
   tableName: "rate_limits",
+  tableCreated: true,
   keyPrefix: "inbox-summarize",
   points: 10,
   duration: 60,
