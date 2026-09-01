@@ -194,6 +194,21 @@ test("malformed authority, request and oversized inputs are rejected before proj
     })),
     "INVALID_DOCUMENT_COUNT",
   );
+  assertContractError(
+    () => buildStudentJourneyReadinessProjection(input({
+      requirements: [
+        { documentType: "bachelor_transcript", mandatory: true, source: "program", sortOrder: 10 },
+        { documentType: "bachelors_transcript", mandatory: true, source: "degree", sortOrder: 20 },
+      ],
+    })),
+    "DUPLICATE_EQUIVALENT_REQUIREMENT",
+  );
+  assertContractError(
+    () => buildStudentJourneyReadinessProjection(input({
+      requirementResolution: "unavailable",
+    })),
+    "UNRESOLVED_REQUIREMENTS_FORBIDDEN",
+  );
 });
 
 test("readiness foundation remains absent from current Journey and mandatory-document runtime paths", () => {

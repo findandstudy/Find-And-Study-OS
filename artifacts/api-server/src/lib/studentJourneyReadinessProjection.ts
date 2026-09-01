@@ -253,6 +253,17 @@ export function buildStudentJourneyReadinessProjection(
     return { ...request, documentType };
   });
 
+  if (input.requirementResolution !== "resolved" && requirements.length > 0) {
+    throw new StudentJourneyReadinessContractError("UNRESOLVED_REQUIREMENTS_FORBIDDEN");
+  }
+  for (let index = 0; index < requirements.length; index += 1) {
+    for (let candidate = index + 1; candidate < requirements.length; candidate += 1) {
+      if (areEquivalentDocTypes(requirements[index]!.documentType, requirements[candidate]!.documentType)) {
+        throw new StudentJourneyReadinessContractError("DUPLICATE_EQUIVALENT_REQUIREMENT");
+      }
+    }
+  }
+
   if (input.requirementAuthority === "versioned") {
     boundedText(input.requirementSetRef, "requirement_set_ref");
   } else if (input.requirementSetRef != null) {

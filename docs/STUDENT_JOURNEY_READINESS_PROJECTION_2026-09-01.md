@@ -44,6 +44,8 @@ verified and is routed to review.
 Inputs are hard-bounded to 250 requirements, 500 document facts and 250 open
 request facts. Invalid dates, control characters, oversized text, malformed
 request state and incomplete versioned authority fail closed.
+Equivalent duplicate requirement definitions and rows supplied for an
+unresolved requirement source are also rejected instead of distorting coverage.
 
 ## Verification and milestone boundary
 
