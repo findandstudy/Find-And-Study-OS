@@ -21,3 +21,10 @@ Hard boundaries:
 The checked-in compose file contains no credentials. Host-only configuration,
 database passwords, application secrets and the generated initial login remain
 under `/opt/findandstudy-staging/secrets` with restrictive permissions.
+
+On this Docker Compose file-provider topology, the three PostgreSQL secret files
+are bind-mounted rather than copied into a Swarm secret. They must therefore be
+owned by the pinned PostgreSQL container uid/gid (`999:999`) with mode `0400`;
+the parent host directory remains `root:findandstudy-staging 0750`, so unrelated
+host users cannot traverse it. Application env and initial-login files remain
+`root:findandstudy-staging 0640`.
