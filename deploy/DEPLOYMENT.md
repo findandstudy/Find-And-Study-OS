@@ -496,6 +496,34 @@ node validate-migrations.mjs
 # 4. Ayrı migration runbook'u ve açık production onayı olmadan ilerlemeyin.
 ```
 
+Fresh veya mevcut uzun ömürlü staging veritabanları genel local runner ile
+`development` olarak yanlış sınıflandırılmaz. Yalnız `fasos_staging`, loopback
+client hedefi, exact clean source commit, exact pre-ledger count, PostgreSQL'in
+raporladığı server identity, doğrudan least-privilege `fas_migrator`, sabit pnpm
+sürümü ve advisory lock birlikte doğrulandığında dedicated runner kullanılabilir:
+
+```bash
+cd /opt/findandstudy-staging/source/lib/db
+ALLOW_STAGING_MIGRATIONS=true \
+MIGRATION_TARGET_ENV=staging \
+MIGRATION_STAGING_CHANGE_ID=stg-YYYYMMDDTHHMMSSZ-<commit12> \
+MIGRATION_EXPECTED_SOURCE_COMMIT=<approved-40-character-commit> \
+MIGRATION_EXPECTED_APPLIED_COUNT=<approved-current-ledger-count> \
+MIGRATION_CONFIRMED_HOST=127.0.0.1 \
+MIGRATION_CONFIRMED_PORT=<loopback-published-port> \
+MIGRATION_CONFIRMED_DATABASE=fasos_staging \
+MIGRATION_CONFIRMED_USER=fas_migrator \
+MIGRATION_CONFIRMED_SERVER_ADDRESS=<postgresql-reported-address> \
+MIGRATION_CONFIRMED_SERVER_PORT=<postgresql-reported-port> \
+DATABASE_URL=<secret-loopback-fasos-staging-url> \
+node ./run-staging-migrations.mjs
+```
+
+`MIGRATION_EXPECTED_APPLIED_COUNT` sıfırdan büyükse aynı change window için
+`MIGRATION_STAGING_BACKUP_ID` de zorunludur. Araç production veritabanı adını,
+uzak DB hostunu, farklı executor'ı, dirty source'u, ledger drift'ini ve `push`
+fallback'ini fail-closed reddeder.
+
 ---
 
 ## Public Endpoints (Anonim Yüzey)

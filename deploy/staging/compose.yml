@@ -1,0 +1,94 @@
+name: findandstudy-staging
+
+services:
+  db:
+    image: postgres:16.15@sha256:e17e86066e5ef83e0952a9347f5c792b7ece00972e2aa787a6986f471b3dd3d5
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+    secrets:
+      - postgres_password
+      - migrator_password
+      - app_password
+    ports:
+      - "127.0.0.1:${FASOS_STAGING_DB_PORT:-55432}:5432"
+    volumes:
+      - fasos_staging_postgres:/var/lib/postgresql/data
+      - ./init-staging-db.sh:/docker-entrypoint-initdb.d/10-fasos-staging.sh:ro
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+    security_opt:
+      - no-new-privileges:true
+
+  app:
+    image: "${FASOS_STAGING_APP_IMAGE:?set FASOS_STAGING_APP_IMAGE}"
+    restart: unless-stopped
+    init: true
+    user: "${FASOS_STAGING_UID:?set FASOS_STAGING_UID}:${FASOS_STAGING_GID:?set FASOS_STAGING_GID}"
+    env_file:
+      - "${FASOS_STAGING_APP_ENV_FILE:?set FASOS_STAGING_APP_ENV_FILE}"
+    depends_on:
+      db:
+        condition: service_healthy
+    expose:
+      - "5000"
+    volumes:
+      - "${FASOS_STAGING_STORAGE_DIR:?set FASOS_STAGING_STORAGE_DIR}:/var/lib/findandstudy/storage"
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=256m,mode=1777
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - backend
+      - edge
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:5000/api/healthz',{redirect:'error'}).then(r=>{if(r.status!==200)process.exit(1)}).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: "root_default"
+      traefik.http.routers.fasos-staging.rule: "Host(`${FASOS_STAGING_HOST:?set FASOS_STAGING_HOST}`)"
+      traefik.http.routers.fasos-staging.entrypoints: "websecure"
+      traefik.http.routers.fasos-staging.tls: "true"
+      traefik.http.routers.fasos-staging.tls.certresolver: "mytlschallenge"
+      traefik.http.services.fasos-staging.loadbalancer.server.port: "5000"
+
+secrets:
+  postgres_password:
+    file: "${FASOS_STAGING_POSTGRES_PASSWORD_FILE:?set FASOS_STAGING_POSTGRES_PASSWORD_FILE}"
+  migrator_password:
+    file: "${FASOS_STAGING_MIGRATOR_PASSWORD_FILE:?set FASOS_STAGING_MIGRATOR_PASSWORD_FILE}"
+  app_password:
+    file: "${FASOS_STAGING_APP_PASSWORD_FILE:?set FASOS_STAGING_APP_PASSWORD_FILE}"
+
+volumes:
+  fasos_staging_postgres:
+    name: fasos_staging_postgres
+
+networks:
+  backend:
+    name: findandstudy_staging_backend
+    internal: true
+  edge:
+    name: root_default
+    external: true

@@ -434,6 +434,84 @@ test("reviewed migration runner pins target identity and package manager", () =>
   assert.match(source, /process\.platform === "win32"/);
 });
 
+test("staging adoption runner is explicit, exact-source and loopback-only", () => {
+  const runner = path.join(root, "lib/db/run-staging-migrations.mjs");
+  const unapproved = spawnSync(process.execPath, [runner], {
+    cwd: root,
+    encoding: "utf8",
+    env: { PATH: process.env.PATH ?? "" },
+  });
+  assert.equal(unapproved.status, 1);
+  assert.match(unapproved.stderr, /ALLOW_STAGING_MIGRATIONS=true is required/);
+
+  const remote = spawnSync(process.execPath, [runner], {
+    cwd: root,
+    encoding: "utf8",
+    env: {
+      PATH: process.env.PATH ?? "",
+      ALLOW_STAGING_MIGRATIONS: "true",
+      MIGRATION_TARGET_ENV: "staging",
+      MIGRATION_STAGING_CHANGE_ID: "stg-20260901T120000Z-68447daeae79",
+      MIGRATION_EXPECTED_SOURCE_COMMIT:
+        "68447daeae79fdc186db7b1b4e9901ba5bf5c83a",
+      DATABASE_URL:
+        "postgresql://fas_migrator:blocked@db.example.test:55432/fasos_staging",
+    },
+  });
+  assert.equal(remote.status, 1);
+  assert.match(remote.stderr, /127\.0\.0\.1/);
+  assert.doesNotMatch(remote.stderr, /blocked/);
+
+  const source = readFileSync(runner, "utf8");
+  assert.match(source, /MIGRATION_EXPECTED_SOURCE_COMMIT/);
+  assert.match(source, /endsWith\(expectedCommit\.slice\(0, 12\)\)/);
+  assert.match(source, /--untracked-files=no/);
+  assert.match(source, /MIGRATION_EXPECTED_APPLIED_COUNT/);
+  assert.match(source, /MIGRATION_STAGING_BACKUP_ID/);
+  assert.match(source, /pg_try_advisory_lock/);
+  assert.match(source, /MIGRATION_CONFIRMED_SERVER_ADDRESS/);
+  assert.match(source, /MIGRATION_CONFIRMED_SERVER_PORT/);
+  assert.match(source, /after\.applied !== expectedMigrations\.length/);
+  assert.match(source, /EXPECTED_PNPM_VERSION = "10\.33\.2"/);
+  assert.doesNotMatch(source, /drizzle-kit", "push/);
+});
+
+test("staging seed is synthetic, explicit and pinned to the fresh 83/83 database", () => {
+  const seed = path.join(root, "deploy/staging/seed-staging.mjs");
+  const unapproved = spawnSync(process.execPath, [seed], {
+    cwd: root,
+    encoding: "utf8",
+    env: { PATH: process.env.PATH ?? "" },
+  });
+  assert.equal(unapproved.status, 1);
+  assert.match(unapproved.stderr, /ALLOW_STAGING_SEED=true is required/);
+
+  const source = readFileSync(seed, "utf8");
+  assert.match(source, /target\.hostname !== "127\.0\.0\.1"/);
+  assert.match(source, /target\.pathname !== "\/fasos_staging"/);
+  assert.match(source, /row\?\.migration_count !== 83/);
+  assert.match(source, /row\?\.user_count !== 0/);
+  assert.match(source, /staging-admin@findandstudy\.com/);
+  assert.match(source, /await client\.query\("BEGIN"\)/);
+  assert.match(source, /await client\.query\("ROLLBACK"\)/);
+});
+
+test("staging database initialization creates only fixed least-privilege identities", () => {
+  const init = readFileSync(
+    path.join(root, "deploy/staging/init-staging-db.sh"),
+    "utf8",
+  );
+  assert.match(init, /CREATE ROLE fas_migrator/);
+  assert.match(init, /CREATE ROLE fas_app/);
+  assert.match(init, /NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT/);
+  assert.match(init, /NOREPLICATION NOBYPASSRLS/);
+  assert.match(init, /createdb .*--owner fas_migrator fasos_staging/);
+  assert.match(init, /REVOKE ALL ON DATABASE fasos_staging FROM PUBLIC/);
+  assert.match(init, /REVOKE CREATE ON SCHEMA public FROM PUBLIC/);
+  assert.match(init, /ALTER DEFAULT PRIVILEGES FOR ROLE fas_migrator/);
+  assert.doesNotMatch(init, /DROP DATABASE|DROP ROLE|TRUNCATE/);
+});
+
 test("production-prefix adoption harness is explicit and loopback-only", () => {
   const harness = path.join(
     root,
