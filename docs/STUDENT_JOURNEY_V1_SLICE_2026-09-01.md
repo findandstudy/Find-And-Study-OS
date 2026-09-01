@@ -96,8 +96,10 @@ slices are:
    [requirement/readiness projection](./STUDENT_JOURNEY_READINESS_PROJECTION_2026-09-01.md)
    only after a versioned tenant-owned requirement set and dossier revision
    exist;
-3. safe student acknowledgement and document-request response commands with
-   idempotency, audit and concurrency tests;
+3. adopt the now-frozen, default-unwired
+   [student document-request response command](./STUDENT_DOCUMENT_REQUEST_RESPONSE_COMMAND_2026-09-01.md)
+   only after its current-context authority and tenant-owned transactional
+   store have durable PostgreSQL adapters;
 4. adopt the default-unwired
    [Student Journey authorization boundary](./STUDENT_JOURNEY_AUTHORIZATION_BOUNDARY_2026-09-01.md)
    only after canonical tenant ownership, capability catalogue and current
