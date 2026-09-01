@@ -174,6 +174,12 @@ targets only the RBAC suite. The suite performs synthetic login/logout-style
 session activity and GET authorization checks; it has no payment, message,
 email, portal-submit, role-mutation or data-delete request.
 
+When a human operator performs the visual gate directly, use
+`STAGING_MANUAL_RBAC_UAT_CHECKLIST_2026-09-02.md`. It fixes the accepted
+origin/release, all 11 synthetic identities, the 10 exact UI route checks,
+responsive/accessibility spot checks, stop conditions and a secret-free
+acceptance record. It never authorizes live delivery or mutating controls.
+
 Run `deploy/staging/run-staging-rbac-uat.mjs` from the exact staging image before
 the browser gate. It is pinned to the exact public HTTPS origin and expected
 release ID, verifies the health release/database contract, then checks the 11
