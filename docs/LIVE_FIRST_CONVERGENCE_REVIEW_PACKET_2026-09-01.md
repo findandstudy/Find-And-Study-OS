@@ -107,8 +107,9 @@ agent's self-review:
 - the exact final source head accepted after review-infrastructure-only changes.
 
 Approval is invalid if the manifest verifier reports drift, if any group is
-unclassified, if a post-review code path appears, or if the reviewer reviewed a
-different base/tree/patch.
+unclassified, if a post-review code path appears, if the PR event target base
+differs from the frozen base commit, or if the reviewer reviewed a different
+base/tree/patch.
 
 The verifier, manifest and workflow are source-controlled review aids, not an
 external trust root. A later edit to any of them requires renewed human review
@@ -134,9 +135,13 @@ The command:
 6. requires the current source head to descend from the reviewed-through
    commit;
 7. rejects every post-review path outside the frozen review-infrastructure
-   allowlist.
+   allowlist;
+8. requires the actual PR event target-base commit to equal the frozen review
+   base and rejects a missing target-base assertion in CI.
 
 The Linux exact-head CI checkout uses full history and supplies the actual PR
-source head rather than the synthetic merge commit. Clean-worktree enforcement
-is enabled in CI. This verifier does not request a review, merge a PR, deploy a
-release or inspect production.
+source head rather than the synthetic merge commit, together with the actual PR
+target-base SHA. A manual run falls back only to the same frozen base commit.
+Clean-worktree and mandatory target-base enforcement are enabled in CI. This
+verifier does not request a review, merge a PR, deploy a release or inspect
+production.

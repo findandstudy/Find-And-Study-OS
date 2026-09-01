@@ -6,6 +6,7 @@ import {
   classifyReviewPath,
   compareExpected,
   verifyAllowedReviewInfrastructurePaths,
+  verifyTargetBase,
 } from "./verify-convergence-review-manifest.mjs";
 
 const repositoryRoot = new URL("../", import.meta.url);
@@ -85,6 +86,17 @@ test("expected evidence comparison is exact and fails closed on aggregate drift"
   );
 });
 
+test("the event target base must equal the frozen review base", () => {
+  assert.equal(
+    verifyTargetBase(manifest.baseCommit, manifest.baseCommit),
+    manifest.baseCommit,
+  );
+  assert.throws(
+    () => verifyTargetBase(manifest.reviewedThroughCommit, manifest.baseCommit),
+    /target base drift/,
+  );
+});
+
 test("the frozen review groups reconcile to the exact reviewed file denominator", () => {
   const counts = Object.values(manifest.expected.groupCounts);
   assert.equal(
@@ -103,7 +115,12 @@ test("the repository verifier reconstructs the pinned base-to-reviewed patch", (
     {
       cwd: repositoryRoot,
       encoding: "utf8",
-      env: { ...process.env, CONVERGENCE_REVIEW_REQUIRE_CLEAN: "0" },
+      env: {
+        ...process.env,
+        CONVERGENCE_REVIEW_REQUIRE_CLEAN: "0",
+        CONVERGENCE_REVIEW_REQUIRE_TARGET_BASE: "1",
+        CONVERGENCE_REVIEW_TARGET_BASE: manifest.baseCommit,
+      },
     },
   );
   assert.equal(result.status, 0, result.stderr);
@@ -113,10 +130,27 @@ test("the repository verifier reconstructs the pinned base-to-reviewed patch", (
     result.stdout.replace(/^\[convergence-review\] PASS /, ""),
   );
   assert.equal(payload.reviewedThroughCommit, manifest.reviewedThroughCommit);
+  assert.equal(payload.targetBase, manifest.baseCommit);
   assert.equal(
     payload.postReviewPaths.every((file) =>
       manifest.allowedPostReviewPaths.includes(file),
     ),
     true,
   );
+});
+
+test("required target-base evidence cannot be omitted", () => {
+  const env = {
+    ...process.env,
+    CONVERGENCE_REVIEW_REQUIRE_CLEAN: "0",
+    CONVERGENCE_REVIEW_REQUIRE_TARGET_BASE: "1",
+  };
+  delete env.CONVERGENCE_REVIEW_TARGET_BASE;
+  const result = spawnSync(
+    process.execPath,
+    ["scripts/verify-convergence-review-manifest.mjs"],
+    { cwd: repositoryRoot, encoding: "utf8", env },
+  );
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /target base is required/);
 });

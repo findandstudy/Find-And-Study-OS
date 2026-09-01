@@ -57,6 +57,16 @@ function exactCommit(value, field) {
   return value;
 }
 
+export function verifyTargetBase(targetBaseInput, expectedBaseCommit) {
+  const targetBase = exactCommit(targetBaseInput, "targetBase");
+  if (targetBase !== expectedBaseCommit) {
+    throw new Error(
+      `target base drift: expected ${expectedBaseCommit}, received ${targetBase}`,
+    );
+  }
+  return targetBase;
+}
+
 function sha256(buffer) {
   return crypto.createHash("sha256").update(buffer).digest("hex");
 }
@@ -252,6 +262,24 @@ function verifyManifest(manifest, sourceHeadInput) {
     manifest.expected,
     "reviewed diff",
   );
+  const requireTargetBaseValue =
+    process.env.CONVERGENCE_REVIEW_REQUIRE_TARGET_BASE;
+  if (
+    requireTargetBaseValue !== undefined &&
+    requireTargetBaseValue !== "0" &&
+    requireTargetBaseValue !== "1"
+  ) {
+    throw new Error(
+      "CONVERGENCE_REVIEW_REQUIRE_TARGET_BASE must be exactly 0 or 1",
+    );
+  }
+  const targetBaseInput = process.env.CONVERGENCE_REVIEW_TARGET_BASE;
+  if (requireTargetBaseValue === "1" && !targetBaseInput) {
+    throw new Error("target base is required for review verification");
+  }
+  const targetBase = targetBaseInput
+    ? verifyTargetBase(targetBaseInput, observation.baseCommit)
+    : null;
   const sourceHead = exactCommit(sourceHeadInput, "sourceHead");
   const ancestor = spawnSync(
     "git",
@@ -283,6 +311,7 @@ function verifyManifest(manifest, sourceHeadInput) {
   }
   return {
     sourceHead,
+    targetBase,
     reviewedThroughCommit: observation.reviewedThroughCommit,
     reviewedTree: observation.reviewedTree,
     patchSha256: observation.patchSha256,
