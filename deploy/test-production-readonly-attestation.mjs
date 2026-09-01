@@ -380,6 +380,20 @@ test("bounded tree scans start only after live target and process verification",
   assert.ok(processes < diskScan);
 });
 
+test("read-only Git and process probes have a fixed non-configurable timeout", () => {
+  const source = fs.readFileSync(
+    path.join(here, "production-readonly-attestation.mjs"),
+    "utf8",
+  );
+  assert.match(source, /const READ_ONLY_PROBE_TIMEOUT_MS = 10_000;/);
+  assert.equal(
+    (source.match(/timeout: READ_ONLY_PROBE_TIMEOUT_MS/g) ?? []).length,
+    3,
+  );
+  assert.equal((source.match(/killSignal: "SIGKILL"/g) ?? []).length, 3);
+  assert.doesNotMatch(source, /process\.env\.[A-Z_]*PROBE_TIMEOUT/);
+});
+
 test("attestation implementation exposes no mutation command or file-write surface", () => {
   const source = fs.readFileSync(
     path.join(here, "production-readonly-attestation.mjs"),
@@ -407,6 +421,7 @@ test("attestation implementation exposes no mutation command or file-write surfa
   assert.match(source, /\["-C", sourceRoot, "rev-parse", "--verify", "HEAD"\]/);
   assert.match(source, /"status",\s*"--porcelain=v1"/);
   assert.match(source, /GIT_OPTIONAL_LOCKS: "0"/);
+  assert.match(source, /READ_ONLY_PROBE_TIMEOUT_MS = 10_000/);
   assert.doesNotMatch(
     source,
     /"(?:checkout|switch|reset|clean|pull|fetch|merge|rebase|commit|push)"/,

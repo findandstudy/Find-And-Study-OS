@@ -20,6 +20,7 @@ const sourceRoot = fs.realpathSync(
 );
 const DEFAULT_MAX_PRIVATE_ENTRIES = 100_000;
 const DEFAULT_MAX_PRIVATE_DURATION_MS = 30_000;
+const READ_ONLY_PROBE_TIMEOUT_MS = 10_000;
 
 function fail(message) {
   throw new Error(`[production-readonly-attestation] BLOCKED: ${message}`);
@@ -165,6 +166,8 @@ function collectSourceProvenance() {
       encoding: "utf8",
       env: gitEnvironment,
       maxBuffer: 1024 * 1024,
+      timeout: READ_ONLY_PROBE_TIMEOUT_MS,
+      killSignal: "SIGKILL",
     },
   ).trim();
   const porcelain = execFileSync(
@@ -174,6 +177,8 @@ function collectSourceProvenance() {
       encoding: "utf8",
       env: gitEnvironment,
       maxBuffer: 1024 * 1024,
+      timeout: READ_ONLY_PROBE_TIMEOUT_MS,
+      killSignal: "SIGKILL",
     },
   );
   return validateSourceProvenance({
@@ -393,6 +398,8 @@ function collectProcessMetadata() {
   const raw = execFileSync("ps", ["-eo", "pid=,uid=,gid=,args="], {
     encoding: "utf8",
     maxBuffer: 4 * 1024 * 1024,
+    timeout: READ_ONLY_PROBE_TIMEOUT_MS,
+    killSignal: "SIGKILL",
   });
   return parseProcessInventory(raw).map((record) => {
     const cwd = fs.realpathSync(`/proc/${record.pid}/cwd`);

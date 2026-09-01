@@ -145,6 +145,12 @@ cannot first materialize an unbounded filename list in memory. Both the
 deployment preflight and read-only production attestation enforce these same
 private-tree ceilings.
 
+Source provenance and process metadata remain exact read-only probes. Each
+`git rev-parse`, `git status` and `ps` child process has a fixed
+`10000`-millisecond `SIGKILL` timeout that cannot be raised by environment
+configuration; a timeout blocks attestation instead of producing partial
+evidence.
+
 This is a deployment gate, not an automatic migration. The current production
 host was last observed with root-owned `0644/0755` private storage and root-owned
 PM2 processes. Do not merge and deploy this boundary until an approved change
