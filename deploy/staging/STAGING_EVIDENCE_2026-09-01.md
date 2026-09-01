@@ -97,6 +97,21 @@ production service, production database/storage, production integration, or
   build images were retained and no Docker prune/retention mutation was
   performed.
 
+## Stability soak evidence
+
+- A read-only five-minute public health soak ran from
+  `2026-09-01T22:34:41Z` through `2026-09-01T22:39:39Z` against release
+  `staging-20260901T221850Z-422c3e0d7274`.
+- All 60 HTTPS samples returned the exact release, HTTP `200` and
+  `dbConnected=true`; samples were spaced five seconds apart.
+- Observed public health latency was `0.023869` seconds minimum, `0.035100`
+  seconds average and `0.135975` seconds maximum.
+- App restart count remained `0 → 0`, final container health was `healthy`,
+  the migration ledger remained `83`, and the soak-window app logs contained
+  zero fatal/unhandled/uncaught matches.
+- The soak made no database writes, configuration changes, container changes
+  or external-delivery calls and retained no request/session payloads.
+
 ## Operational boundary
 
 This evidence proves that the staging baseline is installed and recoverable. It
