@@ -108,7 +108,10 @@ slices are:
    [consent and communication decision contract](./CONSENT_COMMUNICATION_CONTRACT_2026-09-01.md)
    only after Privacy/Legal policy inputs and a tenant-owned transactional
    writer are approved;
-6. analytics/evaluation for next-action correctness, delay and exception rate.
+6. adopt the now-frozen, default-unwired
+   [next-action evaluation contract](./STUDENT_JOURNEY_EVALUATION_CONTRACT_2026-09-01.md)
+   only after an approved evaluation policy, consented cohort, evidence-backed
+   instrumentation and independent reconciliation exist.
 
 Production adoption remains a separate reviewed release decision and is not
 authorized by this document.

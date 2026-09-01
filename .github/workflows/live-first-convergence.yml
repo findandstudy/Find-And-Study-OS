@@ -72,6 +72,7 @@ jobs:
           pnpm --filter @workspace/api-server run test:student-journey-authorization
           pnpm --filter @workspace/api-server run test:student-journey-readiness-projection
           pnpm --filter @workspace/api-server run test:student-document-request-response-command
+          pnpm --filter @workspace/api-server run test:student-journey-evaluation-contract
 
       - name: Type-check the workspace
         run: pnpm run typecheck
@@ -136,6 +137,7 @@ jobs:
           pnpm --filter @workspace/api-server run test:student-journey-authorization
           pnpm --filter @workspace/api-server run test:student-journey-readiness-projection
           pnpm --filter @workspace/api-server run test:student-document-request-response-command
+          pnpm --filter @workspace/api-server run test:student-journey-evaluation-contract
           pnpm run typecheck
 
   postgres-adoption:
