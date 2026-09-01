@@ -12,6 +12,7 @@ import {
   isWithin,
   parsePrivateInventoryDurationLimit,
   parsePrivateInventoryLimit,
+  parseProcStatIdentity,
   parseHealthPort,
   parseProductionExpectations,
   parseProcessInventory,
@@ -311,6 +312,50 @@ test("process inventory emits only exact API/worker pid and uid/gid metadata", (
   );
 });
 
+test("proc start-time identity rejects pid reuse and malformed snapshots", () => {
+  const fields = ["S", ...Array(18).fill("0"), "123456"];
+  const raw = `101 (node worker) ${fields.join(" ")}`;
+  assert.deepEqual(parseProcStatIdentity(raw, 101), {
+    pid: 101,
+    startTimeTicks: "123456",
+  });
+  assert.throws(() => parseProcStatIdentity(raw, 102), /identity changed/);
+  assert.throws(
+    () => parseProcStatIdentity("101 (node) S 0 0", 101),
+    /identity changed/,
+  );
+  fields[19] = "1e3";
+  assert.throws(
+    () => parseProcStatIdentity(`101 (node) ${fields.join(" ")}`, 101),
+    /identity changed/,
+  );
+
+  const source = fs.readFileSync(
+    path.join(here, "production-readonly-attestation.mjs"),
+    "utf8",
+  );
+  assert.equal(
+    (source.match(/readProcIdentity\(record\.pid\)/g) ?? []).length,
+    2,
+  );
+  assert.match(source, /procDirectoryStat\.uid !== record\.uid/);
+  assert.match(source, /procDirectoryStat\.gid !== record\.gid/);
+  assert.match(source, /after\.startTimeTicks !== before\.startTimeTicks/);
+});
+
+test(
+  "proc parser accepts the current Linux process identity",
+  { skip: process.platform !== "linux" },
+  () => {
+    const identity = parseProcStatIdentity(
+      fs.readFileSync(`/proc/${process.pid}/stat`, "utf8"),
+      process.pid,
+    );
+    assert.equal(identity.pid, process.pid);
+    assert.match(identity.startTimeTicks, /^(?:0|[1-9]\d*)$/);
+  },
+);
+
 test("private inventory reports aggregate metadata without file names or contents", () => {
   const fixture = fs.mkdtempSync(path.join(os.tmpdir(), "fasos-attestation-"));
   const privateRoot = path.join(fixture, "private");
@@ -507,6 +552,7 @@ test("attestation implementation exposes no mutation command or file-write surfa
   assert.match(source, /schemaVersion: 4/);
   assert.match(source, /method: "GET"/);
   assert.match(source, /execFileSync\("ps", \["-eo"/);
+  assert.match(source, /readFileSync\(`\/proc\/\$\{pid\}\/stat`/);
   assert.equal((source.match(/execFileSync\(\s*"git"/g) ?? []).length, 2);
   assert.match(source, /\["-C", sourceRoot, "rev-parse", "--verify", "HEAD"\]/);
   assert.match(source, /"status",\s*"--porcelain=v1"/);

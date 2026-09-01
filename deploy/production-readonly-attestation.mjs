@@ -395,6 +395,31 @@ export function parseProcessInventory(raw) {
   return records.sort((left, right) => left.kind.localeCompare(right.kind));
 }
 
+export function parseProcStatIdentity(raw, expectedPid) {
+  if (!Number.isSafeInteger(expectedPid) || expectedPid < 1) {
+    fail("process identity requires a canonical positive pid");
+  }
+  const text = String(raw).trim();
+  const prefix = `${expectedPid} (`;
+  const commandEnd = text.lastIndexOf(") ");
+  if (!text.startsWith(prefix) || commandEnd < prefix.length) {
+    fail("process identity changed during attestation");
+  }
+  const fields = text.slice(commandEnd + 2).split(/\s+/);
+  const startTimeTicks = fields[19];
+  if (fields.length < 20 || !/^(?:0|[1-9]\d*)$/.test(startTimeTicks ?? "")) {
+    fail("process identity changed during attestation");
+  }
+  return { pid: expectedPid, startTimeTicks };
+}
+
+function readProcIdentity(pid) {
+  return parseProcStatIdentity(
+    fs.readFileSync(`/proc/${pid}/stat`, "utf8"),
+    pid,
+  );
+}
+
 function collectProcessMetadata() {
   const raw = execFileSync("ps", ["-eo", "pid=,uid=,gid=,args="], {
     encoding: "utf8",
@@ -403,7 +428,20 @@ function collectProcessMetadata() {
     killSignal: "SIGKILL",
   });
   return parseProcessInventory(raw).map((record) => {
+    const before = readProcIdentity(record.pid);
+    const procDirectoryStat = fs.statSync(`/proc/${record.pid}`);
+    if (
+      !procDirectoryStat.isDirectory() ||
+      procDirectoryStat.uid !== record.uid ||
+      procDirectoryStat.gid !== record.gid
+    ) {
+      fail("process identity changed during attestation");
+    }
     const cwd = fs.realpathSync(`/proc/${record.pid}/cwd`);
+    const after = readProcIdentity(record.pid);
+    if (after.startTimeTicks !== before.startTimeTicks) {
+      fail("process identity changed during attestation");
+    }
     return { ...record, cwd };
   });
 }

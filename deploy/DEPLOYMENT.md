@@ -155,6 +155,10 @@ configuration and an oversized body blocks the attestation. Its target is an
 exact canonical port on `127.0.0.1`; redirects and a changed response URL are
 rejected, so the probe cannot follow a local redirect to another host. Only an
 exact HTTP `200` response with the `application/json` media type is admitted.
+Each selected process is also revalidated against its `/proc` directory
+uid/gid and kernel start-time identity before and after resolving its cwd. PID
+reuse or process replacement blocks the attestation and no process arguments
+are added to the emitted evidence.
 
 This is a deployment gate, not an automatic migration. The current production
 host was last observed with root-owned `0644/0755` private storage and root-owned
