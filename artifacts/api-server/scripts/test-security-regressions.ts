@@ -56,8 +56,36 @@ const usersRouteSource = readFileSync(
   new URL("../src/routes/users.ts", import.meta.url),
   "utf8",
 );
+const agentsRouteSource = readFileSync(
+  new URL("../src/routes/agents.ts", import.meta.url),
+  "utf8",
+);
+const aiAgentConfigSource = readFileSync(
+  new URL("../src/lib/inbox/aiAgentConfig.ts", import.meta.url),
+  "utf8",
+);
+const botAutoReplySource = readFileSync(
+  new URL("../src/lib/inbox/botAutoReply.ts", import.meta.url),
+  "utf8",
+);
+const aiBotsRouteSource = readFileSync(
+  new URL("../src/routes/aiBots.ts", import.meta.url),
+  "utf8",
+);
+const dormBookingFollowupSource = readFileSync(
+  new URL("../src/lib/inbox/dormBookingFollowupWorker.ts", import.meta.url),
+  "utf8",
+);
+const legacyUserManagementPolicySource = readFileSync(
+  new URL("../src/lib/legacyUserManagementPolicy.ts", import.meta.url),
+  "utf8",
+);
 const rolesRouteSource = readFileSync(
   new URL("../src/routes/roles.ts", import.meta.url),
+  "utf8",
+);
+const branchesRouteSource = readFileSync(
+  new URL("../src/routes/branches.ts", import.meta.url),
   "utf8",
 );
 const universitiesRouteSource = readFileSync(
@@ -70,6 +98,22 @@ const embedRouteSource = readFileSync(
 );
 const authSource = readFileSync(
   new URL("../src/lib/auth.ts", import.meta.url),
+  "utf8",
+);
+const permissionsSource = readFileSync(
+  new URL("../src/lib/permissions.ts", import.meta.url),
+  "utf8",
+);
+const authMiddlewareSource = readFileSync(
+  new URL("../src/middlewares/authMiddleware.ts", import.meta.url),
+  "utf8",
+);
+const authHookSource = readFileSync(
+  new URL("../../edcons/src/hooks/use-auth.ts", import.meta.url),
+  "utf8",
+);
+const protectedRouteSource = readFileSync(
+  new URL("../../edcons/src/components/auth/ProtectedRoute.tsx", import.meta.url),
   "utf8",
 );
 const safeOutboundSource = readFileSync(
@@ -262,11 +306,56 @@ test("user and role routes enforce permission and hierarchy boundaries", () => {
   assert.match(usersRouteSource, /You cannot change your own role/);
   assert.match(usersRouteSource, /canManageTargetAccount\(req\.user!\.role, existing\.role\)/);
   assert.match(usersRouteSource, /canManageTargetAccount\(req\.user!\.role, user\.role\)/);
-  assert.match(usersRouteSource, /canManageTargetAccount\(req\.user!\.role, targetUser\.role\)/);
+  assert.match(usersRouteSource, /evaluateLegacyUserManagement/);
+  assert.match(usersRouteSource, /evaluateLegacyUserImpersonation/);
+  assert.match(usersRouteSource, /issued_at: currentSession\.issued_at/);
+  assert.match(usersRouteSource, /PERMISSION_OVERRIDE_REQUIRES_SUPER_ADMIN/);
+  assert.match(usersRouteSource, /notInArray\(usersTable\.role/);
+  assert.match(legacyUserManagementPolicySource, /peer_or_higher_privilege/);
+  assert.match(legacyUserManagementPolicySource, /agent_relationship_route_required/);
   assert.match(rolesRouteSource, /requirePermission\("users\.manage_roles"\)/);
   assert.doesNotMatch(rolesRouteSource, /requireRole\(\.\.\.ADMIN_ROLES\)/);
+  assert.match(rolesRouteSource, /router\.post\("\/roles", requireAuth, requireRole\("super_admin"\)/);
+  assert.match(rolesRouteSource, /router\.patch\("\/roles\/:id", requireAuth, requireRole\("super_admin"\)/);
+  assert.match(rolesRouteSource, /router\.delete\("\/roles\/:id", requireAuth, requireRole\("super_admin"\)/);
+  assert.doesNotMatch(rolesRouteSource, /seedDefaultRoles/);
   assert.match(authSource, /getEffectivePermissionSet\(req\.user\)/);
   assert.doesNotMatch(authSource, /\.\.\.fromDb, \.\.\.fromDefault/);
+  assert.match(permissionsSource, /ALL_PERMISSION_ROLES = new Set\(\["super_admin"\]\)/);
+  assert.match(authMiddlewareSource, /ADMINISH_ROLES = new Set\(\["super_admin"\]\)/);
+  assert.match(authMiddlewareSource, /new Set\(\[\.\.\.effective, \.\.\.own\]\)/);
+  assert.match(authMiddlewareSource, /isAuthoritativeImpersonationParent/);
+  assert.match(authMiddlewareSource, /issuedAt: session\.issued_at/);
+  assert.match(authMiddlewareSource, /isActive: parentAuthRow\.dbUser\.isActive !== false/);
+  assert.doesNotMatch(authHookSource, /role === "super_admin" \|\| role === "admin"/);
+  assert.doesNotMatch(protectedRouteSource, /effectiveUser\.role !== "super_admin" && effectiveUser\.role !== "admin"/);
+  assert.doesNotMatch(agentsRouteSource, /user\.role === "super_admin" \|\| user\.role === "admin"/);
+  assert.equal((agentsRouteSource.match(/issued_at: currentSession\.issued_at/g) ?? []).length, 2);
+});
+
+test("external AI delivery fails closed and activation requires Super Admin", () => {
+  assert.match(aiAgentConfigSource, /externalAutoReplyEnabled: false/);
+  assert.match(aiAgentConfigSource, /aiAgentPatchRequiresSuperAdmin/);
+  assert.match(aiAgentConfigSource, /stripAlreadyEnabledAiAgentControls/);
+  assert.match(aiAgentConfigSource, /AI_EXTERNAL_AUTO_REPLY_KILL_SWITCH/);
+  assert.match(botAutoReplySource, /isExternalAutoReplyEmergencyStopped/);
+  assert.match(botAutoReplySource, /reason: "external_delivery_disabled"/);
+  assert.match(botAutoReplySource, /getExternalAiDeliveryBlockReason/);
+  assert.match(aiBotsRouteSource, /req\.user!\.role === "super_admin"/);
+  assert.match(aiBotsRouteSource, /externalAutoReplyEnabled: false/);
+  assert.match(aiBotsRouteSource, /stripAlreadyEnabledAiAgentControls/);
+  assert.match(inboxRouteSource, /aiAgentPatchRequiresSuperAdmin/);
+  assert.match(inboxRouteSource, /stripAlreadyEnabledAiAgentControls/);
+  assert.match(dormBookingFollowupSource, /!config\.externalAutoReplyEnabled/);
+  assert.match(dormBookingFollowupSource, /isExternalAutoReplyEmergencyStopped/);
+});
+
+test("legacy impersonation is branch-scoped and nested sessions are denied", () => {
+  assert.match(usersRouteSource, /getVisibleBranchIds/);
+  assert.match(usersRouteSource, /currentSession\.originalSid/);
+  assert.match(usersRouteSource, /auth\.impersonate\.denied/);
+  assert.match(agentsRouteSource, /currentSession\.originalSid/);
+  assert.match(agentsRouteSource, /Cannot impersonate an inactive account/);
 });
 
 test("outbound URL policy blocks local, metadata and alternate IP notations", () => {
@@ -471,10 +560,20 @@ test("public embed output sanitizes URLs and escapes visitor-controlled attribut
 test("sensitive settings, AI work, sessions, assets and webhooks fail closed", () => {
   assert.match(settingsRouteSource, /router\.get\("\/settings\/client", requireAuth/);
   assert.match(settingsRouteSource, /router\.get\("\/settings", requireAuth, requireRole\(\.\.\.MANAGER_ROLES\)/);
+  assert.match(settingsRouteSource, /router\.patch\("\/settings", requireAuth, requireRole\("super_admin"\)/);
+  assert.match(settingsRouteSource, /CREDENTIAL_FIELDS = \["smtpPassword", "whatsappToken", "n8nWebhookUrl"\]/);
+  assert.match(settingsRouteSource, /Read paths must never bootstrap mutable platform configuration/);
+  assert.match(settingsRouteSource, /platform_config\.settings\.update/);
+  assert.match(settingsRouteSource, /"\/settings\/admin\/backfill-assignments", requireAuth, requireRole\("super_admin"\)/);
+  assert.match(branchesRouteSource, /platform_config\.branch\.create/);
+  assert.match(branchesRouteSource, /platform_config\.branch\.update/);
+  assert.match(branchesRouteSource, /platform_config\.branch\.archive/);
+  assert.match(branchesRouteSource, /platform_config\.branch\.unarchive/);
   assert.match(aiExtractRouteSource, /requireRole\(\.\.\.STAFF_ROLES, \.\.\.AGENT_ROLES\)/);
   assert.match(aiExtractRouteSource, /new PgRateLimitStore\(AI_RATE_WINDOW_MS, bucket\)/);
-  assert.match(sessionSource, /ABSOLUTE_SESSION_TTL/);
-  assert.match(sessionSource, /sessionCreatedAt/);
+  assert.match(sessionSource, /getBoundedSessionExpiry/);
+  assert.match(sessionSource, /const current = await getSession\(sid\)/);
+  assert.match(sessionSource, /data\.issued_at \?\? current\.issued_at/);
   assert.match(assetSigningSource, /NODE_ENV === "production"\) return ""/);
   assert.match(webhooksSource, /cfg\.secret\.length < 16/);
   assert.match(webhooksSource, /status\(503\)\.json\(\{ error: "Webhook authentication is not configured" \}\)/);

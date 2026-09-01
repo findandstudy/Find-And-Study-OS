@@ -1,6 +1,6 @@
-import { Router, type IRouter } from "express";
+import { Router, type IRouter, type Request } from "express";
 import { db, usersTable, rolesTable, studentsTable, softDelete, agentsTable, branchesTable } from "@workspace/db";
-import { eq, ilike, or, sql, and, isNull, desc, inArray } from "drizzle-orm";
+import { eq, ilike, or, sql, and, isNull, desc, inArray, notInArray } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import { requireAuth, requireRole, requirePermission, logAudit } from "../lib/auth";
 import { writeAudit } from "../lib/auditLog";
@@ -8,7 +8,7 @@ import { ADMIN_ROLES, MANAGER_ROLES, STAFF_ROLES, AGENT_ROLES, requiresDirectBra
 import { getVisibleBranchIds } from "../lib/branchScope";
 import { toE164 } from "../lib/inbox/phone";
 import { dispatchAgentProfileChangedNotif } from "../lib/agentProfileNotif";
-import { createSession, deleteSessionsForUser, getSessionId, SESSION_TTL, SESSION_COOKIE, type SessionData } from "../lib/replitAuth";
+import { createSession, deleteSessionsForUser, getSession, getSessionId, SESSION_TTL, SESSION_COOKIE, type SessionData } from "../lib/replitAuth";
 import { getSessionCookieOptions } from "../lib/cookieOptions";
 import { validatePassword } from "../lib/passwordPolicy";
 import { parsePaginationParams, buildPageMeta } from "@workspace/pagination";
@@ -16,6 +16,13 @@ import { z } from "zod";
 import { validate, getValidated } from "../middlewares/validate";
 import { userHasPermission } from "../lib/permissions";
 import { canAssignUserRole, canManageTargetAccount } from "../lib/userAccountSecurity";
+import { evaluateLegacyUserImpersonation } from "../lib/impersonationPolicy";
+import {
+  canLegacyActorAssignRole,
+  evaluateLegacyUserManagement,
+  type LegacyUserManagementAction,
+  type LegacyUserManagementDecision,
+} from "../lib/legacyUserManagementPolicy";
 
 const createUserBodySchema = z.object({
   email: z.string().trim().toLowerCase().email(),
@@ -47,6 +54,65 @@ async function canAssignActiveBranch(actorId: number, actorRole: string, branchI
   return visibleBranchIds !== null && visibleBranchIds.includes(branchId);
 }
 
+type LegacyUserScopeTarget = {
+  id: number;
+  role: string;
+  branchId: number | null;
+  deletedAt: Date | null;
+};
+
+async function resolveLegacyUserTargetBranchIds(target: LegacyUserScopeTarget): Promise<number[]> {
+  if (target.branchId != null) return [target.branchId];
+  if (target.role !== "student") return [];
+  const rows = await db
+    .select({ branchId: studentsTable.branchId })
+    .from(studentsTable)
+    .where(and(eq(studentsTable.userId, target.id), isNull(studentsTable.deletedAt)));
+  return Array.from(new Set(
+    rows
+      .map((row) => row.branchId)
+      .filter((branchId): branchId is number => branchId != null),
+  ));
+}
+
+async function decideLegacyUserManagement(
+  req: Request,
+  target: LegacyUserScopeTarget,
+  action: LegacyUserManagementAction,
+): Promise<LegacyUserManagementDecision> {
+  const visibleBranchIds = await getVisibleBranchIds(
+    req.user!.id,
+    req.user!.role,
+    req.user!,
+  );
+  return evaluateLegacyUserManagement(
+    { id: req.user!.id, role: req.user!.role, visibleBranchIds },
+    {
+      id: target.id,
+      role: target.role,
+      branchIds: await resolveLegacyUserTargetBranchIds(target),
+      isDeleted: target.deletedAt != null,
+    },
+    action,
+  );
+}
+
+async function auditLegacyUserManagementDenied(
+  req: Request,
+  targetId: number | null,
+  action: LegacyUserManagementAction | "create" | "assign_role",
+  reason: string,
+): Promise<void> {
+  await writeAudit({
+    userId: req.user!.id,
+    action: "user_management.denied",
+    resource: "user",
+    resourceId: targetId,
+    changes: { attemptedAction: action, reason },
+    ipAddress: req.ip ?? null,
+  });
+}
+
 router.get("/users", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
   const asStr = (v: unknown): string => (Array.isArray(v) ? v.join(",") : v == null ? "" : String(v));
   const role = asStr(req.query.role);
@@ -55,6 +121,19 @@ router.get("/users", requireAuth, requireRole(...STAFF_ROLES), async (req, res):
   const pageParams = parsePaginationParams(req, { defaultLimit: 50, maxLimit: "large" });
 
   const conditions = [isNull(usersTable.deletedAt)];
+  const visibleBranchIds = await getVisibleBranchIds(
+    req.user!.id,
+    req.user!.role,
+    req.user!,
+  );
+  if (visibleBranchIds !== null) {
+    conditions.push(
+      visibleBranchIds.length === 0
+        ? sql<boolean>`false`
+        : inArray(usersTable.branchId, visibleBranchIds),
+    );
+    conditions.push(notInArray(usersTable.role, [...AGENT_ROLES, "student"]));
+  }
   if (role) conditions.push(eq(usersTable.role, role));
   if (roles) {
     const roleList = roles.split(",").map((r) => r.trim()).filter(Boolean);
@@ -130,7 +209,8 @@ router.post("/users", requireAuth, requirePermission("users.create"), validate({
     res.status(400).json({ error: "Invalid role" });
     return;
   }
-  if (!canAssignUserRole(req.user!.role, role)) {
+  if (!canAssignUserRole(req.user!.role, role) || !canLegacyActorAssignRole(req.user!.role, role)) {
+    await auditLegacyUserManagementDenied(req, null, "create", "role_assignment_denied");
     res.status(403).json({ error: "You cannot assign this role." });
     return;
   }
@@ -193,6 +273,12 @@ router.get("/users/:id", requireAuth, requireRole(...MANAGER_ROLES), async (req,
   const id = parseInt(String(req.params.id), 10);
   const [user] = await db.select().from(usersTable).where(eq(usersTable.id, id));
   if (!user) { res.status(404).json({ error: "User not found" }); return; }
+  const decision = await decideLegacyUserManagement(req, user, "read");
+  if (!decision.allowed) {
+    await auditLegacyUserManagementDenied(req, id, "read", decision.reason);
+    res.status(403).json({ code: "USER_SCOPE_FORBIDDEN", error: "User is outside your management scope." });
+    return;
+  }
   const { replitId: _r, passwordHash: _p, ...safeUser } = user as any;
   res.json(safeUser);
 });
@@ -209,15 +295,27 @@ router.patch("/users/:id", requireAuth, async (req, res): Promise<void> => {
 
   // Resolve the target before accepting privileged fields. Account tiers are
   // strict: an actor may manage only lower-tier accounts (super_admin excepted).
-  const [targetCheck] = await db.select({ role: usersTable.role, branchId: usersTable.branchId })
+  const [targetCheck] = await db.select({
+    id: usersTable.id,
+    role: usersTable.role,
+    branchId: usersTable.branchId,
+    deletedAt: usersTable.deletedAt,
+  })
     .from(usersTable).where(eq(usersTable.id, id));
   if (!targetCheck) {
     res.status(404).json({ error: "User not found" });
     return;
   }
 
-  if (!isSelf && !canManageTargetAccount(req.user!.role, targetCheck.role)) {
-    res.status(403).json({ error: "You cannot modify an account at or above your privilege level." });
+  const managementDecision = await decideLegacyUserManagement(req, targetCheck, "update");
+  if (!managementDecision.allowed || (!isSelf && !canManageTargetAccount(req.user!.role, targetCheck.role))) {
+    await auditLegacyUserManagementDenied(
+      req,
+      id,
+      "update",
+      managementDecision.allowed ? "peer_or_higher_privilege" : managementDecision.reason,
+    );
+    res.status(403).json({ code: "USER_SCOPE_FORBIDDEN", error: "User is outside your management scope." });
     return;
   }
 
@@ -261,15 +359,20 @@ router.patch("/users/:id", requireAuth, async (req, res): Promise<void> => {
       res.status(403).json({ error: "You cannot change your own role." });
       return;
     }
-    if (!canAssignUserRole(req.user!.role, updates.role as string)) {
+    if (!canAssignUserRole(req.user!.role, updates.role as string) ||
+        !canLegacyActorAssignRole(req.user!.role, updates.role as string)) {
+      await auditLegacyUserManagementDenied(req, id, "assign_role", "role_assignment_denied");
       res.status(403).json({ error: "You cannot assign this role." });
       return;
     }
   }
 
-  if (updates.permissionOverrides !== undefined &&
-      !(await userHasPermission(req.user!, "users.manage_roles"))) {
-    res.status(403).json({ error: "Role-management permission is required to change permission overrides." });
+  if (updates.permissionOverrides !== undefined && req.user!.role !== "super_admin") {
+    await auditLegacyUserManagementDenied(req, id, "update", "permission_overrides_require_super_admin");
+    res.status(403).json({
+      code: "PERMISSION_OVERRIDE_REQUIRES_SUPER_ADMIN",
+      error: "Permission overrides require Super Admin approval.",
+    });
     return;
   }
 
@@ -389,12 +492,25 @@ router.delete("/users/:id", requireAuth, requirePermission("users.delete"), asyn
     res.status(400).json({ error: "Cannot delete your own account" });
     return;
   }
-  const [existing] = await db.select({ id: usersTable.id, email: usersTable.email, role: usersTable.role })
+  const [existing] = await db.select({
+    id: usersTable.id,
+    email: usersTable.email,
+    role: usersTable.role,
+    branchId: usersTable.branchId,
+    deletedAt: usersTable.deletedAt,
+  })
     .from(usersTable)
     .where(and(eq(usersTable.id, id), isNull(usersTable.deletedAt)));
   if (!existing) { res.status(404).json({ error: "User not found" }); return; }
-  if (!canManageTargetAccount(req.user!.role, existing.role)) {
-    res.status(403).json({ error: "You cannot delete an account at or above your privilege level." });
+  const decision = await decideLegacyUserManagement(req, existing, "delete");
+  if (!decision.allowed || !canManageTargetAccount(req.user!.role, existing.role)) {
+    await auditLegacyUserManagementDenied(
+      req,
+      id,
+      "delete",
+      decision.allowed ? "peer_or_higher_privilege" : decision.reason,
+    );
+    res.status(403).json({ code: "USER_SCOPE_FORBIDDEN", error: "User is outside your management scope." });
     return;
   }
 
@@ -442,8 +558,15 @@ router.post("/users/:id/set-password", requireAuth, requirePermission("users.edi
   }
   const [user] = await db.select().from(usersTable).where(eq(usersTable.id, id));
   if (!user) { res.status(404).json({ error: "User not found" }); return; }
-  if (!canManageTargetAccount(req.user!.role, user.role)) {
-    res.status(403).json({ error: "You cannot reset the password of an account at or above your privilege level." });
+  const decision = await decideLegacyUserManagement(req, user, "set_password");
+  if (!decision.allowed || !canManageTargetAccount(req.user!.role, user.role)) {
+    await auditLegacyUserManagementDenied(
+      req,
+      id,
+      "set_password",
+      decision.allowed ? "peer_or_higher_privilege" : decision.reason,
+    );
+    res.status(403).json({ code: "USER_SCOPE_FORBIDDEN", error: "User is outside your management scope." });
     return;
   }
   const hash = await bcrypt.hash(pwd.value, 10);
@@ -500,13 +623,43 @@ router.post("/users/:id/impersonate", requireAuth, requirePermission("users.edit
   const [targetUser] = await db.select().from(usersTable).where(eq(usersTable.id, id));
   if (!targetUser) { res.status(404).json({ error: "User not found" }); return; }
 
-  if (!canManageTargetAccount(req.user!.role, targetUser.role)) {
-    res.status(403).json({ error: "You cannot impersonate an account at or above your privilege level." });
+  const currentSid = req.cookies[SESSION_COOKIE];
+  if (!currentSid) { res.status(400).json({ error: "Session cookie required for impersonation" }); return; }
+  const currentSession = await getSession(currentSid);
+  if (!currentSession || currentSession.originalSid) {
+    await logAudit(req.user!.id, "auth.impersonate.denied", "user", id, {
+      reason: currentSession ? "nested_impersonation" : "invalid_session",
+      targetRole: targetUser.role,
+    }, req.ip);
+    res.status(403).json({ error: "Impersonation cannot be started from this session" });
     return;
   }
 
-  const currentSid = req.cookies[SESSION_COOKIE];
-  if (!currentSid) { res.status(400).json({ error: "Session cookie required for impersonation" }); return; }
+  const targetBranchIds = await resolveLegacyUserTargetBranchIds(targetUser);
+  const visibleBranchIds = await getVisibleBranchIds(
+    req.user!.id,
+    req.user!.role,
+    req.user!,
+  );
+  const decision = evaluateLegacyUserImpersonation(
+    { id: req.user!.id, role: req.user!.role, visibleBranchIds },
+    {
+      id: targetUser.id,
+      role: targetUser.role,
+      branchIds: targetBranchIds,
+      isActive: targetUser.isActive,
+      isDeleted: targetUser.deletedAt != null,
+    },
+  );
+  if (!decision.allowed) {
+    await logAudit(req.user!.id, "auth.impersonate.denied", "user", id, {
+      reason: decision.reason,
+      targetRole: targetUser.role,
+      targetBranchIds,
+    }, req.ip);
+    res.status(403).json({ error: "Impersonation is not permitted for this target" });
+    return;
+  }
 
   const sessionData: SessionData = {
     user: {
@@ -523,11 +676,16 @@ router.post("/users/:id/impersonate", requireAuth, requirePermission("users.edit
     },
     access_token: `impersonation-${Date.now()}`,
     originalSid: currentSid,
+    issued_at: currentSession.issued_at,
   };
 
   const sid = await createSession(sessionData);
   res.cookie(SESSION_COOKIE, sid, getSessionCookieOptions(req, SESSION_TTL));
-  await logAudit(req.user!.id, "auth.impersonate.start", "user", id, { targetRole: targetUser.role }, req.ip);
+  await logAudit(req.user!.id, "auth.impersonate.start", "user", id, {
+    targetRole: targetUser.role,
+    targetBranchIds,
+    policyReason: decision.reason,
+  }, req.ip);
   let redirectTo = "/staff";
   if (ADMIN_ROLES.includes(targetUser.role as any)) redirectTo = "/admin";
   else if (targetUser.role === "student") redirectTo = "/student";

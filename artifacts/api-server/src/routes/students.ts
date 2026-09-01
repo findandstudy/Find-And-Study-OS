@@ -1,6 +1,6 @@
 import { Router, type IRouter, type Request, type Response, type NextFunction } from "express";
-import { db, studentsTable, documentsTable, usersTable, agentsTable, applicationsTable, applicationStageDocumentsTable, notesTable, followUpsTable, leadsTable, invoicesTable, commissionsTable, serviceFeesTable, settingsTable, softDelete, studentEducationRecordsTable, educationRecordsTable, lifecycleCascadeStateTable } from "@workspace/db";
-import { eq, ilike, or, sql, and, lt, lte, gte, desc, asc, inArray, isNotNull, ne } from "drizzle-orm";
+import { db, studentsTable, documentsTable, usersTable, agentsTable, applicationsTable, applicationStageDocumentsTable, pipelineStagesTable, notesTable, followUpsTable, leadsTable, invoicesTable, commissionsTable, serviceFeesTable, settingsTable, softDelete, studentEducationRecordsTable, educationRecordsTable, lifecycleCascadeStateTable } from "@workspace/db";
+import { eq, ilike, or, sql, and, lt, lte, gte, desc, asc, inArray, isNotNull, isNull, ne } from "drizzle-orm";
 import { requireAuth, requireRole, requireAgentStaffPermission, logAudit } from "../lib/auth";
 import { STAFF_ROLES, ADMIN_ROLES, AGENT_ROLES, isAgentRole } from "../lib/roles";
 import { getAgentVisibleIds, getAgentRecord } from "../lib/agentVisibility";
@@ -11,7 +11,6 @@ import { getAgencyMemberAgentIds, resolveAgencyPlatformAssignee } from "../lib/a
 import { getVisibleBranchIds, isInBranchScope, resolveCreateBranchId } from "../lib/branchScope";
 import { assertCanAccessStudent } from "../lib/studentAccess";
 import { streamDocumentToResponse } from "../lib/documentBytes";
-import { isNull } from "drizzle-orm";
 import { normalizeAndValidateNames, normalizePhoneField, EXTENDED_NAME_FIELDS, toLatinUpper } from "../lib/textNormalize";
 import { dispatchNotification } from "../lib/notificationDispatcher";
 import { inferOriginFromUser, inferOriginFromAgentId, type OriginMeta } from "../lib/originHelper";
@@ -45,6 +44,8 @@ import { recordRequestSpan } from "../lib/requestTelemetry";
 import { buildFacetFilterInput, loadFacetValue } from "../lib/facetCache";
 import { getStudentPhotoThumbnail } from "../lib/studentPhotoThumbnail";
 import { studentHasServablePhotoSql } from "../lib/studentPhoto";
+import { buildStudentJourneyProjection } from "../lib/studentJourneyProjection";
+import { isStudentJourneyEnabled } from "../lib/studentJourneyFeature";
 
 const router: IRouter = Router();
 
@@ -98,6 +99,100 @@ router.get("/students/me", requireAuth, async (req, res): Promise<void> => {
   const [student] = await db.select().from(studentsTable).where(and(eq(studentsTable.userId, userId), isNull(studentsTable.deletedAt)));
   if (!student) { res.status(404).json({ error: "Student profile not found" }); return; }
   res.json(student);
+});
+
+// Student Journey v1: a deterministic, server-owned projection for the one
+// most important application action. It deliberately derives only from the
+// signed-in student's records and never accepts a student/application id from
+// the client. Unknown/custom pipeline stages remain visible through an
+// explicit legacy fallback instead of manufacturing progress certainty.
+router.get("/students/me/journey", requireAuth, async (req, res): Promise<void> => {
+  const user = req.user!;
+  res.setHeader("Cache-Control", "private, no-store");
+  if (user.role !== "student") {
+    res.status(403).json({ error: "Only students can call this endpoint" });
+    return;
+  }
+  if (!isStudentJourneyEnabled(user.id)) {
+    res.json({ schemaVersion: 1, enabled: false });
+    return;
+  }
+
+  const [student] = await db
+    .select({ id: studentsTable.id })
+    .from(studentsTable)
+    .where(and(eq(studentsTable.userId, user.id), isNull(studentsTable.deletedAt)));
+  if (!student) {
+    res.status(404).json({ error: "Student profile not found" });
+    return;
+  }
+
+  const [applications, pipelineStages, documents, missingRequests] = await Promise.all([
+    db
+      .select({
+        id: applicationsTable.id,
+        stage: applicationsTable.stage,
+        deadline: applicationsTable.deadline,
+        universityName: applicationsTable.universityName,
+        programName: applicationsTable.programName,
+        assignedToId: applicationsTable.assignedToId,
+        createdAt: applicationsTable.createdAt,
+        updatedAt: applicationsTable.updatedAt,
+      })
+      .from(applicationsTable)
+      .where(and(
+        eq(applicationsTable.studentId, student.id),
+        isNull(applicationsTable.deletedAt),
+      ))
+      .orderBy(desc(applicationsTable.updatedAt), desc(applicationsTable.id)),
+    db
+      .select({
+        key: pipelineStagesTable.key,
+        label: pipelineStagesTable.label,
+        sortOrder: pipelineStagesTable.sortOrder,
+        variant: pipelineStagesTable.variant,
+        isCaseClose: pipelineStagesTable.isCaseClose,
+      })
+      .from(pipelineStagesTable)
+      .where(eq(pipelineStagesTable.entityType, "application"))
+      .orderBy(asc(pipelineStagesTable.sortOrder), asc(pipelineStagesTable.id)),
+    db
+      .select({
+        applicationId: documentsTable.applicationId,
+        status: documentsTable.status,
+      })
+      .from(documentsTable)
+      .where(and(
+        eq(documentsTable.studentId, student.id),
+        isNull(documentsTable.deletedAt),
+      )),
+    db
+      .select({
+        applicationId: applicationStageDocumentsTable.applicationId,
+        respondedAt: applicationStageDocumentsTable.respondedAt,
+      })
+      .from(applicationStageDocumentsTable)
+      .innerJoin(
+        applicationsTable,
+        eq(applicationsTable.id, applicationStageDocumentsTable.applicationId),
+      )
+      .where(and(
+        eq(applicationsTable.studentId, student.id),
+        isNull(applicationsTable.deletedAt),
+        eq(applicationStageDocumentsTable.isMissingDocNote, true),
+        isNull(applicationStageDocumentsTable.fulfilledAt),
+      )),
+  ]);
+
+  res.json({
+    enabled: true,
+    ...buildStudentJourneyProjection({
+      applications,
+      pipelineStages,
+      documents,
+      missingRequests,
+    }),
+  });
 });
 
 // Task #187 — list every open missing-doc request across all of the

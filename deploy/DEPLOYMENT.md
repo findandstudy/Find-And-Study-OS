@@ -10,17 +10,18 @@ storage. Production actions require an approved preflight and fresh backup.
 3. [PostgreSQL Setup](#postgresql-setup)
 4. [Node.js Installation](#nodejs-installation)
 5. [Project Setup](#project-setup)
-6. [Environment Configuration](#environment-configuration)
-7. [First Deploy](#first-deploy)
-8. [Nginx Setup](#nginx-setup)
-9. [SSL with Let's Encrypt](#ssl-with-lets-encrypt)
-10. [PM2 Auto-Start & Log Rotation](#pm2-auto-start--log-rotation)
-11. [Zero-Downtime Updates](#zero-downtime-updates)
-12. [Database Migrations](#database-migrations)
-13. [Public Endpoints (Anonim Yüzey)](#public-endpoints-anonim-yüzey)
-14. [Rollback](#rollback)
-15. [Monitoring](#monitoring)
-16. [Troubleshooting](#troubleshooting)
+6. [Non-root Runtime Boundary](#non-root-runtime-boundary)
+7. [Environment Configuration](#environment-configuration)
+8. [First Deploy](#first-deploy)
+9. [Nginx Setup](#nginx-setup)
+10. [SSL with Let's Encrypt](#ssl-with-lets-encrypt)
+11. [PM2 Auto-Start & Log Rotation](#pm2-auto-start--log-rotation)
+12. [Zero-Downtime Updates](#zero-downtime-updates)
+13. [Database Migrations](#database-migrations)
+14. [Public Endpoints (Anonim Yüzey)](#public-endpoints-anonim-yüzey)
+15. [Rollback](#rollback)
+16. [Monitoring](#monitoring)
+17. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -103,26 +104,181 @@ pm2 --version
 ## Project Setup
 
 ```bash
-# Source, immutable releases and persistent runtime paths are separate.
-sudo mkdir -p /opt/findandstudy/source /opt/findandstudy/releases
-sudo mkdir -p /var/lib/findandstudy/storage /var/log/findandstudy
-sudo chown -R $USER:$USER /opt/findandstudy /var/lib/findandstudy /var/log/findandstudy
+# One-time setup only, after an approved non-root migration change window.
+sudo useradd --system --create-home --home-dir /var/lib/findandstudy \
+  --shell /usr/sbin/nologin findandstudy
+sudo install -d -o findandstudy -g findandstudy -m 0750 \
+  /opt/findandstudy/source /opt/findandstudy/releases /var/log/findandstudy
+sudo install -d -o findandstudy -g findandstudy -m 0700 \
+  /var/lib/findandstudy/storage /var/lib/findandstudy/storage/private
 
 # Projeyi klonlayın veya yükleyin
-cd /opt/findandstudy/source
-git clone https://your-repo-url.git .
+sudo -u findandstudy git clone https://your-repo-url.git /opt/findandstudy/source
 
 # Install dependencies
-pnpm install --frozen-lockfile
+sudo -u findandstudy pnpm --dir /opt/findandstudy/source install --frozen-lockfile
 ```
+
+---
+
+## Non-root Runtime Boundary
+
+`deploy/deploy.sh` now fails before creating a release, installing dependencies
+or touching a process unless all of these statements are true:
+
+- the operator is the explicit `RUNTIME_SERVICE_USER`, never `root`;
+- release, log and local-storage roots are owned by that service uid/gid and
+  grant no access to unrelated VPS users;
+- `RUNTIME_ENV_FILE` is either service-owned `0600` or root:service `0640`;
+- every private object and directory is service-owned, user-only (`0600` files,
+  `0700` directories), non-executable and not a symbolic link;
+- the bounded private-tree scan completes before the configured entry and
+  duration limits.
+
+`RUNTIME_PRIVATE_SCAN_MAX_ENTRIES` may lower the scan budget but must be a
+canonical positive integer and can never raise the hard `100000`-entry ceiling.
+`RUNTIME_PRIVATE_SCAN_MAX_DURATION_MS` follows the same canonical format and may
+lower, but never raise, the hard `30000`-millisecond ceiling. Scientific
+notation, decimals, leading zeros and larger values fail closed. Directory
+entries are streamed and counted before queueing, so one very large directory
+cannot first materialize an unbounded filename list in memory. Both the
+deployment preflight and read-only production attestation enforce these same
+private-tree ceilings.
+
+Source provenance and process metadata remain exact read-only probes. Each
+`git rev-parse`, `git status` and `ps` child process has a fixed
+`10000`-millisecond `SIGKILL` timeout that cannot be raised by environment
+configuration; a timeout blocks attestation instead of producing partial
+evidence. The localhost health response is streamed under a fixed `65536`-byte
+ceiling before JSON parsing; the limit cannot be raised by environment
+configuration and an oversized body blocks the attestation. Its target is an
+exact canonical port on `127.0.0.1`; redirects and a changed response URL are
+rejected, so the probe cannot follow a local redirect to another host. Only an
+exact HTTP `200` response with the `application/json` media type is admitted.
+Each selected process is also revalidated against its `/proc` directory
+uid/gid and kernel start-time identity before and after resolving its cwd. PID
+reuse, process replacement, uid/gid drift, `/proc` inode replacement or cwd
+change blocks the attestation. Process arguments are not added to the emitted
+evidence.
+
+This is a deployment gate, not an automatic migration. The current production
+host was last observed with root-owned `0644/0755` private storage and root-owned
+PM2 processes. Do not merge and deploy this boundary until an approved change
+plan has captured a fresh DB/storage backup, exact ownership inventory, disk
+headroom, two-session recovery access, PM2 startup ownership and a rollback
+path. Do not run recursive `chown`/`chmod`, stop root PM2 or change SSH policy as
+part of an ordinary application release.
+
+The safe transition sequence is:
+
+1. Read-only inventory and backup verification.
+2. Create and verify the dedicated account and its recovery path.
+3. Copy no data; change only the exact reviewed runtime roots and private tree.
+4. Start one candidate API as the service account with background jobs disabled.
+5. Prove HTTP/DB readiness, storage read/write and portal-worker ownership.
+6. Cut over the canonical PM2 processes once, then verify reboot persistence.
+7. Keep the previous code release and recorded ownership manifest for rollback.
+8. Harden root/password SSH only in a later, separately approved change.
+
+No environment flag bypasses this boundary. A failed preflight is a NO-GO.
+
+The deploy also stops before release creation or build unless every relevant
+filesystem has both at least `15 GiB` and at least `15%` space available to the
+non-root runtime account. `RELEASES_DIR`, `LOG_DIR` and, for local storage,
+`STORAGE_LOCAL_DIR` are checked with filesystem metadata only. These are hard
+minimums with no environment bypass. Freeing space requires a separately
+reviewed attribution/retention plan; the deploy never deletes releases, logs,
+backups or private objects automatically.
+
+Before planning the production transition, collect a metadata-only attestation
+from a separate, clean source checkout at the exact reviewed 40-character
+commit. The source checkout is evidence tooling, not the deployed release. The
+tool independently verifies the live `CURRENT_RELEASE_LINK`, process working
+directories and health release identity. It opens the database transaction as
+`READ ONLY`, verifies the Drizzle ledger against the reviewed source hashes,
+calls only the localhost health `GET`, reads process/path/filesystem metadata
+and emits no private filenames, file contents, environment values or database
+credentials:
+
+```bash
+cd /opt/findandstudy/source
+reviewed_commit="<approved-40-character-commit>"
+expected_release_id="<approved-live-release-directory-name>"
+expected_applied_migrations="<approved-production-prefix-count>"
+expected_database_name="<approved-production-database-name>"
+expected_database_address="<approved-server-ip-as-seen-by-postgresql>"
+expected_database_port="<approved-postgresql-port>"
+test "$(git rev-parse --verify HEAD)" = "$reviewed_commit"
+test -z "$(git status --porcelain=v1 --untracked-files=normal)"
+export RUNTIME_ENV_FILE=/etc/findandstudy.env
+set -a
+# shellcheck disable=SC1091
+source "$RUNTIME_ENV_FILE"
+set +a
+umask 077
+attestation_file="$(mktemp /tmp/fasos-attestation.XXXXXX.json)"
+ATTESTATION_EXPECTED_SOURCE_COMMIT="$reviewed_commit" \
+  ATTESTATION_EXPECTED_RELEASE_ID="$expected_release_id" \
+  ATTESTATION_EXPECTED_APPLIED_MIGRATIONS="$expected_applied_migrations" \
+  ATTESTATION_EXPECTED_DATABASE_NAME="$expected_database_name" \
+  ATTESTATION_EXPECTED_DATABASE_ADDRESS="$expected_database_address" \
+  ATTESTATION_EXPECTED_DATABASE_PORT="$expected_database_port" \
+  PRODUCTION_ATTESTATION_READ_ONLY=1 \
+  node deploy/production-readonly-attestation.mjs > "$attestation_file"
+printf 'Attestation written to %s\n' "$attestation_file"
+```
+
+Disk attribution is optional and remains part of the same exact-source,
+exact-release and exact-database read-only attestation. Enable it only after the
+fixed category roots and I/O budget have been reviewed:
+
+```bash
+export ATTESTATION_INCLUDE_DISK_ATTRIBUTION=1
+export DISK_ATTRIBUTION_MAX_ENTRIES=20000
+export DISK_ATTRIBUTION_MAX_DURATION_MS=5000
+
+# Optional categories; use only reviewed, existing, narrow absolute roots.
+# export DISK_ATTRIBUTION_DATABASE_DIR=/var/lib/postgresql/16/main
+# export DISK_ATTRIBUTION_BACKUP_DIR=/var/backups/findandstudy
+```
+
+The entry and duration values are mandatory when attribution is enabled. They
+cannot exceed the hard `100000`-entry and `30000ms` ceilings. Releases, logs and
+local storage are fixed categories; database and backup roots are optional.
+Roots must be at least three path segments deep, may not overlap and may not
+cross a filesystem boundary. Directory entries are streamed, symlinks are not
+followed, and the result contains only category counts and logical/allocated
+byte totals—never filenames or contents. `filesystemTotalBytes` and
+`filesystemAvailableBytes` describe the containing filesystem and can repeat
+when categories share a filesystem; do not sum those capacity fields. Any
+budget, path, mount or read error fails the attribution instead of returning an
+apparently complete partial result. This tool never deletes or rotates data and
+does not itself approve a retention action.
+
+Preparing or updating `/opt/findandstudy/source` is a separate, explicitly
+reviewed source-only operation; it is not a deploy and must not change the
+`current` symlink or any process. Use a frozen dependency install matching the
+reviewed lockfile. Never run the attestation from an ambiguous or dirty source
+tree. Review the JSON before moving it off-host. The command is evidence
+collection, not approval to deploy or change ownership. A source-commit or
+cleanliness mismatch, unexpected release identity, applied migration count
+other than the explicitly approved prefix, database name/server IP/port drift,
+ledger hash mismatch, `CURRENT_RELEASE_LINK` symlink/target replacement during
+the measurement, duplicate API or worker, missing path, unreachable local
+health endpoint or exceeded private-tree limit fails closed. For the current
+convergence decision, the reviewed expectation is the separately verified live
+release identity, `fasos_apply`, the approved local PostgreSQL IP/port and
+exactly `66` applied production-prefix migrations; do not copy these values
+from an unreviewed host observation or use a DNS alias.
 
 ---
 
 ## Environment Configuration
 
 ```bash
-# Runtime secrets are external to source and every release.
-sudo install -m 600 /dev/null /etc/findandstudy.env
+# Runtime secrets are external to source and every release. The service account
+# can read the file through its exact group but cannot modify it.
+sudo install -o root -g findandstudy -m 0640 /dev/null /etc/findandstudy.env
 sudo nano /etc/findandstudy.env
 ```
 
@@ -132,6 +288,7 @@ sudo nano /etc/findandstudy.env
 
 - `DATABASE_URL` — PostgreSQL bağlantı dizisi
 - `PORT` — `5000` (nginx.conf upstream ile eşleşmeli)
+- `RUNTIME_SERVICE_USER` — dedicated non-root Unix account (`findandstudy`)
 - `SESSION_SECRET` — Üret: `openssl rand -hex 32`
 - `ENCRYPTION_KEY` — Üret: `openssl rand -hex 32`
 - `EMBED_TOKEN_SECRET` — Üret: `openssl rand -hex 32`

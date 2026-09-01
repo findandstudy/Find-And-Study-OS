@@ -1517,6 +1517,104 @@
     "docStatusRequested": "Solicitado",
     "docStatusUnderReview": "En revisión"
   },
+  "studentJourney": {
+    "nextBestAction": "Tu siguiente paso más importante",
+    "whyImportant": "Por qué es importante:",
+    "currentStage": "Etapa actual",
+    "deadline": "Fecha límite",
+    "overdue": "Requiere tu atención",
+    "continue": "Continuar",
+    "viewStatus": "Ver estado",
+    "journeyProgress": "Progreso del recorrido",
+    "progressPercent": "{percent}%",
+    "progressUnknown": "Pendiente de confirmación",
+    "needsReview": "Requiere confirmación del asesor",
+    "unavailableTitle": "No pudimos cargar tu recorrido en este momento.",
+    "unavailableDescription": "Los datos de tu solicitud están seguros. Inténtalo de nuevo o abre Mis solicitudes para continuar.",
+    "retry": "Intentar de nuevo",
+    "waitingParty": {
+      "student": "Esperando tu acción",
+      "find_and_study": "Find & Study está revisando",
+      "university": "Esperando a la universidad",
+      "external_authority": "Esperando a la autoridad externa",
+      "completed": "Completado",
+      "unknown": "Parte responsable sin confirmar"
+    },
+    "evidenceStatus": {
+      "not_started": "Aún no se ha añadido documentación",
+      "action_required": "{requested} solicitud(es) requieren tu atención",
+      "in_review": "{pending} documento(s) están en revisión",
+      "verified": "{verified} documento(s) verificados",
+      "unknown": "El estado de la documentación requiere revisión"
+    },
+    "actions": {
+      "explore_programs": {
+        "title": "Elige un programa para comenzar",
+        "description": "Explora programas e inicia la solicitud que mejor se adapte a tus objetivos.",
+        "reason": "Se necesita un programa y un período de ingreso para iniciar tu recorrido de solicitud."
+      },
+      "upload_requested_documents": {
+        "title": "Sube {count} documento(s) solicitado(s)",
+        "description": "Tu solicitud está esperando los documentos pedidos por el equipo de admisiones.",
+        "reason": "El equipo no puede avanzar tu solicitud de forma segura hasta recibirlos."
+      },
+      "replace_rejected_documents": {
+        "title": "Sustituye un documento que necesita corrección",
+        "description": "Revisa los comentarios y sube una copia corregida.",
+        "reason": "La documentación correcta evita retrasos y errores de envío."
+      },
+      "complete_dossier": {
+        "title": "Completa tu expediente de solicitud",
+        "description": "Añade tu perfil y documentos para que tu asesor pueda revisar el caso.",
+        "reason": "Se necesita un expediente completo y correcto para evaluar y preparar la solicitud."
+      },
+      "await_document_review": {
+        "title": "Tus documentos están en revisión",
+        "description": "No necesitas hacer nada salvo que tu asesor solicite una corrección.",
+        "reason": "Find & Study está comprobando la documentación antes del siguiente paso."
+      },
+      "await_submission": {
+        "title": "Tu solicitud se está preparando",
+        "description": "Tu asesor está completando las comprobaciones previas al envío.",
+        "reason": "Los datos y documentos deben comprobarse antes de enviarlos."
+      },
+      "await_university_decision": {
+        "title": "Tu solicitud está en la universidad",
+        "description": "Puedes consultar el último estado mientras la universidad la revisa.",
+        "reason": "La siguiente decisión corresponde ahora a la universidad."
+      },
+      "review_offer": {
+        "title": "Revisa tu oferta y sus condiciones",
+        "description": "Abre tu solicitud para revisar la oferta, las condiciones y la fecha límite.",
+        "reason": "Las condiciones y fechas límite pueden exigir una decisión rápida."
+      },
+      "await_visa_decision": {
+        "title": "Tu solicitud de visado está en revisión",
+        "description": "Consulta el último estado y mantén disponibles tus datos de contacto.",
+        "reason": "La autoridad externa es responsable de la siguiente decisión."
+      },
+      "prepare_enrollment": {
+        "title": "Prepárate para la matrícula",
+        "description": "Revisa tu solicitud y completa los pasos de matrícula restantes.",
+        "reason": "Completar los pasos requeridos ayuda a matricularte a tiempo."
+      },
+      "journey_complete": {
+        "title": "Tu recorrido de solicitud está completo",
+        "description": "Puedes revisar la solicitud completada y sus documentos.",
+        "reason": "Esta solicitud ha alcanzado una etapa final del flujo de trabajo."
+      },
+      "contact_advisor": {
+        "title": "Revisa las siguientes opciones con tu asesor",
+        "description": "Escribe a tu asesor para obtener un siguiente paso claro y específico.",
+        "reason": "Esta solicitud necesita revisión humana antes de recomendar otra acción."
+      },
+      "track_application": {
+        "title": "Sigue el estado de tu solicitud",
+        "description": "Abre tu solicitud para ver el último estado verificado.",
+        "reason": "Find & Study está gestionando el paso actual del proceso."
+      }
+    }
+  },
   "studentWishlist": {
     "title": "Mi lista de deseos",
     "subtitle": "Programas que has guardado para más tarde — {count} programa",

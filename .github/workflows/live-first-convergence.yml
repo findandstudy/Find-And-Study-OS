@@ -1,0 +1,305 @@
+name: Live-first Convergence Gate
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: live-first-convergence-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  ALLOW_LIVE_INTEGRATIONS: "false"
+  CI: "true"
+  NODE_ENV: test
+  NO_COLOR: "1"
+
+jobs:
+  static-gate:
+    name: Ledger, typecheck, and security regressions
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out the pull request
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+          package-manager-cache: false
+
+      - name: Activate the repository-pinned pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.33.2 --activate
+          test "$(pnpm --version)" = "10.33.2"
+
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify package-manager and migration authority
+        env:
+          CONVERGENCE_REVIEW_REQUIRE_CLEAN: "1"
+          CONVERGENCE_REVIEW_REQUIRE_TARGET_BASE: "1"
+          CONVERGENCE_REVIEW_TARGET_BASE: ${{ github.event.pull_request.base.sha || '6dca1f951590dce297bb4d3579bd17d8d9f92e5f' }}
+          CONVERGENCE_REVIEW_TARGET_BASE_REF: ${{ github.event.pull_request.base.ref || 'hotfix/embed-release-20260830' }}
+          CONVERGENCE_REVIEW_SOURCE_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          pnpm run test:package-manager
+          pnpm run test:convergence-review
+          node lib/db/validate-migrations.mjs
+          pnpm --filter @workspace/api-server run test:migration-authority
+          pnpm --filter @workspace/api-server run test:control-plane-schema-bindings
+          pnpm --filter @workspace/api-server run test:active-tenant-context
+          pnpm --filter @workspace/api-server run test:active-context-keyring
+          pnpm --filter @workspace/api-server run test:session-lifetime
+          pnpm --filter @workspace/api-server run test:change-set-policy
+          pnpm --filter @workspace/api-server run test:change-set-evidence-envelope
+          pnpm --filter @workspace/api-server run test:change-set-command
+          pnpm --filter @workspace/api-server run test:change-set-request-context
+          pnpm --filter @workspace/api-server run test:authoritative-active-context-issuance
+          pnpm --filter @workspace/api-server run test:active-context-session-gateway
+          pnpm --filter @workspace/api-server run test:user-management-policy
+          pnpm --filter @workspace/api-server run test:impersonation-policy
+          pnpm --filter @workspace/api-server run test:active-context-selection-consumption
+          pnpm --filter @workspace/api-server run test:active-context-selection-attempt
+          pnpm --filter @workspace/api-server run test:active-context-selection-attempt-ledger
+          pnpm --filter @workspace/api-server run test:active-context-selection-repair
+          pnpm --filter @workspace/api-server run test:active-context-selection-repair-store
+          pnpm --filter @workspace/api-server run test:integration-database-safety
+          pnpm --filter @workspace/api-server run test:student-journey-projection
+          pnpm --filter @workspace/api-server run test:student-journey-milestone-contract
+          pnpm --filter @workspace/api-server run test:consent-communication-contract
+          pnpm --filter @workspace/api-server run test:student-journey-authorization
+          pnpm --filter @workspace/api-server run test:student-journey-readiness-projection
+          pnpm --filter @workspace/api-server run test:student-privacy-sharing-projection
+          pnpm --filter @workspace/api-server run test:student-document-request-response-command
+          pnpm --filter @workspace/api-server run test:student-journey-evaluation-contract
+
+      - name: Type-check the workspace
+        run: pnpm run typecheck
+
+      - name: Verify synchronized UI translations
+        run: pnpm --filter @workspace/edcons run check:i18n
+
+      - name: Detect tenant-writer inventory drift
+        run: pnpm run audit:tenant-writers
+
+      - name: Detect legacy role-gate inventory drift
+        run: pnpm run audit:legacy-role-gates
+
+      - name: Run live security regressions
+        env:
+          DATABASE_URL: postgresql://test:test@127.0.0.1:5432/test
+        run: |
+          pnpm run test:pm2-safety
+          pnpm run test:data-boundaries
+          pnpm run test:runtime-boundary
+          pnpm run test:disk-capacity
+          pnpm run test:disk-attribution
+          pnpm run test:production-attestation
+          pnpm --filter @workspace/api-server run test:ai-delivery-safety
+          pnpm --filter @workspace/api-server run test:rate-limit-ip-security
+          pnpm --filter @workspace/api-server run test:security-regressions
+
+  windows-portability:
+    name: Windows locked install and typecheck
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out the pull request
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+          package-manager-cache: false
+
+      - name: Activate the repository-pinned pnpm
+        shell: pwsh
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.33.2 --activate
+          if ((pnpm --version) -ne "10.33.2") { throw "Unexpected pnpm version" }
+
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify Windows portability
+        run: |
+          pnpm run test:package-manager
+          node lib/db/validate-migrations.mjs
+          pnpm --filter @workspace/api-server run test:integration-database-safety
+          pnpm --filter @workspace/api-server run test:student-journey-projection
+          pnpm --filter @workspace/api-server run test:student-journey-milestone-contract
+          pnpm --filter @workspace/api-server run test:consent-communication-contract
+          pnpm --filter @workspace/api-server run test:student-journey-authorization
+          pnpm --filter @workspace/api-server run test:student-journey-readiness-projection
+          pnpm --filter @workspace/api-server run test:student-privacy-sharing-projection
+          pnpm --filter @workspace/api-server run test:student-document-request-response-command
+          pnpm --filter @workspace/api-server run test:student-journey-evaluation-contract
+          pnpm run typecheck
+
+  postgres-adoption:
+    name: PostgreSQL 16 fresh and production-prefix adoption
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PG_GATE_SERVER_PORT: "5432"
+    services:
+      postgres:
+        image: postgres:16.15@sha256:e17e86066e5ef83e0952a9347f5c792b7ece00972e2aa787a6986f471b3dd3d5
+        env:
+          POSTGRES_DB: postgres
+          POSTGRES_HOST_AUTH_METHOD: trust
+          POSTGRES_USER: postgres
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+
+    steps:
+      - name: Check out the pull request
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+          package-manager-cache: false
+
+      - name: Activate the repository-pinned pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.33.2 --activate
+          test "$(pnpm --version)" = "10.33.2"
+
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Prepare the disposable database
+        env:
+          ALLOW_DISPOSABLE_DATABASE_RESET: "true"
+          PG_DISPOSABLE_ADMIN_URL: postgresql://postgres@127.0.0.1:5433/postgres
+        run: node lib/db/prepare-disposable-migration-database.mjs
+
+      - name: Apply all 83 migrations to a fresh database
+        env:
+          ALLOW_REVIEWED_MIGRATIONS: "true"
+          DATABASE_URL: postgresql://fas_migrator@127.0.0.1:5433/fasos_apply_local
+          MIGRATION_CONFIRMED_DATABASE: fasos_apply_local
+          MIGRATION_CONFIRMED_HOST: 127.0.0.1
+          MIGRATION_CONFIRMED_PORT: "5433"
+          MIGRATION_CONFIRMED_USER: fas_migrator
+          MIGRATION_TARGET_ENV: local
+        working-directory: lib/db
+        run: node ./run-migrations.mjs
+
+      - name: Prove reviewed-runner replay is clean
+        env:
+          ALLOW_REVIEWED_MIGRATIONS: "true"
+          DATABASE_URL: postgresql://fas_migrator@127.0.0.1:5433/fasos_apply_local
+          MIGRATION_CONFIRMED_DATABASE: fasos_apply_local
+          MIGRATION_CONFIRMED_HOST: 127.0.0.1
+          MIGRATION_CONFIRMED_PORT: "5433"
+          MIGRATION_CONFIRMED_USER: fas_migrator
+          MIGRATION_TARGET_ENV: local
+        working-directory: lib/db
+        run: node ./run-migrations.mjs
+
+      - name: Reset the disposable database for prefix adoption
+        env:
+          ALLOW_DISPOSABLE_DATABASE_RESET: "true"
+          PG_DISPOSABLE_ADMIN_URL: postgresql://postgres@127.0.0.1:5433/postgres
+        run: node lib/db/prepare-disposable-migration-database.mjs
+
+      - name: Prepare the comprehensive Control Plane authority split
+        env:
+          ALLOW_DISPOSABLE_CONTROL_PLANE_GATE: "true"
+          PG_GATE_ADMIN_URL: postgresql://postgres@127.0.0.1:5433/fasos_apply_local
+          PG_GATE_APP_URL: postgresql://fas_app@127.0.0.1:5433/fasos_apply_local
+          PG_GATE_MIGRATOR_URL: postgresql://fas_migrator@127.0.0.1:5433/fasos_apply_local
+        run: pnpm --filter @workspace/api-server run test:postgres-control-plane-gate -- setup
+
+      - name: Prove production 66/66 to canonical 83/83 adoption
+        env:
+          ALLOW_DISPOSABLE_PREFIX_ADOPTION: "true"
+          DATABASE_URL: postgresql://fas_migrator@127.0.0.1:5433/fasos_apply_local
+        run: node lib/db/test-production-prefix-adoption.mjs
+
+      - name: Run comprehensive Control Plane foundation checks
+        env:
+          ALLOW_DISPOSABLE_CONTROL_PLANE_GATE: "true"
+          PG_GATE_ADMIN_URL: postgresql://postgres@127.0.0.1:5433/fasos_apply_local
+          PG_GATE_APP_URL: postgresql://fas_app@127.0.0.1:5433/fasos_apply_local
+          PG_GATE_MIGRATOR_URL: postgresql://fas_migrator@127.0.0.1:5433/fasos_apply_local
+        run: pnpm --filter @workspace/api-server run test:postgres-control-plane-gate -- verify
+
+      - name: Run default-off Student Journey G45 PostgreSQL checks
+        env:
+          ALLOW_DISPOSABLE_STUDENT_JOURNEY_G45_TEST: "true"
+          ALLOW_LIVE_INTEGRATIONS: "false"
+          PG_JOURNEY_ADMIN_URL: postgresql://postgres@127.0.0.1:5433/fasos_apply_local
+          PG_JOURNEY_EXECUTOR_URL: postgresql://fas_journey_executor@127.0.0.1:5433/fasos_apply_local
+          PG_JOURNEY_MIGRATOR_URL: postgresql://fas_migrator@127.0.0.1:5433/fasos_apply_local
+          PG_JOURNEY_SERVER_PORT: "5432"
+        run: pnpm --filter @workspace/api-server run test:postgres-student-journey-g45
+
+      - name: Reset the disposable database after foundation fixtures
+        env:
+          ALLOW_DISPOSABLE_DATABASE_RESET: "true"
+          PG_DISPOSABLE_ADMIN_URL: postgresql://postgres@127.0.0.1:5433/postgres
+        run: node lib/db/prepare-disposable-migration-database.mjs
+
+      - name: Rebuild the production-prefix adoption state for adapter checks
+        env:
+          ALLOW_DISPOSABLE_PREFIX_ADOPTION: "true"
+          DATABASE_URL: postgresql://fas_migrator@127.0.0.1:5433/fasos_apply_local
+        run: node lib/db/test-production-prefix-adoption.mjs
+
+      - name: Run EXECUTE-only command, evidence, and context adapter checks
+        env:
+          ALLOW_DISPOSABLE_ADAPTER_TEST: "true"
+          PG_GATE_ADMIN_URL: postgresql://postgres@127.0.0.1:5433/fasos_apply_local
+          PG_GATE_CONTEXT_RESOLVER_URL: postgresql://fas_auth_context_resolver@127.0.0.1:5433/fasos_apply_local
+          PG_GATE_EVIDENCE_ISSUER_URL: postgresql://fas_evidence_issuer@127.0.0.1:5433/fasos_apply_local
+          PG_GATE_EXECUTOR_URL: postgresql://fas_cp_executor@127.0.0.1:5433/fasos_apply_local
+          PG_GATE_MIGRATOR_URL: postgresql://fas_migrator@127.0.0.1:5433/fasos_apply_local
+        run: pnpm --filter @workspace/api-server run test:postgres-change-set-adapter
+
+      - name: Run durable audit and scheduled reconciliation checks
+        env:
+          ALLOW_DISPOSABLE_AUDIT_TEST: "true"
+          PG_GATE_ADMIN_URL: postgresql://postgres@127.0.0.1:5433/fasos_apply_local
+          PG_GATE_AUDIT_WRITER_URL: postgresql://fas_audit_writer@127.0.0.1:5433/fasos_apply_local
+          PG_GATE_EXECUTOR_URL: postgresql://fas_cp_executor@127.0.0.1:5433/fasos_apply_local
+          PG_GATE_MIGRATOR_URL: postgresql://fas_migrator@127.0.0.1:5433/fasos_apply_local
+          PG_GATE_REPAIR_WORKER_URL: postgresql://fas_repair_worker@127.0.0.1:5433/fasos_apply_local
+        run: pnpm --filter @workspace/api-server run test:postgres-change-set-audit
+
+      - name: Run active-context session, lifecycle, and repair checks
+        env:
+          ALLOW_DISPOSABLE_SESSION_GATEWAY_TEST: "true"
+          PG_GATE_ADMIN_URL: postgresql://postgres@127.0.0.1:5433/fasos_apply_local
+          PG_GATE_CONTEXT_RESOLVER_URL: postgresql://fas_auth_context_resolver@127.0.0.1:5433/fasos_apply_local
+          PG_GATE_MIGRATOR_URL: postgresql://fas_migrator@127.0.0.1:5433/fasos_apply_local
+          PG_GATE_RATE_LIMIT_URL: postgresql://fas_rate_limit_executor@127.0.0.1:5433/fasos_apply_local
+          PG_GATE_SESSION_LIFECYCLE_URL: postgresql://fas_session_lifecycle_executor@127.0.0.1:5433/fasos_apply_local
+          PG_GATE_SESSION_REPAIR_URL: postgresql://fas_session_repair_executor@127.0.0.1:5433/fasos_apply_local
+          PG_GATE_SESSION_RESOLVER_URL: postgresql://fas_session_resolver@127.0.0.1:5433/fasos_apply_local
+        run: pnpm --filter @workspace/api-server run test:postgres-active-context-session-gateway

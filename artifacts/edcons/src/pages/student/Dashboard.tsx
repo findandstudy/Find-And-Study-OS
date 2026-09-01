@@ -6,9 +6,11 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { QuickLinkLogo } from "@/components/QuickLinkLogo";
 import { Button } from "@/components/ui/button";
-import { FileText, GraduationCap, Upload, CheckCircle, Clock, AlertCircle, MapPin, MessageSquare, Search, Mail, Phone, User, ExternalLink } from "lucide-react";
+import { FileText, GraduationCap, Upload, CheckCircle, Clock, AlertCircle, MapPin, MessageSquare, Search, Mail, Phone, User, ExternalLink, ArrowRight, RefreshCw } from "lucide-react";
 import { useLocation } from "wouter";
 import { OfferDeadlinesWidget } from "@/components/OfferDeadlinesWidget";
+import { formatDate } from "@/lib/i18n";
+import { useDateFormatPublic } from "@/hooks/use-date-format";
 
 const STAGE_META: Record<string, { labelKey: string; color: string; step: number }> = {
   inquiry: { labelKey: "studentDash.stageInquiry", color: "bg-slate-400", step: 1 },
@@ -23,6 +25,48 @@ const STAGE_META: Record<string, { labelKey: string; color: string; step: number
 
 const STEPS = ["inquiry", "documents_collected", "submitted", "offer_received", "visa_applied", "visa_approved", "enrolled"];
 
+type StudentJourneyProjection = {
+  enabled: true;
+  schemaVersion: 1;
+  source: "pipeline_projection" | "legacy_fallback";
+  application: {
+    id: number;
+    stage: string;
+    universityName: string | null;
+    programName: string | null;
+  } | null;
+  stage: { key: string; label: string; variant: string | null };
+  progress: {
+    known: boolean;
+    completedStages: number | null;
+    totalStages: number | null;
+    percent: number | null;
+  };
+  waitingParty: "student" | "find_and_study" | "university" | "external_authority" | "completed" | "unknown";
+  nextAction: {
+    code: string;
+    href: string;
+    actionable: boolean;
+    priority: "high" | "normal" | "low";
+    dueAt: string | null;
+    dueLabel: string | null;
+    overdue: boolean;
+    openRequestCount: number;
+  };
+  evidence: {
+    status: "not_started" | "action_required" | "in_review" | "verified" | "unknown";
+    verifiedDocuments: number;
+    inReviewDocuments: number;
+    rejectedDocuments: number;
+    openRequests: number;
+  };
+};
+
+type StudentJourneyResponse = StudentJourneyProjection | {
+  enabled: false;
+  schemaVersion: 1;
+};
+
 function getInitials(first?: string | null, last?: string | null) {
   return `${(first || "")[0] || ""}${(last || "")[0] || ""}`.toUpperCase() || "?";
 }
@@ -34,7 +78,8 @@ function formatRole(role: string | null | undefined, fallback: string) {
 
 export default function StudentDashboard() {
   const { user } = useAuth(true);
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
+  const dateFormat = useDateFormatPublic();
   const [, setLocation] = useLocation();
   const { data: applicationsResp, isLoading: appsLoading } = useListApplications(undefined, { query: { queryKey: ['student-applications'] } as any });
   const { data: documentsResp } = useListDocuments(undefined, { query: { queryKey: ['student-docs'] } as any });
@@ -60,6 +105,18 @@ export default function StudentDashboard() {
     enabled: !!user,
   });
   const quickLinks: any[] = quickLinksData?.data || [];
+
+  const {
+    data: journey,
+    isLoading: journeyLoading,
+    isError: journeyError,
+    refetch: refetchJourney,
+  } = useQuery<StudentJourneyResponse>({
+    queryKey: ["/api/students/me/journey"],
+    queryFn: () => customFetch("/api/students/me/journey"),
+    enabled: !!user,
+    staleTime: 30_000,
+  });
 
   const latestApp = applications?.[0];
   const stageInfo = latestApp ? STAGE_META[latestApp.stage] : null;
@@ -90,6 +147,123 @@ export default function StudentDashboard() {
             </p>
           </div>
         </div>
+
+        {journey?.enabled === false ? null : journeyLoading ? (
+          <Card className="p-6 border-primary/20 shadow-lg shadow-primary/5" aria-busy="true">
+            <div className="h-4 w-32 rounded-full bg-secondary animate-pulse mb-4" />
+            <div className="h-7 w-2/3 rounded-full bg-secondary animate-pulse mb-3" />
+            <div className="h-4 w-full rounded-full bg-secondary animate-pulse" />
+          </Card>
+        ) : journeyError || !journey ? (
+          <Card className="p-6 border-amber-300/60 bg-amber-50/40" role="status">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <p className="text-sm font-semibold text-amber-800">{t("studentJourney.unavailableTitle")}</p>
+                <p className="text-sm text-amber-700 mt-1">{t("studentJourney.unavailableDescription")}</p>
+              </div>
+              <Button variant="outline" className="gap-2" onClick={() => void refetchJourney()}>
+                <RefreshCw className="w-4 h-4" /> {t("studentJourney.retry")}
+              </Button>
+            </div>
+          </Card>
+        ) : (
+          <Card className="p-6 sm:p-7 border-primary/25 shadow-xl shadow-primary/10 overflow-hidden relative" aria-live="polite">
+            <div className="absolute inset-y-0 start-0 w-1.5 bg-primary" />
+            <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-6">
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2 mb-3">
+                  <p className="text-xs font-bold uppercase tracking-wider text-primary">{t("studentJourney.nextBestAction")}</p>
+                  <Badge variant="secondary">
+                    {t(`studentJourney.waitingParty.${journey.waitingParty}`)}
+                  </Badge>
+                  {journey.source === "legacy_fallback" && (
+                    <Badge className="bg-amber-100 text-amber-800 border-amber-200">
+                      {t("studentJourney.needsReview")}
+                    </Badge>
+                  )}
+                </div>
+                <h2 className="font-display font-bold text-2xl text-foreground">
+                  {t(`studentJourney.actions.${journey.nextAction.code}.title`, {
+                    count: journey.nextAction.openRequestCount,
+                  })}
+                </h2>
+                <p className="text-muted-foreground mt-2 max-w-3xl">
+                  {t(`studentJourney.actions.${journey.nextAction.code}.description`, {
+                    count: journey.nextAction.openRequestCount,
+                  })}
+                </p>
+                <p className="text-sm mt-3 text-foreground/80">
+                  <span className="font-semibold">{t("studentJourney.whyImportant")}</span>{" "}
+                  {t(`studentJourney.actions.${journey.nextAction.code}.reason`)}
+                </p>
+                <div className="flex flex-wrap items-center gap-x-5 gap-y-2 mt-4 text-sm text-muted-foreground">
+                  <span>
+                    {t("studentJourney.currentStage")}: <strong className="text-foreground">
+                      {STAGE_META[journey.stage.key]
+                        ? t(STAGE_META[journey.stage.key].labelKey)
+                        : journey.stage.label}
+                    </strong>
+                  </span>
+                  {journey.nextAction.dueAt && (
+                    <span className={journey.nextAction.overdue ? "text-rose-700 font-semibold" : ""}>
+                      {journey.nextAction.overdue ? t("studentJourney.overdue") : t("studentJourney.deadline")}: {formatDate(lang, journey.nextAction.dueAt, undefined, dateFormat)}
+                    </span>
+                  )}
+                  {!journey.nextAction.dueAt && journey.nextAction.dueLabel && (
+                    <span>{t("studentJourney.deadline")}: {journey.nextAction.dueLabel}</span>
+                  )}
+                </div>
+              </div>
+              <Button
+                className="rounded-xl gap-2 shrink-0 min-h-11"
+                variant={journey.nextAction.actionable ? "default" : "outline"}
+                onClick={() => setLocation(journey.nextAction.href)}
+              >
+                {journey.nextAction.actionable ? t("studentJourney.continue") : t("studentJourney.viewStatus")}
+                <ArrowRight className="w-4 h-4 rtl:rotate-180" />
+              </Button>
+            </div>
+
+            <div className="grid sm:grid-cols-2 gap-4 mt-6 pt-5 border-t border-border/60">
+              <div>
+                <div className="flex items-center justify-between text-xs mb-2">
+                  <span className="font-semibold text-foreground">{t("studentJourney.journeyProgress")}</span>
+                  <span className="text-muted-foreground">
+                    {journey.progress.known && journey.progress.percent != null
+                      ? t("studentJourney.progressPercent", { percent: journey.progress.percent })
+                      : t("studentJourney.progressUnknown")}
+                  </span>
+                </div>
+                <div
+                  className="h-2.5 rounded-full bg-secondary overflow-hidden"
+                  role="progressbar"
+                  aria-label={t("studentJourney.journeyProgress")}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={journey.progress.known ? journey.progress.percent ?? 0 : undefined}
+                  aria-valuetext={journey.progress.known
+                    ? t("studentJourney.progressPercent", { percent: journey.progress.percent ?? 0 })
+                    : t("studentJourney.progressUnknown")}
+                >
+                  <div
+                    className="h-full rounded-full bg-primary transition-all"
+                    style={{ width: journey.progress.known ? `${journey.progress.percent ?? 0}%` : "0%" }}
+                  />
+                </div>
+              </div>
+              <div className="flex items-center sm:justify-end gap-2 text-sm">
+                <FileText className="w-4 h-4 text-primary" />
+                <span className="text-muted-foreground">
+                  {t(`studentJourney.evidenceStatus.${journey.evidence.status}`, {
+                    verified: journey.evidence.verifiedDocuments,
+                    pending: journey.evidence.inReviewDocuments,
+                    requested: journey.evidence.openRequests,
+                  })}
+                </span>
+              </div>
+            </div>
+          </Card>
+        )}
 
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           {[

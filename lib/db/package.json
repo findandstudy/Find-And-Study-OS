@@ -11,6 +11,8 @@
     "pre-migrate": "node ./pre-migrate.mjs",
     "validate:migrations": "node ./validate-migrations.mjs",
     "verify:migration-state": "node ./verify-migration-state.mjs",
+    "prepare:disposable-migration-db": "node ./prepare-disposable-migration-database.mjs",
+    "test:production-prefix-adoption": "node ./test-production-prefix-adoption.mjs",
     "baseline:migrations": "node ./baseline-migrations.mjs",
     "migrate:reviewed": "node ./run-migrations.mjs",
     "push": "node ./guard-push.mjs",

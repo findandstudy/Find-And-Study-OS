@@ -96,7 +96,7 @@ export function ProtectedRoute({ children, allowedRoles, requiredPermission }: P
     return <AccessDeniedScreen />;
   }
 
-  if (requiredPermission && effectiveUser.role !== "super_admin" && effectiveUser.role !== "admin") {
+  if (requiredPermission && effectiveUser.role !== "super_admin") {
     // The short, section-level keys on /agent routes are the granular
     // agent_staff switches. Primary agents and sub-agents own those portal
     // sections by role and must not be denied merely because role permissions

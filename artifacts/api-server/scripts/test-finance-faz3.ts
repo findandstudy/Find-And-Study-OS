@@ -19,9 +19,10 @@ import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import http from "http";
 import express, { type Express } from "express";
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import {
   db,
+  auditLogsTable,
   usersTable,
   studentsTable,
   applicationsTable,
@@ -104,8 +105,11 @@ const createdCommissionIds: number[] = [];
 const createdStudentIds: number[] = [];
 const createdApplicationIds: number[] = [];
 const createdUserIds: number[] = [];
+const createdAuditLogIds: number[] = [];
 
 after(async () => {
+  if (createdAuditLogIds.length > 0)
+    await db.delete(auditLogsTable).where(inArray(auditLogsTable.id, createdAuditLogIds));
   if (createdApplicationIds.length > 0)
     await db.delete(applicationsTable).where(inArray(applicationsTable.id, createdApplicationIds));
   if (createdStudentIds.length > 0)
@@ -160,6 +164,7 @@ async function seedApplication(studentId: number) {
 // ---------------------------------------------------------------------------
 test("F3-1: POST /commissions with staffUserId+staffCommissionAmount saves both fields", async () => {
   const staffId = await seedStaffUser();
+  currentUser = { id: staffId, role: "super_admin", isActive: true };
 
   const payload = {
     season: SEASON,
@@ -201,6 +206,26 @@ test("F3-1: POST /commissions with staffUserId+staffCommissionAmount saves both 
       "USD",
       `staffCommissionCurrency mismatch: got ${row.staffCommissionCurrency}`,
     );
+
+    let auditRow: { id: number } | undefined;
+    for (let attempt = 0; attempt < 50 && !auditRow; attempt += 1) {
+      [auditRow] = await db
+        .select({ id: auditLogsTable.id })
+        .from(auditLogsTable)
+        .where(
+          and(
+            eq(auditLogsTable.userId, staffId),
+            eq(auditLogsTable.action, "create_commission"),
+            eq(auditLogsTable.resourceId, row.id),
+          ),
+        )
+        .limit(1);
+      if (!auditRow) {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+    }
+    assert.ok(auditRow, "commission creation must persist an audit receipt");
+    createdAuditLogIds.push(auditRow.id);
   });
 });
 

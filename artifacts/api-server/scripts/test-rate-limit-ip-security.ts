@@ -28,7 +28,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import http from "http";
-import express, { type Express } from "express";
+import express, { type Express, type Request } from "express";
 import rateLimit from "express-rate-limit";
 
 import { getClientIp, getRateLimitIp } from "../src/lib/clientIp.js";
@@ -89,6 +89,16 @@ test("RL1: getClientIp() returns req.ip (not raw XFF header value)", async () =>
     assert.equal(capturedIp, "203.0.113.99",
       `getClientIp returned ${capturedIp} — must equal req.ip, not the raw first XFF entry`);
   });
+});
+
+test("RL1b: getRateLimitIp() groups IPv6 clients by the library-safe subnet key", () => {
+  const first = getRateLimitIp({ ip: "2001:db8:abcd:1201::10" } as Request);
+  const sameSubnet = getRateLimitIp({ ip: "2001:db8:abcd:12ff::20" } as Request);
+  const otherSubnet = getRateLimitIp({ ip: "2001:db8:abcd:1301::10" } as Request);
+
+  assert.equal(first, sameSubnet, "IPv6 addresses in the same /56 must share a limiter bucket");
+  assert.notEqual(first, otherSubnet, "IPv6 addresses in different /56 networks need different buckets");
+  assert.match(first, /\/56$/);
 });
 
 // ---------------------------------------------------------------------------

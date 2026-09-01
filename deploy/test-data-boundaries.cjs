@@ -3,7 +3,13 @@
 
 const assert = require("node:assert/strict");
 const { execFileSync, spawnSync } = require("node:child_process");
-const { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } = require("node:fs");
+const {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} = require("node:fs");
 const { tmpdir } = require("node:os");
 const path = require("node:path");
 const test = require("node:test");
@@ -44,11 +50,19 @@ test("Git ignores runtime data and secret env fixtures but keeps examples tracka
       writeFileSync(target, "fixture-only\n");
     }
     for (const name of ignored) {
-      const result = spawnSync("git", ["check-ignore", "-q", path.join(relative, name)], { cwd: root });
+      const result = spawnSync(
+        "git",
+        ["check-ignore", "-q", path.join(relative, name)],
+        { cwd: root },
+      );
       assert.equal(result.status, 0, `${name} must be ignored`);
     }
     for (const name of examples) {
-      const result = spawnSync("git", ["check-ignore", "-q", path.join(relative, name)], { cwd: root });
+      const result = spawnSync(
+        "git",
+        ["check-ignore", "-q", path.join(relative, name)],
+        { cwd: root },
+      );
       assert.equal(result.status, 1, `${name} must remain trackable`);
     }
   } finally {
@@ -86,32 +100,47 @@ test("release runtime env and logs must remain outside immutable release storage
   }
   writeFileSync(externalEnv, "fixture-only\n");
   try {
-    assert.doesNotThrow(() => validateReleaseRuntimePaths({
-      releaseDir: release,
-      releasesDir: releases,
-      logDir: externalLogs,
-      runtimeEnvFile: externalEnv,
-    }));
-    assert.throws(() => validateReleaseRuntimePaths({
-      releaseDir: release,
-      releasesDir: releases,
-      logDir: unsafeLogs,
-      runtimeEnvFile: externalEnv,
-    }), /LOG_DIR must be outside/);
+    assert.doesNotThrow(() =>
+      validateReleaseRuntimePaths({
+        releaseDir: release,
+        releasesDir: releases,
+        logDir: externalLogs,
+        runtimeEnvFile: externalEnv,
+      }),
+    );
+    assert.throws(
+      () =>
+        validateReleaseRuntimePaths({
+          releaseDir: release,
+          releasesDir: releases,
+          logDir: unsafeLogs,
+          runtimeEnvFile: externalEnv,
+        }),
+      /LOG_DIR must be outside/,
+    );
   } finally {
     rmSync(fixture, { recursive: true, force: true });
   }
 });
 
 test("deploy scripts contain no destructive clean or root rsync delete", () => {
-  const scripts = execFileSync("rg", ["--files", "-g", "*.sh", "-g", "*.bash"], {
+  const scripts = execFileSync("git", ["ls-files", "-z"], {
     cwd: root,
     encoding: "utf8",
-  }).trim().split("\n").filter(Boolean);
+  })
+    .split("\0")
+    .filter((file) => file.endsWith(".sh") || file.endsWith(".bash"));
+  assert.ok(
+    scripts.length > 0,
+    "tracked shell-script denominator must not be empty",
+  );
   for (const script of scripts) {
     const source = readFileSync(path.join(root, script), "utf8");
     assert.doesNotMatch(source, /git\s+clean\s+[^\n]*-fdx/);
-    assert.doesNotMatch(source, /rsync\s+[^\n]*--delete[^\n]*(?:\s\/\s|\s\$\{?HOME\}?\s)/);
+    assert.doesNotMatch(
+      source,
+      /rsync\s+[^\n]*--delete[^\n]*(?:\s\/\s|\s\$\{?HOME\}?\s)/,
+    );
   }
   const deploy = readFileSync(path.join(root, "deploy/deploy.sh"), "utf8");
   assert.ok(
@@ -120,7 +149,10 @@ test("deploy scripts contain no destructive clean or root rsync delete", () => {
   );
   assert.match(deploy, /RUNTIME_ENV_FILE/);
   assert.doesNotMatch(deploy, /source \.env/);
-  const build = readFileSync(path.join(root, "deploy/build-production.sh"), "utf8");
+  const build = readFileSync(
+    path.join(root, "deploy/build-production.sh"),
+    "utf8",
+  );
   assert.doesNotMatch(build, /playwright install[^\n]*--with-deps/);
   assert.match(build, /verify-playwright-browser\.cjs/);
 });

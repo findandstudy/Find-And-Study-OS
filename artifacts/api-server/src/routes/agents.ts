@@ -212,7 +212,7 @@ async function resolveAcademyAccessByUserIds(userIds: number[]): Promise<Map<num
   );
 
   for (const user of users) {
-    const basePermissions = user.role === "super_admin" || user.role === "admin"
+    const basePermissions = user.role === "super_admin"
       ? getAllPermissions()
       : permissionsByRole.get(user.role)
         ?? ((DEFAULT_ROLE_PERMISSIONS as Record<string, string[]>)[user.role] ?? []);
@@ -1109,6 +1109,23 @@ router.post("/agents/me/sub-agents/:id/impersonate", requireAuth, requireRole("a
 
   const currentSid = req.cookies[SESSION_COOKIE];
   if (!currentSid) { res.status(400).json({ error: "Session cookie required for impersonation" }); return; }
+  const currentSession = await getSession(currentSid);
+  if (!currentSession || currentSession.originalSid) {
+    await logAudit(req.user!.id, "auth.impersonate.denied", "user", targetUser.id, {
+      reason: currentSession ? "nested_impersonation" : "invalid_session",
+      via: "agents/sub-agents",
+    }, req.ip);
+    res.status(403).json({ error: "Impersonation cannot be started from this session" });
+    return;
+  }
+  if (!targetUser.isActive || targetUser.deletedAt != null) {
+    await logAudit(req.user!.id, "auth.impersonate.denied", "user", targetUser.id, {
+      reason: "inactive_target",
+      via: "agents/sub-agents",
+    }, req.ip);
+    res.status(403).json({ error: "Cannot impersonate an inactive account" });
+    return;
+  }
 
   const sessionData: SessionData = {
     user: {
@@ -1125,6 +1142,7 @@ router.post("/agents/me/sub-agents/:id/impersonate", requireAuth, requireRole("a
     },
     access_token: `agent-impersonation-${Date.now()}`,
     originalSid: currentSid,
+    issued_at: currentSession.issued_at,
   };
 
   const sid = await createSession(sessionData);
@@ -2290,6 +2308,23 @@ router.post("/agents/:id/impersonate", requireAuth, async (req, res, next): Prom
 
   const currentSid = req.cookies[SESSION_COOKIE];
   if (!currentSid) { res.status(400).json({ error: "Session cookie required for impersonation" }); return; }
+  const currentSession = await getSession(currentSid);
+  if (!currentSession || currentSession.originalSid) {
+    await logAudit(req.user!.id, "auth.impersonate.denied", "user", targetUser.id, {
+      reason: currentSession ? "nested_impersonation" : "invalid_session",
+      via: "agents",
+    }, req.ip);
+    res.status(403).json({ error: "Impersonation cannot be started from this session" });
+    return;
+  }
+  if (!targetUser.isActive || targetUser.deletedAt != null) {
+    await logAudit(req.user!.id, "auth.impersonate.denied", "user", targetUser.id, {
+      reason: "inactive_target",
+      via: "agents",
+    }, req.ip);
+    res.status(403).json({ error: "Cannot impersonate an inactive account" });
+    return;
+  }
 
   const sessionData: SessionData = {
     user: {
@@ -2306,6 +2341,7 @@ router.post("/agents/:id/impersonate", requireAuth, async (req, res, next): Prom
     },
     access_token: `impersonation-${Date.now()}`,
     originalSid: currentSid,
+    issued_at: currentSession.issued_at,
   };
 
   const sid = await createSession(sessionData);

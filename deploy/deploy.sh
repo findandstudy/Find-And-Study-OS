@@ -56,6 +56,12 @@ NGINX_APP_HOST="$(APP_BASE_URL="$APP_BASE_URL" node -e '
 [ -n "$NGINX_APP_HOST" ] || fail "APP_BASE_URL has no hostname"
 export NGINX_APP_HOST
 
+# Fail before release creation, dependency installation or any process action
+# unless deployment and the owning PM2 daemon run under the dedicated service
+# account and persistent private objects are not readable by other VPS users.
+node "$SOURCE_ROOT/deploy/runtime-boundary-preflight.cjs"
+node "$SOURCE_ROOT/deploy/disk-capacity-preflight.cjs"
+
 cd "$SOURCE_ROOT"
 git diff --quiet || fail "tracked working tree changes must be committed and reviewed before release"
 git diff --cached --quiet || fail "staged changes must be committed and reviewed before release"

@@ -78,7 +78,10 @@ test("agency SMTP sends manual and student notification email without leaking in
   assert.doesNotMatch(email, /ALLOW_LIVE_INTEGRATIONS !== "true"/);
   assert.match(email, /assertSafeTenantSmtpDestination/);
   assert.match(email, /host: resolvedHost/);
-  assert.match(email, /tlsServername: isIP\(originalHost\)/);
+  assert.match(email, /rejectUnauthorized: true/);
+  assert.match(email, /minVersion: "TLSv1\.2"/);
+  assert.match(email, /config\.tlsServername \|\| isIP\(originalHost\) === 0/);
+  assert.match(email, /servername: config\.tlsServername \|\| originalHost/);
   assert.match(notifications, /getStudentTenantSmtp/);
   assert.match(notifications, /getStudentTenantWhatsApp/);
   assert.match(notifications, /resolveAgentFeatures\(owned\.planTier, owned\.featureOverrides\)\.email_integration/);
@@ -195,6 +198,7 @@ test("academy and agency favicon branding are tenant capability scoped", async (
   assert.match(agents, /async function resolveAcademyAccessByUserIds/);
   assert.match(agents, /rolesTable\.permissions/);
   assert.match(agents, /applyPermissionOverrides/);
+  assert.doesNotMatch(agents, /user\.role === "super_admin" \|\| user\.role === "admin"/);
   assert.match(agents, /async function setUserAcademyAccessOverride/);
   assert.match(agents, /await setUserAcademyAccessOverride\(targetAgent\.userId, parsed\.data\.academyAccess\)/);
   assert.doesNotMatch(agents, /parsed\.data\.academyAccess === roleDefault/);

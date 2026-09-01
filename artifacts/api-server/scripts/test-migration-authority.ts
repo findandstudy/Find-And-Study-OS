@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
   mkdtempSync,
   mkdirSync,
@@ -10,9 +11,10 @@ import {
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 import { validateMigrationLedger } from "../../../lib/db/validate-migrations.mjs";
 
-const root = path.resolve(new URL("../../..", import.meta.url).pathname);
+const root = fileURLToPath(new URL("../../..", import.meta.url));
 const indexSource = readFileSync(
   path.join(root, "artifacts/api-server/src/index.ts"),
   "utf8",
@@ -73,7 +75,8 @@ test("migration validator accepts a coherent disposable ledger fixture", () => {
   try {
     const meta = path.join(fixture, "meta");
     mkdirSync(meta);
-    writeFileSync(path.join(fixture, "0000_fixture.sql"), "SELECT 1;\n");
+    const fixtureSqlPath = path.join(fixture, "0000_fixture.sql");
+    writeFileSync(fixtureSqlPath, "SELECT 1;\r\n");
     writeFileSync(
       path.join(meta, "_journal.json"),
       JSON.stringify({
@@ -90,12 +93,40 @@ test("migration validator accepts a coherent disposable ledger fixture", () => {
         ],
       }),
     );
+    writeFileSync(
+      path.join(meta, "production-prefix.json"),
+      JSON.stringify({
+        schemaVersion: 1,
+        sourceRepository: "example/disposable-fixture",
+        sourceCommit: "a".repeat(40),
+        authoritativeThrough: 0,
+        entries: [
+          {
+            idx: 0,
+            tag: "0000_fixture",
+            when: 1,
+            sha256Lf: createHash("sha256")
+              .update("SELECT 1;\n", "utf8")
+              .digest("hex"),
+          },
+        ],
+      }),
+    );
     assert.deepEqual(
       validateMigrationLedger({
         migrationsDir: fixture,
         journalPath: path.join(meta, "_journal.json"),
       }),
       { files: 1, journalEntries: 1 },
+    );
+    writeFileSync(fixtureSqlPath, "SELECT 2;\n");
+    assert.throws(
+      () =>
+        validateMigrationLedger({
+          migrationsDir: fixture,
+          journalPath: path.join(meta, "_journal.json"),
+        }),
+      /production migration hash drift: 0000_fixture/,
     );
   } finally {
     rmSync(fixture, { recursive: true, force: true });
@@ -113,6 +144,95 @@ test("repository migration history is complete, ordered and duplicate-free", () 
   );
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /OK: (\d+) files, \1 journal entries/);
+});
+
+test("production migration tail and canonical Control Plane range are pinned", () => {
+  const journal = JSON.parse(
+    readFileSync(
+      path.join(root, "lib/db/drizzle/meta/_journal.json"),
+      "utf8",
+    ),
+  );
+  assert.deepEqual(
+    journal.entries.slice(54, 66).map((entry: { tag: string }) => entry.tag),
+    [
+      "0054_agent_applications",
+      "0055_agent_application_review_then_sign",
+      "0056_contract_email_verification_evidence",
+      "0057_agent_application_provisional_portal",
+      "0058_pipeline_stage_auto_messages",
+      "0059_fas_agency_codes",
+      "0060_scoped_record_assignments",
+      "0061_pipeline_stage_audiences",
+      "0062_agent_tenant_capabilities",
+      "0063_finance_mutation_integrity",
+      "0064_agent_application_token_expiry",
+      "0065_invoice_integrity",
+    ],
+  );
+  assert.deepEqual(
+    journal.entries.slice(66).map((entry: { tag: string }) => entry.tag),
+    [
+      "0066_authorization_corridor_foundation",
+      "0067_change_set_control_plane_foundation",
+      "0068_change_set_command_idempotency",
+      "0069_authorization_control_plane_db_hardening",
+      "0070_change_set_evidence_identity_audit_foundation",
+      "0071_change_set_postgres_command_adapter",
+      "0072_change_set_durable_audit_adapter",
+      "0073_change_set_commit_reconciliation",
+      "0074_change_set_scheduled_reconciliation",
+      "0075_active_context_authoritative_resolver",
+      "0076_active_context_session_gateway",
+      "0077_active_context_selection_lifecycle",
+      "0078_active_context_selection_binding",
+      "0079_active_context_selection_consumption",
+      "0080_active_context_selection_consumption_attempts",
+      "0081_active_context_selection_consumption_repair",
+      "0082_student_journey_g45_foundation",
+    ],
+  );
+
+  const attemptMigration = readFileSync(
+    path.join(
+      root,
+      "lib/db/drizzle/0080_active_context_selection_consumption_attempts.sql",
+    ),
+    "utf8",
+  );
+  assert.match(
+    attemptMigration,
+    /CONSTRAINT active_context_selection_consumption_attempts_tenant_id_uq\s+UNIQUE \(tenant_id, id\)/,
+  );
+  assert.match(
+    attemptMigration,
+    /FOREIGN KEY \(tenant_id, attempt_id\)\s+REFERENCES public\.active_context_selection_consumption_attempts\(tenant_id, id\)/,
+  );
+});
+
+test("Student Journey G45 migration remains additive, tenant-forced and default-off", () => {
+  const migration = readFileSync(
+    path.join(
+      root,
+      "lib/db/drizzle/0082_student_journey_g45_foundation.sql",
+    ),
+    "utf8",
+  );
+  assert.match(migration, /'student\.journey\.read'/);
+  assert.match(migration, /'student\.document_request\.respond'/);
+  assert.match(migration, /'student\.dossier\.verify'/);
+  assert.doesNotMatch(migration, /INSERT INTO\s+role_package_capabilities/i);
+  assert.match(migration, /ALTER TABLE public\.%I FORCE ROW LEVEL SECURITY/);
+  assert.match(migration, /journey_notification_intents_default_off_chk/);
+  assert.match(migration, /consent_evidence_kind" = 'VERIFIED_EVIDENCE'/);
+  assert.match(migration, /DEFERRABLE INITIALLY DEFERRED/);
+  assert.match(migration, /SECURITY DEFINER/);
+  assert.match(migration, /SET row_security TO on/);
+  assert.match(
+    migration,
+    /REVOKE ALL ON FUNCTION "fas_journey_v1"\."revalidate_document_request_response_authority"/,
+  );
+  assert.doesNotMatch(migration, /https?:\/\//);
 });
 
 test("migration validator rejects duplicate ids and non-monotonic journal timestamps", () => {
@@ -203,7 +323,14 @@ test("legacy pre-migration cleanup is explicit and local-only", () => {
   }
 });
 
-test("db restore helper rejects unclassified and production-like targets before commands", () => {
+test("db restore helper rejects unclassified and production-like targets before commands", (t) => {
+  const bashProbe = spawnSync("bash", ["-c", "exit 0"], {
+    encoding: "utf8",
+  });
+  if (bashProbe.error || bashProbe.status !== 0) {
+    t.skip("a working bash runtime is unavailable on this host");
+    return;
+  }
   const script = path.join(root, "scripts/db-migrate.sh");
   const unclassified = spawnSync("bash", [script], {
     cwd: root,
@@ -247,6 +374,319 @@ test("migration command requires explicit approval and has no push fallback", ()
     dbMigrate,
     /Refusing to run migrations against a partial or unverified restore/,
   );
+});
+
+test("reviewed migration runner pins target identity and package manager", () => {
+  const runner = path.join(root, "lib/db/run-migrations.mjs");
+  const remote = spawnSync(process.execPath, [runner], {
+    cwd: root,
+    encoding: "utf8",
+    env: {
+      PATH: process.env.PATH ?? "",
+      ALLOW_REVIEWED_MIGRATIONS: "true",
+      MIGRATION_TARGET_ENV: "development",
+      DATABASE_URL:
+        "postgresql://fas_migrator:blocked@db.example.test:5433/fas_dev_blocked",
+      MIGRATION_CONFIRMED_HOST: "db.example.test",
+      MIGRATION_CONFIRMED_PORT: "5433",
+      MIGRATION_CONFIRMED_DATABASE: "fas_dev_blocked",
+      MIGRATION_CONFIRMED_USER: "fas_migrator",
+    },
+  });
+  assert.equal(remote.status, 1);
+  assert.match(remote.stderr, /local\/development migrations require loopback/);
+
+  const production = spawnSync(process.execPath, [runner], {
+    cwd: root,
+    encoding: "utf8",
+    env: {
+      PATH: process.env.PATH ?? "",
+      ALLOW_REVIEWED_MIGRATIONS: "true",
+      MIGRATION_TARGET_ENV: "production",
+      DATABASE_URL:
+        "postgresql://fas_migrator:blocked@db.example.test:5432/fasos",
+    },
+  });
+  assert.equal(production.status, 1);
+  assert.match(production.stderr, /dedicated long-lived adoption runner/);
+
+  const malformed = spawnSync(process.execPath, [runner], {
+    cwd: root,
+    encoding: "utf8",
+    env: {
+      PATH: process.env.PATH ?? "",
+      ALLOW_REVIEWED_MIGRATIONS: "true",
+      MIGRATION_TARGET_ENV: "test",
+      DATABASE_URL: "postgresql://do-not-print-this@[",
+    },
+  });
+  assert.equal(malformed.status, 1);
+  assert.match(malformed.stderr, /DATABASE_URL is malformed/);
+  assert.doesNotMatch(malformed.stderr, /do-not-print-this/);
+
+  const source = readFileSync(runner, "utf8");
+  assert.match(source, /identityClient\.connectionParameters/);
+  assert.match(source, /current_database\(\) AS database_name/);
+  assert.match(source, /pg_auth_members/);
+  assert.match(source, /MIGRATION_CONFIRMED_DATABASE/);
+  assert.match(source, /EXPECTED_PNPM_VERSION = "10\.33\.2"/);
+  assert.match(source, /FAS_REVIEWED_PNPM_CLI/);
+  assert.match(source, /process\.platform === "win32"/);
+});
+
+test("production-prefix adoption harness is explicit and loopback-only", () => {
+  const harness = path.join(
+    root,
+    "lib/db/test-production-prefix-adoption.mjs",
+  );
+  const unapproved = spawnSync(process.execPath, [harness], {
+    cwd: root,
+    encoding: "utf8",
+    env: { PATH: process.env.PATH ?? "" },
+  });
+  assert.equal(unapproved.status, 1);
+  assert.match(unapproved.stderr, /ALLOW_DISPOSABLE_PREFIX_ADOPTION=true/);
+
+  const remote = spawnSync(process.execPath, [harness], {
+    cwd: root,
+    encoding: "utf8",
+    env: {
+      PATH: process.env.PATH ?? "",
+      ALLOW_DISPOSABLE_PREFIX_ADOPTION: "true",
+      DATABASE_URL:
+        "postgresql://fas_migrator:blocked@db.example.test:5433/fasos_apply_local",
+    },
+  });
+  assert.equal(remote.status, 1);
+  assert.match(remote.stderr, /only postgresql:\/\/fas_migrator@127\.0\.0\.1:5433/);
+
+  const source = readFileSync(harness, "utf8");
+  assert.match(source, /prefix adoption requires a fresh disposable database/);
+  assert.match(source, /productionEntries\.length, 66/);
+  assert.match(source, /count: 83/);
+});
+
+test("disposable database reset is explicit and fixed to the local test identity", () => {
+  const resetTool = path.join(
+    root,
+    "lib/db/prepare-disposable-migration-database.mjs",
+  );
+  const unapproved = spawnSync(process.execPath, [resetTool], {
+    cwd: root,
+    encoding: "utf8",
+    env: { PATH: process.env.PATH ?? "" },
+  });
+  assert.equal(unapproved.status, 1);
+  assert.match(unapproved.stderr, /ALLOW_DISPOSABLE_DATABASE_RESET=true/);
+
+  const remote = spawnSync(process.execPath, [resetTool], {
+    cwd: root,
+    encoding: "utf8",
+    env: {
+      PATH: process.env.PATH ?? "",
+      ALLOW_DISPOSABLE_DATABASE_RESET: "true",
+      PG_DISPOSABLE_ADMIN_URL:
+        "postgresql://postgres:blocked@db.example.test:5433/postgres",
+    },
+  });
+  assert.equal(remote.status, 1);
+  assert.match(remote.stderr, /only postgresql:\/\/postgres@127\.0\.0\.1:5433/);
+
+  const source = readFileSync(resetTool, "utf8");
+  assert.match(source, /DROP DATABASE IF EXISTS fasos_apply_local/);
+  assert.match(source, /CREATE DATABASE fasos_apply_local OWNER fas_migrator/);
+  assert.match(source, /NOINHERIT NOREPLICATION NOBYPASSRLS/);
+  assert.match(source, /pg_auth_members/);
+  assert.match(source, /fas_cp_owner/);
+  assert.match(source, /fas_cp_executor/);
+  assert.match(source, /fas_evidence_owner/);
+  assert.match(source, /fas_evidence_issuer/);
+  assert.match(source, /fas_auth_context_owner/);
+  assert.match(source, /fas_auth_context_resolver/);
+  assert.match(source, /fas_app/);
+  assert.match(source, /fas_audit_owner/);
+  assert.match(source, /fas_audit_writer/);
+  assert.match(source, /fas_repair_owner/);
+  assert.match(source, /fas_repair_worker/);
+  assert.match(source, /fas_session_owner/);
+  assert.match(source, /fas_session_resolver/);
+  assert.match(source, /fas_rate_limit_owner/);
+  assert.match(source, /fas_rate_limit_executor/);
+  assert.match(source, /fas_session_lifecycle_owner/);
+  assert.match(source, /fas_session_lifecycle_executor/);
+  assert.match(source, /fas_session_repair_owner/);
+  assert.match(source, /fas_session_repair_executor/);
+  assert.match(source, /fas_journey_owner/);
+  assert.match(source, /fas_journey_executor/);
+});
+
+test("PostgreSQL adapter integration is explicit and fixed to the disposable target", () => {
+  const adapterTest = path.join(
+    root,
+    "artifacts/api-server/scripts/test-postgres-change-set-adapter.ts",
+  );
+  const unapproved = spawnSync(
+    process.execPath,
+    ["--import", "tsx", adapterTest],
+    {
+      cwd: path.join(root, "artifacts/api-server"),
+      encoding: "utf8",
+      env: { PATH: process.env.PATH ?? "" },
+    },
+  );
+  assert.equal(unapproved.status, 1);
+  assert.match(unapproved.stderr, /ALLOW_DISPOSABLE_ADAPTER_TEST=true is required/);
+
+  const source = readFileSync(adapterTest, "utf8");
+  assert.match(source, /assert\.equal\(databaseName, "fasos_apply_local"\)/);
+  assert.match(source, /assert\.equal\(parsed\.port, "5433"\)/);
+  assert.match(source, /\[executorUrl, "fas_cp_executor"\]/);
+  assert.match(source, /\[evidenceIssuerUrl, "fas_evidence_issuer"\]/);
+  assert.match(
+    source,
+    /\[contextResolverUrl, "fas_auth_context_resolver"\]/,
+  );
+});
+
+test("comprehensive Control Plane gate is explicit and fixed to the disposable target", () => {
+  const controlPlaneTest = path.join(
+    root,
+    "artifacts/api-server/scripts/test-postgres-control-plane-gate.ts",
+  );
+  const unapproved = spawnSync(
+    process.execPath,
+    ["--import", "tsx", controlPlaneTest],
+    {
+      cwd: path.join(root, "artifacts/api-server"),
+      encoding: "utf8",
+      env: { PATH: process.env.PATH ?? "" },
+    },
+  );
+  assert.equal(unapproved.status, 1);
+  assert.match(
+    unapproved.stderr,
+    /ALLOW_DISPOSABLE_CONTROL_PLANE_GATE=true is required/,
+  );
+
+  const source = readFileSync(controlPlaneTest, "utf8");
+  assert.match(
+    source,
+    /assert\.equal\(target\.pathname\.slice\(1\), "fasos_apply_local"\)/,
+  );
+  assert.match(source, /assert\.equal\(target\.port, "5433"\)/);
+  assert.match(source, /assert\.equal\(migrationCount\.rows\[0\]\.count, 83\)/);
+  assert.doesNotMatch(source, /CREATE ROLE \$\{/);
+});
+
+test("Student Journey G45 PostgreSQL integration is explicit and loopback-only", () => {
+  const journeyTest = path.join(
+    root,
+    "artifacts/api-server/scripts/test-postgres-student-journey-g45.ts",
+  );
+  const unapproved = spawnSync(
+    process.execPath,
+    ["--import", "tsx", journeyTest],
+    {
+      cwd: path.join(root, "artifacts/api-server"),
+      encoding: "utf8",
+      env: { PATH: process.env.PATH ?? "" },
+    },
+  );
+  assert.equal(unapproved.status, 1);
+  assert.match(
+    unapproved.stderr,
+    /ALLOW_DISPOSABLE_STUDENT_JOURNEY_G45_TEST=true is required/,
+  );
+
+  const source = readFileSync(journeyTest, "utf8");
+  assert.match(source, /target\.hostname, "127\.0\.0\.1"/);
+  assert.match(source, /target\.port, "5433"/);
+  assert.match(source, /target\.pathname, "\/fasos_apply_local"/);
+  assert.match(source, /safeTarget\(executorUrl, "fas_journey_executor"\)/);
+  assert.match(source, /ALLOW_LIVE_INTEGRATIONS/);
+  assert.match(source, /migrationCount\.rows\[0\]\?\.count, 83/);
+  assert.match(source, /journey_notification_intents_default_off_chk/);
+  assert.match(source, /REVOKE ALL ON TABLE public\.\$\{table\} FROM fas_journey_executor/);
+});
+
+test("durable audit integration is explicit and fixed to the disposable target", () => {
+  const auditTest = path.join(
+    root,
+    "artifacts/api-server/scripts/test-postgres-change-set-audit.ts",
+  );
+  const unapproved = spawnSync(
+    process.execPath,
+    ["--import", "tsx", auditTest],
+    {
+      cwd: path.join(root, "artifacts/api-server"),
+      encoding: "utf8",
+      env: { PATH: process.env.PATH ?? "" },
+    },
+  );
+  assert.equal(unapproved.status, 1);
+  assert.match(unapproved.stderr, /ALLOW_DISPOSABLE_AUDIT_TEST=true is required/);
+
+  const source = readFileSync(auditTest, "utf8");
+  assert.match(source, /assert\.equal\(databaseName, "fasos_apply_local"\)/);
+  assert.match(source, /assert\.equal\(parsed\.port, "5433"\)/);
+  assert.match(source, /\[auditWriterUrl, "fas_audit_writer"\]/);
+  assert.match(source, /\[repairWorkerUrl, "fas_repair_worker"\]/);
+});
+
+test("active-context PostgreSQL session integration is explicit and fixed to the disposable target", () => {
+  const sessionTest = path.join(
+    root,
+    "artifacts/api-server/scripts/test-postgres-active-context-session-gateway.ts",
+  );
+  const unapproved = spawnSync(
+    process.execPath,
+    ["--import", "tsx", sessionTest],
+    {
+      cwd: path.join(root, "artifacts/api-server"),
+      encoding: "utf8",
+      env: { PATH: process.env.PATH ?? "" },
+    },
+  );
+  assert.equal(unapproved.status, 1);
+  assert.match(
+    unapproved.stderr,
+    /ALLOW_DISPOSABLE_SESSION_GATEWAY_TEST=true is required/,
+  );
+
+  const source = readFileSync(sessionTest, "utf8");
+  assert.match(source, /assert\.equal\(databaseName, "fasos_apply_local"\)/);
+  assert.match(source, /assert\.equal\(parsed\.port, "5433"\)/);
+  assert.match(source, /\[sessionResolverUrl, "fas_session_resolver"\]/);
+  assert.match(source, /\[rateLimitUrl, "fas_rate_limit_executor"\]/);
+  assert.match(
+    source,
+    /\[lifecycleUrl, "fas_session_lifecycle_executor"\]/,
+  );
+  assert.match(source, /\[repairUrl, "fas_session_repair_executor"\]/);
+});
+
+test("live-first CI pins actions and PostgreSQL while replaying both adoption paths", () => {
+  const workflow = readFileSync(
+    path.join(root, ".github/workflows/live-first-convergence.yml"),
+    "utf8",
+  );
+  assert.match(workflow, /runs-on: ubuntu-latest/);
+  assert.match(workflow, /runs-on: windows-latest/);
+  assert.match(
+    workflow,
+    /postgres:16\.15@sha256:e17e86066e5ef83e0952a9347f5c792b7ece00972e2aa787a6986f471b3dd3d5/,
+  );
+  assert.match(workflow, /prepare-disposable-migration-database\.mjs/);
+  assert.equal(workflow.match(/node \.\/run-migrations\.mjs/g)?.length, 2);
+  assert.equal(
+    workflow.match(/test-production-prefix-adoption\.mjs/g)?.length,
+    2,
+    "foundation and adapter fixtures must use isolated prefix-adoption databases",
+  );
+  assert.match(workflow, /test:postgres-student-journey-g45/);
+  assert.match(workflow, /ALLOW_DISPOSABLE_STUDENT_JOURNEY_G45_TEST/);
+  assert.match(workflow, /ALLOW_LIVE_INTEGRATIONS: "false"/);
+  assert.doesNotMatch(workflow, /uses:\s+[^\s@]+@(?![a-f0-9]{40}\b)/);
 });
 
 test("ledger baseline requires explicit audit and exact database confirmation before DB access", () => {

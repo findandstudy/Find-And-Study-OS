@@ -3,6 +3,11 @@ import { type Request, type Response } from "express";
 import { db, sessionsTable } from "@workspace/db";
 import { eq, asc, and, sql } from "drizzle-orm";
 import { getClearCookieOptions } from "./cookieOptions";
+import {
+  getBoundedSessionExpiry,
+  isAbsoluteSessionExpired,
+  resolveSessionIssuedAt,
+} from "./sessionLifetime";
 
 export const SESSION_COOKIE = "sid";
 
@@ -17,16 +22,6 @@ export const SESSION_COOKIE = "sid";
  * request via authMiddleware, so active users never get logged out.
  */
 export const IDLE_TIMEOUT = 8 * 60 * 60 * 1000;
-
-/**
- * Hard session lifetime. Sliding the idle timeout must never make a stolen
- * cookie valid forever. Operators may tune this between one hour and seven
- * days; the secure default is one day.
- */
-const configuredAbsoluteTtl = Number(process.env.SESSION_ABSOLUTE_TTL_MS);
-export const ABSOLUTE_SESSION_TTL = Number.isFinite(configuredAbsoluteTtl)
-  ? Math.min(7 * 24 * 60 * 60 * 1000, Math.max(60 * 60 * 1000, configuredAbsoluteTtl))
-  : 24 * 60 * 60 * 1000;
 
 /** Backward-compatible alias — do not remove (imported by routes). */
 export const SESSION_TTL = IDLE_TIMEOUT;
@@ -63,8 +58,8 @@ export interface SessionData {
   access_token: string;
   refresh_token?: string;
   expires_at?: number;
-  /** Epoch milliseconds; injected by createSession, never trusted from HTTP. */
-  sessionCreatedAt?: number;
+  /** Server-issued epoch milliseconds used for the non-sliding hard timeout. */
+  issued_at?: number;
   /**
    * If this session was created via impersonation, this points to the
    * original (admin) session id so the user can return to it.
@@ -109,12 +104,12 @@ export async function createSession(
   }
 
   const sid = crypto.randomBytes(32).toString("hex");
-  const sessionCreatedAt = Date.now();
-  const persistedData: SessionData = { ...data, sessionCreatedAt };
+  const issuedAt = resolveSessionIssuedAt(data.issued_at);
+  const storedData: SessionData = { ...data, issued_at: issuedAt };
   await db.insert(sessionsTable).values({
     sid,
-    sess: persistedData as unknown as Record<string, unknown>,
-    expire: new Date(Math.min(sessionCreatedAt + IDLE_TIMEOUT, sessionCreatedAt + ABSOLUTE_SESSION_TTL)),
+    sess: storedData as unknown as Record<string, unknown>,
+    expire: new Date(getBoundedSessionExpiry(issuedAt, IDLE_TIMEOUT)),
     userId: userId ?? null,
   });
   return sid;
@@ -130,23 +125,21 @@ export async function getSession(sid: string): Promise<SessionData | null> {
     if (row) await deleteSession(sid);
     return null;
   }
-
-  const session = row.sess as unknown as SessionData;
-  const now = Date.now();
-  // Legacy sessions pre-date the absolute timestamp. Give them one fresh,
-  // bounded window and persist it; every subsequent request enforces it.
-  if (!Number.isFinite(session.sessionCreatedAt)) {
-    session.sessionCreatedAt = now;
-    await db.update(sessionsTable).set({
-      sess: session as unknown as Record<string, unknown>,
-      expire: new Date(Math.min(row.expire.getTime(), now + ABSOLUTE_SESSION_TTL)),
-    }).where(eq(sessionsTable.sid, sid));
-  }
-  if (now >= session.sessionCreatedAt! + ABSOLUTE_SESSION_TTL) {
+  const data = row.sess as unknown as SessionData;
+  const issuedAt = resolveSessionIssuedAt(data.issued_at);
+  if (isAbsoluteSessionExpired(issuedAt)) {
     await deleteSession(sid);
     return null;
   }
-  return session;
+  if (data.issued_at !== issuedAt) {
+    // One-time compatibility upgrade for sessions created before absolute
+    // lifetime tracking. Their 24-hour clock starts at first observation.
+    data.issued_at = issuedAt;
+    await db.update(sessionsTable)
+      .set({ sess: data as unknown as Record<string, unknown> })
+      .where(eq(sessionsTable.sid, sid));
+  }
+  return data;
 }
 
 /**
@@ -159,7 +152,7 @@ const SESSION_TOUCH_INTERVAL = 5 * 60 * 1000;
 const MAX_TRACKED_SESSION_TOUCHES = 10_000;
 const recentSessionTouches = new Map<string, number>();
 
-export async function touchSession(sid: string, sessionCreatedAt?: number): Promise<void> {
+export async function touchSession(sid: string, issuedAt: number): Promise<void> {
   const now = Date.now();
   const lastTouch = recentSessionTouches.get(sid) ?? 0;
   if (now - lastTouch < SESSION_TOUCH_INTERVAL) return;
@@ -176,12 +169,9 @@ export async function touchSession(sid: string, sessionCreatedAt?: number): Prom
   }
 
   try {
-    const absoluteExpiry = Number.isFinite(sessionCreatedAt)
-      ? sessionCreatedAt! + ABSOLUTE_SESSION_TTL
-      : now + ABSOLUTE_SESSION_TTL;
     await db
       .update(sessionsTable)
-      .set({ expire: new Date(Math.min(Date.now() + IDLE_TIMEOUT, absoluteExpiry)) })
+      .set({ expire: new Date(getBoundedSessionExpiry(issuedAt, IDLE_TIMEOUT)) })
       .where(eq(sessionsTable.sid, sid));
   } catch (error) {
     recentSessionTouches.delete(sid);
@@ -193,14 +183,15 @@ export async function updateSession(
   sid: string,
   data: SessionData,
 ): Promise<void> {
-  const now = Date.now();
-  const sessionCreatedAt = Number.isFinite(data.sessionCreatedAt) ? data.sessionCreatedAt! : now;
-  const persistedData: SessionData = { ...data, sessionCreatedAt };
+  const current = await getSession(sid);
+  if (!current) return;
+  const issuedAt = resolveSessionIssuedAt(data.issued_at ?? current.issued_at);
+  const storedData: SessionData = { ...data, issued_at: issuedAt };
   await db
     .update(sessionsTable)
     .set({
-      sess: persistedData as unknown as Record<string, unknown>,
-      expire: new Date(Math.min(now + IDLE_TIMEOUT, sessionCreatedAt + ABSOLUTE_SESSION_TTL)),
+      sess: storedData as unknown as Record<string, unknown>,
+      expire: new Date(getBoundedSessionExpiry(issuedAt, IDLE_TIMEOUT)),
     })
     .where(eq(sessionsTable.sid, sid));
 }

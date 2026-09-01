@@ -38,6 +38,7 @@ import {
   mergeDocumentParts,
   type DocumentPartInput,
 } from "../lib/documentPartMerge";
+import { getRateLimitIp } from "../lib/clientIp";
 
 // AI extraction endpoints accept base64-encoded PDF/image documents in the
 // JSON body. Base64 inflates payload size by ~33%, and the route itself
@@ -91,7 +92,9 @@ function aiRateLimit(maxRequests: number, bucket: string) {
     legacyHeaders: false,
     message: { error: "Too many requests. Please try again later." },
     store: new PgRateLimitStore(AI_RATE_WINDOW_MS, bucket),
-    keyGenerator: (req) => String(req.user?.id ?? req.ip),
+    keyGenerator: (req) => req.user?.id != null
+      ? `user:${req.user.id}`
+      : `ip:${getRateLimitIp(req)}`,
   });
 }
 

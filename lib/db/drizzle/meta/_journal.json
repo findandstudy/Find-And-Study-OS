@@ -463,6 +463,125 @@
       "when": 1788134400000,
       "tag": "0065_invoice_integrity",
       "breakpoints": true
+    },
+    {
+      "idx": 66,
+      "version": "7",
+      "when": 1788138000000,
+      "tag": "0066_authorization_corridor_foundation",
+      "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "7",
+      "when": 1788141600000,
+      "tag": "0067_change_set_control_plane_foundation",
+      "breakpoints": true
+    },
+    {
+      "idx": 68,
+      "version": "7",
+      "when": 1788145200000,
+      "tag": "0068_change_set_command_idempotency",
+      "breakpoints": true
+    },
+    {
+      "idx": 69,
+      "version": "7",
+      "when": 1788148800000,
+      "tag": "0069_authorization_control_plane_db_hardening",
+      "breakpoints": true
+    },
+    {
+      "idx": 70,
+      "version": "7",
+      "when": 1788152400000,
+      "tag": "0070_change_set_evidence_identity_audit_foundation",
+      "breakpoints": true
+    },
+    {
+      "idx": 71,
+      "version": "7",
+      "when": 1788156000000,
+      "tag": "0071_change_set_postgres_command_adapter",
+      "breakpoints": true
+    },
+    {
+      "idx": 72,
+      "version": "7",
+      "when": 1788159600000,
+      "tag": "0072_change_set_durable_audit_adapter",
+      "breakpoints": true
+    },
+    {
+      "idx": 73,
+      "version": "7",
+      "when": 1788163200000,
+      "tag": "0073_change_set_commit_reconciliation",
+      "breakpoints": true
+    },
+    {
+      "idx": 74,
+      "version": "7",
+      "when": 1788166800000,
+      "tag": "0074_change_set_scheduled_reconciliation",
+      "breakpoints": true
+    },
+    {
+      "idx": 75,
+      "version": "7",
+      "when": 1788170400000,
+      "tag": "0075_active_context_authoritative_resolver",
+      "breakpoints": true
+    },
+    {
+      "idx": 76,
+      "version": "7",
+      "when": 1788174000000,
+      "tag": "0076_active_context_session_gateway",
+      "breakpoints": true
+    },
+    {
+      "idx": 77,
+      "version": "7",
+      "when": 1788177600000,
+      "tag": "0077_active_context_selection_lifecycle",
+      "breakpoints": true
+    },
+    {
+      "idx": 78,
+      "version": "7",
+      "when": 1788181200000,
+      "tag": "0078_active_context_selection_binding",
+      "breakpoints": true
+    },
+    {
+      "idx": 79,
+      "version": "7",
+      "when": 1788184800000,
+      "tag": "0079_active_context_selection_consumption",
+      "breakpoints": true
+    },
+    {
+      "idx": 80,
+      "version": "7",
+      "when": 1788188400000,
+      "tag": "0080_active_context_selection_consumption_attempts",
+      "breakpoints": true
+    },
+    {
+      "idx": 81,
+      "version": "7",
+      "when": 1788192000000,
+      "tag": "0081_active_context_selection_consumption_repair",
+      "breakpoints": true
+    },
+    {
+      "idx": 82,
+      "version": "7",
+      "when": 1788249600000,
+      "tag": "0082_student_journey_g45_foundation",
+      "breakpoints": true
     }
   ]
 }

@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "baseRef": "hotfix/embed-release-20260830",
+  "baseCommit": "6dca1f951590dce297bb4d3579bd17d8d9f92e5f",
+  "reviewedThroughCommit": "929dc02af15149367715616f9e6cf146462eb0bc",
+  "expected": {
+    "reviewedTree": "aa7704b5f1a7053ed240368d35ca42725ddda0f5",
+    "patchSha256": "4b51c3cb924041fbce8f97fc3acf4a539650de8d25245295ac6071c38e567341",
+    "commitCount": 65,
+    "fileCount": 191,
+    "insertions": 58891,
+    "deletions": 290,
+    "groupCounts": {
+      "migration_data_authority": 29,
+      "deployment_attestation": 13,
+      "student_journey": 25,
+      "control_plane_authorization": 58,
+      "live_api_boundary": 13,
+      "frontend": 12,
+      "security_inventory": 7,
+      "ci_supply_chain": 8,
+      "tests": 16,
+      "documentation": 10,
+      "other": 0
+    }
+  },
+  "postReviewInfrastructure": {
+    "pinnedPaths": {
+      ".github/workflows/live-first-convergence.yml": "88246cf39e4be4ee5a2e4fa26fb840919a55ad3e",
+      "docs/LIVE_FIRST_CONVERGENCE_REVIEW_PACKET_2026-09-01.md": "1ebb7c9f53effc4ae723853306438648d9ecd578",
+      "package.json": "8c2805a568f927511e8d2a8b50a56f3273b477fe",
+      "scripts/test-convergence-review-manifest.mjs": "926d05758550b337da682155aee8024aece926fe",
+      "scripts/verify-convergence-review-manifest.mjs": "4ccbc183eb0b1cbf2aa2f2e0a6eaf81d21eea8f2"
+    }
+  },
+  "allowedPostReviewPaths": [
+    ".github/workflows/live-first-convergence.yml",
+    "docs/LIVE_FIRST_CONVERGENCE_REVIEW_PACKET_2026-09-01.md",
+    "package.json",
+    "scripts/test-convergence-review-manifest.mjs",
+    "scripts/verify-convergence-review-manifest.mjs",
+    "security/convergence-review-manifest.json"
+  ]
+}

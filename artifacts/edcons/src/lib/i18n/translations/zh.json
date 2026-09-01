@@ -1517,6 +1517,104 @@
     "docStatusRequested": "已请求",
     "docStatusUnderReview": "审核中"
   },
+  "studentJourney": {
+    "nextBestAction": "你接下来最重要的行动",
+    "whyImportant": "为什么这很重要：",
+    "currentStage": "当前阶段",
+    "deadline": "截止日期",
+    "overdue": "需要你处理",
+    "continue": "继续",
+    "viewStatus": "查看状态",
+    "journeyProgress": "申请旅程进度",
+    "progressPercent": "{percent}%",
+    "progressUnknown": "等待确认",
+    "needsReview": "需要顾问确认",
+    "unavailableTitle": "目前无法加载你的申请旅程。",
+    "unavailableDescription": "你的申请数据是安全的。请重试，或打开“我的申请”继续。",
+    "retry": "重试",
+    "waitingParty": {
+      "student": "等待你处理",
+      "find_and_study": "Find & Study 正在审核",
+      "university": "等待大学处理",
+      "external_authority": "等待外部主管机构",
+      "completed": "已完成",
+      "unknown": "等待方尚未确认"
+    },
+    "evidenceStatus": {
+      "not_started": "尚未添加证明材料",
+      "action_required": "有 {requested} 项材料请求需要你处理",
+      "in_review": "有 {pending} 份文件正在审核",
+      "verified": "已有 {verified} 份文件通过验证",
+      "unknown": "材料状态需要审核"
+    },
+    "actions": {
+      "explore_programs": {
+        "title": "选择一个课程开始申请",
+        "description": "浏览课程并开始最符合你目标的申请。",
+        "reason": "开始申请旅程前，需要确定课程和入学批次。"
+      },
+      "upload_requested_documents": {
+        "title": "上传要求的 {count} 份文件",
+        "description": "招生团队正在等待你提交所要求的文件。",
+        "reason": "这些请求得到回应前，团队无法安全推进申请。"
+      },
+      "replace_rejected_documents": {
+        "title": "替换需要更正的文件",
+        "description": "查看文件反馈并上传更正后的副本。",
+        "reason": "正确的证明材料可避免不必要的延误和提交错误。"
+      },
+      "complete_dossier": {
+        "title": "完善你的申请档案",
+        "description": "补充个人资料和支持文件，以便顾问审核你的情况。",
+        "reason": "评估和准备申请需要完整、准确的档案。"
+      },
+      "await_document_review": {
+        "title": "你的文件正在审核",
+        "description": "除非顾问要求更正，否则目前无需采取新行动。",
+        "reason": "Find & Study 正在进入下一流程前核验证明材料。"
+      },
+      "await_submission": {
+        "title": "你的申请正在准备中",
+        "description": "顾问正在完成提交前检查。",
+        "reason": "发送前必须核对申请信息和证明材料。"
+      },
+      "await_university_decision": {
+        "title": "你的申请已递交大学",
+        "description": "大学审核期间，你可以查看最新状态。",
+        "reason": "下一项决定现在由大学作出。"
+      },
+      "review_offer": {
+        "title": "查看录取通知及其条件",
+        "description": "打开申请，查看录取通知、条件和截止日期。",
+        "reason": "录取条件和截止日期可能需要你及时作出决定。"
+      },
+      "await_visa_decision": {
+        "title": "你的签证申请正在审核",
+        "description": "查看最新状态，并确保联系方式有效。",
+        "reason": "下一项决定由外部主管机构负责。"
+      },
+      "prepare_enrollment": {
+        "title": "准备入学注册",
+        "description": "查看申请并完成剩余的注册步骤。",
+        "reason": "完成必需步骤有助于按时注册。"
+      },
+      "journey_complete": {
+        "title": "你的申请旅程已完成",
+        "description": "你可以查看已完成的申请及其文件。",
+        "reason": "此申请已到达完成的流程阶段。"
+      },
+      "contact_advisor": {
+        "title": "与顾问讨论后续选择",
+        "description": "联系顾问，获取清晰且符合你情况的下一步建议。",
+        "reason": "推荐其他行动前，此申请需要人工审核。"
+      },
+      "track_application": {
+        "title": "跟踪你的申请状态",
+        "description": "打开申请，查看最新的已验证状态。",
+        "reason": "当前流程步骤正由 Find & Study 处理。"
+      }
+    }
+  },
   "studentWishlist": {
     "title": "我的心愿单",
     "subtitle": "您稍后收藏的专业 — {count} 个专业",
