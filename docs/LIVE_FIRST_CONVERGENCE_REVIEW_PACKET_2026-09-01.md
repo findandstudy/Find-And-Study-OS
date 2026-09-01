@@ -20,12 +20,12 @@ NO-GO.
 |---|---|
 | Base branch | `hotfix/embed-release-20260830` |
 | Base commit | `6dca1f951590dce297bb4d3579bd17d8d9f92e5f` |
-| Reviewed-through commit | `cf22635609f3537b22a2f41c677b5a3c7fba8802` |
-| Reviewed tree | `99ce24343bf0112d79aae41a899ec9be31ef5993` |
-| Canonical binary-patch SHA-256 | `1a8316bd5a8af111ae67e2c4107abf5c407a1d4b6bfa8afa66d66b672569e929` |
-| Commit count | `60` |
-| Changed files | `181` |
-| Insertions / deletions | `52,266 / 290` |
+| Reviewed-through commit | `929dc02af15149367715616f9e6cf146462eb0bc` |
+| Reviewed tree | `aa7704b5f1a7053ed240368d35ca42725ddda0f5` |
+| Canonical binary-patch SHA-256 | `4b51c3cb924041fbce8f97fc3acf4a539650de8d25245295ac6071c38e567341` |
+| Commit count | `65` |
+| Changed files | `191` |
+| Insertions / deletions | `58,891 / 290` |
 
 The reviewed base is the public-health-attested live branch source commit, not
 the stale `Find-And-Study-OS-Next/main` snapshot. The reviewed-through commit is
@@ -37,20 +37,20 @@ unchanged CI verifier.
 
 ## Review denominator
 
-The 181 reviewed files reconcile exactly into these mutually exclusive groups:
+The 191 reviewed files reconcile exactly into these mutually exclusive groups:
 
 | Review group | Files | Primary question |
 |---|---:|---|
-| Migration/data authority | 27 | Does `0000–0065` remain byte-authoritative and can `0066–0081` be adopted only on an explicitly approved database? |
+| Migration/data authority | 29 | Does `0000–0065` remain byte-authoritative and can `0066–0082` be adopted only on an explicitly approved database? |
 | Deployment/attestation | 13 | Are root, ownership, disk, process, release and read-only production probes fail-closed and side-effect-free? |
-| Student Journey | 21 | Are self-scope, next action, evidence, response, evaluation and gate claims separated correctly? |
+| Student Journey | 25 | Are self-scope, next action, evidence, response, privacy projection, evaluation and gate claims separated correctly? |
 | Control Plane/authorization | 58 | Are tenant/context/session/capability/receipt/ChangeSet boundaries transactional and default-unwired? |
 | Live API boundary | 13 | Do changes to existing routes/configuration preserve live behavior while closing privilege or external-send gaps? |
 | Frontend | 12 | Are permission projection and Student Journey UI changes scoped, accessible and default-off? |
-| Security inventory | 4 | Do writer/route denominators remain complete and quarantined? |
+| Security inventory | 7 | Do writer/route and reproducible-review denominators remain complete and quarantined? |
 | CI/supply chain | 8 | Are actions, pnpm, lock graph and integration safety pinned and non-secret-bearing? |
 | Other tests | 16 | Do live regressions and negative boundaries cover the modified legacy surfaces? |
-| Documentation | 9 | Do adoption claims match executable evidence and retain NO-GO boundaries? |
+| Documentation | 10 | Do adoption claims match executable evidence and retain NO-GO boundaries? |
 | Unclassified | 0 | Must remain zero. |
 
 ## Required review order
@@ -59,7 +59,7 @@ Review should proceed in dependency order; later slices cannot make an earlier
 failed boundary acceptable.
 
 1. **Base and migration authority:** confirm the base commit, production prefix,
-   migration hashes/journal and fresh plus `66→82` disposable adoption.
+   migration hashes/journal and fresh plus `66→83` disposable adoption.
 2. **Deployment and production attestation:** inspect every read/write API,
    subprocess boundary, `/proc` identity check, filesystem budget and explicit
    opt-in. Confirm no automatic retention/delete path exists.
@@ -86,7 +86,10 @@ failed boundary acceptable.
    - `artifacts/api-server/src/routes/users.ts`
 6. **Student Journey and frontend:** confirm which code is default-off runtime,
    which is default-unwired foundation, and that no foundation can manufacture
-   verified evidence, fulfilment, consent, QAVJP or a gate decision.
+   verified evidence, fulfilment, consent, QAVJP or a gate decision. Review the
+   additive `0082` migration, dedicated response executor, same-transaction
+   transition receipt/milestone/outbox guards and redacted read-only privacy
+   projection; confirm there is no route wiring, external delivery or live PII.
 7. **Security inventories, tests and CI:** verify that the normal denominators
    remain frozen, strict G30 remains NO-GO, credentials are not persisted and
    live integrations remain disabled.

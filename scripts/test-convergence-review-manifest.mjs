@@ -38,6 +38,12 @@ test("sensitive convergence paths are assigned to explicit review groups", () =>
   );
   assert.equal(
     classifyReviewPath(
+      "artifacts/api-server/src/lib/studentPrivacySharingProjection.ts",
+    ),
+    "student_journey",
+  );
+  assert.equal(
+    classifyReviewPath(
       "artifacts/api-server/src/lib/postgresChangeSetCommandStore.ts",
     ),
     "control_plane_authorization",
@@ -52,6 +58,10 @@ test("sensitive convergence paths are assigned to explicit review groups", () =>
   );
   assert.equal(
     classifyReviewPath("security/tenant-writer-registry.json"),
+    "security_inventory",
+  );
+  assert.equal(
+    classifyReviewPath("scripts/verify-convergence-review-manifest.mjs"),
     "security_inventory",
   );
   assert.equal(
@@ -81,9 +91,9 @@ test("post-review changes accept only the frozen review-infrastructure allowlist
 });
 
 test("expected evidence comparison is exact and fails closed on aggregate drift", () => {
-  assert.doesNotThrow(() => compareExpected({ files: 181 }, { files: 181 }));
+  assert.doesNotThrow(() => compareExpected({ files: 191 }, { files: 191 }));
   assert.throws(
-    () => compareExpected({ files: 182 }, { files: 181 }),
+    () => compareExpected({ files: 192 }, { files: 191 }),
     /manifest drift/,
   );
 });
@@ -122,10 +132,10 @@ test("the frozen review groups reconcile to the exact reviewed file denominator"
   const counts = Object.values(manifest.expected.groupCounts);
   assert.equal(
     counts.reduce((total, count) => total + count, 0),
-    181,
+    191,
   );
   assert.equal(manifest.expected.groupCounts.other, 0);
-  assert.equal(manifest.expected.commitCount, 60);
+  assert.equal(manifest.expected.commitCount, 65);
   assert.equal(manifest.expected.patchSha256.length, 64);
 });
 
@@ -185,7 +195,7 @@ test("the repository verifier reconstructs the pinned base-to-reviewed patch", (
   );
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /\[convergence-review\] PASS/);
-  assert.match(result.stdout, /"fileCount":181/);
+  assert.match(result.stdout, /"fileCount":191/);
   const payload = JSON.parse(
     result.stdout.replace(/^\[convergence-review\] PASS /, ""),
   );

@@ -131,7 +131,7 @@ export function classifyReviewPath(rawPath) {
   if (file.startsWith("lib/db/")) return "migration_data_authority";
   if (file.startsWith("deploy/")) return "deployment_attestation";
   if (
-    /student[-_]?journey|student[-_]?document/i.test(file) ||
+    /student[-_]?(?:journey|document|privacy)/i.test(file) ||
     file === "artifacts/api-server/src/routes/students.ts" ||
     file === "artifacts/edcons/src/pages/student/Dashboard.tsx"
   ) {
@@ -152,7 +152,9 @@ export function classifyReviewPath(rawPath) {
   if (
     file.startsWith("security/") ||
     file === "scripts/audit-legacy-role-gates.mjs" ||
-    file === "scripts/audit-tenant-writers.mjs"
+    file === "scripts/audit-tenant-writers.mjs" ||
+    file === "scripts/test-convergence-review-manifest.mjs" ||
+    file === "scripts/verify-convergence-review-manifest.mjs"
   ) {
     return "security_inventory";
   }
