@@ -41,6 +41,12 @@ contract. A verified replacement can satisfy a requirement even when an older
 copy was rejected. An unknown evidence status never counts as uploaded or
 verified and is routed to review.
 
+The legacy upload path can assign an `approved` status while mirroring a file.
+For that reason, neither `approved` nor `verified` is sufficient by itself.
+Verification requires a bounded `VERIFIED_EVIDENCE` reference and lowercase
+SHA-256 content hash; a positive status without that immutable evidence remains
+`in_review` and cannot make a dossier milestone eligible.
+
 Inputs are hard-bounded to 250 requirements, 500 document facts and 250 open
 request facts. Invalid dates, control characters, oversized text, malformed
 request state and incomplete versioned authority fail closed.
@@ -72,7 +78,7 @@ manufacture a verified-dossier milestone.
 
 ## Verification
 
-- Direct readiness projection contract: `11/11` pass.
+- Direct readiness projection contract: `12/12` pass.
 - Added to the Linux and Windows exact-head convergence jobs.
 - No migration, schema, route, UI, writer or runtime import was added.
 

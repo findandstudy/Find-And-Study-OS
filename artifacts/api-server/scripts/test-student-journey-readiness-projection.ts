@@ -8,6 +8,16 @@ import {
 } from "../src/lib/studentJourneyReadinessProjection.js";
 
 const EVALUATED_AT = "2026-09-01T12:00:00.000Z";
+const HASH_A = "a".repeat(64);
+const HASH_B = "b".repeat(64);
+
+function verified(type: string, id: string, sha256: string) {
+  return {
+    type,
+    status: "verified",
+    verifiedEvidence: { kind: "VERIFIED_EVIDENCE" as const, id, sha256 },
+  };
+}
 
 function input(overrides: Partial<StudentJourneyReadinessInput> = {}): StudentJourneyReadinessInput {
   return {
@@ -72,8 +82,8 @@ test("a verified replacement outranks rejected evidence for the same requirement
   const projection = buildStudentJourneyReadinessProjection(input({
     documents: [
       { type: "passport", status: "rejected" },
-      { type: "passport", status: "verified" },
-      { type: "bachelors_transcript_all_semesters", status: "approved" },
+      verified("passport", "evidence:passport:2", HASH_A),
+      verified("bachelors_transcript_all_semesters", "evidence:transcript:1", HASH_B),
     ],
   }));
 
@@ -91,7 +101,7 @@ test("only a versioned requirement set can become eligible for a verified-dossie
     requirements: [
       { documentType: "passport", mandatory: true, source: "requirement_set", sortOrder: 10 },
     ],
-    documents: [{ type: "passport", status: "approved" }],
+    documents: [verified("passport", "evidence:passport:1", HASH_A)],
   }));
 
   assert.equal(projection.readiness, "document_package_ready");
@@ -109,7 +119,7 @@ test("an unanswered request takes priority even when every requirement is verifi
     requirements: [
       { documentType: "passport", mandatory: true, source: "requirement_set", sortOrder: 10 },
     ],
-    documents: [{ type: "passport", status: "verified" }],
+    documents: [verified("passport", "evidence:passport:1", HASH_A)],
     requests: [{ documentType: null, isCustom: true, fulfilled: false, responded: false }],
   }));
 
@@ -122,8 +132,8 @@ test("an unanswered request takes priority even when every requirement is verifi
 test("a responded custom request waits for review and no longer asks the student to act", () => {
   const projection = buildStudentJourneyReadinessProjection(input({
     documents: [
-      { type: "passport", status: "verified" },
-      { type: "bachelors_transcript", status: "verified" },
+      verified("passport", "evidence:passport:1", HASH_A),
+      verified("bachelors_transcript", "evidence:transcript:1", HASH_B),
     ],
     requests: [{ documentType: null, isCustom: true, fulfilled: false, responded: true }],
   }));
@@ -174,6 +184,23 @@ test("unknown evidence states fail closed into human review", () => {
   assert.equal(projection.requirementResults[0]?.result, "unknown");
 });
 
+test("legacy approved status without immutable verified evidence remains in review", () => {
+  const projection = buildStudentJourneyReadinessProjection(input({
+    requirementAuthority: "versioned",
+    requirementSetRef: "requirement-set:2026-09:v3",
+    requirements: [
+      { documentType: "passport", mandatory: true, source: "requirement_set", sortOrder: 10 },
+    ],
+    documents: [{ type: "passport", status: "approved" }],
+  }));
+
+  assert.equal(projection.readiness, "review_required");
+  assert.equal(projection.coverage.uploadComplete, true);
+  assert.equal(projection.coverage.verificationComplete, false);
+  assert.equal(projection.requirementResults[0]?.reason, "positive_status_without_verified_evidence");
+  assert.equal(projection.milestoneEligibility.dossierVerified, false);
+});
+
 test("malformed authority, request and oversized inputs are rejected before projection", () => {
   assertContractError(
     () => buildStudentJourneyReadinessProjection(input({
@@ -208,6 +235,16 @@ test("malformed authority, request and oversized inputs are rejected before proj
       requirementResolution: "unavailable",
     })),
     "UNRESOLVED_REQUIREMENTS_FORBIDDEN",
+  );
+  assertContractError(
+    () => buildStudentJourneyReadinessProjection(input({
+      documents: [{
+        type: "passport",
+        status: "pending",
+        verifiedEvidence: { kind: "VERIFIED_EVIDENCE", id: "evidence:passport:1", sha256: HASH_A },
+      }],
+    })),
+    "VERIFIED_EVIDENCE_STATUS_MISMATCH",
   );
 });
 

@@ -22,6 +22,11 @@ export type JourneyReadinessRequirementInput = {
 export type JourneyReadinessDocumentInput = {
   type: string;
   status: string;
+  verifiedEvidence?: {
+    kind: "VERIFIED_EVIDENCE";
+    id: string;
+    sha256: string;
+  } | null;
 };
 
 export type JourneyReadinessRequestInput = {
@@ -99,6 +104,7 @@ export type StudentJourneyReadinessProjection = {
       | "no_equivalent_evidence"
       | "only_rejected_evidence"
       | "evidence_awaiting_review"
+      | "positive_status_without_verified_evidence"
       | "verified_evidence"
       | "unrecognized_evidence_state";
     equivalentEvidenceCount: number;
@@ -160,7 +166,9 @@ function classifyRequirement(
       equivalentEvidenceCount: 0,
     };
   }
-  if ([...states].some((state) => VERIFIED_DOCUMENT_STATES.has(state))) {
+  if (equivalent.some(
+    (document) => VERIFIED_DOCUMENT_STATES.has(document.status) && document.verifiedEvidence,
+  )) {
     return {
       documentType: requirement.documentType,
       source: requirement.source,
@@ -175,6 +183,15 @@ function classifyRequirement(
       source: requirement.source,
       result: "in_review",
       reason: "evidence_awaiting_review",
+      equivalentEvidenceCount: equivalent.length,
+    };
+  }
+  if ([...states].some((state) => VERIFIED_DOCUMENT_STATES.has(state))) {
+    return {
+      documentType: requirement.documentType,
+      source: requirement.source,
+      result: "in_review",
+      reason: "positive_status_without_verified_evidence",
       equivalentEvidenceCount: equivalent.length,
     };
   }
@@ -232,10 +249,30 @@ export function buildStudentJourneyReadinessProjection(
       };
     },
   );
-  const documents = boundedArray(input.documents, MAX_DOCUMENTS, "document").map((document) => ({
-    type: boundedText(document.type, "document_type"),
-    status: boundedText(document.status, "document_status").toLowerCase(),
-  }));
+  const documents = boundedArray(input.documents, MAX_DOCUMENTS, "document").map((document) => {
+    const status = boundedText(document.status, "document_status").toLowerCase();
+    const verifiedEvidence = document.verifiedEvidence == null
+      ? null
+      : {
+          kind: document.verifiedEvidence.kind,
+          id: boundedText(document.verifiedEvidence.id, "verified_evidence_id"),
+          sha256: boundedText(document.verifiedEvidence.sha256, "verified_evidence_sha256"),
+        };
+    if (verifiedEvidence && verifiedEvidence.kind !== "VERIFIED_EVIDENCE") {
+      throw new StudentJourneyReadinessContractError("INVALID_VERIFIED_EVIDENCE_KIND");
+    }
+    if (verifiedEvidence && !/^[0-9a-f]{64}$/.test(verifiedEvidence.sha256)) {
+      throw new StudentJourneyReadinessContractError("INVALID_VERIFIED_EVIDENCE_SHA256");
+    }
+    if (verifiedEvidence && !VERIFIED_DOCUMENT_STATES.has(status)) {
+      throw new StudentJourneyReadinessContractError("VERIFIED_EVIDENCE_STATUS_MISMATCH");
+    }
+    return {
+      type: boundedText(document.type, "document_type"),
+      status,
+      verifiedEvidence,
+    };
+  });
   const requests = boundedArray(input.requests, MAX_REQUESTS, "request").map((request) => {
     if (
       typeof request.isCustom !== "boolean"
