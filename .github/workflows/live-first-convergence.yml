@@ -27,6 +27,7 @@ jobs:
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
+          fetch-depth: 0
 
       - name: Set up Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -44,8 +45,12 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Verify package-manager and migration authority
+        env:
+          CONVERGENCE_REVIEW_REQUIRE_CLEAN: "1"
+          CONVERGENCE_REVIEW_SOURCE_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           pnpm run test:package-manager
+          pnpm run test:convergence-review
           node lib/db/validate-migrations.mjs
           pnpm --filter @workspace/api-server run test:migration-authority
           pnpm --filter @workspace/api-server run test:control-plane-schema-bindings

@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "baseCommit": "6dca1f951590dce297bb4d3579bd17d8d9f92e5f",
+  "reviewedThroughCommit": "cf22635609f3537b22a2f41c677b5a3c7fba8802",
+  "expected": {
+    "reviewedTree": "99ce24343bf0112d79aae41a899ec9be31ef5993",
+    "patchSha256": "1a8316bd5a8af111ae67e2c4107abf5c407a1d4b6bfa8afa66d66b672569e929",
+    "commitCount": 60,
+    "fileCount": 181,
+    "insertions": 52266,
+    "deletions": 290,
+    "groupCounts": {
+      "migration_data_authority": 27,
+      "deployment_attestation": 13,
+      "student_journey": 21,
+      "control_plane_authorization": 58,
+      "live_api_boundary": 13,
+      "frontend": 12,
+      "security_inventory": 4,
+      "ci_supply_chain": 8,
+      "tests": 16,
+      "documentation": 9,
+      "other": 0
+    }
+  },
+  "allowedPostReviewPaths": [
+    ".github/workflows/live-first-convergence.yml",
+    "docs/LIVE_FIRST_CONVERGENCE_REVIEW_PACKET_2026-09-01.md",
+    "package.json",
+    "scripts/test-convergence-review-manifest.mjs",
+    "scripts/verify-convergence-review-manifest.mjs",
+    "security/convergence-review-manifest.json"
+  ]
+}
