@@ -14,6 +14,7 @@ import {
   parsePrivateInventoryLimit,
   parseProductionExpectations,
   parseProcessInventory,
+  readBoundedHealthBody,
   safeErrorMessage,
   validateSourceProvenance,
 } from "./production-readonly-attestation.mjs";
@@ -394,6 +395,35 @@ test("read-only Git and process probes have a fixed non-configurable timeout", (
   assert.doesNotMatch(source, /process\.env\.[A-Z_]*PROBE_TIMEOUT/);
 });
 
+test("local health response is streamed under a hard 64 KiB body ceiling", async () => {
+  const payload = JSON.stringify({
+    status: "ok",
+    dbConnected: true,
+    releaseId: "release-1",
+  });
+  assert.equal(await readBoundedHealthBody(new Response(payload)), payload);
+  await assert.rejects(
+    () => readBoundedHealthBody(new Response("x".repeat(64 * 1024 + 1))),
+    /bounded 65536-byte limit/,
+  );
+  await assert.rejects(
+    () =>
+      readBoundedHealthBody(new Response(payload), {
+        maxBytes: 64 * 1024 + 1,
+      }),
+    /hard 65536-byte ceiling/,
+  );
+
+  const source = fs.readFileSync(
+    path.join(here, "production-readonly-attestation.mjs"),
+    "utf8",
+  );
+  assert.match(source, /DEFAULT_MAX_HEALTH_BODY_BYTES = 64 \* 1024/);
+  assert.match(source, /response\.body\.getReader\(\)/);
+  assert.doesNotMatch(source, /response\.json\(\)/);
+  assert.doesNotMatch(source, /process\.env\.[A-Z_]*HEALTH_BODY/);
+});
+
 test("attestation implementation exposes no mutation command or file-write surface", () => {
   const source = fs.readFileSync(
     path.join(here, "production-readonly-attestation.mjs"),
@@ -422,6 +452,7 @@ test("attestation implementation exposes no mutation command or file-write surfa
   assert.match(source, /"status",\s*"--porcelain=v1"/);
   assert.match(source, /GIT_OPTIONAL_LOCKS: "0"/);
   assert.match(source, /READ_ONLY_PROBE_TIMEOUT_MS = 10_000/);
+  assert.match(source, /DEFAULT_MAX_HEALTH_BODY_BYTES = 64 \* 1024/);
   assert.doesNotMatch(
     source,
     /"(?:checkout|switch|reset|clean|pull|fetch|merge|rebase|commit|push)"/,

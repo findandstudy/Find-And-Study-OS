@@ -149,7 +149,9 @@ Source provenance and process metadata remain exact read-only probes. Each
 `git rev-parse`, `git status` and `ps` child process has a fixed
 `10000`-millisecond `SIGKILL` timeout that cannot be raised by environment
 configuration; a timeout blocks attestation instead of producing partial
-evidence.
+evidence. The localhost health response is streamed under a fixed `65536`-byte
+ceiling before JSON parsing; the limit cannot be raised by environment
+configuration and an oversized body blocks the attestation.
 
 This is a deployment gate, not an automatic migration. The current production
 host was last observed with root-owned `0644/0755` private storage and root-owned

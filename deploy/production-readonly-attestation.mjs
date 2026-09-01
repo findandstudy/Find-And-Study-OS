@@ -21,6 +21,7 @@ const sourceRoot = fs.realpathSync(
 const DEFAULT_MAX_PRIVATE_ENTRIES = 100_000;
 const DEFAULT_MAX_PRIVATE_DURATION_MS = 30_000;
 const READ_ONLY_PROBE_TIMEOUT_MS = 10_000;
+const DEFAULT_MAX_HEALTH_BODY_BYTES = 64 * 1024;
 
 function fail(message) {
   throw new Error(`[production-readonly-attestation] BLOCKED: ${message}`);
@@ -439,6 +440,56 @@ function collectDiskInventory() {
   };
 }
 
+export async function readBoundedHealthBody(
+  response,
+  { maxBytes = DEFAULT_MAX_HEALTH_BODY_BYTES } = {},
+) {
+  if (
+    !Number.isSafeInteger(maxBytes) ||
+    maxBytes < 1 ||
+    maxBytes > DEFAULT_MAX_HEALTH_BODY_BYTES
+  ) {
+    fail(
+      `health response limit must be between 1 and the hard ${DEFAULT_MAX_HEALTH_BODY_BYTES}-byte ceiling`,
+    );
+  }
+  const declaredLength = response.headers.get("content-length");
+  if (declaredLength !== null) {
+    if (!/^(?:0|[1-9]\d*)$/.test(declaredLength)) {
+      fail("local health endpoint returned an invalid Content-Length");
+    }
+    const parsedLength = Number(declaredLength);
+    if (!Number.isSafeInteger(parsedLength) || parsedLength > maxBytes) {
+      fail(`local health response exceeded the bounded ${maxBytes}-byte limit`);
+    }
+  }
+  if (!response.body) fail("local health endpoint returned no response body");
+
+  const reader = response.body.getReader();
+  const chunks = [];
+  let totalBytes = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!(value instanceof Uint8Array)) {
+        fail("local health endpoint returned an invalid response body");
+      }
+      totalBytes += value.byteLength;
+      if (totalBytes > maxBytes) {
+        await reader.cancel();
+        fail(
+          `local health response exceeded the bounded ${maxBytes}-byte limit`,
+        );
+      }
+      chunks.push(Buffer.from(value));
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  return Buffer.concat(chunks, totalBytes).toString("utf8");
+}
+
 async function collectHealth() {
   const rawPort = process.env.PORT ?? "5000";
   if (!/^\d{2,5}$/.test(rawPort)) fail("PORT must be numeric");
@@ -448,7 +499,13 @@ async function collectHealth() {
   });
   if (!response.ok)
     fail(`local health endpoint returned HTTP ${response.status}`);
-  const payload = await response.json();
+  const body = await readBoundedHealthBody(response);
+  let payload;
+  try {
+    payload = JSON.parse(body);
+  } catch {
+    fail("local health endpoint did not return valid bounded JSON");
+  }
   if (
     payload.status !== "ok" ||
     payload.dbConnected !== true ||
