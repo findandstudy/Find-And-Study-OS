@@ -1,0 +1,144 @@
+name: Staging Adoption Gate
+
+on:
+  push:
+    branches:
+      - "codex/staging-adoption-runner-20260901"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: staging-adoption-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  ALLOW_LIVE_INTEGRATIONS: "false"
+  CI: "true"
+  NODE_ENV: test
+  NO_COLOR: "1"
+  STAGING_BASE_COMMIT: 68447daeae79fdc186db7b1b4e9901ba5bf5c83a
+
+jobs:
+  static-gate:
+    name: Staging source, build, and safety gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Check out the exact staging source
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+          package-manager-cache: false
+
+      - name: Activate the repository-pinned pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.33.2 --activate
+          test "$(pnpm --version)" = "10.33.2"
+
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify clean patch and staging authority
+        run: |
+          git merge-base --is-ancestor "$STAGING_BASE_COMMIT" HEAD
+          git diff --check "$STAGING_BASE_COMMIT"...HEAD
+          pnpm run test:package-manager
+          node lib/db/validate-migrations.mjs
+          pnpm --filter @workspace/api-server run test:migration-authority
+
+      - name: Verify staging Compose topology
+        env:
+          FASOS_STAGING_APP_ENV_FILE: ${{ github.workspace }}/deploy/staging/app.env.example
+          FASOS_STAGING_APP_IMAGE: findandstudy-staging-app:ci
+          FASOS_STAGING_APP_PASSWORD_FILE: ${{ github.workspace }}/deploy/staging/compose.env.example
+          FASOS_STAGING_GID: "10042"
+          FASOS_STAGING_HOST: staging.example.test
+          FASOS_STAGING_MIGRATOR_PASSWORD_FILE: ${{ github.workspace }}/deploy/staging/compose.env.example
+          FASOS_STAGING_POSTGRES_PASSWORD_FILE: ${{ github.workspace }}/deploy/staging/compose.env.example
+          FASOS_STAGING_STORAGE_DIR: /tmp/findandstudy-staging-storage
+          FASOS_STAGING_UID: "10042"
+        run: |
+          bash -n deploy/staging/init-staging-db.sh
+          docker compose -f deploy/staging/compose.yml config --quiet
+
+      - name: Type-check and build the deployable applications
+        run: |
+          pnpm run typecheck
+          pnpm --filter @workspace/edcons run check:i18n
+          pnpm --filter @workspace/api-server run build
+          pnpm --filter @workspace/edcons run build
+
+      - name: Run staging-adjacent security regressions
+        env:
+          DATABASE_URL: postgresql://test:test@127.0.0.1:5432/test
+        run: |
+          pnpm --filter @workspace/api-server run test:rate-limit-ip-security
+          pnpm --filter @workspace/api-server run test:security-regressions
+
+  container-gate:
+    name: Exact-source staging container build
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Check out the exact staging source
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Build the hardened runtime image
+        env:
+          DOCKER_BUILDKIT: "1"
+        run: |
+          docker build \
+            --file deploy/staging/Dockerfile \
+            --build-arg FASOS_SOURCE_COMMIT="${GITHUB_SHA}" \
+            --tag "findandstudy-staging-app:${GITHUB_SHA::12}" \
+            .
+
+      - name: Verify runtime identity and source removal
+        run: |
+          image="findandstudy-staging-app:${GITHUB_SHA::12}"
+          test "$(docker image inspect "$image" --format '{{.Config.User}}')" = "findandstudy"
+          docker run --rm --entrypoint /bin/sh "$image" -c \
+            'test ! -e /app/.git && test ! -e /app/.github && test -f /app/artifacts/api-server/dist/index.cjs'
+
+  windows-portability:
+    name: Windows locked install and typecheck
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out the exact staging source
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+          package-manager-cache: false
+
+      - name: Activate the repository-pinned pnpm
+        shell: pwsh
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.33.2 --activate
+          if ((pnpm --version) -ne "10.33.2") { throw "Unexpected pnpm version" }
+
+      - name: Install and verify Windows portability
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm run test:package-manager
+          node lib/db/validate-migrations.mjs
+          pnpm --filter @workspace/api-server run test:migration-authority
+          pnpm run typecheck

@@ -787,6 +787,31 @@ test("live-first CI pins actions and PostgreSQL while replaying both adoption pa
   assert.doesNotMatch(workflow, /uses:\s+[^\s@]+@(?![a-f0-9]{40}\b)/);
 });
 
+test("staging CI is isolated, exact-source and integration-disabled", () => {
+  const workflow = readFileSync(
+    path.join(root, ".github/workflows/staging-adoption.yml"),
+    "utf8",
+  );
+  assert.match(workflow, /codex\/staging-adoption-runner-20260901/);
+  assert.match(
+    workflow,
+    /STAGING_BASE_COMMIT: 68447daeae79fdc186db7b1b4e9901ba5bf5c83a/,
+  );
+  assert.match(workflow, /git merge-base --is-ancestor/);
+  assert.match(workflow, /git diff --check/);
+  assert.match(workflow, /ALLOW_LIVE_INTEGRATIONS: "false"/);
+  assert.match(
+    workflow,
+    /docker compose -f deploy\/staging\/compose\.yml config --quiet/,
+  );
+  assert.match(workflow, /FASOS_SOURCE_COMMIT="\$\{GITHUB_SHA\}"/);
+  assert.match(workflow, /test:migration-authority/);
+  assert.match(workflow, /test:rate-limit-ip-security/);
+  assert.match(workflow, /runs-on: windows-latest/);
+  assert.doesNotMatch(workflow, /\b(?:ssh|scp|rsync|kubectl)\b/i);
+  assert.doesNotMatch(workflow, /uses:\s+[^\s@]+@(?![a-f0-9]{40}\b)/);
+});
+
 test("ledger baseline requires explicit audit and exact database confirmation before DB access", () => {
   const baseline = spawnSync(
     process.execPath,
