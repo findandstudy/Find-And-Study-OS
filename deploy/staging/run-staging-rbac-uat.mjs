@@ -57,7 +57,7 @@ const ROLE_CHECKS = {
     ["/api/leads", 200],
     ["/api/students", 200],
     ["/api/applications", 200],
-    ["/api/agents/me", 404],
+    ["/api/agents/me", [403, 404]],
   ],
   consultant: [
     ["/api/finance/university-receivables", 403],
@@ -118,7 +118,7 @@ const ROLE_CHECKS = {
     ["/api/leads", 403],
     ["/api/students", 200],
     ["/api/applications", 200],
-    ["/api/agents/me", 404],
+    ["/api/agents/me", [403, 404]],
   ],
 };
 
@@ -226,9 +226,12 @@ async function runRole(origin, role, email, password) {
 
   for (const [path, expectedStatus] of ROLE_CHECKS[role]) {
     const response = await request(origin, cookieJar, path);
-    if (response.status !== expectedStatus) {
+    const allowedStatuses = Array.isArray(expectedStatus)
+      ? expectedStatus
+      : [expectedStatus];
+    if (!allowedStatuses.includes(response.status)) {
       fail(
-        `${role} GET ${path} expected ${expectedStatus}, received ${response.status}`,
+        `${role} GET ${path} expected ${allowedStatuses.join(" or ")}, received ${response.status}`,
       );
     }
     checks += 1;

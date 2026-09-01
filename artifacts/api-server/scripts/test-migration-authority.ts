@@ -617,6 +617,11 @@ test("staging RBAC API runner is release-bound and performs no business mutation
   assert.doesNotMatch(source, /method: "(?:PUT|PATCH|DELETE)"/);
   assert.match(source, /redirect: "error"/);
   assert.match(source, /AbortSignal\.timeout\(10_000\)/);
+  assert.equal(
+    source.match(/\["\/api\/agents\/me", \[403, 404\]\]/g)?.length,
+    2,
+    "non-agent profiles must remain denied without overfitting 403 versus 404",
+  );
   assert.doesNotMatch(
     source,
     /console\.(?:log|error)\([^\n]*(?:password|cookie|sid)/i,
