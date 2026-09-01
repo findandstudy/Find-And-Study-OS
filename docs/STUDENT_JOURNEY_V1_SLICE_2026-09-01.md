@@ -96,7 +96,10 @@ slices are:
 3. safe student acknowledgement and document-request response commands with
    idempotency, audit and concurrency tests;
 4. signed active-context authorization for the student corridor;
-5. notification preference and consent-bound journey updates;
+5. adopt the default-unwired
+   [consent and communication decision contract](./CONSENT_COMMUNICATION_CONTRACT_2026-09-01.md)
+   only after Privacy/Legal policy inputs and a tenant-owned transactional
+   writer are approved;
 6. analytics/evaluation for next-action correctness, delay and exception rate.
 
 Production adoption remains a separate reviewed release decision and is not

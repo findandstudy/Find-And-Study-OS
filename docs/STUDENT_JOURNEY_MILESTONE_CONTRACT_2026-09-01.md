@@ -103,7 +103,10 @@ baseline is frozen.
    asynchronous legacy audit remains secondary evidence only.
 6. Add cross-tenant, stale-version, duplicate, concurrent writer and rollback
    tests against disposable PostgreSQL 16.
-7. Only after those gates, expose a student-safe redacted timeline projection
+7. Adopt the default-unwired
+   [consent and communication decision contract](./CONSENT_COMMUNICATION_CONTRACT_2026-09-01.md)
+   with approved purpose, notice, retention and preference policies.
+8. Only after those gates, expose a student-safe redacted timeline projection
    and start a consented cohort baseline.
 
 Until these prerequisites pass, the dashboard may show the current canonical
