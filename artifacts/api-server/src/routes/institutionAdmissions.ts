@@ -8,11 +8,13 @@ import {
 import {
   assertCapability,
   assertAnyCapability,
+  assertInstitutionDataScope,
   assertDecisionCanCreateOffer,
   assertEnrolmentEvidenceHash,
   assertIndependentChecker,
   isInstitutionRoleKey,
-  sanitizeInstitutionSharedProfile,
+  hasInstitutionDataScope,
+  projectInstitutionSharedProfile,
   type InstitutionCapability,
 } from "../lib/institutionAdmissionsPolicy";
 import {
@@ -174,6 +176,15 @@ router.get("/institution/home", async (req, res) => {
   try {
     const result = await withInstitutionContext(req.user!.id, async (client, context) => {
       const scope = institutionScopeSql(context, 1);
+      if (!hasInstitutionDataScope(context.dataScopes, "analytics.aggregate")) {
+        return {
+          context: toPublicInstitutionContext(context),
+          applicationCounts: [],
+          overdueCount: 0,
+          pendingDecisionCount: 0,
+          projection: "WORKSPACE_ONLY",
+        };
+      }
       const [counts, overdue, decisions] = await Promise.all([
         client.query(`SELECT lifecycle_state, count(*)::integer AS count
           FROM institution_application_cases WHERE ${scope.sql}
@@ -200,6 +211,7 @@ async function listCases(req: Request, res: Response, queueOnly: boolean): Promi
   try {
     const result = await withInstitutionContext(req.user!.id, async (client, context) => {
       assertAnyCapability(context.capabilities, ["institution.applications.review", "institution.decisions.approve", "institution.audit.read"]);
+      assertInstitutionDataScope(context.dataScopes, "application.profile");
       const scope = institutionScopeSql(context, 1);
       const state = typeof req.query.state === "string" ? req.query.state : null;
       const rows = await client.query(`
@@ -236,28 +248,30 @@ router.get("/institution/applications/:id", async (req, res) => {
     const id = asUuid(req.params.id);
     const result = await withInstitutionContext(req.user!.id, async (client, context) => {
       assertAnyCapability(context.capabilities, ["institution.applications.review", "institution.decisions.approve", "institution.audit.read"]);
+      assertInstitutionDataScope(context.dataScopes, "application.profile");
       const application = await assertScopedCase(client, context, id);
       if (application.rowCount !== 1) throw new Error("institution_application_unavailable");
+      const empty = { rows: [] as Record<string, unknown>[] };
       const [assessments, requests, decisions, offers, enrolments, events] = await Promise.all([
-        client.query(`SELECT id, requirement_id, evidence_ref_hash, result, reason_code, notes,
+        hasInstitutionDataScope(context.dataScopes, "application.evidence") ? client.query(`SELECT id, requirement_id, evidence_ref_hash, result, reason_code, notes,
           reviewer_membership_id, supersedes_assessment_id, assessed_at
-          FROM institution_evidence_assessments WHERE application_case_id=$1 ORDER BY assessed_at DESC`, [id]),
-        client.query(`SELECT id, requirement_code, request_code, message, status, due_at, created_at, responded_at
-          FROM institution_information_requests WHERE application_case_id=$1 ORDER BY created_at DESC`, [id]),
-        client.query(`SELECT id, version_number, decision_type, state, reason_code, rationale, conditions,
+          FROM institution_evidence_assessments WHERE application_case_id=$1 ORDER BY assessed_at DESC`, [id]) : Promise.resolve(empty),
+        hasInstitutionDataScope(context.dataScopes, "application.communication") ? client.query(`SELECT id, requirement_code, request_code, message, status, due_at, created_at, responded_at
+          FROM institution_information_requests WHERE application_case_id=$1 ORDER BY created_at DESC`, [id]) : Promise.resolve(empty),
+        hasInstitutionDataScope(context.dataScopes, "application.decision") ? client.query(`SELECT id, version_number, decision_type, state, reason_code, rationale, conditions,
           maker_membership_id, checker_membership_id, created_at, submitted_at, decided_at
-          FROM institution_decisions WHERE application_case_id=$1 ORDER BY version_number DESC`, [id]),
-        client.query(`SELECT id, decision_id, state, conditions, acceptance_deadline, issued_at
-          FROM institution_offers WHERE application_case_id=$1 ORDER BY created_at DESC`, [id]),
-        client.query(`SELECT id, state, evidence_ref_hash, effective_at, updated_at
-          FROM institution_enrolments WHERE application_case_id=$1`, [id]),
-        client.query(`SELECT id, event_type, aggregate_type, aggregate_version, payload, occurred_at
+          FROM institution_decisions WHERE application_case_id=$1 ORDER BY version_number DESC`, [id]) : Promise.resolve(empty),
+        hasInstitutionDataScope(context.dataScopes, "application.offer") ? client.query(`SELECT id, decision_id, state, conditions, acceptance_deadline, issued_at
+          FROM institution_offers WHERE application_case_id=$1 ORDER BY created_at DESC`, [id]) : Promise.resolve(empty),
+        hasInstitutionDataScope(context.dataScopes, "application.enrolment") ? client.query(`SELECT id, state, evidence_ref_hash, effective_at, updated_at
+          FROM institution_enrolments WHERE application_case_id=$1`, [id]) : Promise.resolve(empty),
+        client.query(`SELECT id, event_type, aggregate_type, aggregate_version, occurred_at
           FROM institution_admission_events WHERE application_case_id=$1 ORDER BY occurred_at DESC LIMIT 100`, [id]),
       ]);
       return {
         application: {
           ...application.rows[0],
-          shared_profile: sanitizeInstitutionSharedProfile(application.rows[0].shared_profile),
+          shared_profile: projectInstitutionSharedProfile(application.rows[0].shared_profile, context.roleKey),
         },
         evidenceAssessments: assessments.rows,
         informationRequests: requests.rows,
@@ -276,6 +290,7 @@ router.post("/institution/applications/:id/claim", async (req, res) => {
     const id = asUuid(req.params.id);
     const result = await withInstitutionContext(req.user!.id, async (client, context) => {
       assertCapability(context.capabilities, "institution.applications.review");
+      assertInstitutionDataScope(context.dataScopes, "application.profile");
       const current = await assertScopedCase(client, context, id, true);
       if (current.rowCount !== 1) throw new Error("institution_application_unavailable");
       if (!["RECEIVED", "REVIEWING"].includes(current.rows[0].lifecycle_state)) {
@@ -312,6 +327,7 @@ router.post("/institution/applications/:id/evidence-assessments", async (req, re
     const supersedesId = req.body?.supersedesAssessmentId == null ? null : asUuid(req.body.supersedesAssessmentId);
     const result = await withInstitutionContext(req.user!.id, async (client, context) => {
       assertCapability(context.capabilities, "institution.evidence.assess");
+      assertInstitutionDataScope(context.dataScopes, "application.evidence");
       const application = await assertScopedCase(client, context, caseId, true);
       if (application.rowCount !== 1) throw new Error("institution_application_unavailable");
       const id = nextInstitutionId();
@@ -343,6 +359,7 @@ router.post("/institution/applications/:id/information-requests", async (req, re
     const dueAt = asIsoDate(req.body?.dueAt);
     const result = await withInstitutionContext(req.user!.id, async (client, context) => {
       assertCapability(context.capabilities, "institution.information.request");
+      assertInstitutionDataScope(context.dataScopes, "application.communication");
       const application = await assertScopedCase(client, context, caseId, true);
       if (application.rowCount !== 1) throw new Error("institution_application_unavailable");
       if (!["REVIEWING", "INFORMATION_REQUESTED"].includes(application.rows[0].lifecycle_state)) {
@@ -378,6 +395,8 @@ router.post("/institution/applications/:id/ready-for-decision", async (req, res)
     const result = await withInstitutionContext(req.user!.id, async (client, context) => {
       assertCapability(context.capabilities, "institution.applications.review");
       assertCapability(context.capabilities, "institution.evidence.assess");
+      assertInstitutionDataScope(context.dataScopes, "application.evidence");
+      assertInstitutionDataScope(context.dataScopes, "application.decision");
       const application = await assertScopedCase(client, context, caseId, true);
       if (application.rowCount !== 1 || !["REVIEWING", "INFORMATION_REQUESTED"].includes(application.rows[0].lifecycle_state)) {
         throw new Error("institution_case_not_reviewing");
@@ -423,6 +442,7 @@ router.post("/institution/applications/:id/decisions", async (req, res) => {
     const conditions = Array.isArray(req.body?.conditions) ? req.body.conditions.slice(0, 50) : [];
     const result = await withInstitutionContext(req.user!.id, async (client, context) => {
       assertCapability(context.capabilities, "institution.decisions.draft");
+      assertInstitutionDataScope(context.dataScopes, "application.decision");
       const application = await assertScopedCase(client, context, caseId, true);
       if (application.rowCount !== 1) throw new Error("institution_application_unavailable");
       if (application.rows[0].lifecycle_state !== "READY_FOR_DECISION") throw new Error("institution_case_not_ready");
@@ -451,6 +471,7 @@ router.post("/institution/decisions/:id/submit", async (req, res) => {
     const id = asUuid(req.params.id);
     const result = await withInstitutionContext(req.user!.id, async (client, context) => {
       assertCapability(context.capabilities, "institution.decisions.draft");
+      assertInstitutionDataScope(context.dataScopes, "application.decision");
       const decision = await client.query(`SELECT * FROM institution_decisions WHERE id=$1 FOR UPDATE`, [id]);
       if (decision.rowCount !== 1 || decision.rows[0].maker_membership_id !== context.membershipId) {
         throw new Error("institution_decision_unavailable");
@@ -477,6 +498,7 @@ router.get("/institution/decisions", async (req, res) => {
   try {
     const data = await withInstitutionContext(req.user!.id, async (client, context) => {
       assertAnyCapability(context.capabilities, ["institution.decisions.draft", "institution.decisions.approve", "institution.audit.read"]);
+      assertInstitutionDataScope(context.dataScopes, "application.decision");
       const rows = await client.query(`SELECT d.id,d.application_case_id,d.version_number,d.decision_type,
         d.state,d.reason_code,d.maker_membership_id,d.checker_membership_id,d.created_at,d.submitted_at,d.decided_at,
         c.masked_student_ref,c.program_id,c.intake_key
@@ -498,6 +520,7 @@ async function decide(req: Request, res: Response, outcome: "APPROVED" | "RETURN
     const comment = asOptionalText(req.body?.comment, 2_000);
     const result = await withInstitutionContext(req.user!.id, async (client, context) => {
       assertCapability(context.capabilities, "institution.decisions.approve");
+      assertInstitutionDataScope(context.dataScopes, "application.decision");
       const decision = await client.query(`SELECT * FROM institution_decisions WHERE id=$1 FOR UPDATE`, [id]);
       if (decision.rowCount !== 1 || decision.rows[0].state !== "SUBMITTED") {
         throw new Error("institution_decision_unavailable");
@@ -553,6 +576,7 @@ router.get("/institution/offers", async (req, res) => {
   try {
     const data = await withInstitutionContext(req.user!.id, async (client, context) => {
       assertAnyCapability(context.capabilities, ["institution.offers.issue", "institution.enrolment.confirm", "institution.audit.read"]);
+      assertInstitutionDataScope(context.dataScopes, "application.offer");
       const rows = await client.query(`SELECT o.id,o.application_case_id,o.decision_id,o.state,o.conditions,
         o.acceptance_deadline,o.issued_at,c.masked_student_ref,c.program_id,c.intake_key
         FROM institution_offers o JOIN institution_application_cases c ON c.id=o.application_case_id
@@ -572,6 +596,7 @@ router.post("/institution/offers/:id/issue", async (req, res) => {
     const acceptanceDeadline = asIsoDate(req.body?.acceptanceDeadline);
     const result = await withInstitutionContext(req.user!.id, async (client, context) => {
       assertCapability(context.capabilities, "institution.offers.issue");
+      assertInstitutionDataScope(context.dataScopes, "application.offer");
       const offer = await client.query(`SELECT o.*,d.state AS decision_state,d.decision_type
         FROM institution_offers o JOIN institution_decisions d ON d.id=o.decision_id
         WHERE o.id=$1 FOR UPDATE OF o`, [id]);
@@ -610,6 +635,7 @@ router.post("/institution/applications/:id/enrolment", async (req, res) => {
     if (state === "CONFIRMED") assertEnrolmentEvidenceHash(evidenceRefHash);
     const result = await withInstitutionContext(req.user!.id, async (client, context) => {
       assertCapability(context.capabilities, "institution.enrolment.confirm");
+      assertInstitutionDataScope(context.dataScopes, "application.enrolment");
       const application = await assertScopedCase(client, context, caseId, true);
       if (application.rowCount !== 1 || !["OFFER_ISSUED","ENROLMENT_PENDING"].includes(application.rows[0].lifecycle_state)) {
         throw new Error("institution_case_not_enrolment_ready");
@@ -618,15 +644,16 @@ router.post("/institution/applications/:id/enrolment", async (req, res) => {
       const id = existing.rows[0]?.id ?? nextInstitutionId();
       const receiptHash = state === "CONFIRMED" ? institutionHash({ caseId,evidenceRefHash,verifier:context.membershipId }) : null;
       if (existing.rowCount === 0) {
-        const initialState = state === "CONFIRMED" ? "PENDING_EVIDENCE" : state;
         await client.query(`INSERT INTO institution_enrolments (
           id,tenant_id,relationship_id,application_case_id,state,evidence_ref_hash,
           verified_by_membership_id,receipt_hash,effective_at
-        ) VALUES ($1,$2,$3,$4,$5,NULL,NULL,NULL,NULL)`, [id,context.tenantId,context.relationshipId,caseId,initialState]);
-        if (state === "CONFIRMED") {
-          await client.query(`UPDATE institution_enrolments SET state='CONFIRMED',evidence_ref_hash=$2,
-            verified_by_membership_id=$3,receipt_hash=$4,effective_at=now(),version=version+1 WHERE id=$1`,
-          [id,evidenceRefHash,context.membershipId,receiptHash]);
+        ) VALUES ($1,$2,$3,$4,'PENDING_EVIDENCE',NULL,NULL,NULL,NULL)`, [id,context.tenantId,context.relationshipId,caseId]);
+        if (state !== "PENDING_EVIDENCE") {
+          await client.query(`UPDATE institution_enrolments SET state=$2,evidence_ref_hash=$3,
+            verified_by_membership_id=$4,receipt_hash=$5,effective_at=$6,version=version+1 WHERE id=$1`,
+          [id,state,state === "CONFIRMED" ? evidenceRefHash : null,
+            state === "CONFIRMED" ? context.membershipId : null,receiptHash,
+            state === "CONFIRMED" ? new Date() : null]);
         }
       } else {
         await client.query(`UPDATE institution_enrolments SET state=$2,evidence_ref_hash=$3,
@@ -659,6 +686,7 @@ router.get("/institution/programs-intakes", async (req, res) => {
   try {
     const result = await withInstitutionContext(req.user!.id, async (client, context) => {
       assertCapability(context.capabilities,"institution.catalog.manage");
+      assertInstitutionDataScope(context.dataScopes, "catalog.programs");
       const [rows, requests] = await Promise.all([
         client.query(`SELECT id,name,degree,field,language,duration,intakes,quota,is_active
         FROM programs WHERE university_id=$1
@@ -684,6 +712,7 @@ router.post("/institution/programs-intakes/:id/change-requests", async (req,res)
     if(quota===null&&intakes===null&&isActive===null) throw new Error("institution_program_update_invalid");
     const result=await withInstitutionContext(req.user!.id,async(client,context)=>{
       assertCapability(context.capabilities,"institution.catalog.manage");
+      assertInstitutionDataScope(context.dataScopes, "catalog.programs");
       if(context.programScopeIds.length&&!context.programScopeIds.includes(id)) throw new Error("institution_program_scope_denied");
       const program=await client.query(`SELECT id,name,intakes,quota,is_active FROM programs
         WHERE id=$1 AND university_id=$2`,[id,context.institutionId]);
@@ -704,6 +733,7 @@ router.get("/institution/requirements", async (req, res) => {
   try {
     const data = await withInstitutionContext(req.user!.id, async (client, context) => {
       assertAnyCapability(context.capabilities,["institution.requirements.manage","institution.audit.read"]);
+      assertInstitutionDataScope(context.dataScopes, "catalog.requirements");
       const rows = await client.query(`SELECT s.id,s.program_id,p.name AS program_name,s.intake_key,
         s.version_number,s.state,s.source_ref,s.effective_from,s.effective_until,s.created_at,s.published_at,
         COALESCE(jsonb_agg(jsonb_build_object('id',r.id,'code',r.requirement_code,'title',r.title,
@@ -735,6 +765,7 @@ router.post("/institution/requirements", async (req, res) => {
     }));
     const result = await withInstitutionContext(req.user!.id, async (client, context) => {
       assertCapability(context.capabilities,"institution.requirements.manage");
+      assertInstitutionDataScope(context.dataScopes, "catalog.requirements");
       if (context.programScopeIds.length && !context.programScopeIds.includes(programId)) throw new Error("institution_program_scope_denied");
       if (context.intakeScopes.length && !context.intakeScopes.includes(intakeKey)) throw new Error("institution_intake_scope_denied");
       const program = await client.query(`SELECT id FROM programs WHERE id=$1 AND university_id=$2`,[programId,context.institutionId]);
@@ -768,6 +799,7 @@ router.post("/institution/requirements/:id/submit", async (req,res) => {
     const id=asUuid(req.params.id);
     const result=await withInstitutionContext(req.user!.id,async(client,context)=>{
       assertCapability(context.capabilities,"institution.requirements.manage");
+      assertInstitutionDataScope(context.dataScopes, "catalog.requirements");
       const updated=await client.query(`UPDATE institution_requirement_sets SET state='IN_REVIEW'
         WHERE id=$1 AND state='DRAFT' AND created_by_membership_id=$2 RETURNING id,state,version_number`,[id,context.membershipId]);
       if(updated.rowCount!==1) throw new Error("institution_requirement_set_unavailable");
@@ -784,6 +816,7 @@ router.post("/institution/requirements/:id/publish", async (req,res) => {
     const effectiveFrom=asIsoDate(req.body?.effectiveFrom) ?? new Date();
     const result=await withInstitutionContext(req.user!.id,async(client,context)=>{
       assertCapability(context.capabilities,"institution.requirements.manage");
+      assertInstitutionDataScope(context.dataScopes, "catalog.requirements");
       const current=await client.query(`SELECT * FROM institution_requirement_sets WHERE id=$1 FOR UPDATE`,[id]);
       if(current.rowCount!==1||current.rows[0].state!=="IN_REVIEW") throw new Error("institution_requirement_set_unavailable");
       assertIndependentChecker(current.rows[0].created_by_membership_id,context.membershipId);
@@ -802,6 +835,7 @@ router.get("/institution/sla", async(req,res)=>{
   try{
     const data=await withInstitutionContext(req.user!.id,async(client,context)=>{
       assertAnyCapability(context.capabilities,["institution.sla.manage","institution.audit.read"]);
+      assertInstitutionDataScope(context.dataScopes, "partner.operations");
       const rows=await client.query(`SELECT id,name,timezone,review_target_hours,decision_target_hours,
         information_response_hours,status,version,created_at,updated_at
         FROM institution_sla_policies ORDER BY version DESC`);
@@ -819,6 +853,7 @@ router.post("/institution/sla",async(req,res)=>{
     if(Math.max(reviewHours,decisionHours,informationHours)>2160) throw new Error("institution_sla_invalid");
     const result=await withInstitutionContext(req.user!.id,async(client,context)=>{
       assertCapability(context.capabilities,"institution.sla.manage");
+      assertInstitutionDataScope(context.dataScopes, "partner.operations");
       const next=await client.query<{next_version:string}>(`SELECT COALESCE(max(version),0)+1 AS next_version FROM institution_sla_policies`);
       await client.query(`UPDATE institution_sla_policies SET status='RETIRED',updated_at=now() WHERE status='ACTIVE'`);
       const id=nextInstitutionId(),version=Number(next.rows[0].next_version);
@@ -837,6 +872,7 @@ router.get("/institution/analytics",async(req,res)=>{
   try{
     const data=await withInstitutionContext(req.user!.id,async(client,context)=>{
       assertCapability(context.capabilities,"institution.analytics.read");
+      assertInstitutionDataScope(context.dataScopes, "analytics.aggregate");
       const scope=institutionScopeSql(context,1);
       const [states,sla,decisions,intakes]=await Promise.all([
         client.query(`SELECT lifecycle_state,count(*)::integer AS count FROM institution_application_cases
@@ -859,9 +895,8 @@ router.get("/institution/analytics",async(req,res)=>{
 router.get("/institution/team",async(req,res)=>{
   try{
     const data=await withInstitutionContext(req.user!.id,async(client,context)=>{
-      if(!context.capabilities.has("institution.team.manage")&&!context.capabilities.has("institution.audit.read")){
-        throw new Error("institution_team_denied");
-      }
+      assertCapability(context.capabilities,"institution.team.manage");
+      assertInstitutionDataScope(context.dataScopes, "relationship.membership");
       const rows=await client.query(`SELECT m.id,m.legacy_user_id,m.role_key,m.program_scope_ids,m.intake_scopes,
         m.status,m.valid_from,m.valid_until,m.version,u.first_name,u.last_name,u.email
         FROM institution_memberships m JOIN users u ON u.id=m.legacy_user_id
@@ -882,6 +917,7 @@ router.post("/institution/team/memberships",async(req,res)=>{
     const intakeScopes=Array.isArray(req.body?.intakeScopes)?[...new Set(req.body.intakeScopes.map((v:unknown)=>asText(v,120)))].slice(0,100):[];
     const result=await withInstitutionContext(req.user!.id,async(client,context)=>{
       assertCapability(context.capabilities,"institution.team.manage");
+      assertInstitutionDataScope(context.dataScopes, "relationship.membership");
       const authority=await client.query(`SELECT p.id AS principal_id,rpv.id AS package_id
         FROM principals p CROSS JOIN role_definitions rd JOIN role_package_versions rpv ON rpv.role_definition_id=rd.id
         WHERE p.legacy_user_id=$1 AND p.principal_type='HUMAN' AND p.status='ACTIVE'
@@ -909,10 +945,28 @@ router.get("/institution/integrations",async(req,res)=>{
   try{
     const data=await withInstitutionContext(req.user!.id,async(_client,context)=>{
       assertCapability(context.capabilities,"institution.integrations.manage");
+      assertInstitutionDataScope(context.dataScopes, "integration.metadata");
       return {institutionId:context.institutionId,credentialVisibility:"SECRET_REFERENCES_ONLY",
         externalExecution:"DISABLED",configuredAdapters:[]};
     });
     res.json(data);
+  }catch(error){sendFailure(res,error);}
+});
+
+router.get("/institution/audit",async(req,res)=>{
+  try{
+    const data=await withInstitutionContext(req.user!.id,async(client,context)=>{
+      assertCapability(context.capabilities,"institution.audit.read");
+      assertInstitutionDataScope(context.dataScopes,"audit.masked");
+      const limitRaw=Number(req.query.limit ?? 100);
+      const limit=Number.isSafeInteger(limitRaw)&&limitRaw>=1&&limitRaw<=200?limitRaw:100;
+      const rows=await client.query(`SELECT id,event_type,aggregate_type,aggregate_version,
+        left(actor_membership_id::text,8) AS actor_ref,previous_hash,event_hash,occurred_at
+        FROM institution_admission_events
+        ORDER BY occurred_at DESC,id DESC LIMIT $1`,[limit]);
+      return rows.rows;
+    });
+    res.json({data,projection:"MASKED_APPEND_ONLY"});
   }catch(error){sendFailure(res,error);}
 });
 

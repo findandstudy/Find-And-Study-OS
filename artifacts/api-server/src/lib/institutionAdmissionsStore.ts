@@ -41,6 +41,8 @@ export type InstitutionRequestContext = {
   roleDisplayName: string;
   programScopeIds: number[];
   intakeScopes: string[];
+  purposeCode: string;
+  dataScopes: ReadonlySet<string>;
   capabilities: ReadonlySet<string>;
 };
 
@@ -60,6 +62,8 @@ type AuthorityRow = QueryResultRow & { role_display_name: string };
 type RelationshipRow = QueryResultRow & {
   institution_id: number;
   institution_name: string;
+  purpose_code: string;
+  data_scopes: string[];
 };
 
 function uuidV7(observedAt = Date.now()): string {
@@ -160,9 +164,12 @@ async function resolveContext(
   await client.query("SELECT set_config('app.tenant_id', $1, true)", [row.tenant_id]);
   await client.query("SELECT set_config('app.institution_relationship_id', $1, true)", [row.relationship_id]);
   await client.query("SELECT set_config('app.institution_role', $1, true)", [row.role_key]);
+  await client.query("SELECT set_config('app.institution_membership_id', $1, true)", [row.membership_id]);
+  await client.query("SELECT set_config('app.institution_program_scope_ids', $1, true)", [JSON.stringify(row.program_scope_ids ?? [])]);
+  await client.query("SELECT set_config('app.institution_intake_scopes', $1, true)", [JSON.stringify(row.intake_scopes ?? [])]);
 
   const relationship = await client.query<RelationshipRow>(`
-    SELECT r.institution_id, u.name AS institution_name
+    SELECT r.institution_id, u.name AS institution_name, r.purpose_code, r.data_scopes
     FROM institution_relationships r
     JOIN universities u ON u.id = r.institution_id
     JOIN tenants t ON t.id = r.tenant_id AND t.status = 'ACTIVE'
@@ -171,6 +178,7 @@ async function resolveContext(
       AND r.status = 'ACTIVE'
       AND r.valid_from <= now()
       AND (r.valid_until IS NULL OR r.valid_until > now())
+      AND r.purpose_code = 'admissions.review'
       AND cardinality(r.data_scopes) > 0
   `, [row.relationship_id, row.tenant_id]);
   if (relationship.rowCount !== 1) throw new Error("institution_relationship_unavailable");
@@ -208,6 +216,8 @@ async function resolveContext(
     roleDisplayName: authority.rows[0].role_display_name,
     programScopeIds: row.program_scope_ids ?? [],
     intakeScopes: row.intake_scopes ?? [],
+    purposeCode: relationship.rows[0].purpose_code,
+    dataScopes: new Set(relationship.rows[0].data_scopes ?? []),
     capabilities,
   };
 }

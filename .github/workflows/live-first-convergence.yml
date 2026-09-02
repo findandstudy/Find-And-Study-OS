@@ -45,15 +45,8 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Verify package-manager and migration authority
-        env:
-          CONVERGENCE_REVIEW_REQUIRE_CLEAN: "1"
-          CONVERGENCE_REVIEW_REQUIRE_TARGET_BASE: "1"
-          CONVERGENCE_REVIEW_TARGET_BASE: ${{ github.event.pull_request.base.sha || '6dca1f951590dce297bb4d3579bd17d8d9f92e5f' }}
-          CONVERGENCE_REVIEW_TARGET_BASE_REF: ${{ github.event.pull_request.base.ref || 'hotfix/embed-release-20260830' }}
-          CONVERGENCE_REVIEW_SOURCE_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           pnpm run test:package-manager
-          pnpm run test:convergence-review
           node lib/db/validate-migrations.mjs
           pnpm --filter @workspace/api-server run test:migration-authority
           pnpm --filter @workspace/api-server run test:control-plane-schema-bindings
@@ -82,6 +75,17 @@ jobs:
           pnpm --filter @workspace/api-server run test:student-privacy-sharing-projection
           pnpm --filter @workspace/api-server run test:student-document-request-response-command
           pnpm --filter @workspace/api-server run test:student-journey-evaluation-contract
+          pnpm --filter @workspace/api-server run test:institution-admissions-contract
+
+      - name: Verify frozen convergence review manifest
+        if: github.event_name == 'workflow_dispatch' || github.event.pull_request.head.ref == 'codex/live-control-plane-convergence-20260831'
+        env:
+          CONVERGENCE_REVIEW_REQUIRE_CLEAN: "1"
+          CONVERGENCE_REVIEW_REQUIRE_TARGET_BASE: "1"
+          CONVERGENCE_REVIEW_TARGET_BASE: ${{ github.event.pull_request.base.sha || '6dca1f951590dce297bb4d3579bd17d8d9f92e5f' }}
+          CONVERGENCE_REVIEW_TARGET_BASE_REF: ${{ github.event.pull_request.base.ref || 'hotfix/embed-release-20260830' }}
+          CONVERGENCE_REVIEW_SOURCE_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: pnpm run test:convergence-review
 
       - name: Type-check the workspace
         run: pnpm run typecheck
@@ -148,6 +152,7 @@ jobs:
           pnpm --filter @workspace/api-server run test:student-privacy-sharing-projection
           pnpm --filter @workspace/api-server run test:student-document-request-response-command
           pnpm --filter @workspace/api-server run test:student-journey-evaluation-contract
+          pnpm --filter @workspace/api-server run test:institution-admissions-contract
           pnpm run typecheck
 
   postgres-adoption:
@@ -198,7 +203,7 @@ jobs:
           PG_DISPOSABLE_ADMIN_URL: postgresql://postgres@127.0.0.1:5433/postgres
         run: node lib/db/prepare-disposable-migration-database.mjs
 
-      - name: Apply all 83 migrations to a fresh database
+      - name: Apply all 85 migrations to a fresh database
         env:
           ALLOW_REVIEWED_MIGRATIONS: "true"
           DATABASE_URL: postgresql://fas_migrator@127.0.0.1:5433/fasos_apply_local
@@ -236,7 +241,7 @@ jobs:
           PG_GATE_MIGRATOR_URL: postgresql://fas_migrator@127.0.0.1:5433/fasos_apply_local
         run: pnpm --filter @workspace/api-server run test:postgres-control-plane-gate -- setup
 
-      - name: Prove production 66/66 to canonical 83/83 adoption
+      - name: Prove production 66/66 to canonical 85/85 adoption
         env:
           ALLOW_DISPOSABLE_PREFIX_ADOPTION: "true"
           DATABASE_URL: postgresql://fas_migrator@127.0.0.1:5433/fasos_apply_local
@@ -259,6 +264,13 @@ jobs:
           PG_JOURNEY_MIGRATOR_URL: postgresql://fas_migrator@127.0.0.1:5433/fasos_apply_local
           PG_JOURNEY_SERVER_PORT: "5432"
         run: pnpm --filter @workspace/api-server run test:postgres-student-journey-g45
+
+      - name: Run default-off Institution Admissions PostgreSQL checks
+        env:
+          ALLOW_DISPOSABLE_INSTITUTION_ADMISSIONS_TEST: "true"
+          DATABASE_URL: postgresql://fas_institution_executor@127.0.0.1:5433/fasos_apply_local
+          INSTITUTION_TEST_ADMIN_DATABASE_URL: postgresql://postgres@127.0.0.1:5433/fasos_apply_local
+        run: pnpm --filter @workspace/api-server run test:postgres-institution-admissions
 
       - name: Reset the disposable database after foundation fixtures
         env:

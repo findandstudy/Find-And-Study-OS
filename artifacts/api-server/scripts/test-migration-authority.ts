@@ -166,7 +166,7 @@ test("repository migration history is complete, ordered and duplicate-free", () 
   assert.match(result.stdout, /OK: (\d+) files, \1 journal entries/);
 });
 
-test("production migration tail and canonical Control Plane range are pinned", () => {
+test("production prefix and canonical additive migration tail are pinned", () => {
   const journal = JSON.parse(
     readFileSync(path.join(root, "lib/db/drizzle/meta/_journal.json"), "utf8"),
   );
@@ -207,6 +207,8 @@ test("production migration tail and canonical Control Plane range are pinned", (
       "0080_active_context_selection_consumption_attempts",
       "0081_active_context_selection_consumption_repair",
       "0082_student_journey_g45_foundation",
+      "0083_institution_admissions_foundation",
+      "0084_institution_admissions_authority_hardening",
     ],
   );
 
@@ -673,7 +675,7 @@ test("production-prefix adoption harness is explicit and loopback-only", () => {
   const source = readFileSync(harness, "utf8");
   assert.match(source, /prefix adoption requires a fresh disposable database/);
   assert.match(source, /productionEntries\.length, 66/);
-  assert.match(source, /count: 83/);
+  assert.match(source, /count: 85/);
 });
 
 test("disposable database reset is explicit and fixed to the local test identity", () => {
@@ -728,6 +730,7 @@ test("disposable database reset is explicit and fixed to the local test identity
   assert.match(source, /fas_session_repair_executor/);
   assert.match(source, /fas_journey_owner/);
   assert.match(source, /fas_journey_executor/);
+  assert.match(source, /fas_institution_executor/);
 });
 
 test("PostgreSQL adapter integration is explicit and fixed to the disposable target", () => {
@@ -784,7 +787,7 @@ test("comprehensive Control Plane gate is explicit and fixed to the disposable t
     /assert\.equal\(target\.pathname\.slice\(1\), "fasos_apply_local"\)/,
   );
   assert.match(source, /assert\.equal\(target\.port, "5433"\)/);
-  assert.match(source, /assert\.equal\(migrationCount\.rows\[0\]\.count, 83\)/);
+  assert.match(source, /assert\.equal\(migrationCount\.rows\[0\]\.count, 85\)/);
   assert.doesNotMatch(source, /CREATE ROLE \$\{/);
 });
 
@@ -814,12 +817,40 @@ test("Student Journey G45 PostgreSQL integration is explicit and loopback-only",
   assert.match(source, /target\.pathname, "\/fasos_apply_local"/);
   assert.match(source, /safeTarget\(executorUrl, "fas_journey_executor"\)/);
   assert.match(source, /ALLOW_LIVE_INTEGRATIONS/);
-  assert.match(source, /migrationCount\.rows\[0\]\?\.count, 83/);
+  assert.match(source, /migrationCount\.rows\[0\]\?\.count, 85/);
   assert.match(source, /journey_notification_intents_default_off_chk/);
   assert.match(
     source,
     /REVOKE ALL ON TABLE public\.\$\{table\} FROM fas_journey_executor/,
   );
+});
+
+test("Institution Admissions PostgreSQL integration is explicit and least-privilege", () => {
+  const institutionTest = path.join(
+    root,
+    "artifacts/api-server/scripts/test-postgres-institution-admissions.ts",
+  );
+  const unapproved = spawnSync(
+    process.execPath,
+    ["--import", "tsx", institutionTest],
+    {
+      cwd: path.join(root, "artifacts/api-server"),
+      encoding: "utf8",
+      env: { PATH: process.env.PATH ?? "" },
+    },
+  );
+  assert.equal(unapproved.status, 1);
+  assert.match(
+    unapproved.stderr,
+    /institution_postgres_test_requires_explicit_disposable_opt_in/,
+  );
+
+  const source = readFileSync(institutionTest, "utf8");
+  assert.match(source, /ALLOW_DISPOSABLE_INSTITUTION_ADMISSIONS_TEST/);
+  assert.match(source, /institution_postgres_test_requires_disposable_loopback_database/);
+  assert.match(source, /new URL\(actorUrl\)\.username !== "fas_institution_executor"/);
+  assert.match(source, /NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS/);
+  assert.match(source, /migrationCount\.rows\[0\]\?\.count, 85/);
 });
 
 test("durable audit integration is explicit and fixed to the disposable target", () => {

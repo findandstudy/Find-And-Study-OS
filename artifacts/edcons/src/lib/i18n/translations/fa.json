@@ -6749,7 +6749,8 @@
       "integrations": "Integrations",
       "governance": "Governance",
       "analytics": "Analytics",
-      "team": "Team & roles"
+      "team": "Team & roles",
+      "audit": "Audit records"
     },
     "role": { "portalUser": "Institution user" }
   }

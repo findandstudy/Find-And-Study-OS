@@ -146,3 +146,25 @@ API/Edcons typecheck ve iki production build PASS'tir. Canlı adoption,
 Control Plane provisioning, active-context/step-up, Privacy/Legal, consentli
 cohort ve bağımsız review ayrı NO-GO kapılarıdır. Ayrıntı:
 `INSTITUTION_ADMISSIONS_V1_IMPLEMENTATION_2026-09-02.md`.
+
+### 2 Eylül 2026 — Institution authority hardening eki
+
+Yukarıdaki `84/84`, `7/7` ve `6/6` yerel kanıtını supersede eder. Additive
+`0084_institution_admissions_authority_hardening.sql` ile kanonik ledger
+`85/85` oldu. Relationship purpose/data-scope, program/intake/assigned-reviewer
+kapsamı, current membership actor bağı, kurum rol ayrımı, evidence lineage ve
+decision/offer/enrolment receipt-evidence corridor'u PostgreSQL RLS/trigger
+sınırında fail-closed hale getirildi. Institution Admin application reviewer
+değildir; Auditor masked/read-only kalır; decision maker ile checker aynı olamaz.
+Bilgi isteği update corridor'u bu dilimde DB seviyesinde kapalıdır.
+
+Yeni ayrı `/institution/audit` yüzeyi PII-free masked append-only projection'dır.
+Dedicated Institution CI workflow'u Linux/Windows/PostgreSQL 16 kapılarını,
+genel convergence workflow'u da pure ve PostgreSQL institution regresyonlarını
+çalıştırır. Fresh `85/85`, clean replay, pure `9/9`, exact least-privilege
+executor PostgreSQL `10/10`, migration authority `29 PASS + 1` Bash-unavailable
+SKIP, tenant-writer ve legacy-route inventory, full workspace typecheck, 10 dil
+i18n, API/Edcons production build, data-boundary `4/4`, integration DB safety
+`11/11` ve live security regression `31/31` PASS'tir. Production, staging,
+`Next`, gerçek PII, external send/portal automation, merge ve deploy
+değiştirilmemiştir; bunlar ayrı onay ve NO-GO kapılarında kalır.

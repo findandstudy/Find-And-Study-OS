@@ -574,6 +574,7 @@ function InstitutionShell() {
             <Route path="/institution/integrations"><InstitutionWorkspace view="integrations" /></Route>
             <Route path="/institution/analytics"><InstitutionWorkspace view="analytics" /></Route>
             <Route path="/institution/team"><InstitutionWorkspace view="team" /></Route>
+            <Route path="/institution/audit"><InstitutionWorkspace view="audit" /></Route>
             <Route path="/institution"><InstitutionWorkspace view="home" /></Route>
             <Route component={NotFound} />
           </Switch>

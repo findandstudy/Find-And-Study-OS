@@ -136,6 +136,7 @@ function getMenuForRole(
           items: [
             { title: t("institution.nav.analytics"), icon: BarChart3, url: "/institution/analytics", permKey: "institution.analytics.read" },
             { title: t("institution.nav.team"), icon: Users, url: "/institution/team", permKey: "institution.team.manage" },
+            { title: t("institution.nav.audit"), icon: ShieldCheck, url: "/institution/audit", permKey: "institution.audit.read" },
           ],
         },
       ];

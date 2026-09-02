@@ -67,6 +67,22 @@ export function assertAnyCapability(
   }
 }
 
+export function assertInstitutionDataScope(
+  dataScopes: ReadonlySet<string>,
+  requiredScope: string,
+): void {
+  if (!/^[a-z][a-z0-9._:-]{1,95}$/.test(requiredScope) || !dataScopes.has(requiredScope)) {
+    throw new Error("institution_data_scope_denied");
+  }
+}
+
+export function hasInstitutionDataScope(
+  dataScopes: ReadonlySet<string>,
+  requiredScope: string,
+): boolean {
+  return dataScopes.has(requiredScope);
+}
+
 export function assertIndependentChecker(makerId: string, checkerId: string): void {
   if (!makerId || !checkerId || makerId === checkerId) {
     throw new Error("institution_maker_checker_conflict");
@@ -108,4 +124,12 @@ export function sanitizeInstitutionSharedProfile(value: unknown): Record<string,
       .filter(([key]) => SHARED_PROFILE_KEYS.has(key))
       .map(([key, item]) => [key, typeof item === "string" ? item.slice(0, 500) : item]),
   );
+}
+
+export function projectInstitutionSharedProfile(
+  value: unknown,
+  roleKey: InstitutionRoleKey,
+): Record<string, unknown> {
+  if (roleKey === "INSTITUTION_AUDITOR") return {};
+  return sanitizeInstitutionSharedProfile(value);
 }

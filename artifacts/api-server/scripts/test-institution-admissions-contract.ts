@@ -11,7 +11,9 @@ import {
   assertDecisionCanCreateOffer,
   assertEnrolmentEvidenceHash,
   assertIndependentChecker,
+  assertInstitutionDataScope,
   canTransitionInstitutionCase,
+  projectInstitutionSharedProfile,
   sanitizeInstitutionSharedProfile,
 } from "../src/lib/institutionAdmissionsPolicy";
 
@@ -54,6 +56,16 @@ test("institution profile projection removes CRM and commercial fields", () => {
   }), { givenName: "Ada", nationality: "TR" });
 });
 
+test("purpose-limited data scopes and auditor projection fail closed", () => {
+  const scopes = new Set(["application.profile"]);
+  assert.doesNotThrow(() => assertInstitutionDataScope(scopes, "application.profile"));
+  assert.throws(() => assertInstitutionDataScope(scopes, "application.evidence"), /data_scope_denied/);
+  assert.deepEqual(projectInstitutionSharedProfile({ givenName: "Ada", nationality: "TR" }, "INSTITUTION_AUDITOR"), {});
+  assert.deepEqual(projectInstitutionSharedProfile({ givenName: "Ada", nationality: "TR" }, "DECISION_APPROVER"), {
+    givenName: "Ada", nationality: "TR",
+  });
+});
+
 test("production cannot enable the local assurance escape hatch", () => {
   const previousNodeEnv = process.env.NODE_ENV;
   const previousFlag = process.env.INSTITUTION_ADMISSIONS_V1_LOCAL_ASSURANCE;
@@ -73,4 +85,16 @@ test("institution routes never accept client-selected tenant or relationship aut
   assert.match(source, /withInstitutionContext\(req\.user!\.id/);
   assert.match(source, /req\.apiTokenAuth/);
   assert.match(source, /assertLocalAssurance\(\)/);
+  assert.match(source, /router\.get\("\/institution\/audit"/);
+  assert.match(source, /assertInstitutionDataScope\(context\.dataScopes/);
+});
+
+test("authority hardening migration binds database scope and current actor", () => {
+  const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
+  const source = fs.readFileSync(path.join(root, "lib/db/drizzle/0084_institution_admissions_authority_hardening.sql"), "utf8");
+  assert.match(source, /institution_case_scope_matches/);
+  assert.match(source, /app\.institution_membership_id/);
+  assert.match(source, /institution_evidence_lineage_guard/);
+  assert.match(source, /reviewer cannot assign another institution actor/);
+  assert.match(source, /current checker/);
 });

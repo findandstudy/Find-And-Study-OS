@@ -17,7 +17,7 @@ import { AlertCircle, ArrowLeft, CheckCircle2, Clock3, FileCheck2, Inbox, Loader
 export type InstitutionView =
   | "home" | "review-queue" | "applications" | "application" | "decisions"
   | "offers" | "programs-intakes" | "requirements" | "sla" | "integrations"
-  | "analytics" | "team";
+  | "analytics" | "team" | "audit";
 
 type Props = { view: InstitutionView; applicationId?: string };
 type Context = {
@@ -32,7 +32,7 @@ const TITLES: Record<InstitutionView, string> = {
   application: "Application review", decisions: "Decision approvals", offers: "Offers",
   "programs-intakes": "Programs & intakes", requirements: "Requirements & evidence rules",
   sla: "SLA policies", integrations: "Institution integrations", analytics: "Admissions analytics",
-  team: "Institution team & roles",
+  team: "Institution team & roles", audit: "Institution audit",
 };
 
 function formatDate(value: unknown): string {
@@ -238,6 +238,17 @@ function Integrations() {
   return <Card><CardHeader><CardTitle>Integration safety boundary</CardTitle><CardDescription>Credentials are represented only as secret references and never rendered in this portal.</CardDescription></CardHeader><CardContent className="space-y-4"><div className="flex items-center justify-between rounded-lg border p-4"><div><div className="font-medium">External execution</div><div className="text-sm text-muted-foreground">Submit, portal automation and message delivery</div></div><Badge variant="outline">{query.data?.externalExecution}</Badge></div><div className="flex items-center justify-between rounded-lg border p-4"><div><div className="font-medium">Credential visibility</div><div className="text-sm text-muted-foreground">Raw secrets are never exposed</div></div><Badge>{query.data?.credentialVisibility}</Badge></div></CardContent></Card>;
 }
 
+function Audit() {
+  return <SimpleList endpoint="/api/institution/audit" columns={[
+    {key:"occurred_at",label:"Observed",render:(row)=>formatDate(row.occurred_at)},
+    {key:"event_type",label:"Event",render:(row)=>human(row.event_type.replace("institution.","").replace(".v1",""))},
+    {key:"aggregate_type",label:"Aggregate",render:(row)=>human(row.aggregate_type)},
+    {key:"aggregate_version",label:"Version"},
+    {key:"actor_ref",label:"Actor ref"},
+    {key:"event_hash",label:"Receipt",render:(row)=><span className="font-mono text-xs">{String(row.event_hash).slice(0,12)}…</span>},
+  ]}/>;
+}
+
 export default function InstitutionWorkspace({ view, applicationId }: Props) {
   useSeo({title:TITLES[view],noindex:true});
   const contextQuery=useQuery<Context>({queryKey:["institution","context"],queryFn:()=>customFetch("/api/institution/me/context"),staleTime:60_000,retry:false});
@@ -255,6 +266,7 @@ export default function InstitutionWorkspace({ view, applicationId }: Props) {
     if(view==="integrations")return <Integrations/>;
     if(view==="analytics")return <Analytics/>;
     if(view==="team")return <Team/>;
+    if(view==="audit")return <Audit/>;
     return <Empty>Unknown institution view.</Empty>;
   },[view,applicationId,context]);
   if(contextQuery.isLoading)return <Loading/>;

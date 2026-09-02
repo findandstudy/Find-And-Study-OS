@@ -6749,7 +6749,8 @@
       "integrations": "Entegrasyonlar",
       "governance": "Yönetişim",
       "analytics": "Analitik",
-      "team": "Ekip ve roller"
+      "team": "Ekip ve roller",
+      "audit": "Denetim kayıtları"
     },
     "role": { "portalUser": "Kurum kullanıcısı" }
   }
