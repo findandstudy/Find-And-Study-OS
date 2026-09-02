@@ -10,11 +10,11 @@ Durum: Yerel ve PR-ready; push, PR, merge, staging/production deploy ve `Next` s
 
 - Target base: `822112fb471ad53365034b9b928b5510b4c06d81`
 - Foundation commit: `9e8ef92d073511759860ba9d640be9f767cab311`
-- Code-bearing head: `6cb9dd3e2d7f33644c4b98d948d6a91fc02791e4`
-- Code-bearing tree: `82e52312f660c56fc5ad11871e0e4086388b4bc4`
-- Base → code farkı: `6 commit / 51 dosya / 8.922 ekleme / 31 silme`
-- Binary-patch SHA-256: `7812ea20a9c670ac6b3b0c86c19061c8710c04f5c7a9d1020d7cac8e1d1fe2f3`
-- Binary-patch byte uzunluğu: `512541`
+- Code-bearing head: `efb8d10e948db878857421be3b9f1b45a77bc8f8`
+- Code-bearing tree: `e2d0af4a2ee65167937b1e5146311151272c50e0`
+- Base → code farkı: `8 commit / 56 dosya / 10.595 ekleme / 31 silme`
+- Binary-patch SHA-256: `a8a2b16a923247bffb0b250287fb3ccc4f904202d4086f163bd4645921be2d5e`
+- Binary-patch byte uzunluğu: `589418`
 
 Bu dosya ve onu taşıyan commit review-infrastructure-only'dir. Kendi commit
 kimliğini dairesel olarak mühürleyemez; reviewer branch'in exact final HEAD'ini
@@ -52,22 +52,31 @@ ayrıca kabul etmelidir.
     NOLOGIN/non-super/non-BYPASSRLS ve feature `off|allowlist|all`, varsayılan
     `off`tur. Route/worker/backfill/live wiring yoktur.
 15. Dedicated Institution workflow'u ve genel convergence CI bağlantısı.
+16. `0087` ile Journey verified evidence + current in-app consent'i exact
+    institution case'e bağlayan, ham object ref taşımayan append-only evidence
+    share receipt'i; toplam 19 Institution tablosu FORCE RLS'tir.
+17. Reviewer serbest evidence hash giremez. Assessment exact share receipt,
+    current membership, program/intake/case scope, DB timestamp ve güncel
+    consent ile yeniden doğrulanır; idempotent replay de aynı güncel kontrollerin
+    arkasındadır. Adapter default-unwired ve default-off'tur.
 
 ## Yerel kanıt matrisi
 
 | Kapı | Sonuç |
 |---|---:|
-| Migration ledger | `87/87` PASS |
+| Migration ledger | `88/88` PASS |
 | Fresh PostgreSQL 16.15 migration | PASS |
 | Clean migration replay | PASS |
-| Institution pure contracts | `10/10` PASS |
+| Institution pure contracts | `11/11` PASS |
 | Institution active-context authorization | `9/9` PASS |
 | Institution intake pure contract | `4/4` PASS |
+| Institution evidence-share pure contract | `4/4` PASS |
 | Least-privilege PostgreSQL/RLS/lifecycle | `12/12` PASS |
 | EXECUTE-only PostgreSQL case intake | `5/5` PASS |
-| Migration authority | `30 PASS + 1 Bash-unavailable SKIP` |
+| EXECUTE-only PostgreSQL evidence share | `7/7` PASS |
+| Migration authority | `31 PASS + 1 Bash-unavailable SKIP` |
 | Package-manager contract | `6/6` PASS |
-| Tenant writer inventory | `167/167`, `2.226` surface, hata `0` |
+| Tenant writer inventory | `168/168`, `2.231` surface, hata `0` |
 | Legacy role-gate inventory | `72` route, `1` corridor, hata `0` |
 | Full workspace typecheck | PASS |
 | 10 dil i18n eşliği | PASS |
@@ -80,9 +89,10 @@ ayrıca kabul etmelidir.
 | `git diff --check` | PASS |
 
 PostgreSQL kanıtı yeni ve yalnız loopback'te oluşturulan
-`fas_dev_institution_intake5` disposable DB'sinde, exact
-`fas_institution_executor` ile `fas_institution_intake_executor`
-non-super/non-owner/non-BYPASSRLS rolleriyle alındı.
+`fas_dev_institution_evidence4` disposable DB'sinde, exact
+`fas_institution_executor`, `fas_institution_intake_executor` ve
+`fas_institution_evidence_share_executor` non-super/non-owner/non-BYPASSRLS
+rolleriyle alındı.
 Production credential, dump veya PII kullanılmadı.
 
 ## Reviewer için kritik kontrol listesi
@@ -109,6 +119,13 @@ Production credential, dump veya PII kullanılmadı.
   source external ref'in yalnız hash'inin saklandığını doğrula.
 - Intake executor'ın hiçbir Institution tablosunda SELECT/INSERT yetkisi
   olmadığını; same-source concurrency'nin tek case/receipt ürettiğini doğrula.
+- Evidence-share executor'ın tablo yetkisi olmadığını; receipt'in yalnız current
+  consent + verified Journey evidence'dan türediğini, ham evidence ref
+  taşımadığını ve consent withdrawal sonrası replay/assessment'in reddedildiğini
+  doğrula.
+- Evidence manifestinin reviewer program/intake/case scope'u dışından
+  görünmediğini ve client-supplied assessment timestamp/hash'in etkisiz olduğunu
+  doğrula.
 - CI'nın generic PR'larda eski frozen convergence manifestini yanlışlıkla
   zorlamadığını, frozen branch'te ise zorlamaya devam ettiğini doğrula.
 
@@ -122,6 +139,9 @@ Production credential, dump veya PII kullanılmadı.
 - External message, offer delivery, SIS/API/webhook veya portal automation çalışmadı.
 - Intake adapter hazırdır ama hiçbir route/worker'a bağlanmadı; hiçbir legacy
   application backfill edilmedi ve gerçek applicant PII projection yapılmadı.
+- Evidence-share adapter hazırdır ama route/worker'a bağlanmadı; consent
+  yaratmaz, belge byte'ı/object ref taşımaz ve canlı relationship allowlist'i
+  açılmadı.
 - Consentli cohort UAT, Privacy/Legal, retention, rollback rehearsal ve bağımsız
   security review tamamlanmadan production enablement yoktur.
 - Bu branch push/merge/deploy veya `Find-And-Study-OS-Next` sync için tek başına

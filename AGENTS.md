@@ -258,3 +258,45 @@ Institution case-intake dahil güncel code-bearing head
 ve byte uzunluğu `512541` olarak review packet'te dondurulmuştur. Review packet
 commit'i code-bearing değildir; bağımsız reviewer exact final branch HEAD'ini
 ayrıca kabul etmelidir.
+
+### 2 Eylül 2026 — Institution consent-bound evidence eki
+
+Yukarıdaki Institution case-intake code/review kimliği ve `87/87` kanıtını
+supersede eder. Additive `0087_institution_evidence_share_receipts.sql` ile
+kanonik ledger `88/88`, Institution FORCE-RLS toplamı `19` olmuştur. Kurum
+reviewer'ı artık serbest evidence hash giremez; yalnız exact institution case'e,
+Journey verified evidence/requirement sonucuna ve en son aktif
+`institution.admissions.evidence_share` in-app consent receipt'ine bağlı,
+PII-minimized manifesti seçebilir. Ham document byte veya private object ref
+kurum projection'ına girmez.
+
+Share receipt append-only'dir. Idempotent replay current relationship,
+verified-evidence ve consent durumunu yeniden doğrular; consent withdrawal eski
+receipt replay'ini ve yeni assessment'i reddeder. Assessment DB timestamp'i,
+current reviewer membership'i ve program/intake/case scope'u PostgreSQL
+trigger/RLS sınırında tekrar doğrulanır. Exact
+`fas_institution_evidence_share_executor` tablo yetkisiz/EXECUTE-only; fonksiyon
+owner'ı NOLOGIN/non-super/non-BYPASSRLS'tir. Feature `off|allowlist|all`,
+varsayılan `off`; adapter default-unwired'dır ve consent, dış gönderim veya
+belge aktarımı üretmez.
+
+Güncel code-bearing head `efb8d10e948db878857421be3b9f1b45a77bc8f8`,
+tree `e2d0af4a2ee65167937b1e5146311151272c50e0`, base
+`822112fb471ad53365034b9b928b5510b4c06d81` → code farkı
+`8 commit / 56 dosya / 10.595 ekleme / 31 silme`, binary-patch SHA-256
+`a8a2b16a923247bffb0b250287fb3ccc4f904202d4086f163bd4645921be2d5e`
+ve byte uzunluğu `589418` olarak review packet'te dondurulmuştur.
+
+Fresh PostgreSQL 16.15 `88/88` + clean replay, pure Institution contract
+`11/11`, authorization `9/9`, intake `4/4`, evidence-share `4/4`, Institution
+PostgreSQL `12/12`, intake PostgreSQL `5/5`, evidence-share PostgreSQL `7/7`,
+migration authority `31 PASS + 1` Bash-unavailable SKIP, tenant writer `168/168`
+ve `2.231` surface, legacy route `72/794`, full workspace typecheck, 10 dil
+i18n, API/Edcons production builds, data-boundary `4/4`, integration DB safety
+`11/11` ve security regression `31/31` PASS'tir.
+
+Production, staging, `Next`, GitHub remote, gerçek PII, consent creation,
+worker/route wiring, dış mesaj/SIS/portal execution, merge ve deploy
+değiştirilmemiştir. Bağımsız review, staging `0083–0087` adoption/rollback,
+dedicated owner/executor provisioning, active-context/MFA issuer'ları,
+Privacy/Legal ve consentli staging allowlist UAT ayrı NO-GO kapılarıdır.

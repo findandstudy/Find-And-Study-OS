@@ -2,7 +2,7 @@
 
 Tarih: 2 Eylül 2026
 Branch: `codex/institution-admissions-v1-20260902`
-Durum: Yerel uygulama, active-context/step-up authority hardening ve receipt-bound case-intake adapter disposable PostgreSQL kanıtı tamamlandı; production, staging, `Next`, dış iletişim ve portal automation wiring'i değiştirilmedi.
+Durum: Yerel uygulama, active-context/step-up authority hardening, receipt-bound case-intake ve consent-bound verified-evidence sharing disposable PostgreSQL kanıtı tamamlandı; production, staging, `Next`, dış iletişim ve portal automation wiring'i değiştirilmedi.
 
 ## Teslim edilen ürün yüzeyi
 
@@ -36,6 +36,10 @@ Durum: Yerel uygulama, active-context/step-up authority hardening ve receipt-bou
   PII-minimized application case açan, varsayılan kapalı ve idempotent intake
   adapter'ı eklendi. Ham external reference, result JSON, screenshot, öğrenci
   adı, e-posta, pasaport veya belge içeriği kurum case/receipt'ine yazılmaz.
+- Kurum reviewer'ı artık istemciden serbest bir evidence SHA-256 değeri giremez.
+  Yalnız güncel consent ile kuruma açılmış, Journey tarafından doğrulanmış ve
+  program/intake/case kapsamına uyan PII-minimized evidence manifestini seçer.
+  Belge byte'ı ve private object reference kurum portalına çıkmaz.
 
 ## Veri ve güvenlik omurgası
 
@@ -110,6 +114,28 @@ advisory transaction lock + unique constraint ile eşzamanlı çağrılar tek ca
 ve tek receipt üretir; takip eden çağrı `REPLAY` döndürür. Worker/route wiring'i,
 backfill ve canlı feature activation bu dilimde yoktur.
 
+Additive `0087_institution_evidence_share_receipts.sql` on dokuzuncu
+Institution tablosunu ekler:
+
+19. `institution_evidence_share_receipts`
+
+Evidence-share corridor'u Journey application case, subject, verified evidence
+receipt, güncel `VERIFIED` requirement result ve en son aktif
+`institution.admissions.evidence_share` / `in_app` consent receipt'ini exact
+tenant + relationship + institution case bağıyla doğrular. Ham evidence ref
+yerine DB tarafında SHA-256, source snapshot ve append-only receipt hash'i
+tutulur. Idempotent `REPLAY` dahi relationship/evidence/consent durumunu yeniden
+doğrular; consent geri çekildikten sonra eski receipt tekrar çözülemez.
+
+Paylaşım yazıcısı exact `fas_institution_evidence_share_executor` rolünde tablo
+yetkisi olmadan yalnız SECURITY DEFINER fonksiyonunu çalıştırır. Fonksiyon sahibi
+ayrı NOLOGIN, non-super ve non-BYPASSRLS roldür. Assessment trigger'ı client
+zamanını DB saatiyle değiştirir; exact share receipt/hash, current reviewer
+membership, program/intake/case scope ve güncel consent'i aynı transaction'da
+tekrar doğrular. Intake-created case'lerde receipt zorunludur; migration öncesi
+historical/manual case'ler additive uyumluluk için korunur. Share adapter'ı
+default-unwired'dır; consent oluşturmaz, belge taşımaz ve dış gönderim yapmaz.
+
 Kurum kullanıcısının legacy `users.role=institution_user` değeri yalnız portal
 routing marker'ıdır. Yetki kaynağı değildir. Her API isteğinde sunucu:
 
@@ -144,6 +170,8 @@ INSTITUTION_ACTIVE_CONTEXT_ISSUER_ID=
 INSTITUTION_ACTIVE_CONTEXT_KEY_RING_JSON=
 INSTITUTION_CASE_INTAKE_V1_MODE=off
 INSTITUTION_CASE_INTAKE_V1_RELATIONSHIP_ALLOWLIST=
+INSTITUTION_EVIDENCE_SHARE_V1_MODE=off
+INSTITUTION_EVIDENCE_SHARE_V1_RELATIONSHIP_ALLOWLIST=
 ```
 
 Production'da ayrı `INSTITUTION_DATABASE_URL` ve exact
@@ -160,10 +188,11 @@ komutlar fail-closed kalır.
 
 ## Doğrulanan kanıt
 
-- Migration ledger: `87/87`.
+- Migration ledger: `88/88`.
 - Fresh disposable PostgreSQL 16 migration ve clean replay: PASS.
-- Pure institution contract tests: `10/10` PASS.
+- Pure institution contract tests: `11/11` PASS.
 - Pure institution case-intake config/result tests: `4/4` PASS.
+- Pure institution evidence-share config/request/result tests: `4/4` PASS.
 - PostgreSQL FORCE RLS, exact non-super/non-BYPASSRLS executor, server-side
   membership resolution, assigned-case/program/intake scope, actor spoof deny,
   auditor read-only, append-only evidence, maker-checker receipt ve
@@ -173,9 +202,13 @@ komutlar fail-closed kalır.
 - Intake exact EXECUTE-only owner/executor ayrımı, default-off deny, dry-source
   deny, PII-minimized projection, append-only receipt, idempotency ve same-source
   concurrency: `5/5` PASS.
-- Migration authority: `30 PASS + 1` yalnız bu Windows hostunda Bash bulunmadığı
+- Evidence-share exact EXECUTE-only owner/executor ayrımı, current consent,
+  verified source, PII-minimized receipt, replay revalidation, concurrency,
+  server timestamp, reviewer membership, program/intake scope ve withdrawal
+  deny: `7/7` PASS.
+- Migration authority: `31 PASS + 1` yalnız bu Windows hostunda Bash bulunmadığı
   için beklenen SKIP.
-- Tenant writer inventory: `167/167` classified, `2.226` surface; üç
+- Tenant writer inventory: `168/168` classified, `2.231` surface; dört
   institution writer `db_enforced` ve external pilot quarantine altında.
 - Legacy role-gate inventory: `72` route dosyası; institution route tek
   `corridor_migrated`, kalan `71` legacy quarantine, hata `0`.
@@ -188,13 +221,14 @@ komutlar fail-closed kalır.
 ## Canlı adoption için ayrı onay gerektiren işler
 
 1. Bağımsız review ve branch/ruleset kararı.
-2. Staging'de `0083–0086` migration adoption ve rollback rehearsal.
+2. Staging'de `0083–0087` migration adoption ve rollback rehearsal.
 3. Dedicated non-super/non-BYPASSRLS executor rolü ve exact least-privilege
    grant setinin DBA tarafından kurulması.
 4. Tenant/institution relationship, principal ve membership provisioning'inin
    Control Plane ChangeSet üzerinden yapılması.
-5. Hazır intake adapter'ının yalnız consentli staging relationship allowlist'i
-   için ayrı worker/job'a bağlanması; legacy application backfill yapılmaması.
+5. Hazır intake ve evidence-share adapter'larının yalnız consentli staging
+   relationship allowlist'i için ayrı internal worker/job'a bağlanması; legacy
+   application backfill yapılmaması ve raw belge/object ref taşınmaması.
 6. Authoritative active-context selection issuer, Ed25519 key-ring ve MFA
    step-up receipt issuer'ının ayrı review ile provision edilmesi.
 7. PII/data-sharing, retention ve kurum sözleşmesi onayı.
