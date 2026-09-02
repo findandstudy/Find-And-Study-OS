@@ -6,10 +6,11 @@ runner, which already passed `126` checks across `11` roles.
 
 ## Fixed target
 
-- Origin: `https://staging.srv1110168.hstgr.cloud`
-- Login: `https://staging.srv1110168.hstgr.cloud/tr/login`
-- Code-bearing commit: `422c3e0d7274218f98b0b7693fb78a41cd3148e5`
-- Release ID: `staging-20260901T221850Z-422c3e0d7274`
+- Origin: `https://staging.findandstudy.com`
+- Login: `https://staging.findandstudy.com/tr/login`
+- Temporary rollback origin: `https://staging.srv1110168.hstgr.cloud`
+- Deployed commit: `507fdbd0c7ab686b51bfc500ab0c3652a82bcb23`
+- Release ID: `staging-20260902T053051Z-507fdbd0c7ab`
 - Expected database ledger: `83/83`
 - Expected synthetic denominator: 12 users, including 11 RBAC UAT users, two
   UAT agent profiles and one UAT student profile

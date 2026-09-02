@@ -7,14 +7,34 @@ production service, production database/storage, production integration, or
 ## Identity
 
 - Host: `srv1110168.hstgr.cloud` (`72.61.91.131`)
-- Public URL: `https://staging.srv1110168.hstgr.cloud/tr/login`
+- Canonical public URL: `https://staging.findandstudy.com/tr/login`
+- Temporary rollback URL: `https://staging.srv1110168.hstgr.cloud/tr/login`
 - Branch: `codex/staging-adoption-runner-20260901`
-- Deployed code-bearing commit: `422c3e0d7274218f98b0b7693fb78a41cd3148e5`
-- Release ID: `staging-20260901T221850Z-422c3e0d7274`
-- App image: `findandstudy-staging-app:422c3e0d7274`
-- App image ID: `sha256:6d5089664c229fbb94410fba8128aa56e9463af6e5d0cb66644be76e014bfe3b`
+- Deployed commit: `507fdbd0c7ab686b51bfc500ab0c3652a82bcb23`
+- Release ID: `staging-20260902T053051Z-507fdbd0c7ab`
+- App image: `findandstudy-staging-app:507fdbd0c7ab`
+- App image ID: `sha256:ad492c518e7ecdf073fc1740921f40676c8dd8956f7174febc7a06e26eb1a010`
 - The host checkout, its upstream ref, and the deployed code-bearing commit
   matched exactly; the tracked worktree was clean.
+
+## Custom hostname adoption — 2 September 2026
+
+- The authoritative `findandstudy.com` zone received the exact A record
+  `staging` → `72.61.91.131` with TTL `300`. The authoritative server and the
+  Cloudflare and Google public resolvers returned the same address.
+- Traefik uses one dual-host router for the canonical and rollback hostnames.
+  The Let's Encrypt certificate contains both names as SANs; local and public
+  HTTPS verification succeeded without disabling certificate checks.
+- The application canonical origins and the release-bound RBAC runner now use
+  `https://staging.findandstudy.com`. The legacy hostname remains in the exact
+  CORS allowlist only as the temporary rollback route.
+- The host-only pre-cutover configuration is preserved at
+  `/opt/findandstudy-staging/backups/config-cutover-20260902T053051Z-507fdbd0c7ab`
+  with `0750 root:findandstudy-staging`; its three files retain `0640`.
+- Two fail-closed trial replacements returned to the old image automatically:
+  the first waited for certificate issuance, and the second exposed an
+  attestation mismatch between the image's named user and Compose's exact
+  runtime `10042:10042` identity. No production or database state changed.
 
 ## Runtime and database evidence
 
@@ -47,6 +67,9 @@ production service, production database/storage, production integration, or
   gives all three login/registration/set-password toggles localized accessible
   names and `aria-pressed` state in all 10 supported languages. Two focused
   regressions, i18n parity and Edcons typecheck passed.
+- A fresh public browser load of the canonical Turkish login route rendered the
+  labelled email/password inputs, named password visibility toggle, login and
+  registration tabs without an error boundary.
 
 ## CI evidence
 
@@ -66,6 +89,10 @@ production service, production database/storage, production integration, or
   install/typecheck gate, and exact-source hardened container build. CI also
   discovered all 106 staging RBAC browser cases without executing them against
   the external staging host.
+- Custom-host adoption run
+  [33589045478](https://github.com/findandstudy/Find-And-Study-OS/actions/runs/33589045478)
+  passed all three Linux, Windows and exact-source hardened container jobs on
+  deployed commit `507fdbd0c7ab686b51bfc500ab0c3652a82bcb23`.
 
 ## Backup and recovery evidence
 
@@ -96,6 +123,14 @@ production service, production database/storage, production integration, or
 - Final filesystem use was `72/96 GiB` (`75%`, approximately `25 GiB` free);
   build images were retained and no Docker prune/retention mutation was
   performed.
+- The accepted custom-host backup is
+  `/opt/findandstudy-staging/backups/staging-custom-host-20260902T053456Z-507fdbd0c7ab.dump`
+  (`1,206,953` bytes, SHA-256
+  `3caf6f78fe03289aa2d710976118bb8e3a0febe637ab6fe14d4ce4f35e554735`,
+  `0640 root:findandstudy-staging`). Its network-isolated PostgreSQL 16.15
+  restore reproduced ledger `83`, 12 synthetic users and 190 public tables;
+  the disposable restore container was removed. At final attestation the root
+  filesystem reported `31/96 GiB` used (`32%`, `66 GiB` available).
 
 ## Stability soak evidence
 
@@ -111,6 +146,11 @@ production service, production database/storage, production integration, or
   zero fatal/unhandled/uncaught matches.
 - The soak made no database writes, configuration changes, container changes
   or external-delivery calls and retained no request/session payloads.
+- After custom-host cutover, 12 additional public samples over approximately
+  one minute all returned HTTP `200` and the exact new release. Observed
+  latency was `0.137559` seconds minimum, `0.156513` average and `0.189079`
+  maximum. The post-soak app remained healthy with zero restarts and zero
+  fatal/unhandled/uncaught log matches.
 
 ## Operational boundary
 
