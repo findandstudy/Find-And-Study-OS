@@ -25,7 +25,7 @@ await admin.connect();
 const migrationCount = await admin.query(
   "SELECT count(*)::integer AS count FROM drizzle.__drizzle_migrations",
 );
-assert.equal(migrationCount.rows[0]?.count, 88);
+assert.equal(migrationCount.rows[0]?.count, 89);
 await admin.query(`DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'fas_institution_executor') THEN
     CREATE ROLE fas_institution_executor LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS;
@@ -369,19 +369,20 @@ test("decision, offer, and enrolment transitions require matching receipts and c
     id,tenant_id,relationship_id,application_case_id,state,evidence_ref_hash,
     verified_by_membership_id,receipt_hash,effective_at
   ) VALUES ($1,$2,$3,$4,'CONFIRMED',repeat('1',64),$5,repeat('2',64),now())`,
-  [enrolmentId,tenantId,relationshipId,caseId,approverMembershipId]),/row-level security/i);
+  [enrolmentId,tenantId,relationshipId,caseId,approverMembershipId]),/row-level security|requires evidence share receipt/i);
   await actor.query("ROLLBACK TO SAVEPOINT before_enrolment_insert");
   await actor.query(`INSERT INTO institution_enrolments (
     id,tenant_id,relationship_id,application_case_id,state
   ) VALUES ($1,$2,$3,$4,'PENDING_EVIDENCE')`,[enrolmentId,tenantId,relationshipId,caseId]);
-  await actor.query(`UPDATE institution_enrolments SET state='CONFIRMED',
+  await actor.query("SAVEPOINT before_unbound_confirmation");
+  await assert.rejects(actor.query(`UPDATE institution_enrolments SET state='CONFIRMED',
     evidence_ref_hash=repeat('1',64),verified_by_membership_id=$2,
     receipt_hash=repeat('2',64),effective_at=now(),version=version+1 WHERE id=$1`,
-  [enrolmentId,approverMembershipId]);
-  await actor.query(`UPDATE institution_application_cases SET lifecycle_state='ENROLMENT_PENDING',
-    aggregate_version=aggregate_version+1 WHERE id=$1`,[caseId]);
-  await actor.query(`UPDATE institution_application_cases SET lifecycle_state='ENROLLED',
-    aggregate_version=aggregate_version+1 WHERE id=$1`,[caseId]);
+  [enrolmentId,approverMembershipId]),/requires evidence share receipt/i);
+  await actor.query("ROLLBACK TO SAVEPOINT before_unbound_confirmation");
+  const deferred=await actor.query(`UPDATE institution_enrolments SET state='DEFERRED',
+    version=version+1 WHERE id=$1 RETURNING state`,[enrolmentId]);
+  assert.equal(deferred.rows[0].state,"DEFERRED");
   await rollback();
 });
 

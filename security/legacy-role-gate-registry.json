@@ -635,7 +635,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/institutionAdmissions.ts",
-      "sha256": "12d30e0c5f1bf101d0b4c2322c158c598c253a14078e2cbe878ef53874b586a1",
+      "sha256": "7104646ba5ff68da900090d55fad054c33c0368519cdc6f4b00b1947a1cc0a62",
       "routeRegistrations": 31,
       "requireAuth": 2,
       "requireRole": 0,

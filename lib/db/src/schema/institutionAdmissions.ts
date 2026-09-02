@@ -1085,6 +1085,8 @@ export const institutionEnrolmentsTable = pgTable(
     relationshipId: uuid("relationship_id").notNull(),
     applicationCaseId: uuid("application_case_id").notNull(),
     state: text("state").notNull().default("PENDING_EVIDENCE"),
+    evidenceShareReceiptId: uuid("evidence_share_receipt_id"),
+    evidenceAssessmentId: uuid("evidence_assessment_id"),
     evidenceRefHash: text("evidence_ref_hash"),
     verifiedByMembershipId: uuid("verified_by_membership_id"),
     receiptHash: text("receipt_hash"),
@@ -1113,6 +1115,29 @@ export const institutionEnrolmentsTable = pgTable(
       name: "institution_enrolments_case_fk",
     }).onDelete("restrict"),
     foreignKey({
+      columns: [
+        table.tenantId,
+        table.relationshipId,
+        table.applicationCaseId,
+        table.evidenceShareReceiptId,
+      ],
+      foreignColumns: [
+        institutionEvidenceShareReceiptsTable.tenantId,
+        institutionEvidenceShareReceiptsTable.relationshipId,
+        institutionEvidenceShareReceiptsTable.applicationCaseId,
+        institutionEvidenceShareReceiptsTable.id,
+      ],
+      name: "institution_enrolments_evidence_share_fk",
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [table.tenantId, table.evidenceAssessmentId],
+      foreignColumns: [
+        institutionEvidenceAssessmentsTable.tenantId,
+        institutionEvidenceAssessmentsTable.id,
+      ],
+      name: "institution_enrolments_evidence_assessment_fk",
+    }).onDelete("restrict"),
+    foreignKey({
       columns: [table.tenantId, table.verifiedByMembershipId],
       foreignColumns: [
         institutionMembershipsTable.tenantId,
@@ -1127,7 +1152,11 @@ export const institutionEnrolmentsTable = pgTable(
     ),
     check(
       "institution_enrolments_evidence_chk",
-      sql`${table.state} <> 'CONFIRMED' OR (${table.evidenceRefHash} ~ '^[0-9a-f]{64}$' AND ${table.receiptHash} ~ '^[0-9a-f]{64}$' AND ${table.verifiedByMembershipId} IS NOT NULL AND ${table.effectiveAt} IS NOT NULL)`,
+      sql`${table.state} <> 'CONFIRMED' OR (${table.evidenceRefHash} ~ '^[0-9a-f]{64}$' AND ${table.receiptHash} ~ '^[0-9a-f]{64}$' AND ${table.verifiedByMembershipId} IS NOT NULL AND ${table.effectiveAt} IS NOT NULL AND ((${table.evidenceShareReceiptId} IS NULL AND ${table.evidenceAssessmentId} IS NULL) OR (${table.evidenceShareReceiptId} IS NOT NULL AND ${table.evidenceAssessmentId} IS NOT NULL)))`,
+    ),
+    check(
+      "institution_enrolments_nonconfirmed_evidence_chk",
+      sql`${table.state} = 'CONFIRMED' OR (${table.evidenceShareReceiptId} IS NULL AND ${table.evidenceAssessmentId} IS NULL)`,
     ),
     check("institution_enrolments_version_chk", sql`${table.version} > 0`),
   ],

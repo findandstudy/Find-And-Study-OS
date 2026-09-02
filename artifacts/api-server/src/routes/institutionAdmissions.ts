@@ -10,7 +10,6 @@ import {
   assertAnyCapability,
   assertInstitutionDataScope,
   assertDecisionCanCreateOffer,
-  assertEnrolmentEvidenceHash,
   assertIndependentChecker,
   isInstitutionRoleKey,
   hasInstitutionDataScope,
@@ -247,8 +246,43 @@ router.get("/institution/applications/:id", async (req, res) => {
       if (application.rowCount !== 1) throw new Error("institution_application_unavailable");
       const empty = { rows: [] as Record<string, unknown>[] };
       const [sharedEvidence, assessments, requests, decisions, offers, enrolments, events] = await Promise.all([
-        hasInstitutionDataScope(context.dataScopes, "application.evidence") ? client.query(`SELECT id, requirement_code, content_sha256, receipt_hash, valid_until, created_at
-          FROM institution_evidence_share_receipts WHERE application_case_id=$1 ORDER BY created_at DESC`, [id]) : Promise.resolve(empty),
+        hasInstitutionDataScope(context.dataScopes, "application.evidence") ? client.query(`SELECT share.id, share.requirement_code, share.content_sha256,
+          share.receipt_hash, share.valid_until, share.created_at,
+          eligible_requirement.id AS assessment_requirement_id,
+          eligible_requirement.evidence_type AS assessment_evidence_type,
+          COALESCE(latest.result='VERIFIED'
+            AND upper(eligible_requirement.evidence_type)='ENROLMENT_CONFIRMATION', false)
+            AS enrolment_eligible
+          FROM institution_evidence_share_receipts share
+          JOIN institution_application_cases case_record
+            ON case_record.tenant_id=share.tenant_id
+           AND case_record.relationship_id=share.relationship_id
+           AND case_record.id=share.application_case_id
+          LEFT JOIN LATERAL (
+            SELECT requirement.id,requirement.evidence_type
+            FROM institution_requirements requirement
+            JOIN institution_requirement_sets requirement_set
+              ON requirement_set.tenant_id=requirement.tenant_id
+             AND requirement_set.id=requirement.requirement_set_id
+            WHERE requirement_set.relationship_id=share.relationship_id
+              AND requirement_set.program_id=case_record.program_id
+              AND requirement_set.intake_key=case_record.intake_key
+              AND requirement_set.state='PUBLISHED'
+              AND requirement_set.effective_from IS NOT NULL
+              AND requirement_set.effective_from <= now()
+              AND (requirement_set.effective_until IS NULL OR requirement_set.effective_until > now())
+              AND requirement.requirement_code=upper(translate(share.requirement_code,'.:-','___'))
+            ORDER BY requirement_set.version_number DESC,requirement.id DESC LIMIT 1
+          ) eligible_requirement ON true
+          LEFT JOIN LATERAL (
+            SELECT assessment.result
+            FROM institution_evidence_assessments assessment
+            WHERE assessment.application_case_id=share.application_case_id
+              AND assessment.evidence_share_receipt_id=share.id
+              AND assessment.requirement_id=eligible_requirement.id
+            ORDER BY assessment.assessed_at DESC,assessment.id DESC LIMIT 1
+          ) latest ON true
+          WHERE share.application_case_id=$1 ORDER BY share.created_at DESC`, [id]) : Promise.resolve(empty),
         hasInstitutionDataScope(context.dataScopes, "application.evidence") ? client.query(`SELECT id, requirement_id, evidence_share_receipt_id, evidence_ref_hash, result, reason_code, notes,
           reviewer_membership_id, supersedes_assessment_id, assessed_at
           FROM institution_evidence_assessments WHERE application_case_id=$1 ORDER BY assessed_at DESC`, [id]) : Promise.resolve(empty),
@@ -259,7 +293,8 @@ router.get("/institution/applications/:id", async (req, res) => {
           FROM institution_decisions WHERE application_case_id=$1 ORDER BY version_number DESC`, [id]) : Promise.resolve(empty),
         hasInstitutionDataScope(context.dataScopes, "application.offer") ? client.query(`SELECT id, decision_id, state, conditions, acceptance_deadline, issued_at
           FROM institution_offers WHERE application_case_id=$1 ORDER BY created_at DESC`, [id]) : Promise.resolve(empty),
-        hasInstitutionDataScope(context.dataScopes, "application.enrolment") ? client.query(`SELECT id, state, evidence_ref_hash, effective_at, updated_at
+        hasInstitutionDataScope(context.dataScopes, "application.enrolment") ? client.query(`SELECT id, state, evidence_share_receipt_id,
+          evidence_assessment_id, evidence_ref_hash, effective_at, updated_at
           FROM institution_enrolments WHERE application_case_id=$1`, [id]) : Promise.resolve(empty),
         client.query(`SELECT id, event_type, aggregate_type, aggregate_version, occurred_at
           FROM institution_admission_events WHERE application_case_id=$1 ORDER BY occurred_at DESC LIMIT 100`, [id]),
@@ -312,7 +347,7 @@ router.post("/institution/applications/:id/claim", async (req, res) => {
 router.post("/institution/applications/:id/evidence-assessments", async (req, res) => {
   try {
     const caseId = asUuid(req.params.id);
-    const requirementId = req.body?.requirementId == null ? null : asUuid(req.body.requirementId);
+    const requirementId = asUuid(req.body?.requirementId);
     const evidenceShareReceiptId = asUuid(req.body?.evidenceShareReceiptId);
     const resultCode = asText(req.body?.result, 32).toUpperCase();
     if (!["PENDING", "VERIFIED", "NEEDS_INFORMATION", "REJECTED"].includes(resultCode)) {
@@ -654,9 +689,14 @@ router.post("/institution/applications/:id/enrolment", async (req, res) => {
     if (!["PENDING_EVIDENCE","CONFIRMED","DEFERRED","NOT_ENROLLED"].includes(state)) {
       throw new Error("institution_enrolment_state_invalid");
     }
-    const evidenceRefHash = req.body?.evidenceRefHash ?? null;
-    if (state === "CONFIRMED") assertEnrolmentEvidenceHash(evidenceRefHash);
-    const requestHash = institutionHash({operation:"ENROLMENT_TRANSITION",caseId,state,evidenceRefHash});
+    if (req.body?.evidenceRefHash != null) throw new Error("institution_enrolment_raw_evidence_hash_forbidden");
+    const evidenceShareReceiptId = state === "CONFIRMED"
+      ? asUuid(req.body?.evidenceShareReceiptId)
+      : null;
+    if (state !== "CONFIRMED" && req.body?.evidenceShareReceiptId != null) {
+      throw new Error("institution_enrolment_evidence_receipt_unexpected");
+    }
+    const requestHash = institutionHash({operation:"ENROLMENT_TRANSITION",caseId,state,evidenceShareReceiptId});
     const result = await withInstitutionContext(req.user!.id, async (client, context) => {
       assertCapability(context.capabilities, "institution.enrolment.confirm");
       assertInstitutionDataScope(context.dataScopes, "application.enrolment");
@@ -669,25 +709,59 @@ router.post("/institution/applications/:id/enrolment", async (req, res) => {
         requiredDataScope:"application.enrolment",resourceType:"institution_application",resourceId:caseId,requestHash,
         approvalSatisfied:true,
       });
+      let evidenceRefHash: string | null = null;
+      let evidenceAssessmentId: string | null = null;
+      let sourceShareReceiptHash: string | null = null;
+      let sourceAssessmentHash: string | null = null;
+      if (state === "CONFIRMED") {
+        const evidence = await client.query<{
+          evidence_ref_hash: string;
+          share_receipt_hash: string;
+          evidence_assessment_id: string;
+          evidence_assessment_hash: string;
+        }>(`SELECT * FROM fas_institution_evidence_v1.resolve_enrolment_confirmation(
+          $1::uuid,$2::uuid,$3::uuid,$4::uuid,now()
+        )`, [context.tenantId,context.relationshipId,caseId,evidenceShareReceiptId]);
+        if (evidence.rowCount !== 1
+          || !HASH_RE.test(evidence.rows[0]?.evidence_ref_hash ?? "")
+          || !HASH_RE.test(evidence.rows[0]?.share_receipt_hash ?? "")
+          || !UUID_RE.test(evidence.rows[0]?.evidence_assessment_id ?? "")
+          || !HASH_RE.test(evidence.rows[0]?.evidence_assessment_hash ?? "")) {
+          throw new Error("institution_enrolment_evidence_unavailable");
+        }
+        evidenceRefHash = evidence.rows[0].evidence_ref_hash;
+        evidenceAssessmentId = evidence.rows[0].evidence_assessment_id;
+        sourceShareReceiptHash = evidence.rows[0].share_receipt_hash;
+        sourceAssessmentHash = evidence.rows[0].evidence_assessment_hash;
+      }
       const existing = await client.query(`SELECT * FROM institution_enrolments WHERE application_case_id=$1 FOR UPDATE`, [caseId]);
       const id = existing.rows[0]?.id ?? nextInstitutionId();
-      const receiptHash = state === "CONFIRMED" ? institutionHash({ caseId,evidenceRefHash,verifier:context.membershipId }) : null;
+      const receiptHash = state === "CONFIRMED" ? institutionHash({
+        caseId,evidenceShareReceiptId,evidenceAssessmentId,evidenceRefHash,
+        sourceShareReceiptHash,sourceAssessmentHash,verifier:context.membershipId,
+      }) : null;
       if (existing.rowCount === 0) {
         await client.query(`INSERT INTO institution_enrolments (
-          id,tenant_id,relationship_id,application_case_id,state,evidence_ref_hash,
+          id,tenant_id,relationship_id,application_case_id,state,
+          evidence_share_receipt_id,evidence_assessment_id,evidence_ref_hash,
           verified_by_membership_id,receipt_hash,effective_at
-        ) VALUES ($1,$2,$3,$4,'PENDING_EVIDENCE',NULL,NULL,NULL,NULL)`, [id,context.tenantId,context.relationshipId,caseId]);
+        ) VALUES ($1,$2,$3,$4,'PENDING_EVIDENCE',NULL,NULL,NULL,NULL,NULL,NULL)`, [id,context.tenantId,context.relationshipId,caseId]);
         if (state !== "PENDING_EVIDENCE") {
-          await client.query(`UPDATE institution_enrolments SET state=$2,evidence_ref_hash=$3,
-            verified_by_membership_id=$4,receipt_hash=$5,effective_at=$6,version=version+1 WHERE id=$1`,
-          [id,state,state === "CONFIRMED" ? evidenceRefHash : null,
+          await client.query(`UPDATE institution_enrolments SET state=$2,
+            evidence_share_receipt_id=$3,evidence_assessment_id=$4,evidence_ref_hash=$5,
+            verified_by_membership_id=$6,receipt_hash=$7,effective_at=$8,
+            version=version+1 WHERE id=$1`,
+          [id,state,evidenceShareReceiptId,evidenceAssessmentId,evidenceRefHash,
             state === "CONFIRMED" ? context.membershipId : null,receiptHash,
             state === "CONFIRMED" ? new Date() : null]);
         }
       } else {
-        await client.query(`UPDATE institution_enrolments SET state=$2,evidence_ref_hash=$3,
-          verified_by_membership_id=$4,receipt_hash=$5,effective_at=$6,version=version+1,updated_at=now()
-          WHERE id=$1`, [id,state,evidenceRefHash,state==="CONFIRMED"?context.membershipId:null,receiptHash,
+        await client.query(`UPDATE institution_enrolments SET state=$2,
+          evidence_share_receipt_id=$3,evidence_assessment_id=$4,evidence_ref_hash=$5,
+          verified_by_membership_id=$6,receipt_hash=$7,effective_at=$8,
+          version=version+1,updated_at=now() WHERE id=$1`,
+        [id,state,evidenceShareReceiptId,evidenceAssessmentId,evidenceRefHash,
+          state==="CONFIRMED"?context.membershipId:null,receiptHash,
           state==="CONFIRMED"?new Date():null]);
       }
       let caseVersion = Number(application.rows[0].aggregate_version);
@@ -704,9 +778,11 @@ router.post("/institution/applications/:id/enrolment", async (req, res) => {
       await appendEvent(client, context, { applicationCaseId:caseId,
         eventType:`institution.enrolment.${state.toLowerCase()}.v1`,aggregateType:"ENROLMENT",
         aggregateId:id,aggregateVersion:Number(existing.rows[0]?.version ?? 0)+1,
-        payload:{ evidenceRefHash:state==="CONFIRMED"?evidenceRefHash:null,receiptHash,
+        payload:{ evidenceShareReceiptId:state==="CONFIRMED"?evidenceShareReceiptId:null,
+          evidenceAssessmentId:state==="CONFIRMED"?evidenceAssessmentId:null,receiptHash,
           authorizationReceiptId:authorization.authorizationReceiptId } });
-      return { id,state,receiptHash,authorizationReceiptId:authorization.authorizationReceiptId };
+      return { id,state,evidenceShareReceiptId,evidenceAssessmentId,receiptHash,
+        authorizationReceiptId:authorization.authorizationReceiptId };
     });
     res.json(result);
   } catch (error) { sendFailure(res, error); }
