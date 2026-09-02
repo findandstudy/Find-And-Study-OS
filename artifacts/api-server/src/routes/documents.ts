@@ -18,6 +18,7 @@ import { reEvaluateMandatoryDocs, reEvaluateMandatoryDocsForStudent } from "../l
 import { recomputeStudentPhoto } from "../lib/studentPhoto";
 import { maybeTriggerAutoEducationExtract } from "../lib/educationAutoExtract";
 import { callerOwnsObject } from "../lib/objectAuthz";
+import { hasStoredDocumentContent } from "../lib/documentContentPolicy";
 import archiver from "archiver";
 import { PDFDocument } from "pdf-lib";
 
@@ -209,6 +210,13 @@ router.post("/documents", requireAuth, requireAgentStaffPermission("documents"),
   }
   if (fileUrl && !isValidHttpUrl(fileUrl)) {
     res.status(400).json({ error: "fileUrl must be a valid http/https URL" });
+    return;
+  }
+  if (!hasStoredDocumentContent({ fileKey, fileUrl })) {
+    res.status(400).json({
+      error: "A stored file reference is required before a document can be registered",
+      code: "DOCUMENT_CONTENT_REQUIRED",
+    });
     return;
   }
 
