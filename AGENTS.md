@@ -248,3 +248,13 @@ Production-prefix `66→87` harness'i CI'da bağlanmıştır; bu dilimde mevcut 
 `fasos_apply_local` DB'si korunmuş ve yeniden oluşturulmamıştır. Bağımsız review,
 staging adoption/rollback, dedicated owner/executor provisioning, consentli
 allowlist job wiring ve Privacy/Legal hâlâ NO-GO kapılarıdır.
+
+Institution case-intake dahil güncel code-bearing head
+`6cb9dd3e2d7f33644c4b98d948d6a91fc02791e4`, tree
+`82e52312f660c56fc5ad11871e0e4086388b4bc4`, base
+`822112fb471ad53365034b9b928b5510b4c06d81` → code farkı
+`6 commit / 51 dosya / 8.922 ekleme / 31 silme`, binary-patch SHA-256
+`7812ea20a9c670ac6b3b0c86c19061c8710c04f5c7a9d1020d7cac8e1d1fe2f3`
+ve byte uzunluğu `512541` olarak review packet'te dondurulmuştur. Review packet
+commit'i code-bearing değildir; bağımsız reviewer exact final branch HEAD'ini
+ayrıca kabul etmelidir.
