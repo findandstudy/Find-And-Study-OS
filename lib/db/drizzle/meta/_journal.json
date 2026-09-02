@@ -610,6 +610,13 @@
       "when": 1788595200000,
       "tag": "0086_institution_case_intake_receipts",
       "breakpoints": true
+    },
+    {
+      "idx": 87,
+      "version": "7",
+      "when": 1788681600000,
+      "tag": "0087_institution_evidence_share_receipts",
+      "breakpoints": true
     }
   ]
 }

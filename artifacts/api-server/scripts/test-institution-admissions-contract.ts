@@ -116,6 +116,51 @@ test("case intake migration is receipt-bound, PII-minimized and default-unwired"
   assert.doesNotMatch(source, /result_json|screenshot_urls/);
 });
 
+test("evidence assessment is bound to verified evidence and current consent", () => {
+  const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
+  const migration = fs.readFileSync(
+    path.join(root, "lib/db/drizzle/0087_institution_evidence_share_receipts.sql"),
+    "utf8",
+  );
+  assert.match(migration, /institution_evidence_share_receipts/);
+  assert.match(migration, /institution\.admissions\.evidence_share/);
+  assert.match(migration, /journey_verified_evidence_receipts/);
+  assert.match(migration, /journey_requirement_results/);
+  assert.match(migration, /journey_consent_receipts/);
+  assert.match(migration, /ORDER BY c\.sequence DESC/);
+  assert.match(migration, /v_latest_consent\.action <> 'CAPTURED'/);
+  assert.match(migration, /Idempotent replay is still a current-authority operation/);
+  assert.match(migration, /create_share_receipt/);
+  assert.match(migration, /resolve_assessable_share/);
+  assert.match(migration, /SECURITY DEFINER/);
+  assert.match(migration, /SET row_security TO on/);
+  assert.match(migration, /institution_evidence_share_receipts_append_only/);
+  assert.match(migration, /institution_evidence_share_receipts_scoped_select[\s\S]*institution_application_cases/);
+  assert.match(migration, /institution intake case assessment requires evidence share receipt/);
+  assert.doesNotMatch(migration, /INSERT INTO public\.journey_consent_receipts/);
+  assert.doesNotMatch(migration, /evidence_ref text/);
+
+  const route = fs.readFileSync(
+    path.join(root, "artifacts/api-server/src/routes/institutionAdmissions.ts"),
+    "utf8",
+  );
+  const start = route.indexOf('router.post("/institution/applications/:id/evidence-assessments"');
+  const end = route.indexOf('router.post("/institution/applications/:id/information-requests"', start);
+  assert.ok(start >= 0 && end > start);
+  const assessmentRoute = route.slice(start, end);
+  assert.match(assessmentRoute, /evidenceShareReceiptId/);
+  assert.match(assessmentRoute, /resolve_assessable_share/);
+  assert.doesNotMatch(assessmentRoute, /req\.body\?\.evidenceRefHash/);
+
+  const workspace = fs.readFileSync(
+    path.join(root, "artifacts/edcons/src/pages/institution/Workspace.tsx"),
+    "utf8",
+  );
+  assert.match(workspace, /evidenceShareReceiptId:item\.id/);
+  assert.match(workspace, /consent-bound, verified evidence manifests/);
+  assert.doesNotMatch(workspace, /Evidence reference SHA-256/);
+});
+
 test("authority hardening migration binds database scope and current actor", () => {
   const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
   const source = fs.readFileSync(path.join(root, "lib/db/drizzle/0084_institution_admissions_authority_hardening.sql"), "utf8");

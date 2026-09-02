@@ -24,6 +24,11 @@ import {
 } from "./authorization";
 import { programsTable, universitiesTable } from "./universities";
 import { usersTable } from "./users";
+import {
+  journeyApplicationCasesTable,
+  journeyConsentReceiptsTable,
+  journeyVerifiedEvidenceReceiptsTable,
+} from "./studentJourney";
 
 const uuidV7 = (column: { name: string }) =>
   sql`substring(${sql.identifier(column.name)}::text from 15 for 1) = '7'`;
@@ -465,6 +470,137 @@ export const institutionCaseIntakeReceiptsTable = pgTable(
   ],
 ).enableRLS();
 
+export const institutionEvidenceShareReceiptsTable = pgTable(
+  "institution_evidence_share_receipts",
+  {
+    id: uuid("id").primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    relationshipId: uuid("relationship_id").notNull(),
+    applicationCaseId: uuid("application_case_id").notNull(),
+    journeyApplicationCaseId: uuid("journey_application_case_id").notNull(),
+    journeySubjectId: uuid("journey_subject_id").notNull(),
+    journeyEvidenceReceiptId: uuid("journey_evidence_receipt_id").notNull(),
+    journeyConsentReceiptId: uuid("journey_consent_receipt_id").notNull(),
+    consentPurpose: text("consent_purpose").notNull(),
+    requirementCode: text("requirement_code").notNull(),
+    evidenceRefHash: text("evidence_ref_hash").notNull(),
+    contentSha256: text("content_sha256").notNull(),
+    evidenceReceiptHash: text("evidence_receipt_hash").notNull(),
+    consentReceiptHash: text("consent_receipt_hash").notNull(),
+    sourceSnapshotHash: text("source_snapshot_hash").notNull(),
+    receiptHash: text("receipt_hash").notNull(),
+    validUntil: timestamp("valid_until", { withTimezone: true }),
+    executorKey: text("executor_key")
+      .notNull()
+      .default("institution.evidence_share.v1"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    unique("institution_evidence_share_receipts_tenant_id_id_uq").on(
+      table.tenantId,
+      table.id,
+    ),
+    unique("institution_evidence_share_receipts_scope_id_uq").on(
+      table.tenantId,
+      table.relationshipId,
+      table.applicationCaseId,
+      table.id,
+    ),
+    unique("institution_evidence_share_receipts_source_uq").on(
+      table.tenantId,
+      table.relationshipId,
+      table.applicationCaseId,
+      table.journeyEvidenceReceiptId,
+      table.journeyConsentReceiptId,
+    ),
+    unique("institution_evidence_share_receipts_hash_uq").on(
+      table.tenantId,
+      table.relationshipId,
+      table.receiptHash,
+    ),
+    index("institution_evidence_share_receipts_case_idx").on(
+      table.tenantId,
+      table.relationshipId,
+      table.applicationCaseId,
+      table.createdAt,
+    ),
+    foreignKey({
+      columns: [table.tenantId, table.relationshipId],
+      foreignColumns: [
+        institutionRelationshipsTable.tenantId,
+        institutionRelationshipsTable.id,
+      ],
+      name: "institution_evidence_share_receipts_relationship_fk",
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [table.tenantId, table.relationshipId, table.applicationCaseId],
+      foreignColumns: [
+        institutionApplicationCasesTable.tenantId,
+        institutionApplicationCasesTable.relationshipId,
+        institutionApplicationCasesTable.id,
+      ],
+      name: "institution_evidence_share_receipts_case_fk",
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [
+        table.tenantId,
+        table.journeyApplicationCaseId,
+        table.journeySubjectId,
+      ],
+      foreignColumns: [
+        journeyApplicationCasesTable.tenantId,
+        journeyApplicationCasesTable.id,
+        journeyApplicationCasesTable.subjectId,
+      ],
+      name: "institution_evidence_share_receipts_journey_case_fk",
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [table.tenantId, table.journeyEvidenceReceiptId],
+      foreignColumns: [
+        journeyVerifiedEvidenceReceiptsTable.tenantId,
+        journeyVerifiedEvidenceReceiptsTable.id,
+      ],
+      name: "institution_evidence_share_receipts_evidence_fk",
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [table.tenantId, table.journeyConsentReceiptId],
+      foreignColumns: [
+        journeyConsentReceiptsTable.tenantId,
+        journeyConsentReceiptsTable.id,
+      ],
+      name: "institution_evidence_share_receipts_consent_fk",
+    }).onDelete("restrict"),
+    check("institution_evidence_share_receipts_id_v7_chk", uuidV7(table.id)),
+    check(
+      "institution_evidence_share_receipts_purpose_chk",
+      sql`${table.consentPurpose} = 'institution.admissions.evidence_share'`,
+    ),
+    check(
+      "institution_evidence_share_receipts_requirement_chk",
+      sql`${table.requirementCode} ~ '^[a-z][a-z0-9._:-]{1,95}$'`,
+    ),
+    check(
+      "institution_evidence_share_receipts_hash_chk",
+      sql`${table.evidenceRefHash} ~ '^[0-9a-f]{64}$'
+        AND ${table.contentSha256} ~ '^[0-9a-f]{64}$'
+        AND ${table.evidenceReceiptHash} ~ '^[0-9a-f]{64}$'
+        AND ${table.consentReceiptHash} ~ '^[0-9a-f]{64}$'
+        AND ${table.sourceSnapshotHash} ~ '^[0-9a-f]{64}$'
+        AND ${table.receiptHash} ~ '^[0-9a-f]{64}$'`,
+    ),
+    check(
+      "institution_evidence_share_receipts_executor_chk",
+      sql`${table.executorKey} = 'institution.evidence_share.v1'`,
+    ),
+    check(
+      "institution_evidence_share_receipts_validity_chk",
+      sql`${table.validUntil} IS NULL OR ${table.validUntil} > ${table.createdAt}`,
+    ),
+  ],
+).enableRLS();
+
 export const institutionRequirementSetsTable = pgTable(
   "institution_requirement_sets",
   {
@@ -597,6 +733,7 @@ export const institutionEvidenceAssessmentsTable = pgTable(
     reasonCode: text("reason_code").notNull(),
     notes: text("notes"),
     reviewerMembershipId: uuid("reviewer_membership_id").notNull(),
+    evidenceShareReceiptId: uuid("evidence_share_receipt_id"),
     supersedesAssessmentId: uuid("supersedes_assessment_id"),
     assessmentHash: text("assessment_hash").notNull(),
     assessedAt: timestamp("assessed_at", { withTimezone: true })
@@ -637,6 +774,21 @@ export const institutionEvidenceAssessmentsTable = pgTable(
         institutionMembershipsTable.id,
       ],
       name: "institution_evidence_assessments_reviewer_fk",
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [
+        table.tenantId,
+        table.relationshipId,
+        table.applicationCaseId,
+        table.evidenceShareReceiptId,
+      ],
+      foreignColumns: [
+        institutionEvidenceShareReceiptsTable.tenantId,
+        institutionEvidenceShareReceiptsTable.relationshipId,
+        institutionEvidenceShareReceiptsTable.applicationCaseId,
+        institutionEvidenceShareReceiptsTable.id,
+      ],
+      name: "institution_evidence_assessments_share_fk",
     }).onDelete("restrict"),
     foreignKey({
       columns: [table.tenantId, table.supersedesAssessmentId],
@@ -1064,4 +1216,6 @@ export type InstitutionApplicationCase =
   typeof institutionApplicationCasesTable.$inferSelect;
 export type InstitutionCaseIntakeReceipt =
   typeof institutionCaseIntakeReceiptsTable.$inferSelect;
+export type InstitutionEvidenceShareReceipt =
+  typeof institutionEvidenceShareReceiptsTable.$inferSelect;
 export type InstitutionDecision = typeof institutionDecisionsTable.$inferSelect;

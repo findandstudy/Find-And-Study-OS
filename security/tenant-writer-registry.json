@@ -684,6 +684,15 @@
       "note": "Default-off EXECUTE-only intake uses a dedicated non-owner executor, FORCE RLS, immutable receipts and PII-minimized projection. External tenant activation remains gated."
     },
     {
+      "path": "artifacts/api-server/src/lib/postgresInstitutionEvidenceShareStore.ts",
+      "ownership": "tenant_owned",
+      "enforcement": "db_enforced",
+      "risk": "high",
+      "owner": "Admissions Platform",
+      "externalPilot": "quarantine",
+      "note": "Default-off EXECUTE-only manifest writer derives hashes from verified Journey evidence and the latest active institution-sharing consent. It stores no document byte or raw object reference; Privacy/Legal and consented-cohort activation remain gated."
+    },
+    {
       "path": "artifacts/api-server/src/lib/replitAuth.ts",
       "ownership": "privileged_config",
       "enforcement": "quarantine_required",

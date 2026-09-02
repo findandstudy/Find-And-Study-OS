@@ -136,7 +136,6 @@ function ApplicationReview({ id, context }: { id: string; context?: Context }) {
   const [reasonCode, setReasonCode] = useState("ACADEMIC_REVIEW");
   const [rationale, setRationale] = useState("");
   const [decisionType, setDecisionType] = useState("CONDITIONAL_OFFER");
-  const [evidenceHash, setEvidenceHash] = useState("");
   const [requestMessage, setRequestMessage] = useState("");
   const assess = useApiMutation(() => `/api/institution/applications/${id}/evidence-assessments`);
   const requestInfo = useApiMutation(() => `/api/institution/applications/${id}/information-requests`);
@@ -155,9 +154,9 @@ function ApplicationReview({ id, context }: { id: string; context?: Context }) {
     </Card>
     <div className="grid gap-6 xl:grid-cols-2">
       <Card><CardHeader><CardTitle>Shared applicant profile</CardTitle><CardDescription>Purpose-limited projection; internal CRM notes and commercial fields are excluded.</CardDescription></CardHeader><CardContent className="grid gap-3 sm:grid-cols-2">{Object.entries(app.shared_profile ?? {}).map(([key, value]) => <Info key={key} label={human(key)} value={String(value ?? "—")} />)}</CardContent></Card>
-      <Card><CardHeader><CardTitle>Evidence assessments</CardTitle></CardHeader><CardContent className="space-y-3">
+      <Card><CardHeader><CardTitle>Evidence assessments</CardTitle><CardDescription>Only consent-bound, verified evidence manifests shared with this institution can be assessed. Document bytes and private object references stay outside this portal.</CardDescription></CardHeader><CardContent className="space-y-3">
+        {data.sharedEvidence?.length ? data.sharedEvidence.map((item: any) => <div key={item.id} className="rounded-lg border p-3"><div className="flex items-center justify-between gap-3"><div><div className="font-medium">{human(item.requirement_code)}</div><div className="text-xs text-muted-foreground">Shared {formatDate(item.created_at)} · valid until {formatDate(item.valid_until)}</div></div>{caps.has("institution.evidence.assess") && <Button size="sm" variant="outline" disabled={assess.isPending} onClick={()=>assess.mutate({body:{evidenceShareReceiptId:item.id,result:"VERIFIED",reasonCode}})}>Assess verified evidence</Button>}</div></div>) : <Empty>No consent-bound evidence has been shared with this institution.</Empty>}
         {data.evidenceAssessments?.length ? data.evidenceAssessments.map((item: any) => <div key={item.id} className="flex items-center justify-between rounded-lg border p-3"><div><div className="font-medium">{item.reason_code}</div><div className="text-xs text-muted-foreground">{formatDate(item.assessed_at)}</div></div><Status value={item.result} /></div>) : <Empty />}
-        {caps.has("institution.evidence.assess") && <form className="space-y-3 border-t pt-4" onSubmit={(event) => {event.preventDefault(); assess.mutate({ body:{evidenceRefHash:evidenceHash,result:"VERIFIED",reasonCode} });}}><Label>Evidence reference SHA-256</Label><Input value={evidenceHash} onChange={(e)=>setEvidenceHash(e.target.value)} pattern="[0-9a-f]{64}" required /><Button disabled={assess.isPending}>Record verified assessment</Button></form>}
       </CardContent></Card>
       <Card><CardHeader><CardTitle>Information requests</CardTitle><CardDescription>Creates an auditable request only; no external message is sent by this module.</CardDescription></CardHeader><CardContent className="space-y-3">
         {data.informationRequests?.length ? data.informationRequests.map((item:any)=><div key={item.id} className="rounded-lg border p-3"><div className="flex justify-between"><span className="font-medium">{item.requirement_code}</span><Status value={item.status}/></div><p className="mt-2 text-sm text-muted-foreground">{item.message}</p></div>):<Empty/>}

@@ -246,8 +246,10 @@ router.get("/institution/applications/:id", async (req, res) => {
       const application = await assertScopedCase(client, context, id);
       if (application.rowCount !== 1) throw new Error("institution_application_unavailable");
       const empty = { rows: [] as Record<string, unknown>[] };
-      const [assessments, requests, decisions, offers, enrolments, events] = await Promise.all([
-        hasInstitutionDataScope(context.dataScopes, "application.evidence") ? client.query(`SELECT id, requirement_id, evidence_ref_hash, result, reason_code, notes,
+      const [sharedEvidence, assessments, requests, decisions, offers, enrolments, events] = await Promise.all([
+        hasInstitutionDataScope(context.dataScopes, "application.evidence") ? client.query(`SELECT id, requirement_code, content_sha256, receipt_hash, valid_until, created_at
+          FROM institution_evidence_share_receipts WHERE application_case_id=$1 ORDER BY created_at DESC`, [id]) : Promise.resolve(empty),
+        hasInstitutionDataScope(context.dataScopes, "application.evidence") ? client.query(`SELECT id, requirement_id, evidence_share_receipt_id, evidence_ref_hash, result, reason_code, notes,
           reviewer_membership_id, supersedes_assessment_id, assessed_at
           FROM institution_evidence_assessments WHERE application_case_id=$1 ORDER BY assessed_at DESC`, [id]) : Promise.resolve(empty),
         hasInstitutionDataScope(context.dataScopes, "application.communication") ? client.query(`SELECT id, requirement_code, request_code, message, status, due_at, created_at, responded_at
@@ -267,6 +269,7 @@ router.get("/institution/applications/:id", async (req, res) => {
           ...application.rows[0],
           shared_profile: projectInstitutionSharedProfile(application.rows[0].shared_profile, context.roleKey),
         },
+        sharedEvidence: sharedEvidence.rows,
         evidenceAssessments: assessments.rows,
         informationRequests: requests.rows,
         decisions: decisions.rows,
@@ -310,8 +313,7 @@ router.post("/institution/applications/:id/evidence-assessments", async (req, re
   try {
     const caseId = asUuid(req.params.id);
     const requirementId = req.body?.requirementId == null ? null : asUuid(req.body.requirementId);
-    const evidenceRefHash = asText(req.body?.evidenceRefHash, 64);
-    if (!HASH_RE.test(evidenceRefHash)) throw new Error("institution_evidence_hash_invalid");
+    const evidenceShareReceiptId = asUuid(req.body?.evidenceShareReceiptId);
     const resultCode = asText(req.body?.result, 32).toUpperCase();
     if (!["PENDING", "VERIFIED", "NEEDS_INFORMATION", "REJECTED"].includes(resultCode)) {
       throw new Error("institution_evidence_result_invalid");
@@ -324,14 +326,27 @@ router.post("/institution/applications/:id/evidence-assessments", async (req, re
       assertInstitutionDataScope(context.dataScopes, "application.evidence");
       const application = await assertScopedCase(client, context, caseId, true);
       if (application.rowCount !== 1) throw new Error("institution_application_unavailable");
+      const share = await client.query<{ evidence_ref_hash: string }>(
+        `SELECT evidence_ref_hash
+         FROM fas_institution_evidence_v1.resolve_assessable_share(
+           $1::uuid,$2::uuid,$3::uuid,$4::uuid,now()
+         )`,
+        [context.tenantId, context.relationshipId, caseId, evidenceShareReceiptId],
+      );
+      if (share.rowCount !== 1 || !HASH_RE.test(share.rows[0]?.evidence_ref_hash ?? "")) {
+        throw new Error("institution_evidence_share_unavailable");
+      }
+      const evidenceRefHash = share.rows[0].evidence_ref_hash;
       const id = nextInstitutionId();
-      const hash = institutionHash({ caseId, requirementId, evidenceRefHash, resultCode, reasonCode, notes, supersedesId });
+      const hash = institutionHash({ caseId, requirementId, evidenceShareReceiptId, evidenceRefHash, resultCode, reasonCode, notes, supersedesId });
       const inserted = await client.query(`INSERT INTO institution_evidence_assessments (
-        id,tenant_id,relationship_id,application_case_id,requirement_id,evidence_ref_hash,
-        result,reason_code,notes,reviewer_membership_id,supersedes_assessment_id,assessment_hash
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
-      RETURNING id,result,reason_code,assessed_at`, [id, context.tenantId, context.relationshipId,
-        caseId, requirementId, evidenceRefHash, resultCode, reasonCode, notes,
+        id,tenant_id,relationship_id,application_case_id,requirement_id,
+        evidence_share_receipt_id,evidence_ref_hash,result,reason_code,notes,
+        reviewer_membership_id,supersedes_assessment_id,assessment_hash
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+      RETURNING id,evidence_share_receipt_id,result,reason_code,assessed_at`,
+      [id, context.tenantId, context.relationshipId, caseId, requirementId,
+        evidenceShareReceiptId, evidenceRefHash, resultCode, reasonCode, notes,
         context.membershipId, supersedesId, hash]);
       await appendEvent(client, context, {
         applicationCaseId: caseId, eventType: "institution.evidence.assessed.v1",
