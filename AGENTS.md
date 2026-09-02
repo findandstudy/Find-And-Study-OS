@@ -300,3 +300,48 @@ worker/route wiring, dış mesaj/SIS/portal execution, merge ve deploy
 değiştirilmemiştir. Bağımsız review, staging `0083–0087` adoption/rollback,
 dedicated owner/executor provisioning, active-context/MFA issuer'ları,
 Privacy/Legal ve consentli staging allowlist UAT ayrı NO-GO kapılarıdır.
+
+### 2 Eylül 2026 — Institution reviewed-evidence enrolment eki
+
+Yukarıdaki Institution consent-bound evidence code/review kimliği ve `88/88`
+kanıtını supersede eder. Additive
+`0088_institution_enrolment_evidence_binding.sql` ile kanonik ledger `89/89`
+olmuştur. Yeni bir enrolment confirmation artık istemcinin verdiği SHA-256 ile
+ilerleyemez; exact evidence-share receipt, ona bağlı en son `VERIFIED`
+assessment, application program/intake'ine ait güncel `PUBLISHED` requirement
+set içindeki `ENROLMENT_CONFIRMATION` evidence type ve hâlâ aktif en son consent
+aynı transaction'da yeniden doğrulanır. Tarihsel confirmed satırlar migration
+sırasında korunur; migration sonrasındaki her yeni confirmation source türünden
+bağımsız receipt-bound'dır.
+
+`institution_enrolments` share-receipt ve assessment kimliklerini composite FK
+ile taşır. SECURITY DEFINER resolver current `DECISION_APPROVER` principal,
+membership, `admissions.review` relationship, `application.enrolment` data
+scope, case state, RLS ve DB saatini fail-closed doğrular. Portal eski hash
+prompt'unu kaldırır; reviewer değerlendirmesi exact güncel yayımlanmış kurum
+requirement kimliğine bağlanmadan confirmation düğmesi açılmaz. Consent
+withdrawal hem resolver'ı hem receipt replay'ini reddeder.
+
+Güncel code-bearing head `854d4741bd4b794da598273aff8ade9c825825f2`,
+tree `9c03fe8cfdfa27eee48da7702131ae113bb0a5a4`, base
+`822112fb471ad53365034b9b928b5510b4c06d81` → code farkı
+`10 commit / 57 dosya / 11.196 ekleme / 31 silme`, binary-patch SHA-256
+`9d6fea3229bd77c41388f8cfb20000eaf941fff941e0ad660556fd9dd2b01ae8`
+ve byte uzunluğu `621427` olarak review packet'te dondurulmuştur.
+
+Fresh PostgreSQL 16.15 `89/89` + clean replay ve production-prefix `66→89`
+replay PASS; pure Institution contract `12/12`, authorization `9/9`, intake
+`4/4`, evidence-share `4/4`, Institution PostgreSQL `12/12`, intake PostgreSQL
+`5/5`, evidence/enrolment PostgreSQL `8/8`, migration authority `31 PASS + 1`
+Bash-unavailable SKIP, tenant writer `168/168` ve `2.231` surface, legacy route
+`72/794`, full workspace typecheck, 10 dil i18n, API/Edcons production builds,
+data-boundary `4/4`, integration DB safety `11/11` ve security regression
+`31/31` PASS'tir. Control Plane foundation, Student Journey G45, ChangeSet
+adapter, durable audit/reconciliation ve active-context session/lifecycle/repair
+PostgreSQL kapıları da `89/89` üzerinde PASS'tir.
+
+Production, staging, `Next`, GitHub remote, gerçek PII, live feature state,
+dış mesaj/SIS/portal execution, merge ve deploy değiştirilmemiştir. Bağımsız
+review, staging `0083–0088` adoption/rollback, dedicated role provisioning,
+active-context/MFA issuer'ları, Privacy/Legal ve consentli staging UAT ayrı
+NO-GO kapılarıdır.

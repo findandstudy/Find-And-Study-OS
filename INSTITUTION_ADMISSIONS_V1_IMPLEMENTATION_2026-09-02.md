@@ -2,7 +2,7 @@
 
 Tarih: 2 Eylül 2026
 Branch: `codex/institution-admissions-v1-20260902`
-Durum: Yerel uygulama, active-context/step-up authority hardening, receipt-bound case-intake ve consent-bound verified-evidence sharing disposable PostgreSQL kanıtı tamamlandı; production, staging, `Next`, dış iletişim ve portal automation wiring'i değiştirilmedi.
+Durum: Yerel uygulama, active-context/step-up authority hardening, receipt-bound case-intake, consent-bound verified-evidence sharing ve reviewed-evidence enrolment confirmation disposable PostgreSQL kanıtı tamamlandı; production, staging, `Next`, dış iletişim ve portal automation wiring'i değiştirilmedi.
 
 ## Teslim edilen ürün yüzeyi
 
@@ -40,6 +40,9 @@ Durum: Yerel uygulama, active-context/step-up authority hardening, receipt-bound
   Yalnız güncel consent ile kuruma açılmış, Journey tarafından doğrulanmış ve
   program/intake/case kapsamına uyan PII-minimized evidence manifestini seçer.
   Belge byte'ı ve private object reference kurum portalına çıkmaz.
+- Enrolment confirmation da istemci SHA-256 değeri kabul etmez. Yalnız exact
+  güncel yayımlanmış kurum requirement'ına bağlı son `VERIFIED` assessment ve
+  aktif consent'i olan evidence-share receipt üzerinden ilerler.
 
 ## Veri ve güvenlik omurgası
 
@@ -136,6 +139,21 @@ tekrar doğrular. Intake-created case'lerde receipt zorunludur; migration önces
 historical/manual case'ler additive uyumluluk için korunur. Share adapter'ı
 default-unwired'dır; consent oluşturmaz, belge taşımaz ve dış gönderim yapmaz.
 
+Additive `0088_institution_enrolment_evidence_binding.sql` yeni tablo eklemeden
+`institution_enrolments` kaydını exact share receipt ve assessment kimliğine
+bağlar. Composite FK'ler case/relationship/tenant bağını korur. Ayrı
+SECURITY DEFINER resolver current `DECISION_APPROVER` actor/membership,
+`admissions.review` relationship, `application.enrolment` data scope, uygun
+case state, en son aktif consent, en son assessment ve program/intake'e ait
+etkin `PUBLISHED` requirement set içindeki `ENROLMENT_CONFIRMATION` evidence
+type'ını DB saatiyle yeniden doğrular.
+
+Migration öncesindeki confirmed satırlar additive uyumlulukla korunur; fakat
+migration sonrasındaki her yeni confirmation receipt-bound'dır. Portal eski
+serbest hash prompt'unu kaldırır, reviewer assessment'ını exact yayımlanmış
+requirement kimliğiyle gönderir ve eşleşen requirement yoksa confirmation
+akışını açmaz.
+
 Kurum kullanıcısının legacy `users.role=institution_user` değeri yalnız portal
 routing marker'ıdır. Yetki kaynağı değildir. Her API isteğinde sunucu:
 
@@ -188,9 +206,10 @@ komutlar fail-closed kalır.
 
 ## Doğrulanan kanıt
 
-- Migration ledger: `88/88`.
+- Migration ledger: `89/89`.
 - Fresh disposable PostgreSQL 16 migration ve clean replay: PASS.
-- Pure institution contract tests: `11/11` PASS.
+- Production-prefix `66/66 → 89/89` adoption ve clean replay: PASS.
+- Pure institution contract tests: `12/12` PASS.
 - Pure institution case-intake config/result tests: `4/4` PASS.
 - Pure institution evidence-share config/request/result tests: `4/4` PASS.
 - PostgreSQL FORCE RLS, exact non-super/non-BYPASSRLS executor, server-side
@@ -202,10 +221,11 @@ komutlar fail-closed kalır.
 - Intake exact EXECUTE-only owner/executor ayrımı, default-off deny, dry-source
   deny, PII-minimized projection, append-only receipt, idempotency ve same-source
   concurrency: `5/5` PASS.
-- Evidence-share exact EXECUTE-only owner/executor ayrımı, current consent,
+- Evidence-share/enrolment exact EXECUTE-only owner/executor ayrımı, current consent,
   verified source, PII-minimized receipt, replay revalidation, concurrency,
-  server timestamp, reviewer membership, program/intake scope ve withdrawal
-  deny: `7/7` PASS.
+  server timestamp, reviewer membership, program/intake scope, published
+  enrolment requirement, exact assessment binding, raw-hash deny ve withdrawal
+  deny: `8/8` PASS.
 - Migration authority: `31 PASS + 1` yalnız bu Windows hostunda Bash bulunmadığı
   için beklenen SKIP.
 - Tenant writer inventory: `168/168` classified, `2.231` surface; dört
@@ -215,13 +235,16 @@ komutlar fail-closed kalır.
 - DB, API ve Edcons TypeScript: PASS.
 - API production build: PASS.
 - Edcons i18n parity (10 dil) ve production build: PASS.
+- Control Plane foundation, Student Journey G45, ChangeSet adapter, durable
+  audit/reconciliation ve active-context session/lifecycle/repair PostgreSQL
+  kapıları: PASS.
 - Dedicated Linux/Windows/PostgreSQL 16 Institution CI workflow'u ve genel
   convergence gate bağlantısı eklendi; remote run henüz oluşturulmadı.
 
 ## Canlı adoption için ayrı onay gerektiren işler
 
 1. Bağımsız review ve branch/ruleset kararı.
-2. Staging'de `0083–0087` migration adoption ve rollback rehearsal.
+2. Staging'de `0083–0088` migration adoption ve rollback rehearsal.
 3. Dedicated non-super/non-BYPASSRLS executor rolü ve exact least-privilege
    grant setinin DBA tarafından kurulması.
 4. Tenant/institution relationship, principal ve membership provisioning'inin

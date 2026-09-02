@@ -10,11 +10,11 @@ Durum: Yerel ve PR-ready; push, PR, merge, staging/production deploy ve `Next` s
 
 - Target base: `822112fb471ad53365034b9b928b5510b4c06d81`
 - Foundation commit: `9e8ef92d073511759860ba9d640be9f767cab311`
-- Code-bearing head: `efb8d10e948db878857421be3b9f1b45a77bc8f8`
-- Code-bearing tree: `e2d0af4a2ee65167937b1e5146311151272c50e0`
-- Base → code farkı: `8 commit / 56 dosya / 10.595 ekleme / 31 silme`
-- Binary-patch SHA-256: `a8a2b16a923247bffb0b250287fb3ccc4f904202d4086f163bd4645921be2d5e`
-- Binary-patch byte uzunluğu: `589418`
+- Code-bearing head: `854d4741bd4b794da598273aff8ade9c825825f2`
+- Code-bearing tree: `9c03fe8cfdfa27eee48da7702131ae113bb0a5a4`
+- Base → code farkı: `10 commit / 57 dosya / 11.196 ekleme / 31 silme`
+- Binary-patch SHA-256: `9d6fea3229bd77c41388f8cfb20000eaf941fff941e0ad660556fd9dd2b01ae8`
+- Binary-patch byte uzunluğu: `621427`
 
 Bu dosya ve onu taşıyan commit review-infrastructure-only'dir. Kendi commit
 kimliğini dairesel olarak mühürleyemez; reviewer branch'in exact final HEAD'ini
@@ -59,21 +59,29 @@ ayrıca kabul etmelidir.
     current membership, program/intake/case scope, DB timestamp ve güncel
     consent ile yeniden doğrulanır; idempotent replay de aynı güncel kontrollerin
     arkasındadır. Adapter default-unwired ve default-off'tur.
+18. `0088` ile her yeni enrolment confirmation exact share receipt ve en son
+    reviewed assessment kimliğine bağlanır; istemciden raw hash kabul edilmez.
+19. Confirmation yalnız etkin `PUBLISHED` requirement set içindeki
+    `ENROLMENT_CONFIRMATION` evidence type, current consent, exact
+    `DECISION_APPROVER` ve `application.enrolment` scope ile ilerler.
+20. Portal assessment'ı exact yayımlanmış requirement kimliğine bağlar; eşleşme
+    yoksa bunu görünür kılar ve confirmation seçeneği üretmez.
 
 ## Yerel kanıt matrisi
 
 | Kapı | Sonuç |
 |---|---:|
-| Migration ledger | `88/88` PASS |
+| Migration ledger | `89/89` PASS |
 | Fresh PostgreSQL 16.15 migration | PASS |
 | Clean migration replay | PASS |
-| Institution pure contracts | `11/11` PASS |
+| Production-prefix `66/66 → 89/89` adoption | PASS |
+| Institution pure contracts | `12/12` PASS |
 | Institution active-context authorization | `9/9` PASS |
 | Institution intake pure contract | `4/4` PASS |
 | Institution evidence-share pure contract | `4/4` PASS |
 | Least-privilege PostgreSQL/RLS/lifecycle | `12/12` PASS |
 | EXECUTE-only PostgreSQL case intake | `5/5` PASS |
-| EXECUTE-only PostgreSQL evidence share | `7/7` PASS |
+| EXECUTE-only PostgreSQL evidence/enrolment | `8/8` PASS |
 | Migration authority | `31 PASS + 1 Bash-unavailable SKIP` |
 | Package-manager contract | `6/6` PASS |
 | Tenant writer inventory | `168/168`, `2.231` surface, hata `0` |
@@ -85,11 +93,13 @@ ayrıca kabul etmelidir.
 | Data-boundary regressions | `4/4` PASS |
 | Integration DB safety | `11/11` PASS |
 | Live security regressions | `31/31` PASS |
+| Control Plane + Journey + adapter/audit/session PostgreSQL gates | PASS |
 | Workflow YAML parse | PASS |
 | `git diff --check` | PASS |
 
 PostgreSQL kanıtı yeni ve yalnız loopback'te oluşturulan
-`fas_dev_institution_evidence4` disposable DB'sinde, exact
+`fas_dev_institution_enrolment2` ve açıkça sıfırlanan `fasos_apply_local`
+disposable DB'lerinde, exact
 `fas_institution_executor`, `fas_institution_intake_executor` ve
 `fas_institution_evidence_share_executor` non-super/non-owner/non-BYPASSRLS
 rolleriyle alındı.
@@ -126,6 +136,9 @@ Production credential, dump veya PII kullanılmadı.
 - Evidence manifestinin reviewer program/intake/case scope'u dışından
   görünmediğini ve client-supplied assessment timestamp/hash'in etkisiz olduğunu
   doğrula.
+- Enrolment confirmation'ın raw client hash'i reddettiğini; share receipt'in en
+  son verified assessment, güncel consent ve yayımlanmış
+  `ENROLMENT_CONFIRMATION` requirement'ına bağlı olduğunu doğrula.
 - CI'nın generic PR'larda eski frozen convergence manifestini yanlışlıkla
   zorlamadığını, frozen branch'te ise zorlamaya devam ettiğini doğrula.
 
