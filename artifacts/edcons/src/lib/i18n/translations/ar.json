@@ -6733,5 +6733,24 @@
     "close": "Close",
     "cancel": "Cancel",
     "queueRecipients": "Queue {{count}} recipients"
+  },
+  "institution": {
+    "nav": {
+      "workspace": "Institution workspace",
+      "home": "Overview",
+      "reviewQueue": "Review queue",
+      "applications": "Applications",
+      "decisions": "Decisions",
+      "offers": "Offers",
+      "configuration": "Academic configuration",
+      "programsIntakes": "Programs & intakes",
+      "requirements": "Requirements & evidence",
+      "sla": "SLA policies",
+      "integrations": "Integrations",
+      "governance": "Governance",
+      "analytics": "Analytics",
+      "team": "Team & roles"
+    },
+    "role": { "portalUser": "Institution user" }
   }
 }

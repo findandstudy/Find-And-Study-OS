@@ -125,3 +125,24 @@ Stop and ask the user before proceeding when:
 
 When uncertain, preserve production state and present the uncertainty rather
 than making an assumption.
+
+## 2 Eylül 2026 — Institution Admissions v1 yerel eki
+
+`codex/institution-admissions-v1-20260902` branch'inde ayrı `/institution`
+portal shell'i, altı kurum rol paketi, review/evidence/information-request,
+versioned decision + maker-checker, offer/enrolment, requirements, SLA,
+PII-minimized analytics, team ve secret-reference-only integrations yüzeyi
+uygulandı. Additive `0083_institution_admissions_foundation.sql` ile 13
+tenant/relationship-owned ve FORCE-RLS tablo eklendi; kanonik ledger `84/84`.
+Program/intake değişikliği legacy kataloğa doğrudan yazılmaz; internal ChangeSet
+bekleyen append-only talep üretir.
+
+Feature default-off'tur. Production'da ayrı non-super/non-BYPASSRLS
+`fas_institution_executor` bağlantısı zorunludur. Yüksek etkili komutların local
+assurance bayrağı production'da etkisizdir. Production, staging, `Next`, dış
+iletişim ve portal automation wiring'i bu çalışma sırasında değiştirilmedi.
+Fresh PostgreSQL migration, pure contract `7/7`, PostgreSQL security `6/6`, DB/
+API/Edcons typecheck ve iki production build PASS'tir. Canlı adoption,
+Control Plane provisioning, active-context/step-up, Privacy/Legal, consentli
+cohort ve bağımsız review ayrı NO-GO kapılarıdır. Ayrıntı:
+`INSTITUTION_ADMISSIONS_V1_IMPLEMENTATION_2026-09-02.md`.

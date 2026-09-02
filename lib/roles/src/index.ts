@@ -20,6 +20,10 @@ export const FINANCE_ROLES: string[] = ["super_admin", "admin", "accountant"];
 export const CONTENT_ROLES: string[] = ["super_admin", "admin", "manager", "editor"];
 export const AGENT_ROLES: string[] = ["agent", "sub_agent", "agent_staff"];
 export const STUDENT_ROLES: string[] = ["student"];
+// The legacy user role is only a portal-routing compatibility marker. Actual
+// institution authority is resolved from institution_memberships and the
+// versioned role package on every API request.
+export const INSTITUTION_ROLES: string[] = ["institution_user"];
 export const DIRECT_BRANCH_ROLES: string[] = [
   "admin", "manager", "staff", "consultant", "editor", "accountant",
 ];
@@ -33,6 +37,7 @@ export type FinanceRole = "super_admin" | "admin" | "accountant";
 export type ContentRole = "super_admin" | "admin" | "manager" | "editor";
 export type AgentRole = "agent" | "sub_agent" | "agent_staff";
 export type StudentRole = "student";
+export type InstitutionRole = "institution_user";
 
 export function isAgentRole(role: string): role is AgentRole {
   return AGENT_ROLES.includes(role);
@@ -54,6 +59,9 @@ export function isContentRole(role: string): role is ContentRole {
 }
 export function isStudentRole(role: string): role is StudentRole {
   return STUDENT_ROLES.includes(role);
+}
+export function isInstitutionRole(role: string): role is InstitutionRole {
+  return INSTITUTION_ROLES.includes(role);
 }
 
 /** Roles whose record access is derived directly from users.branch_id. */
