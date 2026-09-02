@@ -2,7 +2,7 @@
 
 Tarih: 2 Eylül 2026
 Branch: `codex/institution-admissions-v1-20260902`
-Durum: Yerel uygulama, authority hardening ve disposable PostgreSQL kanıtı tamamlandı; production, staging, `Next`, dış iletişim ve portal automation wiring'i değiştirilmedi.
+Durum: Yerel uygulama, active-context/step-up authority hardening ve disposable PostgreSQL kanıtı tamamlandı; production, staging, `Next`, dış iletişim ve portal automation wiring'i değiştirilmedi.
 
 ## Teslim edilen ürün yüzeyi
 
@@ -21,12 +21,17 @@ Durum: Yerel uygulama, authority hardening ve disposable PostgreSQL kanıtı tam
   `READY_FOR_DECISION`, karar taslağı, bağımsız maker-checker onayı, offer
   issuance ve enrolment confirmation komutları.
 - Requirement set draft/review/publish ve bağımsız checker sınırı.
-- SLA versioning ve PII-minimized aggregate analytics.
+- SLA değişiklik talebi/versioning ve PII-minimized aggregate analytics.
 - PII içermeyen, append-only hash zincirini gösteren ayrı masked audit ekranı.
 - Program/intake değişiklikleri legacy katalogda doğrudan yazılmaz; append-only
   `PENDING_INTERNAL_CHANGESET` talebi üretir.
 - Integration ekranı secret-reference-only projection döndürür; ham credential
   ve dış execution yoktur.
+- Karar, offer, enrolment, requirement publish, team ve SLA mutation'ları exact
+  Ed25519 active-context, server-session fingerprint, current selection ve
+  gerektiğinde tek kullanımlık step-up receipt olmadan çalışmaz.
+- Team grant ve SLA activation kurum executor'ıyla yapılamaz; yalnız
+  `PENDING_CONTROL_PLANE`/`DRAFT` talep üretilebilir.
 
 ## Veri ve güvenlik omurgası
 
@@ -64,6 +69,22 @@ Additive `0084_institution_admissions_authority_hardening.sql` ise:
   evidence kontrollerini API yanında DB trigger'ında da tekrarlar;
 - kurum principal/package/membership eşleşmesini fail-closed doğrular.
 
+Additive `0085_institution_active_context_step_up.sql` dört tablo daha ekler:
+
+14. `institution_active_context_selections`
+15. `institution_step_up_receipts`
+16. `institution_command_authorization_receipts`
+17. `institution_membership_change_requests`
+
+Bu migration selection/session generation, request hash, capability, resource,
+policy ve data-scope'a exact bağlı tek kullanımlık step-up corridor'u kurar.
+PII-free authorization receipt insert'i sırasında current tenant, external
+institution relationship, HUMAN principal, institution membership, role
+package, capability ve policy satırları transaction sonuna kadar kilitlenip
+yeniden doğrulanır. FORCE-RLS lock politikaları yalnız kilit görünürlüğü verir;
+executor ilgili authority tablolarında UPDATE privilege'a sahip değildir.
+Doğrudan membership grant ve SLA activation policy'leri kaldırılmıştır.
+
 Kurum kullanıcısının legacy `users.role=institution_user` değeri yalnız portal
 routing marker'ıdır. Yetki kaynağı değildir. Her API isteğinde sunucu:
 
@@ -75,6 +96,12 @@ routing marker'ıdır. Yetki kaynağı değildir. Her API isteğinde sunucu:
 6. relationship purpose ve data-scope setini çözer;
 7. program/intake/assigned-case kapsamını hem sorguya hem RLS GUC'lerine bağlar.
 
+Yüksek etkili komutlarda buna ek olarak sunucu, signed version-2 active-context
+envelope'unu exact environment/cell/issuer/key-ring ile doğrular; legacy HMAC
+downgrade'ı, API token'ı ve impersonation'ı reddeder; selection ID, session
+generation ve server-derived session fingerprint'i current DB state ile
+eşleştirir; step-up receipt'i aynı transaction'da tüketir.
+
 İstemci body/query/header üzerinden tenant, relationship veya institution
 authority seçemez. API token çağrıları institution portalında reddedilir.
 
@@ -85,7 +112,11 @@ Feature varsayılan olarak kapalıdır:
 ```text
 INSTITUTION_ADMISSIONS_V1_MODE=off
 INSTITUTION_ADMISSIONS_V1_USER_IDS=
-INSTITUTION_ADMISSIONS_V1_LOCAL_ASSURANCE=false
+INSTITUTION_ACTIVE_CONTEXT_AUDIENCE=
+INSTITUTION_ACTIVE_CONTEXT_ENVIRONMENT_ID=
+INSTITUTION_ACTIVE_CONTEXT_CELL_ID=
+INSTITUTION_ACTIVE_CONTEXT_ISSUER_ID=
+INSTITUTION_ACTIVE_CONTEXT_KEY_RING_JSON=
 ```
 
 Production'da ayrı `INSTITUTION_DATABASE_URL` ve exact
@@ -93,25 +124,28 @@ Production'da ayrı `INSTITUTION_DATABASE_URL` ve exact
 feature'ı açılsa bile executor role eksik/yanlış, superuser veya BYPASSRLS ise
 istek fail-closed reddedilir.
 
-Karar onayı, offer issuance, enrolment confirmation, requirement publish ve
-team grant gibi yüksek etkili komutlar mevcut dilimde yalnız production dışı
-explicit `INSTITUTION_ADMISSIONS_V1_LOCAL_ASSURANCE=true` ile denenebilir.
-Production ortamında bu bayrak etkisizdir. Authoritative active-context,
-step-up ve Control Plane adoption tamamlanmadan bu komutlar canlıya açılamaz.
+Local-assurance escape hatch kaldırılmıştır. Karar onayı, offer issuance,
+enrolment confirmation ve requirement publish exact active-context + current
+authority + step-up + domain maker-checker/evidence ister. Team ve SLA
+endpoint'leri aynı güvenceyle yalnız Control Plane'de ayrıca onaylanacak talep
+üretir. Issuer/key-ring ve selection/step-up issuance provision edilmeden bu
+komutlar fail-closed kalır.
 
 ## Doğrulanan kanıt
 
-- Migration ledger: `85/85`.
+- Migration ledger: `86/86`.
 - Fresh disposable PostgreSQL 16 migration ve clean replay: PASS.
 - Pure institution contract tests: `9/9` PASS.
 - PostgreSQL FORCE RLS, exact non-super/non-BYPASSRLS executor, server-side
   membership resolution, assigned-case/program/intake scope, actor spoof deny,
   auditor read-only, append-only evidence, maker-checker receipt ve
-  evidence-bound decision/offer/enrolment lifecycle: `10/10` PASS.
+  evidence-bound decision/offer/enrolment lifecycle, exact current-authority
+  row lock, single-use step-up, membership grant deny ve SLA draft-only sınırı:
+  `12/12` PASS.
 - Migration authority: `29 PASS + 1` yalnız bu Windows hostunda Bash bulunmadığı
   için beklenen SKIP.
-- Tenant writer inventory: `166/166` classified; yeni iki institution writer
-  `db_enforced` ve external pilot quarantine altında.
+- Tenant writer inventory: `166/166` classified, `2.222` surface; yeni iki
+  institution writer `db_enforced` ve external pilot quarantine altında.
 - Legacy role-gate inventory: `72` route dosyası; institution route tek
   `corridor_migrated`, kalan `71` legacy quarantine, hata `0`.
 - DB, API ve Edcons TypeScript: PASS.
@@ -123,15 +157,15 @@ step-up ve Control Plane adoption tamamlanmadan bu komutlar canlıya açılamaz.
 ## Canlı adoption için ayrı onay gerektiren işler
 
 1. Bağımsız review ve branch/ruleset kararı.
-2. Staging'de `0083–0084` migration adoption ve rollback rehearsal.
+2. Staging'de `0083–0085` migration adoption ve rollback rehearsal.
 3. Dedicated non-super/non-BYPASSRLS executor rolü ve exact least-privilege
    grant setinin DBA tarafından kurulması.
 4. Tenant/institution relationship, principal ve membership provisioning'inin
    Control Plane ChangeSet üzerinden yapılması.
 5. Mevcut submission receipt'lerinden institution case projection adapter'ının
    default-off bağlanması; legacy application backfill yapılmaması.
-6. Authoritative active-context + step-up + maker-checker kanıtının yüksek
-   etkili komutlara bağlanması.
+6. Authoritative active-context selection issuer, Ed25519 key-ring ve MFA
+   step-up receipt issuer'ının ayrı review ile provision edilmesi.
 7. PII/data-sharing, retention ve kurum sözleşmesi onayı.
 8. Consentli staging cohort UAT, SLA/analytics doğrulaması ve rollback kanıtı.
 

@@ -177,3 +177,42 @@ Institution v1 code-bearing head'i
 `INSTITUTION_ADMISSIONS_V1_REVIEW_PACKET_2026-09-02.md` içinde donduruldu.
 Review packet commit'i code-bearing değildir; bağımsız reviewer exact final
 branch HEAD'ini ayrıca kabul etmelidir.
+
+### 2 Eylül 2026 — Institution active-context/step-up eki
+
+Yukarıdaki Institution code/review kimliği ve `85/85`, PostgreSQL `10/10`
+kanıtını supersede eder. Local-assurance escape hatch'i kaldırıldı. Karar
+approve/return/reject, offer issue, enrolment transition ve requirement publish
+komutları artık yalnız Ed25519 v2 signed active-context, exact current
+selection/session generation, server-derived session fingerprint, HUMAN
+principal, external `admissions.review` relationship, current policy/data-scope,
+tek kullanımlık exact step-up ve mevcut domain maker-checker/evidence sınırları
+birlikte geçerse çalışır; API token ve impersonation daima reddedilir.
+
+Additive `0085_institution_active_context_step_up.sql` ile dört tablo eklenmiş,
+Institution FORCE-RLS toplamı `17`, kanonik ledger `86/86` olmuştur. PII-free
+authorization receipt insert'i current selection, relationship, membership,
+tenant, principal, role package, capability ve policy satırlarını transaction
+sonuna kadar `FOR SHARE` ile kilitler. Lock-only FORCE-RLS policy'leri
+`WITH CHECK(false)` kullanır; exact `fas_institution_executor` selection,
+relationship veya membership UPDATE privilege'ına sahip değildir. Direct team
+grant kapatılmış, yalnız `PENDING_CONTROL_PLANE` membership request; direct SLA
+activation/retire kapatılmış, yalnız authorization-bound `DRAFT` üretilmiştir.
+
+Institution code-bearing head `b117e71a013e57efe5e9ce67f777c6b2fe39472f`,
+tree `782daa3c4166e7db074bbb2f983562863e2edd8f`, base
+`822112fb471ad53365034b9b928b5510b4c06d81` → code binary-patch SHA-256
+`4400a1164d4647f9b244ab3ae9cb15145697c9c3ffce2abf3d396b432dbfe329`
+ve byte uzunluğu `438510` olarak review packet'te dondurulmuştur. Base→code
+farkı `4 commit / 46 dosya / 7.507 ekleme / 31 silme`dir. Fresh PostgreSQL
+16.15 `86/86` + clean replay, pure contract `9/9`, pure authorization `9/9`,
+exact least-privilege PostgreSQL `12/12`, migration authority `29 PASS + 1`
+Bash-unavailable SKIP, tenant writer `166/166` ve `2.222` surface, legacy route
+`72/794`, full workspace typecheck, 10 dil i18n, API/Edcons builds,
+data-boundary `4/4`, integration DB safety `11/11` ve security regression
+`31/31` PASS'tir.
+
+Active-context selection issuer, MFA step-up issuer, Ed25519 key-ring, Control
+Plane request apply, staging migration/UAT ve bağımsız review henüz yapılmadı.
+Production, staging, `Next`, gerçek PII, dış mesaj/SIS/portal execution,
+push/merge/deploy değiştirilmemiştir ve ayrı açık onay gerektirir.
