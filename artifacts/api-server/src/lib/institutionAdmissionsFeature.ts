@@ -56,12 +56,3 @@ export function isInstitutionAdmissionsEnabled(userId: number): boolean {
     userId,
   }).enabled;
 }
-
-// High-impact institution actions remain unusable in production until the
-// authoritative active-context + step-up/maker-checker corridor is wired.
-export function isLocalInstitutionAssuranceEnabled(): boolean {
-  return (
-    process.env.NODE_ENV !== "production" &&
-    process.env.INSTITUTION_ADMISSIONS_V1_LOCAL_ASSURANCE === "true"
-  );
-}

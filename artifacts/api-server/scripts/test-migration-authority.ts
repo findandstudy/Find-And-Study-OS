@@ -209,6 +209,7 @@ test("production prefix and canonical additive migration tail are pinned", () =>
       "0082_student_journey_g45_foundation",
       "0083_institution_admissions_foundation",
       "0084_institution_admissions_authority_hardening",
+      "0085_institution_active_context_step_up",
     ],
   );
 
@@ -817,7 +818,7 @@ test("Student Journey G45 PostgreSQL integration is explicit and loopback-only",
   assert.match(source, /target\.pathname, "\/fasos_apply_local"/);
   assert.match(source, /safeTarget\(executorUrl, "fas_journey_executor"\)/);
   assert.match(source, /ALLOW_LIVE_INTEGRATIONS/);
-  assert.match(source, /migrationCount\.rows\[0\]\?\.count, 85/);
+  assert.match(source, /migrationCount\.rows\[0\]\?\.count, 86/);
   assert.match(source, /journey_notification_intents_default_off_chk/);
   assert.match(
     source,
@@ -850,7 +851,10 @@ test("Institution Admissions PostgreSQL integration is explicit and least-privil
   assert.match(source, /institution_postgres_test_requires_disposable_loopback_database/);
   assert.match(source, /new URL\(actorUrl\)\.username !== "fas_institution_executor"/);
   assert.match(source, /NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS/);
-  assert.match(source, /migrationCount\.rows\[0\]\?\.count, 85/);
+  assert.match(source, /migrationCount\.rows\[0\]\?\.count, 86/);
+  assert.match(source, /GRANT SELECT ON TABLE institution_memberships/);
+  assert.doesNotMatch(source, /GRANT SELECT, INSERT ON TABLE institution_memberships/);
+  assert.match(source, /institution_step_up_receipts/);
 });
 
 test("durable audit integration is explicit and fixed to the disposable target", () => {

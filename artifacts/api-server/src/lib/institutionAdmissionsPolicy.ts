@@ -20,9 +20,11 @@ export const INSTITUTION_CAPABILITIES = [
   "institution.enrolment.confirm",
   "institution.catalog.manage",
   "institution.requirements.manage",
+  "institution.sla.request",
   "institution.sla.manage",
   "institution.integrations.manage",
   "institution.analytics.read",
+  "institution.team.request",
   "institution.team.manage",
   "institution.audit.read",
 ] as const;

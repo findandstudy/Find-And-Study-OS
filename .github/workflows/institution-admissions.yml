@@ -62,6 +62,7 @@ jobs:
           node lib/db/validate-migrations.mjs
           pnpm --filter @workspace/api-server run test:migration-authority
           pnpm --filter @workspace/api-server run test:institution-admissions-contract
+          pnpm --filter @workspace/api-server run test:institution-admissions-authorization
 
       - name: Type-check and build deployable applications
         run: |
@@ -101,6 +102,7 @@ jobs:
           pnpm run test:package-manager
           node lib/db/validate-migrations.mjs
           pnpm --filter @workspace/api-server run test:institution-admissions-contract
+          pnpm --filter @workspace/api-server run test:institution-admissions-authorization
           pnpm run typecheck
 
   postgres-gate:
@@ -148,7 +150,7 @@ jobs:
           PG_DISPOSABLE_ADMIN_URL: postgresql://postgres@127.0.0.1:5433/postgres
         run: node lib/db/prepare-disposable-migration-database.mjs
 
-      - name: Apply and replay all 85 migrations
+      - name: Apply and replay all 86 migrations
         env:
           ALLOW_REVIEWED_MIGRATIONS: "true"
           DATABASE_URL: postgresql://fas_migrator@127.0.0.1:5433/fasos_apply_local

@@ -175,6 +175,7 @@
     "test:postgres-student-journey-g45": "tsx ./scripts/test-postgres-student-journey-g45.ts",
     "test:student-journey-evaluation-contract": "tsx --test ./scripts/test-student-journey-evaluation-contract.ts",
     "test:institution-admissions-contract": "tsx --test ./scripts/test-institution-admissions-contract.ts",
+    "test:institution-admissions-authorization": "tsx --test ./scripts/test-institution-admissions-authorization.ts",
     "test:postgres-institution-admissions": "tsx --test ./scripts/test-postgres-institution-admissions.ts",
     "test:staff-scope-performance": "DATABASE_URL=postgres://test:test@127.0.0.1:5432/test tsx --test ./scripts/test-staff-scope-performance.ts",
     "test:read-path-performance": "tsx --test ./scripts/test-read-path-performance.ts",

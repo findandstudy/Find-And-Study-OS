@@ -3,8 +3,8 @@ import type { PoolClient } from "pg";
 import { requireAuth } from "../lib/auth";
 import {
   isInstitutionAdmissionsEnabled,
-  isLocalInstitutionAssuranceEnabled,
 } from "../lib/institutionAdmissionsFeature";
+import { authorizeInstitutionRouteMutation } from "../lib/institutionAdmissionsAuthorizationRuntime";
 import {
   assertCapability,
   assertAnyCapability,
@@ -66,12 +66,6 @@ function asIsoDate(value: unknown): Date | null {
   const date = new Date(value);
   if (!Number.isFinite(date.valueOf())) throw new Error("institution_date_invalid");
   return date;
-}
-
-function assertLocalAssurance(): void {
-  if (!isLocalInstitutionAssuranceEnabled()) {
-    throw new Error("institution_authoritative_assurance_required");
-  }
 }
 
 function institutionPortalGate(req: Request, res: Response, next: NextFunction): void {
@@ -514,10 +508,10 @@ router.get("/institution/decisions", async (req, res) => {
 
 async function decide(req: Request, res: Response, outcome: "APPROVED" | "RETURNED" | "REJECTED") {
   try {
-    assertLocalAssurance();
     const id = asUuid(req.params.id);
     const reasonCode = asCode(req.body?.reasonCode ?? outcome);
     const comment = asOptionalText(req.body?.comment, 2_000);
+    const requestHash = institutionHash({ operation:`DECISION_${outcome}`,id,reasonCode,comment });
     const result = await withInstitutionContext(req.user!.id, async (client, context) => {
       assertCapability(context.capabilities, "institution.decisions.approve");
       assertInstitutionDataScope(context.dataScopes, "application.decision");
@@ -530,6 +524,11 @@ async function decide(req: Request, res: Response, outcome: "APPROVED" | "RETURN
       if (application.rowCount !== 1 || application.rows[0].lifecycle_state !== "DECISION_PENDING_APPROVAL") {
         throw new Error("institution_case_not_pending_approval");
       }
+      const authorization = await authorizeInstitutionRouteMutation({
+        request:req,client,context,capabilityKey:"institution.decisions.approve",
+        requiredDataScope:"application.decision",resourceType:"institution_decision",
+        resourceId:id,requestHash,approvalSatisfied:true,
+      });
       const approvalId = nextInstitutionId();
       await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1, 1))", [context.relationshipId]);
       const previous = await client.query<{ receipt_hash: string }>(`SELECT receipt_hash FROM institution_decision_approvals
@@ -561,8 +560,10 @@ async function decide(req: Request, res: Response, outcome: "APPROVED" | "RETURN
       await appendEvent(client, context, { applicationCaseId: decision.rows[0].application_case_id,
         eventType: `institution.decision.${outcome.toLowerCase()}.v1`, aggregateType: "DECISION",
         aggregateId: id, aggregateVersion: Number(decision.rows[0].version_number),
-        payload: { reasonCode, approvalReceiptHash: receiptHash } });
-      return { id, state: outcome, offerId, approvalReceiptHash: receiptHash };
+        payload: { reasonCode, approvalReceiptHash: receiptHash,
+          authorizationReceiptId:authorization.authorizationReceiptId } });
+      return { id, state: outcome, offerId, approvalReceiptHash: receiptHash,
+        authorizationReceiptId:authorization.authorizationReceiptId };
     });
     res.json(result);
   } catch (error) { sendFailure(res, error); }
@@ -591,9 +592,10 @@ router.get("/institution/offers", async (req, res) => {
 
 router.post("/institution/offers/:id/issue", async (req, res) => {
   try {
-    assertLocalAssurance();
     const id = asUuid(req.params.id);
     const acceptanceDeadline = asIsoDate(req.body?.acceptanceDeadline);
+    const requestHash = institutionHash({operation:"OFFER_ISSUE",id,
+      acceptanceDeadline:acceptanceDeadline?.toISOString() ?? null});
     const result = await withInstitutionContext(req.user!.id, async (client, context) => {
       assertCapability(context.capabilities, "institution.offers.issue");
       assertInstitutionDataScope(context.dataScopes, "application.offer");
@@ -606,6 +608,11 @@ router.post("/institution/offers/:id/issue", async (req, res) => {
       if (application.rowCount !== 1 || application.rows[0].lifecycle_state !== "DECIDED") {
         throw new Error("institution_case_not_decided");
       }
+      const authorization = await authorizeInstitutionRouteMutation({
+        request:req,client,context,capabilityKey:"institution.offers.issue",
+        requiredDataScope:"application.offer",resourceType:"institution_offer",
+        resourceId:id,requestHash,approvalSatisfied:true,
+      });
       const receiptHash = institutionHash({ offerId:id, decisionId:offer.rows[0].decision_id,
         issuer:context.membershipId, acceptanceDeadline:acceptanceDeadline?.toISOString() ?? null });
       await client.query(`UPDATE institution_offers SET state='ISSUED',acceptance_deadline=$2,
@@ -616,8 +623,10 @@ router.post("/institution/offers/:id/issue", async (req, res) => {
         aggregate_version=$2 WHERE id=$1`, [offer.rows[0].application_case_id,caseVersion]);
       await appendEvent(client, context, { applicationCaseId:offer.rows[0].application_case_id,
         eventType:"institution.offer.issued.v1",aggregateType:"OFFER",aggregateId:id,aggregateVersion:1,
-        payload:{ receiptHash, delivery:"NOT_DISPATCHED" } });
-      return { id,state:"ISSUED",receiptHash,delivery:"NOT_DISPATCHED" };
+        payload:{ receiptHash, delivery:"NOT_DISPATCHED",
+          authorizationReceiptId:authorization.authorizationReceiptId } });
+      return { id,state:"ISSUED",receiptHash,delivery:"NOT_DISPATCHED",
+        authorizationReceiptId:authorization.authorizationReceiptId };
     });
     res.json(result);
   } catch (error) { sendFailure(res, error); }
@@ -625,7 +634,6 @@ router.post("/institution/offers/:id/issue", async (req, res) => {
 
 router.post("/institution/applications/:id/enrolment", async (req, res) => {
   try {
-    assertLocalAssurance();
     const caseId = asUuid(req.params.id);
     const state = asText(req.body?.state, 32).toUpperCase();
     if (!["PENDING_EVIDENCE","CONFIRMED","DEFERRED","NOT_ENROLLED"].includes(state)) {
@@ -633,6 +641,7 @@ router.post("/institution/applications/:id/enrolment", async (req, res) => {
     }
     const evidenceRefHash = req.body?.evidenceRefHash ?? null;
     if (state === "CONFIRMED") assertEnrolmentEvidenceHash(evidenceRefHash);
+    const requestHash = institutionHash({operation:"ENROLMENT_TRANSITION",caseId,state,evidenceRefHash});
     const result = await withInstitutionContext(req.user!.id, async (client, context) => {
       assertCapability(context.capabilities, "institution.enrolment.confirm");
       assertInstitutionDataScope(context.dataScopes, "application.enrolment");
@@ -640,6 +649,11 @@ router.post("/institution/applications/:id/enrolment", async (req, res) => {
       if (application.rowCount !== 1 || !["OFFER_ISSUED","ENROLMENT_PENDING"].includes(application.rows[0].lifecycle_state)) {
         throw new Error("institution_case_not_enrolment_ready");
       }
+      const authorization = await authorizeInstitutionRouteMutation({
+        request:req,client,context,capabilityKey:"institution.enrolment.confirm",
+        requiredDataScope:"application.enrolment",resourceType:"institution_application",resourceId:caseId,requestHash,
+        approvalSatisfied:true,
+      });
       const existing = await client.query(`SELECT * FROM institution_enrolments WHERE application_case_id=$1 FOR UPDATE`, [caseId]);
       const id = existing.rows[0]?.id ?? nextInstitutionId();
       const receiptHash = state === "CONFIRMED" ? institutionHash({ caseId,evidenceRefHash,verifier:context.membershipId }) : null;
@@ -675,8 +689,9 @@ router.post("/institution/applications/:id/enrolment", async (req, res) => {
       await appendEvent(client, context, { applicationCaseId:caseId,
         eventType:`institution.enrolment.${state.toLowerCase()}.v1`,aggregateType:"ENROLMENT",
         aggregateId:id,aggregateVersion:Number(existing.rows[0]?.version ?? 0)+1,
-        payload:{ evidenceRefHash:state==="CONFIRMED"?evidenceRefHash:null,receiptHash } });
-      return { id,state,receiptHash };
+        payload:{ evidenceRefHash:state==="CONFIRMED"?evidenceRefHash:null,receiptHash,
+          authorizationReceiptId:authorization.authorizationReceiptId } });
+      return { id,state,receiptHash,authorizationReceiptId:authorization.authorizationReceiptId };
     });
     res.json(result);
   } catch (error) { sendFailure(res, error); }
@@ -811,21 +826,28 @@ router.post("/institution/requirements/:id/submit", async (req,res) => {
 
 router.post("/institution/requirements/:id/publish", async (req,res) => {
   try {
-    assertLocalAssurance();
     const id=asUuid(req.params.id);
     const effectiveFrom=asIsoDate(req.body?.effectiveFrom) ?? new Date();
+    const requestHash=institutionHash({operation:"REQUIREMENT_PUBLISH",id,
+      effectiveFrom:effectiveFrom.toISOString()});
     const result=await withInstitutionContext(req.user!.id,async(client,context)=>{
       assertCapability(context.capabilities,"institution.requirements.manage");
       assertInstitutionDataScope(context.dataScopes, "catalog.requirements");
       const current=await client.query(`SELECT * FROM institution_requirement_sets WHERE id=$1 FOR UPDATE`,[id]);
       if(current.rowCount!==1||current.rows[0].state!=="IN_REVIEW") throw new Error("institution_requirement_set_unavailable");
       assertIndependentChecker(current.rows[0].created_by_membership_id,context.membershipId);
+      const authorization=await authorizeInstitutionRouteMutation({
+        request:req,client,context,capabilityKey:"institution.requirements.manage",
+        requiredDataScope:"catalog.requirements",resourceType:"institution_requirement_set",
+        resourceId:id,requestHash,approvalSatisfied:true,
+      });
       const updated=await client.query(`UPDATE institution_requirement_sets SET state='PUBLISHED',
         approved_by_membership_id=$2,published_at=now(),effective_from=$3 WHERE id=$1
         RETURNING id,state,version_number,published_at,effective_from`,[id,context.membershipId,effectiveFrom]);
       await appendEvent(client,context,{eventType:"institution.requirements.published.v1",aggregateType:"REQUIREMENT_SET",
-        aggregateId:id,aggregateVersion:Number(current.rows[0].version_number),payload:{effectiveFrom:effectiveFrom.toISOString()}});
-      return updated.rows[0];
+        aggregateId:id,aggregateVersion:Number(current.rows[0].version_number),payload:{
+          effectiveFrom:effectiveFrom.toISOString(),authorizationReceiptId:authorization.authorizationReceiptId}});
+      return {...updated.rows[0],authorizationReceiptId:authorization.authorizationReceiptId};
     });
     res.json(result);
   }catch(error){sendFailure(res,error);}
@@ -852,19 +874,31 @@ router.post("/institution/sla",async(req,res)=>{
     const informationHours=asPositiveInt(req.body?.informationResponseHours);
     if(Math.max(reviewHours,decisionHours,informationHours)>2160) throw new Error("institution_sla_invalid");
     const result=await withInstitutionContext(req.user!.id,async(client,context)=>{
-      assertCapability(context.capabilities,"institution.sla.manage");
+      assertCapability(context.capabilities,"institution.sla.request");
       assertInstitutionDataScope(context.dataScopes, "partner.operations");
       const next=await client.query<{next_version:string}>(`SELECT COALESCE(max(version),0)+1 AS next_version FROM institution_sla_policies`);
-      await client.query(`UPDATE institution_sla_policies SET status='RETIRED',updated_at=now() WHERE status='ACTIVE'`);
       const id=nextInstitutionId(),version=Number(next.rows[0].next_version);
+      const requestHash=institutionHash({operation:"SLA_CHANGE_REQUEST",id,name,timezone,
+        reviewHours,decisionHours,informationHours,version});
+      const authorization=await authorizeInstitutionRouteMutation({
+        request:req,client,context,capabilityKey:"institution.sla.request",
+        requiredDataScope:"partner.operations",resourceType:"institution_sla_policy",
+        resourceId:id,requestHash,approvalSatisfied:false,
+      });
       const inserted=await client.query(`INSERT INTO institution_sla_policies (
         id,tenant_id,relationship_id,name,timezone,review_target_hours,decision_target_hours,
-        information_response_hours,status,version,created_by_membership_id
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'ACTIVE',$9,$10) RETURNING *`,[id,context.tenantId,
-        context.relationshipId,name,timezone,reviewHours,decisionHours,informationHours,version,context.membershipId]);
-      return inserted.rows[0];
+        information_response_hours,status,version,created_by_membership_id,
+        request_hash,authorization_receipt_id
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'DRAFT',$9,$10,$11,$12)
+      RETURNING *`,[id,context.tenantId,context.relationshipId,name,timezone,reviewHours,
+        decisionHours,informationHours,version,context.membershipId,requestHash,
+        authorization.authorizationReceiptId]);
+      await appendEvent(client,context,{eventType:"institution.sla.change_requested.v1",
+        aggregateType:"SLA_POLICY",aggregateId:id,aggregateVersion:version,
+        payload:{status:"PENDING_CONTROL_PLANE",authorizationReceiptId:authorization.authorizationReceiptId}});
+      return {...inserted.rows[0],state:"PENDING_CONTROL_PLANE"};
     });
-    res.status(201).json(result);
+    res.status(202).json(result);
   }catch(error){sendFailure(res,error);}
 });
 
@@ -909,14 +943,13 @@ router.get("/institution/team",async(req,res)=>{
 
 router.post("/institution/team/memberships",async(req,res)=>{
   try{
-    assertLocalAssurance();
     const userId=asPositiveInt(req.body?.userId);
     const roleKey=asText(req.body?.roleKey,64).toUpperCase();
     if(!isInstitutionRoleKey(roleKey)) throw new Error("institution_role_invalid");
     const programScopeIds=Array.isArray(req.body?.programScopeIds)?[...new Set(req.body.programScopeIds.map(asPositiveInt))].slice(0,500):[];
     const intakeScopes=Array.isArray(req.body?.intakeScopes)?[...new Set(req.body.intakeScopes.map((v:unknown)=>asText(v,120)))].slice(0,100):[];
     const result=await withInstitutionContext(req.user!.id,async(client,context)=>{
-      assertCapability(context.capabilities,"institution.team.manage");
+      assertCapability(context.capabilities,"institution.team.request");
       assertInstitutionDataScope(context.dataScopes, "relationship.membership");
       const authority=await client.query(`SELECT p.id AS principal_id,rpv.id AS package_id
         FROM principals p CROSS JOIN role_definitions rd JOIN role_package_versions rpv ON rpv.role_definition_id=rd.id
@@ -929,15 +962,26 @@ router.post("/institution/team/memberships",async(req,res)=>{
         }[roleKey]]);
       if(authority.rowCount!==1) throw new Error("institution_principal_unavailable");
       const id=nextInstitutionId();
-      const inserted=await client.query(`INSERT INTO institution_memberships (
-        id,tenant_id,relationship_id,principal_id,role_package_version_id,legacy_user_id,
-        role_key,program_scope_ids,intake_scopes,status
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'ACTIVE') RETURNING id,legacy_user_id,role_key,status`,
-      [id,context.tenantId,context.relationshipId,authority.rows[0].principal_id,authority.rows[0].package_id,
-        userId,roleKey,programScopeIds,intakeScopes]);
+      const requestHash=institutionHash({operation:"MEMBERSHIP_CHANGE_REQUEST",userId,roleKey,
+        programScopeIds,intakeScopes,principalId:authority.rows[0].principal_id,
+        rolePackageVersionId:authority.rows[0].package_id});
+      const authorization=await authorizeInstitutionRouteMutation({
+        request:req,client,context,capabilityKey:"institution.team.request",
+        requiredDataScope:"relationship.membership",resourceType:"institution_membership_request",
+        resourceId:id,requestHash,approvalSatisfied:false,
+      });
+      const inserted=await client.query(`INSERT INTO institution_membership_change_requests (
+        id,tenant_id,relationship_id,target_principal_id,target_legacy_user_id,
+        requested_role_package_version_id,requested_role_key,requested_program_scope_ids,
+        requested_intake_scopes,maker_membership_id,state,request_hash,authorization_receipt_id
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'PENDING_CONTROL_PLANE',$11,$12)
+      RETURNING id,target_legacy_user_id,requested_role_key,state`,
+      [id,context.tenantId,context.relationshipId,authority.rows[0].principal_id,userId,
+        authority.rows[0].package_id,roleKey,programScopeIds,intakeScopes,context.membershipId,
+        requestHash,authorization.authorizationReceiptId]);
       return inserted.rows[0];
     });
-    res.status(201).json(result);
+    res.status(202).json(result);
   }catch(error){sendFailure(res,error);}
 });
 

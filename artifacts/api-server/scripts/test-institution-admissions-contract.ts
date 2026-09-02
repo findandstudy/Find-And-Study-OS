@@ -5,7 +5,6 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   resolveInstitutionAdmissionsFeature,
-  isLocalInstitutionAssuranceEnabled,
 } from "../src/lib/institutionAdmissionsFeature";
 import {
   assertDecisionCanCreateOffer,
@@ -66,27 +65,37 @@ test("purpose-limited data scopes and auditor projection fail closed", () => {
   });
 });
 
-test("production cannot enable the local assurance escape hatch", () => {
-  const previousNodeEnv = process.env.NODE_ENV;
-  const previousFlag = process.env.INSTITUTION_ADMISSIONS_V1_LOCAL_ASSURANCE;
-  process.env.NODE_ENV = "production";
-  process.env.INSTITUTION_ADMISSIONS_V1_LOCAL_ASSURANCE = "true";
-  try { assert.equal(isLocalInstitutionAssuranceEnabled(), false); }
-  finally {
-    if (previousNodeEnv === undefined) delete process.env.NODE_ENV; else process.env.NODE_ENV = previousNodeEnv;
-    if (previousFlag === undefined) delete process.env.INSTITUTION_ADMISSIONS_V1_LOCAL_ASSURANCE; else process.env.INSTITUTION_ADMISSIONS_V1_LOCAL_ASSURANCE = previousFlag;
-  }
-});
-
 test("institution routes never accept client-selected tenant or relationship authority", () => {
   const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
   const source = fs.readFileSync(path.join(root, "src/routes/institutionAdmissions.ts"), "utf8");
   assert.doesNotMatch(source, /req\.(?:body|query|headers)(?:\?|\.)?\.?\[?["']?(?:tenantId|relationshipId|institutionId)["']?\]?/);
   assert.match(source, /withInstitutionContext\(req\.user!\.id/);
   assert.match(source, /req\.apiTokenAuth/);
-  assert.match(source, /assertLocalAssurance\(\)/);
+  assert.doesNotMatch(source, /LOCAL_ASSURANCE|assertLocalAssurance/);
+  assert.match(source, /authorizeInstitutionRouteMutation/);
+  assert.match(source, /institution_membership_change_requests/);
+  assert.doesNotMatch(source, /INSERT INTO institution_memberships/);
+  assert.match(source, /institution\.sla\.request/);
+  assert.match(source, /'DRAFT'/);
+  assert.doesNotMatch(source, /institution_sla_policies SET status='RETIRED'/);
   assert.match(source, /router\.get\("\/institution\/audit"/);
   assert.match(source, /assertInstitutionDataScope\(context\.dataScopes/);
+});
+
+test("active-context migration keeps external institution actors separate and step-up exact", () => {
+  const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
+  const source = fs.readFileSync(path.join(root, "lib/db/drizzle/0085_institution_active_context_step_up.sql"), "utf8");
+  assert.match(source, /institution_active_context_selections/);
+  assert.match(source, /institution_step_up_receipts/);
+  assert.match(source, /institution_command_authorization_receipts/);
+  assert.match(source, /lock_current_mutation_authority/);
+  assert.match(source, /REVOKE ALL ON FUNCTION fas_institution_v1\.lock_current_mutation_authority/);
+  assert.match(source, /institution_membership_change_requests/);
+  assert.match(source, /DROP POLICY institution_memberships_admin_insert/);
+  assert.match(source, /DROP POLICY institution_sla_policies_scoped_update/);
+  assert.match(source, /capability_key = 'institution\.sla\.request'/);
+  assert.match(source, /request_hash/);
+  assert.match(source, /status = 'CONSUMED'/);
 });
 
 test("authority hardening migration binds database scope and current actor", () => {

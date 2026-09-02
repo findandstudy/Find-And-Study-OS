@@ -635,7 +635,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/institutionAdmissions.ts",
-      "sha256": "435f5e51bd9726f94f574bd19af8e3762320c4a4382eff238768f9c82da5e680",
+      "sha256": "8024198fb6582f76fa5cb5e16b29a1c4427707e794dcc415fbf082a70799f8c4",
       "routeRegistrations": 31,
       "requireAuth": 2,
       "requireRole": 0,
@@ -646,7 +646,7 @@
       "publicRouteCandidates": 31,
       "enforcement": "corridor_migrated",
       "owner": "Admissions Platform",
-      "note": "The institution_user role is only a portal-routing marker. Each request re-resolves active HUMAN principal, versioned package, capability, purpose/data scope, program/intake scope and FORCE-RLS membership context; API-token access is denied and high-impact production commands remain disabled."
+      "note": "The institution_user role is only a portal-routing marker. Each request re-resolves active HUMAN principal, versioned package, capability, purpose/data scope, program/intake scope and FORCE-RLS membership context; API-token access is denied. High-impact commands require exact Ed25519 active context, single-use step-up, current authority row locks and domain maker-checker evidence; membership and SLA changes remain pending Control Plane requests."
     },
     {
       "path": "artifacts/api-server/src/routes/integrations.ts",
