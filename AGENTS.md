@@ -168,3 +168,12 @@ i18n, API/Edcons production build, data-boundary `4/4`, integration DB safety
 `11/11` ve live security regression `31/31` PASS'tir. Production, staging,
 `Next`, gerçek PII, external send/portal automation, merge ve deploy
 değiştirilmemiştir; bunlar ayrı onay ve NO-GO kapılarında kalır.
+
+Institution v1 code-bearing head'i
+`0461c88f9d7fdf02ace2063b1b3d6c1fa0a68c30`, tree'si
+`f26b88e59715d6f70bb5101fd120d0c28ea55166` ve base
+`822112fb471ad53365034b9b928b5510b4c06d81` → code binary-patch SHA-256 değeri
+`f5ac4f4b85fbdad148b5f813081b2259734ebbc6339e206ec0aada510e97f182` olarak
+`INSTITUTION_ADMISSIONS_V1_REVIEW_PACKET_2026-09-02.md` içinde donduruldu.
+Review packet commit'i code-bearing değildir; bağımsız reviewer exact final
+branch HEAD'ini ayrıca kabul etmelidir.
