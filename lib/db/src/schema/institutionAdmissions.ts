@@ -16,6 +16,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import { applicationsTable } from "./applications";
+import { portalSubmissionsTable } from "./portalSubmissions";
 import {
   principalsTable,
   rolePackageVersionsTable,
@@ -254,6 +255,12 @@ export const institutionApplicationCasesTable = pgTable(
     slaPolicyId: uuid("sla_policy_id"),
     reviewDueAt: timestamp("review_due_at", { withTimezone: true }),
     decisionDueAt: timestamp("decision_due_at", { withTimezone: true }),
+    sourcePortalSubmissionId: integer("source_portal_submission_id").references(
+      () => portalSubmissionsTable.id,
+      { onDelete: "restrict" },
+    ),
+    sourceSnapshotHash: text("source_snapshot_hash"),
+    intakeReceiptHash: text("intake_receipt_hash"),
     aggregateVersion: bigint("aggregate_version", { mode: "number" })
       .notNull()
       .default(1),
@@ -297,6 +304,13 @@ export const institutionApplicationCasesTable = pgTable(
       table.assignedReviewerMembershipId,
       table.lifecycleState,
     ),
+    uniqueIndex("institution_application_cases_intake_source_uidx")
+      .on(
+        table.tenantId,
+        table.relationshipId,
+        table.sourcePortalSubmissionId,
+      )
+      .where(sql`${table.sourcePortalSubmissionId} IS NOT NULL`),
     foreignKey({
       columns: [table.tenantId, table.relationshipId],
       foreignColumns: [
@@ -337,6 +351,116 @@ export const institutionApplicationCasesTable = pgTable(
     check(
       "institution_application_cases_version_chk",
       sql`${table.aggregateVersion} > 0`,
+    ),
+    check(
+      "institution_application_cases_intake_binding_chk",
+      sql`(
+        ${table.sourcePortalSubmissionId} IS NULL
+        AND ${table.sourceSnapshotHash} IS NULL
+        AND ${table.intakeReceiptHash} IS NULL
+      ) OR (
+        ${table.sourcePortalSubmissionId} IS NOT NULL
+        AND ${table.sourceSnapshotHash} ~ '^[0-9a-f]{64}$'
+        AND ${table.intakeReceiptHash} ~ '^[0-9a-f]{64}$'
+      )`,
+    ),
+  ],
+).enableRLS();
+
+export const institutionCaseIntakeReceiptsTable = pgTable(
+  "institution_case_intake_receipts",
+  {
+    id: uuid("id").primaryKey(),
+    tenantId: uuid("tenant_id").notNull(),
+    relationshipId: uuid("relationship_id").notNull(),
+    applicationCaseId: uuid("application_case_id").notNull(),
+    legacyApplicationId: integer("legacy_application_id")
+      .notNull()
+      .references(() => applicationsTable.id, { onDelete: "restrict" }),
+    portalSubmissionId: integer("portal_submission_id")
+      .notNull()
+      .references(() => portalSubmissionsTable.id, { onDelete: "restrict" }),
+    sourceStatus: text("source_status").notNull(),
+    sourceObservedAt: timestamp("source_observed_at", { withTimezone: true })
+      .notNull(),
+    sourceExternalRefHash: text("source_external_ref_hash").notNull(),
+    sourceSnapshotHash: text("source_snapshot_hash").notNull(),
+    commandHash: text("command_hash").notNull(),
+    maskedStudentRef: text("masked_student_ref").notNull(),
+    receiptHash: text("receipt_hash").notNull(),
+    executorKey: text("executor_key")
+      .notNull()
+      .default("institution.case_intake.v1"),
+    outcome: text("outcome").notNull().default("CREATED"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    unique("institution_case_intake_receipts_tenant_id_id_uq").on(
+      table.tenantId,
+      table.id,
+    ),
+    unique("institution_case_intake_receipts_source_uq").on(
+      table.tenantId,
+      table.relationshipId,
+      table.portalSubmissionId,
+    ),
+    unique("institution_case_intake_receipts_receipt_hash_uq").on(
+      table.tenantId,
+      table.relationshipId,
+      table.receiptHash,
+    ),
+    index("institution_case_intake_receipts_case_idx").on(
+      table.tenantId,
+      table.relationshipId,
+      table.applicationCaseId,
+      table.createdAt,
+    ),
+    foreignKey({
+      columns: [table.tenantId, table.relationshipId],
+      foreignColumns: [
+        institutionRelationshipsTable.tenantId,
+        institutionRelationshipsTable.id,
+      ],
+      name: "institution_case_intake_receipts_relationship_fk",
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [
+        table.tenantId,
+        table.relationshipId,
+        table.applicationCaseId,
+      ],
+      foreignColumns: [
+        institutionApplicationCasesTable.tenantId,
+        institutionApplicationCasesTable.relationshipId,
+        institutionApplicationCasesTable.id,
+      ],
+      name: "institution_case_intake_receipts_case_fk",
+    }).onDelete("restrict"),
+    check("institution_case_intake_receipts_id_v7_chk", uuidV7(table.id)),
+    check(
+      "institution_case_intake_receipts_source_status_chk",
+      sql`${table.sourceStatus} IN ('submitted', 'already_exists', 'accepted')`,
+    ),
+    check(
+      "institution_case_intake_receipts_hash_chk",
+      sql`${table.sourceExternalRefHash} ~ '^[0-9a-f]{64}$'
+        AND ${table.sourceSnapshotHash} ~ '^[0-9a-f]{64}$'
+        AND ${table.commandHash} ~ '^[0-9a-f]{64}$'
+        AND ${table.receiptHash} ~ '^[0-9a-f]{64}$'`,
+    ),
+    check(
+      "institution_case_intake_receipts_masked_ref_chk",
+      sql`${table.maskedStudentRef} ~ '^STU-[0-9A-F]{16}$'`,
+    ),
+    check(
+      "institution_case_intake_receipts_executor_chk",
+      sql`${table.executorKey} = 'institution.case_intake.v1'`,
+    ),
+    check(
+      "institution_case_intake_receipts_outcome_chk",
+      sql`${table.outcome} = 'CREATED'`,
     ),
   ],
 ).enableRLS();
@@ -938,4 +1062,6 @@ export type InstitutionMembership =
   typeof institutionMembershipsTable.$inferSelect;
 export type InstitutionApplicationCase =
   typeof institutionApplicationCasesTable.$inferSelect;
+export type InstitutionCaseIntakeReceipt =
+  typeof institutionCaseIntakeReceiptsTable.$inferSelect;
 export type InstitutionDecision = typeof institutionDecisionsTable.$inferSelect;

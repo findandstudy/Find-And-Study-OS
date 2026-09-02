@@ -63,6 +63,7 @@ jobs:
           pnpm --filter @workspace/api-server run test:migration-authority
           pnpm --filter @workspace/api-server run test:institution-admissions-contract
           pnpm --filter @workspace/api-server run test:institution-admissions-authorization
+          pnpm --filter @workspace/api-server run test:institution-case-intake
 
       - name: Type-check and build deployable applications
         run: |
@@ -103,6 +104,7 @@ jobs:
           node lib/db/validate-migrations.mjs
           pnpm --filter @workspace/api-server run test:institution-admissions-contract
           pnpm --filter @workspace/api-server run test:institution-admissions-authorization
+          pnpm --filter @workspace/api-server run test:institution-case-intake
           pnpm run typecheck
 
   postgres-gate:
@@ -150,7 +152,7 @@ jobs:
           PG_DISPOSABLE_ADMIN_URL: postgresql://postgres@127.0.0.1:5433/postgres
         run: node lib/db/prepare-disposable-migration-database.mjs
 
-      - name: Apply and replay all 86 migrations
+      - name: Apply and replay all 87 migrations
         env:
           ALLOW_REVIEWED_MIGRATIONS: "true"
           DATABASE_URL: postgresql://fas_migrator@127.0.0.1:5433/fasos_apply_local
@@ -170,3 +172,10 @@ jobs:
           DATABASE_URL: postgresql://fas_institution_executor@127.0.0.1:5433/fasos_apply_local
           INSTITUTION_TEST_ADMIN_DATABASE_URL: postgresql://postgres@127.0.0.1:5433/fasos_apply_local
         run: pnpm --filter @workspace/api-server run test:postgres-institution-admissions
+
+      - name: Prove receipt-bound Institution case intake
+        env:
+          ALLOW_DISPOSABLE_INSTITUTION_CASE_INTAKE_TEST: "true"
+          INSTITUTION_INTAKE_TEST_ADMIN_DATABASE_URL: postgresql://postgres@127.0.0.1:5433/fasos_apply_local
+          INSTITUTION_INTAKE_TEST_EXECUTOR_DATABASE_URL: postgresql://fas_institution_intake_executor@127.0.0.1:5433/fasos_apply_local
+        run: pnpm --filter @workspace/api-server run test:postgres-institution-case-intake

@@ -675,6 +675,15 @@
       "note": "Default-unwired G45 writer; production/live PII adoption remains blocked behind explicit rollout and review gates."
     },
     {
+      "path": "artifacts/api-server/src/lib/postgresInstitutionCaseIntakeStore.ts",
+      "ownership": "tenant_owned",
+      "enforcement": "db_enforced",
+      "risk": "high",
+      "owner": "Admissions Platform",
+      "externalPilot": "quarantine",
+      "note": "Default-off EXECUTE-only intake uses a dedicated non-owner executor, FORCE RLS, immutable receipts and PII-minimized projection. External tenant activation remains gated."
+    },
+    {
       "path": "artifacts/api-server/src/lib/replitAuth.ts",
       "ownership": "privileged_config",
       "enforcement": "quarantine_required",

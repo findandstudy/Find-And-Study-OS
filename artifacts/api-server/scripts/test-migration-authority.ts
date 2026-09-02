@@ -210,6 +210,7 @@ test("production prefix and canonical additive migration tail are pinned", () =>
       "0083_institution_admissions_foundation",
       "0084_institution_admissions_authority_hardening",
       "0085_institution_active_context_step_up",
+      "0086_institution_case_intake_receipts",
     ],
   );
 
@@ -676,7 +677,7 @@ test("production-prefix adoption harness is explicit and loopback-only", () => {
   const source = readFileSync(harness, "utf8");
   assert.match(source, /prefix adoption requires a fresh disposable database/);
   assert.match(source, /productionEntries\.length, 66/);
-  assert.match(source, /count: 85/);
+  assert.match(source, /count: 87/);
 });
 
 test("disposable database reset is explicit and fixed to the local test identity", () => {
@@ -788,7 +789,7 @@ test("comprehensive Control Plane gate is explicit and fixed to the disposable t
     /assert\.equal\(target\.pathname\.slice\(1\), "fasos_apply_local"\)/,
   );
   assert.match(source, /assert\.equal\(target\.port, "5433"\)/);
-  assert.match(source, /assert\.equal\(migrationCount\.rows\[0\]\.count, 85\)/);
+  assert.match(source, /assert\.equal\(migrationCount\.rows\[0\]\.count, 87\)/);
   assert.doesNotMatch(source, /CREATE ROLE \$\{/);
 });
 
@@ -818,7 +819,7 @@ test("Student Journey G45 PostgreSQL integration is explicit and loopback-only",
   assert.match(source, /target\.pathname, "\/fasos_apply_local"/);
   assert.match(source, /safeTarget\(executorUrl, "fas_journey_executor"\)/);
   assert.match(source, /ALLOW_LIVE_INTEGRATIONS/);
-  assert.match(source, /migrationCount\.rows\[0\]\?\.count, 86/);
+  assert.match(source, /migrationCount\.rows\[0\]\?\.count, 87/);
   assert.match(source, /journey_notification_intents_default_off_chk/);
   assert.match(
     source,
@@ -851,10 +852,41 @@ test("Institution Admissions PostgreSQL integration is explicit and least-privil
   assert.match(source, /institution_postgres_test_requires_disposable_loopback_database/);
   assert.match(source, /new URL\(actorUrl\)\.username !== "fas_institution_executor"/);
   assert.match(source, /NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS/);
-  assert.match(source, /migrationCount\.rows\[0\]\?\.count, 86/);
+  assert.match(source, /migrationCount\.rows\[0\]\?\.count, 87/);
   assert.match(source, /GRANT SELECT ON TABLE institution_memberships/);
   assert.doesNotMatch(source, /GRANT SELECT, INSERT ON TABLE institution_memberships/);
   assert.match(source, /institution_step_up_receipts/);
+});
+
+test("Institution case intake integration is explicit and EXECUTE-only", () => {
+  const intakeTest = path.join(
+    root,
+    "artifacts/api-server/scripts/test-postgres-institution-case-intake.ts",
+  );
+  const unapproved = spawnSync(
+    process.execPath,
+    ["--import", "tsx", intakeTest],
+    {
+      cwd: path.join(root, "artifacts/api-server"),
+      encoding: "utf8",
+      env: { PATH: process.env.PATH ?? "" },
+    },
+  );
+  assert.equal(unapproved.status, 1);
+  assert.match(
+    unapproved.stderr,
+    /institution_case_intake_test_requires_explicit_disposable_opt_in/,
+  );
+
+  const source = readFileSync(intakeTest, "utf8");
+  assert.match(source, /institution_case_intake_test_requires_disposable_loopback_database/);
+  assert.match(source, /fas_institution_intake_executor/);
+  assert.match(source, /fas_institution_intake_owner/);
+  assert.match(source, /migrationCount\.rows\[0\]\?\.count, 87/);
+  assert.match(source, /case_insert: false/);
+  assert.match(source, /receipt_insert: false/);
+  assert.match(source, /can_execute: true/);
+  assert.match(source, /shared_profile/);
 });
 
 test("durable audit integration is explicit and fixed to the disposable target", () => {
@@ -934,6 +966,8 @@ test("live-first CI pins actions and PostgreSQL while replaying both adoption pa
   assert.match(workflow, /test:postgres-student-journey-g45/);
   assert.match(workflow, /ALLOW_DISPOSABLE_STUDENT_JOURNEY_G45_TEST/);
   assert.match(workflow, /ALLOW_LIVE_INTEGRATIONS: "false"/);
+  assert.match(workflow, /test:postgres-institution-case-intake/);
+  assert.match(workflow, /ALLOW_DISPOSABLE_INSTITUTION_CASE_INTAKE_TEST/);
   assert.doesNotMatch(workflow, /uses:\s+[^\s@]+@(?![a-f0-9]{40}\b)/);
 });
 

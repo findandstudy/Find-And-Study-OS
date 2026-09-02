@@ -216,3 +216,35 @@ Active-context selection issuer, MFA step-up issuer, Ed25519 key-ring, Control
 Plane request apply, staging migration/UAT ve bağımsız review henüz yapılmadı.
 Production, staging, `Next`, gerçek PII, dış mesaj/SIS/portal execution,
 push/merge/deploy değiştirilmemiştir ve ayrı açık onay gerektirir.
+
+### 2 Eylül 2026 — Institution case-intake eki
+
+Yukarıdaki `86/86` kanıtını supersede eder. Additive
+`0086_institution_case_intake_receipts.sql` ile kanonik ledger `87/87`,
+Institution FORCE-RLS toplamı `18` olmuştur. Varsayılan kapalı intake adapter'ı
+yalnız başarılı gerçek portal submission'ı; current tenant→legacy branch,
+application/student, external `admissions.review` relationship/institution,
+program ve portal-university mapping bağları aynı transaction'da geçerse kurum
+review queue'sunda case'e dönüştürür. Case `shared_profile={}` ve deterministik
+maskeli öğrenci referansı taşır; ham external reference, result JSON,
+screenshot, iletişim/kimlik veya belge içeriği projection'a girmez.
+
+Source snapshot, external reference, command ve receipt SHA-256 ile dondurulur;
+`institution_case_intake_receipts` append-only, case source bağı immutable ve
+aynı submission idempotent/concurrency-safe'tir. Exact
+`fas_institution_intake_executor` hiçbir Institution tablosunda SELECT/INSERT
+yetkisine sahip değildir; yalnız ayrı NOLOGIN/non-super/non-BYPASSRLS owner'lı,
+`row_security=on` SECURITY DEFINER fonksiyonunu çalıştırır. Feature modu
+`off|allowlist|all` olup varsayılan `off`tur; route/worker wiring, backfill,
+staging/production activation, dış portal çağrısı ve gerçek PII yoktur.
+
+Fresh PostgreSQL 16.15 `87/87` + clean replay, pure Institution contract
+`10/10`, authorization `9/9`, intake `4/4`, Institution PostgreSQL `12/12`,
+intake PostgreSQL `5/5`, migration authority `30 PASS + 1` Bash-unavailable
+SKIP, tenant writer `167/167` ve `2.226` surface, legacy route `72/794`, full
+workspace typecheck, 10 dil i18n, API/Edcons production builds, data-boundary
+`4/4`, integration DB safety `11/11` ve security regression `31/31` PASS'tir.
+Production-prefix `66→87` harness'i CI'da bağlanmıştır; bu dilimde mevcut yerel
+`fasos_apply_local` DB'si korunmuş ve yeniden oluşturulmamıştır. Bağımsız review,
+staging adoption/rollback, dedicated owner/executor provisioning, consentli
+allowlist job wiring ve Privacy/Legal hâlâ NO-GO kapılarıdır.

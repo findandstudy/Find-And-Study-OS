@@ -98,6 +98,24 @@ test("active-context migration keeps external institution actors separate and st
   assert.match(source, /status = 'CONSUMED'/);
 });
 
+test("case intake migration is receipt-bound, PII-minimized and default-unwired", () => {
+  const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
+  const source = fs.readFileSync(path.join(root, "lib/db/drizzle/0086_institution_case_intake_receipts.sql"), "utf8");
+  assert.match(source, /institution_case_intake_receipts/);
+  assert.match(source, /create_case_from_portal_submission/);
+  assert.match(source, /SECURITY DEFINER/);
+  assert.match(source, /SET row_security TO on/);
+  assert.match(source, /v_submission\.mode::text <> 'real'/);
+  assert.match(source, /v_submission\.status::text NOT IN \('submitted', 'already_exists', 'accepted'\)/);
+  assert.match(source, /tenant_organization_legacy_branches/);
+  assert.match(source, /shared_profile.*'\{\}'::jsonb/s);
+  assert.match(source, /EVIDENCE_NOT_SHARED/);
+  assert.match(source, /institution_case_intake_receipts_append_only/);
+  assert.match(source, /REVOKE ALL ON FUNCTION fas_institution_intake_v1/);
+  assert.doesNotMatch(source, /INSERT INTO public\.institution_memberships/);
+  assert.doesNotMatch(source, /result_json|screenshot_urls/);
+});
+
 test("authority hardening migration binds database scope and current actor", () => {
   const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
   const source = fs.readFileSync(path.join(root, "lib/db/drizzle/0084_institution_admissions_authority_hardening.sql"), "utf8");

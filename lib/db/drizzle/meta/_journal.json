@@ -603,6 +603,13 @@
       "when": 1788508800000,
       "tag": "0085_institution_active_context_step_up",
       "breakpoints": true
+    },
+    {
+      "idx": 86,
+      "version": "7",
+      "when": 1788595200000,
+      "tag": "0086_institution_case_intake_receipts",
+      "breakpoints": true
     }
   ]
 }

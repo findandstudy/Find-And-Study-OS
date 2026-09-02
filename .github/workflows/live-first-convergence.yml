@@ -77,6 +77,7 @@ jobs:
           pnpm --filter @workspace/api-server run test:student-journey-evaluation-contract
           pnpm --filter @workspace/api-server run test:institution-admissions-contract
           pnpm --filter @workspace/api-server run test:institution-admissions-authorization
+          pnpm --filter @workspace/api-server run test:institution-case-intake
 
       - name: Verify frozen convergence review manifest
         if: github.event_name == 'workflow_dispatch' || github.event.pull_request.head.ref == 'codex/live-control-plane-convergence-20260831'
@@ -155,6 +156,7 @@ jobs:
           pnpm --filter @workspace/api-server run test:student-journey-evaluation-contract
           pnpm --filter @workspace/api-server run test:institution-admissions-contract
           pnpm --filter @workspace/api-server run test:institution-admissions-authorization
+          pnpm --filter @workspace/api-server run test:institution-case-intake
           pnpm run typecheck
 
   postgres-adoption:
@@ -205,7 +207,7 @@ jobs:
           PG_DISPOSABLE_ADMIN_URL: postgresql://postgres@127.0.0.1:5433/postgres
         run: node lib/db/prepare-disposable-migration-database.mjs
 
-      - name: Apply all 86 migrations to a fresh database
+      - name: Apply all 87 migrations to a fresh database
         env:
           ALLOW_REVIEWED_MIGRATIONS: "true"
           DATABASE_URL: postgresql://fas_migrator@127.0.0.1:5433/fasos_apply_local
@@ -243,7 +245,7 @@ jobs:
           PG_GATE_MIGRATOR_URL: postgresql://fas_migrator@127.0.0.1:5433/fasos_apply_local
         run: pnpm --filter @workspace/api-server run test:postgres-control-plane-gate -- setup
 
-      - name: Prove production 66/66 to canonical 86/86 adoption
+      - name: Prove production 66/66 to canonical 87/87 adoption
         env:
           ALLOW_DISPOSABLE_PREFIX_ADOPTION: "true"
           DATABASE_URL: postgresql://fas_migrator@127.0.0.1:5433/fasos_apply_local
@@ -273,6 +275,13 @@ jobs:
           DATABASE_URL: postgresql://fas_institution_executor@127.0.0.1:5433/fasos_apply_local
           INSTITUTION_TEST_ADMIN_DATABASE_URL: postgresql://postgres@127.0.0.1:5433/fasos_apply_local
         run: pnpm --filter @workspace/api-server run test:postgres-institution-admissions
+
+      - name: Run receipt-bound Institution case intake PostgreSQL checks
+        env:
+          ALLOW_DISPOSABLE_INSTITUTION_CASE_INTAKE_TEST: "true"
+          INSTITUTION_INTAKE_TEST_ADMIN_DATABASE_URL: postgresql://postgres@127.0.0.1:5433/fasos_apply_local
+          INSTITUTION_INTAKE_TEST_EXECUTOR_DATABASE_URL: postgresql://fas_institution_intake_executor@127.0.0.1:5433/fasos_apply_local
+        run: pnpm --filter @workspace/api-server run test:postgres-institution-case-intake
 
       - name: Reset the disposable database after foundation fixtures
         env:

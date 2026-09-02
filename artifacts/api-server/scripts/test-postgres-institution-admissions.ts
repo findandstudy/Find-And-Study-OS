@@ -25,7 +25,7 @@ await admin.connect();
 const migrationCount = await admin.query(
   "SELECT count(*)::integer AS count FROM drizzle.__drizzle_migrations",
 );
-assert.equal(migrationCount.rows[0]?.count, 86);
+assert.equal(migrationCount.rows[0]?.count, 87);
 await admin.query(`DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'fas_institution_executor') THEN
     CREATE ROLE fas_institution_executor LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS;
@@ -213,7 +213,7 @@ test("all institution tables have FORCE RLS and no DELETE policy", async () => {
     LEFT JOIN pg_policies p ON p.schemaname=n.nspname AND p.tablename=c.relname
     WHERE n.nspname='public' AND c.relname LIKE 'institution_%' AND c.relkind='r'
     GROUP BY c.relname,c.relforcerowsecurity`);
-  assert.equal(result.rowCount,17);
+  assert.equal(result.rowCount,18);
   assert.equal(result.rows.every(row=>row.relforcerowsecurity===true&&row.delete_policies===0),true);
 });
 

@@ -2,7 +2,7 @@
 
 Tarih: 2 Eylül 2026
 Branch: `codex/institution-admissions-v1-20260902`
-Durum: Yerel uygulama, active-context/step-up authority hardening ve disposable PostgreSQL kanıtı tamamlandı; production, staging, `Next`, dış iletişim ve portal automation wiring'i değiştirilmedi.
+Durum: Yerel uygulama, active-context/step-up authority hardening ve receipt-bound case-intake adapter disposable PostgreSQL kanıtı tamamlandı; production, staging, `Next`, dış iletişim ve portal automation wiring'i değiştirilmedi.
 
 ## Teslim edilen ürün yüzeyi
 
@@ -32,6 +32,10 @@ Durum: Yerel uygulama, active-context/step-up authority hardening ve disposable 
   gerektiğinde tek kullanımlık step-up receipt olmadan çalışmaz.
 - Team grant ve SLA activation kurum executor'ıyla yapılamaz; yalnız
   `PENDING_CONTROL_PLANE`/`DRAFT` talep üretilebilir.
+- Gerçek ve başarılı legacy portal submission'dan kurum review queue'suna
+  PII-minimized application case açan, varsayılan kapalı ve idempotent intake
+  adapter'ı eklendi. Ham external reference, result JSON, screenshot, öğrenci
+  adı, e-posta, pasaport veya belge içeriği kurum case/receipt'ine yazılmaz.
 
 ## Veri ve güvenlik omurgası
 
@@ -85,6 +89,27 @@ yeniden doğrulanır. FORCE-RLS lock politikaları yalnız kilit görünürlüğ
 executor ilgili authority tablolarında UPDATE privilege'a sahip değildir.
 Doğrudan membership grant ve SLA activation policy'leri kaldırılmıştır.
 
+Additive `0086_institution_case_intake_receipts.sql` on sekizinci Institution
+tablosunu ekler:
+
+18. `institution_case_intake_receipts`
+
+Intake corridor'u yalnız `mode=real` ve `submitted|already_exists|accepted`
+durumundaki, silinmemiş ve external receipt referansı bulunan bir portal
+submission'ı kabul eder. Aynı transaction içinde tenant→legacy branch,
+application→student, relationship→institution, program→institution ve portal
+university mapping bağlarını yeniden doğrular. Source snapshot, external ref,
+command ve receipt SHA-256 olarak dondurulur; review case'e yalnız deterministik
+`STU-...` maskeli referans ve boş `shared_profile` yazılır. Receipt append-only,
+case üzerindeki source/receipt bağı immutable'dır.
+
+Adapter `fas_institution_intake_executor` rolünde tablo yetkisi olmadan yalnız
+`SECURITY DEFINER` fonksiyonunu çalıştırır. Fonksiyon sahibi ayrı NOLOGIN,
+non-super/non-BYPASSRLS roldür; FORCE RLS açık kalır. Aynı submission için
+advisory transaction lock + unique constraint ile eşzamanlı çağrılar tek case
+ve tek receipt üretir; takip eden çağrı `REPLAY` döndürür. Worker/route wiring'i,
+backfill ve canlı feature activation bu dilimde yoktur.
+
 Kurum kullanıcısının legacy `users.role=institution_user` değeri yalnız portal
 routing marker'ıdır. Yetki kaynağı değildir. Her API isteğinde sunucu:
 
@@ -117,6 +142,8 @@ INSTITUTION_ACTIVE_CONTEXT_ENVIRONMENT_ID=
 INSTITUTION_ACTIVE_CONTEXT_CELL_ID=
 INSTITUTION_ACTIVE_CONTEXT_ISSUER_ID=
 INSTITUTION_ACTIVE_CONTEXT_KEY_RING_JSON=
+INSTITUTION_CASE_INTAKE_V1_MODE=off
+INSTITUTION_CASE_INTAKE_V1_RELATIONSHIP_ALLOWLIST=
 ```
 
 Production'da ayrı `INSTITUTION_DATABASE_URL` ve exact
@@ -133,18 +160,22 @@ komutlar fail-closed kalır.
 
 ## Doğrulanan kanıt
 
-- Migration ledger: `86/86`.
+- Migration ledger: `87/87`.
 - Fresh disposable PostgreSQL 16 migration ve clean replay: PASS.
-- Pure institution contract tests: `9/9` PASS.
+- Pure institution contract tests: `10/10` PASS.
+- Pure institution case-intake config/result tests: `4/4` PASS.
 - PostgreSQL FORCE RLS, exact non-super/non-BYPASSRLS executor, server-side
   membership resolution, assigned-case/program/intake scope, actor spoof deny,
   auditor read-only, append-only evidence, maker-checker receipt ve
   evidence-bound decision/offer/enrolment lifecycle, exact current-authority
   row lock, single-use step-up, membership grant deny ve SLA draft-only sınırı:
   `12/12` PASS.
-- Migration authority: `29 PASS + 1` yalnız bu Windows hostunda Bash bulunmadığı
+- Intake exact EXECUTE-only owner/executor ayrımı, default-off deny, dry-source
+  deny, PII-minimized projection, append-only receipt, idempotency ve same-source
+  concurrency: `5/5` PASS.
+- Migration authority: `30 PASS + 1` yalnız bu Windows hostunda Bash bulunmadığı
   için beklenen SKIP.
-- Tenant writer inventory: `166/166` classified, `2.222` surface; yeni iki
+- Tenant writer inventory: `167/167` classified, `2.226` surface; üç
   institution writer `db_enforced` ve external pilot quarantine altında.
 - Legacy role-gate inventory: `72` route dosyası; institution route tek
   `corridor_migrated`, kalan `71` legacy quarantine, hata `0`.
@@ -157,13 +188,13 @@ komutlar fail-closed kalır.
 ## Canlı adoption için ayrı onay gerektiren işler
 
 1. Bağımsız review ve branch/ruleset kararı.
-2. Staging'de `0083–0085` migration adoption ve rollback rehearsal.
+2. Staging'de `0083–0086` migration adoption ve rollback rehearsal.
 3. Dedicated non-super/non-BYPASSRLS executor rolü ve exact least-privilege
    grant setinin DBA tarafından kurulması.
 4. Tenant/institution relationship, principal ve membership provisioning'inin
    Control Plane ChangeSet üzerinden yapılması.
-5. Mevcut submission receipt'lerinden institution case projection adapter'ının
-   default-off bağlanması; legacy application backfill yapılmaması.
+5. Hazır intake adapter'ının yalnız consentli staging relationship allowlist'i
+   için ayrı worker/job'a bağlanması; legacy application backfill yapılmaması.
 6. Authoritative active-context selection issuer, Ed25519 key-ring ve MFA
    step-up receipt issuer'ının ayrı review ile provision edilmesi.
 7. PII/data-sharing, retention ve kurum sözleşmesi onayı.
