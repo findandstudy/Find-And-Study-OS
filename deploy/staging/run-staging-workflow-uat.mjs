@@ -378,7 +378,10 @@ async function run() {
     const { body: requests } = await superAdmin.call(
       `/api/applications/${studentApplication.id}/missing-doc-notes`,
       jsonRequest("POST", {
-        stage: "inquiry",
+        // The staging reference pipeline deliberately forbids document
+        // requests in `inquiry`. Exercise the configured admin-only stage
+        // instead of bypassing the live pipeline policy.
+        stage: "offer_received",
         items: [{ customTitle, note: runId }],
       }),
     );

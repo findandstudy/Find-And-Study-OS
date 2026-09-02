@@ -9,8 +9,8 @@ runner, which already passed `126` checks across `11` roles.
 - Origin: `https://staging.findandstudy.com`
 - Login: `https://staging.findandstudy.com/tr/login`
 - Temporary rollback origin: `https://staging.srv1110168.hstgr.cloud`
-- Deployed commit: `507fdbd0c7ab686b51bfc500ab0c3652a82bcb23`
-- Release ID: `staging-20260902T053051Z-507fdbd0c7ab`
+- Deployed commit: `ffc7f8d0f54b8becff3162410e86f5942e3c55a8`
+- Release ID: `staging-20260902T123142Z-ffc7f8d0f54b`
 - Expected database ledger: `83/83`
 - Expected synthetic denominator: 12 users, including 11 RBAC UAT users, two
   UAT agent profiles and one UAT student profile
@@ -96,20 +96,30 @@ and `1440 × 900`:
 
 ## Acceptance record
 
-Record only aggregate, non-secret evidence:
+Executed result (aggregate, non-secret evidence only):
 
 ```text
-Target release:
-Browser and version:
-Desktop result: PASS / FAIL
-Mobile result: PASS / FAIL
-Role landing checks: __ / 11 PASS
-Exact visual route checks: __ / 10 PASS
-Accessibility spot checks: PASS / FAIL
-Failure IDs and redacted notes:
-Operator:
-UTC timestamp:
+Target release: staging-20260902T123142Z-ffc7f8d0f54b
+Browser and version: Codex in-app browser (engine version not exposed)
+Desktop result: PASS
+Mobile result: PASS (390 x 844; viewport override reset afterward)
+Role landing checks: 11 / 11 PASS
+Exact visual route checks: 10 / 10 PASS
+Accessibility spot checks: PASS
+Failure IDs and redacted notes: none
+Operator: Codex, under explicit project-owner approval
+UTC timestamp: 2026-09-02T14:07:13Z
 ```
+
+The two deny checks (`Staff → /staff/finance` and
+`Staff → /admin/ai-personas`) redirected to the public `/en` route without a
+protected heading, horizontal overflow or application error. The eight allow
+checks retained their exact protected routes. Mobile spot checks covered the
+login form, Student dashboard/applications, Agent dashboard and Staff
+dashboard/messages. Every checked page exposed a named sidebar toggle and no
+horizontal overflow. The password visibility control changed its accessible
+name and `aria-pressed` state together (`false → true → false`) while the input
+type changed `password → text → password`.
 
 Any wrong landing path, visible forbidden data, unexpected mutation control,
 reload/error boundary, session crossover, or release mismatch is a failed gate.
