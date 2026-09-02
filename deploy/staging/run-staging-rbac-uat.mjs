@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { fileURLToPath } from "node:url";
 
-const EXACT_STAGING_ORIGIN = "https://staging.srv1110168.hstgr.cloud";
+const EXACT_STAGING_ORIGIN = "https://staging.findandstudy.com";
 const ROLE_EMAILS = {
   super_admin: "audit-superadmin@audit.test",
   admin: "audit-admin@audit.test",

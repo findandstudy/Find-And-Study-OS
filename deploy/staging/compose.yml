@@ -67,7 +67,7 @@ services:
     labels:
       traefik.enable: "true"
       traefik.docker.network: "root_default"
-      traefik.http.routers.fasos-staging.rule: "Host(`${FASOS_STAGING_HOST:?set FASOS_STAGING_HOST}`)"
+      traefik.http.routers.fasos-staging.rule: "Host(`${FASOS_STAGING_HOST:?set FASOS_STAGING_HOST}`) || Host(`${FASOS_STAGING_LEGACY_HOST:?set FASOS_STAGING_LEGACY_HOST}`)"
       traefik.http.routers.fasos-staging.entrypoints: "websecure"
       traefik.http.routers.fasos-staging.tls: "true"
       traefik.http.routers.fasos-staging.tls.certresolver: "mytlschallenge"

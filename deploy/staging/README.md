@@ -41,7 +41,9 @@ production credentials/data into them.
 /opt/findandstudy-staging/backups     checksum-attested staging-only backups
 ```
 
-The public hostname is `staging.srv1110168.hstgr.cloud`. Production and the
+The canonical public hostname is `staging.findandstudy.com`. The original
+`staging.srv1110168.hstgr.cloud` hostname remains a temporary rollback route;
+it is not the accepted UAT origin. Production and the
 `Find-And-Study-OS-Next` repository are outside this deployment path.
 
 ## Preflight and image build
@@ -166,7 +168,7 @@ The operator-side browser gate is:
 pnpm run test:e2e:staging-rbac
 ```
 
-It requires exact `PLAYWRIGHT_BASE_URL=https://staging.srv1110168.hstgr.cloud`,
+It requires exact `PLAYWRIGHT_BASE_URL=https://staging.findandstudy.com`,
 `ALLOW_STAGING_RBAC_UAT=true`, `ALLOW_LIVE_INTEGRATIONS=false`, and the
 host-only `RBAC_E2E_PASSWORD`. The dedicated Playwright config has no fixture
 setup/teardown, no local web servers, no tracing or video, runs one worker, and

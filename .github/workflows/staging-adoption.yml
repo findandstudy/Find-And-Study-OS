@@ -62,6 +62,7 @@ jobs:
           FASOS_STAGING_APP_PASSWORD_FILE: ${{ github.workspace }}/deploy/staging/compose.env.example
           FASOS_STAGING_GID: "10042"
           FASOS_STAGING_HOST: staging.example.test
+          FASOS_STAGING_LEGACY_HOST: legacy-staging.example.test
           FASOS_STAGING_MIGRATOR_PASSWORD_FILE: ${{ github.workspace }}/deploy/staging/compose.env.example
           FASOS_STAGING_POSTGRES_PASSWORD_FILE: ${{ github.workspace }}/deploy/staging/compose.env.example
           FASOS_STAGING_STORAGE_DIR: /tmp/findandstudy-staging-storage
@@ -73,7 +74,7 @@ jobs:
       - name: Type-check and build the deployable applications
         env:
           ALLOW_STAGING_RBAC_UAT: "true"
-          PLAYWRIGHT_BASE_URL: https://staging.srv1110168.hstgr.cloud
+          PLAYWRIGHT_BASE_URL: https://staging.findandstudy.com
           RBAC_E2E_PASSWORD: ${{ github.run_id }}-configuration-only-never-used
         run: |
           pnpm run typecheck

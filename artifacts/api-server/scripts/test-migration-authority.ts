@@ -572,7 +572,7 @@ test("staging RBAC browser gate targets only exact HTTPS staging and read surfac
   );
   assert.match(
     config,
-    /EXACT_STAGING_ORIGIN = "https:\/\/staging\.srv1110168\.hstgr\.cloud"/,
+    /EXACT_STAGING_ORIGIN = "https:\/\/staging\.findandstudy\.com"/,
   );
   assert.match(config, /ALLOW_STAGING_RBAC_UAT !== "true"/);
   assert.match(config, /ALLOW_LIVE_INTEGRATIONS !== "false"/);
@@ -602,7 +602,7 @@ test("staging RBAC API runner is release-bound and performs no business mutation
   const source = readFileSync(runner, "utf8");
   assert.match(
     source,
-    /EXACT_STAGING_ORIGIN = "https:\/\/staging\.srv1110168\.hstgr\.cloud"/,
+    /EXACT_STAGING_ORIGIN = "https:\/\/staging\.findandstudy\.com"/,
   );
   assert.match(source, /ALLOW_LIVE_INTEGRATIONS !== "false"/);
   assert.match(source, /STAGING_EXPECTED_SOURCE_COMMIT/);
@@ -907,6 +907,18 @@ test("staging CI is isolated, exact-source and integration-disabled", () => {
     path.join(root, ".github/workflows/staging-adoption.yml"),
     "utf8",
   );
+  const compose = readFileSync(
+    path.join(root, "deploy/staging/compose.yml"),
+    "utf8",
+  );
+  const composeEnv = readFileSync(
+    path.join(root, "deploy/staging/compose.env.example"),
+    "utf8",
+  );
+  const appEnv = readFileSync(
+    path.join(root, "deploy/staging/app.env.example"),
+    "utf8",
+  );
   assert.match(workflow, /codex\/staging-adoption-runner-20260901/);
   assert.match(
     workflow,
@@ -923,9 +935,24 @@ test("staging CI is isolated, exact-source and integration-disabled", () => {
   assert.match(workflow, /test:migration-authority/);
   assert.match(workflow, /test:rate-limit-ip-security/);
   assert.match(workflow, /test:login-accessibility/);
+  assert.match(workflow, /FASOS_STAGING_LEGACY_HOST/);
   assert.match(
     workflow,
     /playwright test --config=playwright\.staging\.config\.ts --list/,
+  );
+  assert.match(compose, /Host\(`\$\{FASOS_STAGING_HOST:\?set FASOS_STAGING_HOST\}`\)/);
+  assert.match(
+    compose,
+    /Host\(`\$\{FASOS_STAGING_LEGACY_HOST:\?set FASOS_STAGING_LEGACY_HOST\}`\)/,
+  );
+  assert.match(composeEnv, /^FASOS_STAGING_HOST=staging\.findandstudy\.com$/m);
+  assert.match(
+    composeEnv,
+    /^FASOS_STAGING_LEGACY_HOST=staging\.srv1110168\.hstgr\.cloud$/m,
+  );
+  assert.match(
+    appEnv,
+    /^ALLOWED_ORIGINS=https:\/\/staging\.findandstudy\.com,https:\/\/staging\.srv1110168\.hstgr\.cloud$/m,
   );
   assert.match(workflow, /runs-on: windows-latest/);
   assert.doesNotMatch(workflow, /\b(?:ssh|scp|rsync|kubectl)\b/i);

@@ -2,7 +2,7 @@ import { defineConfig, devices } from "@playwright/test";
 import { existsSync } from "node:fs";
 import path from "node:path";
 
-const EXACT_STAGING_ORIGIN = "https://staging.srv1110168.hstgr.cloud";
+const EXACT_STAGING_ORIGIN = "https://staging.findandstudy.com";
 
 function resolveStagingOrigin(): string {
   const raw = (process.env.PLAYWRIGHT_BASE_URL ?? "").replace(/\/$/, "");
