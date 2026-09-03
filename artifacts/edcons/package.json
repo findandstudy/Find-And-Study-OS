@@ -21,6 +21,7 @@
     "test:dynamic-lead-sources": "tsx --test ./scripts/test-dynamic-lead-sources.ts",
     "test:pipeline-dialog-dismiss": "tsx --test ./scripts/test-pipeline-dialog-dismiss.ts",
     "test:table-pagination": "tsx --test ./scripts/test-table-pagination.ts",
+    "test:catalog-bulk-import": "tsx --test ./scripts/test-catalog-bulk-import.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
