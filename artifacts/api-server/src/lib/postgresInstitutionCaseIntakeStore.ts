@@ -94,7 +94,12 @@ export class PostgresInstitutionCaseIntakeStore {
           throw new Error("institution_case_intake_executor_identity_invalid");
         }
 
-        await client.query("BEGIN ISOLATION LEVEL SERIALIZABLE");
+        // The SECURITY DEFINER function takes a transaction-scoped advisory
+        // lock before it checks the receipt. READ COMMITTED is intentional:
+        // a SERIALIZABLE snapshot can be fixed before a concurrent caller
+        // releases that lock, hiding the committed receipt and surfacing the
+        // legacy-application unique constraint instead of an idempotent replay.
+        await client.query("BEGIN ISOLATION LEVEL READ COMMITTED");
         transactionStarted = true;
         await client.query(`SELECT set_config('lock_timeout', '2500ms', true),
           set_config('statement_timeout', '8000ms', true),
