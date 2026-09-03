@@ -22,6 +22,11 @@ import { useDocumentTypeCatalog } from "@/lib/programDocTypes";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/hooks/use-i18n";
 import { useSeason } from "@/contexts/SeasonContext";
+import {
+  chunkBulkImportRows,
+  findProgramIdentityCollisions,
+  type BulkImportProgress,
+} from "@/lib/catalogBulkImport";
 
 /* ─── helpers ──────────────────────────────────────────────── */
 
@@ -167,27 +172,96 @@ type BulkImportResult = {
   createdUniversities?: string[];
 };
 
+async function importRowsInChunks(
+  endpoint: string,
+  rows: Record<string, string>[],
+  onProgress: (progress: BulkImportProgress) => void,
+): Promise<BulkImportResult> {
+  const chunks = chunkBulkImportRows(rows);
+  const unknownDocColumns = new Set<string>();
+  const createdUniversities = new Set<string>();
+  let inserted = 0;
+  let skipped = 0;
+  let updated = 0;
+  let docsTouched = 0;
+  let invalidDocCells = 0;
+  let sawUpdated = false;
+  let sawDocsTouched = false;
+  let sawInvalidDocCells = false;
+
+  onProgress({ completed: 0, total: chunks.length });
+  for (let index = 0; index < chunks.length; index++) {
+    const result = await api(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(chunks[index]),
+    }) as BulkImportResult;
+
+    inserted += Number(result.inserted || 0);
+    skipped += Number(result.skipped || 0);
+    if (result.updated !== undefined) {
+      sawUpdated = true;
+      updated += Number(result.updated || 0);
+    }
+    if (result.docsTouched !== undefined) {
+      sawDocsTouched = true;
+      docsTouched += Number(result.docsTouched || 0);
+    }
+    if (result.invalidDocCells !== undefined) {
+      sawInvalidDocCells = true;
+      invalidDocCells += Number(result.invalidDocCells || 0);
+    }
+    for (const column of result.unknownDocColumns || []) unknownDocColumns.add(column);
+    for (const university of result.createdUniversities || []) createdUniversities.add(university);
+    onProgress({ completed: index + 1, total: chunks.length });
+  }
+
+  const unknown = [...unknownDocColumns].sort();
+  return {
+    inserted,
+    skipped,
+    ...(sawUpdated ? { updated } : {}),
+    ...(sawDocsTouched ? { docsTouched } : {}),
+    ...(sawInvalidDocCells ? { invalidDocCells } : {}),
+    ...(unknown.length > 0 ? {
+      unknownDocColumns: unknown,
+      unknownDocColumnsMessage: `Tanımsız belge sütunları (katalogda yok, atlandı): ${unknown.join(", ")}`,
+    } : {}),
+    ...(createdUniversities.size > 0 ? { createdUniversities: [...createdUniversities] } : {}),
+  };
+}
+
 function BulkImportModal({ open, onClose, title, templateRows, notesRows, onImport }: {
   open: boolean; onClose: () => void; title: string;
   templateRows: Record<string, any>[];
   notesRows?: Record<string, any>[];
-  onImport: (rows: Record<string, string>[]) => Promise<BulkImportResult>;
+  onImport: (
+    rows: Record<string, string>[],
+    onProgress: (progress: BulkImportProgress) => void,
+  ) => Promise<BulkImportResult>;
 }) {
   const { t } = useI18n();
   const [result, setResult] = useState<BulkImportResult | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [progress, setProgress] = useState<BulkImportProgress | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    const progressSnapshot: { current: BulkImportProgress | null } = { current: null };
     try {
+      setLoading(true);
+      setResult(null);
+      setError("");
+      setProgress(null);
       const rows = await parseExcel(file);
       if (rows.length === 0) { setError(t("catalogPage.fileEmptyInvalid")); return; }
-      setLoading(true);
-      setError("");
-      const res = await onImport(rows);
+      const res = await onImport(rows, (nextProgress) => {
+        progressSnapshot.current = nextProgress;
+        setProgress(nextProgress);
+      });
       setResult(res);
     } catch (err) {
       const msg = err instanceof Error && err.message ? err.message : t("catalogPage.unknownError");
@@ -198,6 +272,16 @@ function BulkImportModal({ open, onClose, title, templateRows, notesRows, onImpo
         setError(t("catalogPage.sessionExpired"));
       } else if (/HTTP\s*403/i.test(msg) || /CSRF/i.test(msg)) {
         setError(t("catalogPage.permissionDenied"));
+      } else if (
+        progressSnapshot.current &&
+        progressSnapshot.current.completed > 0 &&
+        progressSnapshot.current.completed < progressSnapshot.current.total
+      ) {
+        setError(t("catalogPage.importPartiallyCompleted", {
+          completed: progressSnapshot.current.completed,
+          total: progressSnapshot.current.total,
+          msg,
+        }));
       } else {
         // Surface the backend's reason (e.g. unknown university names) so the
         // user knows what to fix instead of seeing a generic "Import failed".
@@ -207,7 +291,7 @@ function BulkImportModal({ open, onClose, title, templateRows, notesRows, onImpo
     finally { setLoading(false); if (fileRef.current) fileRef.current.value = ""; }
   };
 
-  const reset = () => { setResult(null); setError(""); onClose(); };
+  const reset = () => { setResult(null); setError(""); setProgress(null); onClose(); };
 
   return (
     <>
@@ -220,9 +304,14 @@ function BulkImportModal({ open, onClose, title, templateRows, notesRows, onImpo
           </Button>
           <div>
             <Label htmlFor="xlsxfile">{t("catalogPage.selectExcelFile")}</Label>
-            <Input id="xlsxfile" ref={fileRef} type="file" accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" className="mt-1" onChange={handleFile} disabled={loading} />
+            <Input id="xlsxfile" ref={fileRef} type="file" accept=".xlsx,.xls,.csv,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" className="mt-1" onChange={handleFile} disabled={loading} />
           </div>
-          {loading && <p className="text-sm text-muted-foreground animate-pulse">{t("catalogPage.processing")}</p>}
+          {loading && (
+            <p className="text-sm text-muted-foreground animate-pulse">
+              {t("catalogPage.processing")}
+              {progress && progress.total > 0 ? ` ${progress.completed}/${progress.total}` : ""}
+            </p>
+          )}
           {error && <p className="text-sm text-destructive flex items-center gap-1"><AlertTriangle className="h-4 w-4" />{error}</p>}
           {result && (
             <div className="rounded-lg border border-green-200 bg-green-50 p-3 text-sm space-y-1">
@@ -461,8 +550,11 @@ function CountriesTab() {
     } catch {}
   }
 
-  const handleBulkImport = async (rows: Record<string, string>[]) => {
-    const res = await api("/api/countries/bulk", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(rows) });
+  const handleBulkImport = async (
+    rows: Record<string, string>[],
+    onProgress: (progress: BulkImportProgress) => void,
+  ) => {
+    const res = await importRowsInChunks("/api/countries/bulk", rows, onProgress);
     qc.invalidateQueries({ queryKey: ["countries"] });
     return res;
   };
@@ -732,8 +824,11 @@ function CitiesTab() {
     } catch {}
   }
 
-  const handleBulkImport = async (rows: Record<string, string>[]) => {
-    const res = await api("/api/cities/bulk", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(rows) });
+  const handleBulkImport = async (
+    rows: Record<string, string>[],
+    onProgress: (progress: BulkImportProgress) => void,
+  ) => {
+    const res = await importRowsInChunks("/api/cities/bulk", rows, onProgress);
     qc.invalidateQueries({ queryKey: ["cities"] });
     return res;
   };
@@ -1077,8 +1172,11 @@ function UniversitiesTab() {
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["universities"] }); setDelId(null); },
   });
 
-  const handleBulkImport = async (rows: Record<string, string>[]) => {
-    const res = await api("/api/universities/bulk", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(rows) });
+  const handleBulkImport = async (
+    rows: Record<string, string>[],
+    onProgress: (progress: BulkImportProgress) => void,
+  ) => {
+    const res = await importRowsInChunks("/api/universities/bulk", rows, onProgress);
     qc.invalidateQueries({ queryKey: ["universities"] });
     return res;
   };
@@ -1727,8 +1825,23 @@ function ProgramsTab() {
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["programs"] }); setDelId(null); },
   });
 
-  const handleBulkImport = async (rows: Record<string, string>[]) => {
-    const res = await api("/api/programs/bulk", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(rows) });
+  const handleBulkImport = async (
+    rows: Record<string, string>[],
+    onProgress: (progress: BulkImportProgress) => void,
+  ) => {
+    const collisions = findProgramIdentityCollisions(rows);
+    if (collisions.extraRows > 0) {
+      const samples = collisions.sampleRows
+        .map(({ firstRow, duplicateRow }) => `${firstRow}↔${duplicateRow}`)
+        .join(", ");
+      throw new Error(t("catalogPage.programIdentityCollisions", {
+        groups: collisions.groups,
+        rows: collisions.extraRows,
+        samples,
+      }));
+    }
+
+    const res = await importRowsInChunks("/api/programs/bulk", rows, onProgress);
     qc.invalidateQueries({ queryKey: ["programs"] });
     return res;
   };
