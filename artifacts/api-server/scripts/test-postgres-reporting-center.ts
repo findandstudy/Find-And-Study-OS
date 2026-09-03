@@ -64,7 +64,10 @@ try {
     assert.equal(identity.rows[0]?.database_name, "fasos_apply_local");
   }
   assert.equal(identity.rows[0]?.user_name, "fas_migrator");
-  assert.equal(Number(identity.rows[0]?.server_port), 5433);
+  assert.equal(
+    Number(identity.rows[0]?.server_port),
+    ciDisposableTarget ? 5432 : 5433,
+  );
 
   await client.query("BEGIN READ ONLY");
   for (const [index, query] of queries.entries()) {

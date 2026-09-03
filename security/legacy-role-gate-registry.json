@@ -620,7 +620,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/index.ts",
-      "sha256": "47bbbdcf9d3130ca60a0ab56f885e67785e421e83dcbf80fd9509421c8c8be58",
+      "sha256": "038bada8222178c0d4bcc02a3fc0c581d262ac441e2ddcc2ecd2de051224466b",
       "routeRegistrations": 0,
       "requireAuth": 0,
       "requireRole": 0,
@@ -902,6 +902,21 @@
       "enforcement": "legacy_quarantine",
       "owner": "Platform Engineering",
       "note": "Route-local review required before corridor migration."
+    },
+    {
+      "path": "artifacts/api-server/src/routes/reporting.ts",
+      "sha256": "0019a591cc43c55f3b3ed748e5e1e4e7d36d141ec1ab3b366f90a9df708ae805",
+      "routeRegistrations": 6,
+      "requireAuth": 7,
+      "requireRole": 0,
+      "requirePermission": 6,
+      "requireScope": 0,
+      "directRoleChecks": 0,
+      "authOnlyRouteCandidates": 0,
+      "publicRouteCandidates": 0,
+      "enforcement": "legacy_quarantine",
+      "owner": "Reporting & Intelligence",
+      "note": "Aggregate-only read surface; canonical active-context migration remains a separate gate."
     },
     {
       "path": "artifacts/api-server/src/routes/quickLinks.ts",

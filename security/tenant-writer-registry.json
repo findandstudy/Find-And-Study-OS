@@ -1218,6 +1218,14 @@
       "externalPilot": "quarantine"
     },
     {
+      "path": "artifacts/api-server/src/routes/reporting.ts",
+      "ownership": "mixed_legacy",
+      "enforcement": "runtime_scoped",
+      "risk": "high",
+      "owner": "Reporting & Intelligence",
+      "externalPilot": "quarantine"
+    },
+    {
       "path": "artifacts/api-server/src/routes/quickLinks.ts",
       "ownership": "platform_global",
       "enforcement": "quarantine_required",

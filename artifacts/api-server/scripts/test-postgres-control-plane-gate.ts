@@ -661,7 +661,7 @@ async function verifyAtomicDdlRollback(migrator: pg.Client) {
         "SELECT count(*)::int AS count FROM drizzle.__drizzle_migrations",
       )
     ).rows[0].count,
-    89,
+    90,
   );
 }
 
