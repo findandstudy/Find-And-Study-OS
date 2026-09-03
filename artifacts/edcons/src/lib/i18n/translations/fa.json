@@ -522,7 +522,8 @@
     "systemHealth": "سلامت سیستم",
     "dataQuality": "کیفیت داده‌ها",
     "academy": "Academy",
-    "qualityReport": "گزارش کیفیت"
+    "qualityReport": "گزارش کیفیت",
+    "reports": "گزارش‌ها و تحلیل‌ها"
   },
   "notFound": {
     "title": "صفحه یافت نشد",

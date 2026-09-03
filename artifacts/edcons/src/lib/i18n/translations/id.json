@@ -522,7 +522,8 @@
     "systemHealth": "Kesehatan Sistem",
     "dataQuality": "Kualitas Data",
     "academy": "Academy",
-    "qualityReport": "Laporan Kualitas"
+    "qualityReport": "Laporan Kualitas",
+    "reports": "Pelaporan & Analitik"
   },
   "notFound": {
     "title": "Halaman Tidak Ditemukan",

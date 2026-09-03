@@ -624,6 +624,13 @@
       "when": 1788768000000,
       "tag": "0088_institution_enrolment_evidence_binding",
       "breakpoints": true
+    },
+    {
+      "idx": 89,
+      "version": "7",
+      "when": 1788854400000,
+      "tag": "0089_reporting_center_permissions",
+      "breakpoints": true
     }
   ]
 }

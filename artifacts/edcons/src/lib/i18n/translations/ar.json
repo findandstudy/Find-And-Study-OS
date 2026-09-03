@@ -522,7 +522,8 @@
     "systemHealth": "صحة النظام",
     "dataQuality": "جودة البيانات",
     "academy": "Academy",
-    "qualityReport": "تقرير الجودة"
+    "qualityReport": "تقرير الجودة",
+    "reports": "التقارير والتحليلات"
   },
   "notFound": {
     "title": "الصفحة غير موجودة",

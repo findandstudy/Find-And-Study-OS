@@ -522,7 +522,8 @@
     "systemHealth": "系统健康",
     "dataQuality": "数据质量",
     "academy": "Academy",
-    "qualityReport": "质量报告"
+    "qualityReport": "质量报告",
+    "reports": "报告与分析"
   },
   "notFound": {
     "title": "页面未找到",

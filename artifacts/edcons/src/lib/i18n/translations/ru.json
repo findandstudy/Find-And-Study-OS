@@ -522,7 +522,8 @@
     "systemHealth": "Состояние системы",
     "dataQuality": "Качество данных",
     "academy": "Academy",
-    "qualityReport": "Отчёт о качестве"
+    "qualityReport": "Отчёт о качестве",
+    "reports": "Отчёты и аналитика"
   },
   "notFound": {
     "title": "Страница не найдена",

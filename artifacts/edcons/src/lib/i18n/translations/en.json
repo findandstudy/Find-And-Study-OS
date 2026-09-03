@@ -522,7 +522,8 @@
     "systemHealth": "System Health",
     "dataQuality": "Data Quality",
     "academy": "Academy",
-    "qualityReport": "Quality Report"
+    "qualityReport": "Quality Report",
+    "reports": "Reporting & Intelligence"
   },
   "notFound": {
     "title": "Page Not Found",

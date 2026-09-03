@@ -176,6 +176,8 @@
     "test:student-journey-evaluation-contract": "tsx --test ./scripts/test-student-journey-evaluation-contract.ts",
     "test:institution-admissions-contract": "tsx --test ./scripts/test-institution-admissions-contract.ts",
     "test:institution-admissions-authorization": "tsx --test ./scripts/test-institution-admissions-authorization.ts",
+    "test:reporting-center": "tsx --test ./scripts/test-reporting-center.ts",
+    "test:postgres-reporting-center": "tsx ./scripts/test-postgres-reporting-center.ts",
     "test:institution-case-intake": "tsx --test ./scripts/test-institution-case-intake.ts",
     "test:postgres-institution-case-intake": "tsx --test ./scripts/test-postgres-institution-case-intake.ts",
     "test:institution-evidence-share": "tsx --test ./scripts/test-institution-evidence-share.ts",

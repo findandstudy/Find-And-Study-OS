@@ -225,7 +225,10 @@ function getMenuForRole(
     ];
 
     const groups = [
-      { id: 'overview', label: t("dashboard.overview"), items: [{ title: t("dashboard.dashboard"), icon: LayoutDashboard, url: '/admin' }] },
+      { id: 'overview', label: t("dashboard.overview"), items: [
+        { title: t("dashboard.dashboard"), icon: LayoutDashboard, url: '/admin' },
+        ...(hasPermFn?.('reporting.view') ? [{ title: t("dashboard.reports"), icon: BarChart3, url: '/admin/reports', permKey: 'reporting.view' }] : []),
+      ] },
       { id: 'crm', label: t("dashboard.groupCrm"), items: crmItems },
       { id: 'agentNetwork', label: t("dashboard.groupAgentNetwork"), items: agentNetworkItems },
       { id: 'finance', label: t("dashboard.groupFinance"), items: financeItems },
@@ -247,6 +250,7 @@ function getMenuForRole(
       { title: t("dashboard.messages"), icon: MessageCircle, url: '/staff/messages' },
       { title: t("dashboard.tasks"), icon: ClipboardList, url: '/staff/tasks' },
     ];
+    if (hasPermFn?.('reporting.view')) workItems.unshift({ title: t("dashboard.reports"), icon: BarChart3, url: '/admin/reports', permKey: 'reporting.view' });
     if (showFinance) workItems.push({ title: t("dashboard.finance"), icon: Briefcase, url: '/staff/finance' });
     if (hasPermFn?.('academy.access')) workItems.push({ title: t("dashboard.academy"), icon: ExternalLink, url: '/staff/__academy__', externalHref: '/api/academy-sso' });
     return {

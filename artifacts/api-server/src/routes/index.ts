@@ -69,6 +69,7 @@ import dataQualityRouter from "./dataQuality";
 import aiBotsRouter from "./aiBots";
 import agentApplicationsRouter from "./agentApplications";
 import institutionAdmissionsRouter from "./institutionAdmissions";
+import reportingRouter from "./reporting";
 import { tokenScopeGuard } from "../middlewares/tokenScopeGuard";
 import { studentEmailVerificationGate } from "../middlewares/studentEmailVerificationGate";
 
@@ -203,6 +204,7 @@ router.use(async (req, res, next) => {
 router.use(tokenScopeGuard);
 
 router.use(institutionAdmissionsRouter);
+router.use(reportingRouter);
 
 router.use(healthRouter);
 router.use(storageRouter);

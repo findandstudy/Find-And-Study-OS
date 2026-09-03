@@ -522,7 +522,8 @@
     "systemHealth": "Sistem Sağlığı",
     "dataQuality": "Veri Kalitesi",
     "academy": "Academy",
-    "qualityReport": "Kalite Raporu"
+    "qualityReport": "Kalite Raporu",
+    "reports": "Raporlama & Analiz"
   },
   "notFound": {
     "title": "Sayfa Bulunamadı",
