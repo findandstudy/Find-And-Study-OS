@@ -4,7 +4,9 @@ Tarih: 2 Eylül 2026
 
 Branch: `codex/institution-admissions-v1-20260902`
 
-Durum: Branch push edildi ve taslak PR #31 açıktır; merge, staging/production deploy ve `Next` sync yapılmadı.
+Durum: Branch push edildi, taslak PR #31 açıktır ve code/review head
+`9d2cf546bbdd8a53a69474cc9fe7a1abc99b2d81` için iki remote gate SUCCESS'tir;
+merge, staging/production deploy ve `Next` sync yapılmadı.
 
 ## Dondurulmuş kaynak kimliği
 
@@ -103,6 +105,8 @@ ayrıca kabul etmelidir.
 | Control Plane + Journey + adapter/audit/session PostgreSQL gates | PASS |
 | Workflow YAML parse | PASS |
 | `git diff --check` | PASS |
+| Institution Admissions Gate `33723307855` (`9d2cf546`) | SUCCESS |
+| Live-first Convergence Gate `33723307835` (`9d2cf546`) | SUCCESS |
 
 PostgreSQL kanıtı yeni ve yalnız loopback'te oluşturulan
 `fas_dev_institution_enrolment2` ve açıkça sıfırlanan `fasos_apply_local`

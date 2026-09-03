@@ -351,7 +351,9 @@ Bu ilk düzeltmeden sonraki exact-head run'lar `33722590201`/`33722590203`, ayn�
 stale-snapshot yarışını evidence-share caller'ında yakaladı. `05c93cbc`, advisory
 lock'u koruyup evidence-share transaction'ını `READ COMMITTED` yaptı; pure suite
 `4/4`, PostgreSQL suite concurrency vakasıyla art arda beş kez `8/8` PASS'tir.
-Yeni exact-head final CI rerun beklenmektedir.
+Code/review head `9d2cf546bbdd8a53a69474cc9fe7a1abc99b2d81` için Institution
+Admissions Gate run `33723307855` ve Live-first Convergence Gate run
+`33723307835` SUCCESS'tir.
 
 Production, staging, `Next`, gerçek PII, live feature state,
 dış mesaj/SIS/portal execution, merge ve deploy değiştirilmemiştir. Bağımsız

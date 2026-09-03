@@ -251,8 +251,9 @@ komutlar fail-closed kalır.
 - Dedicated Linux/Windows/PostgreSQL 16 Institution CI workflow'u ve genel
   convergence gate bağlantısı eklendi. İlk remote run'ların yakaladığı intake
   concurrency regresyonu `0fcb46fb`, sonraki run'ın yakaladığı evidence-share
-  regresyonu `05c93cbc` ile düzeltildi; final exact-head remote rerun bu kayıtta
-  henüz beklemededir.
+  regresyonu `05c93cbc` ile düzeltildi. Code/review head `9d2cf546` üzerinde
+  Institution Admissions Gate `33723307855` ve Live-first Convergence Gate
+  `33723307835` SUCCESS'tir.
 
 ## Canlı adoption için ayrı onay gerektiren işler
 
