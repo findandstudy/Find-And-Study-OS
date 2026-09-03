@@ -4,17 +4,17 @@ Tarih: 2 Eylül 2026
 
 Branch: `codex/institution-admissions-v1-20260902`
 
-Durum: Yerel ve PR-ready; push, PR, merge, staging/production deploy ve `Next` sync yapılmadı.
+Durum: Branch push edildi ve taslak PR #31 açıktır; merge, staging/production deploy ve `Next` sync yapılmadı.
 
 ## Dondurulmuş kaynak kimliği
 
 - Target base: `822112fb471ad53365034b9b928b5510b4c06d81`
 - Foundation commit: `9e8ef92d073511759860ba9d640be9f767cab311`
-- Code-bearing head: `854d4741bd4b794da598273aff8ade9c825825f2`
-- Code-bearing tree: `9c03fe8cfdfa27eee48da7702131ae113bb0a5a4`
-- Base → code farkı: `10 commit / 57 dosya / 11.196 ekleme / 31 silme`
-- Binary-patch SHA-256: `9d6fea3229bd77c41388f8cfb20000eaf941fff941e0ad660556fd9dd2b01ae8`
-- Binary-patch byte uzunluğu: `621427`
+- Code-bearing head: `0fcb46fb6a4e0fce04b3ae3e5d90c835c101d0c0`
+- Code-bearing tree: `a8b3d28fe4ee10f61e95093ccf7e487052133cad`
+- Base → code farkı: `11 commit / 57 dosya / 11.282 ekleme / 31 silme`
+- Binary-patch SHA-256: `1edea9714bc9d07b76afa02fc58945d7d73ee1e99edeeed9c6e20b8a5ad236d2`
+- Binary-patch byte uzunluğu: `627141`
 
 Bu dosya ve onu taşıyan commit review-infrastructure-only'dir. Kendi commit
 kimliğini dairesel olarak mühürleyemez; reviewer branch'in exact final HEAD'ini
@@ -66,6 +66,10 @@ ayrıca kabul etmelidir.
     `DECISION_APPROVER` ve `application.enrolment` scope ile ilerler.
 20. Portal assessment'ı exact yayımlanmış requirement kimliğine bağlar; eşleşme
     yoksa bunu görünür kılar ve confirmation seçeneği üretmez.
+21. Case-intake caller transaction advisory lock arkasında `READ COMMITTED`
+    kullanır. Aynı source receipt ile yarışan iki işlem kilit sonrası güncel
+    committed receipt'i görür ve `CREATED + REPLAY` üretir; stale serializable
+    snapshot nedeniyle ikinci case açılmasına izin verilmez.
 
 ## Yerel kanıt matrisi
 
@@ -129,6 +133,9 @@ Production credential, dump veya PII kullanılmadı.
   source external ref'in yalnız hash'inin saklandığını doğrula.
 - Intake executor'ın hiçbir Institution tablosunda SELECT/INSERT yetkisi
   olmadığını; same-source concurrency'nin tek case/receipt ürettiğini doğrula.
+- Intake caller'ın transaction advisory lock'u korurken `READ COMMITTED`
+  kullandığını ve aynı source yarışında committed receipt'i kilit sonrasında
+  yeniden gördüğünü doğrula.
 - Evidence-share executor'ın tablo yetkisi olmadığını; receipt'in yalnız current
   consent + verified Journey evidence'dan türediğini, ham evidence ref
   taşımadığını ve consent withdrawal sonrası replay/assessment'in reddedildiğini
@@ -157,5 +164,5 @@ Production credential, dump veya PII kullanılmadı.
   açılmadı.
 - Consentli cohort UAT, Privacy/Legal, retention, rollback rehearsal ve bağımsız
   security review tamamlanmadan production enablement yoktur.
-- Bu branch push/merge/deploy veya `Find-And-Study-OS-Next` sync için tek başına
-  yetki vermez.
+- Açık taslak PR #31 merge/deploy veya `Find-And-Study-OS-Next` sync için tek
+  başına yetki vermez.

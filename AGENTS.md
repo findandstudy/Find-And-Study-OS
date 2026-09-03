@@ -322,12 +322,12 @@ prompt'unu kaldırır; reviewer değerlendirmesi exact güncel yayımlanmış ku
 requirement kimliğine bağlanmadan confirmation düğmesi açılmaz. Consent
 withdrawal hem resolver'ı hem receipt replay'ini reddeder.
 
-Güncel code-bearing head `854d4741bd4b794da598273aff8ade9c825825f2`,
-tree `9c03fe8cfdfa27eee48da7702131ae113bb0a5a4`, base
+Güncel code-bearing head `0fcb46fb6a4e0fce04b3ae3e5d90c835c101d0c0`,
+tree `a8b3d28fe4ee10f61e95093ccf7e487052133cad`, base
 `822112fb471ad53365034b9b928b5510b4c06d81` → code farkı
-`10 commit / 57 dosya / 11.196 ekleme / 31 silme`, binary-patch SHA-256
-`9d6fea3229bd77c41388f8cfb20000eaf941fff941e0ad660556fd9dd2b01ae8`
-ve byte uzunluğu `621427` olarak review packet'te dondurulmuştur.
+`11 commit / 57 dosya / 11.282 ekleme / 31 silme`, binary-patch SHA-256
+`1edea9714bc9d07b76afa02fc58945d7d73ee1e99edeeed9c6e20b8a5ad236d2`
+ve byte uzunluğu `627141` olarak review packet'te dondurulmuştur.
 
 Fresh PostgreSQL 16.15 `89/89` + clean replay ve production-prefix `66→89`
 replay PASS; pure Institution contract `12/12`, authorization `9/9`, intake
@@ -340,7 +340,14 @@ data-boundary `4/4`, integration DB safety `11/11` ve security regression
 adapter, durable audit/reconciliation ve active-context session/lifecycle/repair
 PostgreSQL kapıları da `89/89` üzerinde PASS'tir.
 
-Production, staging, `Next`, GitHub remote, gerçek PII, live feature state,
+Taslak PR #31'in ilk Institution ve convergence workflow run'ları
+`33721164042`/`33721163999`, same-source intake yarışında advisory lock bekleyen
+ikinci `SERIALIZABLE` transaction'ın stale snapshot ile legacy unique
+constraint'e düştüğünü yakaladı. `0fcb46fb`, transaction advisory lock'u
+koruyarak caller isolation'ı `READ COMMITTED` yaptı; local disposable PostgreSQL
+intake paketi yeniden `5/5` PASS'tir. Exact-head final CI rerun beklenmektedir.
+
+Production, staging, `Next`, gerçek PII, live feature state,
 dış mesaj/SIS/portal execution, merge ve deploy değiştirilmemiştir. Bağımsız
 review, staging `0083–0088` adoption/rollback, dedicated role provisioning,
 active-context/MFA issuer'ları, Privacy/Legal ve consentli staging UAT ayrı

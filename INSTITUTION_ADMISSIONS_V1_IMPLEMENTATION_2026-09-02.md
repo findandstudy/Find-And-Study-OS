@@ -2,7 +2,7 @@
 
 Tarih: 2 Eylül 2026
 Branch: `codex/institution-admissions-v1-20260902`
-Durum: Yerel uygulama, active-context/step-up authority hardening, receipt-bound case-intake, consent-bound verified-evidence sharing ve reviewed-evidence enrolment confirmation disposable PostgreSQL kanıtı tamamlandı; production, staging, `Next`, dış iletişim ve portal automation wiring'i değiştirilmedi.
+Durum: Yerel uygulama, active-context/step-up authority hardening, receipt-bound case-intake, consent-bound verified-evidence sharing ve reviewed-evidence enrolment confirmation disposable PostgreSQL kanıtı tamamlandı; branch push edildi ve taslak PR #31 açıldı; production, staging, `Next`, dış iletişim ve portal automation wiring'i değiştirilmedi.
 
 ## Teslim edilen ürün yüzeyi
 
@@ -221,6 +221,12 @@ komutlar fail-closed kalır.
 - Intake exact EXECUTE-only owner/executor ayrımı, default-off deny, dry-source
   deny, PII-minimized projection, append-only receipt, idempotency ve same-source
   concurrency: `5/5` PASS.
+- Taslak PR #31'in ilk remote PostgreSQL çalışmaları, advisory lock bekleyen ikinci
+  intake transaction'ının önceden alınmış `SERIALIZABLE` snapshot nedeniyle ilk
+  committed receipt'i göremediğini ve legacy unique constraint'e düştüğünü
+  görünür kıldı. Caller isolation `READ COMMITTED` yapıldı; transaction advisory
+  lock korunarak aynı source için `CREATED + REPLAY` davranışı local disposable
+  PostgreSQL'de yeniden `5/5` PASS oldu.
 - Evidence-share/enrolment exact EXECUTE-only owner/executor ayrımı, current consent,
   verified source, PII-minimized receipt, replay revalidation, concurrency,
   server timestamp, reviewer membership, program/intake scope, published
@@ -239,7 +245,9 @@ komutlar fail-closed kalır.
   audit/reconciliation ve active-context session/lifecycle/repair PostgreSQL
   kapıları: PASS.
 - Dedicated Linux/Windows/PostgreSQL 16 Institution CI workflow'u ve genel
-  convergence gate bağlantısı eklendi; remote run henüz oluşturulmadı.
+  convergence gate bağlantısı eklendi. İlk remote run'ların yakaladığı intake
+  concurrency regresyonu `0fcb46fb` ile düzeltildi; final exact-head remote
+  rerun bu kayıtta henüz beklemededir.
 
 ## Canlı adoption için ayrı onay gerektiren işler
 
