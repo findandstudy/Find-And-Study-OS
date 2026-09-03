@@ -4,19 +4,21 @@ Tarih: 2 Eylül 2026
 
 Branch: `codex/institution-admissions-v1-20260902`
 
-Durum: Branch push edildi, taslak PR #31 açıktır ve code/review head
-`9d2cf546bbdd8a53a69474cc9fe7a1abc99b2d81` için iki remote gate SUCCESS'tir;
-merge, staging/production deploy ve `Next` sync yapılmadı.
+Durum: Branch push edildi ve taslak PR #31 açıktır. Önceki code/review head
+`1f9101d06cbed197685057d53cc4224b54792464` için iki remote gate SUCCESS'tir;
+güncel staging target-base `453d47cbe1b97c0d09b022181de658f6efd0326d`
+convergence merge'i yerelde tamamlanmıştır. Institution branch merge'i,
+staging/production deploy ve `Next` sync henüz yapılmadı.
 
 ## Dondurulmuş kaynak kimliği
 
-- Target base: `822112fb471ad53365034b9b928b5510b4c06d81`
+- Target base: `453d47cbe1b97c0d09b022181de658f6efd0326d`
 - Foundation commit: `9e8ef92d073511759860ba9d640be9f767cab311`
-- Code-bearing head: `05c93cbcea524f17e9c497bdabc7b71ffd65d297`
-- Code-bearing tree: `0714864865b486052ed80e37efcd2e03064cd6ac`
-- Base → code farkı: `14 commit / 57 dosya / 11.309 ekleme / 31 silme`
-- Binary-patch SHA-256: `e1add6dfad49561fd292158243bc962b6e8873f12c4e931e8c7a62979470ab5d`
-- Binary-patch byte uzunluğu: `629184`
+- Code-bearing head: `7df0c426eb259193191f916324550da3e8edbf05`
+- Code-bearing tree: `31cef9d0bb5cda77e88cfdf1e557cbc28a6691be`
+- Base → code farkı: `17 commit / 57 dosya / 11.333 ekleme / 31 silme`
+- Binary-patch SHA-256: `3fd11784255bb99cff744bd5686b4eefbed5177fdcf65186c5b8fac116e9f779`
+- Binary-patch byte uzunluğu: `630792`
 
 Bu dosya ve onu taşıyan commit review-infrastructure-only'dir. Kendi commit
 kimliğini dairesel olarak mühürleyemez; reviewer branch'in exact final HEAD'ini
@@ -107,6 +109,9 @@ ayrıca kabul etmelidir.
 | `git diff --check` | PASS |
 | Institution Admissions Gate `33723307855` (`9d2cf546`) | SUCCESS |
 | Live-first Convergence Gate `33723307835` (`9d2cf546`) | SUCCESS |
+| Final docs-only head Institution Gate `33723726118` (`1f9101d0`) | SUCCESS |
+| Final docs-only head Convergence Gate `33723726120` (`1f9101d0`) | SUCCESS |
+| Staging catalog target-base convergence + local focused suites | PASS |
 
 PostgreSQL kanıtı yeni ve yalnız loopback'te oluşturulan
 `fas_dev_institution_enrolment2` ve açıkça sıfırlanan `fasos_apply_local`

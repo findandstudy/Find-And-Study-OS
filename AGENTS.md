@@ -322,12 +322,12 @@ prompt'unu kaldırır; reviewer değerlendirmesi exact güncel yayımlanmış ku
 requirement kimliğine bağlanmadan confirmation düğmesi açılmaz. Consent
 withdrawal hem resolver'ı hem receipt replay'ini reddeder.
 
-Güncel code-bearing head `05c93cbcea524f17e9c497bdabc7b71ffd65d297`,
-tree `0714864865b486052ed80e37efcd2e03064cd6ac`, base
-`822112fb471ad53365034b9b928b5510b4c06d81` → code farkı
-`14 commit / 57 dosya / 11.309 ekleme / 31 silme`, binary-patch SHA-256
-`e1add6dfad49561fd292158243bc962b6e8873f12c4e931e8c7a62979470ab5d`
-ve byte uzunluğu `629184` olarak review packet'te dondurulmuştur.
+Güncel code-bearing head `7df0c426eb259193191f916324550da3e8edbf05`,
+tree `31cef9d0bb5cda77e88cfdf1e557cbc28a6691be`, güncel staging target-base
+`453d47cbe1b97c0d09b022181de658f6efd0326d` → code farkı
+`17 commit / 57 dosya / 11.333 ekleme / 31 silme`, binary-patch SHA-256
+`3fd11784255bb99cff744bd5686b4eefbed5177fdcf65186c5b8fac116e9f779`
+ve byte uzunluğu `630792` olarak review packet'te dondurulmuştur.
 
 Fresh PostgreSQL 16.15 `89/89` + clean replay ve production-prefix `66→89`
 replay PASS; pure Institution contract `12/12`, authorization `9/9`, intake
@@ -354,6 +354,14 @@ lock'u koruyup evidence-share transaction'ını `READ COMMITTED` yaptı; pure su
 Code/review head `9d2cf546bbdd8a53a69474cc9fe7a1abc99b2d81` için Institution
 Admissions Gate run `33723307855` ve Live-first Convergence Gate run
 `33723307835` SUCCESS'tir.
+
+Final docs-only head `1f9101d06cbed197685057d53cc4224b54792464` için Institution
+Admissions Gate `33723726118` ve convergence gate `33723726120` SUCCESS'tir.
+Bu kanıttan sonra staging target branch'ine çıkan catalog bulk-import hardening
+commit'i `453d47cb`, Institution branch'ine çatışmasız merge edilmiştir. Local
+catalog `5/5`, Institution pure `12+9+4+4`, intake PostgreSQL `5/5` ve
+evidence/enrolment PostgreSQL suite'i art arda üç kez `8/8` PASS'tir; merge
+sonrası exact-head remote CI henüz beklenmektedir.
 
 Production, staging, `Next`, gerçek PII, live feature state,
 dış mesaj/SIS/portal execution, merge ve deploy değiştirilmemiştir. Bağımsız

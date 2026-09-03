@@ -254,6 +254,11 @@ komutlar fail-closed kalır.
   regresyonu `05c93cbc` ile düzeltildi. Code/review head `9d2cf546` üzerinde
   Institution Admissions Gate `33723307855` ve Live-first Convergence Gate
   `33723307835` SUCCESS'tir.
+- Bu kanıttan sonra staging target branch'ine çıkan catalog bulk-import hardening
+  commit'i `453d47cb`, Institution branch'ine çatışmasız merge edildi. Catalog
+  bulk-import `5/5`, Institution pure paketleri `12+9+4+4`, intake PostgreSQL
+  `5/5` ve evidence/enrolment PostgreSQL suite'i art arda üç kez `8/8` PASS'tir.
+  Merge sonrası exact-head remote CI ayrı yeniden çalıştırılacaktır.
 
 ## Canlı adoption için ayrı onay gerektiren işler
 
