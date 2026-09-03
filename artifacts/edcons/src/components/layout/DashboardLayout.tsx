@@ -73,6 +73,10 @@ import {
   HeartPulse,
   Maximize2,
   Minimize2,
+  School,
+  Inbox,
+  Timer,
+  BarChart3,
 } from "lucide-react";
 import { PopupRenderer } from "@/components/PopupRenderer";
 import { Button } from "@/components/ui/button";
@@ -101,8 +105,47 @@ function getMenuForRole(
   hasPermFn?: (key: string) => boolean,
   agentAccessTier?: string,
   agentFeatures?: Record<string, boolean>,
+  institutionCapabilities?: string[],
 ): { groups: { id?: string; label: string; items: MenuItem[] }[] } {
   const showFinance = (FINANCE_ROLES as readonly string[]).includes(role);
+
+  if (role === "institution_user") {
+    const allowed = new Set(institutionCapabilities ?? []);
+    const groups = [
+        {
+          label: t("institution.nav.workspace"),
+          items: [
+            { title: t("institution.nav.home"), icon: LayoutDashboard, url: "/institution" },
+            { title: t("institution.nav.reviewQueue"), icon: Inbox, url: "/institution/review-queue", permKey: "institution.applications.review" },
+            { title: t("institution.nav.applications"), icon: FileSearch, url: "/institution/applications", permKey: "institution.applications.review|institution.audit.read" },
+            { title: t("institution.nav.decisions"), icon: ClipboardCheck, url: "/institution/decisions", permKey: "institution.decisions.draft|institution.decisions.approve|institution.audit.read" },
+            { title: t("institution.nav.offers"), icon: FileText, url: "/institution/offers", permKey: "institution.offers.issue|institution.enrolment.confirm|institution.audit.read" },
+          ],
+        },
+        {
+          label: t("institution.nav.configuration"),
+          items: [
+            { title: t("institution.nav.programsIntakes"), icon: School, url: "/institution/programs-intakes", permKey: "institution.catalog.manage" },
+            { title: t("institution.nav.requirements"), icon: ListChecks, url: "/institution/requirements", permKey: "institution.requirements.manage" },
+            { title: t("institution.nav.sla"), icon: Timer, url: "/institution/sla", permKey: "institution.sla.manage" },
+            { title: t("institution.nav.integrations"), icon: Link2, url: "/institution/integrations", permKey: "institution.integrations.manage" },
+          ],
+        },
+        {
+          label: t("institution.nav.governance"),
+          items: [
+            { title: t("institution.nav.analytics"), icon: BarChart3, url: "/institution/analytics", permKey: "institution.analytics.read" },
+            { title: t("institution.nav.team"), icon: Users, url: "/institution/team", permKey: "institution.team.manage" },
+            { title: t("institution.nav.audit"), icon: ShieldCheck, url: "/institution/audit", permKey: "institution.audit.read" },
+          ],
+        },
+      ];
+    return {
+      groups: groups
+        .map((group) => ({ ...group, items: group.items.filter((item) => !item.permKey || item.permKey.split("|").some((capability) => allowed.has(capability))) }))
+        .filter((group) => group.items.length > 0),
+    };
+  }
 
   if (role === 'super_admin' || role === 'admin' || role === 'manager') {
     const isAdmin = role === 'super_admin' || role === 'admin';
@@ -310,6 +353,7 @@ function getRoleLabel(role: string, t: TFunc): string {
     super_admin: "dashboard.superAdmin", admin: "dashboard.admin", manager: "dashboard.manager",
     staff: "dashboard.staff", consultant: "dashboard.consultant", accountant: "dashboard.accountant", editor: "dashboard.editor",
     student: "dashboard.student", agent: "dashboard.agent", sub_agent: "dashboard.subAgent", agent_staff: "dashboard.staff",
+    institution_user: "institution.role.portalUser",
   };
   return roleKeyMap[role] ? t(roleKeyMap[role]) : role;
 }
@@ -320,6 +364,7 @@ const ROLE_COLORS: Record<string, string> = {
   consultant: "bg-indigo-500/12 text-indigo-700 dark:bg-indigo-400/15 dark:text-indigo-300", accountant: "bg-purple-500/12 text-purple-700 dark:bg-purple-400/15 dark:text-purple-300",
   student: "bg-green-500/12 text-green-700 dark:bg-green-400/15 dark:text-green-300", agent: "bg-amber-500/12 text-amber-700 dark:bg-amber-400/15 dark:text-amber-300",
   agent_staff: "bg-teal-500/12 text-teal-700 dark:bg-teal-400/15 dark:text-teal-300",
+  institution_user: "bg-cyan-500/12 text-cyan-700 dark:bg-cyan-400/15 dark:text-cyan-300",
 };
 
 type PanelDensity = "compact" | "comfortable";
@@ -373,6 +418,7 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
   const { season, setSeason, availableYears } = useSeason();
   const { mode, setMode, resolvedTheme, settings: themeSettings } = useTheme();
   const isAgentRole = !!user && (user.role === "agent" || user.role === "sub_agent" || user.role === "agent_staff");
+  const isInstitutionRole = user?.role === "institution_user";
 
   useEffect(() => {
     const root = document.documentElement;
@@ -388,6 +434,14 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
     enabled: isAgentRole,
     queryFn: () => customFetch<any>("/api/agents/me"),
     staleTime: 5 * 60 * 1000,
+  });
+
+  const { data: institutionContext } = useQuery<{ capabilities?: string[] }>({
+    queryKey: ["institution-context"],
+    enabled: isInstitutionRole,
+    queryFn: () => customFetch("/api/institution/me/context"),
+    staleTime: 60_000,
+    retry: false,
   });
 
   // For agents/sub-agents/agent staff, use their business name as the tab
@@ -565,6 +619,7 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
     hasPermission,
     (agentProfile as any)?.accessTier,
     (agentProfile as any)?.effectiveFeatures,
+    institutionContext?.capabilities,
   );
   const allItems = groups.flatMap(g => g.items);
 
@@ -582,7 +637,7 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
 
   const isItemActive = (item: MenuItem) =>
     item.url === location ||
-    (item.url !== '/staff' && item.url !== '/admin' && item.url !== '/student' && item.url !== '/agent' && location.startsWith(item.url));
+    (item.url !== '/staff' && item.url !== '/admin' && item.url !== '/student' && item.url !== '/agent' && item.url !== '/institution' && location.startsWith(item.url));
   // Preserve the order in which the user pinned each item (most recent last).
   const favoriteItems = pinnedUrls
     .map(u => allItems.find(i => i.url === u))

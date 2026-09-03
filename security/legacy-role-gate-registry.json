@@ -8,14 +8,14 @@
     "defaultEnforcement": "legacy_quarantine"
   },
   "totals": {
-    "routeRegistrations": 763,
-    "requireAuth": 707,
+    "routeRegistrations": 794,
+    "requireAuth": 709,
     "requireRole": 476,
     "requirePermission": 41,
     "requireScope": 0,
-    "directRoleChecks": 28,
+    "directRoleChecks": 29,
     "authOnlyRouteCandidates": 128,
-    "publicRouteCandidates": 128
+    "publicRouteCandidates": 159
   },
   "files": [
     {
@@ -95,7 +95,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/agentOnboarding.ts",
-      "sha256": "c90fb2d813c14bab0f26a9aeb88f15bd94464b611732516308262c06dd59ca6f",
+      "sha256": "a63a7842c8928d5a5e3354cc55e611403da8e744a12700633c775804d2b48955",
       "routeRegistrations": 14,
       "requireAuth": 14,
       "requireRole": 1,
@@ -260,7 +260,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/auth.ts",
-      "sha256": "e5fc831668bd5575700b2172231fd4988328fd7897c533841ce7245ec3b5abd7",
+      "sha256": "d9a6ac83e97ce6b4f1438a56c9e9ec83c97a422cab23f079762a719f673fa6b3",
       "routeRegistrations": 10,
       "requireAuth": 0,
       "requireRole": 0,
@@ -485,7 +485,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/documents.ts",
-      "sha256": "a829ecf900a76eedc43af1cd706869126fcf090bde40b67e8ab95f37ce017344",
+      "sha256": "b71a9e99cf21a4440d6fa7f78810b82b682a8f1e46b3d6cc19d746e897eaab84",
       "routeRegistrations": 14,
       "requireAuth": 14,
       "requireRole": 6,
@@ -605,7 +605,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/inbox.ts",
-      "sha256": "eb233ebc911699bcfbd59075e52f998aa178b26f9a51427db8227817501e74db",
+      "sha256": "f4e9e9a9da7efb4b41313f0636fa9c4532d45fe6f0e40f34fa5e5494d59947ce",
       "routeRegistrations": 55,
       "requireAuth": 56,
       "requireRole": 54,
@@ -620,7 +620,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/index.ts",
-      "sha256": "4a4f1bf98c20791a6a273ac73de2eb5d114a3f6e69555b427f91247b5d8a7b7e",
+      "sha256": "47bbbdcf9d3130ca60a0ab56f885e67785e421e83dcbf80fd9509421c8c8be58",
       "routeRegistrations": 0,
       "requireAuth": 0,
       "requireRole": 0,
@@ -632,6 +632,21 @@
       "enforcement": "legacy_quarantine",
       "owner": "Platform Engineering",
       "note": "Route-local review required before corridor migration."
+    },
+    {
+      "path": "artifacts/api-server/src/routes/institutionAdmissions.ts",
+      "sha256": "7104646ba5ff68da900090d55fad054c33c0368519cdc6f4b00b1947a1cc0a62",
+      "routeRegistrations": 31,
+      "requireAuth": 2,
+      "requireRole": 0,
+      "requirePermission": 0,
+      "requireScope": 0,
+      "directRoleChecks": 1,
+      "authOnlyRouteCandidates": 0,
+      "publicRouteCandidates": 31,
+      "enforcement": "corridor_migrated",
+      "owner": "Admissions Platform",
+      "note": "The institution_user role is only a portal-routing marker. Each request re-resolves active HUMAN principal, versioned package, capability, purpose/data scope, program/intake scope and FORCE-RLS membership context; API-token access is denied. High-impact commands require exact Ed25519 active context, single-use step-up, current authority row locks and domain maker-checker evidence; membership and SLA changes remain pending Control Plane requests."
     },
     {
       "path": "artifacts/api-server/src/routes/integrations.ts",

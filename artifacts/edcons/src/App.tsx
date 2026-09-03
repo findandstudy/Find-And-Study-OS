@@ -144,6 +144,9 @@ const ADMIN_ROLES = _SHARED_ADMIN_ROLES;
 const WEBSITE_ADMIN_ROLES: string[] = ["super_admin", "admin"];
 const STUDENT_ROLES = _SHARED_STUDENT_ROLES;
 const AGENT_ROLES = _SHARED_AGENT_ROLES;
+const INSTITUTION_ROLES: string[] = ["institution_user"];
+
+const InstitutionWorkspace = lazyRetry(() => import("@/pages/institution/Workspace"));
 
 function ShellLoader() {
   return <DashboardSkeleton />;
@@ -249,6 +252,7 @@ function AuthFallback() {
     if (STAFF_ROLES.includes(role)) { setLocation("/admin"); return; }
     if (STUDENT_ROLES.includes(role)) { setLocation("/student"); return; }
     if (AGENT_ROLES.includes(role)) { setLocation("/agent"); return; }
+    if (INSTITUTION_ROLES.includes(role)) { setLocation("/institution"); return; }
   }, [me, isLoading, setLocation]);
 
   // Use cached auth (localStorage) for a synchronous signal while the API
@@ -260,7 +264,8 @@ function AuthFallback() {
     cachedRole !== "pending" &&
     (STAFF_ROLES.includes(cachedRole) ||
       STUDENT_ROLES.includes(cachedRole) ||
-      AGENT_ROLES.includes(cachedRole));
+      AGENT_ROLES.includes(cachedRole) ||
+      INSTITUTION_ROLES.includes(cachedRole));
 
   if (hasPortalRole || isLoading) return <PageLoader />;
   return <NotFound />;
@@ -550,6 +555,35 @@ function AgentShell() {
   );
 }
 
+function InstitutionShell() {
+  return (
+    <ProtectedRoute allowedRoles={INSTITUTION_ROLES}>
+      <DashboardLayout>
+        <Suspense fallback={<ShellLoader />}>
+          <Switch>
+            <Route path="/institution/applications/:id">
+              {(params) => <InstitutionWorkspace view="application" applicationId={params.id} />}
+            </Route>
+            <Route path="/institution/review-queue"><InstitutionWorkspace view="review-queue" /></Route>
+            <Route path="/institution/applications"><InstitutionWorkspace view="applications" /></Route>
+            <Route path="/institution/decisions"><InstitutionWorkspace view="decisions" /></Route>
+            <Route path="/institution/offers"><InstitutionWorkspace view="offers" /></Route>
+            <Route path="/institution/programs-intakes"><InstitutionWorkspace view="programs-intakes" /></Route>
+            <Route path="/institution/requirements"><InstitutionWorkspace view="requirements" /></Route>
+            <Route path="/institution/sla"><InstitutionWorkspace view="sla" /></Route>
+            <Route path="/institution/integrations"><InstitutionWorkspace view="integrations" /></Route>
+            <Route path="/institution/analytics"><InstitutionWorkspace view="analytics" /></Route>
+            <Route path="/institution/team"><InstitutionWorkspace view="team" /></Route>
+            <Route path="/institution/audit"><InstitutionWorkspace view="audit" /></Route>
+            <Route path="/institution"><InstitutionWorkspace view="home" /></Route>
+            <Route component={NotFound} />
+          </Switch>
+        </Suspense>
+      </DashboardLayout>
+    </ProtectedRoute>
+  );
+}
+
 function Router() {
   const [location] = useLocation();
 
@@ -557,6 +591,7 @@ function Router() {
                             location === "/staff" || location.startsWith("/staff/");
   const isStudentPath = location === "/student" || location.startsWith("/student/");
   const isAgentPath = location === "/agent" || location.startsWith("/agent/");
+  const isInstitutionPath = location === "/institution" || location.startsWith("/institution/");
   const isAgencyApplicationPublic = location === "/agent/apply";
   const isPublicSignPath = location.startsWith("/sign/");
   const isAgentOnboardingPublic = location === "/agent/onboarding" || location.startsWith("/agent/onboarding?");
@@ -596,7 +631,7 @@ function Router() {
     );
   }
 
-  const branch = isStaffAdminPath ? "staff" : isStudentPath ? "student" : isAgentPath ? "agent" : "public";
+  const branch = isStaffAdminPath ? "staff" : isStudentPath ? "student" : isAgentPath ? "agent" : isInstitutionPath ? "institution" : "public";
   if (prevBranch.current !== branch) {
     prevBranch.current = branch;
   }
@@ -611,6 +646,10 @@ function Router() {
 
   if (isAgentPath) {
     return <ErrorBoundary><AgentShell /></ErrorBoundary>;
+  }
+
+  if (isInstitutionPath) {
+    return <ErrorBoundary><InstitutionShell /></ErrorBoundary>;
   }
 
   // ── Public branch ────────────────────────────────────────────────────────────
@@ -732,6 +771,10 @@ function AuthPrefetch() {
           import("@/pages/agent/AgentApps"),
           import("@/pages/agent/Messages"),
         ]);
+        return;
+      }
+      if (INSTITUTION_ROLES.includes(role)) {
+        await import("@/pages/institution/Workspace");
         return;
       }
       if (STAFF_ROLES.includes(role)) {

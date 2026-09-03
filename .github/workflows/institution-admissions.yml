@@ -1,0 +1,191 @@
+name: Institution Admissions Gate
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/institution-admissions.yml"
+      - "artifacts/api-server/**"
+      - "artifacts/edcons/**"
+      - "deploy/.env.example"
+      - "deploy/staging/app.env.example"
+      - "lib/db/**"
+      - "lib/roles/**"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - "package.json"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: institution-admissions-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  ALLOW_LIVE_INTEGRATIONS: "false"
+  CI: "true"
+  NODE_ENV: test
+  NO_COLOR: "1"
+
+jobs:
+  static-gate:
+    name: Institution contracts, typecheck, and builds
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out exact source
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+          package-manager-cache: false
+
+      - name: Activate repository-pinned pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.33.2 --activate
+          test "$(pnpm --version)" = "10.33.2"
+
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify source and Institution contracts
+        run: |
+          git diff --check "${{ github.event.pull_request.base.sha || 'HEAD^' }}"...HEAD
+          pnpm run test:package-manager
+          node lib/db/validate-migrations.mjs
+          pnpm --filter @workspace/api-server run test:migration-authority
+          pnpm --filter @workspace/api-server run test:institution-admissions-contract
+          pnpm --filter @workspace/api-server run test:institution-admissions-authorization
+          pnpm --filter @workspace/api-server run test:institution-case-intake
+          pnpm --filter @workspace/api-server run test:institution-evidence-share
+
+      - name: Type-check and build deployable applications
+        run: |
+          pnpm run typecheck
+          pnpm --filter @workspace/edcons run check:i18n
+          pnpm --filter @workspace/api-server run build
+          pnpm --filter @workspace/edcons run build
+
+  windows-portability:
+    name: Windows institution portability
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out exact source
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+          package-manager-cache: false
+
+      - name: Activate repository-pinned pnpm
+        shell: pwsh
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.33.2 --activate
+          if ((pnpm --version) -ne "10.33.2") { throw "Unexpected pnpm version" }
+
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify Windows-safe contracts and typecheck
+        run: |
+          pnpm run test:package-manager
+          node lib/db/validate-migrations.mjs
+          pnpm --filter @workspace/api-server run test:institution-admissions-contract
+          pnpm --filter @workspace/api-server run test:institution-admissions-authorization
+          pnpm --filter @workspace/api-server run test:institution-case-intake
+          pnpm --filter @workspace/api-server run test:institution-evidence-share
+          pnpm run typecheck
+
+  postgres-gate:
+    name: PostgreSQL 16 fresh migration and Institution RLS
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16.15@sha256:e17e86066e5ef83e0952a9347f5c792b7ece00972e2aa787a6986f471b3dd3d5
+        env:
+          POSTGRES_DB: postgres
+          POSTGRES_HOST_AUTH_METHOD: trust
+          POSTGRES_USER: postgres
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    steps:
+      - name: Check out exact source
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+          package-manager-cache: false
+
+      - name: Activate repository-pinned pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.33.2 --activate
+          test "$(pnpm --version)" = "10.33.2"
+
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Prepare disposable database
+        env:
+          ALLOW_DISPOSABLE_DATABASE_RESET: "true"
+          PG_DISPOSABLE_ADMIN_URL: postgresql://postgres@127.0.0.1:5433/postgres
+        run: node lib/db/prepare-disposable-migration-database.mjs
+
+      - name: Apply and replay all 89 migrations
+        env:
+          ALLOW_REVIEWED_MIGRATIONS: "true"
+          DATABASE_URL: postgresql://fas_migrator@127.0.0.1:5433/fasos_apply_local
+          MIGRATION_CONFIRMED_DATABASE: fasos_apply_local
+          MIGRATION_CONFIRMED_HOST: 127.0.0.1
+          MIGRATION_CONFIRMED_PORT: "5433"
+          MIGRATION_CONFIRMED_USER: fas_migrator
+          MIGRATION_TARGET_ENV: local
+        working-directory: lib/db
+        run: |
+          node ./run-migrations.mjs
+          node ./run-migrations.mjs
+
+      - name: Prove least-privilege Institution runtime boundary
+        env:
+          ALLOW_DISPOSABLE_INSTITUTION_ADMISSIONS_TEST: "true"
+          DATABASE_URL: postgresql://fas_institution_executor@127.0.0.1:5433/fasos_apply_local
+          INSTITUTION_TEST_ADMIN_DATABASE_URL: postgresql://postgres@127.0.0.1:5433/fasos_apply_local
+        run: pnpm --filter @workspace/api-server run test:postgres-institution-admissions
+
+      - name: Prove receipt-bound Institution case intake
+        env:
+          ALLOW_DISPOSABLE_INSTITUTION_CASE_INTAKE_TEST: "true"
+          INSTITUTION_INTAKE_TEST_ADMIN_DATABASE_URL: postgresql://postgres@127.0.0.1:5433/fasos_apply_local
+          INSTITUTION_INTAKE_TEST_EXECUTOR_DATABASE_URL: postgresql://fas_institution_intake_executor@127.0.0.1:5433/fasos_apply_local
+        run: pnpm --filter @workspace/api-server run test:postgres-institution-case-intake
+
+      - name: Prove consent-bound Institution evidence sharing
+        env:
+          ALLOW_DISPOSABLE_INSTITUTION_EVIDENCE_SHARE_TEST: "true"
+          INSTITUTION_EVIDENCE_TEST_ADMIN_DATABASE_URL: postgresql://postgres@127.0.0.1:5433/fasos_apply_local
+          INSTITUTION_EVIDENCE_TEST_EXECUTOR_DATABASE_URL: postgresql://fas_institution_evidence_share_executor@127.0.0.1:5433/fasos_apply_local
+          INSTITUTION_EVIDENCE_TEST_ACTOR_DATABASE_URL: postgresql://fas_institution_executor@127.0.0.1:5433/fasos_apply_local
+        run: pnpm --filter @workspace/api-server run test:postgres-institution-evidence-share

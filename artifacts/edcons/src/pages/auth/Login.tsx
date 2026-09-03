@@ -155,6 +155,8 @@ export default function Login() {
           setLocation("/student");
         } else if (["agent", "sub_agent", "agent_staff"].includes(user.role)) {
           setLocation("/agent");
+        } else if (user.role === "institution_user") {
+          setLocation("/institution");
         } else {
           setLocation("/staff");
         }

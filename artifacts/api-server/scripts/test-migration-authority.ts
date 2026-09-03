@@ -166,7 +166,7 @@ test("repository migration history is complete, ordered and duplicate-free", () 
   assert.match(result.stdout, /OK: (\d+) files, \1 journal entries/);
 });
 
-test("production migration tail and canonical Control Plane range are pinned", () => {
+test("production prefix and canonical additive migration tail are pinned", () => {
   const journal = JSON.parse(
     readFileSync(path.join(root, "lib/db/drizzle/meta/_journal.json"), "utf8"),
   );
@@ -207,6 +207,12 @@ test("production migration tail and canonical Control Plane range are pinned", (
       "0080_active_context_selection_consumption_attempts",
       "0081_active_context_selection_consumption_repair",
       "0082_student_journey_g45_foundation",
+      "0083_institution_admissions_foundation",
+      "0084_institution_admissions_authority_hardening",
+      "0085_institution_active_context_step_up",
+      "0086_institution_case_intake_receipts",
+      "0087_institution_evidence_share_receipts",
+      "0088_institution_enrolment_evidence_binding",
     ],
   );
 
@@ -673,7 +679,7 @@ test("production-prefix adoption harness is explicit and loopback-only", () => {
   const source = readFileSync(harness, "utf8");
   assert.match(source, /prefix adoption requires a fresh disposable database/);
   assert.match(source, /productionEntries\.length, 66/);
-  assert.match(source, /count: 83/);
+  assert.match(source, /count: 89/);
 });
 
 test("disposable database reset is explicit and fixed to the local test identity", () => {
@@ -728,6 +734,7 @@ test("disposable database reset is explicit and fixed to the local test identity
   assert.match(source, /fas_session_repair_executor/);
   assert.match(source, /fas_journey_owner/);
   assert.match(source, /fas_journey_executor/);
+  assert.match(source, /fas_institution_executor/);
 });
 
 test("PostgreSQL adapter integration is explicit and fixed to the disposable target", () => {
@@ -784,7 +791,7 @@ test("comprehensive Control Plane gate is explicit and fixed to the disposable t
     /assert\.equal\(target\.pathname\.slice\(1\), "fasos_apply_local"\)/,
   );
   assert.match(source, /assert\.equal\(target\.port, "5433"\)/);
-  assert.match(source, /assert\.equal\(migrationCount\.rows\[0\]\.count, 83\)/);
+  assert.match(source, /assert\.equal\(migrationCount\.rows\[0\]\.count, 89\)/);
   assert.doesNotMatch(source, /CREATE ROLE \$\{/);
 });
 
@@ -814,12 +821,107 @@ test("Student Journey G45 PostgreSQL integration is explicit and loopback-only",
   assert.match(source, /target\.pathname, "\/fasos_apply_local"/);
   assert.match(source, /safeTarget\(executorUrl, "fas_journey_executor"\)/);
   assert.match(source, /ALLOW_LIVE_INTEGRATIONS/);
-  assert.match(source, /migrationCount\.rows\[0\]\?\.count, 83/);
+  assert.match(source, /rows\[0\]\?\.count, 89/);
   assert.match(source, /journey_notification_intents_default_off_chk/);
   assert.match(
     source,
     /REVOKE ALL ON TABLE public\.\$\{table\} FROM fas_journey_executor/,
   );
+});
+
+test("Institution Admissions PostgreSQL integration is explicit and least-privilege", () => {
+  const institutionTest = path.join(
+    root,
+    "artifacts/api-server/scripts/test-postgres-institution-admissions.ts",
+  );
+  const unapproved = spawnSync(
+    process.execPath,
+    ["--import", "tsx", institutionTest],
+    {
+      cwd: path.join(root, "artifacts/api-server"),
+      encoding: "utf8",
+      env: { PATH: process.env.PATH ?? "" },
+    },
+  );
+  assert.equal(unapproved.status, 1);
+  assert.match(
+    unapproved.stderr,
+    /institution_postgres_test_requires_explicit_disposable_opt_in/,
+  );
+
+  const source = readFileSync(institutionTest, "utf8");
+  assert.match(source, /ALLOW_DISPOSABLE_INSTITUTION_ADMISSIONS_TEST/);
+  assert.match(source, /institution_postgres_test_requires_disposable_loopback_database/);
+  assert.match(source, /new URL\(actorUrl\)\.username !== "fas_institution_executor"/);
+  assert.match(source, /NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS/);
+  assert.match(source, /migrationCount\.rows\[0\]\?\.count, 89/);
+  assert.match(source, /GRANT SELECT ON TABLE institution_memberships/);
+  assert.doesNotMatch(source, /GRANT SELECT, INSERT ON TABLE institution_memberships/);
+  assert.match(source, /institution_step_up_receipts/);
+});
+
+test("Institution case intake integration is explicit and EXECUTE-only", () => {
+  const intakeTest = path.join(
+    root,
+    "artifacts/api-server/scripts/test-postgres-institution-case-intake.ts",
+  );
+  const unapproved = spawnSync(
+    process.execPath,
+    ["--import", "tsx", intakeTest],
+    {
+      cwd: path.join(root, "artifacts/api-server"),
+      encoding: "utf8",
+      env: { PATH: process.env.PATH ?? "" },
+    },
+  );
+  assert.equal(unapproved.status, 1);
+  assert.match(
+    unapproved.stderr,
+    /institution_case_intake_test_requires_explicit_disposable_opt_in/,
+  );
+
+  const source = readFileSync(intakeTest, "utf8");
+  assert.match(source, /institution_case_intake_test_requires_disposable_loopback_database/);
+  assert.match(source, /fas_institution_intake_executor/);
+  assert.match(source, /fas_institution_intake_owner/);
+  assert.match(source, /migrationCount\.rows\[0\]\?\.count, 89/);
+  assert.match(source, /case_insert: false/);
+  assert.match(source, /receipt_insert: false/);
+  assert.match(source, /can_execute: true/);
+  assert.match(source, /shared_profile/);
+});
+
+test("Institution evidence sharing integration is explicit and EXECUTE-only", () => {
+  const evidenceTest = path.join(
+    root,
+    "artifacts/api-server/scripts/test-postgres-institution-evidence-share.ts",
+  );
+  const unapproved = spawnSync(
+    process.execPath,
+    ["--import", "tsx", evidenceTest],
+    {
+      cwd: path.join(root, "artifacts/api-server"),
+      encoding: "utf8",
+      env: { PATH: process.env.PATH ?? "" },
+    },
+  );
+  assert.equal(unapproved.status, 1);
+  assert.match(
+    unapproved.stderr,
+    /institution_evidence_share_test_requires_explicit_disposable_opt_in/,
+  );
+
+  const source = readFileSync(evidenceTest, "utf8");
+  assert.match(source, /institution_evidence_share_test_requires_disposable_loopback_database/);
+  assert.match(source, /fas_institution_evidence_share_executor/);
+  assert.match(source, /fas_institution_evidence_owner/);
+  assert.match(source, /rows\[0\]\?\.count, 89/);
+  assert.match(source, /evidence_select: false/);
+  assert.match(source, /consent_select: false/);
+  assert.match(source, /share_insert: false/);
+  assert.match(source, /can_execute: true/);
+  assert.match(source, /RAW_EVIDENCE_REF/);
+  assert.match(source, /WITHDRAWN/);
 });
 
 test("durable audit integration is explicit and fixed to the disposable target", () => {
@@ -899,6 +1001,10 @@ test("live-first CI pins actions and PostgreSQL while replaying both adoption pa
   assert.match(workflow, /test:postgres-student-journey-g45/);
   assert.match(workflow, /ALLOW_DISPOSABLE_STUDENT_JOURNEY_G45_TEST/);
   assert.match(workflow, /ALLOW_LIVE_INTEGRATIONS: "false"/);
+  assert.match(workflow, /test:postgres-institution-case-intake/);
+  assert.match(workflow, /ALLOW_DISPOSABLE_INSTITUTION_CASE_INTAKE_TEST/);
+  assert.match(workflow, /test:postgres-institution-evidence-share/);
+  assert.match(workflow, /ALLOW_DISPOSABLE_INSTITUTION_EVIDENCE_SHARE_TEST/);
   assert.doesNotMatch(workflow, /uses:\s+[^\s@]+@(?![a-f0-9]{40}\b)/);
 });
 

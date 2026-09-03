@@ -65,3 +65,4 @@ export * from "./agentApplications";
 export * from "./authorization";
 export * from "./controlPlane";
 export * from "./studentJourney";
+export * from "./institutionAdmissions";

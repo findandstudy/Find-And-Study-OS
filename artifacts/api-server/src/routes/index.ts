@@ -68,6 +68,7 @@ import messageCampaignsRouter from "./messageCampaigns";
 import dataQualityRouter from "./dataQuality";
 import aiBotsRouter from "./aiBots";
 import agentApplicationsRouter from "./agentApplications";
+import institutionAdmissionsRouter from "./institutionAdmissions";
 import { tokenScopeGuard } from "../middlewares/tokenScopeGuard";
 import { studentEmailVerificationGate } from "../middlewares/studentEmailVerificationGate";
 
@@ -200,6 +201,8 @@ router.use(async (req, res, next) => {
 // handlers. No-op for cookie/session requests; enforces least-privilege on
 // Bearer-token requests.
 router.use(tokenScopeGuard);
+
+router.use(institutionAdmissionsRouter);
 
 router.use(healthRouter);
 router.use(storageRouter);

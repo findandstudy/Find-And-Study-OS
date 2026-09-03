@@ -661,7 +661,7 @@ async function verifyAtomicDdlRollback(migrator: pg.Client) {
         "SELECT count(*)::int AS count FROM drizzle.__drizzle_migrations",
       )
     ).rows[0].count,
-    83,
+    89,
   );
 }
 
@@ -1612,7 +1612,7 @@ async function verify() {
     const migrationCount = await migrator.query(
       "SELECT count(*)::int AS count FROM drizzle.__drizzle_migrations",
     );
-    assert.equal(migrationCount.rows[0].count, 83);
+    assert.equal(migrationCount.rows[0].count, 89);
     await verifyAtomicDdlRollback(migrator);
     await migrator.query(
       `INSERT INTO public.branches (id, name) VALUES

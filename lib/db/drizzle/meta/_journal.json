@@ -582,6 +582,48 @@
       "when": 1788249600000,
       "tag": "0082_student_journey_g45_foundation",
       "breakpoints": true
+    },
+    {
+      "idx": 83,
+      "version": "7",
+      "when": 1788336000000,
+      "tag": "0083_institution_admissions_foundation",
+      "breakpoints": true
+    },
+    {
+      "idx": 84,
+      "version": "7",
+      "when": 1788422400000,
+      "tag": "0084_institution_admissions_authority_hardening",
+      "breakpoints": true
+    },
+    {
+      "idx": 85,
+      "version": "7",
+      "when": 1788508800000,
+      "tag": "0085_institution_active_context_step_up",
+      "breakpoints": true
+    },
+    {
+      "idx": 86,
+      "version": "7",
+      "when": 1788595200000,
+      "tag": "0086_institution_case_intake_receipts",
+      "breakpoints": true
+    },
+    {
+      "idx": 87,
+      "version": "7",
+      "when": 1788681600000,
+      "tag": "0087_institution_evidence_share_receipts",
+      "breakpoints": true
+    },
+    {
+      "idx": 88,
+      "version": "7",
+      "when": 1788768000000,
+      "tag": "0088_institution_enrolment_evidence_binding",
+      "breakpoints": true
     }
   ]
 }

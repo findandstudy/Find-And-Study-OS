@@ -401,6 +401,15 @@
       "externalPilot": "quarantine"
     },
     {
+      "path": "artifacts/api-server/src/lib/institutionAdmissionsStore.ts",
+      "ownership": "tenant_owned",
+      "enforcement": "db_enforced",
+      "risk": "high",
+      "owner": "Admissions Platform",
+      "externalPilot": "quarantine",
+      "note": "Default-off institution runtime uses a dedicated non-owner executor, FORCE RLS, server-resolved membership, program/intake scope and current-actor binding. External tenant activation remains gated."
+    },
+    {
       "path": "artifacts/api-server/src/lib/leadAssignment.ts",
       "ownership": "tenant_owned",
       "enforcement": "quarantine_required",
@@ -664,6 +673,24 @@
       "owner": "Student Experience",
       "externalPilot": "quarantine",
       "note": "Default-unwired G45 writer; production/live PII adoption remains blocked behind explicit rollout and review gates."
+    },
+    {
+      "path": "artifacts/api-server/src/lib/postgresInstitutionCaseIntakeStore.ts",
+      "ownership": "tenant_owned",
+      "enforcement": "db_enforced",
+      "risk": "high",
+      "owner": "Admissions Platform",
+      "externalPilot": "quarantine",
+      "note": "Default-off EXECUTE-only intake uses a dedicated non-owner executor, FORCE RLS, immutable receipts and PII-minimized projection. External tenant activation remains gated."
+    },
+    {
+      "path": "artifacts/api-server/src/lib/postgresInstitutionEvidenceShareStore.ts",
+      "ownership": "tenant_owned",
+      "enforcement": "db_enforced",
+      "risk": "high",
+      "owner": "Admissions Platform",
+      "externalPilot": "quarantine",
+      "note": "Default-off EXECUTE-only manifest writer derives hashes from verified Journey evidence and the latest active institution-sharing consent. It stores no document byte or raw object reference; Privacy/Legal and consented-cohort activation remain gated."
     },
     {
       "path": "artifacts/api-server/src/lib/replitAuth.ts",
@@ -1052,6 +1079,15 @@
       "risk": "critical",
       "owner": "Platform Security",
       "externalPilot": "quarantine"
+    },
+    {
+      "path": "artifacts/api-server/src/routes/institutionAdmissions.ts",
+      "ownership": "tenant_owned",
+      "enforcement": "db_enforced",
+      "risk": "critical",
+      "owner": "Admissions Platform",
+      "externalPilot": "quarantine",
+      "note": "Capability plus purpose/data-scope checks are backed by FORCE RLS and append-only receipts; production high-impact commands remain disabled pending authoritative assurance adoption."
     },
     {
       "path": "artifacts/api-server/src/routes/leadAssignmentRules.ts",

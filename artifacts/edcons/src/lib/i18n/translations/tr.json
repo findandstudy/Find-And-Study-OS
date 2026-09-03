@@ -6735,5 +6735,25 @@
     "close": "Close",
     "cancel": "Cancel",
     "queueRecipients": "Queue {{count}} recipients"
+  },
+  "institution": {
+    "nav": {
+      "workspace": "Kurum çalışma alanı",
+      "home": "Genel bakış",
+      "reviewQueue": "İnceleme kuyruğu",
+      "applications": "Başvurular",
+      "decisions": "Kararlar",
+      "offers": "Teklifler",
+      "configuration": "Akademik yapılandırma",
+      "programsIntakes": "Programlar ve dönemler",
+      "requirements": "Koşullar ve kanıtlar",
+      "sla": "SLA politikaları",
+      "integrations": "Entegrasyonlar",
+      "governance": "Yönetişim",
+      "analytics": "Analitik",
+      "team": "Ekip ve roller",
+      "audit": "Denetim kayıtları"
+    },
+    "role": { "portalUser": "Kurum kullanıcısı" }
   }
 }
