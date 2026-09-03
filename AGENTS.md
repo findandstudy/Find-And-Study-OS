@@ -322,12 +322,12 @@ prompt'unu kaldırır; reviewer değerlendirmesi exact güncel yayımlanmış ku
 requirement kimliğine bağlanmadan confirmation düğmesi açılmaz. Consent
 withdrawal hem resolver'ı hem receipt replay'ini reddeder.
 
-Güncel code-bearing head `0fcb46fb6a4e0fce04b3ae3e5d90c835c101d0c0`,
-tree `a8b3d28fe4ee10f61e95093ccf7e487052133cad`, base
+Güncel code-bearing head `05c93cbcea524f17e9c497bdabc7b71ffd65d297`,
+tree `0714864865b486052ed80e37efcd2e03064cd6ac`, base
 `822112fb471ad53365034b9b928b5510b4c06d81` → code farkı
-`11 commit / 57 dosya / 11.282 ekleme / 31 silme`, binary-patch SHA-256
-`1edea9714bc9d07b76afa02fc58945d7d73ee1e99edeeed9c6e20b8a5ad236d2`
-ve byte uzunluğu `627141` olarak review packet'te dondurulmuştur.
+`14 commit / 57 dosya / 11.309 ekleme / 31 silme`, binary-patch SHA-256
+`e1add6dfad49561fd292158243bc962b6e8873f12c4e931e8c7a62979470ab5d`
+ve byte uzunluğu `629184` olarak review packet'te dondurulmuştur.
 
 Fresh PostgreSQL 16.15 `89/89` + clean replay ve production-prefix `66→89`
 replay PASS; pure Institution contract `12/12`, authorization `9/9`, intake
@@ -345,7 +345,13 @@ Taslak PR #31'in ilk Institution ve convergence workflow run'ları
 ikinci `SERIALIZABLE` transaction'ın stale snapshot ile legacy unique
 constraint'e düştüğünü yakaladı. `0fcb46fb`, transaction advisory lock'u
 koruyarak caller isolation'ı `READ COMMITTED` yaptı; local disposable PostgreSQL
-intake paketi yeniden `5/5` PASS'tir. Exact-head final CI rerun beklenmektedir.
+intake paketi yeniden `5/5` PASS'tir.
+
+Bu ilk düzeltmeden sonraki exact-head run'lar `33722590201`/`33722590203`, aynı
+stale-snapshot yarışını evidence-share caller'ında yakaladı. `05c93cbc`, advisory
+lock'u koruyup evidence-share transaction'ını `READ COMMITTED` yaptı; pure suite
+`4/4`, PostgreSQL suite concurrency vakasıyla art arda beş kez `8/8` PASS'tir.
+Yeni exact-head final CI rerun beklenmektedir.
 
 Production, staging, `Next`, gerçek PII, live feature state,
 dış mesaj/SIS/portal execution, merge ve deploy değiştirilmemiştir. Bağımsız

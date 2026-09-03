@@ -10,11 +10,11 @@ Durum: Branch push edildi ve taslak PR #31 açıktır; merge, staging/production
 
 - Target base: `822112fb471ad53365034b9b928b5510b4c06d81`
 - Foundation commit: `9e8ef92d073511759860ba9d640be9f767cab311`
-- Code-bearing head: `0fcb46fb6a4e0fce04b3ae3e5d90c835c101d0c0`
-- Code-bearing tree: `a8b3d28fe4ee10f61e95093ccf7e487052133cad`
-- Base → code farkı: `11 commit / 57 dosya / 11.282 ekleme / 31 silme`
-- Binary-patch SHA-256: `1edea9714bc9d07b76afa02fc58945d7d73ee1e99edeeed9c6e20b8a5ad236d2`
-- Binary-patch byte uzunluğu: `627141`
+- Code-bearing head: `05c93cbcea524f17e9c497bdabc7b71ffd65d297`
+- Code-bearing tree: `0714864865b486052ed80e37efcd2e03064cd6ac`
+- Base → code farkı: `14 commit / 57 dosya / 11.309 ekleme / 31 silme`
+- Binary-patch SHA-256: `e1add6dfad49561fd292158243bc962b6e8873f12c4e931e8c7a62979470ab5d`
+- Binary-patch byte uzunluğu: `629184`
 
 Bu dosya ve onu taşıyan commit review-infrastructure-only'dir. Kendi commit
 kimliğini dairesel olarak mühürleyemez; reviewer branch'in exact final HEAD'ini
@@ -70,6 +70,9 @@ ayrıca kabul etmelidir.
     kullanır. Aynı source receipt ile yarışan iki işlem kilit sonrası güncel
     committed receipt'i görür ve `CREATED + REPLAY` üretir; stale serializable
     snapshot nedeniyle ikinci case açılmasına izin verilmez.
+22. Evidence-share caller aynı lock/visibility sözleşmesini kullanır. Aynı
+    verified evidence source için yarışan işlemler tek PII-minimized receipt'e
+    yakınsar; ikinci işlem güncel receipt'i replay eder.
 
 ## Yerel kanıt matrisi
 
@@ -139,6 +142,9 @@ Production credential, dump veya PII kullanılmadı.
 - Evidence-share executor'ın tablo yetkisi olmadığını; receipt'in yalnız current
   consent + verified Journey evidence'dan türediğini, ham evidence ref
   taşımadığını ve consent withdrawal sonrası replay/assessment'in reddedildiğini
+  doğrula.
+- Evidence-share caller'ın transaction advisory lock arkasında `READ COMMITTED`
+  kullandığını ve aynı verified source yarışının tek immutable receipt ürettiğini
   doğrula.
 - Evidence manifestinin reviewer program/intake/case scope'u dışından
   görünmediğini ve client-supplied assessment timestamp/hash'in etkisiz olduğunu

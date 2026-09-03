@@ -227,6 +227,10 @@ komutlar fail-closed kalır.
   görünür kıldı. Caller isolation `READ COMMITTED` yapıldı; transaction advisory
   lock korunarak aynı source için `CREATED + REPLAY` davranışı local disposable
   PostgreSQL'de yeniden `5/5` PASS oldu.
+- İlk intake düzeltmesinden sonraki remote run, aynı stale-snapshot yarışını
+  evidence-share caller'ında görünür kıldı. Bu caller da transaction advisory
+  lock korunarak `READ COMMITTED` yapıldı. Pure suite `4/4`; PostgreSQL suite aynı
+  concurrency vakası dahil art arda beş çalışmada `8/8` PASS oldu.
 - Evidence-share/enrolment exact EXECUTE-only owner/executor ayrımı, current consent,
   verified source, PII-minimized receipt, replay revalidation, concurrency,
   server timestamp, reviewer membership, program/intake scope, published
@@ -246,8 +250,9 @@ komutlar fail-closed kalır.
   kapıları: PASS.
 - Dedicated Linux/Windows/PostgreSQL 16 Institution CI workflow'u ve genel
   convergence gate bağlantısı eklendi. İlk remote run'ların yakaladığı intake
-  concurrency regresyonu `0fcb46fb` ile düzeltildi; final exact-head remote
-  rerun bu kayıtta henüz beklemededir.
+  concurrency regresyonu `0fcb46fb`, sonraki run'ın yakaladığı evidence-share
+  regresyonu `05c93cbc` ile düzeltildi; final exact-head remote rerun bu kayıtta
+  henüz beklemededir.
 
 ## Canlı adoption için ayrı onay gerektiren işler
 
