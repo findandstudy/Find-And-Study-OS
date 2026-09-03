@@ -96,7 +96,12 @@ export class PostgresInstitutionEvidenceShareStore {
           throw new Error("institution_evidence_share_executor_identity_invalid");
         }
 
-        await client.query("BEGIN ISOLATION LEVEL SERIALIZABLE");
+        // The SECURITY DEFINER function serializes each evidence source with a
+        // transaction-scoped advisory lock. READ COMMITTED is deliberate here:
+        // a SERIALIZABLE snapshot can be fixed before a concurrent caller
+        // commits, so the waiter would miss the newly committed receipt after
+        // acquiring the lock and collide with the unique source constraint.
+        await client.query("BEGIN ISOLATION LEVEL READ COMMITTED");
         transactionStarted = true;
         await client.query(`SELECT set_config('lock_timeout', '2500ms', true),
           set_config('statement_timeout', '8000ms', true),
