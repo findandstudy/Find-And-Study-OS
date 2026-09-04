@@ -239,3 +239,167 @@ has completed both the authenticated visual role walkthrough and the controlled
 synthetic workflow UAT. It does not authorize production deployment, production
 migration, live external delivery, portal automation, real student data,
 `Find-And-Study-OS-Next` synchronization, or merge of convergence PR #30.
+
+## 4 September 2026 — Portal Automation closed-loop v1 adoption
+
+- Exact deployed code-bearing commit:
+  `4f4ce4df3e01b0e71e84a64c02424847a1e6056f` on branch
+  `codex/reporting-intelligence-center-20260903`.
+- Exact-head Actions evidence: Institution Admissions Gate `33882911515`,
+  Portal Automation Gate `33882911634`, Live-first Convergence Gate
+  `33882911333`; all three succeeded.
+- Immediate pre-adoption backup:
+  `/opt/findandstudy-staging/backups/staging-backup-20260904T140614Z-852b03b671e1.dump`
+  (`4,566,372` bytes, SHA-256
+  `e01c0727ac10d8b04c17fad51eb0a76188633ccc9ba6adb44b2d77386ab1487f`,
+  `0640 root:findandstudy-staging`).
+- A network-isolated, tmpfs PostgreSQL 16.15 restore reproduced ledger `90`,
+  13 synthetic users, zero active applications, zero portal submissions and
+  the expected absence of the pre-`0090` lifecycle table. The disposable
+  restore container was removed. An initial validation expected the obsolete
+  12-user denominator and queried the absent table directly; it failed closed
+  after the backup succeeded. The corrected measured-baseline rerun passed.
+- The reviewed least-privilege migration runner advanced only staging from
+  `90/90` to `92/92`. The post-state contained 13 users and zero applications,
+  portal submissions or lifecycle observations.
+- Runtime image:
+  `sha256:7c4de1e8c79c16ab94423529e2a9f939d3882a573fcbeb5a14469dd479db601d`
+  (`findandstudy-staging-app:4f4ce4df3e01`). Release:
+  `staging-20260904T143054Z-4f4ce4df3e01`.
+- Only `findandstudy-staging-app-1` was recreated. It reported healthy,
+  restart count `0`, UID/GID `10042`, read-only root filesystem, capability
+  drop `ALL` and `no-new-privileges:true`. Other VPS containers remained up.
+- Public `/api/healthz` and `/api/health` returned HTTP `200`, the exact release
+  and `dbConnected=true`, with HSTS present. Six additional five-second-spaced
+  samples all matched; app logs had zero fatal/unhandled/uncaught matches.
+- Authenticated read-only browser UAT verified Rules, Operations, Adapter
+  Management, Submission Board and Audit Log. Dynamic stages were sourced from
+  Application Pipeline, while terminal Enrolled and Rejected stages were
+  disabled. No mutating control was used.
+- External safety remained fail-closed: live integrations off, email delivery
+  disabled, background jobs disabled, AI external reply kill-switch on and
+  portal worker count zero. No real portal, messaging, payment or notification
+  call ran.
+- Final root filesystem state was `80%` used with `21,072,498,688` bytes free.
+  Build and rollback images were retained; no Docker prune ran.
+- This adoption does not authorize production, `Next`, PR merge, live worker
+  activation, real PII/credentials or external delivery. Before any staging
+  worker is enabled, an exact-version synthetic allowlisted adapter fixture and
+  lane/credential/write-denominator re-attestation remain mandatory.
+
+### No-outbound synthetic Portal Automation gate
+
+- The exact deployed build image `findandstudy-staging-build:4f4ce4df3e01`
+  executed the v2 adapter production slice with `--network none`, a read-only
+  root filesystem and all live-integration switches disabled. All `26/26`
+  contract checks passed.
+- A disposable PostgreSQL 16.15 instance ran with tmpfs data and `--network
+  none` on the repository-pinned loopback port `5433`. Test containers shared
+  only its network namespace; they had no external route. The reviewed runner
+  applied `0 → 92`, then `8/8` database-backed checks passed for adapter
+  version/approval, observation binding, one-session-per-lane ownership, fair
+  queue claims, quarantine, Guardian idempotency, aggregate operations access
+  and artifact persistence.
+- The accepted disposable database ended at ledger `92/92` with
+  user/application/submission/observation/adapter-spec counts `0/0/0/0/0` and
+  was removed. A first `5432` attempt was rejected by the hard target pin and
+  cleaned up before any migration ran.
+- Live staging received no fixture writes. Aggregate read-only attestation found
+  zero active credentials, zero configured portal universities, zero adapter
+  specs, zero lanes and zero application/document/observation rows. The five
+  external-write denominators — messages, broadcasts, portal submissions,
+  finance mutation requests and Journey outbox events — remained
+  `0/0/0/0/0`.
+- Authenticated read-only UI regression confirmed Test Mode, automation off,
+  fallback off, fan-out off, scheduler off, dynamic pipeline stages and disabled
+  terminal stages. Operations remained all-zero with no error boundary.
+- Post-gate public health returned the exact release and `dbConnected=true`;
+  app state was healthy, restart count `0`, ledger `92/92`, fatal log matches
+  `0`, disposable leftovers `0`, and the root filesystem retained
+  `21,071,781,888` bytes free at `80%` use.
+- This satisfies the no-outbound synthetic gate. It does not authorize worker
+  activation: staging currently has no credential, university or adapter
+  configuration. The next gate is one named partner pilot with exact origin,
+  encrypted credential reference, immutable adapter version, strict dry-run and
+  separate activation approval. Production remains NO-GO.
+
+### Custom adapter fail-closed update
+
+- Exact deployed source commit:
+  `575763b13e6a3833e0646f3f44ca3fd1f8b2359f`. The code chain is
+  `86c15011` (unknown/uploaded adapter auto-process gate), `2b0dbb86`
+  (server-authoritative row graduation state) and `575763b1` (exact route
+  inventory refresh).
+- Exact-head Actions all succeeded: Portal Automation Gate `33888388971`,
+  Live-first Convergence Gate `33888388995` and Institution Admissions Gate
+  `33888389135`. The exact route audit covered 73 files and 804 registrations
+  with zero errors.
+- Network-disabled adapter verification passed `535/535`; registry policy
+  passed `15/15`. Disposable PostgreSQL 16.15 graduation and Portal Management
+  suites each applied `0 → 92` and passed `9/9`; custom keys start
+  manual-only and graduate only after three durable success proofs. API and
+  Edcons direct typechecks passed, and all disposable containers were removed.
+- Immediate pre-deploy backup:
+  `/opt/findandstudy-staging/backups/staging-backup-20260904T151905Z-4f4ce4df3e01.dump`
+  (`4,684,775` bytes, SHA-256
+  `abc53f4b6c0ce35cd2fa43f04f63bb93de4c22114433685c48056ee69272ae8e`,
+  `0640 root:findandstudy-staging`). Its network-isolated PostgreSQL 16.15
+  restore reproduced ledger `92`, 13 synthetic users, zero applications and
+  zero portal submissions; the drill container was removed.
+- Release `staging-20260904T152458Z-575763b13e6a` runs runtime image
+  `sha256:ed82bb6320f0bfec30e0794f0249128a65a376885b90ece7655f0a9dc3e140fa`.
+  The separately retained build image is
+  `sha256:67868f39599f6709f3e30682a5cf5f8bee27daccb936a798fe4b78bf665f14b2`.
+  Only `findandstudy-staging-app-1` was recreated; it remained healthy with
+  restart count `0`, UID/GID `10042`, read-only rootfs, cap-drop `ALL` and
+  `no-new-privileges:true`.
+- Public `/api/healthz` and `/api/health` returned HTTP `200`, HSTS, exact
+  release and `dbConnected=true`; six further samples all matched. The ledger
+  and 11 operational/write denominators after it were
+  `92|0|0|0|0|0|0|0|0|0|0|0` for active portal universities, active
+  credentials, adapter specs, submissions, observations, messages, broadcasts,
+  finance mutation requests, Journey outbox, applications and documents.
+- The four integration kill switches remained exact, portal worker count was
+  zero and fatal/unhandled/uncaught log matches were zero. Root disk use was
+  `81%`, with `20,331,143,168` bytes available. No image, volume or build-cache
+  prune ran.
+- Authenticated read-only UI UAT reconfirmed Test Mode, all automation switches
+  off, dynamic non-terminal stages, disabled terminal stages, zero Operations
+  counters, no configured portal university and `0/3` status on experimental
+  built-ins. No save, upload, submit, test-login or status-sweep action ran.
+- The named-partner procedure is recorded in
+  `PORTAL_AUTOMATION_FIRST_PARTNER_PILOT_RUNBOOK_2026-09-04.md`. Worker and
+  outbound traffic stay disabled until exact origin, encrypted credential
+  reference, immutable adapter version, strict dry-run and separate activation
+  approval are present. Production, `Next` and merge remain NO-GO.
+
+## 4 September 2026 — Code-free Partner Setup adoption
+
+- Reviewed source `96444e43dca5bc93241959aedfcd9ac9f2dfb7bf` passed Portal
+  Automation `33895080885`, Live-first Convergence `33895080860` and
+  Institution Admissions `33895080950` exact-head Actions runs.
+- The accepted pre-adoption backup was
+  `staging-backup-20260904T162944Z-96444e43dca5.dump` (`4,581,742` bytes,
+  SHA-256 `494feaccf40857c48f5fd5238235f0910062dd235e07c8f4ce1e244221e68e83`).
+  Its network-isolated PostgreSQL 16.15 restore reproduced ledger `92`, 13
+  synthetic users and zero applications/submissions/observations; the
+  disposable container was removed.
+- Release `staging-20260904T163712Z-96444e43dca5` uses runtime image
+  `sha256:fbdee9e7e41bebbeca1bb6dfe2bad44a1b248d9c5b5de60bff9f4efbd16ef2d3`
+  and build image
+  `sha256:1bc1c4de2c35be431d95288e2362feb71cbb298ef47995d4fbc0c2f7202accde`.
+  Only the app service changed; the DB container stayed stable and the portal
+  worker count remained zero.
+- Public health was HTTP `200`, exact-release and DB-connected across the
+  initial checks plus six samples. Runtime security remained
+  `10042:10042`, read-only, cap-drop `ALL`, no-new-privileges and restart `0`.
+  The ledger/external-effect counter vector was
+  `92|0|0|0|0|0|0|0|0|0|0|0`; fatal log matches were zero.
+- Browser UAT verified the new Partner Setup default tab, safe all-zero empty
+  state, inactive-only Add University form, dynamic Application Pipeline
+  stages and disabled terminal stages. No mutation or outbound action ran.
+- Two pre-acceptance app swaps deliberately rolled back to the healthy prior
+  image when a CRLF-contaminated final trap-cleanup command failed. The third,
+  LF-normalized run completed; database, schema, worker and external delivery
+  stayed unchanged throughout. Final root use was `81%` with
+  `20,275,982,336` bytes free.

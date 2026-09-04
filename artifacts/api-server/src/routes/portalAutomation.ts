@@ -32,6 +32,7 @@ import {
   resolveStudentPortalRouting,
   scanAndEnqueueTriggerStageApplications,
   MAX_AUTO_FAILED_SUBMISSIONS,
+  withEligiblePortalTriggerStages,
 } from "../lib/portalAutoTrigger.js";
 import { buildPageMeta, parsePaginationParams } from "@workspace/pagination";
 import {
@@ -49,6 +50,10 @@ import {
   isSitMember,
   isSitExcludedUniversity,
   type ProgramCandidate,
+  type PortalStatusCheckResult,
+  type UniversityAdapter,
+  type AdapterSession,
+  type PortalStatusArtifactKind,
 } from "@workspace/portal-adapters";
 import { isAgentRole } from "@workspace/roles";
 import { logAudit, requireAuth, requireRole } from "../lib/auth";
@@ -72,6 +77,15 @@ import {
   type ClaimedSubmission,
   getApplicationMandatoryDocumentStatus,
   syncApplicationFinance,
+  claimDuePortalStatusChecks,
+  completePortalStatusCheck,
+  failPortalStatusCheck,
+  heartbeatPortalStatusCheck,
+  classifyPortalStatusFailure,
+  planPortalStatusSuccess,
+  acquirePortalStatusLaneLease,
+  releasePortalStatusChecks,
+  type ClaimedPortalStatusCheck,
 } from "@workspace/portal-runner";
 import { batchPortalCredentialKeys, resolvePortalCreds, checkHasPortalCredentials } from "../lib/portalCreds.js";
 import { reconcilePortalUniversityCrmLinks } from "../lib/portalUniversityLinker.js";
@@ -82,7 +96,24 @@ import {
   isDiagnosablePortalStatus,
 } from "../lib/portalAiGuardian.js";
 import { queuePortalLifecycleReview } from "../lib/portalLifecycleGuardian.js";
+import { normalizePortalLifecycleObservation } from "../lib/portalLifecycleObservation.js";
+import {
+  mapPortalDispositionToSubmissionStatus,
+  requiredPortalArtifactForSignal,
+} from "../lib/portalLifecycleContract.js";
+import { recordPortalLifecycleObservation } from "../lib/portalLifecycleObservationStore.js";
+import { syncVerifiedPortalApplicationNumber } from "../lib/portalApplicationReferenceSync.js";
+import {
+  hasStoredPortalLifecycleArtifact,
+  persistPortalStatusArtifacts,
+} from "../lib/portalArtifactIntake.js";
 import { resolveCanonicalPortalUniversity } from "../lib/portalUniversityResolver.js";
+import {
+  MAX_PORTAL_ADAPTER_SPEC_BYTES,
+  buildPortalAdapterSpecPolicySnapshot,
+  portalAdapterSpecActivationBlockers,
+  portalAdapterSpecSha256,
+} from "../lib/portalAdapterSpecPolicy.js";
 
 const router: IRouter = Router();
 
@@ -1209,8 +1240,10 @@ router.post(
       return;
     }
 
+    const runtimeSettings = await withEligiblePortalTriggerStages(settings);
+
     // ----- Enqueue every eligible trigger-stage application -------------
-    const summary = await scanAndEnqueueTriggerStageApplications(user.id, settings);
+    const summary = await scanAndEnqueueTriggerStageApplications(user.id, runtimeSettings);
 
     // ----- Immediately drain the queue (interval-independent) -----------
     // Reuses the exact manual process-queued path (50s inline cap per
@@ -1227,7 +1260,7 @@ router.post(
       try {
         // Run Now must only process applications currently in a configured
         // trigger stage — same gate as the enqueue scan above.
-        results = await drainQueue(workerId, settings.triggerStages ?? []);
+        results = await drainQueue(workerId, runtimeSettings.triggerStages ?? []);
         drained = true;
       } finally {
         _processMutex = false;
@@ -2256,11 +2289,12 @@ export async function maybeFanOutStudentForApplication(
   actorUserId: number,
 ): Promise<void> {
   try {
-    const [settings] = await db
+    const [savedSettings] = await db
       .select()
       .from(portalAutomationSettingsTable)
       .limit(1);
-    if (!settings?.isEnabled) return;
+    if (!savedSettings?.isEnabled) return;
+    const settings = await withEligiblePortalTriggerStages(savedSettings);
 
     const [srcApp] = await db
       .select()
@@ -2485,9 +2519,10 @@ router.get(
       .select()
       .from(portalAutomationSettingsTable)
       .limit(1);
-    const triggerStages = Array.isArray(settings?.triggerStages)
-      ? (settings.triggerStages as string[])
-      : [];
+    const runtimeSettings = settings
+      ? await withEligiblePortalTriggerStages(settings)
+      : null;
+    const triggerStages = runtimeSettings?.triggerStages ?? [];
 
     if (triggerStages.length === 0) {
       res.json({ applications: 0, universities: 0, triggerStages: [] });
@@ -2554,9 +2589,10 @@ router.post(
       .select()
       .from(portalAutomationSettingsTable)
       .limit(1);
-    const triggerStages = Array.isArray(settings?.triggerStages)
-      ? (settings.triggerStages as string[])
-      : [];
+    const runtimeSettings = settings
+      ? await withEligiblePortalTriggerStages(settings)
+      : null;
+    const triggerStages = runtimeSettings?.triggerStages ?? [];
     if (triggerStages.length === 0) {
       res.status(409).json({
         error: "NO_TRIGGER_STAGES",
@@ -2782,12 +2818,13 @@ export type AutoDrainTickResult =
  * ticks deterministically without timers.
  */
 export async function runPortalAutoDrainTick(): Promise<AutoDrainTickResult> {
-  const [settings] = await db
+  const [savedSettings] = await db
     .select()
     .from(portalAutomationSettingsTable)
     .limit(1);
 
-  if (!settings?.isEnabled)       return { ran: false, reason: "disabled" };
+  if (!savedSettings?.isEnabled)       return { ran: false, reason: "disabled" };
+  const settings = await withEligiblePortalTriggerStages(savedSettings);
   if (!settings.autoProcessEnabled) return { ran: false, reason: "scheduled_off" };
 
   const intervalMin =
@@ -2848,193 +2885,572 @@ export function startPortalAutoDrain(intervalMs = AUTO_DRAIN_TICK_MS): void {
 }
 
 // ---------------------------------------------------------------------------
-// Background job: periodic multico status sync
+// Background job: distributed portal status sync
 // ---------------------------------------------------------------------------
 
-/**
- * Map a raw Multico portal status string to an internal portal_submission_status
- * enum value. Returns null when the status is not yet terminal (i.e. the
- * canonical row status should remain "submitted" while only result_json is
- * updated).
- *
- * Terminal → internal mapping:
- *   Accepted / Approved  → "accepted"
- *   Rejected / Declined  → "rejected"
- *   anything else        → null  (keep "submitted", just update result_json)
- */
-function mapMulticoPortalStatus(
-  raw: string,
-): "accepted" | "rejected" | null {
-  const lower = raw.toLowerCase().trim();
-  if (lower.includes("accept") || lower.includes("approv")) return "accepted";
-  if (lower.includes("reject") || lower.includes("declin")) return "rejected";
-  return null;
+const PORTAL_STATUS_CHECK_TIMEOUT_MS = 60_000;
+
+async function pollPortalStatusWithTimeout<T>(
+  operation: Promise<T>,
+  onTimeout: () => Promise<void>,
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      operation,
+      new Promise<T>((_, reject) => {
+        timer = setTimeout(() => {
+          reject(new Error("PORTAL_STATUS_CHECK_TIMEOUT"));
+          void onTimeout();
+        }, PORTAL_STATUS_CHECK_TIMEOUT_MS);
+        timer.unref?.();
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 /**
- * One status-sync sweep: queries portal_submissions rows that were submitted
- * to the Multico adapter (status="submitted", adapter_key="multico") and for
- * each row calls the adapter's checkStatus() method to refresh the remote
- * application status.
- *
- * For every changed status the sweep:
- *   1. Writes result_json.portalStatus + portalStatusCheckedAt (always).
- *   2. Writes portal_submissions.status to "accepted"/"rejected" when the
- *      Multico portal signals a terminal decision.
- *   3. Emits a dispatchNotification for accepted/rejected transitions so
- *      staff are informed without manually checking the portal.
- *
- * Exported so a run-now API endpoint can invoke it on demand.
+ * One distributed, fair status-sync sweep. Rows are leased with SKIP LOCKED
+ * and grouped by portal-account lane. Each lane gets its own login/session;
+ * a broken or slow university cannot block unrelated portals.
  */
 export async function runPortalStatusSync(): Promise<{ checked: number; updated: number }> {
-  const rows = await db
-    .select({
-      id:            portalSubmissionsTable.id,
-      applicationId: portalSubmissionsTable.applicationId,
-      studentId:     portalSubmissionsTable.studentId,
-      externalRef:   portalSubmissionsTable.externalRef,
-      resultJson:    portalSubmissionsTable.resultJson,
-    })
-    .from(portalSubmissionsTable)
-    .where(
-      and(
-        eq(portalSubmissionsTable.status, "submitted"),
-        eq(portalSubmissionsTable.adapterKey, "multico"),
-        isNotNull(portalSubmissionsTable.externalRef),
-      ),
-    )
-    .limit(20);
-
+  const workerId = `status-sync-${process.pid}-${Date.now()}`;
+  const rows = await claimDuePortalStatusChecks({
+    workerId,
+    maxLanes: 4,
+    rowsPerLane: 5,
+  });
   if (rows.length === 0) return { checked: 0, updated: 0 };
 
-  const adapter = await resolveAdapterByKey("multico");
-  if (!adapter?.checkStatus) return { checked: rows.length, updated: 0 };
+  const lanes = new Map<string, ClaimedPortalStatusCheck[]>();
+  for (const row of rows) {
+    const lane = lanes.get(row.laneKey) ?? [];
+    lane.push(row);
+    lanes.set(row.laneKey, lane);
+  }
 
-  let session: Awaited<ReturnType<typeof adapter.login>> | undefined;
   let updated = 0;
-  try {
-    const creds = await resolvePortalCreds("multico").catch(() => null);
-    if (!creds) {
-      console.warn("[portal-status-sync] multico credentials not configured — skipping sweep");
-      return { checked: rows.length, updated: 0 };
-    }
-    session = await adapter.login({ credentials: creds, headless: true });
-
-    for (const row of rows) {
-      if (!row.externalRef) continue;
-      try {
-        const result = await adapter.checkStatus!(session, row.externalRef);
-        if (!result) continue;
-
-        const prevPortalStatus = (row.resultJson as Record<string, unknown> | null)?.portalStatus as string | undefined;
-        if (result.status === prevPortalStatus) continue;  // nothing changed
-
-        const internalStatus = mapMulticoPortalStatus(result.status);
-        const newResultJson = {
-          ...(row.resultJson as Record<string, unknown> ?? {}),
-          portalStatus:          result.status,
-          portalStatusCheckedAt: new Date().toISOString(),
-        };
-
-        if (internalStatus) {
-          // Terminal decision — transition portal_submissions.status too.
-          await db
-            .update(portalSubmissionsTable)
-            .set({
-              status:     internalStatus,
-              resultJson: newResultJson,
-              updatedAt:  new Date(),
-            })
-            .where(eq(portalSubmissionsTable.id, row.id));
-
-          // Look up student name + university for the notification body.
-          const [appRow] = await db
-            .select({
-              universityName: applicationsTable.universityName,
-              programName:    applicationsTable.programName,
-              assignedToId:   applicationsTable.assignedToId,
-            })
-            .from(applicationsTable)
-            .where(eq(applicationsTable.id, row.applicationId))
-            .limit(1);
-
-          let studentName = "student";
-          if (row.studentId) {
-            const [sRow] = await db
-              .select({ firstName: studentsTable.firstName, lastName: studentsTable.lastName })
-              .from(studentsTable)
-              .where(eq(studentsTable.id, row.studentId))
-              .limit(1);
-            if (sRow) studentName = `${sRow.firstName ?? ""} ${sRow.lastName ?? ""}`.trim() || studentName;
-          }
-
-          const uniName = appRow?.universityName ?? "Multico University";
-          const progName = appRow?.programName ?? "";
-          const isAccepted = internalStatus === "accepted";
-          const eventLabel = isAccepted ? "Accepted" : "Rejected";
-
-          const recipientUserIds: number[] = [];
-          if (appRow?.assignedToId) recipientUserIds.push(appRow.assignedToId);
-
-          dispatchNotification({
-            event:    `portal.application_${internalStatus}`,
-            title:    `Portal Application ${eventLabel}`,
-            body:     `${studentName}'s application to ${uniName}${progName ? ` / ${progName}` : ""} was ${eventLabel.toLowerCase()} on the Multico portal.`,
-            actionUrl: `/staff/applications/${row.applicationId}`,
-            icon:     isAccepted ? "CheckCircle" : "XCircle",
-            recipientUserIds: recipientUserIds.length > 0 ? recipientUserIds : undefined,
-            templateVars: {
-              studentName,
-              universityName: uniName,
-              programName: progName,
-              portalStatus: result.status,
-            },
-          }).catch(() => {});
-
-          console.log(
-            `[portal-status-sync] multico submission #${row.id} (app #${row.applicationId}): ` +
-            `portalStatus ${prevPortalStatus ?? "?"} → ${result.status} (internal: ${internalStatus})`,
-          );
-        } else {
-          // Non-terminal status change — update result_json only.
-          await db
-            .update(portalSubmissionsTable)
-            .set({ resultJson: newResultJson, updatedAt: new Date() })
-            .where(eq(portalSubmissionsTable.id, row.id));
-
-          console.log(
-            `[portal-status-sync] multico submission #${row.id}: portalStatus ` +
-            `${prevPortalStatus ?? "?"} → ${result.status} (non-terminal, keeping status=submitted)`,
-          );
-        }
-
-        await queuePortalLifecycleReview({
-          submissionId: row.id,
+  const processRow = async (
+    row: ClaimedPortalStatusCheck,
+    result: PortalStatusCheckResult,
+    adapter: UniversityAdapter,
+    session: AdapterSession,
+  ): Promise<void> => {
+    const observation = normalizePortalLifecycleObservation({
+      submissionId: row.id,
+      applicationId: row.applicationId,
+      adapterKey: row.adapterKey,
+      result,
+    });
+    const recordedObservation = await recordPortalLifecycleObservation(observation);
+    const referenceSync = observation.identityVerified
+      ? await syncVerifiedPortalApplicationNumber({
           applicationId: row.applicationId,
-          rawStatus: result.status,
-        }).catch((error) => {
-          console.warn(
-            `[portal-lifecycle] submission #${row.id} proposal failed:`,
-            error,
-          );
-        });
+          verifiedApplicationNumber: observation.verifiedApplicationNumber,
+        })
+      : "invalid";
+    const requiredArtifact = requiredPortalArtifactForSignal(observation.signal) as
+      | PortalStatusArtifactKind
+      | null;
+    let artifactStored = false;
+    if (
+      observation.identityVerified &&
+      requiredArtifact &&
+      adapter.collectStatusArtifacts &&
+      !(await hasStoredPortalLifecycleArtifact(row.applicationId, requiredArtifact))
+    ) {
+      const artifacts = await adapter.collectStatusArtifacts(
+        session,
+        row.externalRef,
+        result,
+        [requiredArtifact],
+      );
+      if (artifacts.some((artifact) => artifact.kind !== requiredArtifact)) {
+        throw new Error("PORTAL_STATUS_ARTIFACT_KIND_MISMATCH");
+      }
+      const artifactOutcomes = await persistPortalStatusArtifacts({
+        submissionId: row.id,
+        applicationId: row.applicationId,
+        observationId: recordedObservation.id,
+        observationHash: observation.observationHash,
+        identityVerified: observation.identityVerified,
+        artifacts,
+      });
+      artifactStored = artifactOutcomes.some((artifact) => artifact.created);
+    }
+    const prevPortalStatus = row.resultJson?.portalStatus as string | undefined;
+    const statusChanged = observation.rawStatus !== prevPortalStatus;
+    const internalStatus = observation.identityVerified
+      ? mapPortalDispositionToSubmissionStatus(observation.disposition)
+      : null;
+    const newResultJson = {
+      ...(row.resultJson ?? {}),
+      portalStatus: observation.rawStatus,
+      portalStatusCheckedAt: new Date().toISOString(),
+      portalLifecycle: {
+        observationId: recordedObservation.id,
+        disposition: observation.disposition,
+        identityVerified: observation.identityVerified,
+        missingDocumentCount: observation.missingDocuments.length,
+        applicationReferenceSync: referenceSync,
+      },
+    };
 
-        updated++;
-      } catch (err) {
-        console.warn(`[portal-status-sync] multico #${row.id} check failed:`, err);
+    // A terminal portal result must not become invisible to operations. Queue
+    // the idempotent review item before changing the submission status; if the
+    // durable queue write fails, the outer worker retry keeps this row eligible.
+    await queuePortalLifecycleReview({
+      submissionId: row.id,
+      applicationId: row.applicationId,
+      rawStatus: observation.rawStatus,
+      observationId: recordedObservation.id,
+      observationHash: observation.observationHash,
+      identityVerified: observation.identityVerified,
+      missingDocuments: observation.missingDocuments,
+      applicationReferenceSync: referenceSync,
+    });
+
+    if (internalStatus) {
+      const transitioned = await db
+        .update(portalSubmissionsTable)
+        .set({ status: internalStatus, resultJson: newResultJson, updatedAt: new Date() })
+        .where(
+          and(
+            eq(portalSubmissionsTable.id, row.id),
+            eq(portalSubmissionsTable.statusCheckLockedBy, workerId),
+            eq(portalSubmissionsTable.status, "submitted"),
+          ),
+        )
+        .returning({ id: portalSubmissionsTable.id });
+      if (transitioned.length === 0) {
+        throw new Error("PORTAL_STATUS_CHECK_LEASE_LOST");
+      }
+
+      const [appRow] = await db
+        .select({
+          universityName: applicationsTable.universityName,
+          programName: applicationsTable.programName,
+          assignedToId: applicationsTable.assignedToId,
+        })
+        .from(applicationsTable)
+        .where(eq(applicationsTable.id, row.applicationId))
+        .limit(1);
+      let studentName = "student";
+      if (row.studentId) {
+        const [student] = await db
+          .select({ firstName: studentsTable.firstName, lastName: studentsTable.lastName })
+          .from(studentsTable)
+          .where(eq(studentsTable.id, row.studentId))
+          .limit(1);
+        if (student) {
+          studentName = `${student.firstName ?? ""} ${student.lastName ?? ""}`.trim() || studentName;
+        }
+      }
+      const universityName = appRow?.universityName ?? row.universityKey;
+      const programName = appRow?.programName ?? "";
+      const terminalPresentation = {
+        accepted: { label: "Enrolled", icon: "CheckCircle" },
+        rejected: { label: "Rejected", icon: "XCircle" },
+        program_full: { label: "Program Full", icon: "AlertTriangle" },
+        already_exists: { label: "Already Registered", icon: "AlertTriangle" },
+        canceled: { label: "Withdrawn", icon: "XCircle" },
+      }[internalStatus];
+      dispatchNotification({
+        event: `portal.application_${internalStatus}`,
+        title: `Portal Application ${terminalPresentation.label}`,
+        body: `${studentName}'s application to ${universityName}${programName ? ` / ${programName}` : ""} is now ${terminalPresentation.label.toLowerCase()} on the ${row.adapterKey} portal.`,
+        actionUrl: `/staff/applications/${row.applicationId}`,
+        icon: terminalPresentation.icon,
+        recipientUserIds: appRow?.assignedToId ? [appRow.assignedToId] : undefined,
+        templateVars: {
+          studentName,
+          universityName,
+          programName,
+          portalStatus: observation.rawStatus,
+        },
+      }).catch(() => {});
+    } else {
+      const refreshed = await db
+        .update(portalSubmissionsTable)
+        .set({ resultJson: newResultJson, updatedAt: new Date() })
+        .where(
+          and(
+            eq(portalSubmissionsTable.id, row.id),
+            eq(portalSubmissionsTable.statusCheckLockedBy, workerId),
+          ),
+        )
+        .returning({ id: portalSubmissionsTable.id });
+      if (refreshed.length === 0) {
+        throw new Error("PORTAL_STATUS_CHECK_LEASE_LOST");
       }
     }
-  } finally {
-    await session?.close().catch(() => {});
-  }
+
+    const completed = await completePortalStatusCheck({
+      submissionId: row.id,
+      workerId,
+      nextCheckAt: planPortalStatusSuccess({
+        submissionId: row.id,
+        disposition: observation.disposition,
+      }),
+    });
+    if (!completed) {
+      throw new Error("PORTAL_STATUS_CHECK_LEASE_LOST");
+    }
+    if (statusChanged || recordedObservation.created || referenceSync === "set" || artifactStored) {
+      updated += 1;
+    }
+  };
+
+  const laneEntries = [...lanes.entries()];
+  const laneOutcomes = await Promise.allSettled(
+    laneEntries.map(async ([laneKey, laneRows]) => {
+      const laneLease = await acquirePortalStatusLaneLease({ laneKey });
+      if (!laneLease) {
+        await releasePortalStatusChecks({
+          submissionIds: laneRows.map((row) => row.id),
+          workerId,
+        });
+        return;
+      }
+      try {
+        const first = laneRows[0]!;
+        const adapter = await resolveAdapterByKey(first.adapterKey);
+        if (!adapter?.checkStatus) {
+          await Promise.all(
+            laneRows.map((row) =>
+              failPortalStatusCheck({
+                submissionId: row.id,
+                workerId,
+                currentFailedAttempts: row.statusCheckAttempts,
+                error: "STATUS_CHECK_UNSUPPORTED",
+              }),
+            ),
+          );
+          return;
+        }
+
+        let session: Awaited<ReturnType<typeof adapter.login>> | undefined;
+        try {
+          const credentials = await resolvePortalCreds(
+            first.universityKey,
+            first.adapterKey,
+          );
+          session = await adapter.login({ credentials, headless: true });
+          for (const row of laneRows) {
+            try {
+              const leaseOwned = await heartbeatPortalStatusCheck({
+                submissionId: row.id,
+                workerId,
+              });
+              if (!leaseOwned) {
+                console.warn(`[portal-status-sync] ${laneKey} submission #${row.id} lease lost before polling`);
+                continue;
+              }
+              const result = await pollPortalStatusWithTimeout(
+                adapter.checkStatus(session, row.externalRef),
+                async () => session?.close().catch(() => {}),
+              );
+              if (result) {
+                await processRow(row, result, adapter, session);
+              } else {
+                const completed = await completePortalStatusCheck({
+                  submissionId: row.id,
+                  workerId,
+                  nextCheckAt: planPortalStatusSuccess({
+                    submissionId: row.id,
+                    disposition: "UNKNOWN",
+                  }),
+                });
+                if (!completed) throw new Error("PORTAL_STATUS_CHECK_LEASE_LOST");
+              }
+            } catch (error) {
+              const failure = await failPortalStatusCheck({
+                submissionId: row.id,
+                workerId,
+                currentFailedAttempts: row.statusCheckAttempts,
+                error,
+              });
+              console.warn(
+                `[portal-status-sync] ${laneKey} submission #${row.id} failed: ${failure.errorCode}`,
+              );
+            }
+          }
+        } catch (error) {
+          const failures = await Promise.all(
+            laneRows.map((row) =>
+              failPortalStatusCheck({
+                submissionId: row.id,
+                workerId,
+                currentFailedAttempts: row.statusCheckAttempts,
+                error,
+              }),
+            ),
+          );
+          console.warn(
+            `[portal-status-sync] lane ${laneKey} login failed: ${failures[0]?.errorCode ?? classifyPortalStatusFailure(error)}`,
+          );
+        } finally {
+          await session?.close().catch(() => {});
+        }
+      } finally {
+        await laneLease.release();
+      }
+    }),
+  );
+  await Promise.allSettled(
+    laneOutcomes.map((outcome, index) => {
+      if (outcome.status === "fulfilled") return Promise.resolve();
+      const [, laneRows] = laneEntries[index]!;
+      return Promise.allSettled(
+        laneRows.map((row) =>
+          failPortalStatusCheck({
+            submissionId: row.id,
+            workerId,
+            currentFailedAttempts: row.statusCheckAttempts,
+            error: outcome.reason,
+          }),
+        ),
+      ).then(() => undefined);
+    }),
+  );
 
   return { checked: rows.length, updated };
 }
 
+router.get(
+  "/portal-automation/operations",
+  requireAuth,
+  requireRole(...ADMIN_ROLES),
+  async (_req, res): Promise<void> => {
+    const [summaryResult, lanesResult, observationsResult, suspendedResult] =
+      await Promise.all([
+        db.execute<{
+          tracked: number;
+          due: number;
+          checking: number;
+          retrying: number;
+          suspended: number;
+          observations24h: number;
+          unverified24h: number;
+          missingDocuments24h: number;
+          decisions24h: number;
+          pendingReviews: number;
+        }>(sql`
+          SELECT
+            count(*) FILTER (WHERE submission.status = 'submitted' AND submission.external_ref IS NOT NULL AND btrim(submission.external_ref) <> '')::int AS tracked,
+            count(*) FILTER (WHERE submission.status = 'submitted' AND submission.external_ref IS NOT NULL AND btrim(submission.external_ref) <> '' AND submission.status_check_suspended_at IS NULL AND submission.status_check_next_at <= now())::int AS due,
+            count(*) FILTER (WHERE submission.status = 'submitted' AND submission.external_ref IS NOT NULL AND btrim(submission.external_ref) <> '' AND submission.status_check_locked_at IS NOT NULL)::int AS checking,
+            count(*) FILTER (WHERE submission.status = 'submitted' AND submission.external_ref IS NOT NULL AND btrim(submission.external_ref) <> '' AND submission.status_check_attempts > 0 AND submission.status_check_suspended_at IS NULL)::int AS retrying,
+            count(*) FILTER (WHERE submission.status = 'submitted' AND submission.external_ref IS NOT NULL AND btrim(submission.external_ref) <> '' AND submission.status_check_suspended_at IS NOT NULL)::int AS suspended,
+            (SELECT count(*)::int FROM portal_lifecycle_observations observation WHERE observation.observed_at >= now() - interval '24 hours') AS "observations24h",
+            (SELECT count(*)::int FROM portal_lifecycle_observations observation WHERE observation.observed_at >= now() - interval '24 hours' AND NOT observation.identity_verified) AS "unverified24h",
+            (SELECT count(*)::int FROM portal_lifecycle_observations observation WHERE observation.observed_at >= now() - interval '24 hours' AND observation.disposition = 'MISSING_DOCUMENT') AS "missingDocuments24h",
+            (SELECT count(*)::int FROM portal_lifecycle_observations observation WHERE observation.observed_at >= now() - interval '24 hours' AND observation.disposition IN ('CONDITIONAL_OFFER', 'UNCONDITIONAL_OFFER', 'FINAL_ACCEPTANCE', 'REJECTED')) AS "decisions24h",
+            (SELECT count(*)::int FROM ai_action_queue action WHERE action.action_type = 'portal_lifecycle_proposal' AND action.status = 'pending_approval') AS "pendingReviews"
+          FROM portal_submissions submission
+          WHERE submission.deleted_at IS NULL
+        `),
+        db.execute<{
+          laneKey: string;
+          adapterKey: string;
+          universityKey: string;
+          tracked: number;
+          due: number;
+          checking: number;
+          retrying: number;
+          suspended: number;
+          oldestDue: Date | null;
+          lastCheckedAt: Date | null;
+        }>(sql`
+          SELECT
+            lower(submission.adapter_key) || ':' || lower(submission.university_key) AS "laneKey",
+            lower(submission.adapter_key) AS "adapterKey",
+            lower(submission.university_key) AS "universityKey",
+            count(*)::int AS tracked,
+            count(*) FILTER (WHERE submission.status_check_suspended_at IS NULL AND submission.status_check_next_at <= now())::int AS due,
+            count(*) FILTER (WHERE submission.status_check_locked_at IS NOT NULL)::int AS checking,
+            count(*) FILTER (WHERE submission.status_check_attempts > 0 AND submission.status_check_suspended_at IS NULL)::int AS retrying,
+            count(*) FILTER (WHERE submission.status_check_suspended_at IS NOT NULL)::int AS suspended,
+            min(submission.status_check_next_at) FILTER (WHERE submission.status_check_suspended_at IS NULL AND submission.status_check_next_at <= now()) AS "oldestDue",
+            max(submission.status_check_last_at) AS "lastCheckedAt"
+          FROM portal_submissions submission
+          WHERE submission.status = 'submitted'
+            AND submission.deleted_at IS NULL
+            AND submission.external_ref IS NOT NULL
+            AND btrim(submission.external_ref) <> ''
+            AND submission.adapter_key IS NOT NULL
+            AND btrim(submission.adapter_key) <> ''
+          GROUP BY lower(submission.adapter_key), lower(submission.university_key)
+          ORDER BY suspended DESC, due DESC, "oldestDue" ASC NULLS LAST
+          LIMIT 100
+        `),
+        db.execute<{
+          id: number;
+          submissionId: number;
+          applicationId: number;
+          adapterKey: string;
+          universityKey: string;
+          disposition: string;
+          identityVerified: boolean;
+          missingDocumentCount: number;
+          observedAt: Date;
+        }>(sql`
+          SELECT
+            observation.id,
+            observation.submission_id AS "submissionId",
+            observation.application_id AS "applicationId",
+            observation.adapter_key AS "adapterKey",
+            submission.university_key AS "universityKey",
+            observation.disposition,
+            observation.identity_verified AS "identityVerified",
+            jsonb_array_length(observation.missing_documents)::int AS "missingDocumentCount",
+            observation.observed_at AS "observedAt"
+          FROM portal_lifecycle_observations observation
+          JOIN portal_submissions submission ON submission.id = observation.submission_id
+          ORDER BY observation.observed_at DESC, observation.id DESC
+          LIMIT 50
+        `),
+        db.execute<{
+          submissionId: number;
+          applicationId: number;
+          adapterKey: string;
+          universityKey: string;
+          attempts: number;
+          suspendedAt: Date;
+          errorCategory: string;
+        }>(sql`
+          SELECT
+            submission.id AS "submissionId",
+            submission.application_id AS "applicationId",
+            submission.adapter_key AS "adapterKey",
+            submission.university_key AS "universityKey",
+            submission.status_check_attempts AS attempts,
+            submission.status_check_suspended_at AS "suspendedAt",
+            CASE
+              WHEN submission.status_check_error = 'STATUS_CHECK_UNSUPPORTED' THEN 'unsupported'
+              WHEN submission.status_check_error = 'STATUS_CHECK_TIMEOUT' THEN 'timeout'
+              WHEN submission.status_check_error = 'STATUS_CHECK_AUTHENTICATION' THEN 'authentication'
+              WHEN submission.status_check_error = 'STATUS_CHECK_PORTAL_DRIFT' THEN 'portal_drift'
+              WHEN submission.status_check_error = 'STATUS_CHECK_NETWORK' THEN 'network'
+              WHEN submission.status_check_error = 'STATUS_CHECK_LEASE_LOST' THEN 'lease_lost'
+              WHEN submission.status_check_error = 'STATUS_CHECK_ARTIFACT' THEN 'artifact'
+              ELSE 'other'
+            END AS "errorCategory"
+          FROM portal_submissions submission
+          WHERE submission.status_check_suspended_at IS NOT NULL
+            AND submission.deleted_at IS NULL
+          ORDER BY submission.status_check_suspended_at DESC
+          LIMIT 50
+        `),
+      ]);
+
+    res.setHeader("Cache-Control", "private, no-store");
+    res.json({
+      summary: summaryResult.rows[0] ?? {
+        tracked: 0,
+        due: 0,
+        checking: 0,
+        retrying: 0,
+        suspended: 0,
+        observations24h: 0,
+        unverified24h: 0,
+        missingDocuments24h: 0,
+        decisions24h: 0,
+        pendingReviews: 0,
+      },
+      lanes: lanesResult.rows,
+      recentObservations: observationsResult.rows,
+      suspended: suspendedResult.rows,
+      generatedAt: new Date().toISOString(),
+    });
+  },
+);
+
+let manualStatusSyncRunning = false;
+router.post(
+  "/portal-automation/status-sync/run",
+  requireAuth,
+  requireRole(...ADMIN_ROLES),
+  async (req, res): Promise<void> => {
+    if (manualStatusSyncRunning) {
+      res.status(409).json({ error: "STATUS_SYNC_ALREADY_RUNNING" });
+      return;
+    }
+    manualStatusSyncRunning = true;
+    const actorId = req.user!.id;
+    const actorIp = req.ip;
+    void runPortalStatusSync()
+      .then((result) =>
+        logAudit(
+          actorId,
+          "run_portal_status_sync",
+          "portal_submission",
+          undefined,
+          result,
+          actorIp,
+        ),
+      )
+      .catch((error) => {
+        console.error(
+          `[portal-status-sync] Manual sweep failed: ${classifyPortalStatusFailure(error)}`,
+        );
+      })
+      .finally(() => {
+        manualStatusSyncRunning = false;
+      });
+    res.status(202).json({ started: true });
+  },
+);
+
+router.post(
+  "/portal-submissions/:id/status-check/resume",
+  requireAuth,
+  requireRole(...ADMIN_ROLES),
+  validate({ params: idParamsSchema }),
+  async (req, res): Promise<void> => {
+    const { id } = getValidated<IdSchemas>(req).params;
+    const [submission] = await db
+      .update(portalSubmissionsTable)
+      .set({
+        statusCheckAttempts: 0,
+        statusCheckNextAt: new Date(),
+        statusCheckError: null,
+        statusCheckLockedAt: null,
+        statusCheckLockedBy: null,
+        statusCheckSuspendedAt: null,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(portalSubmissionsTable.id, id),
+          eq(portalSubmissionsTable.status, "submitted"),
+          isNull(portalSubmissionsTable.deletedAt),
+          isNotNull(portalSubmissionsTable.statusCheckSuspendedAt),
+        ),
+      )
+      .returning({ id: portalSubmissionsTable.id });
+    if (!submission) {
+      res.status(409).json({ error: "STATUS_CHECK_NOT_SUSPENDED" });
+      return;
+    }
+    await logAudit(
+      req.user!.id,
+      "resume_portal_status_check",
+      "portal_submission",
+      id,
+      { resetAttempts: true },
+      req.ip,
+    );
+    res.json({ resumed: true, submissionId: id });
+  },
+);
+
 /**
- * Starts the periodic multico status-sync sweep. Call once at api-server
- * startup. Default interval is 10 minutes — deliberately generous to avoid
- * hammering the portal.
+ * Starts the periodic distributed status-sync sweep. Call once per API
+ * instance; database leases make overlapping instances safe.
  */
 let portalStatusSyncTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -3042,7 +3458,7 @@ export function startPortalStatusSync(intervalMs = 10 * 60_000): () => void {
   if (portalStatusSyncTimer) return stopPortalStatusSync;
   const run = (): void => {
     runPortalStatusSync().catch((err) => {
-      console.error("[portal-status-sync] Sweep error:", err);
+      console.error(`[portal-status-sync] Sweep error: ${classifyPortalStatusFailure(err)}`);
     });
   };
   portalStatusSyncTimer = setInterval(run, intervalMs);
@@ -4248,22 +4664,70 @@ const specKeyParamsSchema = z.object({ key: z.string().min(1).max(100) });
 const rawSpecObjectSchema = z.record(z.string(), z.unknown());
 
 const validateSpecBodySchema = z.object({ spec: rawSpecObjectSchema });
-const upsertSpecBodySchema = z.object({
-  spec: rawSpecObjectSchema,
-  enable: z.boolean().optional(),
-  approveJsHook: z.boolean().optional(),
-  /** super_admin approval to allow enabling this privileged spec. */
-  approvePrivileged: z.boolean().optional(),
-});
+const upsertSpecBodySchema = z
+  .object({ spec: rawSpecObjectSchema })
+  .strict();
 const patchSpecBodySchema = z
   .object({
     enableVersion: z.number().int().positive().optional(),
     disable: z.boolean().optional(),
     rollbackTo: z.number().int().positive().optional(),
+    /** Exact version whose approval flags are being changed. */
+    approvalVersion: z.number().int().positive().optional(),
     jsHookApproved: z.boolean().optional(),
     privilegedApproved: z.boolean().optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((body, ctx) => {
+    const changesApproval =
+      body.jsHookApproved !== undefined ||
+      body.privilegedApproved !== undefined;
+    if (changesApproval && body.approvalVersion === undefined) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["approvalVersion"],
+        message: "approvalVersion is required for approval changes",
+      });
+    }
+    if (!changesApproval && body.approvalVersion !== undefined) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["approvalVersion"],
+        message: "approvalVersion requires an approval change",
+      });
+    }
+    if (
+      body.enableVersion !== undefined &&
+      body.rollbackTo !== undefined
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["enableVersion"],
+        message: "enableVersion and rollbackTo are mutually exclusive",
+      });
+    }
+    if (
+      body.disable === true &&
+      (body.enableVersion !== undefined || body.rollbackTo !== undefined)
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["disable"],
+        message: "disable cannot be combined with enableVersion or rollbackTo",
+      });
+    }
+    if (
+      body.enableVersion === undefined &&
+      body.rollbackTo === undefined &&
+      body.disable !== true &&
+      !changesApproval
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "At least one version, approval, or disable change is required",
+      });
+    }
+  });
 
 function isSuperAdmin(role: string): boolean {
   return role === "super_admin";
@@ -4307,20 +4771,67 @@ async function setEnabledSpecVersionTx(
   }
 }
 
-async function setEnabledSpecVersion(
+class AdapterChangeInFlightError extends Error {
+  constructor(readonly runningCount: number) {
+    super("Adapter behavior cannot change while submissions are running");
+    this.name = "AdapterChangeInFlightError";
+  }
+}
+
+async function resetAdapterExecutionStateTx(
+  tx: SpecTx,
   key: string,
-  version: number | null,
-): Promise<void> {
-  await db.transaction(async (tx) => {
-    await lockSpecKey(tx, key);
-    await setEnabledSpecVersionTx(tx, key, version);
-  });
-  invalidateSpecAdapterCache();
+): Promise<{ partners: number; pendingSubmissions: number }> {
+  // Lock and quarantine every not-yet-started row first. A concurrent claimant
+  // either sees the canceled state after commit or wins the row lock and is
+  // then detected by the running-row check below.
+  const pending = await tx
+    .update(portalSubmissionsTable)
+    .set({
+      status: "canceled",
+      error: "ADAPTER_CONFIGURATION_CHANGED_REVIEW_REQUIRED",
+      lockedAt: null,
+      lockedBy: null,
+      updatedAt: new Date(),
+    })
+    .where(and(
+      eq(portalSubmissionsTable.adapterKey, key),
+      eq(portalSubmissionsTable.status, "queued"),
+      isNull(portalSubmissionsTable.deletedAt),
+    ))
+    .returning({ id: portalSubmissionsTable.id });
+
+  const [inFlight] = await tx
+    .select({ total: count(portalSubmissionsTable.id) })
+    .from(portalSubmissionsTable)
+    .where(and(
+      eq(portalSubmissionsTable.adapterKey, key),
+      eq(portalSubmissionsTable.status, "running"),
+      isNull(portalSubmissionsTable.deletedAt),
+    ));
+  const runningCount = Number(inFlight?.total ?? 0);
+  if (runningCount > 0) throw new AdapterChangeInFlightError(runningCount);
+
+  const partners = await tx
+    .update(portalUniversitiesTable)
+    .set({
+      isActive: false,
+      autoProcess: false,
+      fanOutMode: "off",
+      updatedAt: new Date(),
+    })
+    .where(and(
+      eq(portalUniversitiesTable.adapterKey, key),
+      isNull(portalUniversitiesTable.deletedAt),
+    ))
+    .returning({ id: portalUniversitiesTable.id });
+
+  return { partners: partners.length, pendingSubmissions: pending.length };
 }
 
 // GET /portal-automation/adapter-specs — one entry per key (enabled + latest).
 router.get(
-  "/adapter-specs",
+  "/portal-automation/adapter-specs",
   requireAuth,
   requireRole(...ADMIN_ROLES),
   async (_req, res) => {
@@ -4352,6 +4863,8 @@ router.get(
         privilegedApproved: boolean;
         hasJsHook: boolean;
         privileged: boolean;
+        latestSha256: string;
+        latestActivationBlockers: string[];
         updatedAt: Date;
       }
     >();
@@ -4369,6 +4882,12 @@ router.get(
           privilegedApproved: row.privilegedApproved,
           hasJsHook: specHasJsHook(row.spec),
           privileged: specIsPrivileged(row.spec),
+          latestSha256: portalAdapterSpecSha256(row.spec),
+          latestActivationBlockers: portalAdapterSpecActivationBlockers({
+            spec: row.spec,
+            jsHookApproved: row.jsHookApproved,
+            privilegedApproved: row.privilegedApproved,
+          }),
           updatedAt: row.updatedAt,
         });
       } else {
@@ -4383,7 +4902,7 @@ router.get(
 
 // GET /portal-automation/adapter-specs/:key/versions — full version history.
 router.get(
-  "/adapter-specs/:key/versions",
+  "/portal-automation/adapter-specs/:key/versions",
   requireAuth,
   requireRole(...ADMIN_ROLES),
   validate({ params: specKeyParamsSchema }),
@@ -4401,6 +4920,12 @@ router.get(
         privilegedApproved: row.privilegedApproved,
         hasJsHook: specHasJsHook(row.spec),
         privileged: specIsPrivileged(row.spec),
+        sha256: portalAdapterSpecSha256(row.spec),
+        activationBlockers: portalAdapterSpecActivationBlockers({
+          spec: row.spec,
+          jsHookApproved: row.jsHookApproved,
+          privilegedApproved: row.privilegedApproved,
+        }),
         createdBy: row.createdBy,
         createdAt: row.createdAt,
         updatedAt: row.updatedAt,
@@ -4411,7 +4936,7 @@ router.get(
 
 // POST /portal-automation/adapter-specs/validate — validate without persisting.
 router.post(
-  "/adapter-specs/validate",
+  "/portal-automation/adapter-specs/validate",
   requireAuth,
   requireRole(...ADMIN_ROLES),
   validate({ body: validateSpecBodySchema }),
@@ -4422,25 +4947,42 @@ router.post(
       res.json({ ok: false, error: parsed.error, issues: parsed.issues ?? [] });
       return;
     }
+    const policy = buildPortalAdapterSpecPolicySnapshot(parsed.spec, {
+      jsHookApproved: false,
+      privilegedApproved: false,
+    });
+    if (policy.byteLength > MAX_PORTAL_ADAPTER_SPEC_BYTES) {
+      res.json({
+        ok: false,
+        error: "SPEC_TOO_LARGE",
+        message: `Canonical spec exceeds ${MAX_PORTAL_ADAPTER_SPEC_BYTES} bytes.`,
+        issues: [],
+      });
+      return;
+    }
     res.json({
       ok: true,
       key: parsed.spec.meta.key,
       name: parsed.spec.meta.name,
-      hasJsHook: specHasJsHook(spec),
-      privileged: specIsPrivileged(spec),
+      hasJsHook: policy.hasJsHook,
+      privileged: policy.privileged,
+      sha256: policy.sha256,
+      byteLength: policy.byteLength,
+      activationBlockers: policy.activationBlockers,
+      activationRequiresSeparateStep: true,
     });
   },
 );
 
-// POST /portal-automation/adapter-specs — create a new version (optionally enable).
+// POST /portal-automation/adapter-specs — create a new, inert version.
 router.post(
-  "/adapter-specs",
+  "/portal-automation/adapter-specs",
   requireAuth,
   requireRole(...ADMIN_ROLES),
   validate({ body: upsertSpecBodySchema }),
   async (req, res) => {
     const user = req.user!;
-    const { spec, enable, approveJsHook, approvePrivileged } = getValidated<{
+    const { spec } = getValidated<{
       body: typeof upsertSpecBodySchema;
     }>(req).body;
 
@@ -4450,35 +4992,32 @@ router.post(
       return;
     }
 
-    const hasJsHook = specHasJsHook(spec);
+    const policy = buildPortalAdapterSpecPolicySnapshot(parsed.spec, {
+      jsHookApproved: false,
+      privilegedApproved: false,
+    });
+    if (policy.byteLength > MAX_PORTAL_ADAPTER_SPEC_BYTES) {
+      res.status(413).json({
+        error: "SPEC_TOO_LARGE",
+        message: `Canonical spec exceeds ${MAX_PORTAL_ADAPTER_SPEC_BYTES} bytes.`,
+      });
+      return;
+    }
+    const hasJsHook = policy.hasJsHook;
     // Uploading a spec that contains jsHook steps is super_admin-only.
     if (hasJsHook && !isSuperAdmin(user.role)) {
       res.status(403).json({ error: "JSHOOK_FORBIDDEN", message: "Only super_admin may upload specs containing jsHook steps." });
       return;
     }
-    // Approving jsHook execution is likewise super_admin-only.
-    const jsHookApproved = approveJsHook === true && isSuperAdmin(user.role);
-    // Approving privileged-spec enabling is super_admin-only and independent of jsHookApproved.
-    const privilegedApproved = approvePrivileged === true && isSuperAdmin(user.role);
+    // Approval is never inherited from the upload request. Each immutable
+    // version starts unapproved and must be reviewed explicitly afterwards.
+    const jsHookApproved = false;
+    const privilegedApproved = false;
 
     const key = parsed.spec.meta.key;
 
-    // Privileged specs (http/graphql/jsHook steps) require explicit super_admin
-    // approval (approvePrivileged=true in the request body) before they may be
-    // enabled. Gate this before entering the transaction so we never return an
-    // undefined from db.transaction() and break destructuring below.
-    if (enable && specIsPrivileged(spec) && !privilegedApproved) {
-      res.status(403).json({
-        error: "PRIVILEGED_APPROVAL_REQUIRED",
-        message:
-          "This spec contains privileged steps (http, graphql, or jsHook). " +
-          "A super_admin must pass approvePrivileged=true to enable it.",
-      });
-      return;
-    }
-
     // Lock the key so the next-version computation, the insert, and the optional
-    // enable all happen atomically — concurrent uploads can't collide on the
+    // write happen atomically — concurrent uploads can't collide on the
     // (key, version) unique index or leave two enabled rows.
     const { created, nextVersion } = await db.transaction(async (tx) => {
       await lockSpecKey(tx, key);
@@ -4494,7 +5033,7 @@ router.post(
         .values({
           key,
           name: parsed.spec.meta.name,
-          spec,
+          spec: policy.canonicalSpec,
           version: next,
           enabled: false,
           source: "uploaded",
@@ -4503,36 +5042,46 @@ router.post(
           createdBy: user.id,
         })
         .returning();
-      if (enable) {
-        await setEnabledSpecVersionTx(tx, key, next);
-      }
       return { created: row, nextVersion: next };
     });
-    if (enable) invalidateSpecAdapterCache();
 
     await logAudit(
       user.id,
       "upsert_adapter_spec",
       "portal_adapter_spec",
       created.id,
-      { key, version: nextVersion, enabled: enable === true, hasJsHook, jsHookApproved, privilegedApproved },
+      {
+        key,
+        version: nextVersion,
+        enabled: false,
+        hasJsHook,
+        jsHookApproved,
+        privilegedApproved,
+        specSha256: policy.sha256,
+        specByteLength: policy.byteLength,
+      },
       req.ip,
     );
 
     res.status(201).json({
       key,
       version: nextVersion,
-      enabled: enable === true,
+      enabled: false,
       jsHookApproved,
       privilegedApproved,
       hasJsHook,
+      privileged: policy.privileged,
+      sha256: policy.sha256,
+      byteLength: policy.byteLength,
+      activationBlockers: policy.activationBlockers,
+      activationRequiresSeparateStep: true,
     });
   },
 );
 
 // PATCH /portal-automation/adapter-specs/:key — enable/disable/rollback/approve.
 router.patch(
-  "/adapter-specs/:key",
+  "/portal-automation/adapter-specs/:key",
   requireAuth,
   requireRole(...ADMIN_ROLES),
   validate({ params: specKeyParamsSchema, body: patchSpecBodySchema }),
@@ -4541,71 +5090,168 @@ router.patch(
     const { key } = getValidated<{ params: typeof specKeyParamsSchema }>(req).params;
     const body = getValidated<{ body: typeof patchSpecBodySchema }>(req).body;
 
-    const versions = await listSpecVersions(key);
-    if (versions.length === 0) {
-      res.status(404).json({ error: "NOT_FOUND" });
+    const changesApproval =
+      body.jsHookApproved !== undefined ||
+      body.privilegedApproved !== undefined;
+    if (changesApproval && !isSuperAdmin(user.role)) {
+      res.status(403).json({
+        error: "SPEC_APPROVAL_FORBIDDEN",
+        message: "Only super_admin may change adapter spec approvals.",
+      });
       return;
     }
 
-    // jsHook approval toggle (super_admin only).
-    if (body.jsHookApproved !== undefined) {
-      if (!isSuperAdmin(user.role)) {
-        res.status(403).json({ error: "JSHOOK_FORBIDDEN", message: "Only super_admin may approve jsHook execution." });
-        return;
-      }
-      await db
-        .update(portalAdapterSpecsTable)
-        .set({ jsHookApproved: body.jsHookApproved, updatedAt: new Date() })
-        .where(eq(portalAdapterSpecsTable.key, key));
-      invalidateSpecAdapterCache();
-    }
-
-    // privilegedApproved toggle (super_admin only).
-    if (body.privilegedApproved !== undefined) {
-      if (!isSuperAdmin(user.role)) {
-        res.status(403).json({ error: "PRIVILEGED_APPROVAL_FORBIDDEN", message: "Only super_admin may approve privileged spec enabling." });
-        return;
-      }
-      await db
-        .update(portalAdapterSpecsTable)
-        .set({ privilegedApproved: body.privilegedApproved, updatedAt: new Date() })
-        .where(eq(portalAdapterSpecsTable.key, key));
-      invalidateSpecAdapterCache();
-    }
-
     const targetVersion = body.enableVersion ?? body.rollbackTo;
-    if (body.disable) {
-      await setEnabledSpecVersion(key, null);
-    } else if (targetVersion !== undefined) {
-      if (!versions.some((v) => v.version === targetVersion)) {
-        res.status(404).json({ error: "VERSION_NOT_FOUND", message: `Version ${targetVersion} does not exist for ${key}.` });
-        return;
-      }
-      // Privileged specs require super_admin approval before they can be enabled.
-      const targetRow = versions.find((v) => v.version === targetVersion);
-      if (targetRow && specIsPrivileged(targetRow.spec) && !targetRow.privilegedApproved) {
-        res.status(403).json({
-          error: "PRIVILEGED_APPROVAL_REQUIRED",
-          message:
-            "This spec version contains privileged steps (http, graphql, or jsHook). " +
-            "A super_admin must set privilegedApproved=true before it can be enabled.",
+    let mutation;
+    try {
+      mutation = await db.transaction(async (tx) => {
+        await lockSpecKey(tx, key);
+        const versions = await tx
+          .select()
+          .from(portalAdapterSpecsTable)
+          .where(eq(portalAdapterSpecsTable.key, key))
+          .orderBy(desc(portalAdapterSpecsTable.version));
+
+        if (versions.length === 0) {
+          return { ok: false as const, status: 404, error: "NOT_FOUND" };
+        }
+
+        const approvalRow = body.approvalVersion === undefined
+          ? null
+          : versions.find((row) => row.version === body.approvalVersion) ?? null;
+        if (body.approvalVersion !== undefined && !approvalRow) {
+          return {
+            ok: false as const,
+            status: 404,
+            error: "VERSION_NOT_FOUND",
+            message: `Version ${body.approvalVersion} does not exist for ${key}.`,
+          };
+        }
+
+        const targetRow = targetVersion === undefined
+          ? null
+          : versions.find((row) => row.version === targetVersion) ?? null;
+        if (targetVersion !== undefined && !targetRow) {
+          return {
+            ok: false as const,
+            status: 404,
+            error: "VERSION_NOT_FOUND",
+            message: `Version ${targetVersion} does not exist for ${key}.`,
+          };
+        }
+
+        if (targetRow) {
+          const targetApprovals = {
+            jsHookApproved:
+              approvalRow?.version === targetRow.version && body.jsHookApproved !== undefined
+                ? body.jsHookApproved
+                : targetRow.jsHookApproved,
+            privilegedApproved:
+              approvalRow?.version === targetRow.version && body.privilegedApproved !== undefined
+                ? body.privilegedApproved
+                : targetRow.privilegedApproved,
+          };
+          const blockers = portalAdapterSpecActivationBlockers({
+            spec: targetRow.spec,
+            ...targetApprovals,
+          });
+          if (blockers.length > 0) {
+            return {
+              ok: false as const,
+              status: 409,
+              error: blockers[0],
+              activationBlockers: blockers,
+              message: `Version ${targetVersion} is not approved for activation.`,
+            };
+          }
+        }
+
+        let approvalDisablesEnabledVersion = false;
+        if (approvalRow) {
+          const nextJsHookApproved =
+            body.jsHookApproved ?? approvalRow.jsHookApproved;
+          const nextPrivilegedApproved =
+            body.privilegedApproved ?? approvalRow.privilegedApproved;
+          const mustDisable =
+            approvalRow.enabled &&
+            ((specHasJsHook(approvalRow.spec) && !nextJsHookApproved) ||
+              (specIsPrivileged(approvalRow.spec) && !nextPrivilegedApproved));
+          approvalDisablesEnabledVersion = mustDisable;
+          await tx
+            .update(portalAdapterSpecsTable)
+            .set({
+              jsHookApproved: nextJsHookApproved,
+              privilegedApproved: nextPrivilegedApproved,
+              ...(mustDisable ? { enabled: false } : {}),
+              updatedAt: new Date(),
+            })
+            .where(
+              and(
+                eq(portalAdapterSpecsTable.key, key),
+                eq(portalAdapterSpecsTable.version, approvalRow.version),
+              ),
+            );
+        }
+
+        if (body.disable) {
+          await setEnabledSpecVersionTx(tx, key, null);
+        } else if (targetVersion !== undefined) {
+          await setEnabledSpecVersionTx(tx, key, targetVersion);
+        }
+
+        const adapterBehaviorChanged =
+          body.disable === true ||
+          targetVersion !== undefined ||
+          approvalDisablesEnabledVersion;
+        const safetyReset = adapterBehaviorChanged
+          ? await resetAdapterExecutionStateTx(tx, key)
+          : { partners: 0, pendingSubmissions: 0 };
+
+        return {
+          ok: true as const,
+          auditResourceId: approvalRow?.id ?? targetRow?.id ?? versions[0].id,
+          safetyReset,
+        };
+      });
+    } catch (error) {
+      if (error instanceof AdapterChangeInFlightError) {
+        res.status(409).json({
+          error: "ADAPTER_CHANGE_IN_FLIGHT",
+          message: "Wait for running submissions to finish before changing this adapter.",
+          runningCount: error.runningCount,
         });
         return;
       }
-      await setEnabledSpecVersion(key, targetVersion);
+      throw error;
     }
+
+    if (!mutation.ok) {
+      res.status(mutation.status).json({
+        error: mutation.error,
+        ...(mutation.message ? { message: mutation.message } : {}),
+        ...(mutation.activationBlockers
+          ? { activationBlockers: mutation.activationBlockers }
+          : {}),
+      });
+      return;
+    }
+
+    invalidateSpecAdapterCache();
 
     await logAudit(
       user.id,
       "patch_adapter_spec",
       "portal_adapter_spec",
-      versions[0].id,
+      mutation.auditResourceId,
       {
         key,
         enableVersion: body.enableVersion,
         rollbackTo: body.rollbackTo,
         disable: body.disable === true,
+        approvalVersion: body.approvalVersion,
         jsHookApproved: body.jsHookApproved,
+        privilegedApproved: body.privilegedApproved,
+        safetyReset: mutation.safetyReset,
       },
       req.ip,
     );
@@ -4615,8 +5261,20 @@ router.patch(
     res.json({
       key,
       enabledVersion: enabled?.version ?? null,
-      jsHookApproved: refreshed[0]?.jsHookApproved ?? false,
-      privilegedApproved: refreshed[0]?.privilegedApproved ?? false,
+      approvalVersion: body.approvalVersion ?? null,
+      approval:
+        body.approvalVersion === undefined
+          ? null
+          : (() => {
+              const row = refreshed.find((item) => item.version === body.approvalVersion);
+              return row
+                ? {
+                    jsHookApproved: row.jsHookApproved,
+                    privilegedApproved: row.privilegedApproved,
+                  }
+                : null;
+            })(),
+      safetyReset: mutation.safetyReset,
     });
   },
 );

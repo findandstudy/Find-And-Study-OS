@@ -21,9 +21,13 @@ import express, { type Express } from "express";
 import { eq, inArray } from "drizzle-orm";
 import {
   db,
+  applicationsTable,
   portalUniversitiesTable,
   portalCredentialsTable,
   portalAdaptersTable,
+  portalSubmissionsTable,
+  studentsTable,
+  usersTable,
 } from "@workspace/db";
 import { invalidateDeclarativeAdapterCache } from "@workspace/portal-adapters";
 import portalMgmtRouter from "../src/routes/portalMgmt.js";
@@ -37,6 +41,12 @@ const TEST_ADAPTER = `test_adapter_${RUN_ID}`;
 const ALT_ADAPTER = `alt_adapter_${RUN_ID}`;
 const createdKeys: string[] = [];
 const credKeys: string[] = [TEST_KEY, TEST_ADAPTER, ALT_ADAPTER];
+const cleanupSubmissionIds: number[] = [];
+const cleanupApplicationIds: number[] = [];
+const cleanupStudentIds: number[] = [];
+let fixtureUserId = 0;
+
+const ADMIN = { id: 0, role: "super_admin", isActive: true, emailVerified: true };
 
 function adapterValues(key: string, matchName: string) {
   return {
@@ -59,6 +69,19 @@ function adapterValues(key: string, matchName: string) {
 }
 
 before(async () => {
+  const [user] = await db
+    .insert(usersTable)
+    .values({
+      email: `${RUN_ID}@portal-universities.test`,
+      role: "super_admin",
+      isActive: true,
+      emailVerified: true,
+    })
+    .returning({ id: usersTable.id });
+  fixtureUserId = user.id;
+  ADMIN.id = user.id;
+  currentUser = { ...ADMIN };
+
   await db.insert(portalAdaptersTable).values([
     adapterValues(TEST_ADAPTER, `portal test ${RUN_ID}`),
     adapterValues(ALT_ADAPTER, `alternate portal ${RUN_ID}`),
@@ -67,6 +90,15 @@ before(async () => {
 });
 
 after(async () => {
+  if (cleanupSubmissionIds.length) {
+    await db.delete(portalSubmissionsTable).where(inArray(portalSubmissionsTable.id, cleanupSubmissionIds)).catch(() => {});
+  }
+  if (cleanupApplicationIds.length) {
+    await db.delete(applicationsTable).where(inArray(applicationsTable.id, cleanupApplicationIds)).catch(() => {});
+  }
+  if (cleanupStudentIds.length) {
+    await db.delete(studentsTable).where(inArray(studentsTable.id, cleanupStudentIds)).catch(() => {});
+  }
   if (createdKeys.length) {
     await db
       .delete(portalUniversitiesTable)
@@ -81,6 +113,10 @@ after(async () => {
     .delete(portalAdaptersTable)
     .where(inArray(portalAdaptersTable.key, [TEST_ADAPTER, ALT_ADAPTER]))
     .catch(() => {});
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  if (fixtureUserId) {
+    await db.delete(usersTable).where(eq(usersTable.id, fixtureUserId)).catch(() => {});
+  }
   invalidateDeclarativeAdapterCache();
   setImmediate(() => process.exit(process.exitCode ?? 0));
 });
@@ -89,13 +125,8 @@ after(async () => {
 // Auth stub — role is swapped per test via currentUser
 // ---------------------------------------------------------------------------
 let currentUser: { id: number; role: string; isActive: boolean; emailVerified?: boolean } = {
-  id: 1,
-  role: "super_admin",
-  isActive: true,
-  emailVerified: true,
+  ...ADMIN,
 };
-
-const ADMIN = { id: 1, role: "super_admin", isActive: true, emailVerified: true };
 
 function buildApp(): Express {
   const app = express();
@@ -173,7 +204,7 @@ test("U1: POST creates a university and it appears in the list", async () => {
     const res = await sendReq(server, "POST", "/api/portal-universities", {
       universityKey: TEST_KEY,
       universityName: `Portal Test ${RUN_ID}`,
-      isActive: true,
+      isActive: false,
     });
     assert.equal(res.status, 201, `Expected 201 got ${res.status}: ${JSON.stringify(res.body)}`);
     assert.equal(res.body.universityKey, TEST_KEY);
@@ -198,7 +229,7 @@ test("U1b: POST fails closed when no registered adapter matches", async () => {
     const res = await sendReq(server, "POST", "/api/portal-universities", {
       universityKey: missingKey,
       universityName: `Unknown Portal ${RUN_ID}`,
-      isActive: true,
+      isActive: false,
     });
     assert.equal(res.status, 422, `Expected 422 got ${res.status}: ${JSON.stringify(res.body)}`);
     assert.equal(res.body.error, "NO_MATCHING_ADAPTER");
@@ -249,7 +280,8 @@ test("U3: credentials set→hasCredentials→clear, never leaks plaintext", asyn
       password: "s3cr3t-should-never-be-returned",
     });
     assert.equal(put.status, 200, `Expected 200 got ${put.status}: ${JSON.stringify(put.body)}`);
-    assert.deepEqual(put.body, { ok: true });
+    assert.equal(put.body.ok, true);
+    assert.equal(put.body.safetyReset.partners, 1);
     assert.ok(!("password" in put.body), "PUT response must not echo the password");
 
     const row = await findInList(server, TEST_KEY);
@@ -260,13 +292,68 @@ test("U3: credentials set→hasCredentials→clear, never leaks plaintext", asyn
     assert.ok(!serialized.includes("s3cr3t-should-never-be-returned"), "list row must not leak the password");
     assert.ok(!("password" in row), "list row must not contain a password field");
 
+    await db
+      .update(portalUniversitiesTable)
+      .set({ isActive: true, autoProcess: true, fanOutMode: "auto" })
+      .where(eq(portalUniversitiesTable.id, createdId));
+
     const del = await sendReq(server, "DELETE", `/api/portal-universities/${TEST_KEY}/credentials`);
     assert.equal(del.status, 200, `Expected 200 got ${del.status}: ${JSON.stringify(del.body)}`);
-    assert.deepEqual(del.body, { ok: true });
+    assert.equal(del.body.ok, true);
+    assert.equal(del.body.safetyReset.partners, 1);
 
     const after2 = await findInList(server, TEST_KEY);
     assert.ok(after2, "row must remain after clearing credentials");
     assert.equal(after2.hasCredentials, false, "credentials should be gone after DELETE");
+    assert.equal(after2.isActive, false, "credential removal must force the partner inactive");
+    assert.equal(after2.autoProcess, false, "credential removal must force auto-process off");
+    assert.equal(after2.fanOutMode, "off", "credential removal must force fan-out off");
+  } finally {
+    await new Promise<void>((r) => server.close(() => r()));
+  }
+});
+
+test("U3b: credential mutation is rejected while an adapter submission is running", async () => {
+  currentUser = { ...ADMIN };
+  const server = await listen(buildApp());
+  try {
+    const put = await sendReq(server, "PUT", `/api/portal-universities/${TEST_KEY}/credentials`, {
+      username: "portal-user@example.com",
+      password: "running-test-secret",
+    });
+    assert.equal(put.status, 200);
+
+    const [student] = await db
+      .insert(studentsTable)
+      .values({ firstName: `Credential ${RUN_ID}`, lastName: "Safety" })
+      .returning({ id: studentsTable.id });
+    cleanupStudentIds.push(student.id);
+    const [application] = await db
+      .insert(applicationsTable)
+      .values({ studentId: student.id })
+      .returning({ id: applicationsTable.id });
+    cleanupApplicationIds.push(application.id);
+    const [submission] = await db
+      .insert(portalSubmissionsTable)
+      .values({
+        applicationId: application.id,
+        studentId: student.id,
+        universityKey: TEST_KEY,
+        universityName: `Credential Safety ${RUN_ID}`,
+        adapterKey: ALT_ADAPTER,
+        mode: "dry",
+        status: "running",
+        lockedAt: new Date(),
+        lockedBy: `credential-test-${RUN_ID}`,
+      })
+      .returning({ id: portalSubmissionsTable.id });
+    cleanupSubmissionIds.push(submission.id);
+
+    const blocked = await sendReq(server, "DELETE", `/api/portal-universities/${TEST_KEY}/credentials`);
+    assert.equal(blocked.status, 409);
+    assert.equal(blocked.body.error, "CREDENTIAL_CHANGE_IN_FLIGHT");
+    const row = await findInList(server, TEST_KEY);
+    assert.equal(row.hasCredentials, true, "rejected removal must preserve credentials");
   } finally {
     await new Promise<void>((r) => server.close(() => r()));
   }

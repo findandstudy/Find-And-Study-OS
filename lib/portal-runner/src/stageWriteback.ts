@@ -174,10 +174,14 @@ export async function writebackResult(
     );
 
   // ----- 3. Best-effort canonical application reference sync -------------
-  // portal_submissions.external_ref remains immutable run evidence. The
-  // application-level value is populated only when empty; a different manual
-  // or previously-confirmed value is never overwritten automatically.
-  if (sub.applicationId && submissionStatus === "submitted" && result?.externalRef) {
+  // external_ref is an adapter-defined locator and never becomes the canonical
+  // university number by itself. Only explicit proof-bearing evidence may
+  // populate the Application tab; conflicting values are preserved.
+  if (
+    sub.applicationId &&
+    (submissionStatus === "submitted" || submissionStatus === "already_exists") &&
+    result?.verifiedApplicationNumber
+  ) {
     try {
       const [application] = await db
         .select({ universityApplicationId: applicationsTable.universityApplicationId })
@@ -185,7 +189,7 @@ export async function writebackResult(
         .where(eq(applicationsTable.id, sub.applicationId));
       const plan = planUniversityApplicationIdSync(
         application?.universityApplicationId,
-        result.externalRef,
+        result.verifiedApplicationNumber,
       );
       if (plan.action === "set") {
         const updated = await db

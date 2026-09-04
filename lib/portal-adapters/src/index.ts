@@ -10,6 +10,13 @@ export type {
   SubmitFiles,
   StudentDocumentRef,
   UniversityAdapter,
+  VerifiedApplicationNumberSource,
+  VerifiedUniversityApplicationNumber,
+  PortalStatusCheckResult,
+  PortalStatusIdentityProof,
+  PortalMissingDocument,
+  PortalStatusArtifact,
+  PortalStatusArtifactKind,
 } from "./types.js";
 
 export {
@@ -145,6 +152,7 @@ export {
   type SpecWorkflow,
   type ProfilePolicy,
   type OutcomeRule,
+  type StatusCheckSpec,
 } from "./declarative/schema.js";
 
 export {
@@ -161,6 +169,8 @@ export {
   runSpecWorkflow,
   applyProfilePolicy,
   classifyOutcomeRules,
+  buildDeclarativeStatusResult,
+  buildPortalStatusArtifact,
   type ProfilePolicyResult,
   type SpecPage,
 } from "./declarative/interpreter.js";
@@ -175,6 +185,7 @@ export {
   buildSpecAdapterFromRow,
   buildSpecAdaptersFromRows,
   specRowAllowsJsHook,
+  specRowAllowsExecution,
   specRowAllowsOverride,
   listSpecVersions,
   maxSpecVersion,

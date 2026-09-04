@@ -2,14 +2,14 @@
  * test-adapter-graduation.ts — adapter auto-graduation regression tests (G1–G7).
  *
  * Rule under test:
- *   experimental(key) = staticExperimentalFamily(key)
+ *   experimental(key) = graduationRequiredFamily(key)
  *                       && successCount(key) < GRADUATION_THRESHOLD
  * where successCount = live COUNT of portal_submissions rows with
  * status='submitted', deleted_at IS NULL and durable portal proof per key.
  *
  * G1  GRADUATION_THRESHOLD === 3, consistently re-exported
  * G2  getAdapterSuccessCounts — counts only submitted+non-deleted, 0 for unknown
- * G3  getNonGraduatedExperimentalAdapterKeys — never returns non-experimental
+ * G3  getNonGraduatedExperimentalAdapterKeys — custom keys fail closed
  * G4  graduation flip — seeding >= threshold 'submitted' rows removes the key
  * G5  isExperimentalDynamic wrapper mirrors the shared core
  * G6  getExperimentalExcludedUniversityKeys — includes uni of non-graduated
@@ -32,6 +32,7 @@ import {
   applicationsTable,
   portalSubmissionsTable,
   portalUniversitiesTable,
+  portalAdapterSpecsTable,
   studentsTable,
 } from "@workspace/db";
 import {
@@ -61,11 +62,13 @@ const RUN_ID = `grad_${Date.now().toString(36)}_${Math.random().toString(36).sli
 const EXP_KEY     = "united"; // experimental family (exact-key resolution)
 const EXP_KEY_2   = "emu";    // second experimental family
 const NON_EXP_KEY = "okan";   // production family — never experimental
+const CUSTOM_EXP_KEY = `custom_${RUN_ID}`; // uploaded/declarative key
 
 const cleanupSubmissionIds: number[] = [];
 const cleanupAppIds:        number[] = [];
 const cleanupStudentIds:    number[] = [];
 const cleanupUniIds:        number[] = [];
+const cleanupSpecKeys:       string[] = [];
 
 after(async () => {
   if (cleanupSubmissionIds.length) {
@@ -90,6 +93,12 @@ after(async () => {
     await db
       .delete(portalUniversitiesTable)
       .where(inArray(portalUniversitiesTable.id, cleanupUniIds))
+      .catch(() => {});
+  }
+  if (cleanupSpecKeys.length) {
+    await db
+      .delete(portalAdapterSpecsTable)
+      .where(inArray(portalAdapterSpecsTable.key, cleanupSpecKeys))
       .catch(() => {});
   }
 });
@@ -161,6 +170,7 @@ test("G1: GRADUATION_THRESHOLD is 3 and consistently re-exported", () => {
   assert.equal(WRAPPER_THRESHOLD, REGISTRY_THRESHOLD);
   assert.ok(isExperimentalAdapterKey(EXP_KEY),   `${EXP_KEY} must be experimental family`);
   assert.ok(isExperimentalAdapterKey(EXP_KEY_2), `${EXP_KEY_2} must be experimental family`);
+  assert.ok(isExperimentalAdapterKey(CUSTOM_EXP_KEY), "custom adapter keys must fail closed as experimental");
   assert.ok(!isExperimentalAdapterKey(NON_EXP_KEY), `${NON_EXP_KEY} must NOT be experimental`);
 });
 
@@ -218,15 +228,19 @@ test("G2: getAdapterSuccessCounts requires durable proof", async () => {
 });
 
 // ---------------------------------------------------------------------------
-// G3 — non-experimental families never returned
+// G3 — production families stay clear; custom adapters fail closed
 // ---------------------------------------------------------------------------
-test("G3: non-experimental adapter never in non-graduated set", async () => {
+test("G3: custom adapters start non-graduated while production families stay clear", async () => {
   const set = await getNonGraduatedExperimentalAdapterKeys([
     NON_EXP_KEY,
     "topkapi",
-    `random_${RUN_ID}`,
+    CUSTOM_EXP_KEY,
   ]);
-  assert.equal(set.size, 0, "no experimental families among inputs → empty set");
+  assert.deepEqual(
+    [...set],
+    [CUSTOM_EXP_KEY],
+    "an uploaded/custom key must be gated while proven production families stay clear",
+  );
 });
 
 // ---------------------------------------------------------------------------
@@ -259,6 +273,44 @@ test("G4: experimental key graduates at >= threshold submitted rows", async () =
   // Array-shaped wrapper agrees.
   const viaWrapper = await getNonGraduatedExperimentalKeys([EXP_KEY_2]);
   assert.ok(!viaWrapper.includes(EXP_KEY_2));
+});
+
+test("G4b: uploaded/custom adapter requires the same durable graduation proof", async () => {
+  const appId = await createAppId();
+  const before = await getNonGraduatedExperimentalAdapterKeys([CUSTOM_EXP_KEY]);
+  assert.ok(before.has(CUSTOM_EXP_KEY), "fresh custom adapter must start manual-only");
+
+  for (let i = 0; i < GRADUATION_THRESHOLD; i++) {
+    await seedSubmission({
+      appId,
+      adapterKey: CUSTOM_EXP_KEY,
+      status: "submitted",
+      externalRef: `${RUN_ID}_custom_${i}`,
+    });
+  }
+
+  const after = await getNonGraduatedExperimentalAdapterKeys([CUSTOM_EXP_KEY]);
+  assert.ok(!after.has(CUSTOM_EXP_KEY), "custom adapter graduates only at the durable-proof threshold");
+});
+
+test("G4c: uploaded adapter proofs reset at a newly enabled spec epoch", async () => {
+  cleanupSpecKeys.push(CUSTOM_EXP_KEY);
+  await db.insert(portalAdapterSpecsTable).values({
+    key: CUSTOM_EXP_KEY,
+    name: `Version-bound ${RUN_ID}`,
+    spec: { specVersion: 1 },
+    version: 1,
+    enabled: true,
+    source: "uploaded",
+    privilegedApproved: true,
+    jsHookApproved: true,
+    updatedAt: new Date(Date.now() + 1_000),
+  });
+
+  const count = (await getAdapterSuccessCounts([CUSTOM_EXP_KEY])).get(CUSTOM_EXP_KEY) ?? -1;
+  assert.equal(count, 0, "proofs from before the enabled spec epoch must not graduate it");
+  const gated = await getNonGraduatedExperimentalAdapterKeys([CUSTOM_EXP_KEY]);
+  assert.ok(gated.has(CUSTOM_EXP_KEY));
 });
 
 // ---------------------------------------------------------------------------

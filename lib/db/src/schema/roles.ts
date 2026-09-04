@@ -109,6 +109,17 @@ export const PERMISSION_CATEGORIES = {
       "finance.offset_manage": "Manage Offset",
     },
   },
+  reporting: {
+    label: "Reporting & Intelligence",
+    permissions: {
+      "reporting.view": "View Reporting Center",
+      "reporting.operations": "View Funnel and Operations Reports",
+      "reporting.finance": "View Finance Reports",
+      "reporting.workforce": "View Workforce Reports",
+      "reporting.export": "Export Approved Reports",
+      "reporting.manage": "Manage Reporting Definitions and Delivery",
+    },
+  },
   catalog: {
     label: "Catalog",
     permissions: {
@@ -251,6 +262,9 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
   ],
   accountant: [
     "dashboard.view",
+    "reporting.view",
+    "reporting.finance",
+    "reporting.export",
     "finance.view",
     "finance.commissions_view",
     "finance.commissions_manage",
@@ -300,7 +314,8 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
       !p.startsWith("finance.commissions") &&
       !p.startsWith("finance.offset") &&
       p !== "users.manage_roles" &&
-      p !== "settings.branding"
+      p !== "settings.branding" &&
+      p !== "reporting.manage"
   ),
   editor: [
     "dashboard.view",

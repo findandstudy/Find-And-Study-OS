@@ -50,6 +50,8 @@ interface SpecSummary {
   hasJsHook: boolean;
   privilegedApproved: boolean;
   privileged: boolean;
+  latestSha256: string;
+  latestActivationBlockers: string[];
   updatedAt: string;
 }
 
@@ -62,6 +64,8 @@ interface SpecVersion {
   hasJsHook: boolean;
   privilegedApproved: boolean;
   privileged: boolean;
+  sha256: string;
+  activationBlockers: string[];
   createdBy: number | null;
   createdAt: string;
   updatedAt: string;
@@ -78,6 +82,10 @@ interface ValidationResponse {
   name?: string;
   hasJsHook?: boolean;
   privileged?: boolean;
+  sha256?: string;
+  byteLength?: number;
+  activationBlockers?: string[];
+  activationRequiresSeparateStep?: boolean;
   error?: string;
   message?: string;
   issues?: SpecIssue[];
@@ -98,11 +106,6 @@ function AdapterSpecDialog({ open, isSuperAdmin, onClose, onSaved }: UploadDialo
   const { t } = useI18n();
   const { toast } = useToast();
   const [json, setJson] = useState("");
-  // New versions are inert by default. Validation/canary review must happen
-  // before an operator explicitly enables a runtime spec.
-  const [enable, setEnable] = useState(false);
-  const [approveJsHook, setApproveJsHook] = useState(false);
-  const [approvePrivileged, setApprovePrivileged] = useState(false);
   const [validating, setValidating] = useState(false);
   const [saving, setSaving] = useState(false);
   const [result, setResult] = useState<ValidationResponse | null>(null);
@@ -111,9 +114,6 @@ function AdapterSpecDialog({ open, isSuperAdmin, onClose, onSaved }: UploadDialo
   useEffect(() => {
     if (open) {
       setJson("");
-      setEnable(false);
-      setApproveJsHook(false);
-      setApprovePrivileged(false);
       setResult(null);
     }
   }, [open]);
@@ -175,12 +175,7 @@ function AdapterSpecDialog({ open, isSuperAdmin, onClose, onSaved }: UploadDialo
       await customFetch("/api/portal-automation/adapter-specs", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          spec,
-          enable,
-          approveJsHook: approveJsHook && isSuperAdmin,
-          approvePrivileged: approvePrivileged && isSuperAdmin,
-        }),
+        body: JSON.stringify({ spec }),
       });
       toast({ title: t("portalAutomation.adapterSpecs.saveSuccess") });
       onSaved();
@@ -202,7 +197,6 @@ function AdapterSpecDialog({ open, isSuperAdmin, onClose, onSaved }: UploadDialo
   };
 
   const specHasJsHook = result?.ok === true && result.hasJsHook === true;
-  const specIsPrivileged = result?.ok === true && result.privileged === true;
   const canSave = json.trim().length > 0 && !saving && result?.ok === true;
 
   return (
@@ -213,6 +207,16 @@ function AdapterSpecDialog({ open, isSuperAdmin, onClose, onSaved }: UploadDialo
         </DialogHeader>
 
         <div className="space-y-4 py-1">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3" aria-label={t("portalAutomation.adapterSpecs.workflowLabel")}>
+            {["workflowUpload", "workflowApprove", "workflowActivate"].map((key, index) => (
+              <div key={key} className="rounded-lg border bg-muted/30 px-3 py-2">
+                <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  {index + 1}
+                </div>
+                <div className="text-xs font-medium">{t(`portalAutomation.adapterSpecs.${key}`)}</div>
+              </div>
+            ))}
+          </div>
           <div className="space-y-1.5">
             <div className="flex items-center justify-between gap-2">
               <Label htmlFor="spec-json">{t("portalAutomation.adapterSpecs.jsonLabel")}</Label>
@@ -270,6 +274,18 @@ function AdapterSpecDialog({ open, isSuperAdmin, onClose, onSaved }: UploadDialo
                     {t("portalAutomation.adapterSpecs.containsPrivileged")}
                   </div>
                 )}
+                {result.sha256 && (
+                  <div className="pt-1 text-xs text-muted-foreground">
+                    {t("portalAutomation.adapterSpecs.fingerprint")}: {" "}
+                    <code className="font-mono" title={result.sha256}>{result.sha256.slice(0, 16)}…</code>
+                    {result.byteLength !== undefined && (
+                      <span> · {result.byteLength.toLocaleString()} B</span>
+                    )}
+                  </div>
+                )}
+                <p className="pt-1 text-xs text-muted-foreground">
+                  {t("portalAutomation.adapterSpecs.savedInactiveHint")}
+                </p>
               </div>
             ) : (
               <div className="rounded-lg border border-red-200 bg-red-50 dark:bg-red-900/20 dark:border-red-800 p-3 space-y-1.5">
@@ -291,41 +307,11 @@ function AdapterSpecDialog({ open, isSuperAdmin, onClose, onSaved }: UploadDialo
             )
           )}
 
-          {/* Enable on upload */}
-          <div className="flex items-center gap-3">
-            <Switch id="spec-enable" checked={enable} onCheckedChange={setEnable} />
-            <Label htmlFor="spec-enable">{t("portalAutomation.adapterSpecs.enableOnUpload")}</Label>
-          </div>
-
-          {/* jsHook approval (super_admin only, when spec has jsHook) */}
-          {specHasJsHook && isSuperAdmin && (
-            <div className="flex items-center gap-3">
-              <Switch id="spec-jshook" checked={approveJsHook} onCheckedChange={setApproveJsHook} />
-              <Label htmlFor="spec-jshook" className="flex items-center gap-1.5">
-                <ShieldCheck className="h-3.5 w-3.5 text-amber-600" />
-                {t("portalAutomation.adapterSpecs.approveJsHook")}
-              </Label>
-            </div>
-          )}
           {specHasJsHook && !isSuperAdmin && (
             <p className="text-xs text-amber-700 dark:text-amber-400 flex items-center gap-1.5">
               <ShieldAlert className="h-3.5 w-3.5" />
               {t("portalAutomation.adapterSpecs.jsHookSuperAdminOnly")}
             </p>
-          )}
-
-          {specIsPrivileged && isSuperAdmin && (
-            <div className="flex items-center gap-3">
-              <Switch
-                id="spec-privileged"
-                checked={approvePrivileged}
-                onCheckedChange={setApprovePrivileged}
-              />
-              <Label htmlFor="spec-privileged" className="flex items-center gap-1.5">
-                <ShieldCheck className="h-3.5 w-3.5 text-amber-600" />
-                {t("portalAutomation.adapterSpecs.approvePrivileged")}
-              </Label>
-            </div>
           )}
         </div>
 
@@ -353,11 +339,12 @@ function AdapterSpecDialog({ open, isSuperAdmin, onClose, onSaved }: UploadDialo
 
 interface VersionsDialogProps {
   specKey: string | null;
+  isSuperAdmin: boolean;
   onClose: () => void;
   onChanged: () => void;
 }
 
-function VersionsDialog({ specKey, onClose, onChanged }: VersionsDialogProps) {
+function VersionsDialog({ specKey, isSuperAdmin, onClose, onChanged }: VersionsDialogProps) {
   const { t } = useI18n();
   const { toast } = useToast();
   const [versions, setVersions] = useState<SpecVersion[]>([]);
@@ -392,8 +379,15 @@ function VersionsDialog({ specKey, onClose, onChanged }: VersionsDialogProps) {
       });
       await load();
       onChanged();
-    } catch {
-      toast({ title: t("portalAutomation.adapterSpecs.patchError"), variant: "destructive" });
+    } catch (err: unknown) {
+      const error = (err as { body?: { error?: string } })?.body?.error;
+      toast({
+        title:
+          error === "PRIVILEGED_APPROVAL_REQUIRED" || error === "JSHOOK_APPROVAL_REQUIRED"
+            ? t("portalAutomation.adapterSpecs.approvalRequired")
+            : t("portalAutomation.adapterSpecs.patchError"),
+        variant: "destructive",
+      });
     } finally {
       setBusyVersion(null);
     }
@@ -442,12 +436,59 @@ function VersionsDialog({ specKey, onClose, onChanged }: VersionsDialogProps) {
                   <span className="text-[11px] text-muted-foreground">
                     {new Date(v.createdAt).toLocaleString()}
                   </span>
+                  <div className="mt-1 flex items-center gap-2 flex-wrap">
+                    <code className="text-[10px] text-muted-foreground" title={v.sha256}>
+                      SHA-256 {v.sha256.slice(0, 12)}…
+                    </code>
+                    {v.activationBlockers.map((blocker) => (
+                      <Badge key={blocker} variant="outline" className="h-4 border-amber-300 text-[10px] text-amber-700 dark:text-amber-400">
+                        {t(`portalAutomation.adapterSpecs.blockers.${blocker}`)}
+                      </Badge>
+                    ))}
+                  </div>
                 </div>
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-1 flex-wrap justify-end">
+                  {isSuperAdmin && v.privileged && (
+                    <Button
+                      variant={v.privilegedApproved ? "secondary" : "outline"}
+                      size="sm"
+                      className="h-7 gap-1.5 text-xs"
+                      disabled={busyVersion !== null}
+                      onClick={() => patch({
+                        approvalVersion: v.version,
+                        privilegedApproved: !v.privilegedApproved,
+                      }, v.version)}
+                    >
+                      <ShieldCheck className="w-3 h-3" />
+                      {v.privilegedApproved
+                        ? t("portalAutomation.adapterSpecs.revokePrivileged")
+                        : t("portalAutomation.adapterSpecs.approvePrivileged")}
+                    </Button>
+                  )}
+                  {isSuperAdmin && v.hasJsHook && (
+                    <Button
+                      variant={v.jsHookApproved ? "secondary" : "outline"}
+                      size="sm"
+                      className="h-7 gap-1.5 text-xs"
+                      disabled={busyVersion !== null}
+                      onClick={() => patch({
+                        approvalVersion: v.version,
+                        jsHookApproved: !v.jsHookApproved,
+                      }, v.version)}
+                    >
+                      <ShieldCheck className="w-3 h-3" />
+                      {v.jsHookApproved
+                        ? t("portalAutomation.adapterSpecs.revokeJsHook")
+                        : t("portalAutomation.adapterSpecs.approveJsHook")}
+                    </Button>
+                  )}
                   {!v.enabled && (
                     <Button
                       variant="outline" size="sm" className="h-7 gap-1.5 text-xs"
-                      disabled={busyVersion !== null}
+                      disabled={busyVersion !== null || v.activationBlockers.length > 0}
+                      title={v.activationBlockers.length > 0
+                        ? t("portalAutomation.adapterSpecs.approvalRequired")
+                        : undefined}
                       onClick={() => patch({ rollbackTo: v.version }, v.version)}
                     >
                       {busyVersion === v.version
@@ -593,12 +634,33 @@ export default function AdapterSpecsSection() {
                     <span className="text-[11px] text-muted-foreground">
                       {t("portalAutomation.adapterSpecs.versionCount", { count: s.versionCount })}
                     </span>
+                    <span className="text-[11px] text-muted-foreground">·</span>
+                    <code className="text-[10px] text-muted-foreground" title={s.latestSha256}>
+                      SHA-256 {s.latestSha256.slice(0, 12)}…
+                    </code>
                   </div>
+                  {s.latestActivationBlockers.length > 0 && (
+                    <div className="mt-1 flex items-center gap-1.5 flex-wrap">
+                      {s.latestActivationBlockers.map((blocker) => (
+                        <Badge key={blocker} variant="outline" className="h-4 border-amber-300 text-[10px] text-amber-700 dark:text-amber-400">
+                          {t(`portalAutomation.adapterSpecs.blockers.${blocker}`)}
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
                 </div>
                 <div className="flex items-center gap-2">
                   <Switch
                     checked={s.enabledVersion !== null}
-                    disabled={busyKey === s.key}
+                    disabled={
+                      busyKey === s.key ||
+                      (s.enabledVersion === null && s.latestActivationBlockers.length > 0)
+                    }
+                    title={
+                      s.enabledVersion === null && s.latestActivationBlockers.length > 0
+                        ? t("portalAutomation.adapterSpecs.approvalRequired")
+                        : undefined
+                    }
                     onCheckedChange={(v) => toggleEnabled(s, v)}
                     aria-label={t("portalAutomation.adapterSpecs.toggleEnabled")}
                   />
@@ -624,6 +686,7 @@ export default function AdapterSpecsSection() {
       />
       <VersionsDialog
         specKey={versionsKey}
+        isSuperAdmin={isSuperAdmin}
         onClose={() => setVersionsKey(null)}
         onChanged={load}
       />

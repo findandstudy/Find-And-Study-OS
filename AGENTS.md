@@ -368,3 +368,138 @@ dış mesaj/SIS/portal execution, merge ve deploy değiştirilmemiştir. Bağım
 review, staging `0083–0088` adoption/rollback, dedicated role provisioning,
 active-context/MFA issuer'ları, Privacy/Legal ve consentli staging UAT ayrı
 NO-GO kapılarıdır.
+
+## 4 Eylül 2026 — Portal Automation kapalı-döngü v1 yerel eki
+
+`codex/reporting-intelligence-center-20260903` branch'inde Portal Automation
+üretim dilimi üç yerel commit halinde ilerlemiştir. Application trigger seçimi
+artık canlı pipeline stage kataloğundan gelir; yeni veya drift etmiş stage
+otomatik seçilmez ve terminal/won/lost stage dış submit başlatamaz. No-code
+adapter JSON yükleme yüzeyi boyut/schema/unknown-property kontrolü, kanonik
+SHA-256, immutable version, dry-run/fixture kanıtı ve privileged/jsHook için
+ayrı version-bound onaylarla fail-closed çalışır.
+Version 2 adapter paketi artık bounded read-only `statusCheck` de tanımlayabilir;
+navigate/wait/capture/assert/setVar ve non-mutating HTTP GET dışındaki adımlar
+reddedilir. Status, structured missing-document ve official application number
+mapping'i uygulama koduna dokunmadan yapılır; identity proof ve official number
+yalnız yakalanan application identity istenen external reference ile exact
+eşleşirse üretilir. Status kontrolü privileged version approval kapsamındadır.
+
+Additive `0090_portal_lifecycle_observations.sql` ve
+`0091_portal_application_artifact_intake.sql` ile kanonik ledger `92/92`
+olmuştur. Portal status gözlemleri submission+application composite FK,
+redaction, bounded missing-document list, semantic identity proof ve hash ile
+append-only/deduplicated tutulur. University application number yalnız exact
+labeled/structured/matched-row kanıtı varsa Application tabına yazılır; mevcut
+farklı değer overwrite edilmez, approval queue'ya conflict düşer. Offer,
+payment, final acceptance ve student card stage değişiklikleri exact artifact
+olmadan önerilemez; hiçbir lifecycle proposal portal mutation, dış mesaj,
+ödeme veya otomatik CRM stage değişikliği yetkisi taşımaz.
+
+No-code v2 status mapping offer/deposit/acceptance/final/student-card artifact
+kontrolünü de tanımlayabilir. Artifact ikinci fazda, yalnız ilgili status bunu
+gerektirip application'da dosya yoksa indirilir. Exact allowlisted origin,
+redirect-deny + final-origin recheck, zorunlu content-length, hard `15 MiB`,
+MIME allowlist ve PDF/JPEG/PNG magic-byte eşliği fail-closed'dur.
+Application-scoped content-addressed object key retry'da aynı dosyayı kullanır;
+DB kaydı observation+submission+application composite FK ve içerik hashiyle
+idempotent bağlıdır. İnsan kullanıcı taklit edilmez, kaynak `portal_automation`
+olarak görünür ve stage-document delete API'si bu kanıtı silmez. Dosya mevcut
+Application belge alanında Portal Automation badge'iyle görünür.
+
+Status sync PostgreSQL `SKIP LOCKED` row lease ve adapter+university advisory
+lane lease kullanır. Böylece aynı portal hesabında tek browser session, farklı
+kurumlarda paralellik vardır. Her lane ayrı login/session/timeout sınırındadır;
+başarı cadence'i disposition'a göre deterministik jitter ile `2–24 saat`, hata
+retry'si bounded exponential jitter, sekizinci hatada quarantine'dır. Raw
+browser/provider error veya application number API/log/operasyon ekranına
+çıkmaz. Admin Operations sekmesi yalnız aggregate lane sağlıkları, redacted
+observation metadata, pending review ve audited quarantine resume gösterir.
+Offer/final acceptance monitoring'i sonlandırmaz; yalnız enrolment, reject,
+full quota, duplicate/already-registered ve withdrawal terminaldir.
+
+Dedicated `Portal Automation Gate` Linux, Windows ve PostgreSQL 16 kapılarını
+tanımlar. Yerel kanıt: fresh `92/92` + clean replay, portal pure `26/26`, dynamic
+stage `4/4`, PostgreSQL observation/lane/Guardian/operations/artifact `7/7`, migration
+authority `31 PASS + 1` Bash-unavailable SKIP, package manager `6/6`, workspace
+ve hedef API/worker typecheck, 10 dil i18n, API ve Edcons production build PASS.
+Exact code-bearing head `4f4ce4df3e01b0e71e84a64c02424847a1e6056f`
+remote'a push edilmiştir; Institution Admissions `33882911515`, Portal
+Automation `33882911634` ve Live-first Convergence `33882911333` Actions
+run'larının üçü de SUCCESS'tir.
+
+Proje sahibinin staging deploy onayıyla aynı exact head yalnız
+`staging.findandstudy.com` ortamına alınmıştır. Checksum'lı pre-adoption backup
+`staging-backup-20260904T140614Z-852b03b671e1` izole PostgreSQL 16.15 restore
+tatbikatında ledger `90`, 13 sentetik user, sıfır application ve sıfır portal
+submission üretmiştir; disposable container kaldırılmıştır. En az yetkili
+migration runner staging ledger'ını `90/90 → 92/92` taşımıştır. Release
+`staging-20260904T143054Z-4f4ce4df3e01`, runtime image SHA-256 kimliği
+`7c4de1e8c79c16ab94423529e2a9f939d3882a573fcbeb5a14469dd479db601d`dır.
+Yalnız staging app konteyneri recreate edilmiş; UID/GID `10042`, read-only
+rootfs, cap-drop ALL, no-new-privileges, healthy, restart `0`, public health
+HTTP `200` + `dbConnected=true`, altı ek örnek exact release PASS'tir. Final
+disk `%80`, `21.072.498.688` byte boştur; prune yoktur.
+
+Authenticated salt-okunur UAT Rules, Operations, Adapter Management,
+Submission Board ve Audit Log sekmelerini doğrulamıştır. Trigger stage'ler
+Application Pipeline'dan dinamik gelir ve terminal Enrolled/Rejected seçimleri
+disabled'dır. `ALLOW_LIVE_INTEGRATIONS=false`, email disabled, background jobs
+disabled, AI external reply kill-switch active ve portal worker sayısı `0`
+kalmıştır; dış portal çağrısı, submit, poll, adapter upload veya ayar mutasyonu
+yapılmamıştır. Production, `Next`, PR merge, gerçek credential/PII ve canlı dış
+etki değiştirilmemiştir. Ayrıntı:
+`PORTAL_AUTOMATION_CLOSED_LOOP_V1_IMPLEMENTATION_2026-09-04.md`.
+
+Aynı gün staging adoption sonrası no-outbound sentetik adapter kapısı da
+tamamlanmıştır. Exact deployed build image read-only rootfs ve `--network none`
+ile v2 adapter production slice'ı `26/26` geçmiştir. Ayrı tmpfs PostgreSQL
+16.15 konteyneri `--network none`, loopback `5433` ve exact `0→92` migration
+ile çalışmış; adapter admin/version, observation, distributed lane lease, fair
+claim, quarantine, Guardian idempotency, operations authorization ve artifact
+testleri `8/8` PASS olmuştur. Test DB sonunda `92/92` ve user/application/
+submission/observation/spec `0/0/0/0/0` olarak reconcile edilmiş, disposable
+container kaldırılmıştır. İlk `5432` denemesi hard target pin tarafından
+fail-closed reddedilmiş ve artık bırakmadan temizlenmiştir.
+
+Canlı staging'de yalnız aggregate read yapılmıştır: active credential `0`,
+portal university `0`, adapter spec `0`, lane `0`; messages, broadcasts,
+portal submissions, finance mutation requests ve Journey outbox
+denominator'ları `0/0/0/0/0` kalmıştır. UI Test Mode'da, automation/fallback/
+fan-out/scheduler kapalı, Operations sayaçları sıfırdır. Health exact release,
+ledger `92/92`, restart `0`, fatal log `0` ve leftover UAT container `0`
+PASS'tir. Gerçek credential/university/adapter olmadığından portal worker
+açılmamıştır. İlk gerçek partner; exact origin, encrypted credential reference,
+immutable adapter version, dry-run ve ayrı activation approval ile tek staging
+pilot olarak onboard edilmeden live worker veya outbound portal trafiği NO-GO'dur.
+
+Aynı gün custom adapter graduation sınırı fail-closed sertleştirilmiştir.
+Bilinmeyen veya admin panelden yüklenen her adapter artık deneysel/manual-only
+başlar; üç ayrı durable başarı kanıtı olmadan auto-process açılamaz. API her
+portal-university satırında server-authoritative `experimental`,
+`staticExperimental`, `successCount`, `graduationThreshold` ve `graduated`
+durumunu döner; UI registry dışı anahtarı da muhafazakâr biçimde kilitler. Kod
+commit'leri `86c15011`, `2b0dbb86`, exact route-inventory head'i `575763b1`dir.
+Bu head için Portal Automation `33888388971`, Convergence `33888388995` ve
+Institution `33888389135` Actions run'ları SUCCESS'tir. Network-none adapter
+slice `535/535`, registry `15/15`, disposable PostgreSQL graduation `9/9` ve
+Portal Management projection `9/9` PASS'tir; API/Edcons direct typecheck PASS,
+disposable konteyner kalmamıştır.
+
+Pre-deploy checksum backup
+`staging-backup-20260904T151905Z-4f4ce4df3e01` (`4.684.775` byte, SHA-256
+`abc53f4b6c0ce35cd2fa43f04f63bb93de4c22114433685c48056ee69272ae8e`)
+network-none PostgreSQL 16.15 restore drill'inde ledger `92`, 13 sentetik user,
+sıfır application/submission üretmiştir. Exact staging release
+`staging-20260904T152458Z-575763b13e6a`, runtime image
+`sha256:ed82bb6320f0bfec30e0794f0249128a65a376885b90ece7655f0a9dc3e140fa`
+olarak sağlıklıdır; restart `0`, UID/GID `10042`, read-only rootfs, cap-drop ALL
+ve no-new-privileges korunur. Altı public health örneği exact release + HTTP
+`200` + `dbConnected=true` geçmiştir. Ledger ve aggregate sayaç dizisi
+`92|0|0|0|0|0|0|0|0|0|0|0`, worker `0`, dört kill-switch exact ve fatal log
+`0`dır. Salt-okunur UI regresyonu kurallar/operasyon/adapter/üniversite
+sekmelerini geçmiştir; dış eylem yoktur. İlk pilotin kanonik runbook'u
+`PORTAL_AUTOMATION_FIRST_PARTNER_PILOT_RUNBOOK_2026-09-04.md`dir. Partner adı,
+exact login origin, hesap/otomasyon izni ve encrypted UI credential girişi
+gelmeden worker, real submit, status sweep, fallback veya fan-out NO-GO'dur;
+credential chat'e yazılmaz. Production, `Next` ve merge değişmemiştir.

@@ -23,6 +23,75 @@ export interface PortalProgramOption {
   enabled: boolean;
 }
 
+export type VerifiedApplicationNumberSource =
+  | "labeled_portal_field"
+  | "structured_portal_field"
+  | "matched_application_row"
+  | "official_document";
+
+/**
+ * Evidence contract for the university's official application number. A URL,
+ * route parameter, internal record id or webhook id is not sufficient.
+ */
+export interface VerifiedUniversityApplicationNumber {
+  value: string;
+  source: VerifiedApplicationNumberSource;
+  sourceLabel?: string;
+  identityBound: true;
+  targetBound: true;
+  uniqueMatch: true;
+}
+
+export type PortalStatusIdentitySource =
+  | "matched_application_row"
+  | "labeled_portal_field"
+  | "structured_portal_field";
+
+/**
+ * Proof that a status observation belongs to the intended student/application
+ * row. A successful login or a URL containing an arbitrary id is insufficient.
+ */
+export interface PortalStatusIdentityProof {
+  source: PortalStatusIdentitySource;
+  sourceLabel: string;
+  identityBound: true;
+  targetBound: true;
+  uniqueMatch: true;
+}
+
+export interface PortalMissingDocument {
+  code?: string;
+  label: string;
+}
+
+export type PortalStatusArtifactKind =
+  | "offer_letter"
+  | "deposit_receipt"
+  | "acceptance_letter"
+  | "final_acceptance"
+  | "student_card";
+
+/**
+ * Bounded file bytes collected from the authenticated portal session. The API
+ * persists these into private object storage only after exact application
+ * identity verification; URLs alone are never treated as documents.
+ */
+export interface PortalStatusArtifact {
+  kind: PortalStatusArtifactKind;
+  fileName: string;
+  contentType: "application/pdf" | "image/jpeg" | "image/png";
+  bytes: Uint8Array;
+  sourceLabel: string;
+}
+
+/** Structured, evidence-bearing result returned by a portal status check. */
+export interface PortalStatusCheckResult {
+  status: string;
+  identityProof?: PortalStatusIdentityProof;
+  verifiedApplicationNumber?: VerifiedUniversityApplicationNumber;
+  missingDocuments?: PortalMissingDocument[];
+}
+
 // ---------------------------------------------------------------------------
 // Result returned by adapter.submit()
 // ---------------------------------------------------------------------------
@@ -40,10 +109,13 @@ export interface SubmitResult {
    */
   screenshots?: string[];
   /**
-   * External reference assigned by the portal (e.g. application UUID from the
-   * confirmation page). Optional — not all portals expose this.
+   * Adapter-defined portal locator used for deduplication, repair and status
+   * polling. This is NOT automatically the university's official application
+   * number and must never be copied to the Application tab on its own.
    */
   externalRef?: string;
+  /** Proof-bearing university-issued application number. */
+  verifiedApplicationNumber?: VerifiedUniversityApplicationNumber;
   /**
    * Adapter-specific metadata: programMismatch (Part B resume) and other
    * structured diagnostics that don't fit into the flat SubmitResult fields.
@@ -418,7 +490,19 @@ export interface UniversityAdapter {
   checkStatus?(
     session: AdapterSession,
     externalRef: string,
-  ): Promise<{ status: string } | null>;
+  ): Promise<PortalStatusCheckResult | null>;
+
+  /**
+   * Optional second phase for evidence-bearing offer/final/card downloads.
+   * It is called only when the normalized status requires an artifact that is
+   * not already stored, preventing every status poll from downloading files.
+   */
+  collectStatusArtifacts?(
+    session: AdapterSession,
+    externalRef: string,
+    statusResult: PortalStatusCheckResult,
+    requestedKinds: PortalStatusArtifactKind[],
+  ): Promise<PortalStatusArtifact[]>;
 
   /**
    * Optional — fetch the portal's LIVE program option list (value + text) for

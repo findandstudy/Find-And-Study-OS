@@ -2799,6 +2799,72 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /portal-automation/operations:
+    get:
+      operationId: getPortalAutomationOperations
+      tags: [portal-automation]
+      summary: Read the bounded portal status-monitoring operations view (admin only)
+      description: >
+        Returns aggregate and per-lane queue health, recent redacted lifecycle
+        observations, and quarantined checks. Raw provider errors, credentials,
+        application numbers and student PII are never returned.
+      responses:
+        "200":
+          description: Portal automation operations snapshot
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PortalOperationsResponse"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /portal-automation/status-sync/run:
+    post:
+      operationId: runPortalStatusSync
+      tags: [portal-automation]
+      summary: Start one bounded portal status synchronization sweep (admin only)
+      responses:
+        "202":
+          description: Sweep accepted for background execution
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PortalStatusSyncStarted"
+        "409":
+          description: A manual sweep is already running in this API process
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /portal-submissions/{id}/status-check/resume:
+    post:
+      operationId: resumePortalStatusCheck
+      tags: [portal-automation]
+      summary: Resume one quarantined portal status check (admin only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Status monitoring resumed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PortalStatusCheckResumed"
+        "409":
+          description: Submission is not a suspended, submitted portal application
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /university-portals:
     get:
       operationId: getUniversityPortals
@@ -3027,7 +3093,7 @@ paths:
     post:
       operationId: upsertAdapterSpec
       tags: [portal-automation]
-      summary: Create a new adapter spec version, optionally enabling it (admin only)
+      summary: Create a new inactive adapter spec version (admin only)
       requestBody:
         required: true
         content:
@@ -3049,6 +3115,12 @@ paths:
                 $ref: "#/components/schemas/AdapterSpecValidationResponse"
         "403":
           description: jsHook upload forbidden for the current role
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "413":
+          description: Canonical adapter spec exceeds the size limit
           content:
             application/json:
               schema:
@@ -3095,7 +3167,7 @@ paths:
     patch:
       operationId: patchAdapterSpec
       tags: [portal-automation]
-      summary: Enable, disable, rollback, or approve jsHook for an adapter spec (admin only)
+      summary: Enable, disable, rollback, or approve an exact adapter spec version (admin only)
       parameters:
         - name: key
           in: path
@@ -3122,6 +3194,12 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "404":
           description: Spec key or version not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Exact version is not approved for activation
           content:
             application/json:
               schema:
@@ -3350,6 +3428,8 @@ components:
         - privilegedApproved
         - hasJsHook
         - privileged
+        - latestSha256
+        - latestActivationBlockers
         - updatedAt
       properties:
         key: { type: string }
@@ -3366,6 +3446,11 @@ components:
         privilegedApproved: { type: boolean }
         hasJsHook: { type: boolean }
         privileged: { type: boolean }
+        latestSha256: { type: string, pattern: "^[a-f0-9]{64}$" }
+        latestActivationBlockers:
+          type: array
+          items:
+            $ref: "#/components/schemas/AdapterSpecActivationBlocker"
         updatedAt: { type: string, format: date-time }
     AdapterSpecListResponse:
       type: object
@@ -3386,6 +3471,8 @@ components:
         - privilegedApproved
         - hasJsHook
         - privileged
+        - sha256
+        - activationBlockers
         - createdBy
         - createdAt
         - updatedAt
@@ -3400,6 +3487,11 @@ components:
         privilegedApproved: { type: boolean }
         hasJsHook: { type: boolean }
         privileged: { type: boolean }
+        sha256: { type: string, pattern: "^[a-f0-9]{64}$" }
+        activationBlockers:
+          type: array
+          items:
+            $ref: "#/components/schemas/AdapterSpecActivationBlocker"
         createdBy:
           type: integer
           nullable: true
@@ -3420,6 +3512,12 @@ components:
       properties:
         path: { type: string }
         message: { type: string }
+    AdapterSpecActivationBlocker:
+      type: string
+      enum:
+        - INVALID_SPEC
+        - PRIVILEGED_APPROVAL_REQUIRED
+        - JSHOOK_APPROVAL_REQUIRED
     ValidateAdapterSpecBody:
       type: object
       required: [spec]
@@ -3436,6 +3534,13 @@ components:
         name: { type: string }
         hasJsHook: { type: boolean }
         privileged: { type: boolean }
+        sha256: { type: string, pattern: "^[a-f0-9]{64}$" }
+        byteLength: { type: integer, minimum: 0 }
+        activationBlockers:
+          type: array
+          items:
+            $ref: "#/components/schemas/AdapterSpecActivationBlocker"
+        activationRequiresSeparateStep: { type: boolean }
         error: { type: string }
         message: { type: string }
         issues:
@@ -3449,12 +3554,10 @@ components:
         spec:
           type: object
           additionalProperties: true
-        enable: { type: boolean }
-        approveJsHook: { type: boolean }
-        approvePrivileged: { type: boolean }
+      additionalProperties: false
     UpsertAdapterSpecResponse:
       type: object
-      required: [key, version, enabled, jsHookApproved, privilegedApproved, hasJsHook]
+      required: [key, version, enabled, jsHookApproved, privilegedApproved, hasJsHook, privileged, sha256, byteLength, activationBlockers, activationRequiresSeparateStep]
       properties:
         key: { type: string }
         version: { type: integer }
@@ -3462,24 +3565,44 @@ components:
         jsHookApproved: { type: boolean }
         privilegedApproved: { type: boolean }
         hasJsHook: { type: boolean }
+        privileged: { type: boolean }
+        sha256: { type: string, pattern: "^[a-f0-9]{64}$" }
+        byteLength: { type: integer, minimum: 0 }
+        activationBlockers:
+          type: array
+          items:
+            $ref: "#/components/schemas/AdapterSpecActivationBlocker"
+        activationRequiresSeparateStep: { type: boolean }
     PatchAdapterSpecBody:
       type: object
       properties:
         enableVersion: { type: integer }
         disable: { type: boolean }
         rollbackTo: { type: integer }
+        approvalVersion:
+          type: integer
+          description: Required when either approval flag is changed; binds the decision to one exact version.
         jsHookApproved: { type: boolean }
         privilegedApproved: { type: boolean }
+      additionalProperties: false
     PatchAdapterSpecResponse:
       type: object
-      required: [key, enabledVersion, jsHookApproved, privilegedApproved]
+      required: [key, enabledVersion]
       properties:
         key: { type: string }
         enabledVersion:
           type: integer
           nullable: true
-        jsHookApproved: { type: boolean }
-        privilegedApproved: { type: boolean }
+        approvalVersion:
+          type: integer
+          nullable: true
+        approval:
+          type: object
+          nullable: true
+          required: [jsHookApproved, privilegedApproved]
+          properties:
+            jsHookApproved: { type: boolean }
+            privilegedApproved: { type: boolean }
     HealthStatus:
       type: object
       properties:
@@ -6213,6 +6336,8 @@ components:
           type: integer
         handoffMessage:
           type: string
+        handoffMessages:
+          $ref: "#/components/schemas/AiAgentHandoffMessages"
         languages:
           type: array
           items:
@@ -6626,7 +6751,7 @@ components:
           enum: [dry, real]
         status:
           type: string
-          enum: [queued, running, submitted, already_exists, program_missing, failed, canceled]
+          enum: [queued, running, submitted, already_exists, program_missing, failed, canceled, dry_run, program_full, exclusive_region, accepted, rejected]
         externalRef: { type: string, nullable: true }
         resultJson: { type: object, nullable: true }
         screenshotUrls: { type: array, items: { type: string }, nullable: true }
@@ -6635,11 +6760,114 @@ components:
         maxAttempts: { type: integer }
         lockedAt: { type: string, format: date-time, nullable: true }
         lockedBy: { type: string, nullable: true }
+        statusCheckAttempts: { type: integer, minimum: 0 }
+        statusCheckNextAt: { type: string, format: date-time }
+        statusCheckLastAt: { type: string, format: date-time, nullable: true }
+        statusCheckError:
+          type: string
+          nullable: true
+          enum: [STATUS_CHECK_UNSUPPORTED, STATUS_CHECK_TIMEOUT, STATUS_CHECK_AUTHENTICATION, STATUS_CHECK_PORTAL_DRIFT, STATUS_CHECK_NETWORK, STATUS_CHECK_LEASE_LOST, STATUS_CHECK_FAILED]
+        statusCheckLockedAt: { type: string, format: date-time, nullable: true }
+        statusCheckLockedBy: { type: string, nullable: true }
+        statusCheckSuspendedAt: { type: string, format: date-time, nullable: true }
         enqueuedBy: { type: integer, nullable: true }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
         deletedAt: { type: string, format: date-time, nullable: true }
-      required: [id, applicationId, studentId, universityKey, universityName, mode, status, attempts, maxAttempts, createdAt, updatedAt]
+      required: [id, applicationId, studentId, universityKey, universityName, mode, status, attempts, maxAttempts, statusCheckAttempts, statusCheckNextAt, createdAt, updatedAt]
+
+    PortalOperationsSummary:
+      type: object
+      properties:
+        tracked: { type: integer, minimum: 0 }
+        due: { type: integer, minimum: 0 }
+        checking: { type: integer, minimum: 0 }
+        retrying: { type: integer, minimum: 0 }
+        suspended: { type: integer, minimum: 0 }
+        observations24h: { type: integer, minimum: 0 }
+        unverified24h: { type: integer, minimum: 0 }
+        missingDocuments24h: { type: integer, minimum: 0 }
+        decisions24h: { type: integer, minimum: 0 }
+        pendingReviews: { type: integer, minimum: 0 }
+      required: [tracked, due, checking, retrying, suspended, observations24h, unverified24h, missingDocuments24h, decisions24h, pendingReviews]
+
+    PortalStatusLane:
+      type: object
+      properties:
+        laneKey: { type: string }
+        adapterKey: { type: string }
+        universityKey: { type: string }
+        tracked: { type: integer, minimum: 0 }
+        due: { type: integer, minimum: 0 }
+        checking: { type: integer, minimum: 0 }
+        retrying: { type: integer, minimum: 0 }
+        suspended: { type: integer, minimum: 0 }
+        oldestDue: { type: string, format: date-time, nullable: true }
+        lastCheckedAt: { type: string, format: date-time, nullable: true }
+      required: [laneKey, adapterKey, universityKey, tracked, due, checking, retrying, suspended, oldestDue, lastCheckedAt]
+
+    PortalLifecycleObservationSummary:
+      type: object
+      properties:
+        id: { type: integer }
+        submissionId: { type: integer }
+        applicationId: { type: integer }
+        adapterKey: { type: string }
+        universityKey: { type: string }
+        disposition:
+          type: string
+          enum: [SUBMITTED, UNDER_REVIEW, MISSING_DOCUMENT, FEE_REQUIRED, CONDITIONAL_OFFER, UNCONDITIONAL_OFFER, DEPOSIT_RECEIVED, WAITLISTED, REJECTED, FINAL_ACCEPTANCE, ENROLLED, FULL_QUOTA, DUPLICATE, ALREADY_REGISTERED, WITHDRAWN, UNKNOWN]
+        identityVerified: { type: boolean }
+        missingDocumentCount: { type: integer, minimum: 0, maximum: 50 }
+        observedAt: { type: string, format: date-time }
+      required: [id, submissionId, applicationId, adapterKey, universityKey, disposition, identityVerified, missingDocumentCount, observedAt]
+
+    SuspendedPortalStatusCheck:
+      type: object
+      properties:
+        submissionId: { type: integer }
+        applicationId: { type: integer }
+        adapterKey: { type: string }
+        universityKey: { type: string }
+        attempts: { type: integer, minimum: 1 }
+        suspendedAt: { type: string, format: date-time }
+        errorCategory:
+          type: string
+          enum: [unsupported, timeout, authentication, portal_drift, network, lease_lost, other]
+      required: [submissionId, applicationId, adapterKey, universityKey, attempts, suspendedAt, errorCategory]
+
+    PortalOperationsResponse:
+      type: object
+      properties:
+        summary:
+          $ref: "#/components/schemas/PortalOperationsSummary"
+        lanes:
+          type: array
+          items:
+            $ref: "#/components/schemas/PortalStatusLane"
+        recentObservations:
+          type: array
+          items:
+            $ref: "#/components/schemas/PortalLifecycleObservationSummary"
+        suspended:
+          type: array
+          items:
+            $ref: "#/components/schemas/SuspendedPortalStatusCheck"
+        generatedAt: { type: string, format: date-time }
+      required: [summary, lanes, recentObservations, suspended, generatedAt]
+
+    PortalStatusSyncStarted:
+      type: object
+      properties:
+        started: { type: boolean, const: true }
+      required: [started]
+
+    PortalStatusCheckResumed:
+      type: object
+      properties:
+        resumed: { type: boolean, const: true }
+        submissionId: { type: integer }
+      required: [resumed, submissionId]
 
     EnqueuePortalSubmissionBody:
       type: object

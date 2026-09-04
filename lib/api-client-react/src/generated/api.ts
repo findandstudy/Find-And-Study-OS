@@ -118,9 +118,12 @@ import type {
   OverviewStats,
   PatchAdapterSpecBody,
   PatchAdapterSpecResponse,
+  PortalOperationsResponse,
   PortalProgramMapping,
   PortalProgramOptionsResponse,
   PortalReadiness,
+  PortalStatusCheckResumed,
+  PortalStatusSyncStarted,
   PortalSubmission,
   Program,
   ProgramFallback,
@@ -9778,6 +9781,256 @@ export const useCancelPortalSubmission = <
 };
 
 /**
+ * Returns aggregate and per-lane queue health, recent redacted lifecycle observations, and quarantined checks. Raw provider errors, credentials, application numbers and student PII are never returned.
+
+ * @summary Read the bounded portal status-monitoring operations view (admin only)
+ */
+export const getGetPortalAutomationOperationsUrl = () => {
+  return `/api/portal-automation/operations`;
+};
+
+export const getPortalAutomationOperations = async (
+  options?: RequestInit,
+): Promise<PortalOperationsResponse> => {
+  return customFetch<PortalOperationsResponse>(
+    getGetPortalAutomationOperationsUrl(),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getGetPortalAutomationOperationsQueryKey = () => {
+  return [`/api/portal-automation/operations`] as const;
+};
+
+export const getGetPortalAutomationOperationsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getPortalAutomationOperations>>,
+  TError = ErrorType<ErrorResponse>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getPortalAutomationOperations>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetPortalAutomationOperationsQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getPortalAutomationOperations>>
+  > = ({ signal }) =>
+    getPortalAutomationOperations({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getPortalAutomationOperations>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetPortalAutomationOperationsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getPortalAutomationOperations>>
+>;
+export type GetPortalAutomationOperationsQueryError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Read the bounded portal status-monitoring operations view (admin only)
+ */
+
+export function useGetPortalAutomationOperations<
+  TData = Awaited<ReturnType<typeof getPortalAutomationOperations>>,
+  TError = ErrorType<ErrorResponse>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getPortalAutomationOperations>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetPortalAutomationOperationsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Start one bounded portal status synchronization sweep (admin only)
+ */
+export const getRunPortalStatusSyncUrl = () => {
+  return `/api/portal-automation/status-sync/run`;
+};
+
+export const runPortalStatusSync = async (
+  options?: RequestInit,
+): Promise<PortalStatusSyncStarted> => {
+  return customFetch<PortalStatusSyncStarted>(getRunPortalStatusSyncUrl(), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getRunPortalStatusSyncMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof runPortalStatusSync>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof runPortalStatusSync>>,
+  TError,
+  void,
+  TContext
+> => {
+  const mutationKey = ["runPortalStatusSync"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof runPortalStatusSync>>,
+    void
+  > = () => {
+    return runPortalStatusSync(requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RunPortalStatusSyncMutationResult = NonNullable<
+  Awaited<ReturnType<typeof runPortalStatusSync>>
+>;
+
+export type RunPortalStatusSyncMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Start one bounded portal status synchronization sweep (admin only)
+ */
+export const useRunPortalStatusSync = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof runPortalStatusSync>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof runPortalStatusSync>>,
+  TError,
+  void,
+  TContext
+> => {
+  return useMutation(getRunPortalStatusSyncMutationOptions(options));
+};
+
+/**
+ * @summary Resume one quarantined portal status check (admin only)
+ */
+export const getResumePortalStatusCheckUrl = (id: number) => {
+  return `/api/portal-submissions/${id}/status-check/resume`;
+};
+
+export const resumePortalStatusCheck = async (
+  id: number,
+  options?: RequestInit,
+): Promise<PortalStatusCheckResumed> => {
+  return customFetch<PortalStatusCheckResumed>(
+    getResumePortalStatusCheckUrl(id),
+    {
+      ...options,
+      method: "POST",
+    },
+  );
+};
+
+export const getResumePortalStatusCheckMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof resumePortalStatusCheck>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof resumePortalStatusCheck>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  const mutationKey = ["resumePortalStatusCheck"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof resumePortalStatusCheck>>,
+    { id: number }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return resumePortalStatusCheck(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ResumePortalStatusCheckMutationResult = NonNullable<
+  Awaited<ReturnType<typeof resumePortalStatusCheck>>
+>;
+
+export type ResumePortalStatusCheckMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Resume one quarantined portal status check (admin only)
+ */
+export const useResumePortalStatusCheck = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof resumePortalStatusCheck>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof resumePortalStatusCheck>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  return useMutation(getResumePortalStatusCheckMutationOptions(options));
+};
+
+/**
  * @summary List configured university portals with credential status
  */
 export const getGetUniversityPortalsUrl = () => {
@@ -10566,7 +10819,7 @@ export function useListAdapterSpecs<
 }
 
 /**
- * @summary Create a new adapter spec version, optionally enabling it (admin only)
+ * @summary Create a new inactive adapter spec version (admin only)
  */
 export const getUpsertAdapterSpecUrl = () => {
   return `/api/portal-automation/adapter-specs`;
@@ -10631,7 +10884,7 @@ export type UpsertAdapterSpecMutationError = ErrorType<
 >;
 
 /**
- * @summary Create a new adapter spec version, optionally enabling it (admin only)
+ * @summary Create a new inactive adapter spec version (admin only)
  */
 export const useUpsertAdapterSpec = <
   TError = ErrorType<AdapterSpecValidationResponse | ErrorResponse>,
@@ -10835,7 +11088,7 @@ export function useListAdapterSpecVersions<
 }
 
 /**
- * @summary Enable, disable, rollback, or approve jsHook for an adapter spec (admin only)
+ * @summary Enable, disable, rollback, or approve an exact adapter spec version (admin only)
  */
 export const getPatchAdapterSpecUrl = (key: string) => {
   return `/api/portal-automation/adapter-specs/${key}`;
@@ -10899,7 +11152,7 @@ export type PatchAdapterSpecMutationBody = BodyType<PatchAdapterSpecBody>;
 export type PatchAdapterSpecMutationError = ErrorType<ErrorResponse>;
 
 /**
- * @summary Enable, disable, rollback, or approve jsHook for an adapter spec (admin only)
+ * @summary Enable, disable, rollback, or approve an exact adapter spec version (admin only)
  */
 export const usePatchAdapterSpec = <
   TError = ErrorType<ErrorResponse>,

@@ -874,6 +874,8 @@ export const ListApplicationsQueryParams = zod.object({
   limit: zod.coerce.number().optional(),
 });
 
+export const listApplicationsResponseDataItemUniversityApplicationIdMax = 128;
+
 export const ListApplicationsResponse = zod.object({
   data: zod.array(
     zod.object({
@@ -889,6 +891,13 @@ export const ListApplicationsResponse = zod.object({
       deadline: zod.string().nullish(),
       programName: zod.string().nullish(),
       universityName: zod.string().nullish(),
+      universityApplicationId: zod
+        .string()
+        .max(listApplicationsResponseDataItemUniversityApplicationIdMax)
+        .nullish()
+        .describe(
+          "Current university-assigned application identifier. Historical portal-run references are stored separately.",
+        ),
       country: zod.string().nullish(),
       tuitionFee: zod.number().nullish(),
       scholarship: zod.number().nullish(),
@@ -939,6 +948,8 @@ export const GetApplicationParams = zod.object({
   id: zod.coerce.number(),
 });
 
+export const getApplicationResponseUniversityApplicationIdMax = 128;
+
 export const GetApplicationResponse = zod.object({
   id: zod.number(),
   studentId: zod.number(),
@@ -952,6 +963,13 @@ export const GetApplicationResponse = zod.object({
   deadline: zod.string().nullish(),
   programName: zod.string().nullish(),
   universityName: zod.string().nullish(),
+  universityApplicationId: zod
+    .string()
+    .max(getApplicationResponseUniversityApplicationIdMax)
+    .nullish()
+    .describe(
+      "Current university-assigned application identifier. Historical portal-run references are stored separately.",
+    ),
   country: zod.string().nullish(),
   tuitionFee: zod.number().nullish(),
   scholarship: zod.number().nullish(),
@@ -973,6 +991,8 @@ export const UpdateApplicationParams = zod.object({
   id: zod.coerce.number(),
 });
 
+export const updateApplicationBodyUniversityApplicationIdMax = 128;
+
 export const UpdateApplicationBody = zod.object({
   programId: zod.number().nullish(),
   universityId: zod.number().nullish(),
@@ -984,11 +1004,17 @@ export const UpdateApplicationBody = zod.object({
   deadline: zod.string().nullish(),
   programName: zod.string().nullish(),
   universityName: zod.string().nullish(),
+  universityApplicationId: zod
+    .string()
+    .max(updateApplicationBodyUniversityApplicationIdMax)
+    .nullish(),
   country: zod.string().nullish(),
   tuitionFee: zod.number().nullish(),
   scholarship: zod.number().nullish(),
   notes: zod.string().nullish(),
 });
+
+export const updateApplicationResponseUniversityApplicationIdMax = 128;
 
 export const UpdateApplicationResponse = zod.object({
   id: zod.number(),
@@ -1003,6 +1029,13 @@ export const UpdateApplicationResponse = zod.object({
   deadline: zod.string().nullish(),
   programName: zod.string().nullish(),
   universityName: zod.string().nullish(),
+  universityApplicationId: zod
+    .string()
+    .max(updateApplicationResponseUniversityApplicationIdMax)
+    .nullish()
+    .describe(
+      "Current university-assigned application identifier. Historical portal-run references are stored separately.",
+    ),
   country: zod.string().nullish(),
   tuitionFee: zod.number().nullish(),
   scholarship: zod.number().nullish(),
@@ -2526,6 +2559,8 @@ export const GetInboxConversationDetailResponse = zod.object({
         leadId: zod.number().nullish(),
         studentId: zod.number().nullish(),
         agentId: zod.number().nullish(),
+        isBlocked: zod.boolean(),
+        blockedAt: zod.union([zod.date(), zod.null()]).optional(),
         metadata: zod.record(zod.string(), zod.unknown()).nullish(),
         firstSeenAt: zod.date(),
         lastSeenAt: zod.date(),
@@ -2714,12 +2749,29 @@ export const GetAiAgentConfigResponse = zod.object({
     temperature: zod.number(),
     maxConsecutiveReplies: zod.number(),
     handoffMessage: zod.string(),
-    languages: zod.array(zod.enum(["tr", "en", "ar", "ru", "fr"])),
+    handoffMessages: zod.object({
+      tr: zod.string(),
+      en: zod.string(),
+      ar: zod.string(),
+      fa: zod.string(),
+      fr: zod.string(),
+      es: zod.string(),
+      ru: zod.string(),
+      zh: zod.string(),
+      hi: zod.string(),
+      id: zod.string(),
+    }),
+    languages: zod.array(
+      zod.enum(["tr", "en", "ar", "fa", "fr", "es", "ru", "zh", "hi", "id"]),
+    ),
     escalationKeywords: zod.object({
       contract: zod.array(zod.string()),
       payment: zod.array(zod.string()),
       commission: zod.array(zod.string()),
       partner: zod.array(zod.string()),
+      human_request: zod.array(zod.string()),
+      visa_documents: zod.array(zod.string()),
+      supplier: zod.array(zod.string()),
     }),
     knowledgeBase: zod.string(),
     programScope: zod
@@ -2886,13 +2938,34 @@ export const UpdateAiAgentConfigBody = zod
     temperature: zod.number().optional(),
     maxConsecutiveReplies: zod.number().optional(),
     handoffMessage: zod.string().optional(),
-    languages: zod.array(zod.enum(["tr", "en", "ar", "ru", "fr"])).optional(),
+    handoffMessages: zod
+      .object({
+        tr: zod.string(),
+        en: zod.string(),
+        ar: zod.string(),
+        fa: zod.string(),
+        fr: zod.string(),
+        es: zod.string(),
+        ru: zod.string(),
+        zh: zod.string(),
+        hi: zod.string(),
+        id: zod.string(),
+      })
+      .optional(),
+    languages: zod
+      .array(
+        zod.enum(["tr", "en", "ar", "fa", "fr", "es", "ru", "zh", "hi", "id"]),
+      )
+      .optional(),
     escalationKeywords: zod
       .object({
         contract: zod.array(zod.string()),
         payment: zod.array(zod.string()),
         commission: zod.array(zod.string()),
         partner: zod.array(zod.string()),
+        human_request: zod.array(zod.string()),
+        visa_documents: zod.array(zod.string()),
+        supplier: zod.array(zod.string()),
       })
       .optional(),
     knowledgeBase: zod.string().optional(),
@@ -3040,12 +3113,29 @@ export const UpdateAiAgentConfigResponse = zod.object({
     temperature: zod.number(),
     maxConsecutiveReplies: zod.number(),
     handoffMessage: zod.string(),
-    languages: zod.array(zod.enum(["tr", "en", "ar", "ru", "fr"])),
+    handoffMessages: zod.object({
+      tr: zod.string(),
+      en: zod.string(),
+      ar: zod.string(),
+      fa: zod.string(),
+      fr: zod.string(),
+      es: zod.string(),
+      ru: zod.string(),
+      zh: zod.string(),
+      hi: zod.string(),
+      id: zod.string(),
+    }),
+    languages: zod.array(
+      zod.enum(["tr", "en", "ar", "fa", "fr", "es", "ru", "zh", "hi", "id"]),
+    ),
     escalationKeywords: zod.object({
       contract: zod.array(zod.string()),
       payment: zod.array(zod.string()),
       commission: zod.array(zod.string()),
       partner: zod.array(zod.string()),
+      human_request: zod.array(zod.string()),
+      visa_documents: zod.array(zod.string()),
+      supplier: zod.array(zod.string()),
     }),
     knowledgeBase: zod.string(),
     programScope: zod
@@ -3163,7 +3253,9 @@ export const UpdateAiAgentConfigResponse = zod.object({
  */
 export const TestAiAgentBody = zod.object({
   message: zod.string(),
-  language: zod.enum(["tr", "en", "ar", "ru", "fr"]).optional(),
+  language: zod
+    .enum(["tr", "en", "ar", "fa", "fr", "es", "ru", "zh", "hi", "id"])
+    .optional(),
   history: zod
     .array(
       zod.object({
@@ -3177,7 +3269,18 @@ export const TestAiAgentBody = zod.object({
 export const TestAiAgentResponse = zod.object({
   result: zod.object({
     reply: zod.string().nullable(),
-    language: zod.enum(["tr", "en", "ar", "ru", "fr"]),
+    language: zod.enum([
+      "tr",
+      "en",
+      "ar",
+      "fa",
+      "fr",
+      "es",
+      "ru",
+      "zh",
+      "hi",
+      "id",
+    ]),
     escalation: zod.object({
       escalated: zod.boolean(),
       topic: zod
@@ -3186,6 +3289,9 @@ export const TestAiAgentResponse = zod.object({
           zod.literal("payment"),
           zod.literal("commission"),
           zod.literal("partner"),
+          zod.literal("human_request"),
+          zod.literal("visa_documents"),
+          zod.literal("supplier"),
           zod.literal(null),
         ])
         .nullable(),
@@ -3464,6 +3570,8 @@ export const GetPortalSubmissionsQueryParams = zod.object({
     .optional(),
 });
 
+export const getPortalSubmissionsResponseDataItemStatusCheckAttemptsMin = 0;
+
 export const GetPortalSubmissionsResponse = zod.object({
   data: zod.array(
     zod.object({
@@ -3481,6 +3589,11 @@ export const GetPortalSubmissionsResponse = zod.object({
         "program_missing",
         "failed",
         "canceled",
+        "dry_run",
+        "program_full",
+        "exclusive_region",
+        "accepted",
+        "rejected",
       ]),
       externalRef: zod.string().nullish(),
       resultJson: zod.object({}).passthrough().nullish(),
@@ -3490,6 +3603,25 @@ export const GetPortalSubmissionsResponse = zod.object({
       maxAttempts: zod.number(),
       lockedAt: zod.date().nullish(),
       lockedBy: zod.string().nullish(),
+      statusCheckAttempts: zod
+        .number()
+        .min(getPortalSubmissionsResponseDataItemStatusCheckAttemptsMin),
+      statusCheckNextAt: zod.date(),
+      statusCheckLastAt: zod.date().nullish(),
+      statusCheckError: zod
+        .enum([
+          "STATUS_CHECK_UNSUPPORTED",
+          "STATUS_CHECK_TIMEOUT",
+          "STATUS_CHECK_AUTHENTICATION",
+          "STATUS_CHECK_PORTAL_DRIFT",
+          "STATUS_CHECK_NETWORK",
+          "STATUS_CHECK_LEASE_LOST",
+          "STATUS_CHECK_FAILED",
+        ])
+        .nullish(),
+      statusCheckLockedAt: zod.date().nullish(),
+      statusCheckLockedBy: zod.string().nullish(),
+      statusCheckSuspendedAt: zod.date().nullish(),
       enqueuedBy: zod.number().nullish(),
       createdAt: zod.date(),
       updatedAt: zod.date(),
@@ -3509,6 +3641,8 @@ export const GetPortalSubmissionParams = zod.object({
   id: zod.coerce.number(),
 });
 
+export const getPortalSubmissionResponseStatusCheckAttemptsMin = 0;
+
 export const GetPortalSubmissionResponse = zod.object({
   id: zod.number(),
   applicationId: zod.number(),
@@ -3524,6 +3658,11 @@ export const GetPortalSubmissionResponse = zod.object({
     "program_missing",
     "failed",
     "canceled",
+    "dry_run",
+    "program_full",
+    "exclusive_region",
+    "accepted",
+    "rejected",
   ]),
   externalRef: zod.string().nullish(),
   resultJson: zod.object({}).passthrough().nullish(),
@@ -3533,6 +3672,25 @@ export const GetPortalSubmissionResponse = zod.object({
   maxAttempts: zod.number(),
   lockedAt: zod.date().nullish(),
   lockedBy: zod.string().nullish(),
+  statusCheckAttempts: zod
+    .number()
+    .min(getPortalSubmissionResponseStatusCheckAttemptsMin),
+  statusCheckNextAt: zod.date(),
+  statusCheckLastAt: zod.date().nullish(),
+  statusCheckError: zod
+    .enum([
+      "STATUS_CHECK_UNSUPPORTED",
+      "STATUS_CHECK_TIMEOUT",
+      "STATUS_CHECK_AUTHENTICATION",
+      "STATUS_CHECK_PORTAL_DRIFT",
+      "STATUS_CHECK_NETWORK",
+      "STATUS_CHECK_LEASE_LOST",
+      "STATUS_CHECK_FAILED",
+    ])
+    .nullish(),
+  statusCheckLockedAt: zod.date().nullish(),
+  statusCheckLockedBy: zod.string().nullish(),
+  statusCheckSuspendedAt: zod.date().nullish(),
   enqueuedBy: zod.number().nullish(),
   createdAt: zod.date(),
   updatedAt: zod.date(),
@@ -3572,6 +3730,170 @@ export const CancelPortalSubmissionParams = zod.object({
 
 export const CancelPortalSubmissionResponse = zod.object({
   ok: zod.boolean(),
+});
+
+/**
+ * Returns aggregate and per-lane queue health, recent redacted lifecycle observations, and quarantined checks. Raw provider errors, credentials, application numbers and student PII are never returned.
+
+ * @summary Read the bounded portal status-monitoring operations view (admin only)
+ */
+export const getPortalAutomationOperationsResponseSummaryTrackedMin = 0;
+
+export const getPortalAutomationOperationsResponseSummaryDueMin = 0;
+
+export const getPortalAutomationOperationsResponseSummaryCheckingMin = 0;
+
+export const getPortalAutomationOperationsResponseSummaryRetryingMin = 0;
+
+export const getPortalAutomationOperationsResponseSummarySuspendedMin = 0;
+
+export const getPortalAutomationOperationsResponseSummaryObservations24hMin = 0;
+
+export const getPortalAutomationOperationsResponseSummaryUnverified24hMin = 0;
+
+export const getPortalAutomationOperationsResponseSummaryMissingDocuments24hMin = 0;
+
+export const getPortalAutomationOperationsResponseSummaryDecisions24hMin = 0;
+
+export const getPortalAutomationOperationsResponseSummaryPendingReviewsMin = 0;
+
+export const getPortalAutomationOperationsResponseLanesItemTrackedMin = 0;
+
+export const getPortalAutomationOperationsResponseLanesItemDueMin = 0;
+
+export const getPortalAutomationOperationsResponseLanesItemCheckingMin = 0;
+
+export const getPortalAutomationOperationsResponseLanesItemRetryingMin = 0;
+
+export const getPortalAutomationOperationsResponseLanesItemSuspendedMin = 0;
+
+export const getPortalAutomationOperationsResponseRecentObservationsItemMissingDocumentCountMin = 0;
+export const getPortalAutomationOperationsResponseRecentObservationsItemMissingDocumentCountMax = 50;
+
+export const GetPortalAutomationOperationsResponse = zod.object({
+  summary: zod.object({
+    tracked: zod
+      .number()
+      .min(getPortalAutomationOperationsResponseSummaryTrackedMin),
+    due: zod.number().min(getPortalAutomationOperationsResponseSummaryDueMin),
+    checking: zod
+      .number()
+      .min(getPortalAutomationOperationsResponseSummaryCheckingMin),
+    retrying: zod
+      .number()
+      .min(getPortalAutomationOperationsResponseSummaryRetryingMin),
+    suspended: zod
+      .number()
+      .min(getPortalAutomationOperationsResponseSummarySuspendedMin),
+    observations24h: zod
+      .number()
+      .min(getPortalAutomationOperationsResponseSummaryObservations24hMin),
+    unverified24h: zod
+      .number()
+      .min(getPortalAutomationOperationsResponseSummaryUnverified24hMin),
+    missingDocuments24h: zod
+      .number()
+      .min(getPortalAutomationOperationsResponseSummaryMissingDocuments24hMin),
+    decisions24h: zod
+      .number()
+      .min(getPortalAutomationOperationsResponseSummaryDecisions24hMin),
+    pendingReviews: zod
+      .number()
+      .min(getPortalAutomationOperationsResponseSummaryPendingReviewsMin),
+  }),
+  lanes: zod.array(
+    zod.object({
+      laneKey: zod.string(),
+      adapterKey: zod.string(),
+      universityKey: zod.string(),
+      tracked: zod
+        .number()
+        .min(getPortalAutomationOperationsResponseLanesItemTrackedMin),
+      due: zod
+        .number()
+        .min(getPortalAutomationOperationsResponseLanesItemDueMin),
+      checking: zod
+        .number()
+        .min(getPortalAutomationOperationsResponseLanesItemCheckingMin),
+      retrying: zod
+        .number()
+        .min(getPortalAutomationOperationsResponseLanesItemRetryingMin),
+      suspended: zod
+        .number()
+        .min(getPortalAutomationOperationsResponseLanesItemSuspendedMin),
+      oldestDue: zod.date().nullable(),
+      lastCheckedAt: zod.date().nullable(),
+    }),
+  ),
+  recentObservations: zod.array(
+    zod.object({
+      id: zod.number(),
+      submissionId: zod.number(),
+      applicationId: zod.number(),
+      adapterKey: zod.string(),
+      universityKey: zod.string(),
+      disposition: zod.enum([
+        "SUBMITTED",
+        "UNDER_REVIEW",
+        "MISSING_DOCUMENT",
+        "FEE_REQUIRED",
+        "CONDITIONAL_OFFER",
+        "UNCONDITIONAL_OFFER",
+        "DEPOSIT_RECEIVED",
+        "WAITLISTED",
+        "REJECTED",
+        "FINAL_ACCEPTANCE",
+        "ENROLLED",
+        "FULL_QUOTA",
+        "DUPLICATE",
+        "ALREADY_REGISTERED",
+        "WITHDRAWN",
+        "UNKNOWN",
+      ]),
+      identityVerified: zod.boolean(),
+      missingDocumentCount: zod
+        .number()
+        .min(
+          getPortalAutomationOperationsResponseRecentObservationsItemMissingDocumentCountMin,
+        )
+        .max(
+          getPortalAutomationOperationsResponseRecentObservationsItemMissingDocumentCountMax,
+        ),
+      observedAt: zod.date(),
+    }),
+  ),
+  suspended: zod.array(
+    zod.object({
+      submissionId: zod.number(),
+      applicationId: zod.number(),
+      adapterKey: zod.string(),
+      universityKey: zod.string(),
+      attempts: zod.number().min(1),
+      suspendedAt: zod.date(),
+      errorCategory: zod.enum([
+        "unsupported",
+        "timeout",
+        "authentication",
+        "portal_drift",
+        "network",
+        "lease_lost",
+        "other",
+      ]),
+    }),
+  ),
+  generatedAt: zod.date(),
+});
+
+/**
+ * @summary Resume one quarantined portal status check (admin only)
+ */
+export const ResumePortalStatusCheckParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const ResumePortalStatusCheckResponse = zod.object({
+  resumed: zod.boolean(),
+  submissionId: zod.number(),
 });
 
 /**
@@ -3721,6 +4043,10 @@ export const SetMultiPortalMembersResponse = zod.object({
 /**
  * @summary List declarative adapter specs, one entry per key (admin only)
  */
+export const listAdapterSpecsResponseSpecsItemLatestSha256RegExp = new RegExp(
+  "^[a-f0-9]{64}$",
+);
+
 export const ListAdapterSpecsResponse = zod.object({
   specs: zod.array(
     zod.object({
@@ -3734,19 +4060,26 @@ export const ListAdapterSpecsResponse = zod.object({
       privilegedApproved: zod.boolean(),
       hasJsHook: zod.boolean(),
       privileged: zod.boolean(),
+      latestSha256: zod
+        .string()
+        .regex(listAdapterSpecsResponseSpecsItemLatestSha256RegExp),
+      latestActivationBlockers: zod.array(
+        zod.enum([
+          "INVALID_SPEC",
+          "PRIVILEGED_APPROVAL_REQUIRED",
+          "JSHOOK_APPROVAL_REQUIRED",
+        ]),
+      ),
       updatedAt: zod.date(),
     }),
   ),
 });
 
 /**
- * @summary Create a new adapter spec version, optionally enabling it (admin only)
+ * @summary Create a new inactive adapter spec version (admin only)
  */
 export const UpsertAdapterSpecBody = zod.object({
   spec: zod.record(zod.string(), zod.unknown()),
-  enable: zod.boolean().optional(),
-  approveJsHook: zod.boolean().optional(),
-  approvePrivileged: zod.boolean().optional(),
 });
 
 /**
@@ -3756,12 +4089,35 @@ export const ValidateAdapterSpecBody = zod.object({
   spec: zod.record(zod.string(), zod.unknown()),
 });
 
+export const validateAdapterSpecResponseSha256RegExp = new RegExp(
+  "^[a-f0-9]{64}$",
+);
+export const validateAdapterSpecResponseByteLengthMin = 0;
+
 export const ValidateAdapterSpecResponse = zod.object({
   ok: zod.boolean(),
   key: zod.string().optional(),
   name: zod.string().optional(),
   hasJsHook: zod.boolean().optional(),
   privileged: zod.boolean().optional(),
+  sha256: zod
+    .string()
+    .regex(validateAdapterSpecResponseSha256RegExp)
+    .optional(),
+  byteLength: zod
+    .number()
+    .min(validateAdapterSpecResponseByteLengthMin)
+    .optional(),
+  activationBlockers: zod
+    .array(
+      zod.enum([
+        "INVALID_SPEC",
+        "PRIVILEGED_APPROVAL_REQUIRED",
+        "JSHOOK_APPROVAL_REQUIRED",
+      ]),
+    )
+    .optional(),
+  activationRequiresSeparateStep: zod.boolean().optional(),
   error: zod.string().optional(),
   message: zod.string().optional(),
   issues: zod
@@ -3781,6 +4137,9 @@ export const ListAdapterSpecVersionsParams = zod.object({
   key: zod.coerce.string(),
 });
 
+export const listAdapterSpecVersionsResponseVersionsItemSha256RegExp =
+  new RegExp("^[a-f0-9]{64}$");
+
 export const ListAdapterSpecVersionsResponse = zod.object({
   key: zod.string(),
   versions: zod.array(
@@ -3793,6 +4152,16 @@ export const ListAdapterSpecVersionsResponse = zod.object({
       privilegedApproved: zod.boolean(),
       hasJsHook: zod.boolean(),
       privileged: zod.boolean(),
+      sha256: zod
+        .string()
+        .regex(listAdapterSpecVersionsResponseVersionsItemSha256RegExp),
+      activationBlockers: zod.array(
+        zod.enum([
+          "INVALID_SPEC",
+          "PRIVILEGED_APPROVAL_REQUIRED",
+          "JSHOOK_APPROVAL_REQUIRED",
+        ]),
+      ),
       createdBy: zod.number().nullable(),
       createdAt: zod.date(),
       updatedAt: zod.date(),
@@ -3801,7 +4170,7 @@ export const ListAdapterSpecVersionsResponse = zod.object({
 });
 
 /**
- * @summary Enable, disable, rollback, or approve jsHook for an adapter spec (admin only)
+ * @summary Enable, disable, rollback, or approve an exact adapter spec version (admin only)
  */
 export const PatchAdapterSpecParams = zod.object({
   key: zod.coerce.string(),
@@ -3811,6 +4180,12 @@ export const PatchAdapterSpecBody = zod.object({
   enableVersion: zod.number().optional(),
   disable: zod.boolean().optional(),
   rollbackTo: zod.number().optional(),
+  approvalVersion: zod
+    .number()
+    .optional()
+    .describe(
+      "Required when either approval flag is changed; binds the decision to one exact version.",
+    ),
   jsHookApproved: zod.boolean().optional(),
   privilegedApproved: zod.boolean().optional(),
 });
@@ -3818,8 +4193,13 @@ export const PatchAdapterSpecBody = zod.object({
 export const PatchAdapterSpecResponse = zod.object({
   key: zod.string(),
   enabledVersion: zod.number().nullable(),
-  jsHookApproved: zod.boolean(),
-  privilegedApproved: zod.boolean(),
+  approvalVersion: zod.number().nullish(),
+  approval: zod
+    .object({
+      jsHookApproved: zod.boolean(),
+      privilegedApproved: zod.boolean(),
+    })
+    .nullish(),
 });
 
 /**

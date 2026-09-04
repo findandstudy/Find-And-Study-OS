@@ -24,6 +24,9 @@ import type {
   LoginOpts,
   ProgramOption,
   PortalProgramOption,
+  PortalStatusCheckResult,
+  PortalStatusArtifact,
+  PortalStatusArtifactKind,
 } from "../types.js";
 import type { MinimalPage } from "../declarativeAdapter.js";
 import { launchPortal, logger } from "../browser.js";
@@ -41,10 +44,15 @@ import type {
   WorkflowState,
   ProfilePolicy,
   OutcomeRule,
+  StatusCheckSpec,
 } from "./schema.js";
 import type { InterpolateCtx } from "./interpolate.js";
 import { interpolate } from "./interpolate.js";
-import { executeHttpLikeStep } from "./httpRunner.js";
+import {
+  assertAllowedOrigin,
+  executeHttpLikeStep,
+  type CapturePage,
+} from "./httpRunner.js";
 
 // ---------------------------------------------------------------------------
 // Page interface — MinimalPage plus the optional capabilities a spec may use.
@@ -686,6 +694,308 @@ export function isMutatingSpecStep(step: SpecStep): boolean {
       return _exhaustive;
     }
   }
+}
+
+type StatusRuntimeBags = {
+  vars: Record<string, unknown>;
+  captured: Record<string, unknown>;
+};
+
+const FORBIDDEN_STATUS_PATH_SEGMENTS = new Set(["__proto__", "prototype", "constructor"]);
+
+function readStatusValue(
+  source: StatusCheckSpec["statusFrom"],
+  bags: StatusRuntimeBags,
+): unknown {
+  let value = bags[source.source][source.path];
+  if (!source.jsonPath) return value;
+  if (typeof value === "string") {
+    try {
+      value = JSON.parse(value) as unknown;
+    } catch {
+      return undefined;
+    }
+  }
+  for (const segment of source.jsonPath.split(".")) {
+    if (FORBIDDEN_STATUS_PATH_SEGMENTS.has(segment)) return undefined;
+    if (value === null || typeof value !== "object") return undefined;
+    value = (value as Record<string, unknown>)[segment];
+  }
+  return value;
+}
+
+function requiredBoundedStatusText(value: unknown, code: string, max: number): string {
+  if (typeof value !== "string") throw new Error(code);
+  const text = value.replace(/\s+/g, " ").trim();
+  if (!text || text.length > max || /[\u0000-\u001f\u007f]/u.test(text)) {
+    throw new Error(code);
+  }
+  return text;
+}
+
+/** Pure extraction for a versioned declarative statusCheck contract. */
+export function buildDeclarativeStatusResult(input: {
+  statusCheck: StatusCheckSpec;
+  externalRef: string;
+  vars?: Record<string, unknown>;
+  captured?: Record<string, unknown>;
+}): PortalStatusCheckResult {
+  const externalRef = requiredBoundedStatusText(
+    input.externalRef,
+    "status_check_external_ref_invalid",
+    300,
+  );
+  const bags: StatusRuntimeBags = {
+    vars: input.vars ?? {},
+    captured: input.captured ?? {},
+  };
+  const status = requiredBoundedStatusText(
+    readStatusValue(input.statusCheck.statusFrom, bags),
+    "status_check_status_missing",
+    250,
+  );
+  const identityValue = readStatusValue(input.statusCheck.identity.valueFrom, bags);
+  const identityVerified =
+    typeof identityValue === "string" && identityValue.trim() === externalRef;
+  const result: PortalStatusCheckResult = { status };
+  if (identityVerified) {
+    result.identityProof = {
+      source: input.statusCheck.identity.source,
+      sourceLabel: input.statusCheck.identity.sourceLabel,
+      identityBound: true,
+      targetBound: true,
+      uniqueMatch: true,
+    };
+  }
+
+  if (identityVerified && input.statusCheck.applicationNumber) {
+    const value = requiredBoundedStatusText(
+      readStatusValue(input.statusCheck.applicationNumber.valueFrom, bags),
+      "status_check_application_number_invalid",
+      128,
+    );
+    result.verifiedApplicationNumber = {
+      value,
+      source: input.statusCheck.applicationNumber.source,
+      sourceLabel: input.statusCheck.applicationNumber.sourceLabel,
+      identityBound: true,
+      targetBound: true,
+      uniqueMatch: true,
+    };
+  }
+
+  if (input.statusCheck.missingDocuments) {
+    let value = readStatusValue(input.statusCheck.missingDocuments.valueFrom, bags);
+    if (typeof value === "string") {
+      try {
+        value = JSON.parse(value) as unknown;
+      } catch {
+        throw new Error("status_check_missing_documents_invalid");
+      }
+    }
+    if (!Array.isArray(value) || value.length > 50) {
+      throw new Error("status_check_missing_documents_invalid");
+    }
+    result.missingDocuments = value.map((item) => {
+      if (typeof item === "string") {
+        return {
+          label: requiredBoundedStatusText(
+            item,
+            "status_check_missing_document_invalid",
+            160,
+          ),
+        };
+      }
+      if (!item || typeof item !== "object" || Array.isArray(item)) {
+        throw new Error("status_check_missing_document_invalid");
+      }
+      const row = item as Record<string, unknown>;
+      const label = requiredBoundedStatusText(
+        row[input.statusCheck.missingDocuments!.labelField],
+        "status_check_missing_document_invalid",
+        160,
+      );
+      const codeField = input.statusCheck.missingDocuments!.codeField;
+      const code = codeField ? row[codeField] : undefined;
+      return {
+        label,
+        ...(typeof code === "string" && code.trim()
+          ? { code: requiredBoundedStatusText(code, "status_check_missing_document_invalid", 64) }
+          : {}),
+      };
+    });
+  }
+  return result;
+}
+
+const PORTAL_ARTIFACT_EXTENSION: Record<PortalStatusArtifact["contentType"], string> = {
+  "application/pdf": ".pdf",
+  "image/jpeg": ".jpg",
+  "image/png": ".png",
+};
+
+function statusTextKey(value: string): string {
+  return value.normalize("NFKC").replace(/\s+/g, " ").trim().toLocaleLowerCase("en");
+}
+
+function hasPortalArtifactMagic(
+  contentType: PortalStatusArtifact["contentType"],
+  bytes: Uint8Array,
+): boolean {
+  if (contentType === "application/pdf") {
+    return bytes.length >= 5 && Buffer.from(bytes.subarray(0, 5)).toString("ascii") === "%PDF-";
+  }
+  if (contentType === "image/jpeg") {
+    return bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
+  }
+  return (
+    bytes.length >= 8 &&
+    bytes[0] === 0x89 &&
+    bytes[1] === 0x50 &&
+    bytes[2] === 0x4e &&
+    bytes[3] === 0x47 &&
+    bytes[4] === 0x0d &&
+    bytes[5] === 0x0a &&
+    bytes[6] === 0x1a &&
+    bytes[7] === 0x0a
+  );
+}
+
+/** Validates and names portal bytes without trusting a URL, filename or MIME header. */
+export function buildPortalStatusArtifact(input: {
+  kind: PortalStatusArtifactKind;
+  fileName?: unknown;
+  contentType: unknown;
+  bytes: Uint8Array;
+  sourceLabel: unknown;
+  maxBytes: number;
+}): PortalStatusArtifact {
+  if (!(input.bytes instanceof Uint8Array) || input.bytes.byteLength < 5) {
+    throw new Error("status_artifact_empty");
+  }
+  if (input.bytes.byteLength > input.maxBytes) {
+    throw new Error("status_artifact_too_large");
+  }
+  const contentType = String(input.contentType ?? "")
+    .split(";", 1)[0]!
+    .trim()
+    .toLocaleLowerCase("en") as PortalStatusArtifact["contentType"];
+  if (!(contentType in PORTAL_ARTIFACT_EXTENSION) || !hasPortalArtifactMagic(contentType, input.bytes)) {
+    throw new Error("status_artifact_content_mismatch");
+  }
+  const sourceLabel = requiredBoundedStatusText(
+    input.sourceLabel,
+    "status_artifact_source_label_invalid",
+    160,
+  );
+  const fallbackName = `portal-${input.kind}${PORTAL_ARTIFACT_EXTENSION[contentType]}`;
+  const rawName = typeof input.fileName === "string" ? input.fileName.trim() : "";
+  const safeBase = rawName
+    .replaceAll("\\", "/")
+    .split("/")
+    .pop()!
+    .replace(/[^A-Za-z0-9._-]/g, "_")
+    .replace(/^\.+/, "")
+    .slice(0, 160);
+  const expectedExtension = PORTAL_ARTIFACT_EXTENSION[contentType];
+  const fileName = safeBase && safeBase.toLocaleLowerCase("en").endsWith(expectedExtension)
+    ? safeBase
+    : fallbackName;
+  return {
+    kind: input.kind,
+    fileName,
+    contentType,
+    bytes: input.bytes,
+    sourceLabel,
+  };
+}
+
+async function runDeclarativeStatusContext(
+  page: SpecPage,
+  spec: AdapterSpec,
+  externalRef: string,
+): Promise<{ vars: Record<string, unknown>; captured: Record<string, unknown> }> {
+  const vars: Record<string, unknown> = {
+    externalRef,
+    externalRefEncoded: encodeURIComponent(externalRef),
+  };
+  const captured: Record<string, unknown> = {};
+  await runSpecSteps(
+    page,
+    spec.statusCheck!.steps,
+    {
+      profile: emptyProfile(),
+      files: {},
+      allowJsHook: false,
+      vars,
+      captured,
+      allowedOrigins: spec.meta.allowedOrigins ?? [],
+      dryRun: true,
+      dryRunPolicy: "strict",
+    },
+    false,
+  );
+  return { vars, captured };
+}
+
+async function downloadDeclarativeStatusArtifact(input: {
+  page: SpecPage;
+  spec: AdapterSpec;
+  artifact: StatusCheckSpec["artifacts"][number];
+  bags: StatusRuntimeBags;
+}): Promise<PortalStatusArtifact> {
+  const rawUrl = requiredBoundedStatusText(
+    readStatusValue(input.artifact.urlFrom, input.bags),
+    "status_artifact_url_missing",
+    2_048,
+  );
+  const pageUrl = typeof input.page.url === "function" ? input.page.url() : undefined;
+  let url: string;
+  try {
+    url = new URL(rawUrl, pageUrl).toString();
+  } catch {
+    throw new Error("status_artifact_url_invalid");
+  }
+  const allowedOrigins = input.spec.meta.allowedOrigins ?? [];
+  assertAllowedOrigin(url, allowedOrigins);
+  const requestPage = input.page as unknown as CapturePage;
+  const response = await requestPage.request.fetch(url, {
+    method: "GET",
+    maxRedirects: 0,
+    timeout: 30_000,
+    failOnStatusCode: false,
+  });
+  const status = response.status();
+  if (status < 200 || status >= 300) throw new Error("status_artifact_download_failed");
+  assertAllowedOrigin(response.url(), allowedOrigins);
+  const headers = response.headers();
+  const rawLength = headers["content-length"];
+  const declaredLength = rawLength == null ? NaN : Number(rawLength);
+  if (!Number.isSafeInteger(declaredLength) || declaredLength < 5) {
+    throw new Error("status_artifact_content_length_required");
+  }
+  if (declaredLength > input.artifact.maxBytes) {
+    throw new Error("status_artifact_too_large");
+  }
+  const contentType = String(headers["content-type"] ?? "").split(";", 1)[0]!.trim().toLowerCase();
+  if (!input.artifact.contentTypes.includes(contentType as never)) {
+    throw new Error("status_artifact_content_type_denied");
+  }
+  const bytes = new Uint8Array(await response.body());
+  if (bytes.byteLength !== declaredLength) {
+    throw new Error("status_artifact_content_length_mismatch");
+  }
+  const fileName = input.artifact.fileNameFrom
+    ? readStatusValue(input.artifact.fileNameFrom, input.bags)
+    : undefined;
+  return buildPortalStatusArtifact({
+    kind: input.artifact.kind,
+    fileName,
+    contentType,
+    bytes,
+    sourceLabel: input.artifact.sourceLabel,
+    maxBytes: input.artifact.maxBytes,
+  });
 }
 
 /** Executes a single spec step. Honors `optional` (errors are warned, not thrown). */
@@ -1356,6 +1666,65 @@ export function createSpecAdapter(
       );
       return result;
     },
+
+    ...(spec.statusCheck
+      ? {
+          async checkStatus(
+            session: AdapterSession,
+            externalRef: string,
+          ): Promise<PortalStatusCheckResult> {
+            const page = session.page as unknown as SpecPage;
+            const { vars, captured } = await runDeclarativeStatusContext(
+              page,
+              spec,
+              externalRef,
+            );
+            return buildDeclarativeStatusResult({
+              statusCheck: spec.statusCheck!,
+              externalRef,
+              vars,
+              captured,
+            });
+          },
+
+          async collectStatusArtifacts(
+            session: AdapterSession,
+            externalRef: string,
+            statusResult: PortalStatusCheckResult,
+            requestedKinds: PortalStatusArtifactKind[],
+          ): Promise<PortalStatusArtifact[]> {
+            if (requestedKinds.length === 0 || spec.statusCheck!.artifacts.length === 0) {
+              return [];
+            }
+            const requested = new Set(requestedKinds);
+            const page = session.page as unknown as SpecPage;
+            const bags = await runDeclarativeStatusContext(page, spec, externalRef);
+            const current = buildDeclarativeStatusResult({
+              statusCheck: spec.statusCheck!,
+              externalRef,
+              ...bags,
+            });
+            if (!current.identityProof) throw new Error("status_artifact_identity_unverified");
+            if (statusTextKey(current.status) !== statusTextKey(statusResult.status)) {
+              throw new Error("status_artifact_status_changed");
+            }
+            const matching = spec.statusCheck!.artifacts.filter(
+              (artifact) =>
+                requested.has(artifact.kind) &&
+                artifact.statusValues.some(
+                  (status) => statusTextKey(status) === statusTextKey(current.status),
+                ),
+            );
+            const collected: PortalStatusArtifact[] = [];
+            for (const artifact of matching) {
+              collected.push(
+                await downloadDeclarativeStatusArtifact({ page, spec, artifact, bags }),
+              );
+            }
+            return collected;
+          },
+        }
+      : {}),
 
     ...(spec.programSelection
       ? {

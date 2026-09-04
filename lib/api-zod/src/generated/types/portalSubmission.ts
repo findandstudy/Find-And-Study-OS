@@ -8,6 +8,7 @@
 import type { PortalSubmissionMode } from "./portalSubmissionMode";
 import type { PortalSubmissionResultJson } from "./portalSubmissionResultJson";
 import type { PortalSubmissionStatus } from "./portalSubmissionStatus";
+import type { PortalSubmissionStatusCheckError } from "./portalSubmissionStatusCheckError";
 
 export interface PortalSubmission {
   id: number;
@@ -25,6 +26,14 @@ export interface PortalSubmission {
   maxAttempts: number;
   lockedAt?: Date | null;
   lockedBy?: string | null;
+  /** @minimum 0 */
+  statusCheckAttempts: number;
+  statusCheckNextAt: Date;
+  statusCheckLastAt?: Date | null;
+  statusCheckError?: PortalSubmissionStatusCheckError;
+  statusCheckLockedAt?: Date | null;
+  statusCheckLockedBy?: string | null;
+  statusCheckSuspendedAt?: Date | null;
   enqueuedBy?: number | null;
   createdAt: Date;
   updatedAt: Date;

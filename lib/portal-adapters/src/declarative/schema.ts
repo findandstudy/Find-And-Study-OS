@@ -433,9 +433,11 @@ const graphqlStep = z.object({
 const captureStep = z.object({
   action: z.literal("capture"),
   ...stepControlFields,
-  from: z.enum(["lastResponse", "cookie", "localStorage", "selectorText", "url"]),
+  from: z.enum(["lastResponse", "cookie", "localStorage", "selectorText", "selectorAttribute", "url"]),
   /** JSON dotpath into lastResponse, or cookie/localStorage key name. */
   path: z.string().min(1).optional(),
+  /** Attribute name when from=selectorAttribute. */
+  attribute: z.string().min(1).max(80).regex(/^[A-Za-z_:][A-Za-z0-9_.:-]*$/).optional(),
   name: z.string().min(1),
 });
 
@@ -695,6 +697,79 @@ export const failureSchema = z.object({
   failureText: z.string().min(1).optional(),
 });
 
+const statusValueSourceSchema = z.object({
+  source: z.enum(["captured", "vars"]),
+  /** Key in the selected runtime bag. */
+  path: z.string().min(1).max(100).regex(/^[A-Za-z0-9_-]+$/),
+  /** Optional bounded JSON dot path within that value. Numeric array keys are supported. */
+  jsonPath: z
+    .string()
+    .min(1)
+    .max(300)
+    .regex(/^[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*$/)
+    .optional(),
+});
+
+export const statusCheckSchema = z.object({
+  /** Read-only steps used after login to locate one submitted application. */
+  steps: z.array(specStepSchema).min(1).max(50),
+  statusFrom: statusValueSourceSchema,
+  identity: z.object({
+    valueFrom: statusValueSourceSchema,
+    source: z.enum([
+      "matched_application_row",
+      "labeled_portal_field",
+      "structured_portal_field",
+    ]),
+    sourceLabel: z.string().min(1).max(160),
+    /** Required literal: runtime must exactly match the captured value to externalRef. */
+    matchExternalRef: z.literal(true),
+  }),
+  applicationNumber: z
+    .object({
+      valueFrom: statusValueSourceSchema,
+      source: z.enum([
+        "matched_application_row",
+        "labeled_portal_field",
+        "structured_portal_field",
+      ]),
+      sourceLabel: z.string().min(1).max(160),
+    })
+    .optional(),
+  missingDocuments: z
+    .object({
+      valueFrom: statusValueSourceSchema,
+      labelField: z.string().min(1).max(64).default("label"),
+      codeField: z.string().min(1).max(64).optional(),
+    })
+    .optional(),
+  artifacts: z
+    .array(
+      z.object({
+        kind: z.enum([
+          "offer_letter",
+          "deposit_receipt",
+          "acceptance_letter",
+          "final_acceptance",
+          "student_card",
+        ]),
+        /** Download only when the observed status exactly matches one of these values. */
+        statusValues: z.array(z.string().min(1).max(250)).min(1).max(20),
+        urlFrom: statusValueSourceSchema,
+        fileNameFrom: statusValueSourceSchema.optional(),
+        sourceLabel: z.string().min(1).max(160),
+        maxBytes: z.number().int().min(1024).max(15 * 1024 * 1024).default(10 * 1024 * 1024),
+        contentTypes: z
+          .array(z.enum(["application/pdf", "image/jpeg", "image/png"]))
+          .min(1)
+          .max(3)
+          .default(["application/pdf"]),
+      }),
+    )
+    .max(5)
+    .default([]),
+});
+
 // ---------------------------------------------------------------------------
 // Whole spec
 // ---------------------------------------------------------------------------
@@ -716,6 +791,8 @@ export const adapterSpecSchema = z
     programSelection: programSelectionSchema.optional(),
     success: successSchema.default({}),
     failure: failureSchema.optional(),
+    /** Optional, read-only, evidence-bound status polling contract; v2 only. */
+    statusCheck: statusCheckSchema.optional(),
   })
   .superRefine((spec, ctx) => {
     const checkCondition = (
@@ -768,6 +845,17 @@ export const adapterSpecSchema = z
 
     const checkFills = (steps: SpecStep[], base: (string | number)[]): void => {
       steps.forEach((s, i) => {
+        if (
+          s.action === "capture" &&
+          s.from === "selectorAttribute" &&
+          (!s.path || !s.attribute)
+        ) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: [...base, i],
+            message: "selectorAttribute capture requires path and attribute",
+          });
+        }
         if (s.action === "fill" && (s.value == null) === (s.valueFrom == null)) {
           ctx.addIssue({
             code: z.ZodIssueCode.custom,
@@ -800,6 +888,34 @@ export const adapterSpecSchema = z
     spec.workflow?.states.forEach((state, stateIndex) => {
       checkFills(state.steps, ["workflow", "states", stateIndex, "steps"]);
     });
+    if (spec.statusCheck) {
+      checkFills(spec.statusCheck.steps, ["statusCheck", "steps"]);
+      spec.statusCheck.steps.forEach((step, index) => {
+        const readOnly =
+          ["navigate", "waitFor", "ajaxWait", "capture", "setVar", "assert"].includes(
+            step.action,
+          ) ||
+          (step.action === "http" && step.method === "GET" && step.mutation !== true);
+        if (!readOnly) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["statusCheck", "steps", index, "action"],
+            message: "statusCheck steps must be read-only; only navigate, waitFor, ajaxWait, capture, setVar, assert and non-mutating HTTP GET are allowed",
+          });
+        }
+      });
+      const artifactKinds = new Set<string>();
+      spec.statusCheck.artifacts.forEach((artifact, index) => {
+        if (artifactKinds.has(artifact.kind)) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["statusCheck", "artifacts", index, "kind"],
+            message: "statusCheck artifact kinds must be unique",
+          });
+        }
+        artifactKinds.add(artifact.kind);
+      });
+    }
 
     if (spec.specVersion === 1 && spec.steps.length === 0) {
       ctx.addIssue({
@@ -820,6 +936,13 @@ export const adapterSpecSchema = z
         code: z.ZodIssueCode.custom,
         path: ["profilePolicy"],
         message: "profilePolicy is available only in specVersion 2",
+      });
+    }
+    if (spec.specVersion === 1 && spec.statusCheck) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["statusCheck"],
+        message: "statusCheck is available only in specVersion 2",
       });
     }
     if (spec.specVersion === 1 && spec.meta.resolution === "override") {
@@ -953,7 +1076,13 @@ export const adapterSpecSchema = z
 
     // Require allowedOrigins when any step uses http or graphql.
     const workflowSteps = spec.workflow?.states.flatMap((state) => state.steps) ?? [];
-    const allSteps = [...spec.steps, ...spec.auth.loginSteps, ...workflowSteps];
+    const statusCheckSteps = spec.statusCheck?.steps ?? [];
+    const allSteps = [
+      ...spec.steps,
+      ...spec.auth.loginSteps,
+      ...workflowSteps,
+      ...statusCheckSteps,
+    ];
     const hasHttpOrGraphql = allSteps.some(
       (s) => s.action === "http" || s.action === "graphql",
     );
@@ -1008,6 +1137,7 @@ export const adapterSpecSchema = z
             ["workflow", "states", stateIndex, "steps"],
           );
         });
+        checkStepUrls(statusCheckSteps, ["statusCheck", "steps"]);
       }
     }
   });
@@ -1029,6 +1159,7 @@ export type WorkflowState = z.infer<typeof workflowStateSchema>;
 export type SpecWorkflow = z.infer<typeof workflowSchema>;
 export type ProfilePolicy = z.infer<typeof profilePolicySchema>;
 export type OutcomeRule = z.infer<typeof outcomeRuleSchema>;
+export type StatusCheckSpec = z.infer<typeof statusCheckSchema>;
 export type AdapterSpec = z.infer<typeof adapterSpecSchema>;
 
 // ---------------------------------------------------------------------------
@@ -1063,10 +1194,12 @@ export function specHasJsHook(spec: unknown): boolean {
     steps?: unknown;
     auth?: { loginSteps?: unknown };
     workflow?: { states?: Array<{ steps?: unknown }> };
+    statusCheck?: { steps?: unknown };
   };
   return (
     listHasJsHook(s.steps) ||
     listHasJsHook(s.auth?.loginSteps) ||
+    listHasJsHook(s.statusCheck?.steps) ||
     (Array.isArray(s.workflow?.states) &&
       s.workflow.states.some((state) => listHasJsHook(state?.steps)))
   );
@@ -1095,11 +1228,14 @@ export function specIsPrivileged(spec: unknown): boolean {
     steps?: unknown;
     auth?: { loginSteps?: unknown };
     workflow?: { states?: Array<{ steps?: unknown }> };
+    statusCheck?: { steps?: unknown };
   };
   return (
     s.meta?.resolution === "override" ||
+    Boolean(s.statusCheck) ||
     listHasPrivileged(s.steps) ||
     listHasPrivileged(s.auth?.loginSteps) ||
+    listHasPrivileged(s.statusCheck?.steps) ||
     (Array.isArray(s.workflow?.states) &&
       s.workflow.states.some((state) => listHasPrivileged(state?.steps)))
   );

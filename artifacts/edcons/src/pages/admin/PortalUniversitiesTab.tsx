@@ -121,6 +121,20 @@ interface PortalUniversity {
   linkStatus: "linked" | "stale" | "unlinked";
   createdAt: string;
   fanOutMode: "off" | "manual" | "auto" | null;
+  /** Server-authoritative dynamic graduation decision for this exact adapter. */
+  experimental?: boolean;
+  staticExperimental?: boolean;
+  successCount?: number | null;
+  graduationThreshold?: number | null;
+  graduated?: boolean | null;
+  readiness?: {
+    configurationReady: boolean;
+    manualPilotEligible: boolean;
+    automaticEligible: boolean;
+    blockers: string[];
+    successProofsRemaining: number;
+    phase: string;
+  } | null;
 }
 
 interface RegistryAdapter {
@@ -178,13 +192,12 @@ function AddUniversityDialog({ open, onClose, onCreated }: AddDialogProps) {
   const { toast } = useToast();
   const [name, setName] = useState("");
   const [key, setKey]   = useState("");
-  const [isActive, setIsActive] = useState(false);
   const [saving, setSaving]     = useState(false);
   const [keyEdited, setKeyEdited] = useState(false);
 
   // Reset on open
   useEffect(() => {
-    if (open) { setName(""); setKey(""); setIsActive(false); setKeyEdited(false); }
+    if (open) { setName(""); setKey(""); setKeyEdited(false); }
   }, [open]);
 
   // Auto-slug key from name unless user edited it manually
@@ -199,7 +212,7 @@ function AddUniversityDialog({ open, onClose, onCreated }: AddDialogProps) {
       const uni = await customFetch<PortalUniversity>("/api/portal-universities", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ universityName: name.trim(), universityKey: key.trim(), isActive }),
+        body: JSON.stringify({ universityName: name.trim(), universityKey: key.trim(), isActive: false }),
       });
       toast({ title: t("portalAutomation.unis.addDialog.saveSuccess") });
       onCreated(uni);
@@ -269,10 +282,11 @@ function AddUniversityDialog({ open, onClose, onCreated }: AddDialogProps) {
             </p>
           </div>
 
-          {/* isActive */}
-          <div className="flex items-center gap-3">
-            <Switch id="uni-active" checked={isActive} onCheckedChange={setIsActive} />
-            <Label htmlFor="uni-active">{t("portalAutomation.unis.addDialog.isActiveLabel")}</Label>
+          <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50/60 p-3 dark:border-amber-900 dark:bg-amber-950/20">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+            <p className="text-sm text-muted-foreground">
+              {t("portalAutomation.unis.addDialog.isActiveLabel")}
+            </p>
           </div>
         </div>
 
@@ -840,6 +854,10 @@ function UniversityRow({ uni, onToggle, onToggleAutoProcess, onSetFanOutMode, on
   const isTesting             = testingId             === uni.id;
   const defaults   = (uni.defaults ?? {}) as UniversityDefaults;
   const hasDefaults = !!(defaults.intakeType || defaults.semester || defaults.degreeLevel);
+  const configurationReady = uni.readiness?.configurationReady === true;
+  const automaticEligible = uni.readiness?.automaticEligible === true;
+  const activationEnableBlocked = !uni.isActive && !configurationReady;
+  const autoProcessEnableBlocked = !uni.autoProcess && (!uni.isActive || !automaticEligible);
 
   return (
     <Card className={cn("rounded-xl overflow-hidden", selected && "ring-1 ring-primary")}>
@@ -934,6 +952,7 @@ function UniversityRow({ uni, onToggle, onToggleAutoProcess, onSetFanOutMode, on
                   <Switch
                     checked={uni.isActive}
                     onCheckedChange={(v) => onToggle(uni.id, v)}
+                    disabled={activationEnableBlocked}
                     aria-label={t("portalAutomation.unis.activeLabel")}
                   />
                 )}
@@ -956,7 +975,18 @@ function UniversityRow({ uni, onToggle, onToggleAutoProcess, onSetFanOutMode, on
                     </SelectTrigger>
                     <SelectContent>
                       {(["off", "manual", "auto"] as const).map((m) => (
-                        <SelectItem key={m} value={m} className="text-xs">
+                        <SelectItem
+                          key={m}
+                          value={m}
+                          className="text-xs"
+                          disabled={
+                            m === "manual"
+                              ? !uni.isActive || !configurationReady
+                              : m === "auto"
+                                ? !uni.isActive || !automaticEligible
+                                : false
+                          }
+                        >
                           {t(`portalAutomation.unis.fanOutMode_${m}`)}
                         </SelectItem>
                       ))}
@@ -972,21 +1002,23 @@ function UniversityRow({ uni, onToggle, onToggleAutoProcess, onSetFanOutMode, on
             <div className="flex items-center gap-1.5">
               {isTogglingAutoProcess
                 ? <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
-                : experimental ? (
+                : autoProcessEnableBlocked ? (
                   <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <span className="inline-flex">
                           <Switch
-                            checked={false}
+                            checked={uni.autoProcess}
                             disabled
                             aria-label={t("portalAutomation.unis.autoProcessLabel")}
                           />
                         </span>
                       </TooltipTrigger>
                       <TooltipContent>
-                        {t("portalAutomation.unis.autoProcessExperimentalBlocked")}
-                        {graduationInfo && (
+                        {experimental
+                          ? t("portalAutomation.unis.autoProcessExperimentalBlocked")
+                          : t("portalAutomation.unis.autoProcessReadinessBlocked")}
+                        {experimental && graduationInfo && (
                           <>
                             {" "}
                             {t("portalAutomation.unis.autoProcessGraduationHint", {
@@ -1189,6 +1221,10 @@ export default function PortalUniversitiesTab() {
 
   const experimentalKeys = useMemo(
     () => new Set(registryAdapters.filter((a) => a.experimental).map((a) => a.key)),
+    [registryAdapters],
+  );
+  const registryAdapterKeys = useMemo(
+    () => new Set(registryAdapters.map((a) => a.key)),
     [registryAdapters],
   );
 
@@ -1622,29 +1658,45 @@ export default function PortalUniversitiesTab() {
         />
       ) : (
         <div className="space-y-3">
-          {unis.map((uni) => (
-            <UniversityRow
-              key={uni.id}
-              uni={uni}
-              onToggle={handleToggle}
-              onToggleAutoProcess={handleToggleAutoProcess}
-              onSetFanOutMode={handleSetFanOutMode}
-              onTestLogin={handleTestLogin}
-              onEditDefaults={setEditTarget}
-              onManageCreds={setCredsTarget}
-              onManageMembers={setMembersTarget}
-              onDelete={setDeleteTarget}
-              experimental={experimentalKeys.has(uni.adapterKey)}
-              graduationInfo={graduationInfoByKey.get(uni.adapterKey) ?? null}
-              togglingId={togglingId}
-              togglingAutoProcessId={togglingAutoProcessId}
-              settingFanOutModeId={settingFanOutModeId}
-              testingId={testingId}
-              selected={selectedIds.has(uni.id)}
-              onToggleSelect={toggleSelect}
-              bulkBusy={bulkBusy}
-            />
-          ))}
+          {unis.map((uni) => {
+            // Prefer the row-level server decision. A just-created custom key
+            // may predate the next list refresh, so absence from the known
+            // registry is a conservative manual-only fallback.
+            const experimental = uni.experimental ?? (
+              experimentalKeys.has(uni.adapterKey) ||
+              !registryAdapterKeys.has(uni.adapterKey)
+            );
+            const graduationInfo =
+              experimental && uni.graduationThreshold != null
+                ? {
+                    successCount: uni.successCount ?? 0,
+                    threshold: uni.graduationThreshold,
+                  }
+                : (graduationInfoByKey.get(uni.adapterKey) ?? null);
+            return (
+              <UniversityRow
+                key={uni.id}
+                uni={uni}
+                onToggle={handleToggle}
+                onToggleAutoProcess={handleToggleAutoProcess}
+                onSetFanOutMode={handleSetFanOutMode}
+                onTestLogin={handleTestLogin}
+                onEditDefaults={setEditTarget}
+                onManageCreds={setCredsTarget}
+                onManageMembers={setMembersTarget}
+                onDelete={setDeleteTarget}
+                experimental={experimental}
+                graduationInfo={graduationInfo}
+                togglingId={togglingId}
+                togglingAutoProcessId={togglingAutoProcessId}
+                settingFanOutModeId={settingFanOutModeId}
+                testingId={testingId}
+                selected={selectedIds.has(uni.id)}
+                onToggleSelect={toggleSelect}
+                bulkBusy={bulkBusy}
+              />
+            );
+          })}
           {total > unis.length && (
             <p className="text-xs text-center text-muted-foreground pt-1">
               {unis.length} / {total}

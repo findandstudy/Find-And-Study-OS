@@ -25,6 +25,8 @@ export interface InboxExternalContact {
   studentId?: number | null;
   /** @nullable */
   agentId?: number | null;
+  isBlocked: boolean;
+  blockedAt?: Date | null;
   /** @nullable */
   metadata?: InboxExternalContactMetadata;
   firstSeenAt: Date;

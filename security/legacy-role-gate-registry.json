@@ -8,10 +8,10 @@
     "defaultEnforcement": "legacy_quarantine"
   },
   "totals": {
-    "routeRegistrations": 794,
-    "requireAuth": 709,
-    "requireRole": 476,
-    "requirePermission": 41,
+    "routeRegistrations": 805,
+    "requireAuth": 721,
+    "requireRole": 481,
+    "requirePermission": 47,
     "requireScope": 0,
     "directRoleChecks": 29,
     "authOnlyRouteCandidates": 128,
@@ -230,7 +230,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/applicationStageDocuments.ts",
-      "sha256": "7b62d19f5d57bc27002739f8c3b0186bd54c0242a29638fc83462f8c25fd45ee",
+      "sha256": "466d69dbb713d068a63db10db0b9802a293d10c772a7d0064348356e7ef96453",
       "routeRegistrations": 11,
       "requireAuth": 11,
       "requireRole": 0,
@@ -620,7 +620,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/index.ts",
-      "sha256": "47bbbdcf9d3130ca60a0ab56f885e67785e421e83dcbf80fd9509421c8c8be58",
+      "sha256": "038bada8222178c0d4bcc02a3fc0c581d262ac441e2ddcc2ecd2de051224466b",
       "routeRegistrations": 0,
       "requireAuth": 0,
       "requireRole": 0,
@@ -755,7 +755,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/pipeline.ts",
-      "sha256": "8b08cae7ffa7e30b5d5707b282314e1a289111e6855ed2a203c18e5c5b671847",
+      "sha256": "e53e7d994ac5ccb6bd5e1c48499792bc5539b00186c3be5bf98e5f934f0188bc",
       "routeRegistrations": 3,
       "requireAuth": 4,
       "requireRole": 3,
@@ -785,10 +785,10 @@
     },
     {
       "path": "artifacts/api-server/src/routes/portalAutomation.ts",
-      "sha256": "72b2ad3a8503c30bb55782cac48a7ebc8ba85dc04336533786a7fe4b64a42044",
-      "routeRegistrations": 39,
-      "requireAuth": 40,
-      "requireRole": 35,
+      "sha256": "d57bf443e7ba160f81d8530c4c591de14fe6064482bb3cd3464043e593a4ed23",
+      "routeRegistrations": 42,
+      "requireAuth": 43,
+      "requireRole": 38,
       "requirePermission": 0,
       "requireScope": 0,
       "directRoleChecks": 0,
@@ -800,10 +800,10 @@
     },
     {
       "path": "artifacts/api-server/src/routes/portalMgmt.ts",
-      "sha256": "96f89aaad9dae8d5afb1a9f5a47319db8ddf3cc2f6fe97d5c29d3e81a01d0335",
-      "routeRegistrations": 22,
-      "requireAuth": 23,
-      "requireRole": 23,
+      "sha256": "a0f16f0ef0900e25e3e505b33c719eb88f931324145c97ebbd8692c7a323e7a7",
+      "routeRegistrations": 24,
+      "requireAuth": 25,
+      "requireRole": 25,
       "requirePermission": 0,
       "requireScope": 0,
       "directRoleChecks": 0,
@@ -917,6 +917,21 @@
       "enforcement": "legacy_quarantine",
       "owner": "Platform Engineering",
       "note": "Route-local review required before corridor migration."
+    },
+    {
+      "path": "artifacts/api-server/src/routes/reporting.ts",
+      "sha256": "0019a591cc43c55f3b3ed748e5e1e4e7d36d141ec1ab3b366f90a9df708ae805",
+      "routeRegistrations": 6,
+      "requireAuth": 7,
+      "requireRole": 0,
+      "requirePermission": 6,
+      "requireScope": 0,
+      "directRoleChecks": 0,
+      "authOnlyRouteCandidates": 0,
+      "publicRouteCandidates": 0,
+      "enforcement": "legacy_quarantine",
+      "owner": "Reporting & Intelligence",
+      "note": "Aggregate-only read surface; canonical active-context migration remains a separate gate."
     },
     {
       "path": "artifacts/api-server/src/routes/roles.ts",

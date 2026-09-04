@@ -11,4 +11,7 @@ export interface EscalationKeywords {
   payment: string[];
   commission: string[];
   partner: string[];
+  human_request: string[];
+  visa_documents: string[];
+  supplier: string[];
 }

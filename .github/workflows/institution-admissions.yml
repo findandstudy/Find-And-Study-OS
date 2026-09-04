@@ -65,6 +65,7 @@ jobs:
           pnpm --filter @workspace/api-server run test:institution-admissions-authorization
           pnpm --filter @workspace/api-server run test:institution-case-intake
           pnpm --filter @workspace/api-server run test:institution-evidence-share
+          pnpm --filter @workspace/api-server run test:reporting-center
 
       - name: Type-check and build deployable applications
         run: |
@@ -107,6 +108,7 @@ jobs:
           pnpm --filter @workspace/api-server run test:institution-admissions-authorization
           pnpm --filter @workspace/api-server run test:institution-case-intake
           pnpm --filter @workspace/api-server run test:institution-evidence-share
+          pnpm --filter @workspace/api-server run test:reporting-center
           pnpm run typecheck
 
   postgres-gate:
@@ -154,7 +156,7 @@ jobs:
           PG_DISPOSABLE_ADMIN_URL: postgresql://postgres@127.0.0.1:5433/postgres
         run: node lib/db/prepare-disposable-migration-database.mjs
 
-      - name: Apply and replay all 89 migrations
+      - name: Apply and replay all 92 migrations
         env:
           ALLOW_REVIEWED_MIGRATIONS: "true"
           DATABASE_URL: postgresql://fas_migrator@127.0.0.1:5433/fasos_apply_local
@@ -167,6 +169,12 @@ jobs:
         run: |
           node ./run-migrations.mjs
           node ./run-migrations.mjs
+
+      - name: Compile bounded Reporting Center projections
+        env:
+          ALLOW_DISPOSABLE_REPORTING_TEST: "true"
+          DATABASE_URL: postgresql://fas_migrator@127.0.0.1:5433/fasos_apply_local
+        run: pnpm --filter @workspace/api-server run test:postgres-reporting-center
 
       - name: Prove least-privilege Institution runtime boundary
         env:

@@ -27,6 +27,11 @@ export interface UpdateApplicationBody {
   programName?: string | null;
   /** @nullable */
   universityName?: string | null;
+  /**
+   * @maxLength 128
+   * @nullable
+   */
+  universityApplicationId?: string | null;
   /** @nullable */
   country?: string | null;
   /** @nullable */

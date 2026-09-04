@@ -112,18 +112,25 @@ const EXPERIMENTAL_FAMILIES: ReadonlySet<AdapterFamily> = new Set<AdapterFamily>
   "altinbas",
   "multico",
   "medipol",
+  // Every key that is not owned by a built-in code family resolves to the
+  // declarative family.  Uploaded/admin-created adapters therefore start
+  // manual-only and must earn the same durable-success graduation evidence as
+  // the explicitly experimental code families.  Treating an unknown key as
+  // production-ready would let a newly uploaded mapping bypass the worker and
+  // auto-process guards.
+  "declarative",
 ]);
 
 /**
- * True when the given adapter key belongs to an experimental (non-auto) family,
- * OR when the key itself is listed in EXPERIMENTAL_FAMILIES (supports declarative
- * adapters that carry their own experimental flag during roll-out).
+ * True when the given adapter key belongs to an experimental (non-auto) family.
+ * Unknown and uploaded keys resolve to the declarative family and therefore
+ * fail closed as experimental until the durable-success threshold is reached.
  */
 export function isExperimentalAdapterKey(adapterKey: string): boolean {
   const family = resolveFamily(adapterKey);
   if (EXPERIMENTAL_FAMILIES.has(family)) return true;
-  // Declarative adapters whose key appears in EXPERIMENTAL_FAMILIES by name
-  // are also treated as experimental until graduated.
+  // Retained as a defensive exact-key check if a future family key is added
+  // before resolveFamily learns how to classify it.
   return (EXPERIMENTAL_FAMILIES as ReadonlySet<string>).has(adapterKey);
 }
 

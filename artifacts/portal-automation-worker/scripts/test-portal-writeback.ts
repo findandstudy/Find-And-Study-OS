@@ -7,6 +7,9 @@
  * TW4: writebackResult(null / error)        → status='failed', application stage unchanged
  * TW5: writebackResult(programFull=true)     → status='program_full', meta jsonb written, stage unchanged
  * TW6: Altınbaş programFull=true             → status='program_full', stage='quota_full'
+ * TW7: externalRef only                      → locator saved, canonical number untouched
+ * TW8: verifiedApplicationNumber             → empty canonical number populated
+ * TW9: verifiedApplicationNumber conflict    → existing canonical number preserved
  *
  * Run:
  *   pnpm --filter @workspace/portal-automation-worker test:writeback
@@ -25,6 +28,7 @@ import {
 } from "@workspace/db";
 import { and, eq } from "drizzle-orm";
 import { writebackResult, type RunResult } from "@workspace/portal-runner";
+import type { VerifiedUniversityApplicationNumber } from "@workspace/portal-adapters";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -94,6 +98,8 @@ function makeRunResult(result: {
    *  branches are reachable). */
   dryRun?: boolean;
   adapterKey?: string;
+  externalRef?: string;
+  verifiedApplicationNumber?: VerifiedUniversityApplicationNumber;
 }): RunResult {
   return {
     result: {
@@ -103,6 +109,10 @@ function makeRunResult(result: {
       ...(result.programFull      ? { programFull: true }                       : {}),
       ...(result.requestedProgram ? { requestedProgram: result.requestedProgram } : {}),
       ...(result.openPrograms     ? { openPrograms: result.openPrograms }       : {}),
+      ...(result.externalRef ? { externalRef: result.externalRef } : {}),
+      ...(result.verifiedApplicationNumber
+        ? { verifiedApplicationNumber: result.verifiedApplicationNumber }
+        : {}),
     },
     screenshotUrls: [],
     meta: {
@@ -292,4 +302,83 @@ test("TW6: Altınbaş programFull=true → status=program_full, stage=quota_full
   } else {
     assert.equal(app.stage, "inquiry", "stage absent → application unchanged");
   }
+});
+
+test("TW7: a portal locator never becomes the university application number", async () => {
+  const { subId, appId } = await seedRunningSubmission();
+
+  await writebackResult(
+    subId,
+    makeRunResult({
+      submitted: true,
+      externalRef: "https://portal.example/applications/internal-row-9981",
+    }),
+  );
+
+  const [sub] = await db
+    .select({ externalRef: portalSubmissionsTable.externalRef })
+    .from(portalSubmissionsTable)
+    .where(eq(portalSubmissionsTable.id, subId));
+  const [app] = await db
+    .select({ universityApplicationId: applicationsTable.universityApplicationId })
+    .from(applicationsTable)
+    .where(eq(applicationsTable.id, appId));
+
+  assert.equal(sub.externalRef, "https://portal.example/applications/internal-row-9981");
+  assert.equal(app.universityApplicationId, null);
+});
+
+test("TW8: proof-bound official number populates an empty Application field", async () => {
+  const { subId, appId } = await seedRunningSubmission();
+
+  await writebackResult(
+    subId,
+    makeRunResult({
+      submitted: true,
+      externalRef: "internal-row-9982",
+      verifiedApplicationNumber: {
+        value: "HAL-2026-000184",
+        source: "matched_application_row",
+        sourceLabel: "Applied Program Number",
+        identityBound: true,
+        targetBound: true,
+        uniqueMatch: true,
+      },
+    }),
+  );
+
+  const [app] = await db
+    .select({ universityApplicationId: applicationsTable.universityApplicationId })
+    .from(applicationsTable)
+    .where(eq(applicationsTable.id, appId));
+  assert.equal(app.universityApplicationId, "HAL-2026-000184");
+});
+
+test("TW9: automation preserves a conflicting canonical application number", async () => {
+  const { subId, appId } = await seedRunningSubmission();
+  await db
+    .update(applicationsTable)
+    .set({ universityApplicationId: "STAFF-CONFIRMED-42" })
+    .where(eq(applicationsTable.id, appId));
+
+  await writebackResult(
+    subId,
+    makeRunResult({
+      submitted: true,
+      verifiedApplicationNumber: {
+        value: "PORTAL-CANDIDATE-43",
+        source: "labeled_portal_field",
+        sourceLabel: "Application Number",
+        identityBound: true,
+        targetBound: true,
+        uniqueMatch: true,
+      },
+    }),
+  );
+
+  const [app] = await db
+    .select({ universityApplicationId: applicationsTable.universityApplicationId })
+    .from(applicationsTable)
+    .where(eq(applicationsTable.id, appId));
+  assert.equal(app.universityApplicationId, "STAFF-CONFIRMED-42");
 });

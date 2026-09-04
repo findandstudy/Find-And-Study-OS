@@ -4,6 +4,7 @@ import {
   chooseSalesforceResumeAction,
   chooseSalesforceBinaryCandidate,
   findSalesforceAppliedProgramMatch,
+  hasSalesforceOfficialApplicationNumberProof,
   hasSalesforceCompletionProof,
   hasSalesforceUploadProof,
   salesforceProgramCardMatchesCandidate,
@@ -81,6 +82,30 @@ test("Haliç Applied Programs proves one exact application and rejects ambiguity
       ["Artificial Intelligence Operations (Turkish)"],
     ),
     null,
+  );
+});
+
+test("official application number requires both a semantic label and applicant identity proof", () => {
+  assert.equal(
+    hasSalesforceOfficialApplicationNumberProof({
+      numberLabelVerified: true,
+      identityBound: true,
+    }),
+    true,
+  );
+  assert.equal(
+    hasSalesforceOfficialApplicationNumberProof({
+      numberLabelVerified: false,
+      identityBound: true,
+    }),
+    false,
+  );
+  assert.equal(
+    hasSalesforceOfficialApplicationNumberProof({
+      numberLabelVerified: true,
+      identityBound: false,
+    }),
+    false,
   );
 });
 

@@ -1,0 +1,187 @@
+name: Portal Automation Gate
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/portal-automation.yml"
+      - "artifacts/api-server/**"
+      - "artifacts/edcons/**"
+      - "lib/api-client-react/**"
+      - "lib/api-spec/**"
+      - "lib/api-zod/**"
+      - "lib/db/**"
+      - "lib/portal-adapters/**"
+      - "lib/portal-runner/**"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - "package.json"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: portal-automation-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  ALLOW_LIVE_INTEGRATIONS: "false"
+  CI: "true"
+  # Pure contract tests import the DB package but never open a connection.
+  # Give that package an inert test URL; PostgreSQL steps override it below.
+  DATABASE_URL: postgresql://test:test@127.0.0.1:5432/test
+  NODE_ENV: test
+  NO_COLOR: "1"
+
+jobs:
+  static-gate:
+    name: Portal contracts, typecheck, and builds
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out exact source
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+          package-manager-cache: false
+
+      - name: Activate repository-pinned pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.33.2 --activate
+          test "$(pnpm --version)" = "10.33.2"
+
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify portal contracts and migration authority
+        run: |
+          git diff --check "${{ github.event.pull_request.base.sha || 'HEAD^' }}"...HEAD
+          pnpm run test:package-manager
+          node lib/db/validate-migrations.mjs
+          pnpm --filter @workspace/api-server run test:migration-authority
+          pnpm --filter @workspace/portal-adapters exec tsx --test ./scripts/test-registry.ts
+          pnpm --filter @workspace/api-server run test:portal-trigger-stage-policy
+          pnpm --filter @workspace/api-server run test:portal-partner-readiness
+          pnpm --filter @workspace/api-server run test:portal-production-slice
+
+      - name: Type-check and build deployable applications
+        run: |
+          pnpm run typecheck
+          pnpm --filter @workspace/edcons run check:i18n
+          pnpm --filter @workspace/api-server run build
+          pnpm --filter @workspace/edcons run build
+
+  windows-portability:
+    name: Windows portal portability
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out exact source
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+          package-manager-cache: false
+
+      - name: Activate repository-pinned pnpm
+        shell: pwsh
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.33.2 --activate
+          if ((pnpm --version) -ne "10.33.2") { throw "Unexpected pnpm version" }
+
+      - name: Verify Windows-safe portal contracts
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm run test:package-manager
+          node lib/db/validate-migrations.mjs
+          pnpm --filter @workspace/portal-adapters exec tsx --test ./scripts/test-registry.ts
+          pnpm --filter @workspace/api-server run test:portal-trigger-stage-policy
+          pnpm --filter @workspace/api-server run test:portal-partner-readiness
+          pnpm --filter @workspace/api-server run test:portal-production-slice
+          pnpm run typecheck
+
+  postgres-gate:
+    name: PostgreSQL 16 portal queue and evidence
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16.15@sha256:e17e86066e5ef83e0952a9347f5c792b7ece00972e2aa787a6986f471b3dd3d5
+        env:
+          POSTGRES_DB: postgres
+          POSTGRES_HOST_AUTH_METHOD: trust
+          POSTGRES_USER: postgres
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    steps:
+      - name: Check out exact source
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+          package-manager-cache: false
+
+      - name: Activate repository-pinned pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.33.2 --activate
+          test "$(pnpm --version)" = "10.33.2"
+
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Prepare disposable database
+        env:
+          ALLOW_DISPOSABLE_DATABASE_RESET: "true"
+          PG_DISPOSABLE_ADMIN_URL: postgresql://postgres@127.0.0.1:5433/postgres
+        run: node lib/db/prepare-disposable-migration-database.mjs
+
+      - name: Apply and replay all 92 migrations
+        env:
+          ALLOW_REVIEWED_MIGRATIONS: "true"
+          DATABASE_URL: postgresql://fas_migrator@127.0.0.1:5433/fasos_apply_local
+          MIGRATION_CONFIRMED_DATABASE: fasos_apply_local
+          MIGRATION_CONFIRMED_HOST: 127.0.0.1
+          MIGRATION_CONFIRMED_PORT: "5433"
+          MIGRATION_CONFIRMED_USER: fas_migrator
+          MIGRATION_TARGET_ENV: local
+        working-directory: lib/db
+        run: |
+          node ./run-migrations.mjs
+          node ./run-migrations.mjs
+
+      - name: Prove durable observations, lane isolation, and idempotent review
+        env:
+          DATABASE_URL: postgresql://fas_migrator@127.0.0.1:5433/fasos_apply_local
+          SESSION_SECRET: portal-automation-ci-test-secret-only-20260904
+        run: |
+          pnpm --filter @workspace/api-server run test:postgres-portal-lifecycle-observation-store
+          pnpm --filter @workspace/api-server run test:postgres-portal-status-queue
+          pnpm --filter @workspace/api-server run test:postgres-portal-lifecycle-guardian
+          pnpm --filter @workspace/api-server run test:adapter-graduation
+          pnpm --filter @workspace/api-server run test:portal-adapter-spec-admin
+          pnpm --filter @workspace/api-server run test:portal-mgmt
+          pnpm --filter @workspace/api-server run test:portal-universities
+          pnpm --filter @workspace/api-server run test:portal-operations-admin
+          pnpm --filter @workspace/api-server run test:postgres-portal-artifact-intake

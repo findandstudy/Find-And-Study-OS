@@ -17,4 +17,9 @@ export const PortalSubmissionStatus = {
   program_missing: "program_missing",
   failed: "failed",
   canceled: "canceled",
+  dry_run: "dry_run",
+  program_full: "program_full",
+  exclusive_region: "exclusive_region",
+  accepted: "accepted",
+  rejected: "rejected",
 } as const;

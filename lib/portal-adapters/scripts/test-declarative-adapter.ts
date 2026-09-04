@@ -47,6 +47,7 @@ import {
 } from "../src/declarative/interpreter.js";
 import {
   specRowAllowsJsHook,
+  specRowAllowsExecution,
   specRowAllowsOverride,
   buildSpecAdapterFromRow,
 } from "../src/specLoader.js";
@@ -522,6 +523,7 @@ function makeSpecRow(over: Partial<PortalAdapterSpec> = {}): PortalAdapterSpec {
     source: "uploaded",
     enabled: true,
     jsHookApproved: false,
+    privilegedApproved: false,
     createdBy: 1,
     createdAt: now,
     updatedAt: now,
@@ -549,11 +551,24 @@ test("ROW4: buildSpecAdapterFromRow returns null for an invalid stored spec", ()
   assert.equal(adapter, null);
 });
 
-test("ROW5: jsHook in a user/unapproved row is skipped at run time", async () => {
+test("ROW5: uploaded privileged rows fail closed until the exact version is approved", async () => {
   const raw = validRawSpec() as Record<string, unknown>;
   (raw.steps as unknown[]).push({ action: "jsHook", script: "window.x=1" });
-  const adapter = buildSpecAdapterFromRow(makeSpecRow({ spec: raw as Record<string, unknown>, source: "uploaded", jsHookApproved: false }));
-  assert.notEqual(adapter, null, "row still builds (jsHook is skipped, not rejected)");
+  const unapproved = makeSpecRow({
+    spec: raw as Record<string, unknown>,
+    source: "uploaded",
+    jsHookApproved: false,
+    privilegedApproved: false,
+  });
+  assert.equal(specRowAllowsExecution(unapproved), false);
+  assert.equal(buildSpecAdapterFromRow(unapproved), null);
+  const approved = {
+    ...unapproved,
+    jsHookApproved: true,
+    privilegedApproved: true,
+  };
+  assert.equal(specRowAllowsExecution(approved), true);
+  assert.notEqual(buildSpecAdapterFromRow(approved), null);
 });
 
 // ---------------------------------------------------------------------------

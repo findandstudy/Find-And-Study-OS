@@ -21,6 +21,11 @@ import {
   validateGuardianStagingPatch,
   type GuardianStagingReport,
 } from "./portalAiGuardianStaging";
+import { parseAdapterSpec } from "@workspace/portal-adapters/declarative/schema";
+import {
+  MAX_PORTAL_ADAPTER_SPEC_BYTES,
+  buildPortalAdapterSpecPolicySnapshot,
+} from "./portalAdapterSpecPolicy";
 
 export {
   isDiagnosablePortalStatus,
@@ -242,9 +247,27 @@ async function createGuardianSpecDraft(
     };
   }
 
+  const parsedDraft = parseAdapterSpec(decision.patchedSpec);
+  if (!parsedDraft.ok) {
+    return {
+      draftStatus: "not_created",
+      draftReason: "STAGING_SCHEMA_INVALID",
+    };
+  }
+  const draftPolicy = buildPortalAdapterSpecPolicySnapshot(parsedDraft.spec, {
+    jsHookApproved: false,
+    privilegedApproved: false,
+  });
+  if (draftPolicy.byteLength > MAX_PORTAL_ADAPTER_SPEC_BYTES) {
+    return {
+      draftStatus: "not_created",
+      draftReason: "STAGING_SPEC_TOO_LARGE",
+    };
+  }
+
   const staging = validateGuardianStagingPatch({
     baseSpec: enabledSpec.spec,
-    patchedSpec: decision.patchedSpec,
+    patchedSpec: draftPolicy.canonicalSpec,
     operations: decision.operations,
   });
   if (staging.status !== "passed") {
@@ -275,7 +298,7 @@ async function createGuardianSpecDraft(
       .values({
         key: enabledSpec.key,
         name: `${enabledSpec.name} — Guardian draft`,
-        spec: decision.patchedSpec,
+        spec: draftPolicy.canonicalSpec,
         version: nextVersion,
         enabled: false,
         source: "uploaded",

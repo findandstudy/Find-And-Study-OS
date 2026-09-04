@@ -1500,7 +1500,16 @@ export async function pollStatus(
   page: AdapterSession["page"],
   studentId: string,
   applicationId: string,
-): Promise<{ status: string } | null> {
+): Promise<{
+  status: string;
+  identityProof: {
+    source: "matched_application_row";
+    sourceLabel: string;
+    identityBound: true;
+    targetBound: true;
+    uniqueMatch: true;
+  };
+} | null> {
   const table = await readMulticoApplicationTable(page, studentId);
   if (!table.tableFound) return null;
   const idEscaped = applicationId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -1517,7 +1526,18 @@ export async function pollStatus(
     /(Pending Review|Pending|Accepted|Rejected|Review|Waiting|In Progress|Completed)/i.exec(
       row.text,
     )?.[1];
-  if (status) return { status: status.trim() };
+  if (status) {
+    return {
+      status: status.trim(),
+      identityProof: {
+        source: "matched_application_row",
+        sourceLabel: "Candidate Applications exact application row",
+        identityBound: true,
+        targetBound: true,
+        uniqueMatch: true,
+      },
+    };
+  }
   return null;
 }
 
@@ -1575,7 +1595,7 @@ export const multicoAdapter: UniversityAdapter = {
   async checkStatus(
     session: AdapterSession,
     externalRef: string,
-  ): Promise<{ status: string } | null> {
+  ) {
     // externalRef format: "studentId:applicationId" (see submit return above).
     const sep = externalRef.lastIndexOf(":");
     if (sep === -1) return null;

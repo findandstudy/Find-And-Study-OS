@@ -12,7 +12,6 @@ import { useState, useEffect, useCallback } from "react";
 import { customFetch } from "@workspace/api-client-react";
 import { useI18n } from "@/hooks/use-i18n";
 import { useToast } from "@/hooks/use-toast";
-import { usePipelineStages } from "@/hooks/use-pipeline-stages";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
@@ -24,7 +23,7 @@ import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PortalErrorState } from "@/components/admin/PortalTabStates";
-import { Bot, Construction, Play, Rocket, Save, Timer } from "lucide-react";
+import { AlertTriangle, Bot, Construction, GitBranch, Play, RefreshCw, Rocket, Save, Timer } from "lucide-react";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -37,6 +36,8 @@ import PortalProgramMappingTab from "./PortalProgramMappingTab";
 import PortalAdaptersTab from "./PortalAdaptersTab";
 import PortalSubmissionsTab from "./PortalSubmissionsTab";
 import PortalAuditTab from "./PortalAuditTab";
+import PortalOperationsTab from "./PortalOperationsTab";
+import PortalOnboardingTab from "./PortalOnboardingTab";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -63,6 +64,25 @@ interface PortalUniversity {
   universityName: string;
   adapterKey: string;
   isActive: boolean;
+}
+
+interface PortalTriggerStageOption {
+  key: string;
+  label: string;
+  sortOrder: number;
+  variant: string | null;
+  isCaseClose: boolean;
+  eligible: boolean;
+  ineligibleReason: "terminal_stage" | null;
+}
+
+interface PortalTriggerStageSnapshot {
+  stages: PortalTriggerStageOption[];
+  configuredKeys: string[];
+  validConfiguredKeys: string[];
+  staleConfiguredKeys: string[];
+  ineligibleConfiguredKeys: string[];
+  syncedAt: string;
 }
 
 const DEFAULTS: PortalSettings = {
@@ -99,10 +119,12 @@ function ComingSoon() {
 function AutomationRulesTab() {
   const { t } = useI18n();
   const { toast } = useToast();
-  const { stages, isLoading: stagesLoading } = usePipelineStages("application");
 
   const [settings, setSettings] = useState<PortalSettings>(DEFAULTS);
   const [universities, setUniversities] = useState<PortalUniversity[]>([]);
+  const [stageSnapshot, setStageSnapshot] = useState<PortalTriggerStageSnapshot | null>(null);
+  const [stagesLoading, setStagesLoading] = useState(false);
+  const [stagesLoadError, setStagesLoadError] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -118,18 +140,55 @@ function AutomationRulesTab() {
     counts: { queued: number; excluded: number; noProgram: number; duplicate: number; failed: number };
   } | null>(null);
 
-  // Load settings + universities in parallel
+  const refreshTriggerStages = useCallback(async () => {
+    setStagesLoading(true);
+    setStagesLoadError(false);
+    try {
+      const snapshot = await customFetch<PortalTriggerStageSnapshot>(
+        "/api/portal-automation/stage-options",
+      );
+      setStageSnapshot(snapshot);
+      const eligibleKeys = new Set(
+        snapshot.stages.filter((stage) => stage.eligible).map((stage) => stage.key),
+      );
+      setSettings((previous) => ({
+        ...previous,
+        triggerStages: previous.triggerStages.filter((key) => eligibleKeys.has(key)),
+      }));
+    } catch {
+      setStagesLoadError(true);
+    } finally {
+      setStagesLoading(false);
+    }
+  }, []);
+
+  // Load settings, universities and the authoritative Application Pipeline.
   const load = useCallback(async () => {
     setLoading(true);
     setLoadError(false);
+    setStagesLoadError(false);
     try {
-      const [settingsData, uniData] = await Promise.all([
+      const [settingsData, uniData, stageResult] = await Promise.all([
         customFetch<PortalSettings>("/api/portal-automation/settings"),
         customFetch<{ data: PortalUniversity[]; total: number }>(
           "/api/portal-universities?limit=200&onlyActive=true",
         ).catch(() => ({ data: [] as PortalUniversity[], total: 0 })),
+        customFetch<PortalTriggerStageSnapshot>(
+          "/api/portal-automation/stage-options",
+        ).then(
+          (snapshot) => ({ snapshot, failed: false as const }),
+          () => ({ snapshot: null, failed: true as const }),
+        ),
       ]);
-      setSettings({ ...DEFAULTS, ...settingsData });
+      setStageSnapshot(stageResult.snapshot);
+      setStagesLoadError(stageResult.failed);
+      setSettings({
+        ...DEFAULTS,
+        ...settingsData,
+        triggerStages: stageResult.snapshot
+          ? stageResult.snapshot.validConfiguredKeys
+          : settingsData.triggerStages,
+      });
       setUniversities(uniData.data ?? []);
     } catch {
       setLoadError(true);
@@ -148,7 +207,7 @@ function AutomationRulesTab() {
   const save = async () => {
     setSaving(true);
     try {
-      await customFetch("/api/portal-automation/settings", {
+      const saved = await customFetch<PortalSettings>("/api/portal-automation/settings", {
         method: "PUT",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
@@ -165,6 +224,8 @@ function AutomationRulesTab() {
           fanOutMode: settings.fanOutMode,
         }),
       });
+      setSettings({ ...DEFAULTS, ...saved });
+      await refreshTriggerStages();
       toast({ title: t("portalAutomation.rules.saveSuccess") });
     } catch {
       toast({ title: t("portalAutomation.rules.saveError"), variant: "destructive" });
@@ -396,34 +457,111 @@ function AutomationRulesTab() {
       {/* ── Trigger Stages ──────────────────────────────────────────────── */}
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base">{t("portalAutomation.rules.triggerStagesLabel")}</CardTitle>
-          <CardDescription>{t("portalAutomation.rules.triggerStagesHint")}</CardDescription>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div className="space-y-1.5">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <GitBranch className="h-4 w-4 text-primary" />
+                {t("portalAutomation.rules.triggerStagesLabel")}
+              </CardTitle>
+              <CardDescription>{t("portalAutomation.rules.triggerStagesHint")}</CardDescription>
+              <p className="text-xs text-muted-foreground">
+                {t("portalAutomation.rules.triggerStagesSource")}
+                {stageSnapshot?.syncedAt
+                  ? ` · ${t("portalAutomation.rules.triggerStagesSynced", {
+                      time: new Date(stageSnapshot.syncedAt).toLocaleTimeString([], {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      }),
+                    })}`
+                  : ""}
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={refreshTriggerStages}
+              disabled={stagesLoading}
+              className="shrink-0"
+            >
+              <RefreshCw className={`mr-2 h-4 w-4 ${stagesLoading ? "animate-spin" : ""}`} />
+              {t("portalAutomation.rules.triggerStagesRefresh")}
+            </Button>
+          </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
+          {(stageSnapshot?.staleConfiguredKeys.length ?? 0) > 0 ||
+          (stageSnapshot?.ineligibleConfiguredKeys.length ?? 0) > 0 ? (
+            <div className="flex gap-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+              <p>
+                {t("portalAutomation.rules.triggerStagesDrift", {
+                  stages: [
+                    ...(stageSnapshot?.staleConfiguredKeys ?? []),
+                    ...(stageSnapshot?.ineligibleConfiguredKeys ?? []),
+                  ].join(", "),
+                })}
+              </p>
+            </div>
+          ) : null}
           {stagesLoading ? (
             <div className="space-y-2">
               {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-8 w-48" />)}
             </div>
-          ) : stages.length === 0 ? (
-            <p className="text-sm text-muted-foreground">—</p>
+          ) : stagesLoadError ? (
+            <div className="flex flex-col items-start gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-4">
+              <p className="text-sm text-destructive">
+                {t("portalAutomation.rules.triggerStagesLoadError")}
+              </p>
+              <Button type="button" variant="outline" size="sm" onClick={refreshTriggerStages}>
+                <RefreshCw className="mr-2 h-4 w-4" />
+                {t("portalAutomation.states.retry")}
+              </Button>
+            </div>
+          ) : !stageSnapshot || stageSnapshot.stages.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              {t("portalAutomation.rules.triggerStagesEmpty")}
+            </p>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {stages.map((stage) => (
-                <div key={stage.key} className="flex items-center gap-2.5">
+            <>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              {stageSnapshot.stages.map((stage) => (
+                <div
+                  key={stage.key}
+                  className={`flex items-center justify-between gap-3 rounded-lg border p-3 ${
+                    stage.eligible ? "bg-background" : "bg-muted/40 text-muted-foreground"
+                  }`}
+                >
+                  <div className="flex min-w-0 items-center gap-2.5">
                   <Checkbox
                     id={`stage-${stage.key}`}
                     checked={settings.triggerStages.includes(stage.key)}
                     onCheckedChange={(c) => toggleStage(stage.key, c === true)}
+                    disabled={!stage.eligible}
                   />
                   <Label
                     htmlFor={`stage-${stage.key}`}
-                    className="text-sm cursor-pointer select-none"
+                    className={`truncate text-sm select-none ${
+                      stage.eligible ? "cursor-pointer" : "cursor-not-allowed"
+                    }`}
                   >
                     {stage.label}
                   </Label>
+                  </div>
+                  {!stage.eligible ? (
+                    <Badge variant="outline" className="shrink-0 text-[10px]">
+                      {t("portalAutomation.rules.triggerStageTerminal")}
+                    </Badge>
+                  ) : null}
                 </div>
               ))}
             </div>
+            <p className="text-xs text-muted-foreground">
+              {t("portalAutomation.rules.triggerStagesSelected", {
+                count: String(settings.triggerStages.length),
+              })}
+            </p>
+            </>
           )}
         </CardContent>
       </Card>
@@ -597,7 +735,7 @@ function AutomationRulesTab() {
         <Button
           variant="outline"
           onClick={openBulkConfirm}
-          disabled={bulkRunning || running || saving}
+          disabled={bulkRunning || running || saving || stagesLoading || stagesLoadError}
           className="gap-2"
         >
           <Rocket className="w-4 h-4" />
@@ -608,7 +746,7 @@ function AutomationRulesTab() {
         <Button
           variant="outline"
           onClick={() => setConfirmRunOpen(true)}
-          disabled={running || saving || !settings.isEnabled}
+          disabled={running || saving || stagesLoading || stagesLoadError || !settings.isEnabled}
           className="gap-2"
           title={!settings.isEnabled ? t("portalAutomation.runNow.disabled") : undefined}
         >
@@ -617,7 +755,11 @@ function AutomationRulesTab() {
             ? t("portalAutomation.runNow.running")
             : t("portalAutomation.runNow.button")}
         </Button>
-        <Button onClick={save} disabled={saving} className="gap-2">
+        <Button
+          onClick={save}
+          disabled={saving || stagesLoading || stagesLoadError || !stageSnapshot}
+          className="gap-2"
+        >
           <Save className="w-4 h-4" />
           {saving
             ? t("portalAutomation.rules.saving")
@@ -745,10 +887,12 @@ export default function PortalAutomation() {
       </div>
 
       {/* Tabs */}
-      <Tabs defaultValue="rules">
+      <Tabs defaultValue="onboarding">
         <div className="-mx-1 overflow-x-auto px-1 [scrollbar-width:thin]">
           <TabsList className="inline-flex w-max justify-start gap-1">
+            <TabsTrigger value="onboarding" className="shrink-0">{t("portalAutomation.tabs.onboarding")}</TabsTrigger>
             <TabsTrigger value="rules" className="shrink-0">{t("portalAutomation.tabs.rules")}</TabsTrigger>
+            <TabsTrigger value="operations" className="shrink-0">{t("portalAutomation.tabs.operations")}</TabsTrigger>
             <TabsTrigger value="universities" className="shrink-0">{t("portalAutomation.tabs.universities")}</TabsTrigger>
             <TabsTrigger value="programMapping" className="shrink-0">{t("portalAutomation.tabs.programMapping")}</TabsTrigger>
             <TabsTrigger value="adapters" className="shrink-0">{t("portalAutomation.tabs.adapters")}</TabsTrigger>
@@ -757,8 +901,16 @@ export default function PortalAutomation() {
           </TabsList>
         </div>
 
+        <TabsContent value="onboarding">
+          <PortalOnboardingTab />
+        </TabsContent>
+
         <TabsContent value="rules">
           <AutomationRulesTab />
+        </TabsContent>
+
+        <TabsContent value="operations">
+          <PortalOperationsTab />
         </TabsContent>
 
         <TabsContent value="universities">
