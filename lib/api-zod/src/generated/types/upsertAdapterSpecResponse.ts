@@ -5,6 +5,7 @@
  * Education Consultancy Operating System API
  * OpenAPI spec version: 0.1.0
  */
+import type { AdapterSpecActivationBlocker } from "./adapterSpecActivationBlocker";
 
 export interface UpsertAdapterSpecResponse {
   key: string;
@@ -13,4 +14,9 @@ export interface UpsertAdapterSpecResponse {
   jsHookApproved: boolean;
   privilegedApproved: boolean;
   hasJsHook: boolean;
+  privileged: boolean;
+  sha256: string;
+  byteLength: number;
+  activationBlockers: AdapterSpecActivationBlocker[];
+  activationRequiresSeparateStep: boolean;
 }

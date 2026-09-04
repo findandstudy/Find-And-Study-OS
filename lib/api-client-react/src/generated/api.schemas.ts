@@ -13,6 +13,11 @@ export const AdapterSpecSummarySource = {
   uploaded: "uploaded",
 } as const;
 
+export type AdapterSpecActivationBlocker =
+  | "INVALID_SPEC"
+  | "PRIVILEGED_APPROVAL_REQUIRED"
+  | "JSHOOK_APPROVAL_REQUIRED";
+
 export interface AdapterSpecSummary {
   key: string;
   name: string;
@@ -24,6 +29,8 @@ export interface AdapterSpecSummary {
   privilegedApproved: boolean;
   hasJsHook: boolean;
   privileged: boolean;
+  latestSha256: string;
+  latestActivationBlockers: AdapterSpecActivationBlocker[];
   updatedAt: string;
 }
 
@@ -48,6 +55,8 @@ export interface AdapterSpecVersion {
   privilegedApproved: boolean;
   hasJsHook: boolean;
   privileged: boolean;
+  sha256: string;
+  activationBlockers: AdapterSpecActivationBlocker[];
   createdBy: number | null;
   createdAt: string;
   updatedAt: string;
@@ -75,6 +84,10 @@ export interface AdapterSpecValidationResponse {
   name?: string;
   hasJsHook?: boolean;
   privileged?: boolean;
+  sha256?: string;
+  byteLength?: number;
+  activationBlockers?: AdapterSpecActivationBlocker[];
+  activationRequiresSeparateStep?: boolean;
   error?: string;
   message?: string;
   issues?: AdapterSpecIssue[];
@@ -84,9 +97,6 @@ export type UpsertAdapterSpecBodySpec = { [key: string]: unknown };
 
 export interface UpsertAdapterSpecBody {
   spec: UpsertAdapterSpecBodySpec;
-  enable?: boolean;
-  approveJsHook?: boolean;
-  approvePrivileged?: boolean;
 }
 
 export interface UpsertAdapterSpecResponse {
@@ -96,12 +106,18 @@ export interface UpsertAdapterSpecResponse {
   jsHookApproved: boolean;
   privilegedApproved: boolean;
   hasJsHook: boolean;
+  privileged: boolean;
+  sha256: string;
+  byteLength: number;
+  activationBlockers: AdapterSpecActivationBlocker[];
+  activationRequiresSeparateStep: boolean;
 }
 
 export interface PatchAdapterSpecBody {
   enableVersion?: number;
   disable?: boolean;
   rollbackTo?: number;
+  approvalVersion?: number;
   jsHookApproved?: boolean;
   privilegedApproved?: boolean;
 }
@@ -109,8 +125,11 @@ export interface PatchAdapterSpecBody {
 export interface PatchAdapterSpecResponse {
   key: string;
   enabledVersion: number | null;
-  jsHookApproved: boolean;
-  privilegedApproved: boolean;
+  approvalVersion?: number | null;
+  approval?: {
+    jsHookApproved: boolean;
+    privilegedApproved: boolean;
+  } | null;
 }
 
 export interface HealthStatus {

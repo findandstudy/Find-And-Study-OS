@@ -177,6 +177,7 @@ export {
   buildSpecAdapterFromRow,
   buildSpecAdaptersFromRows,
   specRowAllowsJsHook,
+  specRowAllowsExecution,
   specRowAllowsOverride,
   listSpecVersions,
   maxSpecVersion,

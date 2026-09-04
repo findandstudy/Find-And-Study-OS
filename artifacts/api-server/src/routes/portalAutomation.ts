@@ -84,6 +84,12 @@ import {
 } from "../lib/portalAiGuardian.js";
 import { queuePortalLifecycleReview } from "../lib/portalLifecycleGuardian.js";
 import { resolveCanonicalPortalUniversity } from "../lib/portalUniversityResolver.js";
+import {
+  MAX_PORTAL_ADAPTER_SPEC_BYTES,
+  buildPortalAdapterSpecPolicySnapshot,
+  portalAdapterSpecActivationBlockers,
+  portalAdapterSpecSha256,
+} from "../lib/portalAdapterSpecPolicy.js";
 
 const router: IRouter = Router();
 
@@ -4255,22 +4261,70 @@ const specKeyParamsSchema = z.object({ key: z.string().min(1).max(100) });
 const rawSpecObjectSchema = z.record(z.string(), z.unknown());
 
 const validateSpecBodySchema = z.object({ spec: rawSpecObjectSchema });
-const upsertSpecBodySchema = z.object({
-  spec: rawSpecObjectSchema,
-  enable: z.boolean().optional(),
-  approveJsHook: z.boolean().optional(),
-  /** super_admin approval to allow enabling this privileged spec. */
-  approvePrivileged: z.boolean().optional(),
-});
+const upsertSpecBodySchema = z
+  .object({ spec: rawSpecObjectSchema })
+  .strict();
 const patchSpecBodySchema = z
   .object({
     enableVersion: z.number().int().positive().optional(),
     disable: z.boolean().optional(),
     rollbackTo: z.number().int().positive().optional(),
+    /** Exact version whose approval flags are being changed. */
+    approvalVersion: z.number().int().positive().optional(),
     jsHookApproved: z.boolean().optional(),
     privilegedApproved: z.boolean().optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((body, ctx) => {
+    const changesApproval =
+      body.jsHookApproved !== undefined ||
+      body.privilegedApproved !== undefined;
+    if (changesApproval && body.approvalVersion === undefined) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["approvalVersion"],
+        message: "approvalVersion is required for approval changes",
+      });
+    }
+    if (!changesApproval && body.approvalVersion !== undefined) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["approvalVersion"],
+        message: "approvalVersion requires an approval change",
+      });
+    }
+    if (
+      body.enableVersion !== undefined &&
+      body.rollbackTo !== undefined
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["enableVersion"],
+        message: "enableVersion and rollbackTo are mutually exclusive",
+      });
+    }
+    if (
+      body.disable === true &&
+      (body.enableVersion !== undefined || body.rollbackTo !== undefined)
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["disable"],
+        message: "disable cannot be combined with enableVersion or rollbackTo",
+      });
+    }
+    if (
+      body.enableVersion === undefined &&
+      body.rollbackTo === undefined &&
+      body.disable !== true &&
+      !changesApproval
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "At least one version, approval, or disable change is required",
+      });
+    }
+  });
 
 function isSuperAdmin(role: string): boolean {
   return role === "super_admin";
@@ -4314,20 +4368,9 @@ async function setEnabledSpecVersionTx(
   }
 }
 
-async function setEnabledSpecVersion(
-  key: string,
-  version: number | null,
-): Promise<void> {
-  await db.transaction(async (tx) => {
-    await lockSpecKey(tx, key);
-    await setEnabledSpecVersionTx(tx, key, version);
-  });
-  invalidateSpecAdapterCache();
-}
-
 // GET /portal-automation/adapter-specs — one entry per key (enabled + latest).
 router.get(
-  "/adapter-specs",
+  "/portal-automation/adapter-specs",
   requireAuth,
   requireRole(...ADMIN_ROLES),
   async (_req, res) => {
@@ -4359,6 +4402,8 @@ router.get(
         privilegedApproved: boolean;
         hasJsHook: boolean;
         privileged: boolean;
+        latestSha256: string;
+        latestActivationBlockers: string[];
         updatedAt: Date;
       }
     >();
@@ -4376,6 +4421,12 @@ router.get(
           privilegedApproved: row.privilegedApproved,
           hasJsHook: specHasJsHook(row.spec),
           privileged: specIsPrivileged(row.spec),
+          latestSha256: portalAdapterSpecSha256(row.spec),
+          latestActivationBlockers: portalAdapterSpecActivationBlockers({
+            spec: row.spec,
+            jsHookApproved: row.jsHookApproved,
+            privilegedApproved: row.privilegedApproved,
+          }),
           updatedAt: row.updatedAt,
         });
       } else {
@@ -4390,7 +4441,7 @@ router.get(
 
 // GET /portal-automation/adapter-specs/:key/versions — full version history.
 router.get(
-  "/adapter-specs/:key/versions",
+  "/portal-automation/adapter-specs/:key/versions",
   requireAuth,
   requireRole(...ADMIN_ROLES),
   validate({ params: specKeyParamsSchema }),
@@ -4408,6 +4459,12 @@ router.get(
         privilegedApproved: row.privilegedApproved,
         hasJsHook: specHasJsHook(row.spec),
         privileged: specIsPrivileged(row.spec),
+        sha256: portalAdapterSpecSha256(row.spec),
+        activationBlockers: portalAdapterSpecActivationBlockers({
+          spec: row.spec,
+          jsHookApproved: row.jsHookApproved,
+          privilegedApproved: row.privilegedApproved,
+        }),
         createdBy: row.createdBy,
         createdAt: row.createdAt,
         updatedAt: row.updatedAt,
@@ -4418,7 +4475,7 @@ router.get(
 
 // POST /portal-automation/adapter-specs/validate — validate without persisting.
 router.post(
-  "/adapter-specs/validate",
+  "/portal-automation/adapter-specs/validate",
   requireAuth,
   requireRole(...ADMIN_ROLES),
   validate({ body: validateSpecBodySchema }),
@@ -4429,25 +4486,42 @@ router.post(
       res.json({ ok: false, error: parsed.error, issues: parsed.issues ?? [] });
       return;
     }
+    const policy = buildPortalAdapterSpecPolicySnapshot(parsed.spec, {
+      jsHookApproved: false,
+      privilegedApproved: false,
+    });
+    if (policy.byteLength > MAX_PORTAL_ADAPTER_SPEC_BYTES) {
+      res.json({
+        ok: false,
+        error: "SPEC_TOO_LARGE",
+        message: `Canonical spec exceeds ${MAX_PORTAL_ADAPTER_SPEC_BYTES} bytes.`,
+        issues: [],
+      });
+      return;
+    }
     res.json({
       ok: true,
       key: parsed.spec.meta.key,
       name: parsed.spec.meta.name,
-      hasJsHook: specHasJsHook(spec),
-      privileged: specIsPrivileged(spec),
+      hasJsHook: policy.hasJsHook,
+      privileged: policy.privileged,
+      sha256: policy.sha256,
+      byteLength: policy.byteLength,
+      activationBlockers: policy.activationBlockers,
+      activationRequiresSeparateStep: true,
     });
   },
 );
 
-// POST /portal-automation/adapter-specs — create a new version (optionally enable).
+// POST /portal-automation/adapter-specs — create a new, inert version.
 router.post(
-  "/adapter-specs",
+  "/portal-automation/adapter-specs",
   requireAuth,
   requireRole(...ADMIN_ROLES),
   validate({ body: upsertSpecBodySchema }),
   async (req, res) => {
     const user = req.user!;
-    const { spec, enable, approveJsHook, approvePrivileged } = getValidated<{
+    const { spec } = getValidated<{
       body: typeof upsertSpecBodySchema;
     }>(req).body;
 
@@ -4457,35 +4531,32 @@ router.post(
       return;
     }
 
-    const hasJsHook = specHasJsHook(spec);
+    const policy = buildPortalAdapterSpecPolicySnapshot(parsed.spec, {
+      jsHookApproved: false,
+      privilegedApproved: false,
+    });
+    if (policy.byteLength > MAX_PORTAL_ADAPTER_SPEC_BYTES) {
+      res.status(413).json({
+        error: "SPEC_TOO_LARGE",
+        message: `Canonical spec exceeds ${MAX_PORTAL_ADAPTER_SPEC_BYTES} bytes.`,
+      });
+      return;
+    }
+    const hasJsHook = policy.hasJsHook;
     // Uploading a spec that contains jsHook steps is super_admin-only.
     if (hasJsHook && !isSuperAdmin(user.role)) {
       res.status(403).json({ error: "JSHOOK_FORBIDDEN", message: "Only super_admin may upload specs containing jsHook steps." });
       return;
     }
-    // Approving jsHook execution is likewise super_admin-only.
-    const jsHookApproved = approveJsHook === true && isSuperAdmin(user.role);
-    // Approving privileged-spec enabling is super_admin-only and independent of jsHookApproved.
-    const privilegedApproved = approvePrivileged === true && isSuperAdmin(user.role);
+    // Approval is never inherited from the upload request. Each immutable
+    // version starts unapproved and must be reviewed explicitly afterwards.
+    const jsHookApproved = false;
+    const privilegedApproved = false;
 
     const key = parsed.spec.meta.key;
 
-    // Privileged specs (http/graphql/jsHook steps) require explicit super_admin
-    // approval (approvePrivileged=true in the request body) before they may be
-    // enabled. Gate this before entering the transaction so we never return an
-    // undefined from db.transaction() and break destructuring below.
-    if (enable && specIsPrivileged(spec) && !privilegedApproved) {
-      res.status(403).json({
-        error: "PRIVILEGED_APPROVAL_REQUIRED",
-        message:
-          "This spec contains privileged steps (http, graphql, or jsHook). " +
-          "A super_admin must pass approvePrivileged=true to enable it.",
-      });
-      return;
-    }
-
     // Lock the key so the next-version computation, the insert, and the optional
-    // enable all happen atomically — concurrent uploads can't collide on the
+    // write happen atomically — concurrent uploads can't collide on the
     // (key, version) unique index or leave two enabled rows.
     const { created, nextVersion } = await db.transaction(async (tx) => {
       await lockSpecKey(tx, key);
@@ -4501,7 +4572,7 @@ router.post(
         .values({
           key,
           name: parsed.spec.meta.name,
-          spec,
+          spec: policy.canonicalSpec,
           version: next,
           enabled: false,
           source: "uploaded",
@@ -4510,36 +4581,46 @@ router.post(
           createdBy: user.id,
         })
         .returning();
-      if (enable) {
-        await setEnabledSpecVersionTx(tx, key, next);
-      }
       return { created: row, nextVersion: next };
     });
-    if (enable) invalidateSpecAdapterCache();
 
     await logAudit(
       user.id,
       "upsert_adapter_spec",
       "portal_adapter_spec",
       created.id,
-      { key, version: nextVersion, enabled: enable === true, hasJsHook, jsHookApproved, privilegedApproved },
+      {
+        key,
+        version: nextVersion,
+        enabled: false,
+        hasJsHook,
+        jsHookApproved,
+        privilegedApproved,
+        specSha256: policy.sha256,
+        specByteLength: policy.byteLength,
+      },
       req.ip,
     );
 
     res.status(201).json({
       key,
       version: nextVersion,
-      enabled: enable === true,
+      enabled: false,
       jsHookApproved,
       privilegedApproved,
       hasJsHook,
+      privileged: policy.privileged,
+      sha256: policy.sha256,
+      byteLength: policy.byteLength,
+      activationBlockers: policy.activationBlockers,
+      activationRequiresSeparateStep: true,
     });
   },
 );
 
 // PATCH /portal-automation/adapter-specs/:key — enable/disable/rollback/approve.
 router.patch(
-  "/adapter-specs/:key",
+  "/portal-automation/adapter-specs/:key",
   requireAuth,
   requireRole(...ADMIN_ROLES),
   validate({ params: specKeyParamsSchema, body: patchSpecBodySchema }),
@@ -4548,71 +4629,143 @@ router.patch(
     const { key } = getValidated<{ params: typeof specKeyParamsSchema }>(req).params;
     const body = getValidated<{ body: typeof patchSpecBodySchema }>(req).body;
 
-    const versions = await listSpecVersions(key);
-    if (versions.length === 0) {
-      res.status(404).json({ error: "NOT_FOUND" });
+    const changesApproval =
+      body.jsHookApproved !== undefined ||
+      body.privilegedApproved !== undefined;
+    if (changesApproval && !isSuperAdmin(user.role)) {
+      res.status(403).json({
+        error: "SPEC_APPROVAL_FORBIDDEN",
+        message: "Only super_admin may change adapter spec approvals.",
+      });
       return;
     }
 
-    // jsHook approval toggle (super_admin only).
-    if (body.jsHookApproved !== undefined) {
-      if (!isSuperAdmin(user.role)) {
-        res.status(403).json({ error: "JSHOOK_FORBIDDEN", message: "Only super_admin may approve jsHook execution." });
-        return;
-      }
-      await db
-        .update(portalAdapterSpecsTable)
-        .set({ jsHookApproved: body.jsHookApproved, updatedAt: new Date() })
-        .where(eq(portalAdapterSpecsTable.key, key));
-      invalidateSpecAdapterCache();
-    }
-
-    // privilegedApproved toggle (super_admin only).
-    if (body.privilegedApproved !== undefined) {
-      if (!isSuperAdmin(user.role)) {
-        res.status(403).json({ error: "PRIVILEGED_APPROVAL_FORBIDDEN", message: "Only super_admin may approve privileged spec enabling." });
-        return;
-      }
-      await db
-        .update(portalAdapterSpecsTable)
-        .set({ privilegedApproved: body.privilegedApproved, updatedAt: new Date() })
-        .where(eq(portalAdapterSpecsTable.key, key));
-      invalidateSpecAdapterCache();
-    }
-
     const targetVersion = body.enableVersion ?? body.rollbackTo;
-    if (body.disable) {
-      await setEnabledSpecVersion(key, null);
-    } else if (targetVersion !== undefined) {
-      if (!versions.some((v) => v.version === targetVersion)) {
-        res.status(404).json({ error: "VERSION_NOT_FOUND", message: `Version ${targetVersion} does not exist for ${key}.` });
-        return;
+    const mutation = await db.transaction(async (tx) => {
+      await lockSpecKey(tx, key);
+      const versions = await tx
+        .select()
+        .from(portalAdapterSpecsTable)
+        .where(eq(portalAdapterSpecsTable.key, key))
+        .orderBy(desc(portalAdapterSpecsTable.version));
+
+      if (versions.length === 0) {
+        return { ok: false as const, status: 404, error: "NOT_FOUND" };
       }
-      // Privileged specs require super_admin approval before they can be enabled.
-      const targetRow = versions.find((v) => v.version === targetVersion);
-      if (targetRow && specIsPrivileged(targetRow.spec) && !targetRow.privilegedApproved) {
-        res.status(403).json({
-          error: "PRIVILEGED_APPROVAL_REQUIRED",
-          message:
-            "This spec version contains privileged steps (http, graphql, or jsHook). " +
-            "A super_admin must set privilegedApproved=true before it can be enabled.",
+
+      const approvalRow = body.approvalVersion === undefined
+        ? null
+        : versions.find((row) => row.version === body.approvalVersion) ?? null;
+      if (body.approvalVersion !== undefined && !approvalRow) {
+        return {
+          ok: false as const,
+          status: 404,
+          error: "VERSION_NOT_FOUND",
+          message: `Version ${body.approvalVersion} does not exist for ${key}.`,
+        };
+      }
+
+      const targetRow = targetVersion === undefined
+        ? null
+        : versions.find((row) => row.version === targetVersion) ?? null;
+      if (targetVersion !== undefined && !targetRow) {
+        return {
+          ok: false as const,
+          status: 404,
+          error: "VERSION_NOT_FOUND",
+          message: `Version ${targetVersion} does not exist for ${key}.`,
+        };
+      }
+
+      if (targetRow) {
+        const targetApprovals = {
+          jsHookApproved:
+            approvalRow?.version === targetRow.version && body.jsHookApproved !== undefined
+              ? body.jsHookApproved
+              : targetRow.jsHookApproved,
+          privilegedApproved:
+            approvalRow?.version === targetRow.version && body.privilegedApproved !== undefined
+              ? body.privilegedApproved
+              : targetRow.privilegedApproved,
+        };
+        const blockers = portalAdapterSpecActivationBlockers({
+          spec: targetRow.spec,
+          ...targetApprovals,
         });
-        return;
+        if (blockers.length > 0) {
+          return {
+            ok: false as const,
+            status: 409,
+            error: blockers[0],
+            activationBlockers: blockers,
+            message: `Version ${targetVersion} is not approved for activation.`,
+          };
+        }
       }
-      await setEnabledSpecVersion(key, targetVersion);
+
+      if (approvalRow) {
+        const nextJsHookApproved =
+          body.jsHookApproved ?? approvalRow.jsHookApproved;
+        const nextPrivilegedApproved =
+          body.privilegedApproved ?? approvalRow.privilegedApproved;
+        const mustDisable =
+          approvalRow.enabled &&
+          ((specHasJsHook(approvalRow.spec) && !nextJsHookApproved) ||
+            (specIsPrivileged(approvalRow.spec) && !nextPrivilegedApproved));
+        await tx
+          .update(portalAdapterSpecsTable)
+          .set({
+            jsHookApproved: nextJsHookApproved,
+            privilegedApproved: nextPrivilegedApproved,
+            ...(mustDisable ? { enabled: false } : {}),
+            updatedAt: new Date(),
+          })
+          .where(
+            and(
+              eq(portalAdapterSpecsTable.key, key),
+              eq(portalAdapterSpecsTable.version, approvalRow.version),
+            ),
+          );
+      }
+
+      if (body.disable) {
+        await setEnabledSpecVersionTx(tx, key, null);
+      } else if (targetVersion !== undefined) {
+        await setEnabledSpecVersionTx(tx, key, targetVersion);
+      }
+
+      return {
+        ok: true as const,
+        auditResourceId: approvalRow?.id ?? targetRow?.id ?? versions[0].id,
+      };
+    });
+
+    if (!mutation.ok) {
+      res.status(mutation.status).json({
+        error: mutation.error,
+        ...(mutation.message ? { message: mutation.message } : {}),
+        ...(mutation.activationBlockers
+          ? { activationBlockers: mutation.activationBlockers }
+          : {}),
+      });
+      return;
     }
+
+    invalidateSpecAdapterCache();
 
     await logAudit(
       user.id,
       "patch_adapter_spec",
       "portal_adapter_spec",
-      versions[0].id,
+      mutation.auditResourceId,
       {
         key,
         enableVersion: body.enableVersion,
         rollbackTo: body.rollbackTo,
         disable: body.disable === true,
+        approvalVersion: body.approvalVersion,
         jsHookApproved: body.jsHookApproved,
+        privilegedApproved: body.privilegedApproved,
       },
       req.ip,
     );
@@ -4622,8 +4775,19 @@ router.patch(
     res.json({
       key,
       enabledVersion: enabled?.version ?? null,
-      jsHookApproved: refreshed[0]?.jsHookApproved ?? false,
-      privilegedApproved: refreshed[0]?.privilegedApproved ?? false,
+      approvalVersion: body.approvalVersion ?? null,
+      approval:
+        body.approvalVersion === undefined
+          ? null
+          : (() => {
+              const row = refreshed.find((item) => item.version === body.approvalVersion);
+              return row
+                ? {
+                    jsHookApproved: row.jsHookApproved,
+                    privilegedApproved: row.privilegedApproved,
+                  }
+                : null;
+            })(),
     });
   },
 );

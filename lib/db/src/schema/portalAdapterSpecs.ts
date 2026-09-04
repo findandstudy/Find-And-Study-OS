@@ -14,8 +14,9 @@ import { sql } from "drizzle-orm";
 import { usersTable } from "./users";
 
 // ---------------------------------------------------------------------------
-// Enum — where a spec came from. `builtin` specs are trusted (may run jsHook);
-// `uploaded` specs are untrusted until a super_admin approves jsHook execution.
+// Enum — where a spec came from. `builtin` specs are trusted code;
+// `uploaded` privileged specs remain inert until a super_admin approves the
+// exact version and it is activated in a separate operation.
 // ---------------------------------------------------------------------------
 
 export const portalAdapterSpecSourceEnum = pgEnum("portal_adapter_spec_source", [
@@ -46,12 +47,13 @@ export const portalAdapterSpecsTable = pgTable(
     /** The single active version for this key (loader resolves this row). */
     enabled: boolean("enabled").notNull().default(false),
     source: portalAdapterSpecSourceEnum("source").notNull().default("uploaded"),
-    /** super_admin approval required before jsHook steps may execute. */
+    /** Version-bound super_admin approval required before jsHook may execute. */
     jsHookApproved: boolean("js_hook_approved").notNull().default(false),
     /**
      * super_admin approval required before a privileged spec (containing
      * http, graphql, or jsHook steps) may be enabled. Set via the PATCH
-     * endpoint by a super_admin; the enable endpoint enforces this gate.
+     * endpoint by a super_admin; the activation endpoint and runtime loader
+     * both enforce this gate.
      */
     privilegedApproved: boolean("privileged_approved").notNull().default(false),
     createdBy: integer("created_by").references(() => usersTable.id, {

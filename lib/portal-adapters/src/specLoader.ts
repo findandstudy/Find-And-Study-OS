@@ -7,9 +7,10 @@
  * for each key is validated (declarative/schema), turned into a UniversityAdapter
  * via the interpreter, and exposed for the lowest-priority resolution fallback.
  *
- * Trust model: jsHook steps execute only when the row is `source="builtin"` OR
- * `js_hook_approved=true` (a super_admin decision). Untrusted specs still load
- * and run — their jsHook steps are skipped with a warning by the interpreter.
+ * Trust model: built-in specs are trusted code. Uploaded specs that contain
+ * privileged actions fail closed unless that exact stored version carries the
+ * required privileged and jsHook approvals. The interpreter retains its own
+ * jsHook guard as defense in depth.
  *
  * Resilience: never throws to callers. A malformed spec row is skipped with a
  * warning; a DB error returns the last cached list (or empty).
@@ -20,7 +21,11 @@ import { and, asc, desc, eq } from "drizzle-orm";
 
 import type { UniversityAdapter } from "./types.js";
 import { logger } from "./browser.js";
-import { parseAdapterSpec } from "./declarative/schema.js";
+import {
+  parseAdapterSpec,
+  specHasJsHook,
+  specIsPrivileged,
+} from "./declarative/schema.js";
 import { createSpecAdapter } from "./declarative/interpreter.js";
 
 // ---------------------------------------------------------------------------
@@ -30,6 +35,25 @@ import { createSpecAdapter } from "./declarative/interpreter.js";
 /** Whether a spec row is trusted to execute jsHook steps. */
 export function specRowAllowsJsHook(row: Pick<PortalAdapterSpec, "source" | "jsHookApproved">): boolean {
   return row.source === "builtin" || row.jsHookApproved;
+}
+
+/**
+ * Uploaded privileged specs fail closed at load time as well as at the admin
+ * activation endpoint. This prevents a manually edited/drifted DB row from
+ * executing http/graphql/jsHook actions without both version-bound approvals.
+ */
+export function specRowAllowsExecution(
+  row: Pick<
+    PortalAdapterSpec,
+    "source" | "spec" | "privilegedApproved" | "jsHookApproved"
+  >,
+): boolean {
+  if (row.source === "builtin") return true;
+  const parsed = parseAdapterSpec(row.spec);
+  if (!parsed.ok) return false;
+  if (specIsPrivileged(parsed.spec) && !row.privilegedApproved) return false;
+  if (specHasJsHook(parsed.spec) && !row.jsHookApproved) return false;
+  return true;
 }
 
 /**
@@ -58,6 +82,12 @@ export function buildSpecAdapterFromRow(row: PortalAdapterSpec): UniversityAdapt
   if (!parsed.ok) {
     logger.warn(
       `[specLoader] skipping spec "${row.key}" v${row.version}: ${parsed.error}`,
+    );
+    return null;
+  }
+  if (!specRowAllowsExecution({ ...row, spec: parsed.spec })) {
+    logger.warn(
+      `[specLoader] skipping unapproved privileged spec "${row.key}" v${row.version}`,
     );
     return null;
   }

@@ -213,6 +213,12 @@ steps, resumable state machines, program/quota classification, profile
 fallback policy, strict dry-run and version rollback. See
 [`adapter-spec-v2.md`](./adapter-spec-v2.md).
 
+New university/partner mappings can be uploaded from the admin panel without a
+source-code deployment. The safe path is deliberately staged: validate and
+fingerprint the JSON, save an inactive version, review/approve that exact
+version, run a dry canary, then activate it. Upload never activates a workflow
+and a later version never inherits an earlier privileged approval.
+
 **Code/protocol driver** — use only for mechanics the spec runtime cannot yet
 express, such as CAPTCHA or encrypted server-chained flow protocols. Portal
 field mapping and business policy should remain in a spec wherever possible.

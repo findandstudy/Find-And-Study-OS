@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { AdapterSpecIssue } from "./adapterSpecIssue";
+import type { AdapterSpecActivationBlocker } from "./adapterSpecActivationBlocker";
 
 export interface AdapterSpecValidationResponse {
   ok: boolean;
@@ -13,6 +14,10 @@ export interface AdapterSpecValidationResponse {
   name?: string;
   hasJsHook?: boolean;
   privileged?: boolean;
+  sha256?: string;
+  byteLength?: number;
+  activationBlockers?: AdapterSpecActivationBlocker[];
+  activationRequiresSeparateStep?: boolean;
   error?: string;
   message?: string;
   issues?: AdapterSpecIssue[];

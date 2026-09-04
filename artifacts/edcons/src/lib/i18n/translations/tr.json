@@ -6212,6 +6212,10 @@
     "adapterSpecs": {
       "sectionTitle": "Adaptör Şablonları (Gelişmiş)",
       "sectionDescription": "Sürümlenmiş bildirimsel adaptör şablonları. Daha zengin portal otomasyon şablonlarını yükleyin, doğrulayın, etkinleştirin ve geri alın.",
+      "workflowLabel": "Güvenli adaptör ekleme akışı",
+      "workflowUpload": "Yükle ve doğrula",
+      "workflowApprove": "İncele ve onayla",
+      "workflowActivate": "Sürümü etkinleştir",
       "uploadButton": "Şablon Yükle",
       "uploadTitle": "Adaptör Şablonu Yükle",
       "jsonLabel": "Şablon JSON",
@@ -6223,6 +6227,8 @@
       "validateButton": "Doğrula",
       "validateError": "Doğrulama isteği başarısız oldu.",
       "validOk": "Geçerli: {key} ({name})",
+      "fingerprint": "Kanonik parmak izi",
+      "savedInactiveHint": "Kaydetme işlemi pasif bir sürüm oluşturur. İnceleme ve etkinleştirme ayrı adımlardır.",
       "validFailed": "Şablon doğrulaması başarısız:",
       "containsJsHook": "Bu şablon jsHook adımları içeriyor (çalıştırmak için süper yönetici onayı gerekir).",
       "containsPrivileged": "Bu şablon ayrıcalıklı istek yapabilir veya bir kod adaptörünün yerini alabilir.",
@@ -6250,6 +6256,14 @@
       "versionsTitle": "Sürümler — {key}",
       "noVersions": "Sürüm bulunamadı.",
       "enableVersion": "Etkinleştir",
+      "approvalRequired": "Etkinleştirmeden önce bu sürümün ayrıca onaylanması gerekir.",
+      "revokePrivileged": "Ayrıcalıklı onayı kaldır",
+      "revokeJsHook": "jsHook onayını kaldır",
+      "blockers": {
+        "INVALID_SPEC": "Kayıtlı şablon geçersiz",
+        "PRIVILEGED_APPROVAL_REQUIRED": "Ayrıcalıklı işlem onayı gerekli",
+        "JSHOOK_APPROVAL_REQUIRED": "jsHook onayı gerekli"
+      },
       "close": "Kapat"
     },
     "members": {

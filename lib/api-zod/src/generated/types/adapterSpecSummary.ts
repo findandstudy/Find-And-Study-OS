@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { AdapterSpecSummarySource } from "./adapterSpecSummarySource";
+import type { AdapterSpecActivationBlocker } from "./adapterSpecActivationBlocker";
 
 export interface AdapterSpecSummary {
   key: string;
@@ -18,5 +19,7 @@ export interface AdapterSpecSummary {
   privilegedApproved: boolean;
   hasJsHook: boolean;
   privileged: boolean;
+  latestSha256: string;
+  latestActivationBlockers: AdapterSpecActivationBlocker[];
   updatedAt: Date;
 }

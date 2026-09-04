@@ -9,6 +9,9 @@
 export interface PatchAdapterSpecResponse {
   key: string;
   enabledVersion: number | null;
-  jsHookApproved: boolean;
-  privilegedApproved: boolean;
+  approvalVersion?: number | null;
+  approval?: {
+    jsHookApproved: boolean;
+    privilegedApproved: boolean;
+  } | null;
 }

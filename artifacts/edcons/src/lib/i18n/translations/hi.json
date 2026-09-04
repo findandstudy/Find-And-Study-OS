@@ -6210,6 +6210,20 @@
       "off": "Off"
     },
     "adapterSpecs": {
+      "workflowLabel": "Safe adapter onboarding workflow",
+      "workflowUpload": "Upload and validate",
+      "workflowApprove": "Review and approve",
+      "workflowActivate": "Activate version",
+      "fingerprint": "Canonical fingerprint",
+      "savedInactiveHint": "Saving creates an inactive version. Review and activation are separate steps.",
+      "approvalRequired": "This exact version must be approved before activation.",
+      "revokePrivileged": "Revoke privileged approval",
+      "revokeJsHook": "Revoke jsHook approval",
+      "blockers": {
+        "INVALID_SPEC": "Invalid stored spec",
+        "PRIVILEGED_APPROVAL_REQUIRED": "Privileged approval required",
+        "JSHOOK_APPROVAL_REQUIRED": "jsHook approval required"
+      },
       "sectionTitle": "एडॉप्टर स्पेक (उन्नत)",
       "sectionDescription": "संस्करणयुक्त घोषणात्मक एडॉप्टर स्पेक। अधिक समृद्ध पोर्टल स्वचालन स्पेक अपलोड करें, सत्यापित करें, सक्षम करें और रोलबैक करें।",
       "uploadButton": "स्पेक अपलोड करें",

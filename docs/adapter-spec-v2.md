@@ -7,11 +7,12 @@ The intended operating model is:
 
 1. map the live portal without submitting;
 2. author one JSON spec plus mapping evidence;
-3. upload with **Enable on save off**;
-4. validate and review the privileged capabilities;
-5. run an approved canary;
-6. enable the reviewed version;
-7. roll back to the previous version if the portal changes.
+3. validate the JSON and record its canonical SHA-256 fingerprint;
+4. upload it as a new **inactive** version;
+5. review that exact version and grant any privileged/jsHook approvals;
+6. run an approved canary;
+7. enable the reviewed version;
+8. roll back to the previous version if the portal changes.
 
 Normal spec revisions do not require a source-code deployment or worker
 restart. The worker refreshes enabled specs from the database cache.
@@ -26,7 +27,14 @@ restart. The worker refreshes enabled specs from the database cache.
   - the version is enabled;
   - the spec parses as v2; and
   - a super admin explicitly grants `privilegedApproved`.
-- New uploads are disabled by default in the admin UI.
+- Every uploaded version is canonicalized through the schema, capped at 512
+  KiB, fingerprinted and stored disabled. Unknown properties are discarded;
+  credentials and other secrets must not be included in the JSON.
+- Upload and activation are separate API operations. Approval is bound to one
+  exact version and never inherited by a later upload.
+- Revoking a required approval immediately disables that active version.
+- The runtime loader independently rejects invalid or unapproved privileged
+  versions even if database state is changed outside the admin route.
 - Credentials are resolved from the encrypted credential store or environment;
   passwords must never be embedded in a spec.
 - `http`, `graphql`, `jsHook`, and code-adapter override are privileged.

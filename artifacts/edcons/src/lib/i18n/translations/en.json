@@ -6212,6 +6212,10 @@
     "adapterSpecs": {
       "sectionTitle": "Adapter Specs (Advanced)",
       "sectionDescription": "Versioned declarative adapter specifications. Upload, validate, enable, and roll back richer portal automation specs.",
+      "workflowLabel": "Safe adapter onboarding workflow",
+      "workflowUpload": "Upload and validate",
+      "workflowApprove": "Review and approve",
+      "workflowActivate": "Activate version",
       "uploadButton": "Upload Spec",
       "uploadTitle": "Upload Adapter Spec",
       "jsonLabel": "Spec JSON",
@@ -6223,6 +6227,8 @@
       "validateButton": "Validate",
       "validateError": "Validation request failed.",
       "validOk": "Valid: {key} ({name})",
+      "fingerprint": "Canonical fingerprint",
+      "savedInactiveHint": "Saving creates an inactive version. Review and activation are separate steps.",
       "validFailed": "Spec validation failed:",
       "containsJsHook": "This spec contains jsHook steps (super admin approval required to run them).",
       "containsPrivileged": "This spec can make privileged requests or replace a code adapter.",
@@ -6250,6 +6256,14 @@
       "versionsTitle": "Versions — {key}",
       "noVersions": "No versions found.",
       "enableVersion": "Enable",
+      "approvalRequired": "This exact version must be approved before activation.",
+      "revokePrivileged": "Revoke privileged approval",
+      "revokeJsHook": "Revoke jsHook approval",
+      "blockers": {
+        "INVALID_SPEC": "Invalid stored spec",
+        "PRIVILEGED_APPROVAL_REQUIRED": "Privileged approval required",
+        "JSHOOK_APPROVAL_REQUIRED": "jsHook approval required"
+      },
       "close": "Close"
     },
     "members": {

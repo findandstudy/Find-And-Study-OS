@@ -6210,6 +6210,20 @@
       "off": "Off"
     },
     "adapterSpecs": {
+      "workflowLabel": "Safe adapter onboarding workflow",
+      "workflowUpload": "Upload and validate",
+      "workflowApprove": "Review and approve",
+      "workflowActivate": "Activate version",
+      "fingerprint": "Canonical fingerprint",
+      "savedInactiveHint": "Saving creates an inactive version. Review and activation are separate steps.",
+      "approvalRequired": "This exact version must be approved before activation.",
+      "revokePrivileged": "Revoke privileged approval",
+      "revokeJsHook": "Revoke jsHook approval",
+      "blockers": {
+        "INVALID_SPEC": "Invalid stored spec",
+        "PRIVILEGED_APPROVAL_REQUIRED": "Privileged approval required",
+        "JSHOOK_APPROVAL_REQUIRED": "jsHook approval required"
+      },
       "sectionTitle": "مشخصات آداپتور (پیشرفته)",
       "sectionDescription": "مشخصات آداپتور اعلانی نسخه‌بندی‌شده. مشخصات غنی‌تر اتوماسیون پورتال را بارگذاری، اعتبارسنجی، فعال و بازگردانی کنید.",
       "uploadButton": "بارگذاری مشخصات",

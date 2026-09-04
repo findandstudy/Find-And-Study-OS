@@ -9,6 +9,7 @@
 export * from "./activitySummary";
 export * from "./activitySummaryRange";
 export * from "./adapterSpecIssue";
+export * from "./adapterSpecActivationBlocker";
 export * from "./adapterSpecListResponse";
 export * from "./adapterSpecSummary";
 export * from "./adapterSpecSummarySource";

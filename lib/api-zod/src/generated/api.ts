@@ -3734,20 +3734,21 @@ export const ListAdapterSpecsResponse = zod.object({
       privilegedApproved: zod.boolean(),
       hasJsHook: zod.boolean(),
       privileged: zod.boolean(),
+      latestSha256: zod.string().regex(/^[a-f0-9]{64}$/),
+      latestActivationBlockers: zod.array(
+        zod.enum(["INVALID_SPEC", "PRIVILEGED_APPROVAL_REQUIRED", "JSHOOK_APPROVAL_REQUIRED"]),
+      ),
       updatedAt: zod.date(),
     }),
   ),
 });
 
 /**
- * @summary Create a new adapter spec version, optionally enabling it (admin only)
+ * @summary Create a new inactive adapter spec version (admin only)
  */
 export const UpsertAdapterSpecBody = zod.object({
   spec: zod.record(zod.string(), zod.unknown()),
-  enable: zod.boolean().optional(),
-  approveJsHook: zod.boolean().optional(),
-  approvePrivileged: zod.boolean().optional(),
-});
+}).strict();
 
 /**
  * @summary Validate an adapter spec without persisting it (admin only)
@@ -3762,6 +3763,12 @@ export const ValidateAdapterSpecResponse = zod.object({
   name: zod.string().optional(),
   hasJsHook: zod.boolean().optional(),
   privileged: zod.boolean().optional(),
+  sha256: zod.string().regex(/^[a-f0-9]{64}$/).optional(),
+  byteLength: zod.number().min(0).optional(),
+  activationBlockers: zod.array(
+    zod.enum(["INVALID_SPEC", "PRIVILEGED_APPROVAL_REQUIRED", "JSHOOK_APPROVAL_REQUIRED"]),
+  ).optional(),
+  activationRequiresSeparateStep: zod.boolean().optional(),
   error: zod.string().optional(),
   message: zod.string().optional(),
   issues: zod
@@ -3793,6 +3800,10 @@ export const ListAdapterSpecVersionsResponse = zod.object({
       privilegedApproved: zod.boolean(),
       hasJsHook: zod.boolean(),
       privileged: zod.boolean(),
+      sha256: zod.string().regex(/^[a-f0-9]{64}$/),
+      activationBlockers: zod.array(
+        zod.enum(["INVALID_SPEC", "PRIVILEGED_APPROVAL_REQUIRED", "JSHOOK_APPROVAL_REQUIRED"]),
+      ),
       createdBy: zod.number().nullable(),
       createdAt: zod.date(),
       updatedAt: zod.date(),
@@ -3801,7 +3812,7 @@ export const ListAdapterSpecVersionsResponse = zod.object({
 });
 
 /**
- * @summary Enable, disable, rollback, or approve jsHook for an adapter spec (admin only)
+ * @summary Enable, disable, rollback, or approve an exact adapter spec version (admin only)
  */
 export const PatchAdapterSpecParams = zod.object({
   key: zod.coerce.string(),
@@ -3811,15 +3822,19 @@ export const PatchAdapterSpecBody = zod.object({
   enableVersion: zod.number().optional(),
   disable: zod.boolean().optional(),
   rollbackTo: zod.number().optional(),
+  approvalVersion: zod.number().optional(),
   jsHookApproved: zod.boolean().optional(),
   privilegedApproved: zod.boolean().optional(),
-});
+}).strict();
 
 export const PatchAdapterSpecResponse = zod.object({
   key: zod.string(),
   enabledVersion: zod.number().nullable(),
-  jsHookApproved: zod.boolean(),
-  privilegedApproved: zod.boolean(),
+  approvalVersion: zod.number().nullable().optional(),
+  approval: zod.object({
+    jsHookApproved: zod.boolean(),
+    privilegedApproved: zod.boolean(),
+  }).nullable().optional(),
 });
 
 /**

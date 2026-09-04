@@ -3027,7 +3027,7 @@ paths:
     post:
       operationId: upsertAdapterSpec
       tags: [portal-automation]
-      summary: Create a new adapter spec version, optionally enabling it (admin only)
+      summary: Create a new inactive adapter spec version (admin only)
       requestBody:
         required: true
         content:
@@ -3049,6 +3049,12 @@ paths:
                 $ref: "#/components/schemas/AdapterSpecValidationResponse"
         "403":
           description: jsHook upload forbidden for the current role
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "413":
+          description: Canonical adapter spec exceeds the size limit
           content:
             application/json:
               schema:
@@ -3095,7 +3101,7 @@ paths:
     patch:
       operationId: patchAdapterSpec
       tags: [portal-automation]
-      summary: Enable, disable, rollback, or approve jsHook for an adapter spec (admin only)
+      summary: Enable, disable, rollback, or approve an exact adapter spec version (admin only)
       parameters:
         - name: key
           in: path
@@ -3122,6 +3128,12 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "404":
           description: Spec key or version not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Exact version is not approved for activation
           content:
             application/json:
               schema:
@@ -3350,6 +3362,8 @@ components:
         - privilegedApproved
         - hasJsHook
         - privileged
+        - latestSha256
+        - latestActivationBlockers
         - updatedAt
       properties:
         key: { type: string }
@@ -3366,6 +3380,11 @@ components:
         privilegedApproved: { type: boolean }
         hasJsHook: { type: boolean }
         privileged: { type: boolean }
+        latestSha256: { type: string, pattern: "^[a-f0-9]{64}$" }
+        latestActivationBlockers:
+          type: array
+          items:
+            $ref: "#/components/schemas/AdapterSpecActivationBlocker"
         updatedAt: { type: string, format: date-time }
     AdapterSpecListResponse:
       type: object
@@ -3386,6 +3405,8 @@ components:
         - privilegedApproved
         - hasJsHook
         - privileged
+        - sha256
+        - activationBlockers
         - createdBy
         - createdAt
         - updatedAt
@@ -3400,6 +3421,11 @@ components:
         privilegedApproved: { type: boolean }
         hasJsHook: { type: boolean }
         privileged: { type: boolean }
+        sha256: { type: string, pattern: "^[a-f0-9]{64}$" }
+        activationBlockers:
+          type: array
+          items:
+            $ref: "#/components/schemas/AdapterSpecActivationBlocker"
         createdBy:
           type: integer
           nullable: true
@@ -3420,6 +3446,12 @@ components:
       properties:
         path: { type: string }
         message: { type: string }
+    AdapterSpecActivationBlocker:
+      type: string
+      enum:
+        - INVALID_SPEC
+        - PRIVILEGED_APPROVAL_REQUIRED
+        - JSHOOK_APPROVAL_REQUIRED
     ValidateAdapterSpecBody:
       type: object
       required: [spec]
@@ -3436,6 +3468,13 @@ components:
         name: { type: string }
         hasJsHook: { type: boolean }
         privileged: { type: boolean }
+        sha256: { type: string, pattern: "^[a-f0-9]{64}$" }
+        byteLength: { type: integer, minimum: 0 }
+        activationBlockers:
+          type: array
+          items:
+            $ref: "#/components/schemas/AdapterSpecActivationBlocker"
+        activationRequiresSeparateStep: { type: boolean }
         error: { type: string }
         message: { type: string }
         issues:
@@ -3449,12 +3488,10 @@ components:
         spec:
           type: object
           additionalProperties: true
-        enable: { type: boolean }
-        approveJsHook: { type: boolean }
-        approvePrivileged: { type: boolean }
+      additionalProperties: false
     UpsertAdapterSpecResponse:
       type: object
-      required: [key, version, enabled, jsHookApproved, privilegedApproved, hasJsHook]
+      required: [key, version, enabled, jsHookApproved, privilegedApproved, hasJsHook, privileged, sha256, byteLength, activationBlockers, activationRequiresSeparateStep]
       properties:
         key: { type: string }
         version: { type: integer }
@@ -3462,24 +3499,44 @@ components:
         jsHookApproved: { type: boolean }
         privilegedApproved: { type: boolean }
         hasJsHook: { type: boolean }
+        privileged: { type: boolean }
+        sha256: { type: string, pattern: "^[a-f0-9]{64}$" }
+        byteLength: { type: integer, minimum: 0 }
+        activationBlockers:
+          type: array
+          items:
+            $ref: "#/components/schemas/AdapterSpecActivationBlocker"
+        activationRequiresSeparateStep: { type: boolean }
     PatchAdapterSpecBody:
       type: object
       properties:
         enableVersion: { type: integer }
         disable: { type: boolean }
         rollbackTo: { type: integer }
+        approvalVersion:
+          type: integer
+          description: Required when either approval flag is changed; binds the decision to one exact version.
         jsHookApproved: { type: boolean }
         privilegedApproved: { type: boolean }
+      additionalProperties: false
     PatchAdapterSpecResponse:
       type: object
-      required: [key, enabledVersion, jsHookApproved, privilegedApproved]
+      required: [key, enabledVersion]
       properties:
         key: { type: string }
         enabledVersion:
           type: integer
           nullable: true
-        jsHookApproved: { type: boolean }
-        privilegedApproved: { type: boolean }
+        approvalVersion:
+          type: integer
+          nullable: true
+        approval:
+          type: object
+          nullable: true
+          required: [jsHookApproved, privilegedApproved]
+          properties:
+            jsHookApproved: { type: boolean }
+            privilegedApproved: { type: boolean }
     HealthStatus:
       type: object
       properties:
