@@ -25,6 +25,44 @@ external university portals. It consists of three layers:
 
 ---
 
+## Reference identity contract
+
+Portal records carry two different identifiers and they must not be conflated:
+
+- `portal_submissions.external_ref` is an adapter-defined internal locator for
+  deduplication, repair and status polling. It may be a URL UUID, webhook id,
+  portal database id or a composite value.
+- `applications.university_application_id` is the university-issued official
+  application number shown in the Application tab.
+
+An `externalRef` is never promoted automatically. An adapter may return
+`verifiedApplicationNumber` only after an explicit portal field, structured
+response, uniquely matched application row or official document binds the
+number to the correct applicant and requested programme/intake. URL path and
+query values alone are insufficient. Conflicting existing Application values
+are preserved and writeback emits a reconciliation warning rather than
+overwriting them; a durable exception queue is a later closed-loop phase.
+
+The current code-backed adapter allowlist qualifies only Haliç's semantically
+labeled `Applied Program Number`, and only after the applicant identity and one
+exact programme row are independently matched. Code-looking values found in an
+unlabeled cell remain `externalRef` locators. Other portals stay locator-only
+until their official-number field and identity binding are separately calibrated.
+
+---
+
+## Trigger-stage synchronization
+
+Portal Automation reads trigger options from the authoritative Application
+Pipeline. New stages become visible but remain unselected. Removed stages and
+stages that become terminal (`won`, `lost` or `isCaseClose`) are removed from
+the runnable configuration. If no eligible trigger remains, both automation
+and automatic processing are disabled fail-closed. Pipeline edits and Portal
+Automation settings use the same transaction advisory lock so stale keys
+cannot be reintroduced by a concurrent save.
+
+---
+
 ## Worker Setup
 
 ### Prerequisites
@@ -255,7 +293,9 @@ enabling real submissions.
 2. Switch the university default mode to `real` in Admin UI
 3. Run one **real** submission on a low-risk test application (confirm with
    the student that they are aware)
-4. Verify `externalRef` is populated and the stage moves to **Awaiting Offer**
+4. Verify the internal `externalRef` is populated for reconciliation, any
+   official Application-tab number has `verifiedApplicationNumber` evidence,
+   and the stage moves to **Awaiting Offer**
 
 ---
 

@@ -145,6 +145,18 @@ export function findSalesforceAppliedProgramMatch(
 }
 
 /**
+ * A programme-row reference is canonical only when the portal identified the
+ * column semantically and the current applicant was independently verified.
+ * A code-looking value or an exact programme match alone remains a locator.
+ */
+export function hasSalesforceOfficialApplicationNumberProof(input: {
+  numberLabelVerified: boolean;
+  identityBound: boolean;
+}): boolean {
+  return input.numberLabelVerified === true && input.identityBound === true;
+}
+
+/**
  * Resolve the live portal label without relying on the CRM catalogue id.
  *
  * Portal mappings are stored as { portal label -> CRM programme name }. A

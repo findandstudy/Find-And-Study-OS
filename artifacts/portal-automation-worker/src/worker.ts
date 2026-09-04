@@ -17,8 +17,8 @@
 import os from "node:os";
 import fs from "node:fs";
 import path from "node:path";
-import { and, eq, isNull } from "drizzle-orm";
-import { db, pool, portalUniversitiesTable, portalAutomationSettingsTable } from "@workspace/db";
+import { and, asc, eq, isNull } from "drizzle-orm";
+import { db, pool, pipelineStagesTable, portalUniversitiesTable, portalAutomationSettingsTable } from "@workspace/db";
 import { claimNextWithLaneLease, type ClaimedSubmission, type ClaimedSubmissionLease, cancelStaleIneligibleQueued, releaseStale, requeueStuck, buildStudentProfile, runSubmission, writebackResult, handleNeedsFallback, resolveAdapterKey, getNonGraduatedExperimentalAdapterKeys, portalEvidenceFromError, getApplicationMandatoryDocumentStatus } from "@workspace/portal-runner";
 import { isSitFamilyKey } from "@workspace/portal-adapters";
 import { resolvePortalCreds } from "./credResolver.js";
@@ -136,8 +136,37 @@ async function loadAutoProcessTargets(): Promise<{
  * candidate selection). An empty array means nothing is auto-processed.
  */
 async function loadTriggerStages(): Promise<string[]> {
-  const [settings] = await db.select({ triggerStages: portalAutomationSettingsTable.triggerStages }).from(portalAutomationSettingsTable).limit(1);
-  return settings?.triggerStages ?? [];
+  const [settingsRows, pipelineStages] = await Promise.all([
+    db
+      .select({ triggerStages: portalAutomationSettingsTable.triggerStages })
+      .from(portalAutomationSettingsTable)
+      .limit(1),
+    db
+      .select({
+        key: pipelineStagesTable.key,
+        variant: pipelineStagesTable.variant,
+        isCaseClose: pipelineStagesTable.isCaseClose,
+      })
+      .from(pipelineStagesTable)
+      .where(eq(pipelineStagesTable.entityType, "application"))
+      .orderBy(asc(pipelineStagesTable.sortOrder), asc(pipelineStagesTable.id)),
+  ]);
+  const configured = new Set(
+    (settingsRows[0]?.triggerStages ?? [])
+      .map((key) => String(key).trim())
+      .filter(Boolean),
+  );
+  return pipelineStages
+    .filter((stage) => {
+      const variant = String(stage.variant ?? "").trim().toLowerCase();
+      return (
+        configured.has(stage.key) &&
+        stage.isCaseClose !== true &&
+        variant !== "won" &&
+        variant !== "lost"
+      );
+    })
+    .map((stage) => stage.key);
 }
 
 async function processClaimedSubmission(sub: ClaimedSubmission): Promise<void> {

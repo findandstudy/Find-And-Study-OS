@@ -26,6 +26,7 @@ import {
   portalAdaptersTable,
   portalProgramMappingTable,
   portalCredentialsTable,
+  pipelineStagesTable,
   universitiesTable,
   programsTable,
   GENERAL_MAPPING_KEY,
@@ -45,6 +46,7 @@ import { ADMIN_ROLES, STAFF_ROLES } from "../lib/roles";
 import { getValidated, validate } from "../middlewares/validate";
 import { batchPortalCredentialKeys, checkHasPortalCredentials, resolvePortalCreds } from "../lib/portalCreds";
 import { setPortalCredentials } from "../lib/portalCredentials.js";
+import { buildPortalTriggerStageSnapshot } from "../lib/portalTriggerStagePolicy.js";
 
 const router: IRouter = Router();
 
@@ -100,14 +102,51 @@ router.get(
 );
 
 // ---------------------------------------------------------------------------
+// GET /portal-automation/stage-options
+// Authoritative Application Pipeline projection for automation configuration.
+// Terminal stages remain visible but are explicitly ineligible.
+// ---------------------------------------------------------------------------
+router.get(
+  "/portal-automation/stage-options",
+  requireAuth,
+  requireRole(...STAFF_ROLES, ...ADMIN_ROLES),
+  async (_req, res): Promise<void> => {
+    const [stages, settingsRows] = await Promise.all([
+      db
+        .select({
+          key: pipelineStagesTable.key,
+          label: pipelineStagesTable.label,
+          sortOrder: pipelineStagesTable.sortOrder,
+          variant: pipelineStagesTable.variant,
+          isCaseClose: pipelineStagesTable.isCaseClose,
+        })
+        .from(pipelineStagesTable)
+        .where(eq(pipelineStagesTable.entityType, "application"))
+        .orderBy(asc(pipelineStagesTable.sortOrder), asc(pipelineStagesTable.id)),
+      db
+        .select({ triggerStages: portalAutomationSettingsTable.triggerStages })
+        .from(portalAutomationSettingsTable)
+        .orderBy(asc(portalAutomationSettingsTable.id))
+        .limit(1),
+    ]);
+    const configured = Array.isArray(settingsRows[0]?.triggerStages)
+      ? settingsRows[0].triggerStages as string[]
+      : [];
+    const snapshot = buildPortalTriggerStageSnapshot(stages, configured);
+    res.setHeader("Cache-Control", "private, no-store");
+    res.json({ ...snapshot, syncedAt: new Date().toISOString() });
+  },
+);
+
+// ---------------------------------------------------------------------------
 // PUT /portal-automation/settings
 // ---------------------------------------------------------------------------
 const putSettingsBodySchema = z.object({
   isEnabled: z.boolean(),
-  triggerStages: z.array(z.string().min(1)),
+  triggerStages: z.array(z.string().trim().min(1).max(128)).max(100),
   mode: z.enum(["dry", "real"]),
   scope: z.enum(["only_applied", "selected", "all"]),
-  selectedUniversityKeys: z.array(z.string()),
+  selectedUniversityKeys: z.array(z.string().trim().min(1).max(128)).max(1_000),
   autoProcessEnabled: z.boolean().optional(),
   autoProcessIntervalMinutes: z.number().int().min(1).max(1440).optional(),
   fallbackEnabled: z.boolean().optional(),
@@ -124,36 +163,72 @@ router.put(
     const body = getValidated<PutSettingsSchemas>(req).body;
     const user = req.user!;
 
-    const [existing] = await db
-      .select({ id: portalAutomationSettingsTable.id })
-      .from(portalAutomationSettingsTable)
-      .orderBy(asc(portalAutomationSettingsTable.id))
-      .limit(1);
+    const row = await db.transaction(async (tx) => {
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext('portal_automation_trigger_stages_v1'))`);
 
-    let row;
-    if (existing) {
-      [row] = await db
-        .update(portalAutomationSettingsTable)
-        .set({
-          isEnabled:                   body.isEnabled,
-          triggerStages:               body.triggerStages,
-          mode:                        body.mode,
-          scope:                       body.scope,
-          selectedUniversityKeys:      body.selectedUniversityKeys,
-          ...(body.autoProcessEnabled !== undefined && { autoProcessEnabled: body.autoProcessEnabled }),
-          ...(body.autoProcessIntervalMinutes !== undefined && { autoProcessIntervalMinutes: body.autoProcessIntervalMinutes }),
-          ...(body.fallbackEnabled !== undefined && { fallbackEnabled: body.fallbackEnabled }),
-          ...(body.fanOutMode     !== undefined && { fanOutMode:     body.fanOutMode }),
-          updatedAt:                   new Date(),
+      const stages = await tx
+        .select({
+          key: pipelineStagesTable.key,
+          label: pipelineStagesTable.label,
+          sortOrder: pipelineStagesTable.sortOrder,
+          variant: pipelineStagesTable.variant,
+          isCaseClose: pipelineStagesTable.isCaseClose,
         })
-        .where(eq(portalAutomationSettingsTable.id, existing.id))
-        .returning();
-    } else {
-      [row] = await db
+        .from(pipelineStagesTable)
+        .where(eq(pipelineStagesTable.entityType, "application"))
+        .orderBy(asc(pipelineStagesTable.sortOrder), asc(pipelineStagesTable.id));
+      const snapshot = buildPortalTriggerStageSnapshot(stages, body.triggerStages);
+
+      if (snapshot.staleConfiguredKeys.length > 0) {
+        const error = new Error("Unknown Application Pipeline trigger stage") as Error & { code?: string; details?: string[] };
+        error.code = "UNKNOWN_TRIGGER_STAGE";
+        error.details = snapshot.staleConfiguredKeys;
+        throw error;
+      }
+      if (snapshot.ineligibleConfiguredKeys.length > 0) {
+        const error = new Error("Terminal Application Pipeline stages cannot trigger portal submission") as Error & { code?: string; details?: string[] };
+        error.code = "INELIGIBLE_TRIGGER_STAGE";
+        error.details = snapshot.ineligibleConfiguredKeys;
+        throw error;
+      }
+      if ((body.isEnabled || body.autoProcessEnabled === true) && snapshot.validConfiguredKeys.length === 0) {
+        const error = new Error("At least one eligible Application Pipeline stage is required") as Error & { code?: string; details?: string[] };
+        error.code = "TRIGGER_STAGE_REQUIRED";
+        error.details = [];
+        throw error;
+      }
+
+      const [existing] = await tx
+        .select({ id: portalAutomationSettingsTable.id })
+        .from(portalAutomationSettingsTable)
+        .orderBy(asc(portalAutomationSettingsTable.id))
+        .limit(1);
+
+      if (existing) {
+        const [updated] = await tx
+          .update(portalAutomationSettingsTable)
+          .set({
+            isEnabled:                   body.isEnabled,
+            triggerStages:               snapshot.validConfiguredKeys,
+            mode:                        body.mode,
+            scope:                       body.scope,
+            selectedUniversityKeys:      body.selectedUniversityKeys,
+            ...(body.autoProcessEnabled !== undefined && { autoProcessEnabled: body.autoProcessEnabled }),
+            ...(body.autoProcessIntervalMinutes !== undefined && { autoProcessIntervalMinutes: body.autoProcessIntervalMinutes }),
+            ...(body.fallbackEnabled !== undefined && { fallbackEnabled: body.fallbackEnabled }),
+            ...(body.fanOutMode     !== undefined && { fanOutMode:     body.fanOutMode }),
+            updatedAt:                   new Date(),
+          })
+          .where(eq(portalAutomationSettingsTable.id, existing.id))
+          .returning();
+        return updated;
+      }
+
+      const [inserted] = await tx
         .insert(portalAutomationSettingsTable)
         .values({
           isEnabled:                   body.isEnabled,
-          triggerStages:               body.triggerStages,
+          triggerStages:               snapshot.validConfiguredKeys,
           mode:                        body.mode,
           scope:                       body.scope,
           selectedUniversityKeys:      body.selectedUniversityKeys,
@@ -163,7 +238,19 @@ router.put(
           fanOutMode:                  body.fanOutMode ?? "off",
         })
         .returning();
-    }
+      return inserted;
+    }).catch((error: Error & { code?: string; details?: string[] }) => {
+      if (error.code === "UNKNOWN_TRIGGER_STAGE" || error.code === "INELIGIBLE_TRIGGER_STAGE" || error.code === "TRIGGER_STAGE_REQUIRED") {
+        res.status(400).json({
+          error: error.code,
+          message: error.message,
+          triggerStages: error.details ?? [],
+        });
+        return null;
+      }
+      throw error;
+    });
+    if (!row) return;
 
     logAudit(
       user.id,
@@ -174,7 +261,7 @@ router.put(
         isEnabled: body.isEnabled,
         mode: body.mode,
         scope: body.scope,
-        triggerStagesCount: body.triggerStages.length,
+        triggerStagesCount: row.triggerStages.length,
         autoProcessEnabled: body.autoProcessEnabled,
         autoProcessIntervalMinutes: body.autoProcessIntervalMinutes,
         fallbackEnabled: body.fallbackEnabled,

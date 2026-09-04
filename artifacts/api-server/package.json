@@ -131,6 +131,7 @@
     "test:portal-automation": "tsx --test ./scripts/test-portal-automation.ts",
     "test:portal-auto-trigger": "tsx --test ./scripts/test-portal-auto-trigger.ts",
     "test:portal-trigger": "tsx --test ./scripts/test-portal-trigger.ts",
+    "test:portal-trigger-stage-policy": "tsx --test ./scripts/test-portal-trigger-stage-policy.ts",
     "test:portal-mgmt": "tsx --test ./scripts/test-portal-mgmt.ts",
     "test:portal-manual-submit": "tsx --test ./scripts/test-portal-manual-submit.ts",
     "test:portal-mgmt-b": "tsx --test ./scripts/test-portal-mgmt-b.ts",

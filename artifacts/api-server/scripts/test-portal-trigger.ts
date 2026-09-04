@@ -35,6 +35,7 @@ import {
   portalAutomationSettingsTable,
   portalUniversitiesTable,
   portalSubmissionsTable,
+  pipelineStagesTable,
 } from "@workspace/db";
 import {
   enqueueIfEligible,
@@ -69,6 +70,7 @@ const cleanupStudentIds:   number[] = [];
 const cleanupAppIds:       number[] = [];
 const cleanupSubIds:       number[] = [];
 const cleanupPortalUniIds: number[] = [];
+const cleanupPipelineStageIds: number[] = [];
 
 type PortalSettings = typeof portalAutomationSettingsTable.$inferSelect;
 
@@ -83,6 +85,14 @@ async function getSettings(): Promise<PortalSettings> {
 // before — create shared fixtures
 // ---------------------------------------------------------------------------
 before(async () => {
+  const [triggerStage] = await db.insert(pipelineStagesTable).values({
+    entityType: "application",
+    key: TRIGGER_STAGE,
+    label: `Run Now Trigger ${RUN}`,
+    sortOrder: 90_001,
+  }).returning({ id: pipelineStagesTable.id });
+  cleanupPipelineStageIds.push(triggerStage.id);
+
   const [existing] = await db.select().from(portalAutomationSettingsTable).limit(1);
   if (existing) {
     savedSettings = existing as Record<string, unknown>;
@@ -163,6 +173,9 @@ after(async () => {
   }
   for (const id of cleanupStudentIds) {
     await db.delete(studentsTable).where(eq(studentsTable.id, id)).catch(() => {});
+  }
+  for (const id of cleanupPipelineStageIds) {
+    await db.delete(pipelineStagesTable).where(eq(pipelineStagesTable.id, id)).catch(() => {});
   }
   setImmediate(() => process.exit(process.exitCode ?? 0));
 });

@@ -23,6 +23,57 @@ test("accepts a single proved terminal outcome", () => {
   );
 });
 
+test("accepts a proof-bound official application number", () => {
+  assert.doesNotThrow(() =>
+    assertSubmitResultContract("test", {
+      ...base,
+      submitted: true,
+      externalRef: "internal-record-7",
+      verifiedApplicationNumber: {
+        value: "APP-2026-42",
+        source: "matched_application_row",
+        sourceLabel: "Application Number",
+        identityBound: true,
+        targetBound: true,
+        uniqueMatch: true,
+      },
+    }),
+  );
+});
+
+test("rejects URL-derived or incompletely bound application numbers", () => {
+  assert.throws(
+    () =>
+      assertSubmitResultContract("test", {
+        ...base,
+        submitted: true,
+        verifiedApplicationNumber: {
+          value: "route-42",
+          source: "success_url",
+          identityBound: true,
+          targetBound: true,
+          uniqueMatch: true,
+        } as never,
+      }),
+    /source is not allowed/,
+  );
+  assert.throws(
+    () =>
+      assertSubmitResultContract("test", {
+        ...base,
+        submitted: true,
+        verifiedApplicationNumber: {
+          value: "APP-42",
+          source: "labeled_portal_field",
+          identityBound: true,
+          targetBound: false,
+          uniqueMatch: true,
+        } as never,
+      }),
+    /identity-, target- and unique-record-bound/,
+  );
+});
+
 test("rejects contradictory terminal outcomes", () => {
   assert.throws(
     () =>

@@ -13,7 +13,7 @@
  *   pnpm --filter @workspace/api-server test:portal-mgmt
  */
 
-import { after, test } from "node:test";
+import { after, before, test } from "node:test";
 import assert from "node:assert/strict";
 import http from "http";
 import express, { type Express } from "express";
@@ -22,6 +22,7 @@ import {
   db,
   portalAutomationSettingsTable,
   portalUniversitiesTable,
+  pipelineStagesTable,
 } from "@workspace/db";
 import portalMgmtRouter from "../src/routes/portalMgmt.js";
 
@@ -29,6 +30,7 @@ import portalMgmtRouter from "../src/routes/portalMgmt.js";
 // Cleanup tracking
 // ---------------------------------------------------------------------------
 const cleanupUniIds:      number[] = [];
+const cleanupPipelineStageIds: number[] = [];
 let   savedSettingsId:    number | null = null;
 let   savedSettingsRow:   Record<string, unknown> | null = null;
 
@@ -37,6 +39,16 @@ let   savedSettingsRow:   Record<string, unknown> | null = null;
 // ---------------------------------------------------------------------------
 const RUN = `tau_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 5)}`;
 const TEST_KEY = `uni_${RUN}`;
+const TEST_STAGE_ONE = `tau_ready_${RUN}`;
+const TEST_STAGE_TWO = `tau_submit_${RUN}`;
+
+before(async () => {
+  const stages = await db.insert(pipelineStagesTable).values([
+    { entityType: "application", key: TEST_STAGE_ONE, label: "Ready", sortOrder: 90_010 },
+    { entityType: "application", key: TEST_STAGE_TWO, label: "Submit", sortOrder: 90_011 },
+  ]).returning({ id: pipelineStagesTable.id });
+  cleanupPipelineStageIds.push(...stages.map((stage) => stage.id));
+});
 
 // ---------------------------------------------------------------------------
 // after — restore settings, clean universities
@@ -69,6 +81,10 @@ after(async () => {
       .set({ deletedAt: new Date() })
       .where(and(eq(portalUniversitiesTable.id, id), isNull(portalUniversitiesTable.deletedAt)))
       .catch(() => {});
+  }
+
+  for (const id of cleanupPipelineStageIds) {
+    await db.delete(pipelineStagesTable).where(eq(pipelineStagesTable.id, id)).catch(() => {});
   }
 
   setImmediate(() => process.exit(process.exitCode ?? 0));
@@ -173,7 +189,7 @@ test("TAU1: GET /portal-automation/settings returns defaults when table is empty
 test("TAU2: PUT /portal-automation/settings upsert → GET returns updated values", async () => {
   const payload = {
     isEnabled:              true,
-    triggerStages:          ["offer", "visa"],
+    triggerStages:          [TEST_STAGE_ONE, TEST_STAGE_TWO],
     mode:                   "dry",
     scope:                  "selected",
     selectedUniversityKeys: ["uskudar", "istinye"],
@@ -190,7 +206,7 @@ test("TAU2: PUT /portal-automation/settings upsert → GET returns updated value
     const get = await sendReq(server, "GET", "/api/portal-automation/settings");
     assert.equal(get.status, 200);
     assert.equal(get.body.isEnabled, true);
-    assert.deepEqual(get.body.triggerStages, ["offer", "visa"]);
+    assert.deepEqual(get.body.triggerStages, [TEST_STAGE_ONE, TEST_STAGE_TWO]);
     assert.equal(get.body.scope, "selected");
     assert.deepEqual(get.body.selectedUniversityKeys, ["uskudar", "istinye"]);
 
@@ -202,6 +218,38 @@ test("TAU2: PUT /portal-automation/settings upsert → GET returns updated value
     assert.equal(put2.status, 200);
     assert.equal(put2.body.id, get.body.id, "Should update same row, not insert new");
     assert.equal(put2.body.isEnabled, false);
+  } finally {
+    await close(server);
+  }
+});
+
+test("TAU2b: trigger-stage options come from the Application Pipeline", async () => {
+  const server = await listen(buildApp());
+  try {
+    const response = await sendReq(server, "GET", "/api/portal-automation/stage-options");
+    assert.equal(response.status, 200);
+    assert.equal(
+      response.body.stages.find((stage: { key: string }) => stage.key === TEST_STAGE_ONE)?.eligible,
+      true,
+    );
+    assert.ok(response.body.validConfiguredKeys.includes(TEST_STAGE_ONE));
+  } finally {
+    await close(server);
+  }
+});
+
+test("TAU2c: settings reject trigger keys outside the Application Pipeline", async () => {
+  const server = await listen(buildApp());
+  try {
+    const response = await sendReq(server, "PUT", "/api/portal-automation/settings", {
+      isEnabled: true,
+      triggerStages: [`unknown_${RUN}`],
+      mode: "dry",
+      scope: "only_applied",
+      selectedUniversityKeys: [],
+    });
+    assert.equal(response.status, 400);
+    assert.equal(response.body.error, "UNKNOWN_TRIGGER_STAGE");
   } finally {
     await close(server);
   }

@@ -4,6 +4,7 @@ import {
   db,
   messageTemplatesTable,
   pipelineStagesTable,
+  portalAutomationSettingsTable,
   programDocumentRequirementsTable,
 } from "@workspace/db";
 import type { StageAction, StageAutomaticMessage } from "@workspace/db";
@@ -15,6 +16,7 @@ import {
   normalizeStageAudienceRoles,
   stageAudienceAllows,
 } from "../lib/pipelineAudience";
+import { buildPortalTriggerStageSnapshot } from "../lib/portalTriggerStagePolicy.js";
 
 const router: IRouter = Router();
 
@@ -573,7 +575,11 @@ router.put("/pipeline-stages/:entityType", requireAuth, requireRole(...MANAGER_R
   }
 
   try {
-    const inserted = await db.transaction(async (tx) => {
+    const { rows: inserted, triggerStageReconciliation } = await db.transaction(async (tx) => {
+      if (entityType === "application") {
+        await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext('portal_automation_trigger_stages_v1'))`);
+      }
+
       await tx.delete(pipelineStagesTable).where(eq(pipelineStagesTable.entityType, entityType));
 
       const rows = await tx.insert(pipelineStagesTable)
@@ -627,7 +633,48 @@ router.put("/pipeline-stages/:entityType", requireAuth, requireRole(...MANAGER_R
         }
       }
 
-      return rows;
+      let triggerStageReconciliation: {
+        removedKeys: string[];
+        automationDisabled: boolean;
+      } | null = null;
+      if (entityType === "application") {
+        const [settings] = await tx
+          .select()
+          .from(portalAutomationSettingsTable)
+          .orderBy(asc(portalAutomationSettingsTable.id))
+          .limit(1);
+        if (settings) {
+          const configured = Array.isArray(settings.triggerStages)
+            ? settings.triggerStages as string[]
+            : [];
+          const snapshot = buildPortalTriggerStageSnapshot(rows, configured);
+          const removedKeys = [
+            ...snapshot.staleConfiguredKeys,
+            ...snapshot.ineligibleConfiguredKeys,
+          ];
+          const hadConfiguredTriggers = snapshot.configuredKeys.length > 0;
+          const automationDisabled =
+            hadConfiguredTriggers &&
+            snapshot.validConfiguredKeys.length === 0 &&
+            (settings.isEnabled || settings.autoProcessEnabled);
+
+          if (removedKeys.length > 0 || automationDisabled) {
+            await tx
+              .update(portalAutomationSettingsTable)
+              .set({
+                triggerStages: snapshot.validConfiguredKeys,
+                ...(automationDisabled
+                  ? { isEnabled: false, autoProcessEnabled: false }
+                  : {}),
+                updatedAt: new Date(),
+              })
+              .where(eq(portalAutomationSettingsTable.id, settings.id));
+          }
+          triggerStageReconciliation = { removedKeys, automationDisabled };
+        }
+      }
+
+      return { rows, triggerStageReconciliation };
     });
 
     clearStageFinanceCache();
@@ -644,6 +691,16 @@ router.put("/pipeline-stages/:entityType", requireAuth, requireRole(...MANAGER_R
       const hasConfirmedCommission = inserted.some(s => s.commissionFinanceStatus === "confirmed" || (s.commissionFinanceStatus === null && s.variant === "won"));
       if (!hasConfirmedCommission) {
         warnings.push("No stage marks commission as confirmed. Commission finance entries will never move to confirmed without a stage configured for it.");
+      }
+      if ((triggerStageReconciliation?.removedKeys.length ?? 0) > 0) {
+        warnings.push(
+          `Portal Automation trigger stages removed because they no longer exist or became terminal: ${triggerStageReconciliation!.removedKeys.join(", ")}.`,
+        );
+      }
+      if (triggerStageReconciliation?.automationDisabled) {
+        warnings.push(
+          "Portal Automation was disabled because no eligible trigger stage remained after the pipeline change.",
+        );
       }
     }
 

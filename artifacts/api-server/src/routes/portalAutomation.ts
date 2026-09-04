@@ -32,6 +32,7 @@ import {
   resolveStudentPortalRouting,
   scanAndEnqueueTriggerStageApplications,
   MAX_AUTO_FAILED_SUBMISSIONS,
+  withEligiblePortalTriggerStages,
 } from "../lib/portalAutoTrigger.js";
 import { buildPageMeta, parsePaginationParams } from "@workspace/pagination";
 import {
@@ -1209,8 +1210,10 @@ router.post(
       return;
     }
 
+    const runtimeSettings = await withEligiblePortalTriggerStages(settings);
+
     // ----- Enqueue every eligible trigger-stage application -------------
-    const summary = await scanAndEnqueueTriggerStageApplications(user.id, settings);
+    const summary = await scanAndEnqueueTriggerStageApplications(user.id, runtimeSettings);
 
     // ----- Immediately drain the queue (interval-independent) -----------
     // Reuses the exact manual process-queued path (50s inline cap per
@@ -1227,7 +1230,7 @@ router.post(
       try {
         // Run Now must only process applications currently in a configured
         // trigger stage — same gate as the enqueue scan above.
-        results = await drainQueue(workerId, settings.triggerStages ?? []);
+        results = await drainQueue(workerId, runtimeSettings.triggerStages ?? []);
         drained = true;
       } finally {
         _processMutex = false;
@@ -2256,11 +2259,12 @@ export async function maybeFanOutStudentForApplication(
   actorUserId: number,
 ): Promise<void> {
   try {
-    const [settings] = await db
+    const [savedSettings] = await db
       .select()
       .from(portalAutomationSettingsTable)
       .limit(1);
-    if (!settings?.isEnabled) return;
+    if (!savedSettings?.isEnabled) return;
+    const settings = await withEligiblePortalTriggerStages(savedSettings);
 
     const [srcApp] = await db
       .select()
@@ -2485,9 +2489,10 @@ router.get(
       .select()
       .from(portalAutomationSettingsTable)
       .limit(1);
-    const triggerStages = Array.isArray(settings?.triggerStages)
-      ? (settings.triggerStages as string[])
-      : [];
+    const runtimeSettings = settings
+      ? await withEligiblePortalTriggerStages(settings)
+      : null;
+    const triggerStages = runtimeSettings?.triggerStages ?? [];
 
     if (triggerStages.length === 0) {
       res.json({ applications: 0, universities: 0, triggerStages: [] });
@@ -2554,9 +2559,10 @@ router.post(
       .select()
       .from(portalAutomationSettingsTable)
       .limit(1);
-    const triggerStages = Array.isArray(settings?.triggerStages)
-      ? (settings.triggerStages as string[])
-      : [];
+    const runtimeSettings = settings
+      ? await withEligiblePortalTriggerStages(settings)
+      : null;
+    const triggerStages = runtimeSettings?.triggerStages ?? [];
     if (triggerStages.length === 0) {
       res.status(409).json({
         error: "NO_TRIGGER_STAGES",
@@ -2782,12 +2788,13 @@ export type AutoDrainTickResult =
  * ticks deterministically without timers.
  */
 export async function runPortalAutoDrainTick(): Promise<AutoDrainTickResult> {
-  const [settings] = await db
+  const [savedSettings] = await db
     .select()
     .from(portalAutomationSettingsTable)
     .limit(1);
 
-  if (!settings?.isEnabled)       return { ran: false, reason: "disabled" };
+  if (!savedSettings?.isEnabled)       return { ran: false, reason: "disabled" };
+  const settings = await withEligiblePortalTriggerStages(savedSettings);
   if (!settings.autoProcessEnabled) return { ran: false, reason: "scheduled_off" };
 
   const intervalMin =

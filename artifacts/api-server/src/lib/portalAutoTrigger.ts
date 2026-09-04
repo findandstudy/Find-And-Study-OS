@@ -33,6 +33,7 @@ import {
   portalUniversitiesTable,
   portalSubmissionsTable,
   portalAccountUniversitiesTable,
+  pipelineStagesTable,
   universitiesTable,
   studentsTable,
 } from "@workspace/db";
@@ -49,6 +50,7 @@ import {
   parkApplicationInMissingDocsStage,
 } from "./mandatoryDocs.js";
 import { prepareApplicationPortalPreflight } from "./portalApplicationPreflight.js";
+import { buildPortalTriggerStageSnapshot } from "./portalTriggerStagePolicy.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -67,6 +69,47 @@ export interface AutoTriggerParams {
 
 /** Settings row shape used by the eligibility gate. */
 type PortalSettings = typeof portalAutomationSettingsTable.$inferSelect;
+const ELIGIBLE_TRIGGER_STAGES = Symbol("eligiblePortalTriggerStages");
+type EligiblePortalSettings = PortalSettings & {
+  [ELIGIBLE_TRIGGER_STAGES]: true;
+};
+
+/**
+ * Runtime projection of saved trigger keys against the current Application
+ * Pipeline. This also protects execution immediately after rollout, before an
+ * operator has re-saved any legacy configuration.
+ */
+export async function withEligiblePortalTriggerStages<T extends PortalSettings>(
+  settings: T,
+): Promise<T & EligiblePortalSettings> {
+  if ((settings as Partial<EligiblePortalSettings>)[ELIGIBLE_TRIGGER_STAGES]) {
+    return settings as T & EligiblePortalSettings;
+  }
+  const stages = await db
+    .select({
+      key: pipelineStagesTable.key,
+      label: pipelineStagesTable.label,
+      sortOrder: pipelineStagesTable.sortOrder,
+      variant: pipelineStagesTable.variant,
+      isCaseClose: pipelineStagesTable.isCaseClose,
+    })
+    .from(pipelineStagesTable)
+    .where(eq(pipelineStagesTable.entityType, "application"))
+    .orderBy(asc(pipelineStagesTable.sortOrder), asc(pipelineStagesTable.id));
+  const snapshot = buildPortalTriggerStageSnapshot(
+    stages,
+    Array.isArray(settings.triggerStages) ? settings.triggerStages as string[] : [],
+  );
+  const runtimeSettings = {
+    ...settings,
+    triggerStages: snapshot.validConfiguredKeys,
+  } as T & EligiblePortalSettings;
+  Object.defineProperty(runtimeSettings, ELIGIBLE_TRIGGER_STAGES, {
+    value: true,
+    enumerable: false,
+  });
+  return runtimeSettings;
+}
 
 /** Reason codes for a skipped application — surfaced to the Run Now UI. */
 export type SkipReason =
@@ -389,6 +432,7 @@ export async function enqueueIfEligible(
   params: AutoTriggerParams,
   settings: PortalSettings,
 ): Promise<EnqueueOutcome> {
+  settings = await withEligiblePortalTriggerStages(settings);
   const { applicationId, studentId, newStage, universityName, universityId, actorUserId } = params;
 
   // ----- Gate 1: trigger stage -----------------------------------------
@@ -622,12 +666,13 @@ export async function maybeEnqueuePortalSubmission(
   params: AutoTriggerParams,
 ): Promise<void> {
   // ----- Global kill-switch --------------------------------------------
-  const [settings] = await db
+  const [savedSettings] = await db
     .select()
     .from(portalAutomationSettingsTable)
     .limit(1);
 
-  if (!settings?.isEnabled) return;
+  if (!savedSettings?.isEnabled) return;
+  const settings = await withEligiblePortalTriggerStages(savedSettings);
 
   const outcome = await enqueueIfEligible(params, settings);
 
@@ -672,8 +717,9 @@ export async function enqueueOnStageChange(opts: {
   universityId?: number | null;
 }): Promise<void> {
   try {
-    const [settings] = await db.select().from(portalAutomationSettingsTable).limit(1);
-    if (!settings?.isEnabled) return;
+    const [savedSettings] = await db.select().from(portalAutomationSettingsTable).limit(1);
+    if (!savedSettings?.isEnabled) return;
+    const settings = await withEligiblePortalTriggerStages(savedSettings);
 
     const actorId = opts.actorUserId ?? 0;
 
@@ -785,6 +831,7 @@ export async function scanAndEnqueueTriggerStageApplications(
   actorUserId: number,
   settings: PortalSettings,
 ): Promise<RunNowSummary> {
+  settings = await withEligiblePortalTriggerStages(settings);
   const summary: RunNowSummary = {
     scanned: 0,
     queued: 0,

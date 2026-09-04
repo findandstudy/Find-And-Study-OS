@@ -1,4 +1,5 @@
 import type { SubmitResult } from "./types.js";
+import { parseVerifiedApplicationNumber } from "./applicationReference.js";
 
 const TERMINAL_FLAGS = [
   "submitted",
@@ -37,8 +38,20 @@ export function assertSubmitResultContract(
     issues.push(`contradictory terminal outcomes: ${terminalFlags.join(",")}`);
   }
 
-  if (result.externalRef !== undefined && result.externalRef.trim() === "") {
-    issues.push("externalRef must be omitted instead of empty");
+  if (result.externalRef !== undefined) {
+    if (typeof result.externalRef !== "string" || result.externalRef.trim() === "") {
+      issues.push("externalRef must be a non-empty string or omitted");
+    }
+  }
+
+  if (result.verifiedApplicationNumber !== undefined) {
+    const verified = parseVerifiedApplicationNumber(result.verifiedApplicationNumber);
+    if (!verified.ok) {
+      issues.push(`verifiedApplicationNumber invalid: ${verified.error}`);
+    }
+    if (!result.submitted && !result.alreadyExists) {
+      issues.push("verifiedApplicationNumber requires a submitted or alreadyExists outcome");
+    }
   }
 
   if (result.resolution === "not_in_dropdown") {

@@ -110,6 +110,13 @@ proof passes. A missing required document fails before the upload action.
 When outcome rules are present and none match, the result is explicitly
 unproved; success is never inferred from a URL id alone.
 
+`externalRefFrom` populates only the adapter's internal portal locator. It does
+not populate the official university application number. A future declarative
+contract may expose `verifiedApplicationNumber` only with explicit applicant,
+target and unique-record evidence; until then, uploaded specs must leave the
+Application-tab number unset. URL paths, query parameters, redirect ids and
+generic captured codes never count as an official application number.
+
 ## Altınbaş migration boundary
 
 The current Altınbaş adapter includes a Salesforce Screen Flow/Aura protocol

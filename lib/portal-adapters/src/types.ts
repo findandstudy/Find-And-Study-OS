@@ -23,6 +23,25 @@ export interface PortalProgramOption {
   enabled: boolean;
 }
 
+export type VerifiedApplicationNumberSource =
+  | "labeled_portal_field"
+  | "structured_portal_field"
+  | "matched_application_row"
+  | "official_document";
+
+/**
+ * Evidence contract for the university's official application number. A URL,
+ * route parameter, internal record id or webhook id is not sufficient.
+ */
+export interface VerifiedUniversityApplicationNumber {
+  value: string;
+  source: VerifiedApplicationNumberSource;
+  sourceLabel?: string;
+  identityBound: true;
+  targetBound: true;
+  uniqueMatch: true;
+}
+
 // ---------------------------------------------------------------------------
 // Result returned by adapter.submit()
 // ---------------------------------------------------------------------------
@@ -40,10 +59,13 @@ export interface SubmitResult {
    */
   screenshots?: string[];
   /**
-   * External reference assigned by the portal (e.g. application UUID from the
-   * confirmation page). Optional — not all portals expose this.
+   * Adapter-defined portal locator used for deduplication, repair and status
+   * polling. This is NOT automatically the university's official application
+   * number and must never be copied to the Application tab on its own.
    */
   externalRef?: string;
+  /** Proof-bearing university-issued application number. */
+  verifiedApplicationNumber?: VerifiedUniversityApplicationNumber;
   /**
    * Adapter-specific metadata: programMismatch (Part B resume) and other
    * structured diagnostics that don't fit into the flat SubmitResult fields.

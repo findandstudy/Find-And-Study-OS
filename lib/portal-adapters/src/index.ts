@@ -10,6 +10,8 @@ export type {
   SubmitFiles,
   StudentDocumentRef,
   UniversityAdapter,
+  VerifiedApplicationNumberSource,
+  VerifiedUniversityApplicationNumber,
 } from "./types.js";
 
 export {

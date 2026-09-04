@@ -14,6 +14,7 @@ import {
   chooseSalesforceResumeAction,
   chooseSalesforceBinaryCandidate,
   findSalesforceAppliedProgramMatch,
+  hasSalesforceOfficialApplicationNumberProof,
   hasSalesforceCompletionProof,
   hasSalesforceUploadProof,
   inferSalesforceDocumentSlot,
@@ -34,7 +35,7 @@ function markSalesforceVerifiedSuccess(
   result: SubmitResult,
   kind: "completed_stage" | "exact_application_row",
 ): void {
-  result.submitted = true;
+  if (!result.alreadyExists) result.submitted = true;
   result.meta = {
     ...result.meta,
     successProof: {
@@ -42,6 +43,30 @@ function markSalesforceVerifiedSuccess(
       kind,
       schemaVersion: 1,
     },
+  };
+}
+
+function attachSalesforceAppliedProgramNumber(
+  result: SubmitResult,
+  proof: {
+    externalRef: string;
+    portalProgram: string;
+    numberLabelVerified: boolean;
+  },
+  identityBound: boolean,
+): void {
+  result.externalRef = proof.externalRef;
+  if (!hasSalesforceOfficialApplicationNumberProof({
+    identityBound,
+    numberLabelVerified: proof.numberLabelVerified,
+  })) return;
+  result.verifiedApplicationNumber = {
+    value: proof.externalRef,
+    source: "matched_application_row",
+    sourceLabel: "Applied Program Number",
+    identityBound: true,
+    targetBound: true,
+    uniqueMatch: true,
   };
 }
 
@@ -166,6 +191,7 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
       const inspectAppliedPrograms = async (): Promise<{
         externalRef: string;
         portalProgram: string;
+        numberLabelVerified: boolean;
       } | null> => {
         if (cfg.key !== "halic" || !strictMappedPortal) return null;
         const expectedTarget = resolveSalesforceProgramTarget(
@@ -181,6 +207,7 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
           applicationNumber: string;
           programName: string;
         }> = [];
+        const labeledApplicationNumbers = new Set<string>();
         for (let index = 0; index < rowCount; index++) {
           const row = rows.nth(index);
           const cells = await row
@@ -192,10 +219,12 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
               })),
             )
             .catch(() => []);
-          const applicationNumber =
+          const labeledApplicationNumber =
             cells.find((cell: { label: string }) =>
               /applied program number/i.test(cell.label),
-            )?.text ||
+            )?.text || "";
+          const applicationNumber =
+            labeledApplicationNumber ||
             cells.map((cell: { text: string }) => cell.text)
               .find((text: string) => /^AP\d{6,}$/i.test(text)) ||
             "";
@@ -205,6 +234,9 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
             )?.text || "";
           if (applicationNumber && programName) {
             appliedRows.push({ applicationNumber, programName });
+            if (labeledApplicationNumber) {
+              labeledApplicationNumbers.add(applicationNumber);
+            }
           }
         }
         const match = findSalesforceAppliedProgramMatch(
@@ -217,7 +249,12 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
             portalProgram: match.portalProgram,
           });
         }
-        return match;
+        return match
+          ? {
+              ...match,
+              numberLabelVerified: labeledApplicationNumbers.has(match.externalRef),
+            }
+          : null;
       };
       const filterTrackApplicant = async (
         query: string,
@@ -375,6 +412,7 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
         | {
             externalRef: string;
             portalProgram: string;
+            numberLabelVerified: boolean;
             programMismatch: boolean;
           }
         | null = null;
@@ -490,6 +528,7 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
           ownedCompletedApplication = {
             externalRef: appliedProgram.externalRef,
             portalProgram: appliedProgram.portalProgram,
+            numberLabelVerified: appliedProgram.numberLabelVerified,
             programMismatch: false,
           };
           return false;
@@ -600,6 +639,7 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
           ownedCompletedApplication = {
             externalRef,
             portalProgram,
+            numberLabelVerified: false,
             programMismatch:
               Boolean(portalProgram) &&
               expectedCandidates.length > 0 &&
@@ -641,13 +681,13 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
         const completed = ownedCompletedApplication as {
           externalRef: string;
           portalProgram: string;
+          numberLabelVerified: boolean;
           programMismatch: boolean;
         };
         const completedResult: SubmitResult = {
           alreadyExists: true,
           submitted: false,
           programMissing: false,
-          externalRef: completed.externalRef,
           detail: completed.programMismatch
             ? `${cfg.label}: student already has a completed portal application for a different programme`
             : `${cfg.label}: application already completed in portal`,
@@ -659,6 +699,7 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
               : {}),
           },
         };
+        attachSalesforceAppliedProgramNumber(completedResult, completed, true);
         markSalesforceVerifiedSuccess(
           completedResult,
           "exact_application_row",
@@ -1121,7 +1162,11 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
             result,
             "exact_application_row",
           );
-          result.externalRef = appliedProgram.externalRef;
+          attachSalesforceAppliedProgramNumber(
+            result,
+            appliedProgram,
+            applicantPreflight.owned || exactApplicantReadback,
+          );
           result.detail = `${cfg.label}: application already completed in portal`;
           result.meta = {
             ...result.meta,
@@ -2381,7 +2426,11 @@ function makeSalesforceAdapter(cfg: SalesforceSchoolConfig): UniversityAdapter {
                 result,
                 "exact_application_row",
               );
-              result.externalRef = appliedProgram.externalRef;
+              attachSalesforceAppliedProgramNumber(
+                result,
+                appliedProgram,
+                applicantPreflight.owned || exactApplicantReadback,
+              );
               result.meta = {
                 ...result.meta,
                 portalProgram: appliedProgram.portalProgram,

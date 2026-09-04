@@ -37,6 +37,7 @@ import {
   portalAutomationSettingsTable,
   portalUniversitiesTable,
   portalSubmissionsTable,
+  pipelineStagesTable,
   universitiesTable,
   portalAccountUniversitiesTable,
 } from "@workspace/db";
@@ -90,6 +91,7 @@ const cleanupSubIds:        number[] = [];
 const cleanupPortalUniIds:  number[] = [];
 const cleanupCatalogUniIds: number[] = [];
 const cleanupMembershipIds: number[] = [];
+const cleanupPipelineStageIds: number[] = [];
 let   settingsRowId: number | null   = null;
 
 // Shared aggregator fixture state (set in before(), read in TAT8-TAT11)
@@ -100,6 +102,14 @@ let aggCatalogUniId: number | null = null;
 // before — create shared fixtures
 // ---------------------------------------------------------------------------
 before(async () => {
+  const [triggerStage] = await db.insert(pipelineStagesTable).values({
+    entityType: "application",
+    key: TRIGGER_STAGE,
+    label: `TAT Trigger ${RUN}`,
+    sortOrder: 90_000,
+  }).returning({ id: pipelineStagesTable.id });
+  cleanupPipelineStageIds.push(triggerStage.id);
+
   // Save existing settings row (if any)
   const [existing] = await db.select().from(portalAutomationSettingsTable).limit(1);
   if (existing) {
@@ -226,6 +236,9 @@ after(async () => {
   }
   for (const id of cleanupStudentIds) {
     await db.delete(studentsTable).where(eq(studentsTable.id, id)).catch(() => {});
+  }
+  for (const id of cleanupPipelineStageIds) {
+    await db.delete(pipelineStagesTable).where(eq(pipelineStagesTable.id, id)).catch(() => {});
   }
   setImmediate(() => process.exit(process.exitCode ?? 0));
 });

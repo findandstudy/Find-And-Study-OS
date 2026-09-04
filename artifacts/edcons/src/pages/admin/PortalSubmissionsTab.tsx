@@ -65,6 +65,14 @@ interface SubmissionResultJson {
     submitted?: boolean;
     alreadyExists?: boolean;
     programMissing?: boolean;
+    verifiedApplicationNumber?: {
+      value: string;
+      source: string;
+      sourceLabel?: string;
+      identityBound: true;
+      targetBound: true;
+      uniqueMatch: true;
+    };
     /** Human-readable skip/failure detail from the adapter. */
     detail?: string;
   };
@@ -452,7 +460,20 @@ function SubmissionRow({
               {sub.externalRef && (
                 <>
                   <span>·</span>
+                  <span>{t("portalAutomation.submissions.portalLocatorLabel")}:</span>
                   <code className="bg-muted px-1 rounded text-[11px]">{sub.externalRef}</code>
+                </>
+              )}
+              {sub.resultJson?.result?.verifiedApplicationNumber?.value && (
+                <>
+                  <span>·</span>
+                  <span className="inline-flex items-center gap-1 font-medium text-emerald-700 dark:text-emerald-400">
+                    <CheckCircle2 className="h-3 w-3" />
+                    {t("portalAutomation.submissions.officialApplicationNumberLabel")}:
+                    <code className="rounded bg-emerald-50 px-1 text-[11px] dark:bg-emerald-950/40">
+                      {sub.resultJson.result.verifiedApplicationNumber.value}
+                    </code>
+                  </span>
                 </>
               )}
               {sub.error && (
