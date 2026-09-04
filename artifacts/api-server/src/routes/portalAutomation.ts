@@ -4771,6 +4771,64 @@ async function setEnabledSpecVersionTx(
   }
 }
 
+class AdapterChangeInFlightError extends Error {
+  constructor(readonly runningCount: number) {
+    super("Adapter behavior cannot change while submissions are running");
+    this.name = "AdapterChangeInFlightError";
+  }
+}
+
+async function resetAdapterExecutionStateTx(
+  tx: SpecTx,
+  key: string,
+): Promise<{ partners: number; pendingSubmissions: number }> {
+  // Lock and quarantine every not-yet-started row first. A concurrent claimant
+  // either sees the canceled state after commit or wins the row lock and is
+  // then detected by the running-row check below.
+  const pending = await tx
+    .update(portalSubmissionsTable)
+    .set({
+      status: "canceled",
+      error: "ADAPTER_CONFIGURATION_CHANGED_REVIEW_REQUIRED",
+      lockedAt: null,
+      lockedBy: null,
+      updatedAt: new Date(),
+    })
+    .where(and(
+      eq(portalSubmissionsTable.adapterKey, key),
+      eq(portalSubmissionsTable.status, "queued"),
+      isNull(portalSubmissionsTable.deletedAt),
+    ))
+    .returning({ id: portalSubmissionsTable.id });
+
+  const [inFlight] = await tx
+    .select({ total: count(portalSubmissionsTable.id) })
+    .from(portalSubmissionsTable)
+    .where(and(
+      eq(portalSubmissionsTable.adapterKey, key),
+      eq(portalSubmissionsTable.status, "running"),
+      isNull(portalSubmissionsTable.deletedAt),
+    ));
+  const runningCount = Number(inFlight?.total ?? 0);
+  if (runningCount > 0) throw new AdapterChangeInFlightError(runningCount);
+
+  const partners = await tx
+    .update(portalUniversitiesTable)
+    .set({
+      isActive: false,
+      autoProcess: false,
+      fanOutMode: "off",
+      updatedAt: new Date(),
+    })
+    .where(and(
+      eq(portalUniversitiesTable.adapterKey, key),
+      isNull(portalUniversitiesTable.deletedAt),
+    ))
+    .returning({ id: portalUniversitiesTable.id });
+
+  return { partners: partners.length, pendingSubmissions: pending.length };
+}
+
 // GET /portal-automation/adapter-specs — one entry per key (enabled + latest).
 router.get(
   "/portal-automation/adapter-specs",
@@ -5044,104 +5102,128 @@ router.patch(
     }
 
     const targetVersion = body.enableVersion ?? body.rollbackTo;
-    const mutation = await db.transaction(async (tx) => {
-      await lockSpecKey(tx, key);
-      const versions = await tx
-        .select()
-        .from(portalAdapterSpecsTable)
-        .where(eq(portalAdapterSpecsTable.key, key))
-        .orderBy(desc(portalAdapterSpecsTable.version));
+    let mutation;
+    try {
+      mutation = await db.transaction(async (tx) => {
+        await lockSpecKey(tx, key);
+        const versions = await tx
+          .select()
+          .from(portalAdapterSpecsTable)
+          .where(eq(portalAdapterSpecsTable.key, key))
+          .orderBy(desc(portalAdapterSpecsTable.version));
 
-      if (versions.length === 0) {
-        return { ok: false as const, status: 404, error: "NOT_FOUND" };
-      }
+        if (versions.length === 0) {
+          return { ok: false as const, status: 404, error: "NOT_FOUND" };
+        }
 
-      const approvalRow = body.approvalVersion === undefined
-        ? null
-        : versions.find((row) => row.version === body.approvalVersion) ?? null;
-      if (body.approvalVersion !== undefined && !approvalRow) {
-        return {
-          ok: false as const,
-          status: 404,
-          error: "VERSION_NOT_FOUND",
-          message: `Version ${body.approvalVersion} does not exist for ${key}.`,
-        };
-      }
-
-      const targetRow = targetVersion === undefined
-        ? null
-        : versions.find((row) => row.version === targetVersion) ?? null;
-      if (targetVersion !== undefined && !targetRow) {
-        return {
-          ok: false as const,
-          status: 404,
-          error: "VERSION_NOT_FOUND",
-          message: `Version ${targetVersion} does not exist for ${key}.`,
-        };
-      }
-
-      if (targetRow) {
-        const targetApprovals = {
-          jsHookApproved:
-            approvalRow?.version === targetRow.version && body.jsHookApproved !== undefined
-              ? body.jsHookApproved
-              : targetRow.jsHookApproved,
-          privilegedApproved:
-            approvalRow?.version === targetRow.version && body.privilegedApproved !== undefined
-              ? body.privilegedApproved
-              : targetRow.privilegedApproved,
-        };
-        const blockers = portalAdapterSpecActivationBlockers({
-          spec: targetRow.spec,
-          ...targetApprovals,
-        });
-        if (blockers.length > 0) {
+        const approvalRow = body.approvalVersion === undefined
+          ? null
+          : versions.find((row) => row.version === body.approvalVersion) ?? null;
+        if (body.approvalVersion !== undefined && !approvalRow) {
           return {
             ok: false as const,
-            status: 409,
-            error: blockers[0],
-            activationBlockers: blockers,
-            message: `Version ${targetVersion} is not approved for activation.`,
+            status: 404,
+            error: "VERSION_NOT_FOUND",
+            message: `Version ${body.approvalVersion} does not exist for ${key}.`,
           };
         }
-      }
 
-      if (approvalRow) {
-        const nextJsHookApproved =
-          body.jsHookApproved ?? approvalRow.jsHookApproved;
-        const nextPrivilegedApproved =
-          body.privilegedApproved ?? approvalRow.privilegedApproved;
-        const mustDisable =
-          approvalRow.enabled &&
-          ((specHasJsHook(approvalRow.spec) && !nextJsHookApproved) ||
-            (specIsPrivileged(approvalRow.spec) && !nextPrivilegedApproved));
-        await tx
-          .update(portalAdapterSpecsTable)
-          .set({
-            jsHookApproved: nextJsHookApproved,
-            privilegedApproved: nextPrivilegedApproved,
-            ...(mustDisable ? { enabled: false } : {}),
-            updatedAt: new Date(),
-          })
-          .where(
-            and(
-              eq(portalAdapterSpecsTable.key, key),
-              eq(portalAdapterSpecsTable.version, approvalRow.version),
-            ),
-          );
-      }
+        const targetRow = targetVersion === undefined
+          ? null
+          : versions.find((row) => row.version === targetVersion) ?? null;
+        if (targetVersion !== undefined && !targetRow) {
+          return {
+            ok: false as const,
+            status: 404,
+            error: "VERSION_NOT_FOUND",
+            message: `Version ${targetVersion} does not exist for ${key}.`,
+          };
+        }
 
-      if (body.disable) {
-        await setEnabledSpecVersionTx(tx, key, null);
-      } else if (targetVersion !== undefined) {
-        await setEnabledSpecVersionTx(tx, key, targetVersion);
-      }
+        if (targetRow) {
+          const targetApprovals = {
+            jsHookApproved:
+              approvalRow?.version === targetRow.version && body.jsHookApproved !== undefined
+                ? body.jsHookApproved
+                : targetRow.jsHookApproved,
+            privilegedApproved:
+              approvalRow?.version === targetRow.version && body.privilegedApproved !== undefined
+                ? body.privilegedApproved
+                : targetRow.privilegedApproved,
+          };
+          const blockers = portalAdapterSpecActivationBlockers({
+            spec: targetRow.spec,
+            ...targetApprovals,
+          });
+          if (blockers.length > 0) {
+            return {
+              ok: false as const,
+              status: 409,
+              error: blockers[0],
+              activationBlockers: blockers,
+              message: `Version ${targetVersion} is not approved for activation.`,
+            };
+          }
+        }
 
-      return {
-        ok: true as const,
-        auditResourceId: approvalRow?.id ?? targetRow?.id ?? versions[0].id,
-      };
-    });
+        let approvalDisablesEnabledVersion = false;
+        if (approvalRow) {
+          const nextJsHookApproved =
+            body.jsHookApproved ?? approvalRow.jsHookApproved;
+          const nextPrivilegedApproved =
+            body.privilegedApproved ?? approvalRow.privilegedApproved;
+          const mustDisable =
+            approvalRow.enabled &&
+            ((specHasJsHook(approvalRow.spec) && !nextJsHookApproved) ||
+              (specIsPrivileged(approvalRow.spec) && !nextPrivilegedApproved));
+          approvalDisablesEnabledVersion = mustDisable;
+          await tx
+            .update(portalAdapterSpecsTable)
+            .set({
+              jsHookApproved: nextJsHookApproved,
+              privilegedApproved: nextPrivilegedApproved,
+              ...(mustDisable ? { enabled: false } : {}),
+              updatedAt: new Date(),
+            })
+            .where(
+              and(
+                eq(portalAdapterSpecsTable.key, key),
+                eq(portalAdapterSpecsTable.version, approvalRow.version),
+              ),
+            );
+        }
+
+        if (body.disable) {
+          await setEnabledSpecVersionTx(tx, key, null);
+        } else if (targetVersion !== undefined) {
+          await setEnabledSpecVersionTx(tx, key, targetVersion);
+        }
+
+        const adapterBehaviorChanged =
+          body.disable === true ||
+          targetVersion !== undefined ||
+          approvalDisablesEnabledVersion;
+        const safetyReset = adapterBehaviorChanged
+          ? await resetAdapterExecutionStateTx(tx, key)
+          : { partners: 0, pendingSubmissions: 0 };
+
+        return {
+          ok: true as const,
+          auditResourceId: approvalRow?.id ?? targetRow?.id ?? versions[0].id,
+          safetyReset,
+        };
+      });
+    } catch (error) {
+      if (error instanceof AdapterChangeInFlightError) {
+        res.status(409).json({
+          error: "ADAPTER_CHANGE_IN_FLIGHT",
+          message: "Wait for running submissions to finish before changing this adapter.",
+          runningCount: error.runningCount,
+        });
+        return;
+      }
+      throw error;
+    }
 
     if (!mutation.ok) {
       res.status(mutation.status).json({
@@ -5169,6 +5251,7 @@ router.patch(
         approvalVersion: body.approvalVersion,
         jsHookApproved: body.jsHookApproved,
         privilegedApproved: body.privilegedApproved,
+        safetyReset: mutation.safetyReset,
       },
       req.ip,
     );
@@ -5191,6 +5274,7 @@ router.patch(
                   }
                 : null;
             })(),
+      safetyReset: mutation.safetyReset,
     });
   },
 );

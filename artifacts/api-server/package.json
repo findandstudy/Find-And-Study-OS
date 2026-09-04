@@ -147,6 +147,7 @@
     "test:portal-membership": "tsx --test ./scripts/test-portal-membership.ts",
     "test:portal-fallbacks": "tsx --test ./scripts/test-portal-fallbacks.ts",
     "test:adapter-graduation": "tsx --test ./scripts/test-adapter-graduation.ts",
+    "test:portal-partner-readiness": "tsx --test ./scripts/test-portal-partner-readiness-policy.ts",
     "test:university-exclusions": "tsx --test ./scripts/test-university-exclusions.ts",
     "test:portal": "tsx --test ./scripts/test-portal-api.ts",
     "test:doc-slot-mapping": "tsx --test ./scripts/test-doc-slot-mapping.ts",

@@ -8,9 +8,9 @@
     "defaultEnforcement": "legacy_quarantine"
   },
   "totals": {
-    "routeRegistrations": 804,
-    "requireAuth": 720,
-    "requireRole": 480,
+    "routeRegistrations": 805,
+    "requireAuth": 721,
+    "requireRole": 481,
     "requirePermission": 47,
     "requireScope": 0,
     "directRoleChecks": 29,
@@ -785,7 +785,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/portalAutomation.ts",
-      "sha256": "c4990a8ce1ab3abd6136245132075a5f27bdf5789be66f4e98946643308a849b",
+      "sha256": "d57bf443e7ba160f81d8530c4c591de14fe6064482bb3cd3464043e593a4ed23",
       "routeRegistrations": 42,
       "requireAuth": 43,
       "requireRole": 38,
@@ -800,10 +800,10 @@
     },
     {
       "path": "artifacts/api-server/src/routes/portalMgmt.ts",
-      "sha256": "3c0d99edb3576cfd2cddba002f22c202519a602beef565ada65a4925c7471cc7",
-      "routeRegistrations": 23,
-      "requireAuth": 24,
-      "requireRole": 24,
+      "sha256": "a0f16f0ef0900e25e3e505b33c719eb88f931324145c97ebbd8692c7a323e7a7",
+      "routeRegistrations": 24,
+      "requireAuth": 25,
+      "requireRole": 25,
       "requirePermission": 0,
       "requireScope": 0,
       "directRoleChecks": 0,

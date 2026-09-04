@@ -45,6 +45,13 @@ dosyasına, Git'e ya da loga yazılmaz. Credential yalnız Portal Automation iç
 
 ## 3. Kodsuz onboarding sırası
 
+Başlangıç noktası **Admin > Portal Automation > Partner Setup** sekmesidir.
+Bu ekran credential içermeyen tek bir readiness görünümünde partner, adapter,
+HTTPS portal URL'si, credential referansı, CRM katalog bağlantısı, aktif program
+ve mezuniyet kanıtını birlikte gösterir. Bir partner ilk oluşturulduğunda her
+zaman inactive, auto-process kapalı ve fan-out kapalıdır; readiness kapıları
+geçilmeden UI veya API üzerinden etkinleştirilemez.
+
 ### P0 — Kurum ve origin dondurma
 
 - Kurum adı, portal hesabı sahibi, login URL ve izinli origin'ler kayıt altına
@@ -148,6 +155,22 @@ dosyasına, Git'e ya da loga yazılmaz. Credential yalnız Portal Automation iç
   - email/WhatsApp/payment/public notification kill-switch'leri açık.
 - En az 24 saat hatasız soak ve queue/observation reconciliation görülmeden
   concurrency artırılmaz.
+
+### P8 — Konfigürasyon değişikliği sonrası yeniden doğrulama
+
+- Credential ekleme, değiştirme veya silme; adapter versiyonu
+  enable/disable/rollback; privileged approval geri alma; portal anahtarı,
+  adapter, CRM katalog bağı veya multi-portal routing değişikliği partneri
+  otomatik olarak inactive duruma getirir, auto-process ve fan-out'u kapatır.
+- Değişen adapter/credential için bekleyen submission'lar sabit bir
+  review-required hata koduyla iptal edilir. Çalışmakta olan submission varsa
+  değişiklik `409` ile fail-closed reddedilir ve transaction bütünüyle geri
+  alınır; yarım credential/spec değişikliği oluşmaz.
+- Yüklenen/unknown adapterın üç başarılı kanıt sayacı, o anda etkin olan spec
+  versiyonunun activation epoch'undan itibaren hesaplanır. Eski versiyonun
+  başarıları yeni versiyonu otomatik moda mezun edemez.
+- Değişiklik sonrası P3 test-login, P4 strict dry-run ve gerekli manual canary
+  kanıtları yeniden tamamlanmadan otomasyon tekrar açılmaz.
 
 ## 4. Zorunlu stop koşulları
 

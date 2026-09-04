@@ -5653,6 +5653,7 @@
     },
     "pageTitle": "Portal Automation",
     "tabs": {
+      "onboarding": "Partner Setup",
       "rules": "Automation Rules",
       "universities": "Universities",
       "programMapping": "Program Mapping",
@@ -5660,6 +5661,45 @@
       "submissions": "Submission Board",
       "auditLog": "Audit Log",
       "operations": "Operations"
+    },
+    "onboarding": {
+      "title": "Partner onboarding readiness",
+      "description": "Prepare each university or partner safely without code changes, and see exactly what blocks activation.",
+      "refresh": "Refresh",
+      "globalSafe": "Global controls are in pilot-safe mode",
+      "globalUnsafe": "Global controls can currently produce external effects",
+      "verificationNote": "Test login and strict dry-run remain mandatory before any real submission.",
+      "emptyTitle": "No portal partners yet",
+      "emptyDescription": "Add a university or partner from the Universities tab to begin setup.",
+      "proofs": "Verified successful submission proofs",
+      "requiredChecks": "Required before go-live: test login and strict dry-run",
+      "summary": {
+        "total": "Total partners",
+        "blocked": "Configuration blocked",
+        "manualPilot": "Manual pilot",
+        "automaticEligible": "Automation eligible"
+      },
+      "phase": {
+        "configuration_required": "Configuration required",
+        "manual_pilot": "Manual pilot",
+        "activation_ready": "Ready to activate",
+        "automation_ready": "Ready for automation",
+        "automated": "Automated"
+      },
+      "signals": {
+        "adapter": "Adapter",
+        "portalUrl": "Secure portal URL",
+        "credentials": "Credentials",
+        "catalog": "Catalog link",
+        "programs": "Active programs"
+      },
+      "blockers": {
+        "ADAPTER_REQUIRED": "Registered adapter required",
+        "SECURE_PORTAL_URL_REQUIRED": "Credential-free HTTPS portal URL required",
+        "CREDENTIALS_REQUIRED": "Portal credentials required",
+        "CATALOG_LINK_REQUIRED": "CRM catalog link required",
+        "ACTIVE_PROGRAM_REQUIRED": "At least one active program required"
+      }
     },
     "operations": {
       "title": "Operations & lifecycle",
@@ -5780,7 +5820,7 @@
         "keyHint": "Lowercase letters, digits, underscores and hyphens only.",
         "adapterLabel": "Portal Adapter",
         "adapterHint": "Select the automation adapter for this university's portal.",
-        "isActiveLabel": "Activate immediately",
+        "isActiveLabel": "New partners are added inactive. Complete Partner Setup before activation.",
         "saveButton": "Add",
         "saving": "Adding…",
         "saveSuccess": "University added successfully.",
@@ -5840,6 +5880,7 @@
         "clearError": "Échec de la suppression des identifiants."
       },
       "autoProcessExperimentalBlocked": "Auto-process is disabled for experimental adapters.",
+      "autoProcessReadinessBlocked": "Complete partner setup and activate it before enabling auto-process.",
       "deleteButton": "Delete",
       "deleteConfirmTitle": "Delete university?",
       "deleteConfirmDescription": "This will remove \"{{name}}\" from portal automation. Existing submissions are kept. This action cannot be undone.",

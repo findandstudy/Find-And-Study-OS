@@ -26,6 +26,7 @@ import {
   portalAdaptersTable,
   portalProgramMappingTable,
   portalCredentialsTable,
+  portalSubmissionsTable,
   pipelineStagesTable,
   universitiesTable,
   programsTable,
@@ -40,7 +41,7 @@ import {
   clearCredsOverride,
   invalidateDeclarativeAdapterCache,
 } from "@workspace/portal-adapters";
-import { getSuccessCounts, isExperimentalDynamic, getNonGraduatedExperimentalKeys, GRADUATION_THRESHOLD } from "../lib/adapterGraduation.js";
+import { getSuccessCounts, isExperimentalDynamic, GRADUATION_THRESHOLD } from "../lib/adapterGraduation.js";
 import { buildPageMeta, parsePaginationParams } from "@workspace/pagination";
 import { logAudit, requireAuth, requireRole } from "../lib/auth";
 import { ADMIN_ROLES, STAFF_ROLES } from "../lib/roles";
@@ -48,6 +49,7 @@ import { getValidated, validate } from "../middlewares/validate";
 import { batchPortalCredentialKeys, checkHasPortalCredentials, resolvePortalCreds } from "../lib/portalCreds";
 import { setPortalCredentials } from "../lib/portalCredentials.js";
 import { buildPortalTriggerStageSnapshot } from "../lib/portalTriggerStagePolicy.js";
+import { loadPortalPartnerOnboardingSnapshot } from "../lib/portalPartnerOnboarding.js";
 
 const router: IRouter = Router();
 
@@ -59,6 +61,66 @@ type IdSchemas = { params: typeof idParamsSchema };
 
 const portalKeyParamsSchema = z.object({ portalKey: z.string().min(1) });
 type PortalKeySchemas = { params: typeof portalKeyParamsSchema };
+
+class PortalCredentialsInFlightError extends Error {
+  constructor(readonly runningCount: number) {
+    super("Portal credentials cannot be removed while submissions are running");
+    this.name = "PortalCredentialsInFlightError";
+  }
+}
+
+type PortalMgmtTx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+async function resetPortalCredentialExecutionStateTx(
+  tx: PortalMgmtTx,
+  storageKey: string,
+): Promise<{ partners: number; pendingSubmissions: number }> {
+  // Lock and quarantine queued work before credentials can change. A claim
+  // racing this update either observes canceled after commit or becomes
+  // visible to the running check, which aborts and rolls the transaction back.
+  const pending = await tx
+    .update(portalSubmissionsTable)
+    .set({
+      status: "canceled",
+      error: "PORTAL_CREDENTIALS_CHANGED_REVIEW_REQUIRED",
+      lockedAt: null,
+      lockedBy: null,
+      updatedAt: new Date(),
+    })
+    .where(and(
+      eq(portalSubmissionsTable.adapterKey, storageKey),
+      eq(portalSubmissionsTable.status, "queued"),
+      isNull(portalSubmissionsTable.deletedAt),
+    ))
+    .returning({ id: portalSubmissionsTable.id });
+
+  const [inFlight] = await tx
+    .select({ total: count(portalSubmissionsTable.id) })
+    .from(portalSubmissionsTable)
+    .where(and(
+      eq(portalSubmissionsTable.adapterKey, storageKey),
+      eq(portalSubmissionsTable.status, "running"),
+      isNull(portalSubmissionsTable.deletedAt),
+    ));
+  const runningCount = Number(inFlight?.total ?? 0);
+  if (runningCount > 0) throw new PortalCredentialsInFlightError(runningCount);
+
+  const partners = await tx
+    .update(portalUniversitiesTable)
+    .set({
+      isActive: false,
+      autoProcess: false,
+      fanOutMode: "off",
+      updatedAt: new Date(),
+    })
+    .where(and(
+      eq(portalUniversitiesTable.adapterKey, storageKey),
+      isNull(portalUniversitiesTable.deletedAt),
+    ))
+    .returning({ id: portalUniversitiesTable.id });
+
+  return { partners: partners.length, pendingSubmissions: pending.length };
+}
 
 // ===========================================================================
 // SETTINGS
@@ -136,6 +198,21 @@ router.get(
     const snapshot = buildPortalTriggerStageSnapshot(stages, configured);
     res.setHeader("Cache-Control", "private, no-store");
     res.json({ ...snapshot, syncedAt: new Date().toISOString() });
+  },
+);
+
+// ---------------------------------------------------------------------------
+// GET /portal-automation/onboarding-readiness
+// Read-only, secret-free control-plane projection for code-free partner setup.
+// ---------------------------------------------------------------------------
+router.get(
+  "/portal-automation/onboarding-readiness",
+  requireAuth,
+  requireRole(...STAFF_ROLES, ...ADMIN_ROLES),
+  async (_req, res): Promise<void> => {
+    const snapshot = await loadPortalPartnerOnboardingSnapshot();
+    res.setHeader("Cache-Control", "private, no-store");
+    res.json(snapshot);
   },
 );
 
@@ -413,6 +490,12 @@ router.get(
       new Set(rows.map((row) => row.adapterKey).filter(isExperimentalAdapterKey)),
     );
     const adapterSuccessCounts = await getSuccessCounts(graduationRequiredKeys);
+    const onboardingSnapshot = await loadPortalPartnerOnboardingSnapshot(
+      rows.map((row) => row.id),
+    );
+    const onboardingById = new Map(
+      onboardingSnapshot.partners.map((partner) => [partner.id, partner] as const),
+    );
     const rowsWithCreds = rows.map((row) => {
       const K = row.adapterKey.toUpperCase().replace(/-/g, "_");
       const envHas = !!(
@@ -454,6 +537,7 @@ router.get(
         successCount,
         graduationThreshold: staticExperimental ? GRADUATION_THRESHOLD : null,
         graduated,
+        readiness: onboardingById.get(row.id)?.readiness ?? null,
       };
     });
 
@@ -472,7 +556,9 @@ const createUniversityBodySchema = z.object({
   // clients that intentionally pin a specific registered adapter.
   adapterKey:       z.string().min(1).optional(),
   crmUniversityId:  z.coerce.number().int().positive().optional(),
-  isActive:         z.boolean().optional(),
+  // New partners always start inert. Activation is a separate readiness-bound
+  // operation so a stale client cannot skip credentials/catalog checks.
+  isActive:         z.literal(false).optional(),
   defaults:         z.record(z.unknown()).optional(),
 });
 type CreateUniSchemas = { body: typeof createUniversityBodySchema };
@@ -524,7 +610,7 @@ router.post(
         crmUniversityId: body.crmUniversityId ?? null,
         // A newly discovered portal must complete credentials, login testing
         // and program mapping before it participates in routing.
-        isActive:        body.isActive ?? false,
+        isActive:        false,
         defaults:        body.defaults ?? null,
       })
       .returning();
@@ -590,6 +676,19 @@ router.patch(
       return;
     }
 
+    if (autoProcess) {
+      const readiness = (await loadPortalPartnerOnboardingSnapshot([id])).partners[0];
+      if (!readiness?.isActive || !readiness.readiness.automaticEligible) {
+        res.status(409).json({
+          error: "AUTOMATION_NOT_READY",
+          message: "Portal partner is not ready for automatic processing.",
+          blockers: readiness?.readiness.blockers ?? ["PARTNER_NOT_FOUND"],
+          successProofsRemaining: readiness?.readiness.successProofsRemaining ?? GRADUATION_THRESHOLD,
+        });
+        return;
+      }
+    }
+
     const [updated] = await db
       .update(portalUniversitiesTable)
       .set({ autoProcess, updatedAt: new Date() })
@@ -638,6 +737,22 @@ router.patch(
     if (!row) {
       res.status(404).json({ error: "NOT_FOUND" });
       return;
+    }
+
+    if (fanOutMode !== null && fanOutMode !== "off") {
+      const readiness = (await loadPortalPartnerOnboardingSnapshot([id])).partners[0];
+      const eligible = fanOutMode === "auto"
+        ? readiness?.readiness.automaticEligible
+        : readiness?.readiness.configurationReady;
+      if (!readiness?.isActive || !eligible) {
+        res.status(409).json({
+          error: "FAN_OUT_NOT_READY",
+          message: "Portal partner is not ready for this fan-out mode.",
+          blockers: readiness?.readiness.blockers ?? ["PARTNER_NOT_FOUND"],
+          successProofsRemaining: readiness?.readiness.successProofsRemaining ?? GRADUATION_THRESHOLD,
+        });
+        return;
+      }
     }
 
     const [updated] = await db
@@ -690,9 +805,27 @@ router.patch(
       return;
     }
 
+    if (isActive) {
+      const readiness = (await loadPortalPartnerOnboardingSnapshot([id])).partners[0];
+      if (!readiness?.readiness.configurationReady) {
+        res.status(409).json({
+          error: "ONBOARDING_NOT_READY",
+          message: "Complete the partner configuration before activation.",
+          blockers: readiness?.readiness.blockers ?? ["PARTNER_NOT_FOUND"],
+        });
+        return;
+      }
+    }
+
     const [updated] = await db
       .update(portalUniversitiesTable)
-      .set({ isActive, updatedAt: new Date() })
+      .set({
+        isActive,
+        // Deactivation is a kill switch, not a cosmetic flag. A later
+        // reactivation must never silently resurrect automatic fan-out.
+        ...(!isActive ? { autoProcess: false, fanOutMode: "off" as const } : {}),
+        updatedAt: new Date(),
+      })
       .where(eq(portalUniversitiesTable.id, id))
       .returning();
 
@@ -776,6 +909,31 @@ router.patch(
     const keyRenamed =
       body.universityKey !== undefined && body.universityKey !== row.universityKey;
     const disabledMultiPortal = body.isMultiPortal === false;
+    const routingChanged =
+      keyRenamed ||
+      (body.adapterKey !== undefined && body.adapterKey !== row.adapterKey) ||
+      ("crmUniversityId" in body && body.crmUniversityId !== row.crmUniversityId) ||
+      (body.isMultiPortal !== undefined && body.isMultiPortal !== row.isMultiPortal);
+    if (!routingChanged && body.fanOutMode && body.fanOutMode !== "off") {
+      const readiness = (await loadPortalPartnerOnboardingSnapshot([id])).partners[0];
+      const eligible = body.fanOutMode === "auto"
+        ? readiness?.readiness.automaticEligible
+        : readiness?.readiness.configurationReady;
+      if (!readiness?.isActive || !eligible) {
+        res.status(409).json({
+          error: "FAN_OUT_NOT_READY",
+          message: "Portal partner is not ready for this fan-out mode.",
+          blockers: readiness?.readiness.blockers ?? ["PARTNER_NOT_FOUND"],
+          successProofsRemaining: readiness?.readiness.successProofsRemaining ?? GRADUATION_THRESHOLD,
+        });
+        return;
+      }
+    }
+    if (routingChanged) {
+      patch.isActive = false;
+      patch.autoProcess = false;
+      patch.fanOutMode = "off";
+    }
 
     const updated = await db.transaction(async (tx) => {
       const [u] = await tx
@@ -785,8 +943,8 @@ router.patch(
         .returning();
 
       // If the multi-portal flag was turned OFF, detach its members so their
-      // routes_via no longer dangles on a non-portal company (falls back to own
-      // adapter). Routing changes never touch auto_process.
+      // routes_via no longer dangles on a non-portal company. The edited
+      // partner itself was already returned to inert mode by the safety reset.
       if (disabledMultiPortal) {
         await tx
           .update(portalUniversitiesTable)
@@ -816,7 +974,7 @@ router.patch(
       "update_portal_university",
       "portal_university",
       id,
-      body,
+      { ...body, safetyReset: routingChanged },
       req.ip,
     );
 
@@ -892,12 +1050,26 @@ router.post(
       .select({ id: portalUniversitiesTable.id })
       .from(portalUniversitiesTable)
       .where(and(inArray(portalUniversitiesTable.id, ids), isNull(portalUniversitiesTable.deletedAt)));
-    const eligibleIds = eligible.map((r) => r.id);
+    let eligibleIds = eligible.map((r) => r.id);
+
+    if (isActive && eligibleIds.length > 0) {
+      const snapshot = await loadPortalPartnerOnboardingSnapshot(eligibleIds);
+      const readyIds = new Set(
+        snapshot.partners
+          .filter((partner) => partner.readiness.configurationReady)
+          .map((partner) => partner.id),
+      );
+      eligibleIds = eligibleIds.filter((id) => readyIds.has(id));
+    }
 
     if (eligibleIds.length > 0) {
       await db
         .update(portalUniversitiesTable)
-        .set({ isActive, updatedAt: new Date() })
+        .set({
+          isActive,
+          ...(!isActive ? { autoProcess: false, fanOutMode: "off" as const } : {}),
+          updatedAt: new Date(),
+        })
         .where(inArray(portalUniversitiesTable.id, eligibleIds));
     }
 
@@ -943,15 +1115,19 @@ router.post(
       .from(portalUniversitiesTable)
       .where(and(inArray(portalUniversitiesTable.id, ids), isNull(portalUniversitiesTable.deletedAt)));
 
-    // Auto-graduation guard (enable only): silently skip universities whose
-    // adapter is experimental and not yet graduated — mirrors the single
-    // toggle's 409 but keeps bulk semantics (partial success + skipped list).
+    // Readiness guard (enable only): silently skip inactive, incomplete or
+    // non-graduated partners while keeping partial-success bulk semantics.
     let eligibleRows = eligible;
     if (autoProcess) {
-      const nonGraduated = new Set(
-        await getNonGraduatedExperimentalKeys(eligible.map((r) => r.adapterKey)),
+      const readiness = await loadPortalPartnerOnboardingSnapshot(
+        eligible.map((row) => row.id),
       );
-      eligibleRows = eligible.filter((r) => !nonGraduated.has(r.adapterKey));
+      const readyIds = new Set(
+        readiness.partners
+          .filter((partner) => partner.isActive && partner.readiness.automaticEligible)
+          .map((partner) => partner.id),
+      );
+      eligibleRows = eligible.filter((row) => readyIds.has(row.id));
     }
     const eligibleIds = eligibleRows.map((r) => r.id);
 
@@ -1556,7 +1732,8 @@ router.put(
     const { portalKey } = getValidated<PortalKeySchemas>(req).params;
     const { username, password, extra } = getValidated<CredentialsBodySchemas>(req).body;
 
-    // Verify the portalKey belongs to an active portal_universities row
+    // Verify the portalKey belongs to a configured portal_universities row.
+    // New partners are intentionally inactive while credentials are entered.
     // Select adapterKey too — credentials are stored under adapterKey (canonical).
     const [uni] = await db
       .select({ id: portalUniversitiesTable.id, adapterKey: portalUniversitiesTable.adapterKey })
@@ -1581,18 +1758,35 @@ router.put(
     // The unique index is (organizationId, portalKey); since orgId is null for
     // management-plane credentials, onConflictDoUpdate can't be used directly
     // (PostgreSQL won't raise a conflict when a composite key contains NULL).
-    await setPortalCredentials(null, storageKey, { username, password, extra });
+    let safetyReset;
+    try {
+      safetyReset = await db.transaction(async (tx) => {
+        const reset = await resetPortalCredentialExecutionStateTx(tx, storageKey);
+        await setPortalCredentials(null, storageKey, { username, password, extra }, tx);
+        return reset;
+      });
+    } catch (error) {
+      if (error instanceof PortalCredentialsInFlightError) {
+        res.status(409).json({
+          error: "CREDENTIAL_CHANGE_IN_FLIGHT",
+          message: "Wait for running submissions to finish before changing credentials.",
+          runningCount: error.runningCount,
+        });
+        return;
+      }
+      throw error;
+    }
 
     logAudit(
       req.user!.id,
       "upsert_portal_credentials",
       "portal_credentials",
       uni.id,
-      { portalKey, storageKey },
+      { portalKey, storageKey, safetyReset },
       req.ip,
     );
 
-    res.json({ ok: true });
+    res.json({ ok: true, safetyReset });
   },
 );
 
@@ -1617,22 +1811,47 @@ router.delete(
 
     const storageKey = uni?.adapterKey ?? portalKey;
 
-    // Delete by adapterKey (canonical) OR universityKey (backward compat).
-    const result = await db
-      .update(portalCredentialsTable)
-      .set({ deletedAt: new Date() })
-      .where(
-        and(
-          or(
-            eq(portalCredentialsTable.portalKey, storageKey),
-            eq(portalCredentialsTable.portalKey, portalKey),
-          ),
-          isNull(portalCredentialsTable.deletedAt),
-        ),
-      )
-      .returning({ id: portalCredentialsTable.id });
+    let mutation;
+    try {
+      mutation = await db.transaction(async (tx) => {
+        // Delete by adapterKey (canonical) OR universityKey (backward compat).
+        const result = await tx
+          .update(portalCredentialsTable)
+          .set({ deletedAt: new Date() })
+          .where(
+            and(
+              or(
+                eq(portalCredentialsTable.portalKey, storageKey),
+                eq(portalCredentialsTable.portalKey, portalKey),
+              ),
+              isNull(portalCredentialsTable.deletedAt),
+            ),
+          )
+          .returning({ id: portalCredentialsTable.id });
 
-    if (!result.length) {
+        if (!result.length) return { ok: false as const };
+
+        const safetyReset = await resetPortalCredentialExecutionStateTx(tx, storageKey);
+
+        return {
+          ok: true as const,
+          credentialId: result[0].id,
+          safetyReset,
+        };
+      });
+    } catch (error) {
+      if (error instanceof PortalCredentialsInFlightError) {
+        res.status(409).json({
+          error: "CREDENTIAL_CHANGE_IN_FLIGHT",
+          message: "Wait for running submissions to finish before removing credentials.",
+          runningCount: error.runningCount,
+        });
+        return;
+      }
+      throw error;
+    }
+
+    if (!mutation.ok) {
       res.status(404).json({ error: "NOT_FOUND", message: "No active credentials found for this portal key" });
       return;
     }
@@ -1641,12 +1860,12 @@ router.delete(
       req.user!.id,
       "delete_portal_credentials",
       "portal_credentials",
-      result[0].id,
-      { portalKey },
+      mutation.credentialId,
+      { portalKey, storageKey, safetyReset: mutation.safetyReset },
       req.ip,
     );
 
-    res.json({ ok: true });
+    res.json({ ok: true, safetyReset: mutation.safetyReset });
   },
 );
 

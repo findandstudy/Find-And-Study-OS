@@ -66,8 +66,9 @@ jobs:
           pnpm run test:package-manager
           node lib/db/validate-migrations.mjs
           pnpm --filter @workspace/api-server run test:migration-authority
-          pnpm --filter @workspace/portal-adapters run test:registry
+          pnpm --filter @workspace/portal-adapters exec tsx --test ./scripts/test-registry.ts
           pnpm --filter @workspace/api-server run test:portal-trigger-stage-policy
+          pnpm --filter @workspace/api-server run test:portal-partner-readiness
           pnpm --filter @workspace/api-server run test:portal-production-slice
 
       - name: Type-check and build deployable applications
@@ -105,8 +106,9 @@ jobs:
           pnpm install --frozen-lockfile
           pnpm run test:package-manager
           node lib/db/validate-migrations.mjs
-          pnpm --filter @workspace/portal-adapters run test:registry
+          pnpm --filter @workspace/portal-adapters exec tsx --test ./scripts/test-registry.ts
           pnpm --filter @workspace/api-server run test:portal-trigger-stage-policy
+          pnpm --filter @workspace/api-server run test:portal-partner-readiness
           pnpm --filter @workspace/api-server run test:portal-production-slice
           pnpm run typecheck
 
@@ -172,11 +174,14 @@ jobs:
       - name: Prove durable observations, lane isolation, and idempotent review
         env:
           DATABASE_URL: postgresql://fas_migrator@127.0.0.1:5433/fasos_apply_local
+          SESSION_SECRET: portal-automation-ci-test-secret-only-20260904
         run: |
           pnpm --filter @workspace/api-server run test:postgres-portal-lifecycle-observation-store
           pnpm --filter @workspace/api-server run test:postgres-portal-status-queue
           pnpm --filter @workspace/api-server run test:postgres-portal-lifecycle-guardian
           pnpm --filter @workspace/api-server run test:adapter-graduation
+          pnpm --filter @workspace/api-server run test:portal-adapter-spec-admin
           pnpm --filter @workspace/api-server run test:portal-mgmt
+          pnpm --filter @workspace/api-server run test:portal-universities
           pnpm --filter @workspace/api-server run test:portal-operations-admin
           pnpm --filter @workspace/api-server run test:postgres-portal-artifact-intake

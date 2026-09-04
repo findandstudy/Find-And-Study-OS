@@ -5653,6 +5653,7 @@
     },
     "pageTitle": "Portal Otomasyonu",
     "tabs": {
+      "onboarding": "Partner Kurulumu",
       "rules": "Otomasyon Kuralları",
       "operations": "Operasyon Merkezi",
       "universities": "Üniversiteler",
@@ -5660,6 +5661,45 @@
       "adapters": "Adapter Yönetimi",
       "submissions": "Başvuru Panosu",
       "auditLog": "Denetim Günlüğü"
+    },
+    "onboarding": {
+      "title": "Partner kurulum uygunluğu",
+      "description": "Her üniversite veya partneri koda dokunmadan güvenle hazırlayın; etkinleştirmeyi engelleyen eksikleri tek yerde görün.",
+      "refresh": "Yenile",
+      "globalSafe": "Genel kontroller pilot için güvenli modda",
+      "globalUnsafe": "Genel kontroller şu anda dış sistemlerde etki oluşturabilir",
+      "verificationNote": "Gerçek gönderimden önce test girişi ve katı dry-run zorunludur.",
+      "emptyTitle": "Henüz portal partneri yok",
+      "emptyDescription": "Kuruluma başlamak için Üniversiteler sekmesinden üniversite veya partner ekleyin.",
+      "proofs": "Doğrulanmış başarılı gönderim kanıtları",
+      "requiredChecks": "Canlıya geçmeden zorunlu: test girişi ve katı dry-run",
+      "summary": {
+        "total": "Toplam partner",
+        "blocked": "Kurulumu eksik",
+        "manualPilot": "Manuel pilot",
+        "automaticEligible": "Otomasyona uygun"
+      },
+      "phase": {
+        "configuration_required": "Kurulum gerekli",
+        "manual_pilot": "Manuel pilot",
+        "activation_ready": "Etkinleştirmeye hazır",
+        "automation_ready": "Otomasyona hazır",
+        "automated": "Otomatik"
+      },
+      "signals": {
+        "adapter": "Adaptör",
+        "portalUrl": "Güvenli portal adresi",
+        "credentials": "Giriş bilgileri",
+        "catalog": "Katalog bağlantısı",
+        "programs": "Aktif programlar"
+      },
+      "blockers": {
+        "ADAPTER_REQUIRED": "Kayıtlı adaptör gerekli",
+        "SECURE_PORTAL_URL_REQUIRED": "Giriş bilgisi içermeyen HTTPS portal adresi gerekli",
+        "CREDENTIALS_REQUIRED": "Portal giriş bilgileri gerekli",
+        "CATALOG_LINK_REQUIRED": "CRM katalog bağlantısı gerekli",
+        "ACTIVE_PROGRAM_REQUIRED": "En az bir aktif program gerekli"
+      }
     },
     "operations": {
       "title": "Operasyon ve yaşam döngüsü",
@@ -5780,7 +5820,7 @@
         "keyHint": "Yalnızca küçük harf, rakam, alt çizgi ve tire kullanılabilir.",
         "adapterLabel": "Portal Adapter",
         "adapterHint": "Uyumlu portal adaptörü üniversite adına göre otomatik seçilir. Eşleşen adaptör yoksa üniversite eklenmez.",
-        "isActiveLabel": "Hemen etkinleştir",
+        "isActiveLabel": "Yeni partner pasif eklenir. Etkinleştirmeden önce Partner Kurulumunu tamamlayın.",
         "saveButton": "Ekle",
         "saving": "Ekleniyor…",
         "saveSuccess": "Üniversite başarıyla eklendi.",
@@ -5840,6 +5880,7 @@
         "clearError": "Kimlik bilgileri silinemedi."
       },
       "autoProcessExperimentalBlocked": "Deneysel adaptörlerde otomatik işleme devre dışıdır.",
+      "autoProcessReadinessBlocked": "Otomatik işlemi açmadan önce partner kurulumunu tamamlayıp etkinleştirin.",
       "deleteButton": "Sil",
       "deleteConfirmTitle": "Üniversite silinsin mi?",
       "deleteConfirmDescription": "\"{{name}}\" portal otomasyonundan kaldırılacak. Mevcut gönderimler korunur. Bu işlem geri alınamaz.",

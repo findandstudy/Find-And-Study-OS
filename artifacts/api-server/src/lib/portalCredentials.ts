@@ -18,6 +18,10 @@ import { and, eq, isNull } from "drizzle-orm";
 import { db, portalCredentialsTable } from "@workspace/db";
 import { encryptString, decryptString } from "./encryption.js";
 
+type PortalCredentialDb =
+  | typeof db
+  | Parameters<Parameters<typeof db.transaction>[0]>[0];
+
 // ---------------------------------------------------------------------------
 // setPortalCredentials — upsert encrypted credentials
 // ---------------------------------------------------------------------------
@@ -34,6 +38,7 @@ export async function setPortalCredentials(
     password: string;
     extra?: Record<string, unknown>;
   },
+  executor: PortalCredentialDb = db,
 ): Promise<void> {
   const usernameEnc = encryptString(username);
   const passwordEnc = encryptString(password);
@@ -46,7 +51,7 @@ export async function setPortalCredentials(
     ? eq(portalCredentialsTable.organizationId, organizationId)
     : isNull(portalCredentialsTable.organizationId);
 
-  const [existing] = await db
+  const [existing] = await executor
     .select({ id: portalCredentialsTable.id })
     .from(portalCredentialsTable)
     .where(
@@ -55,7 +60,7 @@ export async function setPortalCredentials(
     .limit(1);
 
   if (existing) {
-    await db
+    await executor
       .update(portalCredentialsTable)
       .set({
         usernameEnc,
@@ -67,7 +72,7 @@ export async function setPortalCredentials(
       })
       .where(eq(portalCredentialsTable.id, existing.id));
   } else {
-    await db.insert(portalCredentialsTable).values({
+    await executor.insert(portalCredentialsTable).values({
       organizationId,
       portalKey,
       usernameEnc,

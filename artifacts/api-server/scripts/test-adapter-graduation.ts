@@ -32,6 +32,7 @@ import {
   applicationsTable,
   portalSubmissionsTable,
   portalUniversitiesTable,
+  portalAdapterSpecsTable,
   studentsTable,
 } from "@workspace/db";
 import {
@@ -67,6 +68,7 @@ const cleanupSubmissionIds: number[] = [];
 const cleanupAppIds:        number[] = [];
 const cleanupStudentIds:    number[] = [];
 const cleanupUniIds:        number[] = [];
+const cleanupSpecKeys:       string[] = [];
 
 after(async () => {
   if (cleanupSubmissionIds.length) {
@@ -91,6 +93,12 @@ after(async () => {
     await db
       .delete(portalUniversitiesTable)
       .where(inArray(portalUniversitiesTable.id, cleanupUniIds))
+      .catch(() => {});
+  }
+  if (cleanupSpecKeys.length) {
+    await db
+      .delete(portalAdapterSpecsTable)
+      .where(inArray(portalAdapterSpecsTable.key, cleanupSpecKeys))
       .catch(() => {});
   }
 });
@@ -283,6 +291,26 @@ test("G4b: uploaded/custom adapter requires the same durable graduation proof", 
 
   const after = await getNonGraduatedExperimentalAdapterKeys([CUSTOM_EXP_KEY]);
   assert.ok(!after.has(CUSTOM_EXP_KEY), "custom adapter graduates only at the durable-proof threshold");
+});
+
+test("G4c: uploaded adapter proofs reset at a newly enabled spec epoch", async () => {
+  cleanupSpecKeys.push(CUSTOM_EXP_KEY);
+  await db.insert(portalAdapterSpecsTable).values({
+    key: CUSTOM_EXP_KEY,
+    name: `Version-bound ${RUN_ID}`,
+    spec: { specVersion: 1 },
+    version: 1,
+    enabled: true,
+    source: "uploaded",
+    privilegedApproved: true,
+    jsHookApproved: true,
+    updatedAt: new Date(Date.now() + 1_000),
+  });
+
+  const count = (await getAdapterSuccessCounts([CUSTOM_EXP_KEY])).get(CUSTOM_EXP_KEY) ?? -1;
+  assert.equal(count, 0, "proofs from before the enabled spec epoch must not graduate it");
+  const gated = await getNonGraduatedExperimentalAdapterKeys([CUSTOM_EXP_KEY]);
+  assert.ok(gated.has(CUSTOM_EXP_KEY));
 });
 
 // ---------------------------------------------------------------------------

@@ -3,12 +3,24 @@ import { after, before, test } from "node:test";
 import http from "node:http";
 import express, { type Express, type NextFunction, type Request, type Response } from "express";
 import { and, eq } from "drizzle-orm";
-import { db, portalAdapterSpecsTable, usersTable } from "@workspace/db";
+import {
+  applicationsTable,
+  db,
+  portalAdapterSpecsTable,
+  portalSubmissionsTable,
+  portalUniversitiesTable,
+  studentsTable,
+  usersTable,
+} from "@workspace/db";
 import portalAutomationRouter from "../src/routes/portalAutomation.js";
 
 const RUN = `spec_admin_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
 const KEY = `spec_${Date.now().toString(36)}`;
 let userId = 0;
+let portalUniversityId = 0;
+let studentId = 0;
+let applicationId = 0;
+let submissionId = 0;
 let currentRole = "super_admin";
 let server: http.Server;
 
@@ -87,13 +99,41 @@ before(async () => {
     })
     .returning({ id: usersTable.id });
   userId = user.id;
+  const [portalUniversity] = await db
+    .insert(portalUniversitiesTable)
+    .values({
+      universityKey: `${KEY}_university`,
+      universityName: `Spec Safety ${RUN}`,
+      adapterKey: KEY,
+      isActive: true,
+      autoProcess: true,
+      fanOutMode: "auto",
+    })
+    .returning({ id: portalUniversitiesTable.id });
+  portalUniversityId = portalUniversity.id;
+  const [student] = await db
+    .insert(studentsTable)
+    .values({ firstName: `Spec ${RUN}`, lastName: "Safety" })
+    .returning({ id: studentsTable.id });
+  studentId = student.id;
+  const [application] = await db
+    .insert(applicationsTable)
+    .values({ studentId })
+    .returning({ id: applicationsTable.id });
+  applicationId = application.id;
   server = http.createServer(buildApp() as unknown as http.RequestListener);
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
 });
 
 after(async () => {
   if (server) await new Promise<void>((resolve) => server.close(() => resolve()));
+  if (submissionId) await db.delete(portalSubmissionsTable).where(eq(portalSubmissionsTable.id, submissionId));
+  if (portalUniversityId) {
+    await db.delete(portalUniversitiesTable).where(eq(portalUniversitiesTable.id, portalUniversityId));
+  }
   await db.delete(portalAdapterSpecsTable).where(eq(portalAdapterSpecsTable.key, KEY));
+  if (applicationId) await db.delete(applicationsTable).where(eq(applicationsTable.id, applicationId));
+  if (studentId) await db.delete(studentsTable).where(eq(studentsTable.id, studentId));
   if (userId) await db.delete(usersTable).where(eq(usersTable.id, userId));
   setImmediate(() => process.exit(process.exitCode ?? 0));
 });
@@ -200,6 +240,40 @@ test("adapter spec admin workflow is inert, canonical, version-bound, and fail-c
   assert.equal(v2.privilegedApproved, false);
   assert.equal(v2.jsHookApproved, false);
 
+  const [runningSubmission] = await db
+    .insert(portalSubmissionsTable)
+    .values({
+      applicationId,
+      studentId,
+      universityKey: `${KEY}_university`,
+      universityName: `Spec Safety ${RUN}`,
+      adapterKey: KEY,
+      mode: "dry",
+      status: "running",
+      lockedAt: new Date(),
+      lockedBy: `spec-test-${RUN}`,
+    })
+    .returning({ id: portalSubmissionsTable.id });
+  submissionId = runningSubmission.id;
+
+  const blockedInFlight = await request(
+    "PATCH",
+    `/api/portal-automation/adapter-specs/${KEY}`,
+    { enableVersion: 1 },
+  );
+  assert.equal(blockedInFlight.status, 409);
+  assert.equal(blockedInFlight.body.error, "ADAPTER_CHANGE_IN_FLIGHT");
+  const [unchangedPartner] = await db
+    .select()
+    .from(portalUniversitiesTable)
+    .where(eq(portalUniversitiesTable.id, portalUniversityId));
+  assert.equal(unchangedPartner.isActive, true, "rejected change must roll partner reset back");
+
+  await db
+    .update(portalSubmissionsTable)
+    .set({ status: "failed", lockedAt: null, lockedBy: null })
+    .where(eq(portalSubmissionsTable.id, submissionId));
+
   const enabled = await request(
     "PATCH",
     `/api/portal-automation/adapter-specs/${KEY}`,
@@ -207,6 +281,19 @@ test("adapter spec admin workflow is inert, canonical, version-bound, and fail-c
   );
   assert.equal(enabled.status, 200, JSON.stringify(enabled.body));
   assert.equal(enabled.body.enabledVersion, 1);
+  assert.equal(enabled.body.safetyReset.partners, 1);
+  const [resetAfterEnable] = await db
+    .select()
+    .from(portalUniversitiesTable)
+    .where(eq(portalUniversitiesTable.id, portalUniversityId));
+  assert.equal(resetAfterEnable.isActive, false);
+  assert.equal(resetAfterEnable.autoProcess, false);
+  assert.equal(resetAfterEnable.fanOutMode, "off");
+
+  await db
+    .update(portalUniversitiesTable)
+    .set({ isActive: true, autoProcess: true, fanOutMode: "auto" })
+    .where(eq(portalUniversitiesTable.id, portalUniversityId));
 
   const revoked = await request(
     "PATCH",
@@ -215,4 +302,12 @@ test("adapter spec admin workflow is inert, canonical, version-bound, and fail-c
   );
   assert.equal(revoked.status, 200, JSON.stringify(revoked.body));
   assert.equal(revoked.body.enabledVersion, null);
+  assert.equal(revoked.body.safetyReset.partners, 1);
+  const [resetAfterRevocation] = await db
+    .select()
+    .from(portalUniversitiesTable)
+    .where(eq(portalUniversitiesTable.id, portalUniversityId));
+  assert.equal(resetAfterRevocation.isActive, false);
+  assert.equal(resetAfterRevocation.autoProcess, false);
+  assert.equal(resetAfterRevocation.fanOutMode, "off");
 });

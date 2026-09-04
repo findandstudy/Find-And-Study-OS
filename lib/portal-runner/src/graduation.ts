@@ -6,7 +6,9 @@
  * has GRADUATION_THRESHOLD portal submissions with a durable success proof. A
  * submitted status alone is intentionally insufficient: historical adapters
  * could report submitted before the portal outcome was positively verified.
- * Graduation is computed LIVE from the DB per adapter_key — no persisted flag:
+ * Graduation is computed LIVE from the DB per adapter_key — no persisted flag.
+ * For an uploaded spec, only proofs created after the currently enabled
+ * version's activation epoch count:
  *
  *   experimental(key) = graduationRequiredFamily(key)
  *                       && successCount(key) < GRADUATION_THRESHOLD
@@ -72,8 +74,9 @@ export function hasDurableGraduationProof(
 }
 
 /**
- * Live verified-success counts per adapter key (one GROUP BY query). Every
- * requested key is present in the map (0 when no proven successful rows).
+ * Live, current-behavior verified-success counts per adapter key (one GROUP
+ * BY query). Every requested key is present in the map (0 when no proven
+ * successful rows). Uploaded spec proofs are activation-epoch-bound.
  */
 export async function getAdapterSuccessCounts(
   adapterKeys: string[],
@@ -83,17 +86,27 @@ export async function getAdapterSuccessCounts(
   if (unique.length === 0) return result;
 
   const res = await pool.query<{ adapter_key: string; n: string }>(
-    `SELECT adapter_key, COUNT(*)::int AS n
-     FROM portal_submissions
-     WHERE adapter_key = ANY($1::text[])
-       AND status = 'submitted'
-       AND deleted_at IS NULL
+    `SELECT submission.adapter_key, COUNT(*)::int AS n
+     FROM portal_submissions submission
+     LEFT JOIN portal_adapter_specs active_spec
+       ON active_spec.key = submission.adapter_key
+      AND active_spec.enabled = TRUE
+     WHERE submission.adapter_key = ANY($1::text[])
+       AND submission.status = 'submitted'
+       AND submission.deleted_at IS NULL
+       -- Uploaded adapter evidence is version-epoch bound. Enabling or
+       -- rolling back a spec refreshes updated_at, so proofs produced by a
+       -- previous behavior cannot silently graduate the new behavior.
        AND (
-         NULLIF(BTRIM(external_ref), '') IS NOT NULL
-         OR result_json #>> '{successProof,verified}' = 'true'
-         OR result_json #>> '{result,meta,successProof,verified}' = 'true'
+         active_spec.id IS NULL
+         OR submission.created_at >= active_spec.updated_at
        )
-     GROUP BY adapter_key`,
+       AND (
+         NULLIF(BTRIM(submission.external_ref), '') IS NOT NULL
+         OR submission.result_json #>> '{successProof,verified}' = 'true'
+         OR submission.result_json #>> '{result,meta,successProof,verified}' = 'true'
+       )
+     GROUP BY submission.adapter_key`,
     [unique],
   );
   for (const row of res.rows) {

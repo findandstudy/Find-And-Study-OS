@@ -89,6 +89,24 @@ State: exact-head staging deployment and read-only UAT complete; production not 
    - Responses are `private, no-store` and do not expose raw status text,
      credentials, student PII or official application numbers.
 
+8. Code-free partner onboarding control plane
+   - Portal Automation opens on a shell-consistent **Partner Setup** workspace
+     that brings configuration, safety state and partner readiness into one
+     operational view instead of relying on scattered toggles.
+   - The secret-free projection evaluates adapter registration, credential-free
+     HTTPS URL safety, encrypted credential presence, CRM catalog linkage,
+     active-program coverage and version-bound graduation evidence.
+   - A newly added partner is always inert. Activation, auto-process and
+     manual/automatic fan-out are denied server-side until their respective
+     readiness gates pass; the UI reflects the same authoritative decision.
+   - Credential, adapter-version and routing changes atomically deactivate all
+     affected partners, disable auto-process/fan-out and cancel queued work for
+     review. A running submission blocks the change and rolls the transaction
+     back, preventing split-brain execution with stale configuration.
+   - Custom/declarative adapter graduation only counts durable successes after
+     the currently enabled spec version's activation epoch. Proof from an old
+     behavior version cannot silently graduate a replacement version.
+
 ## Schema and compatibility
 
 `0090_portal_lifecycle_observations.sql` and
@@ -114,6 +132,11 @@ production schema and row counts before any production migration approval.
 - Fresh disposable PostgreSQL apply: `0 → 92`; clean replay: `92 → 92`.
 - Portal pure contracts: `26/26`.
 - Dynamic trigger policy: `4/4`.
+- Partner readiness policy: `8/8`.
+- Adapter registry behavior: `15/15`.
+- Adapter graduation, including version-epoch reset: `10/10`.
+- Portal Management API: `9/9`; Portal Universities credential boundary:
+  `9/9`; adapter-spec admin transaction boundary: `1/1`.
 - PostgreSQL observation, lane, Guardian, operations and artifact tests: `7/7`.
 - Migration authority: `31 PASS`, `1` Bash-unavailable Windows skip.
 - Package-manager guard: `6/6`, exact pnpm `10.33.2`.
