@@ -10,6 +10,7 @@ export interface PatchAdapterSpecBody {
   enableVersion?: number;
   disable?: boolean;
   rollbackTo?: number;
+  /** Required when either approval flag is changed; binds the decision to one exact version. */
   approvalVersion?: number;
   jsHookApproved?: boolean;
   privilegedApproved?: boolean;

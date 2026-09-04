@@ -10,7 +10,10 @@ import {
   pgEnum,
   index,
   unique,
+  uniqueIndex,
+  check,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { usersTable } from "./users";
 
 export const aiPersonaTypeEnum = pgEnum("ai_persona_type", [
@@ -142,6 +145,8 @@ export const aiActionQueueTable = pgTable(
       onDelete: "set null",
     }),
     actionType: text("action_type").notNull(),
+    /** Optional producer-supplied key for race-safe action deduplication. */
+    idempotencyKey: text("idempotency_key"),
     payload: jsonb("payload").notNull().default({}),
     preview: text("preview"),
     status: aiActionQueueStatusEnum("status")
@@ -159,6 +164,13 @@ export const aiActionQueueTable = pgTable(
   (t) => [
     index("ai_action_queue_status_idx").on(t.status),
     index("ai_action_queue_persona_idx").on(t.personaId),
+    uniqueIndex("ai_action_queue_idempotency_key_uq")
+      .on(t.idempotencyKey)
+      .where(sql`${t.idempotencyKey} IS NOT NULL`),
+    check(
+      "ai_action_queue_idempotency_key_chk",
+      sql`${t.idempotencyKey} IS NULL OR length(${t.idempotencyKey}) BETWEEN 1 AND 128`,
+    ),
   ],
 );
 

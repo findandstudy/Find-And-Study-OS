@@ -15,7 +15,9 @@ export interface UpsertAdapterSpecResponse {
   privilegedApproved: boolean;
   hasJsHook: boolean;
   privileged: boolean;
+  /** @pattern ^[a-f0-9]{64}$ */
   sha256: string;
+  /** @minimum 0 */
   byteLength: number;
   activationBlockers: AdapterSpecActivationBlocker[];
   activationRequiresSeparateStep: boolean;

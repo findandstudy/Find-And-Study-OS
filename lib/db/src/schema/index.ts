@@ -47,6 +47,7 @@ export * from "./aiPersonas";
 export * from "./aiBots";
 export * from "./aiExtractors";
 export * from "./portalSubmissions";
+export * from "./portalLifecycleObservations";
 export * from "./portalAutomationSettings";
 export * from "./portalUniversities";
 export * from "./portalAccountUniversities";

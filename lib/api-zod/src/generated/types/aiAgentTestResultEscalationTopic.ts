@@ -18,4 +18,7 @@ export const AiAgentTestResultEscalationTopic = {
   payment: "payment",
   commission: "commission",
   partner: "partner",
+  human_request: "human_request",
+  visa_documents: "visa_documents",
+  supplier: "supplier",
 } as const;

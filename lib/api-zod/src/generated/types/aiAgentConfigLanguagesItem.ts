@@ -13,6 +13,11 @@ export const AiAgentConfigLanguagesItem = {
   tr: "tr",
   en: "en",
   ar: "ar",
-  ru: "ru",
+  fa: "fa",
   fr: "fr",
+  es: "es",
+  ru: "ru",
+  zh: "zh",
+  hi: "hi",
+  id: "id",
 } as const;

@@ -368,3 +368,44 @@ dış mesaj/SIS/portal execution, merge ve deploy değiştirilmemiştir. Bağım
 review, staging `0083–0088` adoption/rollback, dedicated role provisioning,
 active-context/MFA issuer'ları, Privacy/Legal ve consentli staging UAT ayrı
 NO-GO kapılarıdır.
+
+## 4 Eylül 2026 — Portal Automation kapalı-döngü v1 yerel eki
+
+`codex/reporting-intelligence-center-20260903` branch'inde Portal Automation
+üretim dilimi üç yerel commit halinde ilerlemiştir. Application trigger seçimi
+artık canlı pipeline stage kataloğundan gelir; yeni veya drift etmiş stage
+otomatik seçilmez ve terminal/won/lost stage dış submit başlatamaz. No-code
+adapter JSON yükleme yüzeyi boyut/schema/unknown-property kontrolü, kanonik
+SHA-256, immutable version, dry-run/fixture kanıtı ve privileged/jsHook için
+ayrı version-bound onaylarla fail-closed çalışır.
+
+Additive `0090_portal_lifecycle_observations.sql` ile kanonik ledger `91/91`
+olmuştur. Portal status gözlemleri submission+application composite FK,
+redaction, bounded missing-document list, semantic identity proof ve hash ile
+append-only/deduplicated tutulur. University application number yalnız exact
+labeled/structured/matched-row kanıtı varsa Application tabına yazılır; mevcut
+farklı değer overwrite edilmez, approval queue'ya conflict düşer. Offer,
+payment, final acceptance ve student card stage değişiklikleri exact artifact
+olmadan önerilemez; hiçbir lifecycle proposal portal mutation, dış mesaj,
+ödeme veya otomatik CRM stage değişikliği yetkisi taşımaz.
+
+Status sync PostgreSQL `SKIP LOCKED` row lease ve adapter+university advisory
+lane lease kullanır. Böylece aynı portal hesabında tek browser session, farklı
+kurumlarda paralellik vardır. Her lane ayrı login/session/timeout sınırındadır;
+başarı cadence'i disposition'a göre deterministik jitter ile `2–24 saat`, hata
+retry'si bounded exponential jitter, sekizinci hatada quarantine'dır. Raw
+browser/provider error veya application number API/log/operasyon ekranına
+çıkmaz. Admin Operations sekmesi yalnız aggregate lane sağlıkları, redacted
+observation metadata, pending review ve audited quarantine resume gösterir.
+Offer/final acceptance monitoring'i sonlandırmaz; yalnız enrolment, reject,
+full quota, duplicate/already-registered ve withdrawal terminaldir.
+
+Dedicated `Portal Automation Gate` Linux, Windows ve PostgreSQL 16 kapılarını
+tanımlar. Yerel kanıt: fresh `91/91` + clean replay, portal pure `21/21`, dynamic
+stage `4/4`, PostgreSQL observation/lane/Guardian/operations `6/6`, migration
+authority `31 PASS + 1` Bash-unavailable SKIP, package manager `6/6`, workspace
+ve hedef API/worker typecheck, 10 dil i18n, API ve Edcons production build PASS.
+Disposable test DB iş sonunda kaldırılır. GitHub push/PR/merge, staging,
+production/VPS, gerçek credential/PII, canlı worker ve dış portal çağrısı bu
+dilimde değiştirilmemiştir. Ayrıntı:
+`PORTAL_AUTOMATION_CLOSED_LOOP_V1_IMPLEMENTATION_2026-09-04.md`.

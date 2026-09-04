@@ -36,6 +36,7 @@ import PortalProgramMappingTab from "./PortalProgramMappingTab";
 import PortalAdaptersTab from "./PortalAdaptersTab";
 import PortalSubmissionsTab from "./PortalSubmissionsTab";
 import PortalAuditTab from "./PortalAuditTab";
+import PortalOperationsTab from "./PortalOperationsTab";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -889,6 +890,7 @@ export default function PortalAutomation() {
         <div className="-mx-1 overflow-x-auto px-1 [scrollbar-width:thin]">
           <TabsList className="inline-flex w-max justify-start gap-1">
             <TabsTrigger value="rules" className="shrink-0">{t("portalAutomation.tabs.rules")}</TabsTrigger>
+            <TabsTrigger value="operations" className="shrink-0">{t("portalAutomation.tabs.operations")}</TabsTrigger>
             <TabsTrigger value="universities" className="shrink-0">{t("portalAutomation.tabs.universities")}</TabsTrigger>
             <TabsTrigger value="programMapping" className="shrink-0">{t("portalAutomation.tabs.programMapping")}</TabsTrigger>
             <TabsTrigger value="adapters" className="shrink-0">{t("portalAutomation.tabs.adapters")}</TabsTrigger>
@@ -899,6 +901,10 @@ export default function PortalAutomation() {
 
         <TabsContent value="rules">
           <AutomationRulesTab />
+        </TabsContent>
+
+        <TabsContent value="operations">
+          <PortalOperationsTab />
         </TabsContent>
 
         <TabsContent value="universities">

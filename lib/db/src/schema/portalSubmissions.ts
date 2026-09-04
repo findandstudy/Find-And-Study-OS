@@ -7,7 +7,10 @@ import {
   timestamp,
   jsonb,
   index,
+  unique,
+  check,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { applicationsTable } from "./applications";
@@ -86,6 +89,19 @@ export const portalSubmissionsTable = pgTable(
     lockedAt: timestamp("locked_at", { withTimezone: true }),
     lockedBy: text("locked_by"),
 
+    /** Independent read-only portal status polling lease and retry state. */
+    statusCheckAttempts: integer("status_check_attempts").notNull().default(0),
+    statusCheckNextAt: timestamp("status_check_next_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    statusCheckLastAt: timestamp("status_check_last_at", { withTimezone: true }),
+    statusCheckError: text("status_check_error"),
+    statusCheckLockedAt: timestamp("status_check_locked_at", { withTimezone: true }),
+    statusCheckLockedBy: text("status_check_locked_by"),
+    statusCheckSuspendedAt: timestamp("status_check_suspended_at", {
+      withTimezone: true,
+    }),
+
     enqueuedBy: integer("enqueued_by").references(() => usersTable.id, {
       onDelete: "set null",
     }),
@@ -101,6 +117,10 @@ export const portalSubmissionsTable = pgTable(
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
   },
   (table) => [
+    unique("portal_submissions_id_application_uq").on(
+      table.id,
+      table.applicationId,
+    ),
     index("portal_submissions_application_id_idx").on(table.applicationId),
     index("portal_submissions_status_idx").on(table.status),
     index("portal_submissions_locked_at_idx").on(table.lockedAt),
@@ -115,6 +135,26 @@ export const portalSubmissionsTable = pgTable(
     index("portal_submissions_adapter_key_status_idx").on(
       table.adapterKey,
       table.status,
+    ),
+    index("portal_submissions_status_check_due_idx")
+      .on(table.statusCheckNextAt, table.adapterKey, table.universityKey)
+      .where(
+        sql`${table.status} = 'submitted' AND ${table.externalRef} IS NOT NULL AND btrim(${table.externalRef}) <> '' AND ${table.adapterKey} IS NOT NULL AND btrim(${table.adapterKey}) <> '' AND ${table.deletedAt} IS NULL AND ${table.statusCheckSuspendedAt} IS NULL`,
+      ),
+    index("portal_submissions_status_check_lock_idx").on(
+      table.statusCheckLockedAt,
+    ),
+    check(
+      "portal_submissions_status_check_attempts_chk",
+      sql`${table.statusCheckAttempts} >= 0`,
+    ),
+    check(
+      "portal_submissions_status_check_lock_pair_chk",
+      sql`(${table.statusCheckLockedAt} IS NULL) = (${table.statusCheckLockedBy} IS NULL)`,
+    ),
+    check(
+      "portal_submissions_status_check_error_chk",
+      sql`${table.statusCheckError} IS NULL OR ${table.statusCheckError} IN ('STATUS_CHECK_UNSUPPORTED', 'STATUS_CHECK_TIMEOUT', 'STATUS_CHECK_AUTHENTICATION', 'STATUS_CHECK_PORTAL_DRIFT', 'STATUS_CHECK_NETWORK', 'STATUS_CHECK_LEASE_LOST', 'STATUS_CHECK_FAILED')`,
     ),
   ],
 );

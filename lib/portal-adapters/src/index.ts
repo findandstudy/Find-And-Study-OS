@@ -12,6 +12,9 @@ export type {
   UniversityAdapter,
   VerifiedApplicationNumberSource,
   VerifiedUniversityApplicationNumber,
+  PortalStatusCheckResult,
+  PortalStatusIdentityProof,
+  PortalMissingDocument,
 } from "./types.js";
 
 export {

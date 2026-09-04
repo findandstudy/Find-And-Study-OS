@@ -631,6 +631,13 @@
       "when": 1788854400000,
       "tag": "0089_reporting_center_permissions",
       "breakpoints": true
+    },
+    {
+      "idx": 90,
+      "version": "7",
+      "when": 1788940800000,
+      "tag": "0090_portal_lifecycle_observations",
+      "breakpoints": true
     }
   ]
 }

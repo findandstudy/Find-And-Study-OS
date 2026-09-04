@@ -7,6 +7,10 @@
  */
 
 export type AdapterSpecActivationBlocker =
-  | "INVALID_SPEC"
-  | "PRIVILEGED_APPROVAL_REQUIRED"
-  | "JSHOOK_APPROVAL_REQUIRED";
+  (typeof AdapterSpecActivationBlocker)[keyof typeof AdapterSpecActivationBlocker];
+
+export const AdapterSpecActivationBlocker = {
+  INVALID_SPEC: "INVALID_SPEC",
+  PRIVILEGED_APPROVAL_REQUIRED: "PRIVILEGED_APPROVAL_REQUIRED",
+  JSHOOK_APPROVAL_REQUIRED: "JSHOOK_APPROVAL_REQUIRED",
+} as const;

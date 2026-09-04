@@ -1,11 +1,12 @@
 import { createHash } from "node:crypto";
-import { and, desc, eq, isNull } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import {
   aiActionQueueTable,
   aiPersonasTable,
   applicationStageDocumentsTable,
   applicationsTable,
   db,
+  pipelineStagesTable,
 } from "@workspace/db";
 import {
   planPortalLifecycle,
@@ -13,6 +14,7 @@ import {
   type PortalLifecycleDecision,
 } from "./portalLifecycleContract";
 import { PORTAL_GUARDIAN_SLUG } from "./portalAiGuardian";
+import type { PortalApplicationReferenceSyncOutcome } from "./portalApplicationReferenceSync";
 
 export const PORTAL_LIFECYCLE_ACTION = "portal_lifecycle_proposal";
 
@@ -24,14 +26,6 @@ const documentStageToArtifact: Record<string, PortalLifecycleArtifact> = {
   student_card: "student_card",
 };
 
-type JsonRecord = Record<string, unknown>;
-
-function asRecord(value: unknown): JsonRecord {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? (value as JsonRecord)
-    : {};
-}
-
 function proposalFingerprint(input: {
   submissionId: number;
   applicationId: number;
@@ -39,6 +33,8 @@ function proposalFingerprint(input: {
   currentStage: string;
   artifacts: PortalLifecycleArtifact[];
   decision: PortalLifecycleDecision;
+  observationHash: string;
+  applicationReferenceSync?: PortalApplicationReferenceSyncOutcome;
 }): string {
   return createHash("sha256")
     .update(
@@ -51,6 +47,8 @@ function proposalFingerprint(input: {
         signal: input.decision.signal,
         action: input.decision.action,
         targetStage: input.decision.targetStage,
+        observationHash: input.observationHash,
+        applicationReferenceSync: input.applicationReferenceSync ?? null,
       }),
     )
     .digest("hex");
@@ -66,6 +64,11 @@ export async function queuePortalLifecycleReview(input: {
   submissionId: number;
   applicationId: number;
   rawStatus: string;
+  observationId: number;
+  observationHash: string;
+  identityVerified: boolean;
+  missingDocuments?: Array<{ code?: string; label: string }>;
+  applicationReferenceSync?: PortalApplicationReferenceSyncOutcome;
 }): Promise<{
   queued: boolean;
   actionId?: number;
@@ -107,6 +110,10 @@ export async function queuePortalLifecycleReview(input: {
     })
     .from(applicationStageDocumentsTable)
     .where(eq(applicationStageDocumentsTable.applicationId, input.applicationId));
+  const stageRows = await db
+    .select({ key: pipelineStagesTable.key })
+    .from(pipelineStagesTable)
+    .where(eq(pipelineStagesTable.entityType, "application"));
   const artifacts = [
     ...new Set(
       docs
@@ -119,11 +126,30 @@ export async function queuePortalLifecycleReview(input: {
         .map((doc) => documentStageToArtifact[doc.stage]),
     ),
   ];
-  const decision = planPortalLifecycle({
+  const plannedDecision = planPortalLifecycle({
     rawStatus: input.rawStatus,
     currentStage: application.stage,
+    identityVerified: input.identityVerified,
     artifacts,
+    availableStages: stageRows.map((stage) => stage.key),
   });
+  const referenceConflict =
+    input.applicationReferenceSync === "conflict" ||
+    input.applicationReferenceSync === "concurrent_conflict";
+  const decision: PortalLifecycleDecision = referenceConflict
+    ? {
+        ...plannedDecision,
+        targetStage: null,
+        action: "manual_review",
+        requiredArtifact: null,
+        artifactVerified: false,
+        proposeStudentNotification: false,
+        proposeUniversityForward: false,
+        humanApprovalRequired: true,
+        reason:
+          "The portal's verified application number conflicts with the current Application tab value.",
+      }
+    : plannedDecision;
   if (decision.action === "none") {
     return { queued: false, reason: "NO_ACTION", decision };
   }
@@ -133,52 +159,48 @@ export async function queuePortalLifecycleReview(input: {
     currentStage: application.stage,
     artifacts,
     decision,
+    observationHash: input.observationHash,
   });
-  const pending = await db
-    .select({ id: aiActionQueueTable.id, payload: aiActionQueueTable.payload })
-    .from(aiActionQueueTable)
-    .where(
-      and(
-        eq(aiActionQueueTable.personaId, persona.id),
-        eq(aiActionQueueTable.actionType, PORTAL_LIFECYCLE_ACTION),
-        eq(aiActionQueueTable.status, "pending_approval"),
-      ),
-    )
-    .orderBy(desc(aiActionQueueTable.createdAt))
-    .limit(100);
-  const duplicate = pending.find((item) => {
-    const context = asRecord(asRecord(item.payload).context);
-    return context.fingerprint === fingerprint;
-  });
-  if (duplicate) {
-    return {
-      queued: false,
-      actionId: duplicate.id,
-      reason: "ALREADY_QUEUED",
-      decision,
-    };
-  }
+  const idempotencyKey = `portal_lifecycle:${fingerprint}`;
 
   const [action] = await db
     .insert(aiActionQueueTable)
     .values({
       personaId: persona.id,
       actionType: PORTAL_LIFECYCLE_ACTION,
+      idempotencyKey,
       payload: {
         context: {
           submissionId: input.submissionId,
           applicationId: input.applicationId,
+          observationId: input.observationId,
+          observationHash: input.observationHash,
           fingerprint,
           reviewOnly: true,
         },
         portalStatus: input.rawStatus.slice(0, 250),
         currentStage: application.stage,
         artifacts,
+        missingDocuments: input.missingDocuments ?? [],
+        applicationReferenceSync: input.applicationReferenceSync ?? null,
         decision,
       },
       preview: decision.reason.slice(0, 400),
       status: "pending_approval",
     })
+    .onConflictDoNothing()
     .returning({ id: aiActionQueueTable.id });
-  return { queued: true, actionId: action?.id, decision };
+  if (action) return { queued: true, actionId: action.id, decision };
+
+  const [duplicate] = await db
+    .select({ id: aiActionQueueTable.id })
+    .from(aiActionQueueTable)
+    .where(eq(aiActionQueueTable.idempotencyKey, idempotencyKey))
+    .limit(1);
+  return {
+    queued: false,
+    actionId: duplicate?.id,
+    reason: "ALREADY_QUEUED",
+    decision,
+  };
 }

@@ -214,6 +214,7 @@ test("production prefix and canonical additive migration tail are pinned", () =>
       "0087_institution_evidence_share_receipts",
       "0088_institution_enrolment_evidence_binding",
       "0089_reporting_center_permissions",
+      "0090_portal_lifecycle_observations",
     ],
   );
 

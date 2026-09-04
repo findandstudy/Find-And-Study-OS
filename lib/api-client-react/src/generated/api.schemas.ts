@@ -14,9 +14,13 @@ export const AdapterSpecSummarySource = {
 } as const;
 
 export type AdapterSpecActivationBlocker =
-  | "INVALID_SPEC"
-  | "PRIVILEGED_APPROVAL_REQUIRED"
-  | "JSHOOK_APPROVAL_REQUIRED";
+  (typeof AdapterSpecActivationBlocker)[keyof typeof AdapterSpecActivationBlocker];
+
+export const AdapterSpecActivationBlocker = {
+  INVALID_SPEC: "INVALID_SPEC",
+  PRIVILEGED_APPROVAL_REQUIRED: "PRIVILEGED_APPROVAL_REQUIRED",
+  JSHOOK_APPROVAL_REQUIRED: "JSHOOK_APPROVAL_REQUIRED",
+} as const;
 
 export interface AdapterSpecSummary {
   key: string;
@@ -29,6 +33,7 @@ export interface AdapterSpecSummary {
   privilegedApproved: boolean;
   hasJsHook: boolean;
   privileged: boolean;
+  /** @pattern ^[a-f0-9]{64}$ */
   latestSha256: string;
   latestActivationBlockers: AdapterSpecActivationBlocker[];
   updatedAt: string;
@@ -55,6 +60,7 @@ export interface AdapterSpecVersion {
   privilegedApproved: boolean;
   hasJsHook: boolean;
   privileged: boolean;
+  /** @pattern ^[a-f0-9]{64}$ */
   sha256: string;
   activationBlockers: AdapterSpecActivationBlocker[];
   createdBy: number | null;
@@ -84,7 +90,9 @@ export interface AdapterSpecValidationResponse {
   name?: string;
   hasJsHook?: boolean;
   privileged?: boolean;
+  /** @pattern ^[a-f0-9]{64}$ */
   sha256?: string;
+  /** @minimum 0 */
   byteLength?: number;
   activationBlockers?: AdapterSpecActivationBlocker[];
   activationRequiresSeparateStep?: boolean;
@@ -107,7 +115,9 @@ export interface UpsertAdapterSpecResponse {
   privilegedApproved: boolean;
   hasJsHook: boolean;
   privileged: boolean;
+  /** @pattern ^[a-f0-9]{64}$ */
   sha256: string;
+  /** @minimum 0 */
   byteLength: number;
   activationBlockers: AdapterSpecActivationBlocker[];
   activationRequiresSeparateStep: boolean;
@@ -117,19 +127,22 @@ export interface PatchAdapterSpecBody {
   enableVersion?: number;
   disable?: boolean;
   rollbackTo?: number;
+  /** Required when either approval flag is changed; binds the decision to one exact version. */
   approvalVersion?: number;
   jsHookApproved?: boolean;
   privilegedApproved?: boolean;
 }
 
+export type PatchAdapterSpecResponseApproval = {
+  jsHookApproved: boolean;
+  privilegedApproved: boolean;
+} | null;
+
 export interface PatchAdapterSpecResponse {
   key: string;
   enabledVersion: number | null;
   approvalVersion?: number | null;
-  approval?: {
-    jsHookApproved: boolean;
-    privilegedApproved: boolean;
-  } | null;
+  approval?: PatchAdapterSpecResponseApproval;
 }
 
 export interface HealthStatus {
@@ -1746,6 +1759,8 @@ export interface InboxExternalContact {
   studentId?: number | null;
   /** @nullable */
   agentId?: number | null;
+  isBlocked: boolean;
+  blockedAt?: string | null;
   /** @nullable */
   metadata?: InboxExternalContactMetadata;
   firstSeenAt: string;
@@ -1859,22 +1874,6 @@ export interface EscalationKeywords {
   supplier: string[];
 }
 
-export type AiAgentConfigLanguagesItem =
-  (typeof AiAgentConfigLanguagesItem)[keyof typeof AiAgentConfigLanguagesItem];
-
-export const AiAgentConfigLanguagesItem = {
-  tr: "tr",
-  en: "en",
-  ar: "ar",
-  fa: "fa",
-  ru: "ru",
-  fr: "fr",
-  es: "es",
-  zh: "zh",
-  hi: "hi",
-  id: "id",
-} as const;
-
 export interface AiAgentHandoffMessages {
   tr: string;
   en: string;
@@ -1887,6 +1886,22 @@ export interface AiAgentHandoffMessages {
   hi: string;
   id: string;
 }
+
+export type AiAgentConfigLanguagesItem =
+  (typeof AiAgentConfigLanguagesItem)[keyof typeof AiAgentConfigLanguagesItem];
+
+export const AiAgentConfigLanguagesItem = {
+  tr: "tr",
+  en: "en",
+  ar: "ar",
+  fa: "fa",
+  fr: "fr",
+  es: "es",
+  ru: "ru",
+  zh: "zh",
+  hi: "hi",
+  id: "id",
+} as const;
 
 /**
  * Country / university-type scope for the live searchPrograms tool (FAZ 1). "all" means no restriction on that axis.
@@ -1963,9 +1978,9 @@ export const AiAgentConfigUpdateLanguagesItem = {
   en: "en",
   ar: "ar",
   fa: "fa",
-  ru: "ru",
   fr: "fr",
   es: "es",
+  ru: "ru",
   zh: "zh",
   hi: "hi",
   id: "id",
@@ -1997,8 +2012,13 @@ export const AiAgentTestRequestLanguage = {
   tr: "tr",
   en: "en",
   ar: "ar",
-  ru: "ru",
+  fa: "fa",
   fr: "fr",
+  es: "es",
+  ru: "ru",
+  zh: "zh",
+  hi: "hi",
+  id: "id",
 } as const;
 
 export type AiAgentTestRequestHistoryItemDirection =
@@ -2027,8 +2047,13 @@ export const AiAgentTestResultLanguage = {
   tr: "tr",
   en: "en",
   ar: "ar",
-  ru: "ru",
+  fa: "fa",
   fr: "fr",
+  es: "es",
+  ru: "ru",
+  zh: "zh",
+  hi: "hi",
+  id: "id",
 } as const;
 
 /**
@@ -2043,6 +2068,9 @@ export const AiAgentTestResultEscalationTopic = {
   payment: "payment",
   commission: "commission",
   partner: "partner",
+  human_request: "human_request",
+  visa_documents: "visa_documents",
+  supplier: "supplier",
 } as const;
 
 export type AiAgentTestResultEscalation = {
@@ -2344,9 +2372,28 @@ export const PortalSubmissionStatus = {
   program_missing: "program_missing",
   failed: "failed",
   canceled: "canceled",
+  dry_run: "dry_run",
+  program_full: "program_full",
+  exclusive_region: "exclusive_region",
+  accepted: "accepted",
+  rejected: "rejected",
 } as const;
 
 export type PortalSubmissionResultJson = { [key: string]: unknown } | null;
+
+export type PortalSubmissionStatusCheckError =
+  | (typeof PortalSubmissionStatusCheckError)[keyof typeof PortalSubmissionStatusCheckError]
+  | null;
+
+export const PortalSubmissionStatusCheckError = {
+  STATUS_CHECK_UNSUPPORTED: "STATUS_CHECK_UNSUPPORTED",
+  STATUS_CHECK_TIMEOUT: "STATUS_CHECK_TIMEOUT",
+  STATUS_CHECK_AUTHENTICATION: "STATUS_CHECK_AUTHENTICATION",
+  STATUS_CHECK_PORTAL_DRIFT: "STATUS_CHECK_PORTAL_DRIFT",
+  STATUS_CHECK_NETWORK: "STATUS_CHECK_NETWORK",
+  STATUS_CHECK_LEASE_LOST: "STATUS_CHECK_LEASE_LOST",
+  STATUS_CHECK_FAILED: "STATUS_CHECK_FAILED",
+} as const;
 
 export interface PortalSubmission {
   id: number;
@@ -2364,10 +2411,139 @@ export interface PortalSubmission {
   maxAttempts: number;
   lockedAt?: string | null;
   lockedBy?: string | null;
+  /** @minimum 0 */
+  statusCheckAttempts: number;
+  statusCheckNextAt: string;
+  statusCheckLastAt?: string | null;
+  statusCheckError?: PortalSubmissionStatusCheckError;
+  statusCheckLockedAt?: string | null;
+  statusCheckLockedBy?: string | null;
+  statusCheckSuspendedAt?: string | null;
   enqueuedBy?: number | null;
   createdAt: string;
   updatedAt: string;
   deletedAt?: string | null;
+}
+
+export interface PortalOperationsSummary {
+  /** @minimum 0 */
+  tracked: number;
+  /** @minimum 0 */
+  due: number;
+  /** @minimum 0 */
+  checking: number;
+  /** @minimum 0 */
+  retrying: number;
+  /** @minimum 0 */
+  suspended: number;
+  /** @minimum 0 */
+  observations24h: number;
+  /** @minimum 0 */
+  unverified24h: number;
+  /** @minimum 0 */
+  missingDocuments24h: number;
+  /** @minimum 0 */
+  decisions24h: number;
+  /** @minimum 0 */
+  pendingReviews: number;
+}
+
+export interface PortalStatusLane {
+  laneKey: string;
+  adapterKey: string;
+  universityKey: string;
+  /** @minimum 0 */
+  tracked: number;
+  /** @minimum 0 */
+  due: number;
+  /** @minimum 0 */
+  checking: number;
+  /** @minimum 0 */
+  retrying: number;
+  /** @minimum 0 */
+  suspended: number;
+  oldestDue: string | null;
+  lastCheckedAt: string | null;
+}
+
+export type PortalLifecycleObservationSummaryDisposition =
+  (typeof PortalLifecycleObservationSummaryDisposition)[keyof typeof PortalLifecycleObservationSummaryDisposition];
+
+export const PortalLifecycleObservationSummaryDisposition = {
+  SUBMITTED: "SUBMITTED",
+  UNDER_REVIEW: "UNDER_REVIEW",
+  MISSING_DOCUMENT: "MISSING_DOCUMENT",
+  FEE_REQUIRED: "FEE_REQUIRED",
+  CONDITIONAL_OFFER: "CONDITIONAL_OFFER",
+  UNCONDITIONAL_OFFER: "UNCONDITIONAL_OFFER",
+  DEPOSIT_RECEIVED: "DEPOSIT_RECEIVED",
+  WAITLISTED: "WAITLISTED",
+  REJECTED: "REJECTED",
+  FINAL_ACCEPTANCE: "FINAL_ACCEPTANCE",
+  ENROLLED: "ENROLLED",
+  FULL_QUOTA: "FULL_QUOTA",
+  DUPLICATE: "DUPLICATE",
+  ALREADY_REGISTERED: "ALREADY_REGISTERED",
+  WITHDRAWN: "WITHDRAWN",
+  UNKNOWN: "UNKNOWN",
+} as const;
+
+export interface PortalLifecycleObservationSummary {
+  id: number;
+  submissionId: number;
+  applicationId: number;
+  adapterKey: string;
+  universityKey: string;
+  disposition: PortalLifecycleObservationSummaryDisposition;
+  identityVerified: boolean;
+  /**
+   * @minimum 0
+   * @maximum 50
+   */
+  missingDocumentCount: number;
+  observedAt: string;
+}
+
+export type SuspendedPortalStatusCheckErrorCategory =
+  (typeof SuspendedPortalStatusCheckErrorCategory)[keyof typeof SuspendedPortalStatusCheckErrorCategory];
+
+export const SuspendedPortalStatusCheckErrorCategory = {
+  unsupported: "unsupported",
+  timeout: "timeout",
+  authentication: "authentication",
+  portal_drift: "portal_drift",
+  network: "network",
+  lease_lost: "lease_lost",
+  other: "other",
+} as const;
+
+export interface SuspendedPortalStatusCheck {
+  submissionId: number;
+  applicationId: number;
+  adapterKey: string;
+  universityKey: string;
+  /** @minimum 1 */
+  attempts: number;
+  suspendedAt: string;
+  errorCategory: SuspendedPortalStatusCheckErrorCategory;
+}
+
+export interface PortalOperationsResponse {
+  summary: PortalOperationsSummary;
+  lanes: PortalStatusLane[];
+  recentObservations: PortalLifecycleObservationSummary[];
+  suspended: SuspendedPortalStatusCheck[];
+  generatedAt: string;
+}
+
+export const PortalStatusSyncStartedValue = {
+  started: true,
+} as const;
+export type PortalStatusSyncStarted = typeof PortalStatusSyncStartedValue;
+
+export interface PortalStatusCheckResumed {
+  resumed: true;
+  submissionId: number;
 }
 
 export type EnqueuePortalSubmissionBodyMode =

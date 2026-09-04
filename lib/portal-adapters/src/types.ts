@@ -42,6 +42,36 @@ export interface VerifiedUniversityApplicationNumber {
   uniqueMatch: true;
 }
 
+export type PortalStatusIdentitySource =
+  | "matched_application_row"
+  | "labeled_portal_field"
+  | "structured_portal_field";
+
+/**
+ * Proof that a status observation belongs to the intended student/application
+ * row. A successful login or a URL containing an arbitrary id is insufficient.
+ */
+export interface PortalStatusIdentityProof {
+  source: PortalStatusIdentitySource;
+  sourceLabel: string;
+  identityBound: true;
+  targetBound: true;
+  uniqueMatch: true;
+}
+
+export interface PortalMissingDocument {
+  code?: string;
+  label: string;
+}
+
+/** Structured, evidence-bearing result returned by a portal status check. */
+export interface PortalStatusCheckResult {
+  status: string;
+  identityProof?: PortalStatusIdentityProof;
+  verifiedApplicationNumber?: VerifiedUniversityApplicationNumber;
+  missingDocuments?: PortalMissingDocument[];
+}
+
 // ---------------------------------------------------------------------------
 // Result returned by adapter.submit()
 // ---------------------------------------------------------------------------
@@ -440,7 +470,7 @@ export interface UniversityAdapter {
   checkStatus?(
     session: AdapterSession,
     externalRef: string,
-  ): Promise<{ status: string } | null>;
+  ): Promise<PortalStatusCheckResult | null>;
 
   /**
    * Optional — fetch the portal's LIVE program option list (value + text) for

@@ -50,6 +50,7 @@ import {
   isSitMember,
   isSitExcludedUniversity,
   type ProgramCandidate,
+  type PortalStatusCheckResult,
 } from "@workspace/portal-adapters";
 import { isAgentRole } from "@workspace/roles";
 import { logAudit, requireAuth, requireRole } from "../lib/auth";
@@ -73,6 +74,15 @@ import {
   type ClaimedSubmission,
   getApplicationMandatoryDocumentStatus,
   syncApplicationFinance,
+  claimDuePortalStatusChecks,
+  completePortalStatusCheck,
+  failPortalStatusCheck,
+  heartbeatPortalStatusCheck,
+  classifyPortalStatusFailure,
+  planPortalStatusSuccess,
+  acquirePortalStatusLaneLease,
+  releasePortalStatusChecks,
+  type ClaimedPortalStatusCheck,
 } from "@workspace/portal-runner";
 import { batchPortalCredentialKeys, resolvePortalCreds, checkHasPortalCredentials } from "../lib/portalCreds.js";
 import { reconcilePortalUniversityCrmLinks } from "../lib/portalUniversityLinker.js";
@@ -83,6 +93,10 @@ import {
   isDiagnosablePortalStatus,
 } from "../lib/portalAiGuardian.js";
 import { queuePortalLifecycleReview } from "../lib/portalLifecycleGuardian.js";
+import { normalizePortalLifecycleObservation } from "../lib/portalLifecycleObservation.js";
+import { mapPortalDispositionToSubmissionStatus } from "../lib/portalLifecycleContract.js";
+import { recordPortalLifecycleObservation } from "../lib/portalLifecycleObservationStore.js";
+import { syncVerifiedPortalApplicationNumber } from "../lib/portalApplicationReferenceSync.js";
 import { resolveCanonicalPortalUniversity } from "../lib/portalUniversityResolver.js";
 import {
   MAX_PORTAL_ADAPTER_SPEC_BYTES,
@@ -2861,193 +2875,540 @@ export function startPortalAutoDrain(intervalMs = AUTO_DRAIN_TICK_MS): void {
 }
 
 // ---------------------------------------------------------------------------
-// Background job: periodic multico status sync
+// Background job: distributed portal status sync
 // ---------------------------------------------------------------------------
 
-/**
- * Map a raw Multico portal status string to an internal portal_submission_status
- * enum value. Returns null when the status is not yet terminal (i.e. the
- * canonical row status should remain "submitted" while only result_json is
- * updated).
- *
- * Terminal → internal mapping:
- *   Accepted / Approved  → "accepted"
- *   Rejected / Declined  → "rejected"
- *   anything else        → null  (keep "submitted", just update result_json)
- */
-function mapMulticoPortalStatus(
-  raw: string,
-): "accepted" | "rejected" | null {
-  const lower = raw.toLowerCase().trim();
-  if (lower.includes("accept") || lower.includes("approv")) return "accepted";
-  if (lower.includes("reject") || lower.includes("declin")) return "rejected";
-  return null;
+const PORTAL_STATUS_CHECK_TIMEOUT_MS = 60_000;
+
+async function pollPortalStatusWithTimeout<T>(
+  operation: Promise<T>,
+  onTimeout: () => Promise<void>,
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      operation,
+      new Promise<T>((_, reject) => {
+        timer = setTimeout(() => {
+          reject(new Error("PORTAL_STATUS_CHECK_TIMEOUT"));
+          void onTimeout();
+        }, PORTAL_STATUS_CHECK_TIMEOUT_MS);
+        timer.unref?.();
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 /**
- * One status-sync sweep: queries portal_submissions rows that were submitted
- * to the Multico adapter (status="submitted", adapter_key="multico") and for
- * each row calls the adapter's checkStatus() method to refresh the remote
- * application status.
- *
- * For every changed status the sweep:
- *   1. Writes result_json.portalStatus + portalStatusCheckedAt (always).
- *   2. Writes portal_submissions.status to "accepted"/"rejected" when the
- *      Multico portal signals a terminal decision.
- *   3. Emits a dispatchNotification for accepted/rejected transitions so
- *      staff are informed without manually checking the portal.
- *
- * Exported so a run-now API endpoint can invoke it on demand.
+ * One distributed, fair status-sync sweep. Rows are leased with SKIP LOCKED
+ * and grouped by portal-account lane. Each lane gets its own login/session;
+ * a broken or slow university cannot block unrelated portals.
  */
 export async function runPortalStatusSync(): Promise<{ checked: number; updated: number }> {
-  const rows = await db
-    .select({
-      id:            portalSubmissionsTable.id,
-      applicationId: portalSubmissionsTable.applicationId,
-      studentId:     portalSubmissionsTable.studentId,
-      externalRef:   portalSubmissionsTable.externalRef,
-      resultJson:    portalSubmissionsTable.resultJson,
-    })
-    .from(portalSubmissionsTable)
-    .where(
-      and(
-        eq(portalSubmissionsTable.status, "submitted"),
-        eq(portalSubmissionsTable.adapterKey, "multico"),
-        isNotNull(portalSubmissionsTable.externalRef),
-      ),
-    )
-    .limit(20);
-
+  const workerId = `status-sync-${process.pid}-${Date.now()}`;
+  const rows = await claimDuePortalStatusChecks({
+    workerId,
+    maxLanes: 4,
+    rowsPerLane: 5,
+  });
   if (rows.length === 0) return { checked: 0, updated: 0 };
 
-  const adapter = await resolveAdapterByKey("multico");
-  if (!adapter?.checkStatus) return { checked: rows.length, updated: 0 };
+  const lanes = new Map<string, ClaimedPortalStatusCheck[]>();
+  for (const row of rows) {
+    const lane = lanes.get(row.laneKey) ?? [];
+    lane.push(row);
+    lanes.set(row.laneKey, lane);
+  }
 
-  let session: Awaited<ReturnType<typeof adapter.login>> | undefined;
   let updated = 0;
-  try {
-    const creds = await resolvePortalCreds("multico").catch(() => null);
-    if (!creds) {
-      console.warn("[portal-status-sync] multico credentials not configured — skipping sweep");
-      return { checked: rows.length, updated: 0 };
-    }
-    session = await adapter.login({ credentials: creds, headless: true });
-
-    for (const row of rows) {
-      if (!row.externalRef) continue;
-      try {
-        const result = await adapter.checkStatus!(session, row.externalRef);
-        if (!result) continue;
-
-        const prevPortalStatus = (row.resultJson as Record<string, unknown> | null)?.portalStatus as string | undefined;
-        if (result.status === prevPortalStatus) continue;  // nothing changed
-
-        const internalStatus = mapMulticoPortalStatus(result.status);
-        const newResultJson = {
-          ...(row.resultJson as Record<string, unknown> ?? {}),
-          portalStatus:          result.status,
-          portalStatusCheckedAt: new Date().toISOString(),
-        };
-
-        if (internalStatus) {
-          // Terminal decision — transition portal_submissions.status too.
-          await db
-            .update(portalSubmissionsTable)
-            .set({
-              status:     internalStatus,
-              resultJson: newResultJson,
-              updatedAt:  new Date(),
-            })
-            .where(eq(portalSubmissionsTable.id, row.id));
-
-          // Look up student name + university for the notification body.
-          const [appRow] = await db
-            .select({
-              universityName: applicationsTable.universityName,
-              programName:    applicationsTable.programName,
-              assignedToId:   applicationsTable.assignedToId,
-            })
-            .from(applicationsTable)
-            .where(eq(applicationsTable.id, row.applicationId))
-            .limit(1);
-
-          let studentName = "student";
-          if (row.studentId) {
-            const [sRow] = await db
-              .select({ firstName: studentsTable.firstName, lastName: studentsTable.lastName })
-              .from(studentsTable)
-              .where(eq(studentsTable.id, row.studentId))
-              .limit(1);
-            if (sRow) studentName = `${sRow.firstName ?? ""} ${sRow.lastName ?? ""}`.trim() || studentName;
-          }
-
-          const uniName = appRow?.universityName ?? "Multico University";
-          const progName = appRow?.programName ?? "";
-          const isAccepted = internalStatus === "accepted";
-          const eventLabel = isAccepted ? "Accepted" : "Rejected";
-
-          const recipientUserIds: number[] = [];
-          if (appRow?.assignedToId) recipientUserIds.push(appRow.assignedToId);
-
-          dispatchNotification({
-            event:    `portal.application_${internalStatus}`,
-            title:    `Portal Application ${eventLabel}`,
-            body:     `${studentName}'s application to ${uniName}${progName ? ` / ${progName}` : ""} was ${eventLabel.toLowerCase()} on the Multico portal.`,
-            actionUrl: `/staff/applications/${row.applicationId}`,
-            icon:     isAccepted ? "CheckCircle" : "XCircle",
-            recipientUserIds: recipientUserIds.length > 0 ? recipientUserIds : undefined,
-            templateVars: {
-              studentName,
-              universityName: uniName,
-              programName: progName,
-              portalStatus: result.status,
-            },
-          }).catch(() => {});
-
-          console.log(
-            `[portal-status-sync] multico submission #${row.id} (app #${row.applicationId}): ` +
-            `portalStatus ${prevPortalStatus ?? "?"} → ${result.status} (internal: ${internalStatus})`,
-          );
-        } else {
-          // Non-terminal status change — update result_json only.
-          await db
-            .update(portalSubmissionsTable)
-            .set({ resultJson: newResultJson, updatedAt: new Date() })
-            .where(eq(portalSubmissionsTable.id, row.id));
-
-          console.log(
-            `[portal-status-sync] multico submission #${row.id}: portalStatus ` +
-            `${prevPortalStatus ?? "?"} → ${result.status} (non-terminal, keeping status=submitted)`,
-          );
-        }
-
-        await queuePortalLifecycleReview({
-          submissionId: row.id,
+  const processRow = async (
+    row: ClaimedPortalStatusCheck,
+    result: PortalStatusCheckResult,
+  ): Promise<void> => {
+    const observation = normalizePortalLifecycleObservation({
+      submissionId: row.id,
+      applicationId: row.applicationId,
+      adapterKey: row.adapterKey,
+      result,
+    });
+    const recordedObservation = await recordPortalLifecycleObservation(observation);
+    const referenceSync = observation.identityVerified
+      ? await syncVerifiedPortalApplicationNumber({
           applicationId: row.applicationId,
-          rawStatus: result.status,
-        }).catch((error) => {
-          console.warn(
-            `[portal-lifecycle] submission #${row.id} proposal failed:`,
-            error,
-          );
-        });
+          verifiedApplicationNumber: observation.verifiedApplicationNumber,
+        })
+      : "invalid";
+    const prevPortalStatus = row.resultJson?.portalStatus as string | undefined;
+    const statusChanged = observation.rawStatus !== prevPortalStatus;
+    const internalStatus = observation.identityVerified
+      ? mapPortalDispositionToSubmissionStatus(observation.disposition)
+      : null;
+    const newResultJson = {
+      ...(row.resultJson ?? {}),
+      portalStatus: observation.rawStatus,
+      portalStatusCheckedAt: new Date().toISOString(),
+      portalLifecycle: {
+        observationId: recordedObservation.id,
+        disposition: observation.disposition,
+        identityVerified: observation.identityVerified,
+        missingDocumentCount: observation.missingDocuments.length,
+        applicationReferenceSync: referenceSync,
+      },
+    };
 
-        updated++;
-      } catch (err) {
-        console.warn(`[portal-status-sync] multico #${row.id} check failed:`, err);
+    // A terminal portal result must not become invisible to operations. Queue
+    // the idempotent review item before changing the submission status; if the
+    // durable queue write fails, the outer worker retry keeps this row eligible.
+    await queuePortalLifecycleReview({
+      submissionId: row.id,
+      applicationId: row.applicationId,
+      rawStatus: observation.rawStatus,
+      observationId: recordedObservation.id,
+      observationHash: observation.observationHash,
+      identityVerified: observation.identityVerified,
+      missingDocuments: observation.missingDocuments,
+      applicationReferenceSync: referenceSync,
+    });
+
+    if (internalStatus) {
+      const transitioned = await db
+        .update(portalSubmissionsTable)
+        .set({ status: internalStatus, resultJson: newResultJson, updatedAt: new Date() })
+        .where(
+          and(
+            eq(portalSubmissionsTable.id, row.id),
+            eq(portalSubmissionsTable.statusCheckLockedBy, workerId),
+            eq(portalSubmissionsTable.status, "submitted"),
+          ),
+        )
+        .returning({ id: portalSubmissionsTable.id });
+      if (transitioned.length === 0) {
+        throw new Error("PORTAL_STATUS_CHECK_LEASE_LOST");
+      }
+
+      const [appRow] = await db
+        .select({
+          universityName: applicationsTable.universityName,
+          programName: applicationsTable.programName,
+          assignedToId: applicationsTable.assignedToId,
+        })
+        .from(applicationsTable)
+        .where(eq(applicationsTable.id, row.applicationId))
+        .limit(1);
+      let studentName = "student";
+      if (row.studentId) {
+        const [student] = await db
+          .select({ firstName: studentsTable.firstName, lastName: studentsTable.lastName })
+          .from(studentsTable)
+          .where(eq(studentsTable.id, row.studentId))
+          .limit(1);
+        if (student) {
+          studentName = `${student.firstName ?? ""} ${student.lastName ?? ""}`.trim() || studentName;
+        }
+      }
+      const universityName = appRow?.universityName ?? row.universityKey;
+      const programName = appRow?.programName ?? "";
+      const terminalPresentation = {
+        accepted: { label: "Enrolled", icon: "CheckCircle" },
+        rejected: { label: "Rejected", icon: "XCircle" },
+        program_full: { label: "Program Full", icon: "AlertTriangle" },
+        already_exists: { label: "Already Registered", icon: "AlertTriangle" },
+        canceled: { label: "Withdrawn", icon: "XCircle" },
+      }[internalStatus];
+      dispatchNotification({
+        event: `portal.application_${internalStatus}`,
+        title: `Portal Application ${terminalPresentation.label}`,
+        body: `${studentName}'s application to ${universityName}${programName ? ` / ${programName}` : ""} is now ${terminalPresentation.label.toLowerCase()} on the ${row.adapterKey} portal.`,
+        actionUrl: `/staff/applications/${row.applicationId}`,
+        icon: terminalPresentation.icon,
+        recipientUserIds: appRow?.assignedToId ? [appRow.assignedToId] : undefined,
+        templateVars: {
+          studentName,
+          universityName,
+          programName,
+          portalStatus: observation.rawStatus,
+        },
+      }).catch(() => {});
+    } else {
+      const refreshed = await db
+        .update(portalSubmissionsTable)
+        .set({ resultJson: newResultJson, updatedAt: new Date() })
+        .where(
+          and(
+            eq(portalSubmissionsTable.id, row.id),
+            eq(portalSubmissionsTable.statusCheckLockedBy, workerId),
+          ),
+        )
+        .returning({ id: portalSubmissionsTable.id });
+      if (refreshed.length === 0) {
+        throw new Error("PORTAL_STATUS_CHECK_LEASE_LOST");
       }
     }
-  } finally {
-    await session?.close().catch(() => {});
-  }
+
+    const completed = await completePortalStatusCheck({
+      submissionId: row.id,
+      workerId,
+      nextCheckAt: planPortalStatusSuccess({
+        submissionId: row.id,
+        disposition: observation.disposition,
+      }),
+    });
+    if (!completed) {
+      throw new Error("PORTAL_STATUS_CHECK_LEASE_LOST");
+    }
+    if (statusChanged || recordedObservation.created || referenceSync === "set") {
+      updated += 1;
+    }
+  };
+
+  const laneEntries = [...lanes.entries()];
+  const laneOutcomes = await Promise.allSettled(
+    laneEntries.map(async ([laneKey, laneRows]) => {
+      const laneLease = await acquirePortalStatusLaneLease({ laneKey });
+      if (!laneLease) {
+        await releasePortalStatusChecks({
+          submissionIds: laneRows.map((row) => row.id),
+          workerId,
+        });
+        return;
+      }
+      try {
+        const first = laneRows[0]!;
+        const adapter = await resolveAdapterByKey(first.adapterKey);
+        if (!adapter?.checkStatus) {
+          await Promise.all(
+            laneRows.map((row) =>
+              failPortalStatusCheck({
+                submissionId: row.id,
+                workerId,
+                currentFailedAttempts: row.statusCheckAttempts,
+                error: "STATUS_CHECK_UNSUPPORTED",
+              }),
+            ),
+          );
+          return;
+        }
+
+        let session: Awaited<ReturnType<typeof adapter.login>> | undefined;
+        try {
+          const credentials = await resolvePortalCreds(
+            first.universityKey,
+            first.adapterKey,
+          );
+          session = await adapter.login({ credentials, headless: true });
+          for (const row of laneRows) {
+            try {
+              const leaseOwned = await heartbeatPortalStatusCheck({
+                submissionId: row.id,
+                workerId,
+              });
+              if (!leaseOwned) {
+                console.warn(`[portal-status-sync] ${laneKey} submission #${row.id} lease lost before polling`);
+                continue;
+              }
+              const result = await pollPortalStatusWithTimeout(
+                adapter.checkStatus(session, row.externalRef),
+                async () => session?.close().catch(() => {}),
+              );
+              if (result) {
+                await processRow(row, result);
+              } else {
+                const completed = await completePortalStatusCheck({
+                  submissionId: row.id,
+                  workerId,
+                  nextCheckAt: planPortalStatusSuccess({
+                    submissionId: row.id,
+                    disposition: "UNKNOWN",
+                  }),
+                });
+                if (!completed) throw new Error("PORTAL_STATUS_CHECK_LEASE_LOST");
+              }
+            } catch (error) {
+              const failure = await failPortalStatusCheck({
+                submissionId: row.id,
+                workerId,
+                currentFailedAttempts: row.statusCheckAttempts,
+                error,
+              });
+              console.warn(
+                `[portal-status-sync] ${laneKey} submission #${row.id} failed: ${failure.errorCode}`,
+              );
+            }
+          }
+        } catch (error) {
+          const failures = await Promise.all(
+            laneRows.map((row) =>
+              failPortalStatusCheck({
+                submissionId: row.id,
+                workerId,
+                currentFailedAttempts: row.statusCheckAttempts,
+                error,
+              }),
+            ),
+          );
+          console.warn(
+            `[portal-status-sync] lane ${laneKey} login failed: ${failures[0]?.errorCode ?? classifyPortalStatusFailure(error)}`,
+          );
+        } finally {
+          await session?.close().catch(() => {});
+        }
+      } finally {
+        await laneLease.release();
+      }
+    }),
+  );
+  await Promise.allSettled(
+    laneOutcomes.map((outcome, index) => {
+      if (outcome.status === "fulfilled") return Promise.resolve();
+      const [, laneRows] = laneEntries[index]!;
+      return Promise.allSettled(
+        laneRows.map((row) =>
+          failPortalStatusCheck({
+            submissionId: row.id,
+            workerId,
+            currentFailedAttempts: row.statusCheckAttempts,
+            error: outcome.reason,
+          }),
+        ),
+      ).then(() => undefined);
+    }),
+  );
 
   return { checked: rows.length, updated };
 }
 
+router.get(
+  "/portal-automation/operations",
+  requireAuth,
+  requireRole(...ADMIN_ROLES),
+  async (_req, res): Promise<void> => {
+    const [summaryResult, lanesResult, observationsResult, suspendedResult] =
+      await Promise.all([
+        db.execute<{
+          tracked: number;
+          due: number;
+          checking: number;
+          retrying: number;
+          suspended: number;
+          observations24h: number;
+          unverified24h: number;
+          missingDocuments24h: number;
+          decisions24h: number;
+          pendingReviews: number;
+        }>(sql`
+          SELECT
+            count(*) FILTER (WHERE submission.status = 'submitted' AND submission.external_ref IS NOT NULL AND btrim(submission.external_ref) <> '')::int AS tracked,
+            count(*) FILTER (WHERE submission.status = 'submitted' AND submission.external_ref IS NOT NULL AND btrim(submission.external_ref) <> '' AND submission.status_check_suspended_at IS NULL AND submission.status_check_next_at <= now())::int AS due,
+            count(*) FILTER (WHERE submission.status = 'submitted' AND submission.external_ref IS NOT NULL AND btrim(submission.external_ref) <> '' AND submission.status_check_locked_at IS NOT NULL)::int AS checking,
+            count(*) FILTER (WHERE submission.status = 'submitted' AND submission.external_ref IS NOT NULL AND btrim(submission.external_ref) <> '' AND submission.status_check_attempts > 0 AND submission.status_check_suspended_at IS NULL)::int AS retrying,
+            count(*) FILTER (WHERE submission.status = 'submitted' AND submission.external_ref IS NOT NULL AND btrim(submission.external_ref) <> '' AND submission.status_check_suspended_at IS NOT NULL)::int AS suspended,
+            (SELECT count(*)::int FROM portal_lifecycle_observations observation WHERE observation.observed_at >= now() - interval '24 hours') AS "observations24h",
+            (SELECT count(*)::int FROM portal_lifecycle_observations observation WHERE observation.observed_at >= now() - interval '24 hours' AND NOT observation.identity_verified) AS "unverified24h",
+            (SELECT count(*)::int FROM portal_lifecycle_observations observation WHERE observation.observed_at >= now() - interval '24 hours' AND observation.disposition = 'MISSING_DOCUMENT') AS "missingDocuments24h",
+            (SELECT count(*)::int FROM portal_lifecycle_observations observation WHERE observation.observed_at >= now() - interval '24 hours' AND observation.disposition IN ('CONDITIONAL_OFFER', 'UNCONDITIONAL_OFFER', 'FINAL_ACCEPTANCE', 'REJECTED')) AS "decisions24h",
+            (SELECT count(*)::int FROM ai_action_queue action WHERE action.action_type = 'portal_lifecycle_proposal' AND action.status = 'pending_approval') AS "pendingReviews"
+          FROM portal_submissions submission
+          WHERE submission.deleted_at IS NULL
+        `),
+        db.execute<{
+          laneKey: string;
+          adapterKey: string;
+          universityKey: string;
+          tracked: number;
+          due: number;
+          checking: number;
+          retrying: number;
+          suspended: number;
+          oldestDue: Date | null;
+          lastCheckedAt: Date | null;
+        }>(sql`
+          SELECT
+            lower(submission.adapter_key) || ':' || lower(submission.university_key) AS "laneKey",
+            lower(submission.adapter_key) AS "adapterKey",
+            lower(submission.university_key) AS "universityKey",
+            count(*)::int AS tracked,
+            count(*) FILTER (WHERE submission.status_check_suspended_at IS NULL AND submission.status_check_next_at <= now())::int AS due,
+            count(*) FILTER (WHERE submission.status_check_locked_at IS NOT NULL)::int AS checking,
+            count(*) FILTER (WHERE submission.status_check_attempts > 0 AND submission.status_check_suspended_at IS NULL)::int AS retrying,
+            count(*) FILTER (WHERE submission.status_check_suspended_at IS NOT NULL)::int AS suspended,
+            min(submission.status_check_next_at) FILTER (WHERE submission.status_check_suspended_at IS NULL AND submission.status_check_next_at <= now()) AS "oldestDue",
+            max(submission.status_check_last_at) AS "lastCheckedAt"
+          FROM portal_submissions submission
+          WHERE submission.status = 'submitted'
+            AND submission.deleted_at IS NULL
+            AND submission.external_ref IS NOT NULL
+            AND btrim(submission.external_ref) <> ''
+            AND submission.adapter_key IS NOT NULL
+            AND btrim(submission.adapter_key) <> ''
+          GROUP BY lower(submission.adapter_key), lower(submission.university_key)
+          ORDER BY suspended DESC, due DESC, "oldestDue" ASC NULLS LAST
+          LIMIT 100
+        `),
+        db.execute<{
+          id: number;
+          submissionId: number;
+          applicationId: number;
+          adapterKey: string;
+          universityKey: string;
+          disposition: string;
+          identityVerified: boolean;
+          missingDocumentCount: number;
+          observedAt: Date;
+        }>(sql`
+          SELECT
+            observation.id,
+            observation.submission_id AS "submissionId",
+            observation.application_id AS "applicationId",
+            observation.adapter_key AS "adapterKey",
+            submission.university_key AS "universityKey",
+            observation.disposition,
+            observation.identity_verified AS "identityVerified",
+            jsonb_array_length(observation.missing_documents)::int AS "missingDocumentCount",
+            observation.observed_at AS "observedAt"
+          FROM portal_lifecycle_observations observation
+          JOIN portal_submissions submission ON submission.id = observation.submission_id
+          ORDER BY observation.observed_at DESC, observation.id DESC
+          LIMIT 50
+        `),
+        db.execute<{
+          submissionId: number;
+          applicationId: number;
+          adapterKey: string;
+          universityKey: string;
+          attempts: number;
+          suspendedAt: Date;
+          errorCategory: string;
+        }>(sql`
+          SELECT
+            submission.id AS "submissionId",
+            submission.application_id AS "applicationId",
+            submission.adapter_key AS "adapterKey",
+            submission.university_key AS "universityKey",
+            submission.status_check_attempts AS attempts,
+            submission.status_check_suspended_at AS "suspendedAt",
+            CASE
+              WHEN submission.status_check_error = 'STATUS_CHECK_UNSUPPORTED' THEN 'unsupported'
+              WHEN submission.status_check_error = 'STATUS_CHECK_TIMEOUT' THEN 'timeout'
+              WHEN submission.status_check_error = 'STATUS_CHECK_AUTHENTICATION' THEN 'authentication'
+              WHEN submission.status_check_error = 'STATUS_CHECK_PORTAL_DRIFT' THEN 'portal_drift'
+              WHEN submission.status_check_error = 'STATUS_CHECK_NETWORK' THEN 'network'
+              WHEN submission.status_check_error = 'STATUS_CHECK_LEASE_LOST' THEN 'lease_lost'
+              ELSE 'other'
+            END AS "errorCategory"
+          FROM portal_submissions submission
+          WHERE submission.status_check_suspended_at IS NOT NULL
+            AND submission.deleted_at IS NULL
+          ORDER BY submission.status_check_suspended_at DESC
+          LIMIT 50
+        `),
+      ]);
+
+    res.setHeader("Cache-Control", "private, no-store");
+    res.json({
+      summary: summaryResult.rows[0] ?? {
+        tracked: 0,
+        due: 0,
+        checking: 0,
+        retrying: 0,
+        suspended: 0,
+        observations24h: 0,
+        unverified24h: 0,
+        missingDocuments24h: 0,
+        decisions24h: 0,
+        pendingReviews: 0,
+      },
+      lanes: lanesResult.rows,
+      recentObservations: observationsResult.rows,
+      suspended: suspendedResult.rows,
+      generatedAt: new Date().toISOString(),
+    });
+  },
+);
+
+let manualStatusSyncRunning = false;
+router.post(
+  "/portal-automation/status-sync/run",
+  requireAuth,
+  requireRole(...ADMIN_ROLES),
+  async (req, res): Promise<void> => {
+    if (manualStatusSyncRunning) {
+      res.status(409).json({ error: "STATUS_SYNC_ALREADY_RUNNING" });
+      return;
+    }
+    manualStatusSyncRunning = true;
+    const actorId = req.user!.id;
+    const actorIp = req.ip;
+    void runPortalStatusSync()
+      .then((result) =>
+        logAudit(
+          actorId,
+          "run_portal_status_sync",
+          "portal_submission",
+          undefined,
+          result,
+          actorIp,
+        ),
+      )
+      .catch((error) => {
+        console.error(
+          `[portal-status-sync] Manual sweep failed: ${classifyPortalStatusFailure(error)}`,
+        );
+      })
+      .finally(() => {
+        manualStatusSyncRunning = false;
+      });
+    res.status(202).json({ started: true });
+  },
+);
+
+router.post(
+  "/portal-submissions/:id/status-check/resume",
+  requireAuth,
+  requireRole(...ADMIN_ROLES),
+  validate({ params: idParamsSchema }),
+  async (req, res): Promise<void> => {
+    const { id } = getValidated<IdSchemas>(req).params;
+    const [submission] = await db
+      .update(portalSubmissionsTable)
+      .set({
+        statusCheckAttempts: 0,
+        statusCheckNextAt: new Date(),
+        statusCheckError: null,
+        statusCheckLockedAt: null,
+        statusCheckLockedBy: null,
+        statusCheckSuspendedAt: null,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(portalSubmissionsTable.id, id),
+          eq(portalSubmissionsTable.status, "submitted"),
+          isNull(portalSubmissionsTable.deletedAt),
+          isNotNull(portalSubmissionsTable.statusCheckSuspendedAt),
+        ),
+      )
+      .returning({ id: portalSubmissionsTable.id });
+    if (!submission) {
+      res.status(409).json({ error: "STATUS_CHECK_NOT_SUSPENDED" });
+      return;
+    }
+    await logAudit(
+      req.user!.id,
+      "resume_portal_status_check",
+      "portal_submission",
+      id,
+      { resetAttempts: true },
+      req.ip,
+    );
+    res.json({ resumed: true, submissionId: id });
+  },
+);
+
 /**
- * Starts the periodic multico status-sync sweep. Call once at api-server
- * startup. Default interval is 10 minutes — deliberately generous to avoid
- * hammering the portal.
+ * Starts the periodic distributed status-sync sweep. Call once per API
+ * instance; database leases make overlapping instances safe.
  */
 let portalStatusSyncTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -3055,7 +3416,7 @@ export function startPortalStatusSync(intervalMs = 10 * 60_000): () => void {
   if (portalStatusSyncTimer) return stopPortalStatusSync;
   const run = (): void => {
     runPortalStatusSync().catch((err) => {
-      console.error("[portal-status-sync] Sweep error:", err);
+      console.error(`[portal-status-sync] Sweep error: ${classifyPortalStatusFailure(err)}`);
     });
   };
   portalStatusSyncTimer = setInterval(run, intervalMs);

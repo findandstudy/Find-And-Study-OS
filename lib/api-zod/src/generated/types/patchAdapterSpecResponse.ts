@@ -5,13 +5,11 @@
  * Education Consultancy Operating System API
  * OpenAPI spec version: 0.1.0
  */
+import type { PatchAdapterSpecResponseApproval } from "./patchAdapterSpecResponseApproval";
 
 export interface PatchAdapterSpecResponse {
   key: string;
   enabledVersion: number | null;
   approvalVersion?: number | null;
-  approval?: {
-    jsHookApproved: boolean;
-    privilegedApproved: boolean;
-  } | null;
+  approval?: PatchAdapterSpecResponseApproval;
 }

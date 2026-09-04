@@ -5,8 +5,8 @@
  * Education Consultancy Operating System API
  * OpenAPI spec version: 0.1.0
  */
-import type { AdapterSpecVersionSource } from "./adapterSpecVersionSource";
 import type { AdapterSpecActivationBlocker } from "./adapterSpecActivationBlocker";
+import type { AdapterSpecVersionSource } from "./adapterSpecVersionSource";
 
 export interface AdapterSpecVersion {
   version: number;
@@ -17,6 +17,7 @@ export interface AdapterSpecVersion {
   privilegedApproved: boolean;
   hasJsHook: boolean;
   privileged: boolean;
+  /** @pattern ^[a-f0-9]{64}$ */
   sha256: string;
   activationBlockers: AdapterSpecActivationBlocker[];
   createdBy: number | null;
