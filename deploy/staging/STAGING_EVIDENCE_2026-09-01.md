@@ -322,3 +322,53 @@ migration, live external delivery, portal automation, real student data,
   configuration. The next gate is one named partner pilot with exact origin,
   encrypted credential reference, immutable adapter version, strict dry-run and
   separate activation approval. Production remains NO-GO.
+
+### Custom adapter fail-closed update
+
+- Exact deployed source commit:
+  `575763b13e6a3833e0646f3f44ca3fd1f8b2359f`. The code chain is
+  `86c15011` (unknown/uploaded adapter auto-process gate), `2b0dbb86`
+  (server-authoritative row graduation state) and `575763b1` (exact route
+  inventory refresh).
+- Exact-head Actions all succeeded: Portal Automation Gate `33888388971`,
+  Live-first Convergence Gate `33888388995` and Institution Admissions Gate
+  `33888389135`. The exact route audit covered 73 files and 804 registrations
+  with zero errors.
+- Network-disabled adapter verification passed `535/535`; registry policy
+  passed `15/15`. Disposable PostgreSQL 16.15 graduation and Portal Management
+  suites each applied `0 → 92` and passed `9/9`; custom keys start
+  manual-only and graduate only after three durable success proofs. API and
+  Edcons direct typechecks passed, and all disposable containers were removed.
+- Immediate pre-deploy backup:
+  `/opt/findandstudy-staging/backups/staging-backup-20260904T151905Z-4f4ce4df3e01.dump`
+  (`4,684,775` bytes, SHA-256
+  `abc53f4b6c0ce35cd2fa43f04f63bb93de4c22114433685c48056ee69272ae8e`,
+  `0640 root:findandstudy-staging`). Its network-isolated PostgreSQL 16.15
+  restore reproduced ledger `92`, 13 synthetic users, zero applications and
+  zero portal submissions; the drill container was removed.
+- Release `staging-20260904T152458Z-575763b13e6a` runs runtime image
+  `sha256:ed82bb6320f0bfec30e0794f0249128a65a376885b90ece7655f0a9dc3e140fa`.
+  The separately retained build image is
+  `sha256:67868f39599f6709f3e30682a5cf5f8bee27daccb936a798fe4b78bf665f14b2`.
+  Only `findandstudy-staging-app-1` was recreated; it remained healthy with
+  restart count `0`, UID/GID `10042`, read-only rootfs, cap-drop `ALL` and
+  `no-new-privileges:true`.
+- Public `/api/healthz` and `/api/health` returned HTTP `200`, HSTS, exact
+  release and `dbConnected=true`; six further samples all matched. The ledger
+  and 11 operational/write denominators after it were
+  `92|0|0|0|0|0|0|0|0|0|0|0` for active portal universities, active
+  credentials, adapter specs, submissions, observations, messages, broadcasts,
+  finance mutation requests, Journey outbox, applications and documents.
+- The four integration kill switches remained exact, portal worker count was
+  zero and fatal/unhandled/uncaught log matches were zero. Root disk use was
+  `81%`, with `20,331,143,168` bytes available. No image, volume or build-cache
+  prune ran.
+- Authenticated read-only UI UAT reconfirmed Test Mode, all automation switches
+  off, dynamic non-terminal stages, disabled terminal stages, zero Operations
+  counters, no configured portal university and `0/3` status on experimental
+  built-ins. No save, upload, submit, test-login or status-sweep action ran.
+- The named-partner procedure is recorded in
+  `PORTAL_AUTOMATION_FIRST_PARTNER_PILOT_RUNBOOK_2026-09-04.md`. Worker and
+  outbound traffic stay disabled until exact origin, encrypted credential
+  reference, immutable adapter version, strict dry-run and separate activation
+  approval are present. Production, `Next` and merge remain NO-GO.

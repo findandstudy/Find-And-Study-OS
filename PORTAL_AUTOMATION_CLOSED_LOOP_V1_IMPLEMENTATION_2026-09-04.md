@@ -209,3 +209,81 @@ lane ownership, credential references and external-write denominators remain
 bounded. Production remains NO-GO until the repository production preflight,
 current production row/lock impact review, rollback plan and separate user
 approval are complete for an exact release.
+
+## Custom adapter graduation hardening and first-partner gate
+
+The no-code onboarding boundary was re-audited after the no-outbound gate. An
+unknown or newly uploaded adapter key was not present in the static
+experimental-key set and could therefore be interpreted as non-experimental by
+callers that used only `isExperimentalAdapterKey`. This was corrected
+fail-closed:
+
+- every unknown/declarative adapter now starts experimental and manual-only;
+- graduation is calculated server-side from durable, distinct successful
+  submission proofs with an exact threshold of three;
+- the Portal Universities API returns row-level `experimental`,
+  `staticExperimental`, `successCount`, `graduationThreshold` and `graduated`
+  values;
+- the admin UI consumes that authoritative row state and conservatively
+  disables auto-process for a key absent from the registry response;
+- a custom adapter cannot inherit production-ready status merely because its
+  key is absent from the built-in list.
+
+The three code commits are `86c15011a82541778201c6d2767c0e7c50dd105d`,
+`2b0dbb861f4453278efdefb1c8d0a5fa7f92c447` and
+`575763b13e6a3833e0646f3f44ca3fd1f8b2359f`. Exact-head GitHub Actions on
+`575763b13e6a3833e0646f3f44ca3fd1f8b2359f` all succeeded: Portal Automation
+Gate `33888388971`, Live-first Convergence Gate `33888388995` and Institution
+Admissions Gate `33888389135`. The convergence route registry was refreshed
+from an exact re-audit of 73 route files and 804 registrations: 720
+`requireAuth`, 480 `requireRole`, 47 `requirePermission`, 29 direct-role checks,
+72 legacy-quarantine files and one corridor-migrated file, with zero errors.
+
+The reviewed adapter image passed the complete production slice `434 + 101 =
+535/535` with network disabled. Registry behavior passed `15/15`. A separate
+network-isolated PostgreSQL 16.15 run applied `0 → 92`, then passed adapter
+graduation `9/9`, including manual-only custom-key start and exact three-proof
+graduation. A second disposable `0 → 92` database passed Portal Management
+API projection `9/9`, including the row-level custom adapter state. API and
+Edcons direct TypeScript checks passed. All disposable containers were removed.
+
+### Staging release re-attestation
+
+- Immediate pre-deploy backup:
+  `staging-backup-20260904T151905Z-4f4ce4df3e01` (`4,684,775` bytes,
+  SHA-256 `abc53f4b6c0ce35cd2fa43f04f63bb93de4c22114433685c48056ee69272ae8e`,
+  `0640 root:findandstudy-staging`). A network-isolated PostgreSQL 16.15 restore
+  reproduced ledger `92`, 13 synthetic users, zero applications and zero
+  portal submissions; the restore container was removed.
+- Exact release:
+  `staging-20260904T152458Z-575763b13e6a`, runtime image
+  `sha256:ed82bb6320f0bfec30e0794f0249128a65a376885b90ece7655f0a9dc3e140fa`
+  and build image
+  `sha256:67868f39599f6709f3e30682a5cf5f8bee27daccb936a798fe4b78bf665f14b2`.
+- Only the staging app container was recreated. It is healthy with restart
+  count `0`, UID/GID `10042`, read-only root filesystem, cap-drop `ALL` and
+  `no-new-privileges:true`.
+- `/api/healthz` and `/api/health` returned HTTP `200`, HSTS, the exact release
+  and `dbConnected=true`. Six additional samples were exact; observed latency
+  was `0.031386–0.090830` seconds.
+- Ledger and aggregate read-only counters were
+  `92|0|0|0|0|0|0|0|0|0|0|0`: ledger, active portal universities, active
+  credentials, adapter specs, portal submissions, lifecycle observations,
+  messages, broadcasts, finance mutation requests, Journey outbox events,
+  applications and documents.
+- The four integration kill switches remained exact, portal worker count was
+  zero and fatal/unhandled/uncaught log matches were zero. Final root disk use
+  was `81%`, with `20,331,143,168` bytes available; no prune ran.
+- Authenticated read-only browser UAT rechecked Rules, Operations, Adapter
+  Management and Universities. Rules remained Test Mode with automation,
+  fallback, fan-out and scheduler off; dynamic stages were present and terminal
+  stages disabled. Operations and Universities were empty, and experimental
+  built-ins displayed their `0/3` graduation state. No mutating control ran.
+
+The first-partner decision, onboarding sequence, application-number evidence
+rule, stop conditions and production gate are frozen in
+`PORTAL_AUTOMATION_FIRST_PARTNER_PILOT_RUNBOOK_2026-09-04.md`. A real pilot is
+blocked only on the named partner, exact login origin, account/automation
+permission and credential entry through the encrypted UI. Credentials must not
+be sent through chat. Production, `Next`, merge, external delivery, fan-out and
+fallback remain NO-GO.

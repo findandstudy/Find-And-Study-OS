@@ -472,3 +472,34 @@ PASS'tir. Gerçek credential/university/adapter olmadığından portal worker
 açılmamıştır. İlk gerçek partner; exact origin, encrypted credential reference,
 immutable adapter version, dry-run ve ayrı activation approval ile tek staging
 pilot olarak onboard edilmeden live worker veya outbound portal trafiği NO-GO'dur.
+
+Aynı gün custom adapter graduation sınırı fail-closed sertleştirilmiştir.
+Bilinmeyen veya admin panelden yüklenen her adapter artık deneysel/manual-only
+başlar; üç ayrı durable başarı kanıtı olmadan auto-process açılamaz. API her
+portal-university satırında server-authoritative `experimental`,
+`staticExperimental`, `successCount`, `graduationThreshold` ve `graduated`
+durumunu döner; UI registry dışı anahtarı da muhafazakâr biçimde kilitler. Kod
+commit'leri `86c15011`, `2b0dbb86`, exact route-inventory head'i `575763b1`dir.
+Bu head için Portal Automation `33888388971`, Convergence `33888388995` ve
+Institution `33888389135` Actions run'ları SUCCESS'tir. Network-none adapter
+slice `535/535`, registry `15/15`, disposable PostgreSQL graduation `9/9` ve
+Portal Management projection `9/9` PASS'tir; API/Edcons direct typecheck PASS,
+disposable konteyner kalmamıştır.
+
+Pre-deploy checksum backup
+`staging-backup-20260904T151905Z-4f4ce4df3e01` (`4.684.775` byte, SHA-256
+`abc53f4b6c0ce35cd2fa43f04f63bb93de4c22114433685c48056ee69272ae8e`)
+network-none PostgreSQL 16.15 restore drill'inde ledger `92`, 13 sentetik user,
+sıfır application/submission üretmiştir. Exact staging release
+`staging-20260904T152458Z-575763b13e6a`, runtime image
+`sha256:ed82bb6320f0bfec30e0794f0249128a65a376885b90ece7655f0a9dc3e140fa`
+olarak sağlıklıdır; restart `0`, UID/GID `10042`, read-only rootfs, cap-drop ALL
+ve no-new-privileges korunur. Altı public health örneği exact release + HTTP
+`200` + `dbConnected=true` geçmiştir. Ledger ve aggregate sayaç dizisi
+`92|0|0|0|0|0|0|0|0|0|0|0`, worker `0`, dört kill-switch exact ve fatal log
+`0`dır. Salt-okunur UI regresyonu kurallar/operasyon/adapter/üniversite
+sekmelerini geçmiştir; dış eylem yoktur. İlk pilotin kanonik runbook'u
+`PORTAL_AUTOMATION_FIRST_PARTNER_PILOT_RUNBOOK_2026-09-04.md`dir. Partner adı,
+exact login origin, hesap/otomasyon izni ve encrypted UI credential girişi
+gelmeden worker, real submit, status sweep, fallback veya fan-out NO-GO'dur;
+credential chat'e yazılmaz. Production, `Next` ve merge değişmemiştir.
