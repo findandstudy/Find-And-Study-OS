@@ -310,3 +310,62 @@ blocked only on the named partner, exact login origin, account/automation
 permission and credential entry through the encrypted UI. Credentials must not
 be sent through chat. Production, `Next`, merge, external delivery, fan-out and
 fallback remain NO-GO.
+
+## Code-free Partner Setup staging adoption
+
+The fail-closed Partner Setup control plane was frozen in code-bearing commit
+`813db5991c3e48801719432243d751cea2c11357`. A second review-infrastructure
+commit, `96444e43dca5bc93241959aedfcd9ac9f2dfb7bf`, extended the tenant-writer
+scanner to classify transaction-scoped `executor` writes; the resulting
+inventory is 172 discovered/172 classified writer files with zero normal-mode
+errors. Draft PR #32 remains unmerged.
+
+Exact-head GitHub Actions on `96444e43…` all succeeded: Portal Automation Gate
+`33895080885`, Live-first Convergence Gate `33895080860` and Institution
+Admissions Gate `33895080950`. The earlier exact code commit correctly exposed
+the missing scanner vocabulary through a failed convergence run; no staging
+adoption was attempted until the scanner fix and all three replacement runs
+were green.
+
+Staging adoption evidence:
+
+- Immediate pre-adoption backup:
+  `staging-backup-20260904T162944Z-96444e43dca5.dump` (`4,581,742` bytes,
+  SHA-256 `494feaccf40857c48f5fd5238235f0910062dd235e07c8f4ce1e244221e68e83`,
+  `0640 root:findandstudy-staging`). Its network-isolated PostgreSQL 16.15
+  restore reproduced `92|13|0|0|0`: ledger, synthetic users, applications,
+  portal submissions and lifecycle observations. The disposable restore
+  container was removed.
+- Exact release: `staging-20260904T163712Z-96444e43dca5`; source
+  `96444e43dca5bc93241959aedfcd9ac9f2dfb7bf`; build image
+  `sha256:1bc1c4de2c35be431d95288e2362feb71cbb298ef47995d4fbc0c2f7202accde`;
+  runtime image
+  `sha256:fbdee9e7e41bebbeca1bb6dfe2bad44a1b248d9c5b5de60bff9f4efbd16ef2d3`.
+- Only the staging app service was replaced. The database container identity
+  remained stable, portal worker count stayed zero, app health was `healthy`,
+  restart count was `0`, and the runtime retained UID/GID `10042`, read-only
+  root filesystem, cap-drop `ALL` and `no-new-privileges:true`.
+- Two initial app replacements reached healthy state but the remote operator
+  script's final trap-cleanup line received a Windows carriage return. The
+  fail-closed ERR handler restored both host-only env files and the previous
+  `575763b1…` app each time. The LF-normalized third run completed successfully;
+  no database, worker, schema or external integration changed during either
+  rollback.
+- Public `/api/healthz` and `/api/health` returned HTTP `200`, HSTS, the exact
+  release and `dbConnected=true`. Six further samples were HTTP `200` at
+  `0.026926–0.047372` seconds. Fatal/unhandled/uncaught log matches were zero.
+- Ledger and aggregate external-effect counters were
+  `92|0|0|0|0|0|0|0|0|0|0|0`: ledger, active portal partners, active portal
+  credentials, adapter specs, submissions, lifecycle observations, messages,
+  broadcasts, finance mutation requests, Journey outbox events, applications
+  and application documents. The four external-integration kill switches
+  remained exact.
+- Authenticated read-only browser UAT verified the shell-consistent Partner
+  Setup workspace, all-zero readiness cards and safe empty state. The Add
+  University dialog had no activate-now control and explicitly stated that new
+  partners start inactive. Application Pipeline supplied the trigger-stage
+  options and terminal Enrolled/Rejected remained disabled. No save, add,
+  upload, submit, sweep, fan-out or fallback mutation ran.
+- Final root filesystem use was `81%`, with `20,275,982,336` bytes available.
+  No Docker prune, unrelated restart, production access or `Next` update was
+  performed.

@@ -372,3 +372,34 @@ migration, live external delivery, portal automation, real student data,
   outbound traffic stay disabled until exact origin, encrypted credential
   reference, immutable adapter version, strict dry-run and separate activation
   approval are present. Production, `Next` and merge remain NO-GO.
+
+## 4 September 2026 — Code-free Partner Setup adoption
+
+- Reviewed source `96444e43dca5bc93241959aedfcd9ac9f2dfb7bf` passed Portal
+  Automation `33895080885`, Live-first Convergence `33895080860` and
+  Institution Admissions `33895080950` exact-head Actions runs.
+- The accepted pre-adoption backup was
+  `staging-backup-20260904T162944Z-96444e43dca5.dump` (`4,581,742` bytes,
+  SHA-256 `494feaccf40857c48f5fd5238235f0910062dd235e07c8f4ce1e244221e68e83`).
+  Its network-isolated PostgreSQL 16.15 restore reproduced ledger `92`, 13
+  synthetic users and zero applications/submissions/observations; the
+  disposable container was removed.
+- Release `staging-20260904T163712Z-96444e43dca5` uses runtime image
+  `sha256:fbdee9e7e41bebbeca1bb6dfe2bad44a1b248d9c5b5de60bff9f4efbd16ef2d3`
+  and build image
+  `sha256:1bc1c4de2c35be431d95288e2362feb71cbb298ef47995d4fbc0c2f7202accde`.
+  Only the app service changed; the DB container stayed stable and the portal
+  worker count remained zero.
+- Public health was HTTP `200`, exact-release and DB-connected across the
+  initial checks plus six samples. Runtime security remained
+  `10042:10042`, read-only, cap-drop `ALL`, no-new-privileges and restart `0`.
+  The ledger/external-effect counter vector was
+  `92|0|0|0|0|0|0|0|0|0|0|0`; fatal log matches were zero.
+- Browser UAT verified the new Partner Setup default tab, safe all-zero empty
+  state, inactive-only Add University form, dynamic Application Pipeline
+  stages and disabled terminal stages. No mutation or outbound action ran.
+- Two pre-acceptance app swaps deliberately rolled back to the healthy prior
+  image when a CRLF-contaminated final trap-cleanup command failed. The third,
+  LF-normalized run completed; database, schema, worker and external delivery
+  stayed unchanged throughout. Final root use was `81%` with
+  `20,275,982,336` bytes free.
