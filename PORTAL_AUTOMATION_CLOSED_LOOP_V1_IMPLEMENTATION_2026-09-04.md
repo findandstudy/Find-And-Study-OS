@@ -159,6 +159,41 @@ production schema and row counts before any production migration approval.
 - Final root filesystem use was `80%`, with `21,072,498,688` bytes available.
   No Docker prune or unrelated container restart was performed.
 
+### No-outbound synthetic adapter gate
+
+- The exact deployed build image `findandstudy-staging-build:4f4ce4df3e01`
+  ran the v2 adapter production slice with a read-only root filesystem and
+  `--network none`. All `26/26` checks passed, including canonical spec hashing,
+  version-bound privileged approval, read-only status mapping, exact
+  application-reference proof, verified official application number, bounded
+  artifact collection, MIME/magic validation, content-addressed idempotency,
+  lifecycle proposals, adaptive polling and fixed error redaction.
+- A separate PostgreSQL 16.15 container used tmpfs storage, `--network none`
+  and port `5433`; test processes shared only that network namespace. The
+  reviewed runner applied ledger `0 → 92`, then adapter admin/version workflow,
+  observation binding, distributed lane lease, fair claims, poison-row
+  quarantine, concurrent Guardian idempotency, operations authorization and
+  artifact persistence passed `8/8`.
+- The disposable database reconciled to `92/92` with zero users, applications,
+  submissions, lifecycle observations and adapter specs, then its container was
+  removed. An initial attempt on port `5432` was rejected by the runner's hard
+  `127.0.0.1:5433` target pin and cleaned up before the accepted run.
+- Live staging was queried only for aggregate state. It contained zero active
+  portal credentials, zero configured portal universities, zero adapter specs,
+  zero submission lanes and zero applications/documents/observations. Messages,
+  broadcasts, portal submissions, finance mutation requests and Journey outbox
+  events were all `0` before and after the gate.
+- Post-gate browser regression kept Rules in Test Mode with automation,
+  fallback, fan-out and scheduled processing off. Operations remained all-zero;
+  dynamic pipeline stages and disabled terminal stages were unchanged. Public
+  health, ledger `92/92`, restart count `0` and zero fatal log matches passed;
+  no test container remained.
+- Because there is no active credential, university or adapter configuration,
+  enabling a portal worker would be both ineffective and outside the approved
+  boundary. The first real partner must be onboarded as one explicit staging
+  pilot with its exact domain/origin, encrypted credential reference, immutable
+  adapter version and separate dry-run/activation approvals.
+
 ## Explicitly not performed
 
 - No pull-request merge, branch protection change or production deployment.

@@ -286,3 +286,39 @@ migration, live external delivery, portal automation, real student data,
   activation, real PII/credentials or external delivery. Before any staging
   worker is enabled, an exact-version synthetic allowlisted adapter fixture and
   lane/credential/write-denominator re-attestation remain mandatory.
+
+### No-outbound synthetic Portal Automation gate
+
+- The exact deployed build image `findandstudy-staging-build:4f4ce4df3e01`
+  executed the v2 adapter production slice with `--network none`, a read-only
+  root filesystem and all live-integration switches disabled. All `26/26`
+  contract checks passed.
+- A disposable PostgreSQL 16.15 instance ran with tmpfs data and `--network
+  none` on the repository-pinned loopback port `5433`. Test containers shared
+  only its network namespace; they had no external route. The reviewed runner
+  applied `0 → 92`, then `8/8` database-backed checks passed for adapter
+  version/approval, observation binding, one-session-per-lane ownership, fair
+  queue claims, quarantine, Guardian idempotency, aggregate operations access
+  and artifact persistence.
+- The accepted disposable database ended at ledger `92/92` with
+  user/application/submission/observation/adapter-spec counts `0/0/0/0/0` and
+  was removed. A first `5432` attempt was rejected by the hard target pin and
+  cleaned up before any migration ran.
+- Live staging received no fixture writes. Aggregate read-only attestation found
+  zero active credentials, zero configured portal universities, zero adapter
+  specs, zero lanes and zero application/document/observation rows. The five
+  external-write denominators — messages, broadcasts, portal submissions,
+  finance mutation requests and Journey outbox events — remained
+  `0/0/0/0/0`.
+- Authenticated read-only UI regression confirmed Test Mode, automation off,
+  fallback off, fan-out off, scheduler off, dynamic pipeline stages and disabled
+  terminal stages. Operations remained all-zero with no error boundary.
+- Post-gate public health returned the exact release and `dbConnected=true`;
+  app state was healthy, restart count `0`, ledger `92/92`, fatal log matches
+  `0`, disposable leftovers `0`, and the root filesystem retained
+  `21,071,781,888` bytes free at `80%` use.
+- This satisfies the no-outbound synthetic gate. It does not authorize worker
+  activation: staging currently has no credential, university or adapter
+  configuration. The next gate is one named partner pilot with exact origin,
+  encrypted credential reference, immutable adapter version, strict dry-run and
+  separate activation approval. Production remains NO-GO.

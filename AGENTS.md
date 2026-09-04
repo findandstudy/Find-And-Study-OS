@@ -450,3 +450,25 @@ kalmıştır; dış portal çağrısı, submit, poll, adapter upload veya ayar m
 yapılmamıştır. Production, `Next`, PR merge, gerçek credential/PII ve canlı dış
 etki değiştirilmemiştir. Ayrıntı:
 `PORTAL_AUTOMATION_CLOSED_LOOP_V1_IMPLEMENTATION_2026-09-04.md`.
+
+Aynı gün staging adoption sonrası no-outbound sentetik adapter kapısı da
+tamamlanmıştır. Exact deployed build image read-only rootfs ve `--network none`
+ile v2 adapter production slice'ı `26/26` geçmiştir. Ayrı tmpfs PostgreSQL
+16.15 konteyneri `--network none`, loopback `5433` ve exact `0→92` migration
+ile çalışmış; adapter admin/version, observation, distributed lane lease, fair
+claim, quarantine, Guardian idempotency, operations authorization ve artifact
+testleri `8/8` PASS olmuştur. Test DB sonunda `92/92` ve user/application/
+submission/observation/spec `0/0/0/0/0` olarak reconcile edilmiş, disposable
+container kaldırılmıştır. İlk `5432` denemesi hard target pin tarafından
+fail-closed reddedilmiş ve artık bırakmadan temizlenmiştir.
+
+Canlı staging'de yalnız aggregate read yapılmıştır: active credential `0`,
+portal university `0`, adapter spec `0`, lane `0`; messages, broadcasts,
+portal submissions, finance mutation requests ve Journey outbox
+denominator'ları `0/0/0/0/0` kalmıştır. UI Test Mode'da, automation/fallback/
+fan-out/scheduler kapalı, Operations sayaçları sıfırdır. Health exact release,
+ledger `92/92`, restart `0`, fatal log `0` ve leftover UAT container `0`
+PASS'tir. Gerçek credential/university/adapter olmadığından portal worker
+açılmamıştır. İlk gerçek partner; exact origin, encrypted credential reference,
+immutable adapter version, dry-run ve ayrı activation approval ile tek staging
+pilot olarak onboard edilmeden live worker veya outbound portal trafiği NO-GO'dur.
