@@ -239,3 +239,50 @@ has completed both the authenticated visual role walkthrough and the controlled
 synthetic workflow UAT. It does not authorize production deployment, production
 migration, live external delivery, portal automation, real student data,
 `Find-And-Study-OS-Next` synchronization, or merge of convergence PR #30.
+
+## 4 September 2026 — Portal Automation closed-loop v1 adoption
+
+- Exact deployed code-bearing commit:
+  `4f4ce4df3e01b0e71e84a64c02424847a1e6056f` on branch
+  `codex/reporting-intelligence-center-20260903`.
+- Exact-head Actions evidence: Institution Admissions Gate `33882911515`,
+  Portal Automation Gate `33882911634`, Live-first Convergence Gate
+  `33882911333`; all three succeeded.
+- Immediate pre-adoption backup:
+  `/opt/findandstudy-staging/backups/staging-backup-20260904T140614Z-852b03b671e1.dump`
+  (`4,566,372` bytes, SHA-256
+  `e01c0727ac10d8b04c17fad51eb0a76188633ccc9ba6adb44b2d77386ab1487f`,
+  `0640 root:findandstudy-staging`).
+- A network-isolated, tmpfs PostgreSQL 16.15 restore reproduced ledger `90`,
+  13 synthetic users, zero active applications, zero portal submissions and
+  the expected absence of the pre-`0090` lifecycle table. The disposable
+  restore container was removed. An initial validation expected the obsolete
+  12-user denominator and queried the absent table directly; it failed closed
+  after the backup succeeded. The corrected measured-baseline rerun passed.
+- The reviewed least-privilege migration runner advanced only staging from
+  `90/90` to `92/92`. The post-state contained 13 users and zero applications,
+  portal submissions or lifecycle observations.
+- Runtime image:
+  `sha256:7c4de1e8c79c16ab94423529e2a9f939d3882a573fcbeb5a14469dd479db601d`
+  (`findandstudy-staging-app:4f4ce4df3e01`). Release:
+  `staging-20260904T143054Z-4f4ce4df3e01`.
+- Only `findandstudy-staging-app-1` was recreated. It reported healthy,
+  restart count `0`, UID/GID `10042`, read-only root filesystem, capability
+  drop `ALL` and `no-new-privileges:true`. Other VPS containers remained up.
+- Public `/api/healthz` and `/api/health` returned HTTP `200`, the exact release
+  and `dbConnected=true`, with HSTS present. Six additional five-second-spaced
+  samples all matched; app logs had zero fatal/unhandled/uncaught matches.
+- Authenticated read-only browser UAT verified Rules, Operations, Adapter
+  Management, Submission Board and Audit Log. Dynamic stages were sourced from
+  Application Pipeline, while terminal Enrolled and Rejected stages were
+  disabled. No mutating control was used.
+- External safety remained fail-closed: live integrations off, email delivery
+  disabled, background jobs disabled, AI external reply kill-switch on and
+  portal worker count zero. No real portal, messaging, payment or notification
+  call ran.
+- Final root filesystem state was `80%` used with `21,072,498,688` bytes free.
+  Build and rollback images were retained; no Docker prune ran.
+- This adoption does not authorize production, `Next`, PR merge, live worker
+  activation, real PII/credentials or external delivery. Before any staging
+  worker is enabled, an exact-version synthetic allowlisted adapter fixture and
+  lane/credential/write-denominator re-attestation remain mandatory.

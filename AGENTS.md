@@ -423,7 +423,30 @@ tanımlar. Yerel kanıt: fresh `92/92` + clean replay, portal pure `26/26`, dyna
 stage `4/4`, PostgreSQL observation/lane/Guardian/operations/artifact `7/7`, migration
 authority `31 PASS + 1` Bash-unavailable SKIP, package manager `6/6`, workspace
 ve hedef API/worker typecheck, 10 dil i18n, API ve Edcons production build PASS.
-Disposable test DB iş sonunda kaldırılır. GitHub push/PR/merge, staging,
-production/VPS, gerçek credential/PII, canlı worker ve dış portal çağrısı bu
-dilimde değiştirilmemiştir. Ayrıntı:
+Exact code-bearing head `4f4ce4df3e01b0e71e84a64c02424847a1e6056f`
+remote'a push edilmiştir; Institution Admissions `33882911515`, Portal
+Automation `33882911634` ve Live-first Convergence `33882911333` Actions
+run'larının üçü de SUCCESS'tir.
+
+Proje sahibinin staging deploy onayıyla aynı exact head yalnız
+`staging.findandstudy.com` ortamına alınmıştır. Checksum'lı pre-adoption backup
+`staging-backup-20260904T140614Z-852b03b671e1` izole PostgreSQL 16.15 restore
+tatbikatında ledger `90`, 13 sentetik user, sıfır application ve sıfır portal
+submission üretmiştir; disposable container kaldırılmıştır. En az yetkili
+migration runner staging ledger'ını `90/90 → 92/92` taşımıştır. Release
+`staging-20260904T143054Z-4f4ce4df3e01`, runtime image SHA-256 kimliği
+`7c4de1e8c79c16ab94423529e2a9f939d3882a573fcbeb5a14469dd479db601d`dır.
+Yalnız staging app konteyneri recreate edilmiş; UID/GID `10042`, read-only
+rootfs, cap-drop ALL, no-new-privileges, healthy, restart `0`, public health
+HTTP `200` + `dbConnected=true`, altı ek örnek exact release PASS'tir. Final
+disk `%80`, `21.072.498.688` byte boştur; prune yoktur.
+
+Authenticated salt-okunur UAT Rules, Operations, Adapter Management,
+Submission Board ve Audit Log sekmelerini doğrulamıştır. Trigger stage'ler
+Application Pipeline'dan dinamik gelir ve terminal Enrolled/Rejected seçimleri
+disabled'dır. `ALLOW_LIVE_INTEGRATIONS=false`, email disabled, background jobs
+disabled, AI external reply kill-switch active ve portal worker sayısı `0`
+kalmıştır; dış portal çağrısı, submit, poll, adapter upload veya ayar mutasyonu
+yapılmamıştır. Production, `Next`, PR merge, gerçek credential/PII ve canlı dış
+etki değiştirilmemiştir. Ayrıntı:
 `PORTAL_AUTOMATION_CLOSED_LOOP_V1_IMPLEMENTATION_2026-09-04.md`.

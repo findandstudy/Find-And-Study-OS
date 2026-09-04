@@ -2,7 +2,7 @@
 
 Date: 4 September 2026
 Branch: `codex/reporting-intelligence-center-20260903`
-State: local implementation complete; not pushed or deployed
+State: exact-head staging deployment and read-only UAT complete; production not deployed
 
 ## Delivered scope
 
@@ -105,6 +105,11 @@ production schema and row counts before any production migration approval.
 
 ## Verification evidence
 
+- Exact deployed code-bearing commit:
+  `4f4ce4df3e01b0e71e84a64c02424847a1e6056f`.
+- Exact-head GitHub Actions: Institution Admissions Gate
+  `33882911515`, Portal Automation Gate `33882911634` and Live-first
+  Convergence Gate `33882911333`; all completed successfully.
 - Migration validation: `92 files / 92 journal entries`.
 - Fresh disposable PostgreSQL apply: `0 → 92`; clean replay: `92 → 92`.
 - Portal pure contracts: `26/26`.
@@ -117,18 +122,55 @@ production schema and row counts before any production migration approval.
 - API and Edcons production builds: PASS.
 - `git diff --check`: PASS.
 
+## Staging adoption evidence
+
+- Canonical URL: `https://staging.findandstudy.com/admin/portal-automation`.
+- Release: `staging-20260904T143054Z-4f4ce4df3e01` using runtime image
+  `sha256:7c4de1e8c79c16ab94423529e2a9f939d3882a573fcbeb5a14469dd479db601d`.
+- The immediate pre-adoption dump is
+  `staging-backup-20260904T140614Z-852b03b671e1` (`4,566,372` bytes,
+  SHA-256 `e01c0727ac10d8b04c17fad51eb0a76188633ccc9ba6adb44b2d77386ab1487f`,
+  `0640 root:findandstudy-staging`). Its network-isolated PostgreSQL 16.15
+  restore reproduced ledger `90`, 13 synthetic users, zero applications and
+  zero portal submissions; the disposable restore container was removed.
+- The first restore assertion expected the earlier 12-user baseline and also
+  queried the not-yet-created lifecycle table. It failed closed after the
+  backup had completed. The accepted rerun used the measured 13-user baseline,
+  treated absence of the pre-`0090` table as the expected value, and passed.
+- The least-privilege reviewed migration runner advanced only staging from
+  ledger `90/90` to `92/92`. Post-adoption counts remained 13 users, zero
+  applications, zero portal submissions and zero lifecycle observations.
+- Only `findandstudy-staging-app-1` was recreated. It runs as UID/GID `10042`,
+  with a read-only root filesystem, all capabilities dropped,
+  `no-new-privileges`, health `healthy` and restart count `0`.
+- Public `/api/healthz` and `/api/health` returned HTTP `200`, the exact release
+  ID and `dbConnected=true`; HSTS is active. Six further samples at five-second
+  intervals all returned the same exact result. App logs contained zero
+  fatal/unhandled/uncaught matches.
+- `ALLOW_LIVE_INTEGRATIONS=false`, `EMAIL_DELIVERY_DISABLED=true`,
+  `BACKGROUND_JOBS_ENABLED=false` and
+  `AI_EXTERNAL_AUTO_REPLY_KILL_SWITCH=true` remained effective. Portal worker
+  count was zero, and no portal, email, WhatsApp, payment or notification call
+  was made.
+- Authenticated read-only browser UAT opened Rules, Operations, Adapter
+  Management, Submission Board and Audit Log. Dynamic stages came from the
+  Application Pipeline; terminal Enrolled/Rejected stages were disabled. No
+  submit, status sweep, adapter upload, setting save or other mutation ran.
+- Final root filesystem use was `80%`, with `21,072,498,688` bytes available.
+  No Docker prune or unrelated container restart was performed.
+
 ## Explicitly not performed
 
-- No GitHub push, pull request, merge or branch protection change.
-- No staging or production deployment.
+- No pull-request merge, branch protection change or production deployment.
 - No production migration, service restart, worker restart or credential read.
 - No real portal submission, polling, email, WhatsApp, payment or notification.
 - No local database or storage copy was sent to a remote environment.
 
 ## Required next gate
 
-Before staging adoption: review the exact commit, migration SQL, live staging
-schema, adapter credential references, worker overlap behavior and rollback
-sequence. Run a synthetic allowlisted portal fixture first. Production remains
-NO-GO until the repository deployment preflight is reported and the user gives
-separate explicit approval for that exact release.
+Before any staging worker or integration is enabled, run a synthetic
+allowlisted adapter fixture for the exact approved version and re-attest that
+lane ownership, credential references and external-write denominators remain
+bounded. Production remains NO-GO until the repository production preflight,
+current production row/lock impact review, rollback plan and separate user
+approval are complete for an exact release.
