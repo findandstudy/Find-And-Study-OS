@@ -14,12 +14,12 @@ const sourceRoots = [
 const surfacePatterns = [
   {
     kind: "database_orm_write",
-    expression: /\b(?:db|tx|conn|pool|client)\s*\.(?:insert|update|delete|execute|query)\s*\(/g,
+    expression: /\b(?:db|tx|conn|pool|client|executor)\s*\.(?:insert|update|delete|execute|query)\s*\(/g,
   },
   {
     kind: "database_raw_sql",
     expression:
-      /\b(?:db|tx|conn|pool|client)\s*\.(?:query|execute)\s*\(\s*(?:sql\s*)?[`'"]\s*(?:alter|create|delete|drop|insert|merge|truncate|update)\b/gi,
+      /\b(?:db|tx|conn|pool|client|executor)\s*\.(?:query|execute)\s*\(\s*(?:sql\s*)?[`'"]\s*(?:alter|create|delete|drop|insert|merge|truncate|update)\b/gi,
   },
   {
     kind: "object_or_file_write",
