@@ -800,7 +800,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/portalMgmt.ts",
-      "sha256": "1efa11d671e3ef889f4fcfbbdc8cad86ac89ce3ee9bd47a39943e13c5099ca8b",
+      "sha256": "3c0d99edb3576cfd2cddba002f22c202519a602beef565ada65a4925c7471cc7",
       "routeRegistrations": 23,
       "requireAuth": 24,
       "requireRole": 24,
