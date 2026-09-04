@@ -27,6 +27,9 @@ State: local implementation complete; not pushed or deployed
      mapped from captured/structured values without adding application code.
      Identity proof and the official number are emitted only when the captured
      application identity exactly equals the requested external reference.
+   - The same package can map offer, deposit, acceptance, final-acceptance and
+     student-card download controls. Collection is a separate second phase and
+     runs only when that status needs a file which is not already present.
 
 3. Evidence-bound lifecycle monitoring
    - Adapter status results can carry semantic application identity proof,
@@ -49,7 +52,21 @@ State: local implementation complete; not pushed or deployed
    - Proposals remain human-approval-only and never authorize portal mutation,
      payment, external messaging or direct CRM stage mutation.
 
-5. High-volume queue isolation
+5. Safe portal artifact intake
+   - Authenticated downloads are restricted to the adapter's exact origin;
+     redirects are denied and the final response origin is checked again.
+   - A declared positive content length, a 15 MiB hard ceiling, an allowlisted
+     MIME type and matching PDF/JPEG/PNG magic bytes are all required.
+   - Application-scoped content-addressed keys and a database unique index
+     prevent retry or concurrency from creating duplicate files or rows.
+   - The document is bound to the exact observation, submission and application
+     by a composite foreign key and appears in the existing Application document
+     area with a Portal Automation badge.
+   - Automation is a distinct non-human source; it never impersonates a staff
+     uploader, and portal-collected evidence cannot be deleted through the
+     stage-document API.
+
+6. High-volume queue isolation
    - Row ownership uses PostgreSQL `FOR UPDATE SKIP LOCKED` leases.
    - Adapter+university lanes use a session advisory lease, guaranteeing one
      active browser session per portal account across API instances.
@@ -62,7 +79,7 @@ State: local implementation complete; not pushed or deployed
    - Offers and final acceptance remain monitored for later enrolment/card
      evidence; only closed-loop terminal outcomes stop the lane item.
 
-6. Operations console
+7. Operations console
    - The Portal Automation page now includes an Operations tab consistent with
      the existing admin shell.
    - It shows aggregate health, per-lane backlog, retry/quarantine counts,
@@ -74,11 +91,13 @@ State: local implementation complete; not pushed or deployed
 
 ## Schema and compatibility
 
-`0090_portal_lifecycle_observations.sql` is additive. It adds status-check lease,
-retry and quarantine columns to `portal_submissions`, an idempotency key to
-`ai_action_queue`, and the append-only `portal_lifecycle_observations` table.
+`0090_portal_lifecycle_observations.sql` and
+`0091_portal_application_artifact_intake.sql` are additive. They add status-check
+lease, retry and quarantine columns to `portal_submissions`, an idempotency key
+to `ai_action_queue`, the append-only observation table and evidence-source
+binding on `application_stage_documents`.
 Existing rows receive safe defaults; no table or populated column is dropped,
-renamed or rewritten. The canonical local ledger is `91/91`.
+renamed or rewritten. The canonical local ledger is `92/92`.
 
 The deployment must still follow the repository production preflight. In
 particular, the index/constraint lock impact must be checked on the current
@@ -86,11 +105,11 @@ production schema and row counts before any production migration approval.
 
 ## Verification evidence
 
-- Migration validation: `91 files / 91 journal entries`.
-- Fresh disposable PostgreSQL apply: `0 → 91`; clean replay: `91 → 91`.
-- Portal pure contracts: `23/23`.
+- Migration validation: `92 files / 92 journal entries`.
+- Fresh disposable PostgreSQL apply: `0 → 92`; clean replay: `92 → 92`.
+- Portal pure contracts: `26/26`.
 - Dynamic trigger policy: `4/4`.
-- PostgreSQL observation, lane, Guardian and operations tests: `6/6`.
+- PostgreSQL observation, lane, Guardian, operations and artifact tests: `7/7`.
 - Migration authority: `31 PASS`, `1` Bash-unavailable Windows skip.
 - Package-manager guard: `6/6`, exact pnpm `10.33.2`.
 - Workspace and targeted API/portal-worker typechecks: PASS.

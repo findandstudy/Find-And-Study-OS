@@ -12,6 +12,7 @@ import { validateUploadedFile, validateUploadedFileBuffer, sanitizeFileName } fr
 import { processUpload, UploadTooLargeError } from "../lib/uploads/processUpload";
 import { buildDocNameFromParts } from "../lib/docNaming";
 import { assertCanAccessStudent } from "../lib/studentAccess";
+import { ObjectNotFoundError, ObjectStorageService } from "../lib/objectStorage";
 
 const router: IRouter = Router();
 
@@ -100,6 +101,7 @@ router.get("/applications/:id/stage-documents", requireAuth, requireAgentStaffPe
       uploadedBy: applicationStageDocumentsTable.uploadedBy,
       uploadedByRole: applicationStageDocumentsTable.uploadedByRole,
       uploadedByName: applicationStageDocumentsTable.uploadedByName,
+      sourceType: applicationStageDocumentsTable.sourceType,
       isMissingDocNote: applicationStageDocumentsTable.isMissingDocNote,
       validUntil: applicationStageDocumentsTable.validUntil,
       expiryNotifiedThresholds: applicationStageDocumentsTable.expiryNotifiedThresholds,
@@ -387,6 +389,11 @@ router.delete("/applications/:id/stage-documents/:docId", requireAuth, requireAg
     .where(and(eq(applicationStageDocumentsTable.id, docId), eq(applicationStageDocumentsTable.applicationId, applicationId)));
 
   if (!doc) { res.status(404).json({ error: "Document not found" }); return; }
+
+  if (doc.sourceType === "portal_automation") {
+    res.status(409).json({ error: "Portal-collected evidence is immutable" });
+    return;
+  }
 
   if (!isAdmin && doc.uploadedBy !== user.id) {
     res.status(403).json({ error: "You can only delete your own uploads" });
@@ -759,6 +766,7 @@ router.get("/students/:id/application-documents", requireAuth, requireAgentStaff
       uploadedBy: applicationStageDocumentsTable.uploadedBy,
       uploadedByRole: applicationStageDocumentsTable.uploadedByRole,
       uploadedByName: applicationStageDocumentsTable.uploadedByName,
+      sourceType: applicationStageDocumentsTable.sourceType,
       validUntil: applicationStageDocumentsTable.validUntil,
       hasFileData: sql<boolean>`${applicationStageDocumentsTable.fileData} IS NOT NULL`.as("has_file_data"),
       fileUrl: applicationStageDocumentsTable.fileUrl,
@@ -827,7 +835,26 @@ router.get("/applications/:id/stage-documents/:docId/download", requireAuth, req
     res.setHeader("Content-Length", buffer.length);
     res.send(buffer);
   } else if (doc.fileUrl) {
-    res.redirect(doc.fileUrl);
+    if (doc.fileUrl.startsWith("/objects/")) {
+      try {
+        const storage = new ObjectStorageService();
+        const objectFile = await storage.getObjectEntityFile(doc.fileUrl);
+        res.setHeader("Content-Disposition", `attachment; filename="${encodeURIComponent(downloadName)}"`);
+        res.setHeader("X-Content-Type-Options", "nosniff");
+        await storage.streamObjectToResponse(req, res, objectFile, {
+          contentType: doc.mimeType || "application/octet-stream",
+          cacheControl: "private, no-store",
+        });
+      } catch (error) {
+        if (error instanceof ObjectNotFoundError) {
+          res.status(404).json({ error: "File not found" });
+          return;
+        }
+        throw error;
+      }
+    } else {
+      res.redirect(doc.fileUrl);
+    }
   } else {
     res.status(404).json({ error: "No file data available" });
   }

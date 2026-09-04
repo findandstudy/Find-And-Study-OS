@@ -25,6 +25,8 @@ import type {
   ProgramOption,
   PortalProgramOption,
   PortalStatusCheckResult,
+  PortalStatusArtifact,
+  PortalStatusArtifactKind,
 } from "../types.js";
 import type { MinimalPage } from "../declarativeAdapter.js";
 import { launchPortal, logger } from "../browser.js";
@@ -46,7 +48,11 @@ import type {
 } from "./schema.js";
 import type { InterpolateCtx } from "./interpolate.js";
 import { interpolate } from "./interpolate.js";
-import { executeHttpLikeStep } from "./httpRunner.js";
+import {
+  assertAllowedOrigin,
+  executeHttpLikeStep,
+  type CapturePage,
+} from "./httpRunner.js";
 
 // ---------------------------------------------------------------------------
 // Page interface — MinimalPage plus the optional capabilities a spec may use.
@@ -822,6 +828,176 @@ export function buildDeclarativeStatusResult(input: {
   return result;
 }
 
+const PORTAL_ARTIFACT_EXTENSION: Record<PortalStatusArtifact["contentType"], string> = {
+  "application/pdf": ".pdf",
+  "image/jpeg": ".jpg",
+  "image/png": ".png",
+};
+
+function statusTextKey(value: string): string {
+  return value.normalize("NFKC").replace(/\s+/g, " ").trim().toLocaleLowerCase("en");
+}
+
+function hasPortalArtifactMagic(
+  contentType: PortalStatusArtifact["contentType"],
+  bytes: Uint8Array,
+): boolean {
+  if (contentType === "application/pdf") {
+    return bytes.length >= 5 && Buffer.from(bytes.subarray(0, 5)).toString("ascii") === "%PDF-";
+  }
+  if (contentType === "image/jpeg") {
+    return bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
+  }
+  return (
+    bytes.length >= 8 &&
+    bytes[0] === 0x89 &&
+    bytes[1] === 0x50 &&
+    bytes[2] === 0x4e &&
+    bytes[3] === 0x47 &&
+    bytes[4] === 0x0d &&
+    bytes[5] === 0x0a &&
+    bytes[6] === 0x1a &&
+    bytes[7] === 0x0a
+  );
+}
+
+/** Validates and names portal bytes without trusting a URL, filename or MIME header. */
+export function buildPortalStatusArtifact(input: {
+  kind: PortalStatusArtifactKind;
+  fileName?: unknown;
+  contentType: unknown;
+  bytes: Uint8Array;
+  sourceLabel: unknown;
+  maxBytes: number;
+}): PortalStatusArtifact {
+  if (!(input.bytes instanceof Uint8Array) || input.bytes.byteLength < 5) {
+    throw new Error("status_artifact_empty");
+  }
+  if (input.bytes.byteLength > input.maxBytes) {
+    throw new Error("status_artifact_too_large");
+  }
+  const contentType = String(input.contentType ?? "")
+    .split(";", 1)[0]!
+    .trim()
+    .toLocaleLowerCase("en") as PortalStatusArtifact["contentType"];
+  if (!(contentType in PORTAL_ARTIFACT_EXTENSION) || !hasPortalArtifactMagic(contentType, input.bytes)) {
+    throw new Error("status_artifact_content_mismatch");
+  }
+  const sourceLabel = requiredBoundedStatusText(
+    input.sourceLabel,
+    "status_artifact_source_label_invalid",
+    160,
+  );
+  const fallbackName = `portal-${input.kind}${PORTAL_ARTIFACT_EXTENSION[contentType]}`;
+  const rawName = typeof input.fileName === "string" ? input.fileName.trim() : "";
+  const safeBase = rawName
+    .replaceAll("\\", "/")
+    .split("/")
+    .pop()!
+    .replace(/[^A-Za-z0-9._-]/g, "_")
+    .replace(/^\.+/, "")
+    .slice(0, 160);
+  const expectedExtension = PORTAL_ARTIFACT_EXTENSION[contentType];
+  const fileName = safeBase && safeBase.toLocaleLowerCase("en").endsWith(expectedExtension)
+    ? safeBase
+    : fallbackName;
+  return {
+    kind: input.kind,
+    fileName,
+    contentType,
+    bytes: input.bytes,
+    sourceLabel,
+  };
+}
+
+async function runDeclarativeStatusContext(
+  page: SpecPage,
+  spec: AdapterSpec,
+  externalRef: string,
+): Promise<{ vars: Record<string, unknown>; captured: Record<string, unknown> }> {
+  const vars: Record<string, unknown> = {
+    externalRef,
+    externalRefEncoded: encodeURIComponent(externalRef),
+  };
+  const captured: Record<string, unknown> = {};
+  await runSpecSteps(
+    page,
+    spec.statusCheck!.steps,
+    {
+      profile: emptyProfile(),
+      files: {},
+      allowJsHook: false,
+      vars,
+      captured,
+      allowedOrigins: spec.meta.allowedOrigins ?? [],
+      dryRun: true,
+      dryRunPolicy: "strict",
+    },
+    false,
+  );
+  return { vars, captured };
+}
+
+async function downloadDeclarativeStatusArtifact(input: {
+  page: SpecPage;
+  spec: AdapterSpec;
+  artifact: StatusCheckSpec["artifacts"][number];
+  bags: StatusRuntimeBags;
+}): Promise<PortalStatusArtifact> {
+  const rawUrl = requiredBoundedStatusText(
+    readStatusValue(input.artifact.urlFrom, input.bags),
+    "status_artifact_url_missing",
+    2_048,
+  );
+  const pageUrl = typeof input.page.url === "function" ? input.page.url() : undefined;
+  let url: string;
+  try {
+    url = new URL(rawUrl, pageUrl).toString();
+  } catch {
+    throw new Error("status_artifact_url_invalid");
+  }
+  const allowedOrigins = input.spec.meta.allowedOrigins ?? [];
+  assertAllowedOrigin(url, allowedOrigins);
+  const requestPage = input.page as unknown as CapturePage;
+  const response = await requestPage.request.fetch(url, {
+    method: "GET",
+    maxRedirects: 0,
+    timeout: 30_000,
+    failOnStatusCode: false,
+  });
+  const status = response.status();
+  if (status < 200 || status >= 300) throw new Error("status_artifact_download_failed");
+  assertAllowedOrigin(response.url(), allowedOrigins);
+  const headers = response.headers();
+  const rawLength = headers["content-length"];
+  const declaredLength = rawLength == null ? NaN : Number(rawLength);
+  if (!Number.isSafeInteger(declaredLength) || declaredLength < 5) {
+    throw new Error("status_artifact_content_length_required");
+  }
+  if (declaredLength > input.artifact.maxBytes) {
+    throw new Error("status_artifact_too_large");
+  }
+  const contentType = String(headers["content-type"] ?? "").split(";", 1)[0]!.trim().toLowerCase();
+  if (!input.artifact.contentTypes.includes(contentType as never)) {
+    throw new Error("status_artifact_content_type_denied");
+  }
+  const bytes = new Uint8Array(await response.body());
+  if (bytes.byteLength !== declaredLength) {
+    throw new Error("status_artifact_content_length_mismatch");
+  }
+  const fileName = input.artifact.fileNameFrom
+    ? readStatusValue(input.artifact.fileNameFrom, input.bags)
+    : undefined;
+  return buildPortalStatusArtifact({
+    kind: input.artifact.kind,
+    fileName,
+    contentType,
+    bytes,
+    sourceLabel: input.artifact.sourceLabel,
+    maxBytes: input.artifact.maxBytes,
+  });
+}
+
 /** Executes a single spec step. Honors `optional` (errors are warned, not thrown). */
 export async function executeSpecStep(
   page: SpecPage,
@@ -1498,25 +1674,10 @@ export function createSpecAdapter(
             externalRef: string,
           ): Promise<PortalStatusCheckResult> {
             const page = session.page as unknown as SpecPage;
-            const vars: Record<string, unknown> = {
-              externalRef,
-              externalRefEncoded: encodeURIComponent(externalRef),
-            };
-            const captured: Record<string, unknown> = {};
-            await runSpecSteps(
+            const { vars, captured } = await runDeclarativeStatusContext(
               page,
-              spec.statusCheck!.steps,
-              {
-                profile: emptyProfile(),
-                files: {},
-                allowJsHook: false,
-                vars,
-                captured,
-                allowedOrigins: spec.meta.allowedOrigins ?? [],
-                dryRun: true,
-                dryRunPolicy: "strict",
-              },
-              false,
+              spec,
+              externalRef,
             );
             return buildDeclarativeStatusResult({
               statusCheck: spec.statusCheck!,
@@ -1524,6 +1685,43 @@ export function createSpecAdapter(
               vars,
               captured,
             });
+          },
+
+          async collectStatusArtifacts(
+            session: AdapterSession,
+            externalRef: string,
+            statusResult: PortalStatusCheckResult,
+            requestedKinds: PortalStatusArtifactKind[],
+          ): Promise<PortalStatusArtifact[]> {
+            if (requestedKinds.length === 0 || spec.statusCheck!.artifacts.length === 0) {
+              return [];
+            }
+            const requested = new Set(requestedKinds);
+            const page = session.page as unknown as SpecPage;
+            const bags = await runDeclarativeStatusContext(page, spec, externalRef);
+            const current = buildDeclarativeStatusResult({
+              statusCheck: spec.statusCheck!,
+              externalRef,
+              ...bags,
+            });
+            if (!current.identityProof) throw new Error("status_artifact_identity_unverified");
+            if (statusTextKey(current.status) !== statusTextKey(statusResult.status)) {
+              throw new Error("status_artifact_status_changed");
+            }
+            const matching = spec.statusCheck!.artifacts.filter(
+              (artifact) =>
+                requested.has(artifact.kind) &&
+                artifact.statusValues.some(
+                  (status) => statusTextKey(status) === statusTextKey(current.status),
+                ),
+            );
+            const collected: PortalStatusArtifact[] = [];
+            for (const artifact of matching) {
+              collected.push(
+                await downloadDeclarativeStatusArtifact({ page, spec, artifact, bags }),
+              );
+            }
+            return collected;
           },
         }
       : {}),

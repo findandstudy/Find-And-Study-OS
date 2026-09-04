@@ -385,7 +385,8 @@ mapping'i uygulama koduna dokunmadan yapılır; identity proof ve official numbe
 yalnız yakalanan application identity istenen external reference ile exact
 eşleşirse üretilir. Status kontrolü privileged version approval kapsamındadır.
 
-Additive `0090_portal_lifecycle_observations.sql` ile kanonik ledger `91/91`
+Additive `0090_portal_lifecycle_observations.sql` ve
+`0091_portal_application_artifact_intake.sql` ile kanonik ledger `92/92`
 olmuştur. Portal status gözlemleri submission+application composite FK,
 redaction, bounded missing-document list, semantic identity proof ve hash ile
 append-only/deduplicated tutulur. University application number yalnız exact
@@ -394,6 +395,17 @@ farklı değer overwrite edilmez, approval queue'ya conflict düşer. Offer,
 payment, final acceptance ve student card stage değişiklikleri exact artifact
 olmadan önerilemez; hiçbir lifecycle proposal portal mutation, dış mesaj,
 ödeme veya otomatik CRM stage değişikliği yetkisi taşımaz.
+
+No-code v2 status mapping offer/deposit/acceptance/final/student-card artifact
+kontrolünü de tanımlayabilir. Artifact ikinci fazda, yalnız ilgili status bunu
+gerektirip application'da dosya yoksa indirilir. Exact allowlisted origin,
+redirect-deny + final-origin recheck, zorunlu content-length, hard `15 MiB`,
+MIME allowlist ve PDF/JPEG/PNG magic-byte eşliği fail-closed'dur.
+Application-scoped content-addressed object key retry'da aynı dosyayı kullanır;
+DB kaydı observation+submission+application composite FK ve içerik hashiyle
+idempotent bağlıdır. İnsan kullanıcı taklit edilmez, kaynak `portal_automation`
+olarak görünür ve stage-document delete API'si bu kanıtı silmez. Dosya mevcut
+Application belge alanında Portal Automation badge'iyle görünür.
 
 Status sync PostgreSQL `SKIP LOCKED` row lease ve adapter+university advisory
 lane lease kullanır. Böylece aynı portal hesabında tek browser session, farklı
@@ -407,8 +419,8 @@ Offer/final acceptance monitoring'i sonlandırmaz; yalnız enrolment, reject,
 full quota, duplicate/already-registered ve withdrawal terminaldir.
 
 Dedicated `Portal Automation Gate` Linux, Windows ve PostgreSQL 16 kapılarını
-tanımlar. Yerel kanıt: fresh `91/91` + clean replay, portal pure `23/23`, dynamic
-stage `4/4`, PostgreSQL observation/lane/Guardian/operations `6/6`, migration
+tanımlar. Yerel kanıt: fresh `92/92` + clean replay, portal pure `26/26`, dynamic
+stage `4/4`, PostgreSQL observation/lane/Guardian/operations/artifact `7/7`, migration
 authority `31 PASS + 1` Bash-unavailable SKIP, package manager `6/6`, workspace
 ve hedef API/worker typecheck, 10 dil i18n, API ve Edcons production build PASS.
 Disposable test DB iş sonunda kaldırılır. GitHub push/PR/merge, staging,

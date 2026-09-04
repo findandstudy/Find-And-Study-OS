@@ -1,4 +1,4 @@
-import { pgTable, text, serial, timestamp, integer, boolean, index } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, integer, boolean, index, jsonb } from "drizzle-orm/pg-core";
 import { applicationsTable } from "./applications";
 import { usersTable } from "./users";
 
@@ -11,7 +11,7 @@ export const applicationStageDocumentsTable = pgTable("application_stage_documen
   fileUrl: text("file_url"),
   mimeType: text("mime_type"),
   sizeBytes: integer("size_bytes"),
-  uploadedBy: integer("uploaded_by").notNull().references(() => usersTable.id, { onDelete: "restrict" }),
+  uploadedBy: integer("uploaded_by").references(() => usersTable.id, { onDelete: "restrict" }),
   uploadedByRole: text("uploaded_by_role").notNull(),
   uploadedByName: text("uploaded_by_name"),
   isMissingDocNote: boolean("is_missing_doc_note").default(false),
@@ -41,6 +41,11 @@ export const applicationStageDocumentsTable = pgTable("application_stage_documen
   actionTargetStageKey: text("action_target_stage_key"),
   validUntil: timestamp("valid_until", { withTimezone: true }),
   expiryNotifiedThresholds: text("expiry_notified_thresholds"),
+  sourceType: text("source_type").notNull().default("user_upload"),
+  sourcePortalSubmissionId: integer("source_portal_submission_id"),
+  sourcePortalObservationId: integer("source_portal_observation_id"),
+  sourceContentSha256: text("source_content_sha256"),
+  sourceEvidence: jsonb("source_evidence").notNull().default({}),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
   index("app_stage_docs_application_id_idx").on(table.applicationId),

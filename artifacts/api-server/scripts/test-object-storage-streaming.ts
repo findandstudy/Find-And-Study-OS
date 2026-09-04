@@ -129,15 +129,23 @@ test("empty, missing, PDF, DOCX and image responses keep their contracts", async
   assert.equal((await fetch(`${baseUrl}/image.png`)).headers.get("content-type"), "image/png");
 });
 
-test("path traversal and symlink escape are rejected", async () => {
+test("path traversal and symlink escape are rejected", async (context) => {
   await writeFile(path.join(directory, "..outside.txt"), "safe but invalid path name");
   assert.equal((await fetch(`${baseUrl}/..%2Foutside.txt`)).status, 404);
   const outside = path.join(tmpdir(), `fasos-outside-${process.pid}.txt`);
+  const escapeLink = path.join(directory, "escape.txt");
   await writeFile(outside, "outside");
-  await symlink(outside, path.join(directory, "escape.txt"));
   try {
+    try {
+      await symlink(outside, escapeLink);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "EPERM") throw error;
+      context.diagnostic("Symlink escape assertion unavailable: Windows symlink privilege is disabled.");
+      return;
+    }
     assert.equal((await fetch(`${baseUrl}/escape.txt`)).status, 404);
   } finally {
+    await rm(escapeLink, { force: true });
     await rm(outside, { force: true });
   }
 });

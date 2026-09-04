@@ -433,9 +433,11 @@ const graphqlStep = z.object({
 const captureStep = z.object({
   action: z.literal("capture"),
   ...stepControlFields,
-  from: z.enum(["lastResponse", "cookie", "localStorage", "selectorText", "url"]),
+  from: z.enum(["lastResponse", "cookie", "localStorage", "selectorText", "selectorAttribute", "url"]),
   /** JSON dotpath into lastResponse, or cookie/localStorage key name. */
   path: z.string().min(1).optional(),
+  /** Attribute name when from=selectorAttribute. */
+  attribute: z.string().min(1).max(80).regex(/^[A-Za-z_:][A-Za-z0-9_.:-]*$/).optional(),
   name: z.string().min(1),
 });
 
@@ -741,6 +743,31 @@ export const statusCheckSchema = z.object({
       codeField: z.string().min(1).max(64).optional(),
     })
     .optional(),
+  artifacts: z
+    .array(
+      z.object({
+        kind: z.enum([
+          "offer_letter",
+          "deposit_receipt",
+          "acceptance_letter",
+          "final_acceptance",
+          "student_card",
+        ]),
+        /** Download only when the observed status exactly matches one of these values. */
+        statusValues: z.array(z.string().min(1).max(250)).min(1).max(20),
+        urlFrom: statusValueSourceSchema,
+        fileNameFrom: statusValueSourceSchema.optional(),
+        sourceLabel: z.string().min(1).max(160),
+        maxBytes: z.number().int().min(1024).max(15 * 1024 * 1024).default(10 * 1024 * 1024),
+        contentTypes: z
+          .array(z.enum(["application/pdf", "image/jpeg", "image/png"]))
+          .min(1)
+          .max(3)
+          .default(["application/pdf"]),
+      }),
+    )
+    .max(5)
+    .default([]),
 });
 
 // ---------------------------------------------------------------------------
@@ -818,6 +845,17 @@ export const adapterSpecSchema = z
 
     const checkFills = (steps: SpecStep[], base: (string | number)[]): void => {
       steps.forEach((s, i) => {
+        if (
+          s.action === "capture" &&
+          s.from === "selectorAttribute" &&
+          (!s.path || !s.attribute)
+        ) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: [...base, i],
+            message: "selectorAttribute capture requires path and attribute",
+          });
+        }
         if (s.action === "fill" && (s.value == null) === (s.valueFrom == null)) {
           ctx.addIssue({
             code: z.ZodIssueCode.custom,
@@ -865,6 +903,17 @@ export const adapterSpecSchema = z
             message: "statusCheck steps must be read-only; only navigate, waitFor, ajaxWait, capture, setVar, assert and non-mutating HTTP GET are allowed",
           });
         }
+      });
+      const artifactKinds = new Set<string>();
+      spec.statusCheck.artifacts.forEach((artifact, index) => {
+        if (artifactKinds.has(artifact.kind)) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["statusCheck", "artifacts", index, "kind"],
+            message: "statusCheck artifact kinds must be unique",
+          });
+        }
+        artifactKinds.add(artifact.kind);
       });
     }
 
@@ -1183,6 +1232,7 @@ export function specIsPrivileged(spec: unknown): boolean {
   };
   return (
     s.meta?.resolution === "override" ||
+    Boolean(s.statusCheck) ||
     listHasPrivileged(s.steps) ||
     listHasPrivileged(s.auth?.loginSteps) ||
     listHasPrivileged(s.statusCheck?.steps) ||

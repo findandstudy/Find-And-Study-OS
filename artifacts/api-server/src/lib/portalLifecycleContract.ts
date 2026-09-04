@@ -182,6 +182,12 @@ const artifactForSignal: Partial<Record<PortalLifecycleSignal, PortalLifecycleAr
   student_card: "student_card",
 };
 
+export function requiredPortalArtifactForSignal(
+  signal: PortalLifecycleSignal,
+): PortalLifecycleArtifact | null {
+  return artifactForSignal[signal] ?? null;
+}
+
 const targetStageForSignal: Partial<Record<PortalLifecycleSignal, string>> = {
   submitted: "submitted",
   offer_received: "offer_received",
@@ -212,7 +218,7 @@ export function planPortalLifecycle(input: {
   const signal = normalizePortalLifecycleSignal(input.rawStatus);
   const disposition = normalizePortalLifecycleDisposition(input.rawStatus);
   const artifacts = new Set(input.artifacts ?? []);
-  const requiredArtifact = artifactForSignal[signal] ?? null;
+  const requiredArtifact = requiredPortalArtifactForSignal(signal);
   const artifactVerified = requiredArtifact === null || artifacts.has(requiredArtifact);
   const targetStage = targetStageForSignal[signal] ?? null;
   const availableStages = input.availableStages

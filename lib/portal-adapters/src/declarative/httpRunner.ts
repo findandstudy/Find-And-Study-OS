@@ -30,8 +30,17 @@ export interface RequestContext {
       method?: string;
       headers?: Record<string, string>;
       data?: string;
+      maxRedirects?: number;
+      timeout?: number;
+      failOnStatusCode?: boolean;
     },
-  ): Promise<{ text(): Promise<string> }>;
+  ): Promise<{
+    text(): Promise<string>;
+    body(): Promise<Buffer>;
+    status(): number;
+    headers(): Record<string, string>;
+    url(): string;
+  }>;
 }
 
 /** The Playwright Page subset needed for capture steps. */
@@ -39,6 +48,7 @@ export interface CapturePage {
   url(): string;
   evaluate<T>(fn: string | ((...args: unknown[]) => T), ...args: unknown[]): Promise<T>;
   textContent(selector: string): Promise<string | null>;
+  getAttribute(selector: string, name: string): Promise<string | null>;
   request: RequestContext;
 }
 
@@ -75,8 +85,9 @@ export interface GraphqlStep {
 
 export interface CaptureStep {
   action: "capture";
-  from: "lastResponse" | "cookie" | "localStorage" | "selectorText" | "url";
+  from: "lastResponse" | "cookie" | "localStorage" | "selectorText" | "selectorAttribute" | "url";
   path?: string;
+  attribute?: string;
   name: string;
 }
 
@@ -96,7 +107,7 @@ export type HttpLikeStep = HttpStep | GraphqlStep | CaptureStep | SetVarStep;
  * Validates that `url` has an origin that exactly matches one of the allowed
  * origins. Throws a hard error when the URL is invalid or not in the list.
  */
-function assertAllowedOrigin(url: string, allowedOrigins: string[]): void {
+export function assertAllowedOrigin(url: string, allowedOrigins: string[]): void {
   let parsed: URL;
   try {
     parsed = new URL(url);
@@ -187,8 +198,18 @@ export async function executeHttpLikeStep(
         method: step.method,
         headers,
         data,
+        maxRedirects: 0,
+        failOnStatusCode: false,
       });
+      const status = resp.status();
+      if (status < 200 || status >= 300) {
+        throw new Error(`[httpRunner] HTTP response status ${status}`);
+      }
+      assertAllowedOrigin(resp.url(), allowedOrigins);
       const text = await resp.text();
+      if (Buffer.byteLength(text, "utf8") > 1024 * 1024) {
+        throw new Error("[httpRunner] response exceeds 1 MiB");
+      }
       ctx.captured["lastResponse"] = text;
       if (step.saveAs) ctx.captured[iStr(step.saveAs, ctx)] = text;
       return text;
@@ -213,8 +234,18 @@ export async function executeHttpLikeStep(
         method: "POST",
         headers: { "Content-Type": "application/json" },
         data: body,
+        maxRedirects: 0,
+        failOnStatusCode: false,
       });
+      const status = resp.status();
+      if (status < 200 || status >= 300) {
+        throw new Error(`[httpRunner] GraphQL response status ${status}`);
+      }
+      assertAllowedOrigin(resp.url(), allowedOrigins);
       const text = await resp.text();
+      if (Buffer.byteLength(text, "utf8") > 1024 * 1024) {
+        throw new Error("[httpRunner] response exceeds 1 MiB");
+      }
       ctx.captured["lastResponse"] = text;
       if (step.saveAs) ctx.captured[iStr(step.saveAs, ctx)] = text;
       return text;
@@ -242,6 +273,10 @@ export async function executeHttpLikeStep(
               const parts = resolvedPath.split(".");
               let cur: unknown = parsed;
               for (const p of parts) {
+                if (p === "__proto__" || p === "prototype" || p === "constructor") {
+                  cur = undefined;
+                  break;
+                }
                 if (cur == null || typeof cur !== "object") { cur = undefined; break; }
                 cur = (cur as Record<string, unknown>)[p];
               }
@@ -272,6 +307,14 @@ export async function executeHttpLikeStep(
           if (!resolvedPath) throw new Error("[httpRunner] capture selectorText requires path (the CSS selector)");
           const text = await page.textContent(resolvedPath);
           value = (text ?? "").trim();
+          break;
+        }
+
+        case "selectorAttribute": {
+          if (!resolvedPath || !step.attribute) {
+            throw new Error("[httpRunner] capture selectorAttribute requires path and attribute");
+          }
+          value = (await page.getAttribute(resolvedPath, step.attribute))?.trim() ?? "";
           break;
         }
 

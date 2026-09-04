@@ -51,6 +51,9 @@ import {
   isSitExcludedUniversity,
   type ProgramCandidate,
   type PortalStatusCheckResult,
+  type UniversityAdapter,
+  type AdapterSession,
+  type PortalStatusArtifactKind,
 } from "@workspace/portal-adapters";
 import { isAgentRole } from "@workspace/roles";
 import { logAudit, requireAuth, requireRole } from "../lib/auth";
@@ -94,9 +97,16 @@ import {
 } from "../lib/portalAiGuardian.js";
 import { queuePortalLifecycleReview } from "../lib/portalLifecycleGuardian.js";
 import { normalizePortalLifecycleObservation } from "../lib/portalLifecycleObservation.js";
-import { mapPortalDispositionToSubmissionStatus } from "../lib/portalLifecycleContract.js";
+import {
+  mapPortalDispositionToSubmissionStatus,
+  requiredPortalArtifactForSignal,
+} from "../lib/portalLifecycleContract.js";
 import { recordPortalLifecycleObservation } from "../lib/portalLifecycleObservationStore.js";
 import { syncVerifiedPortalApplicationNumber } from "../lib/portalApplicationReferenceSync.js";
+import {
+  hasStoredPortalLifecycleArtifact,
+  persistPortalStatusArtifacts,
+} from "../lib/portalArtifactIntake.js";
 import { resolveCanonicalPortalUniversity } from "../lib/portalUniversityResolver.js";
 import {
   MAX_PORTAL_ADAPTER_SPEC_BYTES,
@@ -2926,6 +2936,8 @@ export async function runPortalStatusSync(): Promise<{ checked: number; updated:
   const processRow = async (
     row: ClaimedPortalStatusCheck,
     result: PortalStatusCheckResult,
+    adapter: UniversityAdapter,
+    session: AdapterSession,
   ): Promise<void> => {
     const observation = normalizePortalLifecycleObservation({
       submissionId: row.id,
@@ -2940,6 +2952,35 @@ export async function runPortalStatusSync(): Promise<{ checked: number; updated:
           verifiedApplicationNumber: observation.verifiedApplicationNumber,
         })
       : "invalid";
+    const requiredArtifact = requiredPortalArtifactForSignal(observation.signal) as
+      | PortalStatusArtifactKind
+      | null;
+    let artifactStored = false;
+    if (
+      observation.identityVerified &&
+      requiredArtifact &&
+      adapter.collectStatusArtifacts &&
+      !(await hasStoredPortalLifecycleArtifact(row.applicationId, requiredArtifact))
+    ) {
+      const artifacts = await adapter.collectStatusArtifacts(
+        session,
+        row.externalRef,
+        result,
+        [requiredArtifact],
+      );
+      if (artifacts.some((artifact) => artifact.kind !== requiredArtifact)) {
+        throw new Error("PORTAL_STATUS_ARTIFACT_KIND_MISMATCH");
+      }
+      const artifactOutcomes = await persistPortalStatusArtifacts({
+        submissionId: row.id,
+        applicationId: row.applicationId,
+        observationId: recordedObservation.id,
+        observationHash: observation.observationHash,
+        identityVerified: observation.identityVerified,
+        artifacts,
+      });
+      artifactStored = artifactOutcomes.some((artifact) => artifact.created);
+    }
     const prevPortalStatus = row.resultJson?.portalStatus as string | undefined;
     const statusChanged = observation.rawStatus !== prevPortalStatus;
     const internalStatus = observation.identityVerified
@@ -3058,7 +3099,7 @@ export async function runPortalStatusSync(): Promise<{ checked: number; updated:
     if (!completed) {
       throw new Error("PORTAL_STATUS_CHECK_LEASE_LOST");
     }
-    if (statusChanged || recordedObservation.created || referenceSync === "set") {
+    if (statusChanged || recordedObservation.created || referenceSync === "set" || artifactStored) {
       updated += 1;
     }
   };
@@ -3113,7 +3154,7 @@ export async function runPortalStatusSync(): Promise<{ checked: number; updated:
                 async () => session?.close().catch(() => {}),
               );
               if (result) {
-                await processRow(row, result);
+                await processRow(row, result, adapter, session);
               } else {
                 const completed = await completePortalStatusCheck({
                   submissionId: row.id,
@@ -3295,6 +3336,7 @@ router.get(
               WHEN submission.status_check_error = 'STATUS_CHECK_PORTAL_DRIFT' THEN 'portal_drift'
               WHEN submission.status_check_error = 'STATUS_CHECK_NETWORK' THEN 'network'
               WHEN submission.status_check_error = 'STATUS_CHECK_LEASE_LOST' THEN 'lease_lost'
+              WHEN submission.status_check_error = 'STATUS_CHECK_ARTIFACT' THEN 'artifact'
               ELSE 'other'
             END AS "errorCategory"
           FROM portal_submissions submission

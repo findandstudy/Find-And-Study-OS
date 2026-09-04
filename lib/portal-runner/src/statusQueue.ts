@@ -11,6 +11,7 @@ export type PortalStatusFailureCode =
   | "STATUS_CHECK_PORTAL_DRIFT"
   | "STATUS_CHECK_NETWORK"
   | "STATUS_CHECK_LEASE_LOST"
+  | "STATUS_CHECK_ARTIFACT"
   | "STATUS_CHECK_FAILED";
 
 export interface ClaimedPortalStatusCheck {
@@ -99,6 +100,12 @@ export function classifyPortalStatusFailure(error: unknown): PortalStatusFailure
     return "STATUS_CHECK_NETWORK";
   }
   if (normalized.includes("lease_lost")) return "STATUS_CHECK_LEASE_LOST";
+  if (
+    normalized.includes("status_artifact") ||
+    normalized.includes("portal_status_artifact")
+  ) {
+    return "STATUS_CHECK_ARTIFACT";
+  }
   return "STATUS_CHECK_FAILED";
 }
 

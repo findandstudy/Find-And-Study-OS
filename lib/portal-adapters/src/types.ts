@@ -64,6 +64,26 @@ export interface PortalMissingDocument {
   label: string;
 }
 
+export type PortalStatusArtifactKind =
+  | "offer_letter"
+  | "deposit_receipt"
+  | "acceptance_letter"
+  | "final_acceptance"
+  | "student_card";
+
+/**
+ * Bounded file bytes collected from the authenticated portal session. The API
+ * persists these into private object storage only after exact application
+ * identity verification; URLs alone are never treated as documents.
+ */
+export interface PortalStatusArtifact {
+  kind: PortalStatusArtifactKind;
+  fileName: string;
+  contentType: "application/pdf" | "image/jpeg" | "image/png";
+  bytes: Uint8Array;
+  sourceLabel: string;
+}
+
 /** Structured, evidence-bearing result returned by a portal status check. */
 export interface PortalStatusCheckResult {
   status: string;
@@ -471,6 +491,18 @@ export interface UniversityAdapter {
     session: AdapterSession,
     externalRef: string,
   ): Promise<PortalStatusCheckResult | null>;
+
+  /**
+   * Optional second phase for evidence-bearing offer/final/card downloads.
+   * It is called only when the normalized status requires an artifact that is
+   * not already stored, preventing every status poll from downloading files.
+   */
+  collectStatusArtifacts?(
+    session: AdapterSession,
+    externalRef: string,
+    statusResult: PortalStatusCheckResult,
+    requestedKinds: PortalStatusArtifactKind[],
+  ): Promise<PortalStatusArtifact[]>;
 
   /**
    * Optional — fetch the portal's LIVE program option list (value + text) for

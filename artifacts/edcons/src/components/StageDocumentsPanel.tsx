@@ -359,10 +359,15 @@ function StageSection({
                   <FileText className="w-4 h-4 text-muted-foreground shrink-0" />
                   <div className="flex-1 min-w-0">
                     <p className="truncate font-medium text-foreground">{doc.fileName}</p>
-                    <p className="text-xs text-muted-foreground">
+                    <div className="flex items-center gap-1.5 flex-wrap text-xs text-muted-foreground">
                       {doc.uploadedByName || t("stageDocs.unknownUploader")} · {formatDate(doc.createdAt, lang)}
                       {doc.sizeBytes && ` · ${(doc.sizeBytes / 1024).toFixed(0)}KB`}
-                    </p>
+                      {doc.sourceType === "portal_automation" && (
+                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-emerald-700 border-emerald-300">
+                          {t("portalAutomation.pageTitle")}
+                        </Badge>
+                      )}
+                    </div>
                     {validUntil && (
                       <div className="mt-1 flex items-center gap-1.5 flex-wrap">
                         <Badge variant="outline" className="text-[10px] px-1.5 py-0 gap-1">
@@ -435,7 +440,7 @@ function StageSection({
                     >
                       <Download className="w-3.5 h-3.5" />
                     </Button>
-                    {(isAdmin || (userId && doc.uploadedBy === userId)) && (
+                    {doc.sourceType !== "portal_automation" && (isAdmin || (userId && doc.uploadedBy === userId)) && (
                       <Button
                         variant="ghost"
                         size="icon"

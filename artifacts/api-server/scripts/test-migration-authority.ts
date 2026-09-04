@@ -215,7 +215,21 @@ test("production prefix and canonical additive migration tail are pinned", () =>
       "0088_institution_enrolment_evidence_binding",
       "0089_reporting_center_permissions",
       "0090_portal_lifecycle_observations",
+      "0091_portal_application_artifact_intake",
     ],
+  );
+
+  const portalArtifactMigration = readFileSync(
+    path.join(root, "lib/db/drizzle/0091_portal_application_artifact_intake.sql"),
+    "utf8",
+  );
+  assert.match(
+    portalArtifactMigration,
+    /FOREIGN KEY \(\s*"source_portal_observation_id",\s*"source_portal_submission_id",\s*"application_id"\s*\)/,
+  );
+  assert.match(
+    portalArtifactMigration,
+    /"source_type" = 'portal_automation'[\s\S]*"uploaded_by" IS NULL[\s\S]*"file_url" LIKE '\/objects\/portal-artifacts\/%'/,
   );
 
   const attemptMigration = readFileSync(

@@ -153,7 +153,7 @@ jobs:
           PG_DISPOSABLE_ADMIN_URL: postgresql://postgres@127.0.0.1:5433/postgres
         run: node lib/db/prepare-disposable-migration-database.mjs
 
-      - name: Apply and replay all 91 migrations
+      - name: Apply and replay all 92 migrations
         env:
           ALLOW_REVIEWED_MIGRATIONS: "true"
           DATABASE_URL: postgresql://fas_migrator@127.0.0.1:5433/fasos_apply_local
@@ -175,3 +175,4 @@ jobs:
           pnpm --filter @workspace/api-server run test:postgres-portal-status-queue
           pnpm --filter @workspace/api-server run test:postgres-portal-lifecycle-guardian
           pnpm --filter @workspace/api-server run test:portal-operations-admin
+          pnpm --filter @workspace/api-server run test:postgres-portal-artifact-intake

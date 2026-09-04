@@ -1,7 +1,7 @@
 import { type File } from "@google-cloud/storage";
 import { Readable } from "stream";
 import { pipeline } from "node:stream/promises";
-import { randomUUID } from "crypto";
+import { createHash, randomUUID } from "crypto";
 import * as fsPromises from "node:fs/promises";
 import { createReadStream as fsCreateReadStream } from "node:fs";
 import * as nodePath from "node:path";
@@ -455,6 +455,97 @@ export class ObjectStorageService {
     let entityDir = privateObjectDir;
     if (entityDir.endsWith("/")) entityDir = entityDir.slice(0, -1);
     const relPath = fullPath.slice(entityDir.length + 1);
+    return `/objects/${relPath}`;
+  }
+
+  /**
+   * Writes an immutable, content-addressed private object. Retrying the same
+   * application artifact reuses the same key, so a DB retry or concurrent
+   * poll cannot create an unbounded chain of duplicate objects.
+   */
+  async uploadContentAddressedBuffer(opts: {
+    subdir: string;
+    contentSha256: string;
+    buffer: Buffer;
+    contentType: string;
+    extension: ".pdf" | ".jpg" | ".png";
+  }): Promise<string> {
+    const subdir = opts.subdir.replace(/^\/+|\/+$/g, "");
+    if (
+      !/^[A-Za-z0-9][A-Za-z0-9/_-]{0,199}$/.test(subdir) ||
+      subdir.split("/").some((part) => !part || part === "." || part === "..")
+    ) {
+      throw new Error("content_addressed_subdir_invalid");
+    }
+    if (!/^[0-9a-f]{64}$/.test(opts.contentSha256)) {
+      throw new Error("content_addressed_hash_invalid");
+    }
+    const actualHash = createHash("sha256").update(opts.buffer).digest("hex");
+    if (actualHash !== opts.contentSha256) {
+      throw new Error("content_addressed_hash_mismatch");
+    }
+    const relPath = `${subdir}/${opts.contentSha256}${opts.extension}`;
+
+    if (isLocalDriver()) {
+      const storageRoot = nodePath.resolve(getLocalStorageDir());
+      const localPath = nodePath.resolve(storageRoot, ...relPath.split("/"));
+      if (!isWithinRoot(storageRoot, localPath)) {
+        throw new Error("content_addressed_path_escape");
+      }
+      await fsPromises.mkdir(nodePath.dirname(localPath), { recursive: true });
+      let created = false;
+      try {
+        await fsPromises.writeFile(localPath, opts.buffer, { flag: "wx" });
+        created = true;
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+        const existing = await fsPromises.readFile(localPath);
+        const existingHash = createHash("sha256").update(existing).digest("hex");
+        if (existingHash !== opts.contentSha256) {
+          throw new Error("content_addressed_existing_hash_mismatch");
+        }
+      }
+      try {
+        const sidecar = `${localPath}.ct`;
+        if (created) {
+          await fsPromises.writeFile(sidecar, opts.contentType, { flag: "wx" });
+        } else {
+          const existingType = (await fsPromises.readFile(sidecar, "utf8")).trim();
+          if (existingType !== opts.contentType) {
+            throw new Error("content_addressed_existing_type_mismatch");
+          }
+        }
+      } catch (error) {
+        if (created) {
+          await fsPromises.unlink(localPath).catch(() => {});
+        }
+        throw error;
+      }
+      return `/objects/${relPath}`;
+    }
+
+    const privateObjectDir = this.getPrivateObjectDir().replace(/\/$/, "");
+    const fullPath = `${privateObjectDir}/${relPath}`;
+    const { bucketName, objectName } = parseObjectPath(fullPath);
+    const file = getGcsClient().bucket(bucketName).file(objectName);
+    const [exists] = await file.exists();
+    if (exists) {
+      const [existing] = await file.download();
+      const existingHash = createHash("sha256").update(existing).digest("hex");
+      const [metadata] = await file.getMetadata();
+      if (
+        existingHash !== opts.contentSha256 ||
+        String(metadata.contentType ?? "") !== opts.contentType
+      ) {
+        throw new Error("content_addressed_existing_object_mismatch");
+      }
+      return `/objects/${relPath}`;
+    }
+    await file.save(opts.buffer, {
+      metadata: { contentType: opts.contentType },
+      resumable: false,
+      timeout: UPLOAD_TIMEOUT_MS,
+    });
     return `/objects/${relPath}`;
   }
 

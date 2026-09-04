@@ -50,6 +50,7 @@ test("untrusted portal errors collapse to fixed PII-free categories", () => {
   assert.equal(classifyPortalStatusFailure("selector .decision no longer exists"), "STATUS_CHECK_PORTAL_DRIFT");
   assert.equal(classifyPortalStatusFailure("ECONNRESET socket closed"), "STATUS_CHECK_NETWORK");
   assert.equal(classifyPortalStatusFailure("PORTAL_STATUS_CHECK_LEASE_LOST"), "STATUS_CHECK_LEASE_LOST");
+  assert.equal(classifyPortalStatusFailure("status_artifact_content_mismatch"), "STATUS_CHECK_ARTIFACT");
   assert.equal(classifyPortalStatusFailure("student name and arbitrary provider html"), "STATUS_CHECK_FAILED");
 });
 

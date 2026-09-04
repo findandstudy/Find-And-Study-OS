@@ -15,6 +15,8 @@ export type {
   PortalStatusCheckResult,
   PortalStatusIdentityProof,
   PortalMissingDocument,
+  PortalStatusArtifact,
+  PortalStatusArtifactKind,
 } from "./types.js";
 
 export {
@@ -168,6 +170,7 @@ export {
   applyProfilePolicy,
   classifyOutcomeRules,
   buildDeclarativeStatusResult,
+  buildPortalStatusArtifact,
   type ProfilePolicyResult,
   type SpecPage,
 } from "./declarative/interpreter.js";

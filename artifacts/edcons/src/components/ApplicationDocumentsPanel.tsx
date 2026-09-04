@@ -307,10 +307,15 @@ function CategorySection({
                   <FileText className="w-4 h-4 text-muted-foreground shrink-0" />
                   <div className="flex-1 min-w-0">
                     <p className="truncate font-medium text-foreground">{doc.fileName}</p>
-                    <p className="text-xs text-muted-foreground">
+                    <div className="flex items-center gap-1.5 flex-wrap text-xs text-muted-foreground">
                       {doc.uploadedByName || t("appDocsPanel.unknown")} · {(() => { const d = new Date(doc.createdAt); return isNaN(d.getTime()) ? "—" : `${String(d.getDate()).padStart(2,"0")}.${String(d.getMonth()+1).padStart(2,"0")}.${d.getFullYear()}`; })()}
                       {doc.sizeBytes && ` · ${(doc.sizeBytes / 1024).toFixed(0)}KB`}
-                    </p>
+                      {doc.sourceType === "portal_automation" && (
+                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-emerald-700 border-emerald-300">
+                          {t("portalAutomation.pageTitle")}
+                        </Badge>
+                      )}
+                    </div>
                   </div>
                   <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                     <Button
@@ -322,7 +327,7 @@ function CategorySection({
                     >
                       <Download className="w-3.5 h-3.5" />
                     </Button>
-                    {(isAdmin || (userId && doc.uploadedBy === userId)) && (
+                    {doc.sourceType !== "portal_automation" && (isAdmin || (userId && doc.uploadedBy === userId)) && (
                       <Button
                         variant="ghost"
                         size="icon"
