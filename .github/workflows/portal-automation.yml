@@ -66,6 +66,7 @@ jobs:
           pnpm run test:package-manager
           node lib/db/validate-migrations.mjs
           pnpm --filter @workspace/api-server run test:migration-authority
+          pnpm --filter @workspace/portal-adapters run test:registry
           pnpm --filter @workspace/api-server run test:portal-trigger-stage-policy
           pnpm --filter @workspace/api-server run test:portal-production-slice
 
@@ -104,6 +105,7 @@ jobs:
           pnpm install --frozen-lockfile
           pnpm run test:package-manager
           node lib/db/validate-migrations.mjs
+          pnpm --filter @workspace/portal-adapters run test:registry
           pnpm --filter @workspace/api-server run test:portal-trigger-stage-policy
           pnpm --filter @workspace/api-server run test:portal-production-slice
           pnpm run typecheck
@@ -174,5 +176,6 @@ jobs:
           pnpm --filter @workspace/api-server run test:postgres-portal-lifecycle-observation-store
           pnpm --filter @workspace/api-server run test:postgres-portal-status-queue
           pnpm --filter @workspace/api-server run test:postgres-portal-lifecycle-guardian
+          pnpm --filter @workspace/api-server run test:adapter-graduation
           pnpm --filter @workspace/api-server run test:portal-operations-admin
           pnpm --filter @workspace/api-server run test:postgres-portal-artifact-intake

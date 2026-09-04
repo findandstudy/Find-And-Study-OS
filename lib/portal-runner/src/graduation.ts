@@ -1,14 +1,14 @@
 /**
  * graduation.ts — adapter auto-graduation (shared core).
  *
- * An adapter whose family is statically experimental (EXPERIMENTAL_FAMILIES
- * in @workspace/portal-adapters) "graduates" once it has GRADUATION_THRESHOLD
- * portal submissions with a durable success proof. A submitted status alone
- * is intentionally insufficient: historical adapters could report submitted
- * before the portal outcome was positively verified. Graduation is computed
- * LIVE from the DB per adapter_key — no persisted flag:
+ * An adapter whose family requires graduation (explicitly experimental code
+ * families plus every unknown/uploaded declarative key) "graduates" once it
+ * has GRADUATION_THRESHOLD portal submissions with a durable success proof. A
+ * submitted status alone is intentionally insufficient: historical adapters
+ * could report submitted before the portal outcome was positively verified.
+ * Graduation is computed LIVE from the DB per adapter_key — no persisted flag:
  *
- *   experimental(key) = staticExperimentalFamily(key)
+ *   experimental(key) = graduationRequiredFamily(key)
  *                       && successCount(key) < GRADUATION_THRESHOLD
  *
  * This module is the SINGLE counting implementation shared by:
@@ -103,9 +103,9 @@ export async function getAdapterSuccessCounts(
 }
 
 /**
- * Subset of the given adapter keys that are STILL experimental: statically
- * experimental family AND below the graduation threshold. Non-experimental
- * families are never returned regardless of count.
+ * Subset of the given adapter keys that are STILL experimental: a family that
+ * requires graduation AND a durable-success count below the threshold.
+ * Production-proven code families are never returned regardless of count.
  */
 export async function getNonGraduatedExperimentalAdapterKeys(
   adapterKeys: string[],

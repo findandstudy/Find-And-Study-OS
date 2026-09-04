@@ -5,7 +5,7 @@
  * lib/portal-runner/src/graduation.ts (shared with the worker and the
  * drain-once cron script). See that module for the graduation rule:
  *
- *   experimental(key) = staticExperimentalFamily(key)
+ *   experimental(key) = graduationRequiredFamily(key)
  *                       && successCount(key) < GRADUATION_THRESHOLD
  *
  * Manual single-submission of experimental adapters is ALWAYS allowed — only
@@ -27,7 +27,7 @@ export async function getSuccessCounts(
   return getAdapterSuccessCounts(adapterKeys);
 }
 
-/** Dynamic experimental: family is experimental AND not yet graduated. */
+/** Dynamic experimental: family requires graduation and has not yet earned it. */
 export async function isExperimentalDynamic(adapterKey: string): Promise<boolean> {
   if (!isExperimentalAdapterKey(adapterKey)) return false;
   const nonGraduated = await getNonGraduatedExperimentalAdapterKeys([adapterKey]);

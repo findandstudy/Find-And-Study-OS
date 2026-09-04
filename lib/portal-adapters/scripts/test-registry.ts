@@ -165,7 +165,7 @@ test("TR9 — all registered adapters have non-empty key and label", () => {
 // guard: experimental families must NEVER be auto-submitted).
 // ---------------------------------------------------------------------------
 
-test("TR10 — isExperimentalAdapterKey flags salesforce/sit/united/emu/medipol and clears topkapi", () => {
+test("TR10 — isExperimentalAdapterKey flags experimental and uploaded/custom families", () => {
   // Real adapter keys (not family names): uskudar is a salesforce-family key.
   for (const key of ["uskudar", "sit", "united", "emu", "medipol"]) {
     assert.equal(
@@ -181,8 +181,8 @@ test("TR10 — isExperimentalAdapterKey flags salesforce/sit/united/emu/medipol 
   );
   assert.equal(
     isExperimentalAdapterKey("does-not-exist"),
-    false,
-    "Unknown adapter keys must default to non-experimental=false",
+    true,
+    "Unknown/uploaded adapter keys must fail closed as experimental",
   );
 });
 
