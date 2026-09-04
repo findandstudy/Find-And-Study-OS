@@ -35,6 +35,7 @@ import {
   resolveAdapterByKey,
   resolveAdapterForUniversity,
   adapterMetadata,
+  isExperimentalAdapterKey,
   setCredsOverride,
   clearCredsOverride,
   invalidateDeclarativeAdapterCache,
@@ -408,6 +409,10 @@ router.get(
     // Attach hasCredentials boolean — DB-first by adapterKey (canonical), then universityKey
     // as fallback, then env. NEVER expose actual credential values.
     const dbCredKeys = await batchPortalCredentialKeys();
+    const graduationRequiredKeys = Array.from(
+      new Set(rows.map((row) => row.adapterKey).filter(isExperimentalAdapterKey)),
+    );
+    const adapterSuccessCounts = await getSuccessCounts(graduationRequiredKeys);
     const rowsWithCreds = rows.map((row) => {
       const K = row.adapterKey.toUpperCase().replace(/-/g, "_");
       const envHas = !!(
@@ -426,6 +431,13 @@ router.get(
           : !crm || programCount === 0
             ? "stale"
             : "linked";
+      const staticExperimental = isExperimentalAdapterKey(row.adapterKey);
+      const successCount = staticExperimental
+        ? (adapterSuccessCounts.get(row.adapterKey) ?? 0)
+        : null;
+      const graduated = staticExperimental
+        ? successCount! >= GRADUATION_THRESHOLD
+        : null;
       return {
         ...row,
         portalUrl: adapterUrls.get(row.adapterKey) ?? null,
@@ -433,6 +445,15 @@ router.get(
         crmUniversityName: crm?.name ?? null,
         programCount,
         linkStatus,
+        // Return the decision on the row that owns the toggle. Custom DB/spec
+        // adapters are not necessarily present in the static registry list,
+        // so deriving this only in the browser can briefly render a fail-open
+        // auto-process control even though the mutation endpoint rejects it.
+        experimental: staticExperimental && !graduated,
+        staticExperimental,
+        successCount,
+        graduationThreshold: staticExperimental ? GRADUATION_THRESHOLD : null,
+        graduated,
       };
     });
 

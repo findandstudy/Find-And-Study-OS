@@ -121,6 +121,12 @@ interface PortalUniversity {
   linkStatus: "linked" | "stale" | "unlinked";
   createdAt: string;
   fanOutMode: "off" | "manual" | "auto" | null;
+  /** Server-authoritative dynamic graduation decision for this exact adapter. */
+  experimental?: boolean;
+  staticExperimental?: boolean;
+  successCount?: number | null;
+  graduationThreshold?: number | null;
+  graduated?: boolean | null;
 }
 
 interface RegistryAdapter {
@@ -1191,6 +1197,10 @@ export default function PortalUniversitiesTab() {
     () => new Set(registryAdapters.filter((a) => a.experimental).map((a) => a.key)),
     [registryAdapters],
   );
+  const registryAdapterKeys = useMemo(
+    () => new Set(registryAdapters.map((a) => a.key)),
+    [registryAdapters],
+  );
 
   // Graduation progress per still-experimental adapter key (tooltip detail).
   const graduationInfoByKey = useMemo(() => {
@@ -1622,29 +1632,45 @@ export default function PortalUniversitiesTab() {
         />
       ) : (
         <div className="space-y-3">
-          {unis.map((uni) => (
-            <UniversityRow
-              key={uni.id}
-              uni={uni}
-              onToggle={handleToggle}
-              onToggleAutoProcess={handleToggleAutoProcess}
-              onSetFanOutMode={handleSetFanOutMode}
-              onTestLogin={handleTestLogin}
-              onEditDefaults={setEditTarget}
-              onManageCreds={setCredsTarget}
-              onManageMembers={setMembersTarget}
-              onDelete={setDeleteTarget}
-              experimental={experimentalKeys.has(uni.adapterKey)}
-              graduationInfo={graduationInfoByKey.get(uni.adapterKey) ?? null}
-              togglingId={togglingId}
-              togglingAutoProcessId={togglingAutoProcessId}
-              settingFanOutModeId={settingFanOutModeId}
-              testingId={testingId}
-              selected={selectedIds.has(uni.id)}
-              onToggleSelect={toggleSelect}
-              bulkBusy={bulkBusy}
-            />
-          ))}
+          {unis.map((uni) => {
+            // Prefer the row-level server decision. A just-created custom key
+            // may predate the next list refresh, so absence from the known
+            // registry is a conservative manual-only fallback.
+            const experimental = uni.experimental ?? (
+              experimentalKeys.has(uni.adapterKey) ||
+              !registryAdapterKeys.has(uni.adapterKey)
+            );
+            const graduationInfo =
+              experimental && uni.graduationThreshold != null
+                ? {
+                    successCount: uni.successCount ?? 0,
+                    threshold: uni.graduationThreshold,
+                  }
+                : (graduationInfoByKey.get(uni.adapterKey) ?? null);
+            return (
+              <UniversityRow
+                key={uni.id}
+                uni={uni}
+                onToggle={handleToggle}
+                onToggleAutoProcess={handleToggleAutoProcess}
+                onSetFanOutMode={handleSetFanOutMode}
+                onTestLogin={handleTestLogin}
+                onEditDefaults={setEditTarget}
+                onManageCreds={setCredsTarget}
+                onManageMembers={setMembersTarget}
+                onDelete={setDeleteTarget}
+                experimental={experimental}
+                graduationInfo={graduationInfo}
+                togglingId={togglingId}
+                togglingAutoProcessId={togglingAutoProcessId}
+                settingFanOutModeId={settingFanOutModeId}
+                testingId={testingId}
+                selected={selectedIds.has(uni.id)}
+                onToggleSelect={toggleSelect}
+                bulkBusy={bulkBusy}
+              />
+            );
+          })}
           {total > unis.length && (
             <p className="text-xs text-center text-muted-foreground pt-1">
               {unis.length} / {total}

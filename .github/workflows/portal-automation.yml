@@ -177,5 +177,6 @@ jobs:
           pnpm --filter @workspace/api-server run test:postgres-portal-status-queue
           pnpm --filter @workspace/api-server run test:postgres-portal-lifecycle-guardian
           pnpm --filter @workspace/api-server run test:adapter-graduation
+          pnpm --filter @workspace/api-server run test:portal-mgmt
           pnpm --filter @workspace/api-server run test:portal-operations-admin
           pnpm --filter @workspace/api-server run test:postgres-portal-artifact-intake

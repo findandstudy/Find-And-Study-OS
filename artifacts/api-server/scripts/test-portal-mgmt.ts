@@ -305,6 +305,18 @@ test("TAU4: GET /portal-universities lists universities with hasCredentials bool
     cleanupUniIds.push(row.id);
   }
 
+  const customAdapterKey = `custom_adapter_${RUN}`;
+  const [customUni] = await db
+    .insert(portalUniversitiesTable)
+    .values({
+      universityKey: `custom_uni_${RUN}`,
+      universityName: `Custom Adapter University ${RUN}`,
+      adapterKey: customAdapterKey,
+      isActive: true,
+    })
+    .returning({ id: portalUniversitiesTable.id });
+  cleanupUniIds.push(customUni.id);
+
   const app    = buildApp();
   const server = await listen(app);
   try {
@@ -315,6 +327,14 @@ test("TAU4: GET /portal-universities lists universities with hasCredentials bool
     const found = res.body.data.find((r: any) => r.universityKey === TEST_KEY);
     assert.ok(found, `University ${TEST_KEY} should appear in list`);
     assert.equal(typeof found.hasCredentials, "boolean", "hasCredentials should be boolean");
+
+    const customFound = res.body.data.find((r: any) => r.id === customUni.id);
+    assert.ok(customFound, "custom adapter university should appear in list");
+    assert.equal(customFound.experimental, true, "custom adapter must render manual-only");
+    assert.equal(customFound.staticExperimental, true);
+    assert.equal(customFound.successCount, 0);
+    assert.equal(customFound.graduationThreshold, 3);
+    assert.equal(customFound.graduated, false);
 
     // Must not leak any credential values
     const keys = Object.keys(found) as string[];
