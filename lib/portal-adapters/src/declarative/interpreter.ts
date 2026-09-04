@@ -24,6 +24,7 @@ import type {
   LoginOpts,
   ProgramOption,
   PortalProgramOption,
+  PortalStatusCheckResult,
 } from "../types.js";
 import type { MinimalPage } from "../declarativeAdapter.js";
 import { launchPortal, logger } from "../browser.js";
@@ -41,6 +42,7 @@ import type {
   WorkflowState,
   ProfilePolicy,
   OutcomeRule,
+  StatusCheckSpec,
 } from "./schema.js";
 import type { InterpolateCtx } from "./interpolate.js";
 import { interpolate } from "./interpolate.js";
@@ -686,6 +688,138 @@ export function isMutatingSpecStep(step: SpecStep): boolean {
       return _exhaustive;
     }
   }
+}
+
+type StatusRuntimeBags = {
+  vars: Record<string, unknown>;
+  captured: Record<string, unknown>;
+};
+
+const FORBIDDEN_STATUS_PATH_SEGMENTS = new Set(["__proto__", "prototype", "constructor"]);
+
+function readStatusValue(
+  source: StatusCheckSpec["statusFrom"],
+  bags: StatusRuntimeBags,
+): unknown {
+  let value = bags[source.source][source.path];
+  if (!source.jsonPath) return value;
+  if (typeof value === "string") {
+    try {
+      value = JSON.parse(value) as unknown;
+    } catch {
+      return undefined;
+    }
+  }
+  for (const segment of source.jsonPath.split(".")) {
+    if (FORBIDDEN_STATUS_PATH_SEGMENTS.has(segment)) return undefined;
+    if (value === null || typeof value !== "object") return undefined;
+    value = (value as Record<string, unknown>)[segment];
+  }
+  return value;
+}
+
+function requiredBoundedStatusText(value: unknown, code: string, max: number): string {
+  if (typeof value !== "string") throw new Error(code);
+  const text = value.replace(/\s+/g, " ").trim();
+  if (!text || text.length > max || /[\u0000-\u001f\u007f]/u.test(text)) {
+    throw new Error(code);
+  }
+  return text;
+}
+
+/** Pure extraction for a versioned declarative statusCheck contract. */
+export function buildDeclarativeStatusResult(input: {
+  statusCheck: StatusCheckSpec;
+  externalRef: string;
+  vars?: Record<string, unknown>;
+  captured?: Record<string, unknown>;
+}): PortalStatusCheckResult {
+  const externalRef = requiredBoundedStatusText(
+    input.externalRef,
+    "status_check_external_ref_invalid",
+    300,
+  );
+  const bags: StatusRuntimeBags = {
+    vars: input.vars ?? {},
+    captured: input.captured ?? {},
+  };
+  const status = requiredBoundedStatusText(
+    readStatusValue(input.statusCheck.statusFrom, bags),
+    "status_check_status_missing",
+    250,
+  );
+  const identityValue = readStatusValue(input.statusCheck.identity.valueFrom, bags);
+  const identityVerified =
+    typeof identityValue === "string" && identityValue.trim() === externalRef;
+  const result: PortalStatusCheckResult = { status };
+  if (identityVerified) {
+    result.identityProof = {
+      source: input.statusCheck.identity.source,
+      sourceLabel: input.statusCheck.identity.sourceLabel,
+      identityBound: true,
+      targetBound: true,
+      uniqueMatch: true,
+    };
+  }
+
+  if (identityVerified && input.statusCheck.applicationNumber) {
+    const value = requiredBoundedStatusText(
+      readStatusValue(input.statusCheck.applicationNumber.valueFrom, bags),
+      "status_check_application_number_invalid",
+      128,
+    );
+    result.verifiedApplicationNumber = {
+      value,
+      source: input.statusCheck.applicationNumber.source,
+      sourceLabel: input.statusCheck.applicationNumber.sourceLabel,
+      identityBound: true,
+      targetBound: true,
+      uniqueMatch: true,
+    };
+  }
+
+  if (input.statusCheck.missingDocuments) {
+    let value = readStatusValue(input.statusCheck.missingDocuments.valueFrom, bags);
+    if (typeof value === "string") {
+      try {
+        value = JSON.parse(value) as unknown;
+      } catch {
+        throw new Error("status_check_missing_documents_invalid");
+      }
+    }
+    if (!Array.isArray(value) || value.length > 50) {
+      throw new Error("status_check_missing_documents_invalid");
+    }
+    result.missingDocuments = value.map((item) => {
+      if (typeof item === "string") {
+        return {
+          label: requiredBoundedStatusText(
+            item,
+            "status_check_missing_document_invalid",
+            160,
+          ),
+        };
+      }
+      if (!item || typeof item !== "object" || Array.isArray(item)) {
+        throw new Error("status_check_missing_document_invalid");
+      }
+      const row = item as Record<string, unknown>;
+      const label = requiredBoundedStatusText(
+        row[input.statusCheck.missingDocuments!.labelField],
+        "status_check_missing_document_invalid",
+        160,
+      );
+      const codeField = input.statusCheck.missingDocuments!.codeField;
+      const code = codeField ? row[codeField] : undefined;
+      return {
+        label,
+        ...(typeof code === "string" && code.trim()
+          ? { code: requiredBoundedStatusText(code, "status_check_missing_document_invalid", 64) }
+          : {}),
+      };
+    });
+  }
+  return result;
 }
 
 /** Executes a single spec step. Honors `optional` (errors are warned, not thrown). */
@@ -1356,6 +1490,43 @@ export function createSpecAdapter(
       );
       return result;
     },
+
+    ...(spec.statusCheck
+      ? {
+          async checkStatus(
+            session: AdapterSession,
+            externalRef: string,
+          ): Promise<PortalStatusCheckResult> {
+            const page = session.page as unknown as SpecPage;
+            const vars: Record<string, unknown> = {
+              externalRef,
+              externalRefEncoded: encodeURIComponent(externalRef),
+            };
+            const captured: Record<string, unknown> = {};
+            await runSpecSteps(
+              page,
+              spec.statusCheck!.steps,
+              {
+                profile: emptyProfile(),
+                files: {},
+                allowJsHook: false,
+                vars,
+                captured,
+                allowedOrigins: spec.meta.allowedOrigins ?? [],
+                dryRun: true,
+                dryRunPolicy: "strict",
+              },
+              false,
+            );
+            return buildDeclarativeStatusResult({
+              statusCheck: spec.statusCheck!,
+              externalRef,
+              vars,
+              captured,
+            });
+          },
+        }
+      : {}),
 
     ...(spec.programSelection
       ? {

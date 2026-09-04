@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { parseAdapterSpec } from "@workspace/portal-adapters";
+import {
+  buildDeclarativeStatusResult,
+  parseAdapterSpec,
+  specIsPrivileged,
+} from "@workspace/portal-adapters";
 import {
   buildPortalAdapterSpecPolicySnapshot,
   portalAdapterSpecActivationBlockers,
@@ -80,4 +84,110 @@ test("an invalid stored spec is never activation-ready", () => {
     }),
     ["INVALID_SPEC"],
   );
+});
+
+test("v2 status checks are read-only, privileged and bind evidence to externalRef", () => {
+  const raw = validSpec();
+  raw.specVersion = 2;
+  (raw.meta as Record<string, unknown>).allowedOrigins = [
+    "https://apply.policy-fixture.example",
+  ];
+  raw.statusCheck = {
+    steps: [
+      {
+        action: "http",
+        method: "GET",
+        url: "https://apply.policy-fixture.example/api/applications/{{vars.externalRefEncoded}}",
+        saveAs: "lastResponse",
+      },
+    ],
+    statusFrom: {
+      source: "captured",
+      path: "lastResponse",
+      jsonPath: "application.status",
+    },
+    identity: {
+      valueFrom: {
+        source: "captured",
+        path: "lastResponse",
+        jsonPath: "application.externalRef",
+      },
+      source: "structured_portal_field",
+      sourceLabel: "Application API external reference",
+      matchExternalRef: true,
+    },
+    applicationNumber: {
+      valueFrom: {
+        source: "captured",
+        path: "lastResponse",
+        jsonPath: "application.officialNumber",
+      },
+      source: "structured_portal_field",
+      sourceLabel: "Official application number",
+    },
+    missingDocuments: {
+      valueFrom: {
+        source: "captured",
+        path: "lastResponse",
+        jsonPath: "application.missingDocuments",
+      },
+      codeField: "code",
+      labelField: "label",
+    },
+  };
+  const parsed = parseAdapterSpec(raw);
+  if (!parsed.ok) throw new Error(parsed.error);
+  assert.equal(specIsPrivileged(parsed.spec), true);
+
+  const response = JSON.stringify({
+    application: {
+      status: "Missing Documents",
+      externalRef: "student-7:application-42",
+      officialNumber: "OFF-2026-0042",
+      missingDocuments: [{ code: "passport", label: "Passport copy" }],
+    },
+  });
+  const result = buildDeclarativeStatusResult({
+    statusCheck: parsed.spec.statusCheck!,
+    externalRef: "student-7:application-42",
+    captured: { lastResponse: response },
+  });
+  assert.equal(result.status, "Missing Documents");
+  assert.equal(result.identityProof?.uniqueMatch, true);
+  assert.equal(result.verifiedApplicationNumber?.value, "OFF-2026-0042");
+  assert.deepEqual(result.missingDocuments, [
+    { code: "passport", label: "Passport copy" },
+  ]);
+
+  const wrongApplication = buildDeclarativeStatusResult({
+    statusCheck: parsed.spec.statusCheck!,
+    externalRef: "student-7:application-99",
+    captured: { lastResponse: response },
+  });
+  assert.equal(wrongApplication.identityProof, undefined);
+  assert.equal(wrongApplication.verifiedApplicationNumber, undefined);
+});
+
+test("status checks reject mutation steps and legacy specs", () => {
+  for (const specVersion of [1, 2]) {
+    const raw = validSpec();
+    raw.specVersion = specVersion;
+    raw.statusCheck = {
+      steps: [{ action: "click", selector: "button.accept", final: true }],
+      statusFrom: { source: "captured", path: "status" },
+      identity: {
+        valueFrom: { source: "captured", path: "externalRef" },
+        source: "matched_application_row",
+        sourceLabel: "Exact application row",
+        matchExternalRef: true,
+      },
+    };
+    const parsed = parseAdapterSpec(raw);
+    assert.equal(parsed.ok, false);
+    if (!parsed.ok) {
+      assert.match(parsed.error, /statusCheck/);
+      if (specVersion === 1) assert.match(parsed.error, /specVersion 2/);
+      else assert.match(parsed.error, /read-only/);
+    }
+  }
 });

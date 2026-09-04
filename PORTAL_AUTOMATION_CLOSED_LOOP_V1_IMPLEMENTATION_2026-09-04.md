@@ -20,6 +20,13 @@ State: local implementation complete; not pushed or deployed
    - Dry-run and fixture evidence is required before activation.
    - Privileged operations and JavaScript hooks require separate approvals
      bound to the exact immutable version.
+   - Version 2 packages can also declare a bounded, read-only `statusCheck`;
+     only navigation, waiting, capture, assertion, variable assignment and
+     non-mutating HTTP GET steps are accepted.
+   - Status, missing-document data and the official application number can be
+     mapped from captured/structured values without adding application code.
+     Identity proof and the official number are emitted only when the captured
+     application identity exactly equals the requested external reference.
 
 3. Evidence-bound lifecycle monitoring
    - Adapter status results can carry semantic application identity proof,
@@ -81,7 +88,7 @@ production schema and row counts before any production migration approval.
 
 - Migration validation: `91 files / 91 journal entries`.
 - Fresh disposable PostgreSQL apply: `0 → 91`; clean replay: `91 → 91`.
-- Portal pure contracts: `21/21`.
+- Portal pure contracts: `23/23`.
 - Dynamic trigger policy: `4/4`.
 - PostgreSQL observation, lane, Guardian and operations tests: `6/6`.
 - Migration authority: `31 PASS`, `1` Bash-unavailable Windows skip.

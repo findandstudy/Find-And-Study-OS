@@ -378,6 +378,12 @@ otomatik seçilmez ve terminal/won/lost stage dış submit başlatamaz. No-code
 adapter JSON yükleme yüzeyi boyut/schema/unknown-property kontrolü, kanonik
 SHA-256, immutable version, dry-run/fixture kanıtı ve privileged/jsHook için
 ayrı version-bound onaylarla fail-closed çalışır.
+Version 2 adapter paketi artık bounded read-only `statusCheck` de tanımlayabilir;
+navigate/wait/capture/assert/setVar ve non-mutating HTTP GET dışındaki adımlar
+reddedilir. Status, structured missing-document ve official application number
+mapping'i uygulama koduna dokunmadan yapılır; identity proof ve official number
+yalnız yakalanan application identity istenen external reference ile exact
+eşleşirse üretilir. Status kontrolü privileged version approval kapsamındadır.
 
 Additive `0090_portal_lifecycle_observations.sql` ile kanonik ledger `91/91`
 olmuştur. Portal status gözlemleri submission+application composite FK,
@@ -401,7 +407,7 @@ Offer/final acceptance monitoring'i sonlandırmaz; yalnız enrolment, reject,
 full quota, duplicate/already-registered ve withdrawal terminaldir.
 
 Dedicated `Portal Automation Gate` Linux, Windows ve PostgreSQL 16 kapılarını
-tanımlar. Yerel kanıt: fresh `91/91` + clean replay, portal pure `21/21`, dynamic
+tanımlar. Yerel kanıt: fresh `91/91` + clean replay, portal pure `23/23`, dynamic
 stage `4/4`, PostgreSQL observation/lane/Guardian/operations `6/6`, migration
 authority `31 PASS + 1` Bash-unavailable SKIP, package manager `6/6`, workspace
 ve hedef API/worker typecheck, 10 dil i18n, API ve Edcons production build PASS.

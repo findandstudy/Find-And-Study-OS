@@ -150,6 +150,7 @@ export {
   type SpecWorkflow,
   type ProfilePolicy,
   type OutcomeRule,
+  type StatusCheckSpec,
 } from "./declarative/schema.js";
 
 export {
@@ -166,6 +167,7 @@ export {
   runSpecWorkflow,
   applyProfilePolicy,
   classifyOutcomeRules,
+  buildDeclarativeStatusResult,
   type ProfilePolicyResult,
   type SpecPage,
 } from "./declarative/interpreter.js";
