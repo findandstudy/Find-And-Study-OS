@@ -262,9 +262,9 @@ const COPY = {
     noData: "There is no data for this selection.",
   },
   tr: {
-    title: "Raporlama ve Intelligence Center",
+    title: "Raporlama & Analiz",
     description:
-      "Büyüme, başvuru, finans ve veri kalitesini tek, kontrollü alanda yönetin.",
+      "Büyüme, başvurular, finans ve veri kalitesini tek bir görünümde takip edin.",
     overview: "Yönetim özeti",
     funnel: "Lead funnel",
     applications: "Başvurular",
@@ -1154,30 +1154,37 @@ export default function ReportsPage() {
     quality.data?.meta;
 
   return (
-    <div className="space-y-6 p-4 md:p-6" data-testid="page-reporting-center">
-      <div className="overflow-hidden rounded-2xl border bg-gradient-to-br from-slate-950 via-blue-950 to-indigo-950 p-6 text-white shadow-xl">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="max-w-3xl">
-            <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs">
-              <BarChart3 className="h-3.5 w-3.5" />
-              {copy.live}
-            </div>
-            <h1 className="text-2xl font-bold md:text-3xl">{copy.title}</h1>
-            <p className="mt-2 text-sm text-blue-100/80">{copy.description}</p>
+    <div className="space-y-6" data-testid="page-reporting-center">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h1 className="text-3xl font-display font-bold text-foreground">
+            {copy.title}
+          </h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {copy.description}
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+          <Badge
+            variant="outline"
+            className="gap-1.5 border-primary/20 bg-primary/10 px-3 py-1.5 text-primary"
+          >
+            <BarChart3 className="h-3.5 w-3.5" />
+            {copy.live}
+          </Badge>
+          <div className="rounded-lg border bg-card px-3 py-1.5 text-xs text-muted-foreground shadow-sm">
+            <span>{copy.metricVersion}: </span>
+            <span className="font-mono font-medium text-foreground">
+              {meta.data?.metricVersion ?? "…"}
+            </span>
           </div>
-          <div className="text-right text-xs text-blue-100/70">
-            <p>
-              {copy.metricVersion}:{" "}
-              <span className="font-mono text-white">
-                {meta.data?.metricVersion ?? "…"}
-              </span>
-            </p>
-            <p className="mt-1">
-              {copy.calculatedAt}:{" "}
+          <div className="rounded-lg border bg-card px-3 py-1.5 text-xs text-muted-foreground shadow-sm">
+            <span>{copy.calculatedAt}: </span>
+            <span className="font-medium text-foreground">
               {activeMeta
                 ? new Date(activeMeta.asOf).toLocaleString(locale)
                 : "—"}
-            </p>
+            </span>
           </div>
         </div>
       </div>
