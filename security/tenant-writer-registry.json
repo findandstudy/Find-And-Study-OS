@@ -522,6 +522,22 @@
       "externalPilot": "quarantine"
     },
     {
+      "path": "artifacts/api-server/src/lib/portalApplicationReferenceSync.ts",
+      "ownership": "external_integration",
+      "enforcement": "quarantine_required",
+      "risk": "critical",
+      "owner": "Portal Automation",
+      "externalPilot": "quarantine"
+    },
+    {
+      "path": "artifacts/api-server/src/lib/portalArtifactIntake.ts",
+      "ownership": "external_integration",
+      "enforcement": "quarantine_required",
+      "risk": "critical",
+      "owner": "Portal Automation",
+      "externalPilot": "quarantine"
+    },
+    {
       "path": "artifacts/api-server/src/lib/portalAutoTrigger.ts",
       "ownership": "external_integration",
       "enforcement": "quarantine_required",
@@ -547,6 +563,14 @@
     },
     {
       "path": "artifacts/api-server/src/lib/portalLifecycleGuardian.ts",
+      "ownership": "external_integration",
+      "enforcement": "quarantine_required",
+      "risk": "critical",
+      "owner": "Portal Automation",
+      "externalPilot": "quarantine"
+    },
+    {
+      "path": "artifacts/api-server/src/lib/portalLifecycleObservationStore.ts",
       "ownership": "external_integration",
       "enforcement": "quarantine_required",
       "risk": "critical",
