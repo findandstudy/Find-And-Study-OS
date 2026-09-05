@@ -39,6 +39,10 @@ tags:
     description: AI-powered features
   - name: portal-automation
     description: University portal submission automation
+  - name: reporting
+    description: Aggregate, branch-scoped operational reporting
+  - name: social
+    description: Tenant-scoped social content planning and approval; provider publishing is disabled
 
 paths:
   /healthz:
@@ -2770,7 +2774,8 @@ paths:
     post:
       operationId: cancelPortalSubmission
       tags: [portal-automation]
-      summary: Cancel a queued or running portal submission
+      summary: Cancel a queued portal submission
+      description: Running browser actions are worker-owned and fail closed with HTTP 409.
       parameters:
         - name: id
           in: path
@@ -2793,11 +2798,249 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "409":
-          description: Not cancelable
+          description: Not cancelable, already worker-owned, or claimed concurrently
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+
+  /portal-submissions/process-queued:
+    post:
+      operationId: requestPortalSubmissionQueueDrain
+      tags: [portal-automation]
+      summary: Ask the release-matched worker to drain queued submissions
+      responses:
+        "202":
+          description: Request accepted; browser work remains asynchronous
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PortalQueueAccepted" }
+        "503":
+          description: A matching healthy worker is unavailable
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /portal-submissions/{id}/process:
+    post:
+      operationId: requestPortalSubmissionProcessing
+      tags: [portal-automation]
+      summary: Ask the release-matched worker to process one queued submission
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "202":
+          description: Request accepted
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PortalSubmissionProcessingAccepted" }
+        "404":
+          description: Submission not found
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "409":
+          description: Submission is not queued
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "503":
+          description: A matching healthy worker is unavailable
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /portal-submissions/reset-stuck:
+    post:
+      operationId: rejectApiOwnedPortalSubmissionRecovery
+      tags: [portal-automation]
+      summary: Fail-closed legacy endpoint for worker-owned stale recovery
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                thresholdMinutes: { type: integer, minimum: 1, maximum: 60, default: 10 }
+      responses:
+        "409":
+          description: Recovery is owned exclusively by the release-matched worker
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /portal-submissions/bulk-retry:
+    post:
+      operationId: retryPortalSubmissions
+      tags: [portal-automation]
+      summary: Return retryable submissions to the queue after preflight
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PortalSubmissionIdsBody" }
+      responses:
+        "200":
+          description: Retry selection result
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PortalBulkMutationResult" }
+
+  /portal-submissions/bulk-cancel:
+    post:
+      operationId: cancelPortalSubmissions
+      tags: [portal-automation]
+      summary: Cancel queued submissions; running work stays worker-owned
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PortalSubmissionIdsBody" }
+      responses:
+        "200":
+          description: Cancellation selection result
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PortalBulkMutationResult" }
+
+  /portal-submissions/bulk-process:
+    post:
+      operationId: requestBulkPortalSubmissionProcessing
+      tags: [portal-automation]
+      summary: Ask the release-matched worker to process selected queued submissions
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PortalSubmissionIdsBody" }
+      responses:
+        "202":
+          description: Selection accepted
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PortalBulkProcessingAccepted" }
+        "503":
+          description: A matching healthy worker is unavailable
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /portal-lifecycle-proposals:
+    get:
+      operationId: getPortalLifecycleProposals
+      tags: [portal-automation]
+      summary: List immutable evidence-bound lifecycle proposals
+      parameters:
+        - name: status
+          in: query
+          schema: { $ref: "#/components/schemas/PortalLifecycleProposalStatus" }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+      responses:
+        "200":
+          description: Private no-store proposal queue
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/PortalLifecycleProposal" }
+                required: [items]
+
+  /portal-lifecycle-proposals/{id}/review:
+    post:
+      operationId: reviewPortalLifecycleProposal
+      tags: [portal-automation]
+      summary: Record one maker-checker decision and queue a bounded internal transition when eligible
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PortalLifecycleProposalReviewBody" }
+      responses:
+        "200":
+          description: Review persisted; response states whether bounded execution was queued
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PortalLifecycleProposalReviewResult" }
+        "404":
+          description: Proposal not found
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "409":
+          description: Maker-checker or immutable review conflict
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /portal-worker-jobs/{id}:
+    get:
+      operationId: getPortalWorkerJob
+      tags: [portal-automation]
+      summary: Read a redacted worker-job status projection
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Private no-store job status
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PortalWorkerJob" }
+        "404":
+          description: Job not found
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /portal-universities/{id}/test-login:
+    post:
+      operationId: queuePortalUniversityTestLogin
+      tags: [portal-automation]
+      summary: Queue a worker-owned portal login test
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                requestKey: { type: string, minLength: 1, maxLength: 100, pattern: '^[A-Za-z0-9._:-]+$' }
+      responses:
+        "202":
+          description: Test queued
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PortalWorkerJobAccepted" }
+        "404":
+          description: Portal university not found
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "503":
+          description: A matching healthy worker is unavailable
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
 
   /portal-automation/operations:
     get:
@@ -2835,7 +3078,13 @@ paths:
               schema:
                 $ref: "#/components/schemas/PortalStatusSyncStarted"
         "409":
-          description: A manual sweep is already running in this API process
+          description: Idempotency conflict
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: A release-matched status worker is unavailable
           content:
             application/json:
               schema:
@@ -3413,8 +3662,623 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  # REPORTING
+  /reporting/meta:
+    get:
+      operationId: getReportingMeta
+      tags: [reporting]
+      summary: Get the reporting metric catalog and visible branches
+      responses:
+        "200":
+          description: Reporting metadata
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReportingMetaResponse"
+        "401":
+          description: Unauthenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Missing reporting permission
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Reporting data is unavailable or exceeded its query budget
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /reporting/command-center:
+    get:
+      operationId: getReportingCommandCenter
+      tags: [reporting]
+      summary: Get the aggregate management summary and growth trend
+      parameters:
+        - $ref: "#/components/parameters/ReportingFrom"
+        - $ref: "#/components/parameters/ReportingTo"
+        - $ref: "#/components/parameters/ReportingSeason"
+        - $ref: "#/components/parameters/ReportingBranchId"
+      responses:
+        "200":
+          description: Command center report
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReportingCommandCenterResponse"
+        "400":
+          $ref: "#/components/responses/ReportingInvalidFilter"
+        "401":
+          $ref: "#/components/responses/ReportingUnauthenticated"
+        "403":
+          $ref: "#/components/responses/ReportingForbidden"
+        "503":
+          $ref: "#/components/responses/ReportingUnavailable"
+
+  /reporting/funnel:
+    get:
+      operationId: getReportingFunnel
+      tags: [reporting]
+      summary: Get the lead creation cohort funnel and source outcomes
+      parameters:
+        - $ref: "#/components/parameters/ReportingFrom"
+        - $ref: "#/components/parameters/ReportingTo"
+        - $ref: "#/components/parameters/ReportingSeason"
+        - $ref: "#/components/parameters/ReportingBranchId"
+      responses:
+        "200":
+          description: Funnel report
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReportingFunnelResponse"
+        "400":
+          $ref: "#/components/responses/ReportingInvalidFilter"
+        "401":
+          $ref: "#/components/responses/ReportingUnauthenticated"
+        "403":
+          $ref: "#/components/responses/ReportingForbidden"
+        "503":
+          $ref: "#/components/responses/ReportingUnavailable"
+
+  /reporting/applications:
+    get:
+      operationId: getReportingApplications
+      tags: [reporting]
+      summary: Get application inventory, creation cohort, aging and destinations
+      parameters:
+        - $ref: "#/components/parameters/ReportingFrom"
+        - $ref: "#/components/parameters/ReportingTo"
+        - $ref: "#/components/parameters/ReportingSeason"
+        - $ref: "#/components/parameters/ReportingBranchId"
+      responses:
+        "200":
+          description: Application operations report
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReportingApplicationsResponse"
+        "400":
+          $ref: "#/components/responses/ReportingInvalidFilter"
+        "401":
+          $ref: "#/components/responses/ReportingUnauthenticated"
+        "403":
+          $ref: "#/components/responses/ReportingForbidden"
+        "503":
+          $ref: "#/components/responses/ReportingUnavailable"
+
+  /reporting/finance:
+    get:
+      operationId: getReportingFinance
+      tags: [reporting]
+      summary: Get currency-separated finance aggregates
+      parameters:
+        - $ref: "#/components/parameters/ReportingFrom"
+        - $ref: "#/components/parameters/ReportingTo"
+        - $ref: "#/components/parameters/ReportingSeason"
+        - $ref: "#/components/parameters/ReportingBranchId"
+      responses:
+        "200":
+          description: Finance report with no cross-currency totals
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReportingFinanceResponse"
+        "400":
+          $ref: "#/components/responses/ReportingInvalidFilter"
+        "401":
+          $ref: "#/components/responses/ReportingUnauthenticated"
+        "403":
+          $ref: "#/components/responses/ReportingForbidden"
+        "503":
+          $ref: "#/components/responses/ReportingUnavailable"
+
+  /reporting/data-quality:
+    get:
+      operationId: getReportingDataQuality
+      tags: [reporting]
+      summary: Get aggregate-only, read-only data quality checks
+      parameters:
+        - $ref: "#/components/parameters/ReportingFrom"
+        - $ref: "#/components/parameters/ReportingTo"
+        - $ref: "#/components/parameters/ReportingSeason"
+        - $ref: "#/components/parameters/ReportingBranchId"
+      responses:
+        "200":
+          description: Data quality coverage and issue counts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReportingDataQualityResponse"
+        "400":
+          $ref: "#/components/responses/ReportingInvalidFilter"
+        "401":
+          $ref: "#/components/responses/ReportingUnauthenticated"
+        "403":
+          $ref: "#/components/responses/ReportingForbidden"
+        "503":
+          $ref: "#/components/responses/ReportingUnavailable"
+
+  /social/context:
+    get:
+      operationId: getSocialOperationsContext
+      tags: [social]
+      summary: Resolve the current social-operations scope and rollout mode
+      responses:
+        "200":
+          description: Current fail-closed social operations context
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SocialOperationsContext"
+        "401": { description: Authentication required }
+        "403": { description: social.view permission required }
+        "503": { description: Social operations scope is unavailable or disabled }
+
+  /social/overview:
+    get:
+      operationId: getSocialOperationsOverview
+      tags: [social]
+      summary: Get content, account and publication-intent counts
+      responses:
+        "200":
+          description: Tenant and organization scoped overview
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SocialOperationsOverview"
+        "401": { description: Authentication required }
+        "403": { description: social.view permission required }
+        "503": { description: Social operations scope is unavailable or disabled }
+
+  /social/accounts:
+    get:
+      operationId: listSocialAccounts
+      tags: [social]
+      summary: List registered social accounts without secret material
+      responses:
+        "200":
+          description: Social account registry
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/SocialAccount" }
+        "401": { description: Authentication required }
+        "403": { description: social.view permission required }
+        "503": { description: Social operations scope is unavailable or disabled }
+    post:
+      operationId: createSocialAccount
+      tags: [social]
+      summary: Register a social account reference without storing its raw external identifier
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateSocialAccountBody" }
+      responses:
+        "201":
+          description: Account reference registered as unverified
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SocialAccount" }
+        "400": { description: Invalid account reference }
+        "401": { description: Authentication required }
+        "403": { description: social.manage permission required }
+        "409": { description: Account key already exists in this scope }
+        "503": { description: Social operations scope is unavailable or disabled }
+
+  /social/briefs:
+    post:
+      operationId: createSocialContentBrief
+      tags: [social]
+      summary: Create a social content brief in DRAFT state
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateSocialContentBriefBody" }
+      responses:
+        "201":
+          description: Draft brief created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SocialContentBrief" }
+        "400": { description: Invalid brief }
+        "401": { description: Authentication required }
+        "403": { description: social.manage permission required }
+        "503": { description: Social operations scope is unavailable or disabled }
+
+  /social/briefs/{id}/submit:
+    post:
+      operationId: submitSocialContentBrief
+      tags: [social]
+      summary: Move a DRAFT brief to IN_REVIEW
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Brief submitted for review
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SocialContentBrief" }
+        "400": { description: Invalid brief id }
+        "401": { description: Authentication required }
+        "403": { description: social.manage permission required }
+        "409": { description: Brief is not in DRAFT state }
+        "503": { description: Social operations scope is unavailable or disabled }
+
+  /social/briefs/{id}/review:
+    post:
+      operationId: reviewSocialContentBrief
+      tags: [social]
+      summary: Approve or reject an IN_REVIEW brief using maker-checker
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ReviewSocialContentBriefBody" }
+      responses:
+        "200":
+          description: Append-only review decision recorded
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SocialContentReviewResult" }
+        "400": { description: Invalid review request }
+        "401": { description: Authentication required }
+        "403": { description: social.approve permission required }
+        "409": { description: "Maker-checker, state or idempotency conflict" }
+        "503": { description: Social operations scope is unavailable or disabled }
+
 components:
+  parameters:
+    ReportingFrom:
+      name: from
+      in: query
+      description: Inclusive UTC calendar date; defaults to 29 days before today.
+      schema: { type: string, format: date }
+    ReportingTo:
+      name: to
+      in: query
+      description: Inclusive UTC calendar date; the server converts it to an exclusive next-day boundary.
+      schema: { type: string, format: date }
+    ReportingSeason:
+      name: season
+      in: query
+      description: Optional four-digit application season.
+      schema: { type: string, pattern: "^[0-9]{4}$" }
+    ReportingBranchId:
+      name: branchId
+      in: query
+      description: Optional branch inside the server-resolved actor scope.
+      schema: { type: integer, minimum: 1 }
+  responses:
+    ReportingInvalidFilter:
+      description: Invalid or over-broad reporting filter
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    ReportingUnauthenticated:
+      description: Unauthenticated
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    ReportingForbidden:
+      description: Missing permission or branch outside the actor scope
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    ReportingUnavailable:
+      description: Reporting data is unavailable or exceeded its query budget
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
   schemas:
+    ReportingNullablePercent:
+      type: [number, "null"]
+      minimum: 0
+      maximum: 100
+      description: Null means the denominator is zero or unavailable; zero is a measured 0%.
+    ReportingResponseMeta:
+      type: object
+      required: [schemaVersion, metricVersion, asOf, filters, freshness, latencyMs, warnings, privacy]
+      properties:
+        schemaVersion: { type: integer, minimum: 1 }
+        metricVersion: { type: string }
+        asOf: { type: string, format: date-time }
+        filters:
+          type: object
+          required: [from, to, season, branchId, timezone, endBoundary]
+          properties:
+            from: { type: string, format: date }
+            to: { type: string, format: date }
+            season: { type: [string, "null"] }
+            branchId: { type: [integer, "null"] }
+            timezone: { type: string, const: UTC }
+            endBoundary: { type: string, const: inclusive }
+        freshness:
+          type: object
+          required: [status, source, cacheAgeSeconds]
+          properties:
+            status: { type: string, const: live }
+            source: { type: string }
+            cacheAgeSeconds: { type: integer, minimum: 0 }
+        latencyMs: { type: integer, minimum: 0 }
+        warnings:
+          type: array
+          items: { type: string }
+        privacy: { type: string, const: aggregate_non_personal }
+    ReportingMetricDefinition:
+      type: object
+      required: [key, label, domain, description, grain, timeSemantics, sensitivity]
+      properties:
+        key: { type: string }
+        label: { type: string }
+        domain: { type: string, enum: [executive, funnel, applications, finance, data_quality] }
+        description: { type: string }
+        grain: { type: string, enum: [record, application, currency, issue] }
+        timeSemantics: { type: string, enum: [created_cohort, financial_event, current_inventory, global_snapshot] }
+        denominator: { type: string }
+        sensitivity: { type: string, const: aggregate_non_personal }
+    ReportingMetaResponse:
+      type: object
+      required: [schemaVersion, metricVersion, generatedAt, timezone, maximumRangeDays, currencyPolicy, exportPolicy, metrics, branches]
+      properties:
+        schemaVersion: { type: integer, minimum: 1 }
+        metricVersion: { type: string }
+        generatedAt: { type: string, format: date-time }
+        timezone: { type: string, const: UTC }
+        maximumRangeDays: { type: integer, const: 366 }
+        currencyPolicy: { type: string, const: original_currency_only_no_cross_currency_sum }
+        exportPolicy: { type: string, const: disabled_in_v1_until_audited_field_level_export_is_approved }
+        metrics:
+          type: array
+          items: { $ref: "#/components/schemas/ReportingMetricDefinition" }
+        branches:
+          type: array
+          maxItems: 500
+          items:
+            type: object
+            required: [id, name, country, city]
+            properties:
+              id: { type: integer }
+              name: { type: string }
+              country: { type: [string, "null"] }
+              city: { type: [string, "null"] }
+    ReportingCommandCenterResponse:
+      type: object
+      required: [meta, data]
+      properties:
+        meta: { $ref: "#/components/schemas/ReportingResponseMeta" }
+        data:
+          type: object
+          required: [cards, trendBucket, trend]
+          properties:
+            cards:
+              type: object
+              required: [leadsCreated, leadsChangePercent, leadConversionRate, studentsCreated, studentsChangePercent, applicationsCreated, applicationsChangePercent, applicationWinRate, activeApplications, staleApplications]
+              properties:
+                leadsCreated: { type: integer, minimum: 0 }
+                leadsChangePercent: { type: [number, "null"] }
+                leadConversionRate: { $ref: "#/components/schemas/ReportingNullablePercent" }
+                studentsCreated: { type: integer, minimum: 0 }
+                studentsChangePercent: { type: [number, "null"] }
+                applicationsCreated: { type: integer, minimum: 0 }
+                applicationsChangePercent: { type: [number, "null"] }
+                applicationWinRate: { $ref: "#/components/schemas/ReportingNullablePercent" }
+                activeApplications: { type: integer, minimum: 0 }
+                staleApplications: { type: integer, minimum: 0 }
+            trendBucket: { type: string, enum: [day, week, month] }
+            trend:
+              type: array
+              items:
+                type: object
+                required: [bucket, leads, students, applications]
+                properties:
+                  bucket: { type: string, format: date-time }
+                  leads: { type: integer, minimum: 0 }
+                  students: { type: integer, minimum: 0 }
+                  applications: { type: integer, minimum: 0 }
+    ReportingFunnelResponse:
+      type: object
+      required: [meta, data]
+      properties:
+        meta: { $ref: "#/components/schemas/ReportingResponseMeta" }
+        data:
+          type: object
+          required: [stages, lost, sources]
+          properties:
+            stages:
+              type: array
+              items:
+                type: object
+                required: [key, value, rateFromPrevious]
+                properties:
+                  key: { type: string }
+                  value: { type: integer, minimum: 0 }
+                  rateFromPrevious: { $ref: "#/components/schemas/ReportingNullablePercent" }
+            lost: { type: integer, minimum: 0 }
+            sources:
+              type: array
+              maxItems: 20
+              items:
+                type: object
+                required: [source, leads, converted, applications, won, leadConversionRate, applicationWinRate]
+                properties:
+                  source: { type: string }
+                  leads: { type: integer, minimum: 0 }
+                  converted: { type: integer, minimum: 0 }
+                  applications: { type: integer, minimum: 0 }
+                  won: { type: integer, minimum: 0 }
+                  leadConversionRate: { $ref: "#/components/schemas/ReportingNullablePercent" }
+                  applicationWinRate: { $ref: "#/components/schemas/ReportingNullablePercent" }
+    ReportingApplicationsResponse:
+      type: object
+      required: [meta, data]
+      properties:
+        meta: { $ref: "#/components/schemas/ReportingResponseMeta" }
+        data:
+          type: object
+          required: [totals, stages, lastUpdatedAging, destinations]
+          properties:
+            totals:
+              type: object
+              required: [inventory, createdCohort]
+              properties:
+                inventory: { type: integer, minimum: 0 }
+                createdCohort: { type: integer, minimum: 0 }
+            stages:
+              type: array
+              items:
+                type: object
+                required: [key, label, variant, inventory, cohort]
+                properties:
+                  key: { type: string }
+                  label: { type: string }
+                  variant: { type: string }
+                  inventory: { type: integer, minimum: 0 }
+                  cohort: { type: integer, minimum: 0 }
+            lastUpdatedAging:
+              type: array
+              items:
+                type: object
+                required: [bucket, value]
+                properties:
+                  bucket: { type: string, enum: [0-2d, 3-7d, 8-14d, 15-30d, 31d+] }
+                  value: { type: integer, minimum: 0 }
+            destinations:
+              type: array
+              maxItems: 20
+              items:
+                type: object
+                required: [destination, applications, won, winRate]
+                properties:
+                  destination: { type: string }
+                  applications: { type: integer, minimum: 0 }
+                  won: { type: integer, minimum: 0 }
+                  winRate: { $ref: "#/components/schemas/ReportingNullablePercent" }
+    ReportingCommissionByCurrency:
+      type: object
+      required: [currency, records, grossCommission, agentLiability, netCommission, collected, outstanding]
+      properties:
+        currency: { type: string, pattern: "^[A-Z]{3}$" }
+        records: { type: integer, minimum: 0 }
+        grossCommission: { type: number }
+        agentLiability: { type: number }
+        netCommission: { type: number }
+        collected: { type: number }
+        outstanding: { type: number }
+    ReportingServiceFeeByCurrency:
+      type: object
+      required: [currency, records, billed, collected, outstanding]
+      properties:
+        currency: { type: string, pattern: "^[A-Z]{3}$" }
+        records: { type: integer, minimum: 0 }
+        billed: { type: number }
+        collected: { type: number }
+        outstanding: { type: number }
+    ReportingFinanceResponse:
+      type: object
+      required: [meta, data]
+      properties:
+        meta: { $ref: "#/components/schemas/ReportingResponseMeta" }
+        data:
+          type: object
+          required: [currencyPolicy, commissions, serviceFees, transactions]
+          properties:
+            currencyPolicy: { type: string, const: original_currency_only_no_cross_currency_sum }
+            commissions:
+              type: array
+              items: { $ref: "#/components/schemas/ReportingCommissionByCurrency" }
+            serviceFees:
+              type: array
+              items: { $ref: "#/components/schemas/ReportingServiceFeeByCurrency" }
+            transactions:
+              type: array
+              items:
+                type: object
+                required: [currency, type, records, amount]
+                properties:
+                  currency: { type: string, pattern: "^[A-Z]{3}$" }
+                  type: { type: string }
+                  records: { type: integer, minimum: 0 }
+                  amount: { type: number }
+    ReportingDataQualityResponse:
+      type: object
+      required: [meta, data]
+      properties:
+        meta: { $ref: "#/components/schemas/ReportingResponseMeta" }
+        data:
+          type: object
+          required: [coverage, summary, checks, mutationAvailable]
+          properties:
+            coverage:
+              type: object
+              required: [leadSourcePercent, applicationLeadLineagePercent, applicationCatalogLinkPercent]
+              properties:
+                leadSourcePercent: { $ref: "#/components/schemas/ReportingNullablePercent" }
+                applicationLeadLineagePercent: { $ref: "#/components/schemas/ReportingNullablePercent" }
+                applicationCatalogLinkPercent: { $ref: "#/components/schemas/ReportingNullablePercent" }
+            summary:
+              type: object
+              required: [critical, warning]
+              properties:
+                critical: { type: integer, minimum: 0 }
+                warning: { type: integer, minimum: 0 }
+            checks:
+              type: array
+              items:
+                type: object
+                required: [key, label, severity, count, scope]
+                properties:
+                  key: { type: string }
+                  label: { type: string }
+                  severity: { type: string, enum: [critical, warning] }
+                  count: { type: integer, minimum: 0 }
+                  affectedRecords: { type: integer, minimum: 0 }
+                  scope: { type: string, enum: [selected_cohort, branch_snapshot, global_snapshot] }
+            mutationAvailable: { type: boolean, const: false }
     AdapterSpecSummary:
       type: object
       required:
@@ -6752,6 +7616,14 @@ components:
         status:
           type: string
           enum: [queued, running, submitted, already_exists, program_missing, failed, canceled, dry_run, program_full, exclusive_region, accepted, rejected]
+        submitIntentKey: { type: ["string", "null"] }
+        targetIdentitySha256: { type: ["string", "null"], pattern: '^[0-9a-f]{64}$' }
+        targetIdentity: { type: ["object", "null"], additionalProperties: true }
+        submissionAction:
+          type: string
+          enum: [submit, amend, withdraw]
+        supersedesSubmissionId: { type: ["integer", "null"] }
+        providerCommittedAt: { type: ["string", "null"], format: date-time }
         externalRef: { type: string, nullable: true }
         resultJson: { type: object, nullable: true }
         screenshotUrls: { type: array, items: { type: string }, nullable: true }
@@ -6774,7 +7646,128 @@ components:
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
         deletedAt: { type: string, format: date-time, nullable: true }
-      required: [id, applicationId, studentId, universityKey, universityName, mode, status, attempts, maxAttempts, statusCheckAttempts, statusCheckNextAt, createdAt, updatedAt]
+      required: [id, applicationId, studentId, universityKey, universityName, mode, status, submissionAction, attempts, maxAttempts, statusCheckAttempts, statusCheckNextAt, createdAt, updatedAt]
+
+    PortalSubmissionIdsBody:
+      type: object
+      properties:
+        ids:
+          type: array
+          minItems: 1
+          maxItems: 200
+          items: { type: integer, minimum: 1 }
+      required: [ids]
+
+    PortalQueueAccepted:
+      type: object
+      properties:
+        accepted: { type: boolean, const: true }
+        queued: { type: integer, minimum: 0 }
+        statusUrl: { type: string }
+      required: [accepted, queued, statusUrl]
+
+    PortalSubmissionProcessingAccepted:
+      type: object
+      properties:
+        accepted: { type: boolean, const: true }
+        submissionId: { type: integer }
+        statusUrl: { type: string }
+      required: [accepted, submissionId, statusUrl]
+
+    PortalBulkMutationResult:
+      type: object
+      properties:
+        retried: { type: integer, minimum: 0 }
+        canceled: { type: integer, minimum: 0 }
+        ids: { type: array, items: { type: integer } }
+        skipped: { type: array, items: { type: integer } }
+      required: [ids, skipped]
+
+    PortalBulkProcessingAccepted:
+      type: object
+      properties:
+        accepted: { type: integer, minimum: 0 }
+        ids: { type: array, items: { type: integer } }
+        skipped: { type: array, items: { type: integer } }
+        statusUrl: { type: string }
+      required: [accepted, ids, skipped, statusUrl]
+
+    PortalLifecycleProposalStatus:
+      type: string
+      enum: [pending_review, approved, rejected, executing, executed, failed, canceled]
+
+    PortalLifecycleProposal:
+      type: object
+      properties:
+        id: { type: integer }
+        submissionId: { type: integer }
+        applicationId: { type: integer }
+        observationId: { type: integer }
+        rawStatus: { type: string }
+        currentStage: { type: string }
+        decision: { type: object, additionalProperties: true }
+        artifacts: { type: array, items: { type: string } }
+        missingDocuments:
+          type: array
+          items:
+            type: object
+            properties:
+              code: { type: string }
+              label: { type: string }
+            required: [label]
+        applicationReferenceSync: { type: ["string", "null"] }
+        status: { $ref: "#/components/schemas/PortalLifecycleProposalStatus" }
+        reviewedBy: { type: ["integer", "null"] }
+        reviewedAt: { type: ["string", "null"], format: date-time }
+        createdAt: { type: string, format: date-time }
+      required: [id, submissionId, applicationId, observationId, rawStatus, currentStage, decision, artifacts, missingDocuments, status, createdAt]
+
+    PortalLifecycleProposalReviewBody:
+      type: object
+      additionalProperties: false
+      properties:
+        decision: { type: string, enum: [approve, reject] }
+        reason: { type: string, maxLength: 1000 }
+        requestKey: { type: string, minLength: 1, maxLength: 100, pattern: '^[A-Za-z0-9._:-]+$' }
+      required: [decision, requestKey]
+
+    PortalLifecycleProposalReviewResult:
+      type: object
+      properties:
+        proposalId: { type: integer }
+        decision: { type: string, enum: [approve, reject] }
+        replay: { type: boolean }
+        executionQueued: { type: boolean }
+        executionJobId: { type: integer }
+        executionReason: { type: string }
+      required: [proposalId, decision, replay, executionQueued]
+
+    PortalWorkerJob:
+      type: object
+      properties:
+        id: { type: integer }
+        jobKind: { type: string, enum: [test_login, catalog_sync, status_sweep, lifecycle_execute] }
+        portalUniversityId: { type: ["integer", "null"] }
+        requestKey: { type: string }
+        status: { type: string, enum: [queued, running, succeeded, failed, dead_letter, canceled] }
+        attempts: { type: integer, minimum: 0 }
+        maxAttempts: { type: integer, minimum: 1 }
+        lastErrorCode: { type: ["string", "null"] }
+        result: { type: ["object", "null"], additionalProperties: true }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        finishedAt: { type: ["string", "null"], format: date-time }
+      required: [id, jobKind, requestKey, status, attempts, maxAttempts, createdAt, updatedAt]
+
+    PortalWorkerJobAccepted:
+      type: object
+      properties:
+        accepted: { type: boolean, const: true }
+        jobId: { type: integer }
+        requestKey: { type: string }
+        replay: { type: boolean }
+        statusUrl: { type: string }
+      required: [accepted, jobId, requestKey, replay, statusUrl]
 
     PortalOperationsSummary:
       type: object
@@ -6859,8 +7852,12 @@ components:
     PortalStatusSyncStarted:
       type: object
       properties:
-        started: { type: boolean, const: true }
-      required: [started]
+        accepted: { type: boolean, const: true }
+        jobId: { type: integer }
+        requestKey: { type: string }
+        replay: { type: boolean }
+        statusUrl: { type: string }
+      required: [accepted, jobId, requestKey, replay, statusUrl]
 
     PortalStatusCheckResumed:
       type: object
@@ -7046,3 +8043,157 @@ components:
           type: object
           additionalProperties: { type: string }
       required: [programOverrides]
+
+    SocialOperationsContext:
+      type: object
+      required: [enabled, mode, publishingEnabled]
+      properties:
+        enabled: { type: boolean }
+        mode: { type: string, enum: [off, read, manage] }
+        reason: { type: string, nullable: true }
+        tenantId: { type: string, format: uuid }
+        organizationId: { type: string, format: uuid }
+        publishingEnabled:
+          type: boolean
+          const: false
+
+    SocialAccount:
+      type: object
+      required: [id, provider, account_key, display_name, status]
+      properties:
+        id: { type: string, format: uuid }
+        provider: { type: string }
+        account_key: { type: string }
+        display_name: { type: string }
+        integration_key: { type: string, nullable: true }
+        status:
+          type: string
+          enum: [DISCONNECTED, CONNECTED_UNVERIFIED, VERIFIED, REAUTH_REQUIRED, DISABLED]
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    SocialContentBrief:
+      type: object
+      required: [id, title, objective, audience, content_kind, locales, channels, status]
+      properties:
+        id: { type: string, format: uuid }
+        title: { type: string }
+        objective: { type: string }
+        audience: { type: string }
+        content_kind:
+          type: string
+          enum: [POST, STORY, REEL, VIDEO, ARTICLE, AD_CREATIVE]
+        locales:
+          type: array
+          items: { type: string }
+        channels:
+          type: array
+          items: { type: string, enum: [instagram, facebook, linkedin, youtube, tiktok, x, blog] }
+        campaign_key: { type: string, nullable: true }
+        caption: { type: string, nullable: true }
+        utm: { type: object, additionalProperties: { type: string } }
+        scheduled_for: { type: string, format: date-time, nullable: true }
+        status:
+          type: string
+          enum: [DRAFT, IN_REVIEW, APPROVED, REJECTED, ARCHIVED]
+        version: { type: integer, minimum: 1 }
+        created_by_legacy_user_id: { type: integer }
+        reviewed_by_legacy_user_id: { type: integer, nullable: true }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    SocialOperationsOverview:
+      type: object
+      required: [briefCounts, accountCounts, publicationCounts, briefs, publishingEnabled]
+      properties:
+        briefCounts:
+          type: array
+          items:
+            type: object
+            required: [status, count]
+            properties:
+              status: { type: string }
+              count: { type: integer }
+        accountCounts:
+          type: array
+          items:
+            type: object
+            required: [status, count]
+            properties:
+              status: { type: string }
+              count: { type: integer }
+        publicationCounts:
+          type: array
+          items:
+            type: object
+            required: [status, count]
+            properties:
+              status: { type: string }
+              count: { type: integer }
+        briefs:
+          type: array
+          items: { $ref: "#/components/schemas/SocialContentBrief" }
+        publishingEnabled:
+          type: boolean
+          const: false
+
+    CreateSocialAccountBody:
+      type: object
+      additionalProperties: false
+      required: [provider, accountKey, displayName]
+      properties:
+        provider: { type: string, minLength: 2, maxLength: 64 }
+        accountKey: { type: string, minLength: 2, maxLength: 96 }
+        displayName: { type: string, minLength: 1, maxLength: 160 }
+        integrationKey: { type: string, maxLength: 96 }
+        externalAccountRef: { type: string, minLength: 1, maxLength: 512 }
+
+    CreateSocialContentBriefBody:
+      type: object
+      additionalProperties: false
+      required: [title, objective, audience, contentKind, locales, channels]
+      properties:
+        title: { type: string, minLength: 1, maxLength: 240 }
+        objective: { type: string, minLength: 1, maxLength: 2000 }
+        audience: { type: string, minLength: 1, maxLength: 1000 }
+        contentKind:
+          type: string
+          enum: [POST, STORY, REEL, VIDEO, ARTICLE, AD_CREATIVE]
+        locales:
+          type: array
+          minItems: 1
+          maxItems: 20
+          items: { type: string }
+        channels:
+          type: array
+          minItems: 1
+          maxItems: 20
+          items: { type: string, enum: [instagram, facebook, linkedin, youtube, tiktok, x, blog] }
+        campaignKey: { type: string, maxLength: 96 }
+        caption: { type: string, maxLength: 10000 }
+        scheduledFor: { type: string, format: date-time }
+        utm:
+          type: object
+          additionalProperties: false
+          properties:
+            source: { type: string, maxLength: 128 }
+            medium: { type: string, maxLength: 128 }
+            campaign: { type: string, maxLength: 128 }
+            term: { type: string, maxLength: 128 }
+            content: { type: string, maxLength: 128 }
+
+    ReviewSocialContentBriefBody:
+      type: object
+      additionalProperties: false
+      required: [decision, requestKey]
+      properties:
+        decision: { type: string, enum: [APPROVE, REJECT] }
+        reason: { type: string, maxLength: 2000 }
+        requestKey: { type: string, minLength: 8, maxLength: 160 }
+
+    SocialContentReviewResult:
+      type: object
+      required: [replay, decision]
+      properties:
+        replay: { type: boolean }
+        decision: { type: string, enum: [APPROVE, REJECT] }

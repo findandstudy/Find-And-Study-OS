@@ -16,6 +16,10 @@ const indexSource = readFileSync(
   new URL("../src/index.ts", import.meta.url),
   "utf8",
 );
+const routesIndexSource = readFileSync(
+  new URL("../src/routes/index.ts", import.meta.url),
+  "utf8",
+);
 const lifecycleSource = readFileSync(
   new URL("../src/lib/portalLifecycleContract.ts", import.meta.url),
   "utf8",
@@ -558,6 +562,11 @@ test("public embed output sanitizes URLs and escapes visitor-controlled attribut
 });
 
 test("sensitive settings, AI work, sessions, assets and webhooks fail closed", () => {
+  assert.match(routesIndexSource, /code: "AGENT_ONBOARDING_UNAVAILABLE"/);
+  assert.doesNotMatch(
+    routesIndexSource,
+    /catch \(err\) \{\s*console\.error\("\[agent-onboarding-gate\]", err\);\s*next\(\);/,
+  );
   assert.match(settingsRouteSource, /router\.get\("\/settings\/client", requireAuth/);
   assert.match(settingsRouteSource, /router\.get\("\/settings", requireAuth, requireRole\(\.\.\.MANAGER_ROLES\)/);
   assert.match(settingsRouteSource, /router\.patch\("\/settings", requireAuth, requireRole\("super_admin"\)/);

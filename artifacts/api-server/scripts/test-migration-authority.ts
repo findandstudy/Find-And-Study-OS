@@ -216,6 +216,12 @@ test("production prefix and canonical additive migration tail are pinned", () =>
       "0089_reporting_center_permissions",
       "0090_portal_lifecycle_observations",
       "0091_portal_application_artifact_intake",
+      "0092_portal_partner_verification_receipts",
+      "0093_portal_program_fallback_active_uniqueness",
+      "0094_portal_worker_jobs",
+      "0095_portal_submission_intents",
+      "0096_portal_lifecycle_proposals",
+      "0097_social_operations_foundation",
     ],
   );
 
@@ -226,6 +232,32 @@ test("production prefix and canonical additive migration tail are pinned", () =>
   assert.match(
     portalArtifactMigration,
     /FOREIGN KEY \(\s*"source_portal_observation_id",\s*"source_portal_submission_id",\s*"application_id"\s*\)/,
+  );
+
+  const partnerVerificationMigration = readFileSync(
+    path.join(root, "lib/db/drizzle/0092_portal_partner_verification_receipts.sql"),
+    "utf8",
+  );
+  assert.match(partnerVerificationMigration, /"verification_generation" integer NOT NULL DEFAULT 1/);
+  assert.match(partnerVerificationMigration, /"verification_type" IN \('TEST_LOGIN', 'STRICT_DRY_RUN'\)/);
+  assert.match(partnerVerificationMigration, /portal_partner_verification_receipts_append_only/);
+  assert.match(partnerVerificationMigration, /BEFORE UPDATE OR DELETE/);
+  assert.doesNotMatch(partnerVerificationMigration, /\b(?:TRUNCATE|DELETE FROM)\b/i);
+
+  const fallbackActiveUniquenessMigration = readFileSync(
+    path.join(
+      root,
+      "lib/db/drizzle/0093_portal_program_fallback_active_uniqueness.sql",
+    ),
+    "utf8",
+  );
+  assert.match(
+    fallbackActiveUniquenessMigration,
+    /CREATE UNIQUE INDEX "portal_prog_fallback_key_source_uniq"[\s\S]*WHERE "deleted_at" IS NULL/,
+  );
+  assert.doesNotMatch(
+    fallbackActiveUniquenessMigration,
+    /\b(?:TRUNCATE|DELETE FROM)\b/i,
   );
   assert.match(
     portalArtifactMigration,
@@ -247,6 +279,16 @@ test("production prefix and canonical additive migration tail are pinned", () =>
     attemptMigration,
     /FOREIGN KEY \(tenant_id, attempt_id\)\s+REFERENCES public\.active_context_selection_consumption_attempts\(tenant_id, id\)/,
   );
+
+  const socialOperationsMigration = readFileSync(
+    path.join(root, "lib/db/drizzle/0097_social_operations_foundation.sql"),
+    "utf8",
+  );
+  assert.match(socialOperationsMigration, /ALTER TABLE public\.%I FORCE ROW LEVEL SECURITY/);
+  assert.match(socialOperationsMigration, /social_content_reviews_append_only/);
+  assert.match(socialOperationsMigration, /social_performance_snapshots_append_only/);
+  assert.match(socialOperationsMigration, /"provider_mode" text NOT NULL DEFAULT 'MANAGED_PROVIDER'/);
+  assert.doesNotMatch(socialOperationsMigration, /https:\/\/graph\.facebook\.com|api\.linkedin\.com|open\.tiktokapis\.com/);
 });
 
 test("Student Journey G45 migration remains additive, tenant-forced and default-off", () => {
@@ -695,7 +737,8 @@ test("production-prefix adoption harness is explicit and loopback-only", () => {
   const source = readFileSync(harness, "utf8");
   assert.match(source, /prefix adoption requires a fresh disposable database/);
   assert.match(source, /productionEntries\.length, 66/);
-  assert.match(source, /count: 92/);
+  assert.match(source, /canonicalMigrationCount = journal\.entries\.length/);
+  assert.match(source, /count: canonicalMigrationCount/);
 });
 
 test("disposable database reset is explicit and fixed to the local test identity", () => {
@@ -807,7 +850,7 @@ test("comprehensive Control Plane gate is explicit and fixed to the disposable t
     /assert\.equal\(target\.pathname\.slice\(1\), "fasos_apply_local"\)/,
   );
   assert.match(source, /assert\.equal\(target\.port, "5433"\)/);
-  assert.match(source, /assert\.equal\(migrationCount\.rows\[0\]\.count, 92\)/);
+  assert.match(source, /assert\.equal\(migrationCount\.rows\[0\]\.count, 97\)/);
   assert.doesNotMatch(source, /CREATE ROLE \$\{/);
 });
 
@@ -837,7 +880,7 @@ test("Student Journey G45 PostgreSQL integration is explicit and loopback-only",
   assert.match(source, /target\.pathname, "\/fasos_apply_local"/);
   assert.match(source, /safeTarget\(executorUrl, "fas_journey_executor"\)/);
   assert.match(source, /ALLOW_LIVE_INTEGRATIONS/);
-  assert.match(source, /rows\[0\]\?\.count, 92/);
+  assert.match(source, /rows\[0\]\?\.count, 97/);
   assert.match(source, /journey_notification_intents_default_off_chk/);
   assert.match(
     source,
@@ -870,7 +913,7 @@ test("Institution Admissions PostgreSQL integration is explicit and least-privil
   assert.match(source, /institution_postgres_test_requires_disposable_loopback_database/);
   assert.match(source, /new URL\(actorUrl\)\.username !== "fas_institution_executor"/);
   assert.match(source, /NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS/);
-  assert.match(source, /migrationCount\.rows\[0\]\?\.count, 92/);
+  assert.match(source, /migrationCount\.rows\[0\]\?\.count, 97/);
   assert.match(source, /GRANT SELECT ON TABLE institution_memberships/);
   assert.doesNotMatch(source, /GRANT SELECT, INSERT ON TABLE institution_memberships/);
   assert.match(source, /institution_step_up_receipts/);
@@ -900,7 +943,7 @@ test("Institution case intake integration is explicit and EXECUTE-only", () => {
   assert.match(source, /institution_case_intake_test_requires_disposable_loopback_database/);
   assert.match(source, /fas_institution_intake_executor/);
   assert.match(source, /fas_institution_intake_owner/);
-  assert.match(source, /migrationCount\.rows\[0\]\?\.count, 92/);
+  assert.match(source, /migrationCount\.rows\[0\]\?\.count, 97/);
   assert.match(source, /case_insert: false/);
   assert.match(source, /receipt_insert: false/);
   assert.match(source, /can_execute: true/);
@@ -931,7 +974,7 @@ test("Institution evidence sharing integration is explicit and EXECUTE-only", ()
   assert.match(source, /institution_evidence_share_test_requires_disposable_loopback_database/);
   assert.match(source, /fas_institution_evidence_share_executor/);
   assert.match(source, /fas_institution_evidence_owner/);
-  assert.match(source, /rows\[0\]\?\.count, 92/);
+  assert.match(source, /rows\[0\]\?\.count, 97/);
   assert.match(source, /evidence_select: false/);
   assert.match(source, /consent_select: false/);
   assert.match(source, /share_insert: false/);

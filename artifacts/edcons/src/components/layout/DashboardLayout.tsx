@@ -183,10 +183,21 @@ function getMenuForRole(
       { title: t("dashboard.campaigns"), icon: Megaphone, url: '/admin/campaigns' },
     ];
 
+    const engagementItems: MenuItem[] = [
+      ...(hasPermFn?.('social.view') ? [{ title: t("dashboard.socialOperations"), icon: Megaphone, url: '/admin/social', permKey: 'social.view' }] : []),
+    ];
+
     const catalogAdsItems: MenuItem[] = [
       { title: t("dashboard.catalog"), icon: Library, url: '/admin/catalog' },
       { title: t("dashboard.popupAds"), icon: Bell, url: '/admin/popups' },
       { title: t("dashboard.embeds"), icon: Code2, url: '/admin/embeds' },
+    ];
+
+    const insightsItems: MenuItem[] = [
+      ...(hasPermFn?.('reporting.view') ? [{ title: t("dashboard.reports"), icon: BarChart3, url: '/admin/reports', permKey: 'reporting.view' }] : []),
+      { title: t("dashboard.userActivity"), icon: Activity, url: '/admin/activity' },
+      ...(isAdmin || role === 'manager' ? [{ title: t("dashboard.qualityReport"), icon: Gauge, url: '/admin/quality-report' }] : []),
+      ...(isAdmin ? [{ title: t("dashboard.dataQuality"), icon: ShieldCheck, url: '/admin/data-quality' }] : []),
     ];
 
     const aiItems: MenuItem[] = isAdmin ? [
@@ -214,10 +225,7 @@ function getMenuForRole(
       ...(isAdmin ? [{ title: t("dashboard.staffCards"), icon: IdCard, url: '/admin/staff-cards' }] : []),
       ...(role === 'super_admin' ? [{ title: t("dashboard.branches"), icon: Building, url: '/admin/branches' }] : []),
       { title: t("dashboard.auditLog"), icon: Activity, url: '/admin/audit' },
-      { title: t("dashboard.userActivity"), icon: Activity, url: '/admin/activity' },
-      ...(isAdmin || role === 'manager' ? [{ title: t("dashboard.qualityReport"), icon: Gauge, url: '/admin/quality-report' }] : []),
       ...(isAdmin ? [{ title: t("dashboard.systemHealth"), icon: HeartPulse, url: '/admin/system-health' }] : []),
-      ...(isAdmin ? [{ title: t("dashboard.dataQuality"), icon: ShieldCheck, url: '/admin/data-quality' }] : []),
       ...(isAdmin ? [{ title: t("dashboard.apiTokens"), icon: KeyRound, url: '/admin/api-tokens' }] : []),
       { title: t("dashboard.settings"), icon: Settings, url: '/admin/settings' },
       ...(isAdmin ? [{ title: t("dashboard.portalCredentials"), icon: KeyRound, url: '/admin/portal-credentials' }] : []),
@@ -227,11 +235,13 @@ function getMenuForRole(
     const groups = [
       { id: 'overview', label: t("dashboard.overview"), items: [
         { title: t("dashboard.dashboard"), icon: LayoutDashboard, url: '/admin' },
-        ...(hasPermFn?.('reporting.view') ? [{ title: t("dashboard.reports"), icon: BarChart3, url: '/admin/reports', permKey: 'reporting.view' }] : []),
+        { title: t("dashboard.operations"), icon: ListChecks, url: '/admin/operations' },
       ] },
+      { id: 'insights', label: t("reporting.insights"), items: insightsItems },
       { id: 'crm', label: t("dashboard.groupCrm"), items: crmItems },
       { id: 'agentNetwork', label: t("dashboard.groupAgentNetwork"), items: agentNetworkItems },
       { id: 'finance', label: t("dashboard.groupFinance"), items: financeItems },
+      { id: 'engagement', label: t("dashboard.groupEngagement"), items: engagementItems },
       { id: 'catalogAds', label: t("dashboard.groupCatalogAds"), items: catalogAdsItems },
       { id: 'ai', label: t("dashboard.groupAi"), items: aiItems },
       { id: 'website', label: t("dashboard.website"), items: websiteItems },
@@ -243,6 +253,7 @@ function getMenuForRole(
 
   if (role === 'staff' || role === 'consultant' || role === 'accountant' || role === 'editor') {
     const workItems: MenuItem[] = [
+      { title: t("dashboard.operations"), icon: ListChecks, url: '/staff/work' },
       { title: t("dashboard.leads"), icon: Users, url: '/staff/leads' },
       { title: t("dashboard.students"), icon: GraduationCap, url: '/staff/students' },
       { title: t("dashboard.applications"), icon: FileText, url: '/staff/applications' },
@@ -250,7 +261,6 @@ function getMenuForRole(
       { title: t("dashboard.messages"), icon: MessageCircle, url: '/staff/messages' },
       { title: t("dashboard.tasks"), icon: ClipboardList, url: '/staff/tasks' },
     ];
-    if (hasPermFn?.('reporting.view')) workItems.unshift({ title: t("dashboard.reports"), icon: BarChart3, url: '/admin/reports', permKey: 'reporting.view' });
     if (showFinance) workItems.push({ title: t("dashboard.finance"), icon: Briefcase, url: '/staff/finance' });
     if (hasPermFn?.('academy.access')) workItems.push({ title: t("dashboard.academy"), icon: ExternalLink, url: '/staff/__academy__', externalHref: '/api/academy-sso' });
     return {
@@ -265,6 +275,10 @@ function getMenuForRole(
           label: t("dashboard.work"),
           items: workItems
         },
+        ...(hasPermFn?.('reporting.view') ? [{
+          label: t("reporting.insights"),
+          items: [{ title: t("dashboard.reports"), icon: BarChart3, url: '/admin/reports', permKey: 'reporting.view' }],
+        }] : []),
         ...(() => {
           const contractItems: MenuItem[] = [
             ...(hasPermFn?.('contracts.view') ? [{ title: t("dashboard.contracts"), icon: FileText, url: '/admin/contracts', permKey: 'contracts.view' }] : []),

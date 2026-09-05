@@ -1,9 +1,6 @@
 name: Staging Adoption Gate
 
 on:
-  push:
-    branches:
-      - "codex/staging-adoption-runner-20260901"
   workflow_dispatch:
 
 permissions:
