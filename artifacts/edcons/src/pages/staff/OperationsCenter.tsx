@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useEffect, useMemo, useState } from "react";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import {
   customFetch,
   type PortalOperationsResponse,
@@ -7,10 +7,7 @@ import {
 import { ADMIN_ROLES } from "@workspace/roles";
 import { useAuth } from "@/hooks/use-auth";
 import { useI18n } from "@/hooks/use-i18n";
-import {
-  buildOperationsQueue,
-  type OperationsQueueItem,
-} from "@/lib/operationsQueue";
+import type { OperationsQueueItem } from "@/lib/operationsQueue";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -37,29 +34,10 @@ import {
   Users,
 } from "lucide-react";
 
-type Application = {
-  id: number;
-  stage: string;
-  assignedToId: number | null;
-  studentFirstName?: string | null;
-  studentLastName?: string | null;
-  universityName?: string | null;
-  programName?: string | null;
-  deadline?: string | null;
-  updatedAt?: string | null;
-  universityApplicationId?: string | null;
-  currentStageDocCount?: number | null;
-};
-
-type Task = {
-  id: number;
-  title: string;
-  status: string;
-  priority?: string | null;
-  assignedTo?: number | null;
-  assignedToName?: string | null;
-  dueDate?: string | null;
-  updatedAt?: string | null;
+type ApplicationPipelineSummary = {
+  meta: {
+    stages?: Array<{ stage: string; total: number }>;
+  };
 };
 
 type Document = {
@@ -82,14 +60,6 @@ type Stage = {
   isCaseClose: boolean;
 };
 
-type LifecycleProposal = {
-  id: number;
-  applicationId: number;
-  rawStatus: string;
-  status: string;
-  createdAt: string;
-};
-
 type OfferDeadline = {
   docId: number;
   applicationId: number;
@@ -109,6 +79,49 @@ type Integration = {
   isEnabled: boolean;
   updatedAt?: string | null;
 };
+
+type OperationsWorkResponse = {
+  schemaVersion: number;
+  asOf: string;
+  generatedAt: string;
+  items: OperationsQueueItem[];
+  summary: {
+    total: number;
+    critical: number;
+    high: number;
+    medium: number;
+    low: number;
+    mine: number;
+    tasks: number;
+    applications: number;
+    documents: number;
+    portal: number;
+    offers: number;
+  };
+  meta: {
+    limit: number;
+    total: number;
+    hasMore: boolean;
+    nextCursor: string | null;
+  };
+};
+
+function operationsWorkPath(input: {
+  scope: "all" | "mine";
+  search?: string;
+  severity?: "all" | OperationsQueueItem["severity"];
+  source?: "all" | OperationsQueueItem["source"];
+  cursor?: string | null;
+}): string {
+  const params = new URLSearchParams({ scope: input.scope, limit: "50" });
+  if (input.search?.trim()) params.set("search", input.search.trim());
+  if (input.severity && input.severity !== "all")
+    params.set("severity", input.severity);
+  if (input.source && input.source !== "all")
+    params.set("source", input.source);
+  if (input.cursor) params.set("cursor", input.cursor);
+  return `/api/operations/work-items?${params.toString()}`;
+}
 
 const severityClass: Record<OperationsQueueItem["severity"], string> = {
   critical:
@@ -248,18 +261,60 @@ export default function OperationsCenter() {
   const [source, setSource] = useState<"all" | OperationsQueueItem["source"]>(
     "all",
   );
+  const [debouncedSearch, setDebouncedSearch] = useState("");
 
-  const applications = useQuery<{ data: Application[] }>({
-    queryKey: ["operations-center", "applications"],
-    queryFn: () =>
+  useEffect(() => {
+    const timer = window.setTimeout(
+      () => setDebouncedSearch(search.trim()),
+      300,
+    );
+    return () => window.clearTimeout(timer);
+  }, [search]);
+
+  const work = useInfiniteQuery<OperationsWorkResponse>({
+    queryKey: ["operations-center", "work-items", "mine"],
+    queryFn: ({ pageParam }) =>
       customFetch(
-        "/api/applications?page=1&limit=500&includeFacets=0&includeTotals=0",
+        operationsWorkPath({
+          scope: "mine",
+          cursor: typeof pageParam === "string" ? pageParam : null,
+        }),
       ),
+    initialPageParam: null,
+    getNextPageParam: (lastPage) => lastPage.meta.nextCursor ?? undefined,
     retry: false,
   });
-  const tasks = useQuery<{ data: Task[] }>({
-    queryKey: ["operations-center", "tasks"],
-    queryFn: () => customFetch("/api/tasks?limit=500&archived=false"),
+
+  const exceptions = useInfiniteQuery<OperationsWorkResponse>({
+    queryKey: [
+      "operations-center",
+      "work-items",
+      "all",
+      debouncedSearch,
+      severity,
+      source,
+    ],
+    queryFn: ({ pageParam }) =>
+      customFetch(
+        operationsWorkPath({
+          scope: "all",
+          search: debouncedSearch,
+          severity,
+          source,
+          cursor: typeof pageParam === "string" ? pageParam : null,
+        }),
+      ),
+    initialPageParam: null,
+    getNextPageParam: (lastPage) => lastPage.meta.nextCursor ?? undefined,
+    retry: false,
+  });
+
+  const applications = useQuery<ApplicationPipelineSummary>({
+    queryKey: ["operations-center", "application-stage-summary"],
+    queryFn: () =>
+      customFetch(
+        "/api/applications?pipelineSummary=1&includeFacets=0&includeTotals=0",
+      ),
     retry: false,
   });
   const documents = useQuery<Document[]>({
@@ -283,15 +338,6 @@ export default function OperationsCenter() {
     enabled: isAdmin,
     retry: false,
   });
-  const proposals = useQuery<{ items: LifecycleProposal[] }>({
-    queryKey: ["operations-center", "lifecycle-proposals"],
-    queryFn: () =>
-      customFetch(
-        "/api/portal-lifecycle-proposals?status=pending_review&limit=100",
-      ),
-    enabled: isAdmin,
-    retry: false,
-  });
   const integrations = useQuery<{ data: Integration[] }>({
     queryKey: ["operations-center", "integrations"],
     queryFn: () => customFetch("/api/integrations"),
@@ -299,84 +345,62 @@ export default function OperationsCenter() {
     retry: false,
   });
 
-  const appRows = applications.data?.data ?? [];
-  const taskRows = tasks.data?.data ?? [];
   const documentRows = documents.data ?? [];
   const stageRows = stages.data?.stages ?? [];
   const offerRows = offers.data?.data ?? [];
-  const queue = useMemo(
-    () =>
-      buildOperationsQueue({
-        currentUserId: user?.id,
-        applications: appRows,
-        tasks: taskRows,
-        documents: documentRows,
-        terminalStageKeys: stageRows
-          .filter((stage) => stage.isCaseClose)
-          .map((stage) => stage.key),
-        portal: portal.data ?? null,
-        lifecycleProposals: proposals.data?.items ?? [],
-        offerDeadlines: offerRows,
-      }),
-    [
-      appRows,
-      taskRows,
-      documentRows,
-      stageRows,
-      portal.data,
-      proposals.data?.items,
-      offerRows,
-      user?.id,
-    ],
-  );
-
-  const filtered = useMemo(() => {
-    const needle = search.trim().toLowerCase();
-    return queue.filter(
-      (row) =>
-        (severity === "all" || row.severity === severity) &&
-        (source === "all" || row.source === source) &&
-        (!needle ||
-          `${row.identity} ${row.state} ${row.nextAction} ${row.owner} ${row.blocker}`
-            .toLowerCase()
-            .includes(needle)),
-    );
-  }, [queue, search, severity, source]);
-  const myRows = filtered.filter((row) => row.isMine);
-  const severityCounts = countBy(queue, (row) => row.severity);
+  const myRows = work.data?.pages.flatMap((page) => page.items) ?? [];
+  const exceptionRows =
+    exceptions.data?.pages.flatMap((page) => page.items) ?? [];
+  const workSummary = exceptions.data?.pages[0]?.summary ?? {
+    total: 0,
+    critical: 0,
+    high: 0,
+    medium: 0,
+    low: 0,
+    mine: 0,
+    tasks: 0,
+    applications: 0,
+    documents: 0,
+    portal: 0,
+    offers: 0,
+  };
   const documentStatusCounts = countBy(documentRows, (row) =>
     (row.status ?? "pending").toLowerCase(),
   );
-  const stageCounts = countBy(appRows, (row) => row.stage ?? "unknown");
+  const stageCounts = new Map(
+    (applications.data?.meta.stages ?? []).map((row) => [row.stage, row.total]),
+  );
   const loading =
+    work.isLoading ||
+    exceptions.isLoading ||
     applications.isLoading ||
-    tasks.isLoading ||
     documents.isLoading ||
     stages.isLoading ||
     offers.isLoading;
   const partialErrors = [
+    work,
+    exceptions,
     applications,
-    tasks,
     documents,
     stages,
     offers,
-    ...(isAdmin ? [portal, proposals, integrations] : []),
+    ...(isAdmin ? [portal, integrations] : []),
   ].filter((query) => query.isError).length;
 
   const refreshAll = () => {
+    void work.refetch();
+    void exceptions.refetch();
     void applications.refetch();
-    void tasks.refetch();
     void documents.refetch();
     void stages.refetch();
     void offers.refetch();
     if (isAdmin) {
       void portal.refetch();
-      void proposals.refetch();
       void integrations.refetch();
     }
   };
 
-  if (loading && queue.length === 0) {
+  if (loading && myRows.length === 0 && exceptionRows.length === 0) {
     return (
       <div className="space-y-4">
         <Skeleton className="h-16 w-full" />
@@ -425,31 +449,31 @@ export default function OperationsCenter() {
         {[
           {
             label: tr ? "Kritik" : "Critical",
-            value: severityCounts.get("critical") ?? 0,
+            value: workSummary.critical,
             icon: AlertTriangle,
             tone: "text-red-600 bg-red-500/10",
           },
           {
             label: tr ? "Yüksek" : "High",
-            value: severityCounts.get("high") ?? 0,
+            value: workSummary.high,
             icon: Clock3,
             tone: "text-amber-600 bg-amber-500/10",
           },
           {
             label: tr ? "Benim işlerim" : "My work",
-            value: queue.filter((row) => row.isMine).length,
+            value: workSummary.mine,
             icon: UserRoundCheck,
             tone: "text-blue-600 bg-blue-500/10",
           },
           {
             label: tr ? "Belge inceleme" : "Evidence review",
-            value: queue.filter((row) => row.source === "document").length,
+            value: workSummary.documents,
             icon: FileCheck2,
             tone: "text-emerald-600 bg-emerald-500/10",
           },
           {
             label: tr ? "Portal istisnası" : "Portal exceptions",
-            value: queue.filter((row) => row.source === "portal").length,
+            value: workSummary.portal,
             icon: Bot,
             tone: "text-orange-600 bg-orange-500/10",
           },
@@ -508,6 +532,23 @@ export default function OperationsCenter() {
                     : "There is no urgent work assigned to you."
                 }
               />
+              {work.hasNextPage && (
+                <div className="mt-4 flex justify-center">
+                  <Button
+                    variant="outline"
+                    onClick={() => void work.fetchNextPage()}
+                    disabled={work.isFetchingNextPage}
+                  >
+                    {work.isFetchingNextPage
+                      ? tr
+                        ? "Yükleniyor…"
+                        : "Loading…"
+                      : tr
+                        ? "Daha fazla iş yükle"
+                        : "Load more work"}
+                  </Button>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -574,13 +615,35 @@ export default function OperationsCenter() {
             </CardHeader>
             <CardContent>
               <QueueTable
-                rows={filtered}
+                rows={exceptionRows}
                 empty={
                   tr
                     ? "Seçili filtrelerde açık istisna yok."
                     : "No open exceptions match these filters."
                 }
               />
+              <div className="mt-4 flex flex-col items-center gap-2 text-xs text-muted-foreground">
+                <span>
+                  {tr
+                    ? `${exceptionRows.length} / ${exceptions.data?.pages[0]?.meta.total ?? 0} kayıt gösteriliyor`
+                    : `${exceptionRows.length} of ${exceptions.data?.pages[0]?.meta.total ?? 0} records shown`}
+                </span>
+                {exceptions.hasNextPage && (
+                  <Button
+                    variant="outline"
+                    onClick={() => void exceptions.fetchNextPage()}
+                    disabled={exceptions.isFetchingNextPage}
+                  >
+                    {exceptions.isFetchingNextPage
+                      ? tr
+                        ? "Yükleniyor…"
+                        : "Loading…"
+                      : tr
+                        ? "Daha fazla istisna yükle"
+                        : "Load more exceptions"}
+                  </Button>
+                )}
+              </div>
             </CardContent>
           </Card>
         </TabsContent>

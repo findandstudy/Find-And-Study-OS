@@ -16,6 +16,8 @@
     "test:control-plane-schema-bindings": "tsx --test ./scripts/test-control-plane-schema-bindings.ts",
     "test:active-tenant-context": "tsx --test ./scripts/test-active-tenant-context.ts",
     "test:social-operations-contract": "tsx --test ./scripts/test-social-operations-contract.ts",
+    "test:operations-work-read-model": "tsx --test ./scripts/test-operations-work-read-model.ts",
+    "test:postgres-operations-work-read-model": "tsx ./scripts/test-postgres-operations-work-read-model.ts",
     "test:active-context-keyring": "tsx --test ./scripts/test-active-context-keyring.ts",
     "test:session-lifetime": "tsx --test ./scripts/test-session-lifetime.ts",
     "test:change-set-policy": "tsx --test ./scripts/test-change-set-policy.ts",

@@ -222,6 +222,7 @@ test("production prefix and canonical additive migration tail are pinned", () =>
       "0095_portal_submission_intents",
       "0096_portal_lifecycle_proposals",
       "0097_social_operations_foundation",
+      "0098_operations_work_read_model_indexes",
     ],
   );
 
@@ -847,11 +848,14 @@ test("comprehensive Control Plane gate is explicit and fixed to the disposable t
   const source = readFileSync(controlPlaneTest, "utf8");
   assert.match(
     source,
-    /assert\.equal\(target\.pathname\.slice\(1\), "fasos_apply_local"\)/,
+    /target\.pathname\.slice\(1\),[\s\S]*?isDynamicCiTarget \? dynamicCiDatabase : "fasos_apply_local"/,
   );
-  assert.match(source, /assert\.equal\(target\.port, "5433"\)/);
-  assert.match(source, /assert\.equal\(migrationCount\.rows\[0\]\.count, 97\)/);
-  assert.doesNotMatch(source, /CREATE ROLE \$\{/);
+  assert.match(source, /target\.port, isDynamicCiTarget \? "5432" : "5433"/);
+  assert.match(source, /assert\.equal\(migrationCount\.rows\[0\]\.count, 99\)/);
+  assert.match(
+    source,
+    /if \(isDynamicCiTarget\) \{[\s\S]*CREATE ROLE \$\{role\.name\}[\s\S]*NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS/,
+  );
 });
 
 test("Student Journey G45 PostgreSQL integration is explicit and loopback-only", () => {
@@ -880,7 +884,7 @@ test("Student Journey G45 PostgreSQL integration is explicit and loopback-only",
   assert.match(source, /target\.pathname, "\/fasos_apply_local"/);
   assert.match(source, /safeTarget\(executorUrl, "fas_journey_executor"\)/);
   assert.match(source, /ALLOW_LIVE_INTEGRATIONS/);
-  assert.match(source, /rows\[0\]\?\.count, 97/);
+  assert.match(source, /rows\[0\]\?\.count, 99/);
   assert.match(source, /journey_notification_intents_default_off_chk/);
   assert.match(
     source,
@@ -913,7 +917,7 @@ test("Institution Admissions PostgreSQL integration is explicit and least-privil
   assert.match(source, /institution_postgres_test_requires_disposable_loopback_database/);
   assert.match(source, /new URL\(actorUrl\)\.username !== "fas_institution_executor"/);
   assert.match(source, /NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS/);
-  assert.match(source, /migrationCount\.rows\[0\]\?\.count, 97/);
+  assert.match(source, /migrationCount\.rows\[0\]\?\.count, 99/);
   assert.match(source, /GRANT SELECT ON TABLE institution_memberships/);
   assert.doesNotMatch(source, /GRANT SELECT, INSERT ON TABLE institution_memberships/);
   assert.match(source, /institution_step_up_receipts/);
@@ -943,7 +947,7 @@ test("Institution case intake integration is explicit and EXECUTE-only", () => {
   assert.match(source, /institution_case_intake_test_requires_disposable_loopback_database/);
   assert.match(source, /fas_institution_intake_executor/);
   assert.match(source, /fas_institution_intake_owner/);
-  assert.match(source, /migrationCount\.rows\[0\]\?\.count, 97/);
+  assert.match(source, /migrationCount\.rows\[0\]\?\.count, 99/);
   assert.match(source, /case_insert: false/);
   assert.match(source, /receipt_insert: false/);
   assert.match(source, /can_execute: true/);
@@ -974,7 +978,7 @@ test("Institution evidence sharing integration is explicit and EXECUTE-only", ()
   assert.match(source, /institution_evidence_share_test_requires_disposable_loopback_database/);
   assert.match(source, /fas_institution_evidence_share_executor/);
   assert.match(source, /fas_institution_evidence_owner/);
-  assert.match(source, /rows\[0\]\?\.count, 97/);
+  assert.match(source, /rows\[0\]\?\.count, 99/);
   assert.match(source, /evidence_select: false/);
   assert.match(source, /consent_select: false/);
   assert.match(source, /share_insert: false/);
@@ -1051,7 +1055,7 @@ test("live-first CI pins actions and PostgreSQL while replaying both adoption pa
     /postgres:16\.15@sha256:e17e86066e5ef83e0952a9347f5c792b7ece00972e2aa787a6986f471b3dd3d5/,
   );
   assert.match(workflow, /prepare-disposable-migration-database\.mjs/);
-  assert.equal(workflow.match(/node \.\/run-migrations\.mjs/g)?.length, 2);
+  assert.equal(workflow.match(/node \.\/run-migrations\.mjs/g)?.length, 4);
   assert.equal(
     workflow.match(/test-production-prefix-adoption\.mjs/g)?.length,
     2,
@@ -1084,7 +1088,7 @@ test("staging CI is isolated, exact-source and integration-disabled", () => {
     path.join(root, "deploy/staging/app.env.example"),
     "utf8",
   );
-  assert.match(workflow, /codex\/staging-adoption-runner-20260901/);
+  assert.match(workflow, /workflow_dispatch:/);
   assert.match(
     workflow,
     /STAGING_BASE_COMMIT: 68447daeae79fdc186db7b1b4e9901ba5bf5c83a/,

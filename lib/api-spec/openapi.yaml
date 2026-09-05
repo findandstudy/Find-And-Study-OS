@@ -41,6 +41,8 @@ tags:
     description: University portal submission automation
   - name: reporting
     description: Aggregate, branch-scoped operational reporting
+  - name: operations
+    description: Permission-scoped, read-only work and exception projections
   - name: social
     description: Tenant-scoped social content planning and approval; provider publishing is disabled
 
@@ -3823,6 +3825,42 @@ paths:
           $ref: "#/components/responses/ReportingForbidden"
         "503":
           $ref: "#/components/responses/ReportingUnavailable"
+
+  /operations/work-items:
+    get:
+      operationId: getOperationsWorkItems
+      tags: [operations]
+      summary: Get the server-side, cursor-paginated work and exception queue
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+        - name: search
+          in: query
+          schema: { type: string, maxLength: 120 }
+        - name: severity
+          in: query
+          schema: { type: string, enum: [critical, high, medium, low] }
+        - name: source
+          in: query
+          schema: { type: string, enum: [task, application, document, portal, offer] }
+        - name: scope
+          in: query
+          schema: { type: string, enum: [all, mine], default: all }
+        - name: cursor
+          in: query
+          schema: { type: string, maxLength: 1024 }
+      responses:
+        "200":
+          description: A stable, permission-scoped work page
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OperationsWorkResponse"
+        "400": { description: Invalid filter or cursor }
+        "401": { description: Authentication required }
+        "403": { description: Staff role required }
+        "503": { description: Work projection unavailable or timed out }
 
   /social/context:
     get:
@@ -8043,6 +8081,62 @@ components:
           type: object
           additionalProperties: { type: string }
       required: [programOverrides]
+
+    OperationsWorkItem:
+      type: object
+      required: [id, source, severity, reasonCode, identity, state, nextAction, owner, dueAt, blocker, lastActivityAt, href, score, isMine]
+      properties:
+        id: { type: string }
+        source: { type: string, enum: [task, application, document, portal, offer] }
+        severity: { type: string, enum: [critical, high, medium, low] }
+        reasonCode: { type: string }
+        identity: { type: string }
+        state: { type: string }
+        nextAction: { type: string }
+        owner: { type: string }
+        dueAt: { type: string, nullable: true }
+        blocker: { type: string }
+        lastActivityAt: { type: string, nullable: true }
+        href: { type: string }
+        applicationId: { type: integer }
+        score: { type: integer, format: int64 }
+        isMine: { type: boolean }
+
+    OperationsWorkSummary:
+      type: object
+      required: [total, critical, high, medium, low, mine, tasks, applications, documents, portal, offers]
+      properties:
+        total: { type: integer, minimum: 0 }
+        critical: { type: integer, minimum: 0 }
+        high: { type: integer, minimum: 0 }
+        medium: { type: integer, minimum: 0 }
+        low: { type: integer, minimum: 0 }
+        mine: { type: integer, minimum: 0 }
+        tasks: { type: integer, minimum: 0 }
+        applications: { type: integer, minimum: 0 }
+        documents: { type: integer, minimum: 0 }
+        portal: { type: integer, minimum: 0 }
+        offers: { type: integer, minimum: 0 }
+
+    OperationsWorkResponse:
+      type: object
+      required: [schemaVersion, asOf, generatedAt, items, summary, meta]
+      properties:
+        schemaVersion: { type: integer, minimum: 1 }
+        asOf: { type: string, format: date-time }
+        generatedAt: { type: string, format: date-time }
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/OperationsWorkItem" }
+        summary: { $ref: "#/components/schemas/OperationsWorkSummary" }
+        meta:
+          type: object
+          required: [limit, total, hasMore, nextCursor]
+          properties:
+            limit: { type: integer, minimum: 1, maximum: 100 }
+            total: { type: integer, minimum: 0 }
+            hasMore: { type: boolean }
+            nextCursor: { type: string, nullable: true }
 
     SocialOperationsContext:
       type: object
