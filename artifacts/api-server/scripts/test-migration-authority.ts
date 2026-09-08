@@ -233,6 +233,11 @@ test("production prefix and canonical additive migration tail are pinned", () =>
       "0106_activity_read_path_indexes",
       "0107_program_content_translations",
       "0108_expand_system_and_program_locales",
+      "0109_public_web_content_foundation",
+      "0110_catalog_entity_graph_foundation",
+      "0111_catalog_entity_graph_hardening",
+      "0112_public_web_publication_hardening",
+      "0113_public_web_publication_trigger_fix",
     ],
   );
 
@@ -375,6 +380,75 @@ test("production prefix and canonical additive migration tail are pinned", () =>
     activityReadPathMigration,
     /\b(?:TRUNCATE|DELETE FROM|UPDATE)\b/i,
   );
+
+  const publicWebContentMigration = readFileSync(
+    path.join(root, "lib/db/drizzle/0109_public_web_content_foundation.sql"),
+    "utf8",
+  );
+  assert.match(publicWebContentMigration, /public_web_content_revisions_append_only/);
+  assert.match(publicWebContentMigration, /public_web_source_evidence_append_only/);
+  assert.match(publicWebContentMigration, /public_web_publication_receipts_append_only/);
+  assert.match(publicWebContentMigration, /public web approval requires an independent reviewer/);
+  assert.match(publicWebContentMigration, /ALTER TABLE public\.%I FORCE ROW LEVEL SECURITY/);
+  assert.doesNotMatch(publicWebContentMigration, /INSERT INTO\s+role_package_capabilities/i);
+  assert.doesNotMatch(
+    publicWebContentMigration,
+    /INSERT INTO\s+"?(programs|universities|destinations|website_pages)"?/i,
+  );
+
+  const catalogGraphMigration = readFileSync(
+    path.join(root, "lib/db/drizzle/0110_catalog_entity_graph_foundation.sql"),
+    "utf8",
+  );
+  for (const table of [
+    "catalog_sources",
+    "catalog_source_records",
+    "institution_campuses",
+    "program_intakes",
+    "price_components",
+    "tenant_catalog_listings",
+  ]) {
+    assert.match(catalogGraphMigration, new RegExp(`CREATE TABLE "${table}"`));
+  }
+  assert.match(catalogGraphMigration, /"amount_minor" bigint NOT NULL/);
+  assert.match(catalogGraphMigration, /"currency_code" text NOT NULL/);
+  assert.match(catalogGraphMigration, /catalog_source_records_append_only/);
+  assert.match(catalogGraphMigration, /program intake campus must belong to the awarding university/);
+  assert.match(catalogGraphMigration, /ALTER TABLE "tenant_catalog_listings" FORCE ROW LEVEL SECURITY/);
+  assert.doesNotMatch(catalogGraphMigration, /CREATE TABLE "(?:institution_)?requirements?"/i);
+  assert.doesNotMatch(catalogGraphMigration, /\b(?:TRUNCATE|DELETE FROM|UPDATE\s+"?(?:programs|universities))\b/i);
+
+  const catalogGraphHardeningMigration = readFileSync(
+    path.join(root, "lib/db/drizzle/0111_catalog_entity_graph_hardening.sql"),
+    "utf8",
+  );
+  assert.match(catalogGraphHardeningMigration, /GREATEST\("effective_at", COALESCE\("verified_at", "effective_at"\)\)/);
+  assert.doesNotMatch(catalogGraphHardeningMigration, /'SERVICE'/);
+  assert.match(catalogGraphHardeningMigration, /UPDATE OF "source_record_id", "source_verified_at", "source_expires_at"/);
+  assert.match(catalogGraphHardeningMigration, /tenant_catalog_listings_transition_guard/);
+  assert.match(catalogGraphHardeningMigration, /tenant_catalog_listings_initial_state_guard/);
+  assert.match(catalogGraphHardeningMigration, /must begin as an unreviewed DRAFT/);
+  assert.match(catalogGraphHardeningMigration, /approval requires an independent reviewer/);
+  assert.doesNotMatch(catalogGraphHardeningMigration, /\b(?:TRUNCATE|DELETE FROM)\b/i);
+
+  const publicWebHardeningMigration = readFileSync(
+    path.join(root, "lib/db/drizzle/0112_public_web_publication_hardening.sql"),
+    "utf8",
+  );
+  assert.match(publicWebHardeningMigration, /public_web_source_evidence_contract_guard/);
+  assert.match(publicWebHardeningMigration, /lacks current verified critical facts/);
+  assert.match(publicWebHardeningMigration, /indexing requires PASS SEO and structured data/);
+  assert.match(publicWebHardeningMigration, /must begin as a clean DRAFT/);
+  assert.doesNotMatch(publicWebHardeningMigration, /\b(?:TRUNCATE|DELETE FROM|UPDATE\s+"?(?:website_pages|programs|universities))\b/i);
+
+  const publicWebTriggerFixMigration = readFileSync(
+    path.join(root, "lib/db/drizzle/0113_public_web_publication_trigger_fix.sql"),
+    "utf8",
+  );
+  assert.match(publicWebTriggerFixMigration, /revision_seo_status text/);
+  assert.match(publicWebTriggerFixMigration, /IF NEW\."index_state" = 'INDEX'/);
+  assert.doesNotMatch(publicWebTriggerFixMigration, /revision_row record/);
+  assert.doesNotMatch(publicWebTriggerFixMigration, /\b(?:TRUNCATE|DELETE FROM|UPDATE\s+"?(?:website_pages|programs|universities))\b/i);
 });
 
 test("Student Journey G45 migration remains additive, tenant-forced and default-off", () => {

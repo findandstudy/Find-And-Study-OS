@@ -230,6 +230,9 @@
     "reconcile:portal-passport-identities": "tsx scripts/reconcile-portal-passport-identities.ts",
     "test:program-import-headers": "tsx --test ./scripts/test-program-import-headers.ts",
     "test:program-translations": "tsx --test ./scripts/test-program-translations.ts",
+    "test:public-web-foundation": "tsx --test ./scripts/test-public-web-content-foundation.ts",
+    "test:postgres-public-web-foundation": "tsx --test ./scripts/test-postgres-public-web-content-foundation.ts",
+    "test:postgres-catalog-entity-graph": "tsx --test ./scripts/test-postgres-catalog-entity-graph.ts",
     "test:agency-platform-overhaul": "tsx --test ./scripts/test-agency-platform-overhaul.ts"
   },
   "dependencies": {
