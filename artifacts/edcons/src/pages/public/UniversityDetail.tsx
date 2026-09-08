@@ -43,6 +43,7 @@ type UniversityPayload = {
     programCount: number;
     canonicalPath: string;
     requestedPathIsCanonical: boolean;
+    indexable: boolean;
   };
 };
 
@@ -71,7 +72,7 @@ export default function UniversityDetail({ routeKey }: { routeKey: string }) {
     title: university?.name || t("countryDetail.universities"),
     description: university?.description || [university?.city, university?.country].filter(Boolean).join(", ") || t("programs.subtitle"),
     canonical: university ? `${SITE_URL}${university.canonicalPath}` : undefined,
-    noindex: Boolean(error),
+    noindex: error || !payload?.meta.indexable,
     lang,
   });
   useJsonLd(university ? [

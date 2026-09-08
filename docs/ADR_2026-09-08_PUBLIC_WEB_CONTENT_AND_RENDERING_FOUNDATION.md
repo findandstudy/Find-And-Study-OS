@@ -1,7 +1,7 @@
 # ADR — Public Web Content ve Ölçekli Yayın Foundation
 
 Tarih: 8 Eylül 2026
-Durum: Yerel uygulama kabul edildi; runtime wiring ve deploy kapalı
+Durum: Foundation ve varsayılan-kapalı SSR/ISR pilotu yerelde uygulandı; deploy kapalı
 Kapsam: Program, üniversite, destinasyon, CMS sayfası ve rehber içeriği
 
 ## Bağlam
@@ -115,14 +115,40 @@ Saf TypeScript sözleşmesi şunları ekler:
 - AI receipt, maker-checker, kalite, çeviri, SEO ve structured-data kapıları;
 - `off | allowlist | all` fail-closed rollout kararı.
 
-Bu dilimde public HTTP route, sitemap üretimi, admin UI, toplu backfill, provider çağrısı, role grant'i, staging veya production deploy'u yoktur.
+Bu foundation diliminde toplu backfill, provider çağrısı, role grant'i, staging
+veya production deploy'u yoktur. Sonraki yerel dilimlerde command/store adapter,
+Publication Center ve bounded public read modelleri eklendi.
+
+## Yerel SSR/ISR pilotu
+
+Yeni bir framework veya ikinci runtime eklenmeden mevcut modüler monolit üzerinde,
+program liste ve program detay rotaları için on-demand semantic HTML pilotu
+uygulandı. Pilot aşağıdaki güvenlik ve ölçek sınırlarını taşır:
+
+- `PUBLIC_WEB_RENDER_MODE=off|allowlist|all`; eksik veya hatalı ayar `off` olur;
+- allowlist yalnız tam eşleşen, tanınan localized program rotalarını kabul eder;
+- ilk liste en fazla 12 kayıt okur; cache en fazla 500 anahtar tutar;
+- 5 dakika fresh, 1 saat stale-while-revalidate penceresi ve aynı anahtar için
+  in-flight sorgu birleştirmesi kullanılır;
+- slug drift'i kanonik adrese `308` ile yönlendirilir;
+- HTML ve JSON-LD değerleri escape edilir, bütün script'ler istek-bazlı CSP nonce
+  taşır;
+- cevap `X-Public-Render`, `X-Public-Render-Cache` ve `Server-Timing` ile
+  ölçülebilir; render hatasında mevcut SPA güvenli fallback olarak kalır;
+- tenant-bound publication/index projection bağlanana kadar program ve üniversite
+  detayları bilinçli olarak `noindex` kalır.
+
+Saf sözleşme testleri `4/4`, eşzamanlı cold-read coalescing ve sonraki cache-hit'i
+gerçek disposable PostgreSQL üzerinde doğrulayan entegrasyon testi `1/1` geçmiştir.
+API/Edcons typecheck ve production build yeşildir. Pilot hiçbir staging veya
+production runtime'ında etkinleştirilmemiştir.
 
 ## Sonraki dilimlerin sırası
 
-1. Active-context ve capability kontrollü command/store adapter.
-2. Admin Publication Center: source coverage, review, stale ve index queue.
-3. Program ve üniversite için bounded read model + cursor pagination.
-4. SSR/ISR pilotu ve ölçüm raporu.
+1. Active-context ve capability kontrollü command/store adapter. **Yerelde tamamlandı.**
+2. Admin Publication Center: source coverage, review, stale ve index queue. **Yerelde tamamlandı.**
+3. Program ve üniversite için bounded read model + cursor pagination. **Yerelde tamamlandı.**
+4. SSR/ISR pilotu ve ölçüm raporu. **Varsayılan-kapalı pilot yerelde tamamlandı; gerçek trafik ölçümü bekliyor.**
 5. Dinamik, shard edilmiş sitemap index ve hreflang/canonical doğrulaması.
 6. Prototiplerin mevcut tasarım sistemiyle program/üniversite template'lerine dönüştürülmesi.
 7. Related entity ve internal-link graph; kalite eşiği geçmeyen sayfalara link/index üretmeme.

@@ -89,6 +89,7 @@ type ProgramDetailPayload = {
   meta: {
     canonicalPath: string;
     requestedPathIsCanonical: boolean;
+    indexable: boolean;
   };
 };
 
@@ -117,7 +118,7 @@ export default function ProgramDetail({ routeKey }: { routeKey: string }) {
     title: program?.name || t("programs.programDetails"),
     description: program?.description || [program?.degree, program?.field, program?.universityName].filter(Boolean).join(" · ") || t("programs.subtitle"),
     canonical: program ? `${SITE_URL}${program.canonicalPath}` : undefined,
-    noindex: Boolean(error),
+    noindex: error || !payload?.meta.indexable,
     lang,
   });
   useJsonLd(program ? [

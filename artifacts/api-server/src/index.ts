@@ -15,6 +15,12 @@ import { HARDCODED_EXTRACTOR_FIELDS, HARDCODED_EXTRACTOR_RULES } from "./lib/aiD
 import { seedAiAgentConfig } from "./lib/inbox/aiAgentConfig";
 import { seedProgramScopeSource } from "./lib/inbox/knowledgeSources";
 import { renderLlmsText } from "@workspace/corporate-facts";
+import {
+  publicCatalogCsp,
+  renderPublicCatalogHtml,
+  shouldRenderPublicCatalogPath,
+} from "./lib/publicCatalogRenderContract";
+import { getPublicCatalogRenderModel } from "./lib/publicCatalogRenderReadModel";
 
 const isProd = process.env.NODE_ENV === "production";
 
@@ -211,6 +217,72 @@ function serveStaticFrontend() {
     },
   }));
 
+  const indexPath = path.join(distPath, "index.html");
+  const indexHtml = fs.readFileSync(indexPath, "utf8");
+  const configuredSiteUrl = (() => {
+    try {
+      const parsed = new URL(
+        process.env.PUBLIC_SITE_URL || "https://findandstudy.com",
+      );
+      if (!/^https?:$/.test(parsed.protocol) || parsed.username || parsed.password) {
+        throw new Error("unsafe_public_site_url");
+      }
+      return parsed.origin;
+    } catch {
+      console.warn("[public-render] invalid PUBLIC_SITE_URL; using canonical default");
+      return "https://findandstudy.com";
+    }
+  })();
+
+  app.get("/{*splat}", async (req: express.Request, res: express.Response, next: express.NextFunction) => {
+    if (req.path.startsWith("/api")) return next();
+    const route = shouldRenderPublicCatalogPath({
+      path: req.path,
+      mode: process.env.PUBLIC_WEB_RENDER_MODE,
+      allowlist: process.env.PUBLIC_WEB_RENDER_ALLOWLIST,
+    });
+    if (!route) return next();
+
+    const startedAt = process.hrtime.bigint();
+    try {
+      const rendered = await getPublicCatalogRenderModel(route);
+      if (
+        rendered.value.kind === "program_detail"
+        && rendered.value.canonicalPath !== route.path
+      ) {
+        res.setHeader("Cache-Control", "public, max-age=60, s-maxage=300");
+        res.redirect(308, rendered.value.canonicalPath);
+        return;
+      }
+      const nonce = crypto.randomBytes(18).toString("base64url");
+      const html = renderPublicCatalogHtml({
+        indexHtml,
+        model: rendered.value,
+        siteUrl: configuredSiteUrl,
+        nonce,
+      });
+      const durationMs = Number(process.hrtime.bigint() - startedAt) / 1_000_000;
+      res.setHeader(
+        "Cache-Control",
+        "public, max-age=0, s-maxage=300, stale-while-revalidate=3600",
+      );
+      res.setHeader("Content-Security-Policy", publicCatalogCsp(nonce));
+      res.setHeader("X-Public-Render", "ssr-isr-pilot");
+      res.setHeader("X-Public-Render-Cache", rendered.cacheStatus);
+      res.setHeader("Server-Timing", `public-render;dur=${durationMs.toFixed(1)}`);
+      res.status(rendered.value.kind === "not_found" ? 404 : 200);
+      res.type("html").send(html);
+    } catch (error) {
+      console.error("[public-render] request failed", {
+        routeKind: route.kind,
+        message: error instanceof Error ? error.message : "unknown_error",
+      });
+      // Rendering is a default-off pilot. A transient read-model failure must
+      // degrade to the existing SPA instead of taking the public site down.
+      next();
+    }
+  });
+
   app.get("/{*splat}", (req: express.Request, res: express.Response, next: express.NextFunction) => {
     if (req.path.startsWith("/api")) return next();
     // Guarantee the SPA always carries a CSRF cookie before it issues ANY
@@ -227,7 +299,6 @@ function serveStaticFrontend() {
       const token = crypto.randomBytes(32).toString("hex");
       res.cookie("csrf_token", token, getCsrfCookieOptions(req, 7 * 24 * 60 * 60 * 1000));
     }
-    const indexPath = path.join(distPath, "index.html");
     res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
     res.sendFile(indexPath);
   });

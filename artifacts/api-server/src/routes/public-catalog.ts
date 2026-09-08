@@ -281,6 +281,7 @@ router.get(
       })),
       meta: {
         locale,
+        indexable: false,
         canonicalPath: canonical.canonicalPath,
         requestedPathIsCanonical: canonical.isCanonical,
         generatedAt: new Date().toISOString(),
@@ -408,6 +409,7 @@ router.get(
       })),
       meta: {
         locale,
+        indexable: false,
         programCount: Number(countRow?.count ?? 0),
         returnedPrograms: programRows.length,
         canonicalPath: canonical.canonicalPath,
