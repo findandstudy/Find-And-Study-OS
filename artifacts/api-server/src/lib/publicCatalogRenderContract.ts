@@ -21,6 +21,13 @@ export type PublicCatalogRenderRoute =
       path: string;
       routeKey: string;
       identity: PublicCatalogRouteIdentity | null;
+    }
+  | {
+      kind: "university_detail";
+      locale: ProgramSupportedLocale;
+      path: string;
+      routeKey: string;
+      identity: PublicCatalogRouteIdentity | null;
     };
 
 export type PublicCatalogRenderModel =
@@ -76,10 +83,72 @@ export type PublicCatalogRenderModel =
         discountedFee: number | null;
         currency: string | null;
       };
+    }
+  | {
+      kind: "university_detail";
+      locale: ProgramSupportedLocale;
+      canonicalPath: string;
+      title: string;
+      description: string;
+      indexable: boolean;
+      alternatePaths: Partial<Record<ProgramSupportedLocale, string>>;
+      university: {
+        id: number;
+        name: string;
+        country: string;
+        city: string | null;
+        universityType: string | null;
+        programCount: number;
+        programs: Array<{
+          id: number;
+          name: string;
+          degree: string | null;
+          field: string | null;
+          canonicalPath: string;
+        }>;
+      };
     };
 
 const MAX_ALLOWLIST_ENTRIES = 64;
 const MAX_RENDER_PATH_LENGTH = 512;
+
+type RenderCopy = {
+  programs: string;
+  countries: string;
+  degree: string;
+  field: string;
+  duration: string;
+  language: string;
+  location: string;
+  tuition: string;
+  institutionType: string;
+};
+
+const RENDER_COPY: Record<ProgramSupportedLocale, RenderCopy> = {
+  en: { programs: "Programs", countries: "Countries", degree: "Degree", field: "Field", duration: "Duration", language: "Language", location: "Location", tuition: "Tuition", institutionType: "Institution type" },
+  tr: { programs: "Programlar", countries: "Ülkeler", degree: "Derece", field: "Alan", duration: "Süre", language: "Eğitim dili", location: "Konum", tuition: "Öğrenim ücreti", institutionType: "Kurum türü" },
+  ar: { programs: "البرامج", countries: "الدول", degree: "الدرجة", field: "المجال", duration: "المدة", language: "لغة الدراسة", location: "الموقع", tuition: "الرسوم الدراسية", institutionType: "نوع المؤسسة" },
+  fr: { programs: "Programmes", countries: "Pays", degree: "Diplôme", field: "Domaine", duration: "Durée", language: "Langue", location: "Lieu", tuition: "Frais de scolarité", institutionType: "Type d’établissement" },
+  ru: { programs: "Программы", countries: "Страны", degree: "Степень", field: "Направление", duration: "Продолжительность", language: "Язык", location: "Местоположение", tuition: "Стоимость обучения", institutionType: "Тип учреждения" },
+  fa: { programs: "برنامه‌ها", countries: "کشورها", degree: "مقطع", field: "رشته", duration: "مدت", language: "زبان", location: "مکان", tuition: "شهریه", institutionType: "نوع مؤسسه" },
+  zh: { programs: "课程", countries: "国家", degree: "学位", field: "专业领域", duration: "学制", language: "授课语言", location: "地点", tuition: "学费", institutionType: "院校类型" },
+  hi: { programs: "कार्यक्रम", countries: "देश", degree: "डिग्री", field: "विषय क्षेत्र", duration: "अवधि", language: "भाषा", location: "स्थान", tuition: "शिक्षण शुल्क", institutionType: "संस्थान का प्रकार" },
+  es: { programs: "Programas", countries: "Países", degree: "Título", field: "Área", duration: "Duración", language: "Idioma", location: "Ubicación", tuition: "Matrícula", institutionType: "Tipo de institución" },
+  id: { programs: "Program", countries: "Negara", degree: "Gelar", field: "Bidang", duration: "Durasi", language: "Bahasa", location: "Lokasi", tuition: "Biaya kuliah", institutionType: "Jenis institusi" },
+  ur: { programs: "پروگرام", countries: "ممالک", degree: "ڈگری", field: "شعبہ", duration: "مدت", language: "زبان", location: "مقام", tuition: "ٹیوشن فیس", institutionType: "ادارے کی قسم" },
+  tk: { programs: "Maksatnamalar", countries: "Ýurtlar", degree: "Dereje", field: "Ugyr", duration: "Dowamlylygy", language: "Dil", location: "Ýerleşýän ýeri", tuition: "Okuw tölegi", institutionType: "Edaranyň görnüşi" },
+  ky: { programs: "Программалар", countries: "Өлкөлөр", degree: "Даража", field: "Багыт", duration: "Узактыгы", language: "Тил", location: "Жайгашкан жери", tuition: "Окуу акысы", institutionType: "Мекеменин түрү" },
+  kk: { programs: "Бағдарламалар", countries: "Елдер", degree: "Дәреже", field: "Сала", duration: "Ұзақтығы", language: "Тіл", location: "Орналасуы", tuition: "Оқу ақысы", institutionType: "Мекеме түрі" },
+  uz: { programs: "Dasturlar", countries: "Mamlakatlar", degree: "Daraja", field: "Yo‘nalish", duration: "Davomiyligi", language: "Til", location: "Joylashuv", tuition: "O‘qish to‘lovi", institutionType: "Muassasa turi" },
+  tg: { programs: "Барномаҳо", countries: "Кишварҳо", degree: "Дараҷа", field: "Соҳа", duration: "Давомнокӣ", language: "Забон", location: "Ҷойгиршавӣ", tuition: "Ҳаққи таҳсил", institutionType: "Навъи муассиса" },
+  bn: { programs: "প্রোগ্রাম", countries: "দেশ", degree: "ডিগ্রি", field: "বিষয়", duration: "সময়কাল", language: "ভাষা", location: "অবস্থান", tuition: "টিউশন ফি", institutionType: "প্রতিষ্ঠানের ধরন" },
+  pt: { programs: "Programas", countries: "Países", degree: "Grau", field: "Área", duration: "Duração", language: "Idioma", location: "Localização", tuition: "Mensalidade", institutionType: "Tipo de instituição" },
+  ne: { programs: "कार्यक्रमहरू", countries: "देशहरू", degree: "डिग्री", field: "विषय", duration: "अवधि", language: "भाषा", location: "स्थान", tuition: "शिक्षण शुल्क", institutionType: "संस्थाको प्रकार" },
+  vi: { programs: "Chương trình", countries: "Quốc gia", degree: "Bằng cấp", field: "Lĩnh vực", duration: "Thời lượng", language: "Ngôn ngữ", location: "Địa điểm", tuition: "Học phí", institutionType: "Loại hình cơ sở" },
+  ko: { programs: "프로그램", countries: "국가", degree: "학위", field: "전공 분야", duration: "기간", language: "언어", location: "위치", tuition: "학비", institutionType: "기관 유형" },
+  uk: { programs: "Програми", countries: "Країни", degree: "Ступінь", field: "Галузь", duration: "Тривалість", language: "Мова", location: "Розташування", tuition: "Вартість навчання", institutionType: "Тип закладу" },
+  it: { programs: "Programmi", countries: "Paesi", degree: "Titolo", field: "Area", duration: "Durata", language: "Lingua", location: "Località", tuition: "Retta", institutionType: "Tipo di istituzione" },
+};
 
 export function parsePublicWebRenderMode(value: unknown): PublicWebRenderMode {
   const normalized = String(value ?? "").trim().toLocaleLowerCase("en-US");
@@ -119,6 +188,15 @@ export function matchPublicCatalogRenderPath(
   if (segments.length === 3 && segments[1] === "programs") {
     return {
       kind: "program_detail",
+      locale,
+      path,
+      routeKey: segments[2],
+      identity: parsePublicCatalogRouteKey(segments[2]),
+    };
+  }
+  if (segments.length === 3 && segments[1] === "universities") {
+    return {
+      kind: "university_detail",
       locale,
       path,
       routeKey: segments[2],
@@ -173,6 +251,7 @@ function replaceMeta(
 }
 
 function renderProgramList(model: Extract<PublicCatalogRenderModel, { kind: "program_list" }>): string {
+  const copy = RENDER_COPY[model.locale];
   const cards = model.programs.map((program) => `
       <article class="rounded-2xl border border-border bg-card p-5">
         <p class="text-sm text-primary">${escapeHtml(program.universityName)}</p>
@@ -181,29 +260,54 @@ function renderProgramList(model: Extract<PublicCatalogRenderModel, { kind: "pro
         <p class="mt-2 text-sm text-muted-foreground">${escapeHtml([program.city, program.country].filter(Boolean).join(", "))}</p>
       </article>`).join("");
   return `<main data-public-render-shell="program-list" class="mx-auto max-w-7xl px-4 py-24">
-    <header><h1 class="text-4xl font-bold">${escapeHtml(model.title)}</h1><p class="mt-3 text-muted-foreground">${escapeHtml(model.description)}</p><p class="mt-2 text-sm">${model.total.toLocaleString("en-US")} programs</p></header>
+    <header><h1 class="text-4xl font-bold">${escapeHtml(model.title)}</h1><p class="mt-3 text-muted-foreground">${escapeHtml(model.description)}</p><p class="mt-2 text-sm">${model.total.toLocaleString(model.locale)} ${escapeHtml(copy.programs.toLocaleLowerCase(model.locale))}</p></header>
     <section class="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">${cards}</section>
   </main>`;
 }
 
 function renderProgramDetail(model: Extract<PublicCatalogRenderModel, { kind: "program_detail" }>): string {
   const program = model.program;
+  const copy = RENDER_COPY[model.locale];
   const price = program.discountedFee ?? program.tuitionFee;
   return `<main data-public-render-shell="program-detail" class="mx-auto max-w-7xl px-4 py-24">
-    <nav aria-label="Breadcrumb"><a href="/${escapeHtml(model.locale)}/programs">Programs</a> / <span>${escapeHtml(program.name)}</span></nav>
+    <nav aria-label="Breadcrumb"><a href="/${escapeHtml(model.locale)}/programs">${escapeHtml(copy.programs)}</a> / <span>${escapeHtml(program.name)}</span></nav>
     <article class="mt-8">
       <p class="text-sm text-primary"><a href="${escapeHtml(program.universityPath)}">${escapeHtml(program.universityName)}</a></p>
       <h1 class="mt-3 text-4xl font-bold">${escapeHtml(program.name)}</h1>
       <p class="mt-4 text-muted-foreground">${escapeHtml(model.description)}</p>
       <dl class="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <div><dt>Degree</dt><dd>${escapeHtml(program.degree || "—")}</dd></div>
-        <div><dt>Field</dt><dd>${escapeHtml(program.field || "—")}</dd></div>
-        <div><dt>Duration</dt><dd>${escapeHtml(program.duration || "—")}</dd></div>
-        <div><dt>Language</dt><dd>${escapeHtml(program.language || "—")}</dd></div>
-        <div><dt>Location</dt><dd>${escapeHtml([program.city, program.country].filter(Boolean).join(", "))}</dd></div>
-        <div><dt>Tuition</dt><dd>${price === null ? "—" : `${escapeHtml(String(price))} ${escapeHtml(program.currency || "USD")}`}</dd></div>
+        <div><dt>${escapeHtml(copy.degree)}</dt><dd>${escapeHtml(program.degree || "—")}</dd></div>
+        <div><dt>${escapeHtml(copy.field)}</dt><dd>${escapeHtml(program.field || "—")}</dd></div>
+        <div><dt>${escapeHtml(copy.duration)}</dt><dd>${escapeHtml(program.duration || "—")}</dd></div>
+        <div><dt>${escapeHtml(copy.language)}</dt><dd>${escapeHtml(program.language || "—")}</dd></div>
+        <div><dt>${escapeHtml(copy.location)}</dt><dd>${escapeHtml([program.city, program.country].filter(Boolean).join(", "))}</dd></div>
+        <div><dt>${escapeHtml(copy.tuition)}</dt><dd>${price === null ? "—" : `${escapeHtml(String(price))} ${escapeHtml(program.currency || "USD")}`}</dd></div>
       </dl>
     </article>
+  </main>`;
+}
+
+function renderUniversityDetail(model: Extract<PublicCatalogRenderModel, { kind: "university_detail" }>): string {
+  const university = model.university;
+  const copy = RENDER_COPY[model.locale];
+  const programs = university.programs.map((program) => `
+      <article class="rounded-2xl border border-border bg-card p-5">
+        <h2 class="text-lg font-bold"><a href="${escapeHtml(program.canonicalPath)}">${escapeHtml(program.name)}</a></h2>
+        <p class="mt-2 text-muted-foreground">${escapeHtml([program.degree, program.field].filter(Boolean).join(" · "))}</p>
+      </article>`).join("");
+  return `<main data-public-render-shell="university-detail" class="mx-auto max-w-7xl px-4 py-24">
+    <nav aria-label="Breadcrumb"><a href="/${escapeHtml(model.locale)}/countries">${escapeHtml(copy.countries)}</a> / <span>${escapeHtml(university.name)}</span></nav>
+    <article class="mt-8">
+      <p class="text-sm text-primary">${escapeHtml([university.city, university.country].filter(Boolean).join(", "))}</p>
+      <h1 class="mt-3 text-4xl font-bold">${escapeHtml(university.name)}</h1>
+      <p class="mt-4 text-muted-foreground">${escapeHtml(model.description)}</p>
+      <dl class="mt-8 grid gap-4 sm:grid-cols-3">
+        <div><dt>${escapeHtml(copy.institutionType)}</dt><dd>${escapeHtml(university.universityType || "—")}</dd></div>
+        <div><dt>${escapeHtml(copy.location)}</dt><dd>${escapeHtml([university.city, university.country].filter(Boolean).join(", "))}</dd></div>
+        <div><dt>${escapeHtml(copy.programs)}</dt><dd>${escapeHtml(String(university.programCount))}</dd></div>
+      </dl>
+    </article>
+    <section class="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">${programs}</section>
   </main>`;
 }
 
@@ -256,6 +360,31 @@ function structuredData(model: PublicCatalogRenderModel, siteUrl: string): unkno
       },
     };
   }
+  if (model.kind === "university_detail") {
+    const university = model.university;
+    return {
+      "@context": "https://schema.org",
+      "@type": "CollegeOrUniversity",
+      name: university.name,
+      description: model.description,
+      url: `${siteUrl}${model.canonicalPath}`,
+      address: {
+        "@type": "PostalAddress",
+        ...(university.city ? { addressLocality: university.city } : {}),
+        addressCountry: university.country,
+      },
+      hasOfferCatalog: {
+        "@type": "OfferCatalog",
+        numberOfItems: university.programCount,
+        itemListElement: university.programs.map((program, index) => ({
+          "@type": "ListItem",
+          position: index + 1,
+          url: `${siteUrl}${program.canonicalPath}`,
+          name: program.name,
+        })),
+      },
+    };
+  }
   return {
     "@context": "https://schema.org",
     "@type": "WebPage",
@@ -292,8 +421,10 @@ export function renderPublicCatalogHtml(input: {
     ? renderProgramList(input.model)
     : input.model.kind === "program_detail"
       ? renderProgramDetail(input.model)
+      : input.model.kind === "university_detail"
+        ? renderUniversityDetail(input.model)
       : renderNotFound(input.model);
-  const alternatePaths = input.model.kind === "program_detail" && input.model.indexable
+  const alternatePaths = (input.model.kind === "program_detail" || input.model.kind === "university_detail") && input.model.indexable
     ? input.model.alternatePaths
     : {};
   const hreflangLinks = PROGRAM_SUPPORTED_LOCALES.flatMap((locale) => {

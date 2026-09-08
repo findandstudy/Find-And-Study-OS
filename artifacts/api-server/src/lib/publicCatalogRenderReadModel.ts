@@ -18,13 +18,14 @@ import type {
   PublicCatalogRenderRoute,
 } from "./publicCatalogRenderContract";
 import { resolvePublishedEntitySeoState } from "./publicWebDiscoveryReadModel";
+import type { ProgramSupportedLocale } from "./programTranslationContract";
 
 const PILOT_LIST_LIMIT = 12;
 const CACHE_FRESH_MS = 5 * 60_000;
 const CACHE_STALE_MS = 60 * 60_000;
 const CACHE_MAX_ENTRIES = 500;
 
-const LIST_TITLES: Record<string, string> = {
+const LIST_TITLES: Record<ProgramSupportedLocale, string> = {
   en: "Study programs", tr: "Eğitim programları", ar: "البرامج الدراسية",
   fr: "Programmes d’études", ru: "Учебные программы", fa: "برنامه‌های تحصیلی",
   zh: "留学课程", hi: "अध्ययन कार्यक्रम", es: "Programas de estudio",
@@ -35,9 +36,30 @@ const LIST_TITLES: Record<string, string> = {
   uk: "Навчальні програми", it: "Programmi di studio",
 };
 
-const LIST_DESCRIPTIONS: Record<string, string> = {
+const LIST_DESCRIPTIONS: Record<ProgramSupportedLocale, string> = {
   en: "Compare current study opportunities from universities around the world.",
   tr: "Dünyanın farklı üniversitelerindeki güncel eğitim fırsatlarını karşılaştırın.",
+  ar: "قارن فرص الدراسة الحالية في الجامعات حول العالم.",
+  fr: "Comparez les possibilités d’études actuelles dans les universités du monde entier.",
+  ru: "Сравните актуальные возможности обучения в университетах по всему миру.",
+  fa: "فرصت‌های تحصیلی به‌روز دانشگاه‌های سراسر جهان را مقایسه کنید.",
+  zh: "比较世界各地大学的最新留学机会。",
+  hi: "दुनिया भर के विश्वविद्यालयों में उपलब्ध वर्तमान अध्ययन अवसरों की तुलना करें।",
+  es: "Compara oportunidades de estudio actuales en universidades de todo el mundo.",
+  id: "Bandingkan peluang studi terbaru di universitas di seluruh dunia.",
+  ur: "دنیا بھر کی جامعات میں موجودہ تعلیمی مواقع کا موازنہ کریں۔",
+  tk: "Dünýäniň dürli uniwersitetlerindäki häzirki okuw mümkinçiliklerini deňeşdiriň.",
+  ky: "Дүйнөдөгү университеттердин учурдагы окуу мүмкүнчүлүктөрүн салыштырыңыз.",
+  kk: "Әлем университеттеріндегі қазіргі оқу мүмкіндіктерін салыстырыңыз.",
+  uz: "Dunyo universitetlaridagi amaldagi ta’lim imkoniyatlarini solishtiring.",
+  tg: "Имкониятҳои ҷории таҳсилро дар донишгоҳҳои ҷаҳон муқоиса кунед.",
+  bn: "বিশ্বজুড়ে বিশ্ববিদ্যালয়ের বর্তমান পড়াশোনার সুযোগগুলো তুলনা করুন।",
+  pt: "Compare as oportunidades de estudo atuais em universidades de todo o mundo.",
+  ne: "विश्वभरका विश्वविद्यालयमा उपलब्ध हालका अध्ययन अवसरहरू तुलना गर्नुहोस्।",
+  vi: "So sánh các cơ hội học tập hiện có tại các trường đại học trên toàn thế giới.",
+  ko: "전 세계 대학의 최신 유학 기회를 비교해 보세요.",
+  uk: "Порівнюйте актуальні можливості навчання в університетах усього світу.",
+  it: "Confronta le opportunità di studio attuali nelle università di tutto il mondo.",
 };
 
 type CacheEntry = {
@@ -57,7 +79,7 @@ function boundedText(value: string | null | undefined, fallback: string): string
 }
 
 function cacheKey(route: PublicCatalogRenderRoute): string {
-  return `${route.locale}:${route.kind}:${route.kind === "program_detail" ? route.identity?.id ?? route.routeKey : "index"}`;
+  return `${route.locale}:${route.kind}:${route.kind === "program_list" ? "index" : route.identity?.id ?? route.routeKey}`;
 }
 
 function pruneCache(now: number): void {
@@ -244,10 +266,120 @@ async function readProgramDetail(
   };
 }
 
+async function readUniversityDetail(
+  route: Extract<PublicCatalogRenderRoute, { kind: "university_detail" }>,
+): Promise<PublicCatalogRenderModel> {
+  if (!route.identity) {
+    return {
+      kind: "not_found",
+      locale: route.locale,
+      canonicalPath: route.path,
+      title: "University not found",
+      description: "The requested university is unavailable.",
+      indexable: false,
+    };
+  }
+  const policy = await getPublicCatalogPolicy();
+  const conditions: any[] = [eq(universitiesTable.id, route.identity.id)];
+  addPublicCatalogConditions(conditions, policy);
+  const [university] = await db
+    .select({
+      id: universitiesTable.id,
+      name: universitiesTable.name,
+      description: universitiesTable.description,
+      country: universitiesTable.country,
+      city: universitiesTable.city,
+      universityType: universitiesTable.universityType,
+    })
+    .from(universitiesTable)
+    .where(and(...conditions))
+    .limit(1);
+  if (!university) {
+    return {
+      kind: "not_found",
+      locale: route.locale,
+      canonicalPath: route.path,
+      title: "University not found",
+      description: "The requested university is unavailable.",
+      indexable: false,
+    };
+  }
+  const programConditions: any[] = [
+    eq(programsTable.universityId, university.id),
+    eq(programsTable.isActive, true),
+  ];
+  addPublicCatalogConditions(programConditions, policy);
+  const [[countRow], programRows, seoState] = await Promise.all([
+    db
+      .select({ count: sql<number>`count(*)` })
+      .from(programsTable)
+      .innerJoin(universitiesTable, eq(programsTable.universityId, universitiesTable.id))
+      .where(and(...programConditions)),
+    db
+      .select({
+        id: programsTable.id,
+        name: sql<string>`COALESCE(${programTranslationsTable.name}, ${programsTable.name})`,
+        degree: programsTable.degree,
+        field: sql<string | null>`COALESCE(${programTranslationsTable.field}, ${programsTable.field})`,
+      })
+      .from(programsTable)
+      .innerJoin(universitiesTable, eq(programsTable.universityId, universitiesTable.id))
+      .leftJoin(programTranslationsTable, and(
+        eq(programTranslationsTable.programId, programsTable.id),
+        eq(programTranslationsTable.locale, route.locale),
+        eq(programTranslationsTable.status, "published"),
+      ))
+      .where(and(...programConditions))
+      .orderBy(asc(programsTable.name), asc(programsTable.id))
+      .limit(12),
+    resolvePublishedEntitySeoState({
+      entityType: "university",
+      entityId: university.id,
+      locale: route.locale,
+    }),
+  ]);
+  const canonical = publicCatalogCanonicalState({
+    requestedRouteKey: route.routeKey,
+    locale: route.locale,
+    entityType: "university",
+    id: university.id,
+    name: university.name,
+  });
+  return {
+    kind: "university_detail",
+    locale: route.locale,
+    canonicalPath: seoState.canonicalPath || canonical.canonicalPath,
+    title: university.name,
+    description: boundedText(
+      university.description,
+      [university.universityType, university.city, university.country].filter(Boolean).join(" · "),
+    ),
+    indexable: seoState.indexable && route.locale === "en",
+    alternatePaths: seoState.alternates,
+    university: {
+      id: university.id,
+      name: university.name,
+      country: university.country,
+      city: university.city,
+      universityType: university.universityType,
+      programCount: Number(countRow?.count ?? 0),
+      programs: programRows.map((program) => ({
+        ...program,
+        canonicalPath: publicCatalogPath({
+          locale: route.locale,
+          entityType: "program",
+          id: program.id,
+          name: program.name,
+        }),
+      })),
+    },
+  };
+}
+
 async function loadModel(route: PublicCatalogRenderRoute): Promise<PublicCatalogRenderModel> {
-  return route.kind === "program_list"
-    ? readProgramList(route)
-    : readProgramDetail(route);
+  if (route.kind === "program_list") return readProgramList(route);
+  if (route.kind === "program_detail") return readProgramDetail(route);
+  return readUniversityDetail(route);
 }
 
 function refresh(key: string, route: PublicCatalogRenderRoute): Promise<PublicCatalogRenderModel> {
@@ -289,7 +421,7 @@ export async function getPublicCatalogRenderModel(
 }
 
 export function invalidatePublicCatalogRenderCache(input: {
-  entityType?: "program" | "all";
+  entityType?: "program" | "university" | "all";
   entityId?: number;
   locale?: string;
 } = {}): number {
@@ -302,7 +434,9 @@ export function invalidatePublicCatalogRenderCache(input: {
       || (input.entityType === "program" && (
         kind === "program_list"
         || (input.entityId !== undefined && identity === String(input.entityId))
-      ));
+      ))
+      || (input.entityType === "university" && kind === "university_detail"
+        && input.entityId !== undefined && identity === String(input.entityId));
     if (localeMatches && entityMatches) {
       cache.delete(key);
       removed += 1;

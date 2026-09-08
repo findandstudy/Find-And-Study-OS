@@ -90,6 +90,8 @@ test("semantic render shell stays small, escaped and nonce-complete", () => {
   });
   assert.ok(Buffer.byteLength(html) < 64 * 1024);
   assert.equal((html.match(/hreflang="[^"]+"/g) || []).length, 3);
+  assert.match(html, />Derece<\/dt>/);
+  assert.doesNotMatch(html, />Degree<\/dt>/);
   assert.ok((html.match(/<script\b[^>]*>/g) || []).every((tag) => tag.includes('nonce="scale-gate-nonce"')));
   assert.doesNotMatch(html, /commission|service fee|contact person/i);
 });

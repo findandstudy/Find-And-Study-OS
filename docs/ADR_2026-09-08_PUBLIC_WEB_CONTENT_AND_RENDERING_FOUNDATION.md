@@ -122,17 +122,19 @@ Publication Center ve bounded public read modelleri eklendi.
 ## Yerel SSR/ISR pilotu
 
 Yeni bir framework veya ikinci runtime eklenmeden mevcut modüler monolit üzerinde,
-program liste ve program detay rotaları için on-demand semantic HTML pilotu
+program liste, program detay ve üniversite detay rotaları için on-demand semantic HTML pilotu
 uygulandı. Pilot aşağıdaki güvenlik ve ölçek sınırlarını taşır:
 
 - `PUBLIC_WEB_RENDER_MODE=off|allowlist|all`; eksik veya hatalı ayar `off` olur;
-- allowlist yalnız tam eşleşen, tanınan localized program rotalarını kabul eder;
+- allowlist yalnız tam eşleşen, tanınan localized program/üniversite rotalarını kabul eder;
 - ilk liste en fazla 12 kayıt okur; cache en fazla 500 anahtar tutar;
 - 5 dakika fresh, 1 saat stale-while-revalidate penceresi ve aynı anahtar için
   in-flight sorgu birleştirmesi kullanılır;
 - slug drift'i kanonik adrese `308` ile yönlendirilir;
 - HTML ve JSON-LD değerleri escape edilir, bütün script'ler istek-bazlı CSP nonce
   taşır;
+- semantic shell'in navigasyon ve fact etiketleri 23 locale için sunucu tarafında
+  yerelleştirilir; hydration öncesinde İngilizce etiket sızıntısı olmaz;
 - cevap `X-Public-Render`, `X-Public-Render-Cache` ve `Server-Timing` ile
   ölçülebilir; render hatasında mevcut SPA güvenli fallback olarak kalır;
 - tenant-bound publication/index projection bağlanana kadar program ve üniversite

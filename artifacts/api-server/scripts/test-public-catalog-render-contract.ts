@@ -41,14 +41,18 @@ test("render mode and exact allowlist fail closed", () => {
   );
 });
 
-test("only bounded program list and detail paths enter the render pilot", () => {
+test("only bounded programme and university catalogue paths enter the render pilot", () => {
   assert.equal(matchPublicCatalogRenderPath("/en/programs")?.kind, "program_list");
   const detail = matchPublicCatalogRenderPath("/tr/programs/bilgisayar-muhendisligi-42");
   assert.equal(detail?.kind, "program_detail");
   assert.equal(detail?.kind === "program_detail" ? detail.identity?.id : null, 42);
+  const university = matchPublicCatalogRenderPath("/en/universities/example-university-7");
+  assert.equal(university?.kind, "university_detail");
+  assert.equal(university?.kind === "university_detail" ? university.identity?.id : null, 7);
   assert.equal(matchPublicCatalogRenderPath("/xx/programs"), null);
   assert.equal(matchPublicCatalogRenderPath("/en/admin"), null);
   assert.equal(matchPublicCatalogRenderPath("/en/programs/a/b"), null);
+  assert.equal(matchPublicCatalogRenderPath("/en/universities"), null);
 });
 
 test("rendered shell escapes catalogue content, emits canonical metadata, and nonces every script", () => {
@@ -88,10 +92,48 @@ test("rendered shell escapes catalogue content, emits canonical metadata, and no
   assert.doesNotMatch(html, /<img src=x onerror/);
   assert.match(html, /Safe &lt;\/script&gt;&lt;img/);
   assert.match(html, /Safe \\u003c\/script\\u003e\\u003cimg/);
+  assert.match(html, />Degree<\/dt>/);
   const scripts = html.match(/<script\b[^>]*>/g) || [];
   assert.ok(scripts.length >= 3);
   assert.ok(scripts.every((tag) => tag.includes('nonce="test-nonce"')));
   assert.match(publicCatalogCsp("test-nonce"), /script-src 'self' 'nonce-test-nonce'/);
+});
+
+test("university detail emits a semantic institution shell and structured data", () => {
+  const model: PublicCatalogRenderModel = {
+    kind: "university_detail",
+    locale: "en",
+    canonicalPath: "/en/universities/example-university-7",
+    title: "Example University",
+    description: "A verified institution profile.",
+    indexable: true,
+    alternatePaths: { en: "/en/universities/example-university-7" },
+    university: {
+      id: 7,
+      name: "Example University",
+      country: "Turkey",
+      city: "Istanbul",
+      universityType: "Private",
+      programCount: 1,
+      programs: [{
+        id: 42,
+        name: "Computer Science",
+        degree: "BSc",
+        field: "Computing",
+        canonicalPath: "/en/programs/computer-science-42",
+      }],
+    },
+  };
+  const html = renderPublicCatalogHtml({
+    indexHtml,
+    model,
+    siteUrl: "https://findandstudy.com",
+    nonce: "university-nonce",
+  });
+  assert.match(html, /data-public-render-shell="university-detail"/);
+  assert.match(html, /"@type":"CollegeOrUniversity"/);
+  assert.match(html, /href="\/en\/programs\/computer-science-42"/);
+  assert.match(html, /hreflang="x-default"/);
 });
 
 test("read model is on-demand, bounded, stale-while-revalidate, and detail indexing is fail-closed", () => {
@@ -101,6 +143,8 @@ test("read model is on-demand, bounded, stale-while-revalidate, and detail index
   );
   assert.match(readModel, /const PILOT_LIST_LIMIT = 12/);
   assert.match(readModel, /const CACHE_MAX_ENTRIES = 500/);
+  assert.match(readModel, /async function readUniversityDetail/);
+  assert.match(readModel, /\.limit\(12\)/);
   assert.match(readModel, /cacheStatus: "STALE"/);
   assert.match(readModel, /void refresh\(key, route\)/);
   assert.match(readModel, /indexable: false/);

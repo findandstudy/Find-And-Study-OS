@@ -88,6 +88,26 @@ test("render read model serves bounded data and coalesces the same cold key", as
     assert.equal(list.value.kind, "program_list");
     assert.ok(list.value.kind === "program_list" && list.value.programs.length <= 12);
     assert.ok(list.value.kind === "program_list" && list.value.total >= 1);
+
+    const universityRoute = matchPublicCatalogRenderPath(
+      `/en/universities/${publicCatalogRouteKey(universityId, "Render Pilot University")}`,
+    );
+    assert.ok(universityRoute && universityRoute.kind === "university_detail");
+    const universityDetail = await getPublicCatalogRenderModel(universityRoute);
+    assert.equal(universityDetail.value.kind, "university_detail");
+    assert.equal(
+      universityDetail.value.kind === "university_detail"
+        ? universityDetail.value.university.id
+        : null,
+      universityId,
+    );
+    assert.equal(
+      universityDetail.value.kind === "university_detail"
+        ? universityDetail.value.university.programs.length
+        : 0,
+      1,
+    );
+    assert.equal(universityDetail.value.indexable, false);
   } finally {
     invalidatePublicCatalogRenderCache();
     if (programId !== null) {
