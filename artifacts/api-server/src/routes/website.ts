@@ -54,6 +54,7 @@ import {
   type FormsCatalog,
 } from "../lib/exportImportExcel";
 import { safeOutboundRequest } from "../lib/safeOutboundRequest";
+import { buildPublicWebPublicationReadModel } from "../lib/publicWebPublicationReadModel";
 
 const router = Router();
 const WEBSITE_ROLES = ["super_admin", "admin"] as const;
@@ -1003,6 +1004,56 @@ router.get("/website/seo-overview", ...adminOnly, async (_req: Request, res: Res
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : "Internal server error";
     res.status(500).json({ error: msg });
+  }
+});
+
+router.get("/website/publication-center", ...adminOnly, async (_req: Request, res: Response): Promise<void> => {
+  res.setHeader("Cache-Control", "private, no-store");
+  try {
+    const [pages, blogPosts, versions] = await Promise.all([
+      db.select({
+        id: websitePagesTable.id,
+        title: websitePagesTable.title,
+        slug: websitePagesTable.slug,
+        status: websitePagesTable.status,
+        locale: websitePagesTable.locale,
+        metaTitle: websitePagesTable.metaTitle,
+        metaDescription: websitePagesTable.metaDescription,
+        canonicalUrl: websitePagesTable.canonicalUrl,
+        ogImageUrl: websitePagesTable.ogImageUrl,
+        robotsIndex: websitePagesTable.robotsIndex,
+        translationsJson: websitePagesTable.translationsJson,
+        publishedAt: websitePagesTable.publishedAt,
+        updatedAt: websitePagesTable.updatedAt,
+      }).from(websitePagesTable).orderBy(desc(websitePagesTable.updatedAt)).limit(10_001),
+      db.select({
+        id: websiteBlogPostsTable.id,
+        status: websiteBlogPostsTable.status,
+        locale: websiteBlogPostsTable.locale,
+        metaTitle: websiteBlogPostsTable.metaTitle,
+        metaDescription: websiteBlogPostsTable.metaDescription,
+        updatedAt: websiteBlogPostsTable.updatedAt,
+      }).from(websiteBlogPostsTable).orderBy(desc(websiteBlogPostsTable.updatedAt)).limit(10_001),
+      db.select({
+        id: websitePageVersionsTable.id,
+        pageId: websitePageVersionsTable.pageId,
+        versionNumber: websitePageVersionsTable.versionNumber,
+        publishedAt: websitePageVersionsTable.publishedAt,
+        createdAt: websitePageVersionsTable.createdAt,
+      }).from(websitePageVersionsTable).orderBy(desc(websitePageVersionsTable.createdAt)).limit(1_001),
+    ]);
+    res.json(buildPublicWebPublicationReadModel({
+      pages,
+      blogPosts,
+      versions,
+      generatedAt: new Date(),
+    }));
+  } catch (error) {
+    console.error("[website-publication-center] read model failed");
+    const code = error instanceof Error && error.message === "public_web_read_model_denominator_exceeded"
+      ? "PUBLICATION_CENTER_DENOMINATOR_EXCEEDED"
+      : "PUBLICATION_CENTER_UNAVAILABLE";
+    res.status(code.endsWith("EXCEEDED") ? 503 : 500).json({ error: code });
   }
 });
 

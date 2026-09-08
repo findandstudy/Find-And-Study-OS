@@ -233,6 +233,7 @@
     "test:public-web-foundation": "tsx --test ./scripts/test-public-web-content-foundation.ts",
     "test:public-web-command": "tsx --test ./scripts/test-public-web-publication-command.ts",
     "test:public-web-publication-store": "tsx --test ./scripts/test-postgres-public-web-publication-store.ts",
+    "test:public-web-publication-read-model": "tsx --test ./scripts/test-public-web-publication-read-model.ts",
     "test:postgres-public-web-foundation": "tsx --test ./scripts/test-postgres-public-web-content-foundation.ts",
     "test:postgres-catalog-entity-graph": "tsx --test ./scripts/test-postgres-catalog-entity-graph.ts",
     "test:agency-platform-overhaul": "tsx --test ./scripts/test-agency-platform-overhaul.ts"
