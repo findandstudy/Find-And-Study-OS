@@ -238,6 +238,11 @@ test("production prefix and canonical additive migration tail are pinned", () =>
       "0111_catalog_entity_graph_hardening",
       "0112_public_web_publication_hardening",
       "0113_public_web_publication_trigger_fix",
+      "0114_public_web_command_adapter",
+      "0115_public_web_command_variable_binding",
+      "0116_public_web_idempotent_command_gateway",
+      "0117_public_web_replay_rls_fix",
+      "0118_public_web_authorized_command_gateway",
     ],
   );
 
@@ -449,6 +454,55 @@ test("production prefix and canonical additive migration tail are pinned", () =>
   assert.match(publicWebTriggerFixMigration, /IF NEW\."index_state" = 'INDEX'/);
   assert.doesNotMatch(publicWebTriggerFixMigration, /revision_row record/);
   assert.doesNotMatch(publicWebTriggerFixMigration, /\b(?:TRUNCATE|DELETE FROM|UPDATE\s+"?(?:website_pages|programs|universities))\b/i);
+
+  const publicWebCommandMigration = readFileSync(
+    path.join(root, "lib/db/drizzle/0114_public_web_command_adapter.sql"),
+    "utf8",
+  );
+  assert.match(publicWebCommandMigration, /public_web\.content\.publish/);
+  assert.match(publicWebCommandMigration, /fas_public_web_v1\.apply_publication_command/);
+  assert.match(publicWebCommandMigration, /pg_advisory_xact_lock/);
+  assert.match(publicWebCommandMigration, /public web command idempotency conflict/);
+  assert.match(publicWebCommandMigration, /authorization_decision_receipt_id/);
+  assert.match(publicWebCommandMigration, /REVOKE ALL ON ALL FUNCTIONS IN SCHEMA fas_public_web_v1 FROM PUBLIC/);
+  assert.doesNotMatch(publicWebCommandMigration, /INSERT INTO\s+(?:public\.)?role_package_capabilities/i);
+  assert.doesNotMatch(publicWebCommandMigration, /\b(?:TRUNCATE|DELETE FROM|UPDATE\s+(?:public\.)?"?(?:website_pages|programs|universities))\b/i);
+
+  const publicWebVariableBindingMigration = readFileSync(
+    path.join(root, "lib/db/drizzle/0115_public_web_command_variable_binding.sql"),
+    "utf8",
+  );
+  assert.match(publicWebVariableBindingMigration, /#variable_conflict use_variable/);
+  assert.match(publicWebVariableBindingMigration, /REVOKE ALL ON FUNCTION fas_public_web_v1\.apply_publication_command/);
+  assert.doesNotMatch(publicWebVariableBindingMigration, /\b(?:TRUNCATE|DELETE FROM|UPDATE\s+(?:public\.)?"?(?:website_pages|programs|universities))\b/i);
+
+  const publicWebGatewayMigration = readFileSync(
+    path.join(root, "lib/db/drizzle/0116_public_web_idempotent_command_gateway.sql"),
+    "utf8",
+  );
+  assert.match(publicWebGatewayMigration, /apply_publication_command_v2/);
+  assert.match(publicWebGatewayMigration, /SELECT receipt\.\* INTO v_existing_receipt/);
+  assert.match(publicWebGatewayMigration, /pg_advisory_xact_lock/);
+  assert.match(publicWebGatewayMigration, /grant only v2; v1 stays ungranted/);
+  assert.doesNotMatch(publicWebGatewayMigration, /\b(?:TRUNCATE|DELETE FROM|UPDATE\s+(?:public\.)?"?(?:website_pages|programs|universities))\b/i);
+
+  const publicWebReplayRlsFixMigration = readFileSync(
+    path.join(root, "lib/db/drizzle/0117_public_web_replay_rls_fix.sql"),
+    "utf8",
+  );
+  assert.match(publicWebReplayRlsFixMigration, /SELECT receipt\.\* INTO v_existing_receipt/);
+  assert.doesNotMatch(publicWebReplayRlsFixMigration, /\n\s*FOR UPDATE\s*;/);
+  assert.doesNotMatch(publicWebReplayRlsFixMigration, /INSERT INTO\s+(?:public\.)?role_package_capabilities/i);
+
+  const publicWebAuthorizedGatewayMigration = readFileSync(
+    path.join(root, "lib/db/drizzle/0118_public_web_authorized_command_gateway.sql"),
+    "utf8",
+  );
+  assert.match(publicWebAuthorizedGatewayMigration, /apply_authorized_publication_command/);
+  assert.match(publicWebAuthorizedGatewayMigration, /ON CONFLICT \(tenant_id, id\) DO NOTHING/);
+  assert.match(publicWebAuthorizedGatewayMigration, /apply_publication_command_v2/);
+  assert.match(publicWebAuthorizedGatewayMigration, /REVOKE ALL ON FUNCTION/);
+  assert.doesNotMatch(publicWebAuthorizedGatewayMigration, /^\s*GRANT\s/im);
 });
 
 test("Student Journey G45 migration remains additive, tenant-forced and default-off", () => {

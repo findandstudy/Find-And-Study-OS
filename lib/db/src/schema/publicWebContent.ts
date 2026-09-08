@@ -14,7 +14,11 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
-import { organizationsTable, tenantsTable } from "./authorization";
+import {
+  accessDecisionReceiptsTable,
+  organizationsTable,
+  tenantsTable,
+} from "./authorization";
 import { destinationsTable } from "./destinations";
 import { programsTable, universitiesTable } from "./universities";
 import { usersTable } from "./users";
@@ -461,6 +465,10 @@ export const publicWebPublicationReceiptsTable = pgTable(
       .references(() => usersTable.id, { onDelete: "restrict" }),
     requestKey: text("request_key").notNull(),
     evidenceSha256: text("evidence_sha256").notNull(),
+    authorizationDecisionReceiptId: uuid(
+      "authorization_decision_receipt_id",
+    ).notNull(),
+    requestHash: text("request_hash").notNull(),
     occurredAt: timestamp("occurred_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -490,6 +498,14 @@ export const publicWebPublicationReceiptsTable = pgTable(
       name: "public_web_publication_receipts_revision_fk",
     }).onDelete("restrict"),
     foreignKey({
+      columns: [table.tenantId, table.authorizationDecisionReceiptId],
+      foreignColumns: [
+        accessDecisionReceiptsTable.tenantId,
+        accessDecisionReceiptsTable.id,
+      ],
+      name: "public_web_publication_receipts_authorization_fk",
+    }).onDelete("restrict"),
+    foreignKey({
       columns: [table.tenantId, table.organizationId],
       foreignColumns: [organizationsTable.tenantId, organizationsTable.id],
       name: "public_web_publication_receipts_organization_fk",
@@ -508,6 +524,10 @@ export const publicWebPublicationReceiptsTable = pgTable(
     check(
       "public_web_publication_receipts_hash_chk",
       sql`${table.evidenceSha256} ~ '^[0-9a-f]{64}$'`,
+    ),
+    check(
+      "public_web_publication_receipts_request_hash_chk",
+      sql`${table.requestHash} ~ '^[0-9a-f]{64}$'`,
     ),
   ],
 ).enableRLS();

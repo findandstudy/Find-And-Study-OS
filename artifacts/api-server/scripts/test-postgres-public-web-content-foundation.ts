@@ -32,6 +32,19 @@ const EVIDENCE_ID = "018f8200-0000-7000-8000-000000000706";
 const EVIDENCE_BODY_ID = "018f8200-0000-7000-8000-000000000709";
 const RECEIPT_ID = "018f8200-0000-7000-8000-000000000707";
 const ROUTE_ID = "018f8200-0000-7000-8000-000000000708";
+const PRINCIPAL_ID = "018f8200-0000-7000-8000-000000000710";
+const MEMBERSHIP_ID = "018f8200-0000-7000-8000-000000000711";
+const POLICY_ID = "018f8200-0000-7000-8000-000000000712";
+const CONTEXT_ID = "018f8200-0000-7000-8000-000000000713";
+const ACCESS_SUBMIT_ID = "018f8200-0000-7000-8000-000000000714";
+const ACCESS_APPROVE_ID = "018f8200-0000-7000-8000-000000000715";
+const ACCESS_PUBLISH_ID = "018f8200-0000-7000-8000-000000000716";
+const ACCESS_INDEX_ID = "018f8200-0000-7000-8000-000000000717";
+const SUBMIT_RECEIPT_ID = "018f8200-0000-7000-8000-000000000718";
+const APPROVE_RECEIPT_ID = "018f8200-0000-7000-8000-000000000719";
+const INDEX_RECEIPT_ID = "018f8200-0000-7000-8000-00000000071a";
+const ACCESS_DISABLE_ID = "018f8200-0000-7000-8000-00000000071b";
+const DISABLE_RECEIPT_ID = "018f8200-0000-7000-8000-00000000071c";
 const SHA_A = "a".repeat(64);
 const SHA_B = "b".repeat(64);
 
@@ -44,6 +57,79 @@ async function expectRejectedInSavepoint(
   await client.query(`SAVEPOINT ${name}`);
   await assert.rejects(client.query(query), pattern);
   await client.query(`ROLLBACK TO SAVEPOINT ${name}`);
+}
+
+async function insertAccessDecision(
+  client: pg.Client,
+  input: {
+    id: string;
+    capability: string;
+    correlationId: string;
+    actorLegacyUserId: number;
+  },
+): Promise<void> {
+  await client.query(
+    `INSERT INTO access_decision_receipts (
+       id, tenant_id, context_id, actor_principal_id, membership_id,
+       assignment_ids, role_package_version_ids, capability_key,
+       resource_type, resource_id, decision, reason_code, policy_version_id,
+       correlation_id, occurred_at
+     ) VALUES ($1, $2, $3, $4, $5, ARRAY[$5]::uuid[], ARRAY[$5]::uuid[],
+       $6, 'PUBLIC_WEB_CONTENT', $7, 'ALLOW', 'allowed', $8, $9, now())`,
+    [
+      input.id,
+      TENANT_ID,
+      CONTEXT_ID,
+      PRINCIPAL_ID,
+      MEMBERSHIP_ID,
+      input.capability,
+      RECORD_ID,
+      POLICY_ID,
+      input.correlationId,
+    ],
+  );
+  const principal = await client.query(
+    `SELECT legacy_user_id FROM principals WHERE id = $1`,
+    [PRINCIPAL_ID],
+  );
+  assert.equal(Number(principal.rows[0]?.legacy_user_id), input.actorLegacyUserId);
+}
+
+async function applyCommand(
+  client: pg.Client,
+  input: {
+    accessDecisionReceiptId: string;
+    actorLegacyUserId: number;
+    command: string;
+    expectedVersion: number;
+    publicationReceiptId: string;
+    requestKey: string;
+    requestHash: string;
+    staleReasonCode?: string | null;
+  },
+) {
+  const result = await client.query<{ result: Record<string, unknown> }>(
+    `SELECT fas_public_web_v1.apply_publication_command_v2($1::jsonb) AS result`,
+    [
+      JSON.stringify({
+        accessDecisionReceiptId: input.accessDecisionReceiptId,
+        actorLegacyUserId: input.actorLegacyUserId,
+        command: input.command,
+        contentRecordId: RECORD_ID,
+        evidenceSha256: SHA_A,
+        expectedVersion: input.expectedVersion,
+        organizationId: ORGANIZATION_ID,
+        publicationReceiptId: input.publicationReceiptId,
+        requestHash: input.requestHash,
+        requestKey: input.requestKey,
+        revisionId: REVISION_ID,
+        staleReasonCode: input.staleReasonCode ?? null,
+        tenantId: TENANT_ID,
+      }),
+    ],
+  );
+  assert.equal(result.rowCount, 1);
+  return result.rows[0]?.result;
 }
 
 test("public web foundation enforces RLS, immutable evidence and controlled publication", async () => {
@@ -86,6 +172,25 @@ test("public web foundation enforces RLS, immutable evidence and controlled publ
     const reviewerId = Number(users.rows[1]?.id);
     assert.ok(Number.isSafeInteger(authorId));
     assert.ok(Number.isSafeInteger(reviewerId));
+
+    await client.query(
+      `INSERT INTO principals (
+         id, principal_type, issuer, subject, legacy_user_id, status, risk_state
+       ) VALUES ($1, 'HUMAN', 'public-web-test', 'reviewer', $2, 'ACTIVE', 'NORMAL')`,
+      [PRINCIPAL_ID, reviewerId],
+    );
+    await client.query(
+      `INSERT INTO memberships (
+         id, tenant_id, organization_id, principal_id, status, valid_from
+       ) VALUES ($1, $2, $3, $4, 'ACTIVE', now() - interval '1 day')`,
+      [MEMBERSHIP_ID, TENANT_ID, ORGANIZATION_ID, PRINCIPAL_ID],
+    );
+    await client.query(
+      `INSERT INTO policy_versions (
+         id, tenant_id, version_number, checksum, state, effective_at
+       ) VALUES ($1, $2, 1, $3, 'ACTIVE', now() - interval '1 day')`,
+      [POLICY_ID, TENANT_ID, SHA_A],
+    );
 
     const page = await client.query(
       `INSERT INTO website_pages (title, slug, status, locale, created_by, updated_by)
@@ -150,9 +255,33 @@ test("public web foundation enforces RLS, immutable evidence and controlled publ
       [TENANT_ID, ORGANIZATION_ID, RECORD_ID, REVISION_ID],
     );
     await client.query(
-      `UPDATE public_web_publication_states
-       SET status = 'PENDING_REVIEW'
-       WHERE tenant_id = '${TENANT_ID}' AND content_record_id = '${RECORD_ID}'`,
+      `SELECT set_config('app.organization_id', $1, true)`,
+      [ORGANIZATION_ID],
+    );
+    const submitKey = "public-web.submit.fixture-1";
+    await insertAccessDecision(client, {
+      id: ACCESS_SUBMIT_ID,
+      capability: "public_web.content.write",
+      correlationId: submitKey,
+      actorLegacyUserId: reviewerId,
+    });
+    assert.deepEqual(
+      await applyCommand(client, {
+        accessDecisionReceiptId: ACCESS_SUBMIT_ID,
+        actorLegacyUserId: reviewerId,
+        command: "SUBMIT_REVIEW",
+        expectedVersion: 1,
+        publicationReceiptId: SUBMIT_RECEIPT_ID,
+        requestKey: submitKey,
+        requestHash: "1".repeat(64),
+      }),
+      {
+        outcome: "APPLIED",
+        publicationReceiptId: SUBMIT_RECEIPT_ID,
+        status: "PENDING_REVIEW",
+        indexState: "NOINDEX",
+        version: 2,
+      },
     );
 
     await expectRejectedInSavepoint(
@@ -195,19 +324,178 @@ test("public web foundation enforces RLS, immutable evidence and controlled publ
       /independent reviewer/,
     );
 
-    await client.query(
-      `UPDATE public_web_publication_states
-       SET status = 'APPROVED', reviewed_by_legacy_user_id = $1, reviewed_at = now()
-       WHERE tenant_id = $2 AND content_record_id = $3`,
-      [reviewerId, TENANT_ID, RECORD_ID],
+    const approveKey = "public-web.approve.fixture-1";
+    await insertAccessDecision(client, {
+      id: ACCESS_APPROVE_ID,
+      capability: "public_web.content.review",
+      correlationId: approveKey,
+      actorLegacyUserId: reviewerId,
+    });
+    assert.equal(
+      (await applyCommand(client, {
+        accessDecisionReceiptId: ACCESS_APPROVE_ID,
+        actorLegacyUserId: reviewerId,
+        command: "APPROVE",
+        expectedVersion: 2,
+        publicationReceiptId: APPROVE_RECEIPT_ID,
+        requestKey: approveKey,
+        requestHash: "2".repeat(64),
+      }))?.status,
+      "APPROVED",
     );
-    await client.query(
-      `UPDATE public_web_publication_states
-       SET status = 'PUBLISHED', index_state = 'INDEX',
-           published_by_legacy_user_id = $1, published_at = now()
-       WHERE tenant_id = $2 AND content_record_id = $3`,
-      [reviewerId, TENANT_ID, RECORD_ID],
+
+    const publishKey = "public-web.publish.fixture-1";
+    await insertAccessDecision(client, {
+      id: ACCESS_PUBLISH_ID,
+      capability: "public_web.content.publish",
+      correlationId: publishKey,
+      actorLegacyUserId: reviewerId,
+    });
+    assert.deepEqual(
+      await applyCommand(client, {
+        accessDecisionReceiptId: ACCESS_PUBLISH_ID,
+        actorLegacyUserId: reviewerId,
+        command: "PUBLISH",
+        expectedVersion: 3,
+        publicationReceiptId: RECEIPT_ID,
+        requestKey: publishKey,
+        requestHash: "3".repeat(64),
+      }),
+      {
+        outcome: "APPLIED",
+        publicationReceiptId: RECEIPT_ID,
+        status: "PUBLISHED",
+        indexState: "NOINDEX",
+        version: 4,
+      },
     );
+
+    const indexKey = "public-web.index.fixture-1";
+    await insertAccessDecision(client, {
+      id: ACCESS_INDEX_ID,
+      capability: "public_web.content.index",
+      correlationId: indexKey,
+      actorLegacyUserId: reviewerId,
+    });
+    const indexCommand = {
+      accessDecisionReceiptId: ACCESS_INDEX_ID,
+      actorLegacyUserId: reviewerId,
+      command: "ENABLE_INDEX",
+      expectedVersion: 4,
+      publicationReceiptId: INDEX_RECEIPT_ID,
+      requestKey: indexKey,
+      requestHash: "4".repeat(64),
+    };
+    assert.equal((await applyCommand(client, indexCommand))?.outcome, "APPLIED");
+    const indexReceiptProbe = await client.query(
+      `SELECT request_key, request_hash, to_status, index_state
+       FROM public_web_publication_receipts
+       WHERE tenant_id = $1 AND id = $2`,
+      [TENANT_ID, INDEX_RECEIPT_ID],
+    );
+    assert.deepEqual(indexReceiptProbe.rows[0], {
+      request_key: indexKey,
+      request_hash: "4".repeat(64),
+      to_status: "PUBLISHED",
+      index_state: "INDEX",
+    });
+    assert.deepEqual(await applyCommand(client, indexCommand), {
+      outcome: "REPLAY",
+      publicationReceiptId: INDEX_RECEIPT_ID,
+      status: "PUBLISHED",
+      indexState: "INDEX",
+    });
+    await expectRejectedInSavepoint(
+      client,
+      "idempotency_conflict",
+      `SELECT fas_public_web_v1.apply_publication_command_v2(
+        jsonb_build_object(
+          'accessDecisionReceiptId', '${ACCESS_INDEX_ID}',
+          'actorLegacyUserId', ${reviewerId},
+          'command', 'ENABLE_INDEX',
+          'contentRecordId', '${RECORD_ID}',
+          'evidenceSha256', '${SHA_A}',
+          'expectedVersion', 4,
+          'organizationId', '${ORGANIZATION_ID}',
+          'publicationReceiptId', '${INDEX_RECEIPT_ID}',
+          'requestHash', '${"5".repeat(64)}',
+          'requestKey', '${indexKey}',
+          'revisionId', '${REVISION_ID}',
+          'staleReasonCode', NULL,
+          'tenantId', '${TENANT_ID}'
+        )
+      )`,
+      /idempotency conflict/,
+    );
+
+    const disableKey = "public-web.disable-index.fixture-1";
+    const accessPayload = {
+      actorPrincipalId: PRINCIPAL_ID,
+      assignmentIds: [MEMBERSHIP_ID],
+      capabilityKey: "public_web.content.index",
+      contextId: CONTEXT_ID,
+      correlationId: disableKey,
+      decision: "ALLOW",
+      id: ACCESS_DISABLE_ID,
+      membershipId: MEMBERSHIP_ID,
+      occurredAt: Date.now() - 1_000,
+      policyVersionId: POLICY_ID,
+      reasonCode: "allowed",
+      resourceId: RECORD_ID,
+      resourceType: "PUBLIC_WEB_CONTENT",
+      rolePackageVersionIds: [MEMBERSHIP_ID],
+      tenantId: TENANT_ID,
+    };
+    const disableCommand = {
+      accessDecisionReceiptId: ACCESS_DISABLE_ID,
+      actorLegacyUserId: reviewerId,
+      command: "DISABLE_INDEX",
+      contentRecordId: RECORD_ID,
+      evidenceSha256: SHA_A,
+      expectedVersion: 5,
+      organizationId: ORGANIZATION_ID,
+      publicationReceiptId: DISABLE_RECEIPT_ID,
+      requestHash: "6".repeat(64),
+      requestKey: disableKey,
+      revisionId: REVISION_ID,
+      staleReasonCode: null,
+      tenantId: TENANT_ID,
+    };
+    const authorizedApply = await client.query<{ result: Record<string, unknown> }>(
+      `SELECT fas_public_web_v1.apply_authorized_publication_command(
+         $1::jsonb, $2::jsonb
+       ) AS result`,
+      [JSON.stringify(accessPayload), JSON.stringify(disableCommand)],
+    );
+    assert.deepEqual(authorizedApply.rows[0]?.result, {
+      outcome: "APPLIED",
+      publicationReceiptId: DISABLE_RECEIPT_ID,
+      status: "PUBLISHED",
+      indexState: "NOINDEX",
+      version: 6,
+    });
+    const authorizedReplay = await client.query<{ result: Record<string, unknown> }>(
+      `SELECT fas_public_web_v1.apply_authorized_publication_command(
+         $1::jsonb, $2::jsonb
+       ) AS result`,
+      [JSON.stringify(accessPayload), JSON.stringify(disableCommand)],
+    );
+    assert.deepEqual(authorizedReplay.rows[0]?.result, {
+      outcome: "REPLAY",
+      publicationReceiptId: DISABLE_RECEIPT_ID,
+      status: "PUBLISHED",
+      indexState: "NOINDEX",
+    });
+    const accessRecorded = await client.query(
+      `SELECT capability_key, correlation_id, decision
+       FROM access_decision_receipts WHERE tenant_id = $1 AND id = $2`,
+      [TENANT_ID, ACCESS_DISABLE_ID],
+    );
+    assert.deepEqual(accessRecorded.rows[0], {
+      capability_key: "public_web.content.index",
+      correlation_id: disableKey,
+      decision: "ALLOW",
+    });
 
     const published = await client.query(
       `SELECT status, index_state, version
@@ -217,27 +505,9 @@ test("public web foundation enforces RLS, immutable evidence and controlled publ
     );
     assert.deepEqual(published.rows[0], {
       status: "PUBLISHED",
-      index_state: "INDEX",
-      version: "4",
+      index_state: "NOINDEX",
+      version: "6",
     });
-
-    await client.query(
-      `INSERT INTO public_web_publication_receipts (
-         id, tenant_id, organization_id, content_record_id, revision_id,
-         from_status, to_status, index_state, actor_legacy_user_id,
-         request_key, evidence_sha256
-       ) VALUES ($1, $2, $3, $4, $5, 'APPROVED', 'PUBLISHED', 'INDEX', $6,
-         'public-web-foundation.publish.1', $7)`,
-      [
-        RECEIPT_ID,
-        TENANT_ID,
-        ORGANIZATION_ID,
-        RECORD_ID,
-        REVISION_ID,
-        reviewerId,
-        SHA_A,
-      ],
-    );
     // INSERT-only RLS already makes these rows immutable for the runtime role.
     // Exercise the trigger itself as the local disposable superuser as well.
     await client.query("RESET ROLE");
@@ -245,7 +515,7 @@ test("public web foundation enforces RLS, immutable evidence and controlled publ
       client,
       "immutable_receipt",
       `UPDATE public_web_publication_receipts SET to_status = 'RETIRED'
-       WHERE tenant_id = '${TENANT_ID}' AND id = '${RECEIPT_ID}'`,
+       WHERE tenant_id = '${TENANT_ID}' AND id = '${INDEX_RECEIPT_ID}'`,
       /append-only/,
     );
     await expectRejectedInSavepoint(
@@ -300,6 +570,12 @@ test("public web foundation enforces RLS, immutable evidence and controlled publ
       ]],
     );
     assert.equal(rls.rows[0]?.count, 6);
+    const publicExecution = await client.query(
+      `SELECT
+         has_function_privilege('public', 'fas_public_web_v1.apply_publication_command_v2(jsonb)', 'EXECUTE') AS v2,
+         has_function_privilege('public', 'fas_public_web_v1.apply_authorized_publication_command(jsonb,jsonb)', 'EXECUTE') AS authorized`,
+    );
+    assert.deepEqual(publicExecution.rows[0], { v2: false, authorized: false });
     await client.query("ROLLBACK");
   } catch (error) {
     await client.query("ROLLBACK").catch(() => undefined);

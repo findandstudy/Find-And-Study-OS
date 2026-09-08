@@ -799,6 +799,41 @@
       "when": 1790928000000,
       "tag": "0113_public_web_publication_trigger_fix",
       "breakpoints": true
+    },
+    {
+      "idx": 114,
+      "version": "7",
+      "when": 1791014400000,
+      "tag": "0114_public_web_command_adapter",
+      "breakpoints": true
+    },
+    {
+      "idx": 115,
+      "version": "7",
+      "when": 1791100800000,
+      "tag": "0115_public_web_command_variable_binding",
+      "breakpoints": true
+    },
+    {
+      "idx": 116,
+      "version": "7",
+      "when": 1791187200000,
+      "tag": "0116_public_web_idempotent_command_gateway",
+      "breakpoints": true
+    },
+    {
+      "idx": 117,
+      "version": "7",
+      "when": 1791273600000,
+      "tag": "0117_public_web_replay_rls_fix",
+      "breakpoints": true
+    },
+    {
+      "idx": 118,
+      "version": "7",
+      "when": 1791360000000,
+      "tag": "0118_public_web_authorized_command_gateway",
+      "breakpoints": true
     }
   ]
 }
