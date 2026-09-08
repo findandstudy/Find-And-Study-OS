@@ -33,6 +33,7 @@ import {
   getPublicCatalogPolicy,
 } from "../lib/publicCatalogQueryPolicy";
 import { normalizeProgramLocale } from "../lib/programTranslationContract";
+import { resolvePublishedEntitySeoState } from "../lib/publicWebDiscoveryReadModel";
 
 const router: IRouter = Router();
 
@@ -147,7 +148,7 @@ router.get(
     ];
     addPublicCatalogConditions(relatedConditions, policy);
 
-    const [relatedRows, intakeRows, priceRows] = await Promise.all([
+    const [relatedRows, intakeRows, priceRows, seoState] = await Promise.all([
       db
         .select({
           id: programsTable.id,
@@ -243,10 +244,19 @@ router.get(
           asc(priceComponentsTable.id),
         )
         .limit(48),
+      resolvePublishedEntitySeoState({
+        entityType: "program",
+        entityId: program.id,
+        locale,
+      }),
     ]);
 
+    const deliveredLocaleReady = locale === "en" || program.translatedLocale === locale;
+    const indexable = seoState.indexable && deliveredLocaleReady;
+    const canonicalPath = seoState.canonicalPath || canonical.canonicalPath;
+
     setPublicCatalogHeaders(res);
-    res.setHeader("Content-Location", canonical.canonicalPath);
+    res.setHeader("Content-Location", canonicalPath);
     res.json({
       data: {
         ...program,
@@ -257,7 +267,7 @@ router.get(
           program.universityHasLogo,
         ),
         universityHasLogo: undefined,
-        canonicalPath: canonical.canonicalPath,
+        canonicalPath,
         universityPath: publicCatalogPath({
           locale,
           entityType: "university",
@@ -281,9 +291,10 @@ router.get(
       })),
       meta: {
         locale,
-        indexable: false,
-        canonicalPath: canonical.canonicalPath,
-        requestedPathIsCanonical: canonical.isCanonical,
+        indexable,
+        alternatePaths: seoState.alternates,
+        canonicalPath,
+        requestedPathIsCanonical: req.params.routeKey === canonicalPath.split("/").at(-1),
         generatedAt: new Date().toISOString(),
       },
     });
@@ -339,7 +350,7 @@ router.get(
       eq(programsTable.isActive, true),
     ];
     addPublicCatalogConditions(programConditions, policy);
-    const [[countRow], programRows] = await Promise.all([
+    const [[countRow], programRows, seoState] = await Promise.all([
       db
         .select({ count: sql<number>`count(*)` })
         .from(programsTable)
@@ -377,6 +388,11 @@ router.get(
         .where(and(...programConditions))
         .orderBy(asc(programsTable.name), asc(programsTable.id))
         .limit(PUBLIC_CATALOG_UNIVERSITY_PROGRAM_LIMIT),
+      resolvePublishedEntitySeoState({
+        entityType: "university",
+        entityId: university.id,
+        locale,
+      }),
     ]);
 
     const canonical = publicCatalogCanonicalState({
@@ -386,8 +402,10 @@ router.get(
       id: university.id,
       name: university.name,
     });
+    const indexable = seoState.indexable && locale === "en";
+    const canonicalPath = seoState.canonicalPath || canonical.canonicalPath;
     setPublicCatalogHeaders(res);
-    res.setHeader("Content-Location", canonical.canonicalPath);
+    res.setHeader("Content-Location", canonicalPath);
     res.json({
       data: {
         ...university,
@@ -396,7 +414,7 @@ router.get(
           university.id,
           university.hasLogo,
         ),
-        canonicalPath: canonical.canonicalPath,
+        canonicalPath,
       },
       programs: programRows.map((program) => ({
         ...program,
@@ -409,11 +427,12 @@ router.get(
       })),
       meta: {
         locale,
-        indexable: false,
+        indexable,
+        alternatePaths: seoState.alternates,
         programCount: Number(countRow?.count ?? 0),
         returnedPrograms: programRows.length,
-        canonicalPath: canonical.canonicalPath,
-        requestedPathIsCanonical: canonical.isCanonical,
+        canonicalPath,
+        requestedPathIsCanonical: req.params.routeKey === canonicalPath.split("/").at(-1),
         generatedAt: new Date().toISOString(),
       },
     });

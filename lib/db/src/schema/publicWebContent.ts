@@ -430,6 +430,14 @@ export const publicWebPublicationStatesTable = pgTable(
       table.updatedAt,
       table.contentRecordId,
     ),
+    index("public_web_publication_states_public_index_idx")
+      .on(
+        table.tenantId,
+        table.organizationId,
+        table.contentRecordId,
+        table.updatedAt,
+      )
+      .where(sql`${table.status} = 'PUBLISHED' AND ${table.indexState} = 'INDEX'`),
     check(
       "public_web_publication_states_status_chk",
       sql`${table.status} IN ('DRAFT', 'PENDING_REVIEW', 'APPROVED', 'PUBLISHED', 'STALE', 'RETIRED')`,

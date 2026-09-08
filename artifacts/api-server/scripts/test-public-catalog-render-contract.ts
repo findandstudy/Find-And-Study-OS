@@ -59,6 +59,7 @@ test("rendered shell escapes catalogue content, emits canonical metadata, and no
     title: `Security <script>alert(1)</script>`,
     description: `Safe </script><img src=x onerror=alert(1)>`,
     indexable: false,
+    alternatePaths: {},
     program: {
       id: 42,
       name: `Security </script>`,

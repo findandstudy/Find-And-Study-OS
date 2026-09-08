@@ -21,6 +21,17 @@ import {
   shouldRenderPublicCatalogPath,
 } from "./lib/publicCatalogRenderContract";
 import { getPublicCatalogRenderModel } from "./lib/publicCatalogRenderReadModel";
+import {
+  buildStaticSitemapEntries,
+  parsePublicWebSitemapRoute,
+  renderPublicWebSitemapIndex,
+  renderPublicWebUrlSet,
+} from "./lib/publicWebDiscoveryContract";
+import {
+  publicWebDiscoveryConfigFromEnvironment,
+  readPublishedSitemapCounts,
+  readPublishedSitemapPage,
+} from "./lib/publicWebDiscoveryReadModel";
 
 const isProd = process.env.NODE_ENV === "production";
 
@@ -198,6 +209,62 @@ function serveStaticFrontend() {
     console.warn(`[static] Frontend dist not found at ${distPath}, skipping static serving`);
     return;
   }
+
+  app.get(
+    ["/sitemap.xml", "/sitemaps/:sitemapFile"],
+    async (req: express.Request, res: express.Response, next: express.NextFunction) => {
+      const config = publicWebDiscoveryConfigFromEnvironment();
+      if (config.mode === "off") return next();
+      const route = parsePublicWebSitemapRoute(req.path);
+      if (!route) {
+        res.status(404).type("text/plain").send("Sitemap not found");
+        return;
+      }
+      try {
+        let xml: string;
+        if (route.kind === "index") {
+          const counts = config.mode === "published" && config.scope
+            ? await readPublishedSitemapCounts(config.scope)
+            : [];
+          xml = renderPublicWebSitemapIndex({ siteUrl: config.siteUrl, counts });
+        } else if (route.kind === "static") {
+          xml = renderPublicWebUrlSet({
+            siteUrl: config.siteUrl,
+            entries: buildStaticSitemapEntries(),
+          });
+        } else {
+          if (config.mode !== "published" || !config.scope) {
+            res.status(404).type("text/plain").send("Sitemap not found");
+            return;
+          }
+          const entries = await readPublishedSitemapPage({
+            scope: config.scope,
+            entityType: route.entityType,
+            locale: route.locale,
+            shard: route.shard,
+          });
+          if (entries.length === 0) {
+            res.status(404).type("text/plain").send("Sitemap not found");
+            return;
+          }
+          xml = renderPublicWebUrlSet({ siteUrl: config.siteUrl, entries });
+        }
+        res.setHeader(
+          "Cache-Control",
+          "public, max-age=300, s-maxage=3600, stale-while-revalidate=86400",
+        );
+        res.setHeader("X-Content-Type-Options", "nosniff");
+        res.type("application/xml").send(xml);
+      } catch (error) {
+        console.error("[public-sitemap] request failed", {
+          routeKind: route.kind,
+          message: error instanceof Error ? error.message : "unknown_error",
+        });
+        res.setHeader("Cache-Control", "no-store");
+        res.status(503).type("text/plain").send("Sitemap temporarily unavailable");
+      }
+    },
+  );
 
   app.use(
     "/assets",

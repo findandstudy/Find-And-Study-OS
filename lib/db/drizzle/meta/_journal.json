@@ -834,6 +834,13 @@
       "when": 1791360000000,
       "tag": "0118_public_web_authorized_command_gateway",
       "breakpoints": true
+    },
+    {
+      "idx": 119,
+      "version": "7",
+      "when": 1791446400000,
+      "tag": "0119_public_web_discovery_indexes",
+      "breakpoints": true
     }
   ]
 }

@@ -143,13 +143,42 @@ gerçek disposable PostgreSQL üzerinde doğrulayan entegrasyon testi `1/1` geç
 API/Edcons typecheck ve production build yeşildir. Pilot hiçbir staging veya
 production runtime'ında etkinleştirilmemiştir.
 
+## Dinamik keşif ve metadata dilimi
+
+Sitemap ile render rollout'u birbirinden ayrıldı. `PUBLIC_WEB_SITEMAP_MODE`
+varsayılan olarak `off` çalışır; `static` yalnız altı editoryal statik sayfa
+kümesini, `published` ise ek olarak exact tenant+organization kapsamındaki
+`PUBLISHED + INDEX` kayıtlarını açar. Hatalı site URL'si, eksik UUID kapsamı veya
+bilinmeyen mode fail-closed olarak `off` olur.
+
+- ilk sitemap dilimi, public template'i mevcut olan program ve üniversite
+  kayıtlarını locale başına 5.000 URL'lik shard'lara böler; destinasyon, özel CMS
+  sayfası ve makale shard'ları kendi gerçek public route/read modeli tamamlanmadan
+  açılmaz;
+- 23 dildeki alt sayfalar yalnız gerçekten yayınlanmış/indexlenmiş kardeş
+  kayıtlar için karşılıklı hreflang üretir; bulunmayan çeviri uydurulmaz;
+- İngilizce varyant varsa `x-default` olur;
+- sitemap DB sorguları `BEGIN READ ONLY`, 8 saniye statement timeout ve request
+  scope'a bağlı RLS ayarlarıyla çalışır;
+- ayrıntı API'si ve SSR shell aynı publication projection'ından canonical,
+  index ve alternate path bilgisini alır;
+- programlarda İngilizce dışı URL, ayrıca ilgili `program_translations` kaydı
+  gerçekten `published` değilse; üniversitelerde ise localized delivery read
+  modeli hazır değilse indexlenmez;
+- migration `0119_public_web_discovery_indexes` yalnız partial lookup indeksi
+  ekler; içerik veya rollout state'i değiştirmez.
+
+Saf keşif sözleşmesi `5/5`, gerçek disposable PostgreSQL RLS/NOINDEX testi
+`1/1` geçmiştir. Yerel ledger `120/120`, API ve Edcons production build'i
+yeşildir. Staging/production config ve veri state'i değiştirilmemiştir.
+
 ## Sonraki dilimlerin sırası
 
 1. Active-context ve capability kontrollü command/store adapter. **Yerelde tamamlandı.**
 2. Admin Publication Center: source coverage, review, stale ve index queue. **Yerelde tamamlandı.**
 3. Program ve üniversite için bounded read model + cursor pagination. **Yerelde tamamlandı.**
 4. SSR/ISR pilotu ve ölçüm raporu. **Varsayılan-kapalı pilot yerelde tamamlandı; gerçek trafik ölçümü bekliyor.**
-5. Dinamik, shard edilmiş sitemap index ve hreflang/canonical doğrulaması.
+5. Dinamik, shard edilmiş sitemap index ve hreflang/canonical doğrulaması. **Yerelde tamamlandı.**
 6. Prototiplerin mevcut tasarım sistemiyle program/üniversite template'lerine dönüştürülmesi.
 7. Related entity ve internal-link graph; kalite eşiği geçmeyen sayfalara link/index üretmeme.
 

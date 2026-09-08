@@ -90,6 +90,7 @@ type ProgramDetailPayload = {
     canonicalPath: string;
     requestedPathIsCanonical: boolean;
     indexable: boolean;
+    alternatePaths: Record<string, string>;
   };
 };
 
@@ -120,6 +121,7 @@ export default function ProgramDetail({ routeKey }: { routeKey: string }) {
     canonical: program ? `${SITE_URL}${program.canonicalPath}` : undefined,
     noindex: error || !payload?.meta.indexable,
     lang,
+    alternates: payload?.meta.alternatePaths,
   });
   useJsonLd(program ? [
     {

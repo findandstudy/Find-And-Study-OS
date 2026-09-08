@@ -44,6 +44,7 @@ type UniversityPayload = {
     canonicalPath: string;
     requestedPathIsCanonical: boolean;
     indexable: boolean;
+    alternatePaths: Record<string, string>;
   };
 };
 
@@ -74,6 +75,7 @@ export default function UniversityDetail({ routeKey }: { routeKey: string }) {
     canonical: university ? `${SITE_URL}${university.canonicalPath}` : undefined,
     noindex: error || !payload?.meta.indexable,
     lang,
+    alternates: payload?.meta.alternatePaths,
   });
   useJsonLd(university ? [
     {

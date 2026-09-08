@@ -60,6 +60,7 @@ export type PublicCatalogRenderModel =
       title: string;
       description: string;
       indexable: boolean;
+      alternatePaths: Partial<Record<ProgramSupportedLocale, string>>;
       program: {
         id: number;
         name: string;
@@ -277,6 +278,8 @@ export function renderPublicCatalogHtml(input: {
     .replace(/<link\s+rel=["']canonical["'][^>]*>/i, `<link rel="canonical" href="${escapeHtml(canonicalUrl)}" />`)
     .replace(/<script\b/g, `<script nonce="${escapeHtml(input.nonce)}"`);
 
+  html = html.replace(/\s*<link\s+[^>]*rel=["']alternate["'][^>]*hreflang=["'][^"']+["'][^>]*>/gi, "");
+
   html = replaceMeta(html, "name", "description", input.model.description);
   html = replaceMeta(html, "name", "robots", input.model.indexable ? "index, follow" : "noindex, follow");
   html = replaceMeta(html, "property", "og:title", input.model.title);
@@ -290,7 +293,19 @@ export function renderPublicCatalogHtml(input: {
     : input.model.kind === "program_detail"
       ? renderProgramDetail(input.model)
       : renderNotFound(input.model);
-  const extraHead = `  <meta name="csp-nonce" content="${escapeHtml(input.nonce)}" />\n  <meta name="public-render" content="ssr-isr-pilot" />\n  <script nonce="${escapeHtml(input.nonce)}" type="application/ld+json">${safeJson(structuredData(input.model, siteUrl))}</script>\n`;
+  const alternatePaths = input.model.kind === "program_detail" && input.model.indexable
+    ? input.model.alternatePaths
+    : {};
+  const hreflangLinks = PROGRAM_SUPPORTED_LOCALES.flatMap((locale) => {
+    const path = alternatePaths[locale];
+    return path
+      ? [`  <link rel="alternate" hreflang="${locale}" href="${escapeHtml(`${siteUrl}${path}`)}" />`]
+      : [];
+  });
+  if (alternatePaths.en) {
+    hreflangLinks.push(`  <link rel="alternate" hreflang="x-default" href="${escapeHtml(`${siteUrl}${alternatePaths.en}`)}" />`);
+  }
+  const extraHead = `  <meta name="csp-nonce" content="${escapeHtml(input.nonce)}" />\n  <meta name="public-render" content="ssr-isr-pilot" />\n${hreflangLinks.join("\n")}${hreflangLinks.length ? "\n" : ""}  <script nonce="${escapeHtml(input.nonce)}" type="application/ld+json">${safeJson(structuredData(input.model, siteUrl))}</script>\n`;
   return html
     .replace("</head>", `${extraHead}</head>`)
     .replace(/<div\s+id=["']root["']\s*><\/div>/i, `<div id="root" data-public-render-shell-root="true">${shell}</div>`);

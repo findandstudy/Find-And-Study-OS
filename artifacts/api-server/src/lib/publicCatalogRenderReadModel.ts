@@ -17,6 +17,7 @@ import type {
   PublicCatalogRenderModel,
   PublicCatalogRenderRoute,
 } from "./publicCatalogRenderContract";
+import { resolvePublishedEntitySeoState } from "./publicWebDiscoveryReadModel";
 
 const PILOT_LIST_LIMIT = 12;
 const CACHE_FRESH_MS = 5 * 60_000;
@@ -168,6 +169,7 @@ async function readProgramDetail(
       tuitionFee: programsTable.tuitionFee,
       discountedFee: programsTable.discountedFee,
       currency: programsTable.currency,
+      translatedLocale: programTranslationsTable.locale,
       universityId: universitiesTable.id,
       universityName: universitiesTable.name,
       country: universitiesTable.country,
@@ -199,6 +201,11 @@ async function readProgramDetail(
     id: program.id,
     name: program.name,
   });
+  const seoState = await resolvePublishedEntitySeoState({
+    entityType: "program",
+    entityId: program.id,
+    locale: route.locale,
+  });
   const fallbackDescription = [
     program.degree,
     program.field,
@@ -209,12 +216,11 @@ async function readProgramDetail(
   return {
     kind: "program_detail",
     locale: route.locale,
-    canonicalPath: canonical.canonicalPath,
+    canonicalPath: seoState.canonicalPath || canonical.canonicalPath,
     title: `${program.name} | ${program.universityName}`,
     description: boundedText(program.description, fallbackDescription),
-    // Pilot detail pages remain fail-closed until the publication/index state
-    // can be resolved through the tenant-bound public projection.
-    indexable: false,
+    indexable: seoState.indexable && (route.locale === "en" || program.translatedLocale === route.locale),
+    alternatePaths: seoState.alternates,
     program: {
       id: program.id,
       name: program.name,

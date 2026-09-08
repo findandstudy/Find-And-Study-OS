@@ -243,6 +243,7 @@ test("production prefix and canonical additive migration tail are pinned", () =>
       "0116_public_web_idempotent_command_gateway",
       "0117_public_web_replay_rls_fix",
       "0118_public_web_authorized_command_gateway",
+      "0119_public_web_discovery_indexes",
     ],
   );
 
