@@ -74,6 +74,8 @@
     "test:postgres-public-catalog-render": "tsx --test ./scripts/test-postgres-public-catalog-render.ts",
     "test:public-web-discovery": "tsx --test ./scripts/test-public-web-discovery-contract.ts",
     "test:postgres-public-web-discovery": "tsx --test ./scripts/test-postgres-public-web-discovery.ts",
+    "test:public-web-scale": "tsx --test ./scripts/test-public-web-scale-gate.ts",
+    "measure:public-web-local": "node ./scripts/measure-public-web-local-pilot.mjs",
     "test:ai-agent": "tsx --test ./scripts/test-ai-agent-config.ts",
     "test:ai-agent-admin": "tsx --test ./scripts/test-ai-agent-admin.ts",
     "test:ai-delivery-safety": "tsx --test ./scripts/test-ai-delivery-safety.ts",

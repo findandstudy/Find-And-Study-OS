@@ -97,6 +97,8 @@ test("read model is read-only, RLS-scoped and selects only published indexed rec
   assert.match(source, /state\.status='PUBLISHED' AND state\.index_state='INDEX'/);
   assert.match(source, /translation\.status='published'/);
   assert.match(source, /LIMIT \$5 OFFSET \$6/);
+  assert.match(source, /const SEO_CACHE_MAX_ENTRIES = 5_000/);
+  assert.match(source, /const seoInFlight = new Map/);
   assert.doesNotMatch(source, /service_fee|commission|contact_person/i);
 
   const migration = readFileSync(

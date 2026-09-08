@@ -165,12 +165,33 @@ bilinmeyen mode fail-closed olarak `off` olur.
 - programlarda İngilizce dışı URL, ayrıca ilgili `program_translations` kaydı
   gerçekten `published` değilse; üniversitelerde ise localized delivery read
   modeli hazır değilse indexlenmez;
+- entity SEO projection'ı 5 dakika ve en fazla 5.000 anahtarla cache edilir;
+  aynı cold key sorguları birleştirilir ve hedefli invalidation yüzeyi sağlanır;
 - migration `0119_public_web_discovery_indexes` yalnız partial lookup indeksi
   ekler; içerik veya rollout state'i değiştirmez.
 
 Saf keşif sözleşmesi `5/5`, gerçek disposable PostgreSQL RLS/NOINDEX testi
 `1/1` geçmiştir. Yerel ledger `120/120`, API ve Edcons production build'i
 yeşildir. Staging/production config ve veri state'i değiştirilmemiştir.
+
+## Yerel ölçek ve HTTP ölçümü
+
+Hedef katalog kardinalitesi 200.000 program ve 2.000 üniversitenin 23 locale
+varyantı olarak simüle edildi. Sitemap index 4.646.000 olası URL'yi tek build
+artifact'ına dökmeden 944 shard'a böldü. En ağır 5.000 URL / 23 hreflang shard'ı
+yerel testte 134 ms'de üretildi ve 50 MiB açılmış XML sınırının altında kaldı.
+
+Disposable PostgreSQL 16 ve yerel production build ile yapılan HTTP pilotunda:
+
+- 23 cold locale render örneği: origin p95 `25,3 ms`;
+- 100 istek / concurrency 10: cache-hit p95 `25,2 ms`;
+- 40 public course-finder isteği / concurrency 5: API p95 `18,2 ms`;
+- dinamik statik sitemap: HTTP 200, `application/xml`, `nosniff`, 138 localized
+  URL ve karşılıklı hreflang.
+
+Bu değerler yerel sentetik gate kanıtıdır; gerçek kullanıcı Core Web Vitals,
+edge-cache, bot crawl ve staging yük sonucu değildir. Staging rollout veya
+production kapasite iddiası oluşturmaz.
 
 ## Sonraki dilimlerin sırası
 

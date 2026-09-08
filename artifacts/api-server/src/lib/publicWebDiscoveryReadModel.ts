@@ -29,6 +29,21 @@ const ENTITY_ID_COLUMNS: Record<"program" | "university", "program_id" | "univer
   program: "program_id",
   university: "university_id",
 };
+const SEO_CACHE_TTL_MS = 5 * 60_000;
+const SEO_CACHE_MAX_ENTRIES = 5_000;
+const seoCache = new Map<string, { expiresAt: number; value: PublicEntitySeoState }>();
+const seoInFlight = new Map<string, Promise<PublicEntitySeoState>>();
+
+function pruneSeoCache(now: number): void {
+  for (const [key, entry] of seoCache) {
+    if (entry.expiresAt <= now) seoCache.delete(key);
+  }
+  while (seoCache.size >= SEO_CACHE_MAX_ENTRIES) {
+    const oldest = seoCache.keys().next().value;
+    if (oldest === undefined) break;
+    seoCache.delete(oldest);
+  }
+}
 
 export function publicWebDiscoveryConfigFromEnvironment(): PublicWebDiscoveryConfig {
   return parsePublicWebDiscoveryConfig({
@@ -228,5 +243,48 @@ export async function resolvePublishedEntitySeoState(input: {
   if (config.mode !== "published" || !config.scope) {
     return { indexable: false, canonicalPath: null, alternates: {} };
   }
-  return readPublishedEntitySeoState({ ...input, scope: config.scope });
+  const key = [
+    config.scope.tenantId,
+    config.scope.organizationId,
+    input.entityType,
+    input.entityId,
+    input.locale,
+  ].join(":");
+  const now = Date.now();
+  const cached = seoCache.get(key);
+  if (cached && cached.expiresAt > now) return cached.value;
+  const existing = seoInFlight.get(key);
+  if (existing) return existing;
+  const pending = readPublishedEntitySeoState({ ...input, scope: config.scope })
+    .then((value) => {
+      pruneSeoCache(Date.now());
+      seoCache.set(key, { value, expiresAt: Date.now() + SEO_CACHE_TTL_MS });
+      return value;
+    })
+    .finally(() => seoInFlight.delete(key));
+  seoInFlight.set(key, pending);
+  return pending;
+}
+
+export function invalidatePublicWebDiscoveryCache(input: {
+  entityType?: "program" | "university";
+  entityId?: number;
+  locale?: ProgramSupportedLocale;
+} = {}): number {
+  let removed = 0;
+  for (const key of seoCache.keys()) {
+    const parts = key.split(":");
+    const entityType = parts.at(-3);
+    const entityId = Number(parts.at(-2));
+    const locale = parts.at(-1);
+    if (
+      (!input.entityType || input.entityType === entityType)
+      && (input.entityId === undefined || input.entityId === entityId)
+      && (!input.locale || input.locale === locale)
+    ) {
+      seoCache.delete(key);
+      removed += 1;
+    }
+  }
+  return removed;
 }
