@@ -60,6 +60,8 @@ const About = lazyRetry(() => import("@/pages/public/About"));
 const Countries = lazyRetry(() => import("@/pages/public/Countries"));
 const CountryDetail = lazyRetry(() => import("@/pages/public/CountryDetail"));
 const Programs = lazyRetry(() => import("@/pages/public/Programs"));
+const ProgramDetail = lazyRetry(() => import("@/pages/public/ProgramDetail"));
+const UniversityDetail = lazyRetry(() => import("@/pages/public/UniversityDetail"));
 const Blog = lazyRetry(() => import("@/pages/public/Blog"));
 const Contact = lazyRetry(() => import("@/pages/public/Contact"));
 const AgencyApplication = lazyRetry(() => import("@/pages/public/AgencyApplication"));
@@ -292,6 +294,12 @@ function PublicRoutes({ lang }: { lang: string }) {
               {(params) => <CountryDetail slug={params.slug} />}
             </Route>
             <Route path={`/${lang}/programs`} component={Programs} />
+            <Route path={`/${lang}/programs/:routeKey`}>
+              {(params) => <ProgramDetail routeKey={params.routeKey} />}
+            </Route>
+            <Route path={`/${lang}/universities/:routeKey`}>
+              {(params) => <UniversityDetail routeKey={params.routeKey} />}
+            </Route>
             <Route path={`/${lang}/blog`} component={Blog} />
             <Route path={`/${lang}/contact`} component={Contact} />
             <Route path={`/${lang}/agency/apply`} component={AgencyApplication} />

@@ -1,4 +1,22 @@
 {
+  "catalogDetail": {
+    "verifiedPrice": "سعر كتالوج موثّق",
+    "deposit": "الدفعة المقدمة",
+    "location": "الموقع",
+    "relatedPrograms": "برامج ذات صلة",
+    "availablePrograms": "البرامج المتاحة",
+    "availableIntakes": "فترات القبول المتاحة",
+    "capacityOpen": "متاح",
+    "capacityLimited": "محدود",
+    "capacityFull": "ممتلئ",
+    "capacityWaitlist": "قائمة انتظار",
+    "capacityClosed": "مغلق",
+    "capacityUnknown": "التوفر غير معروف",
+    "deliveryOnCampus": "في الحرم الجامعي",
+    "deliveryOnline": "عبر الإنترنت",
+    "deliveryHybrid": "هجين",
+    "deliveryBlended": "مدمج"
+  },
   "integrationsManager": {
     "facebook_messenger": {
       "name": "Facebook / Messenger",

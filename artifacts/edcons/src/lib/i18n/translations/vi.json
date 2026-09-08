@@ -1,4 +1,22 @@
 {
+  "catalogDetail": {
+    "verifiedPrice": "Giá danh mục đã xác minh",
+    "deposit": "Tiền đặt cọc",
+    "location": "Địa điểm",
+    "relatedPrograms": "Chương trình liên quan",
+    "availablePrograms": "Chương trình hiện có",
+    "availableIntakes": "Kỳ nhập học hiện có",
+    "capacityOpen": "Đang mở",
+    "capacityLimited": "Có hạn",
+    "capacityFull": "Đã đủ",
+    "capacityWaitlist": "Danh sách chờ",
+    "capacityClosed": "Đã đóng",
+    "capacityUnknown": "Chưa rõ tình trạng",
+    "deliveryOnCampus": "Tại trường",
+    "deliveryOnline": "Trực tuyến",
+    "deliveryHybrid": "Kết hợp",
+    "deliveryBlended": "Pha trộn"
+  },
   "integrationsManager": {
     "facebook_messenger": {
       "name": "Facebook / Messenger",

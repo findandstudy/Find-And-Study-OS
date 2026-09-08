@@ -1,4 +1,22 @@
 {
+  "catalogDetail": {
+    "verifiedPrice": "검증된 카탈로그 가격",
+    "deposit": "예치금",
+    "location": "위치",
+    "relatedPrograms": "관련 프로그램",
+    "availablePrograms": "지원 가능한 프로그램",
+    "availableIntakes": "지원 가능한 입학 시기",
+    "capacityOpen": "모집 중",
+    "capacityLimited": "제한적",
+    "capacityFull": "마감",
+    "capacityWaitlist": "대기 명단",
+    "capacityClosed": "종료",
+    "capacityUnknown": "모집 여부 미확인",
+    "deliveryOnCampus": "캠퍼스",
+    "deliveryOnline": "온라인",
+    "deliveryHybrid": "하이브리드",
+    "deliveryBlended": "혼합"
+  },
   "integrationsManager": {
     "facebook_messenger": {
       "name": "Facebook/Messenger",

@@ -1,4 +1,22 @@
 {
+  "catalogDetail": {
+    "verifiedPrice": "Tassyklanan katalog bahasy",
+    "deposit": "Depozit",
+    "location": "Ýerleşýän ýeri",
+    "relatedPrograms": "Degişli programmalar",
+    "availablePrograms": "Elýeterli programmalar",
+    "availableIntakes": "Elýeterli kabul döwürleri",
+    "capacityOpen": "Açyk",
+    "capacityLimited": "Çäkli",
+    "capacityFull": "Doly",
+    "capacityWaitlist": "Garaşylýan sanaw",
+    "capacityClosed": "Ýapyk",
+    "capacityUnknown": "Elýeterlilik näbelli",
+    "deliveryOnCampus": "Kampusda",
+    "deliveryOnline": "Onlaýn",
+    "deliveryHybrid": "Gibrid",
+    "deliveryBlended": "Garyşyk"
+  },
   "integrationsManager": {
     "facebook_messenger": {
       "name": "Facebook / Messenger",

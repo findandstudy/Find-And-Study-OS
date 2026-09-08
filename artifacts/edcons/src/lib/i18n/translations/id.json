@@ -1,4 +1,22 @@
 {
+  "catalogDetail": {
+    "verifiedPrice": "Harga katalog terverifikasi",
+    "deposit": "Deposit",
+    "location": "Lokasi",
+    "relatedPrograms": "Program terkait",
+    "availablePrograms": "Program tersedia",
+    "availableIntakes": "Gelombang masuk tersedia",
+    "capacityOpen": "Terbuka",
+    "capacityLimited": "Terbatas",
+    "capacityFull": "Penuh",
+    "capacityWaitlist": "Daftar tunggu",
+    "capacityClosed": "Ditutup",
+    "capacityUnknown": "Ketersediaan tidak diketahui",
+    "deliveryOnCampus": "Di kampus",
+    "deliveryOnline": "Daring",
+    "deliveryHybrid": "Hibrida",
+    "deliveryBlended": "Campuran"
+  },
   "integrationsManager": {
     "facebook_messenger": {
       "name": "Facebook / Messenger",

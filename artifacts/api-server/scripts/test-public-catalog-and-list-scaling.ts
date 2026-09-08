@@ -12,6 +12,7 @@ const read = (relativePath: string) =>
   readFileSync(new URL(relativePath, import.meta.url), "utf8");
 
 const courseFinder = read("../src/routes/course-finder.ts");
+const publicCatalogQueryPolicy = read("../src/lib/publicCatalogQueryPolicy.ts");
 const settingsSchema = read("../../../lib/db/src/schema/settings.ts");
 const publicPrograms = read("../../edcons/src/pages/public/Programs.tsx");
 const leadsRoute = read("../src/routes/leads.ts");
@@ -31,7 +32,7 @@ test("public catalogue uses an explicit public scope for programs and facets", (
 });
 
 test("anonymous course-finder requests fail closed to a private-only default", () => {
-  assert.match(courseFinder, /allowedUniversityTypes = \["Private"\]/);
+  assert.match(publicCatalogQueryPolicy, /allowedUniversityTypes = \["Private"\]/);
   assert.match(courseFinder, /if \(!explicitlyPublic && isInternalCourseFinderRequest\(req\)\) return null/);
   assert.match(courseFinder, /addPublicCatalogConditions\(conditions, publicPolicy\)/);
 });

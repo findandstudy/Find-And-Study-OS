@@ -41,6 +41,8 @@ interface UniversityBrief {
   logoUrl: string | null;
   ranking: number | null;
   universityType: string | null;
+  programCount: number;
+  canonicalPath: string;
 }
 
 interface ProgramBrief {
@@ -53,6 +55,8 @@ interface ProgramBrief {
   currency: string | null;
   discountedFee: number | null;
   universityId: number;
+  universityName: string;
+  canonicalPath: string;
 }
 
 function fixStorageUrl(url: string | null | undefined): string | null {
@@ -130,11 +134,11 @@ export default function CountryDetail({ slug }: { slug: string }) {
   useEffect(() => {
     setIsLoading(true);
     setError(false);
-    customFetch<any>(`/api/public/destinations/${slug}`, { method: "GET" })
+    customFetch<any>(`/api/public/destinations/${slug}?locale=${encodeURIComponent(lang)}`, { method: "GET" })
       .then(d => setData(d))
       .catch(() => setError(true))
       .finally(() => setIsLoading(false));
-  }, [slug]);
+  }, [slug, lang]);
 
   if (isLoading) {
     return (
@@ -159,11 +163,9 @@ export default function CountryDetail({ slug }: { slug: string }) {
     );
   }
 
-  const { destination: dest, universities, programs, stats } = data;
+  const { destination: dest, universities, stats } = data;
   const whyPoints = dest.whyStudyHere?.split(/\.\s+/).filter(p => p.trim().length > 5) || [];
   const cities = dest.popularCities?.split(",").map(c => c.trim()).filter(Boolean) || [];
-
-  const uniMap = new Map(universities.map(u => [u.id, u]));
 
   return (
     <>
@@ -276,7 +278,6 @@ export default function CountryDetail({ slug }: { slug: string }) {
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
               {universities.map((uni, i) => {
                 const logoSrc = fixStorageUrl(uni.logoUrl);
-                const uniPrograms = programs.filter(p => p.universityId === uni.id);
                 return (
                   <motion.div key={uni.id} initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: i * 0.05 }}
                     className="bg-card rounded-2xl border border-border/40 overflow-hidden shadow-sm hover:shadow-md transition-shadow">
@@ -291,7 +292,7 @@ export default function CountryDetail({ slug }: { slug: string }) {
                           )}
                         </div>
                         <div className="min-w-0 flex-1">
-                          <h3 className="font-bold text-foreground text-sm truncate">{uni.name}</h3>
+                          <Link href={uni.canonicalPath} className="font-bold text-foreground text-sm truncate hover:text-primary hover:underline">{uni.name}</Link>
                           {uni.city && (
                             <p className="text-xs text-muted-foreground flex items-center gap-1">
                               <MapPin className="w-3 h-3" /> {uni.city}
@@ -307,7 +308,7 @@ export default function CountryDetail({ slug }: { slug: string }) {
                           <Badge variant="outline" className="text-xs">{t("countryDetail.rank", { rank: uni.ranking })}</Badge>
                         )}
                         <Badge className="text-xs bg-primary/10 text-primary border-0">
-                          {t("countryDetail.programCount", { count: uniPrograms.length })}
+                          {t("countryDetail.programCount", { count: uni.programCount })}
                         </Badge>
                       </div>
                     </div>

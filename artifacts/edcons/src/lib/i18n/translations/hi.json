@@ -1,4 +1,22 @@
 {
+  "catalogDetail": {
+    "verifiedPrice": "सत्यापित कैटलॉग मूल्य",
+    "deposit": "जमा राशि",
+    "location": "स्थान",
+    "relatedPrograms": "संबंधित प्रोग्राम",
+    "availablePrograms": "उपलब्ध प्रोग्राम",
+    "availableIntakes": "उपलब्ध प्रवेश सत्र",
+    "capacityOpen": "खुला",
+    "capacityLimited": "सीमित",
+    "capacityFull": "पूर्ण",
+    "capacityWaitlist": "प्रतीक्षा सूची",
+    "capacityClosed": "बंद",
+    "capacityUnknown": "उपलब्धता अज्ञात",
+    "deliveryOnCampus": "कैंपस में",
+    "deliveryOnline": "ऑनलाइन",
+    "deliveryHybrid": "हाइब्रिड",
+    "deliveryBlended": "मिश्रित"
+  },
   "integrationsManager": {
     "facebook_messenger": {
       "name": "Facebook / Messenger",

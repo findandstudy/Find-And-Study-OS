@@ -1,4 +1,22 @@
 {
+  "catalogDetail": {
+    "verifiedPrice": "قیمت تأییدشده کاتالوگ",
+    "deposit": "ودیعه",
+    "location": "موقعیت",
+    "relatedPrograms": "برنامه‌های مرتبط",
+    "availablePrograms": "برنامه‌های موجود",
+    "availableIntakes": "ورودی‌های موجود",
+    "capacityOpen": "باز",
+    "capacityLimited": "محدود",
+    "capacityFull": "تکمیل ظرفیت",
+    "capacityWaitlist": "فهرست انتظار",
+    "capacityClosed": "بسته",
+    "capacityUnknown": "ظرفیت نامشخص",
+    "deliveryOnCampus": "حضوری",
+    "deliveryOnline": "آنلاین",
+    "deliveryHybrid": "هیبریدی",
+    "deliveryBlended": "ترکیبی"
+  },
   "integrationsManager": {
     "facebook_messenger": {
       "name": "Facebook / Messenger",

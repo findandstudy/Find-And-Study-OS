@@ -1,4 +1,22 @@
 {
+  "catalogDetail": {
+    "verifiedPrice": "Текшерилген каталог баасы",
+    "deposit": "Депозит",
+    "location": "Жайгашкан жери",
+    "relatedPrograms": "Окшош программалар",
+    "availablePrograms": "Жеткиликтүү программалар",
+    "availableIntakes": "Жеткиликтүү кабыл алуулар",
+    "capacityOpen": "Ачык",
+    "capacityLimited": "Чектелген",
+    "capacityFull": "Толду",
+    "capacityWaitlist": "Күтүү тизмеси",
+    "capacityClosed": "Жабык",
+    "capacityUnknown": "Жеткиликтүүлүк белгисиз",
+    "deliveryOnCampus": "Кампуста",
+    "deliveryOnline": "Онлайн",
+    "deliveryHybrid": "Гибрид",
+    "deliveryBlended": "Аралаш"
+  },
   "integrationsManager": {
     "facebook_messenger": {
       "name": "Facebook / Messenger",

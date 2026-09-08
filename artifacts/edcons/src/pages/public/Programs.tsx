@@ -75,6 +75,8 @@ interface Program {
   universityQsRanking: string | null;
   universityTimesRanking: string | null;
   universityAddress: string | null;
+  canonicalPath: string;
+  universityPath: string;
 }
 
 interface Filters {
@@ -105,6 +107,15 @@ function fixStorageUrl(url: string | null | undefined): string | null {
     fixed = `${BASE_URL}${fixed.startsWith("/") ? "" : "/"}${fixed}`;
   }
   return fixed;
+}
+
+function initialQueryValues(key: string): string[] {
+  if (typeof window === "undefined") return [];
+  return (new URLSearchParams(window.location.search).get(key) || "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .slice(0, 20);
 }
 
 type DocKey = string;
@@ -1574,13 +1585,13 @@ export default function Programs() {
   const [search, setSearch] = useState("");
   const [showFilters, setShowFilters] = useState(false);
   const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [country, setCountry] = useState<string[]>([]);
-  const [city, setCity] = useState<string[]>([]);
-  const [universityType, setUniversityType] = useState<string[]>([]);
-  const [universityId, setUniversityId] = useState<string[]>([]);
-  const [level, setLevel] = useState<string[]>([]);
-  const [language, setLanguage] = useState<string[]>([]);
-  const [field, setField] = useState<string[]>([]);
+  const [country, setCountry] = useState<string[]>(() => initialQueryValues("country"));
+  const [city, setCity] = useState<string[]>(() => initialQueryValues("city"));
+  const [universityType, setUniversityType] = useState<string[]>(() => initialQueryValues("universityType"));
+  const [universityId, setUniversityId] = useState<string[]>(() => initialQueryValues("universityId"));
+  const [level, setLevel] = useState<string[]>(() => initialQueryValues("level"));
+  const [language, setLanguage] = useState<string[]>(() => initialQueryValues("language"));
+  const [field, setField] = useState<string[]>(() => initialQueryValues("field"));
   const [feeMin, setFeeMin] = useState("");
   const [feeMax, setFeeMax] = useState("");
   const [programs, setPrograms] = useState<Program[]>([]);
@@ -1616,7 +1627,7 @@ export default function Programs() {
               position: i + 1,
               item: {
                 "@type": "Course",
-                "@id": `${SITE_URL}/en/programs?id=${p.id}`,
+                "@id": `${SITE_URL}${p.canonicalPath}`,
                 name: p.name,
                 description: [p.field, p.degree, p.duration].filter(Boolean).join(" · ") || undefined,
                 provider: {
@@ -1721,6 +1732,10 @@ export default function Programs() {
       if (level.length) params.set("level", level.join(","));
       if (language.length) params.set("language", language.join(","));
       if (field.length) params.set("field", field.join(","));
+      const requestedProgramId = initialQueryValues("programId")[0];
+      if (requestedProgramId && /^\d{1,10}$/.test(requestedProgramId)) {
+        params.set("programId", requestedProgramId);
+      }
       if (debouncedFeeMin) params.set("feeMin", debouncedFeeMin);
       if (debouncedFeeMax) params.set("feeMax", debouncedFeeMax);
 
@@ -1729,6 +1744,9 @@ export default function Programs() {
         { method: "GET" }
       );
       setPrograms(resp.data || []);
+      if (requestedProgramId && resp.data?.length === 1) {
+        setApplyProgram((current) => current || resp.data[0]);
+      }
       setTotal(resp.meta?.total || 0);
       setTotalPages(resp.meta?.totalPages || 1);
     } catch {
@@ -2062,7 +2080,7 @@ export default function Programs() {
                         )}
                         {/* University name + location */}
                         <div className="min-w-0 flex-1">
-                          <p className="text-[12px] font-bold text-foreground/80 truncate leading-tight">{prog.universityName}</p>
+                          <Link href={prog.universityPath} className="block truncate text-[12px] font-bold leading-tight text-foreground/80 hover:text-primary hover:underline">{prog.universityName}</Link>
                           {(prog.universityCity || prog.universityCountry) && (
                             <div className="flex items-center gap-1 text-[10px] text-muted-foreground mt-0.5">
                               <MapPin className="w-3 h-3 shrink-0 text-primary/60" />
@@ -2084,9 +2102,11 @@ export default function Programs() {
                       {/* Card body */}
                       <div className="p-4 flex-1 flex flex-col gap-3">
                         {/* Program name */}
-                        <h3 className="font-bold text-foreground text-[15px] leading-snug line-clamp-2 group-hover:text-primary transition-colors duration-200">
-                          {prog.name}
-                        </h3>
+                        <Link href={prog.canonicalPath} className="block">
+                          <h3 className="font-bold text-foreground text-[15px] leading-snug line-clamp-2 group-hover:text-primary transition-colors duration-200">
+                            {prog.name}
+                          </h3>
+                        </Link>
 
                         {/* Fee + Scholarship */}
                         {effectiveFee != null && (

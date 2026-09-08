@@ -1,4 +1,22 @@
 {
+  "catalogDetail": {
+    "verifiedPrice": "Расталған каталог бағасы",
+    "deposit": "Депозит",
+    "location": "Орналасқан жері",
+    "relatedPrograms": "Ұқсас бағдарламалар",
+    "availablePrograms": "Қолжетімді бағдарламалар",
+    "availableIntakes": "Қолжетімді қабылдаулар",
+    "capacityOpen": "Ашық",
+    "capacityLimited": "Шектеулі",
+    "capacityFull": "Толық",
+    "capacityWaitlist": "Күту тізімі",
+    "capacityClosed": "Жабық",
+    "capacityUnknown": "Қолжетімділігі белгісіз",
+    "deliveryOnCampus": "Кампуста",
+    "deliveryOnline": "Онлайн",
+    "deliveryHybrid": "Гибридті",
+    "deliveryBlended": "Аралас"
+  },
   "integrationsManager": {
     "facebook_messenger": {
       "name": "Facebook / Messenger",
