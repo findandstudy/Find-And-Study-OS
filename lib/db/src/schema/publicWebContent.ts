@@ -548,6 +548,95 @@ export const publicWebPublicationReceiptsTable = pgTable(
   ],
 ).enableRLS();
 
+export const publicWebDraftIntakeReceiptsTable = pgTable(
+  "public_web_draft_intake_receipts",
+  {
+    id: uuid("id").notNull(),
+    tenantId: uuid("tenant_id").notNull(),
+    organizationId: uuid("organization_id").notNull(),
+    contentRecordId: uuid("content_record_id").notNull(),
+    revisionId: uuid("revision_id").notNull(),
+    routeAliasId: uuid("route_alias_id").notNull(),
+    entityType: text("entity_type").notNull(),
+    entityId: integer("entity_id").notNull(),
+    locale: text("locale").notNull(),
+    actorLegacyUserId: integer("actor_legacy_user_id")
+      .notNull()
+      .references(() => usersTable.id, { onDelete: "restrict" }),
+    authorizationDecisionReceiptId: uuid(
+      "authorization_decision_receipt_id",
+    ).notNull(),
+    requestKey: text("request_key").notNull(),
+    requestHash: text("request_hash").notNull(),
+    occurredAt: timestamp("occurred_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    primaryKey({
+      columns: [table.tenantId, table.id],
+      name: "public_web_draft_intake_receipts_pk",
+    }),
+    unique("public_web_draft_intake_receipts_request_uq").on(
+      table.tenantId,
+      table.requestKey,
+    ),
+    foreignKey({
+      columns: [
+        table.tenantId,
+        table.organizationId,
+        table.contentRecordId,
+        table.revisionId,
+      ],
+      foreignColumns: [
+        publicWebContentRevisionsTable.tenantId,
+        publicWebContentRevisionsTable.organizationId,
+        publicWebContentRevisionsTable.contentRecordId,
+        publicWebContentRevisionsTable.id,
+      ],
+      name: "public_web_draft_intake_receipts_revision_fk",
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [table.tenantId, table.routeAliasId],
+      foreignColumns: [
+        publicWebRouteAliasesTable.tenantId,
+        publicWebRouteAliasesTable.id,
+      ],
+      name: "public_web_draft_intake_receipts_route_fk",
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [table.tenantId, table.authorizationDecisionReceiptId],
+      foreignColumns: [
+        accessDecisionReceiptsTable.tenantId,
+        accessDecisionReceiptsTable.id,
+      ],
+      name: "public_web_draft_intake_receipts_authorization_fk",
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [table.tenantId, table.organizationId],
+      foreignColumns: [organizationsTable.tenantId, organizationsTable.id],
+      name: "public_web_draft_intake_receipts_organization_fk",
+    }).onDelete("restrict"),
+    index("public_web_draft_intake_receipts_record_idx").on(
+      table.tenantId,
+      table.organizationId,
+      table.contentRecordId,
+      table.occurredAt,
+    ),
+    check("public_web_draft_intake_receipts_id_v7_chk", uuidV7(table.id)),
+    check(
+      "public_web_draft_intake_receipts_entity_type_chk",
+      sql`${table.entityType} IN ('PROGRAM', 'UNIVERSITY', 'DESTINATION', 'CITY', 'PAGE', 'ARTICLE')`,
+    ),
+    check("public_web_draft_intake_receipts_entity_id_chk", sql`${table.entityId} > 0`),
+    check("public_web_draft_intake_receipts_locale_chk", supportedLocale(table.locale)),
+    check(
+      "public_web_draft_intake_receipts_request_hash_chk",
+      sql`${table.requestHash} ~ '^[0-9a-f]{64}$'`,
+    ),
+  ],
+).enableRLS();
+
 export const publicWebRouteAliasesTable = pgTable(
   "public_web_route_aliases",
   {
@@ -623,4 +712,6 @@ export type PublicWebPublicationState =
   typeof publicWebPublicationStatesTable.$inferSelect;
 export type PublicWebPublicationReceipt =
   typeof publicWebPublicationReceiptsTable.$inferSelect;
+export type PublicWebDraftIntakeReceipt =
+  typeof publicWebDraftIntakeReceiptsTable.$inferSelect;
 export type PublicWebRouteAlias = typeof publicWebRouteAliasesTable.$inferSelect;

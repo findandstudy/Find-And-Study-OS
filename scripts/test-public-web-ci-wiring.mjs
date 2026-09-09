@@ -20,6 +20,8 @@ const purePublicWebChecks = [
   "test:public-web-command",
   "test:public-web-publication-store",
   "test:public-web-publication-read-model",
+  "test:public-web-draft-intake",
+  "test:public-web-draft-intake-store",
   "test:public-localized-entities",
   "test:public-catalog-list-scaling",
   "test:public-catalog-pages",
@@ -30,6 +32,7 @@ const purePublicWebChecks = [
 
 const postgresPublicWebChecks = [
   "test:postgres-public-web-foundation",
+  "test:postgres-public-web-draft-intake",
   "test:postgres-catalog-entity-graph",
   "test:postgres-public-catalog-render",
   "test:postgres-public-web-discovery",
@@ -43,6 +46,14 @@ function assertExactlyOnce(source, needle, context) {
   );
 }
 
+function assertLineExactlyOnce(source, line, context) {
+  assert.equal(
+    source.split(/\r?\n/).filter((candidate) => candidate.trim() === line).length,
+    1,
+    `${context} must include ${line} exactly once`,
+  );
+}
+
 test("public web pure checks are wired into convergence and staging gates", async () => {
   const [convergence, staging] = await Promise.all([
     readFile(convergenceWorkflowUrl, "utf8"),
@@ -50,8 +61,8 @@ test("public web pure checks are wired into convergence and staging gates", asyn
   ]);
 
   for (const script of purePublicWebChecks) {
-    assertExactlyOnce(convergence, `run ${script}`, "convergence workflow");
-    assertExactlyOnce(staging, `run ${script}`, "staging workflow");
+    assertLineExactlyOnce(convergence, `pnpm --filter @workspace/api-server run ${script}`, "convergence workflow");
+    assertLineExactlyOnce(staging, `pnpm --filter @workspace/api-server run ${script}`, "staging workflow");
   }
 
   const publicTemplateCommand =
@@ -112,6 +123,8 @@ test("staging public web environment remains explicitly fail closed", async () =
     "PUBLIC_WEB_ROBOTS_MODE=disallow",
     "PUBLIC_WEB_TENANT_ID=",
     "PUBLIC_WEB_ORGANIZATION_ID=",
+    "PUBLIC_WEB_DRAFT_INTAKE_MODE=off",
+    "PUBLIC_WEB_DRAFT_INTAKE_TENANT_ALLOWLIST=",
   ]) {
     assertExactlyOnce(environment, assignment, "staging environment");
   }

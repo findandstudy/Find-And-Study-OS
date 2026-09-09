@@ -855,6 +855,13 @@
       "when": 1791619200000,
       "tag": "0121_public_web_city_publication_guard",
       "breakpoints": true
+    },
+    {
+      "idx": 122,
+      "version": "7",
+      "when": 1791705600000,
+      "tag": "0122_public_web_draft_intake",
+      "breakpoints": true
     }
   ]
 }

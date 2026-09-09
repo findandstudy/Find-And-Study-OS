@@ -86,6 +86,8 @@ jobs:
           pnpm --filter @workspace/api-server run test:public-web-command
           pnpm --filter @workspace/api-server run test:public-web-publication-store
           pnpm --filter @workspace/api-server run test:public-web-publication-read-model
+          pnpm --filter @workspace/api-server run test:public-web-draft-intake
+          pnpm --filter @workspace/api-server run test:public-web-draft-intake-store
           pnpm --filter @workspace/api-server run test:public-localized-entities
           pnpm --filter @workspace/api-server run test:public-catalog-list-scaling
           pnpm --filter @workspace/api-server run test:public-catalog-pages
@@ -427,6 +429,7 @@ jobs:
           PG_PUBLIC_WEB_DISCOVERY_URL: postgresql://fas_migrator@127.0.0.1:5433/fasos_apply_local
         run: |
           pnpm --filter @workspace/api-server run test:postgres-public-web-foundation
+          pnpm --filter @workspace/api-server run test:postgres-public-web-draft-intake
           pnpm --filter @workspace/api-server run test:postgres-catalog-entity-graph
           pnpm --filter @workspace/api-server run test:postgres-public-catalog-render
           pnpm --filter @workspace/api-server run test:postgres-public-web-discovery

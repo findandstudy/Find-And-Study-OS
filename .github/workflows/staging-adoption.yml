@@ -81,6 +81,8 @@ jobs:
           pnpm --filter @workspace/api-server run test:public-web-command
           pnpm --filter @workspace/api-server run test:public-web-publication-store
           pnpm --filter @workspace/api-server run test:public-web-publication-read-model
+          pnpm --filter @workspace/api-server run test:public-web-draft-intake
+          pnpm --filter @workspace/api-server run test:public-web-draft-intake-store
           pnpm --filter @workspace/api-server run test:public-localized-entities
           pnpm --filter @workspace/api-server run test:public-catalog-list-scaling
           pnpm --filter @workspace/api-server run test:public-catalog-pages

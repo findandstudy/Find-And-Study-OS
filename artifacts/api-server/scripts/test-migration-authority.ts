@@ -246,6 +246,7 @@ test("production prefix and canonical additive migration tail are pinned", () =>
       "0119_public_web_discovery_indexes",
       "0120_public_web_city_pages",
       "0121_public_web_city_publication_guard",
+      "0122_public_web_draft_intake",
     ],
   );
 
@@ -506,6 +507,28 @@ test("production prefix and canonical additive migration tail are pinned", () =>
   assert.match(publicWebAuthorizedGatewayMigration, /apply_publication_command_v2/);
   assert.match(publicWebAuthorizedGatewayMigration, /REVOKE ALL ON FUNCTION/);
   assert.doesNotMatch(publicWebAuthorizedGatewayMigration, /^\s*GRANT\s/im);
+
+  const publicWebDraftIntakeMigration = readFileSync(
+    path.join(root, "lib/db/drizzle/0122_public_web_draft_intake.sql"),
+    "utf8",
+  );
+  assert.match(publicWebDraftIntakeMigration, /public_web_draft_intake_receipts_append_only/);
+  assert.match(publicWebDraftIntakeMigration, /apply_authorized_draft_intake/);
+  assert.match(publicWebDraftIntakeMigration, /pg_advisory_xact_lock/);
+  assert.match(publicWebDraftIntakeMigration, /'DRAFT', 'NOINDEX', 1/);
+  assert.match(publicWebDraftIntakeMigration, /public web draft intake authority unavailable/);
+  assert.match(publicWebDraftIntakeMigration, /organization\.status = 'ACTIVE'/);
+  assert.match(publicWebDraftIntakeMigration, /REVOKE ALL ON FUNCTION/);
+  assert.doesNotMatch(publicWebDraftIntakeMigration, /\n\s*FOR UPDATE\s*;/);
+  assert.doesNotMatch(publicWebDraftIntakeMigration, /^\s*GRANT\s/im);
+  assert.doesNotMatch(
+    publicWebDraftIntakeMigration,
+    /INSERT INTO\s+(?:public\.)?role_package_capabilities/i,
+  );
+  assert.doesNotMatch(
+    publicWebDraftIntakeMigration,
+    /\b(?:TRUNCATE|DELETE FROM|UPDATE\s+(?:public\.)?"?(?:website_pages|programs|universities))\b/i,
+  );
 });
 
 test("Student Journey G45 migration remains additive, tenant-forced and default-off", () => {
