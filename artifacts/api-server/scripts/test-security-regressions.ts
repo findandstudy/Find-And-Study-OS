@@ -20,6 +20,10 @@ const frontendIndexSource = readFileSync(
   new URL("../../edcons/index.html", import.meta.url),
   "utf8",
 );
+const frontendBootstrapSource = readFileSync(
+  new URL("../../edcons/public/bootstrap.js", import.meta.url),
+  "utf8",
+);
 const routesIndexSource = readFileSync(
   new URL("../src/routes/index.ts", import.meta.url),
   "utf8",
@@ -274,11 +278,13 @@ test("production frontend does not emit source maps into the public root", () =>
 });
 
 test("frontend bootstrap errors cannot inject markup or expose stack details", () => {
-  assert.match(frontendIndexSource, /document\.createElement\('div'\)/);
-  assert.match(frontendIndexSource, /message\.textContent =/);
-  assert.match(frontendIndexSource, /d\.replaceChildren\(panel\)/);
-  assert.doesNotMatch(frontendIndexSource, /innerHTML\s*=/);
-  assert.doesNotMatch(frontendIndexSource, /err\.stack|e\.reason\.stack/);
+  assert.match(frontendIndexSource, /<script src="%BASE_URL%bootstrap\.js"><\/script>/);
+  assert.match(frontendBootstrapSource, /document\.createElement\("div"\)/);
+  assert.match(frontendBootstrapSource, /message\.textContent =/);
+  assert.match(frontendBootstrapSource, /root\.replaceChildren\(panel\)/);
+  assert.doesNotMatch(frontendBootstrapSource, /innerHTML\s*=/);
+  assert.doesNotMatch(frontendBootstrapSource, /\.stack|Source:/);
+  assert.doesNotMatch(frontendIndexSource, /<script>(?:.|\n)*?<\/script>/);
 });
 
 test("portal lifecycle planning can never authorize a portal mutation", () => {
