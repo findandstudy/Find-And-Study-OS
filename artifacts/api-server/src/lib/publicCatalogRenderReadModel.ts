@@ -1,5 +1,6 @@
 import {
   db,
+  destinationsTable,
   programsTable,
   programTranslationsTable,
   universitiesTable,
@@ -18,6 +19,7 @@ import type {
   PublicCatalogRenderRoute,
 } from "./publicCatalogRenderContract";
 import { resolvePublishedEntitySeoState } from "./publicWebDiscoveryReadModel";
+import { buildPublicWebCanonicalPath } from "./publicWebContentContract";
 import type { ProgramSupportedLocale } from "./programTranslationContract";
 
 const PILOT_LIST_LIMIT = 12;
@@ -79,7 +81,12 @@ function boundedText(value: string | null | undefined, fallback: string): string
 }
 
 function cacheKey(route: PublicCatalogRenderRoute): string {
-  return `${route.locale}:${route.kind}:${route.kind === "program_list" ? "index" : route.identity?.id ?? route.routeKey}`;
+  const identity = route.kind === "program_list"
+    ? "index"
+    : route.kind === "destination_detail"
+      ? route.slug
+      : route.identity?.id ?? route.routeKey;
+  return `${route.locale}:${route.kind}:${identity}`;
 }
 
 function pruneCache(now: number): void {
@@ -376,10 +383,133 @@ async function readUniversityDetail(
   };
 }
 
+async function readDestinationDetail(
+  route: Extract<PublicCatalogRenderRoute, { kind: "destination_detail" }>,
+): Promise<PublicCatalogRenderModel> {
+  const [destination] = await db
+    .select({
+      id: destinationsTable.id,
+      name: destinationsTable.name,
+      slug: destinationsTable.slug,
+      country: destinationsTable.country,
+      shortDescription: destinationsTable.shortDescription,
+      description: destinationsTable.description,
+      livingCost: destinationsTable.livingCost,
+      climate: destinationsTable.climate,
+      language: destinationsTable.language,
+      currency: destinationsTable.currency,
+      visaInfo: destinationsTable.visaInfo,
+      workPermit: destinationsTable.workPermit,
+      popularCities: destinationsTable.popularCities,
+    })
+    .from(destinationsTable)
+    .where(and(
+      eq(destinationsTable.slug, route.slug),
+      eq(destinationsTable.isActive, true),
+    ))
+    .limit(1);
+  if (!destination) {
+    return {
+      kind: "not_found",
+      locale: route.locale,
+      canonicalPath: route.path,
+      title: "Destination not found",
+      description: "The requested study destination is unavailable.",
+      indexable: false,
+    };
+  }
+
+  const policy = await getPublicCatalogPolicy();
+  const universityConditions: any[] = [
+    sql`lower(trim(${universitiesTable.country})) = lower(trim(${destination.country}))`,
+  ];
+  addPublicCatalogConditions(universityConditions, policy);
+  const programConditions: any[] = [
+    sql`lower(trim(${universitiesTable.country})) = lower(trim(${destination.country}))`,
+    eq(programsTable.isActive, true),
+  ];
+  addPublicCatalogConditions(programConditions, policy);
+
+  const [[universityCount], [programCount], universityRows, seoState] = await Promise.all([
+    db
+      .select({ count: sql<number>`count(*)` })
+      .from(universitiesTable)
+      .where(and(...universityConditions)),
+    db
+      .select({ count: sql<number>`count(*)` })
+      .from(programsTable)
+      .innerJoin(universitiesTable, eq(programsTable.universityId, universitiesTable.id))
+      .where(and(...programConditions)),
+    db
+      .select({
+        id: universitiesTable.id,
+        name: universitiesTable.name,
+        city: universitiesTable.city,
+        universityType: universitiesTable.universityType,
+      })
+      .from(universitiesTable)
+      .where(and(...universityConditions))
+      .orderBy(asc(universitiesTable.name), asc(universitiesTable.id))
+      .limit(PILOT_LIST_LIMIT),
+    resolvePublishedEntitySeoState({
+      entityType: "destination",
+      entityId: destination.id,
+      locale: route.locale,
+    }),
+  ]);
+
+  const canonicalPath = seoState.canonicalPath || buildPublicWebCanonicalPath({
+    entityType: "DESTINATION",
+    entityId: destination.id,
+    locale: route.locale,
+    slug: destination.slug,
+  });
+  return {
+    kind: "destination_detail",
+    locale: route.locale,
+    canonicalPath,
+    title: destination.name,
+    description: boundedText(
+      destination.shortDescription || destination.description,
+      `Study opportunities in ${destination.name}`,
+    ),
+    indexable: seoState.indexable && route.locale === "en",
+    alternatePaths: seoState.alternates,
+    destination: {
+      id: destination.id,
+      name: destination.name,
+      country: destination.country,
+      livingCost: destination.livingCost,
+      climate: destination.climate,
+      language: destination.language,
+      currency: destination.currency,
+      visaInfo: destination.visaInfo,
+      workPermit: destination.workPermit,
+      popularCities: String(destination.popularCities || "")
+        .split(",")
+        .map((city) => city.trim())
+        .filter(Boolean)
+        .slice(0, 24),
+      universityCount: Number(universityCount?.count ?? 0),
+      programCount: Number(programCount?.count ?? 0),
+      universities: universityRows.map((university) => ({
+        ...university,
+        canonicalPath: publicCatalogPath({
+          locale: route.locale,
+          entityType: "university",
+          id: university.id,
+          name: university.name,
+        }),
+      })),
+    },
+  };
+}
+
 async function loadModel(route: PublicCatalogRenderRoute): Promise<PublicCatalogRenderModel> {
   if (route.kind === "program_list") return readProgramList(route);
   if (route.kind === "program_detail") return readProgramDetail(route);
-  return readUniversityDetail(route);
+  if (route.kind === "university_detail") return readUniversityDetail(route);
+  return readDestinationDetail(route);
 }
 
 function refresh(key: string, route: PublicCatalogRenderRoute): Promise<PublicCatalogRenderModel> {
@@ -421,7 +551,7 @@ export async function getPublicCatalogRenderModel(
 }
 
 export function invalidatePublicCatalogRenderCache(input: {
-  entityType?: "program" | "university" | "all";
+  entityType?: "program" | "university" | "destination" | "all";
   entityId?: number;
   locale?: string;
 } = {}): number {
@@ -436,7 +566,8 @@ export function invalidatePublicCatalogRenderCache(input: {
         || (input.entityId !== undefined && identity === String(input.entityId))
       ))
       || (input.entityType === "university" && kind === "university_detail"
-        && input.entityId !== undefined && identity === String(input.entityId));
+        && input.entityId !== undefined && identity === String(input.entityId))
+      || (input.entityType === "destination" && kind === "destination_detail");
     if (localeMatches && entityMatches) {
       cache.delete(key);
       removed += 1;

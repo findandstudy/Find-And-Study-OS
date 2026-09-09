@@ -41,7 +41,7 @@ test("render mode and exact allowlist fail closed", () => {
   );
 });
 
-test("only bounded programme and university catalogue paths enter the render pilot", () => {
+test("only bounded programme, university and destination paths enter the render pilot", () => {
   assert.equal(matchPublicCatalogRenderPath("/en/programs")?.kind, "program_list");
   const detail = matchPublicCatalogRenderPath("/tr/programs/bilgisayar-muhendisligi-42");
   assert.equal(detail?.kind, "program_detail");
@@ -49,6 +49,11 @@ test("only bounded programme and university catalogue paths enter the render pil
   const university = matchPublicCatalogRenderPath("/en/universities/example-university-7");
   assert.equal(university?.kind, "university_detail");
   assert.equal(university?.kind === "university_detail" ? university.identity?.id : null, 7);
+  const destination = matchPublicCatalogRenderPath("/en/destinations/united-kingdom");
+  assert.equal(destination?.kind, "destination_detail");
+  assert.equal(destination?.kind === "destination_detail" ? destination.slug : null, "united-kingdom");
+  assert.equal(matchPublicCatalogRenderPath("/en/countries/united-kingdom")?.kind, "destination_detail");
+  assert.equal(matchPublicCatalogRenderPath("/en/destinations/Unsafe_Slug"), null);
   assert.equal(matchPublicCatalogRenderPath("/xx/programs"), null);
   assert.equal(matchPublicCatalogRenderPath("/en/admin"), null);
   assert.equal(matchPublicCatalogRenderPath("/en/programs/a/b"), null);
@@ -136,6 +141,50 @@ test("university detail emits a semantic institution shell and structured data",
   assert.match(html, /hreflang="x-default"/);
 });
 
+test("destination detail emits a semantic destination shell without inventing translations", () => {
+  const model: PublicCatalogRenderModel = {
+    kind: "destination_detail",
+    locale: "en",
+    canonicalPath: "/en/destinations/turkey",
+    title: "Study in Turkey",
+    description: "Verified destination guidance.",
+    indexable: true,
+    alternatePaths: { en: "/en/destinations/turkey" },
+    destination: {
+      id: 3,
+      name: "Turkey",
+      country: "Turkey",
+      livingCost: "Verified range",
+      climate: "Varied",
+      language: "Turkish",
+      currency: "TRY",
+      visaInfo: "Check current requirements",
+      workPermit: null,
+      popularCities: ["Istanbul", "Ankara"],
+      universityCount: 1,
+      programCount: 2,
+      universities: [{
+        id: 7,
+        name: "Example University",
+        city: "Istanbul",
+        universityType: "Private",
+        canonicalPath: "/en/universities/example-university-7",
+      }],
+    },
+  };
+  const html = renderPublicCatalogHtml({
+    indexHtml,
+    model,
+    siteUrl: "https://findandstudy.com",
+    nonce: "destination-nonce",
+  });
+  assert.match(html, /data-public-render-shell="destination-detail"/);
+  assert.match(html, /"@type":"TouristDestination"/);
+  assert.match(html, /href="\/en\/universities\/example-university-7"/);
+  assert.match(html, /hreflang="x-default"/);
+  assert.doesNotMatch(html, /service fee|commission|contact person/i);
+});
+
 test("read model is on-demand, bounded, stale-while-revalidate, and detail indexing is fail-closed", () => {
   const readModel = readFileSync(
     new URL("../src/lib/publicCatalogRenderReadModel.ts", import.meta.url),
@@ -144,6 +193,7 @@ test("read model is on-demand, bounded, stale-while-revalidate, and detail index
   assert.match(readModel, /const PILOT_LIST_LIMIT = 12/);
   assert.match(readModel, /const CACHE_MAX_ENTRIES = 500/);
   assert.match(readModel, /async function readUniversityDetail/);
+  assert.match(readModel, /async function readDestinationDetail/);
   assert.match(readModel, /\.limit\(12\)/);
   assert.match(readModel, /cacheStatus: "STALE"/);
   assert.match(readModel, /void refresh\(key, route\)/);

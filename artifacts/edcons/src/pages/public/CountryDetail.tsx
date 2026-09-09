@@ -8,6 +8,7 @@ import { motion } from "framer-motion";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CountryFlag, countryCodeFromEmoji } from "@/components/CountryFlag";
+import type { Language } from "@/lib/i18n";
 import {
   Globe2, GraduationCap, Building2, MapPin, DollarSign, Languages,
   Wallet, Thermometer, FileText, Briefcase, ArrowLeft, ChevronRight,
@@ -32,6 +33,7 @@ interface Destination {
   visaInfo: string | null;
   workPermit: string | null;
   popularCities: string | null;
+  canonicalPath: string;
 }
 
 interface UniversityBrief {
@@ -89,6 +91,12 @@ export default function CountryDetail({ slug }: { slug: string }) {
     universities: UniversityBrief[];
     programs: ProgramBrief[];
     stats: { universityCount: number; programCount: number };
+    meta: {
+      locale: Language;
+      indexable: boolean;
+      canonicalPath: string;
+      alternatePaths: Partial<Record<Language, string>>;
+    };
   } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -96,7 +104,10 @@ export default function CountryDetail({ slug }: { slug: string }) {
   useSeo({
     title: data ? t("countryDetail.studyIn", { name: data.destination.name }) : t("countryDetail.studyDestination"),
     description: data?.destination.shortDescription || t("countryDetail.exploreOpportunities"),
+    canonical: data ? `${SITE_URL}${data.meta.canonicalPath}` : undefined,
+    noindex: !data?.meta.indexable,
     lang,
+    alternates: data?.meta.alternatePaths,
   });
   useJsonLd(
     data
@@ -104,18 +115,18 @@ export default function CountryDetail({ slug }: { slug: string }) {
           {
             "@context": "https://schema.org",
             "@type": "TouristDestination",
-            "@id": `${SITE_URL}/en/countries/${slug}#destination`,
+            "@id": `${SITE_URL}${data.meta.canonicalPath}#destination`,
             name: data.destination.name,
             description: data.destination.shortDescription || undefined,
-            url: `${SITE_URL}/en/countries/${slug}`,
+            url: `${SITE_URL}${data.meta.canonicalPath}`,
             touristType: { "@type": "Audience", audienceType: "International Students" },
           },
           {
             "@context": "https://schema.org",
             "@type": "WebPage",
-            "@id": `${SITE_URL}/en/countries/${slug}#webpage`,
+            "@id": `${SITE_URL}${data.meta.canonicalPath}#webpage`,
             name: `Study in ${data.destination.name} — ${SITE_NAME}`,
-            url: `${SITE_URL}/en/countries/${slug}`,
+            url: `${SITE_URL}${data.meta.canonicalPath}`,
             description: data.destination.shortDescription || undefined,
             isPartOf: { "@id": `${SITE_URL}/#website` },
             breadcrumb: {
@@ -123,7 +134,7 @@ export default function CountryDetail({ slug }: { slug: string }) {
               itemListElement: [
                 { "@type": "ListItem", position: 1, name: "Home", item: SITE_URL },
                 { "@type": "ListItem", position: 2, name: "Countries", item: `${SITE_URL}/en/countries` },
-                { "@type": "ListItem", position: 3, name: data.destination.name, item: `${SITE_URL}/en/countries/${slug}` },
+                { "@type": "ListItem", position: 3, name: data.destination.name, item: `${SITE_URL}${data.meta.canonicalPath}` },
               ],
             },
           },

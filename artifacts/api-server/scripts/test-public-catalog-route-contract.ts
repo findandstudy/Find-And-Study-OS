@@ -68,5 +68,9 @@ test("public catalogue detail APIs are bounded and never select private CRM fiel
   assert.match(route, /Content-Location/);
   assert.match(destinations, /returnedUniversities/);
   assert.match(destinations, /returnedPrograms/);
+  assert.match(destinations, /PUBLIC_DESTINATION_ROUTE_INVALID/);
+  assert.match(destinations, /resolvePublishedEntitySeoState/);
+  assert.match(destinations, /Content-Location/);
+  assert.match(destinations, /alternatePaths/);
   assert.doesNotMatch(destinations, /\.limit\(50\)/);
 });

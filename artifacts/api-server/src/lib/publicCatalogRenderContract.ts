@@ -28,6 +28,12 @@ export type PublicCatalogRenderRoute =
       path: string;
       routeKey: string;
       identity: PublicCatalogRouteIdentity | null;
+    }
+  | {
+      kind: "destination_detail";
+      locale: ProgramSupportedLocale;
+      path: string;
+      slug: string;
     };
 
 export type PublicCatalogRenderModel =
@@ -104,6 +110,36 @@ export type PublicCatalogRenderModel =
           name: string;
           degree: string | null;
           field: string | null;
+          canonicalPath: string;
+        }>;
+      };
+    }
+  | {
+      kind: "destination_detail";
+      locale: ProgramSupportedLocale;
+      canonicalPath: string;
+      title: string;
+      description: string;
+      indexable: boolean;
+      alternatePaths: Partial<Record<ProgramSupportedLocale, string>>;
+      destination: {
+        id: number;
+        name: string;
+        country: string;
+        livingCost: string | null;
+        climate: string | null;
+        language: string | null;
+        currency: string | null;
+        visaInfo: string | null;
+        workPermit: string | null;
+        popularCities: string[];
+        universityCount: number;
+        programCount: number;
+        universities: Array<{
+          id: number;
+          name: string;
+          city: string | null;
+          universityType: string | null;
           canonicalPath: string;
         }>;
       };
@@ -201,6 +237,19 @@ export function matchPublicCatalogRenderPath(
       path,
       routeKey: segments[2],
       identity: parsePublicCatalogRouteKey(segments[2]),
+    };
+  }
+  if (
+    segments.length === 3
+    && (segments[1] === "destinations" || segments[1] === "countries")
+    && segments[2].length <= 180
+    && /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(segments[2])
+  ) {
+    return {
+      kind: "destination_detail",
+      locale,
+      path,
+      slug: segments[2],
     };
   }
   return null;
@@ -311,6 +360,33 @@ function renderUniversityDetail(model: Extract<PublicCatalogRenderModel, { kind:
   </main>`;
 }
 
+function renderDestinationDetail(model: Extract<PublicCatalogRenderModel, { kind: "destination_detail" }>): string {
+  const destination = model.destination;
+  const copy = RENDER_COPY[model.locale];
+  const universities = destination.universities.map((university) => `
+      <article class="rounded-2xl border border-border bg-card p-5">
+        <h2 class="text-lg font-bold"><a href="${escapeHtml(university.canonicalPath)}">${escapeHtml(university.name)}</a></h2>
+        <p class="mt-2 text-muted-foreground">${escapeHtml([university.universityType, university.city].filter(Boolean).join(" · "))}</p>
+      </article>`).join("");
+  const cities = destination.popularCities.map((city) => `<li>${escapeHtml(city)}</li>`).join("");
+  return `<main data-public-render-shell="destination-detail" class="mx-auto max-w-7xl px-4 py-24">
+    <nav aria-label="Breadcrumb"><a href="/${escapeHtml(model.locale)}/countries">${escapeHtml(copy.countries)}</a> / <span>${escapeHtml(destination.name)}</span></nav>
+    <article class="mt-8">
+      <p class="text-sm text-primary">${escapeHtml(destination.country)}</p>
+      <h1 class="mt-3 text-4xl font-bold">${escapeHtml(model.title)}</h1>
+      <p class="mt-4 text-muted-foreground">${escapeHtml(model.description)}</p>
+      <dl class="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div><dt>${escapeHtml(copy.location)}</dt><dd>${escapeHtml(destination.country)}</dd></div>
+        <div><dt>${escapeHtml(copy.programs)}</dt><dd>${escapeHtml(String(destination.programCount))}</dd></div>
+        <div><dt>${escapeHtml(copy.language)}</dt><dd>${escapeHtml(destination.language || "—")}</dd></div>
+        <div><dt>${escapeHtml(copy.tuition)}</dt><dd>${escapeHtml(destination.currency || "—")}</dd></div>
+      </dl>
+      ${cities ? `<ul class="mt-8 flex flex-wrap gap-3" aria-label="${escapeHtml(copy.location)}">${cities}</ul>` : ""}
+    </article>
+    <section class="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-3" aria-label="${escapeHtml(destination.name)}">${universities}</section>
+  </main>`;
+}
+
 function renderNotFound(model: Extract<PublicCatalogRenderModel, { kind: "not_found" }>): string {
   return `<main data-public-render-shell="not-found" class="mx-auto max-w-3xl px-4 py-32 text-center"><h1 class="text-3xl font-bold">${escapeHtml(model.title)}</h1><p class="mt-3 text-muted-foreground">${escapeHtml(model.description)}</p></main>`;
 }
@@ -385,6 +461,35 @@ function structuredData(model: PublicCatalogRenderModel, siteUrl: string): unkno
       },
     };
   }
+  if (model.kind === "destination_detail") {
+    const destination = model.destination;
+    return {
+      "@context": "https://schema.org",
+      "@graph": [
+        {
+          "@type": "TouristDestination",
+          "@id": `${siteUrl}${model.canonicalPath}#destination`,
+          name: destination.name,
+          description: model.description,
+          url: `${siteUrl}${model.canonicalPath}`,
+          touristType: {
+            "@type": "Audience",
+            audienceType: "International students",
+          },
+        },
+        {
+          "@type": "ItemList",
+          numberOfItems: destination.universityCount,
+          itemListElement: destination.universities.map((university, index) => ({
+            "@type": "ListItem",
+            position: index + 1,
+            url: `${siteUrl}${university.canonicalPath}`,
+            name: university.name,
+          })),
+        },
+      ],
+    };
+  }
   return {
     "@context": "https://schema.org",
     "@type": "WebPage",
@@ -423,8 +528,14 @@ export function renderPublicCatalogHtml(input: {
       ? renderProgramDetail(input.model)
       : input.model.kind === "university_detail"
         ? renderUniversityDetail(input.model)
+        : input.model.kind === "destination_detail"
+          ? renderDestinationDetail(input.model)
       : renderNotFound(input.model);
-  const alternatePaths = (input.model.kind === "program_detail" || input.model.kind === "university_detail") && input.model.indexable
+  const alternatePaths = (
+    input.model.kind === "program_detail"
+    || input.model.kind === "university_detail"
+    || input.model.kind === "destination_detail"
+  ) && input.model.indexable
     ? input.model.alternatePaths
     : {};
   const hreflangLinks = PROGRAM_SUPPORTED_LOCALES.flatMap((locale) => {

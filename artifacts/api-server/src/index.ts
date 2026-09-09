@@ -314,7 +314,11 @@ function serveStaticFrontend() {
     try {
       const rendered = await getPublicCatalogRenderModel(route);
       if (
-        (rendered.value.kind === "program_detail" || rendered.value.kind === "university_detail")
+        (
+          rendered.value.kind === "program_detail"
+          || rendered.value.kind === "university_detail"
+          || rendered.value.kind === "destination_detail"
+        )
         && rendered.value.canonicalPath !== route.path
       ) {
         res.setHeader("Cache-Control", "public, max-age=60, s-maxage=300");

@@ -40,6 +40,7 @@ test("render read model serves bounded data and coalesces the same cold key", as
   await client.connect();
   let universityId: number | null = null;
   let programId: number | null = null;
+  let destinationId: number | null = null;
   try {
     const identity = await client.query(
       "SELECT current_database() AS database_name, current_user AS user_name, inet_server_port() AS server_port",
@@ -65,6 +66,14 @@ test("render read model serves bounded data and coalesces the same cold key", as
       [universityId],
     );
     programId = program.rows[0].id;
+    const destinationSlug = `render-pilot-destination-${process.pid}`;
+    const destination = await client.query<{ id: number }>(
+      `INSERT INTO destinations (name,slug,country,short_description,popular_cities,is_active)
+       VALUES ('Render Pilot Destination',$1,'Turkey','A bounded synthetic destination.','Istanbul, Ankara',true)
+       RETURNING id`,
+      [destinationSlug],
+    );
+    destinationId = destination.rows[0].id;
 
     const route = matchPublicCatalogRenderPath(
       `/en/programs/${publicCatalogRouteKey(programId, "Render Pilot Computer Science")}`,
@@ -108,8 +117,29 @@ test("render read model serves bounded data and coalesces the same cold key", as
       1,
     );
     assert.equal(universityDetail.value.indexable, false);
+
+    const destinationRoute = matchPublicCatalogRenderPath(`/en/destinations/${destinationSlug}`);
+    assert.ok(destinationRoute && destinationRoute.kind === "destination_detail");
+    const destinationDetail = await getPublicCatalogRenderModel(destinationRoute);
+    assert.equal(destinationDetail.value.kind, "destination_detail");
+    assert.equal(
+      destinationDetail.value.kind === "destination_detail"
+        ? destinationDetail.value.destination.id
+        : null,
+      destinationId,
+    );
+    assert.equal(
+      destinationDetail.value.kind === "destination_detail"
+        ? destinationDetail.value.canonicalPath
+        : null,
+      `/en/destinations/${destinationSlug}`,
+    );
+    assert.equal(destinationDetail.value.indexable, false);
   } finally {
     invalidatePublicCatalogRenderCache();
+    if (destinationId !== null) {
+      await client.query("DELETE FROM destinations WHERE id = $1", [destinationId]);
+    }
     if (programId !== null) {
       await client.query("DELETE FROM programs WHERE id = $1", [programId]);
     }

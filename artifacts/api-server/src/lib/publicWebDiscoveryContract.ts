@@ -9,6 +9,7 @@ export const PUBLIC_WEB_SITEMAP_MAX_SHARDS = 10_000;
 export const PUBLIC_WEB_DISCOVERY_ENTITY_TYPES = [
   "PROGRAM",
   "UNIVERSITY",
+  "DESTINATION",
 ] as const;
 
 export type PublicWebDiscoveryEntityType =
@@ -53,10 +54,12 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-
 const ENTITY_SEGMENTS: Record<string, PublicWebDiscoveryEntityType> = {
   programs: "PROGRAM",
   universities: "UNIVERSITY",
+  destinations: "DESTINATION",
 };
 const ENTITY_PATHS: Record<PublicWebDiscoveryEntityType, string> = {
   PROGRAM: "programs",
   UNIVERSITY: "universities",
+  DESTINATION: "destinations",
 };
 
 const STATIC_PUBLIC_PATHS = ["", "/about", "/programs", "/countries", "/blog", "/contact"] as const;
@@ -122,7 +125,7 @@ export function parsePublicWebSitemapRoute(path: unknown): PublicWebSitemapRoute
   const value = String(path ?? "");
   if (value === "/sitemap.xml") return { kind: "index" };
   if (value === "/sitemaps/static.xml") return { kind: "static" };
-  const match = /^\/sitemaps\/(programs|universities)-([a-z]{2})-(\d{1,5})\.xml$/.exec(value);
+  const match = /^\/sitemaps\/(programs|universities|destinations)-([a-z]{2})-(\d{1,5})\.xml$/.exec(value);
   if (!match) return null;
   const locale = match[2] as ProgramSupportedLocale;
   const shard = Number(match[3]);

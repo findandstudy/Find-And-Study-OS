@@ -8,6 +8,8 @@ import {
 import { courseFinderUniversityLogoUrl } from "../lib/courseFinderVisibility";
 import { normalizeProgramLocale } from "../lib/programTranslationContract";
 import { publicCatalogPath } from "../lib/publicCatalogRouteContract";
+import { buildPublicWebCanonicalPath } from "../lib/publicWebContentContract";
+import { resolvePublishedEntitySeoState } from "../lib/publicWebDiscoveryReadModel";
 
 const router: IRouter = Router();
 
@@ -51,6 +53,13 @@ router.get("/public/destinations", async (_req: Request, res: Response): Promise
 
 router.get("/public/destinations/:slug", async (req: Request, res: Response): Promise<void> => {
   const slug = String(req.params.slug);
+  if (slug.length > 180 || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) {
+    res.status(400).json({
+      error: "Invalid destination route",
+      code: "PUBLIC_DESTINATION_ROUTE_INVALID",
+    });
+    return;
+  }
   const locale = normalizeProgramLocale(req.query.locale);
 
   const [destination] = await db.select()
@@ -92,7 +101,7 @@ router.get("/public/destinations/:slug", async (req: Request, res: Response): Pr
     eq(programsTable.isActive, true),
   ];
   addPublicCatalogConditions(programConditions, policy);
-  const [[universityCount], [programCount], programRows] = await Promise.all([
+  const [[universityCount], [programCount], programRows, seoState] = await Promise.all([
     db.select({ count: sql<number>`count(*)` })
       .from(universitiesTable)
       .where(and(...universityConditions)),
@@ -122,6 +131,11 @@ router.get("/public/destinations/:slug", async (req: Request, res: Response): Pr
       .where(and(...programConditions))
       .orderBy(asc(universitiesTable.name), asc(programsTable.name), asc(programsTable.id))
       .limit(24),
+    resolvePublishedEntitySeoState({
+      entityType: "destination",
+      entityId: destination.id,
+      locale,
+    }),
   ]);
 
   const universities = universityRows.map(({ hasLogo, programCount, ...university }) => ({
@@ -149,15 +163,29 @@ router.get("/public/destinations/:slug", async (req: Request, res: Response): Pr
     universityCount: Number(universityCount?.count ?? 0),
     programCount: Number(programCount?.count ?? 0),
   };
+  const canonicalPath = seoState.canonicalPath || buildPublicWebCanonicalPath({
+    entityType: "DESTINATION",
+    entityId: destination.id,
+    locale,
+    slug: destination.slug,
+  });
 
   res.setHeader("Cache-Control", "public, max-age=60, s-maxage=300, stale-while-revalidate=3600");
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("Content-Location", canonicalPath);
   res.json({
-    destination,
+    destination: {
+      ...destination,
+      canonicalPath,
+    },
     universities,
     programs,
     stats,
     meta: {
       locale,
+      indexable: seoState.indexable && locale === "en",
+      canonicalPath,
+      alternatePaths: seoState.alternates,
       returnedUniversities: universities.length,
       returnedPrograms: programs.length,
       generatedAt: new Date().toISOString(),

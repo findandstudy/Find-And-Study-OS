@@ -25,9 +25,15 @@ export type PublicEntitySeoState = {
   alternates: Partial<Record<ProgramSupportedLocale, string>>;
 };
 
-const ENTITY_ID_COLUMNS: Record<"program" | "university", "program_id" | "university_id"> = {
+type PublicSeoEntityType = "program" | "university" | "destination";
+
+const ENTITY_ID_COLUMNS: Record<
+  PublicSeoEntityType,
+  "program_id" | "university_id" | "destination_id"
+> = {
   program: "program_id",
   university: "university_id",
+  destination: "destination_id",
 };
 const SEO_CACHE_TTL_MS = 5 * 60_000;
 const SEO_CACHE_MAX_ENTRIES = 5_000;
@@ -99,7 +105,7 @@ export async function readPublishedSitemapCounts(
                    AND translation.status='published'
               )
             ))
-            OR (content.entity_type='UNIVERSITY' AND content.locale='en')
+            OR (content.entity_type IN ('UNIVERSITY','DESTINATION') AND content.locale='en')
           )
         GROUP BY content.entity_type,content.locale
         ORDER BY content.entity_type,content.locale`,
@@ -145,7 +151,7 @@ export async function readPublishedSitemapPage(input: {
                      AND translation.status='published'
                 )
               ))
-              OR (content.entity_type='UNIVERSITY' AND content.locale='en')
+              OR (content.entity_type IN ('UNIVERSITY','DESTINATION') AND content.locale='en')
             )
           ORDER BY content.id
           LIMIT $5 OFFSET $6
@@ -194,7 +200,7 @@ export async function readPublishedSitemapPage(input: {
 
 export async function readPublishedEntitySeoState(input: {
   scope: PublicWebDiscoveryScope;
-  entityType: "program" | "university";
+  entityType: PublicSeoEntityType;
   entityId: number;
   locale: ProgramSupportedLocale;
 }): Promise<PublicEntitySeoState> {
@@ -235,7 +241,7 @@ export async function readPublishedEntitySeoState(input: {
 }
 
 export async function resolvePublishedEntitySeoState(input: {
-  entityType: "program" | "university";
+  entityType: PublicSeoEntityType;
   entityId: number;
   locale: ProgramSupportedLocale;
 }): Promise<PublicEntitySeoState> {
@@ -267,7 +273,7 @@ export async function resolvePublishedEntitySeoState(input: {
 }
 
 export function invalidatePublicWebDiscoveryCache(input: {
-  entityType?: "program" | "university";
+  entityType?: PublicSeoEntityType;
   entityId?: number;
   locale?: ProgramSupportedLocale;
 } = {}): number {

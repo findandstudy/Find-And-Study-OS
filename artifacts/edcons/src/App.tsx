@@ -293,6 +293,9 @@ function PublicRoutes({ lang }: { lang: string }) {
             <Route path={`/${lang}/countries/:slug`}>
               {(params) => <CountryDetail slug={params.slug} />}
             </Route>
+            <Route path={`/${lang}/destinations/:slug`}>
+              {(params) => <CountryDetail slug={params.slug} />}
+            </Route>
             <Route path={`/${lang}/programs`} component={Programs} />
             <Route path={`/${lang}/programs/:routeKey`}>
               {(params) => <ProgramDetail routeKey={params.routeKey} />}

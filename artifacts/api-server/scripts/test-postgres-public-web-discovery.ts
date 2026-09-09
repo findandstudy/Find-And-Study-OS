@@ -36,12 +36,14 @@ const RECORDS = {
   tr: "018f8500-0000-7000-8000-000000000012",
   fr: "018f8500-0000-7000-8000-000000000013",
   it: "018f8500-0000-7000-8000-000000000014",
+  destinationEn: "018f8500-0000-7000-8000-000000000015",
 } as const;
 const REVISIONS = {
   en: "018f8500-0000-7000-8000-000000000021",
   tr: "018f8500-0000-7000-8000-000000000022",
   fr: "018f8500-0000-7000-8000-000000000023",
   it: "018f8500-0000-7000-8000-000000000024",
+  destinationEn: "018f8500-0000-7000-8000-000000000025",
 } as const;
 
 test("published discovery is tenant-scoped and excludes NOINDEX or undeliverable locales", async () => {
@@ -55,6 +57,7 @@ test("published discovery is tenant-scoped and excludes NOINDEX or undeliverable
   let userId = 0;
   let universityId = 0;
   let programId = 0;
+  let destinationId = 0;
   try {
     await admin.query("BEGIN");
     await admin.query("SET LOCAL session_replication_role = replica");
@@ -85,6 +88,12 @@ test("published discovery is tenant-scoped and excludes NOINDEX or undeliverable
       [universityId],
     );
     programId = Number(program.rows[0]?.id);
+    const destination = await admin.query<{ id: number }>(
+      `INSERT INTO destinations (name,slug,country,short_description,is_active)
+       VALUES ('Discovery Fixture Destination','discovery-fixture-destination','Testland','Verified destination',true)
+       RETURNING id`,
+    );
+    destinationId = Number(destination.rows[0]?.id);
     for (const locale of ["tr", "it"] as const) {
       await admin.query(
         `INSERT INTO program_translations
@@ -122,6 +131,31 @@ test("published discovery is tenant-scoped and excludes NOINDEX or undeliverable
         [TENANT_ID, ORGANIZATION_ID, RECORDS[locale], REVISIONS[locale], locale === "it" ? "NOINDEX" : "INDEX", userId],
       );
     }
+    await admin.query(
+      `INSERT INTO public_web_content_records
+         (id,tenant_id,organization_id,entity_type,destination_id,locale,
+          canonical_slug,canonical_path,created_by_legacy_user_id)
+       VALUES ($1,$2,$3,'DESTINATION',$4,'en','discovery-fixture-destination',
+         '/en/destinations/discovery-fixture-destination',$5)`,
+      [RECORDS.destinationEn, TENANT_ID, ORGANIZATION_ID, destinationId, userId],
+    );
+    await admin.query(
+      `INSERT INTO public_web_content_revisions
+         (id,tenant_id,organization_id,content_record_id,revision_number,origin,title,
+          content_json,seo_json,structured_data_json,source_sha256,content_sha256,
+          quality_status,source_coverage,translation_status,seo_status,
+          structured_data_status,created_by_legacy_user_id)
+       VALUES ($1,$2,$3,$4,1,'HUMAN','Discovery Destination','{}','{}','{}',$5,$6,
+         'PASS','COMPLETE','SOURCE','PASS','PASS',$7)`,
+      [REVISIONS.destinationEn, TENANT_ID, ORGANIZATION_ID, RECORDS.destinationEn, "d".repeat(64), "e".repeat(64), userId],
+    );
+    await admin.query(
+      `INSERT INTO public_web_publication_states
+         (tenant_id,organization_id,content_record_id,revision_id,status,index_state,
+          reviewed_by_legacy_user_id,reviewed_at,published_by_legacy_user_id,published_at)
+       VALUES ($1,$2,$3,$4,'PUBLISHED','INDEX',$5,now(),$5,now())`,
+      [TENANT_ID, ORGANIZATION_ID, RECORDS.destinationEn, REVISIONS.destinationEn, userId],
+    );
     await admin.query("COMMIT");
 
     const discovery = await import("../src/lib/publicWebDiscoveryReadModel");
@@ -135,6 +169,23 @@ test("published discovery is tenant-scoped and excludes NOINDEX or undeliverable
         { entityType: "PROGRAM", locale: "en", count: 1 },
         { entityType: "PROGRAM", locale: "tr", count: 1 },
       ],
+    );
+    assert.deepEqual(
+      counts.filter((row) => row.entityType === "DESTINATION"),
+      [{ entityType: "DESTINATION", locale: "en", count: 1 }],
+    );
+    assert.deepEqual(
+      await discovery.readPublishedEntitySeoState({
+        scope: { tenantId: TENANT_ID, organizationId: ORGANIZATION_ID },
+        entityType: "destination",
+        entityId: destinationId,
+        locale: "en",
+      }),
+      {
+        indexable: true,
+        canonicalPath: "/en/destinations/discovery-fixture-destination",
+        alternates: { en: "/en/destinations/discovery-fixture-destination" },
+      },
     );
     const rows = await discovery.readPublishedSitemapPage({
       scope: { tenantId: TENANT_ID, organizationId: ORGANIZATION_ID },
@@ -175,6 +226,7 @@ test("published discovery is tenant-scoped and excludes NOINDEX or undeliverable
     await admin.query("DELETE FROM public_web_content_revisions WHERE tenant_id=$1", [TENANT_ID]);
     await admin.query("DELETE FROM public_web_content_records WHERE tenant_id=$1", [TENANT_ID]);
     if (programId) await admin.query("DELETE FROM programs WHERE id=$1", [programId]);
+    if (destinationId) await admin.query("DELETE FROM destinations WHERE id=$1", [destinationId]);
     if (universityId) await admin.query("DELETE FROM universities WHERE id=$1", [universityId]);
     if (userId) await admin.query("DELETE FROM users WHERE id=$1", [userId]);
     await admin.query("DELETE FROM organizations WHERE id=$1 AND tenant_id=$2", [ORGANIZATION_ID, TENANT_ID]);

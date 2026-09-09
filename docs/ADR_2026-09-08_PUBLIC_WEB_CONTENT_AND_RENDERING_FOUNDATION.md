@@ -122,11 +122,11 @@ Publication Center ve bounded public read modelleri eklendi.
 ## Yerel SSR/ISR pilotu
 
 Yeni bir framework veya ikinci runtime eklenmeden mevcut modüler monolit üzerinde,
-program liste, program detay ve üniversite detay rotaları için on-demand semantic HTML pilotu
+program liste, program detay, üniversite detay ve destinasyon detay rotaları için on-demand semantic HTML pilotu
 uygulandı. Pilot aşağıdaki güvenlik ve ölçek sınırlarını taşır:
 
 - `PUBLIC_WEB_RENDER_MODE=off|allowlist|all`; eksik veya hatalı ayar `off` olur;
-- allowlist yalnız tam eşleşen, tanınan localized program/üniversite rotalarını kabul eder;
+- allowlist yalnız tam eşleşen, tanınan localized program/üniversite/destinasyon rotalarını kabul eder;
 - ilk liste en fazla 12 kayıt okur; cache en fazla 500 anahtar tutar;
 - 5 dakika fresh, 1 saat stale-while-revalidate penceresi ve aynı anahtar için
   in-flight sorgu birleştirmesi kullanılır;
@@ -137,10 +137,10 @@ uygulandı. Pilot aşağıdaki güvenlik ve ölçek sınırlarını taşır:
   yerelleştirilir; hydration öncesinde İngilizce etiket sızıntısı olmaz;
 - cevap `X-Public-Render`, `X-Public-Render-Cache` ve `Server-Timing` ile
   ölçülebilir; render hatasında mevcut SPA güvenli fallback olarak kalır;
-- tenant-bound publication/index projection bağlanana kadar program ve üniversite
+- tenant-bound publication/index projection bağlanana kadar program, üniversite ve destinasyon
   detayları bilinçli olarak `noindex` kalır.
 
-Saf sözleşme testleri `4/4`, eşzamanlı cold-read coalescing ve sonraki cache-hit'i
+Saf sözleşme testleri destinasyon dilimiyle `6/6`, eşzamanlı cold-read coalescing ve sonraki cache-hit'i
 gerçek disposable PostgreSQL üzerinde doğrulayan entegrasyon testi `1/1` geçmiştir.
 API/Edcons typecheck ve production build yeşildir. Pilot hiçbir staging veya
 production runtime'ında etkinleştirilmemiştir.
@@ -153,10 +153,9 @@ kümesini, `published` ise ek olarak exact tenant+organization kapsamındaki
 `PUBLISHED + INDEX` kayıtlarını açar. Hatalı site URL'si, eksik UUID kapsamı veya
 bilinmeyen mode fail-closed olarak `off` olur.
 
-- ilk sitemap dilimi, public template'i mevcut olan program ve üniversite
-  kayıtlarını locale başına 5.000 URL'lik shard'lara böler; destinasyon, özel CMS
-  sayfası ve makale shard'ları kendi gerçek public route/read modeli tamamlanmadan
-  açılmaz;
+- public template'i mevcut olan program, üniversite ve destinasyon kayıtlarını
+  locale başına 5.000 URL'lik shard'lara böler; özel CMS sayfası ve makale
+  shard'ları kendi gerçek public route/read modeli tamamlanmadan açılmaz;
 - 23 dildeki alt sayfalar yalnız gerçekten yayınlanmış/indexlenmiş kardeş
   kayıtlar için karşılıklı hreflang üretir; bulunmayan çeviri uydurulmaz;
 - İngilizce varyant varsa `x-default` olur;
@@ -167,6 +166,10 @@ bilinmeyen mode fail-closed olarak `off` olur.
 - programlarda İngilizce dışı URL, ayrıca ilgili `program_translations` kaydı
   gerçekten `published` değilse; üniversitelerde ise localized delivery read
   modeli hazır değilse indexlenmez;
+- destinasyonlar yeni `/{locale}/destinations/{slug}` kanoniğini kullanır;
+  eski `/{locale}/countries/{slug}` ayrıntı yolu SSR açıkken `308` ile kanoniğe
+  gider. Localized destinasyon revision delivery modeli hazır olana kadar yalnız
+  İngilizce yayın/index projection'ı sitemap ve hreflang'e alınır;
 - entity SEO projection'ı 5 dakika ve en fazla 5.000 anahtarla cache edilir;
   aynı cold key sorguları birleştirilir ve hedefli invalidation yüzeyi sağlanır;
 - migration `0119_public_web_discovery_indexes` yalnız partial lookup indeksi
@@ -202,8 +205,9 @@ production kapasite iddiası oluşturmaz.
 3. Program ve üniversite için bounded read model + cursor pagination. **Yerelde tamamlandı.**
 4. SSR/ISR pilotu ve ölçüm raporu. **Varsayılan-kapalı pilot yerelde tamamlandı; gerçek trafik ölçümü bekliyor.**
 5. Dinamik, shard edilmiş sitemap index ve hreflang/canonical doğrulaması. **Yerelde tamamlandı.**
-6. Prototiplerin mevcut tasarım sistemiyle program/üniversite template'lerine dönüştürülmesi.
-7. Related entity ve internal-link graph; kalite eşiği geçmeyen sayfalara link/index üretmeme.
+6. Destinasyon canonical API/SSR/discovery katmanı. **İngilizce kaynak içerik için yerelde tamamlandı; localized delivery bekliyor.**
+7. Prototiplerin mevcut tasarım sistemiyle program/üniversite template'lerine dönüştürülmesi.
+8. Related entity ve internal-link graph; kalite eşiği geçmeyen sayfalara link/index üretmeme.
 
 ## NO-GO sınırları
 
