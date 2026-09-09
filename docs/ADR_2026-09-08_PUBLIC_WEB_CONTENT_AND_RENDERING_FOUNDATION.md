@@ -139,8 +139,9 @@ uygulandı. Pilot aşağıdaki güvenlik ve ölçek sınırlarını taşır:
   yerelleştirilir; hydration öncesinde İngilizce etiket sızıntısı olmaz;
 - cevap `X-Public-Render`, `X-Public-Render-Cache` ve `Server-Timing` ile
   ölçülebilir; render hatasında mevcut SPA güvenli fallback olarak kalır;
-- tenant-bound publication/index projection bağlanana kadar program, üniversite ve destinasyon
-  detayları bilinçli olarak `noindex` kalır.
+- tenant-bound publication/index projection bulunmayan detaylar bilinçli olarak
+  `noindex` kalır; İngilizce dışı university/destination içeriği rollout
+  `published` iken exact yayın revizyonu yoksa fail-closed 404 olur.
 
 Saf sözleşme testleri destinasyon dilimiyle `6/6`, eşzamanlı cold-read coalescing ve sonraki cache-hit'i
 gerçek disposable PostgreSQL üzerinde doğrulayan entegrasyon testi `1/1` geçmiştir.
@@ -166,12 +167,14 @@ bilinmeyen mode fail-closed olarak `off` olur.
 - ayrıntı API'si ve SSR shell aynı publication projection'ından canonical,
   index ve alternate path bilgisini alır;
 - programlarda İngilizce dışı URL, ayrıca ilgili `program_translations` kaydı
-  gerçekten `published` değilse; üniversitelerde ise localized delivery read
-  modeli hazır değilse indexlenmez;
+  gerçekten `published` değilse indexlenmez. University ve destination
+  içerikleri exact state revision pointer'ından okunur; kalite, kaynak kapsamı
+  ve locale translation durumu geçmeyen revizyon teslim veya index edilmez;
 - destinasyonlar yeni `/{locale}/destinations/{slug}` kanoniğini kullanır;
   eski `/{locale}/countries/{slug}` ayrıntı yolu SSR açıkken `308` ile kanoniğe
-  gider. Localized destinasyon revision delivery modeli hazır olana kadar yalnız
-  İngilizce yayın/index projection'ı sitemap ve hreflang'e alınır;
+  gider. Çevrilmiş canonical slug doğrudan exact yayın revizyonundan çözümlenir;
+  eski/çıkarılmış rotalar aktif route-alias ledger'ından yalnız yayındaki hedefe
+  `301/308`, kaldırılan içerik için `410` üretir;
 - rehberler `/{locale}/guides/{slug}-{id}` kanoniğini kullanır. Public blog
   listesi legacy `blog_posts` yerine admin Website Blog'un yönettiği
   `website_blog_posts` kaynağını okur; yalnız `published`, zamanı gelmiş ve
@@ -242,7 +245,7 @@ production kapasite iddiası oluşturmaz.
 3. Program ve üniversite için bounded read model + cursor pagination. **Yerelde tamamlandı.**
 4. SSR/ISR pilotu ve ölçüm raporu. **Varsayılan-kapalı pilot yerelde tamamlandı; gerçek trafik ölçümü bekliyor.**
 5. Dinamik, shard edilmiş sitemap index ve hreflang/canonical doğrulaması. **Yerelde tamamlandı.**
-6. Destinasyon canonical API/SSR/discovery katmanı. **İngilizce kaynak içerik için yerelde tamamlandı; localized delivery bekliyor.**
+6. Destinasyon canonical API/SSR/discovery katmanı. **23 locale için exact yayın revizyonu ve route-alias davranışıyla yerelde tamamlandı; gerçek içerik UAT bekliyor.**
 7. Website Blog rehber listesi, detay API/SSR, canonical/hreflang ve sitemap. **Yerelde tamamlandı.**
 8. Genel CMS page delivery ve reserved-route registry. **Yerelde tamamlandı.**
 9. Prototiplerin mevcut tasarım sistemiyle program/üniversite template'lerine dönüştürülmesi. **Veri-bağlı React ve semantik SSR şablonları yerelde tamamlandı; gerçek içerik UAT bekliyor.**

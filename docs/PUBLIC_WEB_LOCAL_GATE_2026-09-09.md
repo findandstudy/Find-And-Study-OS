@@ -3,7 +3,7 @@
 Tarih: 9 Eylül 2026  
 Durum: **Yerel uygulama tamamlandı; staging/production aktivasyonu NO-GO**  
 Branch: `codex/public-web-foundation-20260908`  
-Code-bearing head: `149b8676fd75901933dfde59b99a93be0cf2db60`  
+Code-bearing head: `f6ab2b4b30f9973765dac5544ab0363494fe762b`
 Karşılaştırma tabanı: `e6edad6a` (`origin/codex/operations-social-staging-20260905`)
 
 ## Teslim edilen dilim
@@ -12,6 +12,10 @@ Karşılaştırma tabanı: `e6edad6a` (`origin/codex/operations-social-staging-2
 - Active-context ve capability doğrulamalı, idempotent publication command/store.
 - Admin Publication Center read model, API ve UI.
 - Ölçeklenebilir public program/university API'leri ve detay sayfaları.
+- University ve destination içeriklerinin exact `PUBLISHED` çok dilli revizyondan API + SSR teslimatı.
+- Çevirisi olmayan İngilizce dışı university/destination rotalarının İngilizce metne düşmeden fail-closed kapanması.
+- Çevrilmiş destination canonical slug çözümleme, locale-aware destination listesi ve toplu/N+1'siz related university yerelleştirmesi.
+- Aktif route-alias ledger'ından yalnız yayındaki hedefe 301/308 ve kaldırılan içeriğe 410 teslimatı; hedef/path doğrulaması ve bounded cache.
 - Default-off, allowlist/all kontrollü semantic SSR/ISR render pilotu.
 - Canonical URL, doğrulanmış hreflang, JSON-LD ve dinamik sitemap üretimi.
 - Yalnız gerçekten `PUBLISHED + INDEX` olan ve ilgili dilde teslim edilebilen kayıtların discovery katmanına alınması.
@@ -21,7 +25,7 @@ Karşılaştırma tabanı: `e6edad6a` (`origin/codex/operations-social-staging-2
 
 | Kapı | Sonuç |
 |---|---:|
-| API TypeScript typecheck | PASS |
+| Full workspace TypeScript typecheck | PASS |
 | API production build | PASS |
 | Edcons TypeScript typecheck | PASS |
 | Edcons i18n parity | PASS — 23 dil |
@@ -30,7 +34,11 @@ Karşılaştırma tabanı: `e6edad6a` (`origin/codex/operations-social-staging-2
 | Public web foundation PostgreSQL | PASS — 1/1 |
 | Catalog entity graph PostgreSQL | PASS — 1/1 |
 | Publication store | PASS — 4/4 |
-| Public catalog render contract | PASS — 5/5 |
+| Public localized entity contract | PASS — 4/4 |
+| Public catalog route contract | PASS — 4/4 |
+| Public catalog render contract | PASS — 9/9 |
+| Public web discovery contract | PASS — 5/5 |
+| Public web discovery PostgreSQL | PASS — 1/1 |
 | Public web scale gate | PASS — 3/3 |
 | Security regressions | PASS — 35/35 |
 
@@ -42,9 +50,9 @@ Araç yalnız açık opt-in ile, `fas_migrator@127.0.0.1:5433/fasos_apply_local`
 
 | Ölçüm | Örnek | p95 |
 |---|---:|---:|
-| SSR origin | 23 | 21,0 ms |
-| SSR cache hit | 100 | 25,1 ms |
-| Public API | 40 | 29,3 ms |
+| SSR origin | 23 | 30,5 ms |
+| SSR cache hit | 100 | 26,4 ms |
+| Public API | 40 | 23,3 ms |
 
 Bu sayılar yerel sentetik ölçümdür; gerçek edge-cache, ağ, CDN, bot trafiği veya kullanıcı Core Web Vitals kanıtı değildir.
 
@@ -79,11 +87,10 @@ Geçersiz rollout modu veya geçersiz tenant/organization UUID'si fail-closed da
 
 ## Bilinen sınırlar ve sonraki kapılar
 
-1. University sayfalarında İngilizce dışı gerçek yerelleştirilmiş içerik projection'ı henüz yoktur; bu nedenle bu URL'ler indexlenmez ve sitemap'e girmez.
-2. Destination/country/city, CMS page ve article/blog için yönetilen dynamic public delivery read model ve gerçek canonical route tamamlanmadan sitemap'e eklenmez.
-3. Staging smoke/UAT, gerçek crawler davranışı, Lighthouse/Core Web Vitals, CDN cache ve invalidation kanıtı alınmamıştır.
-4. Bulk content import/backfill ve AI translation publication otomatik olarak açılmamıştır.
-5. GitHub push/PR, bağımsız review, CI ve deployment bu yerel gate'in dışında kalır.
-6. Production wiring, veri backfill veya public index açma için ayrı açık onay ve rollback planı gerekir.
+1. Staging smoke/UAT, gerçek crawler davranışı, Lighthouse/Core Web Vitals, CDN cache ve invalidation kanıtı alınmamıştır.
+2. Bulk content import/backfill ve AI translation publication otomatik olarak açılmamıştır.
+3. Frontend build başarılıdır; bazı dil paketleri 500 kB uyarı eşiğini aşmaktadır ve gerçek trafik ölçümüyle ayrı bundle bütçesi uygulanmalıdır.
+4. GitHub push/PR, bağımsız review, CI ve deployment bu yerel gate'in dışında kalır.
+5. Production wiring, veri backfill veya public index açma için ayrı açık onay ve rollback planı gerekir.
 
 Bu belge staging veya production deploy yetkisi değildir. Projenin `AGENTS.md` içindeki daha geniş NO-GO, review ve production güvenlik kapıları aynen geçerlidir.
