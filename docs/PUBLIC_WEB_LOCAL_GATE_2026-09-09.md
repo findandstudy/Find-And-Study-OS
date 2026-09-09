@@ -3,7 +3,7 @@
 Tarih: 9 Eylül 2026
 Durum: **Yerel staging adayı yeşil; staging/production aktivasyonu NO-GO**
 Branch: `codex/public-web-foundation-20260908`
-Code/config-bearing head: `f0d94b9994d5dc8bbf945793c251f21df9b8629f`
+Code/config-bearing head: `3b93dee1cebf0fbce984d22916186e682e6a68f4`
 Karşılaştırma tabanı: `e6edad6a` (`origin/codex/operations-social-staging-20260905`)
 
 ## Teslim edilen dilim
@@ -51,6 +51,11 @@ Karşılaştırma tabanı: `e6edad6a` (`origin/codex/operations-social-staging-2
   zorunludur; 100 satır, 8 MiB, 32 derinlik ve 200.000 JSON node tavanlarıyla
   prototype-pollution ve executable değerler reddedilir. Canonical snapshot ve
   manifest SHA-256 mevcut batch planner'a veri olarak aktarılır.
+- Import preview/preflight katmanı adapter approval, maker-checker, server-resolved
+  runtime identity ve kısa ömürlü Ed25519 preview receipt'ini birbirine bağlar.
+  Redacted preview dışına ham içerik/secret çıkmaz; server plan yalnız accepted item
+  metadata'sı taşır ve job contract receipt/plan/release drift'ini fail-closed
+  reddeder. Bu katman da runtime route/UI veya publish/index activation açmaz.
 
 ## Exact-head doğrulama özeti
 
@@ -61,7 +66,7 @@ Karşılaştırma tabanı: `e6edad6a` (`origin/codex/operations-social-staging-2
 | Edcons TypeScript typecheck | PASS |
 | Edcons i18n parity | PASS — 23 dil |
 | Edcons production build | PASS |
-| Migration ledger | PASS — 123 dosya / 123 journal |
+| Migration ledger | PASS — 124 dosya / 124 journal |
 | Public web foundation PostgreSQL | PASS — 1/1 |
 | Catalog entity graph PostgreSQL | PASS — 1/1 |
 | Publication store | PASS — 4/4 |
@@ -71,12 +76,19 @@ Karşılaştırma tabanı: `e6edad6a` (`origin/codex/operations-social-staging-2
 | Public web discovery contract | PASS — 6/6 |
 | Public web discovery PostgreSQL | PASS — 1/1 |
 | Public web scale gate | PASS — 3/3 |
-| Draft intake builder/command/store | PASS — 12/12 |
+| Draft intake builder/command/store | PASS — builder 4/4 + command 6/6 + store 9/9 |
 | Draft intake PostgreSQL | PASS — 1/1 |
-| Draft source resolver | PASS — saf 4/4 + PostgreSQL 1/1 |
-| Draft batch planner | PASS — 6/6 |
-| Draft batch executor | PASS — 5/5 |
+| Draft source resolver | PASS — saf 12/12 + PostgreSQL 1/1 |
+| Draft batch planner | PASS — 20/20 |
+| Draft batch executor | PASS — 6/6 |
 | Draft import manifest | PASS — 5/5 |
+| Adapter approval contract | PASS — 20/20 |
+| Draft import preview | PASS — 14/14 |
+| Preview receipt | PASS — 8/8 |
+| Publication runtime boundary | PASS — 8/8 |
+| Draft import preflight | PASS — 19/19 |
+| Draft import server plan | PASS — 9/9 |
+| Draft import job contract | PASS — 14/14 |
 | Migration authority | PASS — 31/31 + 1 ortam SKIP |
 | Security regressions | PASS — 37/37 |
 | Rate-limit/IP security | PASS — 6/6 |

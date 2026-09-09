@@ -9,11 +9,11 @@ Branch: `codex/public-web-foundation-20260908`
 | Alan | Değer |
 |---|---|
 | Karşılaştırma tabanı | `e6edad6a3de34f1c597687753a8c18d0f8248bcb` |
-| Code/config-bearing head | `f0d94b9994d5dc8bbf945793c251f21df9b8629f` |
-| Tree | `bcbb3682a372f4bace48132884ec4485e569456c` |
-| Base→head binary patch SHA-256 | `47caa86a1f0a36464a0a9b2abdb7c1255b687aebb6cb05472c70eef4feab7737` |
-| Değişim | 50 commit, 127 dosya, +21.390 / -246 |
-| Migration ledger | 123 SQL / 123 journal |
+| Code/config-bearing head | `3b93dee1cebf0fbce984d22916186e682e6a68f4` |
+| Tree | `f057384d8a11cf304889b26c9a91cd3bb3f69e46` |
+| Base→head binary patch SHA-256 | `6b8b72dd3d4d73755d31ed4893aafe4cb2066f88a10cb29cf2aa7725355c0a8d` |
+| Değişim | 52 commit, 144 dosya, +35.493 / -247 |
+| Migration ledger | 124 SQL / 124 journal |
 
 Bu belge code/config hash'inin parçası değildir. Aday kimliği yukarıdaki exact
 head'dir; review veya staging öncesi head değişirse tree, patch hash ve bütün
@@ -68,6 +68,11 @@ kanıtlar yeniden üretilir.
   Manifest client tenant/organization/rol seçemez; 100 satır, 8 MiB, 32 derinlik,
   200.000 node ve 7 günlük ömür tavanlarıyla canonical snapshot olarak planner'a
   girer. Parser herhangi bir adapter kodu çalıştırmaz veya dış bağlantı kurmaz.
+- Import preview/preflight ve job contract katmanları adapter approval, maker-checker,
+  server-resolved runtime kimliği, kısa ömürlü Ed25519 preview receipt'i ve exact
+  plan/release drift bağını birlikte doğrular. Public preview redacted kalır; private
+  command payload'u yalnız enqueue sınırında tutulur. Bu katmanlar runtime route/UI,
+  executor grant veya publish/index activation açmaz.
 
 ## Exact-head yerel kanıt
 
@@ -78,8 +83,8 @@ kanıtlar yeniden üretilir.
 | Edcons i18n | PASS — 5.027 kullanılan anahtar, 23 dil parity |
 | Edcons public template tests | PASS — 5/5 |
 | Edcons production build + static sitemap | PASS |
-| Migration ledger | PASS — 123/123 |
-| Public pure contract suites | PASS — 91/91 |
+| Migration ledger | PASS — 124/124 |
+| Public pure contract suites | PASS — 160/160 (yeni hardening paket testleri) |
 | Public PostgreSQL suites | PASS — 6/6 |
 | Migration authority | PASS — 31/31 + 1 ortam SKIP |
 | Security regressions | PASS — 37/37 |
@@ -89,9 +94,11 @@ kanıtlar yeniden üretilir.
 
 Public pure toplamı: foundation 8, command 4, store adapter 4, publication read
 model 2, localized entity 5, list/scale 13, route 4, render 10, discovery 6 ve
-scale 3 teste ek olarak draft intake builder 4, bounded batch planner 6, batch
-executor 5, source resolver 4, command 4 ve store 4 testtir.
-Deklaratif draft import manifesti ve planner bağlantısı ayrıca 5/5 testtir.
+scale 3 teste ek olarak draft intake builder 4, bounded batch planner 20, batch
+executor 6, source resolver 12, command 6 ve store 9 testtir.
+Deklaratif draft import manifesti 5/5; adapter approval 20/20; preview 14/14;
+preview receipt 8/8; runtime boundary 8/8; preflight 19/19; server plan 9/9 ve
+job contract 14/14 testtir.
 
 Yerel disposable PostgreSQL 16 üzerindeki beş suite public foundation,
 catalog graph, public render ve discovery/localization/route-alias davranışını

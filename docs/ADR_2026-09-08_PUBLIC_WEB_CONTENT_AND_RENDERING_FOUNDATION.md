@@ -272,7 +272,7 @@ production kapasite iddiası oluşturmaz.
     tamamlandı; gerçek içerik ve staging UAT bekliyor.**
 12. Governed content onboarding: yeni program/üniversite/destinasyon/şehir/
     sayfa/rehber içeriğini active-context ve capability doğrulamasıyla yalnız
-    `DRAFT + NOINDEX` olarak kabul etme. **Migration `0122`, command/store ve
+    `DRAFT + NOINDEX` olarak kabul etme. **Migration `0123` replay-hardening, command/store ve
     gerçek PostgreSQL create/replay/revocation/tenant-isolation kapılarıyla
     yerelde tamamlandı. İstemcinin scope/path/hash/internal UUID seçmesini
     reddeden server-bound builder ile aktif kaynakları bounded, salt-okunur ve
@@ -291,6 +291,14 @@ production kapasite iddiası oluşturmaz.
     seçemez; 100 satır, 8 MiB, 32 derinlik ve 200.000 node tavanları uygulanır.
     Manifest yalnız canonical snapshot + hash üretip batch planner'a veri sağlar;
     adapter kodu çalıştırmaz, dış bağlantı kurmaz ve publish etmez.**
+    `0123` replay-hardening migration'ı DB-current session/selection/authority
+    yeniden doğrulaması, scoped request key için durable replay, source snapshot
+    lock ve serializable transaction corridor'u ekler. Ambiguous COMMIT sonrası
+    aynı receipt kimlikleri `REPLAY` sonucu döner; kaynak hash değişimi retry
+    edilmez. Import preview/preflight katmanı adapter approval + maker-checker,
+    server-resolved runtime kimliği ve kısa ömürlü Ed25519 preview receipt'ini
+    exact plan/release drift bağıyla doğrular. Route/UI, executor grant, publish
+    ve index activation bu dilimde açılmamıştır.**
 
 ## NO-GO sınırları
 

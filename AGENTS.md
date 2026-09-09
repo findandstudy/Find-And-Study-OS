@@ -582,3 +582,15 @@ Control Plane'de tenant/org seed olmadığı için sosyal UI güvenli biçimde
 configuration-required gösterir. Staging, production, GitHub, `Next`, external
 provider ve gerçek PII değiştirilmemiştir. Kanonik kayıt:
 `OPERATIONS_GROWTH_FOUNDATION_IMPLEMENTATION_2026-09-05.md`.
+
+## 9 Eylül 2026 — Public Web import preview ve replay-hardening yerel eki
+
+`codex/public-web-foundation-20260908` üzerinde local-only olarak `3b93dee1cebf0fbce984d22916186e682e6a68f4` code-bearing commit'i oluşturuldu; tree `f057384d8a11cf304889b26c9a91cd3bb3f69e46`, karşılaştırma tabanı `e6edad6a3de34f1c597687753a8c18d0f8248bcb`, base→head binary patch SHA-256 `6b8b72dd3d4d73755d31ed4893aafe4cb2066f88a10cb29cf2aa7725355c0a8d`, fark 52 commit/144 dosya/+35.493/-247'dir. Kullanıcıya ait üç patch dosyası commit dışında korunmuştur.
+
+Additive `0123_public_web_draft_intake_replay_hardening.sql` migration'ı journal'a işlendi; migration validator `124/124` PASS'tir. DB tarafı DB-current session/active-selection/authority yeniden doğrulaması, source snapshot `FOR SHARE` kilidi, scoped request key, serializable transaction, ambiguous-COMMIT sonrası durable `REPLAY` ve semantic source-change retry reddi sağlar. `fas_public_web_executor` için owner-private helper'lar ve kritik tablo DML'i fail-closed tutulur; route/UI, executor role grant, publish/index activation ve production/staging wiring açılmamıştır.
+
+Public import zincirine adapter approval + maker-checker, redacted preview, Ed25519 kısa ömürlü preview receipt, server-only runtime boundary, preflight, private server plan ve receipt/plan/release-bound job contract eklendi. Manifest hâlâ declarative JSON'dur; executable mapping kodu, client scope/rol, ham içerik veya secret taşınmaz. Planner 100 kayıt/8 MiB/4 source-read ve 30 saniye bütçeli; executor store concurrency 2'dir.
+
+Kanıt: public-web ilgili saf testleri 160/160; planner 20/20, executor 6/6, source resolver 12/12, intake builder 4/4 + command 6/6 + store 9/9, adapter approval 20/20, preview 14/14, receipt 8/8, runtime boundary 8/8, preflight 19/19, server plan 9/9, job contract 14/14; PostgreSQL intake/source/store suite PASS, public catalog/discovery/render regresyonları PASS, security 37/37, rate-limit 6/6, CI wiring 4/4, migration authority 31 PASS + 1 Bash-unavailable SKIP, workspace typecheck ve API production build PASS. Disposable DB `127.0.0.1:5433/fasos_apply_local` kullanıldı; production credential/PII/provider çağrısı yoktur.
+
+Remote push, PR güncellemesi, staging/production deploy, `Find-And-Study-OS-Next` sync ve runtime aktivasyonu yapılmadı. Bağımsız review, exact-head remote CI, staging UAT, executor grant ve gerçek import pilotu sonraki NO-GO kapılarıdır. Kalıcı ayrıntı: `docs/PUBLIC_WEB_LOCAL_GATE_2026-09-09.md`, `docs/PUBLIC_WEB_STAGING_CANDIDATE_2026-09-09.md` ve `docs/ADR_2026-09-08_PUBLIC_WEB_CONTENT_AND_RENDERING_FOUNDATION.md`.
