@@ -81,10 +81,15 @@ jobs:
         run: pnpm --filter @workspace/edcons run check:i18n
 
       - name: Build API deployable application
+        env:
+          NODE_ENV: production
         run: pnpm --filter @workspace/api-server run build
 
       - name: Build Edcons deployable application
+        env:
+          NODE_ENV: production
         run: pnpm --filter @workspace/edcons run build
+
   windows-portability:
     name: Windows portal portability
     runs-on: windows-latest
