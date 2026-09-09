@@ -120,6 +120,19 @@ try {
   ) {
     throw new Error("sitemap security headers missing");
   }
+  for (const privatePath of ["/admin", "/student", "/en/login", "/sign/test-token"]) {
+    const privateRoute = await timedFetch(privatePath);
+    if (
+      !privateRoute.response.ok
+      || privateRoute.response.headers.get("x-robots-tag") !== "noindex, nofollow, noarchive"
+    ) {
+      throw new Error(`private SPA robots boundary failed for ${privatePath}`);
+    }
+  }
+  const publicHome = await timedFetch("/en");
+  if (!publicHome.response.ok || publicHome.response.headers.has("x-robots-tag")) {
+    throw new Error("public SPA route received the private robots boundary");
+  }
   const result = {
     schemaVersion: 1,
     samples: {
