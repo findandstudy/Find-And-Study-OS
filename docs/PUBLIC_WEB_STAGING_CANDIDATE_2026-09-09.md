@@ -9,11 +9,11 @@ Branch: `codex/public-web-foundation-20260908`
 | Alan | Değer |
 |---|---|
 | Karşılaştırma tabanı | `e6edad6a3de34f1c597687753a8c18d0f8248bcb` |
-| Code/config-bearing head | `cce81223c7399bb6f3b33ade7a52101c8f825e64` |
-| Tree | `f03cef485af9928198bfc00edee5a810bc58e609` |
-| Base→head binary patch SHA-256 | `909b2b1bcfeff5441d2cfe7d68d0b3d809835070e40652420df652ddbadc9649` |
-| Değişim | 22 commit, 95 dosya, +15.312 / -195 |
-| Migration ledger | 120 SQL / 120 journal |
+| Code/config-bearing head | `5274c2b5c763b1bc917706453437a8ddf5b61503` |
+| Tree | `fc85c00c553125a838f8892da5cfa435cc6fe7f2` |
+| Base→head binary patch SHA-256 | `6004ced17a908415bd7bde01cbcde5f36b9f5ef401e58ea791947a4e1eff7718` |
+| Değişim | 37 commit, 110 dosya, +17.085 / -246 |
+| Migration ledger | 122 SQL / 122 journal |
 
 Bu belge code/config hash'inin parçası değildir. Aday kimliği yukarıdaki exact
 head'dir; review veya staging öncesi head değişirse tree, patch hash ve bütün
@@ -26,7 +26,7 @@ kanıtlar yeniden üretilir.
 - Mevcut `website_pages`, `website_blog_posts`, program, university ve
   destination kaynaklarını ikinci bir hakikat deposu yaratmadan governed
   publication projection'ına bağlayan API ve SSR teslimatı.
-- Program, university, destination, guide ve genel CMS sayfalarında canonical,
+- Program, university, destination, city, guide ve genel CMS sayfalarında canonical,
   hreflang, JSON-LD, noindex ve fail-closed çeviri davranışı.
 - 23 locale, 200.000 program ve 2.000 üniversite hedefi için on-demand render,
   bounded cache, in-flight coalescing ve en fazla 5.000 URL'lik sitemap shard'ları.
@@ -36,6 +36,13 @@ kanıtlar yeniden üretilir.
   prototiplerinin mevcut React + SSR bileşen sistemine data-bound uyarlaması.
 - Yeni public-web saf testlerinin convergence ve staging workflow'larına; gerçek
   PostgreSQL kapılarının convergence workflow'una bağlanması.
+- Static frontend bootstrap hata yolunda HTML injection ve kullanıcıya stack/source
+  sızıntısının kaldırılması; yalnız güvenli DOM düğümleriyle genel hata gösterimi.
+- CMS sayfası ve rehber zengin metninde ortak allowlist sanitizer; script,
+  handler, SVG/MathML ve reverse-tabnabbing yüzeylerinin kapatılması.
+- Şehir kayıtları için additive FK/exclusive binding, ayrı immutable migration'da
+  `name + country + body` evidence guard'ı, on-demand API/SSR, City JSON-LD ve
+  published/indexable ülke→şehir→üniversite/program link grafiği.
 
 ## Exact-head yerel kanıt
 
@@ -46,16 +53,16 @@ kanıtlar yeniden üretilir.
 | Edcons i18n | PASS — 5.027 kullanılan anahtar, 23 dil parity |
 | Edcons public template tests | PASS — 5/5 |
 | Edcons production build + static sitemap | PASS |
-| Migration ledger | PASS — 120/120 |
-| Public pure contract suites | PASS — 56/56 |
+| Migration ledger | PASS — 122/122 |
+| Public pure contract suites | PASS — 59/59 |
 | Public PostgreSQL suites | PASS — 4/4 |
-| Security regressions | PASS — 35/35 |
+| Security regressions | PASS — 37/37 |
 | Rate-limit/IP security | PASS — 6/6 |
 | Package-manager guard | PASS — 6/6 |
-| CI wiring contract | PASS — 3/3 |
+| CI wiring contract | PASS — 4/4 |
 
 Public pure toplamı: foundation 8, command 4, store adapter 4, publication read
-model 2, localized entity 4, list/scale 13, route 4, render 9, discovery 5 ve
+model 2, localized entity 5, list/scale 13, route 4, render 10, discovery 6 ve
 scale 3 testtir.
 
 Yerel disposable PostgreSQL 16 üzerindeki dört suite public foundation,
@@ -66,9 +73,9 @@ kanıtladı. Production credential veya production verisi kullanılmadı.
 
 | Ölçüm | Örnek | p95 | Kapı |
 |---|---:|---:|---:|
-| SSR origin | 23 | 20,2 ms | `< 800 ms` |
-| SSR cache hit | 100 | 20,5 ms | `< 250 ms` |
-| Public API | 40 | 23,8 ms | `< 300 ms` |
+| SSR origin | 23 | 20,6 ms | `< 800 ms` |
+| SSR cache hit | 100 | 24,4 ms | `< 250 ms` |
+| Public API | 40 | 18,3 ms | `< 300 ms` |
 
 Bu ölçüm sentetiktir; staging ağ/CDN/browser Core Web Vitals kanıtı değildir.
 
@@ -81,15 +88,18 @@ Bu ölçüm sentetiktir; staging ağ/CDN/browser Core Web Vitals kanıtı değil
 3. Remote convergence CI'ın aynı exact head üzerinde Linux/static, Windows ve
    disposable PostgreSQL job'larını yeşil tamamladığını doğrula.
 4. Staging deploy manifestini reviewed head, beklenen migration prefix ve
-   rollback release'iyle bağla; staging veritabanında yalnız reviewed `0109–0119`
+   rollback release'iyle bağla; staging veritabanında yalnız reviewed `0109–0121`
    additive migrations'ını çalıştır.
-5. İlk rollout'u `PUBLIC_WEB_RENDER_MODE=allowlist`, sitemap/internal-link
-   modlarını `off` tutarak az sayıda program/university/destination rotasında yap.
-6. Login/admin/student/staff/institution yüzeyleri için regresyon smoke; public
+5. `0120` içindeki NOT VALID city FK/entity check'leri için bounded orphan/shape
+   audit'i çalıştır; temiz sonuçtan sonra constraint validation'ı ayrı reviewed
+   staging adımı olarak kaydet.
+6. İlk rollout'u `PUBLIC_WEB_RENDER_MODE=allowlist`, sitemap/internal-link
+   modlarını `off` tutarak az sayıda program/university/destination/city rotasında yap.
+7. Login/admin/student/staff/institution yüzeyleri için regresyon smoke; public
    rotalar için 200/308/404/410, canonical/hreflang/JSON-LD, cache ve XSS UAT yap.
-7. Lighthouse mobile/desktop, gerçek CDN cache HIT/MISS, origin p95/p99, DB pool,
+8. Lighthouse mobile/desktop, gerçek CDN cache HIT/MISS, origin p95/p99, DB pool,
    error rate ve bot crawl ölçümünü kaydet.
-8. Yalnız kanıt başarılıysa `PUBLIC_WEB_SITEMAP_MODE=published` ve
+9. Yalnız kanıt başarılıysa `PUBLIC_WEB_SITEMAP_MODE=published` ve
    `PUBLIC_WEB_INTERNAL_LINK_MODE=published` için ayrı approval ver.
 
 ## Rollback

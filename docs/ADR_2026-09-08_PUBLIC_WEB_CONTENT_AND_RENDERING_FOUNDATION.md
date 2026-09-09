@@ -2,7 +2,7 @@
 
 Tarih: 8 Eylül 2026
 Durum: Foundation ve varsayılan-kapalı SSR/ISR pilotu yerelde uygulandı; deploy kapalı
-Kapsam: Program, üniversite, destinasyon, CMS sayfası ve rehber içeriği
+Kapsam: Program, üniversite, destinasyon, şehir, CMS sayfası ve rehber içeriği
 
 ## Bağlam
 
@@ -47,6 +47,7 @@ birlikte geçmelidir. Sistem varsayılan olarak `NOINDEX` ve rollout `off` çal�
 - Program: `/{locale}/programs/{slug}-{id}`
 - Üniversite: `/{locale}/universities/{slug}-{id}`
 - Destinasyon: `/{locale}/destinations/{slug}`
+- Şehir: `/{locale}/cities/{slug}-{id}`
 - Rehber: `/{locale}/guides/{slug}-{id}`
 
 Program ve üniversite URL'lerinde ID kalıcı kimliği korur. Slug değişiklikleri kaybolmaz; route alias ledger üzerinden 301/308 veya 410 kararı verilir. Aynı scope'ta aynı aktif path ve aynı kayda iki aktif canonical yol yasaktır.
@@ -90,6 +91,14 @@ yeniden üretmeden hedef domain sözleşmesindeki eksikleri tamamlar:
 - float yerine `amount_minor bigint + currency_code` kullanan kaynak-bağlı fiyat bileşenleri;
 - canonical akademik gerçeği değiştirmeyen tenant+organization sınırlı ticari listing overlay'i.
 
+Additive `0120_public_web_city_pages` şehir kayıtlarını public content
+foundation'a tenant/organization sınırını gevşetmeden bağlar. Migration,
+`city_id` foreign key'ini ve entity'ye göre tek kaynak kimliği taşıma kontrolünü
+`NOT VALID` ekler; mevcut veriyi sınırsız taramaz veya içerik backfill'i yapmaz.
+`0121_public_web_city_publication_guard` ayrı immutable migration olarak CITY
+yayını için güncel ve doğrulanmış `name`, `country` ve `body` evidence'ını
+zorunlu kılar. Böylece daha önce çalışmış `0120` dosyasının kimliği korunur.
+
 Additive `0111–0113` hardening migrations şunları güvenceye alır:
 
 - gelecekte yürürlüğe girecek kaynak kayıtlarının doğrulanabilmesi ve kaynak
@@ -122,13 +131,13 @@ Publication Center ve bounded public read modelleri eklendi.
 ## Yerel SSR/ISR pilotu
 
 Yeni bir framework veya ikinci runtime eklenmeden mevcut modüler monolit üzerinde,
-program liste, program detay, üniversite detay, destinasyon detay, rehber/makale
+program liste, program detay, üniversite detay, destinasyon detay, şehir detay, rehber/makale
 ve genel CMS page
 detay rotaları için on-demand semantic HTML pilotu
 uygulandı. Pilot aşağıdaki güvenlik ve ölçek sınırlarını taşır:
 
 - `PUBLIC_WEB_RENDER_MODE=off|allowlist|all`; eksik veya hatalı ayar `off` olur;
-- allowlist yalnız tam eşleşen, tanınan localized program/üniversite/destinasyon/rehber/CMS page rotalarını kabul eder;
+- allowlist yalnız tam eşleşen, tanınan localized program/üniversite/destinasyon/şehir/rehber/CMS page rotalarını kabul eder;
 - ilk liste en fazla 12 kayıt okur; cache en fazla 500 anahtar tutar;
 - 5 dakika fresh, 1 saat stale-while-revalidate penceresi ve aynı anahtar için
   in-flight sorgu birleştirmesi kullanılır;
@@ -140,7 +149,7 @@ uygulandı. Pilot aşağıdaki güvenlik ve ölçek sınırlarını taşır:
 - cevap `X-Public-Render`, `X-Public-Render-Cache` ve `Server-Timing` ile
   ölçülebilir; render hatasında mevcut SPA güvenli fallback olarak kalır;
 - tenant-bound publication/index projection bulunmayan detaylar bilinçli olarak
-  `noindex` kalır; İngilizce dışı university/destination içeriği rollout
+  `noindex` kalır; İngilizce dışı university/destination/city içeriği rollout
   `published` iken exact yayın revizyonu yoksa fail-closed 404 olur.
 
 Saf sözleşme testleri destinasyon dilimiyle `6/6`, eşzamanlı cold-read coalescing ve sonraki cache-hit'i
@@ -156,7 +165,7 @@ kümesini, `published` ise ek olarak exact tenant+organization kapsamındaki
 `PUBLISHED + INDEX` kayıtlarını açar. Hatalı site URL'si, eksik UUID kapsamı veya
 bilinmeyen mode fail-closed olarak `off` olur.
 
-- public template'i mevcut olan program, üniversite ve destinasyon kayıtlarını
+- public template'i mevcut olan program, üniversite, destinasyon ve şehir kayıtlarını
   locale başına 5.000 URL'lik shard'lara böler; özel CMS sayfası ve makale
   shard'ları kendi gerçek public route/read modeli tamamlanmadan açılmaz;
 - 23 dildeki alt sayfalar yalnız gerçekten yayınlanmış/indexlenmiş kardeş
@@ -175,6 +184,12 @@ bilinmeyen mode fail-closed olarak `off` olur.
   gider. Çevrilmiş canonical slug doğrudan exact yayın revizyonundan çözümlenir;
   eski/çıkarılmış rotalar aktif route-alias ledger'ından yalnız yayındaki hedefe
   `301/308`, kaldırılan içerik için `410` üretir;
+- şehirler `/{locale}/cities/{slug}-{id}` kanoniğini kullanır. Şehir public
+  yüzeyi yalnız `PUBLIC_WEB_SITEMAP_MODE=published` ve exact `PUBLISHED`
+  revision birlikte mevcutsa teslim edilir; mode kapalıyken İngilizce legacy
+  veriye düşmez. Ülke sayfaları yalnız yayınlanmış/indexlenmiş şehirleri, şehir
+  sayfaları da aynı kapıdan geçen en fazla 64 aday içinden bounded üniversite ve
+  program bağlantılarını üretir;
 - rehberler `/{locale}/guides/{slug}-{id}` kanoniğini kullanır. Public blog
   listesi legacy `blog_posts` yerine admin Website Blog'un yönettiği
   `website_blog_posts` kaynağını okur; yalnız `published`, zamanı gelmiş ve
@@ -215,22 +230,24 @@ bilinmeyen mode fail-closed olarak `off` olur.
 - migration `0119_public_web_discovery_indexes` yalnız partial lookup indeksi
   ekler; içerik veya rollout state'i değiştirmez.
 
-Saf keşif sözleşmesi `5/5`, gerçek disposable PostgreSQL RLS/NOINDEX testi
-`1/1` geçmiştir. Yerel ledger `120/120`, API ve Edcons production build'i
+Saf keşif sözleşmesi `6/6`, gerçek disposable PostgreSQL RLS/NOINDEX testi
+`1/1` geçmiştir. Yerel ledger `122/122`, API ve Edcons production build'i
 yeşildir. Staging/production config ve veri state'i değiştirilmemiştir.
 
 ## Yerel ölçek ve HTTP ölçümü
 
 Hedef katalog kardinalitesi 200.000 program ve 2.000 üniversitenin 23 locale
-varyantı olarak simüle edildi. Sitemap index 4.646.000 olası URL'yi tek build
-artifact'ına dökmeden 944 shard'a böldü. En ağır 5.000 URL / 23 hreflang shard'ı
-yerel testte 134 ms'de üretildi ve 50 MiB açılmış XML sınırının altında kaldı.
+varyantı olarak simüle edildi. Sitemap index 4.646.000 program+üniversite olası
+URL'sini tek build artifact'ına dökmeden 944 temel shard'a böldü; şehir shard'ları
+yalnız gerçek yayın envanterinden eklenir. En ağır 5.000 URL / 23 hreflang shard'ı
+yerel testte yaklaşık 134–155 ms aralığında üretildi ve 50 MiB açılmış XML
+sınırının altında kaldı.
 
 Disposable PostgreSQL 16 ve yerel production build ile yapılan HTTP pilotunda:
 
-- 23 cold locale render örneği: origin p95 `25,3 ms`;
-- 100 istek / concurrency 10: cache-hit p95 `25,2 ms`;
-- 40 public course-finder isteği / concurrency 5: API p95 `18,2 ms`;
+- 23 cold locale render örneği: origin p95 `20,6 ms`;
+- 100 istek / concurrency 10: cache-hit p95 `24,4 ms`;
+- 40 public course-finder isteği / concurrency 5: API p95 `18,3 ms`;
 - dinamik statik sitemap: HTTP 200, `application/xml`, `nosniff`, 138 localized
   URL ve karşılıklı hreflang.
 
@@ -250,6 +267,9 @@ production kapasite iddiası oluşturmaz.
 8. Genel CMS page delivery ve reserved-route registry. **Yerelde tamamlandı.**
 9. Prototiplerin mevcut tasarım sistemiyle program/üniversite template'lerine dönüştürülmesi. **Veri-bağlı React ve semantik SSR şablonları yerelde tamamlandı; gerçek içerik UAT bekliyor.**
 10. Related entity ve internal-link graph; kalite eşiği geçmeyen sayfalara link/index üretmeme. **Program, üniversite, destinasyon ve rehber graph dilimleri yerelde tamamlandı.**
+11. Şehir sayfası, CITY yayın/evidence kapısı ve ülke→şehir→üniversite/program
+    graph'ı. **Varsayılan-kapalı ve exact yayın snapshot'ına bağlı olarak yerelde
+    tamamlandı; gerçek içerik ve staging UAT bekliyor.**
 
 ## NO-GO sınırları
 

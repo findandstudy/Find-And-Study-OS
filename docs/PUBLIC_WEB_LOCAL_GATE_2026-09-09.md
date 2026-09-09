@@ -3,7 +3,7 @@
 Tarih: 9 Eylül 2026
 Durum: **Yerel staging adayı yeşil; staging/production aktivasyonu NO-GO**
 Branch: `codex/public-web-foundation-20260908`
-Code/config-bearing head: `cce81223c7399bb6f3b33ade7a52101c8f825e64`
+Code/config-bearing head: `5274c2b5c763b1bc917706453437a8ddf5b61503`
 Karşılaştırma tabanı: `e6edad6a` (`origin/codex/operations-social-staging-20260905`)
 
 ## Teslim edilen dilim
@@ -12,8 +12,10 @@ Karşılaştırma tabanı: `e6edad6a` (`origin/codex/operations-social-staging-2
 - Active-context ve capability doğrulamalı, idempotent publication command/store.
 - Admin Publication Center read model, API ve UI.
 - Ölçeklenebilir public program/university API'leri ve detay sayfaları.
-- University ve destination içeriklerinin exact `PUBLISHED` çok dilli revizyondan API + SSR teslimatı.
-- Çevirisi olmayan İngilizce dışı university/destination rotalarının İngilizce metne düşmeden fail-closed kapanması.
+- University, destination ve city içeriklerinin exact `PUBLISHED` çok dilli revizyondan API + SSR teslimatı.
+- Çevirisi olmayan İngilizce dışı university/destination/city rotalarının İngilizce metne düşmeden fail-closed kapanması.
+- `/{locale}/cities/{slug}-{id}` şehir sayfası, ülke→şehir ve şehir→üniversite/program bağlantı grafiği; yalnız `PUBLISHED + INDEX` hedeflere link üretimi.
+- Yeni şehir rotasının publication modu kapalıyken İngilizce legacy kaynağa düşmeden 404/noindex kapanması.
 - Çevrilmiş destination canonical slug çözümleme, locale-aware destination listesi ve toplu/N+1'siz related university yerelleştirmesi.
 - Aktif route-alias ledger'ından yalnız yayındaki hedefe 301/308 ve kaldırılan içeriğe 410 teslimatı; hedef/path doğrulaması ve bounded cache.
 - Default-off, allowlist/all kontrollü semantic SSR/ISR render pilotu.
@@ -30,19 +32,19 @@ Karşılaştırma tabanı: `e6edad6a` (`origin/codex/operations-social-staging-2
 | Edcons TypeScript typecheck | PASS |
 | Edcons i18n parity | PASS — 23 dil |
 | Edcons production build | PASS |
-| Migration ledger | PASS — 120 dosya / 120 journal |
+| Migration ledger | PASS — 122 dosya / 122 journal |
 | Public web foundation PostgreSQL | PASS — 1/1 |
 | Catalog entity graph PostgreSQL | PASS — 1/1 |
 | Publication store | PASS — 4/4 |
-| Public localized entity contract | PASS — 4/4 |
+| Public localized entity contract | PASS — 5/5 |
 | Public catalog route contract | PASS — 4/4 |
-| Public catalog render contract | PASS — 9/9 |
-| Public web discovery contract | PASS — 5/5 |
+| Public catalog render contract | PASS — 10/10 |
+| Public web discovery contract | PASS — 6/6 |
 | Public web discovery PostgreSQL | PASS — 1/1 |
 | Public web scale gate | PASS — 3/3 |
-| Security regressions | PASS — 35/35 |
+| Security regressions | PASS — 37/37 |
 | Rate-limit/IP security | PASS — 6/6 |
-| Public web CI wiring contract | PASS — 3/3 |
+| Public web CI wiring contract | PASS — 4/4 |
 
 Derlemedeki mevcut source-map lookup ve 500 kB üzeri chunk mesajları uyarıdır; build'i başarısız kılmamıştır. Bundle ayrıştırma performans işi ayrı bir kapı olarak korunur.
 
@@ -52,16 +54,16 @@ Araç yalnız açık opt-in ile, `fas_migrator@127.0.0.1:5433/fasos_apply_local`
 
 | Ölçüm | Örnek | p95 |
 |---|---:|---:|
-| SSR origin | 23 | 20,2 ms |
-| SSR cache hit | 100 | 20,5 ms |
-| Public API | 40 | 23,8 ms |
+| SSR origin | 23 | 20,6 ms |
+| SSR cache hit | 100 | 24,4 ms |
+| Public API | 40 | 18,3 ms |
 
 Bu sayılar yerel sentetik ölçümdür; gerçek edge-cache, ağ, CDN, bot trafiği veya kullanıcı Core Web Vitals kanıtı değildir.
 
 ## Ölçek sözleşmesi
 
 - 200.000 program + 2.000 üniversite × 23 locale = 4.646.000 olası URL, önceden render edilmez.
-- Sitemap'ler en fazla 5.000 URL'lik bounded shard'lara ayrılır; hedef envanter 944 sitemap dosyasıdır.
+- Sitemap'ler en fazla 5.000 URL'lik bounded shard'lara ayrılır; 200.000 program + 2.000 üniversite tabanı 944 shard üretir, şehir shard'ları yalnız gerçekten yayınlanan kayıt sayısından eklenir.
 - En kötü 5.000 URL / 23 hreflang shard sentetik testte yaklaşık 134–155 ms aralığında ve 50 MiB heap tavanının altında kaldı.
 - SSR cache 5 dakika fresh, 1 saat stale, en fazla 500 entry ve in-flight coalescing kullanır.
 - Discovery projection cache 5 dakika, en fazla 5.000 entry ve hedefli invalidation kullanır.
@@ -80,22 +82,39 @@ PUBLIC_WEB_ORGANIZATION_ID=
 ```
 
 `PUBLIC_WEB_SITEMAP_MODE=published` yalnız sitemap üretimini açmaz. Aynı
-tenant/organization scope'unda university ve destination detayları için exact
+tenant/organization scope'unda university, destination ve city detayları için exact
 `PUBLISHED` revizyonu teslimat kaynağı yapar. İngilizce dışındaki bir locale'de
 uygun `translation_status=PUBLISHED` revizyonu yoksa sayfa İngilizce metne
 düşmez; API `404` ve SSR noindex/not-found üretir. `NOINDEX` durumundaki
 yayınlanmış revizyon okunabilir, fakat discovery ve hreflang grafiğine girmez.
+City yeni bir public yüzey olduğu için `PUBLIC_WEB_SITEMAP_MODE=off` iken
+İngilizce kaynağa da düşmez; yayın revizyonu olmadan görünür olmaz.
 
 Geçersiz rollout modu veya geçersiz tenant/organization UUID'si fail-closed davranır.
 
 ## Bilinen sınırlar ve sonraki kapılar
 
-1. Staging smoke/UAT, gerçek crawler davranışı, Lighthouse/Core Web Vitals, CDN cache ve invalidation kanıtı alınmamıştır.
+1. Staging smoke/UAT, gerçek crawler davranışı, Lighthouse/Core Web Vitals, CDN cache ve invalidation kanıtı alınmamıştır. Yerel tarayıcıda masaüstü ve 390 px mobil ana sayfa/navigation kontrolü yatay taşma ve console error üretmedi; gerçek city içeriği henüz staging UAT görmedi.
 2. Bulk content import/backfill ve AI translation publication otomatik olarak açılmamıştır.
 3. Frontend build başarılıdır; bazı dil paketleri 500 kB uyarı eşiğini aşmaktadır ve gerçek trafik ölçümüyle ayrı bundle bütçesi uygulanmalıdır.
 4. Public-web saf ve PostgreSQL testleri convergence CI'a, saf testler staging
    adoption CI'a bağlanmıştır. GitHub push/PR, remote exact-head CI,
    bağımsız review ve deployment bu yerel gate'in dışında kalır.
 5. Production wiring, veri backfill veya public index açma için ayrı açık onay ve rollback planı gerekir.
+
+Edcons build bütçesi: başlangıç JavaScript `264.500` byte gzip, CSS `41.019`
+byte gzip, bootstrap `1.266` byte ve en büyük locale chunk `102.406` byte gzip;
+23 locale chunk'ı ölçülmüştür. `CityDetail` ayrı lazy chunk olarak yaklaşık
+`1,85 kB` gzip'tir. İlk exact-head benchmark denemesi örnek toplamadan önce
+20 saniyelik yerel readiness bütçesine takılmış, boş bir porttaki temiz tekrar
+yukarıdaki eşikleri geçmiştir; staging cold-start ölçümü bu nedenle zorunlu
+kapı olarak korunur.
+
+Static frontend bootstrap hata ekranı kullanıcı kontrollü hata/stack metnini
+`innerHTML` ile göstermeyi bırakmıştır; güvenli DOM `textContent` düğümleriyle
+genel hata mesajı verir ve bu sınır security regression suite'inde korunur.
+CMS ve rehber zengin metni tek bir allowlist sanitizer kullanır; executable
+SVG/MathML/handler/style yüzeyi ve yazar-kontrollü yeni-sekme opener davranışı
+kaldırılmıştır.
 
 Bu belge staging veya production deploy yetkisi değildir. Projenin `AGENTS.md` içindeki daha geniş NO-GO, review ve production güvenlik kapıları aynen geçerlidir.
