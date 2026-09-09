@@ -243,6 +243,7 @@
     "test:public-web-publication-store": "tsx --test ./scripts/test-postgres-public-web-publication-store.ts",
     "test:public-web-publication-read-model": "tsx --test ./scripts/test-public-web-publication-read-model.ts",
     "test:public-web-draft-intake": "tsx --test ./scripts/test-public-web-draft-intake-command.ts",
+    "test:public-web-draft-intake-builder": "tsx --test ./scripts/test-public-web-draft-intake-builder.ts",
     "test:public-web-draft-intake-store": "tsx --test ./scripts/test-postgres-public-web-draft-intake-store.ts",
     "test:postgres-public-web-foundation": "tsx --test ./scripts/test-postgres-public-web-content-foundation.ts",
     "test:postgres-public-web-draft-intake": "tsx --test ./scripts/test-postgres-public-web-draft-intake.ts",
