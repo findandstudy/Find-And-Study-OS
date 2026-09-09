@@ -23,6 +23,7 @@ const UUID_V7_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const SHA256_RE = /^[0-9a-f]{64}$/;
 const IDEMPOTENCY_KEY_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{7,159}$/;
+const SESSION_ID_RE = /^[0-9a-f]{64}$/;
 const MAX_ENTITY_ID = 2_147_483_647;
 const MAX_JSON_DEPTH = 24;
 const MAX_JSON_NODES = 20_000;
@@ -55,6 +56,20 @@ export type AuthorizedPublicWebDraftIntakeCommand = {
   capabilityKey: "public_web.content.write";
   requestHash: string;
   decisionReceipt: ActiveContextDecision["receipt"];
+  executionBinding: {
+    contextId: string;
+    contextIssuedAt: number;
+    contextExpiresAt: number;
+    sessionId: string;
+    sessionFingerprint: string;
+    selectionId: string;
+    sessionGeneration: number;
+  };
+};
+
+export type PublicWebDraftSessionBinding = {
+  sessionId: string;
+  sessionFingerprint: string;
 };
 
 export type PublicWebDraftIntakeAuthorizationResult =
@@ -131,9 +146,18 @@ export function hashPublicWebDraftRevision(input: Pick<
 export function hashPublicWebDraftIntakeCommand(
   command: PublicWebDraftIntakeCommand,
 ): string {
-  const { idempotencyKey: _idempotencyKey, ...payload } = command;
+  // The request hash is the semantic identity of the write. Server-generated
+  // UUIDs and the caller retry key are transport identities, so including
+  // either would make an ambiguous-COMMIT retry look like different content.
+  const {
+    contentRecordId: _contentRecordId,
+    idempotencyKey: _idempotencyKey,
+    revisionId: _revisionId,
+    ...payload
+  } = command;
   return crypto
     .createHash("sha256")
+    .update("fas.public-web.draft-intake.semantic.v2\0", "utf8")
     .update(canonicalJson(payload), "utf8")
     .digest("hex");
 }
@@ -252,6 +276,7 @@ export function parsePublicWebDraftIntakeCommand(
 export function authorizePublicWebDraftIntakeCommand(input: {
   context: VerifiedActiveTenantContext;
   state: ResolvedActiveContextState;
+  sessionBinding: PublicWebDraftSessionBinding;
   command: unknown;
   impersonating: boolean;
   now?: number;
@@ -264,7 +289,29 @@ export function authorizePublicWebDraftIntakeCommand(input: {
   if (!isSelectionBoundActiveTenantContext(input.context, now)) {
     return { ok: false, reason: "context_not_selection_bound" };
   }
+  if (
+    !isRecord(input.sessionBinding) ||
+    !hasExactKeys(input.sessionBinding, ["sessionFingerprint", "sessionId"]) ||
+    typeof input.sessionBinding.sessionId !== "string" ||
+    !SESSION_ID_RE.test(input.sessionBinding.sessionId) ||
+    typeof input.sessionBinding.sessionFingerprint !== "string" ||
+    !SESSION_ID_RE.test(input.sessionBinding.sessionFingerprint) ||
+    crypto.createHash("sha256").update(input.sessionBinding.sessionId, "utf8").digest("hex") !==
+      input.sessionBinding.sessionFingerprint
+  ) {
+    return { ok: false, reason: "context_not_selection_bound" };
+  }
   if (input.impersonating) return { ok: false, reason: "impersonation_forbidden" };
+  if (
+    input.context.legacyBranchId !== null ||
+    input.state.membership?.legacyBranchId !== null
+  ) {
+    return {
+      ok: false,
+      reason: "authorization_denied",
+      detail: "legacy_branch_scope_forbidden",
+    };
+  }
 
   const decision = evaluateActiveTenantCapability({
     context: input.context,
@@ -296,6 +343,15 @@ export function authorizePublicWebDraftIntakeCommand(input: {
       capabilityKey: "public_web.content.write",
       requestHash: hashPublicWebDraftIntakeCommand(command),
       decisionReceipt: decision.receipt,
+      executionBinding: {
+        contextId: input.context.contextId,
+        contextIssuedAt: input.context.issuedAt,
+        contextExpiresAt: input.context.expiresAt,
+        sessionId: input.sessionBinding.sessionId,
+        sessionFingerprint: input.sessionBinding.sessionFingerprint,
+        selectionId: input.context.selectionId,
+        sessionGeneration: input.context.sessionGeneration,
+      },
     },
   };
 }

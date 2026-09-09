@@ -95,7 +95,7 @@ async function context(): Promise<VerifiedActiveTenantContext> {
       issuerId: ID.issuer,
       tenantId: ID.tenant,
     },
-    expectedSelection: { selectionId: ID.selection, sessionGeneration: 2 },
+    expectedSelectionBinding: { selectionId: ID.selection, sessionGeneration: 2 },
     now: NOW,
   });
   assert.equal(verified.ok, true);

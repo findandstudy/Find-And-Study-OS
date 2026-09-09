@@ -18,6 +18,11 @@ import type { PublicWebDraftIntakeRequest } from "../src/lib/publicWebDraftIntak
 const NOW = 2_000_000_000_000;
 const SHA_A = "a".repeat(64);
 const SHA_B = "b".repeat(64);
+const SESSION_ID = "2".repeat(64);
+const sessionBinding = {
+  sessionId: SESSION_ID,
+  sessionFingerprint: crypto.createHash("sha256").update(SESSION_ID, "utf8").digest("hex"),
+};
 const ID = {
   context: "018fa800-0000-7000-8000-000000000001",
   tenant: "018fa800-0000-7000-8000-000000000002",
@@ -88,7 +93,7 @@ async function verifiedContext() {
       issuerId: ID.issuer,
       tenantId: ID.tenant,
     },
-    expectedSelection: { selectionId: ID.selection, sessionGeneration: 2 },
+    expectedSelectionBinding: { selectionId: ID.selection, sessionGeneration: 2 },
     now: NOW,
   });
   assert.equal(verified.ok, true);
@@ -186,7 +191,7 @@ test("revalidates a matching plan and executes with at most two concurrent write
     expectedPlanSha256: preview.planSha256,
     actorLegacyUserId: 42,
     resolveSource: source,
-    resolveCurrentAuthorization: async () => ({ context, state: state(), impersonating: false }),
+    resolveCurrentAuthorization: async () => ({ context, state: state(), impersonating: false, sessionBinding }),
     executeAuthorizedDraft: async ({ authorized }) => {
       active += 1;
       peak = Math.max(peak, active);
@@ -243,7 +248,7 @@ test("isolates rejected, unavailable-authority, denied and failed rows without l
     resolveSource,
     resolveCurrentAuthorization: async ({ request: row }) => {
       if (row.entityId === 2) throw new Error("private authority backend detail");
-      return { context, state: state(row.entityId !== 3), impersonating: false };
+      return { context, state: state(row.entityId !== 3), impersonating: false, sessionBinding };
     },
     executeAuthorizedDraft: async ({ authorized }) => {
       if (authorized.command.entityId === 4) throw new Error("private database detail");
@@ -292,7 +297,7 @@ test("rejects a malformed or cross-record store success as an execution failure"
     expectedPlanSha256: preview.planSha256,
     actorLegacyUserId: 42,
     resolveSource: source,
-    resolveCurrentAuthorization: async () => ({ context, state: state(), impersonating: false }),
+    resolveCurrentAuthorization: async () => ({ context, state: state(), impersonating: false, sessionBinding }),
     executeAuthorizedDraft: async () => ({
       outcome: "APPLIED",
       intakeReceiptId: "018fa800-0000-7000-8000-0000000000fd",
@@ -307,4 +312,40 @@ test("rejects a malformed or cross-record store success as an execution failure"
   });
   assert.deepEqual(result.completed, []);
   assert.deepEqual(result.failed, [{ index: 0, reason: "execution_failed" }]);
+});
+
+test("accepts persisted identities returned by an idempotent replay", async () => {
+  const requests = [request(1)];
+  const preview = await planPublicWebDraftBatch({ scope, requests, resolveSource: source });
+  const context = await verifiedContext();
+  const result = await executePublicWebDraftBatch({
+    scope,
+    requests,
+    expectedPlanSha256: preview.planSha256,
+    actorLegacyUserId: 42,
+    resolveSource: source,
+    resolveCurrentAuthorization: async () => ({ context, state: state(), impersonating: false, sessionBinding }),
+    executeAuthorizedDraft: async () => ({
+      outcome: "REPLAY",
+      intakeReceiptId: "018fa800-0000-7000-8000-0000000000f1",
+      contentRecordId: "018fa800-0000-7000-8000-0000000000f2",
+      revisionId: "018fa800-0000-7000-8000-0000000000f3",
+      status: "DRAFT",
+      indexState: "NOINDEX",
+      version: 1,
+    }),
+    now: () => NOW,
+    newUuidV7: uuidFactory(),
+  });
+  assert.deepEqual(result.failed, []);
+  assert.deepEqual(result.completed, [{
+    index: 0,
+    outcome: "REPLAY",
+    intakeReceiptId: "018fa800-0000-7000-8000-0000000000f1",
+    contentRecordId: "018fa800-0000-7000-8000-0000000000f2",
+    revisionId: "018fa800-0000-7000-8000-0000000000f3",
+    status: "DRAFT",
+    indexState: "NOINDEX",
+    version: 1,
+  }]);
 });

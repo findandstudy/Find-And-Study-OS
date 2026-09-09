@@ -11,6 +11,7 @@ import {
 import {
   planPublicWebDraftBatch,
   type PublicWebDraftBatchRejected,
+  type PublicWebDraftBatchSourceResolver,
 } from "./publicWebDraftBatchPlanner.js";
 import type {
   ResolvedActiveContextState,
@@ -20,22 +21,20 @@ import type {
   PublicWebDraftIntakeStoreInput,
   PublicWebDraftIntakeStoreResult,
 } from "./postgresPublicWebDraftIntakeStore.js";
-import type { PublicWebEntityType } from "./publicWebContentContract.js";
 
 const SHA256_RE = /^[0-9a-f]{64}$/;
 const UUID_V7_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MAX_EXECUTION_CONCURRENCY = 2;
 
-type SourceResolver = (
-  entityType: PublicWebEntityType,
-  entityId: number,
-) => Promise<PublicWebDraftSourceBinding | null>;
-
 type CurrentAuthorization = {
   context: VerifiedActiveTenantContext;
   state: ResolvedActiveContextState;
   impersonating: boolean;
+  sessionBinding: {
+    sessionId: string;
+    sessionFingerprint: string;
+  };
 };
 
 export type PublicWebDraftBatchExecutionFailureReason =
@@ -74,7 +73,7 @@ type ExecuteOptions = {
   requests: unknown[];
   expectedPlanSha256: string;
   actorLegacyUserId: number;
-  resolveSource: SourceResolver;
+  resolveSource: PublicWebDraftBatchSourceResolver;
   resolveCurrentAuthorization: (input: {
     index: number;
     request: PublicWebDraftIntakeRequest;
@@ -112,8 +111,8 @@ function validStoreResult(
   value: unknown,
   authorized: AuthorizedPublicWebDraftIntakeCommand,
 ): value is PublicWebDraftIntakeStoreResult {
-  return Boolean(
-    isRecord(value) &&
+  if (!isRecord(value)) return false;
+  if (!(
     Object.keys(value).sort().join("\0") === [
       "contentRecordId",
       "indexState",
@@ -126,12 +125,17 @@ function validStoreResult(
     (value.outcome === "APPLIED" || value.outcome === "REPLAY") &&
     typeof value.intakeReceiptId === "string" &&
     UUID_V7_RE.test(value.intakeReceiptId) &&
-    value.contentRecordId === authorized.command.contentRecordId &&
-    value.revisionId === authorized.command.revisionId &&
+    typeof value.contentRecordId === "string" &&
+    UUID_V7_RE.test(value.contentRecordId) &&
+    typeof value.revisionId === "string" &&
+    UUID_V7_RE.test(value.revisionId) &&
     value.status === "DRAFT" &&
     value.indexState === "NOINDEX" &&
-    value.version === 1,
-  );
+    value.version === 1
+  )) return false;
+  if (value.outcome === "REPLAY") return true;
+  return value.contentRecordId === authorized.command.contentRecordId &&
+    value.revisionId === authorized.command.revisionId;
 }
 
 function completed(
@@ -239,6 +243,7 @@ export async function executePublicWebDraftBatch(
         const decision = authorizePublicWebDraftIntakeCommand({
           context: current.context,
           state: current.state,
+          sessionBinding: current.sessionBinding,
           command: built.command,
           impersonating: current.impersonating,
           now: observedAt,

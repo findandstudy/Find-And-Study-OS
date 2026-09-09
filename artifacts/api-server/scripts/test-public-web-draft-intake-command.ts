@@ -21,6 +21,11 @@ import {
 } from "../src/lib/publicWebDraftIntakeCommand.js";
 
 const NOW = 2_000_000_000_000;
+const SESSION_ID = "1".repeat(64);
+const sessionBinding = {
+  sessionId: SESSION_ID,
+  sessionFingerprint: crypto.createHash("sha256").update(SESSION_ID, "utf8").digest("hex"),
+};
 const ID = {
   context: "018fa200-0000-7000-8000-000000000001",
   tenant: "018fa200-0000-7000-8000-000000000002",
@@ -58,13 +63,13 @@ const signer: ActiveContextExternalSigner = {
   },
 };
 
-async function context(): Promise<VerifiedActiveTenantContext> {
+async function context(legacyBranchId: number | null = null): Promise<VerifiedActiveTenantContext> {
   const token = await issueVersionedActiveTenantContext({
     subject: {
       contextId: ID.context,
       tenantId: ID.tenant,
       organizationId: ID.organization,
-      legacyBranchId: null,
+      legacyBranchId,
       principalId: ID.principal,
       membershipId: ID.membership,
       assignmentIds: [ID.assignment],
@@ -94,7 +99,7 @@ async function context(): Promise<VerifiedActiveTenantContext> {
       issuerId: ID.issuer,
       tenantId: ID.tenant,
     },
-    expectedSelection: { selectionId: ID.selection, sessionGeneration: 3 },
+    expectedSelectionBinding: { selectionId: ID.selection, sessionGeneration: 3 },
     now: NOW,
   });
   assert.equal(verified.ok, true);
@@ -183,7 +188,15 @@ test("parses one bounded draft and produces stable content and request hashes", 
   assert.match(input.contentSha256, /^[0-9a-f]{64}$/);
   assert.equal(
     hashPublicWebDraftIntakeCommand(input),
-    hashPublicWebDraftIntakeCommand(command({ idempotencyKey: "public-web.draft.retry-0001" })),
+    hashPublicWebDraftIntakeCommand(command({
+      contentRecordId: "018fa200-0000-7000-8000-00000000000e",
+      revisionId: "018fa200-0000-7000-8000-00000000000f",
+      idempotencyKey: "public-web.draft.retry-0001",
+    })),
+  );
+  assert.notEqual(
+    hashPublicWebDraftIntakeCommand(input),
+    hashPublicWebDraftIntakeCommand(command({ title: "Changed student guidance" })),
   );
 });
 
@@ -203,6 +216,7 @@ test("rejects hash drift, route spoofing, reserved pages and unsafe JSON shapes"
 test("authorizes exact tenant scope and denies impersonation", async () => {
   const allowed = authorizePublicWebDraftIntakeCommand({
     context: await context(),
+    sessionBinding,
     state: state(),
     command: command(),
     impersonating: false,
@@ -214,13 +228,14 @@ test("authorizes exact tenant scope and denies impersonation", async () => {
     assert.equal(allowed.value.decisionReceipt.resourceId, ID.content);
   }
   assert.deepEqual(authorizePublicWebDraftIntakeCommand({
-    context: await context(), state: state(), command: command(), impersonating: true, now: NOW,
+    context: await context(), sessionBinding, state: state(), command: command(), impersonating: true, now: NOW,
   }), { ok: false, reason: "impersonation_forbidden" });
 });
 
 test("denies cross-tenant intake and capability configurations requiring missing assurance", async () => {
   const crossTenant = authorizePublicWebDraftIntakeCommand({
     context: await context(),
+    sessionBinding,
     state: state(),
     command: command({ tenantId: ID.otherTenant }),
     impersonating: false,
@@ -232,8 +247,47 @@ test("denies cross-tenant intake and capability configurations requiring missing
   const guarded = state();
   guarded.assignments[0]!.capabilities[0]!.stepUpRequired = true;
   const missingAssurance = authorizePublicWebDraftIntakeCommand({
-    context: await context(), state: guarded, command: command(), impersonating: false, now: NOW,
+    context: await context(), sessionBinding, state: guarded, command: command(), impersonating: false, now: NOW,
   });
   assert.equal(missingAssurance.ok, false);
   if (!missingAssurance.ok) assert.equal(missingAssurance.detail, "step_up_required");
+});
+
+test("fails closed for legacy-branch active contexts until DB support exists", async () => {
+  const branchContext = await context(17);
+  const denied = authorizePublicWebDraftIntakeCommand({
+    context: branchContext,
+    sessionBinding,
+    state: state(),
+    command: command(),
+    impersonating: false,
+    now: NOW,
+  });
+  assert.equal(denied.ok, false);
+  if (!denied.ok) assert.equal(denied.detail, "legacy_branch_scope_forbidden");
+});
+
+test("binds the raw server session to its fingerprint and rejects substitution", async () => {
+  const allowed = authorizePublicWebDraftIntakeCommand({
+    context: await context(), sessionBinding, state: state(), command: command(),
+    impersonating: false, now: NOW,
+  });
+  assert.equal(allowed.ok, true);
+  if (allowed.ok) {
+    assert.deepEqual(allowed.value.executionBinding, {
+      contextId: ID.context,
+      contextIssuedAt: NOW,
+      contextExpiresAt: NOW + 60_000,
+      selectionId: ID.selection,
+      sessionGeneration: 3,
+      ...sessionBinding,
+    });
+  }
+  const denied = authorizePublicWebDraftIntakeCommand({
+    context: await context(),
+    sessionBinding: { ...sessionBinding, sessionFingerprint: "f".repeat(64) },
+    state: state(), command: command(), impersonating: false, now: NOW,
+  });
+  assert.equal(denied.ok, false);
+  if (!denied.ok) assert.equal(denied.reason, "context_not_selection_bound");
 });
