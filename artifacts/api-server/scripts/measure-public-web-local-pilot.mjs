@@ -120,6 +120,15 @@ try {
   ) {
     throw new Error("sitemap security headers missing");
   }
+  const robots = await fetch(`${origin}/robots.txt`, { redirect: "manual" });
+  const robotsText = await robots.text();
+  if (
+    !robots.ok
+    || robots.headers.get("cache-control") !== "no-store"
+    || robotsText !== "User-agent: *\nDisallow: /\n"
+  ) {
+    throw new Error("default-off robots boundary failed");
+  }
   for (const privatePath of ["/admin", "/student", "/en/login", "/sign/test-token"]) {
     const privateRoute = await timedFetch(privatePath);
     if (

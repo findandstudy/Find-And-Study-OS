@@ -21,6 +21,10 @@ import {
   shouldRenderPublicCatalogPath,
 } from "./lib/publicCatalogRenderContract";
 import { shouldNoindexSpaPath } from "./lib/spaRobotsPolicy";
+import {
+  parsePublicWebRobotsConfig,
+  renderPublicWebRobots,
+} from "./lib/publicWebRobotsContract";
 import { getPublicCatalogRenderModel } from "./lib/publicCatalogRenderReadModel";
 import {
   buildStaticSitemapEntries,
@@ -43,6 +47,21 @@ app.get(["/llms.txt", "/.well-known/llms.txt"], (_req, res) => {
     .type("text/plain; charset=utf-8")
     .set("Cache-Control", "public, max-age=3600")
     .send(llmsText);
+});
+
+app.get("/robots.txt", (_req, res) => {
+  const config = parsePublicWebRobotsConfig({
+    mode: process.env.PUBLIC_WEB_ROBOTS_MODE,
+    siteUrl: process.env.PUBLIC_SITE_URL,
+  });
+  res.setHeader(
+    "Cache-Control",
+    config.mode === "published"
+      ? "public, max-age=300, s-maxage=3600"
+      : "no-store",
+  );
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.type("text/plain; charset=utf-8").send(renderPublicWebRobots(config));
 });
 
 type FatalShutdown = (reason: string, exitCode: number) => Promise<void>;

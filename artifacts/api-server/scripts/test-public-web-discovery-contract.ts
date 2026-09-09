@@ -9,9 +9,39 @@ import {
   renderPublicWebSitemapIndex,
   renderPublicWebUrlSet,
 } from "../src/lib/publicWebDiscoveryContract";
+import {
+  parsePublicWebRobotsConfig,
+  renderPublicWebRobots,
+} from "../src/lib/publicWebRobotsContract";
 
 const TENANT_ID = "018f8400-0000-7000-8000-000000000001";
 const ORGANIZATION_ID = "018f8400-0000-7000-8000-000000000002";
+
+test("robots publication is explicit and invalid configuration fails closed", () => {
+  assert.deepEqual(parsePublicWebRobotsConfig({}), {
+    mode: "disallow",
+    siteUrl: null,
+    reason: "disabled",
+  });
+  assert.deepEqual(
+    parsePublicWebRobotsConfig({ mode: "published", siteUrl: "http://findandstudy.com" }),
+    { mode: "disallow", siteUrl: null, reason: "invalid_site_url" },
+  );
+  assert.deepEqual(
+    parsePublicWebRobotsConfig({ mode: "published", siteUrl: "https://user:pass@findandstudy.com" }),
+    { mode: "disallow", siteUrl: null, reason: "invalid_site_url" },
+  );
+  const published = parsePublicWebRobotsConfig({
+    mode: "published",
+    siteUrl: "https://findandstudy.com/",
+  });
+  assert.equal(published.mode, "published");
+  const robots = renderPublicWebRobots(published);
+  assert.match(robots, /^User-agent: \*\nAllow: \/$/m);
+  assert.match(robots, /^Disallow: \/institution\/$/m);
+  assert.match(robots, /^Sitemap: https:\/\/findandstudy\.com\/sitemap\.xml$/m);
+  assert.equal(renderPublicWebRobots(parsePublicWebRobotsConfig({})), "User-agent: *\nDisallow: /\n");
+});
 
 test("discovery rollout and tenant scope fail closed", () => {
   assert.equal(parsePublicWebDiscoveryConfig({}).mode, "off");
