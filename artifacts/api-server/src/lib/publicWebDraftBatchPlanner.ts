@@ -192,10 +192,15 @@ export async function planPublicWebDraftBatch(input: {
         rejected.push({ index, reason: "source_missing" });
         continue;
       }
+      const sourceSnapshot: PublicWebDraftSourceBinding = {
+        entityType: source.entityType,
+        entityId: source.entityId,
+        sourceSha256: source.sourceSha256,
+      };
       const identities = validationIdentities(index);
       const built = buildServerBoundPublicWebDraftIntake({
         scope: scopeSnapshot,
-        source,
+        source: sourceSnapshot,
         request: reference.request,
         now: 2_000_000_000_000,
         newUuidV7: () => identities.shift() ?? "",
@@ -204,7 +209,7 @@ export async function planPublicWebDraftBatch(input: {
         rejected.push({ index, reason: "request_invalid" });
         continue;
       }
-      accepted.push({ index, request: reference.request, source });
+      accepted.push({ index, request: reference.request, source: sourceSnapshot });
     }
   }
   await Promise.all(

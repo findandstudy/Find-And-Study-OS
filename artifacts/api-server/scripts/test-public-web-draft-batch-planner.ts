@@ -108,6 +108,25 @@ test("binds planning to a canonical request snapshot across async source reads",
   assert.deepEqual(plan.accepted[0]?.request.contentJson, { body: "Programme 1" });
 });
 
+test("projects resolver bindings onto the exact public source shape", async () => {
+  const plan = await planPublicWebDraftBatch({
+    scope,
+    requests: [request(1)],
+    resolveSource: async (entityType, entityId) => ({
+      entityType,
+      entityId,
+      sourceSha256: SHA,
+      privateCredential: "must-not-cross-boundary",
+    } as never),
+  });
+  assert.deepEqual(plan.accepted[0]?.source, {
+    entityType: "PROGRAM",
+    entityId: 1,
+    sourceSha256: SHA,
+  });
+  assert.equal(JSON.stringify(plan).includes("privateCredential"), false);
+});
+
 test("rejects empty, oversized-count and oversized-byte batches", async () => {
   const resolveSource = async (entityType: PublicWebEntityType, entityId: number) => ({
     entityType,

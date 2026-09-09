@@ -245,6 +245,7 @@
     "test:public-web-draft-intake": "tsx --test ./scripts/test-public-web-draft-intake-command.ts",
     "test:public-web-draft-intake-builder": "tsx --test ./scripts/test-public-web-draft-intake-builder.ts",
     "test:public-web-draft-batch-planner": "tsx --test ./scripts/test-public-web-draft-batch-planner.ts",
+    "test:public-web-draft-batch-executor": "tsx --test ./scripts/test-public-web-draft-batch-executor.ts",
     "test:public-web-draft-source-resolver": "tsx --test ./scripts/test-postgres-public-web-draft-source-resolver.ts",
     "test:public-web-draft-intake-store": "tsx --test ./scripts/test-postgres-public-web-draft-intake-store.ts",
     "test:postgres-public-web-foundation": "tsx --test ./scripts/test-postgres-public-web-content-foundation.ts",
