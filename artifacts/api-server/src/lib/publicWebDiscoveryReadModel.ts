@@ -13,6 +13,7 @@ import {
 import type { ProgramSupportedLocale } from "./programTranslationContract";
 import type {
   PublicLocalizedDestinationRouteResolution,
+  PublicLocalizedEntityCollectionDelivery,
   PublicLocalizedEntityDelivery,
   PublicLocalizedEntitySnapshot,
 } from "./publicLocalizedEntityContract";
@@ -542,6 +543,62 @@ export async function readPublishedLocalizedEntity(input: {
     [scope.tenantId, scope.organizationId, entityType, input.entityId, input.locale],
   ));
   return { mode: "published", snapshot: parseLocalizedEntityRow(result.rows[0]) };
+}
+
+export async function readPublishedLocalizedEntities(input: {
+  entityType: PublicLocalizedEntityType;
+  entityIds: readonly number[];
+  locale: ProgramSupportedLocale;
+}): Promise<PublicLocalizedEntityCollectionDelivery> {
+  const config = publicWebDiscoveryConfigFromEnvironment();
+  const mode = localizedDeliveryMode(config);
+  if (config.mode !== "published" || !config.scope) {
+    return { mode, snapshots: new Map() };
+  }
+  const entityIds = [...new Set(input.entityIds)]
+    .filter((id) => Number.isSafeInteger(id) && id > 0 && id <= 2_147_483_647)
+    .slice(0, 64);
+  if (entityIds.length === 0) return { mode: "published", snapshots: new Map() };
+  const entityType = input.entityType.toUpperCase();
+  const idColumn = ENTITY_ID_COLUMNS[input.entityType];
+  const scope = config.scope;
+  const result = await withPublicScope(scope, async (client) => client.query<RawLocalizedEntityRow>(
+    `SELECT content.${idColumn} AS entity_id,content.canonical_path,
+            revision.title,revision.summary,revision.content_json,state.index_state
+       FROM public_web_content_records content
+       JOIN public_web_publication_states state
+         ON state.tenant_id=content.tenant_id
+        AND state.organization_id=content.organization_id
+        AND state.content_record_id=content.id
+       JOIN public_web_content_revisions revision
+         ON revision.tenant_id=state.tenant_id
+        AND revision.organization_id=state.organization_id
+        AND revision.content_record_id=state.content_record_id
+        AND revision.id=state.revision_id
+      WHERE content.tenant_id=$1 AND content.organization_id=$2
+        AND content.entity_type=$3 AND content.locale=$4
+        AND content.${idColumn}=ANY($5::integer[])
+        AND state.status='PUBLISHED'
+        AND revision.quality_status='PASS'
+        AND revision.source_coverage='COMPLETE'
+        AND revision.translation_status=CASE WHEN content.locale='en' THEN 'SOURCE' ELSE 'PUBLISHED' END
+        AND length(trim(revision.title)) BETWEEN 1 AND 500
+        AND octet_length(COALESCE(revision.summary,'')) <= 4000
+        AND octet_length(revision.content_json::text) BETWEEN 1 AND 1048576
+        AND octet_length(revision.seo_json::text) <= 65536
+      ORDER BY content.${idColumn}
+      LIMIT 64`,
+    [scope.tenantId, scope.organizationId, entityType, input.locale, entityIds],
+  ));
+  const snapshots = new Map<number, PublicLocalizedEntitySnapshot>();
+  for (const row of result.rows) {
+    const entityId = Number(row.entity_id);
+    const snapshot = parseLocalizedEntityRow(row);
+    if (snapshot && Number.isSafeInteger(entityId) && entityId > 0) {
+      snapshots.set(entityId, snapshot);
+    }
+  }
+  return { mode: "published", snapshots };
 }
 
 export async function resolvePublishedLocalizedDestinationRoute(input: {

@@ -12,6 +12,20 @@ export type PublicLocalizedEntityDelivery =
   | { mode: "off"; snapshot: null }
   | { mode: "published"; snapshot: PublicLocalizedEntitySnapshot | null };
 
+export type PublicLocalizedEntityCollectionDelivery = {
+  mode: "off" | "published";
+  snapshots: Map<number, PublicLocalizedEntitySnapshot>;
+};
+
+export function selectLocalizedEntityDelivery(
+  collection: PublicLocalizedEntityCollectionDelivery,
+  entityId: number,
+): PublicLocalizedEntityDelivery {
+  return collection.mode === "off"
+    ? { mode: "off", snapshot: null }
+    : { mode: "published", snapshot: collection.snapshots.get(entityId) ?? null };
+}
+
 export type PublicLocalizedDestinationRouteResolution =
   | { mode: "off"; destinationId: null; snapshot: null }
   | {

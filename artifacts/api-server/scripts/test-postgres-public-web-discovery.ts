@@ -490,6 +490,14 @@ test("published discovery is tenant-scoped and excludes NOINDEX or undeliverable
       }),
       { mode: "published", destinationId: null, snapshot: null },
     );
+    const localizedBatch = await discovery.readPublishedLocalizedEntities({
+      entityType: "university",
+      entityIds: [universityId, universityId, 0, 2_147_483_648],
+      locale: "tr",
+    });
+    assert.equal(localizedBatch.mode, "published");
+    assert.deepEqual([...localizedBatch.snapshots.keys()], [universityId]);
+    assert.equal(localizedBatch.snapshots.get(universityId)?.title, "Doğrulanmış Üniversitesi");
     assert.deepEqual(
       await discovery.readPublishedLocalizedEntity({
         entityType: "destination",

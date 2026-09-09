@@ -95,6 +95,8 @@ test("public catalogue detail APIs are bounded and never select private CRM fiel
   assert.match(destinations, /readIndexableProgramIds/);
   assert.match(destinations, /readPublishedLocalizedEntity/);
   assert.match(destinations, /resolvePublishedLocalizedDestinationRoute/);
+  assert.match(destinations, /readPublishedLocalizedEntities/);
+  assert.match(destinations, /\.limit\(64\)/);
   assert.match(destinations, /PUBLIC_DESTINATION_TRANSLATION_NOT_PUBLISHED/);
   assert.match(destinations, /contentPolicy/);
   assert.doesNotMatch(destinations, /\.limit\(50\)/);

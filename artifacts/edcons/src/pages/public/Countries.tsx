@@ -22,6 +22,7 @@ interface Destination {
   universityCount: number;
   programCount: number;
   isFeatured: boolean;
+  canonicalPath: string;
 }
 
 export default function Countries() {
@@ -47,11 +48,20 @@ export default function Countries() {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    customFetch<Destination[]>("/api/public/destinations", { method: "GET" })
-      .then(data => setDestinations(data))
+    let cancelled = false;
+    setIsLoading(true);
+    customFetch<Destination[]>(`/api/public/destinations?locale=${encodeURIComponent(lang)}`, { method: "GET" })
+      .then(data => {
+        if (!cancelled) setDestinations(data);
+      })
       .catch(() => {})
-      .finally(() => setIsLoading(false));
-  }, []);
+      .finally(() => {
+        if (!cancelled) setIsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [lang]);
 
   const featured = destinations.filter(d => d.isFeatured);
   const others = destinations.filter(d => !d.isFeatured);
@@ -151,7 +161,7 @@ function DestinationCard({ destination: dest, index, featured, t, localePath }: 
       viewport={{ once: true }}
       transition={{ delay: index * 0.05 }}
     >
-      <Link href={localePath(`/destinations/${dest.slug}`)}>
+      <Link href={dest.canonicalPath || localePath(`/destinations/${dest.slug}`)}>
         <div className={`group relative rounded-3xl overflow-hidden border border-border/40 bg-card shadow-lg hover:shadow-xl hover:-translate-y-1 transition-all duration-300 cursor-pointer ${featured ? 'min-h-[320px]' : 'min-h-[280px]'} flex flex-col`}>
           <div className={`h-36 bg-gradient-to-br ${gradient} relative flex items-center justify-center`}>
             {dest.thumbnailUrl ? (

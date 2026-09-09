@@ -15,22 +15,29 @@ import { buildPublicWebCanonicalPath } from "../lib/publicWebContentContract";
 import {
   readIndexableProgramIds,
   readIndexableUniversityIds,
+  readPublishedLocalizedEntities,
   readPublishedLocalizedEntity,
   resolvePublishedLocalizedDestinationRoute,
   resolvePublishedEntitySeoState,
 } from "../lib/publicWebDiscoveryReadModel";
-import { resolveLocalizedDestinationFields } from "../lib/publicLocalizedEntityContract";
+import {
+  resolveLocalizedDestinationFields,
+  resolveLocalizedUniversityFields,
+  selectLocalizedEntityDelivery,
+} from "../lib/publicLocalizedEntityContract";
 
 const router: IRouter = Router();
 const DESTINATION_LINK_LIMIT = 24;
 const DESTINATION_LINK_CANDIDATE_LIMIT = 64;
 
-router.get("/public/destinations", async (_req: Request, res: Response): Promise<void> => {
+router.get("/public/destinations", async (req: Request, res: Response): Promise<void> => {
+  const locale = normalizeProgramLocale(req.query.locale);
   const policy = await getPublicCatalogPolicy();
   const destinations = await db.select()
     .from(destinationsTable)
     .where(eq(destinationsTable.isActive, true))
-    .orderBy(asc(destinationsTable.sortOrder), asc(destinationsTable.name));
+    .orderBy(asc(destinationsTable.sortOrder), asc(destinationsTable.name))
+    .limit(64);
 
   const publicConditions: any[] = [eq(universitiesTable.isActive, true)];
   addPublicCatalogConditions(publicConditions, policy);
@@ -49,14 +56,61 @@ router.get("/public/destinations", async (_req: Request, res: Response): Promise
 
   const countMap = new Map(countryCounts.map(c => [c.countryKey, { uniCount: Number(c.uniCount), progCount: Number(c.progCount) }]));
 
-  const enriched = destinations.map(d => {
+  const localizedDelivery = await readPublishedLocalizedEntities({
+    entityType: "destination",
+    entityIds: destinations.map((destination) => destination.id),
+    locale,
+  });
+  const enriched = destinations.flatMap(d => {
     const key = (d.country ?? "").trim().toLowerCase();
     const live = countMap.get(key);
-    return {
+    const localized = resolveLocalizedDestinationFields({
+      locale,
+      delivery: selectLocalizedEntityDelivery(localizedDelivery, d.id),
+      base: {
+        name: d.name,
+        shortDescription: d.shortDescription,
+        description: d.description,
+        whyStudyHere: d.whyStudyHere,
+        livingCost: d.livingCost,
+        climate: d.climate,
+        language: d.language,
+        currency: d.currency,
+        visaInfo: d.visaInfo,
+        workPermit: d.workPermit,
+        popularCities: String(d.popularCities || "")
+          .split(",")
+          .map((city) => city.trim())
+          .filter(Boolean)
+          .slice(0, 24),
+      },
+    });
+    if (!localized.available) return [];
+    const canonicalPath = localizedDelivery.snapshots.get(d.id)?.canonicalPath
+      || buildPublicWebCanonicalPath({
+        entityType: "DESTINATION",
+        entityId: d.id,
+        locale,
+        slug: d.slug,
+      });
+    return [{
       ...d,
+      name: localized.name,
+      shortDescription: localized.shortDescription,
+      description: localized.description,
+      whyStudyHere: localized.whyStudyHere,
+      livingCost: localized.livingCost,
+      climate: localized.climate,
+      language: localized.language,
+      currency: localized.currency,
+      visaInfo: localized.visaInfo,
+      workPermit: localized.workPermit,
+      popularCities: localized.popularCities.join(", ") || null,
+      canonicalPath,
+      contentPolicy: localized.contentPolicy,
       universityCount: live?.uniCount ?? 0,
       programCount: live?.progCount ?? 0,
-    };
+    }];
   });
 
   res.setHeader("Cache-Control", "public, max-age=60, s-maxage=300, stale-while-revalidate=3600");
@@ -191,14 +245,35 @@ router.get("/public/destinations/:slug", async (req: Request, res: Response): Pr
     return;
   }
 
-  const [indexableUniversityIds, indexableProgramIds] = internalLinkMode === "published"
-    ? await Promise.all([
-      readIndexableUniversityIds({ locale, universityIds: universityRows.map((row) => row.id) }),
-      readIndexableProgramIds({ locale, programIds: programRows.map((row) => row.id) }),
-    ])
-    : [null, null];
+  const [localizedUniversityDelivery, indexableUniversityIds, indexableProgramIds] = await Promise.all([
+    readPublishedLocalizedEntities({
+      entityType: "university",
+      entityIds: universityRows.map((row) => row.id),
+      locale,
+    }),
+    internalLinkMode === "published"
+      ? readIndexableUniversityIds({ locale, universityIds: universityRows.map((row) => row.id) })
+      : Promise.resolve(null),
+    internalLinkMode === "published"
+      ? readIndexableProgramIds({ locale, programIds: programRows.map((row) => row.id) })
+      : Promise.resolve(null),
+  ]);
   const deliveredUniversityRows = universityRows
     .filter((row) => indexableUniversityIds === null || indexableUniversityIds.has(row.id))
+    .flatMap((row) => {
+      const localized = resolveLocalizedUniversityFields({
+        locale,
+        delivery: selectLocalizedEntityDelivery(localizedUniversityDelivery, row.id),
+        base: {
+          name: row.name,
+          description: null,
+          universityType: row.universityType,
+        },
+      });
+      return localized.available
+        ? [{ ...row, name: localized.name, universityType: localized.universityType }]
+        : [];
+    })
     .slice(0, DESTINATION_LINK_LIMIT);
   const deliveredProgramRows = programRows
     .filter((row) => indexableProgramIds === null || indexableProgramIds.has(row.id))

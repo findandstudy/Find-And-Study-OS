@@ -31,6 +31,7 @@ import {
   readIndexableArticleIds,
   readIndexableProgramIds,
   readIndexableUniversityIds,
+  readPublishedLocalizedEntities,
   readPublishedLocalizedEntity,
   resolvePublishedLocalizedDestinationRoute,
   resolvePublishedEntitySeoState,
@@ -40,6 +41,7 @@ import type { ProgramSupportedLocale } from "./programTranslationContract";
 import {
   resolveLocalizedDestinationFields,
   resolveLocalizedUniversityFields,
+  selectLocalizedEntityDelivery,
 } from "./publicLocalizedEntityContract";
 
 const PILOT_LIST_LIMIT = 12;
@@ -648,14 +650,35 @@ async function readDestinationDetail(
     locale: route.locale,
     slug: destination.slug,
   });
-  const indexableUniversityIds = internalLinkMode === "published"
-    ? await readIndexableUniversityIds({
+  const [localizedUniversityDelivery, indexableUniversityIds] = await Promise.all([
+    readPublishedLocalizedEntities({
+      entityType: "university",
+      entityIds: universityRows.map((university) => university.id),
       locale: route.locale,
-      universityIds: universityRows.map((university) => university.id),
-    })
-    : null;
+    }),
+    internalLinkMode === "published"
+      ? readIndexableUniversityIds({
+        locale: route.locale,
+        universityIds: universityRows.map((university) => university.id),
+      })
+      : Promise.resolve(null),
+  ]);
   const deliveredUniversities = universityRows
     .filter((university) => indexableUniversityIds === null || indexableUniversityIds.has(university.id))
+    .flatMap((university) => {
+      const localized = resolveLocalizedUniversityFields({
+        locale: route.locale,
+        delivery: selectLocalizedEntityDelivery(localizedUniversityDelivery, university.id),
+        base: {
+          name: university.name,
+          description: null,
+          universityType: university.universityType,
+        },
+      });
+      return localized.available
+        ? [{ ...university, name: localized.name, universityType: localized.universityType }]
+        : [];
+    })
     .slice(0, PILOT_LIST_LIMIT);
   return {
     kind: "destination_detail",

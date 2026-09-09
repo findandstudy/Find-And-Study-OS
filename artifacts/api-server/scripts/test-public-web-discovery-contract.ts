@@ -130,6 +130,8 @@ test("read model is read-only, RLS-scoped and selects only published indexed rec
   assert.match(source, /export async function readIndexableUniversityIds/);
   assert.match(source, /export async function readPublishedLocalizedEntity/);
   assert.match(source, /export async function resolvePublishedLocalizedDestinationRoute/);
+  assert.match(source, /export async function readPublishedLocalizedEntities/);
+  assert.match(source, /content\.\$\{idColumn\}=ANY\(\$5::integer\[\]\)/);
   assert.match(source, /content\.canonical_path=\$4/);
   assert.match(source, /localizedDeliveryMode/);
   assert.match(source, /revision\.id=state\.revision_id/);
