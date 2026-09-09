@@ -9,10 +9,10 @@ Branch: `codex/public-web-foundation-20260908`
 | Alan | Değer |
 |---|---|
 | Karşılaştırma tabanı | `e6edad6a3de34f1c597687753a8c18d0f8248bcb` |
-| Code/config-bearing head | `713841ca5d2dcd1a68fc29d3ef07bba73227341b` |
-| Tree | `3261a86d90f7490f374ff4fe0f2219088f8e5a3b` |
-| Base→head binary patch SHA-256 | `4bfa68f30355e2ea507d02766afd1773fceeea9b35c6098040e08d1d0daf56aa` |
-| Değişim | 39 commit, 116 dosya, +19.227 / -246 |
+| Code/config-bearing head | `4aaeffc9a1ff6b5990e8eb8e3998dc2b8643fb81` |
+| Tree | `c56369d4e5c97f66a7575831e76a94e07ded1b72` |
+| Base→head binary patch SHA-256 | `bf121e58fc68e653185d9b6eee619afa31bb0ed12e0b74f1d5fc7ce32103c1b9` |
+| Değişim | 41 commit, 118 dosya, +19.556 / -246 |
 | Migration ledger | 123 SQL / 123 journal |
 
 Bu belge code/config hash'inin parçası değildir. Aday kimliği yukarıdaki exact
@@ -47,6 +47,9 @@ kanıtlar yeniden üretilir.
   aynı idempotency anahtarında advisory-lock kullanan governed draft intake.
   Sonuç yalnız `DRAFT + NOINDEX`; receipt append-only, rollout varsayılan `off`
   ve bu adayda HTTP route, UI mutation, executor grant veya publish geçişi yoktur.
+- İstemci tarafından tenant/organization, canonical path, source/content hash ve
+  internal UUID seçilmesini reddeden server-bound intake builder; scope ve source
+  binding'i server girdisinden, record/revision UUIDv7'lerini server tarafında üretir.
 
 ## Exact-head yerel kanıt
 
@@ -58,7 +61,7 @@ kanıtlar yeniden üretilir.
 | Edcons public template tests | PASS — 5/5 |
 | Edcons production build + static sitemap | PASS |
 | Migration ledger | PASS — 123/123 |
-| Public pure contract suites | PASS — 67/67 |
+| Public pure contract suites | PASS — 71/71 |
 | Public PostgreSQL suites | PASS — 5/5 |
 | Migration authority | PASS — 31/31 + 1 ortam SKIP |
 | Security regressions | PASS — 37/37 |
@@ -68,7 +71,7 @@ kanıtlar yeniden üretilir.
 
 Public pure toplamı: foundation 8, command 4, store adapter 4, publication read
 model 2, localized entity 5, list/scale 13, route 4, render 10, discovery 6 ve
-scale 3 teste ek olarak draft intake command 4 ve store 4 testtir.
+scale 3 teste ek olarak draft intake builder 4, command 4 ve store 4 testtir.
 
 Yerel disposable PostgreSQL 16 üzerindeki beş suite public foundation,
 catalog graph, public render ve discovery/localization/route-alias davranışını
