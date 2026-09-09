@@ -9,6 +9,10 @@ const ADMIN_URL =
   "postgresql://postgres@127.0.0.1:5433/fasos_apply_local";
 const target = new URL(ADMIN_URL);
 const databaseName = target.pathname.slice(1);
+const expectedServerPort = Number(process.env.PG_PUBLIC_WEB_SERVER_PORT ?? "5433");
+if (!Number.isSafeInteger(expectedServerPort) || expectedServerPort < 1 || expectedServerPort > 65_535) {
+  throw new Error("Public Web PostgreSQL test requires a valid expected server port");
+}
 if (
   target.protocol !== "postgresql:" ||
   target.hostname !== "127.0.0.1" ||
@@ -153,7 +157,7 @@ test("public web foundation enforces RLS, immutable evidence and controlled publ
     assert.deepEqual(identity.rows[0], {
       database_name: databaseName,
       user_name: "postgres",
-      server_port: 5433,
+      server_port: expectedServerPort,
     });
 
     await client.query("BEGIN");

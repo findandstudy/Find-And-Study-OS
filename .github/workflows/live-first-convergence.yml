@@ -435,6 +435,7 @@ jobs:
       - name: Run governed public web PostgreSQL checks
         env:
           DATABASE_URL: postgresql://fas_migrator@127.0.0.1:5433/fasos_apply_local
+          PG_PUBLIC_WEB_SERVER_PORT: "5432"
           PG_CATALOG_GRAPH_ADMIN_URL: postgresql://postgres@127.0.0.1:5433/fasos_apply_local
           PG_PUBLIC_CATALOG_RENDER_ADMIN_URL: postgresql://postgres@127.0.0.1:5433/fasos_apply_local
           PG_PUBLIC_WEB_ADMIN_URL: postgresql://postgres@127.0.0.1:5433/fasos_apply_local

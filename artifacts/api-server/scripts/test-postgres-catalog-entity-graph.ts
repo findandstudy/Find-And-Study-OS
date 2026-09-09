@@ -7,6 +7,10 @@ const ADMIN_URL =
   process.env.PG_CATALOG_GRAPH_ADMIN_URL ??
   "postgresql://postgres@127.0.0.1:5433/fasos_apply_local";
 const target = new URL(ADMIN_URL);
+const expectedServerPort = Number(process.env.PG_PUBLIC_WEB_SERVER_PORT ?? "5433");
+if (!Number.isSafeInteger(expectedServerPort) || expectedServerPort < 1 || expectedServerPort > 65_535) {
+  throw new Error("Catalog graph test requires a valid expected server port");
+}
 if (
   target.protocol !== "postgresql:" ||
   target.hostname !== "127.0.0.1" ||
@@ -68,7 +72,7 @@ test("catalog graph keeps provenance, intake scope, precise money and tenant lis
     assert.deepEqual(identity.rows[0], {
       database_name: "fasos_apply_local",
       user_name: "postgres",
-      server_port: 5433,
+      server_port: expectedServerPort,
     });
 
     await client.query("BEGIN");
