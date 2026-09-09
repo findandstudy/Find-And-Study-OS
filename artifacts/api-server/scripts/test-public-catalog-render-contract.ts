@@ -41,7 +41,7 @@ test("render mode and exact allowlist fail closed", () => {
   );
 });
 
-test("only bounded programme, university and destination paths enter the render pilot", () => {
+test("only bounded public content paths enter the render pilot and CMS pages cannot shadow system routes", () => {
   assert.equal(matchPublicCatalogRenderPath("/en/programs")?.kind, "program_list");
   const detail = matchPublicCatalogRenderPath("/tr/programs/bilgisayar-muhendisligi-42");
   assert.equal(detail?.kind, "program_detail");
@@ -57,8 +57,13 @@ test("only bounded programme, university and destination paths enter the render 
   const article = matchPublicCatalogRenderPath("/tr/guides/ogrenci-vizesi-19");
   assert.equal(article?.kind, "article_detail");
   assert.equal(article?.kind === "article_detail" ? article.identity?.id : null, 19);
+  const page = matchPublicCatalogRenderPath("/tr/scholarship-guide");
+  assert.equal(page?.kind, "page_detail");
+  assert.equal(page?.kind === "page_detail" ? page.slug : null, "scholarship-guide");
   assert.equal(matchPublicCatalogRenderPath("/xx/programs"), null);
   assert.equal(matchPublicCatalogRenderPath("/en/admin"), null);
+  assert.equal(matchPublicCatalogRenderPath("/en/login"), null);
+  assert.equal(matchPublicCatalogRenderPath("/en/guides"), null);
   assert.equal(matchPublicCatalogRenderPath("/en/programs/a/b"), null);
   assert.equal(matchPublicCatalogRenderPath("/en/universities"), null);
 });
@@ -220,6 +225,38 @@ test("article detail emits safe semantic HTML and Article structured data", () =
   assert.match(html, /hreflang="x-default"/);
 });
 
+test("CMS page detail renders only the immutable projection and escapes block content", () => {
+  const model: PublicCatalogRenderModel = {
+    kind: "page_detail",
+    locale: "en",
+    canonicalPath: "/en/scholarship-guide",
+    title: "Scholarship guide",
+    description: "A reviewed public page.",
+    indexable: true,
+    alternatePaths: { en: "/en/scholarship-guide" },
+    page: {
+      id: 5,
+      title: "Scholarship guide",
+      slug: "scholarship-guide",
+      versionNumber: 3,
+      publishedAt: "2026-09-09T12:00:00.000Z",
+      blocks: [{
+        blockType: "rich_text",
+        content: { content: "<h2>Safe heading</h2><img src=x onerror=alert(1)>" },
+        settings: {},
+        sortOrder: 0,
+      }],
+    },
+  };
+  const html = renderPublicCatalogHtml({ indexHtml, model, siteUrl: "https://findandstudy.com", nonce: "page-nonce" });
+  assert.match(html, /data-public-render-shell="page-detail"/);
+  assert.match(html, /data-public-page-version="3"/);
+  assert.match(html, /Safe heading/);
+  assert.doesNotMatch(html, /<img src=x/);
+  assert.match(html, /"@type":"WebPage"/);
+  assert.match(html, /hreflang="x-default"/);
+});
+
 test("read model is on-demand, bounded, stale-while-revalidate, and detail indexing is fail-closed", () => {
   const readModel = readFileSync(
     new URL("../src/lib/publicCatalogRenderReadModel.ts", import.meta.url),
@@ -230,6 +267,9 @@ test("read model is on-demand, bounded, stale-while-revalidate, and detail index
   assert.match(readModel, /async function readUniversityDetail/);
   assert.match(readModel, /async function readDestinationDetail/);
   assert.match(readModel, /async function readArticleDetail/);
+  assert.match(readModel, /async function readPageDetail/);
+  assert.match(readModel, /websitePageVersionsTable/);
+  assert.match(readModel, /PUBLIC_PAGE_BLOCK_TYPES/);
   assert.match(readModel, /\.limit\(12\)/);
   assert.match(readModel, /cacheStatus: "STALE"/);
   assert.match(readModel, /void refresh\(key, route\)/);

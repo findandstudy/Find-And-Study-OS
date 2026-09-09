@@ -60,6 +60,7 @@ const About = lazyRetry(() => import("@/pages/public/About"));
 const Countries = lazyRetry(() => import("@/pages/public/Countries"));
 const CountryDetail = lazyRetry(() => import("@/pages/public/CountryDetail"));
 const GuideDetail = lazyRetry(() => import("@/pages/public/GuideDetail"));
+const PublicPage = lazyRetry(() => import("@/pages/public/PublicPage"));
 const Programs = lazyRetry(() => import("@/pages/public/Programs"));
 const ProgramDetail = lazyRetry(() => import("@/pages/public/ProgramDetail"));
 const UniversityDetail = lazyRetry(() => import("@/pages/public/UniversityDetail"));
@@ -311,6 +312,9 @@ function PublicRoutes({ lang }: { lang: string }) {
             <Route path={`/${lang}/contact`} component={Contact} />
             <Route path={`/${lang}/agency/apply`} component={AgencyApplication} />
             <Route path={`/${lang}/agency-application`} component={AgencyApplication} />
+            <Route path={`/${lang}/:slug`}>
+              {(params) => <PublicPage slug={params.slug} />}
+            </Route>
             <Route component={AuthFallback} />
           </Switch>
         </PublicLayout>

@@ -61,6 +61,7 @@ test("public catalogue detail APIs are bounded and never select private CRM fiel
   const route = read("../src/routes/public-catalog.ts");
   const destinations = read("../src/routes/destinations.ts");
   const publicWeb = read("../src/routes/public-web.ts");
+  const websiteAdmin = read("../src/routes/website.ts");
   assert.equal(PUBLIC_CATALOG_RELATED_LIMIT, 8);
   assert.equal(PUBLIC_CATALOG_UNIVERSITY_PROGRAM_LIMIT, 12);
   assert.doesNotMatch(route, /commissionRate|serviceFeeAmount|contactPerson(Name|Phone|Email)/);
@@ -79,5 +80,10 @@ test("public catalogue detail APIs are bounded and never select private CRM fiel
   assert.match(publicWeb, /\.limit\(limit \+ 1\)/);
   assert.match(publicWeb, /Content-Location/);
   assert.match(publicWeb, /PUBLIC_GUIDE_ROUTE_INVALID/);
+  assert.match(publicWeb, /PUBLIC_PAGE_ROUTE_INVALID/);
+  assert.match(publicWeb, /PUBLIC_PAGE_NOT_FOUND/);
+  assert.match(websiteAdmin, /translationsJson: page\.translationsJson/);
+  assert.match(websiteAdmin, /updates\.status = "draft"/);
+  assert.match(websiteAdmin, /translationsJson: req\.body\.translations \|\| \{\}, status: "draft", publishedAt: null/);
   assert.doesNotMatch(publicWeb, /authorEmail|commission|serviceFee|contactPerson/i);
 });

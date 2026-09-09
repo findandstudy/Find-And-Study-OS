@@ -54,6 +54,12 @@ test("sitemap routes accept only known locale, entity and bounded shard", () => 
     locale: "tr",
     shard: 3,
   });
+  assert.deepEqual(parsePublicWebSitemapRoute("/sitemaps/pages-en-1.xml"), {
+    kind: "published",
+    entityType: "PAGE",
+    locale: "en",
+    shard: 1,
+  });
   assert.equal(parsePublicWebSitemapRoute("/sitemaps/programs-xx-1.xml"), null);
   assert.equal(parsePublicWebSitemapRoute("/sitemaps/programs-en-0.xml"), null);
   assert.equal(parsePublicWebSitemapRoute("/sitemaps/../../admin.xml"), null);
@@ -68,6 +74,7 @@ test("sitemap index shards governed counts at five thousand URLs", () => {
       { entityType: "UNIVERSITY", locale: "tr", count: 1 },
       { entityType: "DESTINATION", locale: "en", count: 30 },
       { entityType: "ARTICLE", locale: "tr", count: 5_001 },
+      { entityType: "PAGE", locale: "en", count: 1 },
     ],
   });
   assert.match(xml, /\/sitemaps\/static\.xml/);
@@ -77,6 +84,7 @@ test("sitemap index shards governed counts at five thousand URLs", () => {
   assert.match(xml, /universities-tr-1\.xml/);
   assert.match(xml, /destinations-en-1\.xml/);
   assert.match(xml, /guides-tr-2\.xml/);
+  assert.match(xml, /pages-en-1\.xml/);
 });
 
 test("static and dynamic URL sets emit reciprocal hreflang without unsafe paths", () => {
@@ -112,6 +120,8 @@ test("read model is read-only, RLS-scoped and selects only published indexed rec
   assert.match(source, /set_config\('app\.organization_id'/);
   assert.match(source, /state\.status='PUBLISHED' AND state\.index_state='INDEX'/);
   assert.match(source, /translation\.status='published'/);
+  assert.match(source, /website_page_versions/);
+  assert.match(source, /version\.meta_snapshot->'translationsJson'/);
   assert.match(source, /LIMIT \$5 OFFSET \$6/);
   assert.match(source, /const SEO_CACHE_MAX_ENTRIES = 5_000/);
   assert.match(source, /const seoInFlight = new Map/);

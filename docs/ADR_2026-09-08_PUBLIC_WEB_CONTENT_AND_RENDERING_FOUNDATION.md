@@ -122,12 +122,13 @@ Publication Center ve bounded public read modelleri eklendi.
 ## Yerel SSR/ISR pilotu
 
 Yeni bir framework veya ikinci runtime eklenmeden mevcut modüler monolit üzerinde,
-program liste, program detay, üniversite detay, destinasyon detay ve rehber/makale
+program liste, program detay, üniversite detay, destinasyon detay, rehber/makale
+ve genel CMS page
 detay rotaları için on-demand semantic HTML pilotu
 uygulandı. Pilot aşağıdaki güvenlik ve ölçek sınırlarını taşır:
 
 - `PUBLIC_WEB_RENDER_MODE=off|allowlist|all`; eksik veya hatalı ayar `off` olur;
-- allowlist yalnız tam eşleşen, tanınan localized program/üniversite/destinasyon/rehber rotalarını kabul eder;
+- allowlist yalnız tam eşleşen, tanınan localized program/üniversite/destinasyon/rehber/CMS page rotalarını kabul eder;
 - ilk liste en fazla 12 kayıt okur; cache en fazla 500 anahtar tutar;
 - 5 dakika fresh, 1 saat stale-while-revalidate penceresi ve aynı anahtar için
   in-flight sorgu birleştirmesi kullanılır;
@@ -177,6 +178,13 @@ bilinmeyen mode fail-closed olarak `off` olur.
   istenen dilde eksiksiz title+body taşıyan kayıtları bounded keyset listesine
   alır. Rehber body istemcide izinli HTML listesiyle sanitize edilir, SSR ise
   markup'ı güvenli metne dönüştürür;
+- genel CMS sayfaları `/{locale}/{slug}` kanoniğini kullanır. `login`, `admin`,
+  `programs`, `guides` ve diğer sistem namespace'leri merkezi reserved-route
+  registry ile CMS tarafından gölgelenemez. Public okuma yalnız son yayımlanmış
+  `website_page_versions` snapshot'ını kullanır; draft blok/meta/çeviri değişikliği
+  sayfayı tekrar draft durumuna alır. En fazla 64 blok ve 1 MiB snapshot kabul
+  edilir; bilinmeyen/global referans blokları public projection'a alınmaz ve zengin
+  metin istemcide allowlist sanitizer, SSR'da güvenli düz metin olarak işlenir;
 - entity SEO projection'ı 5 dakika ve en fazla 5.000 anahtarla cache edilir;
   aynı cold key sorguları birleştirilir ve hedefli invalidation yüzeyi sağlanır;
 - migration `0119_public_web_discovery_indexes` yalnız partial lookup indeksi
@@ -214,7 +222,7 @@ production kapasite iddiası oluşturmaz.
 5. Dinamik, shard edilmiş sitemap index ve hreflang/canonical doğrulaması. **Yerelde tamamlandı.**
 6. Destinasyon canonical API/SSR/discovery katmanı. **İngilizce kaynak içerik için yerelde tamamlandı; localized delivery bekliyor.**
 7. Website Blog rehber listesi, detay API/SSR, canonical/hreflang ve sitemap. **Yerelde tamamlandı.**
-8. Genel CMS page delivery ve reserved-route registry.
+8. Genel CMS page delivery ve reserved-route registry. **Yerelde tamamlandı.**
 9. Prototiplerin mevcut tasarım sistemiyle program/üniversite template'lerine dönüştürülmesi.
 10. Related entity ve internal-link graph; kalite eşiği geçmeyen sayfalara link/index üretmeme.
 

@@ -25,16 +25,17 @@ export type PublicEntitySeoState = {
   alternates: Partial<Record<ProgramSupportedLocale, string>>;
 };
 
-type PublicSeoEntityType = "program" | "university" | "destination" | "article";
+type PublicSeoEntityType = "program" | "university" | "destination" | "article" | "page";
 
 const ENTITY_ID_COLUMNS: Record<
   PublicSeoEntityType,
-  "program_id" | "university_id" | "destination_id" | "blog_post_id"
+  "program_id" | "university_id" | "destination_id" | "blog_post_id" | "website_page_id"
 > = {
   program: "program_id",
   university: "university_id",
   destination: "destination_id",
   article: "blog_post_id",
+  page: "website_page_id",
 };
 const SEO_CACHE_TTL_MS = 5 * 60_000;
 const SEO_CACHE_MAX_ENTRIES = 5_000;
@@ -113,6 +114,38 @@ export async function readPublishedSitemapCounts(
                  AND post.status='published'
                  AND post.published_at IS NOT NULL
                  AND post.published_at <= now()
+                 AND (
+                   post.locale=content.locale
+                   OR length(trim(COALESCE(post.translations_json->content.locale->>'body',''))) > 0
+                 )
+            ))
+            OR (content.entity_type='PAGE' AND EXISTS (
+              SELECT 1 FROM website_pages website_page
+               WHERE website_page.id=content.website_page_id
+                 AND website_page.status='published'
+                 AND website_page.published_at IS NOT NULL
+                 AND website_page.published_at <= now()
+                 AND EXISTS (
+                   SELECT 1 FROM website_page_versions version
+                    WHERE version.page_id=website_page.id
+                      AND version.published_at IS NOT NULL
+                      AND version.published_at <= now()
+                      AND version.id=(
+                        SELECT latest_version.id FROM website_page_versions latest_version
+                         WHERE latest_version.page_id=website_page.id
+                           AND latest_version.published_at IS NOT NULL
+                           AND latest_version.published_at <= now()
+                         ORDER BY latest_version.version_number DESC
+                         LIMIT 1
+                      )
+                      AND (
+                        website_page.locale=content.locale
+                        OR (
+                          jsonb_typeof(version.meta_snapshot->'translationsJson'->content.locale->'blocks')='array'
+                          AND jsonb_array_length(version.meta_snapshot->'translationsJson'->content.locale->'blocks') > 0
+                        )
+                      )
+                 )
             ))
           )
         GROUP BY content.entity_type,content.locale
@@ -166,6 +199,38 @@ export async function readPublishedSitemapPage(input: {
                    AND post.status='published'
                    AND post.published_at IS NOT NULL
                    AND post.published_at <= now()
+                   AND (
+                     post.locale=content.locale
+                     OR length(trim(COALESCE(post.translations_json->content.locale->>'body',''))) > 0
+                   )
+              ))
+              OR (content.entity_type='PAGE' AND EXISTS (
+                SELECT 1 FROM website_pages website_page
+                 WHERE website_page.id=content.website_page_id
+                   AND website_page.status='published'
+                   AND website_page.published_at IS NOT NULL
+                   AND website_page.published_at <= now()
+                   AND EXISTS (
+                     SELECT 1 FROM website_page_versions version
+                      WHERE version.page_id=website_page.id
+                        AND version.published_at IS NOT NULL
+                        AND version.published_at <= now()
+                        AND version.id=(
+                          SELECT latest_version.id FROM website_page_versions latest_version
+                           WHERE latest_version.page_id=website_page.id
+                             AND latest_version.published_at IS NOT NULL
+                             AND latest_version.published_at <= now()
+                           ORDER BY latest_version.version_number DESC
+                           LIMIT 1
+                        )
+                        AND (
+                          website_page.locale=content.locale
+                          OR (
+                            jsonb_typeof(version.meta_snapshot->'translationsJson'->content.locale->'blocks')='array'
+                            AND jsonb_array_length(version.meta_snapshot->'translationsJson'->content.locale->'blocks') > 0
+                          )
+                        )
+                   )
               ))
             )
           ORDER BY content.id
@@ -191,20 +256,53 @@ export async function readPublishedSitemapPage(input: {
           AND alt_state.content_record_id=alt.id
           AND alt_state.status='PUBLISHED' AND alt_state.index_state='INDEX'
           AND (
-            alt.locale='en' OR (
-              page.entity_type='PROGRAM' AND EXISTS (
+            (page.entity_type='PROGRAM' AND (
+              alt.locale='en' OR EXISTS (
                 SELECT 1 FROM program_translations alt_translation
                  WHERE alt_translation.program_id=alt.program_id
                    AND alt_translation.locale=alt.locale
-                 AND alt_translation.status='published'
+                   AND alt_translation.status='published'
               )
-            ) OR (
+            )) OR (page.entity_type IN ('UNIVERSITY','DESTINATION') AND alt.locale='en') OR (
               page.entity_type='ARTICLE' AND EXISTS (
                 SELECT 1 FROM website_blog_posts alt_post
                  WHERE alt_post.id=alt.blog_post_id
                    AND alt_post.status='published'
                    AND alt_post.published_at IS NOT NULL
                    AND alt_post.published_at <= now()
+                   AND (
+                     alt_post.locale=alt.locale
+                     OR length(trim(COALESCE(alt_post.translations_json->alt.locale->>'body',''))) > 0
+                   )
+              )
+            ) OR (
+              page.entity_type='PAGE' AND EXISTS (
+                SELECT 1 FROM website_pages alt_page
+                 WHERE alt_page.id=alt.website_page_id
+                   AND alt_page.status='published'
+                   AND alt_page.published_at IS NOT NULL
+                   AND alt_page.published_at <= now()
+                   AND EXISTS (
+                     SELECT 1 FROM website_page_versions alt_version
+                      WHERE alt_version.page_id=alt_page.id
+                        AND alt_version.published_at IS NOT NULL
+                        AND alt_version.published_at <= now()
+                        AND alt_version.id=(
+                          SELECT latest_version.id FROM website_page_versions latest_version
+                           WHERE latest_version.page_id=alt_page.id
+                             AND latest_version.published_at IS NOT NULL
+                             AND latest_version.published_at <= now()
+                           ORDER BY latest_version.version_number DESC
+                           LIMIT 1
+                        )
+                        AND (
+                          alt_page.locale=alt.locale
+                          OR (
+                            jsonb_typeof(alt_version.meta_snapshot->'translationsJson'->alt.locale->'blocks')='array'
+                            AND jsonb_array_length(alt_version.meta_snapshot->'translationsJson'->alt.locale->'blocks') > 0
+                          )
+                        )
+                   )
               )
             )
           )
@@ -240,20 +338,53 @@ export async function readPublishedEntitySeoState(input: {
           AND content.entity_type=$3 AND content.${idColumn}=$4
           AND state.status='PUBLISHED' AND state.index_state='INDEX'
           AND (
-            content.locale='en' OR (
-              content.entity_type='PROGRAM' AND EXISTS (
+            (content.entity_type='PROGRAM' AND (
+              content.locale='en' OR EXISTS (
                 SELECT 1 FROM program_translations translation
                  WHERE translation.program_id=content.program_id
                    AND translation.locale=content.locale
                    AND translation.status='published'
               )
-            ) OR (
+            )) OR (content.entity_type IN ('UNIVERSITY','DESTINATION') AND content.locale='en') OR (
               content.entity_type='ARTICLE' AND EXISTS (
                 SELECT 1 FROM website_blog_posts post
                  WHERE post.id=content.blog_post_id
                    AND post.status='published'
                    AND post.published_at IS NOT NULL
                    AND post.published_at <= now()
+                   AND (
+                     post.locale=content.locale
+                     OR length(trim(COALESCE(post.translations_json->content.locale->>'body',''))) > 0
+                   )
+              )
+            ) OR (
+              content.entity_type='PAGE' AND EXISTS (
+                SELECT 1 FROM website_pages website_page
+                 WHERE website_page.id=content.website_page_id
+                   AND website_page.status='published'
+                   AND website_page.published_at IS NOT NULL
+                   AND website_page.published_at <= now()
+                   AND EXISTS (
+                     SELECT 1 FROM website_page_versions version
+                      WHERE version.page_id=website_page.id
+                        AND version.published_at IS NOT NULL
+                        AND version.published_at <= now()
+                        AND version.id=(
+                          SELECT latest_version.id FROM website_page_versions latest_version
+                           WHERE latest_version.page_id=website_page.id
+                             AND latest_version.published_at IS NOT NULL
+                             AND latest_version.published_at <= now()
+                           ORDER BY latest_version.version_number DESC
+                           LIMIT 1
+                        )
+                        AND (
+                          website_page.locale=content.locale
+                          OR (
+                            jsonb_typeof(version.meta_snapshot->'translationsJson'->content.locale->'blocks')='array'
+                            AND jsonb_array_length(version.meta_snapshot->'translationsJson'->content.locale->'blocks') > 0
+                          )
+                        )
+                   )
               )
             )
           )

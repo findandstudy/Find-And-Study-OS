@@ -42,6 +42,7 @@ test("render read model serves bounded data and coalesces the same cold key", as
   let programId: number | null = null;
   let destinationId: number | null = null;
   let articleId: number | null = null;
+  let pageId: number | null = null;
   try {
     const identity = await client.query(
       "SELECT current_database() AS database_name, current_user AS user_name, inet_server_port() AS server_port",
@@ -83,6 +84,42 @@ test("render read model serves bounded data and coalesces the same cold key", as
          'published','en',now()) RETURNING id`,
     );
     articleId = article.rows[0].id;
+    const pageSlug = `render-pilot-page-${process.pid}`;
+    const page = await client.query<{ id: number }>(
+      `INSERT INTO website_pages
+         (title,slug,status,locale,published_at,meta_title,meta_description,translations_json)
+       VALUES ('Published Snapshot Page',$1,'published','en',now(),'Snapshot SEO','Published snapshot description',
+         jsonb_build_object('tr',jsonb_build_object(
+           'fields',jsonb_build_object('title','Yayınlanmış Sayfa','metaTitle','Yayın SEO','metaDescription','Yayın özeti'),
+           'blocks',jsonb_build_array(jsonb_build_object(
+             'blockType','rich_text','content',jsonb_build_object('content','<p>Türkçe yayın gövdesi</p>'),
+             'settings','{}'::jsonb,'sortOrder',0,'isVisible',true
+           ))
+         ))) RETURNING id`,
+      [pageSlug],
+    );
+    pageId = page.rows[0].id;
+    await client.query(
+      `INSERT INTO website_page_versions
+         (page_id,version_number,blocks_snapshot,meta_snapshot,published_at)
+       VALUES ($1,1,$2::jsonb,$3::jsonb,now())`,
+      [
+        pageId,
+        JSON.stringify([{ blockType: "rich_text", content: { content: "<p>Immutable published body</p>" }, settings: {}, sortOrder: 0, isVisible: true }]),
+        JSON.stringify({
+          title: "Published Snapshot Page",
+          metaTitle: "Snapshot SEO",
+          metaDescription: "Published snapshot description",
+          translationsJson: {
+            tr: {
+              fields: { title: "Yayınlanmış Sayfa", metaTitle: "Yayın SEO", metaDescription: "Yayın özeti" },
+              blocks: [{ blockType: "rich_text", content: { content: "<p>Türkçe yayın gövdesi</p>" }, settings: {}, sortOrder: 0, isVisible: true }],
+            },
+          },
+        }),
+      ],
+    );
+    await client.query("UPDATE website_pages SET title='Unpublished draft title' WHERE id=$1", [pageId]);
 
     const route = matchPublicCatalogRenderPath(
       `/en/programs/${publicCatalogRouteKey(programId, "Render Pilot Computer Science")}`,
@@ -160,8 +197,26 @@ test("render read model serves bounded data and coalesces the same cold key", as
       3,
     );
     assert.equal(articleDetail.value.indexable, false);
+
+    const pageRoute = matchPublicCatalogRenderPath(`/en/${pageSlug}`);
+    assert.ok(pageRoute && pageRoute.kind === "page_detail");
+    const pageDetail = await getPublicCatalogRenderModel(pageRoute);
+    assert.equal(pageDetail.value.kind, "page_detail");
+    assert.equal(pageDetail.value.kind === "page_detail" ? pageDetail.value.page.title : null, "Published Snapshot Page");
+    assert.equal(pageDetail.value.kind === "page_detail" ? pageDetail.value.page.versionNumber : null, 1);
+    assert.equal(pageDetail.value.kind === "page_detail" ? pageDetail.value.page.blocks[0]?.blockType : null, "rich_text");
+    assert.equal(pageDetail.value.indexable, false);
+
+    const translatedPageRoute = matchPublicCatalogRenderPath(`/tr/${pageSlug}`);
+    assert.ok(translatedPageRoute && translatedPageRoute.kind === "page_detail");
+    const translatedPage = await getPublicCatalogRenderModel(translatedPageRoute);
+    assert.equal(translatedPage.value.kind === "page_detail" ? translatedPage.value.page.title : null, "Yayınlanmış Sayfa");
+    assert.equal(translatedPage.value.kind === "page_detail" ? translatedPage.value.page.blocks.length : 0, 1);
   } finally {
     invalidatePublicCatalogRenderCache();
+    if (pageId !== null) {
+      await client.query("DELETE FROM website_pages WHERE id = $1", [pageId]);
+    }
     if (articleId !== null) {
       await client.query("DELETE FROM website_blog_posts WHERE id = $1", [articleId]);
     }

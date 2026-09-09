@@ -9,6 +9,24 @@ import {
 
 export type PublicWebRenderMode = "off" | "allowlist" | "all";
 
+export const PUBLIC_WEB_RESERVED_PAGE_SLUGS = new Set([
+  "about", "countries", "destinations", "programs", "universities", "blog",
+  "guides", "contact", "login", "register", "agency", "agency-application",
+  "student", "staff", "admin", "agent", "institution", "accommodation",
+  "instructor", "embed", "api", "sitemaps", "robots.txt", "sitemap.xml",
+]);
+
+export function isReservedPublicPageSlug(value: unknown): boolean {
+  return PUBLIC_WEB_RESERVED_PAGE_SLUGS.has(String(value ?? "").trim().toLowerCase());
+}
+
+export type PublicPageBlock = {
+  blockType: string;
+  content: Record<string, unknown>;
+  settings: Record<string, unknown>;
+  sortOrder: number;
+};
+
 export type PublicCatalogRenderRoute =
   | {
       kind: "program_list";
@@ -41,6 +59,12 @@ export type PublicCatalogRenderRoute =
       path: string;
       routeKey: string;
       identity: PublicCatalogRouteIdentity | null;
+    }
+  | {
+      kind: "page_detail";
+      locale: ProgramSupportedLocale;
+      path: string;
+      slug: string;
     };
 
 export type PublicCatalogRenderModel =
@@ -168,6 +192,23 @@ export type PublicCatalogRenderModel =
         updatedAt: string;
         readTime: number | null;
       };
+    }
+  | {
+      kind: "page_detail";
+      locale: ProgramSupportedLocale;
+      canonicalPath: string;
+      title: string;
+      description: string;
+      indexable: boolean;
+      alternatePaths: Partial<Record<ProgramSupportedLocale, string>>;
+      page: {
+        id: number;
+        title: string;
+        slug: string;
+        versionNumber: number;
+        publishedAt: string;
+        blocks: PublicPageBlock[];
+      };
     };
 
 const MAX_ALLOWLIST_ENTRIES = 64;
@@ -284,6 +325,19 @@ export function matchPublicCatalogRenderPath(
       path,
       routeKey: segments[2],
       identity: parsePublicCatalogRouteKey(segments[2]),
+    };
+  }
+  if (
+    segments.length === 2
+    && segments[1].length <= 180
+    && /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(segments[1])
+    && !isReservedPublicPageSlug(segments[1])
+  ) {
+    return {
+      kind: "page_detail",
+      locale,
+      path,
+      slug: segments[1],
     };
   }
   return null;
@@ -452,6 +506,81 @@ function renderArticleDetail(model: Extract<PublicCatalogRenderModel, { kind: "a
   </main>`;
 }
 
+function safePublicUrl(value: unknown): string | null {
+  const url = String(value ?? "").trim();
+  if (!url || url.length > 2_048 || /[\u0000-\u001f\u007f]/.test(url)) return null;
+  if (url.startsWith("/") && !url.startsWith("//") && !url.includes("..")) return url;
+  if (url.startsWith("#")) return url;
+  try {
+    const parsed = new URL(url);
+    return ["https:", "mailto:", "tel:"].includes(parsed.protocol) ? url : null;
+  } catch {
+    return null;
+  }
+}
+
+function pageItems(value: unknown, maximum = 24): Record<string, unknown>[] {
+  return Array.isArray(value)
+    ? value.slice(0, maximum).filter((item): item is Record<string, unknown> => (
+      item !== null && typeof item === "object" && !Array.isArray(item)
+    ))
+    : [];
+}
+
+function pageText(value: unknown, maximum = 2_000): string {
+  return String(typeof value === "string" || typeof value === "number" ? value : "")
+    .slice(0, maximum)
+    .trim();
+}
+
+function renderPublicPageBlock(block: PublicPageBlock): string {
+  const content = block.content;
+  if (block.blockType === "hero") {
+    const title = pageText(content.title, 500);
+    const subtitle = pageText(content.subtitle, 2_000);
+    const badge = pageText(content.badge, 200);
+    const href = safePublicUrl(content.ctaUrl);
+    const label = pageText(content.ctaLabel, 200);
+    return `<section class="px-4 py-20 text-center"><div class="mx-auto max-w-5xl">${badge ? `<p class="text-sm text-primary">${escapeHtml(badge)}</p>` : ""}<h1 class="mt-3 text-4xl font-bold">${escapeHtml(title)}</h1>${subtitle ? `<p class="mx-auto mt-5 max-w-3xl text-lg text-muted-foreground">${escapeHtml(subtitle)}</p>` : ""}${href && label ? `<p class="mt-7"><a class="rounded-full bg-primary px-6 py-3 text-primary-foreground" href="${escapeHtml(href)}">${escapeHtml(label)}</a></p>` : ""}</div></section>`;
+  }
+  if (block.blockType === "rich_text") {
+    const body = articlePlainText(pageText(content.content, 200_000));
+    return `<section class="mx-auto max-w-3xl px-4 py-10"><div class="whitespace-pre-line leading-7">${escapeHtml(body)}</div></section>`;
+  }
+  if (block.blockType === "stats_strip") {
+    const stats = pageItems(content.stats, 12).map((item) => `<div><strong class="text-3xl">${escapeHtml(pageText(item.value, 100))}</strong><p>${escapeHtml(pageText(item.label, 200))}</p></div>`).join("");
+    return `<section class="mx-auto grid max-w-6xl gap-6 px-4 py-10 text-center sm:grid-cols-2 lg:grid-cols-4">${stats}</section>`;
+  }
+  if (block.blockType === "feature_cards" || block.blockType === "icon_cards") {
+    const cards = pageItems(content.cards, 24).map((item) => {
+      const href = safePublicUrl(item.linkUrl);
+      const title = pageText(item.title, 300);
+      const description = pageText(item.description, 2_000);
+      const card = `<h3 class="text-xl font-bold">${escapeHtml(title)}</h3><p class="mt-2 text-muted-foreground">${escapeHtml(description)}</p>`;
+      return `<article class="rounded-2xl border border-border p-6">${href ? `<a href="${escapeHtml(href)}">${card}</a>` : card}</article>`;
+    }).join("");
+    return `<section class="mx-auto max-w-6xl px-4 py-12"><h2 class="text-center text-3xl font-bold">${escapeHtml(pageText(content.title, 500))}</h2>${content.subtitle ? `<p class="mt-3 text-center text-muted-foreground">${escapeHtml(pageText(content.subtitle, 2_000))}</p>` : ""}<div class="mt-8 grid gap-5 md:grid-cols-3">${cards}</div></section>`;
+  }
+  if (block.blockType === "cta_banner") {
+    const href = safePublicUrl(content.ctaUrl);
+    const label = pageText(content.ctaLabel, 200);
+    return `<section class="mx-auto my-10 max-w-6xl rounded-3xl bg-primary px-6 py-14 text-center text-primary-foreground"><h2 class="text-3xl font-bold">${escapeHtml(pageText(content.title, 500))}</h2><p class="mt-3">${escapeHtml(pageText(content.subtitle, 2_000))}</p>${href && label ? `<p class="mt-7"><a class="rounded-full bg-background px-6 py-3 text-foreground" href="${escapeHtml(href)}">${escapeHtml(label)}</a></p>` : ""}</section>`;
+  }
+  if (block.blockType === "faq") {
+    const items = pageItems(content.items, 50).map((item) => `<details class="rounded-xl border border-border p-5"><summary class="font-semibold">${escapeHtml(pageText(item.question, 500))}</summary><p class="mt-3 text-muted-foreground">${escapeHtml(pageText(item.answer, 4_000))}</p></details>`).join("");
+    return `<section class="mx-auto max-w-3xl px-4 py-12"><h2 class="text-3xl font-bold">${escapeHtml(pageText(content.title, 500))}</h2><div class="mt-7 space-y-3">${items}</div></section>`;
+  }
+  if (block.blockType === "section_title") {
+    return `<section class="mx-auto max-w-6xl px-4 py-10 text-center"><h2 class="text-3xl font-bold">${escapeHtml(pageText(content.title, 500))}</h2>${content.subtitle ? `<p class="mt-3 text-muted-foreground">${escapeHtml(pageText(content.subtitle, 2_000))}</p>` : ""}</section>`;
+  }
+  return "";
+}
+
+function renderPageDetail(model: Extract<PublicCatalogRenderModel, { kind: "page_detail" }>): string {
+  const blocks = model.page.blocks.map(renderPublicPageBlock).join("");
+  return `<main data-public-render-shell="page-detail" data-public-page-version="${model.page.versionNumber}">${blocks || `<section class="mx-auto max-w-3xl px-4 py-24"><h1 class="text-4xl font-bold">${escapeHtml(model.page.title)}</h1></section>`}</main>`;
+}
+
 function renderNotFound(model: Extract<PublicCatalogRenderModel, { kind: "not_found" }>): string {
   return `<main data-public-render-shell="not-found" class="mx-auto max-w-3xl px-4 py-32 text-center"><h1 class="text-3xl font-bold">${escapeHtml(model.title)}</h1><p class="mt-3 text-muted-foreground">${escapeHtml(model.description)}</p></main>`;
 }
@@ -572,6 +701,22 @@ function structuredData(model: PublicCatalogRenderModel, siteUrl: string): unkno
       },
     };
   }
+  if (model.kind === "page_detail") {
+    return {
+      "@context": "https://schema.org",
+      "@type": "WebPage",
+      name: model.page.title,
+      description: model.description,
+      url: `${siteUrl}${model.canonicalPath}`,
+      datePublished: model.page.publishedAt,
+      inLanguage: model.locale,
+      isPartOf: {
+        "@type": "WebSite",
+        name: "Find And Study",
+        url: siteUrl,
+      },
+    };
+  }
   return {
     "@context": "https://schema.org",
     "@type": "WebPage",
@@ -614,12 +759,15 @@ export function renderPublicCatalogHtml(input: {
           ? renderDestinationDetail(input.model)
           : input.model.kind === "article_detail"
             ? renderArticleDetail(input.model)
+            : input.model.kind === "page_detail"
+              ? renderPageDetail(input.model)
       : renderNotFound(input.model);
   const alternatePaths = (
     input.model.kind === "program_detail"
     || input.model.kind === "university_detail"
     || input.model.kind === "destination_detail"
     || input.model.kind === "article_detail"
+    || input.model.kind === "page_detail"
   ) && input.model.indexable
     ? input.model.alternatePaths
     : {};

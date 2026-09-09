@@ -154,4 +154,38 @@ router.get("/public/web/guides/:routeKey", async (req: Request, res: Response): 
   });
 });
 
+router.get("/public/web/pages/:slug", async (req: Request, res: Response): Promise<void> => {
+  const locale = normalizeProgramLocale(req.query.locale);
+  const path = `/${locale}/${String(req.params.slug)}`;
+  const route = matchPublicCatalogRenderPath(path);
+  if (!route || route.kind !== "page_detail") {
+    res.status(400).json({ error: "Invalid page route", code: "PUBLIC_PAGE_ROUTE_INVALID" });
+    return;
+  }
+  const rendered = await getPublicCatalogRenderModel(route);
+  if (rendered.value.kind === "not_found") {
+    res.status(404).json({ error: "Page not found", code: "PUBLIC_PAGE_NOT_FOUND" });
+    return;
+  }
+  if (rendered.value.kind !== "page_detail") {
+    res.status(500).json({ error: "Page projection unavailable", code: "PUBLIC_PAGE_PROJECTION_INVALID" });
+    return;
+  }
+  setPublicHeaders(res);
+  res.setHeader("Content-Location", rendered.value.canonicalPath);
+  res.json({
+    data: rendered.value.page,
+    meta: {
+      locale,
+      title: rendered.value.title,
+      description: rendered.value.description,
+      indexable: rendered.value.indexable,
+      canonicalPath: rendered.value.canonicalPath,
+      alternatePaths: rendered.value.alternatePaths,
+      requestedPathIsCanonical: rendered.value.canonicalPath === path,
+      generatedAt: new Date().toISOString(),
+    },
+  });
+});
+
 export default router;

@@ -5,8 +5,10 @@ import {
   programTranslationsTable,
   universitiesTable,
   websiteBlogPostsTable,
+  websitePagesTable,
+  websitePageVersionsTable,
 } from "@workspace/db";
-import { and, asc, eq, isNotNull, lte, sql } from "drizzle-orm";
+import { and, asc, desc, eq, isNotNull, lte, sql } from "drizzle-orm";
 import {
   publicCatalogCanonicalState,
   publicCatalogPath,
@@ -18,6 +20,7 @@ import {
 import type {
   PublicCatalogRenderModel,
   PublicCatalogRenderRoute,
+  PublicPageBlock,
 } from "./publicCatalogRenderContract";
 import { resolvePublishedEntitySeoState } from "./publicWebDiscoveryReadModel";
 import { buildPublicWebCanonicalPath } from "./publicWebContentContract";
@@ -89,10 +92,36 @@ function boundedString(value: unknown, maximum: number): string {
   return typeof value === "string" ? value.slice(0, maximum) : "";
 }
 
+const PUBLIC_PAGE_BLOCK_TYPES = new Set([
+  "hero", "rich_text", "stats_strip", "feature_cards", "icon_cards",
+  "cta_banner", "faq", "team_grid", "office_list", "logo_grid",
+  "testimonials", "section_title", "spacer_divider",
+]);
+
+function publicPageBlocks(value: unknown): PublicPageBlock[] {
+  if (!Array.isArray(value) || value.length > 64) return [];
+  try {
+    if (Buffer.byteLength(JSON.stringify(value), "utf8") > 1_048_576) return [];
+  } catch {
+    return [];
+  }
+  return value.flatMap((item, index) => {
+    if (!isRecord(item) || item.isVisible === false) return [];
+    const blockType = boundedString(item.blockType, 64);
+    if (!PUBLIC_PAGE_BLOCK_TYPES.has(blockType)) return [];
+    return [{
+      blockType,
+      content: isRecord(item.content) ? item.content : {},
+      settings: isRecord(item.settings) ? item.settings : {},
+      sortOrder: Number.isSafeInteger(item.sortOrder) ? Number(item.sortOrder) : index,
+    }];
+  }).sort((a, b) => a.sortOrder - b.sortOrder);
+}
+
 function cacheKey(route: PublicCatalogRenderRoute): string {
   const identity = route.kind === "program_list"
     ? "index"
-    : route.kind === "destination_detail"
+    : route.kind === "destination_detail" || route.kind === "page_detail"
       ? route.slug
       : route.identity?.id ?? route.routeKey;
   return `${route.locale}:${route.kind}:${identity}`;
@@ -621,12 +650,135 @@ async function readArticleDetail(
   };
 }
 
+async function readPageDetail(
+  route: Extract<PublicCatalogRenderRoute, { kind: "page_detail" }>,
+): Promise<PublicCatalogRenderModel> {
+  const [page] = await db
+    .select({
+      id: websitePagesTable.id,
+      title: websitePagesTable.title,
+      slug: websitePagesTable.slug,
+      locale: websitePagesTable.locale,
+      metaTitle: websitePagesTable.metaTitle,
+      metaDescription: websitePagesTable.metaDescription,
+      publishedAt: websitePagesTable.publishedAt,
+    })
+    .from(websitePagesTable)
+    .where(and(
+      eq(websitePagesTable.slug, route.slug),
+      eq(websitePagesTable.status, "published"),
+      isNotNull(websitePagesTable.publishedAt),
+      lte(websitePagesTable.publishedAt, new Date()),
+    ))
+    .limit(1);
+  if (!page || !page.publishedAt) {
+    return {
+      kind: "not_found",
+      locale: route.locale,
+      canonicalPath: route.path,
+      title: "Page not found",
+      description: "The requested page is unavailable.",
+      indexable: false,
+    };
+  }
+  const [version] = await db
+    .select({
+      versionNumber: websitePageVersionsTable.versionNumber,
+      blocksSnapshot: websitePageVersionsTable.blocksSnapshot,
+      metaSnapshot: websitePageVersionsTable.metaSnapshot,
+      publishedAt: websitePageVersionsTable.publishedAt,
+    })
+    .from(websitePageVersionsTable)
+    .where(and(
+      eq(websitePageVersionsTable.pageId, page.id),
+      isNotNull(websitePageVersionsTable.publishedAt),
+      lte(websitePageVersionsTable.publishedAt, new Date()),
+    ))
+    .orderBy(desc(websitePageVersionsTable.versionNumber))
+    .limit(1);
+  if (!version || !version.publishedAt) {
+    return {
+      kind: "not_found",
+      locale: route.locale,
+      canonicalPath: route.path,
+      title: "Page not found",
+      description: "The requested page has no published version.",
+      indexable: false,
+    };
+  }
+
+  const metaSnapshot = isRecord(version.metaSnapshot) ? version.metaSnapshot : {};
+  const snapshotTranslations = isRecord(metaSnapshot.translationsJson)
+    ? metaSnapshot.translationsJson
+    : {};
+  const translation = isRecord(snapshotTranslations[route.locale])
+    ? snapshotTranslations[route.locale] as Record<string, unknown>
+    : null;
+  const translationFields = translation && isRecord(translation.fields)
+    ? translation.fields
+    : translation;
+  const sourceLocale = String(page.locale || "en").toLowerCase();
+  const source = route.locale === sourceLocale;
+  const title = source
+    ? boundedString(metaSnapshot.title, 500).trim() || page.title
+    : boundedString(translationFields?.title, 500).trim();
+  const metaTitle = source
+    ? boundedString(metaSnapshot.metaTitle, 500).trim() || page.metaTitle || ""
+    : boundedString(translationFields?.metaTitle, 500).trim();
+  const metaDescription = source
+    ? boundedString(metaSnapshot.metaDescription, 2_000).trim() || page.metaDescription || ""
+    : boundedString(translationFields?.metaDescription, 2_000).trim();
+  const blocks = source
+    ? publicPageBlocks(version.blocksSnapshot)
+    : publicPageBlocks(translation?.blocks);
+  const translationAvailable = Boolean(title && blocks.length > 0);
+  if (!translationAvailable) {
+    return {
+      kind: "not_found",
+      locale: route.locale,
+      canonicalPath: route.path,
+      title: "Page not found",
+      description: "The requested page is unavailable in this language.",
+      indexable: false,
+    };
+  }
+  const seoState = await resolvePublishedEntitySeoState({
+    entityType: "page",
+    entityId: page.id,
+    locale: route.locale,
+  });
+  const canonicalPath = seoState.canonicalPath || buildPublicWebCanonicalPath({
+    entityType: "PAGE",
+    entityId: page.id,
+    locale: route.locale,
+    slug: page.slug,
+  });
+  return {
+    kind: "page_detail",
+    locale: route.locale,
+    canonicalPath,
+    title: metaTitle || title,
+    description: boundedText(metaDescription, title),
+    indexable: metaSnapshot.robotsIndex === true && seoState.indexable,
+    alternatePaths: seoState.alternates,
+    page: {
+      id: page.id,
+      title,
+      slug: page.slug,
+      versionNumber: version.versionNumber,
+      publishedAt: version.publishedAt.toISOString(),
+      blocks,
+    },
+  };
+}
+
 async function loadModel(route: PublicCatalogRenderRoute): Promise<PublicCatalogRenderModel> {
   if (route.kind === "program_list") return readProgramList(route);
   if (route.kind === "program_detail") return readProgramDetail(route);
   if (route.kind === "university_detail") return readUniversityDetail(route);
   if (route.kind === "destination_detail") return readDestinationDetail(route);
-  return readArticleDetail(route);
+  if (route.kind === "article_detail") return readArticleDetail(route);
+  return readPageDetail(route);
 }
 
 function refresh(key: string, route: PublicCatalogRenderRoute): Promise<PublicCatalogRenderModel> {
@@ -668,7 +820,7 @@ export async function getPublicCatalogRenderModel(
 }
 
 export function invalidatePublicCatalogRenderCache(input: {
-  entityType?: "program" | "university" | "destination" | "article" | "all";
+  entityType?: "program" | "university" | "destination" | "article" | "page" | "all";
   entityId?: number;
   locale?: string;
 } = {}): number {
@@ -686,7 +838,8 @@ export function invalidatePublicCatalogRenderCache(input: {
         && input.entityId !== undefined && identity === String(input.entityId))
       || (input.entityType === "destination" && kind === "destination_detail")
       || (input.entityType === "article" && kind === "article_detail"
-        && input.entityId !== undefined && identity === String(input.entityId));
+        && input.entityId !== undefined && identity === String(input.entityId))
+      || (input.entityType === "page" && kind === "page_detail");
     if (localeMatches && entityMatches) {
       cache.delete(key);
       removed += 1;

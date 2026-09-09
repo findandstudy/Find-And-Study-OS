@@ -581,7 +581,23 @@ router.post("/website/pages/:id/publish", ...adminOnly, async (req: Request, res
         pageId,
         versionNumber: nextVersion,
         blocksSnapshot: blocks,
-        metaSnapshot: { title: page.title, metaTitle: page.metaTitle, metaDescription: page.metaDescription },
+        metaSnapshot: {
+          title: page.title,
+          slug: page.slug,
+          locale: page.locale,
+          metaTitle: page.metaTitle,
+          metaDescription: page.metaDescription,
+          canonicalUrl: page.canonicalUrl,
+          robotsIndex: page.robotsIndex,
+          robotsFollow: page.robotsFollow,
+          ogTitle: page.ogTitle,
+          ogDescription: page.ogDescription,
+          ogImageUrl: page.ogImageUrl,
+          twitterTitle: page.twitterTitle,
+          twitterDescription: page.twitterDescription,
+          twitterImageUrl: page.twitterImageUrl,
+          translationsJson: page.translationsJson,
+        },
         publishedAt: new Date(),
         createdBy: req.user?.id,
       }).returning();
@@ -798,10 +814,17 @@ router.post("/website/pages/:pageId/restore-version/:versionId", ...adminOnly, a
           }))
         );
       }
-      const metaSnap = version.metaSnapshot as Record<string, string> | null;
+      const metaSnap = version.metaSnapshot as Record<string, unknown> | null;
       if (metaSnap) {
         await tx.update(websitePagesTable)
-          .set({ status: "draft", metaTitle: metaSnap.metaTitle || null, metaDescription: metaSnap.metaDescription || null })
+          .set({
+            status: "draft",
+            metaTitle: typeof metaSnap.metaTitle === "string" ? metaSnap.metaTitle : null,
+            metaDescription: typeof metaSnap.metaDescription === "string" ? metaSnap.metaDescription : null,
+            translationsJson: metaSnap.translationsJson && typeof metaSnap.translationsJson === "object"
+              ? metaSnap.translationsJson
+              : {},
+          })
           .where(eq(websitePagesTable.id, pageId));
       } else {
         await tx.update(websitePagesTable)
@@ -1092,6 +1115,8 @@ router.put("/website/pages/:id/seo", ...adminOnly, async (req: Request, res: Res
     for (const key of allowedFields) {
       if (req.body[key] !== undefined) updates[key] = req.body[key];
     }
+    updates.status = "draft";
+    updates.publishedAt = null;
     const [page] = await db.update(websitePagesTable)
       .set(updates)
       .where(eq(websitePagesTable.id, Number(req.params.id)))
@@ -1191,7 +1216,7 @@ router.get("/website/translations/status", ...adminOnly, async (_req: Request, r
 router.put("/website/pages/:id/translations", ...adminOnly, async (req: Request, res: Response): Promise<void> => {
   try {
     const [page] = await db.update(websitePagesTable)
-      .set({ translationsJson: req.body.translations || {} })
+      .set({ translationsJson: req.body.translations || {}, status: "draft", publishedAt: null })
       .where(eq(websitePagesTable.id, Number(req.params.id)))
       .returning();
     if (!page) return void res.status(404).json({ error: "Not found" });
