@@ -129,6 +129,17 @@ try {
   ) {
     throw new Error("default-off robots boundary failed");
   }
+  for (const llmsPath of ["/llms.txt", "/.well-known/llms.txt"]) {
+    const llms = await fetch(`${origin}${llmsPath}`, { redirect: "manual" });
+    if (
+      llms.status !== 404
+      || llms.headers.get("cache-control") !== "no-store"
+      || llms.headers.get("x-robots-tag") !== "noindex, nofollow, noarchive"
+    ) {
+      throw new Error(`default-off AI discovery boundary failed for ${llmsPath}`);
+    }
+    await llms.arrayBuffer();
+  }
   for (const privatePath of ["/admin", "/student", "/en/login", "/sign/test-token"]) {
     const privateRoute = await timedFetch(privatePath);
     if (

@@ -47,6 +47,15 @@ const publicWebRobotsConfig = parsePublicWebRobotsConfig({
   siteUrl: process.env.PUBLIC_SITE_URL,
 });
 app.get(["/llms.txt", "/.well-known/llms.txt"], (_req, res) => {
+  if (publicWebRobotsConfig.mode !== "published") {
+    res
+      .status(404)
+      .type("text/plain; charset=utf-8")
+      .set("Cache-Control", "no-store")
+      .set("X-Robots-Tag", "noindex, nofollow, noarchive")
+      .send("Not found");
+    return;
+  }
   res
     .type("text/plain; charset=utf-8")
     .set("Cache-Control", "public, max-age=3600")

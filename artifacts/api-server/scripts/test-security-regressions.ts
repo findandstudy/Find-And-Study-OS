@@ -321,6 +321,7 @@ test("private, authentication and token SPA routes are noindex at the server bou
   }
   assert.match(indexSource, /X-Robots-Tag", "noindex, nofollow, noarchive"/);
   assert.match(indexSource, /publicWebRobotsConfig\.mode !== "published"/);
+  assert.match(indexSource, /\["\/llms\.txt", "\/\.well-known\/llms\.txt"\]/);
 });
 
 test("portal lifecycle planning can never authorize a portal mutation", () => {
