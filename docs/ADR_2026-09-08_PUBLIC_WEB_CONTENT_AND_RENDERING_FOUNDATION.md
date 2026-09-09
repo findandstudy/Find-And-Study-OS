@@ -285,6 +285,12 @@ production kapasite iddiası oluşturmaz.
     impersonation'ı reddeder, store concurrency'sini 2 ile sınırlar ve yalnız
     exact kimlikli `DRAFT + NOINDEX` sonucunu kabul eder. HTTP/UI wiring ve
     kalıcı role grant bilinçli olarak yoktur.**
+13. AI veya dış mapping aracıyla toplu içerik hazırlama. **Çalıştırılabilir kod
+    upload'u yerine exact şemalı, mapping SHA-256 bağlı, en fazla 7 gün geçerli
+    deklaratif JSON manifest sözleşmesi yerelde tamamlandı. Client scope/rol
+    seçemez; 100 satır, 8 MiB, 32 derinlik ve 200.000 node tavanları uygulanır.
+    Manifest yalnız canonical snapshot + hash üretip batch planner'a veri sağlar;
+    adapter kodu çalıştırmaz, dış bağlantı kurmaz ve publish etmez.**
 
 ## NO-GO sınırları
 
@@ -300,3 +306,5 @@ production kapasite iddiası oluşturmaz.
   dönüştürülemez.
 - Batch executor ayrı bir runtime endpoint değildir ve publish/index yetkisi
   taşımaz; mevcut admin CMS CRUD rotalarının yerine geçmiş sayılmaz.
+- Import manifesti bir plugin veya script değildir; dosyanın içinden JavaScript,
+  selector, credential, tenant/role veya yürütme talimatı alınmaz.

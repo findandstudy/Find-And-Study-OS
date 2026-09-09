@@ -9,10 +9,10 @@ Branch: `codex/public-web-foundation-20260908`
 | Alan | Değer |
 |---|---|
 | Karşılaştırma tabanı | `e6edad6a3de34f1c597687753a8c18d0f8248bcb` |
-| Code/config-bearing head | `9c3f07d2b6747a34956952ce0823299c6017673f` |
-| Tree | `1fec45c350891b9739ebed7d5f3c2bb24c837956` |
-| Base→head binary patch SHA-256 | `657e126a336eabc64efbf536869a01d9f68270711d8331b6ea8b54a5048c6cc6` |
-| Değişim | 48 commit, 125 dosya, +21.123 / -246 |
+| Code/config-bearing head | `f0d94b9994d5dc8bbf945793c251f21df9b8629f` |
+| Tree | `bcbb3682a372f4bace48132884ec4485e569456c` |
+| Base→head binary patch SHA-256 | `47caa86a1f0a36464a0a9b2abdb7c1255b687aebb6cb05472c70eef4feab7737` |
+| Değişim | 50 commit, 127 dosya, +21.390 / -246 |
 | Migration ledger | 123 SQL / 123 journal |
 
 Bu belge code/config hash'inin parçası değildir. Aday kimliği yukarıdaki exact
@@ -63,6 +63,11 @@ kanıtlar yeniden üretilir.
   kararı alır, impersonation'ı reddeder ve store concurrency'sini 2 ile sınırlar.
   Satır hatalarını izole eder, altyapı detaylarını döndürmez ve yalnız exact
   kimlikleri doğrulanmış `DRAFT + NOINDEX` store sonucunu başarı sayar.
+- AI/mapping aracı çıktıları için çalıştırılabilir kod upload'u yerine exact şemalı,
+  süreli ve mapping SHA-256 bağlı deklaratif JSON manifest kabul sözleşmesi vardır.
+  Manifest client tenant/organization/rol seçemez; 100 satır, 8 MiB, 32 derinlik,
+  200.000 node ve 7 günlük ömür tavanlarıyla canonical snapshot olarak planner'a
+  girer. Parser herhangi bir adapter kodu çalıştırmaz veya dış bağlantı kurmaz.
 
 ## Exact-head yerel kanıt
 
@@ -74,7 +79,7 @@ kanıtlar yeniden üretilir.
 | Edcons public template tests | PASS — 5/5 |
 | Edcons production build + static sitemap | PASS |
 | Migration ledger | PASS — 123/123 |
-| Public pure contract suites | PASS — 86/86 |
+| Public pure contract suites | PASS — 91/91 |
 | Public PostgreSQL suites | PASS — 6/6 |
 | Migration authority | PASS — 31/31 + 1 ortam SKIP |
 | Security regressions | PASS — 37/37 |
@@ -86,6 +91,7 @@ Public pure toplamı: foundation 8, command 4, store adapter 4, publication read
 model 2, localized entity 5, list/scale 13, route 4, render 10, discovery 6 ve
 scale 3 teste ek olarak draft intake builder 4, bounded batch planner 6, batch
 executor 5, source resolver 4, command 4 ve store 4 testtir.
+Deklaratif draft import manifesti ve planner bağlantısı ayrıca 5/5 testtir.
 
 Yerel disposable PostgreSQL 16 üzerindeki beş suite public foundation,
 catalog graph, public render ve discovery/localization/route-alias davranışını
@@ -144,9 +150,9 @@ Bu ölçüm sentetiktir; staging ağ/CDN/browser Core Web Vitals kanıtı değil
 - Bağımsız security/architecture review yoktur.
 - Staging deploy ve gerçek browser/crawler/CDN UAT yapılmamıştır.
 - Toplu içerik backfill, AI çeviri yayınlama ve public indexing aktive değildir.
-- Draft intake, batch planlayıcısı ve executor runtime/UI'a bağlanmamış, executor
-  role/grant verilmemiştir; mevcut CMS CRUD yazıları governed command yoluna
-  geçirilmemiştir.
+- Manifest parser, draft intake, batch planlayıcısı ve executor runtime/UI'a
+  bağlanmamış, executor role/grant verilmemiştir; mevcut CMS CRUD yazıları
+  governed command yoluna geçirilmemiştir.
 - Production deploy, public index açma ve `Find-And-Study-OS-Next` sync bu paketin
   yetkisi dışındadır.
 

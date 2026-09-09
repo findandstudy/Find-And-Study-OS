@@ -3,7 +3,7 @@
 Tarih: 9 Eylül 2026
 Durum: **Yerel staging adayı yeşil; staging/production aktivasyonu NO-GO**
 Branch: `codex/public-web-foundation-20260908`
-Code/config-bearing head: `9c3f07d2b6747a34956952ce0823299c6017673f`
+Code/config-bearing head: `f0d94b9994d5dc8bbf945793c251f21df9b8629f`
 Karşılaştırma tabanı: `e6edad6a` (`origin/codex/operations-social-staging-20260905`)
 
 ## Teslim edilen dilim
@@ -45,6 +45,12 @@ Karşılaştırma tabanı: `e6edad6a` (`origin/codex/operations-social-staging-2
   impersonation'ı reddeder ve en fazla 2 store yazısını eşzamanlı yürütür.
   Store cevabı exact kimlik/shape ile doğrulanır; satır hataları güvenli kodlarla
   izole edilir ve başarılı sonuç yine yalnız `DRAFT + NOINDEX` olabilir.
+- AI/import aracı çıktısı çalıştırılabilir kod olarak kabul edilmez. Sadece exact
+  şemalı `FAS_PUBLIC_WEB_DRAFT_IMPORT` JSON manifesti alınır: client scope/rol
+  alanı yoktur, adapter mapping SHA-256 ve en fazla 7 günlük süre penceresi
+  zorunludur; 100 satır, 8 MiB, 32 derinlik ve 200.000 JSON node tavanlarıyla
+  prototype-pollution ve executable değerler reddedilir. Canonical snapshot ve
+  manifest SHA-256 mevcut batch planner'a veri olarak aktarılır.
 
 ## Exact-head doğrulama özeti
 
@@ -70,6 +76,7 @@ Karşılaştırma tabanı: `e6edad6a` (`origin/codex/operations-social-staging-2
 | Draft source resolver | PASS — saf 4/4 + PostgreSQL 1/1 |
 | Draft batch planner | PASS — 6/6 |
 | Draft batch executor | PASS — 5/5 |
+| Draft import manifest | PASS — 5/5 |
 | Migration authority | PASS — 31/31 + 1 ortam SKIP |
 | Security regressions | PASS — 37/37 |
 | Rate-limit/IP security | PASS — 6/6 |
@@ -126,7 +133,7 @@ Geçersiz rollout modu veya geçersiz tenant/organization UUID'si fail-closed da
 ## Bilinen sınırlar ve sonraki kapılar
 
 1. Staging smoke/UAT, gerçek crawler davranışı, Lighthouse/Core Web Vitals, CDN cache ve invalidation kanıtı alınmamıştır. Yerel tarayıcıda masaüstü ve 390 px mobil ana sayfa/navigation kontrolü yatay taşma ve console error üretmedi; gerçek city içeriği henüz staging UAT görmedi.
-2. Bulk content import/backfill ve AI translation publication otomatik olarak açılmamıştır. Yeni draft intake adapter'ı, bounded batch planlayıcısı ve executor runtime route'una veya admin formuna bağlanmamıştır; mevcut CMS/website CRUD yüzeyi bu governed command yoluna taşınmamıştır.
+2. Bulk content import/backfill ve AI translation publication otomatik olarak açılmamıştır. Manifest parser, draft intake adapter'ı, bounded batch planlayıcısı ve executor runtime route'una veya admin formuna bağlanmamıştır; mevcut CMS/website CRUD yüzeyi bu governed command yoluna taşınmamıştır.
 3. Frontend build başarılıdır; bazı dil paketleri 500 kB uyarı eşiğini aşmaktadır ve gerçek trafik ölçümüyle ayrı bundle bütçesi uygulanmalıdır.
 4. Public-web saf ve PostgreSQL testleri convergence CI'a, saf testler staging
    adoption CI'a bağlanmıştır. GitHub push/PR, remote exact-head CI,
