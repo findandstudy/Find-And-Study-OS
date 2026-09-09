@@ -139,8 +139,11 @@ try {
     }
   }
   const publicHome = await timedFetch("/en");
-  if (!publicHome.response.ok || publicHome.response.headers.has("x-robots-tag")) {
-    throw new Error("public SPA route received the private robots boundary");
+  if (
+    !publicHome.response.ok
+    || publicHome.response.headers.get("x-robots-tag") !== "noindex, nofollow, noarchive"
+  ) {
+    throw new Error("default-off indexing boundary failed for public SPA route");
   }
   const result = {
     schemaVersion: 1,

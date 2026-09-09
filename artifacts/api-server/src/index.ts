@@ -42,6 +42,10 @@ import {
 const isProd = process.env.NODE_ENV === "production";
 
 const llmsText = renderLlmsText();
+const publicWebRobotsConfig = parsePublicWebRobotsConfig({
+  mode: process.env.PUBLIC_WEB_ROBOTS_MODE,
+  siteUrl: process.env.PUBLIC_SITE_URL,
+});
 app.get(["/llms.txt", "/.well-known/llms.txt"], (_req, res) => {
   res
     .type("text/plain; charset=utf-8")
@@ -50,18 +54,14 @@ app.get(["/llms.txt", "/.well-known/llms.txt"], (_req, res) => {
 });
 
 app.get("/robots.txt", (_req, res) => {
-  const config = parsePublicWebRobotsConfig({
-    mode: process.env.PUBLIC_WEB_ROBOTS_MODE,
-    siteUrl: process.env.PUBLIC_SITE_URL,
-  });
   res.setHeader(
     "Cache-Control",
-    config.mode === "published"
+    publicWebRobotsConfig.mode === "published"
       ? "public, max-age=300, s-maxage=3600"
       : "no-store",
   );
   res.setHeader("X-Content-Type-Options", "nosniff");
-  res.type("text/plain; charset=utf-8").send(renderPublicWebRobots(config));
+  res.type("text/plain; charset=utf-8").send(renderPublicWebRobots(publicWebRobotsConfig));
 });
 
 type FatalShutdown = (reason: string, exitCode: number) => Promise<void>;
@@ -331,6 +331,10 @@ function serveStaticFrontend() {
     });
     if (!route) return next();
 
+    if (publicWebRobotsConfig.mode !== "published") {
+      res.setHeader("X-Robots-Tag", "noindex, nofollow, noarchive");
+    }
+
     const startedAt = process.hrtime.bigint();
     try {
       const alias = await resolvePublicWebRouteAlias(req.path);
@@ -407,7 +411,10 @@ function serveStaticFrontend() {
       res.cookie("csrf_token", token, getCsrfCookieOptions(req, 7 * 24 * 60 * 60 * 1000));
     }
     res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
-    if (shouldNoindexSpaPath(req.path)) {
+    if (
+      publicWebRobotsConfig.mode !== "published"
+      || shouldNoindexSpaPath(req.path)
+    ) {
       res.setHeader("X-Robots-Tag", "noindex, nofollow, noarchive");
     }
     res.sendFile(indexPath);
