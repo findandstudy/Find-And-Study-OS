@@ -8,8 +8,10 @@ import {
   websitePagesTable,
   websitePageVersionsTable,
 } from "@workspace/db";
-import { and, asc, desc, eq, isNotNull, lte, sql } from "drizzle-orm";
+import { and, asc, desc, eq, isNotNull, lte, ne, sql } from "drizzle-orm";
 import {
+  PUBLIC_CATALOG_RELATED_CANDIDATE_LIMIT,
+  PUBLIC_CATALOG_RELATED_LIMIT,
   publicCatalogCanonicalState,
   publicCatalogPath,
 } from "./publicCatalogRouteContract";
@@ -22,7 +24,10 @@ import type {
   PublicCatalogRenderRoute,
   PublicPageBlock,
 } from "./publicCatalogRenderContract";
-import { resolvePublishedEntitySeoState } from "./publicWebDiscoveryReadModel";
+import {
+  readIndexableProgramIds,
+  resolvePublishedEntitySeoState,
+} from "./publicWebDiscoveryReadModel";
 import { buildPublicWebCanonicalPath } from "./publicWebContentContract";
 import type { ProgramSupportedLocale } from "./programTranslationContract";
 
@@ -268,11 +273,59 @@ async function readProgramDetail(
     id: program.id,
     name: program.name,
   });
-  const seoState = await resolvePublishedEntitySeoState({
-    entityType: "program",
-    entityId: program.id,
+  const relatedConditions: any[] = [
+    eq(programsTable.isActive, true),
+    ne(programsTable.id, program.id),
+  ];
+  addPublicCatalogConditions(relatedConditions, policy);
+  const relatedScore = sql<number>`(
+    CASE WHEN ${programsTable.universityId} = ${program.universityId} THEN 8 ELSE 0 END
+    + CASE WHEN lower(coalesce(${programsTable.field}, '')) = lower(${program.field ?? ""}::text) AND ${program.field ?? ""}::text <> '' THEN 4 ELSE 0 END
+    + CASE WHEN lower(coalesce(${programsTable.degree}, '')) = lower(${program.degree ?? ""}::text) AND ${program.degree ?? ""}::text <> '' THEN 2 ELSE 0 END
+    + CASE WHEN lower(${universitiesTable.country}) = lower(${program.country}) THEN 1 ELSE 0 END
+  )`;
+  const [seoState, relatedCandidates] = await Promise.all([
+    resolvePublishedEntitySeoState({
+      entityType: "program",
+      entityId: program.id,
+      locale: route.locale,
+    }),
+    db
+      .select({
+        id: programsTable.id,
+        name: sql<string>`COALESCE(${programTranslationsTable.name}, ${programsTable.name})`,
+        universityName: universitiesTable.name,
+        degree: programsTable.degree,
+        field: sql<string | null>`COALESCE(${programTranslationsTable.field}, ${programsTable.field})`,
+        score: relatedScore,
+      })
+      .from(programsTable)
+      .innerJoin(universitiesTable, eq(programsTable.universityId, universitiesTable.id))
+      .leftJoin(programTranslationsTable, and(
+        eq(programTranslationsTable.programId, programsTable.id),
+        eq(programTranslationsTable.locale, route.locale),
+        eq(programTranslationsTable.status, "published"),
+      ))
+      .where(and(...relatedConditions))
+      .orderBy(desc(relatedScore), asc(universitiesTable.name), asc(programsTable.id))
+      .limit(PUBLIC_CATALOG_RELATED_CANDIDATE_LIMIT),
+  ]);
+  const indexableRelatedIds = await readIndexableProgramIds({
     locale: route.locale,
+    programIds: relatedCandidates.map((candidate) => candidate.id),
   });
+  const relatedPrograms = relatedCandidates
+    .filter((candidate) => indexableRelatedIds.has(candidate.id))
+    .slice(0, PUBLIC_CATALOG_RELATED_LIMIT)
+    .map(({ score: _score, ...candidate }) => ({
+      ...candidate,
+      canonicalPath: publicCatalogPath({
+        locale: route.locale,
+        entityType: "program",
+        id: candidate.id,
+        name: candidate.name,
+      }),
+    }));
   const fallbackDescription = [
     program.degree,
     program.field,
@@ -288,6 +341,7 @@ async function readProgramDetail(
     description: boundedText(program.description, fallbackDescription),
     indexable: seoState.indexable && (route.locale === "en" || program.translatedLocale === route.locale),
     alternatePaths: seoState.alternates,
+    relatedPrograms,
     program: {
       id: program.id,
       name: program.name,

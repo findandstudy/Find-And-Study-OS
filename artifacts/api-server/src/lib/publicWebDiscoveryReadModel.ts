@@ -402,6 +402,45 @@ export async function readPublishedEntitySeoState(input: {
   });
 }
 
+export async function readIndexableProgramIds(input: {
+  locale: ProgramSupportedLocale;
+  programIds: readonly number[];
+}): Promise<Set<number>> {
+  const config = publicWebDiscoveryConfigFromEnvironment();
+  if (config.mode !== "published" || !config.scope) return new Set();
+  const scope = config.scope;
+  const programIds = [...new Set(input.programIds)]
+    .filter((id) => Number.isSafeInteger(id) && id > 0 && id <= 2_147_483_647)
+    .slice(0, 64);
+  if (programIds.length === 0) return new Set();
+  return withPublicScope(scope, async (client) => {
+    const result = await client.query<{ program_id: number }>(
+      `SELECT content.program_id
+         FROM public_web_content_records content
+         JOIN public_web_publication_states state
+           ON state.tenant_id=content.tenant_id
+          AND state.organization_id=content.organization_id
+          AND state.content_record_id=content.id
+        WHERE content.tenant_id=$1 AND content.organization_id=$2
+          AND content.entity_type='PROGRAM' AND content.locale=$3
+          AND content.program_id=ANY($4::integer[])
+          AND state.status='PUBLISHED' AND state.index_state='INDEX'
+          AND (
+            content.locale='en' OR EXISTS (
+              SELECT 1 FROM program_translations translation
+               WHERE translation.program_id=content.program_id
+                 AND translation.locale=content.locale
+                 AND translation.status='published'
+            )
+          )
+        ORDER BY content.program_id
+        LIMIT 64`,
+      [scope.tenantId, scope.organizationId, input.locale, programIds],
+    );
+    return new Set(result.rows.map((row) => Number(row.program_id)));
+  });
+}
+
 export async function resolvePublishedEntitySeoState(input: {
   entityType: PublicSeoEntityType;
   entityId: number;

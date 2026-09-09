@@ -77,6 +77,14 @@ test("rendered shell escapes catalogue content, emits canonical metadata, and no
     description: `Safe </script><img src=x onerror=alert(1)>`,
     indexable: false,
     alternatePaths: {},
+    relatedPrograms: [{
+      id: 43,
+      name: "Related programme",
+      universityName: "Related University",
+      degree: "MSc",
+      field: "Computing",
+      canonicalPath: "/en/programs/related-programme-43",
+    }],
     program: {
       id: 42,
       name: `Security </script>`,
@@ -106,6 +114,7 @@ test("rendered shell escapes catalogue content, emits canonical metadata, and no
   assert.match(html, /Safe &lt;\/script&gt;&lt;img/);
   assert.match(html, /Safe \\u003c\/script\\u003e\\u003cimg/);
   assert.match(html, />Degree<\/dt>/);
+  assert.match(html, /href="\/en\/programs\/related-programme-43"/);
   const scripts = html.match(/<script\b[^>]*>/g) || [];
   assert.ok(scripts.length >= 3);
   assert.ok(scripts.every((tag) => tag.includes('nonce="test-nonce"')));

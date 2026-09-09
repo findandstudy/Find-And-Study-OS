@@ -185,6 +185,11 @@ bilinmeyen mode fail-closed olarak `off` olur.
   sayfayı tekrar draft durumuna alır. En fazla 64 blok ve 1 MiB snapshot kabul
   edilir; bilinmeyen/global referans blokları public projection'a alınmaz ve zengin
   metin istemcide allowlist sanitizer, SSR'da güvenli düz metin olarak işlenir;
+- program related graph önce aynı üniversite, alan, derece ve ülke sinyalleriyle
+  en fazla 32 bounded aday üretir; yalnız governed publication state'i gerçekten
+  `PUBLISHED + INDEX` olan ve istenen dilde teslim edilebilen ilk 8 program API
+  ve SSR linkine dönüşür. Discovery rollout kapalı veya scope geçersizse graph
+  fail-closed olarak boş kalır;
 - entity SEO projection'ı 5 dakika ve en fazla 5.000 anahtarla cache edilir;
   aynı cold key sorguları birleştirilir ve hedefli invalidation yüzeyi sağlanır;
 - migration `0119_public_web_discovery_indexes` yalnız partial lookup indeksi
@@ -224,7 +229,7 @@ production kapasite iddiası oluşturmaz.
 7. Website Blog rehber listesi, detay API/SSR, canonical/hreflang ve sitemap. **Yerelde tamamlandı.**
 8. Genel CMS page delivery ve reserved-route registry. **Yerelde tamamlandı.**
 9. Prototiplerin mevcut tasarım sistemiyle program/üniversite template'lerine dönüştürülmesi.
-10. Related entity ve internal-link graph; kalite eşiği geçmeyen sayfalara link/index üretmeme.
+10. Related entity ve internal-link graph; kalite eşiği geçmeyen sayfalara link/index üretmeme. **Program graph dilimi yerelde tamamlandı; üniversite/destinasyon/rehber graph'ları bekliyor.**
 
 ## NO-GO sınırları
 

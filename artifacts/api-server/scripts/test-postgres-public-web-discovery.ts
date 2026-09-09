@@ -31,6 +31,10 @@ process.env.DATABASE_URL = MIGRATOR_URL;
 const TENANT_ID = "018f8500-0000-7000-8000-000000000001";
 const ORGANIZATION_ID = "018f8500-0000-7000-8000-000000000002";
 const OTHER_TENANT_ID = "018f8500-0000-7000-8000-000000000003";
+process.env.PUBLIC_WEB_SITEMAP_MODE = "published";
+process.env.PUBLIC_SITE_URL = "https://findandstudy.com";
+process.env.PUBLIC_WEB_TENANT_ID = TENANT_ID;
+process.env.PUBLIC_WEB_ORGANIZATION_ID = ORGANIZATION_ID;
 const RECORDS = {
   en: "018f8500-0000-7000-8000-000000000011",
   tr: "018f8500-0000-7000-8000-000000000012",
@@ -306,6 +310,13 @@ test("published discovery is tenant-scoped and excludes NOINDEX or undeliverable
         { entityType: "PAGE", locale: "en", count: 1 },
         { entityType: "PAGE", locale: "tr", count: 1 },
       ],
+    );
+    assert.deepEqual(
+      [...await discovery.readIndexableProgramIds({
+        locale: "en",
+        programIds: [programId, programId, 0, 2_147_483_648],
+      })],
+      [programId],
     );
     assert.deepEqual(
       await discovery.readPublishedEntitySeoState({

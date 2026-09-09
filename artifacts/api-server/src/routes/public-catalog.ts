@@ -23,6 +23,7 @@ import {
 import { courseFinderUniversityLogoUrl } from "../lib/courseFinderVisibility";
 import {
   PUBLIC_CATALOG_RELATED_LIMIT,
+  PUBLIC_CATALOG_RELATED_CANDIDATE_LIMIT,
   PUBLIC_CATALOG_UNIVERSITY_PROGRAM_LIMIT,
   parsePublicCatalogRouteKey,
   publicCatalogCanonicalState,
@@ -33,7 +34,10 @@ import {
   getPublicCatalogPolicy,
 } from "../lib/publicCatalogQueryPolicy";
 import { normalizeProgramLocale } from "../lib/programTranslationContract";
-import { resolvePublishedEntitySeoState } from "../lib/publicWebDiscoveryReadModel";
+import {
+  readIndexableProgramIds,
+  resolvePublishedEntitySeoState,
+} from "../lib/publicWebDiscoveryReadModel";
 
 const router: IRouter = Router();
 
@@ -138,8 +142,8 @@ router.get(
     });
     const relatedScore = sql<number>`(
       CASE WHEN ${programsTable.universityId} = ${program.universityId} THEN 8 ELSE 0 END
-      + CASE WHEN lower(coalesce(${programsTable.field}, '')) = lower(${program.field ?? ""}) AND ${program.field ?? null} IS NOT NULL THEN 4 ELSE 0 END
-      + CASE WHEN lower(coalesce(${programsTable.degree}, '')) = lower(${program.degree ?? ""}) AND ${program.degree ?? null} IS NOT NULL THEN 2 ELSE 0 END
+      + CASE WHEN lower(coalesce(${programsTable.field}, '')) = lower(${program.field ?? ""}::text) AND ${program.field ?? ""}::text <> '' THEN 4 ELSE 0 END
+      + CASE WHEN lower(coalesce(${programsTable.degree}, '')) = lower(${program.degree ?? ""}::text) AND ${program.degree ?? ""}::text <> '' THEN 2 ELSE 0 END
       + CASE WHEN lower(${universitiesTable.country}) = lower(${program.universityCountry}) THEN 1 ELSE 0 END
     )`;
     const relatedConditions: any[] = [
@@ -181,7 +185,7 @@ router.get(
         )
         .where(and(...relatedConditions))
         .orderBy(desc(relatedScore), asc(universitiesTable.name), asc(programsTable.id))
-        .limit(PUBLIC_CATALOG_RELATED_LIMIT),
+        .limit(PUBLIC_CATALOG_RELATED_CANDIDATE_LIMIT),
       db
         .select({
           id: programIntakesTable.id,
@@ -254,6 +258,13 @@ router.get(
     const deliveredLocaleReady = locale === "en" || program.translatedLocale === locale;
     const indexable = seoState.indexable && deliveredLocaleReady;
     const canonicalPath = seoState.canonicalPath || canonical.canonicalPath;
+    const relatedProgramIds = await readIndexableProgramIds({
+      locale,
+      programIds: relatedRows.map((related) => related.id),
+    });
+    const relatedPrograms = relatedRows
+      .filter((related) => relatedProgramIds.has(related.id))
+      .slice(0, PUBLIC_CATALOG_RELATED_LIMIT);
 
     setPublicCatalogHeaders(res);
     res.setHeader("Content-Location", canonicalPath);
@@ -280,7 +291,7 @@ router.get(
         ...price,
         amountMinor: price.amountMinor.toString(),
       })),
-      related: relatedRows.map(({ score: _score, ...related }) => ({
+      related: relatedPrograms.map(({ score: _score, ...related }) => ({
         ...related,
         canonicalPath: publicCatalogPath({
           locale,
@@ -294,6 +305,7 @@ router.get(
         indexable,
         alternatePaths: seoState.alternates,
         canonicalPath,
+        relatedPolicy: "PUBLISHED_INDEXABLE_ONLY",
         requestedPathIsCanonical: req.params.routeKey === canonicalPath.split("/").at(-1),
         generatedAt: new Date().toISOString(),
       },

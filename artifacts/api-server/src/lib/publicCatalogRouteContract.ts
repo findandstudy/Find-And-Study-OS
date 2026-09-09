@@ -4,6 +4,7 @@ import {
 } from "./programTranslationContract";
 
 export const PUBLIC_CATALOG_RELATED_LIMIT = 8;
+export const PUBLIC_CATALOG_RELATED_CANDIDATE_LIMIT = 32;
 export const PUBLIC_CATALOG_UNIVERSITY_PROGRAM_LIMIT = 12;
 
 export type PublicCatalogEntityType = "program" | "university";

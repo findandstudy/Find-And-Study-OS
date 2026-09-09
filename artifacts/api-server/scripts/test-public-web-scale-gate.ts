@@ -65,6 +65,7 @@ test("semantic render shell stays small, escaped and nonce-complete", () => {
       en: "/en/programs/security-42",
       tr: "/tr/programs/guvenlik-42",
     },
+    relatedPrograms: [],
     program: {
       id: 42,
       name: "Güvenlik Programı",

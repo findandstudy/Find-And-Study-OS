@@ -105,6 +105,14 @@ export type PublicCatalogRenderModel =
       description: string;
       indexable: boolean;
       alternatePaths: Partial<Record<ProgramSupportedLocale, string>>;
+      relatedPrograms: Array<{
+        id: number;
+        name: string;
+        universityName: string;
+        degree: string | null;
+        field: string | null;
+        canonicalPath: string;
+      }>;
       program: {
         id: number;
         name: string;
@@ -406,6 +414,7 @@ function renderProgramDetail(model: Extract<PublicCatalogRenderModel, { kind: "p
   const program = model.program;
   const copy = RENDER_COPY[model.locale];
   const price = program.discountedFee ?? program.tuitionFee;
+  const related = model.relatedPrograms.map((item) => `<article class="rounded-2xl border border-border p-5"><p class="text-sm text-primary">${escapeHtml(item.universityName)}</p><h2 class="mt-2 text-lg font-bold"><a href="${escapeHtml(item.canonicalPath)}">${escapeHtml(item.name)}</a></h2><p class="mt-2 text-muted-foreground">${escapeHtml([item.degree, item.field].filter(Boolean).join(" · "))}</p></article>`).join("");
   return `<main data-public-render-shell="program-detail" class="mx-auto max-w-7xl px-4 py-24">
     <nav aria-label="Breadcrumb"><a href="/${escapeHtml(model.locale)}/programs">${escapeHtml(copy.programs)}</a> / <span>${escapeHtml(program.name)}</span></nav>
     <article class="mt-8">
@@ -421,6 +430,7 @@ function renderProgramDetail(model: Extract<PublicCatalogRenderModel, { kind: "p
         <div><dt>${escapeHtml(copy.tuition)}</dt><dd>${price === null ? "—" : `${escapeHtml(String(price))} ${escapeHtml(program.currency || "USD")}`}</dd></div>
       </dl>
     </article>
+    ${related ? `<section class="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-4" aria-label="Related programs">${related}</section>` : ""}
   </main>`;
 }
 

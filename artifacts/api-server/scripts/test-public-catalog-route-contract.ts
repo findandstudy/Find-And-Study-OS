@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
   PUBLIC_CATALOG_RELATED_LIMIT,
+  PUBLIC_CATALOG_RELATED_CANDIDATE_LIMIT,
   PUBLIC_CATALOG_UNIVERSITY_PROGRAM_LIMIT,
   parsePublicCatalogRouteKey,
   publicCatalogCanonicalState,
@@ -63,11 +64,14 @@ test("public catalogue detail APIs are bounded and never select private CRM fiel
   const publicWeb = read("../src/routes/public-web.ts");
   const websiteAdmin = read("../src/routes/website.ts");
   assert.equal(PUBLIC_CATALOG_RELATED_LIMIT, 8);
+  assert.equal(PUBLIC_CATALOG_RELATED_CANDIDATE_LIMIT, 32);
   assert.equal(PUBLIC_CATALOG_UNIVERSITY_PROGRAM_LIMIT, 12);
   assert.doesNotMatch(route, /commissionRate|serviceFeeAmount|contactPerson(Name|Phone|Email)/);
   assert.match(route, /isNotNull\(priceComponentsTable\.sourceVerifiedAt\)/);
   assert.match(route, /sourceExpiresAt/);
   assert.match(route, /Content-Location/);
+  assert.match(route, /readIndexableProgramIds/);
+  assert.match(route, /relatedPolicy: "PUBLISHED_INDEXABLE_ONLY"/);
   assert.match(destinations, /returnedUniversities/);
   assert.match(destinations, /returnedPrograms/);
   assert.match(destinations, /PUBLIC_DESTINATION_ROUTE_INVALID/);
