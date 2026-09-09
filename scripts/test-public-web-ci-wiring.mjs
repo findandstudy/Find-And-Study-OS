@@ -10,6 +10,10 @@ const stagingWorkflowUrl = new URL(
   "../.github/workflows/staging-adoption.yml",
   import.meta.url,
 );
+const stagingEnvironmentUrl = new URL(
+  "../deploy/staging/app.env.example",
+  import.meta.url,
+);
 
 const purePublicWebChecks = [
   "test:public-web-foundation",
@@ -96,4 +100,19 @@ test("migration gate labels do not freeze a stale ledger count", async () => {
   const convergence = await readFile(convergenceWorkflowUrl, "utf8");
   assert.doesNotMatch(convergence, /Apply all \d+ migrations/);
   assert.doesNotMatch(convergence, /canonical \d+\/\d+ adoption/);
+});
+
+test("staging public web environment remains explicitly fail closed", async () => {
+  const environment = await readFile(stagingEnvironmentUrl, "utf8");
+  for (const assignment of [
+    "PUBLIC_WEB_RENDER_MODE=off",
+    "PUBLIC_WEB_RENDER_ALLOWLIST=",
+    "PUBLIC_WEB_INTERNAL_LINK_MODE=off",
+    "PUBLIC_WEB_SITEMAP_MODE=off",
+    "PUBLIC_WEB_ROBOTS_MODE=disallow",
+    "PUBLIC_WEB_TENANT_ID=",
+    "PUBLIC_WEB_ORGANIZATION_ID=",
+  ]) {
+    assertExactlyOnce(environment, assignment, "staging environment");
+  }
 });
