@@ -7,6 +7,7 @@ import { canAssignUserRole, canManageTargetAccount } from "../src/lib/userAccoun
 import { isBlockedOutboundIp, parseSafeOutboundUrl } from "../src/lib/safeOutboundRequest";
 import { sanitizeContractTemplateHtml } from "../src/lib/contractHtmlSanitizer";
 import { renderTemplate } from "../src/lib/contractRenderer";
+import { shouldNoindexSpaPath } from "../src/lib/spaRobotsPolicy";
 
 const appSource = readFileSync(
   new URL("../src/app.ts", import.meta.url),
@@ -285,6 +286,40 @@ test("frontend bootstrap errors cannot inject markup or expose stack details", (
   assert.doesNotMatch(frontendBootstrapSource, /innerHTML\s*=/);
   assert.doesNotMatch(frontendBootstrapSource, /\.stack|Source:/);
   assert.doesNotMatch(frontendIndexSource, /<script>(?:.|\n)*?<\/script>/);
+});
+
+test("private, authentication and token SPA routes are noindex at the server boundary", () => {
+  for (const path of [
+    "/admin",
+    "/admin/dashboard",
+    "/staff/applications",
+    "/student",
+    "/agent/apply",
+    "/agent/onboarding",
+    "/institution/review-queue",
+    "/sign/opaque-token",
+    "/login",
+    "/tr/login",
+    "/en/agency/apply",
+    "/en/agency-application",
+    "/not-a-locale/private",
+  ]) {
+    assert.equal(shouldNoindexSpaPath(path), true, path);
+  }
+  for (const path of [
+    "/",
+    "/en",
+    "/tr/about",
+    "/en/programs",
+    "/en/programs/computer-science-42",
+    "/en/universities/example-7",
+    "/en/destinations/turkey",
+    "/en/guides/study-guide-9",
+    "/en/contact",
+  ]) {
+    assert.equal(shouldNoindexSpaPath(path), false, path);
+  }
+  assert.match(indexSource, /X-Robots-Tag", "noindex, nofollow, noarchive"/);
 });
 
 test("portal lifecycle planning can never authorize a portal mutation", () => {

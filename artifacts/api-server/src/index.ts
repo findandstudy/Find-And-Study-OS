@@ -20,6 +20,7 @@ import {
   renderPublicCatalogHtml,
   shouldRenderPublicCatalogPath,
 } from "./lib/publicCatalogRenderContract";
+import { shouldNoindexSpaPath } from "./lib/spaRobotsPolicy";
 import { getPublicCatalogRenderModel } from "./lib/publicCatalogRenderReadModel";
 import {
   buildStaticSitemapEntries,
@@ -387,6 +388,9 @@ function serveStaticFrontend() {
       res.cookie("csrf_token", token, getCsrfCookieOptions(req, 7 * 24 * 60 * 60 * 1000));
     }
     res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+    if (shouldNoindexSpaPath(req.path)) {
+      res.setHeader("X-Robots-Tag", "noindex, nofollow, noarchive");
+    }
     res.sendFile(indexPath);
   });
 
