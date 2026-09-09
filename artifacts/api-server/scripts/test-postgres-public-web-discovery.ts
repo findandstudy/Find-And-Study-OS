@@ -37,6 +37,8 @@ const RECORDS = {
   fr: "018f8500-0000-7000-8000-000000000013",
   it: "018f8500-0000-7000-8000-000000000014",
   destinationEn: "018f8500-0000-7000-8000-000000000015",
+  articleEn: "018f8500-0000-7000-8000-000000000016",
+  articleTr: "018f8500-0000-7000-8000-000000000017",
 } as const;
 const REVISIONS = {
   en: "018f8500-0000-7000-8000-000000000021",
@@ -44,6 +46,8 @@ const REVISIONS = {
   fr: "018f8500-0000-7000-8000-000000000023",
   it: "018f8500-0000-7000-8000-000000000024",
   destinationEn: "018f8500-0000-7000-8000-000000000025",
+  articleEn: "018f8500-0000-7000-8000-000000000026",
+  articleTr: "018f8500-0000-7000-8000-000000000027",
 } as const;
 
 test("published discovery is tenant-scoped and excludes NOINDEX or undeliverable locales", async () => {
@@ -58,6 +62,7 @@ test("published discovery is tenant-scoped and excludes NOINDEX or undeliverable
   let universityId = 0;
   let programId = 0;
   let destinationId = 0;
+  let articleId = 0;
   try {
     await admin.query("BEGIN");
     await admin.query("SET LOCAL session_replication_role = replica");
@@ -94,6 +99,15 @@ test("published discovery is tenant-scoped and excludes NOINDEX or undeliverable
        RETURNING id`,
     );
     destinationId = Number(destination.rows[0]?.id);
+    const article = await admin.query<{ id: number }>(
+      `INSERT INTO website_blog_posts
+         (title,slug,excerpt,content,status,locale,translations_json,published_at)
+       VALUES ('Discovery Guide','discovery-guide','Verified guide',
+         '{"body":"Verified English body"}'::jsonb,'published','en',
+         '{"tr":{"title":"Doğrulanmış Rehber","body":"Doğrulanmış Türkçe içerik"}}'::jsonb,
+         now()) RETURNING id`,
+    );
+    articleId = Number(article.rows[0]?.id);
     for (const locale of ["tr", "it"] as const) {
       await admin.query(
         `INSERT INTO program_translations
@@ -156,6 +170,56 @@ test("published discovery is tenant-scoped and excludes NOINDEX or undeliverable
        VALUES ($1,$2,$3,$4,'PUBLISHED','INDEX',$5,now(),$5,now())`,
       [TENANT_ID, ORGANIZATION_ID, RECORDS.destinationEn, REVISIONS.destinationEn, userId],
     );
+    for (const locale of ["en", "tr"] as const) {
+      await admin.query(
+        `INSERT INTO public_web_content_records
+           (id,tenant_id,organization_id,entity_type,blog_post_id,locale,
+            canonical_slug,canonical_path,created_by_legacy_user_id)
+         VALUES ($1,$2,$3,'ARTICLE',$4,$5,$6,$7,$8)`,
+        [
+          RECORDS[locale === "en" ? "articleEn" : "articleTr"],
+          TENANT_ID,
+          ORGANIZATION_ID,
+          articleId,
+          locale,
+          locale === "en" ? "discovery-guide" : "dogrulanmis-rehber",
+          `/${locale}/guides/${locale === "en" ? "discovery-guide" : "dogrulanmis-rehber"}-${articleId}`,
+          userId,
+        ],
+      );
+      await admin.query(
+        `INSERT INTO public_web_content_revisions
+           (id,tenant_id,organization_id,content_record_id,revision_number,origin,title,
+            content_json,seo_json,structured_data_json,source_sha256,content_sha256,
+            quality_status,source_coverage,translation_status,seo_status,
+            structured_data_status,created_by_legacy_user_id)
+         VALUES ($1,$2,$3,$4,1,'HUMAN','Discovery Guide','{}','{}','{}',$5,$6,
+           'PASS','COMPLETE',$7,'PASS','PASS',$8)`,
+        [
+          REVISIONS[locale === "en" ? "articleEn" : "articleTr"],
+          TENANT_ID,
+          ORGANIZATION_ID,
+          RECORDS[locale === "en" ? "articleEn" : "articleTr"],
+          "f".repeat(64),
+          "9".repeat(64),
+          locale === "en" ? "SOURCE" : "PUBLISHED",
+          userId,
+        ],
+      );
+      await admin.query(
+        `INSERT INTO public_web_publication_states
+           (tenant_id,organization_id,content_record_id,revision_id,status,index_state,
+            reviewed_by_legacy_user_id,reviewed_at,published_by_legacy_user_id,published_at)
+         VALUES ($1,$2,$3,$4,'PUBLISHED','INDEX',$5,now(),$5,now())`,
+        [
+          TENANT_ID,
+          ORGANIZATION_ID,
+          RECORDS[locale === "en" ? "articleEn" : "articleTr"],
+          REVISIONS[locale === "en" ? "articleEn" : "articleTr"],
+          userId,
+        ],
+      );
+    }
     await admin.query("COMMIT");
 
     const discovery = await import("../src/lib/publicWebDiscoveryReadModel");
@@ -175,6 +239,13 @@ test("published discovery is tenant-scoped and excludes NOINDEX or undeliverable
       [{ entityType: "DESTINATION", locale: "en", count: 1 }],
     );
     assert.deepEqual(
+      counts.filter((row) => row.entityType === "ARTICLE"),
+      [
+        { entityType: "ARTICLE", locale: "en", count: 1 },
+        { entityType: "ARTICLE", locale: "tr", count: 1 },
+      ],
+    );
+    assert.deepEqual(
       await discovery.readPublishedEntitySeoState({
         scope: { tenantId: TENANT_ID, organizationId: ORGANIZATION_ID },
         entityType: "destination",
@@ -185,6 +256,22 @@ test("published discovery is tenant-scoped and excludes NOINDEX or undeliverable
         indexable: true,
         canonicalPath: "/en/destinations/discovery-fixture-destination",
         alternates: { en: "/en/destinations/discovery-fixture-destination" },
+      },
+    );
+    assert.deepEqual(
+      await discovery.readPublishedEntitySeoState({
+        scope: { tenantId: TENANT_ID, organizationId: ORGANIZATION_ID },
+        entityType: "article",
+        entityId: articleId,
+        locale: "tr",
+      }),
+      {
+        indexable: true,
+        canonicalPath: `/tr/guides/dogrulanmis-rehber-${articleId}`,
+        alternates: {
+          en: `/en/guides/discovery-guide-${articleId}`,
+          tr: `/tr/guides/dogrulanmis-rehber-${articleId}`,
+        },
       },
     );
     const rows = await discovery.readPublishedSitemapPage({
@@ -227,6 +314,7 @@ test("published discovery is tenant-scoped and excludes NOINDEX or undeliverable
     await admin.query("DELETE FROM public_web_content_records WHERE tenant_id=$1", [TENANT_ID]);
     if (programId) await admin.query("DELETE FROM programs WHERE id=$1", [programId]);
     if (destinationId) await admin.query("DELETE FROM destinations WHERE id=$1", [destinationId]);
+    if (articleId) await admin.query("DELETE FROM website_blog_posts WHERE id=$1", [articleId]);
     if (universityId) await admin.query("DELETE FROM universities WHERE id=$1", [universityId]);
     if (userId) await admin.query("DELETE FROM users WHERE id=$1", [userId]);
     await admin.query("DELETE FROM organizations WHERE id=$1 AND tenant_id=$2", [ORGANIZATION_ID, TENANT_ID]);

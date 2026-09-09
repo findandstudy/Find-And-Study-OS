@@ -41,6 +41,7 @@ test("render read model serves bounded data and coalesces the same cold key", as
   let universityId: number | null = null;
   let programId: number | null = null;
   let destinationId: number | null = null;
+  let articleId: number | null = null;
   try {
     const identity = await client.query(
       "SELECT current_database() AS database_name, current_user AS user_name, inet_server_port() AS server_port",
@@ -74,6 +75,14 @@ test("render read model serves bounded data and coalesces the same cold key", as
       [destinationSlug],
     );
     destinationId = destination.rows[0].id;
+    const article = await client.query<{ id: number }>(
+      `INSERT INTO website_blog_posts
+         (title,slug,excerpt,content,status,locale,published_at)
+       VALUES ('Render Pilot Guide','render-pilot-guide','Verified guide summary',
+         '{"body":"<p>Verified guide body</p>","readTime":3}'::jsonb,
+         'published','en',now()) RETURNING id`,
+    );
+    articleId = article.rows[0].id;
 
     const route = matchPublicCatalogRenderPath(
       `/en/programs/${publicCatalogRouteKey(programId, "Render Pilot Computer Science")}`,
@@ -135,8 +144,27 @@ test("render read model serves bounded data and coalesces the same cold key", as
       `/en/destinations/${destinationSlug}`,
     );
     assert.equal(destinationDetail.value.indexable, false);
+
+    const articleRoute = matchPublicCatalogRenderPath(
+      `/en/guides/${publicCatalogRouteKey(articleId, "Render Pilot Guide")}`,
+    );
+    assert.ok(articleRoute && articleRoute.kind === "article_detail");
+    const articleDetail = await getPublicCatalogRenderModel(articleRoute);
+    assert.equal(articleDetail.value.kind, "article_detail");
+    assert.equal(
+      articleDetail.value.kind === "article_detail" ? articleDetail.value.article.id : null,
+      articleId,
+    );
+    assert.equal(
+      articleDetail.value.kind === "article_detail" ? articleDetail.value.article.readTime : null,
+      3,
+    );
+    assert.equal(articleDetail.value.indexable, false);
   } finally {
     invalidatePublicCatalogRenderCache();
+    if (articleId !== null) {
+      await client.query("DELETE FROM website_blog_posts WHERE id = $1", [articleId]);
+    }
     if (destinationId !== null) {
       await client.query("DELETE FROM destinations WHERE id = $1", [destinationId]);
     }

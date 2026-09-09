@@ -318,6 +318,7 @@ function serveStaticFrontend() {
           rendered.value.kind === "program_detail"
           || rendered.value.kind === "university_detail"
           || rendered.value.kind === "destination_detail"
+          || rendered.value.kind === "article_detail"
         )
         && rendered.value.canonicalPath !== route.path
       ) {

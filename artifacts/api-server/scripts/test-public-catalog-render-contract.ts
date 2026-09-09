@@ -54,6 +54,9 @@ test("only bounded programme, university and destination paths enter the render 
   assert.equal(destination?.kind === "destination_detail" ? destination.slug : null, "united-kingdom");
   assert.equal(matchPublicCatalogRenderPath("/en/countries/united-kingdom")?.kind, "destination_detail");
   assert.equal(matchPublicCatalogRenderPath("/en/destinations/Unsafe_Slug"), null);
+  const article = matchPublicCatalogRenderPath("/tr/guides/ogrenci-vizesi-19");
+  assert.equal(article?.kind, "article_detail");
+  assert.equal(article?.kind === "article_detail" ? article.identity?.id : null, 19);
   assert.equal(matchPublicCatalogRenderPath("/xx/programs"), null);
   assert.equal(matchPublicCatalogRenderPath("/en/admin"), null);
   assert.equal(matchPublicCatalogRenderPath("/en/programs/a/b"), null);
@@ -185,6 +188,38 @@ test("destination detail emits a semantic destination shell without inventing tr
   assert.doesNotMatch(html, /service fee|commission|contact person/i);
 });
 
+test("article detail emits safe semantic HTML and Article structured data", () => {
+  const model: PublicCatalogRenderModel = {
+    kind: "article_detail",
+    locale: "en",
+    canonicalPath: "/en/guides/student-visa-19",
+    title: "Student visa guide",
+    description: "Verified guide summary.",
+    indexable: true,
+    alternatePaths: { en: "/en/guides/student-visa-19" },
+    article: {
+      id: 19,
+      title: "Student visa guide",
+      excerpt: "Verified guide summary.",
+      body: "<h2>Prepare</h2><script>alert(1)</script><p>Use verified evidence.</p>",
+      publishedAt: "2026-09-09T10:00:00.000Z",
+      updatedAt: "2026-09-09T11:00:00.000Z",
+      readTime: 4,
+    },
+  };
+  const html = renderPublicCatalogHtml({
+    indexHtml,
+    model,
+    siteUrl: "https://findandstudy.com",
+    nonce: "article-nonce",
+  });
+  assert.match(html, /data-public-render-shell="article-detail"/);
+  assert.match(html, /"@type":"Article"/);
+  assert.doesNotMatch(html, /<script>alert\(1\)<\/script>/);
+  assert.match(html, /Prepare alert\(1\) Use verified evidence/);
+  assert.match(html, /hreflang="x-default"/);
+});
+
 test("read model is on-demand, bounded, stale-while-revalidate, and detail indexing is fail-closed", () => {
   const readModel = readFileSync(
     new URL("../src/lib/publicCatalogRenderReadModel.ts", import.meta.url),
@@ -194,6 +229,7 @@ test("read model is on-demand, bounded, stale-while-revalidate, and detail index
   assert.match(readModel, /const CACHE_MAX_ENTRIES = 500/);
   assert.match(readModel, /async function readUniversityDetail/);
   assert.match(readModel, /async function readDestinationDetail/);
+  assert.match(readModel, /async function readArticleDetail/);
   assert.match(readModel, /\.limit\(12\)/);
   assert.match(readModel, /cacheStatus: "STALE"/);
   assert.match(readModel, /void refresh\(key, route\)/);

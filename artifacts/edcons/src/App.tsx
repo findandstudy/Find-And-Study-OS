@@ -59,6 +59,7 @@ if (typeof window !== "undefined") {
 const About = lazyRetry(() => import("@/pages/public/About"));
 const Countries = lazyRetry(() => import("@/pages/public/Countries"));
 const CountryDetail = lazyRetry(() => import("@/pages/public/CountryDetail"));
+const GuideDetail = lazyRetry(() => import("@/pages/public/GuideDetail"));
 const Programs = lazyRetry(() => import("@/pages/public/Programs"));
 const ProgramDetail = lazyRetry(() => import("@/pages/public/ProgramDetail"));
 const UniversityDetail = lazyRetry(() => import("@/pages/public/UniversityDetail"));
@@ -304,6 +305,9 @@ function PublicRoutes({ lang }: { lang: string }) {
               {(params) => <UniversityDetail routeKey={params.routeKey} />}
             </Route>
             <Route path={`/${lang}/blog`} component={Blog} />
+            <Route path={`/${lang}/guides/:routeKey`}>
+              {(params) => <GuideDetail routeKey={params.routeKey} />}
+            </Route>
             <Route path={`/${lang}/contact`} component={Contact} />
             <Route path={`/${lang}/agency/apply`} component={AgencyApplication} />
             <Route path={`/${lang}/agency-application`} component={AgencyApplication} />

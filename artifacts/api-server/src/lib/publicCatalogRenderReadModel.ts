@@ -4,8 +4,9 @@ import {
   programsTable,
   programTranslationsTable,
   universitiesTable,
+  websiteBlogPostsTable,
 } from "@workspace/db";
-import { and, asc, eq, sql } from "drizzle-orm";
+import { and, asc, eq, isNotNull, lte, sql } from "drizzle-orm";
 import {
   publicCatalogCanonicalState,
   publicCatalogPath,
@@ -78,6 +79,14 @@ const inFlight = new Map<string, Promise<PublicCatalogRenderModel>>();
 function boundedText(value: string | null | undefined, fallback: string): string {
   const text = String(value || fallback).replace(/\s+/g, " ").trim();
   return text.slice(0, 320);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function boundedString(value: unknown, maximum: number): string {
+  return typeof value === "string" ? value.slice(0, maximum) : "";
 }
 
 function cacheKey(route: PublicCatalogRenderRoute): string {
@@ -505,11 +514,119 @@ async function readDestinationDetail(
   };
 }
 
+async function readArticleDetail(
+  route: Extract<PublicCatalogRenderRoute, { kind: "article_detail" }>,
+): Promise<PublicCatalogRenderModel> {
+  if (!route.identity) {
+    return {
+      kind: "not_found",
+      locale: route.locale,
+      canonicalPath: route.path,
+      title: "Guide not found",
+      description: "The requested guide is unavailable.",
+      indexable: false,
+    };
+  }
+  const [post] = await db
+    .select({
+      id: websiteBlogPostsTable.id,
+      title: websiteBlogPostsTable.title,
+      slug: websiteBlogPostsTable.slug,
+      excerpt: websiteBlogPostsTable.excerpt,
+      content: websiteBlogPostsTable.content,
+      locale: websiteBlogPostsTable.locale,
+      metaTitle: websiteBlogPostsTable.metaTitle,
+      metaDescription: websiteBlogPostsTable.metaDescription,
+      translations: websiteBlogPostsTable.translationsJson,
+      publishedAt: websiteBlogPostsTable.publishedAt,
+      updatedAt: websiteBlogPostsTable.updatedAt,
+    })
+    .from(websiteBlogPostsTable)
+    .where(and(
+      eq(websiteBlogPostsTable.id, route.identity.id),
+      eq(websiteBlogPostsTable.status, "published"),
+      isNotNull(websiteBlogPostsTable.publishedAt),
+      lte(websiteBlogPostsTable.publishedAt, new Date()),
+    ))
+    .limit(1);
+  if (!post || !post.publishedAt) {
+    return {
+      kind: "not_found",
+      locale: route.locale,
+      canonicalPath: route.path,
+      title: "Guide not found",
+      description: "The requested guide is unavailable.",
+      indexable: false,
+    };
+  }
+
+  const baseContent = isRecord(post.content) ? post.content : {};
+  const translations = isRecord(post.translations) ? post.translations : {};
+  const translated = isRecord(translations[route.locale])
+    ? translations[route.locale] as Record<string, unknown>
+    : null;
+  const sourceLocale = String(post.locale || "en").toLowerCase();
+  const translationAvailable = route.locale === sourceLocale
+    || Boolean(
+      translated
+      && boundedString(translated.title, 500).trim()
+      && boundedString(translated.body, 200_000).trim(),
+    );
+  const title = translationAvailable && translated
+    ? boundedString(translated.title, 500).trim()
+    : post.title;
+  const body = translationAvailable && translated
+    ? boundedString(translated.body, 200_000)
+    : boundedString(baseContent.body, 200_000);
+  const excerpt = translationAvailable && translated
+    ? boundedString(translated.excerpt, 2_000).trim() || null
+    : post.excerpt;
+  const metaTitle = translationAvailable && translated
+    ? boundedString(translated.metaTitle, 500).trim()
+    : post.metaTitle;
+  const metaDescription = translationAvailable && translated
+    ? boundedString(translated.metaDescription, 2_000).trim()
+    : post.metaDescription;
+  const readTimeValue = Number(baseContent.readTime);
+  const seoState = await resolvePublishedEntitySeoState({
+    entityType: "article",
+    entityId: post.id,
+    locale: route.locale,
+  });
+  const canonicalPath = seoState.canonicalPath || buildPublicWebCanonicalPath({
+    entityType: "ARTICLE",
+    entityId: post.id,
+    locale: route.locale,
+    slug: post.slug,
+  });
+  return {
+    kind: "article_detail",
+    locale: route.locale,
+    canonicalPath,
+    title: metaTitle || title,
+    description: boundedText(metaDescription || excerpt, title),
+    indexable: seoState.indexable && translationAvailable && body.trim().length > 0,
+    alternatePaths: seoState.alternates,
+    article: {
+      id: post.id,
+      title,
+      excerpt,
+      body,
+      publishedAt: post.publishedAt.toISOString(),
+      updatedAt: post.updatedAt.toISOString(),
+      readTime: Number.isSafeInteger(readTimeValue) && readTimeValue > 0 && readTimeValue <= 240
+        ? readTimeValue
+        : null,
+    },
+  };
+}
+
 async function loadModel(route: PublicCatalogRenderRoute): Promise<PublicCatalogRenderModel> {
   if (route.kind === "program_list") return readProgramList(route);
   if (route.kind === "program_detail") return readProgramDetail(route);
   if (route.kind === "university_detail") return readUniversityDetail(route);
-  return readDestinationDetail(route);
+  if (route.kind === "destination_detail") return readDestinationDetail(route);
+  return readArticleDetail(route);
 }
 
 function refresh(key: string, route: PublicCatalogRenderRoute): Promise<PublicCatalogRenderModel> {
@@ -551,7 +668,7 @@ export async function getPublicCatalogRenderModel(
 }
 
 export function invalidatePublicCatalogRenderCache(input: {
-  entityType?: "program" | "university" | "destination" | "all";
+  entityType?: "program" | "university" | "destination" | "article" | "all";
   entityId?: number;
   locale?: string;
 } = {}): number {
@@ -567,7 +684,9 @@ export function invalidatePublicCatalogRenderCache(input: {
       ))
       || (input.entityType === "university" && kind === "university_detail"
         && input.entityId !== undefined && identity === String(input.entityId))
-      || (input.entityType === "destination" && kind === "destination_detail");
+      || (input.entityType === "destination" && kind === "destination_detail")
+      || (input.entityType === "article" && kind === "article_detail"
+        && input.entityId !== undefined && identity === String(input.entityId));
     if (localeMatches && entityMatches) {
       cache.delete(key);
       removed += 1;

@@ -60,6 +60,7 @@ test("canonical paths normalize locale and detect stale slugs", () => {
 test("public catalogue detail APIs are bounded and never select private CRM fields", () => {
   const route = read("../src/routes/public-catalog.ts");
   const destinations = read("../src/routes/destinations.ts");
+  const publicWeb = read("../src/routes/public-web.ts");
   assert.equal(PUBLIC_CATALOG_RELATED_LIMIT, 8);
   assert.equal(PUBLIC_CATALOG_UNIVERSITY_PROGRAM_LIMIT, 12);
   assert.doesNotMatch(route, /commissionRate|serviceFeeAmount|contactPerson(Name|Phone|Email)/);
@@ -73,4 +74,10 @@ test("public catalogue detail APIs are bounded and never select private CRM fiel
   assert.match(destinations, /Content-Location/);
   assert.match(destinations, /alternatePaths/);
   assert.doesNotMatch(destinations, /\.limit\(50\)/);
+  assert.match(publicWeb, /websiteBlogPostsTable\.status, "published"/);
+  assert.match(publicWeb, /websiteBlogPostsTable\.publishedAt/);
+  assert.match(publicWeb, /\.limit\(limit \+ 1\)/);
+  assert.match(publicWeb, /Content-Location/);
+  assert.match(publicWeb, /PUBLIC_GUIDE_ROUTE_INVALID/);
+  assert.doesNotMatch(publicWeb, /authorEmail|commission|serviceFee|contactPerson/i);
 });

@@ -34,6 +34,13 @@ export type PublicCatalogRenderRoute =
       locale: ProgramSupportedLocale;
       path: string;
       slug: string;
+    }
+  | {
+      kind: "article_detail";
+      locale: ProgramSupportedLocale;
+      path: string;
+      routeKey: string;
+      identity: PublicCatalogRouteIdentity | null;
     };
 
 export type PublicCatalogRenderModel =
@@ -143,6 +150,24 @@ export type PublicCatalogRenderModel =
           canonicalPath: string;
         }>;
       };
+    }
+  | {
+      kind: "article_detail";
+      locale: ProgramSupportedLocale;
+      canonicalPath: string;
+      title: string;
+      description: string;
+      indexable: boolean;
+      alternatePaths: Partial<Record<ProgramSupportedLocale, string>>;
+      article: {
+        id: number;
+        title: string;
+        excerpt: string | null;
+        body: string;
+        publishedAt: string;
+        updatedAt: string;
+        readTime: number | null;
+      };
     };
 
 const MAX_ALLOWLIST_ENTRIES = 64;
@@ -250,6 +275,15 @@ export function matchPublicCatalogRenderPath(
       locale,
       path,
       slug: segments[2],
+    };
+  }
+  if (segments.length === 3 && segments[1] === "guides") {
+    return {
+      kind: "article_detail",
+      locale,
+      path,
+      routeKey: segments[2],
+      identity: parsePublicCatalogRouteKey(segments[2]),
     };
   }
   return null;
@@ -387,6 +421,37 @@ function renderDestinationDetail(model: Extract<PublicCatalogRenderModel, { kind
   </main>`;
 }
 
+function articlePlainText(value: string): string {
+  return value
+    .replace(/<\/(p|div|h[1-6]|li|blockquote)>/gi, "\n")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<[^>]*>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function renderArticleDetail(model: Extract<PublicCatalogRenderModel, { kind: "article_detail" }>): string {
+  const article = model.article;
+  const body = articlePlainText(article.body);
+  return `<main data-public-render-shell="article-detail" class="mx-auto max-w-3xl px-4 py-24">
+    <nav aria-label="Breadcrumb"><a href="/${escapeHtml(model.locale)}/blog">Blog</a> / <span>${escapeHtml(article.title)}</span></nav>
+    <article class="mt-8">
+      <header>
+        <h1 class="text-4xl font-bold">${escapeHtml(article.title)}</h1>
+        <p class="mt-3 text-sm text-muted-foreground"><time datetime="${escapeHtml(article.publishedAt)}">${escapeHtml(article.publishedAt.slice(0, 10))}</time>${article.readTime ? ` · ${article.readTime} min` : ""}</p>
+        ${article.excerpt ? `<p class="mt-5 text-lg text-muted-foreground">${escapeHtml(article.excerpt)}</p>` : ""}
+      </header>
+      <div class="mt-10 whitespace-pre-line leading-7">${escapeHtml(body)}</div>
+    </article>
+  </main>`;
+}
+
 function renderNotFound(model: Extract<PublicCatalogRenderModel, { kind: "not_found" }>): string {
   return `<main data-public-render-shell="not-found" class="mx-auto max-w-3xl px-4 py-32 text-center"><h1 class="text-3xl font-bold">${escapeHtml(model.title)}</h1><p class="mt-3 text-muted-foreground">${escapeHtml(model.description)}</p></main>`;
 }
@@ -490,6 +555,23 @@ function structuredData(model: PublicCatalogRenderModel, siteUrl: string): unkno
       ],
     };
   }
+  if (model.kind === "article_detail") {
+    return {
+      "@context": "https://schema.org",
+      "@type": "Article",
+      headline: model.article.title,
+      description: model.description,
+      url: `${siteUrl}${model.canonicalPath}`,
+      datePublished: model.article.publishedAt,
+      dateModified: model.article.updatedAt,
+      inLanguage: model.locale,
+      publisher: {
+        "@type": "EducationalOrganization",
+        name: "Find And Study",
+        url: siteUrl,
+      },
+    };
+  }
   return {
     "@context": "https://schema.org",
     "@type": "WebPage",
@@ -530,11 +612,14 @@ export function renderPublicCatalogHtml(input: {
         ? renderUniversityDetail(input.model)
         : input.model.kind === "destination_detail"
           ? renderDestinationDetail(input.model)
+          : input.model.kind === "article_detail"
+            ? renderArticleDetail(input.model)
       : renderNotFound(input.model);
   const alternatePaths = (
     input.model.kind === "program_detail"
     || input.model.kind === "university_detail"
     || input.model.kind === "destination_detail"
+    || input.model.kind === "article_detail"
   ) && input.model.indexable
     ? input.model.alternatePaths
     : {};

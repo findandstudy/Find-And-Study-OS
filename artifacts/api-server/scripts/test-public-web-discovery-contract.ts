@@ -48,6 +48,12 @@ test("sitemap routes accept only known locale, entity and bounded shard", () => 
     locale: "en",
     shard: 1,
   });
+  assert.deepEqual(parsePublicWebSitemapRoute("/sitemaps/guides-tr-3.xml"), {
+    kind: "published",
+    entityType: "ARTICLE",
+    locale: "tr",
+    shard: 3,
+  });
   assert.equal(parsePublicWebSitemapRoute("/sitemaps/programs-xx-1.xml"), null);
   assert.equal(parsePublicWebSitemapRoute("/sitemaps/programs-en-0.xml"), null);
   assert.equal(parsePublicWebSitemapRoute("/sitemaps/../../admin.xml"), null);
@@ -61,6 +67,7 @@ test("sitemap index shards governed counts at five thousand URLs", () => {
       { entityType: "PROGRAM", locale: "en", count: 10_001 },
       { entityType: "UNIVERSITY", locale: "tr", count: 1 },
       { entityType: "DESTINATION", locale: "en", count: 30 },
+      { entityType: "ARTICLE", locale: "tr", count: 5_001 },
     ],
   });
   assert.match(xml, /\/sitemaps\/static\.xml/);
@@ -69,6 +76,7 @@ test("sitemap index shards governed counts at five thousand URLs", () => {
   assert.doesNotMatch(xml, /programs-en-4\.xml/);
   assert.match(xml, /universities-tr-1\.xml/);
   assert.match(xml, /destinations-en-1\.xml/);
+  assert.match(xml, /guides-tr-2\.xml/);
 });
 
 test("static and dynamic URL sets emit reciprocal hreflang without unsafe paths", () => {

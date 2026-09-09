@@ -122,11 +122,12 @@ Publication Center ve bounded public read modelleri eklendi.
 ## Yerel SSR/ISR pilotu
 
 Yeni bir framework veya ikinci runtime eklenmeden mevcut modüler monolit üzerinde,
-program liste, program detay, üniversite detay ve destinasyon detay rotaları için on-demand semantic HTML pilotu
+program liste, program detay, üniversite detay, destinasyon detay ve rehber/makale
+detay rotaları için on-demand semantic HTML pilotu
 uygulandı. Pilot aşağıdaki güvenlik ve ölçek sınırlarını taşır:
 
 - `PUBLIC_WEB_RENDER_MODE=off|allowlist|all`; eksik veya hatalı ayar `off` olur;
-- allowlist yalnız tam eşleşen, tanınan localized program/üniversite/destinasyon rotalarını kabul eder;
+- allowlist yalnız tam eşleşen, tanınan localized program/üniversite/destinasyon/rehber rotalarını kabul eder;
 - ilk liste en fazla 12 kayıt okur; cache en fazla 500 anahtar tutar;
 - 5 dakika fresh, 1 saat stale-while-revalidate penceresi ve aynı anahtar için
   in-flight sorgu birleştirmesi kullanılır;
@@ -170,6 +171,12 @@ bilinmeyen mode fail-closed olarak `off` olur.
   eski `/{locale}/countries/{slug}` ayrıntı yolu SSR açıkken `308` ile kanoniğe
   gider. Localized destinasyon revision delivery modeli hazır olana kadar yalnız
   İngilizce yayın/index projection'ı sitemap ve hreflang'e alınır;
+- rehberler `/{locale}/guides/{slug}-{id}` kanoniğini kullanır. Public blog
+  listesi legacy `blog_posts` yerine admin Website Blog'un yönettiği
+  `website_blog_posts` kaynağını okur; yalnız `published`, zamanı gelmiş ve
+  istenen dilde eksiksiz title+body taşıyan kayıtları bounded keyset listesine
+  alır. Rehber body istemcide izinli HTML listesiyle sanitize edilir, SSR ise
+  markup'ı güvenli metne dönüştürür;
 - entity SEO projection'ı 5 dakika ve en fazla 5.000 anahtarla cache edilir;
   aynı cold key sorguları birleştirilir ve hedefli invalidation yüzeyi sağlanır;
 - migration `0119_public_web_discovery_indexes` yalnız partial lookup indeksi
@@ -206,8 +213,10 @@ production kapasite iddiası oluşturmaz.
 4. SSR/ISR pilotu ve ölçüm raporu. **Varsayılan-kapalı pilot yerelde tamamlandı; gerçek trafik ölçümü bekliyor.**
 5. Dinamik, shard edilmiş sitemap index ve hreflang/canonical doğrulaması. **Yerelde tamamlandı.**
 6. Destinasyon canonical API/SSR/discovery katmanı. **İngilizce kaynak içerik için yerelde tamamlandı; localized delivery bekliyor.**
-7. Prototiplerin mevcut tasarım sistemiyle program/üniversite template'lerine dönüştürülmesi.
-8. Related entity ve internal-link graph; kalite eşiği geçmeyen sayfalara link/index üretmeme.
+7. Website Blog rehber listesi, detay API/SSR, canonical/hreflang ve sitemap. **Yerelde tamamlandı.**
+8. Genel CMS page delivery ve reserved-route registry.
+9. Prototiplerin mevcut tasarım sistemiyle program/üniversite template'lerine dönüştürülmesi.
+10. Related entity ve internal-link graph; kalite eşiği geçmeyen sayfalara link/index üretmeme.
 
 ## NO-GO sınırları
 

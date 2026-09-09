@@ -25,15 +25,16 @@ export type PublicEntitySeoState = {
   alternates: Partial<Record<ProgramSupportedLocale, string>>;
 };
 
-type PublicSeoEntityType = "program" | "university" | "destination";
+type PublicSeoEntityType = "program" | "university" | "destination" | "article";
 
 const ENTITY_ID_COLUMNS: Record<
   PublicSeoEntityType,
-  "program_id" | "university_id" | "destination_id"
+  "program_id" | "university_id" | "destination_id" | "blog_post_id"
 > = {
   program: "program_id",
   university: "university_id",
   destination: "destination_id",
+  article: "blog_post_id",
 };
 const SEO_CACHE_TTL_MS = 5 * 60_000;
 const SEO_CACHE_MAX_ENTRIES = 5_000;
@@ -106,6 +107,13 @@ export async function readPublishedSitemapCounts(
               )
             ))
             OR (content.entity_type IN ('UNIVERSITY','DESTINATION') AND content.locale='en')
+            OR (content.entity_type='ARTICLE' AND EXISTS (
+              SELECT 1 FROM website_blog_posts post
+               WHERE post.id=content.blog_post_id
+                 AND post.status='published'
+                 AND post.published_at IS NOT NULL
+                 AND post.published_at <= now()
+            ))
           )
         GROUP BY content.entity_type,content.locale
         ORDER BY content.entity_type,content.locale`,
@@ -152,6 +160,13 @@ export async function readPublishedSitemapPage(input: {
                 )
               ))
               OR (content.entity_type IN ('UNIVERSITY','DESTINATION') AND content.locale='en')
+              OR (content.entity_type='ARTICLE' AND EXISTS (
+                SELECT 1 FROM website_blog_posts post
+                 WHERE post.id=content.blog_post_id
+                   AND post.status='published'
+                   AND post.published_at IS NOT NULL
+                   AND post.published_at <= now()
+              ))
             )
           ORDER BY content.id
           LIMIT $5 OFFSET $6
@@ -181,7 +196,15 @@ export async function readPublishedSitemapPage(input: {
                 SELECT 1 FROM program_translations alt_translation
                  WHERE alt_translation.program_id=alt.program_id
                    AND alt_translation.locale=alt.locale
-                   AND alt_translation.status='published'
+                 AND alt_translation.status='published'
+              )
+            ) OR (
+              page.entity_type='ARTICLE' AND EXISTS (
+                SELECT 1 FROM website_blog_posts alt_post
+                 WHERE alt_post.id=alt.blog_post_id
+                   AND alt_post.status='published'
+                   AND alt_post.published_at IS NOT NULL
+                   AND alt_post.published_at <= now()
               )
             )
           )
@@ -223,6 +246,14 @@ export async function readPublishedEntitySeoState(input: {
                  WHERE translation.program_id=content.program_id
                    AND translation.locale=content.locale
                    AND translation.status='published'
+              )
+            ) OR (
+              content.entity_type='ARTICLE' AND EXISTS (
+                SELECT 1 FROM website_blog_posts post
+                 WHERE post.id=content.blog_post_id
+                   AND post.status='published'
+                   AND post.published_at IS NOT NULL
+                   AND post.published_at <= now()
               )
             )
           )
