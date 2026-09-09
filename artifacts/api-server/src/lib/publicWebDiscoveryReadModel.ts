@@ -31,6 +31,15 @@ export type PublicEntitySeoState = {
   alternates: Partial<Record<ProgramSupportedLocale, string>>;
 };
 
+export type PublicWebRouteAliasAction =
+  | { kind: "redirect"; status: 301 | 308; targetPath: string }
+  | { kind: "gone"; status: 410 };
+
+export type PublicWebRouteAliasResolution = {
+  mode: "off" | "published";
+  action: PublicWebRouteAliasAction | null;
+};
+
 type PublicSeoEntityType = "program" | "university" | "destination" | "article" | "page";
 type PublicLocalizedEntityType = "university" | "destination";
 
@@ -48,6 +57,10 @@ const SEO_CACHE_TTL_MS = 5 * 60_000;
 const SEO_CACHE_MAX_ENTRIES = 5_000;
 const seoCache = new Map<string, { expiresAt: number; value: PublicEntitySeoState }>();
 const seoInFlight = new Map<string, Promise<PublicEntitySeoState>>();
+const ROUTE_ALIAS_CACHE_TTL_MS = 5 * 60_000;
+const ROUTE_ALIAS_CACHE_MAX_ENTRIES = 5_000;
+const routeAliasCache = new Map<string, { expiresAt: number; value: PublicWebRouteAliasResolution }>();
+const routeAliasInFlight = new Map<string, Promise<PublicWebRouteAliasResolution>>();
 
 type RawLocalizedEntityRow = {
   entity_id?: number;
@@ -92,6 +105,34 @@ function parseLocalizedEntityRow(row: RawLocalizedEntityRow | undefined): Public
   };
 }
 
+function safeLocalPublicPath(value: unknown): string | null {
+  const path = typeof value === "string" ? value : "";
+  if (
+    path.length < 4
+    || path.length > 2_048
+    || !/^\/(en|tr|ar|fr|ru|fa|zh|hi|es|id|ur|tk|ky|kk|uz|tg|bn|pt|ne|vi|ko|uk|it)(\/[a-z0-9][a-z0-9._~-]*)+\/?$/.test(path)
+    || path.includes("//")
+    || path.includes("..")
+    || path.includes("?")
+    || path.includes("#")
+    || /[\u0000-\u001f\u007f]/.test(path)
+  ) {
+    return null;
+  }
+  return path;
+}
+
+function pruneRouteAliasCache(now: number): void {
+  for (const [key, entry] of routeAliasCache) {
+    if (entry.expiresAt <= now) routeAliasCache.delete(key);
+  }
+  while (routeAliasCache.size >= ROUTE_ALIAS_CACHE_MAX_ENTRIES) {
+    const oldest = routeAliasCache.keys().next().value;
+    if (oldest === undefined) break;
+    routeAliasCache.delete(oldest);
+  }
+}
+
 function pruneSeoCache(now: number): void {
   for (const [key, entry] of seoCache) {
     if (entry.expiresAt <= now) seoCache.delete(key);
@@ -110,6 +151,70 @@ export function publicWebDiscoveryConfigFromEnvironment(): PublicWebDiscoveryCon
     tenantId: process.env.PUBLIC_WEB_TENANT_ID,
     organizationId: process.env.PUBLIC_WEB_ORGANIZATION_ID,
   });
+}
+
+export async function resolvePublicWebRouteAlias(path: string): Promise<PublicWebRouteAliasResolution> {
+  const config = publicWebDiscoveryConfigFromEnvironment();
+  const mode = localizedDeliveryMode(config);
+  const safePath = safeLocalPublicPath(path);
+  if (mode !== "published" || config.mode !== "published" || !config.scope || !safePath) {
+    return { mode, action: null };
+  }
+  const key = `${config.scope.tenantId}:${config.scope.organizationId}:${safePath}`;
+  const now = Date.now();
+  const cached = routeAliasCache.get(key);
+  if (cached && cached.expiresAt > now) return cached.value;
+  const existing = routeAliasInFlight.get(key);
+  if (existing) return existing;
+  const scope = config.scope;
+  const pending = withPublicScope(scope, async (client) => client.query<{
+    route_kind: string;
+    redirect_to_path: string | null;
+    http_status: number;
+  }>(
+    `SELECT alias.route_kind,alias.redirect_to_path,alias.http_status
+       FROM public_web_route_aliases alias
+       JOIN public_web_content_records content
+         ON content.tenant_id=alias.tenant_id
+        AND content.organization_id=alias.organization_id
+        AND content.id=alias.content_record_id
+       LEFT JOIN public_web_publication_states state
+         ON state.tenant_id=content.tenant_id
+        AND state.organization_id=content.organization_id
+        AND state.content_record_id=content.id
+      WHERE alias.tenant_id=$1 AND alias.organization_id=$2 AND alias.path=$3
+        AND alias.route_kind IN ('REDIRECT','GONE')
+        AND alias.valid_from <= now()
+        AND (alias.valid_to IS NULL OR alias.valid_to > now())
+        AND (alias.route_kind='GONE' OR state.status='PUBLISHED')
+      ORDER BY alias.valid_from DESC,alias.id DESC
+      LIMIT 1`,
+    [scope.tenantId, scope.organizationId, safePath],
+  )).then((result): PublicWebRouteAliasResolution => {
+    const row = result.rows[0];
+    let action: PublicWebRouteAliasAction | null = null;
+    if (row?.route_kind === "GONE" && Number(row.http_status) === 410) {
+      action = { kind: "gone", status: 410 };
+    } else if (
+      row?.route_kind === "REDIRECT"
+      && (Number(row.http_status) === 301 || Number(row.http_status) === 308)
+    ) {
+      const targetPath = safeLocalPublicPath(row.redirect_to_path);
+      if (targetPath && targetPath !== safePath) {
+        action = {
+          kind: "redirect",
+          status: Number(row.http_status) as 301 | 308,
+          targetPath,
+        };
+      }
+    }
+    const value: PublicWebRouteAliasResolution = { mode: "published", action };
+    pruneRouteAliasCache(Date.now());
+    routeAliasCache.set(key, { value, expiresAt: Date.now() + ROUTE_ALIAS_CACHE_TTL_MS });
+    return value;
+  }).finally(() => routeAliasInFlight.delete(key));
+  routeAliasInFlight.set(key, pending);
+  return pending;
 }
 
 async function withPublicScope<T>(
@@ -811,6 +916,7 @@ export function invalidatePublicWebDiscoveryCache(input: {
   entityType?: PublicSeoEntityType;
   entityId?: number;
   locale?: ProgramSupportedLocale;
+  path?: string;
 } = {}): number {
   let removed = 0;
   for (const key of seoCache.keys()) {
@@ -824,6 +930,13 @@ export function invalidatePublicWebDiscoveryCache(input: {
       && (!input.locale || input.locale === locale)
     ) {
       seoCache.delete(key);
+      removed += 1;
+    }
+  }
+  const requestedPath = input.path ? safeLocalPublicPath(input.path) : null;
+  for (const key of routeAliasCache.keys()) {
+    if (!requestedPath || key.endsWith(`:${requestedPath}`)) {
+      routeAliasCache.delete(key);
       removed += 1;
     }
   }

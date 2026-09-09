@@ -63,6 +63,10 @@ const REVISIONS = {
   destinationTr: "018f8500-0000-7000-8000-000000000041",
   universityTr: "018f8500-0000-7000-8000-000000000042",
 } as const;
+const ROUTE_ALIASES = {
+  redirect: "018f8500-0000-7000-8000-000000000051",
+  gone: "018f8500-0000-7000-8000-000000000052",
+} as const;
 
 test("published discovery is tenant-scoped and excludes NOINDEX or undeliverable locales", async () => {
   const admin = new Client({
@@ -227,6 +231,22 @@ test("published discovery is tenant-scoped and excludes NOINDEX or undeliverable
           reviewed_by_legacy_user_id,reviewed_at,published_by_legacy_user_id,published_at)
        VALUES ($1,$2,$3,$4,'PUBLISHED','INDEX',$5,now(),$5,now())`,
       [TENANT_ID, ORGANIZATION_ID, RECORDS.destinationTr, REVISIONS.destinationTr, userId],
+    );
+    await admin.query(
+      `INSERT INTO public_web_route_aliases
+         (id,tenant_id,organization_id,content_record_id,path,route_kind,
+          redirect_to_path,http_status,created_by_legacy_user_id)
+       VALUES
+         ($1,$3,$4,$5,'/tr/countries/eski-hedef','REDIRECT','/tr/destinations/dogrulanmis-hedef',308,$6),
+         ($2,$3,$4,$5,'/tr/destinations/kaldirilan-hedef','GONE',NULL,410,$6)`,
+      [
+        ROUTE_ALIASES.redirect,
+        ROUTE_ALIASES.gone,
+        TENANT_ID,
+        ORGANIZATION_ID,
+        RECORDS.destinationTr,
+        userId,
+      ],
     );
     await admin.query(
       `INSERT INTO public_web_content_records
@@ -490,6 +510,25 @@ test("published discovery is tenant-scoped and excludes NOINDEX or undeliverable
       }),
       { mode: "published", destinationId: null, snapshot: null },
     );
+    assert.deepEqual(
+      await discovery.resolvePublicWebRouteAlias("/tr/countries/eski-hedef"),
+      {
+        mode: "published",
+        action: {
+          kind: "redirect",
+          status: 308,
+          targetPath: "/tr/destinations/dogrulanmis-hedef",
+        },
+      },
+    );
+    assert.deepEqual(
+      await discovery.resolvePublicWebRouteAlias("/tr/destinations/kaldirilan-hedef"),
+      { mode: "published", action: { kind: "gone", status: 410 } },
+    );
+    assert.deepEqual(
+      await discovery.resolvePublicWebRouteAlias("//evil.example/path"),
+      { mode: "published", action: null },
+    );
     const localizedBatch = await discovery.readPublishedLocalizedEntities({
       entityType: "university",
       entityIds: [universityId, universityId, 0, 2_147_483_648],
@@ -609,6 +648,7 @@ test("published discovery is tenant-scoped and excludes NOINDEX or undeliverable
     await admin.query("ROLLBACK").catch(() => undefined);
     await admin.query("BEGIN");
     await admin.query("SET LOCAL session_replication_role = replica");
+    await admin.query("DELETE FROM public_web_route_aliases WHERE tenant_id=$1", [TENANT_ID]);
     await admin.query("DELETE FROM public_web_publication_states WHERE tenant_id=$1", [TENANT_ID]);
     await admin.query("DELETE FROM public_web_content_revisions WHERE tenant_id=$1", [TENANT_ID]);
     await admin.query("DELETE FROM public_web_content_records WHERE tenant_id=$1", [TENANT_ID]);

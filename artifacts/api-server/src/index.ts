@@ -31,6 +31,7 @@ import {
   publicWebDiscoveryConfigFromEnvironment,
   readPublishedSitemapCounts,
   readPublishedSitemapPage,
+  resolvePublicWebRouteAlias,
 } from "./lib/publicWebDiscoveryReadModel";
 
 const isProd = process.env.NODE_ENV === "production";
@@ -312,6 +313,19 @@ function serveStaticFrontend() {
 
     const startedAt = process.hrtime.bigint();
     try {
+      const alias = await resolvePublicWebRouteAlias(req.path);
+      if (alias.action?.kind === "redirect") {
+        res.setHeader("Cache-Control", "public, max-age=300, s-maxage=3600");
+        res.setHeader("X-Content-Type-Options", "nosniff");
+        res.redirect(alias.action.status, alias.action.targetPath);
+        return;
+      }
+      if (alias.action?.kind === "gone") {
+        res.setHeader("Cache-Control", "public, max-age=300, s-maxage=3600");
+        res.setHeader("X-Content-Type-Options", "nosniff");
+        res.status(410).type("text/plain").send("Gone");
+        return;
+      }
       const rendered = await getPublicCatalogRenderModel(route);
       if (
         (

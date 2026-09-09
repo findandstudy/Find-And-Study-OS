@@ -131,6 +131,10 @@ test("read model is read-only, RLS-scoped and selects only published indexed rec
   assert.match(source, /export async function readPublishedLocalizedEntity/);
   assert.match(source, /export async function resolvePublishedLocalizedDestinationRoute/);
   assert.match(source, /export async function readPublishedLocalizedEntities/);
+  assert.match(source, /export async function resolvePublicWebRouteAlias/);
+  assert.match(source, /alias\.route_kind IN \('REDIRECT','GONE'\)/);
+  assert.match(source, /alias\.route_kind='GONE' OR state\.status='PUBLISHED'/);
+  assert.match(source, /const ROUTE_ALIAS_CACHE_MAX_ENTRIES = 5_000/);
   assert.match(source, /content\.\$\{idColumn\}=ANY\(\$5::integer\[\]\)/);
   assert.match(source, /content\.canonical_path=\$4/);
   assert.match(source, /localizedDeliveryMode/);

@@ -41,6 +41,14 @@ test("render mode and exact allowlist fail closed", () => {
   );
 });
 
+test("production render middleware honors governed redirect and gone aliases", () => {
+  const source = readFileSync(new URL("../src/index.ts", import.meta.url), "utf8");
+  assert.match(source, /resolvePublicWebRouteAlias\(req\.path\)/);
+  assert.match(source, /res\.redirect\(alias\.action\.status, alias\.action\.targetPath\)/);
+  assert.match(source, /res\.status\(410\)\.type\("text\/plain"\)\.send\("Gone"\)/);
+  assert.match(source, /X-Content-Type-Options/);
+});
+
 test("only bounded public content paths enter the render pilot and CMS pages cannot shadow system routes", () => {
   assert.equal(matchPublicCatalogRenderPath("/en/programs")?.kind, "program_list");
   const detail = matchPublicCatalogRenderPath("/tr/programs/bilgisayar-muhendisligi-42");
