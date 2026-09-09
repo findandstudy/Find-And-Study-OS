@@ -9,11 +9,11 @@ Branch: `codex/public-web-foundation-20260908`
 | Alan | Değer |
 |---|---|
 | Karşılaştırma tabanı | `e6edad6a3de34f1c597687753a8c18d0f8248bcb` |
-| Code/config-bearing head | `5274c2b5c763b1bc917706453437a8ddf5b61503` |
-| Tree | `fc85c00c553125a838f8892da5cfa435cc6fe7f2` |
-| Base→head binary patch SHA-256 | `6004ced17a908415bd7bde01cbcde5f36b9f5ef401e58ea791947a4e1eff7718` |
-| Değişim | 37 commit, 110 dosya, +17.085 / -246 |
-| Migration ledger | 122 SQL / 122 journal |
+| Code/config-bearing head | `713841ca5d2dcd1a68fc29d3ef07bba73227341b` |
+| Tree | `3261a86d90f7490f374ff4fe0f2219088f8e5a3b` |
+| Base→head binary patch SHA-256 | `4bfa68f30355e2ea507d02766afd1773fceeea9b35c6098040e08d1d0daf56aa` |
+| Değişim | 39 commit, 116 dosya, +19.227 / -246 |
+| Migration ledger | 123 SQL / 123 journal |
 
 Bu belge code/config hash'inin parçası değildir. Aday kimliği yukarıdaki exact
 head'dir; review veya staging öncesi head değişirse tree, patch hash ve bütün
@@ -43,6 +43,10 @@ kanıtlar yeniden üretilir.
 - Şehir kayıtları için additive FK/exclusive binding, ayrı immutable migration'da
   `name + country + body` evidence guard'ı, on-demand API/SSR, City JSON-LD ve
   published/indexable ülke→şehir→üniversite/program link grafiği.
+- Yetki ve tenant/organization kapsamını execution anında tekrar doğrulayan,
+  aynı idempotency anahtarında advisory-lock kullanan governed draft intake.
+  Sonuç yalnız `DRAFT + NOINDEX`; receipt append-only, rollout varsayılan `off`
+  ve bu adayda HTTP route, UI mutation, executor grant veya publish geçişi yoktur.
 
 ## Exact-head yerel kanıt
 
@@ -53,9 +57,10 @@ kanıtlar yeniden üretilir.
 | Edcons i18n | PASS — 5.027 kullanılan anahtar, 23 dil parity |
 | Edcons public template tests | PASS — 5/5 |
 | Edcons production build + static sitemap | PASS |
-| Migration ledger | PASS — 122/122 |
-| Public pure contract suites | PASS — 59/59 |
-| Public PostgreSQL suites | PASS — 4/4 |
+| Migration ledger | PASS — 123/123 |
+| Public pure contract suites | PASS — 67/67 |
+| Public PostgreSQL suites | PASS — 5/5 |
+| Migration authority | PASS — 31/31 + 1 ortam SKIP |
 | Security regressions | PASS — 37/37 |
 | Rate-limit/IP security | PASS — 6/6 |
 | Package-manager guard | PASS — 6/6 |
@@ -63,11 +68,13 @@ kanıtlar yeniden üretilir.
 
 Public pure toplamı: foundation 8, command 4, store adapter 4, publication read
 model 2, localized entity 5, list/scale 13, route 4, render 10, discovery 6 ve
-scale 3 testtir.
+scale 3 teste ek olarak draft intake command 4 ve store 4 testtir.
 
-Yerel disposable PostgreSQL 16 üzerindeki dört suite public foundation,
+Yerel disposable PostgreSQL 16 üzerindeki beş suite public foundation,
 catalog graph, public render ve discovery/localization/route-alias davranışını
-kanıtladı. Production credential veya production verisi kullanılmadı.
+ve draft intake için create/replay/idempotency/append-only/revoked-authority/
+tenant-isolation davranışını kanıtladı. Production credential veya production
+verisi kullanılmadı.
 
 ## Yerel performans eşiği
 
@@ -88,7 +95,7 @@ Bu ölçüm sentetiktir; staging ağ/CDN/browser Core Web Vitals kanıtı değil
 3. Remote convergence CI'ın aynı exact head üzerinde Linux/static, Windows ve
    disposable PostgreSQL job'larını yeşil tamamladığını doğrula.
 4. Staging deploy manifestini reviewed head, beklenen migration prefix ve
-   rollback release'iyle bağla; staging veritabanında yalnız reviewed `0109–0121`
+   rollback release'iyle bağla; staging veritabanında yalnız reviewed `0109–0122`
    additive migrations'ını çalıştır.
 5. `0120` içindeki NOT VALID city FK/entity check'leri için bounded orphan/shape
    audit'i çalıştır; temiz sonuçtan sonra constraint validation'ı ayrı reviewed
@@ -118,6 +125,7 @@ Bu ölçüm sentetiktir; staging ağ/CDN/browser Core Web Vitals kanıtı değil
 - Bağımsız security/architecture review yoktur.
 - Staging deploy ve gerçek browser/crawler/CDN UAT yapılmamıştır.
 - Toplu içerik backfill, AI çeviri yayınlama ve public indexing aktive değildir.
+- Draft intake runtime/UI'a bağlanmamış, executor role/grant verilmemiştir.
 - Production deploy, public index açma ve `Find-And-Study-OS-Next` sync bu paketin
   yetkisi dışındadır.
 

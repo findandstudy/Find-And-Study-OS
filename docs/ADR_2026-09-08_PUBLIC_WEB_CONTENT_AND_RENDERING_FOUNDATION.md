@@ -270,6 +270,11 @@ production kapasite iddiası oluşturmaz.
 11. Şehir sayfası, CITY yayın/evidence kapısı ve ülke→şehir→üniversite/program
     graph'ı. **Varsayılan-kapalı ve exact yayın snapshot'ına bağlı olarak yerelde
     tamamlandı; gerçek içerik ve staging UAT bekliyor.**
+12. Governed content onboarding: yeni program/üniversite/destinasyon/şehir/
+    sayfa/rehber içeriğini active-context ve capability doğrulamasıyla yalnız
+    `DRAFT + NOINDEX` olarak kabul etme. **Migration `0122`, command/store ve
+    gerçek PostgreSQL create/replay/revocation/tenant-isolation kapılarıyla
+    yerelde tamamlandı; HTTP/UI wiring ve role grant bilinçli olarak yoktur.**
 
 ## NO-GO sınırları
 
@@ -278,3 +283,5 @@ production kapasite iddiası oluşturmaz.
 - Production veya staging migration/deploy bu ADR'nin onayıyla yetkilendirilmiş sayılmaz.
 - SSR/ISR framework seçimi performans kanıtından önce yapılmaz.
 - Harici domain ağı karşılıklı yapay link şeması olarak kullanılmaz; bağlantı ancak editoryal ilişki ve kullanıcı değeriyle verilir.
+- Draft intake hiçbir koşulda publish/index kararı vermez; runtime wiring ve
+  executor grant ayrı review/onay kapısıdır.

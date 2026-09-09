@@ -3,7 +3,7 @@
 Tarih: 9 Eylül 2026
 Durum: **Yerel staging adayı yeşil; staging/production aktivasyonu NO-GO**
 Branch: `codex/public-web-foundation-20260908`
-Code/config-bearing head: `5274c2b5c763b1bc917706453437a8ddf5b61503`
+Code/config-bearing head: `713841ca5d2dcd1a68fc29d3ef07bba73227341b`
 Karşılaştırma tabanı: `e6edad6a` (`origin/codex/operations-social-staging-20260905`)
 
 ## Teslim edilen dilim
@@ -22,6 +22,10 @@ Karşılaştırma tabanı: `e6edad6a` (`origin/codex/operations-social-staging-2
 - Canonical URL, doğrulanmış hreflang, JSON-LD ve dinamik sitemap üretimi.
 - Yalnız gerçekten `PUBLISHED + INDEX` olan ve ilgili dilde teslim edilebilen kayıtların discovery katmanına alınması.
 - 200.000 program, 2.000 üniversite ve 23 dil hedefi için bounded sitemap/HTML ölçek kapısı.
+- Publication Center için selection-bound active-context ve
+  `public_web.content.write` capability doğrulamalı, idempotent içerik kabul
+  katmanı. Bu katman yalnız immutable revision + `DRAFT + NOINDEX` oluşturur;
+  yayınlama, index açma, role grant veya HTTP/UI wiring yapmaz.
 
 ## Exact-head doğrulama özeti
 
@@ -32,7 +36,7 @@ Karşılaştırma tabanı: `e6edad6a` (`origin/codex/operations-social-staging-2
 | Edcons TypeScript typecheck | PASS |
 | Edcons i18n parity | PASS — 23 dil |
 | Edcons production build | PASS |
-| Migration ledger | PASS — 122 dosya / 122 journal |
+| Migration ledger | PASS — 123 dosya / 123 journal |
 | Public web foundation PostgreSQL | PASS — 1/1 |
 | Catalog entity graph PostgreSQL | PASS — 1/1 |
 | Publication store | PASS — 4/4 |
@@ -42,6 +46,9 @@ Karşılaştırma tabanı: `e6edad6a` (`origin/codex/operations-social-staging-2
 | Public web discovery contract | PASS — 6/6 |
 | Public web discovery PostgreSQL | PASS — 1/1 |
 | Public web scale gate | PASS — 3/3 |
+| Draft intake command/store | PASS — 8/8 |
+| Draft intake PostgreSQL | PASS — 1/1 |
+| Migration authority | PASS — 31/31 + 1 ortam SKIP |
 | Security regressions | PASS — 37/37 |
 | Rate-limit/IP security | PASS — 6/6 |
 | Public web CI wiring contract | PASS — 4/4 |
@@ -79,6 +86,8 @@ PUBLIC_WEB_INTERNAL_LINK_MODE=off
 PUBLIC_WEB_SITEMAP_MODE=off
 PUBLIC_WEB_TENANT_ID=
 PUBLIC_WEB_ORGANIZATION_ID=
+PUBLIC_WEB_DRAFT_INTAKE_MODE=off
+PUBLIC_WEB_DRAFT_INTAKE_TENANT_ALLOWLIST=
 ```
 
 `PUBLIC_WEB_SITEMAP_MODE=published` yalnız sitemap üretimini açmaz. Aynı
@@ -95,7 +104,7 @@ Geçersiz rollout modu veya geçersiz tenant/organization UUID'si fail-closed da
 ## Bilinen sınırlar ve sonraki kapılar
 
 1. Staging smoke/UAT, gerçek crawler davranışı, Lighthouse/Core Web Vitals, CDN cache ve invalidation kanıtı alınmamıştır. Yerel tarayıcıda masaüstü ve 390 px mobil ana sayfa/navigation kontrolü yatay taşma ve console error üretmedi; gerçek city içeriği henüz staging UAT görmedi.
-2. Bulk content import/backfill ve AI translation publication otomatik olarak açılmamıştır.
+2. Bulk content import/backfill ve AI translation publication otomatik olarak açılmamıştır. Yeni draft intake adapter'ı runtime route'una veya admin formuna bağlanmamıştır.
 3. Frontend build başarılıdır; bazı dil paketleri 500 kB uyarı eşiğini aşmaktadır ve gerçek trafik ölçümüyle ayrı bundle bütçesi uygulanmalıdır.
 4. Public-web saf ve PostgreSQL testleri convergence CI'a, saf testler staging
    adoption CI'a bağlanmıştır. GitHub push/PR, remote exact-head CI,
