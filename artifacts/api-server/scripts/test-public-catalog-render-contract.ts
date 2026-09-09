@@ -114,6 +114,9 @@ test("rendered shell escapes catalogue content, emits canonical metadata, and no
   assert.match(html, /Safe &lt;\/script&gt;&lt;img/);
   assert.match(html, /Safe \\u003c\/script\\u003e\\u003cimg/);
   assert.match(html, />Degree<\/dt>/);
+  assert.match(html, /href="#overview"/);
+  assert.match(html, /id="fees"/);
+  assert.match(html, /<section id="related"/);
   assert.match(html, /href="\/en\/programs\/related-programme-43"/);
   const scripts = html.match(/<script\b[^>]*>/g) || [];
   assert.ok(scripts.length >= 3);
@@ -154,6 +157,8 @@ test("university detail emits a semantic institution shell and structured data",
   });
   assert.match(html, /data-public-render-shell="university-detail"/);
   assert.match(html, /"@type":"CollegeOrUniversity"/);
+  assert.match(html, /href="#overview"/);
+  assert.match(html, /<section id="programs"/);
   assert.match(html, /href="\/en\/programs\/computer-science-42"/);
   assert.match(html, /hreflang="x-default"/);
 });

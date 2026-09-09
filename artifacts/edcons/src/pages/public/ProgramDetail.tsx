@@ -108,6 +108,20 @@ function money(value: number | null, currency: string | null, locale: string) {
   }
 }
 
+function localizedDate(value: string | null, locale: string): string | null {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? null
+    : new Intl.DateTimeFormat(locale, { day: "numeric", month: "short", year: "numeric" }).format(date);
+}
+
+function minorMoney(value: string, currency: string, locale: string): string | null {
+  const amountMinor = Number(value);
+  if (!Number.isSafeInteger(amountMinor)) return null;
+  return money(amountMinor / 100, currency, locale);
+}
+
 export default function ProgramDetail({ routeKey }: { routeKey: string }) {
   const { t, lang, localePath } = useI18n();
   const [, setLocation] = useLocation();
@@ -212,6 +226,7 @@ export default function ProgramDetail({ routeKey }: { routeKey: string }) {
 
   const effectiveFee = program.discountedFee ?? program.tuitionFee;
   const verifiedTuition = payload.prices.find((price) => price.componentType === "TUITION");
+  const visiblePrices = payload.prices.slice(0, 8);
 
   return (
     <>
@@ -252,11 +267,21 @@ export default function ProgramDetail({ routeKey }: { routeKey: string }) {
         </div>
       </section>
 
-      <section className="py-12">
+      <nav className="sticky top-0 z-20 border-b border-border/60 bg-background/95 backdrop-blur" aria-label={t("programs.programDetails")}>
+        <div className="mx-auto flex max-w-7xl gap-6 overflow-x-auto px-4 py-3 text-sm font-semibold [scrollbar-width:none] sm:px-6 lg:px-8 [&::-webkit-scrollbar]:hidden">
+          <a href="#overview" className="whitespace-nowrap text-muted-foreground hover:text-primary">{t("programs.programDetails")}</a>
+          {program.requirements ? <a href="#requirements" className="whitespace-nowrap text-muted-foreground hover:text-primary">{t("programs.requirements")}</a> : null}
+          {payload.intakes.length > 0 ? <a href="#intakes" className="whitespace-nowrap text-muted-foreground hover:text-primary">{t("catalogDetail.availableIntakes")}</a> : null}
+          {visiblePrices.length > 0 ? <a href="#fees" className="whitespace-nowrap text-muted-foreground hover:text-primary">{t("courseFinderPage.tuitionFee")}</a> : null}
+          {payload.related.length > 0 ? <a href="#related" className="whitespace-nowrap text-muted-foreground hover:text-primary">{t("catalogDetail.relatedPrograms")}</a> : null}
+        </div>
+      </nav>
+
+      <section id="overview" className="scroll-mt-20 py-12">
         <div className="mx-auto grid max-w-7xl gap-8 px-4 sm:px-6 lg:grid-cols-3 lg:px-8">
           <div className="space-y-8 lg:col-span-2">
             {program.description && (
-              <article className="rounded-2xl border border-border/50 bg-card p-6 md:p-8">
+              <article id="requirements" className="scroll-mt-24 rounded-2xl border border-border/50 bg-card p-6 md:p-8">
                 <h2 className="text-2xl font-bold">{t("countryDetail.about", { name: program.name })}</h2>
                 <p className="mt-4 whitespace-pre-line leading-7 text-muted-foreground">{program.description}</p>
               </article>
@@ -268,7 +293,7 @@ export default function ProgramDetail({ routeKey }: { routeKey: string }) {
               </article>
             )}
             {payload.intakes.length > 0 && (
-              <section className="rounded-2xl border border-border/50 bg-card p-6 md:p-8">
+              <section id="intakes" className="scroll-mt-24 rounded-2xl border border-border/50 bg-card p-6 md:p-8">
                 <h2 className="flex items-center gap-2 text-2xl font-bold"><CalendarDays className="h-6 w-6 text-primary" />{t("catalogDetail.availableIntakes")}</h2>
                 <div className="mt-5 grid gap-3 sm:grid-cols-2">
                   {payload.intakes.map((intake) => (
@@ -278,15 +303,35 @@ export default function ProgramDetail({ routeKey }: { routeKey: string }) {
                         <Badge variant={intake.capacityStatus === "OPEN" ? "default" : "secondary"}>{t(`catalogDetail.capacity${intake.capacityStatus.charAt(0) + intake.capacityStatus.slice(1).toLowerCase()}`)}</Badge>
                       </div>
                       {intake.campusName && <p className="mt-3 text-sm text-muted-foreground">{intake.campusName}</p>}
+                      {(localizedDate(intake.startsOn, lang) || localizedDate(intake.applicationDeadlineAt, lang)) && (
+                        <dl className="mt-4 grid grid-cols-2 gap-3 border-t border-border/50 pt-3 text-xs">
+                          {localizedDate(intake.startsOn, lang) ? <div><dt className="text-muted-foreground">{t("common.date")}</dt><dd className="mt-1 font-semibold">{localizedDate(intake.startsOn, lang)}</dd></div> : null}
+                          {localizedDate(intake.applicationDeadlineAt, lang) ? <div><dt className="text-muted-foreground">{t("studentJourney.deadline")}</dt><dd className="mt-1 font-semibold">{localizedDate(intake.applicationDeadlineAt, lang)}</dd></div> : null}
+                        </dl>
+                      )}
                     </div>
                   ))}
                 </div>
               </section>
             )}
+            {visiblePrices.length > 0 && (
+              <section id="fees" className="scroll-mt-24 rounded-2xl border border-border/50 bg-card p-6 md:p-8">
+                <h2 className="flex items-center gap-2 text-2xl font-bold"><WalletCards className="h-6 w-6 text-primary" />{t("courseFinderPage.tuitionFee")}</h2>
+                <dl className="mt-5 divide-y divide-border/60 rounded-xl border border-border/60">
+                  {visiblePrices.map((price) => (
+                    <div key={price.id} className="flex items-center justify-between gap-4 px-4 py-3 text-sm">
+                      <dt className="text-muted-foreground">{price.componentType === "TUITION" ? t("courseFinderPage.tuitionFee") : price.componentType === "DEPOSIT" ? t("catalogDetail.deposit") : price.componentType.replaceAll("_", " ").toLowerCase()}</dt>
+                      <dd className="text-right font-bold">{minorMoney(price.amountMinor, price.currencyCode, lang) || "—"}<span className="ml-1 font-normal text-muted-foreground">· {price.frequency.toLowerCase()}</span></dd>
+                    </div>
+                  ))}
+                </dl>
+                <p className="mt-4 flex items-center gap-2 text-xs text-emerald-700"><CheckCircle2 className="h-4 w-4" />{t("catalogDetail.verifiedPrice")}</p>
+              </section>
+            )}
           </div>
 
           <aside className="space-y-5">
-            <div className="rounded-2xl border border-border/50 bg-card p-6">
+            <div className="rounded-2xl border border-border/50 bg-card p-6 lg:sticky lg:top-24">
               <h2 className="font-bold">{t("programs.programDetails")}</h2>
               <dl className="mt-5 space-y-4 text-sm">
                 {[
@@ -308,7 +353,7 @@ export default function ProgramDetail({ routeKey }: { routeKey: string }) {
       </section>
 
       {payload.related.length > 0 && (
-        <section className="bg-secondary/30 py-12">
+        <section id="related" className="scroll-mt-24 bg-secondary/30 py-12">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <h2 className="text-2xl font-bold">{t("catalogDetail.relatedPrograms")}</h2>
             <div className="mt-7 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">

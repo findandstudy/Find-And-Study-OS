@@ -164,13 +164,26 @@ export default function UniversityDetail({ routeKey }: { routeKey: string }) {
         </div>
       </section>
 
-      <section className="py-12">
+      <nav className="sticky top-0 z-20 border-b border-border/60 bg-background/95 backdrop-blur" aria-label={university.name}>
+        <div className="mx-auto flex max-w-7xl gap-6 overflow-x-auto px-4 py-3 text-sm font-semibold [scrollbar-width:none] sm:px-6 lg:px-8 [&::-webkit-scrollbar]:hidden">
+          <a href="#overview" className="whitespace-nowrap text-muted-foreground hover:text-primary">{t("countryDetail.about", { name: university.name })}</a>
+          <a href="#facts" className="whitespace-nowrap text-muted-foreground hover:text-primary">{t("countryDetail.quickFacts")}</a>
+          <a href="#programs" className="whitespace-nowrap text-muted-foreground hover:text-primary">{t("catalogDetail.availablePrograms")}</a>
+        </div>
+      </nav>
+
+      <section id="overview" className="scroll-mt-20 py-12">
         <div className="mx-auto grid max-w-7xl gap-8 px-4 sm:px-6 lg:grid-cols-3 lg:px-8">
           <article className="rounded-2xl border border-border/50 bg-card p-6 md:p-8 lg:col-span-2">
             <h2 className="text-2xl font-bold">{t("countryDetail.about", { name: university.name })}</h2>
             <p className="mt-4 whitespace-pre-line leading-7 text-muted-foreground">{university.description || t("countryDetail.exploreOpportunities")}</p>
+            <dl className="mt-8 grid gap-4 border-t border-border/60 pt-6 sm:grid-cols-2 lg:grid-cols-3">
+              <div><dt className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{t("countryDetail.programs")}</dt><dd className="mt-2 text-2xl font-extrabold">{payload.meta.programCount}</dd></div>
+              <div><dt className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{t("catalogDetail.location")}</dt><dd className="mt-2 font-bold">{[university.city, university.country].filter(Boolean).join(", ")}</dd></div>
+              {university.universityType ? <div><dt className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{t("common.type")}</dt><dd className="mt-2 font-bold">{university.universityType}</dd></div> : null}
+            </dl>
           </article>
-          <aside className="rounded-2xl border border-border/50 bg-card p-6">
+          <aside id="facts" className="scroll-mt-24 rounded-2xl border border-border/50 bg-card p-6 lg:sticky lg:top-24 lg:self-start">
             <h2 className="font-bold">{t("countryDetail.quickFacts")}</h2>
             <dl className="mt-5 space-y-4 text-sm">
               <div><dt className="text-muted-foreground">{t("catalogDetail.location")}</dt><dd className="font-semibold">{university.address || [university.city, university.country].filter(Boolean).join(", ")}</dd></div>
@@ -180,7 +193,7 @@ export default function UniversityDetail({ routeKey }: { routeKey: string }) {
         </div>
       </section>
 
-      <section className="bg-secondary/30 py-12">
+      <section id="programs" className="scroll-mt-24 bg-secondary/30 py-12">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
             <div><p className="text-sm font-semibold text-primary">{university.name}</p><h2 className="mt-1 text-2xl font-bold">{t("catalogDetail.availablePrograms")}</h2></div>

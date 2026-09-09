@@ -421,10 +421,11 @@ function renderProgramDetail(model: Extract<PublicCatalogRenderModel, { kind: "p
   const program = model.program;
   const copy = RENDER_COPY[model.locale];
   const price = program.discountedFee ?? program.tuitionFee;
-  const related = model.relatedPrograms.map((item) => `<article class="rounded-2xl border border-border p-5"><p class="text-sm text-primary">${escapeHtml(item.universityName)}</p><h2 class="mt-2 text-lg font-bold"><a href="${escapeHtml(item.canonicalPath)}">${escapeHtml(item.name)}</a></h2><p class="mt-2 text-muted-foreground">${escapeHtml([item.degree, item.field].filter(Boolean).join(" · "))}</p></article>`).join("");
+  const related = model.relatedPrograms.map((item) => `<article class="rounded-2xl border border-border p-5"><p class="text-sm text-primary">${escapeHtml(item.universityName)}</p><h3 class="mt-2 text-lg font-bold"><a href="${escapeHtml(item.canonicalPath)}">${escapeHtml(item.name)}</a></h3><p class="mt-2 text-muted-foreground">${escapeHtml([item.degree, item.field].filter(Boolean).join(" · "))}</p></article>`).join("");
   return `<main data-public-render-shell="program-detail" class="mx-auto max-w-7xl px-4 py-24">
     <nav aria-label="Breadcrumb"><a href="/${escapeHtml(model.locale)}/programs">${escapeHtml(copy.programs)}</a> / <span>${escapeHtml(program.name)}</span></nav>
-    <article class="mt-8">
+    <nav class="mt-8 flex gap-5" aria-label="${escapeHtml(program.name)}"><a href="#overview">${escapeHtml(copy.degree)}</a><a href="#fees">${escapeHtml(copy.tuition)}</a>${related ? `<a href="#related">${escapeHtml(copy.programs)}</a>` : ""}</nav>
+    <article id="overview" class="mt-8">
       <p class="text-sm text-primary"><a href="${escapeHtml(program.universityPath)}">${escapeHtml(program.universityName)}</a></p>
       <h1 class="mt-3 text-4xl font-bold">${escapeHtml(program.name)}</h1>
       <p class="mt-4 text-muted-foreground">${escapeHtml(model.description)}</p>
@@ -434,10 +435,10 @@ function renderProgramDetail(model: Extract<PublicCatalogRenderModel, { kind: "p
         <div><dt>${escapeHtml(copy.duration)}</dt><dd>${escapeHtml(program.duration || "—")}</dd></div>
         <div><dt>${escapeHtml(copy.language)}</dt><dd>${escapeHtml(program.language || "—")}</dd></div>
         <div><dt>${escapeHtml(copy.location)}</dt><dd>${escapeHtml([program.city, program.country].filter(Boolean).join(", "))}</dd></div>
-        <div><dt>${escapeHtml(copy.tuition)}</dt><dd>${price === null ? "—" : `${escapeHtml(String(price))} ${escapeHtml(program.currency || "USD")}`}</dd></div>
+        <div id="fees"><dt>${escapeHtml(copy.tuition)}</dt><dd>${price === null ? "—" : `${escapeHtml(String(price))} ${escapeHtml(program.currency || "USD")}`}</dd></div>
       </dl>
     </article>
-    ${related ? `<section class="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-4" aria-label="Related programs">${related}</section>` : ""}
+    ${related ? `<section id="related" class="mt-12" aria-label="${escapeHtml(copy.programs)}"><h2 class="text-2xl font-bold">${escapeHtml(copy.programs)}</h2><div class="mt-5 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">${related}</div></section>` : ""}
   </main>`;
 }
 
@@ -446,12 +447,13 @@ function renderUniversityDetail(model: Extract<PublicCatalogRenderModel, { kind:
   const copy = RENDER_COPY[model.locale];
   const programs = university.programs.map((program) => `
       <article class="rounded-2xl border border-border bg-card p-5">
-        <h2 class="text-lg font-bold"><a href="${escapeHtml(program.canonicalPath)}">${escapeHtml(program.name)}</a></h2>
+        <h3 class="text-lg font-bold"><a href="${escapeHtml(program.canonicalPath)}">${escapeHtml(program.name)}</a></h3>
         <p class="mt-2 text-muted-foreground">${escapeHtml([program.degree, program.field].filter(Boolean).join(" · "))}</p>
       </article>`).join("");
   return `<main data-public-render-shell="university-detail" class="mx-auto max-w-7xl px-4 py-24">
     <nav aria-label="Breadcrumb"><a href="/${escapeHtml(model.locale)}/countries">${escapeHtml(copy.countries)}</a> / <span>${escapeHtml(university.name)}</span></nav>
-    <article class="mt-8">
+    <nav class="mt-8 flex gap-5" aria-label="${escapeHtml(university.name)}"><a href="#overview">${escapeHtml(copy.institutionType)}</a><a href="#programs">${escapeHtml(copy.programs)}</a></nav>
+    <article id="overview" class="mt-8">
       <p class="text-sm text-primary">${escapeHtml([university.city, university.country].filter(Boolean).join(", "))}</p>
       <h1 class="mt-3 text-4xl font-bold">${escapeHtml(university.name)}</h1>
       <p class="mt-4 text-muted-foreground">${escapeHtml(model.description)}</p>
@@ -461,7 +463,7 @@ function renderUniversityDetail(model: Extract<PublicCatalogRenderModel, { kind:
         <div><dt>${escapeHtml(copy.programs)}</dt><dd>${escapeHtml(String(university.programCount))}</dd></div>
       </dl>
     </article>
-    <section class="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">${programs}</section>
+    <section id="programs" class="mt-10"><h2 class="text-2xl font-bold">${escapeHtml(copy.programs)}</h2><div class="mt-5 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">${programs}</div></section>
   </main>`;
 }
 

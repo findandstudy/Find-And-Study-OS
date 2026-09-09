@@ -199,6 +199,14 @@ bilinmeyen mode fail-closed olarak `off` olur.
   ilgili locale'de title+body taşıyan ve governed `PUBLISHED + INDEX` durumundaki
   ilk 6 rehber API, istemci ve SSR linkine dönüşür. Mod kapalıysa veya kategori
   yoksa yeni rehber linki üretilmez;
+- verilen program ve üniversite HTML prototipleri doğrudan runtime'a gömülmez.
+  Bilgi mimarisi mevcut React ve SSR shell'lere taşınır: sticky/scrollable bölüm
+  navigasyonu, overview/facts, gerçek intake ve deadline, doğrulanmış price
+  component'leri ve governed related kartları yalnız mevcut API verisiyle render
+  edilir. Prototiplerdeki sabit fiyat, ranking, YÖK/ICEF, deadline, öğrenci yorumu,
+  Unsplash görseli veya örnek dış bağlantılar üretim içeriği sayılmaz;
+- public üniversite web sitesi yalnız credential içermeyen geçerli HTTPS URL ise
+  istemciye teslim edilir; diğer değerler public projection'da `null` olur;
 - entity SEO projection'ı 5 dakika ve en fazla 5.000 anahtarla cache edilir;
   aynı cold key sorguları birleştirilir ve hedefli invalidation yüzeyi sağlanır;
 - migration `0119_public_web_discovery_indexes` yalnız partial lookup indeksi
@@ -237,7 +245,7 @@ production kapasite iddiası oluşturmaz.
 6. Destinasyon canonical API/SSR/discovery katmanı. **İngilizce kaynak içerik için yerelde tamamlandı; localized delivery bekliyor.**
 7. Website Blog rehber listesi, detay API/SSR, canonical/hreflang ve sitemap. **Yerelde tamamlandı.**
 8. Genel CMS page delivery ve reserved-route registry. **Yerelde tamamlandı.**
-9. Prototiplerin mevcut tasarım sistemiyle program/üniversite template'lerine dönüştürülmesi.
+9. Prototiplerin mevcut tasarım sistemiyle program/üniversite template'lerine dönüştürülmesi. **Veri-bağlı React ve semantik SSR şablonları yerelde tamamlandı; gerçek içerik UAT bekliyor.**
 10. Related entity ve internal-link graph; kalite eşiği geçmeyen sayfalara link/index üretmeme. **Program, üniversite, destinasyon ve rehber graph dilimleri yerelde tamamlandı.**
 
 ## NO-GO sınırları

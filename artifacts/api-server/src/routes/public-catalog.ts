@@ -57,6 +57,19 @@ function rejectInvalidRouteKey(res: Response): void {
   });
 }
 
+function safePublicUniversityWebsite(value: unknown): string | null {
+  const raw = typeof value === "string" ? value.trim() : "";
+  if (!raw || raw.length > 2_048 || /[\u0000-\u001f\u007f]/.test(raw)) return null;
+  try {
+    const parsed = new URL(raw);
+    return parsed.protocol === "https:" && !parsed.username && !parsed.password
+      ? parsed.toString()
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 router.get(
   "/public/catalog/programs/:routeKey",
   async (req: Request, res: Response): Promise<void> => {
@@ -435,6 +448,7 @@ router.get(
       data: {
         ...university,
         hasLogo: undefined,
+        website: safePublicUniversityWebsite(university.website),
         logoUrl: courseFinderUniversityLogoUrl(
           university.id,
           university.hasLogo,
