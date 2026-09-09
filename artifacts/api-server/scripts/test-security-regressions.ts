@@ -16,6 +16,10 @@ const indexSource = readFileSync(
   new URL("../src/index.ts", import.meta.url),
   "utf8",
 );
+const frontendIndexSource = readFileSync(
+  new URL("../../edcons/index.html", import.meta.url),
+  "utf8",
+);
 const routesIndexSource = readFileSync(
   new URL("../src/routes/index.ts", import.meta.url),
   "utf8",
@@ -267,6 +271,14 @@ test("production frontend does not emit source maps into the public root", () =>
     "utf8",
   );
   assert.match(viteSource, /sourcemap: !isProd/);
+});
+
+test("frontend bootstrap errors cannot inject markup or expose stack details", () => {
+  assert.match(frontendIndexSource, /document\.createElement\('div'\)/);
+  assert.match(frontendIndexSource, /message\.textContent =/);
+  assert.match(frontendIndexSource, /d\.replaceChildren\(panel\)/);
+  assert.doesNotMatch(frontendIndexSource, /innerHTML\s*=/);
+  assert.doesNotMatch(frontendIndexSource, /err\.stack|e\.reason\.stack/);
 });
 
 test("portal lifecycle planning can never authorize a portal mutation", () => {
