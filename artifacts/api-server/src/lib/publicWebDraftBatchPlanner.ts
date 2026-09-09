@@ -126,8 +126,10 @@ export async function planPublicWebDraftBatch(input: {
   if (
     !input ||
     !isRecord(input.scope) ||
-    !UUID_V7_RE.test(String(input.scope.tenantId)) ||
-    !UUID_V7_RE.test(String(input.scope.organizationId)) ||
+    typeof input.scope.tenantId !== "string" ||
+    typeof input.scope.organizationId !== "string" ||
+    !UUID_V7_RE.test(input.scope.tenantId) ||
+    !UUID_V7_RE.test(input.scope.organizationId) ||
     input.scope.tenantId.toLowerCase() === input.scope.organizationId.toLowerCase() ||
     !Array.isArray(input.requests) ||
     input.requests.length < 1 ||
@@ -145,8 +147,13 @@ export async function planPublicWebDraftBatch(input: {
   if (Buffer.byteLength(serialized, "utf8") > MAX_BATCH_BYTES) {
     throw new Error("public_web_draft_batch_oversized");
   }
+  const requestsSnapshot = JSON.parse(serialized) as unknown[];
+  const scopeSnapshot: PublicWebDraftScope = {
+    tenantId: input.scope.tenantId.toLowerCase(),
+    organizationId: input.scope.organizationId.toLowerCase(),
+  };
 
-  const references = input.requests.map(exactRequestReference);
+  const references = requestsSnapshot.map(exactRequestReference);
   const targetCounts = count(references.map((reference) => reference
     ? `${reference.entityType}:${reference.entityId}:${reference.locale}`
     : null));
@@ -159,7 +166,7 @@ export async function planPublicWebDraftBatch(input: {
     while (true) {
       const index = cursor;
       cursor += 1;
-      if (index >= input.requests.length) return;
+      if (index >= requestsSnapshot.length) return;
       const reference = references[index];
       if (!reference) {
         rejected.push({ index, reason: "request_invalid" });
@@ -187,7 +194,7 @@ export async function planPublicWebDraftBatch(input: {
       }
       const identities = validationIdentities(index);
       const built = buildServerBoundPublicWebDraftIntake({
-        scope: input.scope,
+        scope: scopeSnapshot,
         source,
         request: reference.request,
         now: 2_000_000_000_000,
@@ -202,7 +209,7 @@ export async function planPublicWebDraftBatch(input: {
   }
   await Promise.all(
     Array.from(
-      { length: Math.min(MAX_RESOLVER_CONCURRENCY, input.requests.length) },
+      { length: Math.min(MAX_RESOLVER_CONCURRENCY, requestsSnapshot.length) },
       () => worker(),
     ),
   );
@@ -211,11 +218,11 @@ export async function planPublicWebDraftBatch(input: {
   const planSha256 = crypto
     .createHash("sha256")
     .update("fas.public-web.draft-batch-plan.v1\0", "utf8")
-    .update(canonicalJson({ accepted, rejected, total: input.requests.length }), "utf8")
+    .update(canonicalJson({ accepted, rejected, total: requestsSnapshot.length }), "utf8")
     .digest("hex");
   return {
     schemaVersion: 1,
-    total: input.requests.length,
+    total: requestsSnapshot.length,
     accepted,
     rejected,
     planSha256,

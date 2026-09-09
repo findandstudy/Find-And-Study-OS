@@ -92,6 +92,22 @@ test("isolates missing, unavailable and malformed rows without losing valid work
   assert.equal(JSON.stringify(plan).includes("private infrastructure detail"), false);
 });
 
+test("binds planning to a canonical request snapshot across async source reads", async () => {
+  const mutable = request(1);
+  const plan = await planPublicWebDraftBatch({
+    scope,
+    requests: [mutable],
+    resolveSource: async (entityType, entityId) => {
+      mutable.title = "Mutated after intake";
+      mutable.contentJson = { body: "Mutated after intake" };
+      return { entityType, entityId, sourceSha256: SHA };
+    },
+  });
+  assert.equal(plan.accepted.length, 1);
+  assert.equal(plan.accepted[0]?.request.title, "Programme 1");
+  assert.deepEqual(plan.accepted[0]?.request.contentJson, { body: "Programme 1" });
+});
+
 test("rejects empty, oversized-count and oversized-byte batches", async () => {
   const resolveSource = async (entityType: PublicWebEntityType, entityId: number) => ({
     entityType,
