@@ -312,7 +312,7 @@ function serveStaticFrontend() {
       const parsed = new URL(
         process.env.PUBLIC_SITE_URL || "https://findandstudy.com",
       );
-      if (!/^https?:$/.test(parsed.protocol) || parsed.username || parsed.password) {
+      if (parsed.protocol !== "https:" || parsed.username || parsed.password) {
         throw new Error("unsafe_public_site_url");
       }
       return parsed.origin;

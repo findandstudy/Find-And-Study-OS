@@ -78,7 +78,7 @@ function parseMode(value: unknown): PublicWebSitemapMode {
 function parseSiteUrl(value: unknown): string | null {
   try {
     const url = new URL(String(value ?? ""));
-    if (!/^https?:$/.test(url.protocol) || url.username || url.password) return null;
+    if (url.protocol !== "https:" || url.username || url.password) return null;
     if (url.pathname !== "/" || url.search || url.hash) return null;
     return url.origin;
   } catch {

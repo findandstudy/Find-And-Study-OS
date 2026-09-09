@@ -46,6 +46,7 @@ test("robots publication is explicit and invalid configuration fails closed", ()
 test("discovery rollout and tenant scope fail closed", () => {
   assert.equal(parsePublicWebDiscoveryConfig({}).mode, "off");
   assert.equal(parsePublicWebDiscoveryConfig({ mode: "published", siteUrl: "https://findandstudy.com" }).reason, "invalid_scope");
+  assert.equal(parsePublicWebDiscoveryConfig({ mode: "static", siteUrl: "http://findandstudy.com" }).reason, "invalid_site_url");
   assert.equal(parsePublicWebDiscoveryConfig({ mode: "published", siteUrl: "https://user:pass@example.test", tenantId: TENANT_ID, organizationId: ORGANIZATION_ID }).reason, "invalid_site_url");
   assert.deepEqual(
     parsePublicWebDiscoveryConfig({
