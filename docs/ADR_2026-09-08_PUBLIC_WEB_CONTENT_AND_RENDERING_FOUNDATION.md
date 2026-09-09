@@ -275,8 +275,9 @@ production kapasite iddiası oluşturmaz.
     `DRAFT + NOINDEX` olarak kabul etme. **Migration `0122`, command/store ve
     gerçek PostgreSQL create/replay/revocation/tenant-isolation kapılarıyla
     yerelde tamamlandı. İstemcinin scope/path/hash/internal UUID seçmesini
-    reddeden server-bound builder da eklendi; HTTP/UI wiring ve role grant
-    bilinçli olarak yoktur.**
+    reddeden server-bound builder ile aktif kaynakları bounded, salt-okunur ve
+    kolon-allowlist'li çözen source resolver da eklendi; HTTP/UI wiring ve kalıcı
+    role grant bilinçli olarak yoktur.**
 
 ## NO-GO sınırları
 

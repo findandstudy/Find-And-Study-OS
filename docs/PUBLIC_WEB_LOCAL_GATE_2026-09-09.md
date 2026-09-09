@@ -3,7 +3,7 @@
 Tarih: 9 Eylül 2026
 Durum: **Yerel staging adayı yeşil; staging/production aktivasyonu NO-GO**
 Branch: `codex/public-web-foundation-20260908`
-Code/config-bearing head: `4aaeffc9a1ff6b5990e8eb8e3998dc2b8643fb81`
+Code/config-bearing head: `334f29f514438efed9c3840111d4d3444aa919b9`
 Karşılaştırma tabanı: `e6edad6a` (`origin/codex/operations-social-staging-20260905`)
 
 ## Teslim edilen dilim
@@ -29,6 +29,10 @@ Karşılaştırma tabanı: `e6edad6a` (`origin/codex/operations-social-staging-2
 - İstemci tenant/organization, canonical path, source hash veya internal record/
   revision kimliği seçemez; bunlar server-side scope, doğrulanmış kaynak binding'i
   ve server-generated UUIDv7 kimliklerinden oluşturulur.
+- Kaynak resolver yalnız aktif legacy program/üniversite/destinasyon/şehir ve
+  uygun CMS page/article kayıtlarını bounded, salt-okunur ve kolon-allowlist'li
+  sorguyla çözer; service fee, komisyon, kurum iletişim kişisi ve staff ataması
+  kaynak yüzeyine girmez.
 
 ## Exact-head doğrulama özeti
 
@@ -51,6 +55,7 @@ Karşılaştırma tabanı: `e6edad6a` (`origin/codex/operations-social-staging-2
 | Public web scale gate | PASS — 3/3 |
 | Draft intake builder/command/store | PASS — 12/12 |
 | Draft intake PostgreSQL | PASS — 1/1 |
+| Draft source resolver | PASS — saf 4/4 + PostgreSQL 1/1 |
 | Migration authority | PASS — 31/31 + 1 ortam SKIP |
 | Security regressions | PASS — 37/37 |
 | Rate-limit/IP security | PASS — 6/6 |

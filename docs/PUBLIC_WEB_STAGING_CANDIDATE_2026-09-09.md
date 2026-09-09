@@ -9,10 +9,10 @@ Branch: `codex/public-web-foundation-20260908`
 | Alan | Değer |
 |---|---|
 | Karşılaştırma tabanı | `e6edad6a3de34f1c597687753a8c18d0f8248bcb` |
-| Code/config-bearing head | `4aaeffc9a1ff6b5990e8eb8e3998dc2b8643fb81` |
-| Tree | `c56369d4e5c97f66a7575831e76a94e07ded1b72` |
-| Base→head binary patch SHA-256 | `bf121e58fc68e653185d9b6eee619afa31bb0ed12e0b74f1d5fc7ce32103c1b9` |
-| Değişim | 41 commit, 118 dosya, +19.556 / -246 |
+| Code/config-bearing head | `334f29f514438efed9c3840111d4d3444aa919b9` |
+| Tree | `1b5dcd2492504d11a6ef76c2408e4c49df2a2d36` |
+| Base→head binary patch SHA-256 | `fa76d56a150564d157c1530e518cc13ad61db9c1b95ef791b2c5c6d1fe803570` |
+| Değişim | 43 commit, 121 dosya, +20.091 / -246 |
 | Migration ledger | 123 SQL / 123 journal |
 
 Bu belge code/config hash'inin parçası değildir. Aday kimliği yukarıdaki exact
@@ -50,6 +50,10 @@ kanıtlar yeniden üretilir.
 - İstemci tarafından tenant/organization, canonical path, source/content hash ve
   internal UUID seçilmesini reddeden server-bound intake builder; scope ve source
   binding'i server girdisinden, record/revision UUIDv7'lerini server tarafında üretir.
+- Source resolver yalnız kolon-allowlist'li, boyut-kapılı ve `BEGIN READ ONLY`
+  sorgular kullanır; executor kimliğini privilege/membership seviyesinde doğrular.
+  Service fee, komisyon, kurum iletişim kişisi ve staff assignment alanları bu
+  kaynak hash yüzeyine dahil değildir.
 
 ## Exact-head yerel kanıt
 
@@ -61,8 +65,8 @@ kanıtlar yeniden üretilir.
 | Edcons public template tests | PASS — 5/5 |
 | Edcons production build + static sitemap | PASS |
 | Migration ledger | PASS — 123/123 |
-| Public pure contract suites | PASS — 71/71 |
-| Public PostgreSQL suites | PASS — 5/5 |
+| Public pure contract suites | PASS — 75/75 |
+| Public PostgreSQL suites | PASS — 6/6 |
 | Migration authority | PASS — 31/31 + 1 ortam SKIP |
 | Security regressions | PASS — 37/37 |
 | Rate-limit/IP security | PASS — 6/6 |
@@ -71,13 +75,16 @@ kanıtlar yeniden üretilir.
 
 Public pure toplamı: foundation 8, command 4, store adapter 4, publication read
 model 2, localized entity 5, list/scale 13, route 4, render 10, discovery 6 ve
-scale 3 teste ek olarak draft intake builder 4, command 4 ve store 4 testtir.
+scale 3 teste ek olarak draft intake builder 4, source resolver 4, command 4 ve
+store 4 testtir.
 
 Yerel disposable PostgreSQL 16 üzerindeki beş suite public foundation,
 catalog graph, public render ve discovery/localization/route-alias davranışını
 ve draft intake için create/replay/idempotency/append-only/revoked-authority/
-tenant-isolation davranışını kanıtladı. Production credential veya production
-verisi kullanılmadı.
+tenant-isolation davranışını kanıtladı. Altıncı gerçek PostgreSQL testi geçici,
+kolon-kısıtlı executor ile kaynak çözümleme, inactive kayıt reddi ve temiz role
+cleanup davranışını doğruladı. Production credential veya production verisi
+kullanılmadı.
 
 ## Yerel performans eşiği
 
