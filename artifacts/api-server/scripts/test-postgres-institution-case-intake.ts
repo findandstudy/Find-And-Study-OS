@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { after, test } from "node:test";
 import pg from "pg";
+import { readCurrentMigrationCount } from "./current-migration-count.js";
 import { parseInstitutionCaseIntakeConfig } from "../src/lib/institutionCaseIntake";
 import { PostgresInstitutionCaseIntakeStore } from "../src/lib/postgresInstitutionCaseIntakeStore";
 
@@ -44,7 +45,7 @@ const databaseName = new URL(adminUrl).pathname.slice(1);
 const migrationCount = await admin.query(
   "SELECT count(*)::integer AS count FROM drizzle.__drizzle_migrations",
 );
-assert.equal(migrationCount.rows[0]?.count, 109);
+assert.equal(migrationCount.rows[0]?.count, readCurrentMigrationCount());
 
 await admin.query(`DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'fas_institution_intake_owner') THEN

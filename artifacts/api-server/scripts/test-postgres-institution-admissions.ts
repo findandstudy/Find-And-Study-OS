@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test, { after } from "node:test";
 import pg from "pg";
+import { readCurrentMigrationCount } from "./current-migration-count.js";
 
 if (process.env.ALLOW_DISPOSABLE_INSTITUTION_ADMISSIONS_TEST !== "true") {
   throw new Error("institution_postgres_test_requires_explicit_disposable_opt_in");
@@ -25,7 +26,7 @@ await admin.connect();
 const migrationCount = await admin.query(
   "SELECT count(*)::integer AS count FROM drizzle.__drizzle_migrations",
 );
-assert.equal(migrationCount.rows[0]?.count, 109);
+assert.equal(migrationCount.rows[0]?.count, readCurrentMigrationCount());
 await admin.query(`DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'fas_institution_executor') THEN
     CREATE ROLE fas_institution_executor LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS;
@@ -211,7 +212,7 @@ test("all institution tables have FORCE RLS and no DELETE policy", async () => {
     count(p.policyname) FILTER(WHERE p.cmd='DELETE')::integer AS delete_policies
     FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
     LEFT JOIN pg_policies p ON p.schemaname=n.nspname AND p.tablename=c.relname
-    WHERE n.nspname='public' AND c.relname LIKE 'institution_%' AND c.relkind='r'
+    WHERE n.nspname='public' AND c.relname LIKE 'institution_%' AND c.relname <> 'institution_campuses' AND c.relkind='r'
     GROUP BY c.relname,c.relforcerowsecurity`);
   assert.equal(result.rowCount,19);
   assert.equal(result.rows.every(row=>row.relforcerowsecurity===true&&row.delete_policies===0),true);

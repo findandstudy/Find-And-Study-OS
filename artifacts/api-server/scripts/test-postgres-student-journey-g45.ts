@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import pg from "pg";
+import { readCurrentMigrationCount } from "./current-migration-count.js";
 
 import {
   STUDENT_DOCUMENT_REQUEST_RESPOND_CAPABILITY,
@@ -687,7 +688,7 @@ async function seed(): Promise<ReturnType<typeof createStudentDocumentIngestRece
     const migrationCount = await migrator.query(
       "SELECT count(*)::int AS count FROM drizzle.__drizzle_migrations",
     );
-    assert.equal(migrationCount.rows[0]?.count, 109);
+    assert.equal(migrationCount.rows[0]?.count, readCurrentMigrationCount());
     const defaultGrantCount = await migrator.query(
       `SELECT count(*)::int AS count
        FROM role_package_capabilities
