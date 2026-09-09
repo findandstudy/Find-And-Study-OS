@@ -279,7 +279,7 @@ test("read model is on-demand, bounded, stale-while-revalidate, and detail index
   assert.match(readModel, /async function readPageDetail/);
   assert.match(readModel, /websitePageVersionsTable/);
   assert.match(readModel, /PUBLIC_PAGE_BLOCK_TYPES/);
-  assert.match(readModel, /\.limit\(12\)/);
+  assert.match(readModel, /\.limit\(PILOT_LIST_LIMIT\)/);
   assert.match(readModel, /cacheStatus: "STALE"/);
   assert.match(readModel, /void refresh\(key, route\)/);
   assert.match(readModel, /indexable: false/);

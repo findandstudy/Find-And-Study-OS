@@ -185,11 +185,16 @@ bilinmeyen mode fail-closed olarak `off` olur.
   sayfayı tekrar draft durumuna alır. En fazla 64 blok ve 1 MiB snapshot kabul
   edilir; bilinmeyen/global referans blokları public projection'a alınmaz ve zengin
   metin istemcide allowlist sanitizer, SSR'da güvenli düz metin olarak işlenir;
-- program related graph önce aynı üniversite, alan, derece ve ülke sinyalleriyle
+- internal-link graph program detayında önce aynı üniversite, alan, derece ve ülke sinyalleriyle
   en fazla 32 bounded aday üretir; yalnız governed publication state'i gerçekten
   `PUBLISHED + INDEX` olan ve istenen dilde teslim edilebilen ilk 8 program API
-  ve SSR linkine dönüşür. Discovery rollout kapalı veya scope geçersizse graph
-  fail-closed olarak boş kalır;
+  ve SSR linkine dönüşür. `PUBLIC_WEB_INTERNAL_LINK_MODE` bilinmeyen değerlerde
+  `off` olur: mevcut SPA'nın legacy related davranışı korunur, yeni SSR graph
+  üretilmez. `published` modunda discovery scope geçersizse graph fail-closed
+  olarak boş kalır;
+- üniversite detayındaki program kartları ile destinasyon detayındaki üniversite
+  ve program kartları aynı kapıda toplu, en fazla 64 ID'lik RLS-scope sorgularıyla
+  doğrulanır; N+1 publication sorgusu üretilmez;
 - entity SEO projection'ı 5 dakika ve en fazla 5.000 anahtarla cache edilir;
   aynı cold key sorguları birleştirilir ve hedefli invalidation yüzeyi sağlanır;
 - migration `0119_public_web_discovery_indexes` yalnız partial lookup indeksi
@@ -229,7 +234,7 @@ production kapasite iddiası oluşturmaz.
 7. Website Blog rehber listesi, detay API/SSR, canonical/hreflang ve sitemap. **Yerelde tamamlandı.**
 8. Genel CMS page delivery ve reserved-route registry. **Yerelde tamamlandı.**
 9. Prototiplerin mevcut tasarım sistemiyle program/üniversite template'lerine dönüştürülmesi.
-10. Related entity ve internal-link graph; kalite eşiği geçmeyen sayfalara link/index üretmeme. **Program graph dilimi yerelde tamamlandı; üniversite/destinasyon/rehber graph'ları bekliyor.**
+10. Related entity ve internal-link graph; kalite eşiği geçmeyen sayfalara link/index üretmeme. **Program, üniversite ve destinasyon graph dilimleri yerelde tamamlandı; rehber graph'ı bekliyor.**
 
 ## NO-GO sınırları
 

@@ -6,6 +6,7 @@ import {
   PUBLIC_CATALOG_RELATED_CANDIDATE_LIMIT,
   PUBLIC_CATALOG_UNIVERSITY_PROGRAM_LIMIT,
   parsePublicCatalogRouteKey,
+  parsePublicWebInternalLinkMode,
   publicCatalogCanonicalState,
   publicCatalogPath,
   publicCatalogRouteKey,
@@ -34,6 +35,9 @@ test("route identities reject ambiguous and unsafe input", () => {
 });
 
 test("canonical paths normalize locale and detect stale slugs", () => {
+  assert.equal(parsePublicWebInternalLinkMode(undefined), "off");
+  assert.equal(parsePublicWebInternalLinkMode("PUBLISHED"), "published");
+  assert.equal(parsePublicWebInternalLinkMode("enabled"), "off");
   assert.equal(
     publicCatalogPath({ locale: "tr-TR", entityType: "program", id: 7, name: "Tıp" }),
     "/tr/programs/tip-7",
@@ -71,13 +75,19 @@ test("public catalogue detail APIs are bounded and never select private CRM fiel
   assert.match(route, /sourceExpiresAt/);
   assert.match(route, /Content-Location/);
   assert.match(route, /readIndexableProgramIds/);
-  assert.match(route, /relatedPolicy: "PUBLISHED_INDEXABLE_ONLY"/);
+  assert.match(route, /PUBLIC_WEB_INTERNAL_LINK_MODE/);
+  assert.match(route, /"PUBLISHED_INDEXABLE_ONLY"/);
+  assert.match(route, /"LEGACY_UNGATED"/);
+  assert.match(route, /programLinkPolicy/);
   assert.match(destinations, /returnedUniversities/);
   assert.match(destinations, /returnedPrograms/);
   assert.match(destinations, /PUBLIC_DESTINATION_ROUTE_INVALID/);
   assert.match(destinations, /resolvePublishedEntitySeoState/);
   assert.match(destinations, /Content-Location/);
   assert.match(destinations, /alternatePaths/);
+  assert.match(destinations, /PUBLIC_WEB_INTERNAL_LINK_MODE/);
+  assert.match(destinations, /readIndexableUniversityIds/);
+  assert.match(destinations, /readIndexableProgramIds/);
   assert.doesNotMatch(destinations, /\.limit\(50\)/);
   assert.match(publicWeb, /websiteBlogPostsTable\.status, "published"/);
   assert.match(publicWeb, /websiteBlogPostsTable\.publishedAt/);

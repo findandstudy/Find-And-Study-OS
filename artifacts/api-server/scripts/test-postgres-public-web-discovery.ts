@@ -45,6 +45,7 @@ const RECORDS = {
   articleTr: "018f8500-0000-7000-8000-000000000017",
   pageEn: "018f8500-0000-7000-8000-000000000018",
   pageTr: "018f8500-0000-7000-8000-000000000019",
+  universityEn: "018f8500-0000-7000-8000-000000000030",
 } as const;
 const REVISIONS = {
   en: "018f8500-0000-7000-8000-000000000021",
@@ -56,6 +57,7 @@ const REVISIONS = {
   articleTr: "018f8500-0000-7000-8000-000000000027",
   pageEn: "018f8500-0000-7000-8000-000000000028",
   pageTr: "018f8500-0000-7000-8000-000000000029",
+  universityEn: "018f8500-0000-7000-8000-000000000040",
 } as const;
 
 test("published discovery is tenant-scoped and excludes NOINDEX or undeliverable locales", async () => {
@@ -196,6 +198,33 @@ test("published discovery is tenant-scoped and excludes NOINDEX or undeliverable
        VALUES ($1,$2,$3,$4,'PUBLISHED','INDEX',$5,now(),$5,now())`,
       [TENANT_ID, ORGANIZATION_ID, RECORDS.destinationEn, REVISIONS.destinationEn, userId],
     );
+    await admin.query(
+      `INSERT INTO public_web_content_records
+         (id,tenant_id,organization_id,entity_type,university_id,locale,
+          canonical_slug,canonical_path,created_by_legacy_user_id)
+       VALUES ($1,$2,$3,'UNIVERSITY',$4,'en','discovery-fixture-university',$5,$6)`,
+      [
+        RECORDS.universityEn, TENANT_ID, ORGANIZATION_ID, universityId,
+        `/en/universities/discovery-fixture-university-${universityId}`, userId,
+      ],
+    );
+    await admin.query(
+      `INSERT INTO public_web_content_revisions
+         (id,tenant_id,organization_id,content_record_id,revision_number,origin,title,
+          content_json,seo_json,structured_data_json,source_sha256,content_sha256,
+          quality_status,source_coverage,translation_status,seo_status,
+          structured_data_status,created_by_legacy_user_id)
+       VALUES ($1,$2,$3,$4,1,'HUMAN','Discovery University','{}','{}','{}',$5,$6,
+         'PASS','COMPLETE','SOURCE','PASS','PASS',$7)`,
+      [REVISIONS.universityEn, TENANT_ID, ORGANIZATION_ID, RECORDS.universityEn, "6".repeat(64), "5".repeat(64), userId],
+    );
+    await admin.query(
+      `INSERT INTO public_web_publication_states
+         (tenant_id,organization_id,content_record_id,revision_id,status,index_state,
+          reviewed_by_legacy_user_id,reviewed_at,published_by_legacy_user_id,published_at)
+       VALUES ($1,$2,$3,$4,'PUBLISHED','INDEX',$5,now(),$5,now())`,
+      [TENANT_ID, ORGANIZATION_ID, RECORDS.universityEn, REVISIONS.universityEn, userId],
+    );
     for (const locale of ["en", "tr"] as const) {
       await admin.query(
         `INSERT INTO public_web_content_records
@@ -298,6 +327,10 @@ test("published discovery is tenant-scoped and excludes NOINDEX or undeliverable
       [{ entityType: "DESTINATION", locale: "en", count: 1 }],
     );
     assert.deepEqual(
+      counts.filter((row) => row.entityType === "UNIVERSITY"),
+      [{ entityType: "UNIVERSITY", locale: "en", count: 1 }],
+    );
+    assert.deepEqual(
       counts.filter((row) => row.entityType === "ARTICLE"),
       [
         { entityType: "ARTICLE", locale: "en", count: 1 },
@@ -317,6 +350,20 @@ test("published discovery is tenant-scoped and excludes NOINDEX or undeliverable
         programIds: [programId, programId, 0, 2_147_483_648],
       })],
       [programId],
+    );
+    assert.deepEqual(
+      [...await discovery.readIndexableUniversityIds({
+        locale: "en",
+        universityIds: [universityId, universityId, 0],
+      })],
+      [universityId],
+    );
+    assert.deepEqual(
+      [...await discovery.readIndexableUniversityIds({
+        locale: "tr",
+        universityIds: [universityId],
+      })],
+      [],
     );
     assert.deepEqual(
       await discovery.readPublishedEntitySeoState({

@@ -26,6 +26,7 @@ import {
   PUBLIC_CATALOG_RELATED_CANDIDATE_LIMIT,
   PUBLIC_CATALOG_UNIVERSITY_PROGRAM_LIMIT,
   parsePublicCatalogRouteKey,
+  parsePublicWebInternalLinkMode,
   publicCatalogCanonicalState,
   publicCatalogPath,
 } from "../lib/publicCatalogRouteContract";
@@ -66,6 +67,7 @@ router.get(
     }
 
     const locale = normalizeProgramLocale(req.query.locale);
+    const internalLinkMode = parsePublicWebInternalLinkMode(process.env.PUBLIC_WEB_INTERNAL_LINK_MODE);
     const policy = await getPublicCatalogPolicy();
     const localizedName = sql<string>`COALESCE(${programTranslationsTable.name}, ${programsTable.name})`;
     const conditions: any[] = [
@@ -185,7 +187,7 @@ router.get(
         )
         .where(and(...relatedConditions))
         .orderBy(desc(relatedScore), asc(universitiesTable.name), asc(programsTable.id))
-        .limit(PUBLIC_CATALOG_RELATED_CANDIDATE_LIMIT),
+        .limit(internalLinkMode === "published" ? PUBLIC_CATALOG_RELATED_CANDIDATE_LIMIT : PUBLIC_CATALOG_RELATED_LIMIT),
       db
         .select({
           id: programIntakesTable.id,
@@ -258,12 +260,14 @@ router.get(
     const deliveredLocaleReady = locale === "en" || program.translatedLocale === locale;
     const indexable = seoState.indexable && deliveredLocaleReady;
     const canonicalPath = seoState.canonicalPath || canonical.canonicalPath;
-    const relatedProgramIds = await readIndexableProgramIds({
-      locale,
-      programIds: relatedRows.map((related) => related.id),
-    });
+    const relatedProgramIds = internalLinkMode === "published"
+      ? await readIndexableProgramIds({
+        locale,
+        programIds: relatedRows.map((related) => related.id),
+      })
+      : null;
     const relatedPrograms = relatedRows
-      .filter((related) => relatedProgramIds.has(related.id))
+      .filter((related) => relatedProgramIds === null || relatedProgramIds.has(related.id))
       .slice(0, PUBLIC_CATALOG_RELATED_LIMIT);
 
     setPublicCatalogHeaders(res);
@@ -305,7 +309,9 @@ router.get(
         indexable,
         alternatePaths: seoState.alternates,
         canonicalPath,
-        relatedPolicy: "PUBLISHED_INDEXABLE_ONLY",
+        relatedPolicy: internalLinkMode === "published"
+          ? "PUBLISHED_INDEXABLE_ONLY"
+          : "LEGACY_UNGATED",
         requestedPathIsCanonical: req.params.routeKey === canonicalPath.split("/").at(-1),
         generatedAt: new Date().toISOString(),
       },
@@ -323,6 +329,7 @@ router.get(
     }
 
     const locale = normalizeProgramLocale(req.query.locale);
+    const internalLinkMode = parsePublicWebInternalLinkMode(process.env.PUBLIC_WEB_INTERNAL_LINK_MODE);
     const policy = await getPublicCatalogPolicy();
     const universityConditions: any[] = [
       eq(universitiesTable.id, identity.id),
@@ -399,7 +406,7 @@ router.get(
         )
         .where(and(...programConditions))
         .orderBy(asc(programsTable.name), asc(programsTable.id))
-        .limit(PUBLIC_CATALOG_UNIVERSITY_PROGRAM_LIMIT),
+        .limit(internalLinkMode === "published" ? PUBLIC_CATALOG_RELATED_CANDIDATE_LIMIT : PUBLIC_CATALOG_UNIVERSITY_PROGRAM_LIMIT),
       resolvePublishedEntitySeoState({
         entityType: "university",
         entityId: university.id,
@@ -416,6 +423,12 @@ router.get(
     });
     const indexable = seoState.indexable && locale === "en";
     const canonicalPath = seoState.canonicalPath || canonical.canonicalPath;
+    const indexableProgramIds = internalLinkMode === "published"
+      ? await readIndexableProgramIds({ locale, programIds: programRows.map((program) => program.id) })
+      : null;
+    const deliveredPrograms = programRows
+      .filter((program) => indexableProgramIds === null || indexableProgramIds.has(program.id))
+      .slice(0, PUBLIC_CATALOG_UNIVERSITY_PROGRAM_LIMIT);
     setPublicCatalogHeaders(res);
     res.setHeader("Content-Location", canonicalPath);
     res.json({
@@ -428,7 +441,7 @@ router.get(
         ),
         canonicalPath,
       },
-      programs: programRows.map((program) => ({
+      programs: deliveredPrograms.map((program) => ({
         ...program,
         canonicalPath: publicCatalogPath({
           locale,
@@ -442,7 +455,10 @@ router.get(
         indexable,
         alternatePaths: seoState.alternates,
         programCount: Number(countRow?.count ?? 0),
-        returnedPrograms: programRows.length,
+        returnedPrograms: deliveredPrograms.length,
+        programLinkPolicy: internalLinkMode === "published"
+          ? "PUBLISHED_INDEXABLE_ONLY"
+          : "LEGACY_UNGATED",
         canonicalPath,
         requestedPathIsCanonical: req.params.routeKey === canonicalPath.split("/").at(-1),
         generatedAt: new Date().toISOString(),

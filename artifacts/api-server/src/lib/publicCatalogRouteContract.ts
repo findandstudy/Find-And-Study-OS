@@ -7,6 +7,12 @@ export const PUBLIC_CATALOG_RELATED_LIMIT = 8;
 export const PUBLIC_CATALOG_RELATED_CANDIDATE_LIMIT = 32;
 export const PUBLIC_CATALOG_UNIVERSITY_PROGRAM_LIMIT = 12;
 
+export type PublicWebInternalLinkMode = "off" | "published";
+
+export function parsePublicWebInternalLinkMode(value: unknown): PublicWebInternalLinkMode {
+  return String(value ?? "").trim().toLowerCase() === "published" ? "published" : "off";
+}
+
 export type PublicCatalogEntityType = "program" | "university";
 
 export type PublicCatalogRouteIdentity = {

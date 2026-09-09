@@ -126,6 +126,7 @@ test("read model is read-only, RLS-scoped and selects only published indexed rec
   assert.match(source, /const SEO_CACHE_MAX_ENTRIES = 5_000/);
   assert.match(source, /const seoInFlight = new Map/);
   assert.match(source, /export async function readIndexableProgramIds/);
+  assert.match(source, /export async function readIndexableUniversityIds/);
   assert.match(source, /content\.program_id=ANY\(\$4::integer\[\]\)/);
   assert.match(source, /LIMIT 64/);
   assert.doesNotMatch(source, /service_fee|commission|contact_person/i);

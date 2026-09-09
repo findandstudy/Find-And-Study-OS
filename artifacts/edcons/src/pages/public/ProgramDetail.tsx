@@ -91,7 +91,7 @@ type ProgramDetailPayload = {
     requestedPathIsCanonical: boolean;
     indexable: boolean;
     alternatePaths: Record<string, string>;
-    relatedPolicy: "PUBLISHED_INDEXABLE_ONLY";
+    relatedPolicy: "PUBLISHED_INDEXABLE_ONLY" | "LEGACY_UNGATED";
   };
 };
 

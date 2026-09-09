@@ -96,6 +96,7 @@ export default function CountryDetail({ slug }: { slug: string }) {
       indexable: boolean;
       canonicalPath: string;
       alternatePaths: Partial<Record<Language, string>>;
+      internalLinkPolicy: "PUBLISHED_INDEXABLE_ONLY" | "LEGACY_UNGATED";
     };
   } | null>(null);
   const [isLoading, setIsLoading] = useState(true);

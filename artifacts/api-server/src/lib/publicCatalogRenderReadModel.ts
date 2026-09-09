@@ -12,6 +12,8 @@ import { and, asc, desc, eq, isNotNull, lte, ne, sql } from "drizzle-orm";
 import {
   PUBLIC_CATALOG_RELATED_CANDIDATE_LIMIT,
   PUBLIC_CATALOG_RELATED_LIMIT,
+  PUBLIC_CATALOG_UNIVERSITY_PROGRAM_LIMIT,
+  parsePublicWebInternalLinkMode,
   publicCatalogCanonicalState,
   publicCatalogPath,
 } from "./publicCatalogRouteContract";
@@ -26,6 +28,7 @@ import type {
 } from "./publicCatalogRenderContract";
 import {
   readIndexableProgramIds,
+  readIndexableUniversityIds,
   resolvePublishedEntitySeoState,
 } from "./publicWebDiscoveryReadModel";
 import { buildPublicWebCanonicalPath } from "./publicWebContentContract";
@@ -284,6 +287,7 @@ async function readProgramDetail(
     + CASE WHEN lower(coalesce(${programsTable.degree}, '')) = lower(${program.degree ?? ""}::text) AND ${program.degree ?? ""}::text <> '' THEN 2 ELSE 0 END
     + CASE WHEN lower(${universitiesTable.country}) = lower(${program.country}) THEN 1 ELSE 0 END
   )`;
+  const internalLinkMode = parsePublicWebInternalLinkMode(process.env.PUBLIC_WEB_INTERNAL_LINK_MODE);
   const [seoState, relatedCandidates] = await Promise.all([
     resolvePublishedEntitySeoState({
       entityType: "program",
@@ -308,14 +312,16 @@ async function readProgramDetail(
       ))
       .where(and(...relatedConditions))
       .orderBy(desc(relatedScore), asc(universitiesTable.name), asc(programsTable.id))
-      .limit(PUBLIC_CATALOG_RELATED_CANDIDATE_LIMIT),
+      .limit(internalLinkMode === "published" ? PUBLIC_CATALOG_RELATED_CANDIDATE_LIMIT : 0),
   ]);
-  const indexableRelatedIds = await readIndexableProgramIds({
-    locale: route.locale,
-    programIds: relatedCandidates.map((candidate) => candidate.id),
-  });
+  const indexableRelatedIds = internalLinkMode === "published"
+    ? await readIndexableProgramIds({
+      locale: route.locale,
+      programIds: relatedCandidates.map((candidate) => candidate.id),
+    })
+    : new Set<number>();
   const relatedPrograms = relatedCandidates
-    .filter((candidate) => indexableRelatedIds.has(candidate.id))
+    .filter((candidate) => internalLinkMode === "published" && indexableRelatedIds.has(candidate.id))
     .slice(0, PUBLIC_CATALOG_RELATED_LIMIT)
     .map(({ score: _score, ...candidate }) => ({
       ...candidate,
@@ -408,6 +414,7 @@ async function readUniversityDetail(
     eq(programsTable.isActive, true),
   ];
   addPublicCatalogConditions(programConditions, policy);
+  const internalLinkMode = parsePublicWebInternalLinkMode(process.env.PUBLIC_WEB_INTERNAL_LINK_MODE);
   const [[countRow], programRows, seoState] = await Promise.all([
     db
       .select({ count: sql<number>`count(*)` })
@@ -430,7 +437,7 @@ async function readUniversityDetail(
       ))
       .where(and(...programConditions))
       .orderBy(asc(programsTable.name), asc(programsTable.id))
-      .limit(12),
+      .limit(internalLinkMode === "published" ? PUBLIC_CATALOG_RELATED_CANDIDATE_LIMIT : PUBLIC_CATALOG_UNIVERSITY_PROGRAM_LIMIT),
     resolvePublishedEntitySeoState({
       entityType: "university",
       entityId: university.id,
@@ -444,6 +451,15 @@ async function readUniversityDetail(
     id: university.id,
     name: university.name,
   });
+  const indexableProgramIds = internalLinkMode === "published"
+    ? await readIndexableProgramIds({
+      locale: route.locale,
+      programIds: programRows.map((program) => program.id),
+    })
+    : null;
+  const deliveredPrograms = programRows
+    .filter((program) => indexableProgramIds === null || indexableProgramIds.has(program.id))
+    .slice(0, PUBLIC_CATALOG_UNIVERSITY_PROGRAM_LIMIT);
   return {
     kind: "university_detail",
     locale: route.locale,
@@ -462,7 +478,7 @@ async function readUniversityDetail(
       city: university.city,
       universityType: university.universityType,
       programCount: Number(countRow?.count ?? 0),
-      programs: programRows.map((program) => ({
+      programs: deliveredPrograms.map((program) => ({
         ...program,
         canonicalPath: publicCatalogPath({
           locale: route.locale,
@@ -521,6 +537,7 @@ async function readDestinationDetail(
     eq(programsTable.isActive, true),
   ];
   addPublicCatalogConditions(programConditions, policy);
+  const internalLinkMode = parsePublicWebInternalLinkMode(process.env.PUBLIC_WEB_INTERNAL_LINK_MODE);
 
   const [[universityCount], [programCount], universityRows, seoState] = await Promise.all([
     db
@@ -542,7 +559,7 @@ async function readDestinationDetail(
       .from(universitiesTable)
       .where(and(...universityConditions))
       .orderBy(asc(universitiesTable.name), asc(universitiesTable.id))
-      .limit(PILOT_LIST_LIMIT),
+      .limit(internalLinkMode === "published" ? PUBLIC_CATALOG_RELATED_CANDIDATE_LIMIT : PILOT_LIST_LIMIT),
     resolvePublishedEntitySeoState({
       entityType: "destination",
       entityId: destination.id,
@@ -556,6 +573,15 @@ async function readDestinationDetail(
     locale: route.locale,
     slug: destination.slug,
   });
+  const indexableUniversityIds = internalLinkMode === "published"
+    ? await readIndexableUniversityIds({
+      locale: route.locale,
+      universityIds: universityRows.map((university) => university.id),
+    })
+    : null;
+  const deliveredUniversities = universityRows
+    .filter((university) => indexableUniversityIds === null || indexableUniversityIds.has(university.id))
+    .slice(0, PILOT_LIST_LIMIT);
   return {
     kind: "destination_detail",
     locale: route.locale,
@@ -584,7 +610,7 @@ async function readDestinationDetail(
         .slice(0, 24),
       universityCount: Number(universityCount?.count ?? 0),
       programCount: Number(programCount?.count ?? 0),
-      universities: universityRows.map((university) => ({
+      universities: deliveredUniversities.map((university) => ({
         ...university,
         canonicalPath: publicCatalogPath({
           locale: route.locale,

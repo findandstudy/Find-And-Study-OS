@@ -45,6 +45,7 @@ type UniversityPayload = {
     requestedPathIsCanonical: boolean;
     indexable: boolean;
     alternatePaths: Record<string, string>;
+    programLinkPolicy: "PUBLISHED_INDEXABLE_ONLY" | "LEGACY_UNGATED";
   };
 };
 

@@ -7,11 +7,20 @@ import {
 } from "../lib/publicCatalogQueryPolicy";
 import { courseFinderUniversityLogoUrl } from "../lib/courseFinderVisibility";
 import { normalizeProgramLocale } from "../lib/programTranslationContract";
-import { publicCatalogPath } from "../lib/publicCatalogRouteContract";
+import {
+  parsePublicWebInternalLinkMode,
+  publicCatalogPath,
+} from "../lib/publicCatalogRouteContract";
 import { buildPublicWebCanonicalPath } from "../lib/publicWebContentContract";
-import { resolvePublishedEntitySeoState } from "../lib/publicWebDiscoveryReadModel";
+import {
+  readIndexableProgramIds,
+  readIndexableUniversityIds,
+  resolvePublishedEntitySeoState,
+} from "../lib/publicWebDiscoveryReadModel";
 
 const router: IRouter = Router();
+const DESTINATION_LINK_LIMIT = 24;
+const DESTINATION_LINK_CANDIDATE_LIMIT = 64;
 
 router.get("/public/destinations", async (_req: Request, res: Response): Promise<void> => {
   const policy = await getPublicCatalogPolicy();
@@ -61,6 +70,7 @@ router.get("/public/destinations/:slug", async (req: Request, res: Response): Pr
     return;
   }
   const locale = normalizeProgramLocale(req.query.locale);
+  const internalLinkMode = parsePublicWebInternalLinkMode(process.env.PUBLIC_WEB_INTERNAL_LINK_MODE);
 
   const [destination] = await db.select()
     .from(destinationsTable)
@@ -94,7 +104,7 @@ router.get("/public/destinations/:slug", async (req: Request, res: Response): Pr
     .from(universitiesTable)
     .where(and(...universityConditions))
     .orderBy(asc(universitiesTable.name), asc(universitiesTable.id))
-    .limit(24);
+    .limit(internalLinkMode === "published" ? DESTINATION_LINK_CANDIDATE_LIMIT : DESTINATION_LINK_LIMIT);
 
   const programConditions: any[] = [
     sql`lower(trim(${universitiesTable.country})) = lower(trim(${destination.country}))`,
@@ -130,7 +140,7 @@ router.get("/public/destinations/:slug", async (req: Request, res: Response): Pr
       ))
       .where(and(...programConditions))
       .orderBy(asc(universitiesTable.name), asc(programsTable.name), asc(programsTable.id))
-      .limit(24),
+      .limit(internalLinkMode === "published" ? DESTINATION_LINK_CANDIDATE_LIMIT : DESTINATION_LINK_LIMIT),
     resolvePublishedEntitySeoState({
       entityType: "destination",
       entityId: destination.id,
@@ -138,7 +148,19 @@ router.get("/public/destinations/:slug", async (req: Request, res: Response): Pr
     }),
   ]);
 
-  const universities = universityRows.map(({ hasLogo, programCount, ...university }) => ({
+  const [indexableUniversityIds, indexableProgramIds] = internalLinkMode === "published"
+    ? await Promise.all([
+      readIndexableUniversityIds({ locale, universityIds: universityRows.map((row) => row.id) }),
+      readIndexableProgramIds({ locale, programIds: programRows.map((row) => row.id) }),
+    ])
+    : [null, null];
+  const deliveredUniversityRows = universityRows
+    .filter((row) => indexableUniversityIds === null || indexableUniversityIds.has(row.id))
+    .slice(0, DESTINATION_LINK_LIMIT);
+  const deliveredProgramRows = programRows
+    .filter((row) => indexableProgramIds === null || indexableProgramIds.has(row.id))
+    .slice(0, DESTINATION_LINK_LIMIT);
+  const universities = deliveredUniversityRows.map(({ hasLogo, programCount, ...university }) => ({
     ...university,
     logoUrl: courseFinderUniversityLogoUrl(university.id, hasLogo),
     programCount: Number(programCount),
@@ -149,7 +171,7 @@ router.get("/public/destinations/:slug", async (req: Request, res: Response): Pr
       name: university.name,
     }),
   }));
-  const programs = programRows.map((program) => ({
+  const programs = deliveredProgramRows.map((program) => ({
     ...program,
     canonicalPath: publicCatalogPath({
       locale,
@@ -188,6 +210,9 @@ router.get("/public/destinations/:slug", async (req: Request, res: Response): Pr
       alternatePaths: seoState.alternates,
       returnedUniversities: universities.length,
       returnedPrograms: programs.length,
+      internalLinkPolicy: internalLinkMode === "published"
+        ? "PUBLISHED_INDEXABLE_ONLY"
+        : "LEGACY_UNGATED",
       generatedAt: new Date().toISOString(),
     },
   });

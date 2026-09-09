@@ -441,6 +441,37 @@ export async function readIndexableProgramIds(input: {
   });
 }
 
+export async function readIndexableUniversityIds(input: {
+  locale: ProgramSupportedLocale;
+  universityIds: readonly number[];
+}): Promise<Set<number>> {
+  const config = publicWebDiscoveryConfigFromEnvironment();
+  if (config.mode !== "published" || !config.scope || input.locale !== "en") return new Set();
+  const scope = config.scope;
+  const universityIds = [...new Set(input.universityIds)]
+    .filter((id) => Number.isSafeInteger(id) && id > 0 && id <= 2_147_483_647)
+    .slice(0, 64);
+  if (universityIds.length === 0) return new Set();
+  return withPublicScope(scope, async (client) => {
+    const result = await client.query<{ university_id: number }>(
+      `SELECT content.university_id
+         FROM public_web_content_records content
+         JOIN public_web_publication_states state
+           ON state.tenant_id=content.tenant_id
+          AND state.organization_id=content.organization_id
+          AND state.content_record_id=content.id
+        WHERE content.tenant_id=$1 AND content.organization_id=$2
+          AND content.entity_type='UNIVERSITY' AND content.locale=$3
+          AND content.university_id=ANY($4::integer[])
+          AND state.status='PUBLISHED' AND state.index_state='INDEX'
+        ORDER BY content.university_id
+        LIMIT 64`,
+      [scope.tenantId, scope.organizationId, input.locale, universityIds],
+    );
+    return new Set(result.rows.map((row) => Number(row.university_id)));
+  });
+}
+
 export async function resolvePublishedEntitySeoState(input: {
   entityType: PublicSeoEntityType;
   entityId: number;
