@@ -67,13 +67,17 @@ jobs:
           pnpm --filter @workspace/api-server run test:institution-evidence-share
           pnpm --filter @workspace/api-server run test:reporting-center
 
-      - name: Type-check and build deployable applications
-        run: |
-          pnpm run typecheck
-          pnpm --filter @workspace/edcons run check:i18n
-          pnpm --filter @workspace/api-server run build
-          pnpm --filter @workspace/edcons run build
+      - name: Type-check workspace
+        run: pnpm run typecheck
 
+      - name: Verify synchronized UI translations
+        run: pnpm --filter @workspace/edcons run check:i18n
+
+      - name: Build API deployable application
+        run: pnpm --filter @workspace/api-server run build
+
+      - name: Build Edcons deployable application
+        run: pnpm --filter @workspace/edcons run build
   windows-portability:
     name: Windows institution portability
     runs-on: windows-latest

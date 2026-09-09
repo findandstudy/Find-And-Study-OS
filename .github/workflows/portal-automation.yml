@@ -74,13 +74,17 @@ jobs:
           pnpm --filter @workspace/portal-automation-worker run test:target-policy
           pnpm --filter @workspace/api-server run test:portal-production-slice
 
-      - name: Type-check and build deployable applications
-        run: |
-          pnpm run typecheck
-          pnpm --filter @workspace/edcons run check:i18n
-          pnpm --filter @workspace/api-server run build
-          pnpm --filter @workspace/edcons run build
+      - name: Type-check workspace
+        run: pnpm run typecheck
 
+      - name: Verify synchronized UI translations
+        run: pnpm --filter @workspace/edcons run check:i18n
+
+      - name: Build API deployable application
+        run: pnpm --filter @workspace/api-server run build
+
+      - name: Build Edcons deployable application
+        run: pnpm --filter @workspace/edcons run build
   windows-portability:
     name: Windows portal portability
     runs-on: windows-latest
