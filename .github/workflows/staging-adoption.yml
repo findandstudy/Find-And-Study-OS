@@ -77,6 +77,16 @@ jobs:
           pnpm run typecheck
           pnpm --filter @workspace/edcons run check:i18n
           pnpm --filter @workspace/edcons run test:login-accessibility
+          pnpm --filter @workspace/api-server run test:public-web-foundation
+          pnpm --filter @workspace/api-server run test:public-web-command
+          pnpm --filter @workspace/api-server run test:public-web-publication-store
+          pnpm --filter @workspace/api-server run test:public-web-publication-read-model
+          pnpm --filter @workspace/api-server run test:public-localized-entities
+          pnpm --filter @workspace/api-server run test:public-catalog-list-scaling
+          pnpm --filter @workspace/api-server run test:public-catalog-pages
+          pnpm --filter @workspace/api-server run test:public-catalog-render
+          pnpm --filter @workspace/api-server run test:public-web-discovery
+          pnpm --filter @workspace/api-server run test:public-web-scale
           pnpm exec playwright test --config=playwright.staging.config.ts --list
           pnpm --filter @workspace/api-server run build
           pnpm --filter @workspace/edcons run build
