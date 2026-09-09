@@ -22,6 +22,7 @@ const purePublicWebChecks = [
   "test:public-web-publication-read-model",
   "test:public-web-draft-intake",
   "test:public-web-draft-intake-builder",
+  "test:public-web-draft-source-resolver",
   "test:public-web-draft-intake-store",
   "test:public-localized-entities",
   "test:public-catalog-list-scaling",
@@ -34,6 +35,7 @@ const purePublicWebChecks = [
 const postgresPublicWebChecks = [
   "test:postgres-public-web-foundation",
   "test:postgres-public-web-draft-intake",
+  "test:postgres-public-web-draft-source-resolver",
   "test:postgres-catalog-entity-graph",
   "test:postgres-public-catalog-render",
   "test:postgres-public-web-discovery",

@@ -244,9 +244,11 @@
     "test:public-web-publication-read-model": "tsx --test ./scripts/test-public-web-publication-read-model.ts",
     "test:public-web-draft-intake": "tsx --test ./scripts/test-public-web-draft-intake-command.ts",
     "test:public-web-draft-intake-builder": "tsx --test ./scripts/test-public-web-draft-intake-builder.ts",
+    "test:public-web-draft-source-resolver": "tsx --test ./scripts/test-postgres-public-web-draft-source-resolver.ts",
     "test:public-web-draft-intake-store": "tsx --test ./scripts/test-postgres-public-web-draft-intake-store.ts",
     "test:postgres-public-web-foundation": "tsx --test ./scripts/test-postgres-public-web-content-foundation.ts",
     "test:postgres-public-web-draft-intake": "tsx --test ./scripts/test-postgres-public-web-draft-intake.ts",
+    "test:postgres-public-web-draft-source-resolver": "tsx --test ./scripts/test-postgres-public-web-draft-source-resolver-integration.ts",
     "test:postgres-catalog-entity-graph": "tsx --test ./scripts/test-postgres-catalog-entity-graph.ts",
     "test:agency-platform-overhaul": "tsx --test ./scripts/test-agency-platform-overhaul.ts"
   },
