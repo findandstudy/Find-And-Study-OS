@@ -276,8 +276,12 @@ production kapasite iddiası oluşturmaz.
     gerçek PostgreSQL create/replay/revocation/tenant-isolation kapılarıyla
     yerelde tamamlandı. İstemcinin scope/path/hash/internal UUID seçmesini
     reddeden server-bound builder ile aktif kaynakları bounded, salt-okunur ve
-    kolon-allowlist'li çözen source resolver da eklendi; HTTP/UI wiring ve kalıcı
-    role grant bilinçli olarak yoktur.**
+    kolon-allowlist'li çözen source resolver da eklendi. En fazla 100 kayıt,
+    8 MiB canonical giriş ve 4 eşzamanlı source read ile sınırlı batch
+    planlayıcısı duplicate hedef/idempotency sınıflarını DB çağrısından önce
+    reddeder, kayıt hatalarını izole eder ve yalnız doğrulanmış plan + SHA-256
+    üretir. HTTP/UI wiring, command execution ve kalıcı role grant bilinçli
+    olarak yoktur.**
 
 ## NO-GO sınırları
 
@@ -288,3 +292,6 @@ production kapasite iddiası oluşturmaz.
 - Harici domain ağı karşılıklı yapay link şeması olarak kullanılmaz; bağlantı ancak editoryal ilişki ve kullanıcı değeriyle verilir.
 - Draft intake hiçbir koşulda publish/index kararı vermez; runtime wiring ve
   executor grant ayrı review/onay kapısıdır.
+- Batch planı yürütme talimatı değildir; accepted kayıtlar ayrı ayrı güncel
+  authority, idempotency ve source binding doğrulamasından geçmeden command'e
+  dönüştürülemez.

@@ -9,10 +9,10 @@ Branch: `codex/public-web-foundation-20260908`
 | Alan | Değer |
 |---|---|
 | Karşılaştırma tabanı | `e6edad6a3de34f1c597687753a8c18d0f8248bcb` |
-| Code/config-bearing head | `334f29f514438efed9c3840111d4d3444aa919b9` |
-| Tree | `1b5dcd2492504d11a6ef76c2408e4c49df2a2d36` |
-| Base→head binary patch SHA-256 | `fa76d56a150564d157c1530e518cc13ad61db9c1b95ef791b2c5c6d1fe803570` |
-| Değişim | 43 commit, 121 dosya, +20.091 / -246 |
+| Code/config-bearing head | `4662c7eea98a80788f12e6cc1251d5c7f33ae69b` |
+| Tree | `cf8f86a59bbe42132e2cacda101f965e41c45e26` |
+| Base→head binary patch SHA-256 | `f49fd05a02ae1d20d6ab896aed8ddd76d547415ce257ca2f75bbbaf4c1ad4e0c` |
+| Değişim | 45 commit, 123 dosya, +20.452 / -246 |
 | Migration ledger | 123 SQL / 123 journal |
 
 Bu belge code/config hash'inin parçası değildir. Aday kimliği yukarıdaki exact
@@ -54,6 +54,10 @@ kanıtlar yeniden üretilir.
   sorgular kullanır; executor kimliğini privilege/membership seviyesinde doğrular.
   Service fee, komisyon, kurum iletişim kişisi ve staff assignment alanları bu
   kaynak hash yüzeyine dahil değildir.
+- Bounded batch planlayıcısı 100 kayıt/8 MiB/4 eşzamanlı source-read tavanıyla
+  duplicate hedef ve idempotency anahtarlarını DB çağrısından önce ayırır; satır
+  hatalarını izole eder ve kararlı plan hash'i üretir. Bu katman command execute
+  etmez, veritabanına yazmaz ve publish/index yetkisi taşımaz.
 
 ## Exact-head yerel kanıt
 
@@ -65,7 +69,7 @@ kanıtlar yeniden üretilir.
 | Edcons public template tests | PASS — 5/5 |
 | Edcons production build + static sitemap | PASS |
 | Migration ledger | PASS — 123/123 |
-| Public pure contract suites | PASS — 75/75 |
+| Public pure contract suites | PASS — 79/79 |
 | Public PostgreSQL suites | PASS — 6/6 |
 | Migration authority | PASS — 31/31 + 1 ortam SKIP |
 | Security regressions | PASS — 37/37 |
@@ -75,8 +79,8 @@ kanıtlar yeniden üretilir.
 
 Public pure toplamı: foundation 8, command 4, store adapter 4, publication read
 model 2, localized entity 5, list/scale 13, route 4, render 10, discovery 6 ve
-scale 3 teste ek olarak draft intake builder 4, source resolver 4, command 4 ve
-store 4 testtir.
+scale 3 teste ek olarak draft intake builder 4, bounded batch planner 4, source
+resolver 4, command 4 ve store 4 testtir.
 
 Yerel disposable PostgreSQL 16 üzerindeki beş suite public foundation,
 catalog graph, public render ve discovery/localization/route-alias davranışını
@@ -135,7 +139,8 @@ Bu ölçüm sentetiktir; staging ağ/CDN/browser Core Web Vitals kanıtı değil
 - Bağımsız security/architecture review yoktur.
 - Staging deploy ve gerçek browser/crawler/CDN UAT yapılmamıştır.
 - Toplu içerik backfill, AI çeviri yayınlama ve public indexing aktive değildir.
-- Draft intake runtime/UI'a bağlanmamış, executor role/grant verilmemiştir.
+- Draft intake ve batch planlayıcısı runtime/UI'a bağlanmamış, executor role/grant
+  verilmemiştir; batch çıktısı hiçbir command'i kendiliğinden çalıştırmaz.
 - Production deploy, public index açma ve `Find-And-Study-OS-Next` sync bu paketin
   yetkisi dışındadır.
 

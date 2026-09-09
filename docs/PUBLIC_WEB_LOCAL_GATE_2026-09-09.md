@@ -3,7 +3,7 @@
 Tarih: 9 Eylül 2026
 Durum: **Yerel staging adayı yeşil; staging/production aktivasyonu NO-GO**
 Branch: `codex/public-web-foundation-20260908`
-Code/config-bearing head: `334f29f514438efed9c3840111d4d3444aa919b9`
+Code/config-bearing head: `4662c7eea98a80788f12e6cc1251d5c7f33ae69b`
 Karşılaştırma tabanı: `e6edad6a` (`origin/codex/operations-social-staging-20260905`)
 
 ## Teslim edilen dilim
@@ -33,6 +33,12 @@ Karşılaştırma tabanı: `e6edad6a` (`origin/codex/operations-social-staging-2
   uygun CMS page/article kayıtlarını bounded, salt-okunur ve kolon-allowlist'li
   sorguyla çözer; service fee, komisyon, kurum iletişim kişisi ve staff ataması
   kaynak yüzeyine girmez.
+- Toplu draft planlayıcısı en fazla 100 kayıt ve 8 MiB canonical giriş kabul
+  eder; en fazla 4 kaynak okumasını eşzamanlı yürütür. Yinelenen hedef ve
+  idempotency anahtarlarını kaynak/DB çağrısından önce reddeder; eksik, bozuk
+  veya geçici olarak çözülemeyen bir kayıt diğer geçerli kayıtları düşürmez.
+  Plan yalnız doğrulanmış request/source binding ve kararlı SHA-256 üretir;
+  command çalıştırmaz, veritabanına yazmaz ve yayın/index kararı vermez.
 
 ## Exact-head doğrulama özeti
 
@@ -56,6 +62,7 @@ Karşılaştırma tabanı: `e6edad6a` (`origin/codex/operations-social-staging-2
 | Draft intake builder/command/store | PASS — 12/12 |
 | Draft intake PostgreSQL | PASS — 1/1 |
 | Draft source resolver | PASS — saf 4/4 + PostgreSQL 1/1 |
+| Draft batch planner | PASS — 4/4 |
 | Migration authority | PASS — 31/31 + 1 ortam SKIP |
 | Security regressions | PASS — 37/37 |
 | Rate-limit/IP security | PASS — 6/6 |
@@ -112,7 +119,7 @@ Geçersiz rollout modu veya geçersiz tenant/organization UUID'si fail-closed da
 ## Bilinen sınırlar ve sonraki kapılar
 
 1. Staging smoke/UAT, gerçek crawler davranışı, Lighthouse/Core Web Vitals, CDN cache ve invalidation kanıtı alınmamıştır. Yerel tarayıcıda masaüstü ve 390 px mobil ana sayfa/navigation kontrolü yatay taşma ve console error üretmedi; gerçek city içeriği henüz staging UAT görmedi.
-2. Bulk content import/backfill ve AI translation publication otomatik olarak açılmamıştır. Yeni draft intake adapter'ı runtime route'una veya admin formuna bağlanmamıştır.
+2. Bulk content import/backfill ve AI translation publication otomatik olarak açılmamıştır. Yeni draft intake adapter'ı ve bounded batch planlayıcısı runtime route'una veya admin formuna bağlanmamıştır; planlayıcı tek başına hiçbir command çalıştırmaz.
 3. Frontend build başarılıdır; bazı dil paketleri 500 kB uyarı eşiğini aşmaktadır ve gerçek trafik ölçümüyle ayrı bundle bütçesi uygulanmalıdır.
 4. Public-web saf ve PostgreSQL testleri convergence CI'a, saf testler staging
    adoption CI'a bağlanmıştır. GitHub push/PR, remote exact-head CI,
