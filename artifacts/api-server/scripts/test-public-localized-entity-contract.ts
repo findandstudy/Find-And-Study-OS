@@ -1,10 +1,39 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  resolveLocalizedCityFields,
   resolveLocalizedDestinationFields,
   resolveLocalizedUniversityFields,
   type PublicLocalizedEntitySnapshot,
 } from "../src/lib/publicLocalizedEntityContract";
+
+test("city translations require a governed snapshot outside the English source locale", () => {
+  assert.deepEqual(resolveLocalizedCityFields({
+    locale: "tr",
+    delivery: {
+      mode: "published",
+      snapshot: {
+        canonicalPath: "/tr/cities/istanbul-34",
+        title: "İstanbul",
+        summary: "Uluslararası öğrenciler için doğrulanmış şehir özeti",
+        content: { country: "Türkiye", body: "Doğrulanmış şehir rehberi" },
+        indexState: "INDEX",
+      },
+    },
+    base: { name: "Istanbul", country: "Turkey", description: null },
+  }), {
+    available: true,
+    name: "İstanbul",
+    country: "Türkiye",
+    description: "Doğrulanmış şehir rehberi",
+    contentPolicy: "PUBLISHED_REVISION",
+  });
+  assert.equal(resolveLocalizedCityFields({
+    locale: "tr",
+    delivery: { mode: "published", snapshot: null },
+    base: { name: "Istanbul", country: "Turkey", description: null },
+  }).available, false);
+});
 
 const trSnapshot: PublicLocalizedEntitySnapshot = {
   canonicalPath: "/tr/universities/ornek-universite-1",

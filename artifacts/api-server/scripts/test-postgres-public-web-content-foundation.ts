@@ -8,18 +8,19 @@ const ADMIN_URL =
   process.env.PG_PUBLIC_WEB_ADMIN_URL ??
   "postgresql://postgres@127.0.0.1:5433/fasos_apply_local";
 const target = new URL(ADMIN_URL);
+const databaseName = target.pathname.slice(1);
 if (
   target.protocol !== "postgresql:" ||
   target.hostname !== "127.0.0.1" ||
   target.port !== "5433" ||
-  target.pathname !== "/fasos_apply_local" ||
+  !/^(?:fasos_apply_local|fas_dev_[a-z0-9_]+)$/.test(databaseName) ||
   target.username !== "postgres" ||
   target.password !== "" ||
   target.search !== "" ||
   target.hash !== ""
 ) {
   throw new Error(
-    "Public Web PostgreSQL test requires postgresql://postgres@127.0.0.1:5433/fasos_apply_local",
+    "Public Web PostgreSQL test requires a named disposable loopback PostgreSQL database",
   );
 }
 
@@ -45,6 +46,11 @@ const APPROVE_RECEIPT_ID = "018f8200-0000-7000-8000-000000000719";
 const INDEX_RECEIPT_ID = "018f8200-0000-7000-8000-00000000071a";
 const ACCESS_DISABLE_ID = "018f8200-0000-7000-8000-00000000071b";
 const DISABLE_RECEIPT_ID = "018f8200-0000-7000-8000-00000000071c";
+const CITY_RECORD_ID = "018f8200-0000-7000-8000-00000000071d";
+const CITY_DUPLICATE_RECORD_ID = "018f8200-0000-7000-8000-00000000071e";
+const CITY_REVISION_ID = "018f8200-0000-7000-8000-00000000071f";
+const CITY_EVIDENCE_ID = "018f8200-0000-7000-8000-000000000720";
+const CITY_BODY_EVIDENCE_ID = "018f8200-0000-7000-8000-000000000721";
 const SHA_A = "a".repeat(64);
 const SHA_B = "b".repeat(64);
 
@@ -145,7 +151,7 @@ test("public web foundation enforces RLS, immutable evidence and controlled publ
       "SELECT current_database() AS database_name, current_user AS user_name, inet_server_port() AS server_port",
     );
     assert.deepEqual(identity.rows[0], {
-      database_name: "fasos_apply_local",
+      database_name: databaseName,
       user_name: "postgres",
       server_port: 5433,
     });
@@ -199,6 +205,17 @@ test("public web foundation enforces RLS, immutable evidence and controlled publ
       [authorId],
     );
     const pageId = Number(page.rows[0]?.id);
+    const country = await client.query(
+      `INSERT INTO countries (name, code, is_active)
+       VALUES ('Public Web Cityland', 'PZ', true) RETURNING id`,
+    );
+    const city = await client.query(
+      `INSERT INTO cities (name, country_id, is_active)
+       VALUES ('Public Web City', $1, true) RETURNING id`,
+      [country.rows[0]?.id],
+    );
+    const cityId = Number(city.rows[0]?.id);
+    assert.ok(Number.isSafeInteger(cityId));
 
     await client.query("SET LOCAL ROLE fas_migrator");
     await client.query("SELECT set_config('app.tenant_id', $1, true)", [TENANT_ID]);
@@ -213,6 +230,98 @@ test("public web foundation enforces RLS, immutable evidence and controlled publ
        ) VALUES ($1, $2, $3, 'PAGE', $4, 'en', 'foundation-fixture',
          '/en/foundation-fixture', $5)`,
       [RECORD_ID, TENANT_ID, ORGANIZATION_ID, pageId, authorId],
+    );
+    await client.query(
+      `INSERT INTO public_web_content_records (
+         id, tenant_id, organization_id, entity_type, city_id, locale,
+         canonical_slug, canonical_path, created_by_legacy_user_id
+       ) VALUES ($1, $2, $3, 'CITY', $4::integer, 'en', 'public-web-city',
+         '/en/cities/public-web-city-' || $4::text, $5)`,
+      [CITY_RECORD_ID, TENANT_ID, ORGANIZATION_ID, cityId, authorId],
+    );
+    await expectRejectedInSavepoint(
+      client,
+      "city_locale_unique",
+      `INSERT INTO public_web_content_records (
+         id, tenant_id, organization_id, entity_type, city_id, locale,
+         canonical_slug, canonical_path, created_by_legacy_user_id
+       ) VALUES ('${CITY_DUPLICATE_RECORD_ID}', '${TENANT_ID}', '${ORGANIZATION_ID}',
+         'CITY', ${cityId}, 'en', 'public-web-city-copy',
+         '/en/cities/public-web-city-copy-${cityId}', ${authorId})`,
+      /public_web_content_records_city_locale_uq/,
+    );
+    await expectRejectedInSavepoint(
+      client,
+      "city_binding_exclusive",
+      `INSERT INTO public_web_content_records (
+         id, tenant_id, organization_id, entity_type, city_id, website_page_id,
+         locale, canonical_slug, canonical_path, created_by_legacy_user_id
+       ) VALUES ('${CITY_DUPLICATE_RECORD_ID}', '${TENANT_ID}', '${ORGANIZATION_ID}',
+         'CITY', ${cityId}, ${pageId}, 'tr', 'public-web-city',
+         '/tr/cities/public-web-city-${cityId}', ${authorId})`,
+      /public_web_content_records_entity_binding_chk/,
+    );
+    await client.query(
+      `INSERT INTO public_web_content_revisions (
+         id, tenant_id, organization_id, content_record_id, revision_number,
+         origin, title, content_json, seo_json, structured_data_json,
+         source_sha256, content_sha256, quality_status, source_coverage,
+         translation_status, seo_status, structured_data_status,
+         created_by_legacy_user_id
+       ) VALUES ($1, $2, $3, $4, 1, 'HUMAN', 'Public Web City',
+         '{"country":"Public Web Cityland","body":"Verified city guide"}'::jsonb,
+         '{"title":"Public Web City"}'::jsonb, '{"@type":"City"}'::jsonb,
+         $5, $6, 'PASS', 'COMPLETE', 'SOURCE', 'PASS', 'PASS', $7)`,
+      [CITY_REVISION_ID, TENANT_ID, ORGANIZATION_ID, CITY_RECORD_ID, SHA_A, SHA_B, authorId],
+    );
+    await client.query(
+      `INSERT INTO public_web_source_evidence (
+         id, tenant_id, organization_id, content_record_id, revision_id,
+         source_type, source_visibility, source_url, source_reference_sha256,
+         source_content_sha256, fact_keys, status, observed_at,
+         verified_by_legacy_user_id, verified_at, expires_at
+       ) VALUES ($1, $2, $3, $4, $5, 'EDITORIAL', 'PUBLIC',
+         'https://example.invalid/public-web-city-source', $6, $7,
+         ARRAY['name','country'], 'VERIFIED', now() - interval '1 day', $8,
+         now() - interval '1 day', now() + interval '30 days')`,
+      [CITY_EVIDENCE_ID, TENANT_ID, ORGANIZATION_ID, CITY_RECORD_ID, CITY_REVISION_ID, SHA_A, SHA_B, reviewerId],
+    );
+    await client.query(
+      `INSERT INTO public_web_publication_states (
+         tenant_id, organization_id, content_record_id, revision_id
+       ) VALUES ($1, $2, $3, $4)`,
+      [TENANT_ID, ORGANIZATION_ID, CITY_RECORD_ID, CITY_REVISION_ID],
+    );
+    await client.query(
+      `UPDATE public_web_publication_states SET status='PENDING_REVIEW'
+       WHERE tenant_id=$1 AND content_record_id=$2`,
+      [TENANT_ID, CITY_RECORD_ID],
+    );
+    await expectRejectedInSavepoint(
+      client,
+      "city_required_facts",
+      `UPDATE public_web_publication_states
+       SET status='APPROVED', reviewed_by_legacy_user_id=${reviewerId}, reviewed_at=now()
+       WHERE tenant_id='${TENANT_ID}' AND content_record_id='${CITY_RECORD_ID}'`,
+      /city approval lacks current verified critical facts: body/,
+    );
+    await client.query(
+      `INSERT INTO public_web_source_evidence (
+         id, tenant_id, organization_id, content_record_id, revision_id,
+         source_type, source_visibility, source_url, source_reference_sha256,
+         source_content_sha256, fact_keys, status, observed_at,
+         verified_by_legacy_user_id, verified_at, expires_at
+       ) VALUES ($1, $2, $3, $4, $5, 'EDITORIAL', 'PUBLIC',
+         'https://example.invalid/public-web-city-body-source', $6, $7,
+         ARRAY['body'], 'VERIFIED', now() - interval '1 day', $8,
+         now() - interval '1 day', now() + interval '30 days')`,
+      [CITY_BODY_EVIDENCE_ID, TENANT_ID, ORGANIZATION_ID, CITY_RECORD_ID, CITY_REVISION_ID, SHA_A, SHA_B, reviewerId],
+    );
+    await client.query(
+      `UPDATE public_web_publication_states
+       SET status='APPROVED', reviewed_by_legacy_user_id=$3, reviewed_at=now()
+       WHERE tenant_id=$1 AND content_record_id=$2`,
+      [TENANT_ID, CITY_RECORD_ID, reviewerId],
     );
     await client.query(
       `INSERT INTO public_web_content_revisions (

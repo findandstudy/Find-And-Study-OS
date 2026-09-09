@@ -80,6 +80,15 @@ test("canonical URL builders preserve stable ids and normalize Latin slugs", () 
     }),
     "/en/destinations/united-kingdom",
   );
+  assert.equal(
+    buildPublicWebCanonicalPath({
+      entityType: "CITY",
+      entityId: 34,
+      locale: "tr",
+      slug: "İstanbul",
+    }),
+    "/tr/cities/istanbul-34",
+  );
   assert.throws(
     () => buildPublicWebCanonicalPath({ entityType: "PROGRAM", entityId: 0, locale: "en", slug: "MBA" }),
     /public_web_entity_id_invalid/,
@@ -218,4 +227,23 @@ test("migration is additive, tenant-forced and remains runtime-unwired", () => {
   assert.doesNotMatch(migration, /INSERT INTO\s+"?(programs|universities|destinations|website_pages)"?/i);
   assert.doesNotMatch(migration, /INSERT INTO\s+role_package_capabilities/i);
   assert.doesNotMatch(migration, /https?:\/\/(?:api\.|staging\.|findandstudy)/i);
+
+  const cityMigration = readFileSync(
+    new URL("../../../lib/db/drizzle/0120_public_web_city_pages.sql", import.meta.url),
+    "utf8",
+  );
+  const cityPublicationGuardMigration = readFileSync(
+    new URL("../../../lib/db/drizzle/0121_public_web_city_publication_guard.sql", import.meta.url),
+    "utf8",
+  );
+  assert.match(cityMigration, /ADD COLUMN "city_id" integer/);
+  assert.match(cityMigration, /FOREIGN KEY \("city_id"\) REFERENCES "cities"\("id"\).*NOT VALID/);
+  assert.match(cityMigration, /"entity_type" = 'CITY'.*"city_id" IS NOT NULL/);
+  assert.match(cityMigration, /public_web_content_records_city_locale_uq/);
+  assert.doesNotMatch(cityMigration, /public_web_city_publication_evidence_guard/);
+  assert.match(cityPublicationGuardMigration, /ARRAY\['name','country','body'\]/);
+  assert.match(cityPublicationGuardMigration, /public_web_city_publication_evidence_guard/);
+  assert.match(cityPublicationGuardMigration, /REVOKE ALL ON FUNCTION "enforce_public_web_city_publication_evidence"\(\) FROM PUBLIC/);
+  assert.doesNotMatch(cityMigration, /^\s*(INSERT\s+INTO|UPDATE\s+|DELETE\s+FROM)/im);
+  assert.doesNotMatch(cityPublicationGuardMigration, /^\s*(INSERT\s+INTO|UPDATE\s+|DELETE\s+FROM)/im);
 });

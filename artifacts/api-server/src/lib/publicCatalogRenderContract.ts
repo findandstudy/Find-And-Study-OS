@@ -10,7 +10,7 @@ import {
 export type PublicWebRenderMode = "off" | "allowlist" | "all";
 
 export const PUBLIC_WEB_RESERVED_PAGE_SLUGS = new Set([
-  "about", "countries", "destinations", "programs", "universities", "blog",
+  "about", "countries", "destinations", "cities", "programs", "universities", "blog",
   "guides", "contact", "login", "register", "agency", "agency-application",
   "student", "staff", "admin", "agent", "institution", "accommodation",
   "instructor", "embed", "api", "sitemaps", "robots.txt", "sitemap.xml",
@@ -52,6 +52,13 @@ export type PublicCatalogRenderRoute =
       locale: ProgramSupportedLocale;
       path: string;
       slug: string;
+    }
+  | {
+      kind: "city_detail";
+      locale: ProgramSupportedLocale;
+      path: string;
+      routeKey: string;
+      identity: PublicCatalogRouteIdentity | null;
     }
   | {
       kind: "article_detail";
@@ -179,6 +186,38 @@ export type PublicCatalogRenderModel =
           name: string;
           city: string | null;
           universityType: string | null;
+          canonicalPath: string;
+        }>;
+      };
+    }
+  | {
+      kind: "city_detail";
+      locale: ProgramSupportedLocale;
+      canonicalPath: string;
+      title: string;
+      description: string;
+      indexable: boolean;
+      alternatePaths: Partial<Record<ProgramSupportedLocale, string>>;
+      city: {
+        id: number;
+        name: string;
+        country: string;
+        countryCode: string;
+        description: string | null;
+        universityCount: number;
+        programCount: number;
+        universities: Array<{
+          id: number;
+          name: string;
+          universityType: string | null;
+          canonicalPath: string;
+        }>;
+        programs: Array<{
+          id: number;
+          name: string;
+          universityName: string;
+          degree: string | null;
+          field: string | null;
           canonicalPath: string;
         }>;
       };
@@ -314,6 +353,15 @@ export function matchPublicCatalogRenderPath(
   if (segments.length === 3 && segments[1] === "universities") {
     return {
       kind: "university_detail",
+      locale,
+      path,
+      routeKey: segments[2],
+      identity: parsePublicCatalogRouteKey(segments[2]),
+    };
+  }
+  if (segments.length === 3 && segments[1] === "cities") {
+    return {
+      kind: "city_detail",
       locale,
       path,
       routeKey: segments[2],
@@ -491,6 +539,37 @@ function renderDestinationDetail(model: Extract<PublicCatalogRenderModel, { kind
       ${cities ? `<ul class="mt-8 flex flex-wrap gap-3" aria-label="${escapeHtml(copy.location)}">${cities}</ul>` : ""}
     </article>
     <section class="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-3" aria-label="${escapeHtml(destination.name)}">${universities}</section>
+  </main>`;
+}
+
+function renderCityDetail(model: Extract<PublicCatalogRenderModel, { kind: "city_detail" }>): string {
+  const city = model.city;
+  const copy = RENDER_COPY[model.locale];
+  const universities = city.universities.map((university) => `
+      <article class="rounded-2xl border border-border bg-card p-5">
+        <h2 class="text-lg font-bold"><a href="${escapeHtml(university.canonicalPath)}">${escapeHtml(university.name)}</a></h2>
+        <p class="mt-2 text-muted-foreground">${escapeHtml(university.universityType || city.name)}</p>
+      </article>`).join("");
+  const programs = city.programs.map((program) => `
+      <article class="rounded-2xl border border-border bg-card p-5">
+        <p class="text-sm text-primary">${escapeHtml(program.universityName)}</p>
+        <h3 class="mt-2 text-lg font-bold"><a href="${escapeHtml(program.canonicalPath)}">${escapeHtml(program.name)}</a></h3>
+        <p class="mt-2 text-muted-foreground">${escapeHtml([program.degree, program.field].filter(Boolean).join(" · "))}</p>
+      </article>`).join("");
+  return `<main data-public-render-shell="city-detail" class="mx-auto max-w-7xl px-4 py-24">
+    <nav aria-label="Breadcrumb"><a href="/${escapeHtml(model.locale)}/countries">${escapeHtml(copy.countries)}</a> / <span>${escapeHtml(city.country)}</span> / <span>${escapeHtml(city.name)}</span></nav>
+    <article class="mt-8">
+      <p class="text-sm text-primary">${escapeHtml(city.country)}</p>
+      <h1 class="mt-3 text-4xl font-bold">${escapeHtml(model.title)}</h1>
+      <p class="mt-4 max-w-3xl text-muted-foreground">${escapeHtml(model.description)}</p>
+      <dl class="mt-8 grid gap-4 sm:grid-cols-3">
+        <div><dt>${escapeHtml(copy.location)}</dt><dd>${escapeHtml(`${city.name}, ${city.country}`)}</dd></div>
+        <div><dt>${escapeHtml(copy.institutionType)}</dt><dd>${escapeHtml(String(city.universityCount))}</dd></div>
+        <div><dt>${escapeHtml(copy.programs)}</dt><dd>${escapeHtml(String(city.programCount))}</dd></div>
+      </dl>
+    </article>
+    ${universities ? `<section class="mt-12"><h2 class="text-2xl font-bold">${escapeHtml(copy.institutionType)}</h2><div class="mt-5 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">${universities}</div></section>` : ""}
+    ${programs ? `<section class="mt-12"><h2 class="text-2xl font-bold">${escapeHtml(copy.programs)}</h2><div class="mt-5 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">${programs}</div></section>` : ""}
   </main>`;
 }
 
@@ -707,6 +786,35 @@ function structuredData(model: PublicCatalogRenderModel, siteUrl: string): unkno
       ],
     };
   }
+  if (model.kind === "city_detail") {
+    const city = model.city;
+    return {
+      "@context": "https://schema.org",
+      "@graph": [
+        {
+          "@type": "City",
+          "@id": `${siteUrl}${model.canonicalPath}#city`,
+          name: city.name,
+          description: model.description,
+          url: `${siteUrl}${model.canonicalPath}`,
+          containedInPlace: {
+            "@type": "Country",
+            name: city.country,
+          },
+        },
+        {
+          "@type": "ItemList",
+          numberOfItems: city.universityCount,
+          itemListElement: city.universities.map((university, index) => ({
+            "@type": "ListItem",
+            position: index + 1,
+            url: `${siteUrl}${university.canonicalPath}`,
+            name: university.name,
+          })),
+        },
+      ],
+    };
+  }
   if (model.kind === "article_detail") {
     return {
       "@context": "https://schema.org",
@@ -780,15 +888,18 @@ export function renderPublicCatalogHtml(input: {
         ? renderUniversityDetail(input.model)
         : input.model.kind === "destination_detail"
           ? renderDestinationDetail(input.model)
-          : input.model.kind === "article_detail"
-            ? renderArticleDetail(input.model)
-            : input.model.kind === "page_detail"
-              ? renderPageDetail(input.model)
-      : renderNotFound(input.model);
+          : input.model.kind === "city_detail"
+            ? renderCityDetail(input.model)
+            : input.model.kind === "article_detail"
+              ? renderArticleDetail(input.model)
+              : input.model.kind === "page_detail"
+                ? renderPageDetail(input.model)
+                : renderNotFound(input.model);
   const alternatePaths = (
     input.model.kind === "program_detail"
     || input.model.kind === "university_detail"
     || input.model.kind === "destination_detail"
+    || input.model.kind === "city_detail"
     || input.model.kind === "article_detail"
     || input.model.kind === "page_detail"
   ) && input.model.indexable

@@ -115,6 +115,44 @@ export function resolveLocalizedUniversityFields(input: {
   };
 }
 
+export function resolveLocalizedCityFields(input: {
+  locale: ProgramSupportedLocale;
+  delivery: PublicLocalizedEntityDelivery;
+  base: {
+    name: string;
+    country: string;
+    description: string | null;
+  };
+}): {
+  available: boolean;
+  name: string;
+  country: string;
+  description: string | null;
+  contentPolicy: "LEGACY_SOURCE_ONLY" | "PUBLISHED_REVISION";
+} {
+  const snapshot = input.delivery.snapshot;
+  if (input.delivery.mode === "off") {
+    return { available: true, ...input.base, contentPolicy: "LEGACY_SOURCE_ONLY" };
+  }
+  if (!snapshot) {
+    return {
+      available: input.locale === "en",
+      ...input.base,
+      contentPolicy: "LEGACY_SOURCE_ONLY",
+    };
+  }
+  const preserveBase = input.locale === "en";
+  return {
+    available: true,
+    name: boundedText(snapshot.title, TEXT_LIMITS.title) ?? input.base.name,
+    country: snapshotText(snapshot, ["country"], TEXT_LIMITS.label) ?? input.base.country,
+    description: snapshotText(snapshot, ["description", "body"], TEXT_LIMITS.body)
+      ?? boundedText(snapshot.summary, TEXT_LIMITS.summary)
+      ?? (preserveBase ? input.base.description : null),
+    contentPolicy: "PUBLISHED_REVISION",
+  };
+}
+
 export function resolveLocalizedDestinationFields(input: {
   locale: ProgramSupportedLocale;
   delivery: PublicLocalizedEntityDelivery;

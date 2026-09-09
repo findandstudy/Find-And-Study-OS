@@ -1,5 +1,5 @@
 import { Router, type IRouter, type Request, type Response } from "express";
-import { db, destinationsTable, universitiesTable, programsTable, programTranslationsTable } from "@workspace/db";
+import { db, citiesTable, countriesTable, destinationsTable, universitiesTable, programsTable, programTranslationsTable } from "@workspace/db";
 import { eq, and, sql, asc, desc } from "drizzle-orm";
 import {
   addPublicCatalogConditions,
@@ -22,6 +22,7 @@ import {
 } from "../lib/publicWebDiscoveryReadModel";
 import {
   resolveLocalizedDestinationFields,
+  resolveLocalizedCityFields,
   resolveLocalizedUniversityFields,
   selectLocalizedEntityDelivery,
 } from "../lib/publicLocalizedEntityContract";
@@ -245,12 +246,38 @@ router.get("/public/destinations/:slug", async (req: Request, res: Response): Pr
     return;
   }
 
-  const [localizedUniversityDelivery, indexableUniversityIds, indexableProgramIds] = await Promise.all([
+  const cityRows = await db.select({
+    id: citiesTable.id,
+    name: citiesTable.name,
+    country: countriesTable.name,
+  })
+    .from(citiesTable)
+    .innerJoin(countriesTable, eq(citiesTable.countryId, countriesTable.id))
+    .where(and(
+      eq(citiesTable.isActive, true),
+      eq(countriesTable.isActive, true),
+      sql`(lower(trim(${countriesTable.name})) = lower(trim(${destination.country})) OR upper(trim(${countriesTable.code})) = upper(trim(${destination.country})))`,
+    ))
+    .orderBy(asc(citiesTable.name), asc(citiesTable.id))
+    .limit(256);
+  const popularCityKeys = new Set(localizedDestination.popularCities.map((city) => city.toLocaleLowerCase("en-US")));
+  const cityCandidates = cityRows;
+  const cityIdBatches = Array.from(
+    { length: Math.max(1, Math.ceil(cityCandidates.length / 64)) },
+    (_, index) => cityCandidates.slice(index * 64, (index + 1) * 64).map((row) => row.id),
+  );
+
+  const [localizedUniversityDelivery, localizedCityDeliveries, indexableUniversityIds, indexableProgramIds] = await Promise.all([
     readPublishedLocalizedEntities({
       entityType: "university",
       entityIds: universityRows.map((row) => row.id),
       locale,
     }),
+    Promise.all(cityIdBatches.map((entityIds) => readPublishedLocalizedEntities({
+      entityType: "city",
+      entityIds,
+      locale,
+    }))),
     internalLinkMode === "published"
       ? readIndexableUniversityIds({ locale, universityIds: universityRows.map((row) => row.id) })
       : Promise.resolve(null),
@@ -258,6 +285,12 @@ router.get("/public/destinations/:slug", async (req: Request, res: Response): Pr
       ? readIndexableProgramIds({ locale, programIds: programRows.map((row) => row.id) })
       : Promise.resolve(null),
   ]);
+  const localizedCityDelivery = {
+    mode: localizedCityDeliveries.some((delivery) => delivery.mode === "published")
+      ? "published" as const
+      : "off" as const,
+    snapshots: new Map(localizedCityDeliveries.flatMap((delivery) => [...delivery.snapshots.entries()])),
+  };
   const deliveredUniversityRows = universityRows
     .filter((row) => indexableUniversityIds === null || indexableUniversityIds.has(row.id))
     .flatMap((row) => {
@@ -298,6 +331,24 @@ router.get("/public/destinations/:slug", async (req: Request, res: Response): Pr
       name: program.name,
     }),
   }));
+  const cities = cityCandidates.flatMap((city) => {
+    const delivery = selectLocalizedEntityDelivery(localizedCityDelivery, city.id);
+    const localized = resolveLocalizedCityFields({
+      locale,
+      delivery,
+      base: { name: city.name, country: city.country, description: null },
+    });
+    if (!localized.available || !delivery.snapshot || delivery.snapshot.indexState !== "INDEX") return [];
+    const sourceKey = city.name.toLocaleLowerCase("en-US");
+    const localizedKey = localized.name.toLocaleLowerCase("en-US");
+    if (!popularCityKeys.has(sourceKey) && !popularCityKeys.has(localizedKey)) return [];
+    return [{
+      id: city.id,
+      name: localized.name,
+      sourceName: city.name,
+      canonicalPath: delivery.snapshot.canonicalPath,
+    }];
+  }).slice(0, 24);
 
   const stats = {
     universityCount: Number(universityCount?.count ?? 0),
@@ -331,6 +382,7 @@ router.get("/public/destinations/:slug", async (req: Request, res: Response): Pr
     },
     universities,
     programs,
+    cities,
     stats,
     meta: {
       locale,

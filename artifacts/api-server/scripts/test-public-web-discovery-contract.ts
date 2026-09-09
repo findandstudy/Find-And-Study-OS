@@ -79,6 +79,12 @@ test("sitemap routes accept only known locale, entity and bounded shard", () => 
     locale: "en",
     shard: 1,
   });
+  assert.deepEqual(parsePublicWebSitemapRoute("/sitemaps/cities-tr-1.xml"), {
+    kind: "published",
+    entityType: "CITY",
+    locale: "tr",
+    shard: 1,
+  });
   assert.deepEqual(parsePublicWebSitemapRoute("/sitemaps/guides-tr-3.xml"), {
     kind: "published",
     entityType: "ARTICLE",
@@ -104,6 +110,7 @@ test("sitemap index shards governed counts at five thousand URLs", () => {
       { entityType: "PROGRAM", locale: "en", count: 10_001 },
       { entityType: "UNIVERSITY", locale: "tr", count: 1 },
       { entityType: "DESTINATION", locale: "en", count: 30 },
+      { entityType: "CITY", locale: "tr", count: 450 },
       { entityType: "ARTICLE", locale: "tr", count: 5_001 },
       { entityType: "PAGE", locale: "en", count: 1 },
     ],
@@ -114,6 +121,7 @@ test("sitemap index shards governed counts at five thousand URLs", () => {
   assert.doesNotMatch(xml, /programs-en-4\.xml/);
   assert.match(xml, /universities-tr-1\.xml/);
   assert.match(xml, /destinations-en-1\.xml/);
+  assert.match(xml, /cities-tr-1\.xml/);
   assert.match(xml, /guides-tr-2\.xml/);
   assert.match(xml, /pages-en-1\.xml/);
 });
@@ -175,6 +183,8 @@ test("read model is read-only, RLS-scoped and selects only published indexed rec
   assert.match(source, /const ROUTE_ALIAS_CACHE_MAX_ENTRIES = 5_000/);
   assert.match(source, /content\.\$\{idColumn\}=ANY\(\$5::integer\[\]\)/);
   assert.match(source, /content\.canonical_path=\$4/);
+  assert.match(source, /city: "city_id"/);
+  assert.match(source, /page\.entity_type='CITY' AND alt\.city_id=page\.city_id/);
   assert.match(source, /localizedDeliveryMode/);
   assert.match(source, /revision\.id=state\.revision_id/);
   assert.match(source, /revision\.quality_status='PASS'/);

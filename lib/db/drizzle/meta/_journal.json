@@ -841,6 +841,20 @@
       "when": 1791446400000,
       "tag": "0119_public_web_discovery_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 120,
+      "version": "7",
+      "when": 1791532800000,
+      "tag": "0120_public_web_city_pages",
+      "breakpoints": true
+    },
+    {
+      "idx": 121,
+      "version": "7",
+      "when": 1791619200000,
+      "tag": "0121_public_web_city_publication_guard",
+      "breakpoints": true
     }
   ]
 }

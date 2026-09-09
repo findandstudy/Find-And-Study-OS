@@ -90,6 +90,7 @@ export default function CountryDetail({ slug }: { slug: string }) {
     destination: Destination;
     universities: UniversityBrief[];
     programs: ProgramBrief[];
+    cities: Array<{ id: number; name: string; sourceName: string; canonicalPath: string }>;
     stats: { universityCount: number; programCount: number };
     meta: {
       locale: Language;
@@ -177,7 +178,11 @@ export default function CountryDetail({ slug }: { slug: string }) {
 
   const { destination: dest, universities, stats } = data;
   const whyPoints = dest.whyStudyHere?.split(/\.\s+/).filter(p => p.trim().length > 5) || [];
-  const cities = dest.popularCities?.split(",").map(c => c.trim()).filter(Boolean) || [];
+  const cityNames = dest.popularCities?.split(",").map(c => c.trim()).filter(Boolean) || [];
+  const cityLinks = new Map(data.cities.flatMap((city) => [
+    [city.name.toLocaleLowerCase("en-US"), city.canonicalPath] as const,
+    [city.sourceName.toLocaleLowerCase("en-US"), city.canonicalPath] as const,
+  ]));
 
   return (
     <>
@@ -246,16 +251,23 @@ export default function CountryDetail({ slug }: { slug: string }) {
                 </motion.div>
               )}
 
-              {cities.length > 0 && (
+              {cityNames.length > 0 && (
                 <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }}>
                   <h2 className="text-2xl font-display font-bold text-foreground mb-4">{t("countryDetail.popularCities")}</h2>
                   <div className="flex flex-wrap gap-3">
-                    {cities.map(city => (
-                      <div key={city} className="flex items-center gap-2 bg-card rounded-full border border-border/40 px-4 py-2">
-                        <MapPin className="w-4 h-4 text-primary" />
-                        <span className="text-sm font-medium text-foreground">{city}</span>
-                      </div>
-                    ))}
+                    {cityNames.map(city => {
+                      const cityPath = cityLinks.get(city.toLocaleLowerCase("en-US"));
+                      const content = <><MapPin className="w-4 h-4 text-primary" /><span className="text-sm font-medium text-foreground">{city}</span></>;
+                      return cityPath ? (
+                        <Link key={city} href={cityPath} className="flex items-center gap-2 bg-card rounded-full border border-border/40 px-4 py-2 transition-colors hover:border-primary/40 hover:text-primary">
+                          {content}
+                        </Link>
+                      ) : (
+                        <div key={city} className="flex items-center gap-2 bg-card rounded-full border border-border/40 px-4 py-2">
+                          {content}
+                        </div>
+                      );
+                    })}
                   </div>
                 </motion.div>
               )}

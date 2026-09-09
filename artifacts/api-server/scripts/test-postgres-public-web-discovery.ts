@@ -10,11 +10,12 @@ const MIGRATOR_URL = process.env.PG_PUBLIC_WEB_DISCOVERY_URL
 
 function assertDisposableUrl(raw: string, user: string): void {
   const target = new URL(raw);
+  const databaseName = target.pathname.slice(1);
   if (
     target.protocol !== "postgresql:"
     || target.hostname !== "127.0.0.1"
     || target.port !== "5433"
-    || target.pathname !== "/fasos_apply_local"
+    || !/^(?:fasos_apply_local|fas_dev_[a-z0-9_]+)$/.test(databaseName)
     || target.username !== user
     || target.password !== ""
     || target.search !== ""
@@ -48,6 +49,8 @@ const RECORDS = {
   universityEn: "018f8500-0000-7000-8000-000000000030",
   destinationTr: "018f8500-0000-7000-8000-000000000031",
   universityTr: "018f8500-0000-7000-8000-000000000032",
+  cityEn: "018f8500-0000-7000-8000-000000000033",
+  cityTr: "018f8500-0000-7000-8000-000000000034",
 } as const;
 const REVISIONS = {
   en: "018f8500-0000-7000-8000-000000000021",
@@ -62,6 +65,8 @@ const REVISIONS = {
   universityEn: "018f8500-0000-7000-8000-000000000040",
   destinationTr: "018f8500-0000-7000-8000-000000000041",
   universityTr: "018f8500-0000-7000-8000-000000000042",
+  cityEn: "018f8500-0000-7000-8000-000000000043",
+  cityTr: "018f8500-0000-7000-8000-000000000044",
 } as const;
 const ROUTE_ALIASES = {
   redirect: "018f8500-0000-7000-8000-000000000051",
@@ -82,6 +87,8 @@ test("published discovery is tenant-scoped and excludes NOINDEX or undeliverable
   let destinationId = 0;
   let articleId = 0;
   let pageId = 0;
+  let countryId = 0;
+  let cityId = 0;
   try {
     await admin.query("BEGIN");
     await admin.query("SET LOCAL session_replication_role = replica");
@@ -102,7 +109,7 @@ test("published discovery is tenant-scoped and excludes NOINDEX or undeliverable
     userId = Number(user.rows[0]?.id);
     const university = await admin.query<{ id: number }>(
       `INSERT INTO universities (name,country,city,university_type,is_active)
-       VALUES ('Discovery Fixture University','Testland','Test City','Private',true) RETURNING id`,
+       VALUES ('Discovery Fixture University','Discovery Testland','Discovery Test City','Private',true) RETURNING id`,
     );
     universityId = Number(university.rows[0]?.id);
     const program = await admin.query<{ id: number }>(
@@ -114,10 +121,21 @@ test("published discovery is tenant-scoped and excludes NOINDEX or undeliverable
     programId = Number(program.rows[0]?.id);
     const destination = await admin.query<{ id: number }>(
       `INSERT INTO destinations (name,slug,country,short_description,is_active)
-       VALUES ('Discovery Fixture Destination','discovery-fixture-destination','Testland','Verified destination',true)
+       VALUES ('Discovery Fixture Destination','discovery-fixture-destination','Discovery Testland','Verified destination',true)
        RETURNING id`,
     );
     destinationId = Number(destination.rows[0]?.id);
+    const country = await admin.query<{ id: number }>(
+      `INSERT INTO countries (name,code,is_active)
+       VALUES ('Discovery Testland','DX',true) RETURNING id`,
+    );
+    countryId = Number(country.rows[0]?.id);
+    const city = await admin.query<{ id: number }>(
+      `INSERT INTO cities (name,country_id,is_active)
+       VALUES ('Discovery Test City',$1,true) RETURNING id`,
+      [countryId],
+    );
+    cityId = Number(city.rows[0]?.id);
     const article = await admin.query<{ id: number }>(
       `INSERT INTO website_blog_posts
          (title,slug,excerpt,content,status,locale,translations_json,published_at)
@@ -304,6 +322,47 @@ test("published discovery is tenant-scoped and excludes NOINDEX or undeliverable
       [TENANT_ID, ORGANIZATION_ID, RECORDS.universityTr, REVISIONS.universityTr, userId],
     );
     for (const locale of ["en", "tr"] as const) {
+      const recordKey = locale === "en" ? "cityEn" : "cityTr";
+      const revisionKey = locale === "en" ? "cityEn" : "cityTr";
+      const slug = locale === "en" ? "discovery-test-city" : "kesif-test-sehri";
+      await admin.query(
+        `INSERT INTO public_web_content_records
+           (id,tenant_id,organization_id,entity_type,city_id,locale,
+            canonical_slug,canonical_path,created_by_legacy_user_id)
+         VALUES ($1,$2,$3,'CITY',$4,$5,$6,$7,$8)`,
+        [
+          RECORDS[recordKey], TENANT_ID, ORGANIZATION_ID, cityId, locale, slug,
+          `/${locale}/cities/${slug}-${cityId}`, userId,
+        ],
+      );
+      await admin.query(
+        `INSERT INTO public_web_content_revisions
+           (id,tenant_id,organization_id,content_record_id,revision_number,origin,title,summary,
+            content_json,seo_json,structured_data_json,source_sha256,content_sha256,
+            quality_status,source_coverage,translation_status,seo_status,
+            structured_data_status,created_by_legacy_user_id)
+         VALUES ($1,$2,$3,$4,1,'HUMAN',$5,$6,$7,'{}','{}',$8,$9,
+           'PASS','COMPLETE',$10,'PASS','PASS',$11)`,
+        [
+          REVISIONS[revisionKey], TENANT_ID, ORGANIZATION_ID, RECORDS[recordKey],
+          locale === "en" ? "Discovery Test City" : "Keşif Test Şehri",
+          locale === "en" ? "Verified city summary" : "Doğrulanmış şehir özeti",
+          JSON.stringify({
+            country: locale === "en" ? "Discovery Testland" : "Keşif Test Ülkesi",
+            body: locale === "en" ? "Verified city content" : "Doğrulanmış şehir içeriği",
+          }),
+          "0".repeat(64), "1".repeat(64), locale === "en" ? "SOURCE" : "PUBLISHED", userId,
+        ],
+      );
+      await admin.query(
+        `INSERT INTO public_web_publication_states
+           (tenant_id,organization_id,content_record_id,revision_id,status,index_state,
+            reviewed_by_legacy_user_id,reviewed_at,published_by_legacy_user_id,published_at)
+         VALUES ($1,$2,$3,$4,'PUBLISHED','INDEX',$5,now(),$5,now())`,
+        [TENANT_ID, ORGANIZATION_ID, RECORDS[recordKey], REVISIONS[revisionKey], userId],
+      );
+    }
+    for (const locale of ["en", "tr"] as const) {
       await admin.query(
         `INSERT INTO public_web_content_records
            (id,tenant_id,organization_id,entity_type,blog_post_id,locale,
@@ -415,6 +474,13 @@ test("published discovery is tenant-scoped and excludes NOINDEX or undeliverable
       ],
     );
     assert.deepEqual(
+      counts.filter((row) => row.entityType === "CITY"),
+      [
+        { entityType: "CITY", locale: "en", count: 1 },
+        { entityType: "CITY", locale: "tr", count: 1 },
+      ],
+    );
+    assert.deepEqual(
       counts.filter((row) => row.entityType === "ARTICLE"),
       [
         { entityType: "ARTICLE", locale: "en", count: 1 },
@@ -483,6 +549,53 @@ test("published discovery is tenant-scoped and excludes NOINDEX or undeliverable
         },
       },
     );
+    assert.deepEqual(
+      await discovery.readPublishedLocalizedEntity({
+        entityType: "city",
+        entityId: cityId,
+        locale: "tr",
+      }),
+      {
+        mode: "published",
+        snapshot: {
+          canonicalPath: `/tr/cities/kesif-test-sehri-${cityId}`,
+          title: "Keşif Test Şehri",
+          summary: "Doğrulanmış şehir özeti",
+          content: {
+            body: "Doğrulanmış şehir içeriği",
+            country: "Keşif Test Ülkesi",
+          },
+          indexState: "INDEX",
+        },
+      },
+    );
+    assert.deepEqual(
+      await discovery.readPublishedEntitySeoState({
+        scope: { tenantId: TENANT_ID, organizationId: ORGANIZATION_ID },
+        entityType: "city",
+        entityId: cityId,
+        locale: "tr",
+      }),
+      {
+        indexable: true,
+        canonicalPath: `/tr/cities/kesif-test-sehri-${cityId}`,
+        alternates: {
+          en: `/en/cities/discovery-test-city-${cityId}`,
+          tr: `/tr/cities/kesif-test-sehri-${cityId}`,
+        },
+      },
+    );
+    const citySitemap = await discovery.readPublishedSitemapPage({
+      scope: { tenantId: TENANT_ID, organizationId: ORGANIZATION_ID },
+      entityType: "CITY",
+      locale: "tr",
+      shard: 1,
+    });
+    assert.equal(citySitemap.length, 1);
+    assert.deepEqual(citySitemap[0]?.alternates, {
+      en: `/en/cities/discovery-test-city-${cityId}`,
+      tr: `/tr/cities/kesif-test-sehri-${cityId}`,
+    });
     assert.deepEqual(
       await discovery.resolvePublishedLocalizedDestinationRoute({
         locale: "tr",
@@ -656,6 +769,8 @@ test("published discovery is tenant-scoped and excludes NOINDEX or undeliverable
     if (destinationId) await admin.query("DELETE FROM destinations WHERE id=$1", [destinationId]);
     if (articleId) await admin.query("DELETE FROM website_blog_posts WHERE id=$1", [articleId]);
     if (pageId) await admin.query("DELETE FROM website_pages WHERE id=$1", [pageId]);
+    if (cityId) await admin.query("DELETE FROM cities WHERE id=$1", [cityId]);
+    if (countryId) await admin.query("DELETE FROM countries WHERE id=$1", [countryId]);
     if (universityId) await admin.query("DELETE FROM universities WHERE id=$1", [universityId]);
     if (userId) await admin.query("DELETE FROM users WHERE id=$1", [userId]);
     await admin.query("DELETE FROM organizations WHERE id=$1 AND tenant_id=$2", [ORGANIZATION_ID, TENANT_ID]);

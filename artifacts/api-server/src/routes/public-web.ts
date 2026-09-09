@@ -158,6 +158,43 @@ router.get("/public/web/guides/:routeKey", async (req: Request, res: Response): 
   });
 });
 
+router.get("/public/web/cities/:routeKey", async (req: Request, res: Response): Promise<void> => {
+  const locale = normalizeProgramLocale(req.query.locale);
+  const path = `/${locale}/cities/${String(req.params.routeKey)}`;
+  const route = matchPublicCatalogRenderPath(path);
+  if (!route || route.kind !== "city_detail" || !route.identity) {
+    res.status(400).json({ error: "Invalid city route", code: "PUBLIC_CITY_ROUTE_INVALID" });
+    return;
+  }
+  const rendered = await getPublicCatalogRenderModel(route);
+  if (rendered.value.kind === "not_found") {
+    res.status(404).json({ error: "City not found", code: "PUBLIC_CITY_NOT_FOUND" });
+    return;
+  }
+  if (rendered.value.kind !== "city_detail") {
+    res.status(500).json({ error: "City projection unavailable", code: "PUBLIC_CITY_PROJECTION_INVALID" });
+    return;
+  }
+  setPublicHeaders(res);
+  res.setHeader("Content-Location", rendered.value.canonicalPath);
+  res.json({
+    data: rendered.value.city,
+    meta: {
+      locale,
+      title: rendered.value.title,
+      description: rendered.value.description,
+      indexable: rendered.value.indexable,
+      canonicalPath: rendered.value.canonicalPath,
+      alternatePaths: rendered.value.alternatePaths,
+      requestedPathIsCanonical: rendered.value.canonicalPath === path,
+      internalLinkPolicy: rendered.value.city.universities.length > 0 || rendered.value.city.programs.length > 0
+        ? "PUBLISHED_INDEXABLE_ONLY"
+        : "DISABLED_OR_EMPTY",
+      generatedAt: new Date().toISOString(),
+    },
+  });
+});
+
 router.get("/public/web/pages/:slug", async (req: Request, res: Response): Promise<void> => {
   const locale = normalizeProgramLocale(req.query.locale);
   const path = `/${locale}/${String(req.params.slug)}`;

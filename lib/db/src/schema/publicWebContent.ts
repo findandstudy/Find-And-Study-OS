@@ -20,6 +20,7 @@ import {
   tenantsTable,
 } from "./authorization";
 import { destinationsTable } from "./destinations";
+import { citiesTable } from "./catalog";
 import { programsTable, universitiesTable } from "./universities";
 import { usersTable } from "./users";
 import {
@@ -56,6 +57,9 @@ export const publicWebContentRecordsTable = pgTable(
       () => destinationsTable.id,
       { onDelete: "restrict" },
     ),
+    cityId: integer("city_id").references(() => citiesTable.id, {
+      onDelete: "restrict",
+    }),
     websitePageId: integer("website_page_id").references(
       () => websitePagesTable.id,
       { onDelete: "restrict" },
@@ -116,6 +120,9 @@ export const publicWebContentRecordsTable = pgTable(
         table.locale,
       )
       .where(sql`${table.entityType} = 'DESTINATION'`),
+    uniqueIndex("public_web_content_records_city_locale_uq")
+      .on(table.tenantId, table.organizationId, table.cityId, table.locale)
+      .where(sql`${table.entityType} = 'CITY'`),
     uniqueIndex("public_web_content_records_page_locale_uq")
       .on(
         table.tenantId,
@@ -142,16 +149,17 @@ export const publicWebContentRecordsTable = pgTable(
     check("public_web_content_records_id_v7_chk", uuidV7(table.id)),
     check(
       "public_web_content_records_entity_type_chk",
-      sql`${table.entityType} IN ('PROGRAM', 'UNIVERSITY', 'DESTINATION', 'PAGE', 'ARTICLE')`,
+      sql`${table.entityType} IN ('PROGRAM', 'UNIVERSITY', 'DESTINATION', 'CITY', 'PAGE', 'ARTICLE')`,
     ),
     check(
       "public_web_content_records_entity_binding_chk",
       sql`(
-        (${table.entityType} = 'PROGRAM' AND ${table.programId} IS NOT NULL AND ${table.universityId} IS NULL AND ${table.destinationId} IS NULL AND ${table.websitePageId} IS NULL AND ${table.blogPostId} IS NULL)
-        OR (${table.entityType} = 'UNIVERSITY' AND ${table.programId} IS NULL AND ${table.universityId} IS NOT NULL AND ${table.destinationId} IS NULL AND ${table.websitePageId} IS NULL AND ${table.blogPostId} IS NULL)
-        OR (${table.entityType} = 'DESTINATION' AND ${table.programId} IS NULL AND ${table.universityId} IS NULL AND ${table.destinationId} IS NOT NULL AND ${table.websitePageId} IS NULL AND ${table.blogPostId} IS NULL)
-        OR (${table.entityType} = 'PAGE' AND ${table.programId} IS NULL AND ${table.universityId} IS NULL AND ${table.destinationId} IS NULL AND ${table.websitePageId} IS NOT NULL AND ${table.blogPostId} IS NULL)
-        OR (${table.entityType} = 'ARTICLE' AND ${table.programId} IS NULL AND ${table.universityId} IS NULL AND ${table.destinationId} IS NULL AND ${table.websitePageId} IS NULL AND ${table.blogPostId} IS NOT NULL)
+        (${table.entityType} = 'PROGRAM' AND ${table.programId} IS NOT NULL AND ${table.universityId} IS NULL AND ${table.destinationId} IS NULL AND ${table.cityId} IS NULL AND ${table.websitePageId} IS NULL AND ${table.blogPostId} IS NULL)
+        OR (${table.entityType} = 'UNIVERSITY' AND ${table.programId} IS NULL AND ${table.universityId} IS NOT NULL AND ${table.destinationId} IS NULL AND ${table.cityId} IS NULL AND ${table.websitePageId} IS NULL AND ${table.blogPostId} IS NULL)
+        OR (${table.entityType} = 'DESTINATION' AND ${table.programId} IS NULL AND ${table.universityId} IS NULL AND ${table.destinationId} IS NOT NULL AND ${table.cityId} IS NULL AND ${table.websitePageId} IS NULL AND ${table.blogPostId} IS NULL)
+        OR (${table.entityType} = 'CITY' AND ${table.programId} IS NULL AND ${table.universityId} IS NULL AND ${table.destinationId} IS NULL AND ${table.cityId} IS NOT NULL AND ${table.websitePageId} IS NULL AND ${table.blogPostId} IS NULL)
+        OR (${table.entityType} = 'PAGE' AND ${table.programId} IS NULL AND ${table.universityId} IS NULL AND ${table.destinationId} IS NULL AND ${table.cityId} IS NULL AND ${table.websitePageId} IS NOT NULL AND ${table.blogPostId} IS NULL)
+        OR (${table.entityType} = 'ARTICLE' AND ${table.programId} IS NULL AND ${table.universityId} IS NULL AND ${table.destinationId} IS NULL AND ${table.cityId} IS NULL AND ${table.websitePageId} IS NULL AND ${table.blogPostId} IS NOT NULL)
       )`,
     ),
     check("public_web_content_records_locale_chk", supportedLocale(table.locale)),

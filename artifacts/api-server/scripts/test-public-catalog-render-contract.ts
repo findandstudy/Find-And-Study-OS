@@ -61,6 +61,9 @@ test("only bounded public content paths enter the render pilot and CMS pages can
   assert.equal(destination?.kind, "destination_detail");
   assert.equal(destination?.kind === "destination_detail" ? destination.slug : null, "united-kingdom");
   assert.equal(matchPublicCatalogRenderPath("/en/countries/united-kingdom")?.kind, "destination_detail");
+  const city = matchPublicCatalogRenderPath("/tr/cities/istanbul-34");
+  assert.equal(city?.kind, "city_detail");
+  assert.equal(city?.kind === "city_detail" ? city.identity?.id : null, 34);
   assert.equal(matchPublicCatalogRenderPath("/en/destinations/Unsafe_Slug"), null);
   const article = matchPublicCatalogRenderPath("/tr/guides/ogrenci-vizesi-19");
   assert.equal(article?.kind, "article_detail");
@@ -215,6 +218,54 @@ test("destination detail emits a semantic destination shell without inventing tr
   assert.doesNotMatch(html, /service fee|commission|contact person/i);
 });
 
+test("city detail emits governed city structured data and bounded related links", () => {
+  const model: PublicCatalogRenderModel = {
+    kind: "city_detail",
+    locale: "en",
+    canonicalPath: "/en/cities/istanbul-34",
+    title: "Study in Istanbul",
+    description: "Verified city guidance for international students.",
+    indexable: true,
+    alternatePaths: { en: "/en/cities/istanbul-34" },
+    city: {
+      id: 34,
+      name: "Istanbul",
+      country: "Turkey",
+      countryCode: "TR",
+      description: "Verified city guidance for international students.",
+      universityCount: 1,
+      programCount: 1,
+      universities: [{
+        id: 7,
+        name: "Example University",
+        universityType: "Private",
+        canonicalPath: "/en/universities/example-university-7",
+      }],
+      programs: [{
+        id: 42,
+        name: "Computer Science",
+        universityName: "Example University",
+        degree: "BSc",
+        field: "Computing",
+        canonicalPath: "/en/programs/computer-science-42",
+      }],
+    },
+  };
+  const html = renderPublicCatalogHtml({
+    indexHtml,
+    model,
+    siteUrl: "https://findandstudy.com",
+    nonce: "city-nonce",
+  });
+  assert.match(html, /data-public-render-shell="city-detail"/);
+  assert.match(html, /"@type":"City"/);
+  assert.match(html, /"@type":"Country"/);
+  assert.match(html, /href="\/en\/universities\/example-university-7"/);
+  assert.match(html, /href="\/en\/programs\/computer-science-42"/);
+  assert.match(html, /hreflang="x-default"/);
+  assert.doesNotMatch(html, /service fee|commission|contact person/i);
+});
+
 test("article detail emits safe semantic HTML and Article structured data", () => {
   const model: PublicCatalogRenderModel = {
     kind: "article_detail",
@@ -296,6 +347,9 @@ test("read model is on-demand, bounded, stale-while-revalidate, and detail index
   assert.match(readModel, /const CACHE_MAX_ENTRIES = 500/);
   assert.match(readModel, /async function readUniversityDetail/);
   assert.match(readModel, /async function readDestinationDetail/);
+  assert.match(readModel, /async function readCityDetail/);
+  assert.match(readModel, /localizedDelivery\.mode !== "published" \|\| !localizedDelivery\.snapshot/);
+  assert.match(readModel, /const candidateLimit = internalLinkMode === "published"/);
   assert.match(readModel, /async function readArticleDetail/);
   assert.match(readModel, /readIndexableArticleIds/);
   assert.match(readModel, /async function readPageDetail/);

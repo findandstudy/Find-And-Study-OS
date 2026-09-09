@@ -1,5 +1,7 @@
 import {
   db,
+  citiesTable,
+  countriesTable,
   destinationsTable,
   programsTable,
   programTranslationsTable,
@@ -40,6 +42,7 @@ import { buildPublicWebCanonicalPath } from "./publicWebContentContract";
 import type { ProgramSupportedLocale } from "./programTranslationContract";
 import {
   resolveLocalizedDestinationFields,
+  resolveLocalizedCityFields,
   resolveLocalizedUniversityFields,
   selectLocalizedEntityDelivery,
 } from "./publicLocalizedEntityContract";
@@ -717,6 +720,237 @@ async function readDestinationDetail(
   };
 }
 
+async function readCityDetail(
+  route: Extract<PublicCatalogRenderRoute, { kind: "city_detail" }>,
+): Promise<PublicCatalogRenderModel> {
+  if (!route.identity) {
+    return {
+      kind: "not_found",
+      locale: route.locale,
+      canonicalPath: route.path,
+      title: "City not found",
+      description: "The requested study city is unavailable.",
+      indexable: false,
+    };
+  }
+  const [city] = await db
+    .select({
+      id: citiesTable.id,
+      name: citiesTable.name,
+      country: countriesTable.name,
+      countryCode: countriesTable.code,
+    })
+    .from(citiesTable)
+    .innerJoin(countriesTable, eq(citiesTable.countryId, countriesTable.id))
+    .where(and(
+      eq(citiesTable.id, route.identity.id),
+      eq(citiesTable.isActive, true),
+      eq(countriesTable.isActive, true),
+    ))
+    .limit(1);
+  if (!city) {
+    return {
+      kind: "not_found",
+      locale: route.locale,
+      canonicalPath: route.path,
+      title: "City not found",
+      description: "The requested study city is unavailable.",
+      indexable: false,
+    };
+  }
+
+  const policy = await getPublicCatalogPolicy();
+  const universityConditions: any[] = [
+    sql`lower(trim(${universitiesTable.city})) = lower(trim(${city.name}))`,
+    sql`(lower(trim(${universitiesTable.country})) = lower(trim(${city.country})) OR upper(trim(${universitiesTable.country})) = upper(trim(${city.countryCode})))`,
+  ];
+  addPublicCatalogConditions(universityConditions, policy);
+  const programConditions: any[] = [
+    ...universityConditions,
+    eq(programsTable.isActive, true),
+  ];
+  const internalLinkMode = parsePublicWebInternalLinkMode(process.env.PUBLIC_WEB_INTERNAL_LINK_MODE);
+  const candidateLimit = internalLinkMode === "published"
+    ? PUBLIC_CATALOG_RELATED_CANDIDATE_LIMIT
+    : 0;
+
+  const [
+    [universityCount],
+    [programCount],
+    universityRows,
+    programRows,
+    seoState,
+    localizedDelivery,
+  ] = await Promise.all([
+    db.select({ count: sql<number>`count(*)` })
+      .from(universitiesTable)
+      .where(and(...universityConditions)),
+    db.select({ count: sql<number>`count(*)` })
+      .from(programsTable)
+      .innerJoin(universitiesTable, eq(programsTable.universityId, universitiesTable.id))
+      .where(and(...programConditions)),
+    db.select({
+      id: universitiesTable.id,
+      name: universitiesTable.name,
+      universityType: universitiesTable.universityType,
+    })
+      .from(universitiesTable)
+      .where(and(...universityConditions))
+      .orderBy(asc(universitiesTable.name), asc(universitiesTable.id))
+      .limit(candidateLimit),
+    db.select({
+      id: programsTable.id,
+      name: sql<string>`COALESCE(${programTranslationsTable.name}, ${programsTable.name})`,
+      universityId: universitiesTable.id,
+      universityName: universitiesTable.name,
+      universityType: universitiesTable.universityType,
+      degree: programsTable.degree,
+      field: programsTable.field,
+    })
+      .from(programsTable)
+      .innerJoin(universitiesTable, eq(programsTable.universityId, universitiesTable.id))
+      .leftJoin(programTranslationsTable, and(
+        eq(programTranslationsTable.programId, programsTable.id),
+        eq(programTranslationsTable.locale, route.locale),
+        eq(programTranslationsTable.status, "published"),
+      ))
+      .where(and(...programConditions))
+      .orderBy(asc(universitiesTable.name), asc(programsTable.name), asc(programsTable.id))
+      .limit(candidateLimit),
+    resolvePublishedEntitySeoState({
+      entityType: "city",
+      entityId: city.id,
+      locale: route.locale,
+    }),
+    readPublishedLocalizedEntity({
+      entityType: "city",
+      entityId: city.id,
+      locale: route.locale,
+    }),
+  ]);
+
+  if (localizedDelivery.mode !== "published" || !localizedDelivery.snapshot) {
+    return {
+      kind: "not_found",
+      locale: route.locale,
+      canonicalPath: route.path,
+      title: "City publication not found",
+      description: "The requested city has no published revision.",
+      indexable: false,
+    };
+  }
+  const localizedCity = resolveLocalizedCityFields({
+    locale: route.locale,
+    delivery: localizedDelivery,
+    base: { name: city.name, country: city.country, description: null },
+  });
+  if (!localizedCity.available) {
+    return {
+      kind: "not_found",
+      locale: route.locale,
+      canonicalPath: route.path,
+      title: "City translation not published",
+      description: "The requested city translation is unavailable.",
+      indexable: false,
+    };
+  }
+
+  const [localizedUniversities, indexableUniversityIds, indexableProgramIds] = await Promise.all([
+    readPublishedLocalizedEntities({
+      entityType: "university",
+      entityIds: universityRows.map((university) => university.id),
+      locale: route.locale,
+    }),
+    internalLinkMode === "published"
+      ? readIndexableUniversityIds({
+        locale: route.locale,
+        universityIds: universityRows.map((university) => university.id),
+      })
+      : Promise.resolve(null),
+    internalLinkMode === "published"
+      ? readIndexableProgramIds({
+        locale: route.locale,
+        programIds: programRows.map((program) => program.id),
+      })
+      : Promise.resolve(null),
+  ]);
+  const universities = universityRows
+    .filter((university) => indexableUniversityIds === null || indexableUniversityIds.has(university.id))
+    .flatMap((university) => {
+      const localized = resolveLocalizedUniversityFields({
+        locale: route.locale,
+        delivery: selectLocalizedEntityDelivery(localizedUniversities, university.id),
+        base: { name: university.name, description: null, universityType: university.universityType },
+      });
+      return localized.available
+        ? [{
+          id: university.id,
+          name: localized.name,
+          universityType: localized.universityType,
+          canonicalPath: publicCatalogPath({
+            locale: route.locale,
+            entityType: "university",
+            id: university.id,
+            name: localized.name,
+          }),
+        }]
+        : [];
+    })
+    .slice(0, PILOT_LIST_LIMIT);
+  const programs = programRows
+    .filter((program) => indexableProgramIds === null || indexableProgramIds.has(program.id))
+    .slice(0, PILOT_LIST_LIMIT)
+    .flatMap((program) => {
+      const localizedUniversity = resolveLocalizedUniversityFields({
+        locale: route.locale,
+        delivery: selectLocalizedEntityDelivery(localizedUniversities, program.universityId),
+        base: {
+          name: program.universityName,
+          description: null,
+          universityType: program.universityType,
+        },
+      });
+      if (!localizedUniversity.available) return [];
+      return [{
+        id: program.id,
+        name: program.name,
+        universityName: localizedUniversity.name,
+        degree: program.degree,
+        field: program.field,
+        canonicalPath: publicCatalogPath({
+          locale: route.locale,
+          entityType: "program",
+          id: program.id,
+          name: program.name,
+        }),
+      }];
+    });
+  const canonicalPath = localizedDelivery.snapshot.canonicalPath;
+  return {
+    kind: "city_detail",
+    locale: route.locale,
+    canonicalPath,
+    title: localizedCity.name,
+    description: boundedText(
+      localizedCity.description,
+      `Study opportunities in ${localizedCity.name}, ${localizedCity.country}`,
+    ),
+    indexable: seoState.indexable,
+    alternatePaths: seoState.alternates,
+    city: {
+      id: city.id,
+      name: localizedCity.name,
+      country: localizedCity.country,
+      countryCode: city.countryCode,
+      description: localizedCity.description,
+      universityCount: Number(universityCount?.count ?? 0),
+      programCount: Number(programCount?.count ?? 0),
+      universities,
+      programs,
+    },
+  };
+}
+
 async function readArticleDetail(
   route: Extract<PublicCatalogRenderRoute, { kind: "article_detail" }>,
 ): Promise<PublicCatalogRenderModel> {
@@ -1017,6 +1251,7 @@ async function loadModel(route: PublicCatalogRenderRoute): Promise<PublicCatalog
   if (route.kind === "program_detail") return readProgramDetail(route);
   if (route.kind === "university_detail") return readUniversityDetail(route);
   if (route.kind === "destination_detail") return readDestinationDetail(route);
+  if (route.kind === "city_detail") return readCityDetail(route);
   if (route.kind === "article_detail") return readArticleDetail(route);
   return readPageDetail(route);
 }

@@ -244,6 +244,8 @@ test("production prefix and canonical additive migration tail are pinned", () =>
       "0117_public_web_replay_rls_fix",
       "0118_public_web_authorized_command_gateway",
       "0119_public_web_discovery_indexes",
+      "0120_public_web_city_pages",
+      "0121_public_web_city_publication_guard",
     ],
   );
 

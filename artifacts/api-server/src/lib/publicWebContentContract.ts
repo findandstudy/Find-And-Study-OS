@@ -7,6 +7,7 @@ export const PUBLIC_WEB_ENTITY_TYPES = [
   "PROGRAM",
   "UNIVERSITY",
   "DESTINATION",
+  "CITY",
   "PAGE",
   "ARTICLE",
 ] as const;
@@ -29,6 +30,7 @@ export const PUBLIC_WEB_REQUIRED_FACTS: Record<PublicWebEntityType, readonly str
   ],
   UNIVERSITY: ["name", "country", "status"],
   DESTINATION: ["name", "country", "body"],
+  CITY: ["name", "country", "body"],
   PAGE: ["title", "body"],
   ARTICLE: ["title", "body"],
 };
@@ -104,6 +106,8 @@ export function buildPublicWebCanonicalPath(input: {
       return `/${locale}/universities/${slug}-${id}`;
     case "DESTINATION":
       return `/${locale}/destinations/${slug}`;
+    case "CITY":
+      return `/${locale}/cities/${slug}-${id}`;
     case "PAGE":
       return `/${locale}/${slug}`;
     case "ARTICLE":

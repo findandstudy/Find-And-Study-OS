@@ -6,6 +6,9 @@ import { sanitizePublicRichText } from "../src/lib/publicHtmlSanitizer";
 const program = readFileSync(new URL("../src/pages/public/ProgramDetail.tsx", import.meta.url), "utf8");
 const university = readFileSync(new URL("../src/pages/public/UniversityDetail.tsx", import.meta.url), "utf8");
 const countries = readFileSync(new URL("../src/pages/public/Countries.tsx", import.meta.url), "utf8");
+const country = readFileSync(new URL("../src/pages/public/CountryDetail.tsx", import.meta.url), "utf8");
+const city = readFileSync(new URL("../src/pages/public/CityDetail.tsx", import.meta.url), "utf8");
+const app = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
 
 test("program template keeps prototype information architecture data-bound", () => {
   for (const anchor of ["overview", "requirements", "intakes", "fees", "related"]) {
@@ -33,6 +36,18 @@ test("destination collection requests the active locale and follows canonical pa
   assert.match(countries, /public\/destinations\?locale=/);
   assert.match(countries, /\[lang\]/);
   assert.match(countries, /dest\.canonicalPath \|\| localePath/);
+});
+
+test("city template and destination links stay on governed canonical projections", () => {
+  assert.match(app, /\/\$\{lang\}\/cities\/:routeKey/);
+  assert.match(city, /public\/web\/cities\/\$\{encodeURIComponent\(routeKey\)\}\?locale=/);
+  assert.match(city, /requestedPathIsCanonical/);
+  assert.match(city, /payload\?\.meta\.indexable/);
+  assert.match(city, /"@type": "City"/);
+  assert.match(country, /cityLinks/);
+  assert.match(country, /city\.sourceName/);
+  assert.match(country, /href=\{cityPath\}/);
+  assert.doesNotMatch(city, /dangerouslySetInnerHTML|serviceFee|commission|contactPerson/);
 });
 
 test("public rich text strips executable markup and new-tab opener control", () => {

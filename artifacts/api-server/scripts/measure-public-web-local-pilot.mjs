@@ -7,15 +7,16 @@ if (process.env.ALLOW_PUBLIC_WEB_LOCAL_BENCHMARK !== "true") {
 }
 
 const databaseUrl = new URL(process.env.DATABASE_URL || "");
+const databaseName = databaseUrl.pathname.slice(1);
 if (
   !["postgres:", "postgresql:"].includes(databaseUrl.protocol)
   || databaseUrl.hostname !== "127.0.0.1"
   || databaseUrl.port !== "5433"
-  || databaseUrl.pathname !== "/fasos_apply_local"
+  || !/^(?:fasos_apply_local|fas_dev_[a-z0-9_]+)$/.test(databaseName)
   || databaseUrl.username !== "fas_migrator"
   || databaseUrl.password
 ) {
-  throw new Error("benchmark requires fas_migrator on disposable 127.0.0.1:5433/fasos_apply_local");
+  throw new Error("benchmark requires fas_migrator on a named disposable loopback database");
 }
 
 const port = Number(process.env.PUBLIC_WEB_BENCHMARK_PORT || "25203");

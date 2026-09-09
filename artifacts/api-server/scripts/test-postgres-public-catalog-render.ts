@@ -13,11 +13,12 @@ const { Client } = pg;
 const ADMIN_URL = process.env.PG_PUBLIC_CATALOG_RENDER_ADMIN_URL
   ?? "postgresql://postgres@127.0.0.1:5433/fasos_apply_local";
 const target = new URL(ADMIN_URL);
+const databaseName = target.pathname.slice(1);
 if (
   target.protocol !== "postgresql:"
   || target.hostname !== "127.0.0.1"
   || target.port !== "5433"
-  || target.pathname !== "/fasos_apply_local"
+  || !/^(?:fasos_apply_local|fas_dev_[a-z0-9_]+)$/.test(databaseName)
   || target.username !== "postgres"
   || target.password !== ""
   || target.search !== ""
@@ -41,6 +42,8 @@ test("render read model serves bounded data and coalesces the same cold key", as
   let universityId: number | null = null;
   let programId: number | null = null;
   let destinationId: number | null = null;
+  let countryId: number | null = null;
+  let cityId: number | null = null;
   let articleId: number | null = null;
   let pageId: number | null = null;
   try {
@@ -48,7 +51,7 @@ test("render read model serves bounded data and coalesces the same cold key", as
       "SELECT current_database() AS database_name, current_user AS user_name, inet_server_port() AS server_port",
     );
     assert.deepEqual(identity.rows[0], {
-      database_name: "fasos_apply_local",
+      database_name: databaseName,
       user_name: "postgres",
       server_port: 5433,
     });
@@ -76,6 +79,17 @@ test("render read model serves bounded data and coalesces the same cold key", as
       [destinationSlug],
     );
     destinationId = destination.rows[0].id;
+    const country = await client.query<{ id: number }>(
+      `INSERT INTO countries (name,code,is_active)
+       VALUES ('Render Pilot Country','RP',true) RETURNING id`,
+    );
+    countryId = country.rows[0].id;
+    const city = await client.query<{ id: number }>(
+      `INSERT INTO cities (name,country_id,is_active)
+       VALUES ('Render Pilot City',$1,true) RETURNING id`,
+      [countryId],
+    );
+    cityId = city.rows[0].id;
     const article = await client.query<{ id: number }>(
       `INSERT INTO website_blog_posts
          (title,slug,excerpt,content,status,locale,published_at)
@@ -182,6 +196,14 @@ test("render read model serves bounded data and coalesces the same cold key", as
     );
     assert.equal(destinationDetail.value.indexable, false);
 
+    const cityRoute = matchPublicCatalogRenderPath(
+      `/en/cities/${publicCatalogRouteKey(cityId, "Render Pilot City")}`,
+    );
+    assert.ok(cityRoute && cityRoute.kind === "city_detail");
+    const unpublishedCity = await getPublicCatalogRenderModel(cityRoute);
+    assert.equal(unpublishedCity.value.kind, "not_found");
+    assert.equal(unpublishedCity.value.indexable, false);
+
     const articleRoute = matchPublicCatalogRenderPath(
       `/en/guides/${publicCatalogRouteKey(articleId, "Render Pilot Guide")}`,
     );
@@ -222,6 +244,12 @@ test("render read model serves bounded data and coalesces the same cold key", as
     }
     if (destinationId !== null) {
       await client.query("DELETE FROM destinations WHERE id = $1", [destinationId]);
+    }
+    if (cityId !== null) {
+      await client.query("DELETE FROM cities WHERE id = $1", [cityId]);
+    }
+    if (countryId !== null) {
+      await client.query("DELETE FROM countries WHERE id = $1", [countryId]);
     }
     if (programId !== null) {
       await client.query("DELETE FROM programs WHERE id = $1", [programId]);

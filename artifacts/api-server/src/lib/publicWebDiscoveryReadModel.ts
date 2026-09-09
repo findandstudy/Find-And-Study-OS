@@ -40,16 +40,17 @@ export type PublicWebRouteAliasResolution = {
   action: PublicWebRouteAliasAction | null;
 };
 
-type PublicSeoEntityType = "program" | "university" | "destination" | "article" | "page";
-type PublicLocalizedEntityType = "university" | "destination";
+type PublicSeoEntityType = "program" | "university" | "destination" | "city" | "article" | "page";
+type PublicLocalizedEntityType = "university" | "destination" | "city";
 
 const ENTITY_ID_COLUMNS: Record<
   PublicSeoEntityType,
-  "program_id" | "university_id" | "destination_id" | "blog_post_id" | "website_page_id"
+  "program_id" | "university_id" | "destination_id" | "city_id" | "blog_post_id" | "website_page_id"
 > = {
   program: "program_id",
   university: "university_id",
   destination: "destination_id",
+  city: "city_id",
   article: "blog_post_id",
   page: "website_page_id",
 };
@@ -262,7 +263,7 @@ export async function readPublishedSitemapCounts(
                    AND translation.status='published'
               )
             ))
-            OR (content.entity_type IN ('UNIVERSITY','DESTINATION') AND EXISTS (
+            OR (content.entity_type IN ('UNIVERSITY','DESTINATION','CITY') AND EXISTS (
               SELECT 1 FROM public_web_content_revisions localized_revision
                WHERE localized_revision.tenant_id=state.tenant_id
                  AND localized_revision.organization_id=state.organization_id
@@ -340,7 +341,7 @@ export async function readPublishedSitemapPage(input: {
     const result = await client.query<RawSitemapRow>(
       `WITH page AS (
          SELECT content.id,content.entity_type,content.program_id,content.university_id,
-                content.destination_id,content.website_page_id,content.blog_post_id,
+                content.destination_id,content.city_id,content.website_page_id,content.blog_post_id,
                 content.canonical_path,GREATEST(content.updated_at,state.updated_at) AS last_modified
            FROM public_web_content_records content
            JOIN public_web_publication_states state
@@ -359,7 +360,7 @@ export async function readPublishedSitemapPage(input: {
                      AND translation.status='published'
                 )
               ))
-              OR (content.entity_type IN ('UNIVERSITY','DESTINATION') AND EXISTS (
+              OR (content.entity_type IN ('UNIVERSITY','DESTINATION','CITY') AND EXISTS (
                 SELECT 1 FROM public_web_content_revisions localized_revision
                  WHERE localized_revision.tenant_id=state.tenant_id
                    AND localized_revision.organization_id=state.organization_id
@@ -426,6 +427,7 @@ export async function readPublishedSitemapPage(input: {
             (page.entity_type='PROGRAM' AND alt.program_id=page.program_id)
             OR (page.entity_type='UNIVERSITY' AND alt.university_id=page.university_id)
             OR (page.entity_type='DESTINATION' AND alt.destination_id=page.destination_id)
+            OR (page.entity_type='CITY' AND alt.city_id=page.city_id)
             OR (page.entity_type='PAGE' AND alt.website_page_id=page.website_page_id)
             OR (page.entity_type='ARTICLE' AND alt.blog_post_id=page.blog_post_id)
           )
@@ -442,7 +444,7 @@ export async function readPublishedSitemapPage(input: {
                    AND alt_translation.locale=alt.locale
                    AND alt_translation.status='published'
               )
-            )) OR (page.entity_type IN ('UNIVERSITY','DESTINATION') AND EXISTS (
+            )) OR (page.entity_type IN ('UNIVERSITY','DESTINATION','CITY') AND EXISTS (
               SELECT 1 FROM public_web_content_revisions alt_revision
                WHERE alt_revision.tenant_id=alt_state.tenant_id
                  AND alt_revision.organization_id=alt_state.organization_id
@@ -536,7 +538,7 @@ export async function readPublishedEntitySeoState(input: {
                    AND translation.locale=content.locale
                    AND translation.status='published'
               )
-            )) OR (content.entity_type IN ('UNIVERSITY','DESTINATION') AND EXISTS (
+            )) OR (content.entity_type IN ('UNIVERSITY','DESTINATION','CITY') AND EXISTS (
               SELECT 1 FROM public_web_content_revisions localized_revision
                WHERE localized_revision.tenant_id=state.tenant_id
                  AND localized_revision.organization_id=state.organization_id
