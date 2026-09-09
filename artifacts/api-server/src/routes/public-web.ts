@@ -141,6 +141,7 @@ router.get("/public/web/guides/:routeKey", async (req: Request, res: Response): 
   res.setHeader("Content-Location", rendered.value.canonicalPath);
   res.json({
     data: rendered.value.article,
+    related: rendered.value.relatedArticles,
     meta: {
       locale,
       title: rendered.value.title,
@@ -148,6 +149,9 @@ router.get("/public/web/guides/:routeKey", async (req: Request, res: Response): 
       indexable: rendered.value.indexable,
       canonicalPath: rendered.value.canonicalPath,
       alternatePaths: rendered.value.alternatePaths,
+      internalLinkPolicy: rendered.value.relatedArticles.length > 0
+        ? "PUBLISHED_INDEXABLE_ONLY"
+        : "DISABLED_OR_EMPTY",
       requestedPathIsCanonical: rendered.value.canonicalPath === path,
       generatedAt: new Date().toISOString(),
     },

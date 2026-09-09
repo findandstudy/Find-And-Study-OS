@@ -6,6 +6,7 @@ import {
 export const PUBLIC_CATALOG_RELATED_LIMIT = 8;
 export const PUBLIC_CATALOG_RELATED_CANDIDATE_LIMIT = 32;
 export const PUBLIC_CATALOG_UNIVERSITY_PROGRAM_LIMIT = 12;
+export const PUBLIC_GUIDE_RELATED_LIMIT = 6;
 
 export type PublicWebInternalLinkMode = "off" | "published";
 

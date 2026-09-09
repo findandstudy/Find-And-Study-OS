@@ -8,11 +8,12 @@ import {
   websitePagesTable,
   websitePageVersionsTable,
 } from "@workspace/db";
-import { and, asc, desc, eq, isNotNull, lte, ne, sql } from "drizzle-orm";
+import { and, asc, desc, eq, isNotNull, lte, ne, or, sql } from "drizzle-orm";
 import {
   PUBLIC_CATALOG_RELATED_CANDIDATE_LIMIT,
   PUBLIC_CATALOG_RELATED_LIMIT,
   PUBLIC_CATALOG_UNIVERSITY_PROGRAM_LIMIT,
+  PUBLIC_GUIDE_RELATED_LIMIT,
   parsePublicWebInternalLinkMode,
   publicCatalogCanonicalState,
   publicCatalogPath,
@@ -27,6 +28,7 @@ import type {
   PublicPageBlock,
 } from "./publicCatalogRenderContract";
 import {
+  readIndexableArticleIds,
   readIndexableProgramIds,
   readIndexableUniversityIds,
   resolvePublishedEntitySeoState,
@@ -649,6 +651,7 @@ async function readArticleDetail(
       translations: websiteBlogPostsTable.translationsJson,
       publishedAt: websiteBlogPostsTable.publishedAt,
       updatedAt: websiteBlogPostsTable.updatedAt,
+      categoryId: websiteBlogPostsTable.categoryId,
     })
     .from(websiteBlogPostsTable)
     .where(and(
@@ -708,6 +711,70 @@ async function readArticleDetail(
     locale: route.locale,
     slug: post.slug,
   });
+  const internalLinkMode = parsePublicWebInternalLinkMode(process.env.PUBLIC_WEB_INTERNAL_LINK_MODE);
+  const relatedCandidates = internalLinkMode === "published" && post.categoryId !== null
+    ? await db
+      .select({
+        id: websiteBlogPostsTable.id,
+        title: websiteBlogPostsTable.title,
+        slug: websiteBlogPostsTable.slug,
+        excerpt: websiteBlogPostsTable.excerpt,
+        content: websiteBlogPostsTable.content,
+        locale: websiteBlogPostsTable.locale,
+        translations: websiteBlogPostsTable.translationsJson,
+        publishedAt: websiteBlogPostsTable.publishedAt,
+      })
+      .from(websiteBlogPostsTable)
+      .where(and(
+        ne(websiteBlogPostsTable.id, post.id),
+        eq(websiteBlogPostsTable.categoryId, post.categoryId),
+        eq(websiteBlogPostsTable.status, "published"),
+        isNotNull(websiteBlogPostsTable.publishedAt),
+        lte(websiteBlogPostsTable.publishedAt, new Date()),
+        or(
+          eq(websiteBlogPostsTable.locale, route.locale),
+          sql`${websiteBlogPostsTable.translationsJson} ? ${route.locale}`,
+        ),
+      ))
+      .orderBy(desc(websiteBlogPostsTable.publishedAt), desc(websiteBlogPostsTable.id))
+      .limit(PUBLIC_CATALOG_RELATED_CANDIDATE_LIMIT)
+    : [];
+  const localizedRelatedCandidates = relatedCandidates.flatMap((candidate) => {
+    if (!candidate.publishedAt) return [];
+    const candidateTranslations = isRecord(candidate.translations) ? candidate.translations : {};
+    const candidateTranslation = isRecord(candidateTranslations[route.locale])
+      ? candidateTranslations[route.locale] as Record<string, unknown>
+      : null;
+    const candidateIsSource = String(candidate.locale || "en").toLowerCase() === route.locale;
+    const candidateTitle = candidateIsSource
+      ? candidate.title.trim()
+      : boundedString(candidateTranslation?.title, 500).trim();
+    const candidateBody = candidateIsSource
+      ? boundedString(isRecord(candidate.content) ? candidate.content.body : null, 200_000).trim()
+      : boundedString(candidateTranslation?.body, 200_000).trim();
+    if (!candidateTitle || !candidateBody) return [];
+    return [{
+      id: candidate.id,
+      title: candidateTitle,
+      excerpt: candidateIsSource
+        ? candidate.excerpt
+        : boundedString(candidateTranslation?.excerpt, 2_000).trim() || null,
+      publishedAt: candidate.publishedAt.toISOString(),
+      canonicalPath: buildPublicWebCanonicalPath({
+        entityType: "ARTICLE",
+        entityId: candidate.id,
+        locale: route.locale,
+        slug: candidate.slug,
+      }),
+    }];
+  });
+  const indexableRelatedIds = await readIndexableArticleIds({
+    locale: route.locale,
+    articleIds: localizedRelatedCandidates.map((candidate) => candidate.id),
+  });
+  const relatedArticles = localizedRelatedCandidates
+    .filter((candidate) => indexableRelatedIds.has(candidate.id))
+    .slice(0, PUBLIC_GUIDE_RELATED_LIMIT);
   return {
     kind: "article_detail",
     locale: route.locale,
@@ -716,6 +783,7 @@ async function readArticleDetail(
     description: boundedText(metaDescription || excerpt, title),
     indexable: seoState.indexable && translationAvailable && body.trim().length > 0,
     alternatePaths: seoState.alternates,
+    relatedArticles,
     article: {
       id: post.id,
       title,

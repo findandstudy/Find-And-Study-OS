@@ -20,12 +20,20 @@ type GuideResponse = {
     updatedAt: string;
     readTime: number | null;
   };
+  related: Array<{
+    id: number;
+    title: string;
+    excerpt: string | null;
+    publishedAt: string;
+    canonicalPath: string;
+  }>;
   meta: {
     title: string;
     description: string;
     indexable: boolean;
     canonicalPath: string;
     alternatePaths: Partial<Record<Language, string>>;
+    internalLinkPolicy: "PUBLISHED_INDEXABLE_ONLY" | "DISABLED_OR_EMPTY";
   };
 };
 
@@ -124,6 +132,25 @@ export default function GuideDetail({ routeKey }: { routeKey: string }) {
           dangerouslySetInnerHTML={{ __html: safeGuideHtml(guide.data.body) }}
         />
       </article>
+      {guide.related.length > 0 ? (
+        <section className="mt-16 border-t border-border pt-10" aria-label={t("blog.badge")}>
+          <h2 className="font-display text-2xl font-bold">{t("blog.badge")}</h2>
+          <div className="mt-6 grid gap-5 sm:grid-cols-2">
+            {guide.related.map((item) => (
+              <Link
+                key={item.id}
+                href={item.canonicalPath}
+                className="rounded-2xl border border-border/60 bg-card p-5 transition-all hover:-translate-y-1 hover:border-primary/30 hover:shadow-md"
+              >
+                <p className="text-xs text-muted-foreground">{new Date(item.publishedAt).toLocaleDateString(lang)}</p>
+                <h3 className="mt-2 line-clamp-2 font-bold text-foreground">{item.title}</h3>
+                {item.excerpt ? <p className="mt-3 line-clamp-3 text-sm text-muted-foreground">{item.excerpt}</p> : null}
+                <span className="mt-4 inline-flex items-center text-sm font-semibold text-primary">{t("blog.readMore")}</span>
+              </Link>
+            ))}
+          </div>
+        </section>
+      ) : null}
     </main>
   );
 }

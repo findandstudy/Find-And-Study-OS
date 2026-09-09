@@ -191,6 +191,13 @@ export type PublicCatalogRenderModel =
       description: string;
       indexable: boolean;
       alternatePaths: Partial<Record<ProgramSupportedLocale, string>>;
+      relatedArticles: Array<{
+        id: number;
+        title: string;
+        excerpt: string | null;
+        publishedAt: string;
+        canonicalPath: string;
+      }>;
       article: {
         id: number;
         title: string;
@@ -503,6 +510,9 @@ function articlePlainText(value: string): string {
 function renderArticleDetail(model: Extract<PublicCatalogRenderModel, { kind: "article_detail" }>): string {
   const article = model.article;
   const body = articlePlainText(article.body);
+  const related = model.relatedArticles.length > 0
+    ? `<section class="mt-14" aria-label="Related guides"><h2 class="text-2xl font-bold">Related guides</h2><div class="mt-5 grid gap-4 sm:grid-cols-2">${model.relatedArticles.map((item) => `<article><a href="${escapeHtml(item.canonicalPath)}" class="font-semibold">${escapeHtml(item.title)}</a>${item.excerpt ? `<p>${escapeHtml(item.excerpt)}</p>` : ""}</article>`).join("")}</div></section>`
+    : "";
   return `<main data-public-render-shell="article-detail" class="mx-auto max-w-3xl px-4 py-24">
     <nav aria-label="Breadcrumb"><a href="/${escapeHtml(model.locale)}/blog">Blog</a> / <span>${escapeHtml(article.title)}</span></nav>
     <article class="mt-8">
@@ -513,6 +523,7 @@ function renderArticleDetail(model: Extract<PublicCatalogRenderModel, { kind: "a
       </header>
       <div class="mt-10 whitespace-pre-line leading-7">${escapeHtml(body)}</div>
     </article>
+    ${related}
   </main>`;
 }
 

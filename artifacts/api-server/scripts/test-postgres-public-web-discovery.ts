@@ -352,6 +352,20 @@ test("published discovery is tenant-scoped and excludes NOINDEX or undeliverable
       [programId],
     );
     assert.deepEqual(
+      [...await discovery.readIndexableArticleIds({
+        locale: "en",
+        articleIds: [articleId, articleId, 0, 2_147_483_648],
+      })],
+      [articleId],
+    );
+    assert.deepEqual(
+      [...await discovery.readIndexableArticleIds({
+        locale: "tr",
+        articleIds: [articleId],
+      })],
+      [articleId],
+    );
+    assert.deepEqual(
       [...await discovery.readIndexableUniversityIds({
         locale: "en",
         universityIds: [universityId, universityId, 0],

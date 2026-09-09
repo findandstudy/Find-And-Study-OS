@@ -195,6 +195,10 @@ bilinmeyen mode fail-closed olarak `off` olur.
 - üniversite detayındaki program kartları ile destinasyon detayındaki üniversite
   ve program kartları aynı kapıda toplu, en fazla 64 ID'lik RLS-scope sorgularıyla
   doğrulanır; N+1 publication sorgusu üretilmez;
+- rehber detayındaki aynı kategori önerileri en fazla 32 adaydan üretilir; yalnız
+  ilgili locale'de title+body taşıyan ve governed `PUBLISHED + INDEX` durumundaki
+  ilk 6 rehber API, istemci ve SSR linkine dönüşür. Mod kapalıysa veya kategori
+  yoksa yeni rehber linki üretilmez;
 - entity SEO projection'ı 5 dakika ve en fazla 5.000 anahtarla cache edilir;
   aynı cold key sorguları birleştirilir ve hedefli invalidation yüzeyi sağlanır;
 - migration `0119_public_web_discovery_indexes` yalnız partial lookup indeksi
@@ -234,7 +238,7 @@ production kapasite iddiası oluşturmaz.
 7. Website Blog rehber listesi, detay API/SSR, canonical/hreflang ve sitemap. **Yerelde tamamlandı.**
 8. Genel CMS page delivery ve reserved-route registry. **Yerelde tamamlandı.**
 9. Prototiplerin mevcut tasarım sistemiyle program/üniversite template'lerine dönüştürülmesi.
-10. Related entity ve internal-link graph; kalite eşiği geçmeyen sayfalara link/index üretmeme. **Program, üniversite ve destinasyon graph dilimleri yerelde tamamlandı; rehber graph'ı bekliyor.**
+10. Related entity ve internal-link graph; kalite eşiği geçmeyen sayfalara link/index üretmeme. **Program, üniversite, destinasyon ve rehber graph dilimleri yerelde tamamlandı.**
 
 ## NO-GO sınırları
 

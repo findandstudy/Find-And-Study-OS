@@ -211,6 +211,13 @@ test("article detail emits safe semantic HTML and Article structured data", () =
     description: "Verified guide summary.",
     indexable: true,
     alternatePaths: { en: "/en/guides/student-visa-19" },
+    relatedArticles: [{
+      id: 20,
+      title: "Application evidence guide",
+      excerpt: "Prepare your evidence.",
+      publishedAt: "2026-09-08T10:00:00.000Z",
+      canonicalPath: "/en/guides/application-evidence-20",
+    }],
     article: {
       id: 19,
       title: "Student visa guide",
@@ -231,6 +238,7 @@ test("article detail emits safe semantic HTML and Article structured data", () =
   assert.match(html, /"@type":"Article"/);
   assert.doesNotMatch(html, /<script>alert\(1\)<\/script>/);
   assert.match(html, /Prepare alert\(1\) Use verified evidence/);
+  assert.match(html, /href="\/en\/guides\/application-evidence-20"/);
   assert.match(html, /hreflang="x-default"/);
 });
 
@@ -276,6 +284,7 @@ test("read model is on-demand, bounded, stale-while-revalidate, and detail index
   assert.match(readModel, /async function readUniversityDetail/);
   assert.match(readModel, /async function readDestinationDetail/);
   assert.match(readModel, /async function readArticleDetail/);
+  assert.match(readModel, /readIndexableArticleIds/);
   assert.match(readModel, /async function readPageDetail/);
   assert.match(readModel, /websitePageVersionsTable/);
   assert.match(readModel, /PUBLIC_PAGE_BLOCK_TYPES/);

@@ -441,6 +441,47 @@ export async function readIndexableProgramIds(input: {
   });
 }
 
+export async function readIndexableArticleIds(input: {
+  locale: ProgramSupportedLocale;
+  articleIds: readonly number[];
+}): Promise<Set<number>> {
+  const config = publicWebDiscoveryConfigFromEnvironment();
+  if (config.mode !== "published" || !config.scope) return new Set();
+  const scope = config.scope;
+  const articleIds = [...new Set(input.articleIds)]
+    .filter((id) => Number.isSafeInteger(id) && id > 0 && id <= 2_147_483_647)
+    .slice(0, 64);
+  if (articleIds.length === 0) return new Set();
+  return withPublicScope(scope, async (client) => {
+    const result = await client.query<{ blog_post_id: number }>(
+      `SELECT content.blog_post_id
+         FROM public_web_content_records content
+         JOIN public_web_publication_states state
+           ON state.tenant_id=content.tenant_id
+          AND state.organization_id=content.organization_id
+          AND state.content_record_id=content.id
+         JOIN website_blog_posts post ON post.id=content.blog_post_id
+        WHERE content.tenant_id=$1 AND content.organization_id=$2
+          AND content.entity_type='ARTICLE' AND content.locale=$3
+          AND content.blog_post_id=ANY($4::integer[])
+          AND state.status='PUBLISHED' AND state.index_state='INDEX'
+          AND post.status='published' AND post.published_at IS NOT NULL
+          AND post.published_at <= now()
+          AND (
+            post.locale=content.locale
+            OR (
+              length(trim(COALESCE(post.translations_json->content.locale->>'title',''))) > 0
+              AND length(trim(COALESCE(post.translations_json->content.locale->>'body',''))) > 0
+            )
+          )
+        ORDER BY content.blog_post_id
+        LIMIT 64`,
+      [scope.tenantId, scope.organizationId, input.locale, articleIds],
+    );
+    return new Set(result.rows.map((row) => Number(row.blog_post_id)));
+  });
+}
+
 export async function readIndexableUniversityIds(input: {
   locale: ProgramSupportedLocale;
   universityIds: readonly number[];

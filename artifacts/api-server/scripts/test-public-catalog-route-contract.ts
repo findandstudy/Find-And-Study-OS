@@ -94,6 +94,8 @@ test("public catalogue detail APIs are bounded and never select private CRM fiel
   assert.match(publicWeb, /\.limit\(limit \+ 1\)/);
   assert.match(publicWeb, /Content-Location/);
   assert.match(publicWeb, /PUBLIC_GUIDE_ROUTE_INVALID/);
+  assert.match(publicWeb, /related: rendered\.value\.relatedArticles/);
+  assert.match(publicWeb, /PUBLISHED_INDEXABLE_ONLY/);
   assert.match(publicWeb, /PUBLIC_PAGE_ROUTE_INVALID/);
   assert.match(publicWeb, /PUBLIC_PAGE_NOT_FOUND/);
   assert.match(websiteAdmin, /translationsJson: page\.translationsJson/);
