@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { customFetch } from "@workspace/api-client-react";
-import DOMPurify from "isomorphic-dompurify";
 import { ArrowLeft, BookOpen, Calendar, Clock } from "lucide-react";
 import { Link } from "wouter";
 
@@ -9,6 +8,7 @@ import { useI18n } from "@/hooks/use-i18n";
 import { SITE_NAME, SITE_URL, useJsonLd } from "@/hooks/use-json-ld";
 import { useSeo } from "@/hooks/use-seo";
 import type { Language } from "@/lib/i18n";
+import { sanitizePublicRichText } from "@/lib/publicHtmlSanitizer";
 
 type GuideResponse = {
   data: {
@@ -36,21 +36,6 @@ type GuideResponse = {
     internalLinkPolicy: "PUBLISHED_INDEXABLE_ONLY" | "DISABLED_OR_EMPTY";
   };
 };
-
-const GUIDE_ALLOWED_TAGS = [
-  "p", "br", "strong", "em", "b", "i", "u", "a", "ul", "ol", "li",
-  "h2", "h3", "h4", "blockquote", "code", "pre", "span", "hr",
-];
-
-function safeGuideHtml(value: string): string {
-  return DOMPurify.sanitize(value, {
-    ALLOWED_TAGS: GUIDE_ALLOWED_TAGS,
-    ALLOWED_ATTR: ["href", "target", "rel"],
-    ALLOWED_URI_REGEXP: /^(?:https?:|mailto:|tel:|\/|#)/i,
-    FORBID_TAGS: ["script", "style", "iframe", "object", "embed", "form"],
-    FORBID_ATTR: ["style", "onerror", "onload", "onclick", "onmouseover", "onfocus"],
-  });
-}
 
 export default function GuideDetail({ routeKey }: { routeKey: string }) {
   const { t, lang, localePath } = useI18n();
@@ -129,7 +114,7 @@ export default function GuideDetail({ routeKey }: { routeKey: string }) {
         </header>
         <div
           className="prose prose-slate mt-10 max-w-none dark:prose-invert"
-          dangerouslySetInnerHTML={{ __html: safeGuideHtml(guide.data.body) }}
+          dangerouslySetInnerHTML={{ __html: sanitizePublicRichText(guide.data.body) }}
         />
       </article>
       {guide.related.length > 0 ? (

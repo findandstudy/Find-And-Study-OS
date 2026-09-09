@@ -49,6 +49,11 @@ test("public web pure checks are wired into convergence and staging gates", asyn
     assertExactlyOnce(convergence, `run ${script}`, "convergence workflow");
     assertExactlyOnce(staging, `run ${script}`, "staging workflow");
   }
+
+  const publicTemplateCommand =
+    "pnpm --filter @workspace/edcons run test:public-detail-templates";
+  assertExactlyOnce(convergence, publicTemplateCommand, "convergence workflow");
+  assertExactlyOnce(staging, publicTemplateCommand, "staging workflow");
 });
 
 test("public web PostgreSQL checks run once before disposable database reset", async () => {

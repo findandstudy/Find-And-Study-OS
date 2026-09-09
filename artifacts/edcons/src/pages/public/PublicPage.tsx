@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import { customFetch } from "@workspace/api-client-react";
-import DOMPurify from "isomorphic-dompurify";
 import { ArrowLeft, FileText } from "lucide-react";
 import { Link } from "wouter";
 
@@ -9,6 +8,7 @@ import { useI18n } from "@/hooks/use-i18n";
 import { SITE_NAME, SITE_URL, useJsonLd } from "@/hooks/use-json-ld";
 import { useSeo } from "@/hooks/use-seo";
 import type { Language } from "@/lib/i18n";
+import { sanitizePublicRichText } from "@/lib/publicHtmlSanitizer";
 
 type PageBlock = {
   blockType: string;
@@ -34,21 +34,6 @@ type PageResponse = {
     alternatePaths: Partial<Record<Language, string>>;
   };
 };
-
-const RICH_TEXT_TAGS = [
-  "p", "br", "strong", "em", "b", "i", "u", "a", "ul", "ol", "li",
-  "h2", "h3", "h4", "blockquote", "code", "pre", "span", "hr",
-];
-
-function safeRichText(value: unknown): string {
-  return DOMPurify.sanitize(typeof value === "string" ? value : "", {
-    ALLOWED_TAGS: RICH_TEXT_TAGS,
-    ALLOWED_ATTR: ["href", "target", "rel"],
-    ALLOWED_URI_REGEXP: /^(?:https?:|mailto:|tel:|\/|#)/i,
-    FORBID_TAGS: ["script", "style", "iframe", "object", "embed", "form"],
-    FORBID_ATTR: ["style", "onerror", "onload", "onclick", "onmouseover", "onfocus"],
-  });
-}
 
 function text(value: unknown, maximum = 2_000): string {
   return String(typeof value === "string" || typeof value === "number" ? value : "")
@@ -121,7 +106,7 @@ function Block({ block }: { block: PageBlock }) {
       );
     }
     case "rich_text":
-      return <section className="prose prose-slate mx-auto max-w-3xl px-4 py-12 dark:prose-invert" dangerouslySetInnerHTML={{ __html: safeRichText(content.content) }} />;
+      return <section className="prose prose-slate mx-auto max-w-3xl px-4 py-12 dark:prose-invert" dangerouslySetInnerHTML={{ __html: sanitizePublicRichText(content.content) }} />;
     case "stats_strip":
       return (
         <section className="mx-auto grid max-w-6xl gap-6 px-4 py-12 text-center sm:grid-cols-2 lg:grid-cols-4">

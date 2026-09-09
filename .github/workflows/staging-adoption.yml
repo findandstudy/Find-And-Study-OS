@@ -87,6 +87,7 @@ jobs:
           pnpm --filter @workspace/api-server run test:public-catalog-render
           pnpm --filter @workspace/api-server run test:public-web-discovery
           pnpm --filter @workspace/api-server run test:public-web-scale
+          pnpm --filter @workspace/edcons run test:public-detail-templates
           pnpm exec playwright test --config=playwright.staging.config.ts --list
           pnpm --filter @workspace/api-server run build
           pnpm --filter @workspace/edcons run build

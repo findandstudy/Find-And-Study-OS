@@ -92,6 +92,7 @@ jobs:
           pnpm --filter @workspace/api-server run test:public-catalog-render
           pnpm --filter @workspace/api-server run test:public-web-discovery
           pnpm --filter @workspace/api-server run test:public-web-scale
+          pnpm --filter @workspace/edcons run test:public-detail-templates
 
       - name: Verify frozen convergence review manifest
         if: github.event_name == 'workflow_dispatch' || github.event.pull_request.head.ref == 'codex/live-control-plane-convergence-20260831'

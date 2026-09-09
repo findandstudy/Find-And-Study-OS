@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import { sanitizePublicRichText } from "../src/lib/publicHtmlSanitizer";
 
 const program = readFileSync(new URL("../src/pages/public/ProgramDetail.tsx", import.meta.url), "utf8");
 const university = readFileSync(new URL("../src/pages/public/UniversityDetail.tsx", import.meta.url), "utf8");
@@ -32,4 +33,17 @@ test("destination collection requests the active locale and follows canonical pa
   assert.match(countries, /public\/destinations\?locale=/);
   assert.match(countries, /\[lang\]/);
   assert.match(countries, /dest\.canonicalPath \|\| localePath/);
+});
+
+test("public rich text strips executable markup and new-tab opener control", () => {
+  const sanitized = sanitizePublicRichText(`
+    <p style="color:red" onclick="alert(1)">Safe <strong>content</strong></p>
+    <a href="javascript:alert(1)" target="_blank" rel="opener">unsafe</a>
+    <a href="https://example.edu/path">allowed</a>
+    <svg><a href="https://evil.example">svg</a></svg>
+    <script>alert(1)</script>
+  `);
+  assert.match(sanitized, /<strong>content<\/strong>/);
+  assert.match(sanitized, /href="https:\/\/example\.edu\/path"/);
+  assert.doesNotMatch(sanitized, /javascript:|onclick|style=|target=|rel=|<svg|<script/i);
 });
