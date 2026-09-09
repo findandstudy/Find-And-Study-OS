@@ -1,9 +1,9 @@
 # Public Web Foundation — Yerel Gate Kanıtı
 
-Tarih: 9 Eylül 2026  
-Durum: **Yerel uygulama tamamlandı; staging/production aktivasyonu NO-GO**  
-Branch: `codex/public-web-foundation-20260908`  
-Code-bearing head: `f6ab2b4b30f9973765dac5544ab0363494fe762b`
+Tarih: 9 Eylül 2026
+Durum: **Yerel staging adayı yeşil; staging/production aktivasyonu NO-GO**
+Branch: `codex/public-web-foundation-20260908`
+Code/config-bearing head: `cce81223c7399bb6f3b33ade7a52101c8f825e64`
 Karşılaştırma tabanı: `e6edad6a` (`origin/codex/operations-social-staging-20260905`)
 
 ## Teslim edilen dilim
@@ -41,6 +41,8 @@ Karşılaştırma tabanı: `e6edad6a` (`origin/codex/operations-social-staging-2
 | Public web discovery PostgreSQL | PASS — 1/1 |
 | Public web scale gate | PASS — 3/3 |
 | Security regressions | PASS — 35/35 |
+| Rate-limit/IP security | PASS — 6/6 |
+| Public web CI wiring contract | PASS — 3/3 |
 
 Derlemedeki mevcut source-map lookup ve 500 kB üzeri chunk mesajları uyarıdır; build'i başarısız kılmamıştır. Bundle ayrıştırma performans işi ayrı bir kapı olarak korunur.
 
@@ -50,9 +52,9 @@ Araç yalnız açık opt-in ile, `fas_migrator@127.0.0.1:5433/fasos_apply_local`
 
 | Ölçüm | Örnek | p95 |
 |---|---:|---:|
-| SSR origin | 23 | 30,5 ms |
-| SSR cache hit | 100 | 26,4 ms |
-| Public API | 40 | 23,3 ms |
+| SSR origin | 23 | 20,2 ms |
+| SSR cache hit | 100 | 20,5 ms |
+| Public API | 40 | 23,8 ms |
 
 Bu sayılar yerel sentetik ölçümdür; gerçek edge-cache, ağ, CDN, bot trafiği veya kullanıcı Core Web Vitals kanıtı değildir.
 
@@ -71,6 +73,7 @@ Staging ve production ortamları bu çalışma tarafından değiştirilmedi. Aş
 ```text
 PUBLIC_WEB_RENDER_MODE=off
 PUBLIC_WEB_RENDER_ALLOWLIST=
+PUBLIC_WEB_INTERNAL_LINK_MODE=off
 PUBLIC_WEB_SITEMAP_MODE=off
 PUBLIC_WEB_TENANT_ID=
 PUBLIC_WEB_ORGANIZATION_ID=
@@ -90,7 +93,9 @@ Geçersiz rollout modu veya geçersiz tenant/organization UUID'si fail-closed da
 1. Staging smoke/UAT, gerçek crawler davranışı, Lighthouse/Core Web Vitals, CDN cache ve invalidation kanıtı alınmamıştır.
 2. Bulk content import/backfill ve AI translation publication otomatik olarak açılmamıştır.
 3. Frontend build başarılıdır; bazı dil paketleri 500 kB uyarı eşiğini aşmaktadır ve gerçek trafik ölçümüyle ayrı bundle bütçesi uygulanmalıdır.
-4. GitHub push/PR, bağımsız review, CI ve deployment bu yerel gate'in dışında kalır.
+4. Public-web saf ve PostgreSQL testleri convergence CI'a, saf testler staging
+   adoption CI'a bağlanmıştır. GitHub push/PR, remote exact-head CI,
+   bağımsız review ve deployment bu yerel gate'in dışında kalır.
 5. Production wiring, veri backfill veya public index açma için ayrı açık onay ve rollback planı gerekir.
 
 Bu belge staging veya production deploy yetkisi değildir. Projenin `AGENTS.md` içindeki daha geniş NO-GO, review ve production güvenlik kapıları aynen geçerlidir.
