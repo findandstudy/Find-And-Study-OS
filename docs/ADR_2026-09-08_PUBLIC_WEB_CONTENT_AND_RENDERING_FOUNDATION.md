@@ -280,8 +280,11 @@ production kapasite iddiası oluşturmaz.
     8 MiB canonical giriş ve 4 eşzamanlı source read ile sınırlı batch
     planlayıcısı duplicate hedef/idempotency sınıflarını DB çağrısından önce
     reddeder, kayıt hatalarını izole eder ve yalnız doğrulanmış plan + SHA-256
-    üretir. HTTP/UI wiring, command execution ve kalıcı role grant bilinçli
-    olarak yoktur.**
+    üretir. Batch executor bu SHA'yı güncel kaynaklarla yeniden üretir; her kayıt
+    için güncel selection-bound authority/capability kararını tekrar alır,
+    impersonation'ı reddeder, store concurrency'sini 2 ile sınırlar ve yalnız
+    exact kimlikli `DRAFT + NOINDEX` sonucunu kabul eder. HTTP/UI wiring ve
+    kalıcı role grant bilinçli olarak yoktur.**
 
 ## NO-GO sınırları
 
@@ -295,3 +298,5 @@ production kapasite iddiası oluşturmaz.
 - Batch planı yürütme talimatı değildir; accepted kayıtlar ayrı ayrı güncel
   authority, idempotency ve source binding doğrulamasından geçmeden command'e
   dönüştürülemez.
+- Batch executor ayrı bir runtime endpoint değildir ve publish/index yetkisi
+  taşımaz; mevcut admin CMS CRUD rotalarının yerine geçmiş sayılmaz.

@@ -3,7 +3,7 @@
 Tarih: 9 Eylül 2026
 Durum: **Yerel staging adayı yeşil; staging/production aktivasyonu NO-GO**
 Branch: `codex/public-web-foundation-20260908`
-Code/config-bearing head: `4662c7eea98a80788f12e6cc1251d5c7f33ae69b`
+Code/config-bearing head: `9c3f07d2b6747a34956952ce0823299c6017673f`
 Karşılaştırma tabanı: `e6edad6a` (`origin/codex/operations-social-staging-20260905`)
 
 ## Teslim edilen dilim
@@ -39,6 +39,12 @@ Karşılaştırma tabanı: `e6edad6a` (`origin/codex/operations-social-staging-2
   veya geçici olarak çözülemeyen bir kayıt diğer geçerli kayıtları düşürmez.
   Plan yalnız doğrulanmış request/source binding ve kararlı SHA-256 üretir;
   command çalıştırmaz, veritabanına yazmaz ve yayın/index kararı vermez.
+- Batch executor yalnız önceden görülen plan SHA-256 güncel kaynaklarla yeniden
+  üretilebiliyorsa ilerler. Her accepted kayıt için selection-bound active-context
+  ve `public_web.content.write` yetkisini execution anında tekrar değerlendirir;
+  impersonation'ı reddeder ve en fazla 2 store yazısını eşzamanlı yürütür.
+  Store cevabı exact kimlik/shape ile doğrulanır; satır hataları güvenli kodlarla
+  izole edilir ve başarılı sonuç yine yalnız `DRAFT + NOINDEX` olabilir.
 
 ## Exact-head doğrulama özeti
 
@@ -62,7 +68,8 @@ Karşılaştırma tabanı: `e6edad6a` (`origin/codex/operations-social-staging-2
 | Draft intake builder/command/store | PASS — 12/12 |
 | Draft intake PostgreSQL | PASS — 1/1 |
 | Draft source resolver | PASS — saf 4/4 + PostgreSQL 1/1 |
-| Draft batch planner | PASS — 4/4 |
+| Draft batch planner | PASS — 6/6 |
+| Draft batch executor | PASS — 5/5 |
 | Migration authority | PASS — 31/31 + 1 ortam SKIP |
 | Security regressions | PASS — 37/37 |
 | Rate-limit/IP security | PASS — 6/6 |
@@ -119,7 +126,7 @@ Geçersiz rollout modu veya geçersiz tenant/organization UUID'si fail-closed da
 ## Bilinen sınırlar ve sonraki kapılar
 
 1. Staging smoke/UAT, gerçek crawler davranışı, Lighthouse/Core Web Vitals, CDN cache ve invalidation kanıtı alınmamıştır. Yerel tarayıcıda masaüstü ve 390 px mobil ana sayfa/navigation kontrolü yatay taşma ve console error üretmedi; gerçek city içeriği henüz staging UAT görmedi.
-2. Bulk content import/backfill ve AI translation publication otomatik olarak açılmamıştır. Yeni draft intake adapter'ı ve bounded batch planlayıcısı runtime route'una veya admin formuna bağlanmamıştır; planlayıcı tek başına hiçbir command çalıştırmaz.
+2. Bulk content import/backfill ve AI translation publication otomatik olarak açılmamıştır. Yeni draft intake adapter'ı, bounded batch planlayıcısı ve executor runtime route'una veya admin formuna bağlanmamıştır; mevcut CMS/website CRUD yüzeyi bu governed command yoluna taşınmamıştır.
 3. Frontend build başarılıdır; bazı dil paketleri 500 kB uyarı eşiğini aşmaktadır ve gerçek trafik ölçümüyle ayrı bundle bütçesi uygulanmalıdır.
 4. Public-web saf ve PostgreSQL testleri convergence CI'a, saf testler staging
    adoption CI'a bağlanmıştır. GitHub push/PR, remote exact-head CI,
