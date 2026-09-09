@@ -107,6 +107,13 @@ jobs:
       - name: Type-check the workspace
         run: pnpm run typecheck
 
+      - name: Build the deployable applications and enforce public bundle budgets
+        env:
+          NODE_ENV: production
+        run: |
+          pnpm --filter @workspace/api-server run build
+          pnpm --filter @workspace/edcons run build
+
       - name: Verify synchronized UI translations
         run: pnpm --filter @workspace/edcons run check:i18n
 
