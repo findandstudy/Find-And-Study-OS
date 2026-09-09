@@ -83,6 +83,7 @@ jobs:
           pnpm --filter @workspace/api-server run test:public-web-publication-read-model
           pnpm --filter @workspace/api-server run test:public-web-draft-intake
           pnpm --filter @workspace/api-server run test:public-web-draft-intake-builder
+          pnpm --filter @workspace/api-server run test:public-web-draft-batch-planner
           pnpm --filter @workspace/api-server run test:public-web-draft-source-resolver
           pnpm --filter @workspace/api-server run test:public-web-draft-intake-store
           pnpm --filter @workspace/api-server run test:public-localized-entities

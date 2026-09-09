@@ -22,6 +22,7 @@ const purePublicWebChecks = [
   "test:public-web-publication-read-model",
   "test:public-web-draft-intake",
   "test:public-web-draft-intake-builder",
+  "test:public-web-draft-batch-planner",
   "test:public-web-draft-source-resolver",
   "test:public-web-draft-intake-store",
   "test:public-localized-entities",
