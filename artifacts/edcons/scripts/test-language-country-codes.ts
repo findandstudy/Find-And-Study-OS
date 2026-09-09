@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import { CORPORATE_FACTS } from "@workspace/corporate-facts";
 
 import {
   LANGUAGE_COUNTRY_CODES,
+  LANGUAGE_META,
   SUPPORTED_LANGUAGES,
 } from "../src/lib/i18n/index.js";
 
@@ -34,6 +36,10 @@ test("every supported language has its canonical flag country", () => {
     it: "IT",
   });
   assert.deepEqual(Object.keys(LANGUAGE_COUNTRY_CODES), [...SUPPORTED_LANGUAGES]);
+  assert.deepEqual(
+    [...CORPORATE_FACTS.supportedLanguages],
+    SUPPORTED_LANGUAGES.map((code) => LANGUAGE_META[code].name),
+  );
 });
 
 test("the public language selector uses the canonical mapping without a GB fallback", () => {
