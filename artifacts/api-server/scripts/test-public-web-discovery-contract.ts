@@ -128,6 +128,14 @@ test("read model is read-only, RLS-scoped and selects only published indexed rec
   assert.match(source, /export async function readIndexableProgramIds/);
   assert.match(source, /export async function readIndexableArticleIds/);
   assert.match(source, /export async function readIndexableUniversityIds/);
+  assert.match(source, /export async function readPublishedLocalizedEntity/);
+  assert.match(source, /export async function resolvePublishedLocalizedDestinationRoute/);
+  assert.match(source, /content\.canonical_path=\$4/);
+  assert.match(source, /localizedDeliveryMode/);
+  assert.match(source, /revision\.id=state\.revision_id/);
+  assert.match(source, /revision\.quality_status='PASS'/);
+  assert.match(source, /revision\.source_coverage='COMPLETE'/);
+  assert.match(source, /CASE WHEN content\.locale='en' THEN 'SOURCE' ELSE 'PUBLISHED' END/);
   assert.match(source, /content\.program_id=ANY\(\$4::integer\[\]\)/);
   assert.match(source, /LIMIT 64/);
   assert.doesNotMatch(source, /service_fee|commission|contact_person/i);

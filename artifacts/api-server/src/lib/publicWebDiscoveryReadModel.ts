@@ -11,6 +11,11 @@ import {
   type PublicWebSitemapEntry,
 } from "./publicWebDiscoveryContract";
 import type { ProgramSupportedLocale } from "./programTranslationContract";
+import type {
+  PublicLocalizedDestinationRouteResolution,
+  PublicLocalizedEntityDelivery,
+  PublicLocalizedEntitySnapshot,
+} from "./publicLocalizedEntityContract";
 
 type RawCount = { entity_type: string; locale: string; count: string };
 type RawSitemapRow = {
@@ -26,6 +31,7 @@ export type PublicEntitySeoState = {
 };
 
 type PublicSeoEntityType = "program" | "university" | "destination" | "article" | "page";
+type PublicLocalizedEntityType = "university" | "destination";
 
 const ENTITY_ID_COLUMNS: Record<
   PublicSeoEntityType,
@@ -41,6 +47,49 @@ const SEO_CACHE_TTL_MS = 5 * 60_000;
 const SEO_CACHE_MAX_ENTRIES = 5_000;
 const seoCache = new Map<string, { expiresAt: number; value: PublicEntitySeoState }>();
 const seoInFlight = new Map<string, Promise<PublicEntitySeoState>>();
+
+type RawLocalizedEntityRow = {
+  entity_id?: number;
+  canonical_path: string;
+  title: string;
+  summary: string | null;
+  content_json: unknown;
+  index_state: string;
+};
+
+function localizedDeliveryMode(config: PublicWebDiscoveryConfig): "off" | "published" {
+  if (config.mode === "published" && config.scope) return "published";
+  return String(process.env.PUBLIC_WEB_SITEMAP_MODE ?? "")
+    .trim()
+    .toLocaleLowerCase("en-US") === "published"
+    ? "published"
+    : "off";
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function parseLocalizedEntityRow(row: RawLocalizedEntityRow | undefined): PublicLocalizedEntitySnapshot | null {
+  if (!row || !isPlainRecord(row.content_json)) return null;
+  const title = typeof row.title === "string" ? row.title.trim() : "";
+  const summary = typeof row.summary === "string" ? row.summary.trim() : null;
+  if (
+    !title
+    || title.length > 500
+    || (summary !== null && summary.length > 4_000)
+    || (row.index_state !== "INDEX" && row.index_state !== "NOINDEX")
+  ) {
+    return null;
+  }
+  return {
+    canonicalPath: row.canonical_path,
+    title,
+    summary: summary || null,
+    content: row.content_json,
+    indexState: row.index_state,
+  };
+}
 
 function pruneSeoCache(now: number): void {
   for (const [key, entry] of seoCache) {
@@ -107,7 +156,19 @@ export async function readPublishedSitemapCounts(
                    AND translation.status='published'
               )
             ))
-            OR (content.entity_type IN ('UNIVERSITY','DESTINATION') AND content.locale='en')
+            OR (content.entity_type IN ('UNIVERSITY','DESTINATION') AND EXISTS (
+              SELECT 1 FROM public_web_content_revisions localized_revision
+               WHERE localized_revision.tenant_id=state.tenant_id
+                 AND localized_revision.organization_id=state.organization_id
+                 AND localized_revision.content_record_id=state.content_record_id
+                 AND localized_revision.id=state.revision_id
+                 AND localized_revision.quality_status='PASS'
+                 AND localized_revision.source_coverage='COMPLETE'
+                 AND localized_revision.translation_status=CASE WHEN content.locale='en' THEN 'SOURCE' ELSE 'PUBLISHED' END
+                 AND length(trim(localized_revision.title)) BETWEEN 1 AND 500
+                 AND octet_length(localized_revision.content_json::text) BETWEEN 1 AND 1048576
+                 AND octet_length(localized_revision.seo_json::text) <= 65536
+            ))
             OR (content.entity_type='ARTICLE' AND EXISTS (
               SELECT 1 FROM website_blog_posts post
                WHERE post.id=content.blog_post_id
@@ -192,7 +253,19 @@ export async function readPublishedSitemapPage(input: {
                      AND translation.status='published'
                 )
               ))
-              OR (content.entity_type IN ('UNIVERSITY','DESTINATION') AND content.locale='en')
+              OR (content.entity_type IN ('UNIVERSITY','DESTINATION') AND EXISTS (
+                SELECT 1 FROM public_web_content_revisions localized_revision
+                 WHERE localized_revision.tenant_id=state.tenant_id
+                   AND localized_revision.organization_id=state.organization_id
+                   AND localized_revision.content_record_id=state.content_record_id
+                   AND localized_revision.id=state.revision_id
+                   AND localized_revision.quality_status='PASS'
+                   AND localized_revision.source_coverage='COMPLETE'
+                   AND localized_revision.translation_status=CASE WHEN content.locale='en' THEN 'SOURCE' ELSE 'PUBLISHED' END
+                   AND length(trim(localized_revision.title)) BETWEEN 1 AND 500
+                   AND octet_length(localized_revision.content_json::text) BETWEEN 1 AND 1048576
+                   AND octet_length(localized_revision.seo_json::text) <= 65536
+              ))
               OR (content.entity_type='ARTICLE' AND EXISTS (
                 SELECT 1 FROM website_blog_posts post
                  WHERE post.id=content.blog_post_id
@@ -263,7 +336,19 @@ export async function readPublishedSitemapPage(input: {
                    AND alt_translation.locale=alt.locale
                    AND alt_translation.status='published'
               )
-            )) OR (page.entity_type IN ('UNIVERSITY','DESTINATION') AND alt.locale='en') OR (
+            )) OR (page.entity_type IN ('UNIVERSITY','DESTINATION') AND EXISTS (
+              SELECT 1 FROM public_web_content_revisions alt_revision
+               WHERE alt_revision.tenant_id=alt_state.tenant_id
+                 AND alt_revision.organization_id=alt_state.organization_id
+                 AND alt_revision.content_record_id=alt_state.content_record_id
+                 AND alt_revision.id=alt_state.revision_id
+                 AND alt_revision.quality_status='PASS'
+                 AND alt_revision.source_coverage='COMPLETE'
+                 AND alt_revision.translation_status=CASE WHEN alt.locale='en' THEN 'SOURCE' ELSE 'PUBLISHED' END
+                 AND length(trim(alt_revision.title)) BETWEEN 1 AND 500
+                 AND octet_length(alt_revision.content_json::text) BETWEEN 1 AND 1048576
+                 AND octet_length(alt_revision.seo_json::text) <= 65536
+            )) OR (
               page.entity_type='ARTICLE' AND EXISTS (
                 SELECT 1 FROM website_blog_posts alt_post
                  WHERE alt_post.id=alt.blog_post_id
@@ -345,7 +430,19 @@ export async function readPublishedEntitySeoState(input: {
                    AND translation.locale=content.locale
                    AND translation.status='published'
               )
-            )) OR (content.entity_type IN ('UNIVERSITY','DESTINATION') AND content.locale='en') OR (
+            )) OR (content.entity_type IN ('UNIVERSITY','DESTINATION') AND EXISTS (
+              SELECT 1 FROM public_web_content_revisions localized_revision
+               WHERE localized_revision.tenant_id=state.tenant_id
+                 AND localized_revision.organization_id=state.organization_id
+                 AND localized_revision.content_record_id=state.content_record_id
+                 AND localized_revision.id=state.revision_id
+                 AND localized_revision.quality_status='PASS'
+                 AND localized_revision.source_coverage='COMPLETE'
+                 AND localized_revision.translation_status=CASE WHEN content.locale='en' THEN 'SOURCE' ELSE 'PUBLISHED' END
+                 AND length(trim(localized_revision.title)) BETWEEN 1 AND 500
+                 AND octet_length(localized_revision.content_json::text) BETWEEN 1 AND 1048576
+                 AND octet_length(localized_revision.seo_json::text) <= 65536
+            )) OR (
               content.entity_type='ARTICLE' AND EXISTS (
                 SELECT 1 FROM website_blog_posts post
                  WHERE post.id=content.blog_post_id
@@ -400,6 +497,103 @@ export async function readPublishedEntitySeoState(input: {
       alternates,
     };
   });
+}
+
+export async function readPublishedLocalizedEntity(input: {
+  entityType: PublicLocalizedEntityType;
+  entityId: number;
+  locale: ProgramSupportedLocale;
+}): Promise<PublicLocalizedEntityDelivery> {
+  const config = publicWebDiscoveryConfigFromEnvironment();
+  if (config.mode !== "published" || !config.scope) {
+    return { mode: localizedDeliveryMode(config), snapshot: null };
+  }
+  const scope = config.scope;
+  if (!Number.isSafeInteger(input.entityId) || input.entityId < 1 || input.entityId > 2_147_483_647) {
+    return { mode: "published", snapshot: null };
+  }
+  const entityType = input.entityType.toUpperCase();
+  const idColumn = ENTITY_ID_COLUMNS[input.entityType];
+  const result = await withPublicScope(scope, async (client) => client.query<RawLocalizedEntityRow>(
+    `SELECT content.canonical_path,revision.title,revision.summary,
+            revision.content_json,state.index_state
+       FROM public_web_content_records content
+       JOIN public_web_publication_states state
+         ON state.tenant_id=content.tenant_id
+        AND state.organization_id=content.organization_id
+        AND state.content_record_id=content.id
+       JOIN public_web_content_revisions revision
+         ON revision.tenant_id=state.tenant_id
+        AND revision.organization_id=state.organization_id
+        AND revision.content_record_id=state.content_record_id
+        AND revision.id=state.revision_id
+      WHERE content.tenant_id=$1 AND content.organization_id=$2
+        AND content.entity_type=$3 AND content.${idColumn}=$4 AND content.locale=$5
+        AND state.status='PUBLISHED'
+        AND revision.quality_status='PASS'
+        AND revision.source_coverage='COMPLETE'
+        AND revision.translation_status=CASE WHEN content.locale='en' THEN 'SOURCE' ELSE 'PUBLISHED' END
+        AND length(trim(revision.title)) BETWEEN 1 AND 500
+        AND octet_length(COALESCE(revision.summary,'')) <= 4000
+        AND octet_length(revision.content_json::text) BETWEEN 1 AND 1048576
+        AND octet_length(revision.seo_json::text) <= 65536
+      ORDER BY revision.revision_number DESC
+      LIMIT 1`,
+    [scope.tenantId, scope.organizationId, entityType, input.entityId, input.locale],
+  ));
+  return { mode: "published", snapshot: parseLocalizedEntityRow(result.rows[0]) };
+}
+
+export async function resolvePublishedLocalizedDestinationRoute(input: {
+  locale: ProgramSupportedLocale;
+  slug: string;
+}): Promise<PublicLocalizedDestinationRouteResolution> {
+  const config = publicWebDiscoveryConfigFromEnvironment();
+  if (config.mode !== "published" || !config.scope) {
+    return { mode: localizedDeliveryMode(config), destinationId: null, snapshot: null };
+  }
+  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(input.slug) || input.slug.length > 180) {
+    return { mode: "published", destinationId: null, snapshot: null };
+  }
+  const scope = config.scope;
+  const canonicalPath = `/${input.locale}/destinations/${input.slug}`;
+  const result = await withPublicScope(scope, async (client) => client.query<RawLocalizedEntityRow>(
+    `SELECT content.destination_id AS entity_id,content.canonical_path,
+            revision.title,revision.summary,revision.content_json,state.index_state
+       FROM public_web_content_records content
+       JOIN public_web_publication_states state
+         ON state.tenant_id=content.tenant_id
+        AND state.organization_id=content.organization_id
+        AND state.content_record_id=content.id
+       JOIN public_web_content_revisions revision
+         ON revision.tenant_id=state.tenant_id
+        AND revision.organization_id=state.organization_id
+        AND revision.content_record_id=state.content_record_id
+        AND revision.id=state.revision_id
+      WHERE content.tenant_id=$1 AND content.organization_id=$2
+        AND content.entity_type='DESTINATION' AND content.locale=$3
+        AND content.canonical_path=$4
+        AND state.status='PUBLISHED'
+        AND revision.quality_status='PASS'
+        AND revision.source_coverage='COMPLETE'
+        AND revision.translation_status=CASE WHEN content.locale='en' THEN 'SOURCE' ELSE 'PUBLISHED' END
+        AND length(trim(revision.title)) BETWEEN 1 AND 500
+        AND octet_length(COALESCE(revision.summary,'')) <= 4000
+        AND octet_length(revision.content_json::text) BETWEEN 1 AND 1048576
+        AND octet_length(revision.seo_json::text) <= 65536
+      LIMIT 1`,
+    [scope.tenantId, scope.organizationId, input.locale, canonicalPath],
+  ));
+  const row = result.rows[0];
+  const snapshot = parseLocalizedEntityRow(row);
+  const destinationId = Number(row?.entity_id);
+  return {
+    mode: "published",
+    destinationId: snapshot && Number.isSafeInteger(destinationId) && destinationId > 0
+      ? destinationId
+      : null,
+    snapshot,
+  };
 }
 
 export async function readIndexableProgramIds(input: {
@@ -487,7 +681,7 @@ export async function readIndexableUniversityIds(input: {
   universityIds: readonly number[];
 }): Promise<Set<number>> {
   const config = publicWebDiscoveryConfigFromEnvironment();
-  if (config.mode !== "published" || !config.scope || input.locale !== "en") return new Set();
+  if (config.mode !== "published" || !config.scope) return new Set();
   const scope = config.scope;
   const universityIds = [...new Set(input.universityIds)]
     .filter((id) => Number.isSafeInteger(id) && id > 0 && id <= 2_147_483_647)
@@ -501,10 +695,21 @@ export async function readIndexableUniversityIds(input: {
            ON state.tenant_id=content.tenant_id
           AND state.organization_id=content.organization_id
           AND state.content_record_id=content.id
+         JOIN public_web_content_revisions revision
+           ON revision.tenant_id=state.tenant_id
+          AND revision.organization_id=state.organization_id
+          AND revision.content_record_id=state.content_record_id
+          AND revision.id=state.revision_id
         WHERE content.tenant_id=$1 AND content.organization_id=$2
           AND content.entity_type='UNIVERSITY' AND content.locale=$3
           AND content.university_id=ANY($4::integer[])
           AND state.status='PUBLISHED' AND state.index_state='INDEX'
+          AND revision.quality_status='PASS'
+          AND revision.source_coverage='COMPLETE'
+          AND revision.translation_status=CASE WHEN content.locale='en' THEN 'SOURCE' ELSE 'PUBLISHED' END
+          AND length(trim(revision.title)) BETWEEN 1 AND 500
+          AND octet_length(revision.content_json::text) BETWEEN 1 AND 1048576
+          AND octet_length(revision.seo_json::text) <= 65536
         ORDER BY content.university_id
         LIMIT 64`,
       [scope.tenantId, scope.organizationId, input.locale, universityIds],

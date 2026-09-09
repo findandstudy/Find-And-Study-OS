@@ -71,6 +71,7 @@
     "test:public-catalog-list-scaling": "tsx --test ./scripts/test-public-catalog-and-list-scaling.ts",
     "test:public-catalog-pages": "tsx --test ./scripts/test-public-catalog-route-contract.ts",
     "test:public-catalog-render": "tsx --test ./scripts/test-public-catalog-render-contract.ts",
+    "test:public-localized-entities": "tsx --test ./scripts/test-public-localized-entity-contract.ts",
     "test:postgres-public-catalog-render": "tsx --test ./scripts/test-postgres-public-catalog-render.ts",
     "test:public-web-discovery": "tsx --test ./scripts/test-public-web-discovery-contract.ts",
     "test:postgres-public-web-discovery": "tsx --test ./scripts/test-postgres-public-web-discovery.ts",

@@ -81,6 +81,9 @@ test("public catalogue detail APIs are bounded and never select private CRM fiel
   assert.match(route, /programLinkPolicy/);
   assert.match(route, /safePublicUniversityWebsite/);
   assert.match(route, /parsed\.protocol === "https:"/);
+  assert.match(route, /readPublishedLocalizedEntity/);
+  assert.match(route, /PUBLIC_UNIVERSITY_TRANSLATION_NOT_PUBLISHED/);
+  assert.match(route, /contentPolicy/);
   assert.match(destinations, /returnedUniversities/);
   assert.match(destinations, /returnedPrograms/);
   assert.match(destinations, /PUBLIC_DESTINATION_ROUTE_INVALID/);
@@ -90,6 +93,10 @@ test("public catalogue detail APIs are bounded and never select private CRM fiel
   assert.match(destinations, /PUBLIC_WEB_INTERNAL_LINK_MODE/);
   assert.match(destinations, /readIndexableUniversityIds/);
   assert.match(destinations, /readIndexableProgramIds/);
+  assert.match(destinations, /readPublishedLocalizedEntity/);
+  assert.match(destinations, /resolvePublishedLocalizedDestinationRoute/);
+  assert.match(destinations, /PUBLIC_DESTINATION_TRANSLATION_NOT_PUBLISHED/);
+  assert.match(destinations, /contentPolicy/);
   assert.doesNotMatch(destinations, /\.limit\(50\)/);
   assert.match(publicWeb, /websiteBlogPostsTable\.status, "published"/);
   assert.match(publicWeb, /websiteBlogPostsTable\.publishedAt/);

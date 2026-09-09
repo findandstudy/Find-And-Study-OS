@@ -15,8 +15,11 @@ import { buildPublicWebCanonicalPath } from "../lib/publicWebContentContract";
 import {
   readIndexableProgramIds,
   readIndexableUniversityIds,
+  readPublishedLocalizedEntity,
+  resolvePublishedLocalizedDestinationRoute,
   resolvePublishedEntitySeoState,
 } from "../lib/publicWebDiscoveryReadModel";
+import { resolveLocalizedDestinationFields } from "../lib/publicLocalizedEntityContract";
 
 const router: IRouter = Router();
 const DESTINATION_LINK_LIMIT = 24;
@@ -71,10 +74,16 @@ router.get("/public/destinations/:slug", async (req: Request, res: Response): Pr
   }
   const locale = normalizeProgramLocale(req.query.locale);
   const internalLinkMode = parsePublicWebInternalLinkMode(process.env.PUBLIC_WEB_INTERNAL_LINK_MODE);
+  const routeResolution = await resolvePublishedLocalizedDestinationRoute({ locale, slug });
 
   const [destination] = await db.select()
     .from(destinationsTable)
-    .where(and(eq(destinationsTable.slug, slug), eq(destinationsTable.isActive, true)))
+    .where(and(
+      routeResolution.destinationId
+        ? eq(destinationsTable.id, routeResolution.destinationId)
+        : eq(destinationsTable.slug, slug),
+      eq(destinationsTable.isActive, true),
+    ))
     .limit(1);
 
   if (!destination) {
@@ -111,7 +120,7 @@ router.get("/public/destinations/:slug", async (req: Request, res: Response): Pr
     eq(programsTable.isActive, true),
   ];
   addPublicCatalogConditions(programConditions, policy);
-  const [[universityCount], [programCount], programRows, seoState] = await Promise.all([
+  const [[universityCount], [programCount], programRows, seoState, localizedDelivery] = await Promise.all([
     db.select({ count: sql<number>`count(*)` })
       .from(universitiesTable)
       .where(and(...universityConditions)),
@@ -146,7 +155,41 @@ router.get("/public/destinations/:slug", async (req: Request, res: Response): Pr
       entityId: destination.id,
       locale,
     }),
+    readPublishedLocalizedEntity({
+      entityType: "destination",
+      entityId: destination.id,
+      locale,
+    }),
   ]);
+
+  const localizedDestination = resolveLocalizedDestinationFields({
+    locale,
+    delivery: localizedDelivery,
+    base: {
+      name: destination.name,
+      shortDescription: destination.shortDescription,
+      description: destination.description,
+      whyStudyHere: destination.whyStudyHere,
+      livingCost: destination.livingCost,
+      climate: destination.climate,
+      language: destination.language,
+      currency: destination.currency,
+      visaInfo: destination.visaInfo,
+      workPermit: destination.workPermit,
+      popularCities: String(destination.popularCities || "")
+        .split(",")
+        .map((city) => city.trim())
+        .filter(Boolean)
+        .slice(0, 24),
+    },
+  });
+  if (!localizedDestination.available) {
+    res.status(404).json({
+      error: "Destination translation not published",
+      code: "PUBLIC_DESTINATION_TRANSLATION_NOT_PUBLISHED",
+    });
+    return;
+  }
 
   const [indexableUniversityIds, indexableProgramIds] = internalLinkMode === "published"
     ? await Promise.all([
@@ -185,7 +228,7 @@ router.get("/public/destinations/:slug", async (req: Request, res: Response): Pr
     universityCount: Number(universityCount?.count ?? 0),
     programCount: Number(programCount?.count ?? 0),
   };
-  const canonicalPath = seoState.canonicalPath || buildPublicWebCanonicalPath({
+  const canonicalPath = localizedDelivery.snapshot?.canonicalPath || seoState.canonicalPath || buildPublicWebCanonicalPath({
     entityType: "DESTINATION",
     entityId: destination.id,
     locale,
@@ -198,6 +241,17 @@ router.get("/public/destinations/:slug", async (req: Request, res: Response): Pr
   res.json({
     destination: {
       ...destination,
+      name: localizedDestination.name,
+      shortDescription: localizedDestination.shortDescription,
+      description: localizedDestination.description,
+      whyStudyHere: localizedDestination.whyStudyHere,
+      livingCost: localizedDestination.livingCost,
+      climate: localizedDestination.climate,
+      language: localizedDestination.language,
+      currency: localizedDestination.currency,
+      visaInfo: localizedDestination.visaInfo,
+      workPermit: localizedDestination.workPermit,
+      popularCities: localizedDestination.popularCities.join(", ") || null,
       canonicalPath,
     },
     universities,
@@ -205,7 +259,7 @@ router.get("/public/destinations/:slug", async (req: Request, res: Response): Pr
     stats,
     meta: {
       locale,
-      indexable: seoState.indexable && locale === "en",
+      indexable: seoState.indexable,
       canonicalPath,
       alternatePaths: seoState.alternates,
       returnedUniversities: universities.length,
@@ -213,6 +267,7 @@ router.get("/public/destinations/:slug", async (req: Request, res: Response): Pr
       internalLinkPolicy: internalLinkMode === "published"
         ? "PUBLISHED_INDEXABLE_ONLY"
         : "LEGACY_UNGATED",
+      contentPolicy: localizedDestination.contentPolicy,
       generatedAt: new Date().toISOString(),
     },
   });

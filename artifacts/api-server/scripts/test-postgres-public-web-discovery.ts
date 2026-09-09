@@ -46,6 +46,8 @@ const RECORDS = {
   pageEn: "018f8500-0000-7000-8000-000000000018",
   pageTr: "018f8500-0000-7000-8000-000000000019",
   universityEn: "018f8500-0000-7000-8000-000000000030",
+  destinationTr: "018f8500-0000-7000-8000-000000000031",
+  universityTr: "018f8500-0000-7000-8000-000000000032",
 } as const;
 const REVISIONS = {
   en: "018f8500-0000-7000-8000-000000000021",
@@ -58,6 +60,8 @@ const REVISIONS = {
   pageEn: "018f8500-0000-7000-8000-000000000028",
   pageTr: "018f8500-0000-7000-8000-000000000029",
   universityEn: "018f8500-0000-7000-8000-000000000040",
+  destinationTr: "018f8500-0000-7000-8000-000000000041",
+  universityTr: "018f8500-0000-7000-8000-000000000042",
 } as const;
 
 test("published discovery is tenant-scoped and excludes NOINDEX or undeliverable locales", async () => {
@@ -200,6 +204,32 @@ test("published discovery is tenant-scoped and excludes NOINDEX or undeliverable
     );
     await admin.query(
       `INSERT INTO public_web_content_records
+         (id,tenant_id,organization_id,entity_type,destination_id,locale,
+          canonical_slug,canonical_path,created_by_legacy_user_id)
+       VALUES ($1,$2,$3,'DESTINATION',$4,'tr','dogrulanmis-hedef',
+         '/tr/destinations/dogrulanmis-hedef',$5)`,
+      [RECORDS.destinationTr, TENANT_ID, ORGANIZATION_ID, destinationId, userId],
+    );
+    await admin.query(
+      `INSERT INTO public_web_content_revisions
+         (id,tenant_id,organization_id,content_record_id,revision_number,origin,title,summary,
+          content_json,seo_json,structured_data_json,source_sha256,content_sha256,
+          quality_status,source_coverage,translation_status,seo_status,
+          structured_data_status,created_by_legacy_user_id)
+       VALUES ($1,$2,$3,$4,1,'HUMAN','Doğrulanmış Hedef','Doğrulanmış Türkçe özet',
+         '{"body":"Doğrulanmış Türkçe destinasyon içeriği","climate":"Ilıman"}','{}','{}',$5,$6,
+         'PASS','COMPLETE','PUBLISHED','PASS','PASS',$7)`,
+      [REVISIONS.destinationTr, TENANT_ID, ORGANIZATION_ID, RECORDS.destinationTr, "4".repeat(64), "3".repeat(64), userId],
+    );
+    await admin.query(
+      `INSERT INTO public_web_publication_states
+         (tenant_id,organization_id,content_record_id,revision_id,status,index_state,
+          reviewed_by_legacy_user_id,reviewed_at,published_by_legacy_user_id,published_at)
+       VALUES ($1,$2,$3,$4,'PUBLISHED','INDEX',$5,now(),$5,now())`,
+      [TENANT_ID, ORGANIZATION_ID, RECORDS.destinationTr, REVISIONS.destinationTr, userId],
+    );
+    await admin.query(
+      `INSERT INTO public_web_content_records
          (id,tenant_id,organization_id,entity_type,university_id,locale,
           canonical_slug,canonical_path,created_by_legacy_user_id)
        VALUES ($1,$2,$3,'UNIVERSITY',$4,'en','discovery-fixture-university',$5,$6)`,
@@ -224,6 +254,34 @@ test("published discovery is tenant-scoped and excludes NOINDEX or undeliverable
           reviewed_by_legacy_user_id,reviewed_at,published_by_legacy_user_id,published_at)
        VALUES ($1,$2,$3,$4,'PUBLISHED','INDEX',$5,now(),$5,now())`,
       [TENANT_ID, ORGANIZATION_ID, RECORDS.universityEn, REVISIONS.universityEn, userId],
+    );
+    await admin.query(
+      `INSERT INTO public_web_content_records
+         (id,tenant_id,organization_id,entity_type,university_id,locale,
+          canonical_slug,canonical_path,created_by_legacy_user_id)
+       VALUES ($1,$2,$3,'UNIVERSITY',$4,'tr','dogrulanmis-universite',$5,$6)`,
+      [
+        RECORDS.universityTr, TENANT_ID, ORGANIZATION_ID, universityId,
+        `/tr/universities/dogrulanmis-universite-${universityId}`, userId,
+      ],
+    );
+    await admin.query(
+      `INSERT INTO public_web_content_revisions
+         (id,tenant_id,organization_id,content_record_id,revision_number,origin,title,summary,
+          content_json,seo_json,structured_data_json,source_sha256,content_sha256,
+          quality_status,source_coverage,translation_status,seo_status,
+          structured_data_status,created_by_legacy_user_id)
+       VALUES ($1,$2,$3,$4,1,'HUMAN','Doğrulanmış Üniversitesi','Doğrulanmış Türkçe üniversite özeti',
+         '{"description":"Doğrulanmış üniversite açıklaması","universityType":"Vakıf"}','{}','{}',$5,$6,
+         'PASS','COMPLETE','PUBLISHED','PASS','PASS',$7)`,
+      [REVISIONS.universityTr, TENANT_ID, ORGANIZATION_ID, RECORDS.universityTr, "2".repeat(64), "1".repeat(64), userId],
+    );
+    await admin.query(
+      `INSERT INTO public_web_publication_states
+         (tenant_id,organization_id,content_record_id,revision_id,status,index_state,
+          reviewed_by_legacy_user_id,reviewed_at,published_by_legacy_user_id,published_at)
+       VALUES ($1,$2,$3,$4,'PUBLISHED','INDEX',$5,now(),$5,now())`,
+      [TENANT_ID, ORGANIZATION_ID, RECORDS.universityTr, REVISIONS.universityTr, userId],
     );
     for (const locale of ["en", "tr"] as const) {
       await admin.query(
@@ -324,11 +382,17 @@ test("published discovery is tenant-scoped and excludes NOINDEX or undeliverable
     );
     assert.deepEqual(
       counts.filter((row) => row.entityType === "DESTINATION"),
-      [{ entityType: "DESTINATION", locale: "en", count: 1 }],
+      [
+        { entityType: "DESTINATION", locale: "en", count: 1 },
+        { entityType: "DESTINATION", locale: "tr", count: 1 },
+      ],
     );
     assert.deepEqual(
       counts.filter((row) => row.entityType === "UNIVERSITY"),
-      [{ entityType: "UNIVERSITY", locale: "en", count: 1 }],
+      [
+        { entityType: "UNIVERSITY", locale: "en", count: 1 },
+        { entityType: "UNIVERSITY", locale: "tr", count: 1 },
+      ],
     );
     assert.deepEqual(
       counts.filter((row) => row.entityType === "ARTICLE"),
@@ -377,7 +441,74 @@ test("published discovery is tenant-scoped and excludes NOINDEX or undeliverable
         locale: "tr",
         universityIds: [universityId],
       })],
-      [],
+      [universityId],
+    );
+    assert.deepEqual(
+      await discovery.readPublishedLocalizedEntity({
+        entityType: "university",
+        entityId: universityId,
+        locale: "tr",
+      }),
+      {
+        mode: "published",
+        snapshot: {
+          canonicalPath: `/tr/universities/dogrulanmis-universite-${universityId}`,
+          title: "Doğrulanmış Üniversitesi",
+          summary: "Doğrulanmış Türkçe üniversite özeti",
+          content: {
+            description: "Doğrulanmış üniversite açıklaması",
+            universityType: "Vakıf",
+          },
+          indexState: "INDEX",
+        },
+      },
+    );
+    assert.deepEqual(
+      await discovery.resolvePublishedLocalizedDestinationRoute({
+        locale: "tr",
+        slug: "dogrulanmis-hedef",
+      }),
+      {
+        mode: "published",
+        destinationId,
+        snapshot: {
+          canonicalPath: "/tr/destinations/dogrulanmis-hedef",
+          title: "Doğrulanmış Hedef",
+          summary: "Doğrulanmış Türkçe özet",
+          content: {
+            body: "Doğrulanmış Türkçe destinasyon içeriği",
+            climate: "Ilıman",
+          },
+          indexState: "INDEX",
+        },
+      },
+    );
+    assert.deepEqual(
+      await discovery.resolvePublishedLocalizedDestinationRoute({
+        locale: "tr",
+        slug: "unpublished-hedef",
+      }),
+      { mode: "published", destinationId: null, snapshot: null },
+    );
+    assert.deepEqual(
+      await discovery.readPublishedLocalizedEntity({
+        entityType: "destination",
+        entityId: destinationId,
+        locale: "tr",
+      }),
+      {
+        mode: "published",
+        snapshot: {
+          canonicalPath: "/tr/destinations/dogrulanmis-hedef",
+          title: "Doğrulanmış Hedef",
+          summary: "Doğrulanmış Türkçe özet",
+          content: {
+            body: "Doğrulanmış Türkçe destinasyon içeriği",
+            climate: "Ilıman",
+          },
+          indexState: "INDEX",
+        },
+      },
     );
     assert.deepEqual(
       await discovery.readPublishedEntitySeoState({
@@ -389,7 +520,10 @@ test("published discovery is tenant-scoped and excludes NOINDEX or undeliverable
       {
         indexable: true,
         canonicalPath: "/en/destinations/discovery-fixture-destination",
-        alternates: { en: "/en/destinations/discovery-fixture-destination" },
+        alternates: {
+          en: "/en/destinations/discovery-fixture-destination",
+          tr: "/tr/destinations/dogrulanmis-hedef",
+        },
       },
     );
     assert.deepEqual(

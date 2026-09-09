@@ -37,8 +37,10 @@ import {
 import { normalizeProgramLocale } from "../lib/programTranslationContract";
 import {
   readIndexableProgramIds,
+  readPublishedLocalizedEntity,
   resolvePublishedEntitySeoState,
 } from "../lib/publicWebDiscoveryReadModel";
+import { resolveLocalizedUniversityFields } from "../lib/publicLocalizedEntityContract";
 
 const router: IRouter = Router();
 
@@ -382,7 +384,7 @@ router.get(
       eq(programsTable.isActive, true),
     ];
     addPublicCatalogConditions(programConditions, policy);
-    const [[countRow], programRows, seoState] = await Promise.all([
+    const [[countRow], programRows, seoState, localizedDelivery] = await Promise.all([
       db
         .select({ count: sql<number>`count(*)` })
         .from(programsTable)
@@ -425,17 +427,41 @@ router.get(
         entityId: university.id,
         locale,
       }),
+      readPublishedLocalizedEntity({
+        entityType: "university",
+        entityId: university.id,
+        locale,
+      }),
     ]);
+
+    const localizedUniversity = resolveLocalizedUniversityFields({
+      locale,
+      delivery: localizedDelivery,
+      base: {
+        name: university.name,
+        description: university.description,
+        universityType: university.universityType,
+      },
+    });
+    if (!localizedUniversity.available) {
+      res.status(404).json({
+        error: "University translation not published",
+        code: "PUBLIC_UNIVERSITY_TRANSLATION_NOT_PUBLISHED",
+      });
+      return;
+    }
 
     const canonical = publicCatalogCanonicalState({
       requestedRouteKey: req.params.routeKey,
       locale,
       entityType: "university",
       id: university.id,
-      name: university.name,
+      name: localizedUniversity.name,
     });
-    const indexable = seoState.indexable && locale === "en";
-    const canonicalPath = seoState.canonicalPath || canonical.canonicalPath;
+    const indexable = seoState.indexable;
+    const canonicalPath = localizedDelivery.snapshot?.canonicalPath
+      || seoState.canonicalPath
+      || canonical.canonicalPath;
     const indexableProgramIds = internalLinkMode === "published"
       ? await readIndexableProgramIds({ locale, programIds: programRows.map((program) => program.id) })
       : null;
@@ -447,6 +473,9 @@ router.get(
     res.json({
       data: {
         ...university,
+        name: localizedUniversity.name,
+        description: localizedUniversity.description,
+        universityType: localizedUniversity.universityType,
         hasLogo: undefined,
         website: safePublicUniversityWebsite(university.website),
         logoUrl: courseFinderUniversityLogoUrl(
@@ -473,6 +502,7 @@ router.get(
         programLinkPolicy: internalLinkMode === "published"
           ? "PUBLISHED_INDEXABLE_ONLY"
           : "LEGACY_UNGATED",
+        contentPolicy: localizedUniversity.contentPolicy,
         canonicalPath,
         requestedPathIsCanonical: req.params.routeKey === canonicalPath.split("/").at(-1),
         generatedAt: new Date().toISOString(),

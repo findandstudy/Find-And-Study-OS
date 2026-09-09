@@ -68,6 +68,13 @@ PUBLIC_WEB_TENANT_ID=
 PUBLIC_WEB_ORGANIZATION_ID=
 ```
 
+`PUBLIC_WEB_SITEMAP_MODE=published` yalnız sitemap üretimini açmaz. Aynı
+tenant/organization scope'unda university ve destination detayları için exact
+`PUBLISHED` revizyonu teslimat kaynağı yapar. İngilizce dışındaki bir locale'de
+uygun `translation_status=PUBLISHED` revizyonu yoksa sayfa İngilizce metne
+düşmez; API `404` ve SSR noindex/not-found üretir. `NOINDEX` durumundaki
+yayınlanmış revizyon okunabilir, fakat discovery ve hreflang grafiğine girmez.
+
 Geçersiz rollout modu veya geçersiz tenant/organization UUID'si fail-closed davranır.
 
 ## Bilinen sınırlar ve sonraki kapılar

@@ -31,10 +31,16 @@ import {
   readIndexableArticleIds,
   readIndexableProgramIds,
   readIndexableUniversityIds,
+  readPublishedLocalizedEntity,
+  resolvePublishedLocalizedDestinationRoute,
   resolvePublishedEntitySeoState,
 } from "./publicWebDiscoveryReadModel";
 import { buildPublicWebCanonicalPath } from "./publicWebContentContract";
 import type { ProgramSupportedLocale } from "./programTranslationContract";
+import {
+  resolveLocalizedDestinationFields,
+  resolveLocalizedUniversityFields,
+} from "./publicLocalizedEntityContract";
 
 const PILOT_LIST_LIMIT = 12;
 const CACHE_FRESH_MS = 5 * 60_000;
@@ -417,7 +423,7 @@ async function readUniversityDetail(
   ];
   addPublicCatalogConditions(programConditions, policy);
   const internalLinkMode = parsePublicWebInternalLinkMode(process.env.PUBLIC_WEB_INTERNAL_LINK_MODE);
-  const [[countRow], programRows, seoState] = await Promise.all([
+  const [[countRow], programRows, seoState, localizedDelivery] = await Promise.all([
     db
       .select({ count: sql<number>`count(*)` })
       .from(programsTable)
@@ -445,13 +451,37 @@ async function readUniversityDetail(
       entityId: university.id,
       locale: route.locale,
     }),
+    readPublishedLocalizedEntity({
+      entityType: "university",
+      entityId: university.id,
+      locale: route.locale,
+    }),
   ]);
+  const localizedUniversity = resolveLocalizedUniversityFields({
+    locale: route.locale,
+    delivery: localizedDelivery,
+    base: {
+      name: university.name,
+      description: university.description,
+      universityType: university.universityType,
+    },
+  });
+  if (!localizedUniversity.available) {
+    return {
+      kind: "not_found",
+      locale: route.locale,
+      canonicalPath: route.path,
+      title: "University translation not published",
+      description: "The requested university translation is unavailable.",
+      indexable: false,
+    };
+  }
   const canonical = publicCatalogCanonicalState({
     requestedRouteKey: route.routeKey,
     locale: route.locale,
     entityType: "university",
     id: university.id,
-    name: university.name,
+    name: localizedUniversity.name,
   });
   const indexableProgramIds = internalLinkMode === "published"
     ? await readIndexableProgramIds({
@@ -465,20 +495,20 @@ async function readUniversityDetail(
   return {
     kind: "university_detail",
     locale: route.locale,
-    canonicalPath: seoState.canonicalPath || canonical.canonicalPath,
-    title: university.name,
+    canonicalPath: localizedDelivery.snapshot?.canonicalPath || seoState.canonicalPath || canonical.canonicalPath,
+    title: localizedUniversity.name,
     description: boundedText(
-      university.description,
-      [university.universityType, university.city, university.country].filter(Boolean).join(" · "),
+      localizedUniversity.description,
+      [localizedUniversity.universityType, university.city, university.country].filter(Boolean).join(" · "),
     ),
-    indexable: seoState.indexable && route.locale === "en",
+    indexable: seoState.indexable,
     alternatePaths: seoState.alternates,
     university: {
       id: university.id,
-      name: university.name,
+      name: localizedUniversity.name,
       country: university.country,
       city: university.city,
-      universityType: university.universityType,
+      universityType: localizedUniversity.universityType,
       programCount: Number(countRow?.count ?? 0),
       programs: deliveredPrograms.map((program) => ({
         ...program,
@@ -496,6 +526,10 @@ async function readUniversityDetail(
 async function readDestinationDetail(
   route: Extract<PublicCatalogRenderRoute, { kind: "destination_detail" }>,
 ): Promise<PublicCatalogRenderModel> {
+  const routeResolution = await resolvePublishedLocalizedDestinationRoute({
+    locale: route.locale,
+    slug: route.slug,
+  });
   const [destination] = await db
     .select({
       id: destinationsTable.id,
@@ -514,7 +548,9 @@ async function readDestinationDetail(
     })
     .from(destinationsTable)
     .where(and(
-      eq(destinationsTable.slug, route.slug),
+      routeResolution.destinationId
+        ? eq(destinationsTable.id, routeResolution.destinationId)
+        : eq(destinationsTable.slug, route.slug),
       eq(destinationsTable.isActive, true),
     ))
     .limit(1);
@@ -541,7 +577,7 @@ async function readDestinationDetail(
   addPublicCatalogConditions(programConditions, policy);
   const internalLinkMode = parsePublicWebInternalLinkMode(process.env.PUBLIC_WEB_INTERNAL_LINK_MODE);
 
-  const [[universityCount], [programCount], universityRows, seoState] = await Promise.all([
+  const [[universityCount], [programCount], universityRows, seoState, localizedDelivery] = await Promise.all([
     db
       .select({ count: sql<number>`count(*)` })
       .from(universitiesTable)
@@ -567,9 +603,46 @@ async function readDestinationDetail(
       entityId: destination.id,
       locale: route.locale,
     }),
+    readPublishedLocalizedEntity({
+      entityType: "destination",
+      entityId: destination.id,
+      locale: route.locale,
+    }),
   ]);
 
-  const canonicalPath = seoState.canonicalPath || buildPublicWebCanonicalPath({
+  const localizedDestination = resolveLocalizedDestinationFields({
+    locale: route.locale,
+    delivery: localizedDelivery,
+    base: {
+      name: destination.name,
+      shortDescription: destination.shortDescription,
+      description: destination.description,
+      whyStudyHere: null,
+      livingCost: destination.livingCost,
+      climate: destination.climate,
+      language: destination.language,
+      currency: destination.currency,
+      visaInfo: destination.visaInfo,
+      workPermit: destination.workPermit,
+      popularCities: String(destination.popularCities || "")
+        .split(",")
+        .map((city) => city.trim())
+        .filter(Boolean)
+        .slice(0, 24),
+    },
+  });
+  if (!localizedDestination.available) {
+    return {
+      kind: "not_found",
+      locale: route.locale,
+      canonicalPath: route.path,
+      title: "Destination translation not published",
+      description: "The requested destination translation is unavailable.",
+      indexable: false,
+    };
+  }
+
+  const canonicalPath = localizedDelivery.snapshot?.canonicalPath || seoState.canonicalPath || buildPublicWebCanonicalPath({
     entityType: "DESTINATION",
     entityId: destination.id,
     locale: route.locale,
@@ -588,28 +661,24 @@ async function readDestinationDetail(
     kind: "destination_detail",
     locale: route.locale,
     canonicalPath,
-    title: destination.name,
+    title: localizedDestination.name,
     description: boundedText(
-      destination.shortDescription || destination.description,
-      `Study opportunities in ${destination.name}`,
+      localizedDestination.shortDescription || localizedDestination.description,
+      `Study opportunities in ${localizedDestination.name}`,
     ),
-    indexable: seoState.indexable && route.locale === "en",
+    indexable: seoState.indexable,
     alternatePaths: seoState.alternates,
     destination: {
       id: destination.id,
-      name: destination.name,
+      name: localizedDestination.name,
       country: destination.country,
-      livingCost: destination.livingCost,
-      climate: destination.climate,
-      language: destination.language,
-      currency: destination.currency,
-      visaInfo: destination.visaInfo,
-      workPermit: destination.workPermit,
-      popularCities: String(destination.popularCities || "")
-        .split(",")
-        .map((city) => city.trim())
-        .filter(Boolean)
-        .slice(0, 24),
+      livingCost: localizedDestination.livingCost,
+      climate: localizedDestination.climate,
+      language: localizedDestination.language,
+      currency: localizedDestination.currency,
+      visaInfo: localizedDestination.visaInfo,
+      workPermit: localizedDestination.workPermit,
+      popularCities: localizedDestination.popularCities,
       universityCount: Number(universityCount?.count ?? 0),
       programCount: Number(programCount?.count ?? 0),
       universities: deliveredUniversities.map((university) => ({
