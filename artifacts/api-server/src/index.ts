@@ -242,9 +242,14 @@ function serveStaticFrontend() {
 
   app.get(
     ["/sitemap.xml", "/sitemaps/:sitemapFile"],
-    async (req: express.Request, res: express.Response, next: express.NextFunction) => {
+    async (req: express.Request, res: express.Response) => {
       const config = publicWebDiscoveryConfigFromEnvironment();
-      if (config.mode === "off") return next();
+      if (config.mode === "off") {
+        res.setHeader("Cache-Control", "no-store");
+        res.setHeader("X-Robots-Tag", "noindex, nofollow, noarchive");
+        res.status(404).type("text/plain").send("Sitemap not found");
+        return;
+      }
       const route = parsePublicWebSitemapRoute(req.path);
       if (!route) {
         res.status(404).type("text/plain").send("Sitemap not found");

@@ -142,6 +142,13 @@ test("static and dynamic URL sets emit reciprocal hreflang without unsafe paths"
 });
 
 test("read model is read-only, RLS-scoped and selects only published indexed records", () => {
+  const server = readFileSync(
+    new URL("../src/index.ts", import.meta.url),
+    "utf8",
+  );
+  assert.match(server, /if \(config\.mode === "off"\) \{/);
+  assert.match(server, /status\(404\)\.type\("text\/plain"\)\.send\("Sitemap not found"\)/);
+  assert.doesNotMatch(server, /if \(config\.mode === "off"\) return next\(\)/);
   const source = readFileSync(
     new URL("../src/lib/publicWebDiscoveryReadModel.ts", import.meta.url),
     "utf8",
