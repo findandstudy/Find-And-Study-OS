@@ -266,7 +266,7 @@ router.post("/universities/bulk", bulkJson, requireAuth, requireRole(...MANAGER_
  * Auth: manager+; katalog hassas yapılandırma, dış istemcilere açmıyoruz.
  */
 const PROGRAM_TEMPLATE_FIXED_COLUMNS = [
-  "universityId", "universityName", "name", "description", "degree", "field", "language",
+  "universityId", "universityName", "country", "name", "description", "degree", "field", "language",
   "duration", "tuitionFee", "currency", "scholarship", "intakes",
   "requirements", "commissionRate", "applicationFee", "advancedFee",
   "depositFee", "serviceFeeAmount", "discountedFee", "languageFee",
@@ -296,7 +296,8 @@ router.get("/programs/import-template", requireAuth, requireRole(...MANAGER_ROLE
       { Column: "universityName", Required: "Yes (or universityId)", Notes: "Exact name as it appears in the Universities tab. Case-insensitive but spelling must match." },
       { Column: "universityId", Required: "Yes (or universityName)", Notes: "Numeric university id (alternative to universityName)." },
       { Column: "name", Required: "Yes", Notes: "Canonical English program name (e.g. Computer Engineering)." },
-      { Column: "description", Required: "No", Notes: "Canonical English description. The system automatically queues all 15 translations." },
+      { Column: "country", Required: "No", Notes: "Used when auto-creating a missing university (for example, Turkey)." },
+      { Column: "description", Required: "No", Notes: "Canonical English description. The system automatically queues all configured target translations." },
       { Column: "degree / field / language / duration", Required: "No", Notes: "Free text." },
       { Column: "tuitionFee / scholarship / applicationFee / advancedFee / depositFee / serviceFeeAmount / discountedFee / languageFee", Required: "No", Notes: "Numeric (no currency symbol)." },
       { Column: "currency", Required: "No", Notes: "ISO code: USD, EUR, TRY, GBP. Defaults to USD." },
@@ -345,6 +346,25 @@ router.post("/programs/bulk", bulkJson, requireAuth, requireRole(...MANAGER_ROLE
   // to internal keys before any validation.
   const normalizedRows = normalizeProgramImportRows(rows) as typeof rows;
 
+  // Belge sütun anahtarlarını canlı katalogtan oku (5dk cache, in-flight
+  // dedupe, fail→eski cache). Anahtarları sabit bir sıraya (alfabetik)
+  // koyuyoruz ki tüm satırlar için sortOrder deterministik kalsın — eski
+  // hardcoded dizinin sağladığı garanti.
+  // loadDocCatalogKeySet() preserves the admin-managed `sort_order` from
+  // catalog_options (loader SELECTs ORDER BY sort_order, id). Spreading
+  // the Set keeps that order, so the importer's `sortOrder` field matches
+  // what the widget/UI uses elsewhere.
+  const docKeySet = await loadDocCatalogKeySet();
+  const docKeys = [...docKeySet];
+  if (docKeys.length === 0) {
+    // Katalog tamamen boş veya DB hiç ulaşılamadı ve cache de yok: import
+    // sessizce belge sütunlarını yok sayarsa kullanıcı sebebini anlayamaz.
+    res.status(503).json({
+      error: "Belge kataloğu yüklenemedi, lütfen tekrar deneyin.",
+    });
+    return;
+  }
+  const docKeyOrder = new Map(docKeys.map((k, i) => [k, i]));
   const allUnis = await db.select({ id: universitiesTable.id, name: universitiesTable.name }).from(universitiesTable);
   const uniNameMap = Object.fromEntries(allUnis.map(u => [u.name.trim().toLowerCase(), u.id]));
 
@@ -373,25 +393,6 @@ router.post("/programs/bulk", bulkJson, requireAuth, requireRole(...MANAGER_ROLE
     }
   }
 
-  // Belge sütun anahtarlarını canlı katalogtan oku (5dk cache, in-flight
-  // dedupe, fail→eski cache). Anahtarları sabit bir sıraya (alfabetik)
-  // koyuyoruz ki tüm satırlar için sortOrder deterministik kalsın — eski
-  // hardcoded dizinin sağladığı garanti.
-  // loadDocCatalogKeySet() preserves the admin-managed `sort_order` from
-  // catalog_options (loader SELECTs ORDER BY sort_order, id). Spreading
-  // the Set keeps that order, so the importer's `sortOrder` field matches
-  // what the widget/UI uses elsewhere.
-  const docKeySet = await loadDocCatalogKeySet();
-  const docKeys = [...docKeySet];
-  if (docKeys.length === 0) {
-    // Katalog tamamen boş veya DB hiç ulaşılamadı ve cache de yok: import
-    // sessizce belge sütunlarını yok sayarsa kullanıcı sebebini anlayamaz.
-    res.status(503).json({
-      error: "Belge kataloğu yüklenemedi, lütfen tekrar deneyin.",
-    });
-    return;
-  }
-  const docKeyOrder = new Map(docKeys.map((k, i) => [k, i]));
   // Set of column header names from the incoming payload that we tried to
   // match against the catalog but didn't recognise. Reported back so the
   // admin sees "you imported a column called `xyz_form` that isn't in the

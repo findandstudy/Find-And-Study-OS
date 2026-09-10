@@ -1953,7 +1953,8 @@ function ProgramsTab() {
   const notesRows: Record<string, string>[] = [
     { Column: "universityName", Required: "Yes", Notes: "Exact name as it appears in the Universities tab. Case-insensitive but spelling must match." },
     { Column: "name", Required: "Yes", Notes: "Program name (e.g. Computer Engineering)." },
-    { Column: "description", Required: "No", Notes: "Canonical English description. Saving automatically queues the other 15 languages." },
+    { Column: "country", Required: "No", Notes: "Used when auto-creating a missing university (for example, Turkey)." },
+    { Column: "description", Required: "No", Notes: "Canonical English description. Saving automatically queues all configured target translations." },
     { Column: "degree", Required: "No", Notes: "BSc, MSc, MBA, PhD, Diploma, etc." },
     { Column: "field", Required: "No", Notes: "Field of study (Engineering, Business, Arts, ...)." },
     { Column: "language", Required: "No", Notes: "Language of instruction (English, Turkish, ...)." },

@@ -227,13 +227,16 @@ router.use(agentsRouter);
 router.use(agentEmbedRouter);
 router.use(applicationsRouter);
 router.use(documentsRouter);
+// Catalog owns reserved /programs/import-template and /programs/bulk routes.
+// Mount it before universitiesRouter so the generic /programs/:id handler
+// cannot interpret "import-template" as an id.
+router.use(catalogRouter);
 router.use(universitiesRouter);
 router.use(financeRouter);
 router.use(contentRouter);
 router.use(settingsRouter);
 router.use(auditRouter);
 router.use(statsRouter);
-router.use(catalogRouter);
 router.use(aiExtractRouter);
 router.use(pipelineRouter);
 router.use(courseFinderRouter);
