@@ -37,6 +37,12 @@ import { buildFacetFilterInput, loadFacetValue } from "../lib/facetCache";
 import { isFtcEmbedSource, trackFtcLeadStageChange } from "../lib/ga4LeadTracking";
 import { canTransitionToPipelineStage } from "../lib/pipelineAudience";
 import { resolveAgentFeatures } from "../lib/agentFeatures";
+import {
+  findBulkLeadIdentityConflict,
+  normalizeBulkLeadEmail,
+  normalizeBulkLeadPhone,
+  rememberBulkLeadIdentity,
+} from "../lib/bulkLeadImport";
 
 const router: IRouter = Router();
 
@@ -747,6 +753,43 @@ router.post("/leads/bulk", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROL
   const inserted: any[] = [];
   const errors: any[] = [];
 
+  const requestedEmails = Array.from(new Set(
+    leads.map((lead) => normalizeBulkLeadEmail(lead?.email)).filter((value): value is string => Boolean(value)),
+  ));
+  const requestedPhones = Array.from(new Set(
+    leads
+      .map((lead) => {
+        const normalizedPhone = normalizeBulkLeadPhone(lead?.phone);
+        return normalizedPhone ? toE164(normalizePhoneField(normalizedPhone)) : null;
+      })
+      .filter((value): value is string => Boolean(value)),
+  ));
+  const identityConditions = [];
+  if (requestedEmails.length > 0) {
+    identityConditions.push(inArray(sql<string>`lower(${leadsTable.email})`, requestedEmails));
+  }
+  if (requestedPhones.length > 0) {
+    identityConditions.push(inArray(leadsTable.phoneE164, requestedPhones));
+  }
+  const ownershipCondition = resolvedAgentId != null
+    ? eq(leadsTable.agentId, resolvedAgentId)
+    : and(
+        isNull(leadsTable.agentId),
+        inheritedBranchId == null
+          ? isNull(leadsTable.branchId)
+          : eq(leadsTable.branchId, inheritedBranchId),
+      );
+  const existingRows = identityConditions.length > 0
+    ? await db
+        .select({ email: leadsTable.email, phoneE164: leadsTable.phoneE164 })
+        .from(leadsTable)
+        .where(and(isNull(leadsTable.deletedAt), ownershipCondition, or(...identityConditions)))
+    : [];
+  const existingIdentities = {
+    emails: new Set(existingRows.map((row) => normalizeBulkLeadEmail(row.email)).filter((value): value is string => Boolean(value))),
+    phones: new Set(existingRows.map((row) => row.phoneE164).filter((value): value is string => Boolean(value))),
+  };
+
   for (let i = 0; i < leads.length; i++) {
     const l = leads[i];
     if (!l.firstName || !l.lastName) {
@@ -760,7 +803,22 @@ router.post("/leads/bulk", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROL
       errors.push({ index: i, error: nameErr, row: l });
       continue;
     }
-    const normPhone = l.phone ? normalizePhoneField(l.phone) : null;
+    const rawPhone = normalizeBulkLeadPhone(l.phone);
+    const normPhone = rawPhone ? normalizePhoneField(rawPhone) : null;
+    const identity = {
+      email: normalizeBulkLeadEmail(l.email),
+      phoneE164: toE164(normPhone),
+    };
+    const identityConflict = findBulkLeadIdentityConflict(identity, existingIdentities);
+    if (identityConflict) {
+      errors.push({
+        index: i,
+        code: "DUPLICATE_LEAD",
+        error: `A lead with the same ${identityConflict} already exists`,
+        row: l,
+      });
+      continue;
+    }
     let estimatedValue: string | null = null;
     if (l.estimatedValue != null && String(l.estimatedValue).trim() !== "") {
       const parsed = parseFloat(String(l.estimatedValue).replace(/[^0-9.\-]/g, ""));
@@ -774,7 +832,7 @@ router.post("/leads/bulk", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROL
         status: l.status || "new",
         email: l.email || null,
         phone: normPhone,
-        phoneE164: toE164(normPhone),
+        phoneE164: identity.phoneE164,
         nationality: l.nationality || null,
         interestedProgram: l.interestedProgram || null,
         interestedUniversity: l.interestedUniversity || null,
@@ -788,6 +846,7 @@ router.post("/leads/bulk", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROL
       }).returning();
       await applyLeadAssignmentRules(lead, req.ip);
       inserted.push(lead);
+      rememberBulkLeadIdentity(identity, existingIdentities);
     } catch (err: any) {
       errors.push({ index: i, error: err.message, row: l });
     }

@@ -1046,6 +1046,7 @@ const EMPTY_FORM = {
 const SAMPLE_CSV_LEADS = `firstName,lastName,email,phone,nationality,interestedProgram,interestedUniversity,interestedCountry,source,estimatedValue
 John,Doe,john@example.com,+1-555-0001,American,Computer Science,MIT,USA,website,5000
 Jane,Smith,jane@example.com,+44-20-0002,British,Business Administration,Oxford,UK,referral,7500`;
+const LEAD_BULK_IMPORT_BATCH_SIZE = 200;
 
 function LeadBulkImportModal({ open, onClose, onSuccess }: { open: boolean; onClose: () => void; onSuccess: () => void; }) {
   const { t } = useI18n();
@@ -1081,14 +1082,12 @@ function LeadBulkImportModal({ open, onClose, onSuccess }: { open: boolean; onCl
     setPreview(null);
     try {
       const text = await fileToCsv(file);
-      const res = await fetch(`${BASE_URL}/api/ai/extract-bulk-csv`, {
+      const data = await customFetch<{ records?: any[]; students?: any[] }>(`${BASE_URL}/api/ai/extract-bulk-csv`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        credentials: "include",
         body: JSON.stringify({ csvData: text, entity: "lead" }),
+        responseType: "json",
       });
-      if (!res.ok) throw new Error(t("leadsPage.csvParsingFailed"));
-      const data = await res.json();
       setPreview(data.records || data.students || []);
     } catch (err: any) {
       toast({ title: t("leadsPage.csvParsingFailed"), description: err.message, variant: "destructive" });
@@ -1101,15 +1100,20 @@ function LeadBulkImportModal({ open, onClose, onSuccess }: { open: boolean; onCl
     if (!preview) return;
     setImporting(true);
     try {
-      const res = await fetch(`${BASE_URL}/api/leads/bulk`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ leads: preview }),
-      });
-      if (!res.ok) throw new Error(t("leadsPage.importFailed"));
-      const data = await res.json();
-      setResult({ success: data.success, errors: data.errors?.length || 0 });
+      let success = 0;
+      let errors = 0;
+      for (let offset = 0; offset < preview.length; offset += LEAD_BULK_IMPORT_BATCH_SIZE) {
+        const batch = preview.slice(offset, offset + LEAD_BULK_IMPORT_BATCH_SIZE);
+        const data = await customFetch<{ success: number; errors?: unknown[] }>(`${BASE_URL}/api/leads/bulk`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ leads: batch }),
+          responseType: "json",
+        });
+        success += data.success;
+        errors += data.errors?.length || 0;
+      }
+      setResult({ success, errors });
       onSuccess();
     } catch (err: any) {
       toast({ title: t("leadsPage.importFailed"), description: err.message, variant: "destructive" });
