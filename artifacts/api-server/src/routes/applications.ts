@@ -1979,15 +1979,13 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, ...AG
     const [studentRec3] = await db.select({ firstName: studentsTable.firstName, lastName: studentsTable.lastName, userId: studentsTable.userId }).from(studentsTable).where(eq(studentsTable.id, app.studentId));
     const sName3 = studentRec3 ? `${studentRec3.firstName || ""} ${studentRec3.lastName || ""}`.trim() : "";
     const recipientIds: number[] = [];
-    // When the application belongs to an agent, route the notification to the
-    // agent's user account instead of the student directly — the agent is the
-    // primary contact for agent-owned students and may be the only party with
-    // a user account in the system.
+    // Agent-owned applications fan out to the owning agent and its active
+    // agency/sub-agent staff chain. This keeps status changes visible to the
+    // responsible agency without leaking them to sibling tenants.
     if (app.agentId) {
-      const [agentRec3] = await db.select({ userId: agentsTable.userId }).from(agentsTable)
-        .where(eq(agentsTable.id, app.agentId));
-      if (agentRec3?.userId && !recipientIds.includes(agentRec3.userId)) {
-        recipientIds.push(agentRec3.userId);
+      const agentRecipients = await getAgentNotificationRecipientIds(app.agentId);
+      for (const recipientId of agentRecipients) {
+        if (!recipientIds.includes(recipientId)) recipientIds.push(recipientId);
       }
     } else if (studentRec3?.userId) {
       recipientIds.push(studentRec3.userId);
