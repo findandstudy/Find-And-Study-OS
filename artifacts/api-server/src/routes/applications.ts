@@ -5,7 +5,7 @@ import { normalizeGpaTo100 } from "../lib/gpaNormalize";
 import { requireAuth, requireRole, requireAgentStaffPermission, logAudit } from "../lib/auth";
 import { STAFF_ROLES, ADMIN_ROLES, AGENT_ROLES, isAgentRole } from "../lib/roles";
 import { assertCanAccessStudent } from "../lib/studentAccess";
-import { getAgentVisibleIds, getAgentRecord } from "../lib/agentVisibility";
+import { getAgentVisibleIds, getAgentRecord, getAgentNotificationRecipientIds } from "../lib/agentVisibility";
 import { isAgentSourcedAndBlockedForStaff } from "../lib/rbac/agentSourceScope";
 import { getEffectivePermissionSet, canAccessAssignedRecord, userHasPermission } from "../lib/permissions";
 import { cascadeApplicationAssignment } from "../lib/leadAssignment";
@@ -2472,11 +2472,14 @@ router.post("/applications/:id/notes", requireAuth, requireRole(...STAFF_ROLES, 
     if (app.assignedToId && app.assignedToId !== req.user!.id) {
       recipientIds.push(app.assignedToId);
     }
-    if (app.agentId) {
-      const [agent] = await db.select({ userId: agentsTable.userId }).from(agentsTable)
-        .where(eq(agentsTable.id, app.agentId));
-      if (agent?.userId && agent.userId !== req.user!.id && !recipientIds.includes(agent.userId)) {
-        recipientIds.push(agent.userId);
+    // Private notes are restricted to the main account. They must never
+    // notify an agent, sub-agent, or agent staff member.
+    if (app.agentId && !(isStaff && isInternal === true)) {
+      const agentRecipients = await getAgentNotificationRecipientIds(app.agentId);
+      for (const recipientId of agentRecipients) {
+        if (recipientId !== req.user!.id && !recipientIds.includes(recipientId)) {
+          recipientIds.push(recipientId);
+        }
       }
     }
     if (recipientIds.length > 0) {
