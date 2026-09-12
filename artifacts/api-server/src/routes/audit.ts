@@ -1,8 +1,9 @@
 import { Router, type IRouter } from "express";
 import { db, auditLogsTable, usersTable, studentsTable, leadsTable, applicationsTable, documentsTable, programsTable, agentsTable } from "@workspace/db";
-import { sql, desc, ilike, or, eq, and, inArray, isNotNull, isNull } from "drizzle-orm";
+import { sql, desc, ilike, or, eq, and, inArray, isNotNull, isNull, notInArray } from "drizzle-orm";
 import { requireAuth, requireRole } from "../lib/auth";
-import { MANAGER_ROLES, STAFF_ROLES } from "../lib/roles";
+import { AGENT_ROLES, MANAGER_ROLES, STAFF_ROLES } from "../lib/roles";
+import { getAgentVisibleIds } from "../lib/agentVisibility";
 import { checkAssignmentConsistency } from "../lib/assignmentConsistencyChecker";
 
 const router: IRouter = Router();
@@ -214,10 +215,16 @@ async function enrichAuditRows(data: any[]) {
  * Document events are included only when the document belongs to one of those
  * assigned leads, students, or applications.
  */
-router.get("/audit/dashboard", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
+router.get("/audit/dashboard", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES), async (req, res): Promise<void> => {
   const user = req.user!;
   const requestedLimit = parseInt(String(req.query.limit ?? "20"), 10);
   const limit = Math.min(20, Math.max(1, Number.isFinite(requestedLimit) ? requestedLimit : 20));
+  const isAgentViewer = (AGENT_ROLES as readonly string[]).includes(user.role);
+  const visibleAgentIds = isAgentViewer ? await getAgentVisibleIds(user.id, user.role) : [];
+  if (isAgentViewer && visibleAgentIds.length === 0) {
+    res.json({ data: [] });
+    return;
+  }
 
   const ownedDocument = and(
     isNotNull(documentsTable.id),
@@ -259,19 +266,19 @@ router.get("/audit/dashboard", requireAuth, requireRole(...STAFF_ROLES), async (
     .leftJoin(leadsTable, and(
       eq(auditLogsTable.resource, "lead"),
       eq(auditLogsTable.resourceId, leadsTable.id),
-      eq(leadsTable.assignedToId, user.id),
+      isAgentViewer ? inArray(leadsTable.agentId, visibleAgentIds) : eq(leadsTable.assignedToId, user.id),
       isNull(leadsTable.deletedAt),
     ))
     .leftJoin(studentsTable, and(
       eq(auditLogsTable.resource, "student"),
       eq(auditLogsTable.resourceId, studentsTable.id),
-      eq(studentsTable.assignedToId, user.id),
+      isAgentViewer ? inArray(studentsTable.agentId, visibleAgentIds) : eq(studentsTable.assignedToId, user.id),
       isNull(studentsTable.deletedAt),
     ))
     .leftJoin(applicationsTable, and(
       eq(auditLogsTable.resource, "application"),
       eq(auditLogsTable.resourceId, applicationsTable.id),
-      eq(applicationsTable.assignedToId, user.id),
+      isAgentViewer ? inArray(applicationsTable.agentId, visibleAgentIds) : eq(applicationsTable.assignedToId, user.id),
       isNull(applicationsTable.deletedAt),
     ))
     .leftJoin(documentsTable, and(
@@ -279,11 +286,14 @@ router.get("/audit/dashboard", requireAuth, requireRole(...STAFF_ROLES), async (
       eq(auditLogsTable.resourceId, documentsTable.id),
       isNull(documentsTable.deletedAt),
     ))
-    .where(or(
-      isNotNull(leadsTable.id),
-      isNotNull(studentsTable.id),
-      isNotNull(applicationsTable.id),
-      ownedDocument,
+    .where(and(
+      or(
+        isNotNull(leadsTable.id),
+        isNotNull(studentsTable.id),
+        isNotNull(applicationsTable.id),
+        ownedDocument,
+      ),
+      ...(isAgentViewer ? [notInArray(auditLogsTable.action, ["create_note", "delete_note", "conversation_note_create"])] : []),
     ))
     .orderBy(desc(auditLogsTable.createdAt))
     .limit(limit);

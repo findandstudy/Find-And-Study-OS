@@ -42,6 +42,15 @@ function getInitials(firstName?: string, lastName?: string) {
   return `${(firstName || "?")[0]}${(lastName || "?")[0]}`.toUpperCase();
 }
 
+function resolveAgentActionUrl(url: unknown): string | null {
+  if (typeof url !== "string") return null;
+  const normalized = url.trim();
+  // Notifications may only navigate within the current app. Reject absolute,
+  // protocol-relative, control-character and backslash URLs before role mapping.
+  if (!normalized.startsWith("/") || normalized.startsWith("//") || normalized.includes("\\") || normalized.includes("\r") || normalized.includes("\n")) return null;
+  return normalized.replace(/^\/staff\//, "/agent/");
+}
+
 const NOTIFICATION_ICONS: Record<string, typeof Bell> = {
   "lead.created": UserPlus,
   "lead.assigned": Users,
@@ -72,6 +81,7 @@ export default function AgentDashboard() {
   const { t, lang } = useI18n();
   const dateLoc = getLocale(lang);
   const [, setLocation] = useLocation();
+  const queryClient = useQueryClient();
   const [showAddLead, setShowAddLead] = useState(false);
   const [showAddStudent, setShowAddStudent] = useState(false);
   const { stages: pipelineStages } = usePipelineStages("student");
@@ -96,8 +106,8 @@ export default function AgentDashboard() {
   const latestStudents: any[] = latestStudentsData?.data || [];
 
   const { data: latestAuditData } = useQuery<any>({
-    queryKey: ["/api/audit", "agent-dashboard-latest"],
-    queryFn: () => fetch(`${BASE}/api/audit?limit=5&page=1`, { credentials: "include" }).then(r => r.json()),
+    queryKey: ["/api/audit/dashboard", "agent-dashboard-latest"],
+    queryFn: () => fetch(`${BASE}/api/audit/dashboard?limit=5`, { credentials: "include" }).then(r => r.json()),
   });
   const latestUpdates: any[] = latestAuditData?.data || [];
 
@@ -106,6 +116,14 @@ export default function AgentDashboard() {
     queryFn: () => fetch(`${BASE}/api/notifications?limit=5`, { credentials: "include" }).then(r => r.json()),
   });
   const latestNotifications: any[] = notificationsData?.data || [];
+
+  const markNotificationRead = async (id: number) => {
+    try {
+      await fetch(`${BASE}/api/notifications/${id}/read`, { method: "PATCH", credentials: "include" });
+      queryClient.setQueryData(["/api/notifications", "agent-dashboard-latest"], (current: any) => current ? { ...current, data: (current.data || []).map((item: any) => item.id === id ? { ...item, isRead: true } : item) } : current);
+      void queryClient.invalidateQueries({ queryKey: ["notification-section-counts"] });
+    } catch { /* a failed read receipt must not block navigation */ }
+  };
 
   const { data: quickLinksData } = useQuery<any>({
     queryKey: ["/api/quick-links"],
@@ -220,12 +238,14 @@ export default function AgentDashboard() {
                 <p className="text-sm text-muted-foreground">{t("agentDash.noUpdates")}</p>
               ) : (
                 latestUpdates.map((u: any, i: number) => {
-                  const detailHref = u.resource && u.resourceId
-                    ? `/agent/${u.resource === "application" ? "applications" : u.resource === "student" ? "students" : u.resource === "lead" ? "leads" : ""}/${u.resourceId}`
+                  const resourcePath = u.resource === "application" ? "applications" : u.resource === "student" ? "students" : u.resource === "lead" ? "leads" : null;
+                  const detailHref = resourcePath && Number.isSafeInteger(Number(u.resourceId))
+                    ? `/agent/${resourcePath}/${u.resourceId}`
                     : null;
                   const actionLabel = (u.action || "").replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase());
                   const resourceLabel = (u.resource || "").replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase());
-                  const changes = u.data ? Object.entries(u.data).filter(([k]) => !["id", "updatedAt"].includes(k)).slice(0, 2).map(([k, v]) => `${k}: ${v}`).join(", ") : "";
+                  const changeSource = u.changes ?? u.data;
+                  const changes = changeSource ? Object.entries(changeSource).filter(([k]) => !["id", "updatedAt"].includes(k)).slice(0, 2).map(([k, v]) => `${k}: ${typeof v === "object" ? JSON.stringify(v) : v}`).join(", ") : "";
                   const Wrapper = detailHref ? Link : "div" as any;
                   const wrapperProps = detailHref ? { href: detailHref } : {};
                   return (
@@ -275,7 +295,17 @@ export default function AgentDashboard() {
                   const NIcon = NOTIFICATION_ICONS[n.type] || Bell;
                   const localized = localizeNotification(n, lang);
                   return (
-                    <div key={n.id} className={`p-3 rounded-xl border transition-colors ${n.isRead ? "bg-secondary/20 border-border/50" : "bg-primary/5 border-primary/20"}`}>
+                    <button
+                      key={n.id}
+                      type="button"
+                      onClick={() => {
+                        if (!n.isRead) void markNotificationRead(n.id);
+                        const resolvedUrl = resolveAgentActionUrl(n.actionUrl);
+                        if (resolvedUrl) setLocation(resolvedUrl);
+                      }}
+                      aria-label={localized.title}
+                      className={`w-full text-left p-3 rounded-xl border transition-colors hover:bg-secondary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${n.isRead ? "bg-secondary/20 border-border/50" : "bg-primary/5 border-primary/20"}`}
+                    >
                       <div className="flex items-start gap-2.5">
                         <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 mt-0.5 ${n.isRead ? "bg-muted/50" : "bg-primary/10"}`}>
                           <NIcon className={`w-3.5 h-3.5 ${n.isRead ? "text-muted-foreground" : "text-primary"}`} />
@@ -292,7 +322,7 @@ export default function AgentDashboard() {
                           {formatTimeAgo(lang, n.createdAt)}
                         </span>
                       </div>
-                    </div>
+                    </button>
                   );
                 })
               )}
