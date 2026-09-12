@@ -195,7 +195,9 @@ function ApplicationStageDocuments({
         targetStageLabel={currentStageMeta?.label || application.stage || "inquiry"}
         uploadStage={uploadStageMeta?.key || uploadStage}
         moveAfterUpload={false}
-        quickMode
+        // Offer stages can require a validity date; keep the full dialog for
+        // those stages so the backend requirement is satisfiable.
+        quickMode={uploadStageMeta?.requiresValidUntil !== true}
         onUploaded={() => {
           queryClient.invalidateQueries({ queryKey: ["inbox-application-stage-documents", application.id] });
           onUpdated?.();
