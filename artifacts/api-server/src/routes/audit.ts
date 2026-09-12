@@ -226,29 +226,55 @@ router.get("/audit/dashboard", requireAuth, requireRole(...STAFF_ROLES, ...AGENT
     return;
   }
 
-  const ownedDocument = and(
-    isNotNull(documentsTable.id),
-    or(
-      sql<boolean>`EXISTS (
-        SELECT 1 FROM ${studentsTable} AS dashboard_document_student
-        WHERE dashboard_document_student.id = ${documentsTable.studentId}
-          AND dashboard_document_student.assigned_to_id = ${user.id}
-          AND dashboard_document_student.deleted_at IS NULL
-      )`,
-      sql<boolean>`EXISTS (
-        SELECT 1 FROM ${leadsTable} AS dashboard_document_lead
-        WHERE dashboard_document_lead.id = ${documentsTable.leadId}
-          AND dashboard_document_lead.assigned_to_id = ${user.id}
-          AND dashboard_document_lead.deleted_at IS NULL
-      )`,
-      sql<boolean>`EXISTS (
-        SELECT 1 FROM ${applicationsTable} AS dashboard_document_application
-        WHERE dashboard_document_application.id = ${documentsTable.applicationId}
-          AND dashboard_document_application.assigned_to_id = ${user.id}
-          AND dashboard_document_application.deleted_at IS NULL
-      )`,
-    ),
-  );
+  // A document event follows the same ownership boundary as its parent.
+  // Agents own records through the agent/child-agent relation; staff own them
+  // through direct assignment. This prevents admin or worker uploads from
+  // leaking into another agency dashboard.
+  const visibleAgentIdsSql = isAgentViewer
+    ? sql.join(visibleAgentIds.map((id) => sql`${id}`), sql`, `)
+    : null;
+  const documentOwner = isAgentViewer
+    ? or(
+        sql<boolean>`EXISTS (
+          SELECT 1 FROM ${studentsTable} AS dashboard_document_student
+          WHERE dashboard_document_student.id = ${documentsTable.studentId}
+            AND dashboard_document_student.agent_id IN (${visibleAgentIdsSql!})
+            AND dashboard_document_student.deleted_at IS NULL
+        )`,
+        sql<boolean>`EXISTS (
+          SELECT 1 FROM ${leadsTable} AS dashboard_document_lead
+          WHERE dashboard_document_lead.id = ${documentsTable.leadId}
+            AND dashboard_document_lead.agent_id IN (${visibleAgentIdsSql!})
+            AND dashboard_document_lead.deleted_at IS NULL
+        )`,
+        sql<boolean>`EXISTS (
+          SELECT 1 FROM ${applicationsTable} AS dashboard_document_application
+          WHERE dashboard_document_application.id = ${documentsTable.applicationId}
+            AND dashboard_document_application.agent_id IN (${visibleAgentIdsSql!})
+            AND dashboard_document_application.deleted_at IS NULL
+        )`,
+      )
+    : or(
+        sql<boolean>`EXISTS (
+          SELECT 1 FROM ${studentsTable} AS dashboard_document_student
+          WHERE dashboard_document_student.id = ${documentsTable.studentId}
+            AND dashboard_document_student.assigned_to_id = ${user.id}
+            AND dashboard_document_student.deleted_at IS NULL
+        )`,
+        sql<boolean>`EXISTS (
+          SELECT 1 FROM ${leadsTable} AS dashboard_document_lead
+          WHERE dashboard_document_lead.id = ${documentsTable.leadId}
+            AND dashboard_document_lead.assigned_to_id = ${user.id}
+            AND dashboard_document_lead.deleted_at IS NULL
+        )`,
+        sql<boolean>`EXISTS (
+          SELECT 1 FROM ${applicationsTable} AS dashboard_document_application
+          WHERE dashboard_document_application.id = ${documentsTable.applicationId}
+            AND dashboard_document_application.assigned_to_id = ${user.id}
+            AND dashboard_document_application.deleted_at IS NULL
+        )`,
+      );
+  const ownedDocument = and(isNotNull(documentsTable.id), documentOwner);
 
   const data = await db
     .select({
