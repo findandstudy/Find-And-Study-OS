@@ -38,3 +38,10 @@ test("student course finder resolves the student profile id before document acce
   assert.match(source, /id: selfStudentProfile\.id/);
   assert.doesNotMatch(source, /id: currentUser\.id,[\s\S]{0,160}setSelectedStudent/);
 });
+
+test("course finder safely formats missing or invalid catalog currency", async () => {
+  const source = await readFile(courseFinderPath, "utf8");
+  assert.match(source, /import \{ formatMoney \} from "@\/lib\/currency"/);
+  assert.match(source, /return formatMoney\(amount, currency, \{ maximumFractionDigits: 0 \}\)/);
+  assert.doesNotMatch(source, /new Intl\.NumberFormat\("en-US", \{ style: "currency", currency,/);
+});
