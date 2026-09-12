@@ -2,7 +2,7 @@ import { Router, type IRouter } from "express";
 import { db, pool, universitiesTable, programsTable, programTranslationsTable, applicationsTable, pipelineStagesTable, programDocumentRequirementsTable } from "@workspace/db";
 import { eq, ilike, sql, and, or, inArray, isNull, getTableColumns } from "drizzle-orm";
 import { requireAuth, requireRole, logAudit } from "../lib/auth";
-import { MANAGER_ROLES, STAFF_ROLES } from "../lib/roles";
+import { MANAGER_ROLES, STAFF_ROLES, AGENT_ROLES } from "../lib/roles";
 import { getCurrentSeason } from "../lib/season";
 import { sanitizeCourseFinderProgram } from "../lib/courseFinderVisibility";
 import {
@@ -30,6 +30,20 @@ const UNI_PATCH_FIELDS = [
 ];
 
 const CONTACT_FIELDS = ["contactPersonName", "contactPersonPhone", "contactPersonEmail"];
+function programResponseVisibility(user?: { role: string; agentStaffPermissions?: string[] }): {
+  contacts: boolean;
+  internalFees: boolean;
+  serviceFee: boolean;
+} {
+  const backOfficeRole = Boolean(user && ([...STAFF_ROLES, ...AGENT_ROLES] as string[]).includes(user.role));
+  const agentStaff = user?.role === "agent_staff";
+  return {
+    contacts: backOfficeRole,
+    internalFees: backOfficeRole && (!agentStaff || (user?.agentStaffPermissions ?? []).includes("view_commission_amount")),
+    serviceFee: backOfficeRole && (!agentStaff || (user?.agentStaffPermissions ?? []).includes("view_service_fee")),
+  };
+}
+
 // Internal fields that must never leak through unauthenticated /universities
 // endpoints. assignedStaffIds is the per-university notification recipient
 // list — exposing it would reveal internal user-id assignments publicly.
@@ -345,17 +359,11 @@ router.get("/programs", async (req, res): Promise<void> => {
     .offset(offset)
     .orderBy(programsTable.name);
 
-  // This legacy endpoint is used by both authenticated back-office screens and
-  // anonymous catalogue consumers. Never expose commercial fields to callers
-  // without an authenticated session; protected staff/agent screens retain the
-  // existing response contract.
-  const visibleRows: any[] = req.user
-    ? rows
-    : rows.map((row) => sanitizeCourseFinderProgram(row, {
-        contacts: false,
-        internalFees: false,
-        serviceFee: false,
-      }));
+  // Apply the same server-side projection to every caller. Agent staff's
+  // explicit switches must hold here too because application forms load their
+  // program metadata from this legacy endpoint.
+  const visibility = programResponseVisibility(req.user);
+  const visibleRows: any[] = rows.map((row) => sanitizeCourseFinderProgram(row, visibility));
 
   let data: any[] = visibleRows.map((row) => ({
     ...row,
@@ -523,13 +531,10 @@ router.get("/programs/:id", async (req, res): Promise<void> => {
   const reqs = await db.select().from(programDocumentRequirementsTable)
     .where(eq(programDocumentRequirementsTable.programId, id))
     .orderBy(programDocumentRequirementsTable.sortOrder);
-  const visibleProgram = req.user
-    ? prog
-    : sanitizeCourseFinderProgram(prog, {
-        contacts: false,
-        internalFees: false,
-        serviceFee: false,
-      });
+  const visibleProgram = sanitizeCourseFinderProgram(
+    prog,
+    programResponseVisibility(req.user),
+  );
   res.json({
     ...visibleProgram,
     contentLocale: prog.translatedLocale || "en",
