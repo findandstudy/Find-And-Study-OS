@@ -4,6 +4,7 @@ import { customFetch } from "@workspace/api-client-react";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { useI18n } from "@/hooks/use-i18n";
 import { useToast } from "@/hooks/use-toast";
+import { usePipelineStages } from "@/hooks/use-pipeline-stages";
 import { applicationCreationErrorToast } from "@/components/ApplicationCreationErrorToast";
 import type { InboxConversationDetailResponse } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
@@ -16,8 +17,10 @@ import {
   Lock,
   FileText,
   Send,
+  Upload,
 } from "lucide-react";
 import { InboxStatusControl } from "./InboxStatusControl";
+import { StageDocUploadDialog } from "@/components/StageDocUploadDialog";
 import {
   readLeadInterest,
   uniqueExactInterestMatch,
@@ -49,6 +52,7 @@ interface AppRow {
 
 interface StageDocumentRow {
   id: number;
+  stage: string;
   fileName: string;
   mimeType?: string | null;
   sizeBytes?: number | null;
@@ -86,19 +90,29 @@ function ApplicationStageDocuments({
   application,
   onSendDocument,
   sendingDisabled,
+  onUpdated,
 }: {
   application: AppRow;
   onSendDocument?: (document: SendableApplicationDocument) => Promise<void>;
   sendingDisabled?: boolean;
+  onUpdated?: () => void;
 }) {
+  const { t } = useI18n();
   const [sendingId, setSendingId] = useState<number | null>(null);
+  const [uploadOpen, setUploadOpen] = useState(false);
+  const [uploadStage, setUploadStage] = useState(application.stage || "inquiry");
+  const queryClient = useQueryClient();
+  const { stages: pipelineStages } = usePipelineStages("application");
+  const uploadableStages = pipelineStages.filter((stage) => (stage.uploadPermissionLevel ?? "none") !== "none");
+  const uploadStageMeta = pipelineStages.find((stage) => stage.key === uploadStage);
+  const currentStageMeta = pipelineStages.find((stage) => stage.key === application.stage);
   const { data, isLoading } = useQuery<StageDocumentRow[]>({
-    queryKey: ["inbox-application-stage-documents", application.id, application.stage],
-    queryFn: () =>
-      customFetch(
-        `${BASE_URL}/api/applications/${application.id}/stage-documents?stage=${encodeURIComponent(application.stage || "inquiry")}`,
-      ),
-    enabled: Boolean(application.id && application.stage),
+    // Fetch every process-stage document, not only the current stage. Offer,
+    // deposit and final-acceptance evidence must remain visible after the
+    // application advances to a later stage.
+    queryKey: ["inbox-application-stage-documents", application.id],
+    queryFn: () => customFetch(BASE_URL + "/api/applications/" + application.id + "/stage-documents?limit=200"),
+    enabled: Boolean(application.id),
     staleTime: 15_000,
   });
   const documents = (data ?? []).filter(
@@ -106,46 +120,87 @@ function ApplicationStageDocuments({
       !document.isMissingDocNote && Boolean(document.fileUrl || document.hasFileData),
   );
 
-  if (isLoading || documents.length === 0) return null;
-
   return (
-    <div className="mt-2 space-y-1 border-t border-border/60 pt-2">
-      {documents.map((document) => (
-        <div key={document.id} className="flex min-w-0 items-center gap-1.5">
-          <FileText className="h-3.5 w-3.5 shrink-0 text-primary/70" />
-          <span className="min-w-0 flex-1 truncate text-[10px]" title={document.fileName}>
-            {document.fileName}
-          </span>
-          {onSendDocument && (
-            <button
-              type="button"
-              className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-primary transition-colors hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-40"
-              title={sendingDisabled ? "The 24-hour reply window is closed" : "Send document to chat"}
-              aria-label={`Send ${document.fileName} to chat`}
-              disabled={sendingDisabled || sendingId !== null}
-              onClick={async () => {
-                setSendingId(document.id);
-                try {
-                  await onSendDocument({
-                    applicationId: application.id,
-                    documentId: document.id,
-                    fileName: document.fileName,
-                    mimeType: document.mimeType,
-                  });
-                } finally {
-                  setSendingId(null);
-                }
-              }}
-            >
-              {sendingId === document.id ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <Send className="h-3.5 w-3.5" />
-              )}
-            </button>
-          )}
+    <div className="mt-2 space-y-1.5 border-t border-border/60 pt-2">
+      {documents.map((document) => {
+        const stageLabel = pipelineStages.find((stage) => stage.key === document.stage)?.label || document.stage;
+        return (
+          <div key={document.id} className="flex min-w-0 items-center gap-1.5">
+            <FileText className="h-3.5 w-3.5 shrink-0 text-primary/70" />
+            <span className="min-w-0 flex-1 truncate text-[10px]" title={document.fileName}>
+              {document.fileName}
+              <span className="ms-1 text-[9px] text-muted-foreground">· {stageLabel}</span>
+            </span>
+            {onSendDocument && (
+              <button
+                type="button"
+                className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-primary transition-colors hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-40"
+                title={sendingDisabled ? "The 24-hour reply window is closed" : "Send document to chat"}
+                aria-label={"Send " + document.fileName + " to chat"}
+                disabled={sendingDisabled || sendingId !== null}
+                onClick={async () => {
+                  setSendingId(document.id);
+                  try {
+                    await onSendDocument({
+                      applicationId: application.id,
+                      documentId: document.id,
+                      fileName: document.fileName,
+                      mimeType: document.mimeType,
+                    });
+                  } finally {
+                    setSendingId(null);
+                  }
+                }}
+              >
+                {sendingId === document.id ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Send className="h-3.5 w-3.5" />
+                )}
+              </button>
+            )}
+          </div>
+        );
+      })}
+      {!isLoading && uploadableStages.length > 0 && (
+        <div className="flex min-w-0 items-center gap-1.5 pt-1">
+          <select
+            value={uploadStage}
+            onChange={(event) => setUploadStage(event.target.value)}
+            className="h-7 min-w-0 flex-1 rounded-md border border-input bg-background px-1.5 text-[10px]"
+            aria-label={t("stageDocUpload.uploadDocuments")}
+          >
+            {uploadableStages.map((stage) => (
+              <option key={stage.key} value={stage.key}>{stage.label || stage.key}</option>
+            ))}
+          </select>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-7 shrink-0 gap-1 px-2 text-[10px]"
+            onClick={() => setUploadOpen(true)}
+            data-testid={"button-upload-process-document-" + application.id}
+          >
+            <Upload className="h-3 w-3" />
+            {t("stageDocUpload.quickTitle")}
+          </Button>
         </div>
-      ))}
+      )}
+      <StageDocUploadDialog
+        open={uploadOpen}
+        onClose={() => setUploadOpen(false)}
+        applicationId={application.id}
+        targetStage={application.stage || "inquiry"}
+        targetStageLabel={currentStageMeta?.label || application.stage || "inquiry"}
+        uploadStage={uploadStageMeta?.key || uploadStage}
+        moveAfterUpload={false}
+        quickMode
+        onUploaded={() => {
+          queryClient.invalidateQueries({ queryKey: ["inbox-application-stage-documents", application.id] });
+          onUpdated?.();
+        }}
+      />
     </div>
   );
 }
@@ -697,6 +752,7 @@ export function InboxApplicationTab({
                   application={app}
                   onSendDocument={onSendDocument}
                   sendingDisabled={documentSendingDisabled}
+                  onUpdated={onUpdated}
                 />
               </div>
               <button

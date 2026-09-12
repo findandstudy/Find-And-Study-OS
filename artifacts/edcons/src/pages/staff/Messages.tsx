@@ -522,6 +522,11 @@ function InboxTab() {
   const [inboxStaffLoading, setInboxStaffLoading] = useState(true);
   const [convs, setConvs] = useState<InboxConversation[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMoreConversations, setLoadingMoreConversations] = useState(false);
+  const [hasMoreConversations, setHasMoreConversations] = useState(false);
+  const inboxCursorRef = useRef<string | null>(null);
+  const inboxFilterKeyRef = useRef<string | null>(null);
+  const inboxAppendInFlightRef = useRef(false);
   const inboxRequestSequenceRef = useRef(0);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [detail, setDetail] = useState<InboxConversationDetailResponse | null>(null);
@@ -769,29 +774,86 @@ function InboxTab() {
       ? "stale"
       : liveStatus;
 
-  const fetchInbox = useCallback(async (options?: { background?: boolean }) => {
+  const fetchInbox = useCallback(async (options?: { background?: boolean; append?: boolean }) => {
     const background = options?.background === true;
+    const append = options?.append === true;
+    if (background && inboxAppendInFlightRef.current) return;
     const requestSequence = ++inboxRequestSequenceRef.current;
-    if (!background) setLoading(true);
+    const filterKey = JSON.stringify([tab, channel, sortOrder, showTests, debouncedInboxSearch, assignedStaffId]);
+    const queryChanged = inboxFilterKeyRef.current !== filterKey;
+    if (queryChanged) {
+      inboxFilterKeyRef.current = filterKey;
+      inboxCursorRef.current = null;
+      setHasMoreConversations(false);
+      if (!background) setConvs([]);
+    }
+    const cursor = append ? inboxCursorRef.current : null;
+    if (append && !cursor) return;
+    if (append) {
+      inboxAppendInFlightRef.current = true;
+      setLoadingMoreConversations(true);
+    } else if (!background) {
+      setLoading(true);
+    }
     try {
-      const params = new URLSearchParams({ tab, order: sortOrder });
+      const params = new URLSearchParams({ tab, order: sortOrder, limit: "200" });
       if (channel !== "all") params.set("channel", channel);
       if (showTests) params.set("showTests", "true");
       if (debouncedInboxSearch) params.set("search", debouncedInboxSearch);
       if (assignedStaffId !== null) params.set("assignedToId", String(assignedStaffId));
-      const url = `/api/inbox/conversations?${params.toString()}`;
-      const res = await customFetch(url);
+      if (cursor) params.set("cursor", cursor);
+      const url = "/api/inbox/conversations?" + params.toString();
+      const res: any = await customFetch(url);
       if (requestSequence === inboxRequestSequenceRef.current) {
-        setConvs((res as any)?.data || []);
+        const incoming = Array.isArray(res?.data) ? res.data : [];
+        const responseCursor = typeof res?.nextCursor === "string" ? res.nextCursor : null;
+        // A background refresh replaces only the newest page. Preserve the
+        // cursor for already loaded older pages, otherwise “load more” would
+        // request page two again after every live update.
+        const hadOlderPages = inboxCursorRef.current !== null;
+        if (!background || queryChanged || !hadOlderPages) {
+          inboxCursorRef.current = responseCursor;
+        }
+        setHasMoreConversations((previous) =>
+          background && !queryChanged
+            ? Boolean(previous || res?.hasMore || inboxCursorRef.current)
+            : Boolean(res?.hasMore && inboxCursorRef.current),
+        );
+        if (append) {
+          setConvs((previous) => {
+            const seen = new Set(previous.map((conversation) => conversation.id));
+            return [...previous, ...incoming.filter((conversation: InboxConversation) => !seen.has(conversation.id))];
+          });
+        } else if (background && !queryChanged) {
+          setConvs((previous) => {
+            const fresh = new Map<number, InboxConversation>(incoming.map((conversation: InboxConversation) => [conversation.id, conversation] as const));
+            const merged = previous.map((conversation) => fresh.get(conversation.id) ?? conversation);
+            const existing = new Set(merged.map((conversation) => conversation.id));
+            return [...incoming, ...merged.filter((conversation) => !existing.has(conversation.id))];
+          });
+        } else {
+          setConvs(incoming);
+        }
       }
     } catch {
-      // A transient live-refresh failure must not blank an already usable
-      // inbox. Explicit/filter-changing loads retain the previous behavior.
-      if (!background && requestSequence === inboxRequestSequenceRef.current) setConvs([]);
+      if (!background && !append && requestSequence === inboxRequestSequenceRef.current) setConvs([]);
     } finally {
-      if (requestSequence === inboxRequestSequenceRef.current) setLoading(false);
+      if (append) inboxAppendInFlightRef.current = false;
+      if (requestSequence === inboxRequestSequenceRef.current) {
+        if (!background && !append) setLoading(false);
+        if (append) setLoadingMoreConversations(false);
+      } else if (append) {
+        // A filter change may supersede the append request; never leave the
+        // load-more control stuck in its busy state.
+        setLoadingMoreConversations(false);
+      }
     }
   }, [tab, channel, sortOrder, showTests, debouncedInboxSearch, assignedStaffId]);
+
+  const loadMoreConversations = useCallback(() => {
+    if (!hasMoreConversations || loadingMoreConversations) return;
+    void fetchInbox({ append: true });
+  }, [fetchInbox, hasMoreConversations, loadingMoreConversations]);
 
   useEffect(() => { fetchInbox(); }, [fetchInbox]);
 
@@ -2454,6 +2516,22 @@ function InboxTab() {
                 </div>
               );
             })}
+            {hasMoreConversations && (
+              <div className="flex justify-center border-t border-border/30 p-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  className="h-8 w-full text-xs"
+                  onClick={loadMoreConversations}
+                  disabled={loadingMoreConversations}
+                  data-testid="button-load-more-conversations"
+                >
+                  {loadingMoreConversations ? <Loader2 className="me-1.5 h-3.5 w-3.5 animate-spin" /> : <ChevronDown className="me-1.5 h-3.5 w-3.5" />}
+                  {loadingMoreConversations ? t("common.loading") : t("inbox.chat.loadOlder")}
+                </Button>
+              </div>
+            )}
           </div>
         </div>
 

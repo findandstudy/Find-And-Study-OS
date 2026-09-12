@@ -3022,6 +3022,10 @@ router.post(
           },
         },
       });
+      if (inbound.messageId === 0) {
+        res.status(403).json({ error: "contact_blocked" });
+        return;
+      }
       const outcome = session.conversation.aiBotId != null
         ? await maybeAutoReply({
             conversationId: inbound.conversationId,
@@ -3123,6 +3127,16 @@ router.post(
           },
         },
       });
+      if (inbound.messageId === 0) {
+        try {
+          const file = await embedChatMediaStorage.getObjectEntityFile(storedPath);
+          await file.delete({ ignoreNotFound: true });
+        } catch {
+          // Best-effort cleanup of media submitted by a blocked contact.
+        }
+        res.status(403).json({ error: "contact_blocked" });
+        return;
+      }
       const outcome = caption
         ? await maybeAutoReply({
             conversationId: inbound.conversationId,
