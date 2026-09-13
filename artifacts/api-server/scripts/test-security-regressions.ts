@@ -487,9 +487,10 @@ test("contract HTML and rendered placeholders cannot persist executable markup",
 });
 
 test("legacy public program routes strip commercial fields for anonymous callers", () => {
-  assert.match(universitiesRouteSource, /const visibleRows: any\[\] = req\.user/);
+  assert.match(universitiesRouteSource, /const visibility = programResponseVisibility\(req\.user\)/);
+  assert.match(universitiesRouteSource, /const visibleRows: any\[\] = rows\.map/);
   assert.match(universitiesRouteSource, /sanitizeCourseFinderProgram\(row/);
-  assert.match(universitiesRouteSource, /const visibleProgram = req\.user/);
+  assert.match(universitiesRouteSource, /const visibleProgram = sanitizeCourseFinderProgram\(/);
 });
 
 test("widget-specific CORS clears permissive headers before applying its allow-list", () => {
