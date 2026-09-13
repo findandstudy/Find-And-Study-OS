@@ -1,8 +1,9 @@
 import { db, agentsTable, usersTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { and, eq, inArray, isNull } from "drizzle-orm";
 
 const AGENT_VISIBILITY_TTL = 30_000;
 const agentVisibilityCache = new Map<string, { ids: number[]; fetchedAt: number }>();
+const agentNotificationCache = new Map<number, { ids: number[]; fetchedAt: number }>();
 
 export async function getAgentVisibleIds(userId: number, userRole: string): Promise<number[]> {
   const cacheKey = `${userId}:${userRole}`;
@@ -51,6 +52,77 @@ export async function getAgentVisibleIds(userId: number, userRole: string): Prom
 
 export function invalidateAgentVisibilityCache(userId: number, userRole: string): void {
   agentVisibilityCache.delete(`${userId}:${userRole}`);
+  // Relationship changes can affect both visibility and notification fan-out.
+  agentNotificationCache.clear();
+}
+
+/**
+ * Return the active user accounts that should receive an application
+ * notification for an agent-owned record.
+ *
+ * The owner, its ancestor agents, and their agent_staff members are included.
+ * Descendant/sibling agencies are deliberately excluded so a child event never
+ * leaks to an unrelated agency.
+ */
+export async function getAgentNotificationRecipientIds(agentId: number): Promise<number[]> {
+  if (!Number.isSafeInteger(agentId) || agentId <= 0) return [];
+  const cached = agentNotificationCache.get(agentId);
+  if (cached && Date.now() - cached.fetchedAt < AGENT_VISIBILITY_TTL) {
+    return [...cached.ids];
+  }
+
+  const scopedAgentIds: number[] = [];
+  const seen = new Set<number>();
+  let currentId: number | null = agentId;
+  for (let depth = 0; depth < 32 && currentId != null; depth += 1) {
+    if (seen.has(currentId)) break;
+    seen.add(currentId);
+
+    const [agent] = await db
+      .select({
+        id: agentsTable.id,
+        parentAgentId: agentsTable.parentAgentId,
+      })
+      .from(agentsTable)
+      .where(and(
+        eq(agentsTable.id, currentId),
+        eq(agentsTable.status, "active"),
+        isNull(agentsTable.deletedAt),
+      ))
+      .limit(1);
+    if (!agent) break;
+    scopedAgentIds.push(agent.id);
+    currentId = agent.parentAgentId ?? null;
+  }
+
+  if (scopedAgentIds.length === 0) return [];
+
+  const staffUsers = await db
+    .select({ id: usersTable.id })
+    .from(usersTable)
+    .where(and(
+      inArray(usersTable.managingAgentId, scopedAgentIds),
+      eq(usersTable.role, "agent_staff"),
+      eq(usersTable.isActive, true),
+    ));
+
+  // userId is nullable on legacy agent rows; active users only receive notifications.
+  const ownerUsers = await db
+    .select({ id: usersTable.id })
+    .from(agentsTable)
+    .innerJoin(usersTable, eq(agentsTable.userId, usersTable.id))
+    .where(and(
+      inArray(agentsTable.id, scopedAgentIds),
+      eq(agentsTable.status, "active"),
+      isNull(agentsTable.deletedAt),
+      eq(usersTable.isActive, true),
+    ));
+  const recipientIds = Array.from(new Set([
+    ...ownerUsers.map((row) => row.id),
+    ...staffUsers.map((row) => row.id),
+  ]));
+  agentNotificationCache.set(agentId, { ids: recipientIds, fetchedAt: Date.now() });
+  return [...recipientIds];
 }
 
 export async function getAgentRecord(userId: number, userRole?: string) {

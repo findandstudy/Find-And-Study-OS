@@ -1,4 +1,22 @@
 {
+  "catalogDetail": {
+    "verifiedPrice": "प्रमाणित सूची मूल्य",
+    "deposit": "धरौटी",
+    "location": "स्थान",
+    "relatedPrograms": "सम्बन्धित कार्यक्रमहरू",
+    "availablePrograms": "उपलब्ध कार्यक्रमहरू",
+    "availableIntakes": "उपलब्ध भर्ना सत्रहरू",
+    "capacityOpen": "खुला",
+    "capacityLimited": "सीमित",
+    "capacityFull": "भरिएको",
+    "capacityWaitlist": "प्रतीक्षा सूची",
+    "capacityClosed": "बन्द",
+    "capacityUnknown": "उपलब्धता अज्ञात",
+    "deliveryOnCampus": "क्याम्पसमा",
+    "deliveryOnline": "अनलाइन",
+    "deliveryHybrid": "हाइब्रिड",
+    "deliveryBlended": "मिश्रित"
+  },
   "integrationsManager": {
     "facebook_messenger": {
       "name": "फेसबुक / मेसेन्जर",

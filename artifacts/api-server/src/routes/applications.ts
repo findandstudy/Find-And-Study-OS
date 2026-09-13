@@ -3,9 +3,10 @@ import { db, applicationsTable, notesTable, usersTable, studentsTable, leadsTabl
 import { eq, sql, and, inArray, asc, desc, ilike, isNull, isNotNull, ne, lt, gte } from "drizzle-orm";
 import { normalizeGpaTo100 } from "../lib/gpaNormalize";
 import { requireAuth, requireRole, requireAgentStaffPermission, logAudit } from "../lib/auth";
+import type { SessionUser } from "../lib/replitAuth";
 import { STAFF_ROLES, ADMIN_ROLES, AGENT_ROLES, isAgentRole } from "../lib/roles";
 import { assertCanAccessStudent } from "../lib/studentAccess";
-import { getAgentVisibleIds, getAgentRecord } from "../lib/agentVisibility";
+import { getAgentVisibleIds, getAgentRecord, getAgentNotificationRecipientIds } from "../lib/agentVisibility";
 import { isAgentSourcedAndBlockedForStaff } from "../lib/rbac/agentSourceScope";
 import { getEffectivePermissionSet, canAccessAssignedRecord, userHasPermission } from "../lib/permissions";
 import { cascadeApplicationAssignment } from "../lib/leadAssignment";
@@ -131,6 +132,21 @@ function applicationIsUnassigned() {
 }
 
 const GLOBAL_APPLICATION_STAFF_ROLES = new Set(["super_admin", "admin"]);
+/**
+ * Commission values are a privileged financial projection. Agent staff use
+ * their explicit portal switch; every other caller must have the canonical
+ * applications.view_commission permission (agents/sub-agents retain their
+ * existing commission projection).
+ */
+async function canViewApplicationCommission(user: SessionUser): Promise<boolean> {
+  if (user.role === "agent_staff") {
+    return (user.agentStaffPermissions ?? []).includes("view_commission_amount");
+  }
+  if (user.role === "student") return false;
+  if (isAgentRole(user.role)) return true;
+  return userHasPermission(user, "applications.view_commission");
+}
+
 
 /**
  * Application read scope for branch-bound staff.
@@ -505,6 +521,7 @@ router.get("/applications", requireAuth, requireAgentStaffPermission("applicatio
 
   const user = req.user!;
   const isStaff = STAFF_ROLES.includes(user.role as any);
+  const canExposeCommission = await canViewApplicationCommission(user);
 
   const conditions = [isNull(applicationsTable.deletedAt)];
   const scopeResolveStartedAt = process.hrtime.bigint();
@@ -531,7 +548,7 @@ router.get("/applications", requireAuth, requireAgentStaffPermission("applicatio
   } else if (user.role === "student") {
     const [studentRec] = await db.select().from(studentsTable).where(eq(studentsTable.userId, user.id));
     if (!studentRec) {
-      res.json({ data: [], meta: { total: 0, totalCommission: 0, page: pageNum, limit: limitNum, totalPages: 0 } });
+      res.json({ data: [], meta: { total: 0, totalCommission: canExposeCommission ? 0 : null, page: pageNum, limit: limitNum, totalPages: 0 } });
       return;
     }
     studentScopeId = studentRec.id;
@@ -539,7 +556,7 @@ router.get("/applications", requireAuth, requireAgentStaffPermission("applicatio
   } else if (isAgentRole(user.role)) {
     agentVisibleIds = await getAgentVisibleIds(user.id, user.role);
     if (agentVisibleIds.length === 0) {
-      res.json({ data: [], meta: { total: 0, totalCommission: 0, page: pageNum, limit: limitNum, totalPages: 0 } });
+      res.json({ data: [], meta: { total: 0, totalCommission: canExposeCommission ? 0 : null, page: pageNum, limit: limitNum, totalPages: 0 } });
       return;
     }
     conditions.push(inArray(applicationsTable.agentId, agentVisibleIds));
@@ -708,13 +725,13 @@ router.get("/applications", requireAuth, requireAgentStaffPermission("applicatio
     const stages = summaryRows.map(row => ({
       stage: row.stage,
       total: Number(row.count ?? 0),
-      totalCommission: resolveApplicationCommissionTotal({
+      totalCommission: canExposeCommission ? resolveApplicationCommissionTotal({
         universityCommissionTotal: row.universityCommissionTotal,
         agentCommissionTotal: row.agentCommissionTotal,
         subAgentCommissionTotal: row.subAgentCommissionTotal,
         isAgentUser: Boolean(isAgentUser),
         isSubAgentUser,
-      }),
+      }) : null,
     }));
 
     res.json({
@@ -766,9 +783,10 @@ router.get("/applications", requireAuth, requireAgentStaffPermission("applicatio
     fee: commissionsTable.universityCommissionAmount,
     date: applicationsTable.createdAt,
   };
-  const orderColumn = sortColumns[sortKey] || applicationsTable.createdAt;
+  const resolvedSortKey = !canExposeCommission && sortKey === "fee" ? "date" : sortKey;
+  const orderColumn = sortColumns[resolvedSortKey] || applicationsTable.createdAt;
   const order = sortDir === "asc" ? asc(orderColumn) : desc(orderColumn);
-  const orderBy = sortKey === "stage"
+  const orderBy = resolvedSortKey === "stage"
     ? [
         // Unknown/retired custom stages stay at the end in both directions.
         asc(applicationStageIsUnknown),
@@ -857,15 +875,22 @@ router.get("/applications", requireAuth, requireAgentStaffPermission("applicatio
   ]);
   const { countryRows, universityRows, agentRows } = facetRows;
   const count = includeTotals ? (countRows[0]?.count ?? 0) : rows.length;
-  const totalCommission = includeTotals ? resolveApplicationCommissionTotal({
+  const totalCommission = includeTotals && canExposeCommission ? resolveApplicationCommissionTotal({
     universityCommissionTotal: countRows[0]?.universityCommissionTotal,
     agentCommissionTotal: countRows[0]?.agentCommissionTotal,
     subAgentCommissionTotal: countRows[0]?.subAgentCommissionTotal,
     isAgentUser: Boolean(isAgentUser),
     isSubAgentUser,
-  }) : undefined;
+  }) : (includeTotals ? null : undefined);
   const mappedRows = rows.map(r => {
     const { agentCommissionAmount, subAgentCommissionAmount, commissionAmount: uniAmt, ...rest } = r;
+    if (!canExposeCommission) {
+      return {
+        ...rest,
+        commissionAmount: null,
+        studentPhotoUrl: rest.studentHasPhoto ? buildStableSignedStudentPhotoThumbnailPath(rest.studentId) : null,
+      };
+    }
     const uniNum = parseFloat(String(uniAmt ?? "0")) || 0;
     const agentNum = parseFloat(String(agentCommissionAmount ?? "0")) || 0;
     const subNum = parseFloat(String(subAgentCommissionAmount ?? "0")) || 0;
@@ -1409,6 +1434,7 @@ router.get("/applications/:id", requireAuth, requireAgentStaffPermission("applic
 
   const user = req.user!;
   const isStaff = STAFF_ROLES.includes(user.role as any);
+  const canExposeCommission = await canViewApplicationCommission(user);
   if (isStaff && !GLOBAL_APPLICATION_STAFF_ROLES.has(user.role)) {
     const visibleBranchIds = await getVisibleBranchIds(user.id, user.role, user);
     const [visibleRow] = await db
@@ -1423,7 +1449,10 @@ router.get("/applications/:id", requireAuth, requireAgentStaffPermission("applic
     if (!visibleRow) { res.status(404).json({ error: "Application not found" }); return; }
   }
   // Agent and student access checks remain below.
-  if (isAgentRole(user.role)) {
+  if (!canExposeCommission) {
+    (row as any).commissionAmount = null;
+    (row as any).commissionStatus = null;
+  } else if (isAgentRole(user.role)) {
     const agentRec = await getAgentRecord(user.id, user.role);
     const isSubAgentUser = user.role === "sub_agent" || !!agentRec?.parentAgentId;
     const agentNum = parseFloat(String((row as any).agentCommissionAmount ?? "0")) || 0;
@@ -1979,15 +2008,13 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, ...AG
     const [studentRec3] = await db.select({ firstName: studentsTable.firstName, lastName: studentsTable.lastName, userId: studentsTable.userId }).from(studentsTable).where(eq(studentsTable.id, app.studentId));
     const sName3 = studentRec3 ? `${studentRec3.firstName || ""} ${studentRec3.lastName || ""}`.trim() : "";
     const recipientIds: number[] = [];
-    // When the application belongs to an agent, route the notification to the
-    // agent's user account instead of the student directly — the agent is the
-    // primary contact for agent-owned students and may be the only party with
-    // a user account in the system.
+    // Agent-owned applications fan out to the owning agent and its active
+    // agency/sub-agent staff chain. This keeps status changes visible to the
+    // responsible agency without leaking them to sibling tenants.
     if (app.agentId) {
-      const [agentRec3] = await db.select({ userId: agentsTable.userId }).from(agentsTable)
-        .where(eq(agentsTable.id, app.agentId));
-      if (agentRec3?.userId && !recipientIds.includes(agentRec3.userId)) {
-        recipientIds.push(agentRec3.userId);
+      const agentRecipients = await getAgentNotificationRecipientIds(app.agentId);
+      for (const recipientId of agentRecipients) {
+        if (!recipientIds.includes(recipientId)) recipientIds.push(recipientId);
       }
     } else if (studentRec3?.userId) {
       recipientIds.push(studentRec3.userId);
@@ -2472,11 +2499,14 @@ router.post("/applications/:id/notes", requireAuth, requireRole(...STAFF_ROLES, 
     if (app.assignedToId && app.assignedToId !== req.user!.id) {
       recipientIds.push(app.assignedToId);
     }
-    if (app.agentId) {
-      const [agent] = await db.select({ userId: agentsTable.userId }).from(agentsTable)
-        .where(eq(agentsTable.id, app.agentId));
-      if (agent?.userId && agent.userId !== req.user!.id && !recipientIds.includes(agent.userId)) {
-        recipientIds.push(agent.userId);
+    // Private notes are restricted to the main account. They must never
+    // notify an agent, sub-agent, or agent staff member.
+    if (app.agentId && !(isStaff && isInternal === true)) {
+      const agentRecipients = await getAgentNotificationRecipientIds(app.agentId);
+      for (const recipientId of agentRecipients) {
+        if (recipientId !== req.user!.id && !recipientIds.includes(recipientId)) {
+          recipientIds.push(recipientId);
+        }
       }
     }
     if (recipientIds.length > 0) {

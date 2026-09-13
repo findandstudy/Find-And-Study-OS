@@ -1,4 +1,22 @@
 {
+  "catalogDetail": {
+    "verifiedPrice": "Prezzo di catalogo verificato",
+    "deposit": "Deposito",
+    "location": "Località",
+    "relatedPrograms": "Programmi correlati",
+    "availablePrograms": "Programmi disponibili",
+    "availableIntakes": "Sessioni disponibili",
+    "capacityOpen": "Aperto",
+    "capacityLimited": "Limitato",
+    "capacityFull": "Completo",
+    "capacityWaitlist": "Lista d’attesa",
+    "capacityClosed": "Chiuso",
+    "capacityUnknown": "Disponibilità sconosciuta",
+    "deliveryOnCampus": "In campus",
+    "deliveryOnline": "Online",
+    "deliveryHybrid": "Ibrido",
+    "deliveryBlended": "Misto"
+  },
   "integrationsManager": {
     "facebook_messenger": {
       "name": "Facebook/Messenger",

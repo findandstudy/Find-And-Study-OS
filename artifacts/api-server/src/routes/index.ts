@@ -33,6 +33,8 @@ import aiPersonasRouter from "./ai-personas";
 import aiExtractorsRouter from "./ai-extractors";
 import aiDefaultsRouter from "./ai-defaults";
 import destinationsRouter from "./destinations";
+import publicCatalogRouter from "./public-catalog";
+import publicWebRouter from "./public-web";
 import quickLinksRouter from "./quickLinks";
 import exportRouter from "./export";
 import programDocumentRequirementsRouter from "./programDocumentRequirements";
@@ -225,13 +227,16 @@ router.use(agentsRouter);
 router.use(agentEmbedRouter);
 router.use(applicationsRouter);
 router.use(documentsRouter);
+// Catalog owns reserved /programs/import-template and /programs/bulk routes.
+// Mount it before universitiesRouter so the generic /programs/:id handler
+// cannot interpret "import-template" as an id.
+router.use(catalogRouter);
 router.use(universitiesRouter);
 router.use(financeRouter);
 router.use(contentRouter);
 router.use(settingsRouter);
 router.use(auditRouter);
 router.use(statsRouter);
-router.use(catalogRouter);
 router.use(aiExtractRouter);
 router.use(pipelineRouter);
 router.use(courseFinderRouter);
@@ -247,6 +252,8 @@ router.use(applicationStageDocumentsRouter);
 router.use(embedRouter);
 router.use(publicApplyRouter);
 router.use(destinationsRouter);
+router.use(publicCatalogRouter);
+router.use(publicWebRouter);
 router.use(quickLinksRouter);
 router.use(exportRouter);
 router.use(programDocumentRequirementsRouter);

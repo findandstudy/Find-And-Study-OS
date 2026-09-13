@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test, { after } from "node:test";
 import pg from "pg";
+import { readCurrentMigrationCount } from "./current-migration-count.js";
 
 if (process.env.ALLOW_DISPOSABLE_SOCIAL_PUBLICATION_TEST !== "true")
   throw new Error(
@@ -32,7 +33,7 @@ assert.equal(
       "SELECT count(*)::integer AS count FROM drizzle.__drizzle_migrations",
     )
   ).rows[0]?.count,
-  108,
+  readCurrentMigrationCount(),
 );
 await admin.query(`DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='fas_social_executor') THEN

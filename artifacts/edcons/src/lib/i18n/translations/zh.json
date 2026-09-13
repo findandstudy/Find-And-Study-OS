@@ -1,4 +1,22 @@
 {
+  "catalogDetail": {
+    "verifiedPrice": "已验证的目录价格",
+    "deposit": "押金",
+    "location": "地点",
+    "relatedPrograms": "相关课程",
+    "availablePrograms": "可选课程",
+    "availableIntakes": "可选入学批次",
+    "capacityOpen": "开放",
+    "capacityLimited": "名额有限",
+    "capacityFull": "已满",
+    "capacityWaitlist": "候补名单",
+    "capacityClosed": "已关闭",
+    "capacityUnknown": "名额未知",
+    "deliveryOnCampus": "校内授课",
+    "deliveryOnline": "在线授课",
+    "deliveryHybrid": "混合授课",
+    "deliveryBlended": "融合授课"
+  },
   "integrationsManager": {
     "facebook_messenger": {
       "name": "Facebook / Messenger",

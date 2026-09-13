@@ -233,6 +233,21 @@ test("production prefix and canonical additive migration tail are pinned", () =>
       "0106_activity_read_path_indexes",
       "0107_program_content_translations",
       "0108_expand_system_and_program_locales",
+      "0109_public_web_content_foundation",
+      "0110_catalog_entity_graph_foundation",
+      "0111_catalog_entity_graph_hardening",
+      "0112_public_web_publication_hardening",
+      "0113_public_web_publication_trigger_fix",
+      "0114_public_web_command_adapter",
+      "0115_public_web_command_variable_binding",
+      "0116_public_web_idempotent_command_gateway",
+      "0117_public_web_replay_rls_fix",
+      "0118_public_web_authorized_command_gateway",
+      "0119_public_web_discovery_indexes",
+      "0120_public_web_city_pages",
+      "0121_public_web_city_publication_guard",
+      "0122_public_web_draft_intake",
+      "0123_public_web_draft_intake_replay_hardening",
     ],
   );
 
@@ -374,6 +389,146 @@ test("production prefix and canonical additive migration tail are pinned", () =>
   assert.doesNotMatch(
     activityReadPathMigration,
     /\b(?:TRUNCATE|DELETE FROM|UPDATE)\b/i,
+  );
+
+  const publicWebContentMigration = readFileSync(
+    path.join(root, "lib/db/drizzle/0109_public_web_content_foundation.sql"),
+    "utf8",
+  );
+  assert.match(publicWebContentMigration, /public_web_content_revisions_append_only/);
+  assert.match(publicWebContentMigration, /public_web_source_evidence_append_only/);
+  assert.match(publicWebContentMigration, /public_web_publication_receipts_append_only/);
+  assert.match(publicWebContentMigration, /public web approval requires an independent reviewer/);
+  assert.match(publicWebContentMigration, /ALTER TABLE public\.%I FORCE ROW LEVEL SECURITY/);
+  assert.doesNotMatch(publicWebContentMigration, /INSERT INTO\s+role_package_capabilities/i);
+  assert.doesNotMatch(
+    publicWebContentMigration,
+    /INSERT INTO\s+"?(programs|universities|destinations|website_pages)"?/i,
+  );
+
+  const catalogGraphMigration = readFileSync(
+    path.join(root, "lib/db/drizzle/0110_catalog_entity_graph_foundation.sql"),
+    "utf8",
+  );
+  for (const table of [
+    "catalog_sources",
+    "catalog_source_records",
+    "institution_campuses",
+    "program_intakes",
+    "price_components",
+    "tenant_catalog_listings",
+  ]) {
+    assert.match(catalogGraphMigration, new RegExp(`CREATE TABLE "${table}"`));
+  }
+  assert.match(catalogGraphMigration, /"amount_minor" bigint NOT NULL/);
+  assert.match(catalogGraphMigration, /"currency_code" text NOT NULL/);
+  assert.match(catalogGraphMigration, /catalog_source_records_append_only/);
+  assert.match(catalogGraphMigration, /program intake campus must belong to the awarding university/);
+  assert.match(catalogGraphMigration, /ALTER TABLE "tenant_catalog_listings" FORCE ROW LEVEL SECURITY/);
+  assert.doesNotMatch(catalogGraphMigration, /CREATE TABLE "(?:institution_)?requirements?"/i);
+  assert.doesNotMatch(catalogGraphMigration, /\b(?:TRUNCATE|DELETE FROM|UPDATE\s+"?(?:programs|universities))\b/i);
+
+  const catalogGraphHardeningMigration = readFileSync(
+    path.join(root, "lib/db/drizzle/0111_catalog_entity_graph_hardening.sql"),
+    "utf8",
+  );
+  assert.match(catalogGraphHardeningMigration, /GREATEST\("effective_at", COALESCE\("verified_at", "effective_at"\)\)/);
+  assert.doesNotMatch(catalogGraphHardeningMigration, /'SERVICE'/);
+  assert.match(catalogGraphHardeningMigration, /UPDATE OF "source_record_id", "source_verified_at", "source_expires_at"/);
+  assert.match(catalogGraphHardeningMigration, /tenant_catalog_listings_transition_guard/);
+  assert.match(catalogGraphHardeningMigration, /tenant_catalog_listings_initial_state_guard/);
+  assert.match(catalogGraphHardeningMigration, /must begin as an unreviewed DRAFT/);
+  assert.match(catalogGraphHardeningMigration, /approval requires an independent reviewer/);
+  assert.doesNotMatch(catalogGraphHardeningMigration, /\b(?:TRUNCATE|DELETE FROM)\b/i);
+
+  const publicWebHardeningMigration = readFileSync(
+    path.join(root, "lib/db/drizzle/0112_public_web_publication_hardening.sql"),
+    "utf8",
+  );
+  assert.match(publicWebHardeningMigration, /public_web_source_evidence_contract_guard/);
+  assert.match(publicWebHardeningMigration, /lacks current verified critical facts/);
+  assert.match(publicWebHardeningMigration, /indexing requires PASS SEO and structured data/);
+  assert.match(publicWebHardeningMigration, /must begin as a clean DRAFT/);
+  assert.doesNotMatch(publicWebHardeningMigration, /\b(?:TRUNCATE|DELETE FROM|UPDATE\s+"?(?:website_pages|programs|universities))\b/i);
+
+  const publicWebTriggerFixMigration = readFileSync(
+    path.join(root, "lib/db/drizzle/0113_public_web_publication_trigger_fix.sql"),
+    "utf8",
+  );
+  assert.match(publicWebTriggerFixMigration, /revision_seo_status text/);
+  assert.match(publicWebTriggerFixMigration, /IF NEW\."index_state" = 'INDEX'/);
+  assert.doesNotMatch(publicWebTriggerFixMigration, /revision_row record/);
+  assert.doesNotMatch(publicWebTriggerFixMigration, /\b(?:TRUNCATE|DELETE FROM|UPDATE\s+"?(?:website_pages|programs|universities))\b/i);
+
+  const publicWebCommandMigration = readFileSync(
+    path.join(root, "lib/db/drizzle/0114_public_web_command_adapter.sql"),
+    "utf8",
+  );
+  assert.match(publicWebCommandMigration, /public_web\.content\.publish/);
+  assert.match(publicWebCommandMigration, /fas_public_web_v1\.apply_publication_command/);
+  assert.match(publicWebCommandMigration, /pg_advisory_xact_lock/);
+  assert.match(publicWebCommandMigration, /public web command idempotency conflict/);
+  assert.match(publicWebCommandMigration, /authorization_decision_receipt_id/);
+  assert.match(publicWebCommandMigration, /REVOKE ALL ON ALL FUNCTIONS IN SCHEMA fas_public_web_v1 FROM PUBLIC/);
+  assert.doesNotMatch(publicWebCommandMigration, /INSERT INTO\s+(?:public\.)?role_package_capabilities/i);
+  assert.doesNotMatch(publicWebCommandMigration, /\b(?:TRUNCATE|DELETE FROM|UPDATE\s+(?:public\.)?"?(?:website_pages|programs|universities))\b/i);
+
+  const publicWebVariableBindingMigration = readFileSync(
+    path.join(root, "lib/db/drizzle/0115_public_web_command_variable_binding.sql"),
+    "utf8",
+  );
+  assert.match(publicWebVariableBindingMigration, /#variable_conflict use_variable/);
+  assert.match(publicWebVariableBindingMigration, /REVOKE ALL ON FUNCTION fas_public_web_v1\.apply_publication_command/);
+  assert.doesNotMatch(publicWebVariableBindingMigration, /\b(?:TRUNCATE|DELETE FROM|UPDATE\s+(?:public\.)?"?(?:website_pages|programs|universities))\b/i);
+
+  const publicWebGatewayMigration = readFileSync(
+    path.join(root, "lib/db/drizzle/0116_public_web_idempotent_command_gateway.sql"),
+    "utf8",
+  );
+  assert.match(publicWebGatewayMigration, /apply_publication_command_v2/);
+  assert.match(publicWebGatewayMigration, /SELECT receipt\.\* INTO v_existing_receipt/);
+  assert.match(publicWebGatewayMigration, /pg_advisory_xact_lock/);
+  assert.match(publicWebGatewayMigration, /grant only v2; v1 stays ungranted/);
+  assert.doesNotMatch(publicWebGatewayMigration, /\b(?:TRUNCATE|DELETE FROM|UPDATE\s+(?:public\.)?"?(?:website_pages|programs|universities))\b/i);
+
+  const publicWebReplayRlsFixMigration = readFileSync(
+    path.join(root, "lib/db/drizzle/0117_public_web_replay_rls_fix.sql"),
+    "utf8",
+  );
+  assert.match(publicWebReplayRlsFixMigration, /SELECT receipt\.\* INTO v_existing_receipt/);
+  assert.doesNotMatch(publicWebReplayRlsFixMigration, /\n\s*FOR UPDATE\s*;/);
+  assert.doesNotMatch(publicWebReplayRlsFixMigration, /INSERT INTO\s+(?:public\.)?role_package_capabilities/i);
+
+  const publicWebAuthorizedGatewayMigration = readFileSync(
+    path.join(root, "lib/db/drizzle/0118_public_web_authorized_command_gateway.sql"),
+    "utf8",
+  );
+  assert.match(publicWebAuthorizedGatewayMigration, /apply_authorized_publication_command/);
+  assert.match(publicWebAuthorizedGatewayMigration, /ON CONFLICT \(tenant_id, id\) DO NOTHING/);
+  assert.match(publicWebAuthorizedGatewayMigration, /apply_publication_command_v2/);
+  assert.match(publicWebAuthorizedGatewayMigration, /REVOKE ALL ON FUNCTION/);
+  assert.doesNotMatch(publicWebAuthorizedGatewayMigration, /^\s*GRANT\s/im);
+
+  const publicWebDraftIntakeMigration = readFileSync(
+    path.join(root, "lib/db/drizzle/0122_public_web_draft_intake.sql"),
+    "utf8",
+  );
+  assert.match(publicWebDraftIntakeMigration, /public_web_draft_intake_receipts_append_only/);
+  assert.match(publicWebDraftIntakeMigration, /apply_authorized_draft_intake/);
+  assert.match(publicWebDraftIntakeMigration, /pg_advisory_xact_lock/);
+  assert.match(publicWebDraftIntakeMigration, /'DRAFT', 'NOINDEX', 1/);
+  assert.match(publicWebDraftIntakeMigration, /public web draft intake authority unavailable/);
+  assert.match(publicWebDraftIntakeMigration, /organization\.status = 'ACTIVE'/);
+  assert.match(publicWebDraftIntakeMigration, /REVOKE ALL ON FUNCTION/);
+  assert.doesNotMatch(publicWebDraftIntakeMigration, /\n\s*FOR UPDATE\s*;/);
+  assert.doesNotMatch(publicWebDraftIntakeMigration, /^\s*GRANT\s/im);
+  assert.doesNotMatch(
+    publicWebDraftIntakeMigration,
+    /INSERT INTO\s+(?:public\.)?role_package_capabilities/i,
+  );
+  assert.doesNotMatch(
+    publicWebDraftIntakeMigration,
+    /\b(?:TRUNCATE|DELETE FROM|UPDATE\s+(?:public\.)?"?(?:website_pages|programs|universities))\b/i,
   );
 });
 
@@ -640,7 +795,7 @@ test("staging adoption runner is explicit, exact-source and loopback-only", () =
   assert.doesNotMatch(source, /drizzle-kit", "push/);
 });
 
-test("staging seed is synthetic, explicit and pinned to the fresh 109/109 database", () => {
+test("staging seed is synthetic, explicit and pinned to the source-bound migration ledger", () => {
   const seed = path.join(root, "deploy/staging/seed-staging.mjs");
   const unapproved = spawnSync(process.execPath, [seed], {
     cwd: root,
@@ -653,7 +808,8 @@ test("staging seed is synthetic, explicit and pinned to the fresh 109/109 databa
   const source = readFileSync(seed, "utf8");
   assert.match(source, /target\.hostname !== "127\.0\.0\.1"/);
   assert.match(source, /target\.pathname !== "\/fasos_staging"/);
-  assert.match(source, /row\?\.migration_count !== 109/);
+  assert.match(source, /expectedStagingMigrationCount/);
+  assert.match(source, /row\?\.migration_count !== expectedMigrations/);
   assert.match(source, /row\?\.user_count !== 0/);
   assert.match(source, /staging-admin@findandstudy\.com/);
   assert.match(source, /await client\.query\("BEGIN"\)/);
@@ -700,7 +856,8 @@ test("staging RBAC UAT fixtures are explicit, synthetic and denominator-bound", 
   assert.match(source, /target\.pathname !== "\/fasos_staging"/);
   assert.match(source, /STAGING_TARGET_ENV !== "staging"/);
   assert.match(source, /ALLOW_LIVE_INTEGRATIONS !== "false"/);
-  assert.match(source, /identityRow\?\.migration_count !== 109/);
+  assert.match(source, /expectedStagingMigrationCount/);
+  assert.match(source, /identityRow\?\.migration_count !== expectedMigrations/);
   assert.match(source, /STAGING_UAT_EXPECTED_PRE_USER_COUNT/);
   assert.match(source, /a non-synthetic or unrecognized user exists/);
   assert.match(source, /created_from_source = 'staging_rbac_uat'/);
@@ -938,11 +1095,11 @@ test("comprehensive Control Plane gate is explicit and fixed to the disposable t
   assert.match(source, /target\.port, isDynamicCiTarget \? "5432" : "5433"/);
   assert.match(
     source,
-    /assert\.equal\(migrationCount\.rows\[0\]\.count, 109\)/,
+    /assert\.equal\(migrationCount\.rows\[0\]\.count, readCurrentMigrationCount\(\)\)/,
   );
   assert.match(
     source,
-    /verifyAtomicDdlRollback[\s\S]*?SELECT count\(\*\)::int AS count FROM drizzle\.__drizzle_migrations[\s\S]*?109/,
+    /verifyAtomicDdlRollback[\s\S]*?SELECT count\(\*\)::int AS count FROM drizzle\.__drizzle_migrations[\s\S]*?readCurrentMigrationCount/,
   );
   assert.match(
     source,
@@ -976,7 +1133,7 @@ test("Student Journey G45 PostgreSQL integration is explicit and loopback-only",
   assert.match(source, /target\.pathname, "\/fasos_apply_local"/);
   assert.match(source, /safeTarget\(executorUrl, "fas_journey_executor"\)/);
   assert.match(source, /ALLOW_LIVE_INTEGRATIONS/);
-  assert.match(source, /rows\[0\]\?\.count, 109/);
+  assert.match(source, /rows\[0\]\?\.count, readCurrentMigrationCount\(\)/);
   assert.match(source, /journey_notification_intents_default_off_chk/);
   assert.match(
     source,
@@ -1018,7 +1175,7 @@ test("Institution Admissions PostgreSQL integration is explicit and least-privil
     source,
     /NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS/,
   );
-  assert.match(source, /migrationCount\.rows\[0\]\?\.count, 109/);
+  assert.match(source, /migrationCount\.rows\[0\]\?\.count, readCurrentMigrationCount\(\)/);
   assert.match(source, /GRANT SELECT ON TABLE institution_memberships/);
   assert.doesNotMatch(source, /GRANT SELECT, INSERT ON TABLE institution_memberships/);
   assert.match(source, /institution_step_up_receipts/);
@@ -1048,7 +1205,7 @@ test("Institution case intake integration is explicit and EXECUTE-only", () => {
   assert.match(source, /institution_case_intake_test_requires_disposable_loopback_database/);
   assert.match(source, /fas_institution_intake_executor/);
   assert.match(source, /fas_institution_intake_owner/);
-  assert.match(source, /migrationCount\.rows\[0\]\?\.count, 109/);
+  assert.match(source, /migrationCount\.rows\[0\]\?\.count, readCurrentMigrationCount\(\)/);
   assert.match(source, /case_insert: false/);
   assert.match(source, /receipt_insert: false/);
   assert.match(source, /can_execute: true/);
@@ -1079,7 +1236,7 @@ test("Institution evidence sharing integration is explicit and EXECUTE-only", ()
   assert.match(source, /institution_evidence_share_test_requires_disposable_loopback_database/);
   assert.match(source, /fas_institution_evidence_share_executor/);
   assert.match(source, /fas_institution_evidence_owner/);
-  assert.match(source, /rows\[0\]\?\.count, 109/);
+  assert.match(source, /rows\[0\]\?\.count, readCurrentMigrationCount\(\)/);
   assert.match(source, /evidence_select: false/);
   assert.match(source, /consent_select: false/);
   assert.match(source, /share_insert: false/);

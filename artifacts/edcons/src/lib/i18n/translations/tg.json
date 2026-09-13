@@ -1,4 +1,22 @@
 {
+  "catalogDetail": {
+    "verifiedPrice": "Нархи тасдиқшудаи каталог",
+    "deposit": "Пешпардохт",
+    "location": "Ҷойгиршавӣ",
+    "relatedPrograms": "Барномаҳои марбут",
+    "availablePrograms": "Барномаҳои дастрас",
+    "availableIntakes": "Қабулҳои дастрас",
+    "capacityOpen": "Кушода",
+    "capacityLimited": "Маҳдуд",
+    "capacityFull": "Пур",
+    "capacityWaitlist": "Рӯйхати интизорӣ",
+    "capacityClosed": "Пӯшида",
+    "capacityUnknown": "Дастрасӣ номаълум",
+    "deliveryOnCampus": "Дар кампус",
+    "deliveryOnline": "Онлайн",
+    "deliveryHybrid": "Гибридӣ",
+    "deliveryBlended": "Омехта"
+  },
   "integrationsManager": {
     "facebook_messenger": {
       "name": "Facebook / Паёмнавис",

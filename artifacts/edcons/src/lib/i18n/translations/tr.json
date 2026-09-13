@@ -1,4 +1,22 @@
 {
+  "catalogDetail": {
+    "verifiedPrice": "Doğrulanmış katalog fiyatı",
+    "deposit": "Depozito",
+    "location": "Konum",
+    "relatedPrograms": "İlgili programlar",
+    "availablePrograms": "Mevcut programlar",
+    "availableIntakes": "Mevcut dönemler",
+    "capacityOpen": "Açık",
+    "capacityLimited": "Sınırlı",
+    "capacityFull": "Dolu",
+    "capacityWaitlist": "Bekleme listesi",
+    "capacityClosed": "Kapalı",
+    "capacityUnknown": "Durum bilinmiyor",
+    "deliveryOnCampus": "Kampüste",
+    "deliveryOnline": "Çevrim içi",
+    "deliveryHybrid": "Hibrit",
+    "deliveryBlended": "Karma"
+  },
   "integrationsManager": {
     "facebook_messenger": {
       "name": "Facebook / Messenger",

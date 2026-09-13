@@ -12,6 +12,8 @@ export function useJsonLd(schema: object | object[]) {
     for (const s of schemas) {
       const el = document.createElement("script");
       el.type = "application/ld+json";
+      const nonce = document.querySelector<HTMLMetaElement>('meta[name="csp-nonce"]')?.content;
+      if (nonce) el.nonce = nonce;
       el.textContent = JSON.stringify(s);
       document.head.appendChild(el);
       elements.push(el);

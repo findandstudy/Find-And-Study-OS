@@ -54,6 +54,7 @@ import {
   type FormsCatalog,
 } from "../lib/exportImportExcel";
 import { safeOutboundRequest } from "../lib/safeOutboundRequest";
+import { buildPublicWebPublicationReadModel } from "../lib/publicWebPublicationReadModel";
 
 const router = Router();
 const WEBSITE_ROLES = ["super_admin", "admin"] as const;
@@ -580,7 +581,23 @@ router.post("/website/pages/:id/publish", ...adminOnly, async (req: Request, res
         pageId,
         versionNumber: nextVersion,
         blocksSnapshot: blocks,
-        metaSnapshot: { title: page.title, metaTitle: page.metaTitle, metaDescription: page.metaDescription },
+        metaSnapshot: {
+          title: page.title,
+          slug: page.slug,
+          locale: page.locale,
+          metaTitle: page.metaTitle,
+          metaDescription: page.metaDescription,
+          canonicalUrl: page.canonicalUrl,
+          robotsIndex: page.robotsIndex,
+          robotsFollow: page.robotsFollow,
+          ogTitle: page.ogTitle,
+          ogDescription: page.ogDescription,
+          ogImageUrl: page.ogImageUrl,
+          twitterTitle: page.twitterTitle,
+          twitterDescription: page.twitterDescription,
+          twitterImageUrl: page.twitterImageUrl,
+          translationsJson: page.translationsJson,
+        },
         publishedAt: new Date(),
         createdBy: req.user?.id,
       }).returning();
@@ -797,10 +814,17 @@ router.post("/website/pages/:pageId/restore-version/:versionId", ...adminOnly, a
           }))
         );
       }
-      const metaSnap = version.metaSnapshot as Record<string, string> | null;
+      const metaSnap = version.metaSnapshot as Record<string, unknown> | null;
       if (metaSnap) {
         await tx.update(websitePagesTable)
-          .set({ status: "draft", metaTitle: metaSnap.metaTitle || null, metaDescription: metaSnap.metaDescription || null })
+          .set({
+            status: "draft",
+            metaTitle: typeof metaSnap.metaTitle === "string" ? metaSnap.metaTitle : null,
+            metaDescription: typeof metaSnap.metaDescription === "string" ? metaSnap.metaDescription : null,
+            translationsJson: metaSnap.translationsJson && typeof metaSnap.translationsJson === "object"
+              ? metaSnap.translationsJson
+              : {},
+          })
           .where(eq(websitePagesTable.id, pageId));
       } else {
         await tx.update(websitePagesTable)
@@ -1006,6 +1030,56 @@ router.get("/website/seo-overview", ...adminOnly, async (_req: Request, res: Res
   }
 });
 
+router.get("/website/publication-center", ...adminOnly, async (_req: Request, res: Response): Promise<void> => {
+  res.setHeader("Cache-Control", "private, no-store");
+  try {
+    const [pages, blogPosts, versions] = await Promise.all([
+      db.select({
+        id: websitePagesTable.id,
+        title: websitePagesTable.title,
+        slug: websitePagesTable.slug,
+        status: websitePagesTable.status,
+        locale: websitePagesTable.locale,
+        metaTitle: websitePagesTable.metaTitle,
+        metaDescription: websitePagesTable.metaDescription,
+        canonicalUrl: websitePagesTable.canonicalUrl,
+        ogImageUrl: websitePagesTable.ogImageUrl,
+        robotsIndex: websitePagesTable.robotsIndex,
+        translationsJson: websitePagesTable.translationsJson,
+        publishedAt: websitePagesTable.publishedAt,
+        updatedAt: websitePagesTable.updatedAt,
+      }).from(websitePagesTable).orderBy(desc(websitePagesTable.updatedAt)).limit(10_001),
+      db.select({
+        id: websiteBlogPostsTable.id,
+        status: websiteBlogPostsTable.status,
+        locale: websiteBlogPostsTable.locale,
+        metaTitle: websiteBlogPostsTable.metaTitle,
+        metaDescription: websiteBlogPostsTable.metaDescription,
+        updatedAt: websiteBlogPostsTable.updatedAt,
+      }).from(websiteBlogPostsTable).orderBy(desc(websiteBlogPostsTable.updatedAt)).limit(10_001),
+      db.select({
+        id: websitePageVersionsTable.id,
+        pageId: websitePageVersionsTable.pageId,
+        versionNumber: websitePageVersionsTable.versionNumber,
+        publishedAt: websitePageVersionsTable.publishedAt,
+        createdAt: websitePageVersionsTable.createdAt,
+      }).from(websitePageVersionsTable).orderBy(desc(websitePageVersionsTable.createdAt)).limit(1_001),
+    ]);
+    res.json(buildPublicWebPublicationReadModel({
+      pages,
+      blogPosts,
+      versions,
+      generatedAt: new Date(),
+    }));
+  } catch (error) {
+    console.error("[website-publication-center] read model failed");
+    const code = error instanceof Error && error.message === "public_web_read_model_denominator_exceeded"
+      ? "PUBLICATION_CENTER_DENOMINATOR_EXCEEDED"
+      : "PUBLICATION_CENTER_UNAVAILABLE";
+    res.status(code.endsWith("EXCEEDED") ? 503 : 500).json({ error: code });
+  }
+});
+
 router.get("/website/pages/:id/seo", ...adminOnly, async (req: Request, res: Response): Promise<void> => {
   try {
     const [page] = await db.select({
@@ -1041,6 +1115,8 @@ router.put("/website/pages/:id/seo", ...adminOnly, async (req: Request, res: Res
     for (const key of allowedFields) {
       if (req.body[key] !== undefined) updates[key] = req.body[key];
     }
+    updates.status = "draft";
+    updates.publishedAt = null;
     const [page] = await db.update(websitePagesTable)
       .set(updates)
       .where(eq(websitePagesTable.id, Number(req.params.id)))
@@ -1140,7 +1216,7 @@ router.get("/website/translations/status", ...adminOnly, async (_req: Request, r
 router.put("/website/pages/:id/translations", ...adminOnly, async (req: Request, res: Response): Promise<void> => {
   try {
     const [page] = await db.update(websitePagesTable)
-      .set({ translationsJson: req.body.translations || {} })
+      .set({ translationsJson: req.body.translations || {}, status: "draft", publishedAt: null })
       .where(eq(websitePagesTable.id, Number(req.params.id)))
       .returning();
     if (!page) return void res.status(404).json({ error: "Not found" });

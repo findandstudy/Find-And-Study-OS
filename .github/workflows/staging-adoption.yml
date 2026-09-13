@@ -77,6 +77,31 @@ jobs:
           pnpm run typecheck
           pnpm --filter @workspace/edcons run check:i18n
           pnpm --filter @workspace/edcons run test:login-accessibility
+          pnpm --filter @workspace/api-server run test:public-web-foundation
+          pnpm --filter @workspace/api-server run test:public-web-command
+          pnpm --filter @workspace/api-server run test:public-web-publication-store
+          pnpm --filter @workspace/api-server run test:public-web-publication-read-model
+          pnpm --filter @workspace/api-server run test:public-web-draft-intake
+          pnpm --filter @workspace/api-server run test:public-web-draft-intake-builder
+          pnpm --filter @workspace/api-server run test:public-web-draft-batch-planner
+          pnpm --filter @workspace/api-server run test:public-web-draft-batch-executor
+          pnpm --filter @workspace/api-server run test:public-web-draft-import-manifest
+          pnpm --filter @workspace/api-server run test:public-web-import-adapter-approval
+          pnpm --filter @workspace/api-server run test:public-web-draft-import-preview
+          pnpm --filter @workspace/api-server run test:public-web-draft-preview-receipt
+          pnpm --filter @workspace/api-server run test:public-web-publication-runtime-boundary
+          pnpm --filter @workspace/api-server run test:public-web-draft-import-preflight
+          pnpm --filter @workspace/api-server run test:public-web-draft-import-server-plan
+          pnpm --filter @workspace/api-server run test:public-web-draft-import-job-contract
+          pnpm --filter @workspace/api-server run test:public-web-draft-source-resolver
+          pnpm --filter @workspace/api-server run test:public-web-draft-intake-store
+          pnpm --filter @workspace/api-server run test:public-localized-entities
+          pnpm --filter @workspace/api-server run test:public-catalog-list-scaling
+          pnpm --filter @workspace/api-server run test:public-catalog-pages
+          pnpm --filter @workspace/api-server run test:public-catalog-render
+          pnpm --filter @workspace/api-server run test:public-web-discovery
+          pnpm --filter @workspace/api-server run test:public-web-scale
+          pnpm --filter @workspace/edcons run test:public-detail-templates
           pnpm exec playwright test --config=playwright.staging.config.ts --list
           pnpm --filter @workspace/api-server run build
           pnpm --filter @workspace/edcons run build

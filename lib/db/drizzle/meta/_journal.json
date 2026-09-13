@@ -764,6 +764,111 @@
       "when": 1790496000000,
       "tag": "0108_expand_system_and_program_locales",
       "breakpoints": true
+    },
+    {
+      "idx": 109,
+      "version": "7",
+      "when": 1790582400000,
+      "tag": "0109_public_web_content_foundation",
+      "breakpoints": true
+    },
+    {
+      "idx": 110,
+      "version": "7",
+      "when": 1790668800000,
+      "tag": "0110_catalog_entity_graph_foundation",
+      "breakpoints": true
+    },
+    {
+      "idx": 111,
+      "version": "7",
+      "when": 1790755200000,
+      "tag": "0111_catalog_entity_graph_hardening",
+      "breakpoints": true
+    },
+    {
+      "idx": 112,
+      "version": "7",
+      "when": 1790841600000,
+      "tag": "0112_public_web_publication_hardening",
+      "breakpoints": true
+    },
+    {
+      "idx": 113,
+      "version": "7",
+      "when": 1790928000000,
+      "tag": "0113_public_web_publication_trigger_fix",
+      "breakpoints": true
+    },
+    {
+      "idx": 114,
+      "version": "7",
+      "when": 1791014400000,
+      "tag": "0114_public_web_command_adapter",
+      "breakpoints": true
+    },
+    {
+      "idx": 115,
+      "version": "7",
+      "when": 1791100800000,
+      "tag": "0115_public_web_command_variable_binding",
+      "breakpoints": true
+    },
+    {
+      "idx": 116,
+      "version": "7",
+      "when": 1791187200000,
+      "tag": "0116_public_web_idempotent_command_gateway",
+      "breakpoints": true
+    },
+    {
+      "idx": 117,
+      "version": "7",
+      "when": 1791273600000,
+      "tag": "0117_public_web_replay_rls_fix",
+      "breakpoints": true
+    },
+    {
+      "idx": 118,
+      "version": "7",
+      "when": 1791360000000,
+      "tag": "0118_public_web_authorized_command_gateway",
+      "breakpoints": true
+    },
+    {
+      "idx": 119,
+      "version": "7",
+      "when": 1791446400000,
+      "tag": "0119_public_web_discovery_indexes",
+      "breakpoints": true
+    },
+    {
+      "idx": 120,
+      "version": "7",
+      "when": 1791532800000,
+      "tag": "0120_public_web_city_pages",
+      "breakpoints": true
+    },
+    {
+      "idx": 121,
+      "version": "7",
+      "when": 1791619200000,
+      "tag": "0121_public_web_city_publication_guard",
+      "breakpoints": true
+    },
+    {
+      "idx": 122,
+      "version": "7",
+      "when": 1791705600000,
+      "tag": "0122_public_web_draft_intake",
+      "breakpoints": true
+    },
+    {
+      "idx": 123,
+      "version": "7",
+      "when": 1791792000000,
+      "tag": "0123_public_web_draft_intake_replay_hardening",
+      "breakpoints": true
     }
   ]
 }

@@ -1,4 +1,22 @@
 {
+  "catalogDetail": {
+    "verifiedPrice": "تصدیق شدہ کیٹلاگ قیمت",
+    "deposit": "ڈپازٹ",
+    "location": "مقام",
+    "relatedPrograms": "متعلقہ پروگرام",
+    "availablePrograms": "دستیاب پروگرام",
+    "availableIntakes": "دستیاب داخلے",
+    "capacityOpen": "کھلا",
+    "capacityLimited": "محدود",
+    "capacityFull": "مکمل",
+    "capacityWaitlist": "انتظار کی فہرست",
+    "capacityClosed": "بند",
+    "capacityUnknown": "دستیابی نامعلوم",
+    "deliveryOnCampus": "کیمپس میں",
+    "deliveryOnline": "آن لائن",
+    "deliveryHybrid": "ہائبرڈ",
+    "deliveryBlended": "مخلوط"
+  },
   "integrationsManager": {
     "facebook_messenger": {
       "name": "Facebook / Messenger",

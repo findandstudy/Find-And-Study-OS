@@ -8,14 +8,14 @@
     "defaultEnforcement": "legacy_quarantine"
   },
   "totals": {
-    "routeRegistrations": 844,
-    "requireAuth": 763,
-    "requireRole": 489,
+    "routeRegistrations": 852,
+    "requireAuth": 764,
+    "requireRole": 490,
     "requirePermission": 78,
     "requireScope": 0,
     "directRoleChecks": 29,
     "authOnlyRouteCandidates": 128,
-    "publicRouteCandidates": 159
+    "publicRouteCandidates": 166
   },
   "files": [
     {
@@ -215,7 +215,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/applications.ts",
-      "sha256": "b493059786c961c54837f28c89ba81c1fd82ad6098be44c34b5d410450395f11",
+      "sha256": "6fc7de5bad03e45a6e9f70ffee36ee0e09347c14136646024c40992c155f0047",
       "routeRegistrations": 13,
       "requireAuth": 14,
       "requireRole": 9,
@@ -245,7 +245,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/audit.ts",
-      "sha256": "90d94ca557534c3b8b2c80b0147689c17d42800eb638cb266429974e94250a52",
+      "sha256": "df748a4523807062456f79efe9cf93401495cb1592c2e8aad2937d2c4caedd5a",
       "routeRegistrations": 3,
       "requireAuth": 4,
       "requireRole": 3,
@@ -305,7 +305,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/catalog.ts",
-      "sha256": "682c9241dd503e98bcb3797b1361e5f8e6073654bf6902d22fe7ae55ea196c05",
+      "sha256": "75e4bc61b28ac2ccafb7ccdd3729ea1cbdb6c38cad41eb915523e214d3ee8849",
       "routeRegistrations": 21,
       "requireAuth": 19,
       "requireRole": 17,
@@ -425,7 +425,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/course-finder.ts",
-      "sha256": "3300f8595d669414ec5b6478e6eb39d6f62b263fa7cde9ee023d42fc4d5edd46",
+      "sha256": "1f910a62e22598181b79b2f49089006621dc3ad9f84ce25ffbd96d32906a6bb8",
       "routeRegistrations": 10,
       "requireAuth": 9,
       "requireRole": 3,
@@ -470,7 +470,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/destinations.ts",
-      "sha256": "c08539d427c076438032f78effa66355e1ea295e1edaaad8b4e9664427145fba",
+      "sha256": "c908778237e5fe9846db2e8279d6e9b23fdfc265d909b1be26424d4df1bc290d",
       "routeRegistrations": 2,
       "requireAuth": 0,
       "requireRole": 0,
@@ -530,7 +530,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/embed.ts",
-      "sha256": "598fa7745182dddddaabab23bb2a6b415ffeea4df103f85e15a789f2634befb0",
+      "sha256": "ac998d83fdd8d7180aafb951464887fb9e7c599707f325f915dff01b73bb37ff",
       "routeRegistrations": 29,
       "requireAuth": 14,
       "requireRole": 13,
@@ -605,7 +605,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/inbox.ts",
-      "sha256": "25c4443ebdd6e4c31244303fa11b39a2fc26881f377d27a0b8a794c53baa2544",
+      "sha256": "d4fe3df9b06b27c0ce7b4a7d95dd161594035e88c6530e7da34bdbbdacb2f75e",
       "routeRegistrations": 55,
       "requireAuth": 56,
       "requireRole": 54,
@@ -620,7 +620,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/index.ts",
-      "sha256": "eed3dd2f2d692174376e0212e7eb662001779bb43eb233d8aad4fd64b6b50a36",
+      "sha256": "89497b00844902f25d88afdc1bf46f27c36bfb7408f7e3eb91731e346219a05e",
       "routeRegistrations": 0,
       "requireAuth": 0,
       "requireRole": 0,
@@ -889,6 +889,36 @@
       "note": "Route-local review required before corridor migration."
     },
     {
+      "path": "artifacts/api-server/src/routes/public-catalog.ts",
+      "sha256": "ef8c8c3207c0fd1bfec59bfc7cf902e6e1669a80d803b082affb53c35aaf2cd3",
+      "routeRegistrations": 2,
+      "requireAuth": 0,
+      "requireRole": 0,
+      "requirePermission": 0,
+      "requireScope": 0,
+      "directRoleChecks": 0,
+      "authOnlyRouteCandidates": 0,
+      "publicRouteCandidates": 2,
+      "enforcement": "legacy_quarantine",
+      "owner": "Platform Engineering",
+      "note": "Route-local review required before corridor migration."
+    },
+    {
+      "path": "artifacts/api-server/src/routes/public-web.ts",
+      "sha256": "d189a90903bf3f29a51c8b468fd1cf96f0db62fd0c61e083d1e29958153fb9a9",
+      "routeRegistrations": 4,
+      "requireAuth": 0,
+      "requireRole": 0,
+      "requirePermission": 0,
+      "requireScope": 0,
+      "directRoleChecks": 0,
+      "authOnlyRouteCandidates": 0,
+      "publicRouteCandidates": 4,
+      "enforcement": "legacy_quarantine",
+      "owner": "Platform Engineering",
+      "note": "Route-local review required before corridor migration."
+    },
+    {
       "path": "artifacts/api-server/src/routes/publicSigning.ts",
       "sha256": "7f8b8579f00b5f6b2c4ef60e003c3be056a07944baf86c0632ba00c0f5973f10",
       "routeRegistrations": 8,
@@ -965,7 +995,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/settings.ts",
-      "sha256": "8239165a921c392d54c91bc138bccb6f629e26128a2ecdacb6c0b23af3152e05",
+      "sha256": "737465260793cc944c89bf2cfcbee81b87f23ad2c135090a4b021292805d45da",
       "routeRegistrations": 8,
       "requireAuth": 7,
       "requireRole": 4,
@@ -1085,10 +1115,10 @@
     },
     {
       "path": "artifacts/api-server/src/routes/universities.ts",
-      "sha256": "1ecfd7691448e8fdfd5c8d3071759ab766efc132c3e537d3518b7be020bcdaff",
-      "routeRegistrations": 22,
-      "requireAuth": 16,
-      "requireRole": 14,
+      "sha256": "8d7bd2fe90c2b7fe4c985c2e5dae0cadc1e4f4a98a1dab103b0b46bc90ecc6d2",
+      "routeRegistrations": 23,
+      "requireAuth": 17,
+      "requireRole": 15,
       "requirePermission": 0,
       "requireScope": 0,
       "directRoleChecks": 0,
@@ -1130,7 +1160,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/webhooks.ts",
-      "sha256": "5ade936e3d59924aa4f148af1bcea072f77a3d00de8a56bd2c7723d6a1107099",
+      "sha256": "d88670ab3da27a142439bca82ba8b0042f32231e1f091c0c104ac2d94fe0b2c1",
       "routeRegistrations": 7,
       "requireAuth": 0,
       "requireRole": 0,
@@ -1145,15 +1175,15 @@
     },
     {
       "path": "artifacts/api-server/src/routes/website.ts",
-      "sha256": "fcf10f117d6e8d9446f54e9c22460daf5d2ffa5f7d2fefb265cbce5b812b8451",
-      "routeRegistrations": 32,
+      "sha256": "9ba24f4c2ff7661c29725805a406128b94288429b7cec22d33a2dd7f054e5cc9",
+      "routeRegistrations": 33,
       "requireAuth": 2,
       "requireRole": 1,
       "requirePermission": 0,
       "requireScope": 0,
       "directRoleChecks": 0,
       "authOnlyRouteCandidates": 0,
-      "publicRouteCandidates": 32,
+      "publicRouteCandidates": 33,
       "enforcement": "legacy_quarantine",
       "owner": "Platform Engineering",
       "note": "Route-local review required before corridor migration."

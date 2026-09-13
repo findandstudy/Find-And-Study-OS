@@ -1,4 +1,22 @@
 {
+  "catalogDetail": {
+    "verifiedPrice": "Проверенная цена каталога",
+    "deposit": "Депозит",
+    "location": "Местоположение",
+    "relatedPrograms": "Похожие программы",
+    "availablePrograms": "Доступные программы",
+    "availableIntakes": "Доступные наборы",
+    "capacityOpen": "Открыт",
+    "capacityLimited": "Мало мест",
+    "capacityFull": "Мест нет",
+    "capacityWaitlist": "Лист ожидания",
+    "capacityClosed": "Закрыт",
+    "capacityUnknown": "Наличие неизвестно",
+    "deliveryOnCampus": "В кампусе",
+    "deliveryOnline": "Онлайн",
+    "deliveryHybrid": "Гибридно",
+    "deliveryBlended": "Смешанно"
+  },
   "integrationsManager": {
     "facebook_messenger": {
       "name": "Facebook / Messenger",

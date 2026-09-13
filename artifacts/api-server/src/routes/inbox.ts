@@ -176,6 +176,24 @@ router.get(
 );
 const inboxMediaStorage = new ObjectStorageService();
 const webChatMediaBody = raw({ limit: WEB_CHAT_MEDIA_MAX_BYTES, type: () => true });
+/** Stable keyset cursor for the inbox conversation feed. */
+function decodeInboxCursor(raw: unknown): { at: Date; id: number } | null {
+  if (typeof raw !== "string" || raw.length === 0 || raw.length > 256) return null;
+  try {
+    const parsed = JSON.parse(Buffer.from(raw, "base64url").toString("utf8")) as { at?: unknown; id?: unknown };
+    const at = new Date(String(parsed.at ?? ""));
+    const id = Number(parsed.id);
+    if (!Number.isFinite(at.getTime()) || !Number.isInteger(id) || id <= 0) return null;
+    return { at, id };
+  } catch {
+    return null;
+  }
+}
+
+function encodeInboxCursor(at: Date | null, id: number): string | null {
+  if (!at || !Number.isInteger(id) || id <= 0) return null;
+  return Buffer.from(JSON.stringify({ at: at.toISOString(), id }), "utf8").toString("base64url");
+}
 
 function requestedAiBotId(req: Request): number | null {
   const rawValue = req.body?.aiBotId ?? req.query.aiBotId;
@@ -919,9 +937,18 @@ router.get(
     const search = String(req.query.search || "").trim().slice(0, 120);
     const assignedToRaw = req.query.assignedToId == null ? "" : String(req.query.assignedToId).trim();
     const assignedToId = assignedToRaw ? Number(assignedToRaw) : null;
+    const rawLimit = parseInt(String(req.query.limit ?? "200"), 10);
+    const listLimit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 200) : 200;
+    const cursorRaw = req.query.cursor == null ? "" : String(req.query.cursor).trim();
+    const cursor = decodeInboxCursor(cursorRaw);
 
     if (assignedToRaw && (!Number.isInteger(assignedToId) || (assignedToId ?? 0) <= 0)) {
       res.status(400).json({ error: "Invalid assignedToId" });
+      return;
+    }
+
+    if (cursorRaw && !cursor) {
+      res.status(400).json({ error: "Invalid conversation cursor" });
       return;
     }
 
@@ -931,6 +958,17 @@ router.get(
         : eq(conversationsTable.isArchived, false),
     ];
     const effectiveAssignedTo = inboxEffectiveAssignedToSql();
+    // Use the same timestamp expression for ordering and the keyset cursor so
+    // rows with no last message remain reachable and new inbound messages never
+    // cause page skips/duplicates.
+    const feedTimestamp = sql`COALESCE(${conversationsTable.lastMessageAt}, ${conversationsTable.createdAt})`;
+    if (cursor) {
+      if (order === "asc") {
+        where.push(sql`(${feedTimestamp} > ${cursor.at} OR (${feedTimestamp} = ${cursor.at} AND ${conversationsTable.id} > ${cursor.id}))`);
+      } else {
+        where.push(sql`(${feedTimestamp} < ${cursor.at} OR (${feedTimestamp} = ${cursor.at} AND ${conversationsTable.id} < ${cursor.id}))`);
+      }
+    }
 
     // Test/junk conversations are hidden by default: e2e-suite artifacts and
     // quick-contact WhatsApp stubs that never left the queue. Toggle with
@@ -1054,14 +1092,23 @@ router.get(
       .where(and(...where))
       .orderBy(
         order === "asc"
-          ? asc(conversationsTable.lastMessageAt)
-          : desc(conversationsTable.lastMessageAt),
+          ? asc(feedTimestamp)
+          : desc(feedTimestamp),
+        order === "asc" ? asc(conversationsTable.id) : desc(conversationsTable.id),
       )
-      .limit(200);
+      // Fetch one sentinel row so the client can request the next cursor.
+      .limit(listLimit + 1);
 
-    const externalIds = [...new Set(rows.map((r) => r.externalContactId).filter((x): x is number => !!x))];
-    const assignedIds = [...new Set(rows.map((r) => r.assignedToId).filter((x): x is number => !!x))];
-    const channelAccountIds = [...new Set(rows.map((r) => r.channelAccountId).filter((x): x is number => !!x))];
+    const hasMore = rows.length > listLimit;
+    const pageRows = hasMore ? rows.slice(0, listLimit) : rows;
+    const nextRow = pageRows[pageRows.length - 1];
+    const nextCursor = hasMore && nextRow
+      ? encodeInboxCursor(nextRow.lastMessageAt ?? nextRow.createdAt, nextRow.id)
+      : null;
+
+    const externalIds = [...new Set(pageRows.map((r) => r.externalContactId).filter((x): x is number => !!x))];
+    const assignedIds = [...new Set(pageRows.map((r) => r.assignedToId).filter((x): x is number => !!x))];
+    const channelAccountIds = [...new Set(pageRows.map((r) => r.channelAccountId).filter((x): x is number => !!x))];
 
     type AssignedUserSummary = {
       id: number;
@@ -1115,14 +1162,14 @@ router.get(
     const channelAccountsMap = new Map<number, ChannelAccountSummary>();
     for (const account of accounts) channelAccountsMap.set(account.id, account);
 
-    const data = rows.map((r) => ({
+    const data = pageRows.map((r) => ({
       ...r,
       externalContact: r.externalContactId ? contactsMap.get(r.externalContactId) : null,
       assignedTo: r.assignedToId ? usersMap.get(r.assignedToId) : null,
       channelAccount: r.channelAccountId ? channelAccountsMap.get(r.channelAccountId) ?? null : null,
     }));
 
-    res.json({ data });
+    res.json({ data, nextCursor, hasMore });
   },
 );
 

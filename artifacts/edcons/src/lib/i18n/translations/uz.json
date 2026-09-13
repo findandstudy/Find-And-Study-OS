@@ -1,4 +1,22 @@
 {
+  "catalogDetail": {
+    "verifiedPrice": "Tasdiqlangan katalog narxi",
+    "deposit": "Depozit",
+    "location": "Joylashuv",
+    "relatedPrograms": "Tegishli dasturlar",
+    "availablePrograms": "Mavjud dasturlar",
+    "availableIntakes": "Mavjud qabullar",
+    "capacityOpen": "Ochiq",
+    "capacityLimited": "Cheklangan",
+    "capacityFull": "Toʻlgan",
+    "capacityWaitlist": "Kutish roʻyxati",
+    "capacityClosed": "Yopiq",
+    "capacityUnknown": "Mavjudlik nomaʼlum",
+    "deliveryOnCampus": "Kampusda",
+    "deliveryOnline": "Onlayn",
+    "deliveryHybrid": "Gibrid",
+    "deliveryBlended": "Aralash"
+  },
   "integrationsManager": {
     "facebook_messenger": {
       "name": "Facebook / Messenger",
@@ -548,8 +566,8 @@
     "signInSubtitle": "Murojaatga murojaat qilib boʻlsangiz, unga murojaat.",
     "emailLabel": "Elektron pochta",
     "passwordLabel": "Parol",
-    "showPassword": "Maxfiy soʻzlarni _koʻrsatish",
-    "hidePassword": "Maxfiy soʻzlarni _koʻrsatish",
+    "showPassword": "Maxfiy soʻzni koʻrsatish",
+    "hidePassword": "Maxfiy soʻzni yashirish",
     "signInButton": "Imzo",
     "createAccount": "Hisobni yaratish",
     "registerSubtitle": "Tashkilot sifatida oʻynash uchun xabar qiling.",

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
 import pg from "pg";
+import { readCurrentMigrationCount } from "./current-migration-count.js";
 import {
   fingerprintChangeSetEvidencePublicKey,
   issueChangeSetEvidenceEnvelope,
@@ -713,7 +714,7 @@ async function verifyAtomicDdlRollback(migrator: pg.Client) {
         "SELECT count(*)::int AS count FROM drizzle.__drizzle_migrations",
       )
     ).rows[0].count,
-    108,
+    readCurrentMigrationCount(),
   );
 }
 
@@ -1664,7 +1665,7 @@ async function verify() {
     const migrationCount = await migrator.query(
       "SELECT count(*)::int AS count FROM drizzle.__drizzle_migrations",
     );
-    assert.equal(migrationCount.rows[0].count, 109);
+    assert.equal(migrationCount.rows[0].count, readCurrentMigrationCount());
     await verifyAtomicDdlRollback(migrator);
     await migrator.query(
       `INSERT INTO public.branches (id, name) VALUES

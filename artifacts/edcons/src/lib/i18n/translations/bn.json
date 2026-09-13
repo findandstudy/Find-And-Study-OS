@@ -1,4 +1,22 @@
 {
+  "catalogDetail": {
+    "verifiedPrice": "যাচাইকৃত ক্যাটালগ মূল্য",
+    "deposit": "জমা",
+    "location": "অবস্থান",
+    "relatedPrograms": "সম্পর্কিত প্রোগ্রাম",
+    "availablePrograms": "উপলভ্য প্রোগ্রাম",
+    "availableIntakes": "উপলভ্য ভর্তি সেশন",
+    "capacityOpen": "খোলা",
+    "capacityLimited": "সীমিত",
+    "capacityFull": "পূর্ণ",
+    "capacityWaitlist": "অপেক্ষমাণ তালিকা",
+    "capacityClosed": "বন্ধ",
+    "capacityUnknown": "উপলভ্যতা অজানা",
+    "deliveryOnCampus": "ক্যাম্পাসে",
+    "deliveryOnline": "অনলাইন",
+    "deliveryHybrid": "হাইব্রিড",
+    "deliveryBlended": "মিশ্র"
+  },
   "integrationsManager": {
     "facebook_messenger": {
       "name": "ফেসবুক/মেসেঞ্জার",

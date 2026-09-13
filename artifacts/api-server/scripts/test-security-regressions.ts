@@ -7,6 +7,7 @@ import { canAssignUserRole, canManageTargetAccount } from "../src/lib/userAccoun
 import { isBlockedOutboundIp, parseSafeOutboundUrl } from "../src/lib/safeOutboundRequest";
 import { sanitizeContractTemplateHtml } from "../src/lib/contractHtmlSanitizer";
 import { renderTemplate } from "../src/lib/contractRenderer";
+import { shouldNoindexSpaPath } from "../src/lib/spaRobotsPolicy";
 
 const appSource = readFileSync(
   new URL("../src/app.ts", import.meta.url),
@@ -14,6 +15,14 @@ const appSource = readFileSync(
 );
 const indexSource = readFileSync(
   new URL("../src/index.ts", import.meta.url),
+  "utf8",
+);
+const frontendIndexSource = readFileSync(
+  new URL("../../edcons/index.html", import.meta.url),
+  "utf8",
+);
+const frontendBootstrapSource = readFileSync(
+  new URL("../../edcons/public/bootstrap.js", import.meta.url),
   "utf8",
 );
 const routesIndexSource = readFileSync(
@@ -269,6 +278,52 @@ test("production frontend does not emit source maps into the public root", () =>
   assert.match(viteSource, /sourcemap: !isProd/);
 });
 
+test("frontend bootstrap errors cannot inject markup or expose stack details", () => {
+  assert.match(frontendIndexSource, /<script src="%BASE_URL%bootstrap\.js"><\/script>/);
+  assert.match(frontendBootstrapSource, /document\.createElement\("div"\)/);
+  assert.match(frontendBootstrapSource, /message\.textContent =/);
+  assert.match(frontendBootstrapSource, /root\.replaceChildren\(panel\)/);
+  assert.doesNotMatch(frontendBootstrapSource, /innerHTML\s*=/);
+  assert.doesNotMatch(frontendBootstrapSource, /\.stack|Source:/);
+  assert.doesNotMatch(frontendIndexSource, /<script>(?:.|\n)*?<\/script>/);
+});
+
+test("private, authentication and token SPA routes are noindex at the server boundary", () => {
+  for (const path of [
+    "/admin",
+    "/admin/dashboard",
+    "/staff/applications",
+    "/student",
+    "/agent/apply",
+    "/agent/onboarding",
+    "/institution/review-queue",
+    "/sign/opaque-token",
+    "/login",
+    "/tr/login",
+    "/en/agency/apply",
+    "/en/agency-application",
+    "/not-a-locale/private",
+  ]) {
+    assert.equal(shouldNoindexSpaPath(path), true, path);
+  }
+  for (const path of [
+    "/",
+    "/en",
+    "/tr/about",
+    "/en/programs",
+    "/en/programs/computer-science-42",
+    "/en/universities/example-7",
+    "/en/destinations/turkey",
+    "/en/guides/study-guide-9",
+    "/en/contact",
+  ]) {
+    assert.equal(shouldNoindexSpaPath(path), false, path);
+  }
+  assert.match(indexSource, /X-Robots-Tag", "noindex, nofollow, noarchive"/);
+  assert.match(indexSource, /publicWebRobotsConfig\.mode !== "published"/);
+  assert.match(indexSource, /\["\/llms\.txt", "\/\.well-known\/llms\.txt"\]/);
+});
+
 test("portal lifecycle planning can never authorize a portal mutation", () => {
   assert.match(lifecycleSource, /allowPortalMutation:\s*false/);
   assert.doesNotMatch(lifecycleSource, /allowPortalMutation:\s*true/);
@@ -432,9 +487,10 @@ test("contract HTML and rendered placeholders cannot persist executable markup",
 });
 
 test("legacy public program routes strip commercial fields for anonymous callers", () => {
-  assert.match(universitiesRouteSource, /const visibleRows: any\[\] = req\.user/);
+  assert.match(universitiesRouteSource, /const visibility = programResponseVisibility\(req\.user\)/);
+  assert.match(universitiesRouteSource, /const visibleRows: any\[\] = rows\.map/);
   assert.match(universitiesRouteSource, /sanitizeCourseFinderProgram\(row/);
-  assert.match(universitiesRouteSource, /const visibleProgram = req\.user/);
+  assert.match(universitiesRouteSource, /const visibleProgram = sanitizeCourseFinderProgram\(/);
 });
 
 test("widget-specific CORS clears permissive headers before applying its allow-list", () => {

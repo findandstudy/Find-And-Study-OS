@@ -1,4 +1,22 @@
 {
+  "catalogDetail": {
+    "verifiedPrice": "Перевірена ціна каталогу",
+    "deposit": "Депозит",
+    "location": "Розташування",
+    "relatedPrograms": "Схожі програми",
+    "availablePrograms": "Доступні програми",
+    "availableIntakes": "Доступні набори",
+    "capacityOpen": "Відкрито",
+    "capacityLimited": "Обмежено",
+    "capacityFull": "Місць немає",
+    "capacityWaitlist": "Список очікування",
+    "capacityClosed": "Закрито",
+    "capacityUnknown": "Наявність невідома",
+    "deliveryOnCampus": "У кампусі",
+    "deliveryOnline": "Онлайн",
+    "deliveryHybrid": "Гібридно",
+    "deliveryBlended": "Змішано"
+  },
   "integrationsManager": {
     "facebook_messenger": {
       "name": "Facebook / Messenger",
