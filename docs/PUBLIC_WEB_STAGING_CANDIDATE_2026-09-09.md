@@ -127,8 +127,9 @@ Bu ölçüm sentetiktir; staging ağ/CDN/browser Core Web Vitals kanıtı değil
 3. Remote convergence CI'ın aynı exact head üzerinde Linux/static, Windows ve
    disposable PostgreSQL job'larını yeşil tamamladığını doğrula.
 4. Staging deploy manifestini reviewed head, beklenen migration prefix ve
-   rollback release'iyle bağla; staging veritabanında yalnız reviewed `0109–0122`
-   additive migrations'ını çalıştır.
+   rollback release'iyle bağla; staging veritabanında yalnız reviewed `0109–0123`
+   additive migrations'ını çalıştır. `0123` replay-hardening migration'ı da
+   aynı reviewed tail'in parçasıdır; migration aralığı elle kısaltılamaz.
 5. `0120` içindeki NOT VALID city FK/entity check'leri için bounded orphan/shape
    audit'i çalıştır; temiz sonuçtan sonra constraint validation'ı ayrı reviewed
    staging adımı olarak kaydet.
