@@ -7,7 +7,8 @@ external delivery, portal submission, advertising, or a production deploy.
 ## Accepted environment
 
 - origin: `https://staging.findandstudy.com`
-- API release: `staging-20260913T045212Z-c64e1592`
+- API release: `staging-20260913T074512Z-7def31e6`
+- reviewed source: `7def31e6c7fbf55263cf7f63a2f722609b4f4d04` (feature branch)
 - database: `fasos_staging`, ledger `124/124`, `dbConnected=true`
 - staging safety: `ALLOW_LIVE_INTEGRATIONS=false`, background jobs disabled,
   email delivery disabled, Student Journey mode `off`
