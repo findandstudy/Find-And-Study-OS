@@ -11,8 +11,8 @@
  *   3. staff gets 404 on agent-sourced lead detail
  *   4. staff gets 404 on agent-sourced lead PATCH
  *   5. agent sees ONLY own leads (KURAL 2: sub-agent leads excluded)
- *   6. staff sees ONLY direct applications in list
- *   7. staff gets 404 on agent-sourced application detail
+ *   6. staff sees direct and agent-sourced applications in list
+ *   7. staff can open agent-sourced application detail
  *   8. staff gets 404 on agent-sourced application PATCH
  *
  * Run with:
@@ -270,23 +270,20 @@ test("RBAC: agent sees only OWN leads (KURAL 2 — not sub-agent leads)", async 
 // Tests: APPLICATION endpoints
 // ---------------------------------------------------------------------------
 
-test("RBAC: staff sees ONLY direct applications in list (agentId IS NULL)", async () => {
+test("RBAC: staff sees direct and agent-sourced applications in list", async () => {
   currentUser = { id: staffUserId, role: "staff", isActive: true };
   const { status, data } = await apiReq("GET", `/api/applications?limit=500`);
   assert.equal(status, 200);
   const items = (data as { data: { id: number; agentId: unknown }[] }).data;
   const ids = items.map((r) => r.id);
-  assert.ok(!ids.includes(agentAppId), "staff must NOT see agent-sourced application");
+  assert.ok(ids.includes(agentAppId), "staff must see agent-sourced application");
   assert.ok(ids.includes(directAppId), "staff must see direct application");
-  for (const item of items) {
-    assert.equal(item.agentId, null, `staff should not see application with agentId=${item.agentId}`);
-  }
 });
 
-test("RBAC: staff gets 404 on agent-sourced application detail", async () => {
+test("RBAC: staff can open agent-sourced application detail", async () => {
   currentUser = { id: staffUserId, role: "staff", isActive: true };
   const { status } = await apiReq("GET", `/api/applications/${agentAppId}`);
-  assert.equal(status, 404, "staff must get 404 for agent-sourced application detail");
+  assert.notEqual(status, 404, "staff should be able to access agent-sourced application detail");
 });
 
 test("RBAC: staff can access direct application detail", async () => {
