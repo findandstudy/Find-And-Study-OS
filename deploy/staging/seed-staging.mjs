@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
+import { expectedStagingMigrationCount } from "./migration-count.mjs";
 
 const apiRequire = createRequire(
   new URL("../../artifacts/api-server/package.json", import.meta.url),
@@ -49,6 +50,7 @@ async function run() {
   }
 
   const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
+  const expectedMigrations = expectedStagingMigrationCount(root);
   const seedSql = fs.readFileSync(
     path.join(root, "artifacts/api-server/src/seed.sql"),
     "utf8",
@@ -69,10 +71,10 @@ async function run() {
     if (
       row?.database_name !== "fasos_staging" ||
       row?.user_name !== "fas_migrator" ||
-      row?.migration_count !== 109 ||
+      row?.migration_count !== expectedMigrations ||
       row?.user_count !== 0
     ) {
-      fail("seed requires a fresh 109/109 staging database with zero users");
+      fail(`seed requires a fresh ${expectedMigrations}/${expectedMigrations} staging database with zero users`);
     }
     await client.query(seedSql);
     const passwordHash = await bcrypt.hash(password, 12);

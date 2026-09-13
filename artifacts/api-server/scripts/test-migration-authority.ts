@@ -795,7 +795,7 @@ test("staging adoption runner is explicit, exact-source and loopback-only", () =
   assert.doesNotMatch(source, /drizzle-kit", "push/);
 });
 
-test("staging seed is synthetic, explicit and pinned to the fresh 109/109 database", () => {
+test("staging seed is synthetic, explicit and pinned to the source-bound migration ledger", () => {
   const seed = path.join(root, "deploy/staging/seed-staging.mjs");
   const unapproved = spawnSync(process.execPath, [seed], {
     cwd: root,
@@ -808,7 +808,8 @@ test("staging seed is synthetic, explicit and pinned to the fresh 109/109 databa
   const source = readFileSync(seed, "utf8");
   assert.match(source, /target\.hostname !== "127\.0\.0\.1"/);
   assert.match(source, /target\.pathname !== "\/fasos_staging"/);
-  assert.match(source, /row\?\.migration_count !== 109/);
+  assert.match(source, /expectedStagingMigrationCount/);
+  assert.match(source, /row\?\.migration_count !== expectedMigrations/);
   assert.match(source, /row\?\.user_count !== 0/);
   assert.match(source, /staging-admin@findandstudy\.com/);
   assert.match(source, /await client\.query\("BEGIN"\)/);
@@ -855,7 +856,8 @@ test("staging RBAC UAT fixtures are explicit, synthetic and denominator-bound", 
   assert.match(source, /target\.pathname !== "\/fasos_staging"/);
   assert.match(source, /STAGING_TARGET_ENV !== "staging"/);
   assert.match(source, /ALLOW_LIVE_INTEGRATIONS !== "false"/);
-  assert.match(source, /identityRow\?\.migration_count !== 109/);
+  assert.match(source, /expectedStagingMigrationCount/);
+  assert.match(source, /identityRow\?\.migration_count !== expectedMigrations/);
   assert.match(source, /STAGING_UAT_EXPECTED_PRE_USER_COUNT/);
   assert.match(source, /a non-synthetic or unrecognized user exists/);
   assert.match(source, /created_from_source = 'staging_rbac_uat'/);
