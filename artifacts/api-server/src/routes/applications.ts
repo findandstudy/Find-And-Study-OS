@@ -522,9 +522,6 @@ router.get("/applications", requireAuth, requireAgentStaffPermission("applicatio
   const user = req.user!;
   const isStaff = STAFF_ROLES.includes(user.role as any);
   const canExposeCommission = await canViewApplicationCommission(user);
-  const staffPerms = isStaff && !GLOBAL_APPLICATION_STAFF_ROLES.has(user.role)
-    ? await getEffectivePermissionSet(user)
-    : null;
 
   const conditions = [isNull(applicationsTable.deletedAt)];
   const scopeResolveStartedAt = process.hrtime.bigint();
@@ -545,11 +542,6 @@ router.get("/applications", requireAuth, requireAgentStaffPermission("applicatio
     // Super admins/admins retain global read access. Other staff roles see
     // their branch plus branchless/shared legacy rows.
     if (!GLOBAL_APPLICATION_STAFF_ROLES.has(user.role)) {
-      // Agent-sourced records remain private to the agency unless the staff
-      // principal has the explicit cross-source permission.
-      if (!staffPerms?.has("records.view_others")) {
-        conditions.push(isNull(applicationsTable.agentId));
-      }
       visibleBranchIds = await getVisibleBranchIds(user.id, user.role, user);
       conditions.push(applicationInStaffBranchScope(visibleBranchIds ?? []));
     }
@@ -571,9 +563,8 @@ router.get("/applications", requireAuth, requireAgentStaffPermission("applicatio
     if (studentId) conditions.push(eq(applicationsTable.studentId, parseInt(studentId, 10)));
   }
 
-  // Branch scoping remains enforced for agents; students are already limited
-  // to their own application rows. Non-admin staff source scope is applied
-  // above before facets and rows are loaded.
+  // Staff application visibility is global. Branch scoping remains enforced
+  // for agents; students are already limited to their own application rows.
   if (!isStaff && user.role !== "student") {
     visibleBranchIds = await getVisibleBranchIds(user.id, user.role, user);
     if (visibleBranchIds !== null) {
@@ -1444,12 +1435,6 @@ router.get("/applications/:id", requireAuth, requireAgentStaffPermission("applic
   const user = req.user!;
   const isStaff = STAFF_ROLES.includes(user.role as any);
   const canExposeCommission = await canViewApplicationCommission(user);
-  const detailStaffPerms = isStaff && !GLOBAL_APPLICATION_STAFF_ROLES.has(user.role)
-    ? await getEffectivePermissionSet(user)
-    : null;
-  if (isAgentSourcedAndBlockedForStaff(user, row.agentId) && !detailStaffPerms?.has("records.view_others")) {
-    res.status(404).json({ error: "Application not found" }); return;
-  }
   if (isStaff && !GLOBAL_APPLICATION_STAFF_ROLES.has(user.role)) {
     const visibleBranchIds = await getVisibleBranchIds(user.id, user.role, user);
     const [visibleRow] = await db
