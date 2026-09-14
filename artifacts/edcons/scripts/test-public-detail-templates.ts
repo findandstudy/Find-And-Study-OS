@@ -32,6 +32,15 @@ test("university template keeps overview, facts and governed programs connected"
   assert.doesNotMatch(university, /dangerouslySetInnerHTML/);
 });
 
+test("public fee templates normalize catalog currency values before Intl formatting", () => {
+  assert.match(program, /normalizeCurrency\(currency\)/);
+  assert.match(university, /normalizeCurrency\(currency\)/);
+  assert.match(
+    readFileSync(new URL("../src/pages/public/Programs.tsx", import.meta.url), "utf8"),
+    /normalizeCurrency\(currency\)/,
+  );
+});
+
 test("destination collection requests the active locale and follows canonical paths", () => {
   assert.match(countries, /public\/destinations\?locale=/);
   assert.match(countries, /\[lang\]/);
