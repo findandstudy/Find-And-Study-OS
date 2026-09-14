@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Info, DollarSign, ArrowRight, Eraser, AlertTriangle } from "lucide-react";
+import { normalizeCurrency } from "@/lib/currency";
 
 const MAX_MARKUP = 100_000;
 
@@ -20,9 +21,13 @@ type PdfMarkupModalProps = {
 
 function formatCurrency(amount: number, currency = "USD"): string {
   try {
-    return new Intl.NumberFormat("en-US", { style: "currency", currency, maximumFractionDigits: 0 }).format(amount);
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: normalizeCurrency(currency),
+      maximumFractionDigits: 0,
+    }).format(amount);
   } catch {
-    return `$${amount.toLocaleString()}`;
+    return `${normalizeCurrency(currency)} ${amount.toLocaleString("en-US")}`;
   }
 }
 

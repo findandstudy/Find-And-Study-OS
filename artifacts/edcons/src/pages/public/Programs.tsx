@@ -23,6 +23,7 @@ import {
 import { PHONE_CODES, normalizeNationality, FALLBACK_COUNTRIES } from "@/lib/nationalities";
 import { PhoneCodePicker } from "@/components/ui/phone-code-picker";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { normalizeCurrency } from "@/lib/currency";
 import {
   Search, MapPin, BookOpen, GraduationCap, Globe2, Clock, DollarSign, Users,
   Languages, ChevronLeft, ChevronRight, Upload, X, CheckCircle2, Loader2, Sparkles,
@@ -92,7 +93,7 @@ interface Filters {
 
 function formatFee(fee: number | null, currency: string | null): string {
   if (!fee) return "";
-  const cur = currency || "USD";
+  const cur = normalizeCurrency(currency);
   try {
     return new Intl.NumberFormat("en-US", { style: "currency", currency: cur, maximumFractionDigits: 0 }).format(fee);
   } catch {

@@ -7,6 +7,7 @@ import { SITE_NAME, SITE_URL, useJsonLd } from "@/hooks/use-json-ld";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Building2, ExternalLink, GraduationCap, MapPin } from "lucide-react";
+import { normalizeCurrency } from "@/lib/currency";
 
 type UniversityPayload = {
   data: {
@@ -54,11 +55,11 @@ function money(value: number | null, currency: string | null, locale: string) {
   try {
     return new Intl.NumberFormat(locale, {
       style: "currency",
-      currency: currency || "USD",
+      currency: normalizeCurrency(currency),
       maximumFractionDigits: 0,
     }).format(value);
   } catch {
-    return `${value.toLocaleString()} ${currency || "USD"}`;
+    return `${value.toLocaleString(locale)} ${normalizeCurrency(currency)}`;
   }
 }
 
