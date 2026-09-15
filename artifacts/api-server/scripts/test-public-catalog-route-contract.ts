@@ -142,6 +142,19 @@ test("public catalogue detail APIs are bounded and never select private CRM fiel
   assert.match(translationQueue, /completeProgramTranslation/);
   assert.match(translationQueue, /invalidatePublicCatalogRenderCache\(\{ entityType: "catalog" \}\)/);
   assert.match(translationQueue, /invalidatePublicWebDiscoveryCache\(\)/);
+  const countCalls = (source: string, pattern: RegExp) => (source.match(pattern) || []).length;
+  assert.equal(
+    countCalls(catalogAdmin, /invalidatePublicCatalogRenderCache\(\{ entityType: "catalog" \}\)/g),
+    countCalls(catalogAdmin, /invalidatePublicWebDiscoveryCache\(\)/g),
+  );
+  assert.equal(
+    countCalls(universitiesAdmin, /invalidatePublicCatalogRenderCache\(\{ entityType: "catalog" \}\)/g),
+    countCalls(universitiesAdmin, /invalidatePublicWebDiscoveryCache\(\)/g),
+  );
+  assert.equal(
+    countCalls(translationQueue, /invalidatePublicCatalogRenderCache\(\{ entityType: "catalog" \}\)/g),
+    countCalls(translationQueue, /invalidatePublicWebDiscoveryCache\(\)/g),
+  );
   assert.match(exampleEnvironment, /^PUBLIC_WEB_INTERNAL_LINK_MODE=off$/m);
   assert.doesNotMatch(publicWeb, /authorEmail|commission|serviceFee|contactPerson/i);
 });
