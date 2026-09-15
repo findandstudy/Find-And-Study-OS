@@ -121,6 +121,8 @@ test("public catalogue detail APIs are bounded and never select private CRM fiel
   assert.match(websiteAdmin, /translationsJson: page\.translationsJson/);
   assert.match(websiteAdmin, /updates\.status = "draft"/);
   assert.match(websiteAdmin, /translationsJson: req\.body\.translations \|\| \{\}, status: "draft", publishedAt: null/);
+  assert.match(websiteAdmin, /"catalog_grid"/);
+  assert.match(websiteAdmin, /invalidatePublicCatalogRenderCache\(\{ entityType: "page"/);
   assert.match(exampleEnvironment, /^PUBLIC_WEB_INTERNAL_LINK_MODE=off$/m);
   assert.doesNotMatch(publicWeb, /authorEmail|commission|serviceFee|contactPerson/i);
 });

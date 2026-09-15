@@ -55,6 +55,7 @@ import {
 } from "../lib/exportImportExcel";
 import { safeOutboundRequest } from "../lib/safeOutboundRequest";
 import { buildPublicWebPublicationReadModel } from "../lib/publicWebPublicationReadModel";
+import { invalidatePublicCatalogRenderCache } from "../lib/publicCatalogRenderReadModel";
 
 const router = Router();
 const WEBSITE_ROLES = ["super_admin", "admin"] as const;
@@ -63,7 +64,7 @@ const adminOnly = [requireAuth, requireRole(...WEBSITE_ROLES)] as const;
 const VALID_BLOCK_TYPES = new Set([
   "hero", "rich_text", "stats_strip", "feature_cards", "icon_cards",
   "cta_banner", "faq", "team_grid", "office_list", "logo_grid",
-  "testimonials", "section_title", "spacer_divider", "global_block",
+  "testimonials", "section_title", "spacer_divider", "global_block", "catalog_grid",
 ]);
 
 function registerCrud(
@@ -605,6 +606,7 @@ router.post("/website/pages/:id/publish", ...adminOnly, async (req: Request, res
       return { page, version };
     });
     if (!result) return void res.status(404).json({ error: "Not found" });
+    invalidatePublicCatalogRenderCache({ entityType: "page", entityId: pageId });
     res.json(result);
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : "Internal server error";
@@ -619,6 +621,7 @@ router.post("/website/pages/:id/unpublish", ...adminOnly, async (req: Request, r
       .where(eq(websitePagesTable.id, Number(req.params.id)))
       .returning();
     if (!page) return void res.status(404).json({ error: "Not found" });
+    invalidatePublicCatalogRenderCache({ entityType: "page", entityId: page.id });
     res.json(page);
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : "Internal server error";
