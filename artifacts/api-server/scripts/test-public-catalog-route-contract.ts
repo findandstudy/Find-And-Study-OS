@@ -141,6 +141,7 @@ test("public catalogue detail APIs are bounded and never select private CRM fiel
   assert.match(universitiesAdmin, /invalidatePublicWebDiscoveryCache\(\)/);
   assert.match(translationQueue, /completeProgramTranslation/);
   assert.match(translationQueue, /invalidatePublicCatalogRenderCache\(\{ entityType: "catalog" \}\)/);
+  assert.match(translationQueue, /invalidatePublicWebDiscoveryCache\(\)/);
   assert.match(exampleEnvironment, /^PUBLIC_WEB_INTERNAL_LINK_MODE=off$/m);
   assert.doesNotMatch(publicWeb, /authorEmail|commission|serviceFee|contactPerson/i);
 });
