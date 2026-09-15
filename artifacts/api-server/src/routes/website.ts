@@ -55,6 +55,7 @@ import {
 } from "../lib/exportImportExcel";
 import { safeOutboundRequest } from "../lib/safeOutboundRequest";
 import { buildPublicWebPublicationReadModel } from "../lib/publicWebPublicationReadModel";
+import { invalidatePublicWebDiscoveryCache } from "../lib/publicWebDiscoveryReadModel";
 import { invalidatePublicCatalogRenderCache } from "../lib/publicCatalogRenderReadModel";
 
 const router = Router();
@@ -71,7 +72,8 @@ function registerCrud(
   basePath: string,
   table: AnyPgTable,
   idCol: AnyPgColumn,
-  orderCol?: AnyPgColumn
+  orderCol?: AnyPgColumn,
+  onMutation?: (id: number) => void,
 ): void {
   router.get(basePath, ...adminOnly, async (_req: Request, res: Response): Promise<void> => {
     try {
@@ -97,6 +99,7 @@ function registerCrud(
   router.post(basePath, ...adminOnly, async (req: Request, res: Response): Promise<void> => {
     try {
       const [row] = await db.insert(table).values(req.body).returning();
+      if (row && onMutation) onMutation(Number((row as { id: number }).id));
       res.status(201).json(row);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Internal server error";
@@ -108,6 +111,7 @@ function registerCrud(
     try {
       const [row] = await db.update(table).set(req.body).where(eq(idCol, Number(req.params.id))).returning();
       if (!row) { res.status(404).json({ error: "Not found" }); return; }
+      if (onMutation) onMutation(Number((row as { id: number }).id));
       res.json(row);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Internal server error";
@@ -119,6 +123,7 @@ function registerCrud(
     try {
       const [row] = await db.delete(table).where(eq(idCol, Number(req.params.id))).returning();
       if (!row) { res.status(404).json({ error: "Not found" }); return; }
+      if (onMutation) onMutation(Number((row as { id: number }).id));
       res.json({ success: true });
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Internal server error";
@@ -127,7 +132,16 @@ function registerCrud(
   });
 }
 
-registerCrud("/website/pages", websitePagesTable, websitePagesTable.id, websitePagesTable.sortOrder);
+const invalidatePagePublicationCaches = (id: number): void => {
+  invalidatePublicCatalogRenderCache({ entityType: "page", entityId: id });
+  invalidatePublicWebDiscoveryCache({ entityType: "page", entityId: id });
+};
+const invalidateArticlePublicationCaches = (id: number): void => {
+  invalidatePublicCatalogRenderCache({ entityType: "article", entityId: id });
+  invalidatePublicWebDiscoveryCache({ entityType: "article", entityId: id });
+};
+
+registerCrud("/website/pages", websitePagesTable, websitePagesTable.id, websitePagesTable.sortOrder, invalidatePagePublicationCaches);
 registerCrud("/website/page-versions", websitePageVersionsTable, websitePageVersionsTable.id);
 registerCrud("/website/page-blocks", websitePageBlocksTable, websitePageBlocksTable.id, websitePageBlocksTable.sortOrder);
 registerCrud("/website/navigation-menus", websiteNavigationMenusTable, websiteNavigationMenusTable.id);
@@ -136,7 +150,7 @@ registerCrud("/website/theme-tokens", websiteThemeTokensTable, websiteThemeToken
 registerCrud("/website/global-components", websiteGlobalComponentsTable, websiteGlobalComponentsTable.id);
 registerCrud("/website/forms", websiteFormsTable, websiteFormsTable.id);
 registerCrud("/website/form-fields", websiteFormFieldsTable, websiteFormFieldsTable.id, websiteFormFieldsTable.sortOrder);
-registerCrud("/website/blog-posts", websiteBlogPostsTable, websiteBlogPostsTable.id);
+registerCrud("/website/blog-posts", websiteBlogPostsTable, websiteBlogPostsTable.id, undefined, invalidateArticlePublicationCaches);
 registerCrud("/website/blog-categories", websiteBlogCategoriesTable, websiteBlogCategoriesTable.id, websiteBlogCategoriesTable.sortOrder);
 registerCrud("/website/blog-tags", websiteBlogTagsTable, websiteBlogTagsTable.id);
 registerCrud("/website/blog-post-tags", websiteBlogPostTagsTable, websiteBlogPostTagsTable.id);
@@ -607,6 +621,7 @@ router.post("/website/pages/:id/publish", ...adminOnly, async (req: Request, res
     });
     if (!result) return void res.status(404).json({ error: "Not found" });
     invalidatePublicCatalogRenderCache({ entityType: "page", entityId: pageId });
+    invalidatePublicWebDiscoveryCache({ entityType: "page", entityId: pageId });
     res.json(result);
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : "Internal server error";
@@ -622,6 +637,7 @@ router.post("/website/pages/:id/unpublish", ...adminOnly, async (req: Request, r
       .returning();
     if (!page) return void res.status(404).json({ error: "Not found" });
     invalidatePublicCatalogRenderCache({ entityType: "page", entityId: page.id });
+    invalidatePublicWebDiscoveryCache({ entityType: "page", entityId: page.id });
     res.json(page);
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : "Internal server error";
@@ -636,6 +652,8 @@ router.post("/website/blog-posts/:id/publish", ...adminOnly, async (req: Request
       .where(eq(websiteBlogPostsTable.id, Number(req.params.id)))
       .returning();
     if (!post) return void res.status(404).json({ error: "Not found" });
+    invalidatePublicCatalogRenderCache({ entityType: "article", entityId: post.id });
+    invalidatePublicWebDiscoveryCache({ entityType: "article", entityId: post.id });
     res.json(post);
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : "Internal server error";
@@ -650,6 +668,8 @@ router.post("/website/blog-posts/:id/unpublish", ...adminOnly, async (req: Reque
       .where(eq(websiteBlogPostsTable.id, Number(req.params.id)))
       .returning();
     if (!post) return void res.status(404).json({ error: "Not found" });
+    invalidatePublicCatalogRenderCache({ entityType: "article", entityId: post.id });
+    invalidatePublicWebDiscoveryCache({ entityType: "article", entityId: post.id });
     res.json(post);
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : "Internal server error";
@@ -1125,6 +1145,8 @@ router.put("/website/pages/:id/seo", ...adminOnly, async (req: Request, res: Res
       .where(eq(websitePagesTable.id, Number(req.params.id)))
       .returning();
     if (!page) return void res.status(404).json({ error: "Not found" });
+    invalidatePublicCatalogRenderCache({ entityType: "page", entityId: page.id });
+    invalidatePublicWebDiscoveryCache({ entityType: "page", entityId: page.id });
     res.json(page);
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : "Internal server error";
@@ -1223,6 +1245,8 @@ router.put("/website/pages/:id/translations", ...adminOnly, async (req: Request,
       .where(eq(websitePagesTable.id, Number(req.params.id)))
       .returning();
     if (!page) return void res.status(404).json({ error: "Not found" });
+    invalidatePublicCatalogRenderCache({ entityType: "page", entityId: page.id });
+    invalidatePublicWebDiscoveryCache({ entityType: "page", entityId: page.id });
     res.json(page);
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : "Internal server error";
@@ -1237,6 +1261,8 @@ router.put("/website/blog-posts/:id/translations", ...adminOnly, async (req: Req
       .where(eq(websiteBlogPostsTable.id, Number(req.params.id)))
       .returning();
     if (!post) return void res.status(404).json({ error: "Not found" });
+    invalidatePublicCatalogRenderCache({ entityType: "article", entityId: post.id });
+    invalidatePublicWebDiscoveryCache({ entityType: "article", entityId: post.id });
     res.json(post);
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : "Internal server error";

@@ -58,10 +58,12 @@ const SEO_CACHE_TTL_MS = 5 * 60_000;
 const SEO_CACHE_MAX_ENTRIES = 5_000;
 const seoCache = new Map<string, { expiresAt: number; value: PublicEntitySeoState }>();
 const seoInFlight = new Map<string, Promise<PublicEntitySeoState>>();
+let seoCacheGeneration = 0;
 const ROUTE_ALIAS_CACHE_TTL_MS = 5 * 60_000;
 const ROUTE_ALIAS_CACHE_MAX_ENTRIES = 5_000;
 const routeAliasCache = new Map<string, { expiresAt: number; value: PublicWebRouteAliasResolution }>();
 const routeAliasInFlight = new Map<string, Promise<PublicWebRouteAliasResolution>>();
+let routeAliasCacheGeneration = 0;
 
 type RawLocalizedEntityRow = {
   entity_id?: number;
@@ -168,7 +170,9 @@ export async function resolvePublicWebRouteAlias(path: string): Promise<PublicWe
   const existing = routeAliasInFlight.get(key);
   if (existing) return existing;
   const scope = config.scope;
-  const pending = withPublicScope(scope, async (client) => client.query<{
+  const generation = routeAliasCacheGeneration;
+  let pending: Promise<PublicWebRouteAliasResolution>;
+  pending = withPublicScope(scope, async (client) => client.query<{
     route_kind: string;
     redirect_to_path: string | null;
     http_status: number;
@@ -211,9 +215,13 @@ export async function resolvePublicWebRouteAlias(path: string): Promise<PublicWe
     }
     const value: PublicWebRouteAliasResolution = { mode: "published", action };
     pruneRouteAliasCache(Date.now());
-    routeAliasCache.set(key, { value, expiresAt: Date.now() + ROUTE_ALIAS_CACHE_TTL_MS });
+    if (generation === routeAliasCacheGeneration) {
+      routeAliasCache.set(key, { value, expiresAt: Date.now() + ROUTE_ALIAS_CACHE_TTL_MS });
+    }
     return value;
-  }).finally(() => routeAliasInFlight.delete(key));
+  }).finally(() => {
+    if (routeAliasInFlight.get(key) === pending) routeAliasInFlight.delete(key);
+  });
   routeAliasInFlight.set(key, pending);
   return pending;
 }
@@ -903,13 +911,19 @@ export async function resolvePublishedEntitySeoState(input: {
   if (cached && cached.expiresAt > now) return cached.value;
   const existing = seoInFlight.get(key);
   if (existing) return existing;
-  const pending = readPublishedEntitySeoState({ ...input, scope: config.scope })
+  const generation = seoCacheGeneration;
+  let pending: Promise<PublicEntitySeoState>;
+  pending = readPublishedEntitySeoState({ ...input, scope: config.scope })
     .then((value) => {
-      pruneSeoCache(Date.now());
-      seoCache.set(key, { value, expiresAt: Date.now() + SEO_CACHE_TTL_MS });
+      if (generation === seoCacheGeneration) {
+        pruneSeoCache(Date.now());
+        seoCache.set(key, { value, expiresAt: Date.now() + SEO_CACHE_TTL_MS });
+      }
       return value;
     })
-    .finally(() => seoInFlight.delete(key));
+    .finally(() => {
+      if (seoInFlight.get(key) === pending) seoInFlight.delete(key);
+    });
   seoInFlight.set(key, pending);
   return pending;
 }
@@ -921,7 +935,8 @@ export function invalidatePublicWebDiscoveryCache(input: {
   path?: string;
 } = {}): number {
   let removed = 0;
-  for (const key of seoCache.keys()) {
+  const seoCandidateKeys = new Set([...seoCache.keys(), ...seoInFlight.keys()]);
+  for (const key of seoCandidateKeys) {
     const parts = key.split(":");
     const entityType = parts.at(-3);
     const entityId = Number(parts.at(-2));
@@ -932,15 +947,22 @@ export function invalidatePublicWebDiscoveryCache(input: {
       && (!input.locale || input.locale === locale)
     ) {
       seoCache.delete(key);
+      seoInFlight.delete(key);
       removed += 1;
     }
   }
   const requestedPath = input.path ? safeLocalPublicPath(input.path) : null;
-  for (const key of routeAliasCache.keys()) {
+  const aliasCandidateKeys = new Set([...routeAliasCache.keys(), ...routeAliasInFlight.keys()]);
+  for (const key of aliasCandidateKeys) {
     if (!requestedPath || key.endsWith(`:${requestedPath}`)) {
       routeAliasCache.delete(key);
+      routeAliasInFlight.delete(key);
       removed += 1;
     }
+  }
+  if (removed > 0) {
+    seoCacheGeneration += 1;
+    routeAliasCacheGeneration += 1;
   }
   return removed;
 }

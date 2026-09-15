@@ -132,6 +132,9 @@ test("public catalogue detail APIs are bounded and never select private CRM fiel
   assert.match(websiteAdmin, /translationsJson: req\.body\.translations \|\| \{\}, status: "draft", publishedAt: null/);
   assert.match(websiteAdmin, /"catalog_grid"/);
   assert.match(websiteAdmin, /invalidatePublicCatalogRenderCache\(\{ entityType: "page"/);
+  assert.match(websiteAdmin, /onMutation\?: \(id: number\) => void/);
+  assert.match(websiteAdmin, /invalidatePagePublicationCaches/);
+  assert.match(websiteAdmin, /invalidateArticlePublicationCaches/);
   assert.match(catalogAdmin, /invalidatePublicCatalogRenderCache\(\{ entityType: "catalog" \}\)/);
   assert.match(universitiesAdmin, /invalidatePublicCatalogRenderCache\(\{ entityType: "catalog" \}\)/);
   assert.match(translationQueue, /completeProgramTranslation/);
