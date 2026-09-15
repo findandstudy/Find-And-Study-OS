@@ -74,6 +74,8 @@ test("public CMS pages render hydrated catalogue cards in the SPA fallback", () 
   assert.match(publicPage, /items\(content\.items, 12\)/);
   assert.match(publicPage, /safeUrl\(item\.canonicalPath\)/);
   assert.match(publicPage, /No published catalogue entries are available yet/);
+  assert.match(publicPage, /"@type": "ItemList"/);
+  assert.match(publicPage, /page\.meta\.indexable \? page\.data\.blocks/);
 });
 
 test("Pages editor previews catalogue blocks without persisting catalogue facts", () => {

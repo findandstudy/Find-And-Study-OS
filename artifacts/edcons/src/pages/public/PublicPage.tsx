@@ -209,17 +209,35 @@ export default function PublicPage({ slug }: { slug: string }) {
     lang,
     alternates: page?.meta.alternatePaths,
   });
-  const schema = useMemo(() => page ? [{
-    "@context": "https://schema.org",
-    "@type": "WebPage",
-    "@id": `${SITE_URL}${page.meta.canonicalPath}#webpage`,
-    name: page.data.title,
-    description: page.meta.description,
-    url: `${SITE_URL}${page.meta.canonicalPath}`,
-    datePublished: page.data.publishedAt,
-    inLanguage: lang,
-    isPartOf: { "@type": "WebSite", name: SITE_NAME, url: SITE_URL },
-  }] : [], [lang, page]);
+  const schema = useMemo(() => {
+    if (!page) return [];
+    const webPage = {
+      "@type": "WebPage",
+      "@id": `${SITE_URL}${page.meta.canonicalPath}#webpage`,
+      name: page.data.title,
+      description: page.meta.description,
+      url: `${SITE_URL}${page.meta.canonicalPath}`,
+      datePublished: page.data.publishedAt,
+      inLanguage: lang,
+      isPartOf: { "@type": "WebSite", name: SITE_NAME, url: SITE_URL },
+    };
+    const catalogueLists = page.meta.indexable ? page.data.blocks.flatMap((block) => {
+      if (block.blockType !== "catalog_grid") return [];
+      const entries = items(block.content.items, 12).flatMap((item) => {
+        const href = safeUrl(item.canonicalPath);
+        const name = text(item.title, 500);
+        return href && name ? [{ "@type": "ListItem", url: href.startsWith("/") ? `${SITE_URL}${href}` : href, name }] : [];
+      });
+      if (entries.length === 0) return [];
+      return [{
+        "@type": "ItemList",
+        name: text(block.content.title, 500) || "Catalogue",
+        numberOfItems: entries.length,
+        itemListElement: entries.map((entry, index) => ({ ...entry, position: index + 1 })),
+      }];
+    }) : [];
+    return [{ "@context": "https://schema.org", ...webPage }, ...catalogueLists];
+  }, [lang, page]);
   useJsonLd(schema);
 
   if (loading) return <main className="mx-auto max-w-6xl px-4 py-28"><div className="h-12 w-2/3 animate-pulse rounded bg-secondary" /><div className="mt-8 h-80 animate-pulse rounded-3xl bg-secondary" /></main>;
