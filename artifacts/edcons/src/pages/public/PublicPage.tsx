@@ -136,7 +136,7 @@ function Block({ block }: { block: PageBlock }) {
               {cards.map((item, index) => {
                 const href = safeUrl(item.canonicalPath);
                 const card = <><h3 className="text-xl font-semibold">{text(item.title, 500)}</h3>{item.description ? <p className="mt-2 text-muted-foreground">{text(item.description)}</p> : null}</>;
-                return <article key={text(item.id, 64) || index} className="rounded-2xl border bg-card p-6 shadow-sm">{href ? <a href={href} className="block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">{card}</a> : card}</article>;
+                return <article key={text(item.id, 64) || index} className="rounded-2xl border bg-card p-6 shadow-sm">{href ? <a href={href} rel={href.startsWith("http") ? "noopener noreferrer" : undefined} className="block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">{card}</a> : card}</article>;
               })}
             </div>
           ) : (
