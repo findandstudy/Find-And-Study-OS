@@ -8,6 +8,7 @@ import { invalidateCurrencyCatalog } from "../lib/currencyCatalog";
 import { normalizeDialCode } from "../lib/dialCodes";
 import { normalizeProgramImportRows, collectUniversitiesToCreate } from "../lib/programImportHeaders";
 import { invalidatePublicCatalogRenderCache } from "../lib/publicCatalogRenderReadModel";
+import { invalidatePublicWebDiscoveryCache } from "../lib/publicWebDiscoveryReadModel";
 import * as XLSX from "xlsx";
 
 // Catalog bulk-import endpoints accept JSON arrays of thousands of rows
@@ -101,6 +102,7 @@ router.post("/countries", requireAuth, requireRole(...MANAGER_ROLES), async (req
   try {
     const [country] = await db.insert(countriesTable).values({ name, code: code.toUpperCase(), flagEmoji, dialCode: normalizeDialCode(dialCode), isActive }).returning();
     invalidatePublicCatalogRenderCache({ entityType: "catalog" });
+    invalidatePublicWebDiscoveryCache();
     await logAudit(req.user!.id, "create_country", "country", country.id, { name, code }, req.ip);
     res.status(201).json(country);
   } catch { res.status(409).json({ error: "Country code or name already exists" }); }
@@ -111,7 +113,10 @@ router.post("/countries/bulk", bulkJson, requireAuth, requireRole(...MANAGER_ROL
   if (!Array.isArray(rows) || rows.length === 0) { res.status(400).json({ error: "Expected non-empty array" }); return; }
   const values = rows.map(r => ({ name: r.name, code: r.code.toUpperCase(), flagEmoji: r.flagEmoji ?? null, dialCode: normalizeDialCode(r.dialCode), isActive: true }));
   const inserted = await db.insert(countriesTable).values(values).onConflictDoNothing().returning();
-  if (inserted.length > 0) invalidatePublicCatalogRenderCache({ entityType: "catalog" });
+  if (inserted.length > 0) {
+    invalidatePublicCatalogRenderCache({ entityType: "catalog" });
+    invalidatePublicWebDiscoveryCache();
+  }
   await logAudit(req.user!.id, "bulk_import_countries", "country", undefined, { count: inserted.length }, req.ip);
   res.json({ inserted: inserted.length, skipped: rows.length - inserted.length });
 });
@@ -128,6 +133,7 @@ router.patch("/countries/:id", requireAuth, requireRole(...MANAGER_ROLES), async
   const [country] = await db.update(countriesTable).set(updates).where(eq(countriesTable.id, id)).returning();
   if (!country) { res.status(404).json({ error: "Not found" }); return; }
   invalidatePublicCatalogRenderCache({ entityType: "catalog" });
+  invalidatePublicWebDiscoveryCache();
   res.json(country);
 });
 
@@ -135,6 +141,7 @@ router.delete("/countries/:id", requireAuth, requireRole(...MANAGER_ROLES), asyn
   const id = parseInt(String(req.params.id), 10);
   await db.delete(countriesTable).where(eq(countriesTable.id, id));
   invalidatePublicCatalogRenderCache({ entityType: "catalog" });
+  invalidatePublicWebDiscoveryCache();
   res.sendStatus(204);
 });
 
@@ -167,6 +174,7 @@ router.post("/cities", requireAuth, requireRole(...MANAGER_ROLES), async (req, r
   if (!name || !countryId) { res.status(400).json({ error: "name and countryId are required" }); return; }
   const [city] = await db.insert(citiesTable).values({ name, countryId, isActive }).returning();
   invalidatePublicCatalogRenderCache({ entityType: "catalog" });
+  invalidatePublicWebDiscoveryCache();
   await logAudit(req.user!.id, "create_city", "city", city.id, { name, countryId }, req.ip);
   res.status(201).json(city);
 });
@@ -186,7 +194,10 @@ router.post("/cities/bulk", bulkJson, requireAuth, requireRole(...MANAGER_ROLES)
 
   if (values.length === 0) { res.status(400).json({ error: "No valid rows (countryId or countryCode required)" }); return; }
   const inserted = await db.insert(citiesTable).values(values).returning();
-  if (inserted.length > 0) invalidatePublicCatalogRenderCache({ entityType: "catalog" });
+  if (inserted.length > 0) {
+    invalidatePublicCatalogRenderCache({ entityType: "catalog" });
+    invalidatePublicWebDiscoveryCache();
+  }
   await logAudit(req.user!.id, "bulk_import_cities", "city", undefined, { count: inserted.length }, req.ip);
   res.json({ inserted: inserted.length, skipped: rows.length - inserted.length });
 });
@@ -201,6 +212,7 @@ router.patch("/cities/:id", requireAuth, requireRole(...MANAGER_ROLES), async (r
   const [city] = await db.update(citiesTable).set(updates).where(eq(citiesTable.id, id)).returning();
   if (!city) { res.status(404).json({ error: "Not found" }); return; }
   invalidatePublicCatalogRenderCache({ entityType: "catalog" });
+  invalidatePublicWebDiscoveryCache();
   res.json(city);
 });
 
@@ -208,6 +220,7 @@ router.delete("/cities/:id", requireAuth, requireRole(...MANAGER_ROLES), async (
   const id = parseInt(String(req.params.id), 10);
   await db.delete(citiesTable).where(eq(citiesTable.id, id));
   invalidatePublicCatalogRenderCache({ entityType: "catalog" });
+  invalidatePublicWebDiscoveryCache();
   res.sendStatus(204);
 });
 
@@ -254,7 +267,10 @@ router.post("/universities/bulk", bulkJson, requireAuth, requireRole(...MANAGER_
 
   if (values.length === 0) { res.status(400).json({ error: "No valid rows" }); return; }
   const inserted = await db.insert(universitiesTable).values(values).onConflictDoNothing().returning();
-  if (inserted.length > 0) invalidatePublicCatalogRenderCache({ entityType: "catalog" });
+  if (inserted.length > 0) {
+    invalidatePublicCatalogRenderCache({ entityType: "catalog" });
+    invalidatePublicWebDiscoveryCache();
+  }
   await logAudit(req.user!.id, "bulk_import_universities", "university", undefined, { count: inserted.length }, req.ip);
   res.json({ inserted: inserted.length, skipped: rows.length - inserted.length });
 });
@@ -593,6 +609,7 @@ router.post("/programs/bulk", bulkJson, requireAuth, requireRole(...MANAGER_ROLE
   // import (rather than once per row) so bulk imports stay cheap and never
   // serve a stale snapshot beyond the current request.
   invalidatePublicCatalogRenderCache({ entityType: "catalog" });
+  invalidatePublicWebDiscoveryCache();
 
   const unknownDocColumns = [...unknownDocCols].sort();
   await logAudit(req.user!.id, "bulk_import_programs", "program", undefined, {

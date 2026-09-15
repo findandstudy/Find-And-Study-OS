@@ -18,6 +18,7 @@ import {
   requeueProgramTranslations,
 } from "../lib/programTranslationQueue";
 import { invalidatePublicCatalogRenderCache } from "../lib/publicCatalogRenderReadModel";
+import { invalidatePublicWebDiscoveryCache } from "../lib/publicWebDiscoveryReadModel";
 
 const router: IRouter = Router();
 
@@ -212,6 +213,7 @@ router.post("/universities", requireAuth, requireRole(...MANAGER_ROLES), async (
     status,
   }).returning();
   invalidatePublicCatalogRenderCache({ entityType: "catalog" });
+  invalidatePublicWebDiscoveryCache();
   await logAudit(req.user!.id, "create_university", "university", uni.id, { name, country }, req.ip);
   res.status(201).json(uni);
 });
@@ -258,6 +260,7 @@ router.patch("/universities/:id", requireAuth, requireRole(...MANAGER_ROLES), as
   const [uni] = await db.update(universitiesTable).set(updates).where(eq(universitiesTable.id, id)).returning();
   if (!uni) { res.status(404).json({ error: "University not found" }); return; }
   invalidatePublicCatalogRenderCache({ entityType: "catalog" });
+  invalidatePublicWebDiscoveryCache();
   await logAudit(req.user!.id, "update_university", "university", id, updates, req.ip);
   res.json(uni);
 });
@@ -267,6 +270,7 @@ router.delete("/universities/:id", requireAuth, requireRole(...MANAGER_ROLES), a
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   await db.delete(universitiesTable).where(eq(universitiesTable.id, id));
   invalidatePublicCatalogRenderCache({ entityType: "catalog" });
+  invalidatePublicWebDiscoveryCache();
   await logAudit(req.user!.id, "delete_university", "university", id, {}, req.ip);
   res.sendStatus(204);
 });
@@ -438,6 +442,7 @@ router.post("/programs", requireAuth, requireRole(...MANAGER_ROLES), async (req,
     isActive,
   }).returning();
   invalidatePublicCatalogRenderCache({ entityType: "catalog" });
+  invalidatePublicWebDiscoveryCache();
   await logAudit(req.user!.id, "create_program", "program", prog.id, { universityId, name }, req.ip);
   res.status(201).json(prog);
 });
@@ -495,7 +500,10 @@ router.patch("/programs/bulk-status", requireAuth, requireRole(...MANAGER_ROLES)
     .where(inArray(programsTable.id, ids))
     .returning({ id: programsTable.id });
 
-  if (updated.length > 0) invalidatePublicCatalogRenderCache({ entityType: "catalog" });
+  if (updated.length > 0) {
+    invalidatePublicCatalogRenderCache({ entityType: "catalog" });
+    invalidatePublicWebDiscoveryCache();
+  }
 
   await logAudit(
     req.user!.id,
@@ -646,6 +654,7 @@ router.put("/programs/:id/translations/:locale", requireAuth, requireRole(...MAN
     ]);
     if (result.rowCount !== 1) { res.status(409).json({ error: "Translation is currently processing" }); return; }
     invalidatePublicCatalogRenderCache({ entityType: "catalog" });
+    invalidatePublicWebDiscoveryCache();
     await logAudit(req.user!.id, "program_translation.manual_publish", "program", id, { locale }, req.ip);
     res.json({ programId: id, locale, status: "published", isManual: true });
   } catch (error) {
@@ -673,6 +682,7 @@ router.patch("/programs/:id", requireAuth, requireRole(...MANAGER_ROLES), async 
   const [prog] = await db.update(programsTable).set(updates).where(eq(programsTable.id, id)).returning();
   if (!prog) { res.status(404).json({ error: "Program not found" }); return; }
   invalidatePublicCatalogRenderCache({ entityType: "catalog" });
+  invalidatePublicWebDiscoveryCache();
   await logAudit(req.user!.id, "update_program", "program", id, updates, req.ip);
   res.json(prog);
 });
@@ -682,13 +692,17 @@ router.delete("/programs/:id", requireAuth, requireRole(...MANAGER_ROLES), async
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   await db.delete(programsTable).where(eq(programsTable.id, id));
   invalidatePublicCatalogRenderCache({ entityType: "catalog" });
+  invalidatePublicWebDiscoveryCache();
   await logAudit(req.user!.id, "delete_program", "program", id, {}, req.ip);
   res.sendStatus(204);
 });
 
 router.delete("/programs", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
   const result = await db.delete(programsTable).returning({ id: programsTable.id });
-  if (result.length > 0) invalidatePublicCatalogRenderCache({ entityType: "catalog" });
+  if (result.length > 0) {
+    invalidatePublicCatalogRenderCache({ entityType: "catalog" });
+    invalidatePublicWebDiscoveryCache();
+  }
   await logAudit(req.user!.id, "delete_all_programs", "program", undefined, { count: result.length }, req.ip);
   res.json({ deleted: result.length });
 });
