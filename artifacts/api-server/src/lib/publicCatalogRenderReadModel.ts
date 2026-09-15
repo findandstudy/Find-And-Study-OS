@@ -202,14 +202,17 @@ async function readPublicCatalogBlockItems(
   config: PublicCatalogBlockConfig,
   locale: ProgramSupportedLocale,
 ): Promise<PublicCatalogBlockItem[]> {
-  const countryFilter = config.country.toLocaleLowerCase("en-US");
-  const cityFilter = config.city.toLocaleLowerCase("en-US");
+  // Keep the caller's Unicode text intact and normalize both operands in SQL.
+  // JavaScript's locale-specific lowercasing can turn Turkish dotted-I values
+  // into a combining sequence that does not match PostgreSQL lower().
+  const countryFilter = config.country.trim();
+  const cityFilter = config.city.trim();
   if (config.source === "programs") {
     const policy = await getPublicCatalogPolicy();
     const conditions: any[] = [eq(programsTable.isActive, true)];
     addPublicCatalogConditions(conditions, policy);
-    if (countryFilter) conditions.push(sql`lower(trim(${universitiesTable.country})) = ${countryFilter}`);
-    if (cityFilter) conditions.push(sql`lower(trim(coalesce(${universitiesTable.city}, ''))) = ${cityFilter}`);
+    if (countryFilter) conditions.push(sql`lower(trim(${universitiesTable.country})) = lower(trim(${countryFilter}))`);
+    if (cityFilter) conditions.push(sql`lower(trim(coalesce(${universitiesTable.city}, ''))) = lower(trim(${cityFilter}))`);
     const rows = await db
       .select({
         id: programsTable.id,
@@ -239,8 +242,8 @@ async function readPublicCatalogBlockItems(
     const policy = await getPublicCatalogPolicy();
     const conditions: any[] = [];
     addPublicCatalogConditions(conditions, policy);
-    if (countryFilter) conditions.push(sql`lower(trim(${universitiesTable.country})) = ${countryFilter}`);
-    if (cityFilter) conditions.push(sql`lower(trim(coalesce(${universitiesTable.city}, ''))) = ${cityFilter}`);
+    if (countryFilter) conditions.push(sql`lower(trim(${universitiesTable.country})) = lower(trim(${countryFilter}))`);
+    if (cityFilter) conditions.push(sql`lower(trim(coalesce(${universitiesTable.city}, ''))) = lower(trim(${cityFilter}))`);
     const rows = await db
       .select({
         id: universitiesTable.id,
@@ -263,7 +266,7 @@ async function readPublicCatalogBlockItems(
 
   if (config.source === "destinations") {
     const conditions: any[] = [eq(destinationsTable.isActive, true)];
-    if (countryFilter) conditions.push(sql`lower(trim(${destinationsTable.country})) = ${countryFilter}`);
+    if (countryFilter) conditions.push(sql`lower(trim(${destinationsTable.country})) = lower(trim(${countryFilter}))`);
     const rows = await db
       .select({
         id: destinationsTable.id,
@@ -290,8 +293,8 @@ async function readPublicCatalogBlockItems(
   }
 
   const conditions: any[] = [eq(citiesTable.isActive, true), eq(countriesTable.isActive, true)];
-  if (countryFilter) conditions.push(sql`lower(trim(${countriesTable.name})) = ${countryFilter}`);
-  if (cityFilter) conditions.push(sql`lower(trim(${citiesTable.name})) = ${cityFilter}`);
+  if (countryFilter) conditions.push(sql`lower(trim(${countriesTable.name})) = lower(trim(${countryFilter}))`);
+  if (cityFilter) conditions.push(sql`lower(trim(${citiesTable.name})) = lower(trim(${cityFilter}))`);
   const rows = await db
     .select({
       id: citiesTable.id,

@@ -466,3 +466,14 @@ test("read model is on-demand, bounded, stale-while-revalidate, and detail index
   assert.match(readModel, /indexable: false/);
   assert.doesNotMatch(readModel, /serviceFeeAmount|commissionRate|contactPerson/);
 });
+
+test("catalogue block filters normalize Unicode on both SQL operands", () => {
+  const readModel = readFileSync(
+    new URL("../src/lib/publicCatalogRenderReadModel.ts", import.meta.url),
+    "utf8",
+  );
+  assert.doesNotMatch(readModel, /toLocaleLowerCase\("en-US"\)/);
+  assert.match(readModel, /lower\(trim\(\$\{universitiesTable\.country\}\)\) = lower\(trim\(\$\{countryFilter\}\)\)/);
+  assert.match(readModel, /lower\(trim\(\$\{countriesTable\.name\}\)\) = lower\(trim\(\$\{countryFilter\}\)\)/);
+  assert.match(readModel, /lower\(trim\(\$\{citiesTable\.name\}\)\) = lower\(trim\(\$\{cityFilter\}\)\)/);
+});
