@@ -702,6 +702,13 @@ function safePublicUrl(value: unknown): string | null {
   }
 }
 
+function safePublicImageUrl(value: unknown): string | null {
+  const url = safePublicUrl(value);
+  return url && !url.startsWith("mailto:") && !url.startsWith("tel:") && !url.startsWith("#")
+    ? url
+    : null;
+}
+
 function pageItems(value: unknown, maximum = 24): Record<string, unknown>[] {
   return Array.isArray(value)
     ? value.slice(0, maximum).filter((item): item is Record<string, unknown> => (
@@ -747,6 +754,63 @@ function renderPublicPageBlock(block: PublicPageBlock, index: number): string {
       return `<article class="rounded-2xl border border-border bg-card p-5">${href ? `<a class="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2" href="${escapeHtml(href)}">${card}</a>` : card}</article>`;
     }).join("");
     return `<section class="mx-auto max-w-6xl px-4 py-12" aria-labelledby="${headingId}" data-catalog-source="${escapeHtml(source)}"><h2 id="${headingId}" class="text-3xl font-bold">${escapeHtml(title)}</h2>${subtitle ? `<p class="mt-3 text-muted-foreground">${escapeHtml(subtitle)}</p>` : ""}<div class="mt-7 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">${cards}</div></section>`;
+  }
+  if (block.blockType === "team_grid") {
+    const title = pageText(content.title, 500);
+    const subtitle = pageText(content.subtitle, 2_000);
+    const members = pageItems(content.members, 24).map((item) => {
+      const name = pageText(item.name, 200) || "Team member";
+      const role = pageText(item.role, 200);
+      const bio = pageText(item.bio, 2_000);
+      const photo = safePublicImageUrl(item.photo);
+      return `<article class="rounded-2xl border border-border p-5 text-center">${photo ? `<img src="${escapeHtml(photo)}" alt="${escapeHtml(name)}" class="mx-auto h-24 w-24 rounded-full object-cover" loading="lazy" />` : ""}<h3 class="mt-4 font-semibold">${escapeHtml(name)}</h3>${role ? `<p class="text-sm text-primary">${escapeHtml(role)}</p>` : ""}${bio ? `<p class="mt-2 text-sm text-muted-foreground">${escapeHtml(bio)}</p>` : ""}</article>`;
+    }).join("");
+    return `<section class="mx-auto max-w-6xl px-4 py-12"><h2 class="text-center text-3xl font-bold">${escapeHtml(title)}</h2>${subtitle ? `<p class="mt-3 text-center text-muted-foreground">${escapeHtml(subtitle)}</p>` : ""}<div class="mt-7 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">${members}</div></section>`;
+  }
+  if (block.blockType === "office_list") {
+    const title = pageText(content.title, 500);
+    const subtitle = pageText(content.subtitle, 2_000);
+    const offices = pageItems(content.offices, 24).map((item) => {
+      const name = pageText(item.name, 300) || "Office";
+      const city = pageText(item.city, 200);
+      const address = pageText(item.address, 2_000);
+      const phone = pageText(item.phone, 100);
+      const email = pageText(item.email, 320);
+      return `<article class="rounded-2xl border border-border p-6"><h3 class="text-xl font-semibold">${escapeHtml(name)}</h3>${city ? `<p class="mt-1 text-primary">${escapeHtml(city)}</p>` : ""}${address ? `<p class="mt-3 text-muted-foreground">${escapeHtml(address)}</p>` : ""}${phone || email ? `<p class="mt-3 text-sm">${escapeHtml([phone, email].filter(Boolean).join(" "))}</p>` : ""}</article>`;
+    }).join("");
+    return `<section class="mx-auto max-w-6xl px-4 py-12"><h2 class="text-center text-3xl font-bold">${escapeHtml(title)}</h2>${subtitle ? `<p class="mt-3 text-center text-muted-foreground">${escapeHtml(subtitle)}</p>` : ""}<div class="mt-7 grid gap-5 md:grid-cols-2">${offices}</div></section>`;
+  }
+  if (block.blockType === "logo_grid") {
+    const title = pageText(content.title, 500);
+    const subtitle = pageText(content.subtitle, 2_000);
+    const logos = pageItems(content.logos, 40).map((item) => {
+      const name = pageText(item.name, 200) || "Partner";
+      const image = safePublicImageUrl(item.imageUrl);
+      const href = safePublicUrl(item.linkUrl);
+      const visual = image
+        ? `<img src="${escapeHtml(image)}" alt="${escapeHtml(name)}" class="h-16 w-32 object-contain" loading="lazy" />`
+        : `<span>${escapeHtml(name)}</span>`;
+      return href
+        ? `<a href="${escapeHtml(href)}" class="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"${href.startsWith("http") ? ` rel="noopener noreferrer"` : ""}>${visual}</a>`
+        : `<div>${visual}</div>`;
+    }).join("");
+    return `<section class="mx-auto max-w-6xl px-4 py-12"><h2 class="text-center text-3xl font-bold">${escapeHtml(title)}</h2>${subtitle ? `<p class="mt-3 text-center text-muted-foreground">${escapeHtml(subtitle)}</p>` : ""}<div class="mt-7 flex flex-wrap items-center justify-center gap-8">${logos}</div></section>`;
+  }
+  if (block.blockType === "testimonials") {
+    const title = pageText(content.title, 500);
+    const subtitle = pageText(content.subtitle, 2_000);
+    const testimonials = pageItems(content.items, 24).map((item) => {
+      const quote = pageText(item.content, 4_000);
+      const name = pageText(item.name, 200);
+      const role = pageText(item.role, 200);
+      return `<blockquote class="rounded-2xl border border-border bg-card p-6"><p class="text-lg">${quote ? `“${escapeHtml(quote)}”` : ""}</p>${name || role ? `<footer class="mt-4 text-sm text-muted-foreground">${escapeHtml([name, role].filter(Boolean).join(" · "))}</footer>` : ""}</blockquote>`;
+    }).join("");
+    return `<section class="mx-auto max-w-6xl px-4 py-12"><h2 class="text-center text-3xl font-bold">${escapeHtml(title)}</h2>${subtitle ? `<p class="mt-3 text-center text-muted-foreground">${escapeHtml(subtitle)}</p>` : ""}<div class="mt-7 grid gap-5 md:grid-cols-2">${testimonials}</div></section>`;
+  }
+  if (block.blockType === "spacer_divider") {
+    const requestedHeight = Number(content.height);
+    const height = Math.min(160, Math.max(8, Number.isFinite(requestedHeight) ? requestedHeight : 48));
+    return `<div aria-hidden="true" style="height:${height}px" class="mx-auto max-w-6xl px-4">${content.showDivider ? "<hr />" : ""}</div>`;
   }
   if (block.blockType === "feature_cards" || block.blockType === "icon_cards") {
     const cards = pageItems(content.cards, 24).map((item) => {

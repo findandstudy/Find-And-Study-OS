@@ -439,6 +439,40 @@ test("CMS catalogue grid renders current data bindings without storing duplicate
   assert.doesNotMatch(html, /<script>alert\(1\)<\/script>/);
 });
 
+test("SSR renders all allowlisted CMS presentation blocks with bounded safe media", () => {
+  const model: PublicCatalogRenderModel = {
+    kind: "page_detail",
+    locale: "en",
+    canonicalPath: "/en/about",
+    title: "About",
+    description: "About Find and Study.",
+    indexable: true,
+    alternatePaths: { en: "/en/about" },
+    page: {
+      id: 10,
+      title: "About",
+      slug: "about-content",
+      versionNumber: 2,
+      publishedAt: "2026-09-09T12:00:00.000Z",
+      blocks: [
+        { blockType: "team_grid", content: { title: "Team", members: [{ name: "A <script>", role: "Counselor", bio: "Bio", photo: "https://cdn.example/team.jpg" }] }, settings: {}, sortOrder: 0 },
+        { blockType: "office_list", content: { title: "Offices", offices: [{ name: "Istanbul", city: "Istanbul", address: "Address", phone: "+90", email: "info@example.com" }] }, settings: {}, sortOrder: 1 },
+        { blockType: "logo_grid", content: { title: "Partners", logos: [{ name: "Partner", imageUrl: "https://cdn.example/logo.svg", linkUrl: "https://partner.example" }] }, settings: {}, sortOrder: 2 },
+        { blockType: "testimonials", content: { title: "Stories", items: [{ name: "Student", role: "Alumni", content: "Great support <script>alert(1)</script>" }] }, settings: {}, sortOrder: 3 },
+        { blockType: "spacer_divider", content: { height: 999, showDivider: true }, settings: {}, sortOrder: 4 },
+      ],
+    },
+  };
+  const html = renderPublicCatalogHtml({ indexHtml, model, siteUrl: "https://findandstudy.com", nonce: "blocks-nonce" });
+  for (const marker of ["Team", "Offices", "Partners", "Stories", "team.jpg", "logo.svg", "<hr />"]) {
+    assert.match(html, new RegExp(marker.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  }
+  assert.match(html, /A &lt;script&gt;/);
+  assert.match(html, /Great support &lt;script&gt;alert\(1\)&lt;\/script&gt;/);
+  assert.match(html, /style="height:160px"/);
+  assert.doesNotMatch(html, /<script>alert\(1\)<\/script>/);
+});
+
 test("read model is on-demand, bounded, stale-while-revalidate, and detail indexing is fail-closed", () => {
   const readModel = readFileSync(
     new URL("../src/lib/publicCatalogRenderReadModel.ts", import.meta.url),
