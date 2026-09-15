@@ -77,15 +77,15 @@ function ActionLink({ href, label, secondary = false }: { href: unknown; label: 
       href={safeHref}
       rel={safeHref.startsWith("http") ? "noopener noreferrer" : undefined}
       className={secondary
-        ? "inline-flex rounded-full border border-current px-6 py-3 font-semibold"
-        : "inline-flex rounded-full bg-primary px-6 py-3 font-semibold text-primary-foreground"}
+        ? "inline-flex rounded-full border border-current px-6 py-3 font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+        : "inline-flex rounded-full bg-primary px-6 py-3 font-semibold text-primary-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"}
     >
       {safeLabel}
     </a>
   );
 }
 
-function Block({ block }: { block: PageBlock }) {
+function Block({ block, index }: { block: PageBlock; index: number }) {
   const content = block.content;
   switch (block.blockType) {
     case "hero": {
@@ -122,11 +122,12 @@ function Block({ block }: { block: PageBlock }) {
       };
       const source = text(content.source, 32).toLowerCase();
       const cards = items(content.items, 12);
+      const headingId = `catalog-grid-title-${index}`;
       return (
-        <section className="mx-auto max-w-6xl px-4 py-14" aria-label={text(content.title, 500) || "Live catalogue"}>
+        <section className="mx-auto max-w-6xl px-4 py-14" aria-labelledby={headingId}>
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
-              <h2 className="font-display text-3xl font-bold">{text(content.title, 500)}</h2>
+              <h2 id={headingId} className="font-display text-3xl font-bold">{text(content.title, 500)}</h2>
               {content.subtitle ? <p className="mt-3 text-muted-foreground">{text(content.subtitle)}</p> : null}
             </div>
             {sourceLabels[source] ? <span className="rounded-full border px-3 py-1 text-xs font-medium text-muted-foreground">{sourceLabels[source]} · live</span> : null}
@@ -240,9 +241,9 @@ export default function PublicPage({ slug }: { slug: string }) {
   }, [lang, page]);
   useJsonLd(schema);
 
-  if (loading) return <main className="mx-auto max-w-6xl px-4 py-28"><div className="h-12 w-2/3 animate-pulse rounded bg-secondary" /><div className="mt-8 h-80 animate-pulse rounded-3xl bg-secondary" /></main>;
+  if (loading) return <main className="mx-auto max-w-6xl px-4 py-28" aria-busy="true" aria-live="polite"><div role="status" aria-label="Loading page" className="h-12 w-2/3 animate-pulse rounded bg-secondary" /><div className="mt-8 h-80 animate-pulse rounded-3xl bg-secondary" /></main>;
   if (failed || !page) {
     return <main className="mx-auto max-w-3xl px-4 py-28 text-center"><FileText className="mx-auto h-14 w-14 text-muted-foreground/30" /><h1 className="mt-5 text-2xl font-bold">Page not found</h1><p className="mt-2 text-muted-foreground">This page is unavailable or has not been published in this language.</p><Button asChild variant="outline" className="mt-7 rounded-full"><Link href={localePath("")}><ArrowLeft className="mr-2 h-4 w-4" />{SITE_NAME}</Link></Button></main>;
   }
-  return <main data-public-page-version={page.data.versionNumber}>{page.data.blocks.map((block, index) => <Block key={`${block.blockType}-${block.sortOrder}-${index}`} block={block} />)}</main>;
+  return <main data-public-page-version={page.data.versionNumber}>{page.data.blocks.map((block, index) => <Block key={`${block.blockType}-${block.sortOrder}-${index}`} block={block} index={index} />)}</main>;
 }

@@ -78,6 +78,14 @@ test("public CMS pages render hydrated catalogue cards in the SPA fallback", () 
   assert.match(publicPage, /page\.meta\.indexable \? page\.data\.blocks/);
 });
 
+test("public catalogue blocks keep mobile and keyboard-accessible semantics", () => {
+  assert.match(publicPage, /aria-labelledby=\{headingId\}/);
+  assert.match(publicPage, /id=\{headingId\}/);
+  assert.match(publicPage, /sm:grid-cols-2 lg:grid-cols-3/);
+  assert.match(publicPage, /focus-visible:ring-2 focus-visible:ring-primary/);
+  assert.match(publicPage, /aria-busy=\"true\"/);
+});
+
 test("Pages editor previews catalogue blocks without persisting catalogue facts", () => {
   assert.match(pageEditor, /case "catalog_grid"/);
   assert.match(pageEditor, /Live cards from the current catalogue appear here/);
