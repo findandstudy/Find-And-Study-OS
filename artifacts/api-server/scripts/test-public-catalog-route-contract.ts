@@ -85,6 +85,9 @@ test("public catalogue detail APIs are bounded and never select private CRM fiel
   assert.match(renderReadModel, /cacheGeneration/);
   assert.match(renderReadModel, /entityType\?: .*catalog/);
   assert.match(renderReadModel, /inFlight\.get\(key\) === pending/);
+  assert.match(renderReadModel, /hasPublishedTranslation/);
+  assert.match(renderReadModel, /sourceBlocks/);
+  assert.match(renderReadModel, /alternatePaths: hasPublishedTranslation \? seoState\.alternates : \{\}/);
   assert.match(renderReadModel, /lte\(priceComponentsTable\.effectiveFrom/);
   assert.match(renderReadModel, /priceComponentsTable\.effectiveUntil/);
   assert.match(route, /sourceExpiresAt/);

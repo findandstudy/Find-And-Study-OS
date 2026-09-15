@@ -1502,18 +1502,25 @@ async function readPageDetail(
     : translation;
   const sourceLocale = String(page.locale || "en").toLowerCase();
   const source = route.locale === sourceLocale;
-  const title = source
-    ? boundedString(metaSnapshot.title, 500).trim() || page.title
-    : boundedString(translationFields?.title, 500).trim();
-  const metaTitle = source
-    ? boundedString(metaSnapshot.metaTitle, 500).trim() || page.metaTitle || ""
+  const sourceTitle = boundedString(metaSnapshot.title, 500).trim() || page.title;
+  const sourceMetaTitle = boundedString(metaSnapshot.metaTitle, 500).trim() || page.metaTitle || "";
+  const sourceMetaDescription = boundedString(metaSnapshot.metaDescription, 2_000).trim() || page.metaDescription || "";
+  const sourceBlocks = publicPageBlocks(version.blocksSnapshot);
+  const translatedTitle = boundedString(translationFields?.title, 500).trim();
+  const translatedBlocks = publicPageBlocks(translation?.blocks);
+  const hasPublishedTranslation = source || Boolean(translation && translatedTitle && translatedBlocks.length > 0);
+  // A missing/partial locale must remain useful to a visitor: show the
+  // canonical source-language snapshot as a visible fallback.  The
+  // `hasPublishedTranslation` flag below keeps that fallback out of
+  // indexing, hreflang and sitemap projections.
+  const title = source || !hasPublishedTranslation ? sourceTitle : translatedTitle;
+  const metaTitle = source || !hasPublishedTranslation
+    ? sourceMetaTitle
     : boundedString(translationFields?.metaTitle, 500).trim();
-  const metaDescription = source
-    ? boundedString(metaSnapshot.metaDescription, 2_000).trim() || page.metaDescription || ""
+  const metaDescription = source || !hasPublishedTranslation
+    ? sourceMetaDescription
     : boundedString(translationFields?.metaDescription, 2_000).trim();
-  const rawBlocks = source
-    ? publicPageBlocks(version.blocksSnapshot)
-    : publicPageBlocks(translation?.blocks);
+  const rawBlocks = source || !hasPublishedTranslation ? sourceBlocks : translatedBlocks;
   const blocks = await hydratePublicCatalogBlocks(rawBlocks, route.locale);
   const translationAvailable = Boolean(title && blocks.length > 0);
   if (!translationAvailable) {
@@ -1543,8 +1550,8 @@ async function readPageDetail(
     canonicalPath,
     title: metaTitle || title,
     description: boundedText(metaDescription, title),
-    indexable: metaSnapshot.robotsIndex === true && seoState.indexable,
-    alternatePaths: seoState.alternates,
+    indexable: hasPublishedTranslation && metaSnapshot.robotsIndex === true && seoState.indexable,
+    alternatePaths: hasPublishedTranslation ? seoState.alternates : {},
     page: {
       id: page.id,
       title,
