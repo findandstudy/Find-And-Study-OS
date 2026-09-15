@@ -428,6 +428,10 @@ test("CMS catalogue grid renders current data bindings without storing duplicate
   };
   const html = renderPublicCatalogHtml({ indexHtml, model, siteUrl: "https://findandstudy.com", nonce: "catalog-nonce" });
   assert.match(html, /data-catalog-source="destinations"/);
+  assert.match(html, /aria-labelledby="catalog-grid-title-0"/);
+  assert.match(html, /id="catalog-grid-title-0"/);
+  assert.match(html, /focus-visible:ring-2 focus-visible:ring-primary/);
+  assert.match(html, /sm:grid-cols-2 lg:grid-cols-3/);
   assert.match(html, /Türkiye &lt;script&gt;alert\(1\)&lt;\/script&gt;/);
   assert.match(html, /href="\/en\/countries\/turkey"/);
   assert.match(html, /"@type":"ItemList"/);

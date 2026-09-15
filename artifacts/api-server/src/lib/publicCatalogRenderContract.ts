@@ -716,7 +716,7 @@ function pageText(value: unknown, maximum = 2_000): string {
     .trim();
 }
 
-function renderPublicPageBlock(block: PublicPageBlock): string {
+function renderPublicPageBlock(block: PublicPageBlock, index: number): string {
   const content = block.content;
   if (block.blockType === "hero") {
     const title = pageText(content.title, 500);
@@ -738,14 +738,15 @@ function renderPublicPageBlock(block: PublicPageBlock): string {
     const title = pageText(content.title, 500);
     const subtitle = pageText(content.subtitle, 2_000);
     const source = pageText(content.source, 32);
+    const headingId = `catalog-grid-title-${index}`;
     const cards = pageItems(content.items, 24).map((item) => {
       const href = safePublicUrl(item.canonicalPath);
       const itemTitle = pageText(item.title, 500);
       const description = pageText(item.description, 2_000);
       const card = `<h3 class="text-lg font-bold">${escapeHtml(itemTitle)}</h3>${description ? `<p class="mt-2 text-muted-foreground">${escapeHtml(description)}</p>` : ""}`;
-      return `<article class="rounded-2xl border border-border bg-card p-5">${href ? `<a href="${escapeHtml(href)}">${card}</a>` : card}</article>`;
+      return `<article class="rounded-2xl border border-border bg-card p-5">${href ? `<a class="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2" href="${escapeHtml(href)}">${card}</a>` : card}</article>`;
     }).join("");
-    return `<section class="mx-auto max-w-6xl px-4 py-12" data-catalog-source="${escapeHtml(source)}"><h2 class="text-3xl font-bold">${escapeHtml(title)}</h2>${subtitle ? `<p class="mt-3 text-muted-foreground">${escapeHtml(subtitle)}</p>` : ""}<div class="mt-7 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">${cards}</div></section>`;
+    return `<section class="mx-auto max-w-6xl px-4 py-12" aria-labelledby="${headingId}" data-catalog-source="${escapeHtml(source)}"><h2 id="${headingId}" class="text-3xl font-bold">${escapeHtml(title)}</h2>${subtitle ? `<p class="mt-3 text-muted-foreground">${escapeHtml(subtitle)}</p>` : ""}<div class="mt-7 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">${cards}</div></section>`;
   }
   if (block.blockType === "feature_cards" || block.blockType === "icon_cards") {
     const cards = pageItems(content.cards, 24).map((item) => {
@@ -773,7 +774,7 @@ function renderPublicPageBlock(block: PublicPageBlock): string {
 }
 
 function renderPageDetail(model: Extract<PublicCatalogRenderModel, { kind: "page_detail" }>): string {
-  const blocks = model.page.blocks.map(renderPublicPageBlock).join("");
+  const blocks = model.page.blocks.map((block, index) => renderPublicPageBlock(block, index)).join("");
   return `<main data-public-render-shell="page-detail" data-public-page-version="${model.page.versionNumber}">${blocks || `<section class="mx-auto max-w-3xl px-4 py-24"><h1 class="text-4xl font-bold">${escapeHtml(model.page.title)}</h1></section>`}</main>`;
 }
 
