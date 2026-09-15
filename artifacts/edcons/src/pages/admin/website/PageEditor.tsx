@@ -1164,6 +1164,40 @@ function BlockPreviewItem({ block }: { block: PageBlock }) {
         </div>
       );
 
+    case "catalog_grid": {
+      const sourceLabels: Record<string, string> = {
+        programs: "Programs",
+        universities: "Universities",
+        destinations: "Destinations",
+        cities: "Cities",
+      };
+      const source = String(c.source || "").toLowerCase();
+      const liveItems = ((c.items as { title?: string; description?: string }[]) || []).slice(0, 6);
+      return (
+        <div className="py-8 px-6">
+          <div className="flex items-end justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-bold">{(c.title as string) || "Explore our catalogue"}</h2>
+              {c.subtitle && <p className="mt-1 text-sm text-gray-500">{c.subtitle as string}</p>}
+            </div>
+            <span className="rounded-full border px-2 py-1 text-[10px] text-gray-500">{sourceLabels[source] || "Live catalogue"}</span>
+          </div>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {liveItems.length > 0 ? liveItems.map((item, i) => (
+              <div key={i} className="rounded-xl border bg-white p-4 dark:bg-card">
+                <h3 className="text-sm font-semibold">{item.title || "Catalogue entry"}</h3>
+                {item.description && <p className="mt-1 text-xs text-gray-500">{item.description}</p>}
+              </div>
+            )) : (
+              <div className="col-span-full rounded-xl border border-dashed p-6 text-center text-xs text-gray-500">
+                Live cards from the current catalogue appear here when the page is rendered.
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
     case "feature_cards":
     case "icon_cards":
       return (
