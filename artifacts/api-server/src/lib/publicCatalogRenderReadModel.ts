@@ -3,6 +3,9 @@ import {
   citiesTable,
   countriesTable,
   destinationsTable,
+  institutionCampusesTable,
+  priceComponentsTable,
+  programIntakesTable,
   programsTable,
   programTranslationsTable,
   universitiesTable,
@@ -10,7 +13,7 @@ import {
   websitePagesTable,
   websitePageVersionsTable,
 } from "@workspace/db";
-import { and, asc, desc, eq, isNotNull, lte, ne, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, isNotNull, isNull, lte, ne, or, sql } from "drizzle-orm";
 import {
   PUBLIC_CATALOG_RELATED_CANDIDATE_LIMIT,
   PUBLIC_CATALOG_RELATED_LIMIT,
@@ -301,7 +304,8 @@ async function readProgramDetail(
     + CASE WHEN lower(${universitiesTable.country}) = lower(${program.country}) THEN 1 ELSE 0 END
   )`;
   const internalLinkMode = parsePublicWebInternalLinkMode(process.env.PUBLIC_WEB_INTERNAL_LINK_MODE);
-  const [seoState, relatedCandidates] = await Promise.all([
+  const now = new Date();
+  const [seoState, relatedCandidates, intakeRows, priceRows] = await Promise.all([
     resolvePublishedEntitySeoState({
       entityType: "program",
       entityId: program.id,
@@ -326,6 +330,66 @@ async function readProgramDetail(
       .where(and(...relatedConditions))
       .orderBy(desc(relatedScore), asc(universitiesTable.name), asc(programsTable.id))
       .limit(internalLinkMode === "published" ? PUBLIC_CATALOG_RELATED_CANDIDATE_LIMIT : 0),
+    db
+      .select({
+        id: programIntakesTable.id,
+        intakeKey: programIntakesTable.intakeKey,
+        academicYear: programIntakesTable.academicYear,
+        startsOn: programIntakesTable.startsOn,
+        applicationDeadlineAt: programIntakesTable.applicationDeadlineAt,
+        capacityStatus: programIntakesTable.capacityStatus,
+        deliveryMode: programIntakesTable.deliveryMode,
+        campusName: institutionCampusesTable.name,
+      })
+      .from(programIntakesTable)
+      .leftJoin(institutionCampusesTable, eq(programIntakesTable.campusId, institutionCampusesTable.id))
+      .where(and(
+        eq(programIntakesTable.programId, program.id),
+        eq(programIntakesTable.status, "ACTIVE"),
+          or(
+            isNull(programIntakesTable.applicationDeadlineAt),
+            gte(programIntakesTable.applicationDeadlineAt, now),
+          ),
+          or(
+            isNull(programIntakesTable.sourceExpiresAt),
+            gte(programIntakesTable.sourceExpiresAt, now),
+        ),
+      ))
+      .orderBy(
+        asc(programIntakesTable.startsOn),
+        asc(programIntakesTable.academicYear),
+        asc(programIntakesTable.id),
+      )
+      .limit(24),
+    db
+      .select({
+        id: priceComponentsTable.id,
+        componentType: priceComponentsTable.componentType,
+        amountMinor: priceComponentsTable.amountMinor,
+        currencyCode: priceComponentsTable.currencyCode,
+        frequency: priceComponentsTable.frequency,
+      })
+      .from(priceComponentsTable)
+      .where(and(
+        eq(priceComponentsTable.programId, program.id),
+        eq(priceComponentsTable.status, "ACTIVE"),
+        isNotNull(priceComponentsTable.sourceVerifiedAt),
+        lte(priceComponentsTable.effectiveFrom, now),
+        or(
+          isNull(priceComponentsTable.effectiveUntil),
+          gte(priceComponentsTable.effectiveUntil, now),
+        ),
+        or(
+          isNull(priceComponentsTable.sourceExpiresAt),
+          gte(priceComponentsTable.sourceExpiresAt, now),
+        ),
+      ))
+      .orderBy(
+        asc(priceComponentsTable.componentType),
+        asc(priceComponentsTable.effectiveFrom),
+        asc(priceComponentsTable.id),
+      )
+      .limit(48),
   ]);
   const indexableRelatedIds = internalLinkMode === "published"
     ? await readIndexableProgramIds({
@@ -345,6 +409,14 @@ async function readProgramDetail(
         name: candidate.name,
       }),
     }));
+  const prices = priceRows.map((price) => ({
+    id: price.id,
+    componentType: price.componentType,
+    amountMinor: price.amountMinor.toString(),
+    currencyCode: price.currencyCode,
+    frequency: price.frequency,
+  }));
+  const verifiedTuition = prices.find((price) => price.componentType === "TUITION") || null;
   const fallbackDescription = [
     program.degree,
     program.field,
@@ -380,7 +452,19 @@ async function readProgramDetail(
       tuitionFee: program.tuitionFee,
       discountedFee: program.discountedFee,
       currency: program.currency,
+      verifiedTuition: verifiedTuition
+        ? {
+          amountMinor: verifiedTuition.amountMinor,
+          currencyCode: verifiedTuition.currencyCode,
+          frequency: verifiedTuition.frequency,
+        }
+        : null,
     },
+    intakes: intakeRows.map((intake) => ({
+      ...intake,
+      applicationDeadlineAt: intake.applicationDeadlineAt?.toISOString() ?? null,
+    })),
+    prices,
   };
 }
 
@@ -829,7 +913,7 @@ async function readCityDetail(
     }),
   ]);
 
-  if (localizedDelivery.mode !== "published" || !localizedDelivery.snapshot) {
+  if (localizedDelivery.mode !== "published") {
     return {
       kind: "not_found",
       locale: route.locale,
@@ -925,7 +1009,14 @@ async function readCityDetail(
         }),
       }];
     });
-  const canonicalPath = localizedDelivery.snapshot.canonicalPath;
+  const canonicalPath = localizedDelivery.snapshot?.canonicalPath
+    || seoState.canonicalPath
+    || buildPublicWebCanonicalPath({
+      entityType: "CITY",
+      entityId: city.id,
+      locale: route.locale,
+      slug: city.name,
+    });
   return {
     kind: "city_detail",
     locale: route.locale,

@@ -41,6 +41,15 @@ test("public fee templates normalize catalog currency values before Intl formatt
   );
 });
 
+test("program detail uses verified fee payload for display and structured data", () => {
+  assert.match(program, /const verifiedFee = verifiedTuition \? minorAmount\(verifiedTuition\.amountMinor\) : null/);
+  assert.match(program, /offers: verifiedFee !== null && verifiedTuition/);
+  assert.match(program, /effectiveFee = verifiedFee/);
+  assert.match(program, /const displayCurrency = verifiedTuition\?\.currencyCode \|\| program\?\.currency/);
+  assert.match(program, /money\(effectiveFee, displayCurrency \?\? null, lang\)/);
+  assert.doesNotMatch(program, /const effectiveFee = program\.discountedFee \?\? program\.tuitionFee/);
+});
+
 test("destination collection requests the active locale and follows canonical paths", () => {
   assert.match(countries, /public\/destinations\?locale=/);
   assert.match(countries, /\[lang\]/);

@@ -134,7 +134,29 @@ export type PublicCatalogRenderModel =
         tuitionFee: number | null;
         discountedFee: number | null;
         currency: string | null;
+        verifiedTuition?: {
+          amountMinor: string;
+          currencyCode: string;
+          frequency: string;
+        } | null;
       };
+      intakes?: Array<{
+        id: string;
+        intakeKey: string;
+        academicYear: number;
+        startsOn: string | null;
+        applicationDeadlineAt: string | null;
+        capacityStatus: string;
+        deliveryMode: string;
+        campusName: string | null;
+      }>;
+      prices?: Array<{
+        id: string;
+        componentType: string;
+        amountMinor: string;
+        currencyCode: string;
+        frequency: string;
+      }>;
     }
   | {
       kind: "university_detail";
@@ -465,10 +487,49 @@ function renderProgramList(model: Extract<PublicCatalogRenderModel, { kind: "pro
   </main>`;
 }
 
+function normalizedCurrency(value: unknown): string | null {
+  const currency = String(value ?? "").trim().toUpperCase();
+  return /^[A-Z]{3}$/.test(currency) ? currency : null;
+}
+
+function formatMinorPrice(
+  amountMinor: unknown,
+  currencyCode: unknown,
+  locale: ProgramSupportedLocale,
+): string | null {
+  const amount = typeof amountMinor === "string" || typeof amountMinor === "number"
+    ? Number(amountMinor)
+    : NaN;
+  const currency = normalizedCurrency(currencyCode);
+  if (!Number.isSafeInteger(amount) || amount < 0 || !currency) return null;
+  try {
+    return new Intl.NumberFormat(locale, {
+      style: "currency",
+      currency,
+      maximumFractionDigits: 0,
+    }).format(amount / 100);
+  } catch {
+    return `${(amount / 100).toLocaleString(locale)} ${currency}`;
+  }
+}
+
 function renderProgramDetail(model: Extract<PublicCatalogRenderModel, { kind: "program_detail" }>): string {
   const program = model.program;
   const copy = RENDER_COPY[model.locale];
-  const price = program.discountedFee ?? program.tuitionFee;
+  const prices = model.prices ?? [];
+  const verifiedTuition = program.verifiedTuition || prices.find((item) => item.componentType === "TUITION") || null;
+  const price = verifiedTuition
+    ? formatMinorPrice(verifiedTuition.amountMinor, verifiedTuition.currencyCode, model.locale)
+    : null;
+  const intakes = (model.intakes ?? []).map((intake) => `
+      <article class="rounded-xl border border-border/60 p-4">
+        <h3 class="font-semibold">${escapeHtml(intake.intakeKey)} · ${escapeHtml(String(intake.academicYear))}</h3>
+        <p class="mt-2 text-sm text-muted-foreground">${escapeHtml([intake.startsOn ? `Starts ${intake.startsOn}` : "", intake.applicationDeadlineAt ? `Deadline ${intake.applicationDeadlineAt.slice(0, 10)}` : "", intake.campusName || ""].filter(Boolean).join(" · "))}</p>
+      </article>`).join("");
+  const priceRows = prices.map((item) => {
+    const formatted = formatMinorPrice(item.amountMinor, item.currencyCode, model.locale) || "—";
+    return `<div><dt>${escapeHtml(item.componentType)}</dt><dd>${escapeHtml(formatted)} · ${escapeHtml(item.frequency.toLowerCase())}</dd></div>`;
+  }).join("");
   const related = model.relatedPrograms.map((item) => `<article class="rounded-2xl border border-border p-5"><p class="text-sm text-primary">${escapeHtml(item.universityName)}</p><h3 class="mt-2 text-lg font-bold"><a href="${escapeHtml(item.canonicalPath)}">${escapeHtml(item.name)}</a></h3><p class="mt-2 text-muted-foreground">${escapeHtml([item.degree, item.field].filter(Boolean).join(" · "))}</p></article>`).join("");
   return `<main data-public-render-shell="program-detail" class="mx-auto max-w-7xl px-4 py-24">
     <nav aria-label="Breadcrumb"><a href="/${escapeHtml(model.locale)}/programs">${escapeHtml(copy.programs)}</a> / <span>${escapeHtml(program.name)}</span></nav>
@@ -483,9 +544,11 @@ function renderProgramDetail(model: Extract<PublicCatalogRenderModel, { kind: "p
         <div><dt>${escapeHtml(copy.duration)}</dt><dd>${escapeHtml(program.duration || "—")}</dd></div>
         <div><dt>${escapeHtml(copy.language)}</dt><dd>${escapeHtml(program.language || "—")}</dd></div>
         <div><dt>${escapeHtml(copy.location)}</dt><dd>${escapeHtml([program.city, program.country].filter(Boolean).join(", "))}</dd></div>
-        <div id="fees"><dt>${escapeHtml(copy.tuition)}</dt><dd>${price === null ? "—" : `${escapeHtml(String(price))} ${escapeHtml(program.currency || "USD")}`}</dd></div>
+        <div id="fees"><dt>${escapeHtml(copy.tuition)}</dt><dd>${price === null ? "—" : escapeHtml(price)}</dd></div>
       </dl>
     </article>
+    ${intakes ? `<section id="intakes" class="mt-10"><h2 class="text-2xl font-bold">Available intakes</h2><div class="mt-5 grid gap-4 sm:grid-cols-2">${intakes}</div></section>` : ""}
+    ${priceRows ? `<section class="mt-10" aria-label="${escapeHtml(copy.tuition)}"><h2 class="text-2xl font-bold">${escapeHtml(copy.tuition)}</h2><dl class="mt-5 grid gap-4 sm:grid-cols-2">${priceRows}</dl></section>` : ""}
     ${related ? `<section id="related" class="mt-12" aria-label="${escapeHtml(copy.programs)}"><h2 class="text-2xl font-bold">${escapeHtml(copy.programs)}</h2><div class="mt-5 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">${related}</div></section>` : ""}
   </main>`;
 }
@@ -690,7 +753,13 @@ function renderNotFound(model: Extract<PublicCatalogRenderModel, { kind: "not_fo
 function structuredData(model: PublicCatalogRenderModel, siteUrl: string): unknown {
   if (model.kind === "program_detail") {
     const program = model.program;
-    const price = program.discountedFee ?? program.tuitionFee;
+    const prices = model.prices ?? [];
+    const verifiedTuition = program.verifiedTuition || prices.find((item) => item.componentType === "TUITION") || null;
+    const amountMinor = verifiedTuition ? Number(verifiedTuition.amountMinor) : NaN;
+    const price = Number.isSafeInteger(amountMinor) && amountMinor >= 0
+      ? amountMinor / 100
+      : null;
+    const currency = verifiedTuition ? normalizedCurrency(verifiedTuition.currencyCode) : null;
     return {
       "@context": "https://schema.org",
       "@type": "Course",
@@ -704,11 +773,11 @@ function structuredData(model: PublicCatalogRenderModel, siteUrl: string): unkno
       },
       ...(program.language ? { inLanguage: program.language } : {}),
       ...(program.duration ? { timeRequired: program.duration } : {}),
-      ...(price !== null ? {
+      ...(price !== null && currency ? {
         offers: {
           "@type": "Offer",
           price,
-          priceCurrency: program.currency || "USD",
+          priceCurrency: currency,
         },
       } : {}),
     };

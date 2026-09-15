@@ -119,8 +119,13 @@ function localizedDate(value: string | null, locale: string): string | null {
 
 function minorMoney(value: string, currency: string, locale: string): string | null {
   const amountMinor = Number(value);
-  if (!Number.isSafeInteger(amountMinor)) return null;
+  if (!Number.isSafeInteger(amountMinor) || amountMinor < 0) return null;
   return money(amountMinor / 100, currency, locale);
+}
+
+function minorAmount(value: string): number | null {
+  const amountMinor = Number(value);
+  return Number.isSafeInteger(amountMinor) && amountMinor >= 0 ? amountMinor / 100 : null;
 }
 
 export default function ProgramDetail({ routeKey }: { routeKey: string }) {
@@ -130,6 +135,9 @@ export default function ProgramDetail({ routeKey }: { routeKey: string }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const program = payload?.data;
+  const verifiedTuition = payload?.prices.find((price) => price.componentType === "TUITION");
+  const verifiedFee = verifiedTuition ? minorAmount(verifiedTuition.amountMinor) : null;
+  const displayCurrency = verifiedTuition?.currencyCode || program?.currency;
 
   useSeo({
     title: program?.name || t("programs.programDetails"),
@@ -159,10 +167,10 @@ export default function ProgramDetail({ routeKey }: { routeKey: string }) {
       },
       inLanguage: program.language || undefined,
       timeRequired: program.duration || undefined,
-      offers: program.tuitionFee !== null ? {
+      offers: verifiedFee !== null && verifiedTuition ? {
         "@type": "Offer",
-        price: program.discountedFee ?? program.tuitionFee,
-        priceCurrency: program.currency || "USD",
+        price: verifiedFee,
+        priceCurrency: normalizeCurrency(verifiedTuition.currencyCode),
       } : undefined,
     },
     {
@@ -225,8 +233,7 @@ export default function ProgramDetail({ routeKey }: { routeKey: string }) {
     );
   }
 
-  const effectiveFee = program.discountedFee ?? program.tuitionFee;
-  const verifiedTuition = payload.prices.find((price) => price.componentType === "TUITION");
+  const effectiveFee = verifiedFee;
   const visiblePrices = payload.prices.slice(0, 8);
 
   return (
@@ -253,11 +260,8 @@ export default function ProgramDetail({ routeKey }: { routeKey: string }) {
             </div>
             <div className="min-w-[260px] rounded-2xl border border-border/50 bg-card p-6 shadow-sm">
               <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{t("courseFinderPage.tuitionFee")}</p>
-              <p className="mt-2 text-3xl font-extrabold text-foreground">{money(effectiveFee, program.currency, lang) || "—"}</p>
-              {program.discountedFee !== null && program.tuitionFee !== null && program.discountedFee < program.tuitionFee && (
-                <p className="mt-1 text-sm text-muted-foreground line-through">{money(program.tuitionFee, program.currency, lang)}</p>
-              )}
-              {verifiedTuition && (
+              <p className="mt-2 text-3xl font-extrabold text-foreground">{money(effectiveFee, displayCurrency ?? null, lang) || "—"}</p>
+              {verifiedFee !== null && verifiedTuition && (
                 <p className="mt-3 flex items-center gap-1.5 text-xs text-emerald-700"><CheckCircle2 className="h-3.5 w-3.5" />{t("catalogDetail.verifiedPrice")}</p>
               )}
               <Button asChild className="mt-6 w-full rounded-xl">
@@ -340,7 +344,7 @@ export default function ProgramDetail({ routeKey }: { routeKey: string }) {
                   [BookOpen, t("courseFinderPage.field"), program.field],
                   [Globe2, t("courseFinderPage.language"), program.language],
                   [Clock3, t("courseFinderPage.duration"), program.duration],
-                  [CalendarDays, t("courseFinderPage.intakes"), program.intakes],
+                  [CalendarDays, t("courseFinderPage.intakes"), payload.intakes.length > 0 ? payload.intakes.map((intake) => `${intake.intakeKey} ${intake.academicYear}`).join(", ") : null],
                   [Award, t("courseFinderPage.scholarship"), money(program.scholarship, program.currency, lang)],
                   [WalletCards, t("catalogDetail.deposit"), money(program.depositFee, program.currency, lang)],
                 ].filter((item) => Boolean(item[2])).map(([Icon, label, value]) => {

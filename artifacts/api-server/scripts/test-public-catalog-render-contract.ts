@@ -135,6 +135,63 @@ test("rendered shell escapes catalogue content, emits canonical metadata, and no
   assert.match(publicCatalogCsp("test-nonce"), /script-src 'self' 'nonce-test-nonce'/);
 });
 
+test("program SSR uses verified price components and structured active intakes", () => {
+  const model: PublicCatalogRenderModel = {
+    kind: "program_detail",
+    locale: "en",
+    canonicalPath: "/en/programs/verified-program-42",
+    title: "Verified program",
+    description: "Verified program description.",
+    indexable: true,
+    alternatePaths: { en: "/en/programs/verified-program-42" },
+    relatedPrograms: [],
+    program: {
+      id: 42,
+      name: "Verified program",
+      universityName: "Verified University",
+      universityPath: "/en/universities/verified-university-7",
+      country: "Turkey",
+      city: "Istanbul",
+      degree: "MSc",
+      field: "Computing",
+      duration: "2 years",
+      language: "English",
+      tuitionFee: 1,
+      discountedFee: 0,
+      currency: "INVALID",
+      verifiedTuition: {
+        amountMinor: "1234500",
+        currencyCode: "USD",
+        frequency: "ANNUAL",
+      },
+    },
+    intakes: [{
+      id: "intake-1",
+      intakeKey: "Fall",
+      academicYear: 2026,
+      startsOn: "2026-09-01",
+      applicationDeadlineAt: "2026-06-30T00:00:00.000Z",
+      capacityStatus: "OPEN",
+      deliveryMode: "ON_CAMPUS",
+      campusName: "Main Campus",
+    }],
+    prices: [{
+      id: "price-1",
+      componentType: "TUITION",
+      amountMinor: "1234500",
+      currencyCode: "USD",
+      frequency: "ANNUAL",
+    }],
+  };
+  const html = renderPublicCatalogHtml({ indexHtml, model, siteUrl: "https://findandstudy.com", nonce: "verified-nonce" });
+  assert.match(html, /\$12,345/);
+  assert.match(html, /Fall · 2026/);
+  assert.match(html, /"price":12345/);
+  assert.match(html, /"priceCurrency":"USD"/);
+  assert.doesNotMatch(html, /INVALID/);
+  assert.doesNotMatch(html, /<div id="fees"><dt>Tuition<\/dt><dd>1/);
+});
+
 test("university detail emits a semantic institution shell and structured data", () => {
   const model: PublicCatalogRenderModel = {
     kind: "university_detail",
@@ -348,7 +405,8 @@ test("read model is on-demand, bounded, stale-while-revalidate, and detail index
   assert.match(readModel, /async function readUniversityDetail/);
   assert.match(readModel, /async function readDestinationDetail/);
   assert.match(readModel, /async function readCityDetail/);
-  assert.match(readModel, /localizedDelivery\.mode !== "published" \|\| !localizedDelivery\.snapshot/);
+  assert.match(readModel, /localizedDelivery\.mode !== "published"/);
+  assert.match(readModel, /localizedDelivery\.snapshot\?\.canonicalPath/);
   assert.match(readModel, /const candidateLimit = internalLinkMode === "published"/);
   assert.match(readModel, /async function readArticleDetail/);
   assert.match(readModel, /readIndexableArticleIds/);

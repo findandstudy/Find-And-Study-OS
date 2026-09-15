@@ -16,6 +16,7 @@ import {
   gte,
   isNotNull,
   isNull,
+  lte,
   ne,
   or,
   sql,
@@ -169,6 +170,7 @@ router.get(
     ];
     addPublicCatalogConditions(relatedConditions, policy);
 
+    const now = new Date();
     const [relatedRows, intakeRows, priceRows, seoState] = await Promise.all([
       db
         .select({
@@ -226,7 +228,11 @@ router.get(
           eq(programIntakesTable.status, "ACTIVE"),
           or(
             isNull(programIntakesTable.applicationDeadlineAt),
-            gte(programIntakesTable.applicationDeadlineAt, new Date()),
+            gte(programIntakesTable.applicationDeadlineAt, now),
+          ),
+          or(
+            isNull(programIntakesTable.sourceExpiresAt),
+            gte(programIntakesTable.sourceExpiresAt, now),
           ),
         ))
         .orderBy(
@@ -254,9 +260,14 @@ router.get(
           eq(priceComponentsTable.programId, program.id),
           eq(priceComponentsTable.status, "ACTIVE"),
           isNotNull(priceComponentsTable.sourceVerifiedAt),
+          lte(priceComponentsTable.effectiveFrom, now),
+          or(
+            isNull(priceComponentsTable.effectiveUntil),
+            gte(priceComponentsTable.effectiveUntil, now),
+          ),
           or(
             isNull(priceComponentsTable.sourceExpiresAt),
-            gte(priceComponentsTable.sourceExpiresAt, new Date()),
+            gte(priceComponentsTable.sourceExpiresAt, now),
           ),
         ))
         .orderBy(

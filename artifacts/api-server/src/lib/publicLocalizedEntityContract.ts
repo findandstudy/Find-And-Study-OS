@@ -96,7 +96,10 @@ export function resolveLocalizedUniversityFields(input: {
   }
   if (!snapshot) {
     return {
-      available: input.locale === "en",
+      // A missing localized revision may still be served as a user-visible
+      // fallback. Publication/index policy remains responsible for keeping
+      // fallback content out of hreflang and sitemaps.
+      available: true,
       ...input.base,
       contentPolicy: "LEGACY_SOURCE_ONLY",
     };
@@ -136,7 +139,7 @@ export function resolveLocalizedCityFields(input: {
   }
   if (!snapshot) {
     return {
-      available: input.locale === "en",
+      available: true,
       ...input.base,
       contentPolicy: "LEGACY_SOURCE_ONLY",
     };
@@ -190,7 +193,7 @@ export function resolveLocalizedDestinationFields(input: {
   }
   if (!snapshot) {
     return {
-      available: input.locale === "en",
+      available: true,
       ...input.base,
       contentPolicy: "LEGACY_SOURCE_ONLY",
     };

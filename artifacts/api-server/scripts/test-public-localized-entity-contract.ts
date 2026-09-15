@@ -7,7 +7,7 @@ import {
   type PublicLocalizedEntitySnapshot,
 } from "../src/lib/publicLocalizedEntityContract";
 
-test("city translations require a governed snapshot outside the English source locale", () => {
+test("city translations fall back to the source record while remaining policy-controlled", () => {
   assert.deepEqual(resolveLocalizedCityFields({
     locale: "tr",
     delivery: {
@@ -28,11 +28,14 @@ test("city translations require a governed snapshot outside the English source l
     description: "Doğrulanmış şehir rehberi",
     contentPolicy: "PUBLISHED_REVISION",
   });
-  assert.equal(resolveLocalizedCityFields({
+  const fallback = resolveLocalizedCityFields({
     locale: "tr",
     delivery: { mode: "published", snapshot: null },
     base: { name: "Istanbul", country: "Turkey", description: null },
-  }).available, false);
+  });
+  assert.equal(fallback.available, true);
+  assert.equal(fallback.contentPolicy, "LEGACY_SOURCE_ONLY");
+  assert.equal(fallback.name, "Istanbul");
 });
 
 const trSnapshot: PublicLocalizedEntitySnapshot = {
@@ -64,13 +67,13 @@ test("published university snapshot replaces only governed display fields", () =
   });
 });
 
-test("missing governed translation fails closed while rollout is published", () => {
+test("missing governed translation serves source fallback while index policy stays separate", () => {
   const translated = resolveLocalizedUniversityFields({
     locale: "tr",
     delivery: { mode: "published", snapshot: null },
     base: { name: "Example University", description: "English", universityType: "Private" },
   });
-  assert.equal(translated.available, false);
+  assert.equal(translated.available, true);
   assert.equal(translated.contentPolicy, "LEGACY_SOURCE_ONLY");
 
   const legacy = resolveLocalizedUniversityFields({
@@ -80,6 +83,30 @@ test("missing governed translation fails closed while rollout is published", () 
   });
   assert.equal(legacy.available, true);
   assert.equal(legacy.contentPolicy, "LEGACY_SOURCE_ONLY");
+});
+
+test("missing destination translation serves the source record", () => {
+  const fallback = resolveLocalizedDestinationFields({
+    locale: "tr",
+    delivery: { mode: "published", snapshot: null },
+    base: {
+      name: "Turkey",
+      shortDescription: "English summary",
+      description: "English body",
+      whyStudyHere: "English why",
+      livingCost: "Affordable",
+      climate: "Mediterranean",
+      language: "Turkish",
+      currency: "TRY",
+      visaInfo: "English visa details",
+      workPermit: "English work details",
+      popularCities: ["Istanbul"],
+    },
+  });
+  assert.equal(fallback.available, true);
+  assert.equal(fallback.contentPolicy, "LEGACY_SOURCE_ONLY");
+  assert.equal(fallback.name, "Turkey");
+  assert.deepEqual(fallback.popularCities, ["Istanbul"]);
 });
 
 test("non-English destination snapshot never leaks untranslated optional prose", () => {
