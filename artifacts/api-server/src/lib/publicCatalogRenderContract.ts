@@ -933,8 +933,7 @@ function structuredData(model: PublicCatalogRenderModel, siteUrl: string): unkno
     };
   }
   if (model.kind === "page_detail") {
-    return {
-      "@context": "https://schema.org",
+    const webPage = {
       "@type": "WebPage",
       name: model.page.title,
       description: model.description,
@@ -947,6 +946,28 @@ function structuredData(model: PublicCatalogRenderModel, siteUrl: string): unkno
         url: siteUrl,
       },
     };
+    // Catalogue cards are hydrated from the canonical read model immediately
+    // before rendering.  Expose only those already-delivered, safe canonical
+    // links as ItemList JSON-LD; the CMS never supplies factual list data.
+    const catalogueLists = model.page.blocks.flatMap((block) => {
+      if (block.blockType !== "catalog_grid") return [];
+      const entries = pageItems(block.content.items, 12).flatMap((item) => {
+        const url = safePublicUrl(item.canonicalPath);
+        const name = pageText(item.title, 500);
+        return url && name ? [{ "@type": "ListItem", position: 0, url: `${siteUrl}${url}`, name }] : [];
+      });
+      if (entries.length === 0) return [];
+      return [{
+        "@type": "ItemList",
+        name: pageText(block.content.title, 500) || "Catalogue",
+        numberOfItems: entries.length,
+        itemListElement: entries.map((entry, index) => ({ ...entry, position: index + 1 })),
+      }];
+    });
+    return catalogueLists.length > 0 ? {
+      "@context": "https://schema.org",
+      "@graph": [webPage, ...catalogueLists],
+    } : { "@context": "https://schema.org", ...webPage };
   }
   return {
     "@context": "https://schema.org",

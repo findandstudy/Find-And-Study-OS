@@ -430,6 +430,8 @@ test("CMS catalogue grid renders current data bindings without storing duplicate
   assert.match(html, /data-catalog-source="destinations"/);
   assert.match(html, /Türkiye &lt;script&gt;alert\(1\)&lt;\/script&gt;/);
   assert.match(html, /href="\/en\/countries\/turkey"/);
+  assert.match(html, /"@type":"ItemList"/);
+  assert.match(html, /"numberOfItems":1/);
   assert.doesNotMatch(html, /<script>alert\(1\)<\/script>/);
 });
 
