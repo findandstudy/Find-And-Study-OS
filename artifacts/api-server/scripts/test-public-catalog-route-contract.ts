@@ -68,6 +68,9 @@ test("public catalogue detail APIs are bounded and never select private CRM fiel
   const destinations = read("../src/routes/destinations.ts");
   const publicWeb = read("../src/routes/public-web.ts");
   const websiteAdmin = read("../src/routes/website.ts");
+  const catalogAdmin = read("../src/routes/catalog.ts");
+  const universitiesAdmin = read("../src/routes/universities.ts");
+  const translationQueue = read("../src/lib/programTranslationQueue.ts");
   const exampleEnvironment = read("../../../.env.example");
   assert.equal(PUBLIC_CATALOG_RELATED_LIMIT, 8);
   assert.equal(PUBLIC_CATALOG_RELATED_CANDIDATE_LIMIT, 32);
@@ -79,6 +82,9 @@ test("public catalogue detail APIs are bounded and never select private CRM fiel
   assert.match(route, /priceComponentsTable\.effectiveUntil/);
   assert.match(route, /programIntakesTable\.applicationDeadlineAt/);
   assert.match(renderReadModel, /programIntakesTable\.sourceExpiresAt/);
+  assert.match(renderReadModel, /cacheGeneration/);
+  assert.match(renderReadModel, /entityType\?: .*catalog/);
+  assert.match(renderReadModel, /inFlight\.get\(key\) === pending/);
   assert.match(renderReadModel, /lte\(priceComponentsTable\.effectiveFrom/);
   assert.match(renderReadModel, /priceComponentsTable\.effectiveUntil/);
   assert.match(route, /sourceExpiresAt/);
@@ -123,6 +129,10 @@ test("public catalogue detail APIs are bounded and never select private CRM fiel
   assert.match(websiteAdmin, /translationsJson: req\.body\.translations \|\| \{\}, status: "draft", publishedAt: null/);
   assert.match(websiteAdmin, /"catalog_grid"/);
   assert.match(websiteAdmin, /invalidatePublicCatalogRenderCache\(\{ entityType: "page"/);
+  assert.match(catalogAdmin, /invalidatePublicCatalogRenderCache\(\{ entityType: "catalog" \}\)/);
+  assert.match(universitiesAdmin, /invalidatePublicCatalogRenderCache\(\{ entityType: "catalog" \}\)/);
+  assert.match(translationQueue, /completeProgramTranslation/);
+  assert.match(translationQueue, /invalidatePublicCatalogRenderCache\(\{ entityType: "catalog" \}\)/);
   assert.match(exampleEnvironment, /^PUBLIC_WEB_INTERNAL_LINK_MODE=off$/m);
   assert.doesNotMatch(publicWeb, /authorEmail|commission|serviceFee|contactPerson/i);
 });

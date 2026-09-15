@@ -104,6 +104,22 @@ export type PublicCatalogRenderCacheStatus = "HIT" | "MISS" | "STALE" | "COALESC
 
 const cache = new Map<string, CacheEntry>();
 const inFlight = new Map<string, Promise<PublicCatalogRenderModel>>();
+// Invalidations may race with a request that started just before a catalogue
+// write.  A refresh from the old snapshot must never repopulate the cache
+// after that write, so each refresh captures the current generation.
+let cacheGeneration = 0;
+
+const CATALOG_DERIVED_CACHE_KINDS = new Set([
+  "program_list",
+  "program_detail",
+  "university_detail",
+  "destination_detail",
+  "city_detail",
+  // CMS pages may contain a live `catalog_grid` block.  We do not store the
+  // block's catalogue rows in the CMS, therefore every catalogue mutation
+  // invalidates page render entries as well.
+  "page_detail",
+]);
 
 function boundedText(value: string | null | undefined, fallback: string): string {
   const text = String(value || fallback).replace(/\s+/g, " ").trim();
@@ -1553,13 +1569,18 @@ async function loadModel(route: PublicCatalogRenderRoute): Promise<PublicCatalog
 function refresh(key: string, route: PublicCatalogRenderRoute): Promise<PublicCatalogRenderModel> {
   const current = inFlight.get(key);
   if (current) return current;
-  const pending = loadModel(route)
+  const generation = cacheGeneration;
+  let pending: Promise<PublicCatalogRenderModel>;
+  pending = loadModel(route)
     .then((value) => {
-      saveCache(key, value);
+      if (generation === cacheGeneration) saveCache(key, value);
       return value;
     })
     .finally(() => {
-      inFlight.delete(key);
+      // An invalidation can remove this promise while it is running and a
+      // subsequent request can already have installed a newer one.  Never
+      // let the old promise delete that newer in-flight entry.
+      if (inFlight.get(key) === pending) inFlight.delete(key);
     });
   inFlight.set(key, pending);
   return pending;
@@ -1589,30 +1610,40 @@ export async function getPublicCatalogRenderModel(
 }
 
 export function invalidatePublicCatalogRenderCache(input: {
-  entityType?: "program" | "university" | "destination" | "article" | "page" | "all";
+  entityType?: "program" | "university" | "destination" | "city" | "catalog" | "article" | "page" | "all";
   entityId?: number;
   locale?: string;
 } = {}): number {
   let removed = 0;
-  for (const key of cache.keys()) {
+  const candidateKeys = new Set([...cache.keys(), ...inFlight.keys()]);
+  const matches = (key: string): boolean => {
     const [locale, kind, identity] = key.split(":");
     const localeMatches = !input.locale || input.locale === locale;
-    const entityMatches = !input.entityType
+    return localeMatches && (!input.entityType
       || input.entityType === "all"
+      || (input.entityType === "catalog" && CATALOG_DERIVED_CACHE_KINDS.has(kind))
       || (input.entityType === "program" && (
         kind === "program_list"
-        || (input.entityId !== undefined && identity === String(input.entityId))
+        || kind === "page_detail"
+        || (kind === "program_detail" && input.entityId !== undefined && identity === String(input.entityId))
       ))
-      || (input.entityType === "university" && kind === "university_detail"
-        && input.entityId !== undefined && identity === String(input.entityId))
-      || (input.entityType === "destination" && kind === "destination_detail")
+      || (input.entityType === "university" && (
+        kind === "program_list" || kind === "program_detail" || kind === "page_detail"
+        || (kind === "university_detail" && input.entityId !== undefined && identity === String(input.entityId))
+      ))
+      || (input.entityType === "destination" && (kind === "destination_detail" || kind === "page_detail"))
+      || (input.entityType === "city" && (kind === "city_detail" || kind === "page_detail"))
       || (input.entityType === "article" && kind === "article_detail"
         && input.entityId !== undefined && identity === String(input.entityId))
-      || (input.entityType === "page" && kind === "page_detail");
-    if (localeMatches && entityMatches) {
+      || (input.entityType === "page" && kind === "page_detail"));
+  };
+  for (const key of candidateKeys) {
+    if (matches(key)) {
       cache.delete(key);
+      inFlight.delete(key);
       removed += 1;
     }
   }
+  if (removed > 0) cacheGeneration += 1;
   return removed;
 }
