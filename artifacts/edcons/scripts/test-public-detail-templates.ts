@@ -8,6 +8,7 @@ const university = readFileSync(new URL("../src/pages/public/UniversityDetail.ts
 const countries = readFileSync(new URL("../src/pages/public/Countries.tsx", import.meta.url), "utf8");
 const country = readFileSync(new URL("../src/pages/public/CountryDetail.tsx", import.meta.url), "utf8");
 const city = readFileSync(new URL("../src/pages/public/CityDetail.tsx", import.meta.url), "utf8");
+const publicPage = readFileSync(new URL("../src/pages/public/PublicPage.tsx", import.meta.url), "utf8");
 const app = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
 const blockTypes = readFileSync(new URL("../src/lib/website/blockTypes.ts", import.meta.url), "utf8");
 
@@ -65,6 +66,13 @@ test("Pages editor exposes a bounded live catalogue data block", () => {
   assert.match(blockTypes, /key: "limit"/);
   assert.match(blockTypes, /key: "country"/);
   assert.match(blockTypes, /key: "city"/);
+});
+
+test("public CMS pages render hydrated catalogue cards in the SPA fallback", () => {
+  assert.match(publicPage, /case "catalog_grid"/);
+  assert.match(publicPage, /items\(content\.items, 12\)/);
+  assert.match(publicPage, /safeUrl\(item\.canonicalPath\)/);
+  assert.match(publicPage, /No published catalogue entries are available yet/);
 });
 
 test("city template and destination links stay on governed canonical projections", () => {

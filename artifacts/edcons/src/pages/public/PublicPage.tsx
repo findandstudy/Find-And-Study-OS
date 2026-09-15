@@ -113,6 +113,38 @@ function Block({ block }: { block: PageBlock }) {
           {items(content.stats, 12).map((stat, index) => <div key={index} className="rounded-2xl border bg-card p-6"><p className="text-3xl font-bold text-primary">{text(stat.value, 100)}</p><p className="mt-2 text-sm text-muted-foreground">{text(stat.label, 200)}</p></div>)}
         </section>
       );
+    case "catalog_grid": {
+      const sourceLabels: Record<string, string> = {
+        programs: "Programs",
+        universities: "Universities",
+        destinations: "Destinations",
+        cities: "Cities",
+      };
+      const source = text(content.source, 32).toLowerCase();
+      const cards = items(content.items, 12);
+      return (
+        <section className="mx-auto max-w-6xl px-4 py-14" aria-label={text(content.title, 500) || "Live catalogue"}>
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <h2 className="font-display text-3xl font-bold">{text(content.title, 500)}</h2>
+              {content.subtitle ? <p className="mt-3 text-muted-foreground">{text(content.subtitle)}</p> : null}
+            </div>
+            {sourceLabels[source] ? <span className="rounded-full border px-3 py-1 text-xs font-medium text-muted-foreground">{sourceLabels[source]} · live</span> : null}
+          </div>
+          {cards.length > 0 ? (
+            <div className="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+              {cards.map((item, index) => {
+                const href = safeUrl(item.canonicalPath);
+                const card = <><h3 className="text-xl font-semibold">{text(item.title, 500)}</h3>{item.description ? <p className="mt-2 text-muted-foreground">{text(item.description)}</p> : null}</>;
+                return <article key={text(item.id, 64) || index} className="rounded-2xl border bg-card p-6 shadow-sm">{href ? <a href={href} className="block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">{card}</a> : card}</article>;
+              })}
+            </div>
+          ) : (
+            <p className="mt-8 rounded-2xl border border-dashed p-8 text-center text-muted-foreground">No published catalogue entries are available yet.</p>
+          )}
+        </section>
+      );
+    }
     case "feature_cards":
     case "icon_cards":
       return (
