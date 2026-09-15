@@ -31,7 +31,9 @@ import type {
   PublicCatalogRenderModel,
   PublicCatalogRenderRoute,
   PublicPageBlock,
+  PublicCatalogPageBlockSource,
 } from "./publicCatalogRenderContract";
+import { parsePublicCatalogPageBlockSource } from "./publicCatalogRenderContract";
 import {
   readIndexableArticleIds,
   readIndexableProgramIds,
@@ -119,7 +121,7 @@ function boundedString(value: unknown, maximum: number): string {
 const PUBLIC_PAGE_BLOCK_TYPES = new Set([
   "hero", "rich_text", "stats_strip", "feature_cards", "icon_cards",
   "cta_banner", "faq", "team_grid", "office_list", "logo_grid",
-  "testimonials", "section_title", "spacer_divider",
+  "testimonials", "section_title", "spacer_divider", "catalog_grid",
 ]);
 
 function publicPageBlocks(value: unknown): PublicPageBlock[] {
@@ -140,6 +142,206 @@ function publicPageBlocks(value: unknown): PublicPageBlock[] {
       sortOrder: Number.isSafeInteger(item.sortOrder) ? Number(item.sortOrder) : index,
     }];
   }).sort((a, b) => a.sortOrder - b.sortOrder);
+}
+
+const PUBLIC_CATALOG_BLOCK_LIMIT = 12;
+
+type PublicCatalogBlockConfig = {
+  source: PublicCatalogPageBlockSource;
+  limit: number;
+  country: string;
+  city: string;
+};
+
+function publicCatalogBlockConfig(block: PublicPageBlock): PublicCatalogBlockConfig | null {
+  if (block.blockType !== "catalog_grid") return null;
+  const source = parsePublicCatalogPageBlockSource(block.content.source);
+  if (!source) return null;
+  const requestedLimit = Number(block.content.limit);
+  const limit = Number.isSafeInteger(requestedLimit)
+    ? Math.max(1, Math.min(PUBLIC_CATALOG_BLOCK_LIMIT, requestedLimit))
+    : 6;
+  return {
+    source,
+    limit,
+    country: boundedString(block.content.country, 120).trim(),
+    city: boundedString(block.content.city, 120).trim(),
+  };
+}
+
+type PublicCatalogBlockItem = {
+  id: number;
+  title: string;
+  description: string;
+  canonicalPath: string;
+};
+
+/**
+ * Resolve catalogue-backed CMS blocks just before rendering.  The CMS stores
+ * only the source/filter configuration; current public rows are always read
+ * from the canonical catalogue, so editors never create a second copy of
+ * programme, university, destination or city data.
+ */
+async function readPublicCatalogBlockItems(
+  config: PublicCatalogBlockConfig,
+  locale: ProgramSupportedLocale,
+): Promise<PublicCatalogBlockItem[]> {
+  const countryFilter = config.country.toLocaleLowerCase("en-US");
+  const cityFilter = config.city.toLocaleLowerCase("en-US");
+  if (config.source === "programs") {
+    const policy = await getPublicCatalogPolicy();
+    const conditions: any[] = [eq(programsTable.isActive, true)];
+    addPublicCatalogConditions(conditions, policy);
+    if (countryFilter) conditions.push(sql`lower(trim(${universitiesTable.country})) = ${countryFilter}`);
+    if (cityFilter) conditions.push(sql`lower(trim(coalesce(${universitiesTable.city}, ''))) = ${cityFilter}`);
+    const rows = await db
+      .select({
+        id: programsTable.id,
+        name: sql<string>`COALESCE(${programTranslationsTable.name}, ${programsTable.name})`,
+        description: sql<string | null>`COALESCE(${programTranslationsTable.description}, ${programsTable.description})`,
+        universityName: universitiesTable.name,
+      })
+      .from(programsTable)
+      .innerJoin(universitiesTable, eq(programsTable.universityId, universitiesTable.id))
+      .leftJoin(programTranslationsTable, and(
+        eq(programTranslationsTable.programId, programsTable.id),
+        eq(programTranslationsTable.locale, locale),
+        eq(programTranslationsTable.status, "published"),
+      ))
+      .where(and(...conditions))
+      .orderBy(asc(universitiesTable.name), asc(programsTable.name), asc(programsTable.id))
+      .limit(config.limit);
+    return rows.map((row) => ({
+      id: row.id,
+      title: row.name,
+      description: boundedText(row.description, row.universityName),
+      canonicalPath: publicCatalogPath({ locale, entityType: "program", id: row.id, name: row.name }),
+    }));
+  }
+
+  if (config.source === "universities") {
+    const policy = await getPublicCatalogPolicy();
+    const conditions: any[] = [];
+    addPublicCatalogConditions(conditions, policy);
+    if (countryFilter) conditions.push(sql`lower(trim(${universitiesTable.country})) = ${countryFilter}`);
+    if (cityFilter) conditions.push(sql`lower(trim(coalesce(${universitiesTable.city}, ''))) = ${cityFilter}`);
+    const rows = await db
+      .select({
+        id: universitiesTable.id,
+        name: universitiesTable.name,
+        description: universitiesTable.description,
+        country: universitiesTable.country,
+        city: universitiesTable.city,
+      })
+      .from(universitiesTable)
+      .where(and(...conditions))
+      .orderBy(asc(universitiesTable.name), asc(universitiesTable.id))
+      .limit(config.limit);
+    return rows.map((row) => ({
+      id: row.id,
+      title: row.name,
+      description: boundedText(row.description, [row.city, row.country].filter(Boolean).join(", ") || ""),
+      canonicalPath: publicCatalogPath({ locale, entityType: "university", id: row.id, name: row.name }),
+    }));
+  }
+
+  if (config.source === "destinations") {
+    const conditions: any[] = [eq(destinationsTable.isActive, true)];
+    if (countryFilter) conditions.push(sql`lower(trim(${destinationsTable.country})) = ${countryFilter}`);
+    const rows = await db
+      .select({
+        id: destinationsTable.id,
+        name: destinationsTable.name,
+        slug: destinationsTable.slug,
+        description: destinationsTable.shortDescription,
+        country: destinationsTable.country,
+      })
+      .from(destinationsTable)
+      .where(and(...conditions))
+      .orderBy(asc(destinationsTable.sortOrder), asc(destinationsTable.name), asc(destinationsTable.id))
+      .limit(config.limit);
+    return rows.map((row) => ({
+      id: row.id,
+      title: row.name,
+      description: boundedText(row.description, row.country),
+      canonicalPath: buildPublicWebCanonicalPath({
+        entityType: "DESTINATION",
+        entityId: row.id,
+        locale,
+        slug: row.slug,
+      }),
+    }));
+  }
+
+  const conditions: any[] = [eq(citiesTable.isActive, true), eq(countriesTable.isActive, true)];
+  if (countryFilter) conditions.push(sql`lower(trim(${countriesTable.name})) = ${countryFilter}`);
+  if (cityFilter) conditions.push(sql`lower(trim(${citiesTable.name})) = ${cityFilter}`);
+  const rows = await db
+    .select({
+      id: citiesTable.id,
+      name: citiesTable.name,
+      country: countriesTable.name,
+    })
+    .from(citiesTable)
+    .innerJoin(countriesTable, eq(citiesTable.countryId, countriesTable.id))
+    .where(and(...conditions))
+    .orderBy(asc(citiesTable.name), asc(citiesTable.id))
+    .limit(config.limit);
+  return rows.map((row) => ({
+    id: row.id,
+    title: row.name,
+    description: row.country,
+    canonicalPath: buildPublicWebCanonicalPath({
+      entityType: "CITY",
+      entityId: row.id,
+      locale,
+      slug: row.name,
+    }),
+  }));
+}
+
+async function hydratePublicCatalogBlocks(
+  blocks: PublicPageBlock[],
+  locale: ProgramSupportedLocale,
+): Promise<PublicPageBlock[]> {
+  const configKey = (config: PublicCatalogBlockConfig): string => [
+    config.source,
+    config.limit,
+    config.country,
+    config.city,
+  ].join("|");
+  const configs = new Map<string, PublicCatalogBlockConfig>();
+  for (const block of blocks) {
+    const config = publicCatalogBlockConfig(block);
+    if (config) {
+      const key = configKey(config);
+      if (!configs.has(key)) configs.set(key, config);
+    }
+  }
+  if (configs.size === 0) return blocks;
+  const resolved = new Map<string, PublicCatalogBlockItem[]>();
+  await Promise.all(Array.from(configs.entries()).map(async ([key, config]) => {
+    try {
+      resolved.set(key, await readPublicCatalogBlockItems(config, locale));
+    } catch (error) {
+      console.error("[public-render] catalogue block failed", {
+        source: config.source,
+        message: error instanceof Error ? error.message : "unknown_error",
+      });
+      resolved.set(key, []);
+    }
+  }));
+  return blocks.map((block) => {
+    const config = publicCatalogBlockConfig(block);
+    if (!config) return block;
+    return {
+      ...block,
+      content: {
+        ...block.content,
+        items: resolved.get(configKey(config)) || [],
+      },
+    };
+  });
 }
 
 function cacheKey(route: PublicCatalogRenderRoute): string {
@@ -1293,9 +1495,10 @@ async function readPageDetail(
   const metaDescription = source
     ? boundedString(metaSnapshot.metaDescription, 2_000).trim() || page.metaDescription || ""
     : boundedString(translationFields?.metaDescription, 2_000).trim();
-  const blocks = source
+  const rawBlocks = source
     ? publicPageBlocks(version.blocksSnapshot)
     : publicPageBlocks(translation?.blocks);
+  const blocks = await hydratePublicCatalogBlocks(rawBlocks, route.locale);
   const translationAvailable = Boolean(title && blocks.length > 0);
   if (!translationAvailable) {
     return {

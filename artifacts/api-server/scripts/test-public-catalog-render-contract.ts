@@ -395,6 +395,44 @@ test("CMS page detail renders only the immutable projection and escapes block co
   assert.match(html, /hreflang="x-default"/);
 });
 
+test("CMS catalogue grid renders current data bindings without storing duplicate facts", () => {
+  const model: PublicCatalogRenderModel = {
+    kind: "page_detail",
+    locale: "en",
+    canonicalPath: "/en/study-destinations",
+    title: "Study destinations",
+    description: "Browse destinations.",
+    indexable: true,
+    alternatePaths: { en: "/en/study-destinations" },
+    page: {
+      id: 9,
+      title: "Study destinations",
+      slug: "study-destinations",
+      versionNumber: 1,
+      publishedAt: "2026-09-09T12:00:00.000Z",
+      blocks: [{
+        blockType: "catalog_grid",
+        content: {
+          source: "destinations",
+          title: "Live destinations",
+          items: [{
+            title: "Türkiye <script>alert(1)</script>",
+            description: "Current catalogue row",
+            canonicalPath: "/en/countries/turkey",
+          }],
+        },
+        settings: {},
+        sortOrder: 0,
+      }],
+    },
+  };
+  const html = renderPublicCatalogHtml({ indexHtml, model, siteUrl: "https://findandstudy.com", nonce: "catalog-nonce" });
+  assert.match(html, /data-catalog-source="destinations"/);
+  assert.match(html, /Türkiye &lt;script&gt;alert\(1\)&lt;\/script&gt;/);
+  assert.match(html, /href="\/en\/countries\/turkey"/);
+  assert.doesNotMatch(html, /<script>alert\(1\)<\/script>/);
+});
+
 test("read model is on-demand, bounded, stale-while-revalidate, and detail indexing is fail-closed", () => {
   const readModel = readFileSync(
     new URL("../src/lib/publicCatalogRenderReadModel.ts", import.meta.url),
@@ -413,6 +451,9 @@ test("read model is on-demand, bounded, stale-while-revalidate, and detail index
   assert.match(readModel, /async function readPageDetail/);
   assert.match(readModel, /websitePageVersionsTable/);
   assert.match(readModel, /PUBLIC_PAGE_BLOCK_TYPES/);
+  assert.match(readModel, /hydratePublicCatalogBlocks/);
+  assert.match(readModel, /PUBLIC_CATALOG_BLOCK_LIMIT = 12/);
+  assert.match(readModel, /parsePublicCatalogPageBlockSource/);
   assert.match(readModel, /\.limit\(PILOT_LIST_LIMIT\)/);
   assert.match(readModel, /cacheStatus: "STALE"/);
   assert.match(readModel, /void refresh\(key, route\)/);

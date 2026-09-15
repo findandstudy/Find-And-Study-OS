@@ -65,6 +65,38 @@ export const BLOCK_TYPES: BlockTypeDef[] = [
     defaultContent: { bgColor: "card", stats: [{ value: "500+", label: "Universities" }, { value: "30+", label: "Countries" }, { value: "98%", label: "Visa Rate" }, { value: "$2M+", label: "Scholarships" }] },
   },
   {
+    type: "catalog_grid",
+    label: "Live Catalog Grid",
+    icon: "🔄",
+    category: "data",
+    fields: [
+      { key: "title", label: "Section Title", type: "text", placeholder: "Explore our catalogue" },
+      { key: "subtitle", label: "Section Subtitle", type: "textarea" },
+      {
+        key: "source",
+        label: "Catalogue Source",
+        type: "select",
+        options: [
+          { label: "Programs", value: "programs" },
+          { label: "Universities", value: "universities" },
+          { label: "Destinations", value: "destinations" },
+          { label: "Cities", value: "cities" },
+        ],
+      },
+      { key: "limit", label: "Items to show", type: "number", defaultValue: 6 },
+      { key: "country", label: "Country filter (optional)", type: "text" },
+      { key: "city", label: "City filter (optional)", type: "text" },
+    ],
+    defaultContent: {
+      title: "Explore our catalogue",
+      subtitle: "Browse current options from the live catalogue.",
+      source: "programs",
+      limit: 6,
+      country: "",
+      city: "",
+    },
+  },
+  {
     type: "feature_cards",
     label: "Feature Cards",
     icon: "🃏",

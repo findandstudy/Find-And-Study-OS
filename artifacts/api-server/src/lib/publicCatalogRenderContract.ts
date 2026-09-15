@@ -27,6 +27,24 @@ export type PublicPageBlock = {
   sortOrder: number;
 };
 
+/**
+ * Module-local data sources that a CMS page may render from the public
+ * catalogue.  These are references only: the page stores the source name and
+ * the renderer reads current, public catalogue rows at request time.
+ */
+export const PUBLIC_CATALOG_PAGE_BLOCK_SOURCES = [
+  "programs", "universities", "destinations", "cities",
+] as const;
+
+export type PublicCatalogPageBlockSource = typeof PUBLIC_CATALOG_PAGE_BLOCK_SOURCES[number];
+
+export function parsePublicCatalogPageBlockSource(value: unknown): PublicCatalogPageBlockSource | null {
+  const source = String(value ?? "").trim().toLowerCase();
+  return (PUBLIC_CATALOG_PAGE_BLOCK_SOURCES as readonly string[]).includes(source)
+    ? source as PublicCatalogPageBlockSource
+    : null;
+}
+
 export type PublicCatalogRenderRoute =
   | {
       kind: "program_list";
@@ -715,6 +733,19 @@ function renderPublicPageBlock(block: PublicPageBlock): string {
   if (block.blockType === "stats_strip") {
     const stats = pageItems(content.stats, 12).map((item) => `<div><strong class="text-3xl">${escapeHtml(pageText(item.value, 100))}</strong><p>${escapeHtml(pageText(item.label, 200))}</p></div>`).join("");
     return `<section class="mx-auto grid max-w-6xl gap-6 px-4 py-10 text-center sm:grid-cols-2 lg:grid-cols-4">${stats}</section>`;
+  }
+  if (block.blockType === "catalog_grid") {
+    const title = pageText(content.title, 500);
+    const subtitle = pageText(content.subtitle, 2_000);
+    const source = pageText(content.source, 32);
+    const cards = pageItems(content.items, 24).map((item) => {
+      const href = safePublicUrl(item.canonicalPath);
+      const itemTitle = pageText(item.title, 500);
+      const description = pageText(item.description, 2_000);
+      const card = `<h3 class="text-lg font-bold">${escapeHtml(itemTitle)}</h3>${description ? `<p class="mt-2 text-muted-foreground">${escapeHtml(description)}</p>` : ""}`;
+      return `<article class="rounded-2xl border border-border bg-card p-5">${href ? `<a href="${escapeHtml(href)}">${card}</a>` : card}</article>`;
+    }).join("");
+    return `<section class="mx-auto max-w-6xl px-4 py-12" data-catalog-source="${escapeHtml(source)}"><h2 class="text-3xl font-bold">${escapeHtml(title)}</h2>${subtitle ? `<p class="mt-3 text-muted-foreground">${escapeHtml(subtitle)}</p>` : ""}<div class="mt-7 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">${cards}</div></section>`;
   }
   if (block.blockType === "feature_cards" || block.blockType === "icon_cards") {
     const cards = pageItems(content.cards, 24).map((item) => {

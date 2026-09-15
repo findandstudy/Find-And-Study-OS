@@ -9,6 +9,7 @@ const countries = readFileSync(new URL("../src/pages/public/Countries.tsx", impo
 const country = readFileSync(new URL("../src/pages/public/CountryDetail.tsx", import.meta.url), "utf8");
 const city = readFileSync(new URL("../src/pages/public/CityDetail.tsx", import.meta.url), "utf8");
 const app = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+const blockTypes = readFileSync(new URL("../src/lib/website/blockTypes.ts", import.meta.url), "utf8");
 
 test("program template keeps prototype information architecture data-bound", () => {
   for (const anchor of ["overview", "requirements", "intakes", "fees", "related"]) {
@@ -54,6 +55,16 @@ test("destination collection requests the active locale and follows canonical pa
   assert.match(countries, /public\/destinations\?locale=/);
   assert.match(countries, /\[lang\]/);
   assert.match(countries, /dest\.canonicalPath \|\| localePath/);
+});
+
+test("Pages editor exposes a bounded live catalogue data block", () => {
+  assert.match(blockTypes, /type: "catalog_grid"/);
+  for (const source of ["programs", "universities", "destinations", "cities"]) {
+    assert.match(blockTypes, new RegExp(`value: "${source}"`));
+  }
+  assert.match(blockTypes, /key: "limit"/);
+  assert.match(blockTypes, /key: "country"/);
+  assert.match(blockTypes, /key: "city"/);
 });
 
 test("city template and destination links stay on governed canonical projections", () => {
