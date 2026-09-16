@@ -337,7 +337,6 @@ async function hydratePublicCatalogBlocks(
       if (!configs.has(key)) configs.set(key, config);
     }
   }
-  if (configs.size === 0) return blocks;
   const resolved = new Map<string, PublicCatalogBlockItem[]>();
   await Promise.all(Array.from(configs.entries()).map(async ([key, config]) => {
     try {
@@ -351,13 +350,15 @@ async function hydratePublicCatalogBlocks(
     }
   }));
   return blocks.map((block) => {
+    if (block.blockType !== "catalog_grid") return block;
     const config = publicCatalogBlockConfig(block);
-    if (!config) return block;
     return {
       ...block,
       content: {
         ...block.content,
-        items: resolved.get(configKey(config)) || [],
+        // Stored CMS items are never catalogue facts, including when the
+        // source is missing or invalid and no catalogue query was performed.
+        items: config ? resolved.get(configKey(config)) || [] : [],
       },
     };
   });

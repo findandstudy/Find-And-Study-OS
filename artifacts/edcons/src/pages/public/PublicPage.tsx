@@ -68,6 +68,20 @@ function safeImageUrl(value: unknown): string | null {
     : null;
 }
 
+function spacerHeightClass(value: unknown): string {
+  // Literal classes keep all supported sizes in the generated stylesheet.
+  // Match the SSR renderer without requiring inline styles in its strict CSP.
+  const classes = [
+    "h-[8px]", "h-[16px]", "h-[24px]", "h-[32px]", "h-[40px]",
+    "h-[48px]", "h-[56px]", "h-[64px]", "h-[72px]", "h-[80px]",
+    "h-[88px]", "h-[96px]", "h-[104px]", "h-[112px]", "h-[120px]",
+    "h-[128px]", "h-[136px]", "h-[144px]", "h-[152px]", "h-[160px]",
+  ];
+  const requestedHeight = Number(value);
+  const height = Math.min(160, Math.max(8, Number.isFinite(requestedHeight) ? requestedHeight : 48));
+  return classes[Math.round(height / 8) - 1];
+}
+
 function ActionLink({ href, label, secondary = false }: { href: unknown; label: unknown; secondary?: boolean }) {
   const safeHref = safeUrl(href);
   const safeLabel = text(label, 200);
@@ -176,8 +190,7 @@ function Block({ block, index }: { block: PageBlock; index: number }) {
     case "section_title":
       return <section className="mx-auto max-w-6xl px-4 py-10 text-center"><h2 className="text-3xl font-bold">{text(content.title, 500)}</h2>{content.subtitle ? <p className="mt-3 text-muted-foreground">{text(content.subtitle)}</p> : null}</section>;
     case "spacer_divider": {
-      const height = Math.min(160, Math.max(8, Number(content.height) || 48));
-      return <div aria-hidden="true" style={{ height }} className="mx-auto max-w-6xl px-4">{content.showDivider ? <hr /> : null}</div>;
+      return <div aria-hidden="true" className={`mx-auto max-w-6xl px-4 ${spacerHeightClass(content.height)}`}>{content.showDivider ? <hr /> : null}</div>;
     }
     default:
       return null;
@@ -237,7 +250,7 @@ export default function PublicPage({ slug }: { slug: string }) {
         itemListElement: entries.map((entry, index) => ({ ...entry, position: index + 1 })),
       }];
     }) : [];
-    return [{ "@context": "https://schema.org", ...webPage }, ...catalogueLists];
+    return { "@context": "https://schema.org", "@graph": [webPage, ...catalogueLists] };
   }, [lang, page]);
   useJsonLd(schema);
 

@@ -469,8 +469,34 @@ test("SSR renders all allowlisted CMS presentation blocks with bounded safe medi
   }
   assert.match(html, /A &lt;script&gt;/);
   assert.match(html, /Great support &lt;script&gt;alert\(1\)&lt;\/script&gt;/);
-  assert.match(html, /style="height:160px"/);
+  assert.match(html, /h-\[160px\]/);
+  assert.doesNotMatch(html, /\sstyle=/);
   assert.doesNotMatch(html, /<script>alert\(1\)<\/script>/);
+});
+
+test("SSR spacers use stylesheet-backed bounded heights under the strict CSP", () => {
+  const spa = readFileSync(new URL("../../edcons/src/pages/public/PublicPage.tsx", import.meta.url), "utf8");
+  const heights: Array<[unknown, number]> = [
+    [-10, 8], [0, 8], [8, 8], [17, 16], [47, 48], [160, 160],
+    [999, 160], ["not-a-height", 48], [undefined, 48],
+  ];
+  for (let height = 8; height <= 160; height += 8) heights.push([height, height]);
+  for (const [requested, expected] of heights) {
+    const model: PublicCatalogRenderModel = {
+      kind: "page_detail", locale: "en", canonicalPath: "/en/spacer-test",
+      title: "Spacer", description: "Spacer layout", indexable: false, alternatePaths: {},
+      page: {
+        id: 11, title: "Spacer", slug: "spacer-test", versionNumber: 1,
+        publishedAt: "2026-09-09T12:00:00.000Z",
+        blocks: [{ blockType: "spacer_divider", content: { height: requested }, settings: {}, sortOrder: 0 }],
+      },
+    };
+    const html = renderPublicCatalogHtml({ indexHtml, model, siteUrl: "https://findandstudy.com", nonce: "spacer-nonce" });
+    assert.ok(html.includes(`h-[${expected}px]`), `height ${String(requested)} must resolve to ${expected}px`);
+    assert.doesNotMatch(html, /\sstyle=/);
+    assert.ok(spa.includes(`"h-[${expected}px]"`), "SSR class must exist in the frontend CSS scan source");
+  }
+  assert.match(publicCatalogCsp("spacer-nonce"), /(?:^|; )style-src 'self'(?:;|$)/);
 });
 
 test("read model is on-demand, bounded, stale-while-revalidate, and detail indexing is fail-closed", () => {

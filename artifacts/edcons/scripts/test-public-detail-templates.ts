@@ -76,6 +76,9 @@ test("public CMS pages render hydrated catalogue cards in the SPA fallback", () 
   assert.match(publicPage, /No published catalogue entries are available yet/);
   assert.match(publicPage, /"@type": "ItemList"/);
   assert.match(publicPage, /page\.meta\.indexable \? page\.data\.blocks/);
+  // useJsonLd emits arrays as separate scripts, so the catalogue nodes must
+  // share the WebPage's context inside one graph instead of separate scripts.
+  assert.match(publicPage, /return \{ "@context": "https:\/\/schema\.org", "@graph": \[webPage, \.\.\.catalogueLists\] \}/);
 });
 
 test("public catalogue blocks keep mobile and keyboard-accessible semantics", () => {

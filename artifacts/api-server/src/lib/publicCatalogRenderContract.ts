@@ -723,6 +723,19 @@ function pageText(value: unknown, maximum = 2_000): string {
     .trim();
 }
 
+function spacerHeightClass(value: unknown): string {
+  // Keep the same literal sizes in PublicPage.tsx so Tailwind emits their CSS.
+  const classes = [
+    "h-[8px]", "h-[16px]", "h-[24px]", "h-[32px]", "h-[40px]",
+    "h-[48px]", "h-[56px]", "h-[64px]", "h-[72px]", "h-[80px]",
+    "h-[88px]", "h-[96px]", "h-[104px]", "h-[112px]", "h-[120px]",
+    "h-[128px]", "h-[136px]", "h-[144px]", "h-[152px]", "h-[160px]",
+  ];
+  const requestedHeight = Number(value);
+  const height = Math.min(160, Math.max(8, Number.isFinite(requestedHeight) ? requestedHeight : 48));
+  return classes[Math.round(height / 8) - 1];
+}
+
 function renderPublicPageBlock(block: PublicPageBlock, index: number): string {
   const content = block.content;
   if (block.blockType === "hero") {
@@ -808,9 +821,7 @@ function renderPublicPageBlock(block: PublicPageBlock, index: number): string {
     return `<section class="mx-auto max-w-6xl px-4 py-12"><h2 class="text-center text-3xl font-bold">${escapeHtml(title)}</h2>${subtitle ? `<p class="mt-3 text-center text-muted-foreground">${escapeHtml(subtitle)}</p>` : ""}<div class="mt-7 grid gap-5 md:grid-cols-2">${testimonials}</div></section>`;
   }
   if (block.blockType === "spacer_divider") {
-    const requestedHeight = Number(content.height);
-    const height = Math.min(160, Math.max(8, Number.isFinite(requestedHeight) ? requestedHeight : 48));
-    return `<div aria-hidden="true" style="height:${height}px" class="mx-auto max-w-6xl px-4">${content.showDivider ? "<hr />" : ""}</div>`;
+    return `<div aria-hidden="true" class="mx-auto max-w-6xl px-4 ${spacerHeightClass(content.height)}">${content.showDivider ? "<hr />" : ""}</div>`;
   }
   if (block.blockType === "feature_cards" || block.blockType === "icon_cards") {
     const cards = pageItems(content.cards, 24).map((item) => {

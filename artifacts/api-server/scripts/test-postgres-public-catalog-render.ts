@@ -238,6 +238,38 @@ test("render read model serves bounded data and coalesces the same cold key", as
     const translatedPage = await getPublicCatalogRenderModel(translatedPageRoute);
     assert.equal(translatedPage.value.kind === "page_detail" ? translatedPage.value.page.title : null, "Yayınlanmış Sayfa");
     assert.equal(translatedPage.value.kind === "page_detail" ? translatedPage.value.page.blocks.length : 0, 1);
+
+    // Neither an invalid-only page (zero queries) nor a mixed page may pass
+    // stored CMS items off as current catalogue records.
+    const forgedItem = { id: -1, title: "Untrusted stored catalogue item", canonicalPath: "/en/forged" };
+    const invalidBlocks = ["unknown-source", undefined].map((source, sortOrder) => ({
+      blockType: "catalog_grid", content: { source, items: [forgedItem] },
+      settings: {}, sortOrder, isVisible: true,
+    }));
+    for (const withValidSource of [false, true]) {
+      const blocks = withValidSource ? [...invalidBlocks, {
+        blockType: "catalog_grid",
+        content: { source: "cities", country: "Render Pilot Country", items: [forgedItem] },
+        settings: {}, sortOrder: 2, isVisible: true,
+      }] : invalidBlocks;
+      await client.query(
+        "UPDATE website_page_versions SET blocks_snapshot=$2::jsonb WHERE page_id=$1 AND version_number=1",
+        [pageId, JSON.stringify(blocks)],
+      );
+      invalidatePublicCatalogRenderCache({ entityType: "page", entityId: pageId });
+      const hydratedPage = await getPublicCatalogRenderModel(pageRoute);
+      assert.equal(hydratedPage.value.kind, "page_detail");
+      if (hydratedPage.value.kind !== "page_detail") throw new Error("Expected published page");
+      assert.deepEqual(hydratedPage.value.page.blocks[0].content.items, []);
+      assert.deepEqual(hydratedPage.value.page.blocks[1].content.items, []);
+      assert.ok(!JSON.stringify(hydratedPage.value).includes(forgedItem.title));
+      if (withValidSource) {
+        assert.deepEqual(hydratedPage.value.page.blocks[2].content.items, [{
+          id: cityId, title: "Render Pilot City", description: "Render Pilot Country",
+          canonicalPath: `/en/cities/${publicCatalogRouteKey(cityId, "Render Pilot City")}`,
+        }]);
+      }
+    }
   } finally {
     invalidatePublicCatalogRenderCache();
     if (pageId !== null) {
