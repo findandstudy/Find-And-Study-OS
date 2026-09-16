@@ -305,7 +305,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/catalog.ts",
-      "sha256": "75e4bc61b28ac2ccafb7ccdd3729ea1cbdb6c38cad41eb915523e214d3ee8849",
+      "sha256": "4f1b71258d52330c4250952876d3e958f22500fb0e8f63dbd632a825941c639e",
       "routeRegistrations": 21,
       "requireAuth": 19,
       "requireRole": 17,
@@ -890,7 +890,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/public-catalog.ts",
-      "sha256": "ef8c8c3207c0fd1bfec59bfc7cf902e6e1669a80d803b082affb53c35aaf2cd3",
+      "sha256": "6c801af5481d4ba5b9b3e57c9561baaf65e5a70160516315cd4268e25bb768fb",
       "routeRegistrations": 2,
       "requireAuth": 0,
       "requireRole": 0,
@@ -1115,7 +1115,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/universities.ts",
-      "sha256": "8d7bd2fe90c2b7fe4c985c2e5dae0cadc1e4f4a98a1dab103b0b46bc90ecc6d2",
+      "sha256": "80d41d69f0804a7c6547cba8f4076fe58f07ffe6dd21cda49ca438eedf7b0bb7",
       "routeRegistrations": 23,
       "requireAuth": 17,
       "requireRole": 15,
@@ -1175,7 +1175,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/website.ts",
-      "sha256": "9ba24f4c2ff7661c29725805a406128b94288429b7cec22d33a2dd7f054e5cc9",
+      "sha256": "90f7a5b4b19c8c0a369e75475b7b858d521a27421bad74dc4299c778672809dd",
       "routeRegistrations": 33,
       "requireAuth": 2,
       "requireRole": 1,
