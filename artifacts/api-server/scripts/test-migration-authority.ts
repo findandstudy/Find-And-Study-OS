@@ -77,8 +77,9 @@ test("PostgreSQL rate limiters use the migration-owned table without boot DDL", 
       ),
     )
     .join("\n");
-  assert.equal(routeSources.match(/new RateLimiterPostgres\s*\(/g)?.length, 4);
-  assert.equal(routeSources.match(/tableCreated:\s*true/g)?.length, 4);
+  // Includes the account-bound provider-block limiter; all five use pre-created schema.
+  assert.equal(routeSources.match(/new RateLimiterPostgres\s*\(/g)?.length, 5);
+  assert.equal(routeSources.match(/tableCreated:\s*true/g)?.length, 5);
   assert.match(
     readFileSync(
       path.join(root, "lib/db/drizzle/0001_silly_patriot.sql"),
