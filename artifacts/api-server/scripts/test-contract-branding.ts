@@ -6,6 +6,7 @@ import {
   publicContractBranding,
   resolveContractEmailVerificationEvidence,
   sanitizeContractBranding,
+  mergeContractBranding,
   validateContractBrandingInput,
   validateCompanySignatureDataUrl,
 } from "../src/lib/contractBranding";
@@ -13,6 +14,33 @@ import {
 const VALID_PNG_BASE64 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
 const VALID_PNG_DATA_URL = `data:image/png;base64,${VALID_PNG_BASE64}`;
+
+test("template email policy preserves the profile signature and presentation", () => {
+  const profile = { brandName: "Profile", primaryColor: "#123456", companySignatureDataUrl: VALID_PNG_DATA_URL, requireEmailVerification: false };
+  for (const signature of [undefined, null, "", "   "]) {
+    const merged = mergeContractBranding(profile, { requireEmailVerification: true, companySignatureDataUrl: signature });
+    assert.equal(merged?.companySignatureDataUrl, VALID_PNG_DATA_URL);
+    assert.equal(merged?.brandName, "Profile");
+    assert.equal(merged?.primaryColor, "#123456");
+    assert.equal(contractRequiresEmailVerification(merged), true);
+    assert.equal(hasContractCompanySignature(merged), true);
+    assert.equal("companySignatureDataUrl" in (publicContractBranding(merged) ?? {}), false);
+  }
+  assert.equal(profile.requireEmailVerification, false, "merge must not mutate the profile");
+});
+
+test("only defined template fields override profile fields, including explicit false", () => {
+  const profile = { brandName: "Profile", requireEmailVerification: true, companySignatureDataUrl: VALID_PNG_DATA_URL };
+  const merged = mergeContractBranding(profile, { brandName: "Template", requireEmailVerification: false });
+  assert.equal(merged?.brandName, "Template");
+  assert.equal(contractRequiresEmailVerification(merged), false);
+  assert.equal(hasContractCompanySignature(merged), true);
+  assert.equal(mergeContractBranding(profile, {})?.brandName, "Profile");
+  assert.equal(mergeContractBranding(null, { companySignatureDataUrl: VALID_PNG_DATA_URL })?.companySignatureDataUrl, VALID_PNG_DATA_URL);
+  assert.equal(hasContractCompanySignature(mergeContractBranding(null, { requireEmailVerification: true })), false);
+  assert.equal(mergeContractBranding(null, null), null);
+  assert.equal(contractRequiresEmailVerification(mergeContractBranding(null, {})), true);
+});
 
 test("accepts a valid admin-managed PNG signature", () => {
   assert.equal(validateCompanySignatureDataUrl(VALID_PNG_DATA_URL), null);

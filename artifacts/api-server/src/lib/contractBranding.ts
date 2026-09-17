@@ -69,6 +69,16 @@ export function sanitizeContractBranding(value: unknown): ContractBrandingConfig
   return Object.values(config).some(value => value !== undefined) ? config : null;
 }
 
+/** Empty template fields inherit the profile; explicit false remains an override. */
+export function mergeContractBranding(profile: unknown, template: unknown): ContractBrandingConfig | null {
+  const base = sanitizeContractBranding(profile);
+  const overrides = sanitizeContractBranding(template);
+  return sanitizeContractBranding({
+    ...(base ?? {}),
+    ...Object.fromEntries(Object.entries(overrides ?? {}).filter(([, value]) => value !== undefined)),
+  });
+}
+
 /** Legacy templates (no explicit setting) continue to require verification. */
 export function contractRequiresEmailVerification(value: unknown): boolean {
   return sanitizeContractBranding(value)?.requireEmailVerification !== false;
