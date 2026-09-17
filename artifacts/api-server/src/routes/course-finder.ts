@@ -1,4 +1,5 @@
 import { Router, type IRouter } from "express";
+import { getPublicCatalogCacheGeneration } from "../lib/publicCatalogRenderReadModel";
 import { db, programsTable, programTranslationsTable, universitiesTable, wishlistsTable, applicationsTable, commissionsTable, serviceFeesTable, studentsTable, pipelineStagesTable, settingsTable, documentsTable } from "@workspace/db";
 import { eq, ilike, sql, and, inArray, isNull, desc, or } from "drizzle-orm";
 import { requireAuth, requireRole, requireAgentStaffPermission, logAudit } from "../lib/auth";
@@ -259,10 +260,10 @@ router.get("/course-finder", async (req, res): Promise<void> => {
     page: String(pageNum),
     limit: String(limitNum),
   });
-  const cacheKey = `${policyKey}:${visibilityKey}:locale=${contentLocale}:${requestKey}`;
+  const cacheKey = `${getPublicCatalogCacheGeneration()}:${policyKey}:${visibilityKey}:locale=${contentLocale}:${requestKey}`;
   const cached = courseFinderListCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) {
-    res.setHeader("Cache-Control", "private, max-age=10, stale-while-revalidate=30");
+    res.setHeader("Cache-Control", "private, no-cache");
     res.setHeader("X-Course-Finder-List-Cache", "HIT");
     res.json(cached.value);
     return;
@@ -387,7 +388,7 @@ router.get("/course-finder", async (req, res): Promise<void> => {
       return nextPayload;
     },
   });
-  res.setHeader("Cache-Control", "private, max-age=10, stale-while-revalidate=30");
+  res.setHeader("Cache-Control", "private, no-cache");
   res.setHeader(
     "X-Course-Finder-List-Cache",
     wasCoalesced ? "COALESCED" : "MISS",
@@ -486,10 +487,10 @@ router.get("/course-finder/filters", async (req, res): Promise<void> => {
     const policyKey = publicPolicy
       ? `public:${publicCatalogPolicyCacheKey(publicPolicy)}`
       : "internal";
-    const cacheKey = `${policyKey}:${courseFinderFilterCacheKey(params)}`;
+    const cacheKey = `${getPublicCatalogCacheGeneration()}:${policyKey}:${courseFinderFilterCacheKey(params)}`;
     const cached = courseFinderFilterCache.get(cacheKey);
     if (cached && cached.expiresAt > Date.now()) {
-      res.setHeader("Cache-Control", "private, max-age=30, stale-while-revalidate=120");
+      res.setHeader("Cache-Control", "private, no-cache");
       res.setHeader("X-Course-Finder-Filter-Cache", "HIT");
       res.json(cached.value);
       return;
@@ -576,7 +577,7 @@ router.get("/course-finder/filters", async (req, res): Promise<void> => {
         return payload;
       },
     });
-    res.setHeader("Cache-Control", "private, max-age=30, stale-while-revalidate=120");
+    res.setHeader("Cache-Control", "private, no-cache");
     res.setHeader(
       "X-Course-Finder-Filter-Cache",
       wasCoalesced ? "COALESCED" : "MISS",

@@ -1624,6 +1624,8 @@ export async function getPublicCatalogRenderModel(
   return { value, cacheStatus: coalesced ? "COALESCED" : "MISS" };
 }
 
+export function getPublicCatalogCacheGeneration(): number { return cacheGeneration; }
+
 export function invalidatePublicCatalogRenderCache(input: {
   detailTemplate?: DetailLayoutKind;
   entityType?: "program" | "university" | "destination" | "city" | "catalog" | "article" | "page" | "all";
@@ -1661,6 +1663,8 @@ export function invalidatePublicCatalogRenderCache(input: {
       removed += 1;
     }
   }
-  if (removed > 0) cacheGeneration += 1;
+  // Other catalogue consumers (Course Finder) also key their caches by this generation.
+  // A mutation must advance it even when no SSR entry happens to be cached.
+  cacheGeneration += 1;
   return removed;
 }

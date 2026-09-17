@@ -62,8 +62,8 @@ export function addPublicCatalogConditions(
   conditions: any[],
   policy: PublicCatalogPolicy | null,
 ): void {
-  if (!policy) return;
   conditions.push(eq(universitiesTable.isActive, true));
+  if (!policy) return;
 
   const countryRuleEntries = Object.entries(policy.countryRules);
   if (countryRuleEntries.length === 0) {

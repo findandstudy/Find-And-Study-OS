@@ -1,4 +1,27 @@
 {
+  "universityStatus": {
+    "activateConfirm": "Seçilen {count} üniversite aktif edilsin mi? Yalnız kendi durumu aktif olan programlar yeniden görünür. Mevcut başvurular değişmez.",
+    "deactivateConfirm": "Seçilen {count} üniversite pasif edilsin mi? Üniversiteler ve bağlı programları arama ve halka açık sayfalardan gizlenir. Kayıtlar ve mevcut başvurular silinmez."
+  },
+  "inboxActions": {
+    "allAssignedPeople": "Tüm sorumlular",
+    "receivingAccount": "Mesajın geldiği hesap",
+    "allReceivingAccounts": "Tüm bağlı hesaplar",
+    "unlinkedAccount": "Eski / hesaba bağlanmamış kayıtlar",
+    "blockMenu": "Engelleme",
+    "providerBlock": "WhatsApp üzerinden engelle",
+    "providerUnblock": "WhatsApp engelini kaldır",
+    "localBlock": "Yalnız sistem içinde engelle",
+    "localConfirm": "Seçilen {count} konuşmadaki kişiler sistem içinde engellensin mi? Kişilerin tüm konuşmalarını etkiler; sistemde yeni mesajları ve bot yanıtlarını durdurur. WhatsApp veya Instagram üzerinden yazmalarını engellemez.",
+    "providerConfirm": "Seçilen {count} konuşmanın WhatsApp hatlarında sağlayıcı engeli değiştirilsin mi? Etkin Meta veya Zernio bağlantısı gerekir. Engelleme yalnız son 24 saatte yazmış bireysel hesaplarda desteklenir. Desteklenmeyen hesaplar başarısız sayılır; sistem içi engeller değişmez.",
+    "providerDisabled": "Sağlayıcı engellemesi bu ortamda henüz etkin değil. Canlı bağlantı testi ve yönetici aktivasyonu gerekiyor.",
+    "results": "Teyit edilen: {succeeded} · Teyit edilemeyen: {failed}",
+    "failureHelp": "Başarısız konuşmalar seçili kaldı. Desteklenmeyen hesap, kapalı entegrasyon, sağlayıcı kısıtı veya zaman aşımı olabilir. Sonucu belirsiz işlemi tekrarlamadan önce sağlayıcıdan kontrol edin.",
+    "localScope": "Yalnız sistem içi engellemedir. WhatsApp veya Instagram tarafındaki engel durumunu değiştirmez.",
+    "providerScope": "WhatsApp işlemi yalnız seçilen gelen mesaj hatları için teyit etti. Sistem içi engeller değişmedi.",
+    "accountsFailed": "Bağlı hesaplar yüklenemedi. Yeniden denemek için sayfayı yenileyin.",
+    "limit": "Engelleme için en fazla 100 konuşma seçin."
+  },
   "catalogDetail": {
     "verifiedPrice": "Doğrulanmış katalog fiyatı",
     "deposit": "Depozito",

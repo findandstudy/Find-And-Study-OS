@@ -1017,6 +1017,8 @@ function UniversitiesTab() {
   const { toast } = useToast();
   const { user } = useAuth();
   const isSuperAdmin = user?.role === "super_admin";
+  const canChangeUniversityStatus = ["super_admin", "admin", "manager"].includes(user?.role ?? "");
+  const [universityStatusBusy, setUniversityStatusBusy] = useState(false);
   const logoInputRef = useRef<HTMLInputElement>(null);
 
   const [page, setPage] = useState(1);
@@ -1091,6 +1093,21 @@ function UniversitiesTab() {
   }
   function toggleOne(id: number) {
     setSelected(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  }
+
+  async function changeUniversityStatus(isActive: boolean) {
+    const ids = [...selected];
+    if (!ids.length || universityStatusBusy || !canChangeUniversityStatus) return;
+    if (!window.confirm(t(isActive ? "universityStatus.activateConfirm" : "universityStatus.deactivateConfirm", { count: ids.length }))) return;
+    setUniversityStatusBusy(true);
+    try {
+      const result = await api("/api/universities/bulk-status", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ids, isActive }) });
+      setSelected(new Set());
+      await Promise.all(["universities", "programs", "course-finder", "course-finder-filters", "university-options"].map(key => qc.invalidateQueries({ queryKey: [key] })));
+      toast({ title: t("common.success"), description: `${result.updated} · ${isActive ? t("common.active") : t("common.inactive")}` });
+    } catch (error) {
+      toast({ title: t("common.error"), description: error instanceof Error ? error.message : undefined, variant: "destructive" });
+    } finally { setUniversityStatusBusy(false); }
   }
 
   async function handleBulkDelete() {
@@ -1234,6 +1251,10 @@ function UniversitiesTab() {
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input placeholder={t("catalogPage.searchUniversities")} className="pl-8" value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} />
         </div>
+        {canChangeUniversityStatus && selected.size > 0 && <>
+          <Button variant="outline" size="sm" disabled={universityStatusBusy || selected.size > 5000} onClick={() => void changeUniversityStatus(true)} data-testid="university-bulk-activate"><Check className="h-4 w-4 me-2" />{t("common.active")} ({selected.size})</Button>
+          <Button variant="outline" size="sm" disabled={universityStatusBusy || selected.size > 5000} onClick={() => void changeUniversityStatus(false)} data-testid="university-bulk-deactivate"><X className="h-4 w-4 me-2" />{t("common.inactive")} ({selected.size})</Button>
+        </>}
         {selected.size > 0 && (
           <Button variant="destructive" size="sm" onClick={() => setBulkDelOpen(true)}>
             <Trash2 className="h-4 w-4 mr-2" />{t("catalogPage.deleteSelected", { n: selected.size })}

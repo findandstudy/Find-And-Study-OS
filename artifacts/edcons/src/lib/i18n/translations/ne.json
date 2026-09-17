@@ -1,4 +1,27 @@
 {
+  "universityStatus": {
+    "activateConfirm": "Activate {count} selected universities? Only programs whose own status is active become visible again. Existing applications are unchanged.",
+    "deactivateConfirm": "Deactivate {count} selected universities? The universities and their programs will be hidden from discovery and public pages. Records and existing applications will not be deleted."
+  },
+  "inboxActions": {
+    "allAssignedPeople": "All assigned people",
+    "receivingAccount": "Receiving account",
+    "allReceivingAccounts": "All receiving accounts",
+    "unlinkedAccount": "Legacy / unlinked account",
+    "blockMenu": "Block actions",
+    "providerBlock": "Block on WhatsApp",
+    "providerUnblock": "Unblock on WhatsApp",
+    "localBlock": "Block in this system",
+    "localConfirm": "Block contacts from {count} selected conversations in this system? This affects all conversations for each contact, stops local messages and bot replies, but does not block the sender in WhatsApp or Instagram.",
+    "providerConfirm": "Change the WhatsApp provider block for {count} selected conversations on their receiving lines? Requires an enabled Meta or Zernio connection. Blocking supports consumer accounts that messaged within the last 24 hours. Unsupported accounts fail; local blocks are unchanged.",
+    "providerDisabled": "Provider blocking is not enabled in this environment. A live connection test and administrator activation are required.",
+    "results": "Confirmed: {succeeded} · Not confirmed: {failed}",
+    "failureHelp": "Failed conversations remain selected. An unsupported account, disabled integration, provider restriction or timeout may prevent confirmation. Check the provider before retrying an uncertain result.",
+    "localScope": "System-only block. The sender is not blocked by WhatsApp or Instagram.",
+    "providerScope": "WhatsApp confirmed the operation on the selected receiving lines only. Local blocks are unchanged.",
+    "accountsFailed": "Receiving accounts could not be loaded. Refresh this page to retry.",
+    "limit": "Select at most 100 conversations for block actions."
+  },
   "catalogDetail": {
     "verifiedPrice": "प्रमाणित सूची मूल्य",
     "deposit": "धरौटी",

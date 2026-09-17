@@ -49,7 +49,9 @@ import { userHasPermission } from "../lib/permissions";
 import { dispatchNotification } from "../lib/notificationDispatcher";
 import { sendEmail } from "../lib/email";
 import { safeOutboundRequest } from "../lib/safeOutboundRequest";
-import { resolveOutboundConfig } from "../lib/inbox/channelAccountConfig";
+import { resolveOutboundConfig, parseAccountConfig } from "../lib/inbox/channelAccountConfig";
+import { changeWhatsAppProviderBlock } from "../lib/inbox/providerBlock";
+import { parseInboxAccountFilter } from "../lib/inbox/accountFilter";
 import { decryptConfig } from "../lib/encryption";
 import { sendViaZernio, getZernioApiKey, resolveZernioAccount, sendZernioTemplate } from "../lib/inbox/zernioSend";
 import { toE164 } from "../lib/inbox/phone";
@@ -154,6 +156,15 @@ import {
 } from "../lib/inboxConversationIndicators";
 
 const router: IRouter = Router();
+
+// Filter labels only: never expose provider configuration, tokens or metadata.
+router.get("/inbox/filter-accounts", requireAuth, requireRole(...STAFF_ROLES, ...ADMIN_ROLES), async (_req, res) => {
+  const accounts = await db.select({ id: channelAccountsTable.id, channel: channelAccountsTable.channel,
+    displayName: channelAccountsTable.displayName, isActive: channelAccountsTable.isActive })
+    .from(channelAccountsTable).orderBy(asc(channelAccountsTable.channel), asc(channelAccountsTable.displayName));
+  res.setHeader("Cache-Control", "private, no-store");
+  res.json({ accounts, providerBlockEnabled: process.env.INBOX_PROVIDER_BLOCK_ENABLED === "true" && isLiveIntegrationsEnabled() });
+});
 
 router.get(
   "/inbox/whatsapp-accounts",
@@ -335,6 +346,11 @@ const summarizeRateLimiter = new RateLimiterPostgres({
   keyPrefix: "inbox-summarize",
   points: 10,
   duration: 60,
+});
+
+const providerBlockRateLimiter = new RateLimiterPostgres({
+  storeClient: pool, storeType: "pool", tableName: "rate_limits", tableCreated: true,
+  keyPrefix: "inbox-provider-block", points: 100, duration: 60,
 });
 
 function isAiSummary(value: unknown): value is ConversationAiSummary {
@@ -937,6 +953,13 @@ router.get(
     const search = String(req.query.search || "").trim().slice(0, 120);
     const assignedToRaw = req.query.assignedToId == null ? "" : String(req.query.assignedToId).trim();
     const assignedToId = assignedToRaw ? Number(assignedToRaw) : null;
+    const assignment = req.query.assignment ?? "all";
+    if (!["all", "mine", "unassigned"].includes(String(assignment)) || typeof assignment !== "string") {
+      res.status(400).json({ error: "Invalid assignment" }); return;
+    }
+    let accountId: number | null;
+    try { accountId = parseInboxAccountFilter(req.query.channelAccountId); }
+    catch { res.status(400).json({ error: "Invalid channelAccountId" }); return; }
     const rawLimit = parseInt(String(req.query.limit ?? "200"), 10);
     const listLimit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 200) : 200;
     const cursorRaw = req.query.cursor == null ? "" : String(req.query.cursor).trim();
@@ -958,6 +981,9 @@ router.get(
         : eq(conversationsTable.isArchived, false),
     ];
     const effectiveAssignedTo = inboxEffectiveAssignedToSql();
+    if (assignment === "mine") where.push(sql`${effectiveAssignedTo} = ${userId}`);
+    if (assignment === "unassigned") where.push(sql`${effectiveAssignedTo} IS NULL`);
+    if (accountId !== null) where.push(accountId === 0 ? isNull(conversationsTable.channelAccountId) : eq(conversationsTable.channelAccountId, accountId));
     // Use the same timestamp expression for ordering and the keyset cursor so
     // rows with no last message remain reachable and new inbound messages never
     // cause page skips/duplicates.
@@ -1884,6 +1910,53 @@ router.post(
         error: error instanceof Error ? error.message : "Application intake action failed",
       });
     }
+  },
+);
+
+router.patch(
+  "/inbox/conversations/:id/provider-block",
+  requireAuth,
+  requireRole(...STAFF_ROLES, ...ADMIN_ROLES),
+  async (req, res): Promise<void> => {
+    const id = Number(req.params.id);
+    const parsed = z.object({ blocked: z.boolean(), confirm: z.literal("PROVIDER_BLOCK_CHANGE") }).strict().safeParse(req.body);
+    if (!Number.isSafeInteger(id) || id <= 0 || !parsed.success) {
+      res.status(400).json({ error: "Invalid provider block request" }); return;
+    }
+    if (await isConversationEntityBlocked(req.user!, id)) {
+      res.status(404).json({ error: "Conversation not found" }); return;
+    }
+    if (process.env.INBOX_PROVIDER_BLOCK_ENABLED !== "true" || !isLiveIntegrationsEnabled()) {
+      res.status(409).json({ error: "PROVIDER_BLOCK_NOT_ENABLED" }); return;
+    }
+    try { await providerBlockRateLimiter.consume(String(req.user!.id)); }
+    catch { res.status(429).json({ error: "PROVIDER_BLOCK_RATE_LIMITED" }); return; }
+    const [conversation] = await db.select().from(conversationsTable).where(eq(conversationsTable.id, id)).limit(1);
+    if (!conversation?.externalContactId || !conversation.channelAccountId) {
+      res.status(409).json({ error: "EXACT_ACCOUNT_REQUIRED" }); return;
+    }
+    const [account] = await db.select().from(channelAccountsTable).where(eq(channelAccountsTable.id, conversation.channelAccountId)).limit(1);
+    const [contact] = await db.select().from(externalContactsTable).where(eq(externalContactsTable.id, conversation.externalContactId)).limit(1);
+    if (!account || !contact || account.channel !== conversation.channel || contact.channel !== conversation.channel) {
+      res.status(409).json({ error: "ACCOUNT_CONTACT_MISMATCH" }); return;
+    }
+    // Deliberately do not use outbound fallback: blocking belongs to this exact receiving line.
+    const config = account.provider === "direct" && account.channel === "whatsapp" ? parseAccountConfig(account.configEncrypted) : {};
+    let zernioApiKey: string | undefined;
+    if (account.provider === "zernio" && account.channel === "whatsapp" && account.isActive) {
+      const [integration] = await db.select({ enabled: integrationsTable.isEnabled }).from(integrationsTable).where(eq(integrationsTable.key, "zernio")).limit(1);
+      if (integration?.enabled) zernioApiKey = (await getZernioApiKey()) ?? undefined;
+    }
+    await logAudit(req.user!.id, "provider_block_requested", "conversation", id, { blocked: parsed.data.blocked, channelAccountId: account.id }, req.ip);
+    const result = await changeWhatsAppProviderBlock({
+      liveEnabled: isLiveIntegrationsEnabled(), channel: account.channel, provider: account.provider,
+      active: account.isActive, phoneNumberId: config.phoneNumberId, accessToken: config.accessToken,
+      zernioAccountId: account.externalAccountId ?? undefined, zernioApiKey,
+      recipient: contact.externalId, blocked: parsed.data.blocked,
+    });
+    await logAudit(req.user!.id, "provider_block_result", "conversation", id, { blocked: parsed.data.blocked, channelAccountId: account.id, ...result }, req.ip);
+    res.setHeader("Cache-Control", "private, no-store");
+    res.status(result.confirmed ? 200 : 409).json(result.confirmed ? result : { ...result, error: result.reason });
   },
 );
 
