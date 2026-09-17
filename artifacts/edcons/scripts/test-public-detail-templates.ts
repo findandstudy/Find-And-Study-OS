@@ -90,9 +90,14 @@ test("public catalogue blocks keep mobile and keyboard-accessible semantics", ()
 });
 
 test("Pages editor previews catalogue blocks without persisting catalogue facts", () => {
-  assert.match(pageEditor, /case "catalog_grid"/);
-  assert.match(pageEditor, /Live cards from the current catalogue appear here/);
-  assert.match(pageEditor, /sourceLabels/);
+  const preview = readFileSync(new URL("../src/pages/admin/website/CatalogBlockPreview.tsx", import.meta.url), "utf8");
+  assert.match(pageEditor, /<CatalogBlockPreview content=\{block.content\} locale=\{locale\}/);
+  assert.match(preview, /\/api\/website\/catalog-preview/);
+  assert.doesNotMatch(preview, /setBlocks|content\.items|method: "POST"/);
+  assert.match(preview, /signal/);
+  assert.match(preview, /role="alert"/);
+  assert.match(preview, /role="status"/);
+  assert.match(pageEditor, /editLocale === sourceLocale/);
 });
 
 test("city template and destination links stay on governed canonical projections", () => {

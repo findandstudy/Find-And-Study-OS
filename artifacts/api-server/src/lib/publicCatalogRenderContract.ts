@@ -17,7 +17,7 @@ export const PUBLIC_WEB_RESERVED_PAGE_SLUGS = new Set([
 ]);
 
 export function isReservedPublicPageSlug(value: unknown): boolean {
-  return PUBLIC_WEB_RESERVED_PAGE_SLUGS.has(String(value ?? "").trim().toLowerCase());
+  return String(value ?? "").startsWith("_detail-layout-") || PUBLIC_WEB_RESERVED_PAGE_SLUGS.has(String(value ?? "").trim().toLowerCase());
 }
 
 export type PublicPageBlock = {
@@ -92,7 +92,10 @@ export type PublicCatalogRenderRoute =
       slug: string;
     };
 
-export type PublicCatalogRenderModel =
+export type PublicCatalogRenderModel = PublicCatalogRenderModelData & {
+  detailLayout?: import("./websiteDetailLayoutContract").DetailLayout;
+};
+type PublicCatalogRenderModelData =
   | {
       kind: "not_found";
       locale: ProgramSupportedLocale;
@@ -567,7 +570,7 @@ function renderProgramDetail(model: Extract<PublicCatalogRenderModel, { kind: "p
     </article>
     ${intakes ? `<section id="intakes" class="mt-10"><h2 class="text-2xl font-bold">Available intakes</h2><div class="mt-5 grid gap-4 sm:grid-cols-2">${intakes}</div></section>` : ""}
     ${priceRows ? `<section class="mt-10" aria-label="${escapeHtml(copy.tuition)}"><h2 class="text-2xl font-bold">${escapeHtml(copy.tuition)}</h2><dl class="mt-5 grid gap-4 sm:grid-cols-2">${priceRows}</dl></section>` : ""}
-    ${related ? `<section id="related" class="mt-12" aria-label="${escapeHtml(copy.programs)}"><h2 class="text-2xl font-bold">${escapeHtml(copy.programs)}</h2><div class="mt-5 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">${related}</div></section>` : ""}
+    ${related ? `<section data-detail-section="related" id="related" class="mt-12" aria-label="${escapeHtml(copy.programs)}"><h2 class="text-2xl font-bold">${escapeHtml(copy.programs)}</h2><div class="mt-5 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">${related}</div></section>` : ""}
   </main>`;
 }
 
@@ -592,7 +595,7 @@ function renderUniversityDetail(model: Extract<PublicCatalogRenderModel, { kind:
         <div><dt>${escapeHtml(copy.programs)}</dt><dd>${escapeHtml(String(university.programCount))}</dd></div>
       </dl>
     </article>
-    <section id="programs" class="mt-10"><h2 class="text-2xl font-bold">${escapeHtml(copy.programs)}</h2><div class="mt-5 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">${programs}</div></section>
+    <section data-detail-section="programs" id="programs" class="mt-10"><h2 class="text-2xl font-bold">${escapeHtml(copy.programs)}</h2><div class="mt-5 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">${programs}</div></section>
   </main>`;
 }
 
@@ -619,7 +622,7 @@ function renderDestinationDetail(model: Extract<PublicCatalogRenderModel, { kind
       </dl>
       ${cities ? `<ul class="mt-8 flex flex-wrap gap-3" aria-label="${escapeHtml(copy.location)}">${cities}</ul>` : ""}
     </article>
-    <section class="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-3" aria-label="${escapeHtml(destination.name)}">${universities}</section>
+    <section data-detail-section="universities" class="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-3" aria-label="${escapeHtml(destination.name)}">${universities}</section>
   </main>`;
 }
 
@@ -649,8 +652,8 @@ function renderCityDetail(model: Extract<PublicCatalogRenderModel, { kind: "city
         <div><dt>${escapeHtml(copy.programs)}</dt><dd>${escapeHtml(String(city.programCount))}</dd></div>
       </dl>
     </article>
-    ${universities ? `<section class="mt-12"><h2 class="text-2xl font-bold">${escapeHtml(copy.institutionType)}</h2><div class="mt-5 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">${universities}</div></section>` : ""}
-    ${programs ? `<section class="mt-12"><h2 class="text-2xl font-bold">${escapeHtml(copy.programs)}</h2><div class="mt-5 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">${programs}</div></section>` : ""}
+    ${universities ? `<section data-detail-section="universities" class="mt-12"><h2 class="text-2xl font-bold">${escapeHtml(copy.institutionType)}</h2><div class="mt-5 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">${universities}</div></section>` : ""}
+    ${programs ? `<section data-detail-section="programs" class="mt-12"><h2 class="text-2xl font-bold">${escapeHtml(copy.programs)}</h2><div class="mt-5 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">${programs}</div></section>` : ""}
   </main>`;
 }
 
@@ -1077,7 +1080,7 @@ export function renderPublicCatalogHtml(input: {
   html = replaceMeta(html, "name", "twitter:title", input.model.title);
   html = replaceMeta(html, "name", "twitter:description", input.model.description);
 
-  const shell = input.model.kind === "program_list"
+  let shell = input.model.kind === "program_list"
     ? renderProgramList(input.model)
     : input.model.kind === "program_detail"
       ? renderProgramDetail(input.model)
@@ -1092,6 +1095,14 @@ export function renderPublicCatalogHtml(input: {
               : input.model.kind === "page_detail"
                 ? renderPageDetail(input.model)
                 : renderNotFound(input.model);
+  if (input.model.detailLayout) {
+    const layout = input.model.detailLayout;
+    const sections = new Map<string, string>();
+    shell = shell.replace(/<section data-detail-section="([a-z]+)"[\s\S]*?<\/section>/g, (markup, key) => { sections.set(key, markup); return ""; });
+    const ordered = layout.sections.filter(key => !layout.hidden.includes(key)).map(key => sections.get(key) ?? "").join("");
+    shell = shell.replace("</main>", `${ordered}</main>`);
+    for (const key of layout.hidden) shell = shell.replace(new RegExp(`<a href="#${key}"[^>]*>[\\s\\S]*?<\\/a>`, "g"), "");
+  }
   const alternatePaths = (
     input.model.kind === "program_detail"
     || input.model.kind === "university_detail"
@@ -1113,7 +1124,7 @@ export function renderPublicCatalogHtml(input: {
   }
   const extraHead = `  <meta name="csp-nonce" content="${escapeHtml(input.nonce)}" />\n  <meta name="public-render" content="ssr-isr-pilot" />\n${hreflangLinks.join("\n")}${hreflangLinks.length ? "\n" : ""}  <script nonce="${escapeHtml(input.nonce)}" type="application/ld+json">${safeJson(structuredData(input.model, siteUrl))}</script>\n`;
   return html
-    .replace("</head>", `${extraHead}</head>`)
+    .replace("</head>", `${extraHead}${input.model.detailLayout ? `<script id="public-detail-layout" nonce="${escapeHtml(input.nonce)}" type="application/json">${safeJson(input.model.detailLayout)}</script>` : ""}</head>`)
     .replace(/<div\s+id=["']root["']\s*><\/div>/i, `<div id="root" data-public-render-shell-root="true">${shell}</div>`);
 }
 

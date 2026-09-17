@@ -34,6 +34,8 @@ import type {
   PublicCatalogPageBlockSource,
 } from "./publicCatalogRenderContract";
 import { parsePublicCatalogPageBlockSource } from "./publicCatalogRenderContract";
+import { readPublishedDetailLayout } from "./websiteDetailLayouts";
+import { DETAIL_LAYOUT_KINDS, type DetailLayoutKind } from "./websiteDetailLayoutContract";
 import {
   readIndexableArticleIds,
   readIndexableProgramIds,
@@ -198,7 +200,7 @@ type PublicCatalogBlockItem = {
  * from the canonical catalogue, so editors never create a second copy of
  * programme, university, destination or city data.
  */
-async function readPublicCatalogBlockItems(
+export async function readPublicCatalogBlockItems(
   config: PublicCatalogBlockConfig,
   locale: ProgramSupportedLocale,
 ): Promise<PublicCatalogBlockItem[]> {
@@ -1583,7 +1585,9 @@ function refresh(key: string, route: PublicCatalogRenderRoute): Promise<PublicCa
   const generation = cacheGeneration;
   let pending: Promise<PublicCatalogRenderModel>;
   pending = loadModel(route)
-    .then((value) => {
+    .then(async (value) => {
+      const kind = value.kind.replace(/_detail$/, "") as DetailLayoutKind;
+      if (DETAIL_LAYOUT_KINDS.includes(kind)) value.detailLayout = await readPublishedDetailLayout(kind);
       if (generation === cacheGeneration) saveCache(key, value);
       return value;
     })
@@ -1621,6 +1625,7 @@ export async function getPublicCatalogRenderModel(
 }
 
 export function invalidatePublicCatalogRenderCache(input: {
+  detailTemplate?: DetailLayoutKind;
   entityType?: "program" | "university" | "destination" | "city" | "catalog" | "article" | "page" | "all";
   entityId?: number;
   locale?: string;
@@ -1630,6 +1635,7 @@ export function invalidatePublicCatalogRenderCache(input: {
   const matches = (key: string): boolean => {
     const [locale, kind, identity] = key.split(":");
     const localeMatches = !input.locale || input.locale === locale;
+    if (input.detailTemplate) return localeMatches && kind === `${input.detailTemplate}_detail`;
     return localeMatches && (!input.entityType
       || input.entityType === "all"
       || (input.entityType === "catalog" && CATALOG_DERIVED_CACHE_KINDS.has(kind))

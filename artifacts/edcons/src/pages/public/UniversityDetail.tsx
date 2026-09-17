@@ -1,3 +1,4 @@
+import { DetailLayout } from "./DetailLayout";
 import { useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { customFetch } from "@workspace/api-client-react";
@@ -147,8 +148,8 @@ export default function UniversityDetail({ routeKey }: { routeKey: string }) {
   ].filter((entry) => entry[1] !== null);
 
   return (
-    <>
-      <section className="border-b border-border/40 bg-gradient-to-br from-primary/10 via-background to-accent/10 py-16">
+    <DetailLayout kind="university">
+      <section data-detail-section="hero" className="border-b border-border/40 bg-gradient-to-br from-primary/10 via-background to-accent/10 py-16">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <Link href={localePath("/countries")} className="mb-8 inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-primary"><ArrowLeft className="h-4 w-4" />{t("countryDetail.allDestinations")}</Link>
           <div className="flex flex-col gap-6 md:flex-row md:items-center">
@@ -165,7 +166,7 @@ export default function UniversityDetail({ routeKey }: { routeKey: string }) {
         </div>
       </section>
 
-      <nav className="sticky top-0 z-20 border-b border-border/60 bg-background/95 backdrop-blur" aria-label={university.name}>
+      <nav data-detail-section="navigation" className="sticky top-0 z-20 border-b border-border/60 bg-background/95 backdrop-blur" aria-label={university.name}>
         <div className="mx-auto flex max-w-7xl gap-6 overflow-x-auto px-4 py-3 text-sm font-semibold [scrollbar-width:none] sm:px-6 lg:px-8 [&::-webkit-scrollbar]:hidden">
           <a href="#overview" className="whitespace-nowrap text-muted-foreground hover:text-primary">{t("countryDetail.about", { name: university.name })}</a>
           <a href="#facts" className="whitespace-nowrap text-muted-foreground hover:text-primary">{t("countryDetail.quickFacts")}</a>
@@ -173,7 +174,7 @@ export default function UniversityDetail({ routeKey }: { routeKey: string }) {
         </div>
       </nav>
 
-      <section id="overview" className="scroll-mt-20 py-12">
+      <section data-detail-section="overview" id="overview" className="scroll-mt-20 py-12">
         <div className="mx-auto grid max-w-7xl gap-8 px-4 sm:px-6 lg:grid-cols-3 lg:px-8">
           <article className="rounded-2xl border border-border/50 bg-card p-6 md:p-8 lg:col-span-2">
             <h2 className="text-2xl font-bold">{t("countryDetail.about", { name: university.name })}</h2>
@@ -194,7 +195,7 @@ export default function UniversityDetail({ routeKey }: { routeKey: string }) {
         </div>
       </section>
 
-      <section id="programs" className="scroll-mt-24 bg-secondary/30 py-12">
+      <section data-detail-section="programs" id="programs" className="scroll-mt-24 bg-secondary/30 py-12">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
             <div><p className="text-sm font-semibold text-primary">{university.name}</p><h2 className="mt-1 text-2xl font-bold">{t("catalogDetail.availablePrograms")}</h2></div>
@@ -214,6 +215,6 @@ export default function UniversityDetail({ routeKey }: { routeKey: string }) {
           ) : <p className="mt-7 text-muted-foreground">{t("programs.noResults")}</p>}
         </div>
       </section>
-    </>
+    </DetailLayout>
   );
 }

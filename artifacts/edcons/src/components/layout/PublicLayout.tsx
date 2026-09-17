@@ -57,12 +57,12 @@ export function PublicLayout({ children }: { children: ReactNode }) {
 
   return (
     <div className="min-h-screen flex flex-col font-sans" dir={isRTL ? "rtl" : "ltr"}>
-      <a href="#main-content" className="skip-to-content">
+      <a href="#main-content" className="sr-only focus:not-sr-only focus:fixed focus:start-4 focus:top-4 focus:z-[100] focus:rounded focus:bg-background focus:p-3 focus:text-foreground focus:ring-2">
         {t("a11y.skipToContent")}
       </a>
       <header className="sticky top-0 z-50 w-full glass border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
-          <Link href={localePath("/")} className="flex items-center gap-2 group">
+          <Link href={localePath("/")} className="flex min-w-0 items-center gap-2 group">
             {logoUrl ? (
               <img
                 src={logoUrl}
@@ -71,17 +71,17 @@ export function PublicLayout({ children }: { children: ReactNode }) {
               />
             ) : (
               <>
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center text-white shadow-lg group-hover:scale-105 transition-transform duration-300">
+                <div className="w-10 h-10 shrink-0 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center text-white shadow-lg group-hover:scale-105 transition-transform duration-300">
                   <GraduationCap className="w-6 h-6" />
                 </div>
-                <span className="font-display font-bold text-2xl tracking-tight text-foreground">
+                <span className="font-display font-bold text-xl tracking-tight text-foreground truncate max-w-[160px] xl:max-w-[240px]">
                   {companyName}
                 </span>
               </>
             )}
           </Link>
 
-          <nav aria-label="Main navigation" className="hidden md:flex items-center gap-8 font-medium text-sm text-muted-foreground">
+          <nav aria-label="Main navigation" className="hidden xl:flex items-center gap-6 font-medium text-sm text-muted-foreground">
             {navLinks.map((link) => (
               <Link key={link.href} href={link.href} className="hover:text-primary transition-colors">
                 {link.label}
@@ -89,7 +89,7 @@ export function PublicLayout({ children }: { children: ReactNode }) {
             ))}
           </nav>
 
-          <div className="flex items-center gap-3">
+          <div className="flex shrink-0 items-center gap-2">
             <div className="relative" ref={langRef}>
               <button
                 onClick={() => setLangOpen(!langOpen)}
@@ -126,14 +126,14 @@ export function PublicLayout({ children }: { children: ReactNode }) {
               <Link href={localePath("/login")}>{t("nav.login")}</Link>
             </Button>
 
-            <Button variant="ghost" size="icon" className="md:hidden" aria-label="Open menu" onClick={() => setMobileOpen(!mobileOpen)}>
+            <Button variant="ghost" size="icon" className="xl:hidden" aria-label="Open menu" aria-expanded={mobileOpen} onClick={() => setMobileOpen(!mobileOpen)}>
               {mobileOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
             </Button>
           </div>
         </div>
 
         {mobileOpen && (
-          <div className="md:hidden border-t bg-background/95 backdrop-blur-md">
+          <div className="xl:hidden border-t bg-background/95 backdrop-blur-md">
             <nav className="max-w-7xl mx-auto px-4 py-4 flex flex-col gap-1">
               {navLinks.map((link) => (
                 <Link

@@ -16,6 +16,17 @@ import {
 } from "../lib/programTranslationContract";
 
 const router: IRouter = Router();
+router.get("/public/web/detail-layouts/:kind", async (req, res) => {
+  res.setHeader("Cache-Control", "no-store");
+  res.setHeader("X-Robots-Tag", "noindex");
+  const { DETAIL_LAYOUT_KINDS } = await import("../lib/websiteDetailLayoutContract");
+  const kind = String(req.params.kind);
+  if (!DETAIL_LAYOUT_KINDS.includes(kind as typeof DETAIL_LAYOUT_KINDS[number])) { res.sendStatus(404); return; }
+  try {
+    const { readPublishedDetailLayout } = await import("../lib/websiteDetailLayouts");
+    res.json(await readPublishedDetailLayout(kind as typeof DETAIL_LAYOUT_KINDS[number]));
+  } catch { res.status(503).json({ error: "Layout unavailable" }); }
+});
 const PUBLIC_CACHE_CONTROL =
   "public, max-age=60, s-maxage=300, stale-while-revalidate=3600";
 

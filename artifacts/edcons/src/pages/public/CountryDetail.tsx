@@ -1,3 +1,4 @@
+import { DetailLayout } from "./DetailLayout";
 import { useState, useEffect } from "react";
 import { useI18n } from "@/hooks/use-i18n";
 import { useSeo } from "@/hooks/use-seo";
@@ -185,8 +186,8 @@ export default function CountryDetail({ slug }: { slug: string }) {
   ]));
 
   return (
-    <>
-      <section className="pt-24 pb-16 bg-gradient-to-br from-primary/10 via-accent/5 to-primary/5 relative overflow-hidden">
+    <DetailLayout kind="destination">
+      <section data-detail-section="hero" className="pt-24 pb-16 bg-gradient-to-br from-primary/10 via-accent/5 to-primary/5 relative overflow-hidden">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <Link href={localePath("/countries")} className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-primary transition-colors mb-6">
             <ArrowLeft className="w-4 h-4" /> {t("countryDetail.allDestinations")}
@@ -224,7 +225,7 @@ export default function CountryDetail({ slug }: { slug: string }) {
         </div>
       </section>
 
-      <section className="py-12">
+      <section data-detail-section="overview" className="py-12">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid lg:grid-cols-3 gap-8">
             <div className="lg:col-span-2 space-y-8">
@@ -287,7 +288,7 @@ export default function CountryDetail({ slug }: { slug: string }) {
       </section>
 
       {universities.length > 0 && (
-        <section className="py-12 bg-secondary/30">
+        <section data-detail-section="universities" className="py-12 bg-secondary/30">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex items-center justify-between mb-8">
               <h2 className="text-2xl font-display font-bold text-foreground">
@@ -344,7 +345,7 @@ export default function CountryDetail({ slug }: { slug: string }) {
         </section>
       )}
 
-      <section className="py-16 bg-gradient-to-r from-primary to-accent text-white mx-4 sm:mx-8 rounded-3xl mb-12 overflow-hidden relative">
+      <section data-detail-section="cta" className="py-16 bg-gradient-to-r from-primary to-accent text-white mx-4 sm:mx-8 rounded-3xl mb-12 overflow-hidden relative">
         <div className="max-w-3xl mx-auto px-8 text-center relative z-10">
           <h2 className="text-3xl font-display font-bold mb-4">{t("countryDetail.readyToStudy", { name: dest.name })}</h2>
           <p className="text-white/80 mb-8">{t("countryDetail.readyToStudyDesc")}</p>
@@ -358,6 +359,6 @@ export default function CountryDetail({ slug }: { slug: string }) {
           </div>
         </div>
       </section>
-    </>
+    </DetailLayout>
   );
 }

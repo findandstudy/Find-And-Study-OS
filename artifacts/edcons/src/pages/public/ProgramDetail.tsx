@@ -1,3 +1,4 @@
+import { DetailLayout } from "./DetailLayout";
 import { useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { customFetch } from "@workspace/api-client-react";
@@ -237,8 +238,8 @@ export default function ProgramDetail({ routeKey }: { routeKey: string }) {
   const visiblePrices = payload.prices.slice(0, 8);
 
   return (
-    <>
-      <section className="border-b border-border/40 bg-gradient-to-br from-primary/10 via-background to-accent/10 py-16">
+    <DetailLayout kind="program">
+      <section data-detail-section="hero" className="border-b border-border/40 bg-gradient-to-br from-primary/10 via-background to-accent/10 py-16">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <Link href={localePath("/programs")} className="mb-7 inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-primary">
             <ArrowLeft className="h-4 w-4" /> {t("countryDetail.viewAllPrograms")}
@@ -272,7 +273,7 @@ export default function ProgramDetail({ routeKey }: { routeKey: string }) {
         </div>
       </section>
 
-      <nav className="sticky top-0 z-20 border-b border-border/60 bg-background/95 backdrop-blur" aria-label={t("programs.programDetails")}>
+      <nav data-detail-section="navigation" className="sticky top-0 z-20 border-b border-border/60 bg-background/95 backdrop-blur" aria-label={t("programs.programDetails")}>
         <div className="mx-auto flex max-w-7xl gap-6 overflow-x-auto px-4 py-3 text-sm font-semibold [scrollbar-width:none] sm:px-6 lg:px-8 [&::-webkit-scrollbar]:hidden">
           <a href="#overview" className="whitespace-nowrap text-muted-foreground hover:text-primary">{t("programs.programDetails")}</a>
           {program.requirements ? <a href="#requirements" className="whitespace-nowrap text-muted-foreground hover:text-primary">{t("programs.requirements")}</a> : null}
@@ -282,17 +283,17 @@ export default function ProgramDetail({ routeKey }: { routeKey: string }) {
         </div>
       </nav>
 
-      <section id="overview" className="scroll-mt-20 py-12">
+      <section data-detail-section="overview" id="overview" className="scroll-mt-20 py-12">
         <div className="mx-auto grid max-w-7xl gap-8 px-4 sm:px-6 lg:grid-cols-3 lg:px-8">
           <div className="space-y-8 lg:col-span-2">
             {program.description && (
-              <article id="requirements" className="scroll-mt-24 rounded-2xl border border-border/50 bg-card p-6 md:p-8">
+              <article className="scroll-mt-24 rounded-2xl border border-border/50 bg-card p-6 md:p-8">
                 <h2 className="text-2xl font-bold">{t("countryDetail.about", { name: program.name })}</h2>
                 <p className="mt-4 whitespace-pre-line leading-7 text-muted-foreground">{program.description}</p>
               </article>
             )}
             {program.requirements && (
-              <article className="rounded-2xl border border-border/50 bg-card p-6 md:p-8">
+              <article id="requirements" className="scroll-mt-24 rounded-2xl border border-border/50 bg-card p-6 md:p-8">
                 <h2 className="flex items-center gap-2 text-2xl font-bold"><CheckCircle2 className="h-6 w-6 text-primary" />{t("programs.requirements")}</h2>
                 <p className="mt-4 whitespace-pre-line leading-7 text-muted-foreground">{program.requirements}</p>
               </article>
@@ -358,7 +359,7 @@ export default function ProgramDetail({ routeKey }: { routeKey: string }) {
       </section>
 
       {payload.related.length > 0 && (
-        <section id="related" className="scroll-mt-24 bg-secondary/30 py-12">
+        <section data-detail-section="related" id="related" className="scroll-mt-24 bg-secondary/30 py-12">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <h2 className="text-2xl font-bold">{t("catalogDetail.relatedPrograms")}</h2>
             <div className="mt-7 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
@@ -373,6 +374,6 @@ export default function ProgramDetail({ routeKey }: { routeKey: string }) {
           </div>
         </section>
       )}
-    </>
+    </DetailLayout>
   );
 }

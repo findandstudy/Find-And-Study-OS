@@ -1,3 +1,4 @@
+import { DetailLayout } from "./DetailLayout";
 import { useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { customFetch } from "@workspace/api-client-react";
@@ -114,8 +115,8 @@ export default function CityDetail({ routeKey }: { routeKey: string }) {
   }
 
   return (
-    <>
-      <section className="border-b border-border/40 bg-gradient-to-br from-primary/10 via-background to-accent/10 py-16">
+    <DetailLayout kind="city">
+      <section data-detail-section="hero" className="border-b border-border/40 bg-gradient-to-br from-primary/10 via-background to-accent/10 py-16">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <Link href={localePath("/countries")} className="mb-8 inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-primary"><ArrowLeft className="h-4 w-4" />{t("countryDetail.allDestinations")}</Link>
           <div className="flex items-center gap-5">
@@ -129,7 +130,7 @@ export default function CityDetail({ routeKey }: { routeKey: string }) {
         </div>
       </section>
 
-      <section className="py-12">
+      <section data-detail-section="overview" className="py-12">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <article className="max-w-3xl rounded-2xl border border-border/50 bg-card p-6 md:p-8">
             <h2 className="text-2xl font-bold">{t("countryDetail.about", { name: city.name })}</h2>
@@ -139,7 +140,7 @@ export default function CityDetail({ routeKey }: { routeKey: string }) {
       </section>
 
       {city.universities.length > 0 && (
-        <section className="bg-secondary/30 py-12">
+        <section data-detail-section="universities" className="bg-secondary/30 py-12">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <h2 className="text-2xl font-bold">{t("countryDetail.universitiesIn", { name: city.name })}</h2>
             <div className="mt-7 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
@@ -156,7 +157,7 @@ export default function CityDetail({ routeKey }: { routeKey: string }) {
       )}
 
       {city.programs.length > 0 && (
-        <section className="py-12">
+        <section data-detail-section="programs" className="py-12">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <div className="flex flex-wrap items-end justify-between gap-4"><h2 className="text-2xl font-bold">{t("catalogDetail.availablePrograms")}</h2><Button asChild variant="outline" className="rounded-full"><Link href={`${localePath("/programs")}?country=${encodeURIComponent(city.country)}&city=${encodeURIComponent(city.name)}`}>{t("countryDetail.viewAllPrograms")}</Link></Button></div>
             <div className="mt-7 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
@@ -172,6 +173,6 @@ export default function CityDetail({ routeKey }: { routeKey: string }) {
           </div>
         </section>
       )}
-    </>
+    </DetailLayout>
   );
 }

@@ -154,6 +154,10 @@ test("render read model serves bounded data and coalesces the same cold key", as
     assert.equal(first.value.indexable, false);
     const hit = await getPublicCatalogRenderModel(route);
     assert.equal(hit.cacheStatus, "HIT");
+    assert.equal(invalidatePublicCatalogRenderCache({ detailTemplate: "city" }), 0);
+    assert.equal((await getPublicCatalogRenderModel(route)).cacheStatus, "HIT");
+    assert.equal(invalidatePublicCatalogRenderCache({ detailTemplate: "program" }), 1);
+    assert.equal((await getPublicCatalogRenderModel(route)).cacheStatus, "MISS");
 
     const listRoute = matchPublicCatalogRenderPath("/en/programs");
     assert.ok(listRoute && listRoute.kind === "program_list");

@@ -1,4 +1,4 @@
-import express, { Router, json, type Request, type Response } from "express";
+import express, { Router, json, type Request, type Response, type RequestHandler } from "express";
 import { publicFormLimiter } from "../lib/limiters";
 import { getClientIp } from "../lib/clientIp";
 import { db } from "@workspace/db";
@@ -56,11 +56,120 @@ import {
 import { safeOutboundRequest } from "../lib/safeOutboundRequest";
 import { buildPublicWebPublicationReadModel } from "../lib/publicWebPublicationReadModel";
 import { invalidatePublicWebDiscoveryCache } from "../lib/publicWebDiscoveryReadModel";
-import { invalidatePublicCatalogRenderCache } from "../lib/publicCatalogRenderReadModel";
+import { invalidatePublicCatalogRenderCache, readPublicCatalogBlockItems } from "../lib/publicCatalogRenderReadModel";
+import { parseWebsitePageDraft, parseWebsiteCatalogPreview } from "../lib/websitePageAuthoring";
+import { createHash } from "node:crypto";
+import { detailLayoutSlug, parseDetailLayout, readDetailLayoutDraft } from "../lib/websiteDetailLayouts";
+import { DETAIL_LAYOUT_KINDS } from "../lib/websiteDetailLayoutContract";
+import { getSession, getSessionId } from "../lib/replitAuth";
 
 const router = Router();
 const WEBSITE_ROLES = ["super_admin", "admin"] as const;
 const adminOnly = [requireAuth, requireRole(...WEBSITE_ROLES)] as const;
+
+router.get("/website/detail-layouts", ...adminOnly, async (_req, res) => {
+  res.setHeader("Cache-Control", "private, no-store");
+  try { res.json(await Promise.all(DETAIL_LAYOUT_KINDS.map(readDetailLayoutDraft))); }
+  catch { res.status(503).json({ error: "Layout read unavailable" }); }
+});
+
+router.post("/website/detail-layouts/draft", ...adminOnly, async (req, res) => {
+  const layout = parseDetailLayout(req.body?.layout);
+  if (!layout || Object.keys(req.body).sort().join() !== "expectedUpdatedAt,layout" ||
+      !(req.body.expectedUpdatedAt === null || typeof req.body.expectedUpdatedAt === "string")) {
+    res.status(400).json({ error: "Invalid layout" }); return;
+  }
+  try {
+    await db.transaction(async tx => {
+      const slug = detailLayoutSlug(layout.kind);
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${slug}))`);
+      const [existing] = await tx.select().from(websitePagesTable).where(eq(websitePagesTable.slug, slug)).for("update");
+      if ((existing?.updatedAt.toISOString() ?? null) !== req.body.expectedUpdatedAt) throw new Error("CONFLICT");
+      const values = { title: `${layout.kind} detail layout`, template: `detail:${layout.kind}`, status: "draft", robotsIndex: false, updatedBy: req.user!.id };
+      const [page] = existing ? await tx.update(websitePagesTable).set(values).where(eq(websitePagesTable.id, existing.id)).returning()
+        : await tx.insert(websitePagesTable).values({ ...values, slug, createdBy: req.user!.id }).returning();
+      await tx.delete(websitePageBlocksTable).where(eq(websitePageBlocksTable.pageId, page.id));
+      await tx.insert(websitePageBlocksTable).values({ pageId: page.id, blockType: "detail_layout", content: layout, sortOrder: 0 });
+    });
+    res.json(await readDetailLayoutDraft(layout.kind));
+  } catch (error) { res.status(error instanceof Error && error.message === "CONFLICT" ? 409 : 503).json({ error: "Save failed; reload before retrying" }); }
+});
+
+// Presentation-template batch only. Does not activate governed entity publication or indexing.
+router.post("/website/detail-layouts/publish", ...adminOnly, async (req, res) => {
+  try {
+    const sid = getSessionId(req);
+    const session = sid && !req.apiTokenAuth && !req.headers.authorization ? await getSession(sid) : null;
+    if (!session || session.originalSid || session.user.id !== req.user!.id) {
+      res.status(403).json({ error: "Direct human session required for approval" }); return;
+    }
+  } catch { res.status(503).json({ error: "Approval session unavailable" }); return; }
+  const selections = req.body?.selections;
+  if (req.body?.approved !== true || Object.keys(req.body).sort().join() !== "approved,selections" ||
+      !Array.isArray(selections) || selections.length < 1 || selections.length > 4 ||
+      new Set(selections.map(x => x?.pageId)).size !== selections.length ||
+      !selections.every(x => x && Object.keys(x).sort().join() === "digest,pageId" && Number.isSafeInteger(x.pageId) && /^[a-f0-9]{64}$/.test(x.digest))) {
+    res.status(400).json({ error: "Explicit approval and exact selections required" }); return;
+  }
+  try {
+    const result = await db.transaction(async tx => {
+      await tx.execute(sql`SET LOCAL lock_timeout = '2s'`);
+      await tx.execute(sql`SET LOCAL statement_timeout = '10s'`);
+      const receipts = [];
+      for (const selection of [...selections].sort((a, b) => a.pageId - b.pageId)) {
+        const [page] = await tx.select().from(websitePagesTable).where(eq(websitePagesTable.id, selection.pageId)).for("update");
+        const blocks = await tx.select().from(websitePageBlocksTable).where(eq(websitePageBlocksTable.pageId, selection.pageId)).orderBy(asc(websitePageBlocksTable.sortOrder));
+        const layout = blocks.length === 1 && blocks[0].blockType === "detail_layout" ? parseDetailLayout(blocks[0].content) : null;
+        if (!page || !layout || page.template !== `detail:${layout.kind}` || page.slug !== detailLayoutSlug(layout.kind) || page.status !== "draft") throw new Error("CONFLICT");
+        if (!page.updatedBy || page.updatedBy === req.user!.id || page.createdBy === req.user!.id) throw new Error("REVIEWER_REQUIRED");
+        const digest = createHash("sha256").update(JSON.stringify({ pageId: page.id, updatedAt: page.updatedAt.toISOString(), layout })).digest("hex");
+        if (digest !== selection.digest) throw new Error("CONFLICT");
+        const [last] = await tx.select().from(websitePageVersionsTable).where(eq(websitePageVersionsTable.pageId, page.id)).orderBy(desc(websitePageVersionsTable.versionNumber)).limit(1);
+        const now = new Date();
+        const [version] = await tx.insert(websitePageVersionsTable).values({ pageId: page.id, versionNumber: (last?.versionNumber ?? 0) + 1,
+          blocksSnapshot: blocks, metaSnapshot: { title: page.title, template: page.template, approval: { digest, authorId: page.updatedBy, reviewerId: req.user!.id } },
+          publishedAt: now, createdBy: req.user!.id }).returning();
+        await tx.update(websitePagesTable).set({ status: "published", robotsIndex: false, publishedAt: now }).where(eq(websitePagesTable.id, page.id));
+        receipts.push({ pageId: page.id, version: version.versionNumber, kind: layout.kind });
+      }
+      return receipts;
+    });
+    for (const receipt of result) invalidatePublicCatalogRenderCache({ detailTemplate: receipt.kind });
+    res.json({ receipts: result });
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : "UNAVAILABLE";
+    res.status(reason === "REVIEWER_REQUIRED" ? 403 : reason === "CONFLICT" ? 409 : 503).json({ error: reason === "REVIEWER_REQUIRED" ? "A different administrator must review and approve" : "Publication failed; refresh and review again" });
+  }
+});
+
+// These internal layout records must not be edited/published through legacy generic CRUD.
+router.use(["/website/pages", "/website/page-blocks", "/website/page-versions"], ...adminOnly, async (req, res, next) => {
+  if (!["POST", "PUT", "PATCH", "DELETE"].includes(req.method)) { next(); return; }
+  const body = req.body ?? {};
+  const proposed = [body, body.meta, body.metaSnapshot].filter(Boolean);
+  if (proposed.some(x => String(x.template ?? "").startsWith("detail:") || String(x.slug ?? "").startsWith("_detail-layout-")) || body.blockType === "detail_layout") {
+    res.status(409).json({ error: "Use the reviewed detail-template workflow" }); return;
+  }
+  try {
+    const id = Number(req.path.split("/")[1]);
+    const ids = [Number(body.pageId)].filter(Number.isSafeInteger);
+    if (Number.isSafeInteger(id) && id > 0) {
+      if (req.baseUrl.endsWith("/pages")) ids.push(id);
+      else {
+        const table = req.baseUrl.endsWith("/page-blocks") ? websitePageBlocksTable : websitePageVersionsTable;
+        const [row] = await db.select({ pageId: table.pageId }).from(table).where(eq(table.id, id));
+        if (row) ids.push(row.pageId);
+      }
+    }
+    if (ids.length) {
+      const pages = await db.select({ template: websitePagesTable.template, slug: websitePagesTable.slug }).from(websitePagesTable).where(inArray(websitePagesTable.id, ids));
+      if (pages.some(p => p.template.startsWith("detail:") || p.slug.startsWith("_detail-layout-"))) {
+        res.status(409).json({ error: "Use the reviewed detail-template workflow" }); return;
+      }
+    }
+    next();
+  } catch { res.status(503).json({ error: "Template boundary unavailable" }); }
+});
 
 const VALID_BLOCK_TYPES = new Set([
   "hero", "rich_text", "stats_strip", "feature_cards", "icon_cards",
@@ -141,6 +250,41 @@ const invalidateArticlePublicationCaches = (id: number): void => {
   invalidatePublicWebDiscoveryCache({ entityType: "article", entityId: id });
 };
 
+const createPageDraft: RequestHandler = async (req, res): Promise<void> => {
+  let draft: ReturnType<typeof parseWebsitePageDraft>;
+  try { draft = parseWebsitePageDraft(req.body); }
+  catch (error) { res.status(400).json({ error: error instanceof Error ? error.message : "Invalid page draft" }); return; }
+  try {
+    const page = await db.transaction(async tx => {
+      const [created] = await tx.insert(websitePagesTable).values({ ...draft.page, createdBy: req.user?.id }).returning();
+      if (draft.blocks.length) await tx.insert(websitePageBlocksTable).values(draft.blocks.map(block => ({ ...block, pageId: created.id })));
+      return created;
+    });
+    invalidatePagePublicationCaches(page.id);
+    res.status(201).json(page);
+  } catch (error) {
+    const cause = error as { code?: string; cause?: { code?: string } };
+    if (cause.code === "23505" || cause.cause?.code === "23505") {
+      res.status(409).json({ error: "A page already uses this address" }); return;
+    }
+    res.status(500).json({ error: "Page draft could not be created" });
+  }
+};
+
+router.get("/website/catalog-preview", ...adminOnly, async (req, res): Promise<void> => {
+  res.setHeader("Cache-Control", "private, no-store");
+  res.setHeader("X-Robots-Tag", "noindex, nofollow");
+  let preview: ReturnType<typeof parseWebsiteCatalogPreview>;
+  try { preview = parseWebsiteCatalogPreview(req.query); }
+  catch { res.status(400).json({ error: "Invalid catalogue preview settings" }); return; }
+  try {
+    // Exactly the same bounded public projection used by published CMS blocks.
+    const items = await readPublicCatalogBlockItems(preview.config, preview.locale);
+    res.json({ items });
+  } catch { res.status(503).json({ error: "Catalogue preview is temporarily unavailable" }); }
+});
+
+router.post("/website/pages/drafts", ...adminOnly, createPageDraft);
 registerCrud("/website/pages", websitePagesTable, websitePagesTable.id, websitePagesTable.sortOrder, invalidatePagePublicationCaches);
 registerCrud("/website/page-versions", websitePageVersionsTable, websitePageVersionsTable.id);
 registerCrud("/website/page-blocks", websitePageBlocksTable, websitePageBlocksTable.id, websitePageBlocksTable.sortOrder);
