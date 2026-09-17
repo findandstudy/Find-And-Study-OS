@@ -1175,7 +1175,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/website.ts",
-      "sha256": "e321e6169c2670a6682729f8a4615b6b875afc3d0d66191c6caa420eaedfea9f",
+      "sha256": "65a6747228b0e77132e90dc18b98e51e57eef2aa027c762c32d0cb307f1e1518",
       "routeRegistrations": 38,
       "requireAuth": 2,
       "requireRole": 1,

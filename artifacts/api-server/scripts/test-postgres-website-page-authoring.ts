@@ -36,8 +36,8 @@ test("Pages draft and preview HTTP routes enforce roles and use current PostgreS
   const origin = `http://127.0.0.1:${address.port}`;
   let universityId: number | null = null;
   const layoutIds: number[] = [];
-  const request = (path: string, role?: string, body?: unknown) => fetch(`${origin}/api${path}`, {
-    method: body ? "POST" : "GET",
+  const request = (path: string, role?: string, body?: unknown, method = body ? "POST" : "GET") => fetch(`${origin}/api${path}`, {
+    method,
     headers: { ...(role ? { "x-fixture-role": role } : {}), ...(body ? { "Content-Type": "application/json" } : {}) },
     body: body ? JSON.stringify(body) : undefined,
   });
@@ -91,7 +91,19 @@ test("Pages draft and preview HTTP routes enforce roles and use current PostgreS
     assert.equal((await request("/website/detail-layouts/publish", "super_admin", approval)).status, 403, "impersonated reviewer denied");
     await pool.query("UPDATE sessions SET sess=sess::jsonb - 'originalSid' WHERE sid=$1", [fixtureSid("super_admin")]);
     assert.equal((await request(`/website/pages/${entry.pageId}/publish`, "super_admin", {})).status, 409, "legacy publish bypass denied");
+    const layoutBlock = (await pool.query("SELECT id FROM website_page_blocks WHERE page_id=$1", [entry.pageId])).rows[0];
+    const encodeId = (id: number) => String(id).split("").map(c => `%${c.charCodeAt(0).toString(16)}`).join("");
+    for (const path of [`/WEBSITE/PAGES/${entry.pageId}`, `/website/PaGeS/${entry.pageId}`, `/website/PAGE-BLOCKS/${layoutBlock.id}`, `/website/pages/${encodeId(entry.pageId)}`, `/website/page-blocks/${encodeId(layoutBlock.id)}`]) {
+      for (const method of ["PUT", "DELETE"]) {
+        assert.equal((await request(path, "super_admin", { title: "bypass attempt" }, method)).status, 409, `${method} ${path} must not bypass review`);
+      }
+    }
+    assert.equal((await request(`/WEBSITE/PAGES/${entry.pageId}/PUBLISH`, "super_admin", {})).status, 409);
+    assert.equal((await request(`/website/pages/${encodeId(entry.pageId)}/publish`, "super_admin", {})).status, 409);
     assert.equal((await request("/website/page-versions", "super_admin", { pageId: entry.pageId, versionNumber: 1 })).status, 409);
+    for (const path of ["/website/pages", "/website/page-blocks", "/website/page-versions"]) {
+      assert.equal((await request(path, "super_admin", [{ pageId: entry.pageId, template: "detail:city", blockType: "detail_layout" }])).status, 400, "generic bulk insertion is rejected");
+    }
     assert.equal((await request("/website/detail-layouts/publish", "super_admin", { ...approval, selections: [{ pageId: entry.pageId, digest: "a".repeat(64) }] })).status, 409);
     assert.equal((await request("/website/detail-layouts/publish", "super_admin", approval)).status, 200);
     assert.equal((await request("/website/detail-layouts/publish", "super_admin", approval)).status, 409, "replay cannot create another publication");

@@ -146,17 +146,23 @@ router.post("/website/detail-layouts/publish", ...adminOnly, async (req, res) =>
 router.use(["/website/pages", "/website/page-blocks", "/website/page-versions"], ...adminOnly, async (req, res, next) => {
   if (!["POST", "PUT", "PATCH", "DELETE"].includes(req.method)) { next(); return; }
   const body = req.body ?? {};
+  if (typeof body !== "object" || Array.isArray(body)) {
+    res.status(400).json({ error: "A single object is required" }); return;
+  }
   const proposed = [body, body.meta, body.metaSnapshot].filter(Boolean);
   if (proposed.some(x => String(x.template ?? "").startsWith("detail:") || String(x.slug ?? "").startsWith("_detail-layout-")) || body.blockType === "detail_layout") {
     res.status(409).json({ error: "Use the reviewed detail-template workflow" }); return;
   }
   try {
-    const id = Number(req.path.split("/")[1]);
+    // Match Express's single decoding of route parameters before resolving ownership.
+    const id = Number(decodeURIComponent(req.path.split("/")[1] ?? ""));
     const ids = [Number(body.pageId)].filter(Number.isSafeInteger);
     if (Number.isSafeInteger(id) && id > 0) {
-      if (req.baseUrl.endsWith("/pages")) ids.push(id);
+      // Express route matching is case-insensitive and accepts trailing slashes.
+      const basePath = req.baseUrl.toLowerCase().replace(/\/+$/, "");
+      if (basePath.endsWith("/pages")) ids.push(id);
       else {
-        const table = req.baseUrl.endsWith("/page-blocks") ? websitePageBlocksTable : websitePageVersionsTable;
+        const table = basePath.endsWith("/page-blocks") ? websitePageBlocksTable : websitePageVersionsTable;
         const [row] = await db.select({ pageId: table.pageId }).from(table).where(eq(table.id, id));
         if (row) ids.push(row.pageId);
       }
