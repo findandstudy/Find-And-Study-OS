@@ -15,6 +15,7 @@ import { formatTimeAgo, getLocale } from "@/lib/i18n";
 import { OfferDeadlinesWidget } from "@/components/OfferDeadlinesWidget";
 import { useSeason } from "@/contexts/SeasonContext";
 import { localizeNotification } from "@/lib/notificationLocalization";
+import { dashboardActivityLabels, dashboardActivityHref } from "@/lib/dashboardLocalization";
 
 const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
@@ -319,15 +320,8 @@ export default function StaffDashboard() {
                 <p className="text-sm text-muted-foreground">{t("staffDash.noUpdates")}</p>
               ) : (
                 latestUpdates.map((u: any, i: number) => {
-                  const detailCollection = u.resource === "application" ? "applications"
-                    : u.resource === "student" ? "students"
-                    : u.resource === "lead" ? "leads"
-                    : null;
-                  const detailHref = detailCollection && u.resourceId
-                    ? `/staff/${detailCollection}/${u.resourceId}`
-                    : null;
-                  const actionLabel = (u.action || "").replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase());
-                  const resourceLabel = (u.resource || "").replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase());
+                  const detailHref = dashboardActivityHref("staff", u.resource, u.resourceId);
+                  const { actionLabel, resourceLabel } = dashboardActivityLabels(u.action || "", u.resource || "", t);
                   const changes = u.changes && typeof u.changes === "object"
                     ? Object.entries(u.changes)
                         .filter(([k]) => !["id", "updatedAt"].includes(k))

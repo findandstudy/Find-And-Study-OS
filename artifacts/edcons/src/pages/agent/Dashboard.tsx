@@ -25,6 +25,7 @@ import { useSeason } from "@/contexts/SeasonContext";
 import { usePipelineStages } from "@/hooks/use-pipeline-stages";
 import SignContract from "@/pages/agent/SignContract";
 import { localizeNotification } from "@/lib/notificationLocalization";
+import { dashboardActivityLabels, dashboardActivityHref } from "@/lib/dashboardLocalization";
 import { UpcomingFollowUpsWidget } from "@/components/UpcomingFollowUpsWidget";
 
 const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
@@ -238,12 +239,8 @@ export default function AgentDashboard() {
                 <p className="text-sm text-muted-foreground">{t("agentDash.noUpdates")}</p>
               ) : (
                 latestUpdates.map((u: any, i: number) => {
-                  const resourcePath = u.resource === "application" ? "applications" : u.resource === "student" ? "students" : u.resource === "lead" ? "leads" : null;
-                  const detailHref = resourcePath && Number.isSafeInteger(Number(u.resourceId))
-                    ? `/agent/${resourcePath}/${u.resourceId}`
-                    : null;
-                  const actionLabel = (u.action || "").replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase());
-                  const resourceLabel = (u.resource || "").replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase());
+                  const detailHref = dashboardActivityHref("agent", u.resource, u.resourceId);
+                  const { actionLabel, resourceLabel } = dashboardActivityLabels(u.action || "", u.resource || "", t);
                   const changeSource = u.changes ?? u.data;
                   const changes = changeSource ? Object.entries(changeSource).filter(([k]) => !["id", "updatedAt"].includes(k)).slice(0, 2).map(([k, v]) => `${k}: ${typeof v === "object" ? JSON.stringify(v) : v}`).join(", ") : "";
                   const Wrapper = detailHref ? Link : "div" as any;
