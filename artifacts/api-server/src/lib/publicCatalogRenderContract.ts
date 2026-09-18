@@ -305,6 +305,7 @@ type PublicCatalogRenderModelData =
         versionNumber: number;
         publishedAt: string;
         blocks: PublicPageBlock[];
+        seo?: Record<string, string | boolean>;
       };
     };
 
@@ -758,6 +759,9 @@ function renderPublicPageBlock(block: PublicPageBlock, index: number): string {
     return `<section class="mx-auto grid max-w-6xl gap-6 px-4 py-10 text-center sm:grid-cols-2 lg:grid-cols-4">${stats}</section>`;
   }
   if (block.blockType === "catalog_grid") {
+    const layout = content.layout === "list" ? "grid grid-cols-1 gap-5" : content.layout === "carousel"
+      ? "flex gap-5 overflow-x-auto snap-x snap-mandatory pb-4 [&>article]:min-w-[min(85vw,320px)] [&>article]:snap-start"
+      : Number(content.columns) === 2 ? "grid gap-5 sm:grid-cols-2" : Number(content.columns) === 4 ? "grid gap-5 sm:grid-cols-2 lg:grid-cols-4" : "grid gap-5 sm:grid-cols-2 lg:grid-cols-3";
     const title = pageText(content.title, 500);
     const subtitle = pageText(content.subtitle, 2_000);
     const source = pageText(content.source, 32);
@@ -769,7 +773,7 @@ function renderPublicPageBlock(block: PublicPageBlock, index: number): string {
       const card = `<h3 class="text-lg font-bold">${escapeHtml(itemTitle)}</h3>${description ? `<p class="mt-2 text-muted-foreground">${escapeHtml(description)}</p>` : ""}`;
       return `<article class="rounded-2xl border border-border bg-card p-5">${href ? `<a class="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2" href="${escapeHtml(href)}">${card}</a>` : card}</article>`;
     }).join("");
-    return `<section class="mx-auto max-w-6xl px-4 py-12" aria-labelledby="${headingId}" data-catalog-source="${escapeHtml(source)}"><h2 id="${headingId}" class="text-3xl font-bold">${escapeHtml(title)}</h2>${subtitle ? `<p class="mt-3 text-muted-foreground">${escapeHtml(subtitle)}</p>` : ""}<div class="mt-7 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">${cards}</div></section>`;
+    return `<section class="mx-auto max-w-6xl px-4 py-12" aria-labelledby="${headingId}" data-catalog-source="${escapeHtml(source)}"><h2 id="${headingId}" class="text-3xl font-bold">${escapeHtml(title)}</h2>${subtitle ? `<p class="mt-3 text-muted-foreground">${escapeHtml(subtitle)}</p>` : ""}<div class="mt-7 ${layout}"${content.layout === "carousel" ? ' tabindex="0"' : ""}>${cards}</div></section>`;
   }
   if (block.blockType === "team_grid") {
     const title = pageText(content.title, 500);

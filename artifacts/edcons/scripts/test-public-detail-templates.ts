@@ -84,7 +84,8 @@ test("public CMS pages render hydrated catalogue cards in the SPA fallback", () 
 test("public catalogue blocks keep mobile and keyboard-accessible semantics", () => {
   assert.match(publicPage, /aria-labelledby=\{headingId\}/);
   assert.match(publicPage, /id=\{headingId\}/);
-  assert.match(publicPage, /sm:grid-cols-2 lg:grid-cols-3/);
+  assert.match(publicPage, /catalogLayoutClass\(content\)/);
+  assert.match(readFileSync(new URL("../src/lib/website/catalogPresentation.ts", import.meta.url), "utf8"), /sm:grid-cols-2 lg:grid-cols-3/);
   assert.match(publicPage, /focus-visible:ring-2 focus-visible:ring-primary/);
   assert.match(publicPage, /aria-busy=\"true\"/);
 });

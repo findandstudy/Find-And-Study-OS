@@ -45,11 +45,17 @@ export function parseWebsiteCatalogPreview(input: Record<string, unknown>) {
   const source = parsePublicCatalogPageBlockSource(input.source);
   if (!source || typeof input.source !== "string") throw new Error("Invalid catalogue source");
   const rawLimit = input.limit ?? "6";
-  if (typeof rawLimit !== "string" || !/^\d{1,2}$/.test(rawLimit)) throw new Error("Invalid preview limit");
-  const limit = Number(rawLimit);
-  if (limit < 1 || limit > 12) throw new Error("Preview limit must be between 1 and 12");
+  if (typeof rawLimit !== "string" || !/^\d{1,6}$/.test(rawLimit) || Number(rawLimit) < 1) throw new Error("Preview limit must be a positive integer");
+  const limit = Math.min(12, Number(rawLimit)); // Legacy saved values are bounded, not rejected.
+  const ids: Record<string, number> = {};
+  for (const key of ["countryId", "cityId", "universityId"]) {
+    if (input[key] === undefined || input[key] === "") continue;
+    if (typeof input[key] !== "string" || !/^[1-9]\d{0,8}$/.test(input[key] as string)) throw new Error(`Invalid ${key}`);
+    ids[key] = Number(input[key]);
+  }
   return {
-    config: { source, limit, country: text(input.country ?? "", 120), city: text(input.city ?? "", 120) },
+    config: { source, limit, country: text(input.country ?? "", 120), city: text(input.city ?? "", 120), ...ids,
+      degree: text(input.degree ?? "", 120), language: text(input.language ?? "", 120), institutionType: text(input.institutionType ?? "", 120) },
     locale: authoringLocale(input.locale ?? "en"),
   };
 }

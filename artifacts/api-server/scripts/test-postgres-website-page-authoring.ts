@@ -14,6 +14,10 @@ test("Pages draft and preview HTTP routes enforce roles and use current PostgreS
   const { pool } = await import("@workspace/db");
   closePool = () => pool.end();
   const { default: router } = await import("../src/routes/website");
+  const { countryMatches, catalogName } = await import("../src/lib/websiteCatalogFilters");
+  for (const alias of ["Turkey", "Türkiye", "Turkiye", "TR", "türkiye"]) assert.equal(countryMatches(alias, { name: "Turkey", code: "TR" }), true);
+  assert.equal(countryMatches("GB", { name: "United Kingdom", code: "GB" }), true);
+  assert.equal(catalogName("İstanbul"), catalogName("Istanbul"));
   const identity = await pool.query("SELECT current_database() AS name, inet_server_addr()::text AS address, inet_server_port() AS port");
   assert.deepEqual(identity.rows[0], { name: "fasos_apply_local", address: "127.0.0.1/32", port: 5433 });
   const slug = `authoring-fixture-${process.pid}`;
@@ -35,6 +39,8 @@ test("Pages draft and preview HTTP routes enforce roles and use current PostgreS
   assert.ok(address && typeof address !== "string");
   const origin = `http://127.0.0.1:${address.port}`;
   let universityId: number | null = null;
+  let countryId: number | null = null;
+  let inactiveGlobalId: number | null = null;
   const layoutIds: number[] = [];
   const request = (path: string, role?: string, body?: unknown, method = body ? "POST" : "GET") => fetch(`${origin}/api${path}`, {
     method,
@@ -47,6 +53,7 @@ test("Pages draft and preview HTTP routes enforce roles and use current PostgreS
     for (const [role, status] of [[undefined, 401], ["student", 403], ["agent", 403], ["staff", 403]] as const) {
       assert.equal((await request("/website/pages/drafts", role, draft)).status, status);
       assert.equal((await request("/website/catalog-preview?source=universities", role)).status, status);
+      assert.equal((await request("/website/catalog-filters?source=universities", role)).status, status);
     }
     const attempts = await Promise.all([request("/website/pages/drafts", "admin", draft), request("/website/pages/drafts", "admin", draft)]);
     assert.deepEqual(attempts.map(response => response.status).sort(), [201, 409]);
@@ -54,15 +61,29 @@ test("Pages draft and preview HTTP routes enforce roles and use current PostgreS
     assert.equal(created.status, "draft");
     assert.equal(created.robotsIndex, false);
     assert.equal(created.createdBy, 2147483000);
+    assert.equal((await request(`/website/pages/${slug}`)).status, 404, "anonymous drafts are hidden");
+    assert.equal((await request(`/website/pages/${created.id}`)).status, 401, "numeric authoring remains private");
     const blocks = await pool.query("SELECT block_type, content FROM website_page_blocks WHERE page_id=$1 ORDER BY sort_order", [created.id]);
     assert.deepEqual(blocks.rows.map(row => row.block_type), ["hero", "catalog_grid"]);
     assert.equal(blocks.rows[1].content.source, "universities");
     assert.equal(blocks.rows[1].content.items, undefined);
     assert.equal((await request("/website/pages/drafts", "admin", { ...draft, slug: "programs" })).status, 400);
     assert.equal((await request("/website/pages/drafts", "admin", { ...draft, status: "published" })).status, 400);
-    assert.equal((await request("/website/catalog-preview?source=universities&limit=13", "admin")).status, 400);
+    assert.equal((await request("/website/catalog-preview?source=universities&limit=66", "admin")).status, 200);
+    countryId = (await pool.query("INSERT INTO countries(name,code,is_active) VALUES ($1,'AF',true) RETURNING id", [country])).rows[0].id;
     const inserted = await pool.query("INSERT INTO universities(name,country,university_type,is_active) VALUES ('Authoring Before',$1,'Private',true) RETURNING id", [country]);
     universityId = inserted.rows[0].id;
+    const definitions = await (await request("/website/catalog-filters?source=universities&locale=tr", "admin")).json();
+    assert.deepEqual(definitions.map((f: any) => f.key), ["countryId", "cityId", "institutionType"]);
+    assert.ok(definitions[0].options.some((o: any) => o.id === String(countryId)));
+    assert.deepEqual((await (await request("/website/catalog-filters?source=cities", "admin")).json()).map((f: any) => f.key), ["countryId"]);
+    assert.deepEqual(await (await request("/website/catalog-filters?source=destinations", "admin")).json(), []);
+    const invalidFilter = await request("/website/catalog-preview?source=universities&countryId=NaN", "admin");
+    assert.equal(invalidFilter.status, 400);
+    assert.equal((await invalidFilter.json()).error, "Invalid countryId");
+    const byId = await (await request(`/website/catalog-preview?source=universities&countryId=${countryId}`, "admin")).json();
+    assert.deepEqual(byId.items.map((i: any) => i.id), [universityId]);
+    assert.deepEqual((await (await request("/website/catalog-preview?source=universities&countryId=999999999", "admin")).json()).items, []);
     const previewPath = `/website/catalog-preview?source=universities&locale=ar&country=${encodeURIComponent(country)}`;
     const first = await request(previewPath, "admin");
     assert.equal(first.status, 200);
@@ -75,6 +96,36 @@ test("Pages draft and preview HTTP routes enforce roles and use current PostgreS
     assert.equal(current.items[0].title, "Authoring After");
     assert.match(current.items[0].canonicalPath, /^\/ar\/universities\/authoring-after-\d+$/);
     assert.equal((await pool.query("SELECT count(*)::int AS count FROM website_page_versions WHERE page_id=$1", [created.id])).rows[0].count, 0);
+
+    // Real publication path, immutable snapshots, legacy slash slugs, locale fallback.
+    await pool.query("INSERT INTO website_page_blocks(page_id,block_type,content,sort_order) VALUES ($1,'global_block','{}',2)", [created.id]);
+    inactiveGlobalId = (await pool.query("INSERT INTO website_global_components(name,slug,component_type,content,is_active) VALUES ('Inactive fixture',$1,'cta_banner','{\"title\":\"Must not appear\"}',false) RETURNING id", [slug])).rows[0].id;
+    await pool.query("INSERT INTO website_page_blocks(page_id,block_type,content,sort_order) VALUES ($1,'global_block',$2::jsonb,3)", [created.id, JSON.stringify({ globalComponentId: inactiveGlobalId })]);
+    await pool.query("UPDATE website_pages SET slug=$2,og_title='Published OG',robots_follow=false WHERE id=$1", [created.id, `/${slug}`]);
+    assert.equal((await request(`/website/pages/${created.id}/publish`, "admin", {})).status, 200);
+    const published = await request(`/website/pages/${slug}?locale=en`);
+    assert.equal(published.status, 200);
+    const publishedBody = await published.json();
+    assert.equal(publishedBody.data.blocks.length, 2, "unbound and inactive globals emit no empty section");
+    assert.equal(publishedBody.data.seo.ogTitle, "Published OG");
+    assert.equal(publishedBody.data.seo.robotsFollow, false);
+    assert.equal((await pool.query("SELECT count(*)::int AS n FROM website_pages WHERE slug IN ('about','/about')")).rows[0].n, 0, "isolated fixture requires an unused About route");
+    await pool.query("UPDATE website_pages SET slug='/about' WHERE id=$1", [created.id]);
+    try {
+      const about = await request("/website/pages/about?locale=en");
+      assert.equal(about.status, 200);
+      assert.equal((await about.json()).meta.canonicalPath, "/en/about");
+    } finally { await pool.query("UPDATE website_pages SET slug=$2 WHERE id=$1", [created.id, `/${slug}`]); }
+    await pool.query("UPDATE website_page_blocks SET content='{\"title\":\"Unpublished draft\"}' WHERE page_id=$1 AND block_type='hero'", [created.id]);
+    assert.equal((await (await request(`/website/pages/${slug}`)).json()).data.blocks[0].content.title, draft.title);
+    const fallback = await (await request(`/website/pages/${slug}?locale=tr`)).json();
+    assert.equal(fallback.meta.indexable, false);
+    assert.deepEqual(fallback.meta.alternatePaths, {});
+    assert.equal((await request(`/website/pages/${created.id}/publish`, "admin", {})).status, 200);
+    assert.equal((await (await request(`/website/pages/${slug}`)).json()).data.blocks[0].content.title, "Unpublished draft");
+    assert.equal((await request(`/website/pages/${created.id}/unpublish`, "admin", {})).status, 200);
+    assert.equal((await request(`/website/pages/${slug}`)).status, 404);
+    await pool.query("UPDATE website_pages SET slug=$2 WHERE id=$1", [created.id, slug]);
 
     const { defaultDetailLayout } = await import("../src/lib/websiteDetailLayoutContract");
     const { readPublishedDetailLayout } = await import("../src/lib/websiteDetailLayouts");
@@ -118,8 +169,10 @@ test("Pages draft and preview HTTP routes enforce roles and use current PostgreS
     assert.deepEqual(await readPublishedDetailLayout("city"), changed);
   } finally {
     await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
-    await pool.query("DELETE FROM website_pages WHERE slug=$1", [slug]);
+    await pool.query("DELETE FROM website_pages WHERE slug IN ($1,$2)", [slug, `/${slug}`]);
     if (universityId !== null) await pool.query("DELETE FROM universities WHERE id=$1", [universityId]);
+    if (countryId !== null) await pool.query("DELETE FROM countries WHERE id=$1", [countryId]);
+    if (inactiveGlobalId !== null) await pool.query("DELETE FROM website_global_components WHERE id=$1", [inactiveGlobalId]);
     for (const id of layoutIds) await pool.query("DELETE FROM website_pages WHERE id=$1", [id]);
     for (const role of ["admin", "super_admin"]) await pool.query("DELETE FROM sessions WHERE sid=$1", [fixtureSid(role)]);
     await pool.end();

@@ -62,8 +62,11 @@ import { createHash } from "node:crypto";
 import { detailLayoutSlug, parseDetailLayout, readDetailLayoutDraft } from "../lib/websiteDetailLayouts";
 import { DETAIL_LAYOUT_KINDS } from "../lib/websiteDetailLayoutContract";
 import { getSession, getSessionId } from "../lib/replitAuth";
+import { readWebsitePublishedPage } from "../lib/websitePublishedPage";
+import { readWebsiteCatalogFilters } from "../lib/websiteCatalogFilters";
 
 const router = Router();
+router.get("/website/pages/:slug", readWebsitePublishedPage);
 const WEBSITE_ROLES = ["super_admin", "admin"] as const;
 const adminOnly = [requireAuth, requireRole(...WEBSITE_ROLES)] as const;
 
@@ -282,7 +285,7 @@ router.get("/website/catalog-preview", ...adminOnly, async (req, res): Promise<v
   res.setHeader("X-Robots-Tag", "noindex, nofollow");
   let preview: ReturnType<typeof parseWebsiteCatalogPreview>;
   try { preview = parseWebsiteCatalogPreview(req.query); }
-  catch { res.status(400).json({ error: "Invalid catalogue preview settings" }); return; }
+  catch (error) { res.status(400).json({ error: error instanceof Error ? error.message : "Invalid catalogue preview settings" }); return; }
   try {
     // Exactly the same bounded public projection used by published CMS blocks.
     const items = await readPublicCatalogBlockItems(preview.config, preview.locale);
@@ -290,6 +293,19 @@ router.get("/website/catalog-preview", ...adminOnly, async (req, res): Promise<v
   } catch { res.status(503).json({ error: "Catalogue preview is temporarily unavailable" }); }
 });
 
+router.get("/website/catalog-filters", ...adminOnly, async (req, res): Promise<void> => {
+  res.setHeader("Cache-Control", "private, no-store");
+  let parsed: ReturnType<typeof parseWebsiteCatalogPreview>;
+  try {
+    parsed = parseWebsiteCatalogPreview(req.query);
+  } catch (error) {
+    res.status(400).json({ error: error instanceof Error ? error.message : "Invalid filters" });
+    return;
+  }
+  try {
+    res.json(await readWebsiteCatalogFilters(parsed.config.source, parsed.locale, (parsed.config as { countryId?: number }).countryId));
+  } catch { res.status(503).json({ error: "Catalogue filters are temporarily unavailable" }); }
+});
 router.post("/website/pages/drafts", ...adminOnly, createPageDraft);
 registerCrud("/website/pages", websitePagesTable, websitePagesTable.id, websitePagesTable.sortOrder, invalidatePagePublicationCaches);
 registerCrud("/website/page-versions", websitePageVersionsTable, websitePageVersionsTable.id);

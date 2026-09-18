@@ -527,13 +527,15 @@ test("read model is on-demand, bounded, stale-while-revalidate, and detail index
   assert.doesNotMatch(readModel, /serviceFeeAmount|commissionRate|contactPerson/);
 });
 
-test("catalogue block filters normalize Unicode on both SQL operands", () => {
+test("catalogue block filters resolve Unicode aliases to stable catalogue IDs", () => {
   const readModel = readFileSync(
     new URL("../src/lib/publicCatalogRenderReadModel.ts", import.meta.url),
     "utf8",
   );
   assert.doesNotMatch(readModel, /toLocaleLowerCase\("en-US"\)/);
-  assert.match(readModel, /lower\(trim\(\$\{universitiesTable\.country\}\)\) = lower\(trim\(\$\{countryFilter\}\)\)/);
-  assert.match(readModel, /lower\(trim\(\$\{countriesTable\.name\}\)\) = lower\(trim\(\$\{countryFilter\}\)\)/);
-  assert.match(readModel, /lower\(trim\(\$\{citiesTable\.name\}\)\) = lower\(trim\(\$\{cityFilter\}\)\)/);
+  assert.match(readModel, /countryMatches\(config.country, c\)/);
+  assert.match(readModel, /catalogName\(c.name\) === catalogName\(config.city\)/);
+  assert.match(readModel, /eq\(countriesTable.id, country.id\)/);
+  assert.match(readModel, /eq\(citiesTable.id, city.id\)/);
+  assert.match(readModel, /city.countryId/);
 });

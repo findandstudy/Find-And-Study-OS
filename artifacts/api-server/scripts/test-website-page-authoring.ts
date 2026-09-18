@@ -32,9 +32,20 @@ test("preview accepts only bounded known sources, filters and the supported loca
   const result = parseWebsiteCatalogPreview({ source: "programs", country: " Türkiye ", locale: "ar", limit: "12" });
   assert.equal(result.config.country, "Türkiye");
   assert.equal(result.locale, "ar");
-  for (const bad of [{ source: "users" }, { source: ["programs"] }, { limit: "13" }, { limit: "0" }, { limit: "NaN" }, { limit: "1.5" }, { locale: "xx" }, { country: "x".repeat(121) }, { city: {} }]) {
+  assert.equal(parseWebsiteCatalogPreview({ source: "programs", limit: "66" }).config.limit, 12);
+  for (const bad of [{ source: "users" }, { source: ["programs"] }, { countryId: "NaN" }, { limit: "0" }, { limit: "NaN" }, { limit: "1.5" }, { locale: "xx" }, { country: "x".repeat(121) }, { city: {} }]) {
     assert.throws(() => parseWebsiteCatalogPreview({ source: "programs", ...bad }));
   }
+});
+test("preview keeps legacy strings and validates stable catalogue IDs independently", () => {
+  const { config } = parseWebsiteCatalogPreview({ source: "programs", country: "TR", city: "London", countryId: "1", cityId: "2", universityId: "3", degree: "Bachelor", language: "English", limit: "66" });
+  assert.equal(config.countryId, 1);
+  assert.equal(config.cityId, 2);
+  assert.equal(config.universityId, 3);
+  assert.equal(config.country, "TR");
+  assert.equal(config.city, "London");
+  assert.equal(config.limit, 12);
+  for (const countryId of ["-1", "1.2", ["1"], {}, "1000000000"]) assert.throws(() => parseWebsiteCatalogPreview({ source: "cities", countryId }));
 });
 test("authoring wiring preserves admin authorization, public read projection and atomic draft writes", () => {
   const routes = readFileSync(new URL("../src/routes/website.ts", import.meta.url), "utf8");

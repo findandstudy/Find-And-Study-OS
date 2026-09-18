@@ -1,6 +1,8 @@
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/hooks/use-i18n";
 import { useSeo } from "@/hooks/use-seo";
+import { useTemplatePage, useTemplatePageSeo } from "./useTemplatePage";
+import { Block } from "./PublicPage";
 import { useJsonLd, SITE_URL, SITE_NAME, ORG_SCHEMA } from "@/hooks/use-json-ld";
 import { ArrowRight, BookOpen, FileText, Globe2, ShieldCheck, Star, Users } from "lucide-react";
 import { motion } from "framer-motion";
@@ -8,7 +10,11 @@ import { Link } from "wouter";
 
 export default function Home() {
   const { t, lang, localePath } = useI18n();
-  useSeo({ title: t("seo.homeTitle"), description: t("seo.homeDesc"), lang });
+  const page = useTemplatePage("home", lang);
+  useSeo({ title: page?.meta.title || t("seo.homeTitle"), description: page?.meta.description || t("seo.homeDesc"), lang,
+    noindex: page ? !page.meta.indexable : false, alternates: page?.meta.alternatePaths,
+    canonical: typeof page?.data.seo?.canonicalUrl === "string" && page.data.seo.canonicalUrl ? page.data.seo.canonicalUrl : undefined });
+  useTemplatePageSeo(page);
   useJsonLd([
     ORG_SCHEMA,
     {
@@ -29,6 +35,8 @@ export default function Home() {
       publisher: { "@id": `${SITE_URL}/#organization` },
     },
   ]);
+
+  if (page) return <main data-public-page-version={page.data.versionNumber}>{page.data.blocks.map((block, index) => <Block key={`${block.blockType}-${index}`} block={block} index={index} />)}</main>;
 
   return (
     <>

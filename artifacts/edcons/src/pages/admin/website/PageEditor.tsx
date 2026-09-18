@@ -24,6 +24,7 @@ import { BLOCK_TYPES, getBlockTypeDef, getDefaultContent, type PageBlock, type B
 import { SUPPORTED_LANGUAGES, LANGUAGE_META } from "@/lib/i18n";
 import DOMPurify from "isomorphic-dompurify";
 import { CatalogBlockPreview } from "./CatalogBlockPreview";
+import { CatalogBlockFields } from "./CatalogBlockFields";
 
 const ALLOWED_TAGS = ["p", "br", "b", "i", "u", "strong", "em", "a", "ul", "ol", "li", "h1", "h2", "h3", "h4", "h5", "h6", "blockquote", "code", "pre", "span", "div", "img", "hr"];
 const ALLOWED_ATTRS = ["href", "target", "rel", "src", "alt", "class", "style"];
@@ -230,6 +231,9 @@ export default function PageEditor({ id }: { id: number }) {
 
   const publishMutation = useMutation({
     mutationFn: async () => {
+      if (blocks.some(b => b.blockType === "global_block" && !b.content.globalComponentId)) {
+        if (!window.confirm("An unbound Global Block will be skipped on the public page. Publish anyway?")) throw new Error("Publication cancelled");
+      }
       const payload: Record<string, unknown> = {
         blocks: editLocale === sourceLocale ? blocks.map((b, i) => ({ ...b, sortOrder: i })) : defaultBlocksRef.current.map((b, i) => ({ ...b, sortOrder: i })),
       };
@@ -685,10 +689,14 @@ export default function PageEditor({ id }: { id: number }) {
                 ) : (
                   <>
                     <BlockFieldEditor
-                      fields={selectedTypeDef?.fields || []}
+                      fields={selectedBlock.blockType === "catalog_grid" ? (selectedTypeDef?.fields || []).filter(f => !["country", "city", "limit"].includes(f.key)) : selectedTypeDef?.fields || []}
                       content={selectedBlock.content}
-                      onChange={(key, value) => updateBlockContent(selectedBlockIdx!, key, value)}
+                      onChange={(key, value) => {
+                        updateBlockContent(selectedBlockIdx!, key, value);
+                        if (selectedBlock.blockType === "catalog_grid" && key === "source") for (const filter of ["country", "city", "countryId", "cityId", "universityId", "degree", "language", "institutionType"]) updateBlockContent(selectedBlockIdx!, filter, "");
+                      }}
                     />
+                    {selectedBlock.blockType === "catalog_grid" && <CatalogBlockFields content={selectedBlock.content} locale={editLocale} onChange={(key, value) => updateBlockContent(selectedBlockIdx!, key, value)} />}
                     <AiAssistantPanel
                       context={Object.values(selectedBlock.content).filter(v => typeof v === "string").join(" ").slice(0, 500)}
                       locale={editLocale}

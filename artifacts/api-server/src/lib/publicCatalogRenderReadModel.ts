@@ -12,6 +12,7 @@ import {
   websiteBlogPostsTable,
   websitePagesTable,
   websitePageVersionsTable,
+  websiteGlobalComponentsTable,
 } from "@workspace/db";
 import { and, asc, desc, eq, gte, isNotNull, isNull, lte, ne, or, sql } from "drizzle-orm";
 import {
@@ -36,6 +37,7 @@ import type {
 import { parsePublicCatalogPageBlockSource } from "./publicCatalogRenderContract";
 import { readPublishedDetailLayout } from "./websiteDetailLayouts";
 import { DETAIL_LAYOUT_KINDS, type DetailLayoutKind } from "./websiteDetailLayoutContract";
+import { websiteCatalogTaxonomy, countryMatches, catalogName } from "./websiteCatalogFilters";
 import {
   readIndexableArticleIds,
   readIndexableProgramIds,
@@ -169,6 +171,8 @@ type PublicCatalogBlockConfig = {
   limit: number;
   country: string;
   city: string;
+  countryId?: number; cityId?: number; universityId?: number;
+  degree?: string; language?: string; institutionType?: string;
 };
 
 function publicCatalogBlockConfig(block: PublicPageBlock): PublicCatalogBlockConfig | null {
@@ -184,6 +188,12 @@ function publicCatalogBlockConfig(block: PublicPageBlock): PublicCatalogBlockCon
     limit,
     country: boundedString(block.content.country, 120).trim(),
     city: boundedString(block.content.city, 120).trim(),
+    countryId: Number(block.content.countryId) || undefined,
+    cityId: Number(block.content.cityId) || undefined,
+    universityId: Number(block.content.universityId) || undefined,
+    degree: boundedString(block.content.degree, 120),
+    language: boundedString(block.content.language, 120),
+    institutionType: boundedString(block.content.institutionType, 120),
   };
 }
 
@@ -204,17 +214,30 @@ export async function readPublicCatalogBlockItems(
   config: PublicCatalogBlockConfig,
   locale: ProgramSupportedLocale,
 ): Promise<PublicCatalogBlockItem[]> {
-  // Keep the caller's Unicode text intact and normalize both operands in SQL.
-  // JavaScript's locale-specific lowercasing can turn Turkish dotted-I values
-  // into a combining sequence that does not match PostgreSQL lower().
-  const countryFilter = config.country.trim();
-  const cityFilter = config.city.trim();
+  // Resolve legacy names against the canonical taxonomy before querying.
+  // Parameterized aliases preserve catalogue spelling, including Turkish I.
+  const needsTaxonomy = config.countryId || config.cityId || config.country || config.city;
+  const taxonomy = config.source !== "destinations" && needsTaxonomy ? await websiteCatalogTaxonomy(config.source, config.countryId) : null;
+  const matches = taxonomy?.countries.filter(c => config.countryId ? c.id === config.countryId : config.country && countryMatches(config.country, c)) || [];
+  const selectedCountry = matches.length === 1 ? matches[0] : null;
+  const cityMatches = taxonomy?.cities.filter(c => (!selectedCountry || c.countryId === selectedCountry.id) && (config.cityId ? c.id === config.cityId : config.city && catalogName(c.name) === catalogName(config.city))) || [];
+  const city = cityMatches.length === 1 ? cityMatches[0] : null;
+  const country = selectedCountry || (city ? taxonomy?.countries.find(c => c.id === city.countryId) : null);
+  if ((config.countryId && !country) || (config.cityId && !city)) return [];
+  const countryFilter = country?.name || "";
+  const universityCountryCondition = country ? sql`${universitiesTable.country} in (${sql.join(
+    [...new Set(taxonomy!.universities.filter(u => countryMatches(u.country, country)).map(u => u.country))].map(name => sql`${name}`).concat(sql`NULL`), sql`, `)})` : undefined;
+  const universityCityCondition = city ? sql`${universitiesTable.city} in (${sql.join(
+    [...new Set(taxonomy!.universities.filter(u => catalogName(u.city || "") === catalogName(city.name)).map(u => u.city))].map(name => sql`${name}`).concat(sql`NULL`), sql`, `)})` : undefined;
   if (config.source === "programs") {
     const policy = await getPublicCatalogPolicy();
     const conditions: any[] = [eq(programsTable.isActive, true)];
     addPublicCatalogConditions(conditions, policy);
-    if (countryFilter) conditions.push(sql`lower(trim(${universitiesTable.country})) = lower(trim(${countryFilter}))`);
-    if (cityFilter) conditions.push(sql`lower(trim(coalesce(${universitiesTable.city}, ''))) = lower(trim(${cityFilter}))`);
+    if (universityCountryCondition) conditions.push(universityCountryCondition);
+    if (universityCityCondition) conditions.push(universityCityCondition);
+    if (config.universityId) conditions.push(eq(universitiesTable.id, config.universityId));
+    if (config.degree) conditions.push(eq(programsTable.degree, config.degree));
+    if (config.language) conditions.push(eq(programsTable.language, config.language));
     const rows = await db
       .select({
         id: programsTable.id,
@@ -244,8 +267,9 @@ export async function readPublicCatalogBlockItems(
     const policy = await getPublicCatalogPolicy();
     const conditions: any[] = [];
     addPublicCatalogConditions(conditions, policy);
-    if (countryFilter) conditions.push(sql`lower(trim(${universitiesTable.country})) = lower(trim(${countryFilter}))`);
-    if (cityFilter) conditions.push(sql`lower(trim(coalesce(${universitiesTable.city}, ''))) = lower(trim(${cityFilter}))`);
+    if (universityCountryCondition) conditions.push(universityCountryCondition);
+    if (universityCityCondition) conditions.push(universityCityCondition);
+    if (config.institutionType) conditions.push(eq(universitiesTable.universityType, config.institutionType));
     const rows = await db
       .select({
         id: universitiesTable.id,
@@ -295,8 +319,8 @@ export async function readPublicCatalogBlockItems(
   }
 
   const conditions: any[] = [eq(citiesTable.isActive, true), eq(countriesTable.isActive, true)];
-  if (countryFilter) conditions.push(sql`lower(trim(${countriesTable.name})) = lower(trim(${countryFilter}))`);
-  if (cityFilter) conditions.push(sql`lower(trim(${citiesTable.name})) = lower(trim(${cityFilter}))`);
+  if (country) conditions.push(eq(countriesTable.id, country.id));
+  if (city) conditions.push(eq(citiesTable.id, city.id));
   const rows = await db
     .select({
       id: citiesTable.id,
@@ -325,12 +349,7 @@ async function hydratePublicCatalogBlocks(
   blocks: PublicPageBlock[],
   locale: ProgramSupportedLocale,
 ): Promise<PublicPageBlock[]> {
-  const configKey = (config: PublicCatalogBlockConfig): string => [
-    config.source,
-    config.limit,
-    config.country,
-    config.city,
-  ].join("|");
+  const configKey = (config: PublicCatalogBlockConfig): string => JSON.stringify(config);
   const configs = new Map<string, PublicCatalogBlockConfig>();
   for (const block of blocks) {
     const config = publicCatalogBlockConfig(block);
@@ -1439,10 +1458,10 @@ async function readArticleDetail(
   };
 }
 
-async function readPageDetail(
+export async function readPageDetail(
   route: Extract<PublicCatalogRenderRoute, { kind: "page_detail" }>,
 ): Promise<PublicCatalogRenderModel> {
-  const [page] = await db
+  const pages = await db
     .select({
       id: websitePagesTable.id,
       title: websitePagesTable.title,
@@ -1454,12 +1473,14 @@ async function readPageDetail(
     })
     .from(websitePagesTable)
     .where(and(
-      eq(websitePagesTable.slug, route.slug),
+      or(eq(websitePagesTable.slug, route.slug), eq(websitePagesTable.slug, `/${route.slug}`)),
       eq(websitePagesTable.status, "published"),
       isNotNull(websitePagesTable.publishedAt),
       lte(websitePagesTable.publishedAt, new Date()),
     ))
-    .limit(1);
+    .limit(2);
+  // Ambiguous legacy aliases must not select an arbitrary published page.
+  const page = pages.length === 1 ? pages[0] : null;
   if (!page || !page.publishedAt) {
     return {
       kind: "not_found",
@@ -1511,9 +1532,22 @@ async function readPageDetail(
   const sourceTitle = boundedString(metaSnapshot.title, 500).trim() || page.title;
   const sourceMetaTitle = boundedString(metaSnapshot.metaTitle, 500).trim() || page.metaTitle || "";
   const sourceMetaDescription = boundedString(metaSnapshot.metaDescription, 2_000).trim() || page.metaDescription || "";
-  const sourceBlocks = publicPageBlocks(version.blocksSnapshot);
+  const expandGlobals = async (snapshot: unknown) => {
+    if (!Array.isArray(snapshot) || snapshot.length > 64 || Buffer.byteLength(JSON.stringify(snapshot), "utf8") > 1_048_576) return [];
+    const globals = snapshot.filter(b => b?.blockType === "global_block" && b.isVisible !== false);
+    const ids = globals.map(b => Number(b.content?.globalComponentId)).filter(id => Number.isSafeInteger(id) && id > 0);
+    const rows = ids.length ? await db.select().from(websiteGlobalComponentsTable)
+      .where(and(eq(websiteGlobalComponentsTable.isActive, true), sql`${websiteGlobalComponentsTable.id} in (${sql.join(ids.map(id => sql`${id}`), sql`, `)})`)) : [];
+    return snapshot.flatMap(block => {
+      if (block?.blockType !== "global_block") return [block];
+      const component = rows.find(row => row.id === Number(block.content?.globalComponentId));
+      if (!component || block.isVisible === false) return [];
+      return [{ ...block, blockType: component.componentType, content: component.content }];
+    });
+  };
+  const sourceBlocks = publicPageBlocks(await expandGlobals(version.blocksSnapshot));
   const translatedTitle = boundedString(translationFields?.title, 500).trim();
-  const translatedBlocks = publicPageBlocks(translation?.blocks);
+  const translatedBlocks = publicPageBlocks(await expandGlobals(translation?.blocks));
   const hasPublishedTranslation = source || Boolean(translation && translatedTitle && translatedBlocks.length > 0);
   // A missing/partial locale must remain useful to a visitor: show the
   // canonical source-language snapshot as a visible fallback.  The
@@ -1544,7 +1578,7 @@ async function readPageDetail(
     entityId: page.id,
     locale: route.locale,
   });
-  const canonicalPath = seoState.canonicalPath || buildPublicWebCanonicalPath({
+  const canonicalPath = ["home", "about"].includes(route.slug) ? `/${route.locale}${route.slug === "home" ? "" : "/about"}` : seoState.canonicalPath || buildPublicWebCanonicalPath({
     entityType: "PAGE",
     entityId: page.id,
     locale: route.locale,
@@ -1565,6 +1599,10 @@ async function readPageDetail(
       versionNumber: version.versionNumber,
       publishedAt: version.publishedAt.toISOString(),
       blocks,
+      seo: Object.fromEntries(["canonicalUrl", "ogTitle", "ogDescription", "ogImageUrl", "twitterTitle", "twitterDescription", "twitterImageUrl", "robotsFollow"].flatMap(key => {
+        const value = metaSnapshot[key];
+        return typeof value === "string" || typeof value === "boolean" ? [[key, value]] : [];
+      })),
     },
   };
 }

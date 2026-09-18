@@ -9,6 +9,7 @@ import { SITE_NAME, SITE_URL, useJsonLd } from "@/hooks/use-json-ld";
 import { useSeo } from "@/hooks/use-seo";
 import type { Language } from "@/lib/i18n";
 import { sanitizePublicRichText } from "@/lib/publicHtmlSanitizer";
+import { catalogLayoutClass } from "@/lib/website/catalogPresentation";
 
 type PageBlock = {
   blockType: string;
@@ -17,7 +18,7 @@ type PageBlock = {
   sortOrder: number;
 };
 
-type PageResponse = {
+export type PageResponse = {
   data: {
     id: number;
     title: string;
@@ -25,6 +26,7 @@ type PageResponse = {
     versionNumber: number;
     publishedAt: string;
     blocks: PageBlock[];
+    seo?: Record<string, string | boolean>;
   };
   meta: {
     title: string;
@@ -99,7 +101,7 @@ function ActionLink({ href, label, secondary = false }: { href: unknown; label: 
   );
 }
 
-function Block({ block, index }: { block: PageBlock; index: number }) {
+export function Block({ block, index }: { block: PageBlock; index: number }) {
   const content = block.content;
   switch (block.blockType) {
     case "hero": {
@@ -147,7 +149,7 @@ function Block({ block, index }: { block: PageBlock; index: number }) {
             {sourceLabels[source] ? <span className="rounded-full border px-3 py-1 text-xs font-medium text-muted-foreground">{sourceLabels[source]} · live</span> : null}
           </div>
           {cards.length > 0 ? (
-            <div className="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+            <div className={`mt-8 ${catalogLayoutClass(content)}`} tabIndex={content.layout === "carousel" ? 0 : undefined} aria-label={text(content.title, 500)}>
               {cards.map((item, index) => {
                 const href = safeUrl(item.canonicalPath);
                 const card = <><h3 className="text-xl font-semibold">{text(item.title, 500)}</h3>{item.description ? <p className="mt-2 text-muted-foreground">{text(item.description)}</p> : null}</>;

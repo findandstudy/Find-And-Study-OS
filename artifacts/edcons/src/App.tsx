@@ -205,7 +205,7 @@ function LoginRedirect() {
 function InvalidLangRedirect({ segment, rest }: { segment: string; rest: string }) {
   const [, setLocation] = useLocation();
   useEffect(() => {
-    const path = rest ? `/en/${rest}` : `/en`;
+    const path = segment === "about" && !rest ? "/en/about" : rest ? `/en/${rest}` : `/en`;
     setLocation(path, { replace: true });
   }, [segment, rest, setLocation]);
   return <PageLoader />;

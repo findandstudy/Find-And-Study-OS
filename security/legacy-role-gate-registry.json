@@ -8,14 +8,14 @@
     "defaultEnforcement": "legacy_quarantine"
   },
   "totals": {
-    "routeRegistrations": 861,
+    "routeRegistrations": 863,
     "requireAuth": 767,
     "requireRole": 493,
     "requirePermission": 78,
     "requireScope": 0,
     "directRoleChecks": 32,
     "authOnlyRouteCandidates": 128,
-    "publicRouteCandidates": 172
+    "publicRouteCandidates": 173
   },
   "files": [
     {
@@ -1175,15 +1175,15 @@
     },
     {
       "path": "artifacts/api-server/src/routes/website.ts",
-      "sha256": "65a6747228b0e77132e90dc18b98e51e57eef2aa027c762c32d0cb307f1e1518",
-      "routeRegistrations": 38,
+      "sha256": "07f371b25ffc6c4f525384bcc771b476b4e42a9f7e495659d8770e8b4b7a46a9",
+      "routeRegistrations": 40,
       "requireAuth": 2,
       "requireRole": 1,
       "requirePermission": 0,
       "requireScope": 0,
       "directRoleChecks": 0,
       "authOnlyRouteCandidates": 0,
-      "publicRouteCandidates": 38,
+      "publicRouteCandidates": 39,
       "enforcement": "legacy_quarantine",
       "owner": "Platform Engineering",
       "note": "Route-local review required before corridor migration."
