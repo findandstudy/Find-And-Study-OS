@@ -36,7 +36,10 @@ test("all supported languages name both password visibility states", () => {
   const languageFiles = readdirSync(translationsDirectory)
     .filter((file) => file.endsWith(".json"))
     .sort();
-  assert.equal(languageFiles.length, 10);
+  // The product currently ships 23 supported locale packs, including the
+  // recently added Bengali, Portuguese, Nepali, Vietnamese, Korean,
+  // Ukrainian and Italian translations.
+  assert.equal(languageFiles.length, 23);
 
   for (const file of languageFiles) {
     const translation = JSON.parse(

@@ -1,6 +1,8 @@
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/hooks/use-i18n";
 import { useSeo } from "@/hooks/use-seo";
+import { useTemplatePage, useTemplatePageSeo } from "./useTemplatePage";
+import { Block } from "./PublicPage";
 import { useJsonLd, SITE_URL, SITE_NAME, ORG_SCHEMA } from "@/hooks/use-json-ld";
 import { Link } from "wouter";
 import { motion } from "framer-motion";
@@ -30,6 +32,7 @@ function getInitials(name: string): string {
 
 export default function About() {
   const { t, lang, localePath } = useI18n();
+  const page = useTemplatePage("about", lang);
 
   const { data: teamMembers = [] } = useQuery<TeamMember[]>({
     queryKey: ["cms-team-members", lang],
@@ -37,7 +40,10 @@ export default function About() {
     staleTime: 5 * 60 * 1000,
   });
 
-  useSeo({ title: t("seo.aboutTitle"), description: t("seo.aboutDesc"), lang });
+  useSeo({ title: page?.meta.title || t("seo.aboutTitle"), description: page?.meta.description || t("seo.aboutDesc"), lang,
+    noindex: page ? !page.meta.indexable : false, alternates: page?.meta.alternatePaths,
+    canonical: typeof page?.data.seo?.canonicalUrl === "string" && page.data.seo.canonicalUrl ? page.data.seo.canonicalUrl : undefined });
+  useTemplatePageSeo(page);
   useJsonLd([
     ORG_SCHEMA,
     {
@@ -67,6 +73,8 @@ export default function About() {
     { icon: Users, title: t("about.community"), desc: t("about.communityDesc") },
     { icon: Award, title: t("about.integrity"), desc: t("about.integrityDesc") },
   ];
+
+  if (page) return <main data-public-page-version={page.data.versionNumber}>{page.data.blocks.map((block, index) => <Block key={`${block.blockType}-${index}`} block={block} index={index} />)}</main>;
 
   return (
     <>

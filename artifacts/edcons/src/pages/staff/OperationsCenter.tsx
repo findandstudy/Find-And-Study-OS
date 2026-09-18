@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   customFetch,
   type PortalOperationsResponse,
@@ -7,7 +7,14 @@ import {
 import { ADMIN_ROLES } from "@workspace/roles";
 import { useAuth } from "@/hooks/use-auth";
 import { useI18n } from "@/hooks/use-i18n";
+import { useToast } from "@/hooks/use-toast";
 import type { OperationsQueueItem } from "@/lib/operationsQueue";
+import {
+  addDaysToDueDate,
+  canActOnTask,
+  taskIdFromQueueRow,
+  type OperationsTaskAction,
+} from "@/lib/operationsWorkActions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -170,9 +177,15 @@ function countBy<T>(rows: T[], read: (row: T) => string): Map<string, number> {
 function QueueTable({
   rows,
   empty,
+  isAdmin,
+  pendingAction,
+  onTaskAction,
 }: {
   rows: OperationsQueueItem[];
   empty: string;
+  isAdmin: boolean;
+  pendingAction: string | null;
+  onTaskAction: (row: OperationsQueueItem, action: OperationsTaskAction) => void;
 }) {
   if (rows.length === 0) {
     return (
@@ -184,7 +197,7 @@ function QueueTable({
   }
   return (
     <div className="overflow-x-auto rounded-xl border">
-      <table className="w-full min-w-[1080px] text-sm">
+      <table className="w-full min-w-[1240px] text-sm">
         <thead className="bg-muted/50 text-left text-xs text-muted-foreground">
           <tr>
             <th className="px-3 py-2.5 font-medium">Kimlik / kayıt</th>
@@ -194,55 +207,86 @@ function QueueTable({
             <th className="px-3 py-2.5 font-medium">Tarih</th>
             <th className="px-3 py-2.5 font-medium">Risk / engel</th>
             <th className="px-3 py-2.5 font-medium">Son hareket</th>
-            <th className="w-10 px-3 py-2.5" />
+            <th className="w-[190px] px-3 py-2.5 text-right">Aksiyon</th>
           </tr>
         </thead>
         <tbody className="divide-y">
-          {rows.map((row) => (
-            <tr key={row.id} className="align-top hover:bg-muted/25">
-              <td className="px-3 py-3">
-                <p className="max-w-[260px] font-medium">{row.identity}</p>
-                <div className="mt-1 flex gap-1.5">
-                  <Badge
-                    className={`border-0 text-[10px] ${sourceClass[row.source]}`}
+          {rows.map((row) => {
+            const taskId = taskIdFromQueueRow(row);
+            return (
+              <tr key={row.id} className="align-top hover:bg-muted/25">
+                <td className="px-3 py-3">
+                  <p className="max-w-[260px] font-medium">{row.identity}</p>
+                  <div className="mt-1 flex gap-1.5">
+                    <Badge
+                      className={"border-0 text-[10px] " + sourceClass[row.source]}
+                    >
+                      {row.source}
+                    </Badge>
+                    <Badge
+                      variant="outline"
+                      className={"text-[10px] " + severityClass[row.severity]}
+                    >
+                      {row.severity}
+                    </Badge>
+                  </div>
+                </td>
+                <td className="px-3 py-3">
+                  <Badge variant="outline">{row.state}</Badge>
+                </td>
+                <td className="max-w-[230px] px-3 py-3 font-medium">
+                  {row.nextAction}
+                </td>
+                <td className="px-3 py-3">{row.owner}</td>
+                <td className="whitespace-nowrap px-3 py-3 text-xs">
+                  {safeDate(row.dueAt)}
+                </td>
+                <td className="max-w-[220px] px-3 py-3 text-xs text-muted-foreground">
+                  {row.blocker}
+                </td>
+                <td className="whitespace-nowrap px-3 py-3 text-xs text-muted-foreground">
+                  {safeDate(row.lastActivityAt)}
+                </td>
+                <td className="px-3 py-3 text-right">
+                  {canActOnTask(row, isAdmin) && (
+                    <div className="flex flex-wrap justify-end gap-1">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 gap-1 px-2 text-xs text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800"
+                        onClick={() => onTaskAction(row, "complete")}
+                        disabled={pendingAction === row.id + ":complete"}
+                        title="Görevi tamamlandı olarak işaretle"
+                      >
+                        <CheckCircle2 className="size-3.5" />
+                        Tamamla
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 gap-1 px-2 text-xs text-amber-700 hover:bg-amber-50 hover:text-amber-800"
+                        onClick={() => onTaskAction(row, "snooze")}
+                        disabled={pendingAction === row.id + ":snooze"}
+                        title="Görevi 3 gün ertele"
+                      >
+                        <Clock3 className="size-3.5" />
+                        +3 gün
+                      </Button>
+                    </div>
+                  )}
+                  <a
+                    href={taskId !== null ? "/staff/tasks?taskId=" + taskId : row.href}
+                    aria-label="Kaydı aç"
+                    className="inline-flex rounded-md p-2 text-primary hover:bg-primary/10"
                   >
-                    {row.source}
-                  </Badge>
-                  <Badge
-                    variant="outline"
-                    className={`text-[10px] ${severityClass[row.severity]}`}
-                  >
-                    {row.severity}
-                  </Badge>
-                </div>
-              </td>
-              <td className="px-3 py-3">
-                <Badge variant="outline">{row.state}</Badge>
-              </td>
-              <td className="max-w-[230px] px-3 py-3 font-medium">
-                {row.nextAction}
-              </td>
-              <td className="px-3 py-3">{row.owner}</td>
-              <td className="whitespace-nowrap px-3 py-3 text-xs">
-                {safeDate(row.dueAt)}
-              </td>
-              <td className="max-w-[220px] px-3 py-3 text-xs text-muted-foreground">
-                {row.blocker}
-              </td>
-              <td className="whitespace-nowrap px-3 py-3 text-xs text-muted-foreground">
-                {safeDate(row.lastActivityAt)}
-              </td>
-              <td className="px-3 py-3 text-right">
-                <a
-                  href={row.href}
-                  aria-label="Kaydı aç"
-                  className="inline-flex rounded-md p-2 text-primary hover:bg-primary/10"
-                >
-                  <ArrowRight className="size-4" />
-                </a>
-              </td>
-            </tr>
-          ))}
+                    <ArrowRight className="size-4" />
+                  </a>
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>
@@ -252,6 +296,8 @@ function QueueTable({
 export default function OperationsCenter() {
   const { user } = useAuth(true);
   const { lang } = useI18n();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
   const tr = lang === "tr";
   const isAdmin = Boolean(user?.role && ADMIN_ROLES.includes(user.role));
   const [search, setSearch] = useState("");
@@ -262,6 +308,7 @@ export default function OperationsCenter() {
     "all",
   );
   const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [pendingAction, setPendingAction] = useState<string | null>(null);
 
   useEffect(() => {
     const timer = window.setTimeout(
@@ -400,6 +447,102 @@ export default function OperationsCenter() {
     }
   };
 
+  async function recordTaskAction(
+    row: OperationsQueueItem,
+    action: OperationsTaskAction,
+    taskId: number,
+  ): Promise<void> {
+    // Activity telemetry is best-effort and intentionally contains no student,
+    // partner or task title data. The task endpoint remains the source of truth.
+    try {
+      await customFetch("/api/activity/event", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          eventType: "operations.task_action",
+          route:
+            typeof window !== "undefined"
+              ? window.location.pathname
+              : "/staff/operations",
+          metadata: {
+            action,
+            taskId,
+            reasonCode: row.reasonCode,
+            source: row.source,
+          },
+        }),
+      });
+    } catch {
+      // A telemetry outage must never turn a successful task action into an
+      // apparent failure or cause the user to repeat a mutation.
+    }
+  }
+
+  async function handleTaskAction(
+    row: OperationsQueueItem,
+    action: OperationsTaskAction,
+  ): Promise<void> {
+    if (!canActOnTask(row, isAdmin)) return;
+    const taskId = taskIdFromQueueRow(row);
+    if (taskId === null) return;
+    if (
+      action === "complete" &&
+      !window.confirm(
+        tr
+          ? "Bu görevi tamamlandı olarak işaretlemek istiyor musunuz?"
+          : "Mark this task as completed?",
+      )
+    ) {
+      return;
+    }
+    const key = row.id + ":" + action;
+    setPendingAction(key);
+    try {
+      const snoozedDueDate = addDaysToDueDate(row.dueAt, 3);
+      if (action === "snooze" && !snoozedDueDate) {
+        toast({
+          title: tr ? "Görev ertelenemedi" : "Task could not be snoozed",
+          description: tr ? "Geçerli bir tarih bulunamadı." : "No valid due date was found.",
+          variant: "destructive",
+        });
+        return;
+      }
+      const body: Record<string, string> =
+        action === "complete"
+          ? { status: "done" }
+          : { dueDate: snoozedDueDate as string };
+      await customFetch("/api/tasks/" + taskId, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      void recordTaskAction(row, action, taskId);
+      toast({
+        title:
+          action === "complete"
+            ? tr
+              ? "Görev tamamlandı"
+              : "Task completed"
+            : tr
+              ? "Görev 3 gün ertelendi"
+              : "Task snoozed for 3 days",
+      });
+      await queryClient.invalidateQueries({
+        queryKey: ["operations-center", "work-items"],
+      });
+    } catch (error) {
+      const description =
+        error instanceof Error ? error.message : tr ? "İşlem başarısız." : "Action failed.";
+      toast({
+        title: tr ? "Görev güncellenemedi" : "Task was not updated",
+        description,
+        variant: "destructive",
+      });
+    } finally {
+      setPendingAction(null);
+    }
+  }
+
   if (loading && myRows.length === 0 && exceptionRows.length === 0) {
     return (
       <div className="space-y-4">
@@ -526,6 +669,9 @@ export default function OperationsCenter() {
             <CardContent>
               <QueueTable
                 rows={myRows}
+                isAdmin={isAdmin}
+                pendingAction={pendingAction}
+                onTaskAction={(row, action) => void handleTaskAction(row, action)}
                 empty={
                   tr
                     ? "Şu anda size atanmış acil bir iş yok."
@@ -616,6 +762,9 @@ export default function OperationsCenter() {
             <CardContent>
               <QueueTable
                 rows={exceptionRows}
+                isAdmin={isAdmin}
+                pendingAction={pendingAction}
+                onTaskAction={(row, action) => void handleTaskAction(row, action)}
                 empty={
                   tr
                     ? "Seçili filtrelerde açık istisna yok."

@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useLocation } from "wouter";
+import { inboxListFilters } from "@/lib/inboxListFilters";
+import { runInboxBulkBlock } from "@/lib/inboxBulkBlock";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEntityViewTracker } from "@/hooks/use-entity-view-tracker";
 import {
@@ -518,10 +520,29 @@ function InboxTab() {
   const [inboxSearch, setInboxSearch] = useState("");
   const [debouncedInboxSearch, setDebouncedInboxSearch] = useState("");
   const [assignedStaffId, setAssignedStaffId] = useState<number | null>(null);
+  const [filterAccountId, setFilterAccountId] = useState("");
+  const [assignmentMode, setAssignmentMode] = useState<"all" | "mine" | "unassigned">("all");
+  const [providerBlockEnabled, setProviderBlockEnabled] = useState(false);
+  useEffect(() => {
+    // Preserve old pinned "mine/unassigned" preferences in the new person filter.
+    if (tab === "mine" || tab === "unassigned") { setAssignmentMode(tab); setAssignedStaffId(null); setTab("all"); }
+  }, [tab]);
+  const [filterAccounts, setFilterAccounts] = useState<{ id: number; channel: string; displayName: string; isActive: boolean }[]>([]);
+  const [filterAccountsFailed, setFilterAccountsFailed] = useState(false);
+  useEffect(() => {
+    const controller = new AbortController();
+    void customFetch("/api/inbox/filter-accounts", { signal: controller.signal }).then((value: any) => { setFilterAccounts(value.accounts ?? []); setProviderBlockEnabled(value.providerBlockEnabled === true); }).catch(() => { if (!controller.signal.aborted) setFilterAccountsFailed(true); });
+    return () => controller.abort();
+  }, []);
   const [inboxStaff, setInboxStaff] = useState<InboxStaffOption[]>([]);
   const [inboxStaffLoading, setInboxStaffLoading] = useState(true);
   const [convs, setConvs] = useState<InboxConversation[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMoreConversations, setLoadingMoreConversations] = useState(false);
+  const [hasMoreConversations, setHasMoreConversations] = useState(false);
+  const inboxCursorRef = useRef<string | null>(null);
+  const inboxFilterKeyRef = useRef<string | null>(null);
+  const inboxAppendInFlightRef = useRef(false);
   const inboxRequestSequenceRef = useRef(0);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [detail, setDetail] = useState<InboxConversationDetailResponse | null>(null);
@@ -769,29 +790,83 @@ function InboxTab() {
       ? "stale"
       : liveStatus;
 
-  const fetchInbox = useCallback(async (options?: { background?: boolean }) => {
+  const fetchInbox = useCallback(async (options?: { background?: boolean; append?: boolean }) => {
     const background = options?.background === true;
+    const append = options?.append === true;
+    if (background && inboxAppendInFlightRef.current) return;
     const requestSequence = ++inboxRequestSequenceRef.current;
-    if (!background) setLoading(true);
+    const filterKey = JSON.stringify([tab, channel, sortOrder, showTests, debouncedInboxSearch, assignedStaffId, filterAccountId, assignmentMode]);
+    const queryChanged = inboxFilterKeyRef.current !== filterKey;
+    if (queryChanged) {
+      inboxFilterKeyRef.current = filterKey;
+      inboxCursorRef.current = null;
+      setSelectedIds(new Set());
+      setBulkConfirm(null);
+      setHasMoreConversations(false);
+      if (!background) setConvs([]);
+    }
+    const cursor = append ? inboxCursorRef.current : null;
+    if (append && !cursor) return;
+    if (append) {
+      inboxAppendInFlightRef.current = true;
+      setLoadingMoreConversations(true);
+    } else if (!background) {
+      setLoading(true);
+    }
     try {
-      const params = new URLSearchParams({ tab, order: sortOrder });
-      if (channel !== "all") params.set("channel", channel);
-      if (showTests) params.set("showTests", "true");
-      if (debouncedInboxSearch) params.set("search", debouncedInboxSearch);
-      if (assignedStaffId !== null) params.set("assignedToId", String(assignedStaffId));
-      const url = `/api/inbox/conversations?${params.toString()}`;
-      const res = await customFetch(url);
+      const params = inboxListFilters({ tab, channel, order: sortOrder, showTests, search: debouncedInboxSearch, assignedToId: assignedStaffId, channelAccountId: filterAccountId, cursor, assignment: assignmentMode });
+      const url = "/api/inbox/conversations?" + params.toString();
+      const res: any = await customFetch(url);
       if (requestSequence === inboxRequestSequenceRef.current) {
-        setConvs((res as any)?.data || []);
+        const incoming = Array.isArray(res?.data) ? res.data : [];
+        const responseCursor = typeof res?.nextCursor === "string" ? res.nextCursor : null;
+        // A background refresh replaces only the newest page. Preserve the
+        // cursor for already loaded older pages, otherwise “load more” would
+        // request page two again after every live update.
+        const hadOlderPages = inboxCursorRef.current !== null;
+        if (!background || queryChanged || !hadOlderPages) {
+          inboxCursorRef.current = responseCursor;
+        }
+        setHasMoreConversations((previous) =>
+          background && !queryChanged
+            ? Boolean(previous || res?.hasMore || inboxCursorRef.current)
+            : Boolean(res?.hasMore && inboxCursorRef.current),
+        );
+        if (append) {
+          setConvs((previous) => {
+            const seen = new Set(previous.map((conversation) => conversation.id));
+            return [...previous, ...incoming.filter((conversation: InboxConversation) => !seen.has(conversation.id))];
+          });
+        } else if (background && !queryChanged) {
+          setConvs((previous) => {
+            const fresh = new Map<number, InboxConversation>(incoming.map((conversation: InboxConversation) => [conversation.id, conversation] as const));
+            const merged = previous.map((conversation) => fresh.get(conversation.id) ?? conversation);
+            const existing = new Set(merged.map((conversation) => conversation.id));
+            return [...incoming, ...merged.filter((conversation) => !existing.has(conversation.id))];
+          });
+        } else {
+          setConvs(incoming);
+        }
       }
     } catch {
-      // A transient live-refresh failure must not blank an already usable
-      // inbox. Explicit/filter-changing loads retain the previous behavior.
-      if (!background && requestSequence === inboxRequestSequenceRef.current) setConvs([]);
+      if (!background && !append && requestSequence === inboxRequestSequenceRef.current) setConvs([]);
     } finally {
-      if (requestSequence === inboxRequestSequenceRef.current) setLoading(false);
+      if (append) inboxAppendInFlightRef.current = false;
+      if (requestSequence === inboxRequestSequenceRef.current) {
+        if (!background && !append) setLoading(false);
+        if (append) setLoadingMoreConversations(false);
+      } else if (append) {
+        // A filter change may supersede the append request; never leave the
+        // load-more control stuck in its busy state.
+        setLoadingMoreConversations(false);
+      }
     }
-  }, [tab, channel, sortOrder, showTests, debouncedInboxSearch, assignedStaffId]);
+  }, [tab, channel, sortOrder, showTests, debouncedInboxSearch, assignedStaffId, filterAccountId, assignmentMode]);
+
+  const loadMoreConversations = useCallback(() => {
+    if (!hasMoreConversations || loadingMoreConversations) return;
+    void fetchInbox({ append: true });
+  }, [fetchInbox, hasMoreConversations, loadingMoreConversations]);
 
   useEffect(() => { fetchInbox(); }, [fetchInbox]);
 
@@ -1243,7 +1318,7 @@ function InboxTab() {
 
   async function toggleContactBlock(blocked: boolean) {
     if (!selectedId || blockingContact) return;
-    if (!window.confirm(blocked ? t("messagesPage.confirmBlockContact") : t("messagesPage.confirmUnblockContact"))) return;
+    if (!window.confirm(blocked ? t("inboxActions.localConfirm", { count: 1 }) : t("messagesPage.confirmUnblockContact"))) return;
     setBlockingContact(true);
     try {
       await customFetch(`/api/inbox/conversations/${selectedId}/block`, {
@@ -1251,7 +1326,7 @@ function InboxTab() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ blocked }),
       });
-      toast({ title: blocked ? t("messagesPage.contactBlocked") : t("messagesPage.contactUnblocked") });
+      toast({ title: blocked ? t("messagesPage.contactBlocked") : t("messagesPage.contactUnblocked"), description: t("inboxActions.localScope") });
       setPendingFiles([]);
       setReply("");
       await Promise.all([fetchInbox(), fetchDetail(selectedId)]);
@@ -1828,8 +1903,6 @@ function InboxTab() {
   const channelOptions = ["all", "whatsapp", "web_chat", "messenger", "instagram", "web_form", "email", "sms", "telegram"];
   const tabs: Array<{ key: typeof tab; label: string; icon: any }> = [
     { key: "all", label: t("messagesPage.all"), icon: Hash },
-    { key: "mine", label: t("messagesPage.mine"), icon: UserCheck },
-    { key: "unassigned", label: t("messagesPage.unassigned"), icon: InboxIcon },
     { key: "open", label: t("inbox.tabs.open"), icon: MessageCircle },
     { key: "unanswered", label: t("inbox.tabs.unanswered"), icon: Clock },
     { key: "unread", label: t("inbox.tabs.unread"), icon: MessageSquare },
@@ -1978,6 +2051,27 @@ function InboxTab() {
     }
   }
 
+  async function runBulkBlock(mode: "local" | "provider" | "provider-unblock") {
+    const ids = [...selectedIds];
+    const startedFilter = inboxFilterKeyRef.current;
+    if (!ids.length || bulkBusy || ids.length > 100) return;
+    if (!window.confirm(t(mode === "local" ? "inboxActions.localConfirm" : "inboxActions.providerConfirm", { count: ids.length }))) return;
+    setBulkBusy(true);
+    try {
+      const { succeeded, failed } = await runInboxBulkBlock(ids, async id => {
+        const result: any = await customFetch(`/api/inbox/conversations/${id}/${mode === "local" ? "block" : "provider-block"}`, {
+          method: "PATCH", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(mode === "local" ? { blocked: true } : { blocked: mode !== "provider-unblock", confirm: "PROVIDER_BLOCK_CHANGE" }),
+        });
+        if (mode !== "local" && result.confirmed !== true) throw new Error("Unconfirmed");
+      });
+      toast({ title: t("inboxActions.results", { succeeded, failed: failed.length }), description: failed.length ? t("inboxActions.failureHelp") : t(mode === "local" ? "inboxActions.localScope" : "inboxActions.providerScope"), variant: failed.length ? "destructive" : "default" });
+      if (startedFilter === inboxFilterKeyRef.current) setSelectedIds(new Set(failed));
+      await fetchInbox();
+      if (selectedId) await fetchDetail(selectedId);
+    } finally { setBulkBusy(false); }
+  }
+
   // Day separator label: Today / Yesterday / localized date.
   const dayLabelOf = (d: Date) => {
     const today = new Date();
@@ -2085,14 +2179,6 @@ function InboxTab() {
                 >
                   <span className="flex items-center gap-2 min-w-0">
                     {(() => {
-                      if (selectedStaffName) {
-                        return (
-                          <>
-                            <UserCheck className="w-3.5 h-3.5 shrink-0" />
-                            <span className="truncate">{selectedStaffName}</span>
-                          </>
-                        );
-                      }
                       const current = tabs.find((tb) => tb.key === tab) ?? tabs[0];
                       const Icon = current.icon;
                       return (
@@ -2118,14 +2204,13 @@ function InboxTab() {
                     <DropdownMenuItem
                       key={tb.key}
                       onClick={() => {
-                        setAssignedStaffId(null);
                         setTab(tb.key);
                       }}
-                      className={cn("flex items-center gap-2", assignedStaffId === null && active && "bg-accent")}
+                      className={cn("flex items-center gap-2", active && "bg-accent")}
                     >
                       <Icon className={cn("w-3.5 h-3.5 shrink-0", !active && "opacity-60")} />
                       <span className="flex-1 truncate">{tb.label}</span>
-                      {assignedStaffId === null && active && <Check className="w-3.5 h-3.5 shrink-0 opacity-70" />}
+                      {active && <Check className="w-3.5 h-3.5 shrink-0 opacity-70" />}
                       <button
                         type="button"
                         aria-pressed={pinned}
@@ -2145,7 +2230,18 @@ function InboxTab() {
                     </DropdownMenuItem>
                   );
                 })}
-                <div className="my-1 h-px bg-border" />
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="w-full justify-between h-8" data-testid="button-inbox-person-filter">
+                  <span className="truncate">{selectedStaffName || (assignmentMode === "mine" ? t("messagesPage.mine") : assignmentMode === "unassigned" ? t("messagesPage.unassigned") : t("inboxActions.allAssignedPeople"))}</span><ChevronDown className="w-3 h-3" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-[var(--radix-dropdown-menu-trigger-width)]">
+                <DropdownMenuItem onClick={() => { setAssignedStaffId(null); setAssignmentMode("all"); }}>{t("inboxActions.allAssignedPeople")}</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => { setAssignedStaffId(null); setAssignmentMode("mine"); }}>{t("messagesPage.mine")}</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => { setAssignedStaffId(null); setAssignmentMode("unassigned"); }}>{t("messagesPage.unassigned")}</DropdownMenuItem>
                 {inboxStaffLoading && (
                   <div className="flex items-center gap-1.5 px-2 py-2 text-xs text-muted-foreground">
                     <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -2165,8 +2261,8 @@ function InboxTab() {
                       <DropdownMenuItem
                         key={`staff-${staffUser.id}`}
                         onClick={() => {
-                          setTab("all");
                           setAssignedStaffId(staffUser.id);
+                          setAssignmentMode("all");
                         }}
                         className={cn("flex items-center gap-2", active && "bg-accent")}
                         data-testid={`option-inbox-staff-${staffUser.id}`}
@@ -2214,7 +2310,7 @@ function InboxTab() {
                 {channelOptions.map((ch) => {
                   const Icon = ch === "all" ? InboxIcon : (channelIcon[ch] || MessageCircle);
                   return (
-                    <DropdownMenuItem key={ch} onClick={() => setChannel(ch)}>
+                    <DropdownMenuItem key={ch} onClick={() => { setChannel(ch); setFilterAccountId(""); }}>
                       <Icon
                         className={cn(
                           "w-4 h-4 me-2",
@@ -2237,6 +2333,12 @@ function InboxTab() {
               </DropdownMenuContent>
             </DropdownMenu>
 
+            <select aria-label={t("inboxActions.receivingAccount")} className="h-8 w-full min-w-0 rounded-md border bg-background px-2 text-xs" value={filterAccountId} onChange={e => setFilterAccountId(e.target.value)} data-testid="select-inbox-account-filter">
+              <option value="">{t("inboxActions.allReceivingAccounts")}</option>
+              <option value="0">{t("inboxActions.unlinkedAccount")}</option>
+              {filterAccounts.filter(a => channel === "all" || a.channel === channel).map(a => <option key={a.id} value={a.id}>{a.channel} · {a.displayName}{a.isActive ? "" : " (inactive)"} · #{a.id}</option>)}
+            </select>
+            {filterAccountsFailed && <p role="alert" className="text-xs text-destructive">{t("inboxActions.accountsFailed")}</p>}
             <div className="flex items-center gap-1">
               <Button
                 variant="ghost"
@@ -2276,7 +2378,7 @@ function InboxTab() {
             </div>
 
             {selectMode && (
-              <div className="flex items-center gap-1.5 rounded-lg border border-border/60 bg-muted/40 px-2 py-1.5">
+              <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-border/60 bg-muted/40 px-2 py-1.5">
                 <button
                   type="button"
                   onClick={selectAllVisible}
@@ -2312,6 +2414,16 @@ function InboxTab() {
                     <Archive className="w-3 h-3" /> {t("inbox.bulk.archive")}
                   </Button>
                 )}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild><Button size="sm" variant="outline" className="h-6 px-2 text-[11px]" disabled={!selectedIds.size || selectedIds.size > 100 || bulkBusy} data-testid="button-bulk-block">{t("inboxActions.blockMenu")}</Button></DropdownMenuTrigger>
+                  <DropdownMenuContent>
+                    <DropdownMenuItem disabled={!providerBlockEnabled} onClick={() => void runBulkBlock("provider")}>{t("inboxActions.providerBlock")}</DropdownMenuItem>
+                    <DropdownMenuItem disabled={!providerBlockEnabled} onClick={() => void runBulkBlock("provider-unblock")}>{t("inboxActions.providerUnblock")}</DropdownMenuItem>
+                    {!providerBlockEnabled && <p className="max-w-64 px-2 py-1 text-xs text-muted-foreground">{t("inboxActions.providerDisabled")}</p>}
+                    <DropdownMenuItem onClick={() => void runBulkBlock("local")}>{t("inboxActions.localBlock")}</DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                {selectedIds.size > 100 && <p className="w-full text-xs" role="status">{t("inboxActions.limit")}</p>}
                 {canDeleteConversations && (
                   <Button
                     size="sm"
@@ -2454,6 +2566,22 @@ function InboxTab() {
                 </div>
               );
             })}
+            {hasMoreConversations && (
+              <div className="flex justify-center border-t border-border/30 p-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  className="h-8 w-full text-xs"
+                  onClick={loadMoreConversations}
+                  disabled={loadingMoreConversations}
+                  data-testid="button-load-more-conversations"
+                >
+                  {loadingMoreConversations ? <Loader2 className="me-1.5 h-3.5 w-3.5 animate-spin" /> : <ChevronDown className="me-1.5 h-3.5 w-3.5" />}
+                  {loadingMoreConversations ? t("common.loading") : t("inbox.chat.loadOlder")}
+                </Button>
+              </div>
+            )}
           </div>
         </div>
 
@@ -2564,12 +2692,12 @@ function InboxTab() {
                       onClick={() => toggleContactBlock(!contactBlocked)}
                       disabled={blockingContact}
                       className="h-7 text-xs gap-1"
-                      title={contactBlocked ? t("messagesPage.unblockContact") : t("messagesPage.blockContact")}
+                      title={t("inboxActions.localScope")}
                       data-testid="button-toggle-contact-block"
                     >
                       {blockingContact ? <Loader2 className="w-3 h-3 animate-spin" /> : contactBlocked ? <ShieldCheck className="w-3 h-3" /> : <Ban className="w-3 h-3" />}
                       <span className="hidden min-[1800px]:inline">
-                        {contactBlocked ? t("messagesPage.unblock") : t("messagesPage.block")}
+                        {contactBlocked ? t("messagesPage.unblock") : t("inboxActions.localBlock")}
                       </span>
                     </Button>
                   )}

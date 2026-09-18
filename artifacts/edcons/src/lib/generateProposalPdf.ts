@@ -1,4 +1,5 @@
 import { jsPDF } from "jspdf";
+import { normalizeCurrency } from "./currency";
 
 export type ProposalProgramData = {
   id: number;
@@ -121,11 +122,11 @@ function fmt(amount: number | null | undefined, currency = "USD"): string {
   try {
     return new Intl.NumberFormat("en-US", {
       style: "currency",
-      currency,
+      currency: normalizeCurrency(currency),
       maximumFractionDigits: 0,
     }).format(amount);
   } catch {
-    return `$${Math.round(amount).toLocaleString("en-US")}`;
+    return `${normalizeCurrency(currency)} ${Math.round(amount).toLocaleString("en-US")}`;
   }
 }
 
@@ -821,7 +822,7 @@ export async function buildProposalPdf(options: ProposalOptions): Promise<jsPDF>
     compact = false,
   ) {
     const height = compact ? 11.75 : 17.4;
-    const currency = program.currency || "USD";
+    const currency = normalizeCurrency(program.currency);
     const tuition = effectiveTuition(program);
     const discount = discountData(program);
     const serviceFee = getProposalServiceFee(program, serviceFeeMarkup, hideServiceFee);

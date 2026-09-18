@@ -87,6 +87,25 @@ export function computeReadiness(
   const incompatible: ReadinessIncompatibility[] = [];
   const skipped: string[] = [];
 
+  // An empty matrix is not proof that a portal accepts the profile. It means
+  // that we do not have a reviewed contract for that portal/level yet. Keep
+  // the result explicitly unsupported *and not ready* so callers that only
+  // inspect `ready` cannot accidentally treat an unverified portal as safe.
+  // Existing execution paths still use `supported` to decide whether to show
+  // soft-gate details, so this is a fail-closed contract correction without
+  // turning the readiness endpoint into a hard submission blocker.
+  if (rules.length === 0) {
+    return {
+      ready: false,
+      supported: false,
+      portal: portalKey,
+      level,
+      missing,
+      incompatible,
+      skipped,
+    };
+  }
+
   const hasDoc = (kind: string): boolean => {
     if (kind === "photo") {
       return (

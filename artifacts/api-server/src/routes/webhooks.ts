@@ -386,7 +386,7 @@ router.post("/webhooks/whatsapp", webhookLimiter, rawJson, async (req: Request, 
         },
       });
       processed++;
-      if (!result.duplicate && m.text && m.text.trim()) {
+      if (!result.duplicate && result.messageId > 0 && m.text && m.text.trim()) {
         botCandidates.push({ conversationId: result.conversationId, inboundMessageId: result.messageId });
       }
     } catch (err) {
@@ -544,7 +544,7 @@ router.post("/webhooks/meta", webhookLimiter, rawJson, async (req: Request, res:
         },
       });
       processed++;
-      if (!result.duplicate && m.text && m.text.trim()) {
+      if (!result.duplicate && result.messageId > 0 && m.text && m.text.trim()) {
         botCandidates.push({
           conversationId: result.conversationId,
           inboundMessageId: result.messageId,
@@ -889,7 +889,7 @@ router.post("/webhooks/zernio", webhookLimiter, rawJson, async (req, res): Promi
         },
       });
 
-      if (!result.duplicate) {
+      if (!result.duplicate && result.messageId > 0) {
         (async () => {
           try {
             await maybeAutoReply({

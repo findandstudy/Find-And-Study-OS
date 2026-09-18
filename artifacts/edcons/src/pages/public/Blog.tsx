@@ -1,20 +1,25 @@
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useI18n } from "@/hooks/use-i18n";
 import { useSeo } from "@/hooks/use-seo";
 import { useJsonLd, SITE_URL, SITE_NAME } from "@/hooks/use-json-ld";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { useListBlogPosts } from "@workspace/api-client-react";
+import { customFetch } from "@workspace/api-client-react";
 import { Search, BookOpen, Calendar, Clock, ArrowRight } from "lucide-react";
 import { motion } from "framer-motion";
+import { Link } from "wouter";
 
 export default function Blog() {
   const { t, lang } = useI18n();
   useSeo({ title: t("seo.blogTitle"), description: t("seo.blogDesc"), lang });
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("All");
-  const { data: postsResp, isLoading } = useListBlogPosts(undefined, { query: { queryKey: ['blog-posts'] } as any });
-  const posts = (postsResp as any)?.data || postsResp || [];
+  const { data: postsResp, isLoading } = useQuery({
+    queryKey: ["public-web-guides", lang],
+    queryFn: () => customFetch<any>(`/api/public/web/guides?locale=${encodeURIComponent(lang)}&limit=24`),
+  });
+  const posts = postsResp?.data || [];
 
   const categories = [
     { key: "All", label: t("blog.all") },
@@ -28,12 +33,10 @@ export default function Blog() {
   const filtered = (Array.isArray(posts) ? posts : []).filter((p: any) => {
     const matchSearch = !search || p.title.toLowerCase().includes(search.toLowerCase());
     const matchCat = category === "All" || p.category === category;
-    return matchSearch && matchCat && (p.status === 'published' || p.published === true);
+    return matchSearch && matchCat;
   });
 
-  const allPublished = (Array.isArray(posts) ? posts : []).filter(
-    (p: any) => p.status === 'published' || p.published === true
-  );
+  const allPublished = Array.isArray(posts) ? posts : [];
 
   useJsonLd([
     {
@@ -59,9 +62,9 @@ export default function Blog() {
     ...(allPublished.slice(0, 10).map((p: any) => ({
       "@context": "https://schema.org",
       "@type": "BlogPosting",
-      "@id": `${SITE_URL}/en/blog/${p.slug || p.id}#blogposting`,
+      "@id": `${SITE_URL}${p.canonicalPath}#blogposting`,
       headline: p.title,
-      url: `${SITE_URL}/en/blog/${p.slug || p.id}`,
+      url: `${SITE_URL}${p.canonicalPath}`,
       description: p.excerpt || p.summary || undefined,
       datePublished: p.publishedAt || p.createdAt || undefined,
       dateModified: p.updatedAt || p.publishedAt || undefined,
@@ -77,8 +80,8 @@ export default function Blog() {
       },
       isPartOf: { "@id": `${SITE_URL}/en/blog#blog` },
       ...(p.category ? { articleSection: p.category } : {}),
-      ...(p.coverImageUrl || p.imageUrl
-        ? { image: { "@type": "ImageObject", url: p.coverImageUrl || p.imageUrl } }
+      ...(p.featuredImageUrl
+        ? { image: { "@type": "ImageObject", url: p.featuredImageUrl } }
         : {}),
     }))),
   ]);
@@ -147,9 +150,7 @@ export default function Blog() {
                 <motion.article key={post.id} initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}
                   className="group bg-card rounded-2xl overflow-hidden shadow-lg shadow-black/5 hover:-translate-y-2 transition-all duration-300 hover:shadow-xl border border-border/40 flex flex-col">
                   <div className="h-48 bg-gradient-to-br from-accent/20 via-primary/10 to-accent/5 relative overflow-hidden">
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <BookOpen className="w-16 h-16 text-accent/30" />
-                    </div>
+                    {post.featuredImageUrl ? <img src={post.featuredImageUrl} alt="" className="absolute inset-0 h-full w-full object-cover" loading="lazy" /> : <div className="absolute inset-0 flex items-center justify-center"><BookOpen className="w-16 h-16 text-accent/30" /></div>}
                     {post.category && (
                       <Badge className="absolute top-4 left-4 bg-accent text-white">{post.category}</Badge>
                     )}
@@ -164,18 +165,16 @@ export default function Blog() {
                       )}
                       <span className="flex items-center gap-1"><Clock className="w-3 h-3" /> 5 {t("blog.minRead")}</span>
                     </div>
-                    <h2 className="font-display font-bold text-foreground text-xl mb-3 group-hover:text-accent transition-colors leading-snug flex-1">
-                      {post.title}
-                    </h2>
+                    <h2 className="font-display font-bold text-foreground text-xl mb-3 group-hover:text-accent transition-colors leading-snug flex-1"><Link href={post.canonicalPath}>{post.title}</Link></h2>
                     {post.excerpt && (
                       <p className="text-muted-foreground text-sm line-clamp-3 mb-4">{post.excerpt}</p>
                     )}
-                    <button
-                      type="button"
+                    <Link
+                      href={post.canonicalPath}
                       aria-label={`${t("blog.readMore")} — ${post.title}`}
                       className="flex items-center gap-2 text-accent font-semibold text-sm mt-auto hover:gap-4 transition-all">
                       {t("blog.readMore")} <ArrowRight className="w-4 h-4" aria-hidden="true" />
-                    </button>
+                    </Link>
                   </div>
                 </motion.article>
               ))}

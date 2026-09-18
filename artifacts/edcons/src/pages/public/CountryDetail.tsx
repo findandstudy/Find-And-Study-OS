@@ -1,3 +1,4 @@
+import { DetailLayout } from "./DetailLayout";
 import { useState, useEffect } from "react";
 import { useI18n } from "@/hooks/use-i18n";
 import { useSeo } from "@/hooks/use-seo";
@@ -8,6 +9,7 @@ import { motion } from "framer-motion";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CountryFlag, countryCodeFromEmoji } from "@/components/CountryFlag";
+import type { Language } from "@/lib/i18n";
 import {
   Globe2, GraduationCap, Building2, MapPin, DollarSign, Languages,
   Wallet, Thermometer, FileText, Briefcase, ArrowLeft, ChevronRight,
@@ -32,6 +34,7 @@ interface Destination {
   visaInfo: string | null;
   workPermit: string | null;
   popularCities: string | null;
+  canonicalPath: string;
 }
 
 interface UniversityBrief {
@@ -41,6 +44,8 @@ interface UniversityBrief {
   logoUrl: string | null;
   ranking: number | null;
   universityType: string | null;
+  programCount: number;
+  canonicalPath: string;
 }
 
 interface ProgramBrief {
@@ -53,6 +58,8 @@ interface ProgramBrief {
   currency: string | null;
   discountedFee: number | null;
   universityId: number;
+  universityName: string;
+  canonicalPath: string;
 }
 
 function fixStorageUrl(url: string | null | undefined): string | null {
@@ -84,7 +91,15 @@ export default function CountryDetail({ slug }: { slug: string }) {
     destination: Destination;
     universities: UniversityBrief[];
     programs: ProgramBrief[];
+    cities: Array<{ id: number; name: string; sourceName: string; canonicalPath: string }>;
     stats: { universityCount: number; programCount: number };
+    meta: {
+      locale: Language;
+      indexable: boolean;
+      canonicalPath: string;
+      alternatePaths: Partial<Record<Language, string>>;
+      internalLinkPolicy: "PUBLISHED_INDEXABLE_ONLY" | "LEGACY_UNGATED";
+    };
   } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -92,7 +107,10 @@ export default function CountryDetail({ slug }: { slug: string }) {
   useSeo({
     title: data ? t("countryDetail.studyIn", { name: data.destination.name }) : t("countryDetail.studyDestination"),
     description: data?.destination.shortDescription || t("countryDetail.exploreOpportunities"),
+    canonical: data ? `${SITE_URL}${data.meta.canonicalPath}` : undefined,
+    noindex: !data?.meta.indexable,
     lang,
+    alternates: data?.meta.alternatePaths,
   });
   useJsonLd(
     data
@@ -100,18 +118,18 @@ export default function CountryDetail({ slug }: { slug: string }) {
           {
             "@context": "https://schema.org",
             "@type": "TouristDestination",
-            "@id": `${SITE_URL}/en/countries/${slug}#destination`,
+            "@id": `${SITE_URL}${data.meta.canonicalPath}#destination`,
             name: data.destination.name,
             description: data.destination.shortDescription || undefined,
-            url: `${SITE_URL}/en/countries/${slug}`,
+            url: `${SITE_URL}${data.meta.canonicalPath}`,
             touristType: { "@type": "Audience", audienceType: "International Students" },
           },
           {
             "@context": "https://schema.org",
             "@type": "WebPage",
-            "@id": `${SITE_URL}/en/countries/${slug}#webpage`,
+            "@id": `${SITE_URL}${data.meta.canonicalPath}#webpage`,
             name: `Study in ${data.destination.name} — ${SITE_NAME}`,
-            url: `${SITE_URL}/en/countries/${slug}`,
+            url: `${SITE_URL}${data.meta.canonicalPath}`,
             description: data.destination.shortDescription || undefined,
             isPartOf: { "@id": `${SITE_URL}/#website` },
             breadcrumb: {
@@ -119,7 +137,7 @@ export default function CountryDetail({ slug }: { slug: string }) {
               itemListElement: [
                 { "@type": "ListItem", position: 1, name: "Home", item: SITE_URL },
                 { "@type": "ListItem", position: 2, name: "Countries", item: `${SITE_URL}/en/countries` },
-                { "@type": "ListItem", position: 3, name: data.destination.name, item: `${SITE_URL}/en/countries/${slug}` },
+                { "@type": "ListItem", position: 3, name: data.destination.name, item: `${SITE_URL}${data.meta.canonicalPath}` },
               ],
             },
           },
@@ -130,11 +148,11 @@ export default function CountryDetail({ slug }: { slug: string }) {
   useEffect(() => {
     setIsLoading(true);
     setError(false);
-    customFetch<any>(`/api/public/destinations/${slug}`, { method: "GET" })
+    customFetch<any>(`/api/public/destinations/${slug}?locale=${encodeURIComponent(lang)}`, { method: "GET" })
       .then(d => setData(d))
       .catch(() => setError(true))
       .finally(() => setIsLoading(false));
-  }, [slug]);
+  }, [slug, lang]);
 
   if (isLoading) {
     return (
@@ -159,15 +177,17 @@ export default function CountryDetail({ slug }: { slug: string }) {
     );
   }
 
-  const { destination: dest, universities, programs, stats } = data;
+  const { destination: dest, universities, stats } = data;
   const whyPoints = dest.whyStudyHere?.split(/\.\s+/).filter(p => p.trim().length > 5) || [];
-  const cities = dest.popularCities?.split(",").map(c => c.trim()).filter(Boolean) || [];
-
-  const uniMap = new Map(universities.map(u => [u.id, u]));
+  const cityNames = dest.popularCities?.split(",").map(c => c.trim()).filter(Boolean) || [];
+  const cityLinks = new Map(data.cities.flatMap((city) => [
+    [city.name.toLocaleLowerCase("en-US"), city.canonicalPath] as const,
+    [city.sourceName.toLocaleLowerCase("en-US"), city.canonicalPath] as const,
+  ]));
 
   return (
-    <>
-      <section className="pt-24 pb-16 bg-gradient-to-br from-primary/10 via-accent/5 to-primary/5 relative overflow-hidden">
+    <DetailLayout kind="destination">
+      <section data-detail-section="hero" className="pt-24 pb-16 bg-gradient-to-br from-primary/10 via-accent/5 to-primary/5 relative overflow-hidden">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <Link href={localePath("/countries")} className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-primary transition-colors mb-6">
             <ArrowLeft className="w-4 h-4" /> {t("countryDetail.allDestinations")}
@@ -205,7 +225,7 @@ export default function CountryDetail({ slug }: { slug: string }) {
         </div>
       </section>
 
-      <section className="py-12">
+      <section data-detail-section="overview" className="py-12">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid lg:grid-cols-3 gap-8">
             <div className="lg:col-span-2 space-y-8">
@@ -232,16 +252,23 @@ export default function CountryDetail({ slug }: { slug: string }) {
                 </motion.div>
               )}
 
-              {cities.length > 0 && (
+              {cityNames.length > 0 && (
                 <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }}>
                   <h2 className="text-2xl font-display font-bold text-foreground mb-4">{t("countryDetail.popularCities")}</h2>
                   <div className="flex flex-wrap gap-3">
-                    {cities.map(city => (
-                      <div key={city} className="flex items-center gap-2 bg-card rounded-full border border-border/40 px-4 py-2">
-                        <MapPin className="w-4 h-4 text-primary" />
-                        <span className="text-sm font-medium text-foreground">{city}</span>
-                      </div>
-                    ))}
+                    {cityNames.map(city => {
+                      const cityPath = cityLinks.get(city.toLocaleLowerCase("en-US"));
+                      const content = <><MapPin className="w-4 h-4 text-primary" /><span className="text-sm font-medium text-foreground">{city}</span></>;
+                      return cityPath ? (
+                        <Link key={city} href={cityPath} className="flex items-center gap-2 bg-card rounded-full border border-border/40 px-4 py-2 transition-colors hover:border-primary/40 hover:text-primary">
+                          {content}
+                        </Link>
+                      ) : (
+                        <div key={city} className="flex items-center gap-2 bg-card rounded-full border border-border/40 px-4 py-2">
+                          {content}
+                        </div>
+                      );
+                    })}
                   </div>
                 </motion.div>
               )}
@@ -261,7 +288,7 @@ export default function CountryDetail({ slug }: { slug: string }) {
       </section>
 
       {universities.length > 0 && (
-        <section className="py-12 bg-secondary/30">
+        <section data-detail-section="universities" className="py-12 bg-secondary/30">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex items-center justify-between mb-8">
               <h2 className="text-2xl font-display font-bold text-foreground">
@@ -276,7 +303,6 @@ export default function CountryDetail({ slug }: { slug: string }) {
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
               {universities.map((uni, i) => {
                 const logoSrc = fixStorageUrl(uni.logoUrl);
-                const uniPrograms = programs.filter(p => p.universityId === uni.id);
                 return (
                   <motion.div key={uni.id} initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: i * 0.05 }}
                     className="bg-card rounded-2xl border border-border/40 overflow-hidden shadow-sm hover:shadow-md transition-shadow">
@@ -291,7 +317,7 @@ export default function CountryDetail({ slug }: { slug: string }) {
                           )}
                         </div>
                         <div className="min-w-0 flex-1">
-                          <h3 className="font-bold text-foreground text-sm truncate">{uni.name}</h3>
+                          <Link href={uni.canonicalPath} className="font-bold text-foreground text-sm truncate hover:text-primary hover:underline">{uni.name}</Link>
                           {uni.city && (
                             <p className="text-xs text-muted-foreground flex items-center gap-1">
                               <MapPin className="w-3 h-3" /> {uni.city}
@@ -307,7 +333,7 @@ export default function CountryDetail({ slug }: { slug: string }) {
                           <Badge variant="outline" className="text-xs">{t("countryDetail.rank", { rank: uni.ranking })}</Badge>
                         )}
                         <Badge className="text-xs bg-primary/10 text-primary border-0">
-                          {t("countryDetail.programCount", { count: uniPrograms.length })}
+                          {t("countryDetail.programCount", { count: uni.programCount })}
                         </Badge>
                       </div>
                     </div>
@@ -319,7 +345,7 @@ export default function CountryDetail({ slug }: { slug: string }) {
         </section>
       )}
 
-      <section className="py-16 bg-gradient-to-r from-primary to-accent text-white mx-4 sm:mx-8 rounded-3xl mb-12 overflow-hidden relative">
+      <section data-detail-section="cta" className="py-16 bg-gradient-to-r from-primary to-accent text-white mx-4 sm:mx-8 rounded-3xl mb-12 overflow-hidden relative">
         <div className="max-w-3xl mx-auto px-8 text-center relative z-10">
           <h2 className="text-3xl font-display font-bold mb-4">{t("countryDetail.readyToStudy", { name: dest.name })}</h2>
           <p className="text-white/80 mb-8">{t("countryDetail.readyToStudyDesc")}</p>
@@ -333,6 +359,6 @@ export default function CountryDetail({ slug }: { slug: string }) {
           </div>
         </div>
       </section>
-    </>
+    </DetailLayout>
   );
 }

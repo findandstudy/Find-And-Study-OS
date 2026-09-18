@@ -49,7 +49,9 @@ import { userHasPermission } from "../lib/permissions";
 import { dispatchNotification } from "../lib/notificationDispatcher";
 import { sendEmail } from "../lib/email";
 import { safeOutboundRequest } from "../lib/safeOutboundRequest";
-import { resolveOutboundConfig } from "../lib/inbox/channelAccountConfig";
+import { resolveOutboundConfig, parseAccountConfig } from "../lib/inbox/channelAccountConfig";
+import { changeWhatsAppProviderBlock } from "../lib/inbox/providerBlock";
+import { parseInboxAccountFilter } from "../lib/inbox/accountFilter";
 import { decryptConfig } from "../lib/encryption";
 import { sendViaZernio, getZernioApiKey, resolveZernioAccount, sendZernioTemplate } from "../lib/inbox/zernioSend";
 import { toE164 } from "../lib/inbox/phone";
@@ -155,6 +157,15 @@ import {
 
 const router: IRouter = Router();
 
+// Filter labels only: never expose provider configuration, tokens or metadata.
+router.get("/inbox/filter-accounts", requireAuth, requireRole(...STAFF_ROLES, ...ADMIN_ROLES), async (_req, res) => {
+  const accounts = await db.select({ id: channelAccountsTable.id, channel: channelAccountsTable.channel,
+    displayName: channelAccountsTable.displayName, isActive: channelAccountsTable.isActive })
+    .from(channelAccountsTable).orderBy(asc(channelAccountsTable.channel), asc(channelAccountsTable.displayName));
+  res.setHeader("Cache-Control", "private, no-store");
+  res.json({ accounts, providerBlockEnabled: process.env.INBOX_PROVIDER_BLOCK_ENABLED === "true" && isLiveIntegrationsEnabled() });
+});
+
 router.get(
   "/inbox/whatsapp-accounts",
   requireAuth,
@@ -176,6 +187,24 @@ router.get(
 );
 const inboxMediaStorage = new ObjectStorageService();
 const webChatMediaBody = raw({ limit: WEB_CHAT_MEDIA_MAX_BYTES, type: () => true });
+/** Stable keyset cursor for the inbox conversation feed. */
+function decodeInboxCursor(raw: unknown): { at: Date; id: number } | null {
+  if (typeof raw !== "string" || raw.length === 0 || raw.length > 256) return null;
+  try {
+    const parsed = JSON.parse(Buffer.from(raw, "base64url").toString("utf8")) as { at?: unknown; id?: unknown };
+    const at = new Date(String(parsed.at ?? ""));
+    const id = Number(parsed.id);
+    if (!Number.isFinite(at.getTime()) || !Number.isInteger(id) || id <= 0) return null;
+    return { at, id };
+  } catch {
+    return null;
+  }
+}
+
+function encodeInboxCursor(at: Date | null, id: number): string | null {
+  if (!at || !Number.isInteger(id) || id <= 0) return null;
+  return Buffer.from(JSON.stringify({ at: at.toISOString(), id }), "utf8").toString("base64url");
+}
 
 function requestedAiBotId(req: Request): number | null {
   const rawValue = req.body?.aiBotId ?? req.query.aiBotId;
@@ -317,6 +346,11 @@ const summarizeRateLimiter = new RateLimiterPostgres({
   keyPrefix: "inbox-summarize",
   points: 10,
   duration: 60,
+});
+
+const providerBlockRateLimiter = new RateLimiterPostgres({
+  storeClient: pool, storeType: "pool", tableName: "rate_limits", tableCreated: true,
+  keyPrefix: "inbox-provider-block", points: 100, duration: 60,
 });
 
 function isAiSummary(value: unknown): value is ConversationAiSummary {
@@ -919,9 +953,25 @@ router.get(
     const search = String(req.query.search || "").trim().slice(0, 120);
     const assignedToRaw = req.query.assignedToId == null ? "" : String(req.query.assignedToId).trim();
     const assignedToId = assignedToRaw ? Number(assignedToRaw) : null;
+    const assignment = req.query.assignment ?? "all";
+    if (!["all", "mine", "unassigned"].includes(String(assignment)) || typeof assignment !== "string") {
+      res.status(400).json({ error: "Invalid assignment" }); return;
+    }
+    let accountId: number | null;
+    try { accountId = parseInboxAccountFilter(req.query.channelAccountId); }
+    catch { res.status(400).json({ error: "Invalid channelAccountId" }); return; }
+    const rawLimit = parseInt(String(req.query.limit ?? "200"), 10);
+    const listLimit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 200) : 200;
+    const cursorRaw = req.query.cursor == null ? "" : String(req.query.cursor).trim();
+    const cursor = decodeInboxCursor(cursorRaw);
 
     if (assignedToRaw && (!Number.isInteger(assignedToId) || (assignedToId ?? 0) <= 0)) {
       res.status(400).json({ error: "Invalid assignedToId" });
+      return;
+    }
+
+    if (cursorRaw && !cursor) {
+      res.status(400).json({ error: "Invalid conversation cursor" });
       return;
     }
 
@@ -931,6 +981,20 @@ router.get(
         : eq(conversationsTable.isArchived, false),
     ];
     const effectiveAssignedTo = inboxEffectiveAssignedToSql();
+    if (assignment === "mine") where.push(sql`${effectiveAssignedTo} = ${userId}`);
+    if (assignment === "unassigned") where.push(sql`${effectiveAssignedTo} IS NULL`);
+    if (accountId !== null) where.push(accountId === 0 ? isNull(conversationsTable.channelAccountId) : eq(conversationsTable.channelAccountId, accountId));
+    // Use the same timestamp expression for ordering and the keyset cursor so
+    // rows with no last message remain reachable and new inbound messages never
+    // cause page skips/duplicates.
+    const feedTimestamp = sql`COALESCE(${conversationsTable.lastMessageAt}, ${conversationsTable.createdAt})`;
+    if (cursor) {
+      if (order === "asc") {
+        where.push(sql`(${feedTimestamp} > ${cursor.at} OR (${feedTimestamp} = ${cursor.at} AND ${conversationsTable.id} > ${cursor.id}))`);
+      } else {
+        where.push(sql`(${feedTimestamp} < ${cursor.at} OR (${feedTimestamp} = ${cursor.at} AND ${conversationsTable.id} < ${cursor.id}))`);
+      }
+    }
 
     // Test/junk conversations are hidden by default: e2e-suite artifacts and
     // quick-contact WhatsApp stubs that never left the queue. Toggle with
@@ -1054,14 +1118,23 @@ router.get(
       .where(and(...where))
       .orderBy(
         order === "asc"
-          ? asc(conversationsTable.lastMessageAt)
-          : desc(conversationsTable.lastMessageAt),
+          ? asc(feedTimestamp)
+          : desc(feedTimestamp),
+        order === "asc" ? asc(conversationsTable.id) : desc(conversationsTable.id),
       )
-      .limit(200);
+      // Fetch one sentinel row so the client can request the next cursor.
+      .limit(listLimit + 1);
 
-    const externalIds = [...new Set(rows.map((r) => r.externalContactId).filter((x): x is number => !!x))];
-    const assignedIds = [...new Set(rows.map((r) => r.assignedToId).filter((x): x is number => !!x))];
-    const channelAccountIds = [...new Set(rows.map((r) => r.channelAccountId).filter((x): x is number => !!x))];
+    const hasMore = rows.length > listLimit;
+    const pageRows = hasMore ? rows.slice(0, listLimit) : rows;
+    const nextRow = pageRows[pageRows.length - 1];
+    const nextCursor = hasMore && nextRow
+      ? encodeInboxCursor(nextRow.lastMessageAt ?? nextRow.createdAt, nextRow.id)
+      : null;
+
+    const externalIds = [...new Set(pageRows.map((r) => r.externalContactId).filter((x): x is number => !!x))];
+    const assignedIds = [...new Set(pageRows.map((r) => r.assignedToId).filter((x): x is number => !!x))];
+    const channelAccountIds = [...new Set(pageRows.map((r) => r.channelAccountId).filter((x): x is number => !!x))];
 
     type AssignedUserSummary = {
       id: number;
@@ -1115,14 +1188,14 @@ router.get(
     const channelAccountsMap = new Map<number, ChannelAccountSummary>();
     for (const account of accounts) channelAccountsMap.set(account.id, account);
 
-    const data = rows.map((r) => ({
+    const data = pageRows.map((r) => ({
       ...r,
       externalContact: r.externalContactId ? contactsMap.get(r.externalContactId) : null,
       assignedTo: r.assignedToId ? usersMap.get(r.assignedToId) : null,
       channelAccount: r.channelAccountId ? channelAccountsMap.get(r.channelAccountId) ?? null : null,
     }));
 
-    res.json({ data });
+    res.json({ data, nextCursor, hasMore });
   },
 );
 
@@ -1837,6 +1910,53 @@ router.post(
         error: error instanceof Error ? error.message : "Application intake action failed",
       });
     }
+  },
+);
+
+router.patch(
+  "/inbox/conversations/:id/provider-block",
+  requireAuth,
+  requireRole(...STAFF_ROLES, ...ADMIN_ROLES),
+  async (req, res): Promise<void> => {
+    const id = Number(req.params.id);
+    const parsed = z.object({ blocked: z.boolean(), confirm: z.literal("PROVIDER_BLOCK_CHANGE") }).strict().safeParse(req.body);
+    if (!Number.isSafeInteger(id) || id <= 0 || !parsed.success) {
+      res.status(400).json({ error: "Invalid provider block request" }); return;
+    }
+    if (await isConversationEntityBlocked(req.user!, id)) {
+      res.status(404).json({ error: "Conversation not found" }); return;
+    }
+    if (process.env.INBOX_PROVIDER_BLOCK_ENABLED !== "true" || !isLiveIntegrationsEnabled()) {
+      res.status(409).json({ error: "PROVIDER_BLOCK_NOT_ENABLED" }); return;
+    }
+    try { await providerBlockRateLimiter.consume(String(req.user!.id)); }
+    catch { res.status(429).json({ error: "PROVIDER_BLOCK_RATE_LIMITED" }); return; }
+    const [conversation] = await db.select().from(conversationsTable).where(eq(conversationsTable.id, id)).limit(1);
+    if (!conversation?.externalContactId || !conversation.channelAccountId) {
+      res.status(409).json({ error: "EXACT_ACCOUNT_REQUIRED" }); return;
+    }
+    const [account] = await db.select().from(channelAccountsTable).where(eq(channelAccountsTable.id, conversation.channelAccountId)).limit(1);
+    const [contact] = await db.select().from(externalContactsTable).where(eq(externalContactsTable.id, conversation.externalContactId)).limit(1);
+    if (!account || !contact || account.channel !== conversation.channel || contact.channel !== conversation.channel) {
+      res.status(409).json({ error: "ACCOUNT_CONTACT_MISMATCH" }); return;
+    }
+    // Deliberately do not use outbound fallback: blocking belongs to this exact receiving line.
+    const config = account.provider === "direct" && account.channel === "whatsapp" ? parseAccountConfig(account.configEncrypted) : {};
+    let zernioApiKey: string | undefined;
+    if (account.provider === "zernio" && account.channel === "whatsapp" && account.isActive) {
+      const [integration] = await db.select({ enabled: integrationsTable.isEnabled }).from(integrationsTable).where(eq(integrationsTable.key, "zernio")).limit(1);
+      if (integration?.enabled) zernioApiKey = (await getZernioApiKey()) ?? undefined;
+    }
+    await logAudit(req.user!.id, "provider_block_requested", "conversation", id, { blocked: parsed.data.blocked, channelAccountId: account.id }, req.ip);
+    const result = await changeWhatsAppProviderBlock({
+      liveEnabled: isLiveIntegrationsEnabled(), channel: account.channel, provider: account.provider,
+      active: account.isActive, phoneNumberId: config.phoneNumberId, accessToken: config.accessToken,
+      zernioAccountId: account.externalAccountId ?? undefined, zernioApiKey,
+      recipient: contact.externalId, blocked: parsed.data.blocked,
+    });
+    await logAudit(req.user!.id, "provider_block_result", "conversation", id, { blocked: parsed.data.blocked, channelAccountId: account.id, ...result }, req.ip);
+    res.setHeader("Cache-Control", "private, no-store");
+    res.status(result.confirmed ? 200 : 409).json(result.confirmed ? result : { ...result, error: result.reason });
   },
 );
 

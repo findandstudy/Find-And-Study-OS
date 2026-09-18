@@ -10,6 +10,7 @@ interface SeoOptions {
   ogImage?: string;
   ogType?: "website" | "article";
   lang?: Language;
+  alternates?: Partial<Record<Language, string>>;
 }
 
 function setMeta(name: string, content: string, isProperty = false) {
@@ -41,7 +42,7 @@ function removeHreflangLinks() {
   document.querySelectorAll('link[rel="alternate"][hreflang]').forEach((el) => el.remove());
 }
 
-export function useSeo({ title, description, canonical, noindex = false, ogImage, ogType = "website", lang }: SeoOptions) {
+export function useSeo({ title, description, canonical, noindex = false, ogImage, ogType = "website", lang, alternates }: SeoOptions) {
   const agencyBusinessName = useSyncExternalStore(
     subscribeAgencyBusinessName,
     getActiveAgencyBusinessName,
@@ -82,8 +83,10 @@ export function useSeo({ title, description, canonical, noindex = false, ogImage
       const currentPath = stripLanguagePrefix(window.location.pathname.replace(basePath, ""));
 
       for (const code of SUPPORTED_LANGUAGES) {
-        const localizedPath = buildLocalizedPath(currentPath, code);
-        const href = `${origin}${basePath}${localizedPath}`;
+        const explicitPath = alternates?.[code];
+        if (alternates && !explicitPath) continue;
+        const localizedPath = explicitPath || buildLocalizedPath(currentPath, code);
+        const href = /^https?:\/\//.test(localizedPath) ? localizedPath : `${origin}${basePath}${localizedPath}`;
         const linkEl = document.createElement("link");
         linkEl.rel = "alternate";
         linkEl.hreflang = code;
@@ -91,15 +94,18 @@ export function useSeo({ title, description, canonical, noindex = false, ogImage
         document.head.appendChild(linkEl);
       }
 
-      const defaultLink = document.createElement("link");
-      defaultLink.rel = "alternate";
-      defaultLink.hreflang = "x-default";
-      defaultLink.href = `${origin}${basePath}${buildLocalizedPath(currentPath, "en")}`;
-      document.head.appendChild(defaultLink);
+      const defaultPath = alternates ? alternates.en : buildLocalizedPath(currentPath, "en");
+      if (defaultPath) {
+        const defaultLink = document.createElement("link");
+        defaultLink.rel = "alternate";
+        defaultLink.hreflang = "x-default";
+        defaultLink.href = /^https?:\/\//.test(defaultPath) ? defaultPath : `${origin}${basePath}${defaultPath}`;
+        document.head.appendChild(defaultLink);
+      }
     }
 
     return () => {
       removeHreflangLinks();
     };
-  }, [title, description, canonical, noindex, ogImage, ogType, lang, agencyBusinessName]);
+  }, [title, description, canonical, noindex, ogImage, ogType, lang, alternates, agencyBusinessName]);
 }

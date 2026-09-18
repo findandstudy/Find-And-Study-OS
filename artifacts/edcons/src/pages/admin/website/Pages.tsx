@@ -1,4 +1,3 @@
-import { useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
@@ -6,9 +5,13 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { FileText, Edit, Search, Globe, Eye, EyeOff } from "lucide-react";
+import { FileText, Edit, Search, Globe, Eye, EyeOff, Plus } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { SUPPORTED_LANGUAGES, LANGUAGE_META } from "@/lib/i18n";
 import { useState } from "react";
 import { useLocation } from "wouter";
+import DetailTemplates from "./DetailTemplates";
 
 interface WebsitePage {
   id: number;
@@ -36,24 +39,27 @@ export default function WebsitePages() {
   const [, setLocation] = useLocation();
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [createOpen, setCreateOpen] = useState(false);
+  const [draft, setDraft] = useState({ title: "", slug: "", locale: "en", starter: "blank", country: "", city: "" });
 
-  const { data: pages = [], isLoading } = useQuery<WebsitePage[]>({
+  const { data: pages = [], isLoading, isError, refetch } = useQuery<WebsitePage[]>({
     queryKey: ["website-pages"],
     queryFn: () => customFetch("/api/website/pages"),
   });
 
-  const seedMutation = useMutation({
-    mutationFn: () => customFetch("/api/website/pages/seed", { method: "POST", headers: { "Content-Type": "application/json" } }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["website-pages"] }),
+  const createMutation = useMutation({
+    mutationFn: () => customFetch<WebsitePage>("/api/website/pages/drafts", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(draft),
+    }),
+    onSuccess: page => {
+      queryClient.invalidateQueries({ queryKey: ["website-pages"] });
+      setCreateOpen(false);
+      setLocation(`/admin/website/pages/${page.id}/edit`);
+    },
   });
 
-  useEffect(() => {
-    if (!isLoading && pages.length === 0) {
-      seedMutation.mutate();
-    }
-  }, [isLoading, pages.length]);
-
   const filtered = pages.filter(p => {
+    if (p.template?.startsWith("detail:")) return false;
     if (searchTerm && !p.title.toLowerCase().includes(searchTerm.toLowerCase()) && !p.slug.toLowerCase().includes(searchTerm.toLowerCase())) return false;
     if (statusFilter !== "all" && p.status !== statusFilter) return false;
     return true;
@@ -69,8 +75,31 @@ export default function WebsitePages() {
               <p className="text-sm text-muted-foreground">Manage your website pages and their content.</p>
             </div>
           </div>
+          <Button onClick={() => { createMutation.reset(); setCreateOpen(true); }}><Plus className="w-4 h-4 me-2" />New page</Button>
         </div>
 
+        <Dialog open={createOpen} onOpenChange={open => { if (!createMutation.isPending) setCreateOpen(open); }}>
+          <DialogContent className="max-h-[90dvh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Create page draft</DialogTitle>
+              <DialogDescription>Start blank or use a live catalogue layout. No catalogue facts are copied. Nothing is published automatically.</DialogDescription>
+            </DialogHeader>
+            <form className="space-y-4" onSubmit={event => { event.preventDefault(); if (!createMutation.isPending) createMutation.mutate(); }}>
+              <div className="space-y-2"><Label htmlFor="new-page-title">Title</Label><Input id="new-page-title" required maxLength={200} value={draft.title} onChange={event => setDraft({ ...draft, title: event.target.value })} /></div>
+              <div className="space-y-2"><Label htmlFor="new-page-slug">Page address</Label><Input id="new-page-slug" required maxLength={150} pattern="[a-z0-9]+(-[a-z0-9]+)*" placeholder="study-in-turkiye" value={draft.slug} onChange={event => setDraft({ ...draft, slug: event.target.value })} aria-describedby="new-page-url" /><p id="new-page-url" className="text-xs text-muted-foreground">/{draft.locale}/{draft.slug || "your-page"} — existing system addresses cannot be replaced.</p></div>
+              <div className="space-y-2"><Label htmlFor="new-page-locale">Source language</Label><Select value={draft.locale} onValueChange={locale => setDraft({ ...draft, locale })}><SelectTrigger id="new-page-locale"><SelectValue /></SelectTrigger><SelectContent>{SUPPORTED_LANGUAGES.map(locale => <SelectItem key={locale} value={locale}>{LANGUAGE_META[locale].name}</SelectItem>)}</SelectContent></Select></div>
+              <div className="space-y-2"><Label htmlFor="new-page-starter">Starting layout</Label><Select value={draft.starter} onValueChange={starter => setDraft({ ...draft, starter })}><SelectTrigger id="new-page-starter"><SelectValue /></SelectTrigger><SelectContent>{[["blank", "Blank page"], ["programs", "Live programs"], ["universities", "Live universities"], ["destinations", "Live destinations"], ["cities", "Live cities"]].map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}</SelectContent></Select></div>
+              {draft.starter !== "blank" && <>
+                <div className="space-y-2"><Label htmlFor="new-page-country">Country filter (optional)</Label><Input id="new-page-country" maxLength={120} value={draft.country} onChange={event => setDraft({ ...draft, country: event.target.value })} /></div>
+                <div className="space-y-2"><Label htmlFor="new-page-city">City filter (optional)</Label><Input id="new-page-city" maxLength={120} value={draft.city} onChange={event => setDraft({ ...draft, city: event.target.value })} /></div>
+              </>}
+              {createMutation.isError && <p role="alert" className="text-sm text-destructive">Could not create the draft. Check the address is unique and not reserved, then retry. Your entries are preserved.</p>}
+              <div className="flex justify-end gap-2"><Button type="button" variant="outline" disabled={createMutation.isPending} onClick={() => setCreateOpen(false)}>Cancel</Button><Button type="submit" disabled={createMutation.isPending}>{createMutation.isPending ? "Creating…" : "Create draft"}</Button></div>
+            </form>
+          </DialogContent>
+        </Dialog>
+
+        <DetailTemplates />
         <div className="flex flex-col sm:flex-row gap-3">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -94,7 +123,7 @@ export default function WebsitePages() {
           </Select>
         </div>
 
-        {isLoading || seedMutation.isPending ? (
+        {isError ? <div role="alert" className="rounded-lg border p-6">Pages could not be loaded. <Button variant="outline" onClick={() => refetch()}>Retry</Button></div> : isLoading ? (
           <div className="flex items-center justify-center py-20">
             <div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full" />
           </div>

@@ -7,6 +7,8 @@ import {
   type ProgramSourceContent,
   type ProgramTargetLocale,
 } from "./programTranslationContract";
+import { invalidatePublicCatalogRenderCache } from "./publicCatalogRenderReadModel";
+import { invalidatePublicWebDiscoveryCache } from "./publicWebDiscoveryReadModel";
 
 export type ClaimedProgramTranslation = {
   programId: number;
@@ -114,7 +116,12 @@ export async function completeProgramTranslation(
     content.name, content.description, content.field, content.duration,
     content.intakes, content.requirements, provider.provider, provider.model,
   ]);
-  return result.rowCount === 1;
+  const committed = result.rowCount === 1;
+  if (committed) {
+    invalidatePublicCatalogRenderCache({ entityType: "catalog" });
+    invalidatePublicWebDiscoveryCache();
+  }
+  return committed;
 }
 
 export async function failProgramTranslation(

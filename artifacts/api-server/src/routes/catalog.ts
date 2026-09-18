@@ -7,6 +7,8 @@ import { invalidateDocCatalog as invalidateDocCatalogCache, loadDocCatalog, load
 import { invalidateCurrencyCatalog } from "../lib/currencyCatalog";
 import { normalizeDialCode } from "../lib/dialCodes";
 import { normalizeProgramImportRows, collectUniversitiesToCreate } from "../lib/programImportHeaders";
+import { invalidatePublicCatalogRenderCache } from "../lib/publicCatalogRenderReadModel";
+import { invalidatePublicWebDiscoveryCache } from "../lib/publicWebDiscoveryReadModel";
 import * as XLSX from "xlsx";
 
 // Catalog bulk-import endpoints accept JSON arrays of thousands of rows
@@ -99,6 +101,8 @@ router.post("/countries", requireAuth, requireRole(...MANAGER_ROLES), async (req
   if (!name || !code) { res.status(400).json({ error: "name and code are required" }); return; }
   try {
     const [country] = await db.insert(countriesTable).values({ name, code: code.toUpperCase(), flagEmoji, dialCode: normalizeDialCode(dialCode), isActive }).returning();
+    invalidatePublicCatalogRenderCache({ entityType: "catalog" });
+    invalidatePublicWebDiscoveryCache();
     await logAudit(req.user!.id, "create_country", "country", country.id, { name, code }, req.ip);
     res.status(201).json(country);
   } catch { res.status(409).json({ error: "Country code or name already exists" }); }
@@ -109,6 +113,10 @@ router.post("/countries/bulk", bulkJson, requireAuth, requireRole(...MANAGER_ROL
   if (!Array.isArray(rows) || rows.length === 0) { res.status(400).json({ error: "Expected non-empty array" }); return; }
   const values = rows.map(r => ({ name: r.name, code: r.code.toUpperCase(), flagEmoji: r.flagEmoji ?? null, dialCode: normalizeDialCode(r.dialCode), isActive: true }));
   const inserted = await db.insert(countriesTable).values(values).onConflictDoNothing().returning();
+  if (inserted.length > 0) {
+    invalidatePublicCatalogRenderCache({ entityType: "catalog" });
+    invalidatePublicWebDiscoveryCache();
+  }
   await logAudit(req.user!.id, "bulk_import_countries", "country", undefined, { count: inserted.length }, req.ip);
   res.json({ inserted: inserted.length, skipped: rows.length - inserted.length });
 });
@@ -124,12 +132,16 @@ router.patch("/countries/:id", requireAuth, requireRole(...MANAGER_ROLES), async
   if (isActive !== undefined) updates.isActive = isActive;
   const [country] = await db.update(countriesTable).set(updates).where(eq(countriesTable.id, id)).returning();
   if (!country) { res.status(404).json({ error: "Not found" }); return; }
+  invalidatePublicCatalogRenderCache({ entityType: "catalog" });
+  invalidatePublicWebDiscoveryCache();
   res.json(country);
 });
 
 router.delete("/countries/:id", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
   const id = parseInt(String(req.params.id), 10);
   await db.delete(countriesTable).where(eq(countriesTable.id, id));
+  invalidatePublicCatalogRenderCache({ entityType: "catalog" });
+  invalidatePublicWebDiscoveryCache();
   res.sendStatus(204);
 });
 
@@ -161,6 +173,8 @@ router.post("/cities", requireAuth, requireRole(...MANAGER_ROLES), async (req, r
   const { name, countryId, isActive = true } = req.body;
   if (!name || !countryId) { res.status(400).json({ error: "name and countryId are required" }); return; }
   const [city] = await db.insert(citiesTable).values({ name, countryId, isActive }).returning();
+  invalidatePublicCatalogRenderCache({ entityType: "catalog" });
+  invalidatePublicWebDiscoveryCache();
   await logAudit(req.user!.id, "create_city", "city", city.id, { name, countryId }, req.ip);
   res.status(201).json(city);
 });
@@ -180,6 +194,10 @@ router.post("/cities/bulk", bulkJson, requireAuth, requireRole(...MANAGER_ROLES)
 
   if (values.length === 0) { res.status(400).json({ error: "No valid rows (countryId or countryCode required)" }); return; }
   const inserted = await db.insert(citiesTable).values(values).returning();
+  if (inserted.length > 0) {
+    invalidatePublicCatalogRenderCache({ entityType: "catalog" });
+    invalidatePublicWebDiscoveryCache();
+  }
   await logAudit(req.user!.id, "bulk_import_cities", "city", undefined, { count: inserted.length }, req.ip);
   res.json({ inserted: inserted.length, skipped: rows.length - inserted.length });
 });
@@ -193,12 +211,16 @@ router.patch("/cities/:id", requireAuth, requireRole(...MANAGER_ROLES), async (r
   if (isActive !== undefined) updates.isActive = isActive;
   const [city] = await db.update(citiesTable).set(updates).where(eq(citiesTable.id, id)).returning();
   if (!city) { res.status(404).json({ error: "Not found" }); return; }
+  invalidatePublicCatalogRenderCache({ entityType: "catalog" });
+  invalidatePublicWebDiscoveryCache();
   res.json(city);
 });
 
 router.delete("/cities/:id", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
   const id = parseInt(String(req.params.id), 10);
   await db.delete(citiesTable).where(eq(citiesTable.id, id));
+  invalidatePublicCatalogRenderCache({ entityType: "catalog" });
+  invalidatePublicWebDiscoveryCache();
   res.sendStatus(204);
 });
 
@@ -245,6 +267,10 @@ router.post("/universities/bulk", bulkJson, requireAuth, requireRole(...MANAGER_
 
   if (values.length === 0) { res.status(400).json({ error: "No valid rows" }); return; }
   const inserted = await db.insert(universitiesTable).values(values).onConflictDoNothing().returning();
+  if (inserted.length > 0) {
+    invalidatePublicCatalogRenderCache({ entityType: "catalog" });
+    invalidatePublicWebDiscoveryCache();
+  }
   await logAudit(req.user!.id, "bulk_import_universities", "university", undefined, { count: inserted.length }, req.ip);
   res.json({ inserted: inserted.length, skipped: rows.length - inserted.length });
 });
@@ -266,7 +292,7 @@ router.post("/universities/bulk", bulkJson, requireAuth, requireRole(...MANAGER_
  * Auth: manager+; katalog hassas yapılandırma, dış istemcilere açmıyoruz.
  */
 const PROGRAM_TEMPLATE_FIXED_COLUMNS = [
-  "universityId", "universityName", "name", "description", "degree", "field", "language",
+  "universityId", "universityName", "country", "name", "description", "degree", "field", "language",
   "duration", "tuitionFee", "currency", "scholarship", "intakes",
   "requirements", "commissionRate", "applicationFee", "advancedFee",
   "depositFee", "serviceFeeAmount", "discountedFee", "languageFee",
@@ -296,7 +322,8 @@ router.get("/programs/import-template", requireAuth, requireRole(...MANAGER_ROLE
       { Column: "universityName", Required: "Yes (or universityId)", Notes: "Exact name as it appears in the Universities tab. Case-insensitive but spelling must match." },
       { Column: "universityId", Required: "Yes (or universityName)", Notes: "Numeric university id (alternative to universityName)." },
       { Column: "name", Required: "Yes", Notes: "Canonical English program name (e.g. Computer Engineering)." },
-      { Column: "description", Required: "No", Notes: "Canonical English description. The system automatically queues all 15 translations." },
+      { Column: "country", Required: "No", Notes: "Used when auto-creating a missing university (for example, Turkey)." },
+      { Column: "description", Required: "No", Notes: "Canonical English description. The system automatically queues all configured target translations." },
       { Column: "degree / field / language / duration", Required: "No", Notes: "Free text." },
       { Column: "tuitionFee / scholarship / applicationFee / advancedFee / depositFee / serviceFeeAmount / discountedFee / languageFee", Required: "No", Notes: "Numeric (no currency symbol)." },
       { Column: "currency", Required: "No", Notes: "ISO code: USD, EUR, TRY, GBP. Defaults to USD." },
@@ -345,6 +372,25 @@ router.post("/programs/bulk", bulkJson, requireAuth, requireRole(...MANAGER_ROLE
   // to internal keys before any validation.
   const normalizedRows = normalizeProgramImportRows(rows) as typeof rows;
 
+  // Belge sütun anahtarlarını canlı katalogtan oku (5dk cache, in-flight
+  // dedupe, fail→eski cache). Anahtarları sabit bir sıraya (alfabetik)
+  // koyuyoruz ki tüm satırlar için sortOrder deterministik kalsın — eski
+  // hardcoded dizinin sağladığı garanti.
+  // loadDocCatalogKeySet() preserves the admin-managed `sort_order` from
+  // catalog_options (loader SELECTs ORDER BY sort_order, id). Spreading
+  // the Set keeps that order, so the importer's `sortOrder` field matches
+  // what the widget/UI uses elsewhere.
+  const docKeySet = await loadDocCatalogKeySet();
+  const docKeys = [...docKeySet];
+  if (docKeys.length === 0) {
+    // Katalog tamamen boş veya DB hiç ulaşılamadı ve cache de yok: import
+    // sessizce belge sütunlarını yok sayarsa kullanıcı sebebini anlayamaz.
+    res.status(503).json({
+      error: "Belge kataloğu yüklenemedi, lütfen tekrar deneyin.",
+    });
+    return;
+  }
+  const docKeyOrder = new Map(docKeys.map((k, i) => [k, i]));
   const allUnis = await db.select({ id: universitiesTable.id, name: universitiesTable.name }).from(universitiesTable);
   const uniNameMap = Object.fromEntries(allUnis.map(u => [u.name.trim().toLowerCase(), u.id]));
 
@@ -373,25 +419,6 @@ router.post("/programs/bulk", bulkJson, requireAuth, requireRole(...MANAGER_ROLE
     }
   }
 
-  // Belge sütun anahtarlarını canlı katalogtan oku (5dk cache, in-flight
-  // dedupe, fail→eski cache). Anahtarları sabit bir sıraya (alfabetik)
-  // koyuyoruz ki tüm satırlar için sortOrder deterministik kalsın — eski
-  // hardcoded dizinin sağladığı garanti.
-  // loadDocCatalogKeySet() preserves the admin-managed `sort_order` from
-  // catalog_options (loader SELECTs ORDER BY sort_order, id). Spreading
-  // the Set keeps that order, so the importer's `sortOrder` field matches
-  // what the widget/UI uses elsewhere.
-  const docKeySet = await loadDocCatalogKeySet();
-  const docKeys = [...docKeySet];
-  if (docKeys.length === 0) {
-    // Katalog tamamen boş veya DB hiç ulaşılamadı ve cache de yok: import
-    // sessizce belge sütunlarını yok sayarsa kullanıcı sebebini anlayamaz.
-    res.status(503).json({
-      error: "Belge kataloğu yüklenemedi, lütfen tekrar deneyin.",
-    });
-    return;
-  }
-  const docKeyOrder = new Map(docKeys.map((k, i) => [k, i]));
   // Set of column header names from the incoming payload that we tried to
   // match against the catalog but didn't recognise. Reported back so the
   // admin sees "you imported a column called `xyz_form` that isn't in the
@@ -576,6 +603,13 @@ router.post("/programs/bulk", bulkJson, requireAuth, requireRole(...MANAGER_ROLE
       }
     }
   }
+
+  // Public detail pages and CMS catalogue blocks read these rows directly.
+  // Invalidate only catalogue-derived render entries after the complete
+  // import (rather than once per row) so bulk imports stay cheap and never
+  // serve a stale snapshot beyond the current request.
+  invalidatePublicCatalogRenderCache({ entityType: "catalog" });
+  invalidatePublicWebDiscoveryCache();
 
   const unknownDocColumns = [...unknownDocCols].sort();
   await logAudit(req.user!.id, "bulk_import_programs", "program", undefined, {

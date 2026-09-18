@@ -5,6 +5,9 @@ import path from "path";
 import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
 
 const isBuild = process.argv.includes("build");
+// A deployable public build must not inherit NODE_ENV=test from the CI test
+// runner: that bundles React's development runtime and dev-only overlays.
+if (isBuild) process.env.NODE_ENV = "production";
 const isProd = process.env.NODE_ENV === "production";
 
 const rawPort = process.env.PORT;

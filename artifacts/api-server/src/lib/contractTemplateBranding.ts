@@ -2,6 +2,7 @@ import { contractBrandProfilesTable, contractTemplatesTable, db } from "@workspa
 import { and, eq } from "drizzle-orm";
 import {
   sanitizeContractBranding,
+  mergeContractBranding,
   type ContractBrandingConfig,
 } from "./contractBranding";
 
@@ -29,9 +30,5 @@ export async function resolveContractTemplateBranding(
     profileConfig = sanitizeContractBranding(profile?.config);
   }
 
-  const templateConfig = sanitizeContractBranding(template.signingPageConfig);
-  return sanitizeContractBranding({
-    ...(profileConfig || {}),
-    ...(templateConfig || {}),
-  });
+  return mergeContractBranding(profileConfig, template.signingPageConfig);
 }

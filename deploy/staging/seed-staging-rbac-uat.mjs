@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
+import path from "node:path";
+import { expectedStagingMigrationCount } from "./migration-count.mjs";
 
 const apiRequire = createRequire(
   new URL("../../artifacts/api-server/package.json", import.meta.url),
@@ -143,6 +145,8 @@ async function run() {
   const expectedPreUserCount = exactExpectedUserCount(
     process.env.STAGING_UAT_EXPECTED_PRE_USER_COUNT,
   );
+  const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
+  const expectedMigrations = expectedStagingMigrationCount(root);
 
   const passwordHash = await bcrypt.hash(password, 12);
   const client = new pg.Client({
@@ -164,7 +168,7 @@ async function run() {
     if (
       identityRow?.database_name !== "fasos_staging" ||
       identityRow?.user_name !== "fas_migrator" ||
-              identityRow?.migration_count !== 109 ||
+      identityRow?.migration_count !== expectedMigrations ||
       identityRow?.user_count !== expectedPreUserCount
     ) {
       fail("database identity, ledger, or exact pre-user count does not match");

@@ -103,7 +103,10 @@ test("R7: fatherJob/motherJob skipped, toggles never missing", () => {
 
 test("R8: portal without a readiness matrix is marked unsupported", () => {
   const r = computeReadiness(fullStudent({ nationality: null }), [], "united", []);
-  assert.equal(r.ready, true);
+  // Unsupported must never be interpreted as ready by callers that only
+  // inspect the readiness flag. The endpoint remains a soft gate because
+  // execution paths also check `supported` before applying it.
+  assert.equal(r.ready, false);
   assert.equal(r.supported, false);
   assert.deepEqual(r.missing, []);
 });

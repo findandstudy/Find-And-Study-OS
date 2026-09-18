@@ -67,12 +67,21 @@ jobs:
           pnpm --filter @workspace/api-server run test:institution-evidence-share
           pnpm --filter @workspace/api-server run test:reporting-center
 
-      - name: Type-check and build deployable applications
-        run: |
-          pnpm run typecheck
-          pnpm --filter @workspace/edcons run check:i18n
-          pnpm --filter @workspace/api-server run build
-          pnpm --filter @workspace/edcons run build
+      - name: Type-check workspace
+        run: pnpm run typecheck
+
+      - name: Verify synchronized UI translations
+        run: pnpm --filter @workspace/edcons run check:i18n
+
+      - name: Build API deployable application
+        env:
+          NODE_ENV: production
+        run: pnpm --filter @workspace/api-server run build
+
+      - name: Build Edcons deployable application
+        env:
+          NODE_ENV: production
+        run: pnpm --filter @workspace/edcons run build
 
   windows-portability:
     name: Windows institution portability
@@ -156,7 +165,7 @@ jobs:
           PG_DISPOSABLE_ADMIN_URL: postgresql://postgres@127.0.0.1:5433/postgres
         run: node lib/db/prepare-disposable-migration-database.mjs
 
-      - name: Apply and replay all 109 migrations
+      - name: Apply and replay all reviewed migrations
         env:
           ALLOW_REVIEWED_MIGRATIONS: "true"
           DATABASE_URL: postgresql://fas_migrator@127.0.0.1:5433/fasos_apply_local

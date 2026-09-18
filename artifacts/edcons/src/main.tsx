@@ -37,7 +37,7 @@ import "./index.css";
 const _PORTAL_PREFIXES = ["/admin", "/staff", "/student", "/agent"];
 
 function _isKnownPublicPath(path: string): boolean {
-  const PUBLIC_SUB = new Set(["", "about", "countries", "programs", "blog", "contact", "login"]);
+  const PUBLIC_SUB = new Set(["", "about", "countries", "programs", "universities", "blog", "contact", "login"]);
   const parts = path.split("/").filter(Boolean);
   if (parts.length === 0) return true;
   if (parts.length === 1) return true;
@@ -124,4 +124,12 @@ if (import.meta.env.DEV) {
   document.body.appendChild(badge);
 }
 
-createRoot(document.getElementById("root")!).render(<App />);
+const rootElement = document.getElementById("root")!;
+// The SSR/ISR pilot emits a safe semantic shell for crawlers and first paint.
+// It is intentionally not a React hydration payload yet, so remove it before
+// createRoot mounts to avoid duplicate DOM and hydration mismatch warnings.
+if (rootElement.hasAttribute("data-public-render-shell-root")) {
+  rootElement.replaceChildren();
+  rootElement.removeAttribute("data-public-render-shell-root");
+}
+createRoot(rootElement).render(<App />);

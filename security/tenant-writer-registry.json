@@ -744,6 +744,51 @@
       "note": "Default-off translation worker calls an external AI provider and commits only source-hash-matched results; provider activation remains quarantined."
     },
     {
+      "path": "artifacts/api-server/src/lib/postgresPublicWebDraftIntakeStore.ts",
+      "ownership": "tenant_owned",
+      "enforcement": "quarantine_required",
+      "risk": "critical",
+      "owner": "Catalog & Content",
+      "externalPilot": "quarantine",
+      "note": "Governed public-web draft intake store is receipt-bound and runtime-unwired; executor grant and external publication remain disabled."
+    },
+    {
+      "path": "artifacts/api-server/src/lib/postgresPublicWebPublicationStore.ts",
+      "ownership": "tenant_owned",
+      "enforcement": "quarantine_required",
+      "risk": "critical",
+      "owner": "Catalog & Content",
+      "externalPilot": "quarantine",
+      "note": "Governed public-web publication store is maker-checker and receipt-bound; publication/index activation remains disabled."
+    },
+    {
+      "path": "artifacts/api-server/src/lib/publicCatalogQueryPolicy.ts",
+      "ownership": "tenant_owned",
+      "enforcement": "quarantine_required",
+      "risk": "high",
+      "owner": "Catalog & Content",
+      "externalPilot": "quarantine",
+      "note": "Public catalogue policy cache is tenant-scoped and fail-closed; anonymous publication rollout remains gated."
+    },
+    {
+      "path": "artifacts/api-server/src/lib/publicCatalogRenderReadModel.ts",
+      "ownership": "tenant_owned",
+      "enforcement": "quarantine_required",
+      "risk": "high",
+      "owner": "Catalog & Content",
+      "externalPilot": "quarantine",
+      "note": "Public catalogue render cache is bounded and published-projection-only; SSR rollout remains allowlist-gated."
+    },
+    {
+      "path": "artifacts/api-server/src/lib/publicWebDiscoveryReadModel.ts",
+      "ownership": "tenant_owned",
+      "enforcement": "quarantine_required",
+      "risk": "high",
+      "owner": "Catalog & Content",
+      "externalPilot": "quarantine",
+      "note": "Public discovery read model uses bounded read-only queries and invalidation; sitemap/index rollout remains disabled."
+    },
+    {
       "path": "artifacts/api-server/src/lib/replitAuth.ts",
       "ownership": "privileged_config",
       "enforcement": "quarantine_required",

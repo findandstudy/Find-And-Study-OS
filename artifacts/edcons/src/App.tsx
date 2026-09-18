@@ -59,7 +59,12 @@ if (typeof window !== "undefined") {
 const About = lazyRetry(() => import("@/pages/public/About"));
 const Countries = lazyRetry(() => import("@/pages/public/Countries"));
 const CountryDetail = lazyRetry(() => import("@/pages/public/CountryDetail"));
+const CityDetail = lazyRetry(() => import("@/pages/public/CityDetail"));
+const GuideDetail = lazyRetry(() => import("@/pages/public/GuideDetail"));
+const PublicPage = lazyRetry(() => import("@/pages/public/PublicPage"));
 const Programs = lazyRetry(() => import("@/pages/public/Programs"));
+const ProgramDetail = lazyRetry(() => import("@/pages/public/ProgramDetail"));
+const UniversityDetail = lazyRetry(() => import("@/pages/public/UniversityDetail"));
 const Blog = lazyRetry(() => import("@/pages/public/Blog"));
 const Contact = lazyRetry(() => import("@/pages/public/Contact"));
 const AgencyApplication = lazyRetry(() => import("@/pages/public/AgencyApplication"));
@@ -200,7 +205,7 @@ function LoginRedirect() {
 function InvalidLangRedirect({ segment, rest }: { segment: string; rest: string }) {
   const [, setLocation] = useLocation();
   useEffect(() => {
-    const path = rest ? `/en/${rest}` : `/en`;
+    const path = segment === "about" && !rest ? "/en/about" : rest ? `/en/${rest}` : `/en`;
     setLocation(path, { replace: true });
   }, [segment, rest, setLocation]);
   return <PageLoader />;
@@ -291,11 +296,29 @@ function PublicRoutes({ lang }: { lang: string }) {
             <Route path={`/${lang}/countries/:slug`}>
               {(params) => <CountryDetail slug={params.slug} />}
             </Route>
+            <Route path={`/${lang}/destinations/:slug`}>
+              {(params) => <CountryDetail slug={params.slug} />}
+            </Route>
+            <Route path={`/${lang}/cities/:routeKey`}>
+              {(params) => <CityDetail routeKey={params.routeKey} />}
+            </Route>
             <Route path={`/${lang}/programs`} component={Programs} />
+            <Route path={`/${lang}/programs/:routeKey`}>
+              {(params) => <ProgramDetail routeKey={params.routeKey} />}
+            </Route>
+            <Route path={`/${lang}/universities/:routeKey`}>
+              {(params) => <UniversityDetail routeKey={params.routeKey} />}
+            </Route>
             <Route path={`/${lang}/blog`} component={Blog} />
+            <Route path={`/${lang}/guides/:routeKey`}>
+              {(params) => <GuideDetail routeKey={params.routeKey} />}
+            </Route>
             <Route path={`/${lang}/contact`} component={Contact} />
             <Route path={`/${lang}/agency/apply`} component={AgencyApplication} />
             <Route path={`/${lang}/agency-application`} component={AgencyApplication} />
+            <Route path={`/${lang}/:slug`}>
+              {(params) => <PublicPage slug={params.slug} />}
+            </Route>
             <Route component={AuthFallback} />
           </Switch>
         </PublicLayout>

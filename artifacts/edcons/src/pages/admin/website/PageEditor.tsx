@@ -23,6 +23,8 @@ import { useLocation } from "wouter";
 import { BLOCK_TYPES, getBlockTypeDef, getDefaultContent, type PageBlock, type BlockFieldDef } from "@/lib/website/blockTypes";
 import { SUPPORTED_LANGUAGES, LANGUAGE_META } from "@/lib/i18n";
 import DOMPurify from "isomorphic-dompurify";
+import { CatalogBlockPreview } from "./CatalogBlockPreview";
+import { CatalogBlockFields } from "./CatalogBlockFields";
 
 const ALLOWED_TAGS = ["p", "br", "b", "i", "u", "strong", "em", "a", "ul", "ol", "li", "h1", "h2", "h3", "h4", "h5", "h6", "blockquote", "code", "pre", "span", "div", "img", "hr"];
 const ALLOWED_ATTRS = ["href", "target", "rel", "src", "alt", "class", "style"];
@@ -74,6 +76,7 @@ export default function PageEditor({ id }: { id: number }) {
   const [blocks, setBlocks] = useState<PageBlock[]>([]);
   const [selectedBlockIdx, setSelectedBlockIdx] = useState<number | null>(null);
   const [previewSize, setPreviewSize] = useState<PreviewSize>("desktop");
+  const [mobilePane, setMobilePane] = useState<"blocks" | "editor" | "preview">("preview");
   const [showAddBlock, setShowAddBlock] = useState(false);
   const [dirty, setDirty] = useState(false);
   const blocksInitialized = useRef(false);
@@ -94,6 +97,7 @@ export default function PageEditor({ id }: { id: number }) {
     queryKey: ["website-page", id],
     queryFn: () => customFetch(`/api/website/pages/${id}`),
   });
+  const sourceLocale = page?.locale || "en";
 
   const { data: savedBlocks = [], isFetched: blocksFetched } = useQuery<PageBlock[]>({
     queryKey: ["website-page-blocks", id],
@@ -111,6 +115,7 @@ export default function PageEditor({ id }: { id: number }) {
     if (blocksInitialized.current) return;
     if (!blocksFetched) return;
     blocksInitialized.current = true;
+    setEditLocale(page?.locale || "en");
     const parsed = savedBlocks.map((b, i) => ({
       id: b.id,
       blockType: b.blockType,
@@ -194,7 +199,7 @@ export default function PageEditor({ id }: { id: number }) {
       const prev = (result[loc] && typeof result[loc] === "object") ? result[loc] as Record<string, unknown> : {};
       result[loc] = { ...prev, blocks: blockArr };
     }
-    if (editLocale !== "en") {
+    if (editLocale !== sourceLocale) {
       const prev = (result[editLocale] && typeof result[editLocale] === "object") ? result[editLocale] as Record<string, unknown> : {};
       result[editLocale] = { ...prev, blocks: blocks.map((b, i) => ({ ...b, sortOrder: i })) };
     }
@@ -204,7 +209,7 @@ export default function PageEditor({ id }: { id: number }) {
   const saveDraftMutation = useMutation({
     mutationFn: () => {
       const payload: Record<string, unknown> = {
-        blocks: editLocale === "en" ? blocks.map((b, i) => ({ ...b, sortOrder: i })) : defaultBlocksRef.current.map((b, i) => ({ ...b, sortOrder: i })),
+        blocks: editLocale === sourceLocale ? blocks.map((b, i) => ({ ...b, sortOrder: i })) : defaultBlocksRef.current.map((b, i) => ({ ...b, sortOrder: i })),
       };
       const tx = buildTranslationsPayload();
       if (tx) payload.translationsJson = tx;
@@ -226,8 +231,11 @@ export default function PageEditor({ id }: { id: number }) {
 
   const publishMutation = useMutation({
     mutationFn: async () => {
+      if (blocks.some(b => b.blockType === "global_block" && !b.content.globalComponentId)) {
+        if (!window.confirm("An unbound Global Block will be skipped on the public page. Publish anyway?")) throw new Error("Publication cancelled");
+      }
       const payload: Record<string, unknown> = {
-        blocks: editLocale === "en" ? blocks.map((b, i) => ({ ...b, sortOrder: i })) : defaultBlocksRef.current.map((b, i) => ({ ...b, sortOrder: i })),
+        blocks: editLocale === sourceLocale ? blocks.map((b, i) => ({ ...b, sortOrder: i })) : defaultBlocksRef.current.map((b, i) => ({ ...b, sortOrder: i })),
       };
       const tx = buildTranslationsPayload();
       if (tx) payload.translationsJson = tx;
@@ -254,12 +262,12 @@ export default function PageEditor({ id }: { id: number }) {
 
   function handleLocaleSwitch(newLocale: string) {
     if (newLocale === editLocale) return;
-    if (editLocale === "en") {
+    if (editLocale === sourceLocale) {
       defaultBlocksRef.current = JSON.parse(JSON.stringify(blocks));
     } else {
       translationsRef.current[editLocale] = JSON.parse(JSON.stringify(blocks));
     }
-    if (newLocale === "en") {
+    if (newLocale === sourceLocale) {
       setBlocks(JSON.parse(JSON.stringify(defaultBlocksRef.current)));
     } else {
       const translated = translationsRef.current[newLocale];
@@ -268,7 +276,7 @@ export default function PageEditor({ id }: { id: number }) {
       } else {
         const copy = JSON.parse(JSON.stringify(defaultBlocksRef.current));
         setBlocks(copy);
-        toast({ title: "No translation yet", description: "Showing default (English) content. Edit to create translation." });
+        toast({ title: "No translation yet", description: `Showing source (${sourceLocale}) content. Edit to create translation.` });
       }
     }
     setEditLocale(newLocale);
@@ -309,6 +317,7 @@ export default function PageEditor({ id }: { id: number }) {
     };
     setBlocks(prev => [...prev, newBlock]);
     setSelectedBlockIdx(blocks.length);
+    setMobilePane("editor");
     setShowAddBlock(false);
     setDirty(true);
   }, [blocks.length]);
@@ -375,10 +384,10 @@ export default function PageEditor({ id }: { id: number }) {
   }
 
   return (
-      <div className="flex flex-col h-[calc(100vh-3.5rem)]">
-        <div className="h-12 border-b bg-card flex items-center justify-between px-4 shrink-0">
-          <div className="flex items-center gap-3">
-            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setLocation("/admin/website/pages")}>
+      <div className="flex min-w-0 flex-col h-[calc(100dvh-3.5rem)]">
+        <div className="min-h-12 border-b bg-card flex flex-wrap gap-3 items-center justify-between px-4 py-2 shrink-0">
+          <div className="flex min-w-0 flex-wrap items-center gap-3">
+            <Button aria-label="Back to pages" variant="ghost" size="icon" className="h-8 w-8" onClick={() => setLocation("/admin/website/pages")}>
               <ArrowLeft className="w-4 h-4" />
             </Button>
             <Separator orientation="vertical" className="h-5" />
@@ -388,9 +397,9 @@ export default function PageEditor({ id }: { id: number }) {
             </Badge>
             {dirty && <Badge variant="outline" className="text-xs text-amber-600 border-amber-300">Unsaved</Badge>}
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Select value={editLocale} onValueChange={handleLocaleSwitch}>
-              <SelectTrigger className="h-7 w-[100px] text-xs">
+              <SelectTrigger aria-label="Editing language" className="h-7 w-[100px] text-xs">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -400,7 +409,7 @@ export default function PageEditor({ id }: { id: number }) {
               </SelectContent>
             </Select>
             <div className="flex gap-0.5">
-              {SUPPORTED_LANGUAGES.filter(l => l !== "en").slice(0, 5).map(l => {
+              {SUPPORTED_LANGUAGES.filter(l => l !== sourceLocale).slice(0, 5).map(l => {
                 const trBlocks = translationsRef.current[l];
                 const has = trBlocks && trBlocks.length > 0;
                 return <span key={l} className={`text-[9px] ${has ? "text-green-600" : "text-muted-foreground/40"}`} title={`${LANGUAGE_META[l].name}: ${has ? "translated" : "not translated"}`}>{has ? "●" : "○"}</span>;
@@ -411,6 +420,8 @@ export default function PageEditor({ id }: { id: number }) {
               {(["desktop", "tablet", "mobile"] as PreviewSize[]).map(size => (
                 <Button
                   key={size}
+                  aria-label={`${size} preview width`}
+                  aria-pressed={previewSize === size}
                   variant={previewSize === size ? "default" : "ghost"}
                   size="icon"
                   className="h-7 w-7 rounded-none first:rounded-l-md last:rounded-r-md"
@@ -567,13 +578,16 @@ export default function PageEditor({ id }: { id: number }) {
           </div>
         </div>
 
-        <div className="flex flex-1 overflow-hidden">
-          <div className="w-64 border-r bg-card flex flex-col shrink-0">
+        <nav aria-label="Editor panels" className="flex gap-2 border-b p-2 lg:hidden">
+          {(["blocks", "editor", "preview"] as const).map(pane => <Button key={pane} size="sm" variant={mobilePane === pane ? "default" : "outline"} aria-pressed={mobilePane === pane} onClick={() => setMobilePane(pane)}>{pane === "blocks" ? "Blocks" : pane === "editor" ? "Edit block" : "Preview"}</Button>)}
+        </nav>
+        <div className="flex min-h-0 flex-1 overflow-hidden">
+          <div className={`${mobilePane === "blocks" ? "flex" : "hidden"} w-full lg:w-64 border-e bg-card lg:flex flex-col shrink-0`}>
             <div className="p-3 border-b flex items-center justify-between">
               <h3 className="text-xs font-bold uppercase text-muted-foreground">Blocks</h3>
               <Dialog open={showAddBlock} onOpenChange={setShowAddBlock}>
                 <DialogTrigger asChild>
-                  <Button variant="outline" size="icon" className="h-6 w-6">
+                  <Button aria-label="Add block" variant="outline" size="icon" className="h-8 w-8">
                     <Plus className="w-3.5 h-3.5" />
                   </Button>
                 </DialogTrigger>
@@ -609,25 +623,24 @@ export default function PageEditor({ id }: { id: number }) {
                       className={`group flex items-center gap-1 p-2 rounded-lg cursor-pointer transition-colors text-sm ${
                         selectedBlockIdx === idx ? "bg-primary/10 border border-primary/30" : "hover:bg-secondary"
                       } ${!block.isVisible ? "opacity-50" : ""}`}
-                      onClick={() => setSelectedBlockIdx(idx)}
                     >
                       <GripVertical className="w-3 h-3 text-muted-foreground shrink-0" />
                       <span className="text-sm shrink-0">{def?.icon || "📦"}</span>
-                      <span className="flex-1 truncate text-xs font-medium">{def?.label || block.blockType}</span>
-                      <div className="hidden group-hover:flex items-center gap-0.5">
-                        <button onClick={e => { e.stopPropagation(); moveBlock(idx, -1); }} className="p-0.5 hover:bg-secondary rounded" disabled={idx === 0}>
+                      <button className="min-w-0 flex-1 truncate py-2 text-start text-xs font-medium" onClick={() => { setSelectedBlockIdx(idx); setMobilePane("editor"); }}>{def?.label || block.blockType}</button>
+                      <div className="flex items-center gap-0.5">
+                        <button aria-label="Move block up" onClick={e => { e.stopPropagation(); moveBlock(idx, -1); }} className="p-1 hover:bg-secondary rounded" disabled={idx === 0}>
                           <ChevronUp className="w-3 h-3" />
                         </button>
-                        <button onClick={e => { e.stopPropagation(); moveBlock(idx, 1); }} className="p-0.5 hover:bg-secondary rounded" disabled={idx === blocks.length - 1}>
+                        <button aria-label="Move block down" onClick={e => { e.stopPropagation(); moveBlock(idx, 1); }} className="p-1 hover:bg-secondary rounded" disabled={idx === blocks.length - 1}>
                           <ChevronDown className="w-3 h-3" />
                         </button>
-                        <button onClick={e => { e.stopPropagation(); toggleVisibility(idx); }} className="p-0.5 hover:bg-secondary rounded">
+                        <button aria-label={block.isVisible ? "Hide block" : "Show block"} onClick={e => { e.stopPropagation(); toggleVisibility(idx); }} className="p-1 hover:bg-secondary rounded">
                           {block.isVisible ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
                         </button>
-                        <button onClick={e => { e.stopPropagation(); duplicateBlock(idx); }} className="p-0.5 hover:bg-secondary rounded">
+                        <button aria-label="Duplicate block" onClick={e => { e.stopPropagation(); duplicateBlock(idx); }} className="p-1 hover:bg-secondary rounded">
                           <Copy className="w-3 h-3" />
                         </button>
-                        <button onClick={e => { e.stopPropagation(); removeBlock(idx); }} className="p-0.5 hover:bg-red-100 dark:hover:bg-red-900/30 text-red-500 rounded">
+                        <button aria-label="Remove block" onClick={e => { e.stopPropagation(); removeBlock(idx); }} className="p-1 hover:bg-red-100 dark:hover:bg-red-900/30 text-red-500 rounded">
                           <Trash2 className="w-3 h-3" />
                         </button>
                       </div>
@@ -644,13 +657,13 @@ export default function PageEditor({ id }: { id: number }) {
             </ScrollArea>
           </div>
 
-          <div className="w-80 border-r bg-background flex flex-col shrink-0">
+          <div className={`${mobilePane === "editor" ? "flex" : "hidden"} w-full lg:w-80 border-e bg-background lg:flex flex-col shrink-0`}>
             <div className="p-3 border-b">
               <h3 className="text-xs font-bold uppercase text-muted-foreground">
                 {selectedBlock ? `Edit: ${selectedTypeDef?.label || selectedBlock.blockType}` : "Block Editor"}
               </h3>
             </div>
-            {editLocale !== "en" && (
+            {editLocale !== sourceLocale && (
               <div className="mx-3 mt-2 p-2 rounded-lg bg-blue-50 border border-blue-200 text-xs">
                 <p className="font-medium text-blue-800 flex items-center gap-1">
                   {LANGUAGE_META[editLocale as keyof typeof LANGUAGE_META]?.flag} Editing in {LANGUAGE_META[editLocale as keyof typeof LANGUAGE_META]?.name || editLocale}
@@ -659,8 +672,9 @@ export default function PageEditor({ id }: { id: number }) {
                 <Button type="button" variant="outline" size="sm" className="h-5 text-[10px] px-2 mt-1" onClick={() => {
                   const defaultBlocks = defaultBlocksRef.current;
                   setBlocks(defaultBlocks.map(b => ({ ...b })));
-                  toast({ title: "Copied blocks from English" });
-                }}>Copy blocks from English</Button>
+                  setDirty(true);
+                  toast({ title: `Copied blocks from ${sourceLocale}` });
+                }}>Copy blocks from source language</Button>
               </div>
             )}
             <ScrollArea className="flex-1">
@@ -675,10 +689,14 @@ export default function PageEditor({ id }: { id: number }) {
                 ) : (
                   <>
                     <BlockFieldEditor
-                      fields={selectedTypeDef?.fields || []}
+                      fields={selectedBlock.blockType === "catalog_grid" ? (selectedTypeDef?.fields || []).filter(f => !["country", "city", "limit"].includes(f.key)) : selectedTypeDef?.fields || []}
                       content={selectedBlock.content}
-                      onChange={(key, value) => updateBlockContent(selectedBlockIdx!, key, value)}
+                      onChange={(key, value) => {
+                        updateBlockContent(selectedBlockIdx!, key, value);
+                        if (selectedBlock.blockType === "catalog_grid" && key === "source") for (const filter of ["country", "city", "countryId", "cityId", "universityId", "degree", "language", "institutionType"]) updateBlockContent(selectedBlockIdx!, filter, "");
+                      }}
                     />
+                    {selectedBlock.blockType === "catalog_grid" && <CatalogBlockFields content={selectedBlock.content} locale={editLocale} onChange={(key, value) => updateBlockContent(selectedBlockIdx!, key, value)} />}
                     <AiAssistantPanel
                       context={Object.values(selectedBlock.content).filter(v => typeof v === "string").join(" ").slice(0, 500)}
                       locale={editLocale}
@@ -707,12 +725,12 @@ export default function PageEditor({ id }: { id: number }) {
             </ScrollArea>
           </div>
 
-          <div className="flex-1 bg-secondary/30 flex flex-col items-center p-4 overflow-auto">
+          <div className={`${mobilePane === "preview" ? "flex" : "hidden"} min-w-0 flex-1 bg-secondary/30 lg:flex flex-col items-center p-4 overflow-auto`}>
             <div
               className="bg-white dark:bg-card rounded-lg shadow-lg border overflow-hidden transition-all duration-300"
               style={{ width: PREVIEW_WIDTHS[previewSize], maxWidth: "100%", minHeight: "400px" }}
             >
-              <BlockPreview blocks={blocks} />
+              <BlockPreview blocks={blocks} locale={editLocale} />
             </div>
           </div>
         </div>
@@ -1101,7 +1119,7 @@ function GlobalBlockPreview({ componentId, slug }: { componentId: number | null;
   }
 }
 
-function BlockPreview({ blocks }: { blocks: PageBlock[] }) {
+function BlockPreview({ blocks, locale }: { blocks: PageBlock[]; locale: string }) {
   const visibleBlocks = blocks.filter(b => b.isVisible);
 
   if (visibleBlocks.length === 0) {
@@ -1113,7 +1131,7 @@ function BlockPreview({ blocks }: { blocks: PageBlock[] }) {
   }
 
   return (
-    <div className="divide-y">
+    <div className="divide-y" dir={["ar", "fa", "ur"].includes(locale) ? "rtl" : "ltr"} lang={locale}>
       {visibleBlocks.map((block, idx) => (
         <div key={idx} className="relative">
           <div className="absolute top-1 right-1 z-10">
@@ -1121,7 +1139,7 @@ function BlockPreview({ blocks }: { blocks: PageBlock[] }) {
               {getBlockTypeDef(block.blockType)?.label || block.blockType}
             </Badge>
           </div>
-          <BlockPreviewItem block={block} />
+          {block.blockType === "catalog_grid" ? <CatalogBlockPreview content={block.content} locale={locale} /> : <BlockPreviewItem block={block} />}
         </div>
       ))}
     </div>

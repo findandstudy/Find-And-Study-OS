@@ -24,6 +24,7 @@ import {
   Camera,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { formatMoney } from "@/lib/currency";
 import {
   collectProposalStudyLevels,
   loadProposalDocumentRequirements,
@@ -230,7 +231,10 @@ const SHOW_COMMISSION_ROLES = ["super_admin", "agent", "sub_agent"];
 
 function formatCurrency(amount: number | null | undefined, currency = "USD") {
   if (amount == null) return "—";
-  return new Intl.NumberFormat("en-US", { style: "currency", currency, maximumFractionDigits: 0 }).format(amount);
+  // Catalog imports can contain a missing, lower-case, or otherwise invalid
+  // currency value. Keep a malformed row from taking down the whole result
+  // grid; formatMoney normalizes the code and has a safe display fallback.
+  return formatMoney(amount, currency, { maximumFractionDigits: 0 });
 }
 
 function calcCommissionAmount(program: Program, agentShareRate?: number | null | undefined): number | null {

@@ -26,6 +26,7 @@ import { Link } from "wouter";
 import { useI18n } from "@/hooks/use-i18n";
 import { useSeason } from "@/contexts/SeasonContext";
 import { localizeNotification } from "@/lib/notificationLocalization";
+import { dashboardActivityLabels, dashboardActivityHref } from "@/lib/dashboardLocalization";
 
 const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 function isOverdue(d: string) { return new Date(d) < new Date(); }
@@ -514,12 +515,12 @@ export default function AdminDashboard() {
       {/* Quick Nav */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
         {[
-          { label: "Users", icon: Users, href: "/admin/users", color: "text-blue-500 bg-blue-500/10" },
-          { label: "Leads", icon: Users, href: "/staff/leads", color: "text-purple-500 bg-purple-500/10" },
-          { label: "Applications", icon: FileText, href: "/staff/applications", color: "text-green-500 bg-green-500/10" },
-          { label: "Finance", icon: DollarSign, href: "/staff/finance", color: "text-amber-500 bg-amber-500/10" },
-          { label: "Settings", icon: Shield, href: "/admin/settings", color: "text-primary bg-primary/10" },
-          { label: "Audit Log", icon: Activity, href: "/admin/audit", color: "text-rose-500 bg-rose-500/10" },
+          { label: t("dashboard.users"), icon: Users, href: "/admin/users", color: "text-blue-500 bg-blue-500/10" },
+          { label: t("dashboard.leads"), icon: Users, href: "/staff/leads", color: "text-purple-500 bg-purple-500/10" },
+          { label: t("dashboard.applications"), icon: FileText, href: "/staff/applications", color: "text-green-500 bg-green-500/10" },
+          { label: t("dashboard.finance"), icon: DollarSign, href: "/staff/finance", color: "text-amber-500 bg-amber-500/10" },
+          { label: t("dashboard.settings"), icon: Shield, href: "/admin/settings", color: "text-primary bg-primary/10" },
+          { label: t("dashboard.auditLog"), icon: Activity, href: "/admin/audit", color: "text-rose-500 bg-rose-500/10" },
         ].map((item, i) => (
           <Link key={i} href={item.href}>
             <Card className="p-5 text-center border-none shadow-md shadow-black/5 hover:-translate-y-1 hover:shadow-lg transition-[transform,box-shadow] duration-200 cursor-pointer group">
@@ -540,11 +541,11 @@ export default function AdminDashboard() {
             <div className="w-8 h-8 rounded-lg bg-green-500/10 flex items-center justify-center">
               <GraduationCap className="w-4 h-4 text-green-500" />
             </div>
-            <h3 className="font-display font-bold text-base">Latest Students</h3>
+            <h3 className="font-display font-bold text-base">{t("staffDash.latestStudents")}</h3>
           </div>
           <div className="space-y-3 max-h-[320px] overflow-y-auto">
             {latestStudents.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No students yet.</p>
+              <p className="text-sm text-muted-foreground">{t("staffDash.noStudents")}</p>
             ) : (
               latestStudents.map((st: any, i: number) => (
                 <Link key={st.id} href={`/staff/students/${st.id}`}>
@@ -567,7 +568,7 @@ export default function AdminDashboard() {
                       </p>
                       <p className="text-xs text-muted-foreground">
                         {formatDate(st.createdAt, lang)}{", "}
-                        {new Date(st.createdAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })}
+                        {new Date(st.createdAt).toLocaleTimeString(lang, { hour: "numeric", minute: "2-digit" })}
                       </p>
                     </div>
                     <Badge variant="secondary" className="text-[10px] w-6 h-6 rounded-full p-0 flex items-center justify-center shrink-0 bg-primary/10 text-primary font-bold">
@@ -586,18 +587,15 @@ export default function AdminDashboard() {
             <div className="w-8 h-8 rounded-lg bg-purple-500/10 flex items-center justify-center">
               <Activity className="w-4 h-4 text-purple-500" />
             </div>
-            <h3 className="font-display font-bold text-base">Latest Updates</h3>
+            <h3 className="font-display font-bold text-base">{t("staffDash.latestUpdates")}</h3>
           </div>
           <div className="space-y-3 max-h-[320px] overflow-y-auto">
             {latestUpdates.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No recent updates.</p>
+              <p className="text-sm text-muted-foreground">{t("staffDash.noUpdates")}</p>
             ) : (
               latestUpdates.map((u: any, i: number) => {
-                const detailHref = u.resource && u.resourceId
-                  ? `/staff/${u.resource === "application" ? "applications" : u.resource === "student" ? "students" : u.resource === "lead" ? "leads" : ""}/${u.resourceId}`
-                  : null;
-                const actionLabel = (u.action || "").replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase());
-                const resourceLabel = (u.resource || "").replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase());
+                const detailHref = dashboardActivityHref("staff", u.resource, u.resourceId);
+                const { actionLabel, resourceLabel } = dashboardActivityLabels(u.action || "", u.resource || "", t);
                 const changes = u.data ? Object.entries(u.data).filter(([k]) => !["id", "updatedAt"].includes(k)).slice(0, 2).map(([k, v]) => `${k}: ${v}`).join(", ") : "";
                 const Wrapper = detailHref ? Link : "div" as any;
                 const wrapperProps = detailHref ? { href: detailHref } : {};
@@ -608,7 +606,7 @@ export default function AdminDashboard() {
                         {u.userName ? u.userName.split(" ").map((n: string) => n[0]).join("").slice(0, 2).toUpperCase() : "SY"}
                       </div>
                       <div className="min-w-0 flex-1">
-                        <p className="text-sm font-semibold text-foreground truncate">{u.userName || "System"}</p>
+                        <p className="text-sm font-semibold text-foreground truncate">{u.userName || t("common.system")}</p>
                         <p className="text-xs text-foreground/80 font-medium mt-0.5">
                           {actionLabel}{resourceLabel ? ` — ${resourceLabel}` : ""}
                           {u.resourceId ? ` #${u.resourceId}` : ""}
@@ -633,11 +631,11 @@ export default function AdminDashboard() {
             <div className="w-8 h-8 rounded-lg bg-amber-500/10 flex items-center justify-center">
               <Bell className="w-4 h-4 text-amber-500" />
             </div>
-            <h3 className="font-display font-bold text-base">Notifications</h3>
+            <h3 className="font-display font-bold text-base">{t("staffDash.notifications")}</h3>
           </div>
           <div className="space-y-3 max-h-[320px] overflow-y-auto">
             {latestNotifications.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No notifications.</p>
+              <p className="text-sm text-muted-foreground">{t("staffDash.noNotifications")}</p>
             ) : (
               latestNotifications.map((n: any) => {
                 const NIcon = NOTIFICATION_ICONS[n.type] || Bell;
@@ -701,8 +699,8 @@ export default function AdminDashboard() {
                 <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }} />
                 <YAxis axisLine={false} tickLine={false} tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }} />
                 <Tooltip contentStyle={{ backgroundColor: "hsl(var(--card))", borderRadius: "12px", border: "1px solid hsl(var(--border))" }} />
-                <Area type="monotone" dataKey="leads" name="Leads" stroke="hsl(var(--primary))" strokeWidth={2.5} fillOpacity={1} fill="url(#admLeads)" />
-                <Area type="monotone" dataKey="applications" name="Applications" stroke="hsl(var(--accent))" strokeWidth={2.5} fillOpacity={1} fill="url(#admApps)" />
+                <Area type="monotone" dataKey="leads" name={t("dashboard.leads")} stroke="hsl(var(--primary))" strokeWidth={2.5} fillOpacity={1} fill="url(#admLeads)" />
+                <Area type="monotone" dataKey="applications" name={t("dashboard.applications")} stroke="hsl(var(--accent))" strokeWidth={2.5} fillOpacity={1} fill="url(#admApps)" />
               </AreaChart>
             </ResponsiveContainer>
           </div>
@@ -710,11 +708,11 @@ export default function AdminDashboard() {
           <div className="flex items-center gap-4 mt-3 justify-center">
             <div className="flex items-center gap-1.5">
               <span className="w-3 h-1.5 rounded-full bg-primary inline-block" />
-              <span className="text-[11px] text-muted-foreground">Leads</span>
+              <span className="text-[11px] text-muted-foreground">{t("dashboard.leads")}</span>
             </div>
             <div className="flex items-center gap-1.5">
               <span className="w-3 h-1.5 rounded-full bg-accent inline-block" />
-              <span className="text-[11px] text-muted-foreground">Applications</span>
+              <span className="text-[11px] text-muted-foreground">{t("dashboard.applications")}</span>
             </div>
           </div>
         </Card>
@@ -768,8 +766,8 @@ export default function AdminDashboard() {
                     <p className={`text-xs mt-1 ${isOverdue(fu.scheduledAt) ? "text-red-600 font-semibold" : "text-muted-foreground"}`}>
                       {formatDate(fu.scheduledAt, lang)}
                       {" "}
-                      {new Date(fu.scheduledAt).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}
-                      {isOverdue(fu.scheduledAt) && " — Overdue"}
+                      {new Date(fu.scheduledAt).toLocaleTimeString(lang, { hour: "2-digit", minute: "2-digit" })}
+                      {isOverdue(fu.scheduledAt) && ` — ${t("common.overdue")}`}
                     </p>
                     {(fu.updatedByName ?? fu.createdByName) && (
                       <p className="text-xs text-muted-foreground mt-0.5">

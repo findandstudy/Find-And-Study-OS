@@ -15,15 +15,62 @@ import { HARDCODED_EXTRACTOR_FIELDS, HARDCODED_EXTRACTOR_RULES } from "./lib/aiD
 import { seedAiAgentConfig } from "./lib/inbox/aiAgentConfig";
 import { seedProgramScopeSource } from "./lib/inbox/knowledgeSources";
 import { renderLlmsText } from "@workspace/corporate-facts";
+import {
+  publicCatalogCsp,
+  renderPublicCatalogHtml,
+  shouldRenderPublicCatalogPath,
+} from "./lib/publicCatalogRenderContract";
+import { shouldNoindexSpaPath } from "./lib/spaRobotsPolicy";
+import {
+  parsePublicWebRobotsConfig,
+  renderPublicWebRobots,
+} from "./lib/publicWebRobotsContract";
+import { getPublicCatalogRenderModel } from "./lib/publicCatalogRenderReadModel";
+import {
+  buildStaticSitemapEntries,
+  parsePublicWebSitemapRoute,
+  renderPublicWebSitemapIndex,
+  renderPublicWebUrlSet,
+} from "./lib/publicWebDiscoveryContract";
+import {
+  publicWebDiscoveryConfigFromEnvironment,
+  readPublishedSitemapCounts,
+  readPublishedSitemapPage,
+  resolvePublicWebRouteAlias,
+} from "./lib/publicWebDiscoveryReadModel";
 
 const isProd = process.env.NODE_ENV === "production";
 
 const llmsText = renderLlmsText();
+const publicWebRobotsConfig = parsePublicWebRobotsConfig({
+  mode: process.env.PUBLIC_WEB_ROBOTS_MODE,
+  siteUrl: process.env.PUBLIC_SITE_URL,
+});
 app.get(["/llms.txt", "/.well-known/llms.txt"], (_req, res) => {
+  if (publicWebRobotsConfig.mode !== "published") {
+    res
+      .status(404)
+      .type("text/plain; charset=utf-8")
+      .set("Cache-Control", "no-store")
+      .set("X-Robots-Tag", "noindex, nofollow, noarchive")
+      .send("Not found");
+    return;
+  }
   res
     .type("text/plain; charset=utf-8")
     .set("Cache-Control", "public, max-age=3600")
     .send(llmsText);
+});
+
+app.get("/robots.txt", (_req, res) => {
+  res.setHeader(
+    "Cache-Control",
+    publicWebRobotsConfig.mode === "published"
+      ? "public, max-age=300, s-maxage=3600"
+      : "no-store",
+  );
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.type("text/plain; charset=utf-8").send(renderPublicWebRobots(publicWebRobotsConfig));
 });
 
 type FatalShutdown = (reason: string, exitCode: number) => Promise<void>;
@@ -193,6 +240,67 @@ function serveStaticFrontend() {
     return;
   }
 
+  app.get(
+    ["/sitemap.xml", "/sitemaps/:sitemapFile"],
+    async (req: express.Request, res: express.Response) => {
+      const config = publicWebDiscoveryConfigFromEnvironment();
+      if (config.mode === "off") {
+        res.setHeader("Cache-Control", "no-store");
+        res.setHeader("X-Robots-Tag", "noindex, nofollow, noarchive");
+        res.status(404).type("text/plain").send("Sitemap not found");
+        return;
+      }
+      const route = parsePublicWebSitemapRoute(req.path);
+      if (!route) {
+        res.status(404).type("text/plain").send("Sitemap not found");
+        return;
+      }
+      try {
+        let xml: string;
+        if (route.kind === "index") {
+          const counts = config.mode === "published" && config.scope
+            ? await readPublishedSitemapCounts(config.scope)
+            : [];
+          xml = renderPublicWebSitemapIndex({ siteUrl: config.siteUrl, counts });
+        } else if (route.kind === "static") {
+          xml = renderPublicWebUrlSet({
+            siteUrl: config.siteUrl,
+            entries: buildStaticSitemapEntries(),
+          });
+        } else {
+          if (config.mode !== "published" || !config.scope) {
+            res.status(404).type("text/plain").send("Sitemap not found");
+            return;
+          }
+          const entries = await readPublishedSitemapPage({
+            scope: config.scope,
+            entityType: route.entityType,
+            locale: route.locale,
+            shard: route.shard,
+          });
+          if (entries.length === 0) {
+            res.status(404).type("text/plain").send("Sitemap not found");
+            return;
+          }
+          xml = renderPublicWebUrlSet({ siteUrl: config.siteUrl, entries });
+        }
+        res.setHeader(
+          "Cache-Control",
+          "public, max-age=300, s-maxage=3600, stale-while-revalidate=86400",
+        );
+        res.setHeader("X-Content-Type-Options", "nosniff");
+        res.type("application/xml").send(xml);
+      } catch (error) {
+        console.error("[public-sitemap] request failed", {
+          routeKind: route.kind,
+          message: error instanceof Error ? error.message : "unknown_error",
+        });
+        res.setHeader("Cache-Control", "no-store");
+        res.status(503).type("text/plain").send("Sitemap temporarily unavailable");
+      }
+    },
+  );
+
   app.use(
     "/assets",
     (_req: express.Request, res: express.Response, next: express.NextFunction) => {
@@ -211,6 +319,96 @@ function serveStaticFrontend() {
     },
   }));
 
+  const indexPath = path.join(distPath, "index.html");
+  const indexHtml = fs.readFileSync(indexPath, "utf8");
+  const configuredSiteUrl = (() => {
+    try {
+      const parsed = new URL(
+        process.env.PUBLIC_SITE_URL || "https://findandstudy.com",
+      );
+      if (parsed.protocol !== "https:" || parsed.username || parsed.password) {
+        throw new Error("unsafe_public_site_url");
+      }
+      return parsed.origin;
+    } catch {
+      console.warn("[public-render] invalid PUBLIC_SITE_URL; using canonical default");
+      return "https://findandstudy.com";
+    }
+  })();
+
+  app.get("/{*splat}", async (req: express.Request, res: express.Response, next: express.NextFunction) => {
+    if (req.path.startsWith("/api")) return next();
+    const route = shouldRenderPublicCatalogPath({
+      path: req.path,
+      mode: process.env.PUBLIC_WEB_RENDER_MODE,
+      allowlist: process.env.PUBLIC_WEB_RENDER_ALLOWLIST,
+    });
+    if (!route) return next();
+
+    if (publicWebRobotsConfig.mode !== "published") {
+      res.setHeader("X-Robots-Tag", "noindex, nofollow, noarchive");
+    }
+
+    const startedAt = process.hrtime.bigint();
+    try {
+      const alias = await resolvePublicWebRouteAlias(req.path);
+      if (alias.action?.kind === "redirect") {
+        res.setHeader("Cache-Control", "public, max-age=300, s-maxage=3600");
+        res.setHeader("X-Content-Type-Options", "nosniff");
+        res.redirect(alias.action.status, alias.action.targetPath);
+        return;
+      }
+      if (alias.action?.kind === "gone") {
+        res.setHeader("Cache-Control", "public, max-age=300, s-maxage=3600");
+        res.setHeader("X-Content-Type-Options", "nosniff");
+        res.status(410).type("text/plain").send("Gone");
+        return;
+      }
+      const rendered = await getPublicCatalogRenderModel(route);
+      if (
+        (
+          rendered.value.kind === "program_detail"
+          || rendered.value.kind === "university_detail"
+          || rendered.value.kind === "destination_detail"
+          || rendered.value.kind === "city_detail"
+          || rendered.value.kind === "article_detail"
+          || rendered.value.kind === "page_detail"
+        )
+        && rendered.value.canonicalPath !== route.path
+      ) {
+        res.setHeader("Cache-Control", "public, max-age=60, s-maxage=300");
+        res.redirect(308, rendered.value.canonicalPath);
+        return;
+      }
+      const nonce = crypto.randomBytes(18).toString("base64url");
+      const html = renderPublicCatalogHtml({
+        indexHtml,
+        model: rendered.value,
+        siteUrl: configuredSiteUrl,
+        nonce,
+      });
+      const durationMs = Number(process.hrtime.bigint() - startedAt) / 1_000_000;
+      res.setHeader(
+        "Cache-Control",
+        "public, max-age=0, s-maxage=300, stale-while-revalidate=3600",
+      );
+      res.setHeader("Content-Security-Policy", publicCatalogCsp(nonce));
+      res.setHeader("X-Public-Render", "ssr-isr-pilot");
+      res.setHeader("X-Public-Render-Cache", rendered.cacheStatus);
+      res.setHeader("Server-Timing", `public-render;dur=${durationMs.toFixed(1)}`);
+      res.status(rendered.value.kind === "not_found" ? 404 : 200);
+      res.type("html").send(html);
+    } catch (error) {
+      console.error("[public-render] request failed", {
+        routeKind: route.kind,
+        message: error instanceof Error ? error.message : "unknown_error",
+      });
+      // Rendering is a default-off pilot. A transient read-model failure must
+      // degrade to the existing SPA instead of taking the public site down.
+      next();
+    }
+  });
+
   app.get("/{*splat}", (req: express.Request, res: express.Response, next: express.NextFunction) => {
     if (req.path.startsWith("/api")) return next();
     // Guarantee the SPA always carries a CSRF cookie before it issues ANY
@@ -227,8 +425,13 @@ function serveStaticFrontend() {
       const token = crypto.randomBytes(32).toString("hex");
       res.cookie("csrf_token", token, getCsrfCookieOptions(req, 7 * 24 * 60 * 60 * 1000));
     }
-    const indexPath = path.join(distPath, "index.html");
     res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+    if (
+      publicWebRobotsConfig.mode !== "published"
+      || shouldNoindexSpaPath(req.path)
+    ) {
+      res.setHeader("X-Robots-Tag", "noindex, nofollow, noarchive");
+    }
     res.sendFile(indexPath);
   });
 

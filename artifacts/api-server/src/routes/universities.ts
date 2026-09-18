@@ -2,7 +2,7 @@ import { Router, type IRouter } from "express";
 import { db, pool, universitiesTable, programsTable, programTranslationsTable, applicationsTable, pipelineStagesTable, programDocumentRequirementsTable } from "@workspace/db";
 import { eq, ilike, sql, and, or, inArray, isNull, getTableColumns } from "drizzle-orm";
 import { requireAuth, requireRole, logAudit } from "../lib/auth";
-import { MANAGER_ROLES, STAFF_ROLES } from "../lib/roles";
+import { MANAGER_ROLES, STAFF_ROLES, AGENT_ROLES } from "../lib/roles";
 import { getCurrentSeason } from "../lib/season";
 import { sanitizeCourseFinderProgram } from "../lib/courseFinderVisibility";
 import {
@@ -17,6 +17,9 @@ import {
   requeueAllFailedProgramTranslations,
   requeueProgramTranslations,
 } from "../lib/programTranslationQueue";
+import { invalidatePublicCatalogRenderCache } from "../lib/publicCatalogRenderReadModel";
+import { invalidatePublicWebDiscoveryCache } from "../lib/publicWebDiscoveryReadModel";
+import { parseUniversityBulkStatus } from "../lib/universityBulkStatus";
 
 const router: IRouter = Router();
 
@@ -30,6 +33,20 @@ const UNI_PATCH_FIELDS = [
 ];
 
 const CONTACT_FIELDS = ["contactPersonName", "contactPersonPhone", "contactPersonEmail"];
+function programResponseVisibility(user?: { role: string; agentStaffPermissions?: string[] }): {
+  contacts: boolean;
+  internalFees: boolean;
+  serviceFee: boolean;
+} {
+  const backOfficeRole = Boolean(user && ([...STAFF_ROLES, ...AGENT_ROLES] as string[]).includes(user.role));
+  const agentStaff = user?.role === "agent_staff";
+  return {
+    contacts: backOfficeRole,
+    internalFees: backOfficeRole && (!agentStaff || (user?.agentStaffPermissions ?? []).includes("view_commission_amount")),
+    serviceFee: backOfficeRole && (!agentStaff || (user?.agentStaffPermissions ?? []).includes("view_service_fee")),
+  };
+}
+
 // Internal fields that must never leak through unauthenticated /universities
 // endpoints. assignedStaffIds is the per-university notification recipient
 // list — exposing it would reveal internal user-id assignments publicly.
@@ -84,6 +101,7 @@ router.get("/universities", async (req, res): Promise<void> => {
   const offset = (pageNum - 1) * limitNum;
 
   const conditions = [];
+  if (!req.user || !MANAGER_ROLES.includes(req.user.role)) conditions.push(eq(universitiesTable.isActive, true));
   if (country) conditions.push(ilike(universitiesTable.country, `%${country}%`));
   if (city) conditions.push(ilike(universitiesTable.city, `%${city}%`));
   if (type) conditions.push(ilike(universitiesTable.universityType, type));
@@ -125,7 +143,7 @@ router.get("/universities", async (req, res): Promise<void> => {
   res.json({ data, meta: { total: Number(count), page: pageNum, limit: limitNum, totalPages: Math.ceil(Number(count) / limitNum) } });
 });
 
-router.get("/universities/options", requireAuth, async (_req, res): Promise<void> => {
+router.get("/universities/options", requireAuth, async (req, res): Promise<void> => {
   try {
     const data = await db
       .select({
@@ -133,6 +151,7 @@ router.get("/universities/options", requireAuth, async (_req, res): Promise<void
         name: universitiesTable.name,
       })
       .from(universitiesTable)
+      .where(MANAGER_ROLES.includes(req.user!.role) ? undefined : eq(universitiesTable.isActive, true))
       .orderBy(universitiesTable.name);
     res.json({ data });
   } catch (error) {
@@ -196,8 +215,26 @@ router.post("/universities", requireAuth, requireRole(...MANAGER_ROLES), async (
     contactPersonEmail: contactPersonEmail || null,
     status,
   }).returning();
+  invalidatePublicCatalogRenderCache({ entityType: "catalog" });
+  invalidatePublicWebDiscoveryCache();
   await logAudit(req.user!.id, "create_university", "university", uni.id, { name, country }, req.ip);
   res.status(201).json(uni);
+});
+
+router.patch("/universities/bulk-status", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
+  let input: ReturnType<typeof parseUniversityBulkStatus>;
+  try { input = parseUniversityBulkStatus(req.body); }
+  catch (error) { res.status(400).json({ error: (error as Error).message }); return; }
+  // Do not overwrite child program flags: reactivation must preserve individually inactive programs.
+  const updated = await db.update(universitiesTable).set({ isActive: input.isActive })
+    .where(inArray(universitiesTable.id, input.ids)).returning({ id: universitiesTable.id });
+  if (updated.length) {
+    invalidatePublicCatalogRenderCache({ entityType: "catalog" });
+    invalidatePublicWebDiscoveryCache();
+  }
+  await logAudit(req.user!.id, input.isActive ? "bulk_activate_universities" : "bulk_deactivate_universities", "university", undefined,
+    { requestedCount: input.ids.length, updatedCount: updated.length, universityIds: input.ids.slice(0, 100), truncated: input.ids.length > 100 }, req.ip);
+  res.json({ updated: updated.length, ids: updated.map(row => row.id), isActive: input.isActive });
 });
 
 router.get("/universities/:id", async (req, res): Promise<void> => {
@@ -240,7 +277,9 @@ router.patch("/universities/:id", requireAuth, requireRole(...MANAGER_ROLES), as
   }
   if (Object.keys(updates).length === 0) { res.status(400).json({ error: "No valid fields" }); return; }
   const [uni] = await db.update(universitiesTable).set(updates).where(eq(universitiesTable.id, id)).returning();
-  if (!uni) { res.status(404).json({ error: "University not found" }); return; }
+  if (!uni || (!req.user && !uni.isActive)) { res.status(404).json({ error: "University not found" }); return; }
+  invalidatePublicCatalogRenderCache({ entityType: "catalog" });
+  invalidatePublicWebDiscoveryCache();
   await logAudit(req.user!.id, "update_university", "university", id, updates, req.ip);
   res.json(uni);
 });
@@ -249,6 +288,8 @@ router.delete("/universities/:id", requireAuth, requireRole(...MANAGER_ROLES), a
   const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   await db.delete(universitiesTable).where(eq(universitiesTable.id, id));
+  invalidatePublicCatalogRenderCache({ entityType: "catalog" });
+  invalidatePublicWebDiscoveryCache();
   await logAudit(req.user!.id, "delete_university", "university", id, {}, req.ip);
   res.sendStatus(204);
 });
@@ -304,6 +345,10 @@ router.get("/programs", async (req, res): Promise<void> => {
   const offset = (pageNum - 1) * limitNum;
 
   const conditions = [];
+  if (!req.user || !MANAGER_ROLES.includes(req.user.role)) {
+    conditions.push(eq(programsTable.isActive, true));
+    conditions.push(sql`EXISTS (SELECT 1 FROM ${universitiesTable} WHERE ${universitiesTable.id} = ${programsTable.universityId} AND ${universitiesTable.isActive} = true)`);
+  }
   if (universityId && /^\d+$/.test(universityId)) conditions.push(eq(programsTable.universityId, parseInt(universityId, 10)));
   if (language) conditions.push(ilike(programsTable.language, language));
   if (search) conditions.push(localized
@@ -345,17 +390,11 @@ router.get("/programs", async (req, res): Promise<void> => {
     .offset(offset)
     .orderBy(programsTable.name);
 
-  // This legacy endpoint is used by both authenticated back-office screens and
-  // anonymous catalogue consumers. Never expose commercial fields to callers
-  // without an authenticated session; protected staff/agent screens retain the
-  // existing response contract.
-  const visibleRows: any[] = req.user
-    ? rows
-    : rows.map((row) => sanitizeCourseFinderProgram(row, {
-        contacts: false,
-        internalFees: false,
-        serviceFee: false,
-      }));
+  // Apply the same server-side projection to every caller. Agent staff's
+  // explicit switches must hold here too because application forms load their
+  // program metadata from this legacy endpoint.
+  const visibility = programResponseVisibility(req.user);
+  const visibleRows: any[] = rows.map((row) => sanitizeCourseFinderProgram(row, visibility));
 
   let data: any[] = visibleRows.map((row) => ({
     ...row,
@@ -425,6 +464,8 @@ router.post("/programs", requireAuth, requireRole(...MANAGER_ROLES), async (req,
     quota: quotaVal,
     isActive,
   }).returning();
+  invalidatePublicCatalogRenderCache({ entityType: "catalog" });
+  invalidatePublicWebDiscoveryCache();
   await logAudit(req.user!.id, "create_program", "program", prog.id, { universityId, name }, req.ip);
   res.status(201).json(prog);
 });
@@ -482,6 +523,11 @@ router.patch("/programs/bulk-status", requireAuth, requireRole(...MANAGER_ROLES)
     .where(inArray(programsTable.id, ids))
     .returning({ id: programsTable.id });
 
+  if (updated.length > 0) {
+    invalidatePublicCatalogRenderCache({ entityType: "catalog" });
+    invalidatePublicWebDiscoveryCache();
+  }
+
   await logAudit(
     req.user!.id,
     isActive ? "bulk_activate_programs" : "bulk_deactivate_programs",
@@ -523,13 +569,10 @@ router.get("/programs/:id", async (req, res): Promise<void> => {
   const reqs = await db.select().from(programDocumentRequirementsTable)
     .where(eq(programDocumentRequirementsTable.programId, id))
     .orderBy(programDocumentRequirementsTable.sortOrder);
-  const visibleProgram = req.user
-    ? prog
-    : sanitizeCourseFinderProgram(prog, {
-        contacts: false,
-        internalFees: false,
-        serviceFee: false,
-      });
+  const visibleProgram = sanitizeCourseFinderProgram(
+    prog,
+    programResponseVisibility(req.user),
+  );
   res.json({
     ...visibleProgram,
     contentLocale: prog.translatedLocale || "en",
@@ -633,6 +676,8 @@ router.put("/programs/:id/translations/:locale", requireAuth, requireRole(...MAN
       source.field, source.duration, source.intakes, source.requirements,
     ]);
     if (result.rowCount !== 1) { res.status(409).json({ error: "Translation is currently processing" }); return; }
+    invalidatePublicCatalogRenderCache({ entityType: "catalog" });
+    invalidatePublicWebDiscoveryCache();
     await logAudit(req.user!.id, "program_translation.manual_publish", "program", id, { locale }, req.ip);
     res.json({ programId: id, locale, status: "published", isManual: true });
   } catch (error) {
@@ -659,6 +704,12 @@ router.patch("/programs/:id", requireAuth, requireRole(...MANAGER_ROLES), async 
   if (Object.keys(updates).length === 0) { res.status(400).json({ error: "No valid fields" }); return; }
   const [prog] = await db.update(programsTable).set(updates).where(eq(programsTable.id, id)).returning();
   if (!prog) { res.status(404).json({ error: "Program not found" }); return; }
+  if (!req.user) {
+    const [parent] = await db.select({ isActive: universitiesTable.isActive }).from(universitiesTable).where(eq(universitiesTable.id, prog.universityId));
+    if (!prog.isActive || !parent?.isActive) { res.status(404).json({ error: "Program not found" }); return; }
+  }
+  invalidatePublicCatalogRenderCache({ entityType: "catalog" });
+  invalidatePublicWebDiscoveryCache();
   await logAudit(req.user!.id, "update_program", "program", id, updates, req.ip);
   res.json(prog);
 });
@@ -667,12 +718,18 @@ router.delete("/programs/:id", requireAuth, requireRole(...MANAGER_ROLES), async
   const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   await db.delete(programsTable).where(eq(programsTable.id, id));
+  invalidatePublicCatalogRenderCache({ entityType: "catalog" });
+  invalidatePublicWebDiscoveryCache();
   await logAudit(req.user!.id, "delete_program", "program", id, {}, req.ip);
   res.sendStatus(204);
 });
 
 router.delete("/programs", requireAuth, requireRole(...MANAGER_ROLES), async (req, res): Promise<void> => {
   const result = await db.delete(programsTable).returning({ id: programsTable.id });
+  if (result.length > 0) {
+    invalidatePublicCatalogRenderCache({ entityType: "catalog" });
+    invalidatePublicWebDiscoveryCache();
+  }
   await logAudit(req.user!.id, "delete_all_programs", "program", undefined, { count: result.length }, req.ip);
   res.json({ deleted: result.length });
 });

@@ -362,6 +362,38 @@ export async function processInboundMessage(opts: {
     conversation = { ...conversation, ...communicationPatch };
   }
 
+  // A blocked contact may still submit a webhook at the provider, but the
+  // CRM must treat the block as a real communication boundary: do not persist
+  // the inbound content, notify staff, publish a live event, or invoke AI.
+  // Re-read the contact immediately before the insert to close the race where
+  // staff block a contact while a provider webhook is being processed.
+  const [blockState] = await db
+    .select({ isBlocked: externalContactsTable.isBlocked })
+    .from(externalContactsTable)
+    .where(eq(externalContactsTable.id, externalContact.id))
+    .limit(1);
+  if (blockState?.isBlocked === true) {
+    await db
+      .update(conversationsTable)
+      .set({ botEnabled: false, botReplyCount: 0 })
+      .where(eq(conversationsTable.id, conversation.id));
+    if (channelAccountId) {
+      await db
+        .update(channelAccountsTable)
+        .set({ lastSeenAt: new Date() })
+        .where(eq(channelAccountsTable.id, channelAccountId));
+    }
+    return {
+      conversationId: conversation.id,
+      // No message row is created for blocked contacts; 0 is an explicit
+      // ignored/tombstone-free result for webhook callers.
+      messageId: 0,
+      externalContactId: externalContact.id,
+      duplicate: false,
+      unmatched: !isLinked,
+    };
+  }
+
   // Race-safe message insert. The unique index on (channel, externalMessageId)
   // doubles as our dedupe guarantee — a duplicate webhook delivery is dropped
   // by the DB and we report `duplicate: true` after a refetch.
@@ -401,6 +433,35 @@ export async function processInboundMessage(opts: {
     };
   }
   const inserted = insertedRows[0];
+
+  // Re-check after the insert as well. If a block was committed while the
+  // provider request was in flight, remove the just-created row before any
+  // conversation update, notification, live event, or AI work can observe it.
+  const [postInsertBlockState] = await db
+    .select({ isBlocked: externalContactsTable.isBlocked })
+    .from(externalContactsTable)
+    .where(eq(externalContactsTable.id, externalContact.id))
+    .limit(1);
+  if (postInsertBlockState?.isBlocked === true) {
+    await db.delete(messagesTable).where(eq(messagesTable.id, inserted.id));
+    await db
+      .update(conversationsTable)
+      .set({ botEnabled: false, botReplyCount: 0 })
+      .where(eq(conversationsTable.id, conversation.id));
+    if (channelAccountId) {
+      await db
+        .update(channelAccountsTable)
+        .set({ lastSeenAt: new Date() })
+        .where(eq(channelAccountsTable.id, channelAccountId));
+    }
+    return {
+      conversationId: conversation.id,
+      messageId: 0,
+      externalContactId: externalContact.id,
+      duplicate: false,
+      unmatched: !isLinked,
+    };
+  }
 
   await db
     .update(conversationsTable)
