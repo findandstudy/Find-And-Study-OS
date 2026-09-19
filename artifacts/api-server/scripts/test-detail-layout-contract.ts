@@ -17,11 +17,18 @@ test("four layouts preserve mandatory facts and reject arbitrary content", () =>
 test("optional sections reorder without moving ahead of identity and facts", () => {
   const layout = defaultDetailLayout("city");
   const sections = ["hero", "navigation", "overview", "facts", "programs", "universities"];
-  assert.deepEqual(parseDetailLayout({ ...layout, sections, hidden: ["universities"] }), { ...layout, sections, hidden: ["universities"] });
+  const upgraded = parseDetailLayout({ version: 2, kind: "city", sections, hidden: ["universities"] });
+  assert.ok(upgraded);
+  assert.equal(upgraded.version, 3);
+  assert.deepEqual(upgraded.sections.filter(key => sections.includes(key)), sections, "v2 relative order survives additive sections");
+  assert.deepEqual(new Set(upgraded.sections), new Set(layout.sections));
+  assert.deepEqual(upgraded.hidden, ["universities"]);
+  assert.deepEqual(parseDetailLayout(upgraded), upgraded, "complete v3 layout round trips");
+  assert.equal(parseDetailLayout({ ...layout, sections, hidden: ["universities"] }), null, "v3 cannot omit additive section keys");
   assert.equal(parseDetailLayout({ ...layout, sections: ["hero", "navigation", "programs", "overview", "facts", "universities"] }), null);
-  assert.equal(parseDetailLayout({ ...layout, sections: ["hero", "overview", "programs", "universities"] }), null, "v2 cannot silently omit the new mandatory section set");
+  assert.equal(parseDetailLayout({ version: 2, kind: "city", hidden: [], sections: ["hero", "overview", "programs", "universities"] }), null, "v2 cannot silently omit its mandatory section set");
   assert.deepEqual(parseDetailLayout({ version: 1, kind: "city", sections: ["hero", "overview", "programs", "universities"], hidden: ["universities"] }),
-    { ...layout, sections, hidden: ["universities"] }, "saved v1 layouts upgrade while preserving optional order and visibility");
+    upgraded, "saved v1 layouts upgrade while preserving optional order and visibility");
   assert.equal(parseDetailLayout({ version: 1, kind: "city", sections: ["hero", "programs", "overview", "universities"], hidden: [] }), null);
 });
 test("server and browser module-local contracts stay byte-equivalent", () => {
@@ -30,7 +37,7 @@ test("server and browser module-local contracts stay byte-equivalent", () => {
 });
 test("SSR applies published layout without changing canonical facts or index policy", () => {
   const model: PublicCatalogRenderModel = { kind: "city_detail", locale: "ar", canonicalPath: "/ar/cities/city-1", title: "City", description: "Source description", indexable: false, alternatePaths: {},
-    detailLayout: { ...defaultDetailLayout("city"), sections: ["hero", "navigation", "overview", "facts", "programs", "universities"] },
+    detailLayout: parseDetailLayout({ version: 2, kind: "city", sections: ["hero", "navigation", "overview", "facts", "programs", "universities"], hidden: [] })!,
     city: { id: 1, name: "City", country: "Country", countryCode: "TR", description: "Source description", universityCount: 1, programCount: 1,
       universities: [{ id: 2, name: "Real university", universityType: "Private", canonicalPath: "/ar/universities/real-2" }],
       programs: [{ id: 3, name: "Real program", universityName: "Real university", degree: "Bachelor", field: null, canonicalPath: "/ar/programs/real-3" }] } };

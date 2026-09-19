@@ -79,7 +79,7 @@
     "test:public-catalog-tuition": "tsx --test ./scripts/test-public-catalog-tuition.ts",
     "test:postgres-public-catalog-tuition": "tsx --test ./scripts/test-postgres-public-catalog-tuition.ts",
     "test:public-catalog-requirements": "tsx --test ./scripts/test-public-catalog-requirements.ts",
-    "test:public-catalog-render": "tsx --test ./scripts/test-public-catalog-render-contract.ts ./scripts/test-website-page-authoring.ts ./scripts/test-detail-layout-contract.ts",
+    "test:public-catalog-render": "tsx --test ./scripts/test-public-catalog-render-contract.ts ./scripts/test-website-page-authoring.ts ./scripts/test-detail-layout-contract.ts ./scripts/test-detail-content-contract.ts ./scripts/test-city-program-brief.ts ./scripts/test-public-catalog-program-brief.ts ./scripts/test-course-finder-detail-context.ts",
     "test:public-localized-entities": "tsx --test ./scripts/test-public-localized-entity-contract.ts",
     "test:postgres-public-catalog-render": "tsx --test ./scripts/test-postgres-public-catalog-render.ts",
     "test:public-web-discovery": "tsx --test ./scripts/test-public-web-discovery-contract.ts",

@@ -7,12 +7,15 @@ import { useI18n } from "@/hooks/use-i18n";
 import { useSeo } from "@/hooks/use-seo";
 import { SITE_NAME, SITE_URL, useJsonLd } from "@/hooks/use-json-ld";
 import { Button } from "@/components/ui/button";
-import { DetailArtwork, DetailBreadcrumbs, DetailCard, DetailFacts, DetailHeading, DetailPrice } from "./DetailEditorial";
+import { DetailBreadcrumbs, DetailFacts, DetailHeading, DetailIdentity, DetailPrice } from "./DetailEditorial";
+import { boundDetailContent, detailContentNavigation, detailContentSections, DetailMobileActions } from "./DetailContentSections";
+import { CityProgramCards, type CityProgramCardData } from "./CityProgramCards";
 import { detailCopy, detailMoney, displayTuition, durationIsAmbiguous, localDetailPath, splitRequirements, tuitionOffer, type DetailTuition } from "./detailPresentation";
 
-import { ArrowLeft, BookOpen, ArrowUpRight } from "lucide-react";
+import { ArrowLeft, BookOpen, ArrowUpRight, Building2, GraduationCap, Clock3, Languages, MapPin, CalendarDays, FileText, Wallet } from "lucide-react";
 
 type ProgramDetailPayload = {
+  editorial?: unknown;
   data: {
     id: number;
     isActive?: boolean;
@@ -68,7 +71,7 @@ type ProgramDetailPayload = {
     currencyCode: string;
     frequency: string;
   }>;
-  related: Array<{
+  related: Array<CityProgramCardData & {
     id: number;
     name: string;
     degree: string | null;
@@ -115,6 +118,7 @@ export default function ProgramDetail({ routeKey }: { routeKey: string }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const program = payload?.data;
+  const editorial = boundDetailContent(payload?.editorial, "program", program?.id, lang);
   const tuition = program ? displayTuition(program, lang) : null;
   const copy = detailCopy(lang);
 
@@ -209,10 +213,9 @@ export default function ProgramDetail({ routeKey }: { routeKey: string }) {
   }
 
   const visiblePrices = payload.prices.slice(0, 8);
-  const { requirements, metadata } = splitRequirements(program.requirements);
+  const { requirements, metadata } = splitRequirements(program.requirements, { canonicalPath: program.canonicalPath, id: program.id });
   const countryPath = localDetailPath(program.countryPath), cityPath = localDetailPath(program.cityPath);
   const hasFees = visiblePrices.length > 0 || tuition !== null;
-  const intakeNames = payload.intakes.map(intake => `${intake.intakeKey} ${intake.academicYear}`).join(" · ");
   const campuses = [...new Set(payload.intakes.map(intake => intake.campusName).filter(Boolean))].join(" · ");
   const institutionLocation = <>{cityPath ? <Link href={cityPath}>{program.universityCity}</Link> : program.universityCity}{program.universityCity && " · "}{countryPath ? <Link href={countryPath}>{program.universityCountry}</Link> : program.universityCountry}</>;
   const apply = programAdmissionsOpen(program)
@@ -223,35 +226,47 @@ export default function ProgramDetail({ routeKey }: { routeKey: string }) {
     <DetailLayout kind="program">
       <section data-detail-section="hero">
         <div className="detail-hero">
-          <div className="detail-hero-backdrop"><DetailArtwork /></div>
+          <div className="detail-wrap detail-hero-top">
+            <DetailBreadcrumbs label={copy.catalogue} items={[
+              { label: t("nav.programs"), path: localePath("/programs") },
+              { label: program.universityCountry, path: countryPath },
+              { label: program.universityCity || "", path: cityPath },
+              { label: program.universityName, path: program.universityPath },
+              { label: program.name },
+            ]} />
+          </div>
           <div className="detail-wrap detail-hero-main">
-            <div>
-              <p className="detail-eyebrow">{copy.program} · {program.degree || program.field}</p>
+            <div className="detail-hero-content">
+              <div className="detail-identity">
+                <DetailIdentity src={program.universityLogoUrl} name={program.universityName} />
+                <Link className="detail-hero-link" href={program.universityPath}>{program.universityName}<ArrowUpRight size={17} aria-hidden="true" /></Link>
+              </div>
+              <p className="detail-eyebrow">{copy.program}</p>
               <h1>{program.name}</h1>
-              <Link className="detail-hero-link" href={program.universityPath}>{program.universityName}<ArrowUpRight size={18} aria-hidden="true" /></Link>
-              <p className="detail-hero-lead">{[program.field, program.language].filter(Boolean).join(" · ")}</p>
+              <p className="detail-hero-lead detail-icon-line"><MapPin size={18} aria-hidden="true" /><span>{institutionLocation}</span></p>
+              <div className="detail-meta-pills">
+                {program.degree && <span className="detail-meta-pill"><GraduationCap size={15} aria-hidden="true" />{program.degree}</span>}
+                {program.field && <span className="detail-meta-pill"><BookOpen size={15} aria-hidden="true" />{program.field}</span>}
+              </div>
             </div>
             <aside className="detail-hero-card" aria-label={t("courseFinderPage.tuitionFee")}>
-              <p className="detail-eyebrow">{t("courseFinderPage.tuitionFee")}</p>
+              <p className="detail-eyebrow detail-icon-line"><Wallet size={16} aria-hidden="true" />{t("courseFinderPage.tuitionFee")}</p>
               <DetailPrice tuition={tuition} locale={lang} verifiedLabel={t("catalogDetail.verifiedPrice")} />
-              {intakeNames && <p className="detail-provenance">{t("catalogDetail.availableIntakes")} · {intakeNames}</p>}
+              {(program.duration || payload.intakes.length > 0) && <dl className="detail-summary-list">
+                {program.duration && <div><dt><Clock3 size={16} aria-hidden="true" />{durationIsAmbiguous(program.duration) ? copy.durationAsListed : t("courseFinderPage.duration")}</dt><dd><bdi>{program.duration}</bdi></dd></div>}
+                {payload.intakes.length > 0 && <div><dt><CalendarDays size={16} aria-hidden="true" />{t("catalogDetail.availableIntakes")}</dt><dd>{new Intl.NumberFormat(lang).format(payload.intakes.length)}</dd></div>}
+              </dl>}
               <div className="detail-actions">{apply}</div>
-              {!tuition && <div className="detail-actions"><Link href={localePath("/contact")} className="is-secondary">{t("countryDetail.talkToAdvisor")}</Link></div>}
+              <div className="detail-actions"><Link href={localePath("/contact")} className="is-secondary">{t("countryDetail.talkToAdvisor")}</Link></div>
             </aside>
           </div>
         </div>
         <div className="detail-factbar"><div className="detail-wrap">
-          <DetailBreadcrumbs label={copy.catalogue} items={[
-            { label: t("nav.programs"), path: localePath("/programs") },
-            { label: program.universityCountry, path: countryPath },
-            { label: program.universityCity || "", path: cityPath },
-            { label: program.universityName, path: program.universityPath },
-          ]} />
           <DetailFacts items={[
-            { label: t("courseFinderPage.degree"), value: program.degree },
-            { label: durationIsAmbiguous(program.duration) ? copy.durationAsListed : t("courseFinderPage.duration"), value: program.duration },
-            { label: t("courseFinderPage.language"), value: program.language },
-            { label: campuses ? copy.campus : copy.institutionLocation, value: campuses || institutionLocation },
+            { label: t("courseFinderPage.degree"), value: program.degree, icon: <GraduationCap size={18} aria-hidden="true" /> },
+            { label: durationIsAmbiguous(program.duration) ? copy.durationAsListed : t("courseFinderPage.duration"), value: program.duration, icon: <Clock3 size={18} aria-hidden="true" /> },
+            { label: t("courseFinderPage.language"), value: program.language, icon: <Languages size={18} aria-hidden="true" /> },
+            { label: campuses ? copy.campus : copy.institutionLocation, value: campuses || institutionLocation, icon: <MapPin size={18} aria-hidden="true" /> },
           ]} />
         </div></div>
       </section>
@@ -261,6 +276,7 @@ export default function ProgramDetail({ routeKey }: { routeKey: string }) {
           {requirements.length > 0 && <a href="#requirements">{t("programs.requirements")}</a>}
           {payload.intakes.length > 0 && <a href="#intakes">{t("catalogDetail.availableIntakes")}</a>}
           {hasFees && <a href="#fees">{t("courseFinderPage.tuitionFee")}</a>}
+          {detailContentNavigation(editorial)}
           {payload.related.length > 0 && <a href="#related">{t("catalogDetail.relatedPrograms")}</a>}
         </div>
       </nav>
@@ -279,9 +295,9 @@ export default function ProgramDetail({ routeKey }: { routeKey: string }) {
             <div>
               <p className="detail-eyebrow">{copy.courseInformation}</p>
               <dl className="detail-keylines">
-                <div><dt>{copy.institution}</dt><dd><Link href={program.universityPath}>{program.universityName}</Link></dd></div>
-                <div><dt>{copy.institutionLocation}</dt><dd>{institutionLocation}</dd></div>
-                {metadata.map((item, index) => <div key={index}><dt>{copy[item.key]}</dt><dd>{item.value}</dd></div>)}
+                <div><dt><Building2 size={17} aria-hidden="true" />{copy.institution}</dt><dd><Link href={program.universityPath}>{program.universityName}</Link></dd></div>
+                <div><dt><MapPin size={17} aria-hidden="true" />{copy.institutionLocation}</dt><dd>{institutionLocation}</dd></div>
+                {metadata.map((item, index) => <div key={index}><dt><BookOpen size={17} aria-hidden="true" />{copy[item.key]}</dt><dd>{item.value}</dd></div>)}
               </dl>
               {metadata.length > 0 && <p className="detail-provenance">{copy.catalogueNote}</p>}
             </div>
@@ -291,14 +307,14 @@ export default function ProgramDetail({ routeKey }: { routeKey: string }) {
       {requirements.length > 0 && <section data-detail-section="requirements" id="requirements" className="detail-section is-sky">
         <div className="detail-wrap detail-split">
           <DetailHeading number="02" eyebrow={copy.program} title={t("programs.requirements")} />
-          <ul className="detail-program-points">{requirements.map((item, index) => <li key={index}>{item}</li>)}</ul>
+          <ul className="detail-program-points">{requirements.map((item, index) => <li key={index}><FileText size={20} aria-hidden="true" /><span>{item}</span></li>)}</ul>
         </div>
       </section>}
       {payload.intakes.length > 0 && <section data-detail-section="intakes" id="intakes" className="detail-section is-sand">
         <div className="detail-wrap">
           <DetailHeading number="03" eyebrow={copy.program} title={t("catalogDetail.availableIntakes")} />
           <div className="detail-grid">{payload.intakes.map(intake => <article key={intake.id} className="detail-intake">
-            <p className="detail-eyebrow">{intake.academicYear}</p><h3>{intake.intakeKey}</h3>
+            <p className="detail-eyebrow detail-icon-line"><CalendarDays size={17} aria-hidden="true" />{intake.academicYear}</p><h3>{intake.intakeKey}</h3>
             <span className="detail-pill">{t(`catalogDetail.capacity${intake.capacityStatus.charAt(0) + intake.capacityStatus.slice(1).toLowerCase()}`)}</span>
             <dl className="detail-keylines">
               <div><dt>{copy.mode}</dt><dd>{t(`catalogDetail.delivery${intake.deliveryMode === "ON_CAMPUS" ? "OnCampus" : intake.deliveryMode.charAt(0) + intake.deliveryMode.slice(1).toLowerCase()}`)}</dd></div>
@@ -311,23 +327,23 @@ export default function ProgramDetail({ routeKey }: { routeKey: string }) {
       </section>}
       {hasFees && <section data-detail-section="fees" id="fees" className="detail-section is-sky">
         <div className="detail-wrap detail-split">
-          <div><DetailHeading number="04" eyebrow={copy.program} title={t("courseFinderPage.tuitionFee")} /><p className="detail-provenance">{tuition?.source === "legacy" ? copy.legacyPrice : copy.priceBasis}</p></div>
-          <div>{tuition && <DetailPrice tuition={tuition} locale={lang} verifiedLabel={t("catalogDetail.verifiedPrice")} />}
-            <dl className="detail-keylines">{visiblePrices.map(price => <div key={price.id}>
+          <div><DetailHeading number="04" eyebrow={copy.program} title={t("courseFinderPage.tuitionFee")} />{tuition?.source !== "legacy" && <p className="detail-provenance">{copy.priceBasis}</p>}</div>
+          <div className="detail-fee-panel">{tuition && <DetailPrice tuition={tuition} locale={lang} verifiedLabel={t("catalogDetail.verifiedPrice")} />}
+            {visiblePrices.length > 0 && <dl className="detail-keylines">{visiblePrices.map(price => <div key={price.id}>
               <dt>{price.componentType === "TUITION" ? t("courseFinderPage.tuitionFee") : price.componentType === "DEPOSIT" ? t("catalogDetail.deposit") : price.componentType.replaceAll("_", " ").toLowerCase()}</dt>
               <dd>{detailMoney(minorAmount(price.amountMinor, price.currencyCode), price.currencyCode, lang) || copy.confirmPrice}<small className="block">{price.frequency.replaceAll("_", " ").toLowerCase()}</small></dd>
-            </div>)}</dl>
+            </div>)}</dl>}
           </div>
         </div>
       </section>}
       {payload.related.length > 0 && <section data-detail-section="related" id="related" className="detail-section">
         <div className="detail-wrap">
           <DetailHeading number="05" eyebrow={copy.studyOptions} title={t("catalogDetail.relatedPrograms")} />
-          <div className="detail-grid">{payload.related.map((related, index) => <DetailCard key={related.id} href={related.canonicalPath} eyebrow={related.universityName} title={related.name} index={index}>
-            <p>{[related.degree, related.duration, related.language].filter(Boolean).join(" · ")}</p>
-          </DetailCard>)}</div>
+          <CityProgramCards key={`${program.id}:${lang}`} programs={payload.related} />
         </div>
       </section>}
+      {detailContentSections(editorial, lang, localePath("/contact"))}
+      <DetailMobileActions data-detail-section="mobileActions">{apply}<Link className="is-secondary" href={localePath("/contact")}>{t("countryDetail.talkToAdvisor")}</Link></DetailMobileActions>
     </DetailLayout>
   );
 }

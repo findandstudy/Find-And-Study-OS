@@ -5,13 +5,14 @@ import { useSeo } from "@/hooks/use-seo";
 import { useJsonLd, SITE_URL, SITE_NAME } from "@/hooks/use-json-ld";
 import { customFetch } from "@workspace/api-client-react";
 import { Link } from "wouter";
-import { DetailArtwork, DetailBreadcrumbs, DetailCard, DetailHeading, DetailImage } from "./DetailEditorial";
+import { DetailBreadcrumbs, DetailCard, DetailHeading, DetailImage } from "./DetailEditorial";
+import { boundDetailContent, detailContentNavigation, detailContentSections } from "./DetailContentSections";
 import { catalogueCount, detailCopy } from "./detailPresentation";
 
 import { Button } from "@/components/ui/button";
 import { CountryFlag, countryCodeFromEmoji } from "@/components/CountryFlag";
 import type { Language } from "@/lib/i18n";
-import { Globe2, ArrowLeft, ArrowUpRight } from "lucide-react";
+import { Globe2, ArrowLeft, ArrowUpRight, Building2, GraduationCap, MapPin } from "lucide-react";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
@@ -74,6 +75,7 @@ function fixStorageUrl(url: string | null | undefined): string | null {
 export default function CountryDetail({ slug }: { slug: string }) {
   const { t, lang, localePath } = useI18n();
   const [data, setData] = useState<{
+    editorial?: unknown;
     destination: Destination;
     universities: UniversityBrief[];
     programs: ProgramBrief[];
@@ -89,6 +91,7 @@ export default function CountryDetail({ slug }: { slug: string }) {
   } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(false);
+  const editorial = boundDetailContent(data?.editorial, "destination", data?.destination.catalogCountryId, lang);
 
   useSeo({
     title: data ? t("countryDetail.studyIn", { name: data.destination.name }) : t("countryDetail.studyDestination"),
@@ -132,12 +135,14 @@ export default function CountryDetail({ slug }: { slug: string }) {
   );
 
   useEffect(() => {
+    const controller = new AbortController();
     setIsLoading(true);
     setError(false);
-    customFetch<any>(`/api/public/destinations/${slug}?locale=${encodeURIComponent(lang)}`, { method: "GET" })
+    customFetch<any>(`/api/public/destinations/${encodeURIComponent(slug)}?locale=${encodeURIComponent(lang)}`, { method: "GET", signal: controller.signal })
       .then(d => setData(d))
-      .catch(() => setError(true))
-      .finally(() => setIsLoading(false));
+      .catch(() => { if (!controller.signal.aborted) setError(true); })
+      .finally(() => { if (!controller.signal.aborted) setIsLoading(false); });
+    return () => controller.abort();
   }, [slug, lang]);
 
   if (isLoading) {
@@ -166,6 +171,10 @@ export default function CountryDetail({ slug }: { slug: string }) {
   const { destination: dest, universities, stats } = data;
   const copy = detailCopy(lang);
   const whyPoints = dest.whyStudyHere?.split(/\.\s+/).filter(p => p.trim().length > 5) || [];
+  const overviewDescription = dest.description?.trim() || dest.shortDescription?.trim();
+  const overviewImage = fixStorageUrl(dest.heroImageUrl);
+  const hasOverviewImage = !!overviewImage && /^(?:https?:\/\/|\/(?!\/))/.test(overviewImage);
+  const hasOverview = !!overviewDescription || whyPoints.length > 0 || hasOverviewImage;
   const cityNames = dest.popularCities?.split(",").map(c => c.trim()).filter(Boolean) || [];
   const cityLinks = new Map(data.cities.flatMap((city) => [
     [city.name.toLocaleLowerCase("en-US"), city.canonicalPath] as const,
@@ -183,66 +192,74 @@ export default function CountryDetail({ slug }: { slug: string }) {
     { label: t("countryDetail.workPermit"), value: dest.workPermit },
   ].filter(fact => !!fact.value);
   const iso = (dest.country && dest.country.length === 2 ? dest.country : null) || (dest.flagEmoji ? countryCodeFromEmoji(dest.flagEmoji) : null);
+  const programsPath = localePath(`/programs?country=${encodeURIComponent(dest.country)}`);
   return (
     <DetailLayout kind="destination">
       <section data-detail-section="hero">
         <div className="detail-hero is-destination">
-          {dest.heroImageUrl && <div className="detail-hero-backdrop"><DetailImage src={fixStorageUrl(dest.heroImageUrl)} alt="" /></div>}
-          <div className="detail-wrap detail-hero-main is-wide">
+          <div className="detail-wrap detail-hero-top"><DetailBreadcrumbs label={copy.catalogue} items={[{ label: t("nav.countries"), path: localePath("/countries") }, { label: dest.name }]} /></div>
+          <div className="detail-wrap detail-hero-main">
             <div>
-              <p className="detail-eyebrow">{copy.destination}</p>
-              {iso && <CountryFlag code={iso} size="xl" alt={dest.name} />}
+              <div className="detail-cover-label">{iso ? <CountryFlag code={iso} size="md" alt={dest.name} /> : <Globe2 size={18} aria-hidden="true" />}<span>{copy.destination}</span></div>
               <h1>{t("countryDetail.studyIn", { name: dest.name })}</h1>
-              {dest.shortDescription && <p className="detail-hero-lead">{dest.shortDescription}</p>}
-              <div className="detail-country-stats">
-                <div><strong>{stats.universityCount}</strong><span>{copy.universityCount}</span></div>
-                <div><strong>{stats.programCount}</strong><span>{copy.programCount}</span></div>
+              <p className="detail-hero-lead">{dest.shortDescription || t("countryDetail.exploreOpportunities")}</p>
+              <div className="detail-actions">
+                <Link href={programsPath}>{t("countryDetail.browsePrograms")}<ArrowUpRight size={18} aria-hidden="true" /></Link>
+                <Link className="is-secondary" href={localePath("/contact")}>{t("countryDetail.talkToAdvisor")}</Link>
               </div>
             </div>
-            <DetailArtwork />
+            <aside className="detail-destination-summary" aria-label={copy.studyOptions}>
+              <p className="detail-eyebrow">{copy.studyOptions}</p>
+              <div className="detail-country-stats">
+                <div><Building2 size={21} aria-hidden="true" /><strong>{stats.universityCount.toLocaleString(lang)}</strong><span>{copy.universityCount}</span></div>
+                <div><GraduationCap size={23} aria-hidden="true" /><strong>{stats.programCount.toLocaleString(lang)}</strong><span>{copy.programCount}</span></div>
+              </div>
+              {cities.length > 0 && <div className="detail-location-pills"><a href="#cities"><MapPin size={15} aria-hidden="true" />{t("countryDetail.popularCities")}<ArrowUpRight size={15} aria-hidden="true" /></a></div>}
+            </aside>
           </div>
         </div>
-        <div className="detail-wrap"><DetailBreadcrumbs label={copy.catalogue} items={[{ label: t("nav.countries"), path: localePath("/countries") }, { label: dest.name }]} /></div>
       </section>
       <nav data-detail-section="navigation" className="detail-nav" aria-label={dest.name}><div className="detail-wrap">
-        <a href="#overview">{copy.overview}</a>
+        {hasOverview && <a href="#overview">{copy.overview}</a>}
         {facts.length > 0 && <a href="#facts">{t("countryDetail.quickFacts")}</a>}
         {cities.length > 0 && <a href="#cities">{t("countryDetail.popularCities")}</a>}
         {universities.length > 0 && <a href="#universities">{t("countryDetail.universities")}</a>}
+        {detailContentNavigation(editorial)}
         <a href="#cta">{copy.next}</a>
       </div></nav>
-      <section data-detail-section="overview" id="overview" className="detail-section">
+      {hasOverview && <section data-detail-section="overview" id="overview" className="detail-section">
         <div className="detail-wrap">
           <DetailHeading number="01" eyebrow={copy.destination} title={t("countryDetail.about", { name: dest.name })} />
-          <div className="detail-split">
-            <p className="detail-prose detail-snapshot">{dest.description || dest.shortDescription || t("countryDetail.exploreOpportunities")}</p>
-            {whyPoints.length > 0 ? <div><p className="detail-eyebrow">{t("countryDetail.whyStudy", { name: dest.name })}</p><ul className="detail-program-points">{whyPoints.map((point, i) => <li key={i}>{point}</li>)}</ul></div> : <div className="detail-actions"><Link href={localePath(`/programs?country=${encodeURIComponent(dest.country)}`)}>{t("countryDetail.browsePrograms")}<ArrowUpRight size={17} aria-hidden="true" /></Link></div>}
+          <div className={overviewDescription && (whyPoints.length > 0 || hasOverviewImage) ? "detail-split" : "detail-overview-single"}>
+            {overviewDescription && <p className="detail-prose detail-snapshot">{overviewDescription}</p>}
+            {whyPoints.length > 0 ? <div>{hasOverviewImage && <DetailImage className="detail-destination-image" src={overviewImage} alt={dest.name} />}<p className="detail-eyebrow">{t("countryDetail.whyStudy", { name: dest.name })}</p><ul className="detail-program-points">{whyPoints.map((point, i) => <li key={i}>{point}</li>)}</ul></div> : hasOverviewImage && <DetailImage className="detail-destination-image" src={overviewImage} alt={dest.name} />}
           </div>
         </div>
-      </section>
+      </section>}
       {facts.length > 0 && <section data-detail-section="facts" id="facts" className="detail-section is-sky">
         <div className="detail-wrap detail-split">
           <DetailHeading number="02" eyebrow={copy.overview} title={t("countryDetail.quickFacts")} />
           <dl className="detail-keylines">{facts.map(fact => <div key={fact.label}><dt>{fact.label}</dt><dd>{fact.value}</dd></div>)}</dl>
         </div>
       </section>}
-      {cities.length > 0 && <section data-detail-section="cities" id="cities" className="detail-section is-dark">
+      {cities.length > 0 && <section data-detail-section="cities" id="cities" className="detail-section is-sky">
         <div className="detail-wrap">
           <DetailHeading number="03" eyebrow={dest.name} title={t("countryDetail.popularCities")} />
-          <div className="detail-grid">{cities.map((city, index) => {
+          <div className="detail-grid">{cities.map((city) => {
             const cityPath = city.canonicalPath;
-            return cityPath ? <DetailCard key={city.name} href={cityPath} eyebrow={dest.name} title={city.name} index={index} /> : <article key={city.name} className="detail-catalog-card"><p className="detail-eyebrow">{dest.name}</p><h3>{city.name}</h3></article>;
+            return cityPath ? <DetailCard key={city.name} href={cityPath} eyebrow={dest.name} title={city.name} kind="city" /> : <article key={city.name} className="detail-catalog-card"><MapPin aria-hidden="true" /><p className="detail-eyebrow">{dest.name}</p><h3>{city.name}</h3></article>;
           })}</div>
         </div>
       </section>}
       {universities.length > 0 && <section data-detail-section="universities" id="universities" className="detail-section is-sand">
         <div className="detail-wrap">
           <DetailHeading number="04" eyebrow={copy.studyOptions} title={t("countryDetail.universitiesIn", { name: dest.name })} />
-          <div className="detail-grid">{universities.map((uni, index) => <DetailCard key={uni.id} href={uni.canonicalPath} title={uni.name} eyebrow={uni.city || dest.name} index={index}>
+          <div className="detail-grid">{universities.map((uni) => <DetailCard key={uni.id} href={uni.canonicalPath} title={uni.name} eyebrow={uni.city || dest.name} kind="university" logoUrl={fixStorageUrl(uni.logoUrl)}>
             <p>{[uni.universityType, catalogueCount(uni.programCount, t("countryDetail.programs"))].filter(Boolean).join(" · ")}</p>
           </DetailCard>)}</div>
         </div>
       </section>}
+      {detailContentSections(editorial, lang, localePath("/contact"))}
       <section data-detail-section="cta" id="cta" className="detail-section is-dark">
         <div className="detail-wrap detail-cta">
           <div><p className="detail-eyebrow">{copy.next}</p><h2>{t("countryDetail.readyToStudy", { name: dest.name })}</h2></div>

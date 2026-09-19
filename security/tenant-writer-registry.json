@@ -1517,6 +1517,15 @@
       "externalPilot": "quarantine"
     },
     {
+      "path": "artifacts/api-server/src/routes/website-detail-content.ts",
+      "ownership": "platform_global",
+      "enforcement": "quarantine_required",
+      "risk": "medium",
+      "owner": "Catalog & Content",
+      "externalPilot": "quarantine",
+      "note": "Supplemental legacy CMS content only: router-wide administrator authorization, direct human sessions for writes, immutable snapshot approval by a different administrator, and generic CMS bypass guards. No Control Plane corridor, Cutover grant, or external-pilot authorization."
+    },
+    {
       "path": "artifacts/api-server/src/routes/website.ts",
       "ownership": "platform_global",
       "enforcement": "quarantine_required",

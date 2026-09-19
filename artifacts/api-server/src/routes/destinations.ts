@@ -8,6 +8,7 @@ import {
 import { courseFinderUniversityLogoUrl } from "../lib/courseFinderVisibility";
 import { normalizeProgramLocale } from "../lib/programTranslationContract";
 import { readPublicCatalogCountryDirectory, readCatalogCountryFallback, matchCatalogCountry } from "../lib/publicCatalogLocationLinks";
+import { readPublishedDetailContent } from "../lib/websiteDetailContent";
 import { countryAliases } from "../lib/websiteCatalogFilters";
 import {
   parsePublicWebInternalLinkMode,
@@ -157,7 +158,7 @@ router.get("/public/destinations/:slug", async (req: Request, res: Response): Pr
       res.setHeader("Cache-Control", "public, max-age=60");
       res.setHeader("X-Robots-Tag", "noindex, follow");
       res.setHeader("Content-Location", fallback.meta.canonicalPath);
-      res.json(fallback);
+      res.json({ ...fallback, editorial: await readPublishedDetailContent("destination", fallback.destination.catalogCountryId, locale) });
       return;
     }
     res.status(404).json({ error: "Destination not found" });
@@ -386,6 +387,7 @@ router.get("/public/destinations/:slug", async (req: Request, res: Response): Pr
   res.json({
     destination: {
       ...destination,
+      catalogCountryId: mappedCountry?.id ?? null,
       name: localizedDestination.name,
       shortDescription: localizedDestination.shortDescription,
       description: localizedDestination.description,
@@ -399,6 +401,7 @@ router.get("/public/destinations/:slug", async (req: Request, res: Response): Pr
       popularCities: localizedDestination.popularCities.join(", ") || null,
       canonicalPath,
     },
+    editorial: mappedCountry ? await readPublishedDetailContent("destination", mappedCountry.id, locale) : null,
     universities,
     programs,
     cities,

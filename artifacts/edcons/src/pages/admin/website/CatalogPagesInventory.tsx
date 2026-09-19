@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { LANGUAGE_META, SUPPORTED_LANGUAGES } from "@/lib/i18n";
 import { useI18n } from "@/hooks/use-i18n";
+import DetailContentEditor, { type DetailContentTarget } from "./DetailContentEditor";
 
 type Kind = "country" | "city" | "university" | "program";
 type Item = {
@@ -39,6 +40,7 @@ export default function CatalogPagesInventory() {
   const [search, setSearch] = useState("");
   const [debounced, setDebounced] = useState("");
   const [page, setPage] = useState(1);
+  const [editingContent, setEditingContent] = useState<DetailContentTarget | null>(null);
   useEffect(() => { const timer = setTimeout(() => { setDebounced(search.trim()); setPage(1); }, 250); return () => clearTimeout(timer); }, [search]);
   const query = useQuery<Inventory>({
     queryKey: ["website-catalog-pages", kind, locale, debounced, page],
@@ -49,7 +51,7 @@ export default function CatalogPagesInventory() {
   return <section aria-labelledby="catalog-pages-title" className="space-y-4 rounded-xl border bg-card p-4 sm:p-6">
     <div className="flex flex-wrap items-start justify-between gap-3">
       <div><h2 id="catalog-pages-title" className="flex items-center gap-2 text-xl font-semibold"><Database className="h-5 w-5 text-primary" />{tr ? "Dinamik katalog sayfaları" : "Dynamic catalogue pages"}</h2>
-        <p className="mt-1 max-w-2xl text-sm text-muted-foreground">{tr ? "Mevcut katalogdan üretilen sayfalar. Kaynak kaydı düzenleyin veya canlı görünümü açın; burada kopya sayfa oluşturulmaz ve içerik yayınlanmaz." : "Pages rendered from existing catalogue records. Edit the source or open the public view; this inventory creates no duplicate pages and publishes no content."}</p></div>
+        <p className="mt-1 max-w-2xl text-sm text-muted-foreground">{tr ? "Mevcut katalogdan üretilen sayfalar. Kaynak bilgilerini veya kaynaklı ek içerikleri düzenleyin; kopya katalog sayfası oluşturulmaz. İçerik yayını ayrı inceleme ve onay gerektirir." : "Pages rendered from existing catalogue records. Edit source facts or sourced supplemental content; no duplicate catalogue pages are created. Publishing content requires separate review and approval."}</p></div>
       <Button variant="outline" size="sm" disabled={query.isFetching} onClick={() => void query.refetch()}><RefreshCw className="me-2 h-4 w-4" />{tr ? "Yenile" : "Refresh"}</Button>
     </div>
     <div className="grid gap-3 sm:grid-cols-[1fr_1fr_2fr]">
@@ -68,9 +70,10 @@ export default function CatalogPagesInventory() {
             <p className="break-all font-mono text-xs text-muted-foreground" dir="ltr">{item.canonicalPath ?? (tr ? "Halka açık adres yok" : "No public address")}</p>
             <dl className="grid gap-2 text-xs sm:grid-cols-3"><div><dt className="text-muted-foreground">{tr ? "İçerik yayını" : "Content publication"}</dt><dd className="mt-1 font-medium">{label(item.publication.status)}{item.publication.revisionNumber !== null ? ` · v${item.publication.revisionNumber}` : ""}</dd></div><div><dt className="text-muted-foreground">SEO</dt><dd className="mt-1 font-medium">{label(item.seo)}</dd></div><div><dt className="text-muted-foreground">{tr ? "Yeni başvuru" : "New applications"}</dt><dd className="mt-1 font-medium">{item.admissionsOpen === null ? "—" : item.admissionsOpen ? (tr ? "Açık" : "Open") : (tr ? "Kapalı" : "Closed")}</dd></div></dl>
             {!!item.issues.length && <div className="flex flex-wrap gap-1.5">{item.issues.map(issue => <Badge key={issue} variant="outline" className="font-normal">{label(issue)}</Badge>)}</div>}
-            <div className="flex flex-wrap items-center justify-between gap-2"><p className="text-xs text-muted-foreground">{tr ? "Kaynak güncellemesi" : "Source updated"}: {new Date(item.sourceUpdatedAt).toLocaleString(locale)}</p><div className="flex gap-2"><Button asChild variant="outline" size="sm"><a href={item.sourceEditPath}>{tr ? "Kaynağı düzenle" : "Edit source"}</a></Button>{item.visible && item.canonicalPath ? <Button asChild variant="outline" size="sm"><a href={item.canonicalPath} target="_blank" rel="noopener noreferrer"><ExternalLink className="me-1.5 h-4 w-4" />{tr ? "Önizle" : "Preview"}</a></Button> : <Button size="sm" variant="outline" disabled>{tr ? "Önizleme yok" : "Preview unavailable"}</Button>}</div></div>
+            <div className="flex flex-wrap items-center justify-between gap-2"><p className="text-xs text-muted-foreground">{tr ? "Kaynak güncellemesi" : "Source updated"}: {new Date(item.sourceUpdatedAt).toLocaleString(locale)}</p><div className="flex flex-wrap gap-2"><Button variant="outline" size="sm" onClick={() => setEditingContent({ kind: item.kind === "country" ? "destination" : item.kind, entityId: item.sourceId, locale: item.locale, title: item.title, sourceEditPath: item.sourceEditPath })}>{tr ? "Detay içeriği" : "Detail content"}</Button><Button asChild variant="outline" size="sm"><a href={item.sourceEditPath}>{tr ? "Kaynağı düzenle" : "Edit source"}</a></Button>{item.visible && item.canonicalPath ? <Button asChild variant="outline" size="sm"><a href={item.canonicalPath} target="_blank" rel="noopener noreferrer"><ExternalLink className="me-1.5 h-4 w-4" />{tr ? "Önizle" : "Preview"}</a></Button> : <Button size="sm" variant="outline" disabled>{tr ? "Önizleme yok" : "Preview unavailable"}</Button>}</div></div>
           </article>)}</div>
           <div className="flex items-center justify-between gap-2 border-t pt-4"><Button variant="outline" size="sm" disabled={page <= 1 || query.isFetching} onClick={() => setPage(value => value - 1)}><ChevronLeft className="me-1 h-4 w-4" />{t("common.previous")}</Button><p className="text-sm">{page} / {Math.max(1, pagination?.totalPages ?? 1)}</p><Button variant="outline" size="sm" disabled={page >= (pagination?.totalPages ?? 0) || query.isFetching} onClick={() => setPage(value => value + 1)}>{t("common.next")}<ChevronRight className="ms-1 h-4 w-4" /></Button></div>
         </>}
+    {editingContent && <DetailContentEditor key={`${editingContent.kind}:${editingContent.entityId}:${editingContent.locale}`} target={editingContent} onClose={() => setEditingContent(null)} onSaved={() => void query.refetch()} />}
   </section>;
 }

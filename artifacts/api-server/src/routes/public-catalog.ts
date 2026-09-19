@@ -1,5 +1,6 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import { publicCatalogRequirements } from "../lib/publicCatalogRequirements";
+import { readPublishedDetailContent } from "../lib/websiteDetailContent";
 import {
   db,
   institutionCampusesTable,
@@ -36,13 +37,16 @@ import {
 import { normalizeProgramLocale } from "../lib/programTranslationContract";
 import {
   readIndexableProgramIds,
+  readIndexableUniversityIds,
+  readPublishedLocalizedEntities,
   readPublishedLocalizedEntity,
   resolvePublishedEntitySeoState,
 } from "../lib/publicWebDiscoveryReadModel";
-import { resolveLocalizedUniversityFields } from "../lib/publicLocalizedEntityContract";
+import { resolveLocalizedUniversityFields, selectLocalizedEntityDelivery } from "../lib/publicLocalizedEntityContract";
 import { readPublicCatalogPrices } from "../lib/publicCatalogPriceReadModel";
 import { projectPublicTuition, publicCurrency } from "../lib/publicCatalogTuition";
 import { resolvePublicCatalogLocationLinks } from "../lib/publicCatalogLocationLinks";
+import { projectPublicProgramBrief } from "../lib/publicCatalogProgramBrief";
 
 const router: IRouter = Router();
 
@@ -183,6 +187,9 @@ router.get(
           field: sql<string | null>`COALESCE(${programTranslationsTable.field}, ${programsTable.field})`,
           duration: sql<string | null>`COALESCE(${programTranslationsTable.duration}, ${programsTable.duration})`,
           language: programsTable.language,
+          description: sql<string | null>`COALESCE(${programTranslationsTable.description}, ${programsTable.description})`,
+          requirements: sql<string | null>`COALESCE(${programTranslationsTable.requirements}, ${programsTable.requirements})`,
+          isActive: programsTable.isActive,
           tuitionFee: programsTable.tuitionFee,
           discountedFee: programsTable.discountedFee,
           currency: programsTable.currency,
@@ -190,6 +197,10 @@ router.get(
           universityName: universitiesTable.name,
           universityCountry: universitiesTable.country,
           universityCity: universitiesTable.city,
+          universityType: universitiesTable.universityType,
+          universityIsActive: universitiesTable.isActive,
+          universityWebsite: universitiesTable.website,
+          universityHasLogo: sql<boolean>`${universitiesTable.logoUrl} IS NOT NULL AND length(trim(${universitiesTable.logoUrl})) > 0`,
           score: relatedScore,
         })
         .from(programsTable)
@@ -266,15 +277,24 @@ router.get(
     const relatedPrograms = relatedRows
       .filter((related) => relatedProgramIds === null || relatedProgramIds.has(related.id))
       .slice(0, PUBLIC_CATALOG_RELATED_LIMIT);
-    const relatedPrices = await readPublicCatalogPrices(relatedPrograms.map(row => row.id), now);
+    const relatedUniversityIds = [...new Set(relatedPrograms.map(row => row.universityId))];
+    const [relatedPrices, localizedRelatedUniversities, indexableRelatedUniversityIds] = await Promise.all([
+      readPublicCatalogPrices(relatedPrograms.map(row => row.id), now),
+      readPublishedLocalizedEntities({ entityType: "university", entityIds: relatedUniversityIds, locale }),
+      internalLinkMode === "published"
+        ? readIndexableUniversityIds({ locale, universityIds: relatedUniversityIds })
+        : Promise.resolve(null),
+    ]);
 
     setPublicCatalogHeaders(res);
+    res.setHeader("Cache-Control", "no-store");
     res.setHeader("Content-Location", canonicalPath);
     res.json({
+      editorial: await readPublishedDetailContent("program", program.id, locale),
       data: {
         ...program,
         ...locationLinks,
-        requirements: publicCatalogRequirements(program.requirements),
+        requirements: publicCatalogRequirements(program.requirements, { canonicalPath, id: program.id }),
         tuition: projectPublicTuition(program, priceRows),
         translatedLocale: undefined,
         fallbackUsed: locale !== "en" && program.translatedLocale !== locale,
@@ -296,16 +316,20 @@ router.get(
         ...price,
         amountMinor: price.amountMinor.toString(),
       })),
-      related: relatedPrograms.map(({ score: _score, ...related }) => ({
-        ...related,
-        tuition: projectPublicTuition(related, relatedPrices.get(related.id) ?? []),
-        canonicalPath: publicCatalogPath({
-          locale,
-          entityType: "program",
-          id: related.id,
-          name: related.name,
-        }),
-      })),
+      related: relatedPrograms.map(({ score: _score, universityHasLogo, ...related }) => {
+        const localizedUniversity = resolveLocalizedUniversityFields({ locale,
+          delivery: selectLocalizedEntityDelivery(localizedRelatedUniversities, related.universityId),
+          base: { name: related.universityName, description: null, universityType: related.universityType } });
+        return {
+          ...related,
+          ...projectPublicProgramBrief({ ...related, universityHasLogo }, {
+            locale, prices: relatedPrices.get(related.id) ?? [],
+            universityName: localizedUniversity.name, universityType: localizedUniversity.universityType,
+            universityPath: indexableRelatedUniversityIds === null || indexableRelatedUniversityIds.has(related.universityId)
+              ? publicCatalogPath({ locale, entityType: "university", id: related.universityId, name: localizedUniversity.name }) : null,
+          }),
+        };
+      }),
       meta: {
         locale,
         indexable,
@@ -461,6 +485,7 @@ router.get(
     setPublicCatalogHeaders(res);
     res.setHeader("Content-Location", canonicalPath);
     res.json({
+      editorial: await readPublishedDetailContent("university", university.id, locale),
       data: {
         ...university,
         ...locationLinks,

@@ -1,5 +1,6 @@
 import { projectPublicTuition, publicMinorAmount, publicCurrency } from "./publicCatalogTuition";
 import { publicCatalogRequirements } from "./publicCatalogRequirements";
+import { parseDetailContent } from "./websiteDetailContentContract";
 import {
   PROGRAM_SUPPORTED_LOCALES,
   type ProgramSupportedLocale,
@@ -19,7 +20,7 @@ export const PUBLIC_WEB_RESERVED_PAGE_SLUGS = new Set([
 ]);
 
 export function isReservedPublicPageSlug(value: unknown): boolean {
-  return String(value ?? "").startsWith("_detail-layout-") || PUBLIC_WEB_RESERVED_PAGE_SLUGS.has(String(value ?? "").trim().toLowerCase());
+  return /^_detail-(layout|content)-/i.test(String(value ?? "")) || PUBLIC_WEB_RESERVED_PAGE_SLUGS.has(String(value ?? "").trim().toLowerCase());
 }
 
 export type PublicPageBlock = {
@@ -95,6 +96,7 @@ export type PublicCatalogRenderRoute =
     };
 
 export type PublicCatalogRenderModel = PublicCatalogRenderModelData & {
+  editorial?: import("./websiteDetailContentContract").DetailContent | null;
   detailLayout?: import("./websiteDetailLayoutContract").DetailLayout;
 };
 type PublicCatalogRenderModelData =
@@ -272,6 +274,20 @@ type PublicCatalogRenderModelData =
           id: number;
           name: string;
           universityName: string;
+          universityId?: number;
+          universityPath?: string;
+          universityType?: string | null;
+          universityCity?: string | null;
+          universityCountry?: string | null;
+          universityLogoUrl?: string | null;
+          universityWebsite?: string | null;
+          universityIsActive?: boolean;
+          isActive?: boolean;
+          language?: string | null;
+          duration?: string | null;
+          description?: string | null;
+          requirements?: string | null;
+          tuition?: ReturnType<typeof projectPublicTuition>;
           degree: string | null;
           field: string | null;
           canonicalPath: string;
@@ -495,6 +511,22 @@ function safeJson(value: unknown): string {
     .replace(/&/g, "\\u0026");
 }
 
+/** Mirrors the visitor-visible editorial content without authoring state or raw HTML. */
+function renderDetailContent(model: PublicCatalogRenderModel): string {
+  const content = parseDetailContent(model.editorial);
+  const entityId = model.kind === "program_detail" ? model.program.id : model.kind === "university_detail" ? model.university.id
+    : model.kind === "city_detail" ? model.city.id : model.kind === "destination_detail" ? model.destination.catalogCountryId : null;
+  if (!content || content.locale !== model.locale || content.entityId !== entityId || `${content.kind}_detail` !== model.kind) return "";
+  return content.sections.map(section => {
+    const cards = section.cards?.map(card => `<article><h3>${card.href ? `<a href="${escapeHtml(card.href)}" rel="noopener noreferrer">${escapeHtml(card.title)}</a>` : escapeHtml(card.title)}</h3><p>${escapeHtml(card.body)}</p></article>`).join("") || "";
+    const images = section.images?.map(image => `<figure><img loading="lazy" decoding="async" src="${escapeHtml(image.src)}" alt="${escapeHtml(image.alt)}" width="800" height="560" />${image.caption ? `<figcaption>${escapeHtml(image.caption)}</figcaption>` : ""}</figure>`).join("") || "";
+    const table = section.table ? `<div role="region" aria-label="${escapeHtml(section.title)}" tabindex="0" style="overflow-x:auto"><table><caption>${escapeHtml(section.title)}</caption><thead><tr>${section.table.columns.map(column => `<th scope="col">${escapeHtml(column)}</th>`).join("")}</tr></thead><tbody>${section.table.rows.map(row => `<tr>${row.map((cell,index) => index ? `<td>${escapeHtml(cell)}</td>` : `<th scope="row">${escapeHtml(cell)}</th>`).join("")}</tr>`).join("")}</tbody></table></div>` : "";
+    const steps = section.steps ? `<ol>${section.steps.map(step => `<li><h3>${escapeHtml(step.title)}</h3><p>${escapeHtml(step.body)}</p></li>`).join("")}</ol>` : "";
+    const faq = section.questions?.map(item => `<details><summary>${escapeHtml(item.question)}</summary><p>${escapeHtml(item.answer)}</p></details>`).join("") || "";
+    return `<section data-detail-section="editorial-${section.key}" id="editorial-${section.key}" class="mt-10"><h2>${escapeHtml(section.title)}</h2>${section.body ? `<p>${escapeHtml(section.body)}</p>` : ""}${images}${cards}${table}${steps}${faq}<footer>${section.sources.map(source => `<cite><a href="${escapeHtml(source.url)}" rel="noopener noreferrer">${escapeHtml(source.label)}</a></cite>`).join(" · ")} <time datetime="${section.reviewedOn}">${section.reviewedOn}</time></footer></section>`;
+  }).join("");
+}
+
 function replaceMeta(
   html: string,
   attribute: "name" | "property",
@@ -556,7 +588,7 @@ function locationHierarchy(value: { country?: string; city?: string | null; coun
 
 function renderProgramDetail(model: Extract<PublicCatalogRenderModel, { kind: "program_detail" }>): string {
   const program = model.program;
-  const requirements = publicCatalogRequirements(program.requirements);
+  const requirements = publicCatalogRequirements(program.requirements, { canonicalPath: model.canonicalPath, id: program.id });
   const copy = RENDER_COPY[model.locale];
   const prices = model.prices ?? [];
   const verifiedTuition = program.verifiedTuition || prices.find((item) => item.componentType === "TUITION") || null;
@@ -1125,10 +1157,11 @@ export function renderPublicCatalogHtml(input: {
               : input.model.kind === "page_detail"
                 ? renderPageDetail(input.model)
                 : renderNotFound(input.model);
+  shell = shell.replace("</main>", `${renderDetailContent(input.model)}</main>`);
   if (input.model.detailLayout) {
     const layout = input.model.detailLayout;
     const sections = new Map<string, string>();
-    shell = shell.replace(/<section data-detail-section="([a-z]+)"[\s\S]*?<\/section>/g, (markup, key) => { sections.set(key, markup); return ""; });
+    shell = shell.replace(/<section data-detail-section="([a-zA-Z-]+)"[\s\S]*?<\/section>/g, (markup, key) => { sections.set(key, markup); return ""; });
     const ordered = layout.sections.filter(key => !layout.hidden.includes(key)).map(key => sections.get(key) ?? "").join("");
     shell = shell.replace("</main>", `${ordered}</main>`);
     for (const key of layout.hidden) shell = shell.replace(new RegExp(`<a href="#${key}"[^>]*>[\\s\\S]*?<\\/a>`, "g"), "");

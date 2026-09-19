@@ -153,10 +153,10 @@ test("render read model serves bounded data and coalesces the same cold key", as
     assert.equal(first.value.kind === "program_detail" ? first.value.program.id : null, programId);
     assert.equal(first.value.indexable, false);
     const hit = await getPublicCatalogRenderModel(route);
-    assert.equal(hit.cacheStatus, "HIT");
+    assert.equal(hit.cacheStatus, "MISS", "time-bound program facts never replay a stale model");
     assert.equal(invalidatePublicCatalogRenderCache({ detailTemplate: "city" }), 0);
-    assert.equal((await getPublicCatalogRenderModel(route)).cacheStatus, "HIT");
-    assert.equal(invalidatePublicCatalogRenderCache({ detailTemplate: "program" }), 1);
+    assert.equal((await getPublicCatalogRenderModel(route)).cacheStatus, "MISS");
+    assert.equal(invalidatePublicCatalogRenderCache({ detailTemplate: "program" }), 0);
     assert.equal((await getPublicCatalogRenderModel(route)).cacheStatus, "MISS");
 
     const listRoute = matchPublicCatalogRenderPath("/en/programs");
@@ -213,6 +213,31 @@ test("render read model serves bounded data and coalesces the same cold key", as
     assert.equal(sourceCity.value.indexable, false);
     assert.deepEqual(sourceCity.value.alternatePaths, {}, "source-only cities do not claim published language alternatives");
     assert.equal(sourceCity.value.kind === "city_detail" ? sourceCity.value.city.id : null, cityId);
+    await client.query("UPDATE universities SET country='Render Pilot Country',city='Render Pilot City',website='javascript:alert(1)',logo_url='fixture-logo' WHERE id=$1", [universityId]);
+    await client.query("UPDATE programs SET requirements='IELTS: 6.5 | Intake years: 2027 | Edvoy ref: 123' WHERE id=$1", [programId]);
+    try {
+      const refreshedCity = await getPublicCatalogRenderModel(cityRoute);
+      assert.equal(refreshedCity.cacheStatus, "MISS", "city cards cannot replay stale admission/price facts");
+      assert.equal(refreshedCity.value.kind, "city_detail");
+      if (refreshedCity.value.kind !== "city_detail") throw new Error("Expected city model");
+      const brief = refreshedCity.value.city.programs.find(program => program.id === programId);
+      assert.ok(brief);
+      assert.equal(brief.universityId, universityId);
+      assert.equal(brief.universityIsActive, true);
+      assert.equal(brief.isActive, true);
+      assert.equal(brief.language, "English");
+      assert.equal(brief.duration, "2 years");
+      assert.equal(brief.requirements, "IELTS: 6.5");
+      assert.equal(brief.universityWebsite, null);
+      assert.equal(brief.universityLogoUrl, `/api/universities/${universityId}/logo`);
+      assert.deepEqual(brief.tuition, { amount: 12000, currency: "USD", source: "legacy", verified: false, frequency: null, isFrom: false });
+      for (const privateField of ["commissionRate", "serviceFeeAmount", "intakes", "tuitionFee", "discountedFee", "universityContactEmail"]) assert.equal(Object.hasOwn(brief, privateField), false);
+      await client.query("UPDATE universities SET is_active=false WHERE id=$1", [universityId]);
+      const closedCity = await getPublicCatalogRenderModel(cityRoute);
+      assert.equal(closedCity.value.kind === "city_detail" ? closedCity.value.city.programs.length : -1, 0);
+    } finally {
+      await client.query("UPDATE universities SET country='Turkey',city='Istanbul',website=NULL,logo_url=NULL,is_active=true WHERE id=$1", [universityId]);
+    }
 
     const articleRoute = matchPublicCatalogRenderPath(
       `/en/guides/${publicCatalogRouteKey(articleId, "Render Pilot Guide")}`,

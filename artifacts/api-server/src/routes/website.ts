@@ -66,8 +66,10 @@ import { readWebsitePublishedPage } from "../lib/websitePublishedPage";
 import { readWebsiteCatalogFilters } from "../lib/websiteCatalogFilters";
 import { parseCatalogInventoryQuery } from "../lib/websiteCatalogInventoryContract";
 import { readWebsiteCatalogInventory } from "../lib/websiteCatalogInventory";
+import detailContentRouter from "./website-detail-content";
 
 const router = Router();
+router.use("/website/detail-content", detailContentRouter);
 router.get("/website/pages/:slug", readWebsitePublishedPage);
 const WEBSITE_ROLES = ["super_admin", "admin"] as const;
 const adminOnly = [requireAuth, requireRole(...WEBSITE_ROLES)] as const;
@@ -89,6 +91,11 @@ router.get("/website/detail-layouts", ...adminOnly, async (_req, res) => {
 });
 
 router.post("/website/detail-layouts/draft", ...adminOnly, async (req, res) => {
+  try {
+    const sid = getSessionId(req);
+    const session = sid && !req.apiTokenAuth && !req.headers.authorization ? await getSession(sid) : null;
+    if (!session || session.originalSid || session.user.id !== req.user!.id) { res.status(403).json({ error: "Direct human session required for authoring" }); return; }
+  } catch { res.status(503).json({ error: "Authoring session unavailable" }); return; }
   const layout = parseDetailLayout(req.body?.layout);
   if (!layout || Object.keys(req.body).sort().join() !== "expectedUpdatedAt,layout" ||
       !(req.body.expectedUpdatedAt === null || typeof req.body.expectedUpdatedAt === "string")) {
@@ -165,7 +172,7 @@ router.use(["/website/pages", "/website/page-blocks", "/website/page-versions"],
     res.status(400).json({ error: "A single object is required" }); return;
   }
   const proposed = [body, body.meta, body.metaSnapshot].filter(Boolean);
-  if (proposed.some(x => String(x.template ?? "").startsWith("detail:") || String(x.slug ?? "").startsWith("_detail-layout-")) || body.blockType === "detail_layout") {
+  if (proposed.some(x => /^(detail:|detail-content:)/i.test(String(x.template ?? "")) || /^_detail-(layout|content)-/i.test(String(x.slug ?? ""))) || ["detail_layout", "detail_content"].includes(body.blockType)) {
     res.status(409).json({ error: "Use the reviewed detail-template workflow" }); return;
   }
   try {
@@ -184,7 +191,7 @@ router.use(["/website/pages", "/website/page-blocks", "/website/page-versions"],
     }
     if (ids.length) {
       const pages = await db.select({ template: websitePagesTable.template, slug: websitePagesTable.slug }).from(websitePagesTable).where(inArray(websitePagesTable.id, ids));
-      if (pages.some(p => p.template.startsWith("detail:") || p.slug.startsWith("_detail-layout-"))) {
+      if (pages.some(p => /^(detail:|detail-content:)/i.test(p.template) || /^_detail-(layout|content)-/i.test(p.slug))) {
         res.status(409).json({ error: "Use the reviewed detail-template workflow" }); return;
       }
     }

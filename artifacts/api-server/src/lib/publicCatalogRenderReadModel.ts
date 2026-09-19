@@ -39,7 +39,12 @@ import { readPublishedDetailLayout } from "./websiteDetailLayouts";
 import { DETAIL_LAYOUT_KINDS, type DetailLayoutKind } from "./websiteDetailLayoutContract";
 import { websiteCatalogTaxonomy, countryMatches, countryAliases, catalogName } from "./websiteCatalogFilters";
 import { readCatalogCountryFallback, matchCatalogCountry, resolvePublicCatalogLocationLinks } from "./publicCatalogLocationLinks";
+import { readPublishedDetailContent } from "./websiteDetailContent";
 import { readPublicCatalogPrices } from "./publicCatalogPriceReadModel";
+import { projectPublicTuition } from "./publicCatalogTuition";
+import { projectPublicProgramBrief } from "./publicCatalogProgramBrief";
+import { publicCatalogRequirements } from "./publicCatalogRequirements";
+import { courseFinderUniversityLogoUrl } from "./courseFinderVisibility";
 import {
   readIndexableArticleIds,
   readIndexableProgramIds,
@@ -565,6 +570,21 @@ async function readProgramDetail(
         universityName: universitiesTable.name,
         degree: programsTable.degree,
         field: sql<string | null>`COALESCE(${programTranslationsTable.field}, ${programsTable.field})`,
+        duration: sql<string | null>`COALESCE(${programTranslationsTable.duration}, ${programsTable.duration})`,
+        language: programsTable.language,
+        description: sql<string | null>`COALESCE(${programTranslationsTable.description}, ${programsTable.description})`,
+        requirements: sql<string | null>`COALESCE(${programTranslationsTable.requirements}, ${programsTable.requirements})`,
+        isActive: programsTable.isActive,
+        tuitionFee: programsTable.tuitionFee,
+        discountedFee: programsTable.discountedFee,
+        currency: programsTable.currency,
+        universityId: universitiesTable.id,
+        universityCountry: universitiesTable.country,
+        universityCity: universitiesTable.city,
+        universityType: universitiesTable.universityType,
+        universityIsActive: universitiesTable.isActive,
+        universityWebsite: universitiesTable.website,
+        universityHasLogo: sql<boolean>`${universitiesTable.logoUrl} IS NOT NULL AND length(trim(${universitiesTable.logoUrl})) > 0`,
         score: relatedScore,
       })
       .from(programsTable)
@@ -616,18 +636,26 @@ async function readProgramDetail(
       programIds: relatedCandidates.map((candidate) => candidate.id),
     })
     : new Set<number>();
-  const relatedPrograms = relatedCandidates
+  const deliveredRelatedPrograms = relatedCandidates
     .filter((candidate) => internalLinkMode === "published" && indexableRelatedIds.has(candidate.id))
-    .slice(0, PUBLIC_CATALOG_RELATED_LIMIT)
-    .map(({ score: _score, ...candidate }) => ({
-      ...candidate,
-      canonicalPath: publicCatalogPath({
-        locale: route.locale,
-        entityType: "program",
-        id: candidate.id,
-        name: candidate.name,
-      }),
-    }));
+    .slice(0, PUBLIC_CATALOG_RELATED_LIMIT);
+  const relatedUniversityIds = [...new Set(deliveredRelatedPrograms.map(row => row.universityId))];
+  const [relatedPrices, localizedRelatedUniversities, indexableRelatedUniversityIds] = await Promise.all([
+    readPublicCatalogPrices(deliveredRelatedPrograms.map(row => row.id), now),
+    readPublishedLocalizedEntities({ entityType: "university", entityIds: relatedUniversityIds, locale: route.locale }),
+    readIndexableUniversityIds({ locale: route.locale, universityIds: relatedUniversityIds }),
+  ]);
+  const relatedPrograms = deliveredRelatedPrograms.map(candidate => {
+    const localizedUniversity = resolveLocalizedUniversityFields({ locale: route.locale,
+      delivery: selectLocalizedEntityDelivery(localizedRelatedUniversities, candidate.universityId),
+      base: { name: candidate.universityName, description: null, universityType: candidate.universityType } });
+    return projectPublicProgramBrief(candidate, {
+      locale: route.locale, prices: relatedPrices.get(candidate.id) ?? [],
+      universityName: localizedUniversity.name, universityType: localizedUniversity.universityType,
+      universityPath: indexableRelatedUniversityIds.has(candidate.universityId)
+        ? publicCatalogPath({ locale: route.locale, entityType: "university", id: candidate.universityId, name: localizedUniversity.name }) : null,
+    });
+  });
   const prices = Object.assign(priceRows.map((price) => ({
     id: price.id,
     componentType: price.componentType,
@@ -1127,8 +1155,21 @@ async function readCityDetail(
       universityId: universitiesTable.id,
       universityName: universitiesTable.name,
       universityType: universitiesTable.universityType,
+      universityCity: universitiesTable.city,
+      universityCountry: universitiesTable.country,
+      universityWebsite: universitiesTable.website,
+      universityHasLogo: sql<boolean>`${universitiesTable.logoUrl} IS NOT NULL AND length(trim(${universitiesTable.logoUrl})) > 0`,
+      universityIsActive: universitiesTable.isActive,
+      isActive: programsTable.isActive,
+      language: programsTable.language,
+      duration: sql<string | null>`COALESCE(${programTranslationsTable.duration}, ${programsTable.duration})`,
+      description: sql<string | null>`COALESCE(${programTranslationsTable.description}, ${programsTable.description})`,
+      requirements: sql<string | null>`COALESCE(${programTranslationsTable.requirements}, ${programsTable.requirements})`,
+      tuitionFee: programsTable.tuitionFee,
+      discountedFee: programsTable.discountedFee,
+      currency: programsTable.currency,
       degree: programsTable.degree,
-      field: programsTable.field,
+      field: sql<string | null>`COALESCE(${programTranslationsTable.field}, ${programsTable.field})`,
     })
       .from(programsTable)
       .innerJoin(universitiesTable, eq(programsTable.universityId, universitiesTable.id))
@@ -1171,7 +1212,7 @@ async function readCityDetail(
   const [localizedUniversities, indexableUniversityIds, indexableProgramIds] = await Promise.all([
     readPublishedLocalizedEntities({
       entityType: "university",
-      entityIds: universityRows.map((university) => university.id),
+      entityIds: universityRows.map(university => university.id),
       locale: route.locale,
     }),
     internalLinkMode === "published"
@@ -1210,13 +1251,22 @@ async function readCityDetail(
         : [];
     })
     .slice(0, PILOT_LIST_LIMIT);
-  const programs = programRows
+  const deliveredProgramRows = programRows
     .filter((program) => indexableProgramIds === null || indexableProgramIds.has(program.id))
-    .slice(0, PILOT_LIST_LIMIT)
+    .slice(0, PILOT_LIST_LIMIT);
+  const programUniversityIds = [...new Set(deliveredProgramRows.map(program => program.universityId))];
+  const [cityProgramPrices, localizedProgramUniversities, indexableProgramUniversityIds] = await Promise.all([
+    readPublicCatalogPrices(deliveredProgramRows.map(program => program.id)),
+    readPublishedLocalizedEntities({ entityType: "university", entityIds: programUniversityIds, locale: route.locale }),
+    internalLinkMode === "published"
+      ? readIndexableUniversityIds({ locale: route.locale, universityIds: programUniversityIds })
+      : Promise.resolve(null),
+  ]);
+  const programs = deliveredProgramRows
     .flatMap((program) => {
       const localizedUniversity = resolveLocalizedUniversityFields({
         locale: route.locale,
-        delivery: selectLocalizedEntityDelivery(localizedUniversities, program.universityId),
+        delivery: selectLocalizedEntityDelivery(localizedProgramUniversities, program.universityId),
         base: {
           name: program.universityName,
           description: null,
@@ -1224,10 +1274,32 @@ async function readCityDetail(
         },
       });
       if (!localizedUniversity.available) return [];
+      const programPath = publicCatalogPath({ locale: route.locale, entityType: "program", id: program.id, name: program.name });
+      let website: string | null = null;
+      try {
+        const parsed = new URL(program.universityWebsite ?? "");
+        if ((parsed.protocol === "https:" || parsed.protocol === "http:") && !parsed.username && !parsed.password) website = parsed.href;
+      } catch { /* Invalid catalogue websites are not public links. */ }
       return [{
         id: program.id,
         name: program.name,
         universityName: localizedUniversity.name,
+        universityId: program.universityId,
+        universityPath: indexableProgramUniversityIds === null || indexableProgramUniversityIds.has(program.universityId)
+          ? publicCatalogPath({ locale: route.locale, entityType: "university", id: program.universityId, name: localizedUniversity.name })
+          : undefined,
+        universityType: localizedUniversity.universityType,
+        universityCity: program.universityCity,
+        universityCountry: program.universityCountry,
+        universityLogoUrl: courseFinderUniversityLogoUrl(program.universityId, program.universityHasLogo),
+        universityWebsite: website,
+        universityIsActive: program.universityIsActive,
+        isActive: program.isActive,
+        language: program.language,
+        duration: program.duration,
+        description: program.description,
+        requirements: publicCatalogRequirements(program.requirements, { canonicalPath: programPath, id: program.id }),
+        tuition: projectPublicTuition(program, cityProgramPrices.get(program.id) ?? []),
         degree: program.degree,
         field: program.field,
         canonicalPath: publicCatalogPath({
@@ -1613,7 +1685,16 @@ function refresh(key: string, route: PublicCatalogRenderRoute): Promise<PublicCa
     .then(async (value) => {
       const kind = value.kind.replace(/_detail$/, "") as DetailLayoutKind;
       if (DETAIL_LAYOUT_KINDS.includes(kind)) value.detailLayout = await readPublishedDetailLayout(kind);
-      if (generation === cacheGeneration) saveCache(key, value);
+      let contentId: number | undefined;
+      if (value.kind === "program_detail") contentId = value.program.id;
+      if (value.kind === "university_detail") contentId = value.university.id;
+      if (value.kind === "city_detail") contentId = value.city.id;
+      if (value.kind === "destination_detail") {
+        contentId = value.destination.catalogCountryId ?? matchCatalogCountry(value.destination.country, await db.select().from(countriesTable))?.id;
+        value.destination.catalogCountryId = contentId;
+      }
+      if (contentId && DETAIL_LAYOUT_KINDS.includes(kind)) value.editorial = await readPublishedDetailContent(kind, contentId, route.locale);
+      if (generation === cacheGeneration && route.kind !== "city_detail" && route.kind !== "program_detail") saveCache(key, value);
       return value;
     })
     .finally(() => {
@@ -1630,6 +1711,12 @@ export async function getPublicCatalogRenderModel(
   route: PublicCatalogRenderRoute,
 ): Promise<{ value: PublicCatalogRenderModel; cacheStatus: PublicCatalogRenderCacheStatus }> {
   const key = cacheKey(route);
+  // City and program cards include time-bound prices and admission flags: coalesce concurrent
+  // reads, but never replay a cached value after its evidence may have expired.
+  if (route.kind === "city_detail" || route.kind === "program_detail") {
+    const coalesced = inFlight.has(key);
+    return { value: await refresh(key, route), cacheStatus: coalesced ? "COALESCED" : "MISS" };
+  }
   const now = Date.now();
   const entry = cache.get(key);
   if (entry?.freshUntil && entry.freshUntil > now) {
@@ -1668,11 +1755,12 @@ export function invalidatePublicCatalogRenderCache(input: {
       || (input.entityType === "catalog" && CATALOG_DERIVED_CACHE_KINDS.has(kind))
       || (input.entityType === "program" && (
         kind === "program_list"
+        || kind === "city_detail"
         || kind === "page_detail"
         || (kind === "program_detail" && input.entityId !== undefined && identity === String(input.entityId))
       ))
       || (input.entityType === "university" && (
-        kind === "program_list" || kind === "program_detail" || kind === "page_detail"
+        kind === "program_list" || kind === "program_detail" || kind === "page_detail" || kind === "city_detail"
         || (kind === "university_detail" && input.entityId !== undefined && identity === String(input.entityId))
       ))
       || (input.entityType === "destination" && (kind === "destination_detail" || kind === "page_detail"))

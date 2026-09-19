@@ -843,6 +843,41 @@ export async function readIndexableProgramIds(input: {
   });
 }
 
+/** Detail search needs the full eligible university set before SQL count/pagination. */
+export async function readIndexableUniversityProgramIds(input: {
+  locale: ProgramSupportedLocale;
+  universityId: number;
+}): Promise<number[]> {
+  const config = publicWebDiscoveryConfigFromEnvironment();
+  if (config.mode !== "published" || !config.scope) return [];
+  if (!Number.isSafeInteger(input.universityId) || input.universityId <= 0) return [];
+  const scope = config.scope;
+  return withPublicScope(scope, async (client) => {
+    const result = await client.query<{ program_id: number }>(
+      `SELECT DISTINCT content.program_id
+         FROM public_web_content_records content
+         JOIN public_web_publication_states state
+           ON state.tenant_id=content.tenant_id
+          AND state.organization_id=content.organization_id
+          AND state.content_record_id=content.id
+         JOIN programs program ON program.id=content.program_id
+        WHERE content.tenant_id=$1 AND content.organization_id=$2
+          AND content.entity_type='PROGRAM' AND content.locale=$3
+          AND program.university_id=$4
+          AND state.status='PUBLISHED' AND state.index_state='INDEX'
+          AND (content.locale='en' OR EXISTS (
+            SELECT 1 FROM program_translations translation
+             WHERE translation.program_id=content.program_id
+               AND translation.locale=content.locale AND translation.status='published'
+          ))
+        ORDER BY content.program_id LIMIT 10001`,
+      [scope.tenantId, scope.organizationId, input.locale, input.universityId],
+    );
+    if (result.rows.length > 10000) throw new Error("PUBLIC_DETAIL_PROGRAM_SCOPE_OVERFLOW");
+    return result.rows.map(row => Number(row.program_id));
+  });
+}
+
 export async function readIndexableArticleIds(input: {
   locale: ProgramSupportedLocale;
   articleIds: readonly number[];

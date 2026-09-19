@@ -2,9 +2,11 @@ import { DetailLayout } from "./DetailLayout";
 import { useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { customFetch } from "@workspace/api-client-react";
-import { ArrowLeft, ArrowUpRight, MapPin } from "lucide-react";
+import { ArrowLeft, ArrowUpRight, MapPin, Building2, GraduationCap, Globe2 } from "lucide-react";
 
-import { DetailArtwork, DetailBreadcrumbs, DetailCard, DetailFacts, DetailHeading } from "./DetailEditorial";
+import { DetailBreadcrumbs, DetailCard, DetailFacts, DetailHeading } from "./DetailEditorial";
+import { boundDetailContent, detailContentNavigation, detailContentSections } from "./DetailContentSections";
+import { CityProgramCards, type CityProgramCardData } from "./CityProgramCards";
 import { detailCopy, localDetailPath } from "./detailPresentation";
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/hooks/use-i18n";
@@ -12,6 +14,7 @@ import { SITE_NAME, SITE_URL, useJsonLd } from "@/hooks/use-json-ld";
 import { useSeo } from "@/hooks/use-seo";
 
 type CityPayload = {
+  editorial?: unknown;
   data: {
     id: number;
     name: string;
@@ -28,14 +31,7 @@ type CityPayload = {
       universityType: string | null;
       canonicalPath: string;
     }>;
-    programs: Array<{
-      id: number;
-      name: string;
-      universityName: string;
-      degree: string | null;
-      field: string | null;
-      canonicalPath: string;
-    }>;
+    programs: CityProgramCardData[];
   };
   meta: {
     title: string;
@@ -54,6 +50,7 @@ export default function CityDetail({ routeKey }: { routeKey: string }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const city = payload?.data;
+  const editorial = boundDetailContent(payload?.editorial, "city", city?.id, lang);
 
   useSeo({
     title: payload?.meta.title || t("countryDetail.studyDestination"),
@@ -118,58 +115,64 @@ export default function CityDetail({ routeKey }: { routeKey: string }) {
   }
 
   const copy = detailCopy(lang);
+  const overviewDescription = city.description?.trim();
   const countryPath = localDetailPath(city.countryPath);
   const programsPath = `${localePath("/programs")}?country=${encodeURIComponent(city.country)}&city=${encodeURIComponent(city.name)}`;
   return (
     <DetailLayout kind="city">
       <section data-detail-section="hero">
-        <div className="detail-hero is-destination">
-          <div className="detail-wrap detail-hero-main is-wide">
+        <div className="detail-hero is-city">
+          <div className="detail-wrap detail-hero-top"><DetailBreadcrumbs label={copy.catalogue} items={[{ label: t("nav.countries"), path: localePath("/countries") }, { label: city.country, path: countryPath }, { label: city.name }]} /></div>
+          <div className="detail-wrap detail-hero-main">
             <div>
-              <p className="detail-eyebrow">{copy.city}</p>
-              {countryPath ? <Link className="detail-hero-link" href={countryPath}>{city.country}<ArrowUpRight size={17} aria-hidden="true" /></Link> : <p className="detail-hero-lead">{city.country}</p>}
+              <div className="detail-cover-label"><MapPin size={18} aria-hidden="true" /><span>{copy.city}</span></div>
               <h1>{city.name}</h1>
-              <div className="detail-country-stats">
-                <div><strong>{city.universityCount}</strong><span>{copy.universityCount}</span></div>
-                <div><strong>{city.programCount}</strong><span>{copy.programCount}</span></div>
-              </div>
-              <div className="detail-actions"><Link href={programsPath}>{t("countryDetail.viewAllPrograms")}<ArrowUpRight size={17} aria-hidden="true" /></Link></div>
+              {countryPath ? <Link className="detail-hero-link" href={countryPath}><Globe2 size={17} aria-hidden="true" />{city.country}<ArrowUpRight size={17} aria-hidden="true" /></Link> : <p className="detail-hero-lead">{city.country}</p>}
+              <div className="detail-actions"><Link href={programsPath}>{t("countryDetail.viewAllPrograms")}<ArrowUpRight size={17} aria-hidden="true" /></Link><Link className="is-secondary" href={localePath("/contact")}>{t("countryDetail.talkToAdvisor")}</Link></div>
             </div>
-            <DetailArtwork />
+            <aside className="detail-destination-summary" aria-label={copy.studyOptions}>
+              <p className="detail-eyebrow">{copy.studyOptions}</p>
+              <div className="detail-country-stats">
+                <div><Building2 size={21} aria-hidden="true" /><strong>{city.universityCount.toLocaleString(lang)}</strong><span>{copy.universityCount}</span></div>
+                <div><GraduationCap size={23} aria-hidden="true" /><strong>{city.programCount.toLocaleString(lang)}</strong><span>{copy.programCount}</span></div>
+              </div>
+              <p className="detail-summary-caption"><MapPin size={16} aria-hidden="true" />{city.name} · {city.country}</p>
+            </aside>
           </div>
         </div>
-        <div className="detail-wrap"><DetailBreadcrumbs label={copy.catalogue} items={[{ label: t("nav.countries"), path: localePath("/countries") }, { label: city.country, path: countryPath }, { label: city.name }]} /></div>
       </section>
       <nav data-detail-section="navigation" className="detail-nav" aria-label={city.name}><div className="detail-wrap">
-        <a href="#overview">{copy.overview}</a><a href="#facts">{t("countryDetail.quickFacts")}</a>
+        {overviewDescription && <a href="#overview">{copy.overview}</a>}<a href="#facts">{t("countryDetail.quickFacts")}</a>
         {city.universities.length > 0 && <a href="#universities">{t("countryDetail.universities")}</a>}
         {city.programs.length > 0 && <a href="#programs">{t("countryDetail.programs")}</a>}
+        {detailContentNavigation(editorial)}
       </div></nav>
-      <section data-detail-section="overview" id="overview" className="detail-section">
+      {overviewDescription && <section data-detail-section="overview" id="overview" className="detail-section">
         <div className="detail-wrap detail-split">
           <DetailHeading number="01" eyebrow={copy.city} title={t("countryDetail.about", { name: city.name })} />
-          <p className="detail-prose detail-snapshot">{city.description || payload.meta.description}</p>
+          <p className="detail-prose detail-snapshot">{overviewDescription}</p>
         </div>
-      </section>
+      </section>}
       <section data-detail-section="facts" id="facts" className="detail-section is-sky">
         <div className="detail-wrap">
           <DetailHeading number="02" eyebrow={city.name} title={t("countryDetail.quickFacts")} />
-          <DetailFacts items={[{ label: copy.country, value: countryPath ? <Link href={countryPath}>{city.country}</Link> : city.country }, { label: copy.universityCount, value: city.universityCount }, { label: copy.programCount, value: city.programCount }]} />
+          <DetailFacts items={[{ label: copy.country, icon: <Globe2 size={19} />, value: countryPath ? <Link href={countryPath}>{city.country}</Link> : city.country }, { label: copy.universityCount, icon: <Building2 size={19} />, value: city.universityCount }, { label: copy.programCount, icon: <GraduationCap size={19} />, value: city.programCount }]} />
         </div>
       </section>
       {city.universities.length > 0 && <section data-detail-section="universities" id="universities" className="detail-section is-sand">
         <div className="detail-wrap">
           <DetailHeading number="03" eyebrow={copy.studyOptions} title={t("countryDetail.universitiesIn", { name: city.name })} />
-          <div className="detail-grid">{city.universities.map((university, index) => <DetailCard key={university.id} href={university.canonicalPath} eyebrow={university.universityType} title={university.name} index={index} />)}</div>
+          <div className="detail-grid">{city.universities.map((university) => <DetailCard key={university.id} href={university.canonicalPath} eyebrow={university.universityType} title={university.name} kind="university" />)}</div>
         </div>
       </section>}
       {city.programs.length > 0 && <section data-detail-section="programs" id="programs" className="detail-section">
         <div className="detail-wrap">
           <DetailHeading number="04" eyebrow={copy.studyOptions} title={t("catalogDetail.availablePrograms")} />
-          <div className="detail-grid">{city.programs.map((program, index) => <DetailCard key={program.id} href={program.canonicalPath} eyebrow={program.universityName} title={program.name} index={index}><p>{[program.degree, program.field].filter(Boolean).join(" · ")}</p></DetailCard>)}</div>
+          <CityProgramCards key={`${city.id}:${lang}`} programs={city.programs} />
           <div className="detail-actions"><Link href={programsPath}>{t("countryDetail.viewAllPrograms")}<ArrowUpRight size={17} aria-hidden="true" /></Link></div>
         </div>
       </section>}
+      {detailContentSections(editorial, lang, localePath("/contact"))}
     </DetailLayout>
   );
 }

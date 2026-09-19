@@ -5,13 +5,16 @@ import { customFetch } from "@workspace/api-client-react";
 import { useI18n } from "@/hooks/use-i18n";
 import { useSeo } from "@/hooks/use-seo";
 import { SITE_NAME, SITE_URL, useJsonLd } from "@/hooks/use-json-ld";
-import { DetailArtwork, DetailBreadcrumbs, DetailFacts, DetailHeading, DetailPrice } from "./DetailEditorial";
-import { detailCopy, displayTuition, localDetailPath, type DetailTuition } from "./detailPresentation";
+import { DetailBreadcrumbs, DetailHeading, DetailIdentity } from "./DetailEditorial";
+import { boundDetailContent, detailContentNavigation, detailContentSections, DetailMobileActions } from "./DetailContentSections";
+import { detailCopy, localDetailPath, type DetailTuition } from "./detailPresentation";
+import { UniversityProgramBrowser } from "./UniversityProgramBrowser";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Building2, ExternalLink, ArrowUpRight } from "lucide-react";
+import { ArrowLeft, Building2, ExternalLink, ArrowUpRight, MapPin, GraduationCap, Award } from "lucide-react";
 
 
 type UniversityPayload = {
+  editorial?: unknown;
   data: {
     id: number;
     name: string;
@@ -63,6 +66,7 @@ export default function UniversityDetail({ routeKey }: { routeKey: string }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const university = payload?.data;
+  const editorial = boundDetailContent(payload?.editorial, "university", university?.id, lang);
 
   useSeo({
     title: university?.name || t("countryDetail.universities"),
@@ -147,27 +151,35 @@ export default function UniversityDetail({ routeKey }: { routeKey: string }) {
     <DetailLayout kind="university">
       <section data-detail-section="hero">
         <div className="detail-hero">
-          <div className="detail-wrap detail-hero-main is-wide">
-            <div>
-              <p className="detail-eyebrow">{copy.institution} · {university.universityType}</p>
-              {university.logoUrl && <img className="detail-logo" src={university.logoUrl} alt={university.name} onError={event => { event.currentTarget.hidden = true; }} />}
-              <h1>{university.name}</h1>
-              <p className="detail-hero-lead">{location}</p>
-              {university.isActive === false && <p className="detail-provenance" role="status">{t("courseFinderPage.apply")} · {t("common.inactive")}</p>}
-              <div className="detail-actions"><a href="#programs">{t("catalogDetail.availablePrograms")}<ArrowUpRight size={17} aria-hidden="true" /></a>
-                {university.website && <a className="is-secondary" href={university.website} target="_blank" rel="noopener noreferrer">{t("programs.visitUniversity")}<ExternalLink size={16} aria-hidden="true" /></a>}
+          <div className="detail-wrap detail-hero-top">
+            <DetailBreadcrumbs label={copy.catalogue} items={[{ label: t("nav.countries"), path: localePath("/countries") }, { label: university.country, path: countryPath }, { label: university.city || "", path: cityPath }, { label: university.name }]} />
+          </div>
+          <div className="detail-wrap detail-hero-main">
+            <div className="detail-hero-content">
+              <div className="detail-identity">
+                <DetailIdentity src={university.logoUrl} name={university.name} />
+                <p className="detail-eyebrow">{copy.institution}</p>
               </div>
+              <h1>{university.name}</h1>
+              <p className="detail-hero-lead detail-icon-line"><MapPin size={18} aria-hidden="true" /><span>{location}</span></p>
+              <div className="detail-meta-pills">
+                {university.universityType && <span className="detail-meta-pill"><Building2 size={15} aria-hidden="true" />{university.universityType}</span>}
+                {degrees.map(degree => <span className="detail-meta-pill" key={degree}><GraduationCap size={15} aria-hidden="true" />{degree}</span>)}
+              </div>
+              {university.isActive === false && <p className="detail-provenance" role="status">{t("courseFinderPage.apply")} · {t("common.inactive")}</p>}
             </div>
-            <DetailArtwork />
+            <aside className="detail-hero-card" aria-label={t("catalogDetail.availablePrograms")}>
+              <p className="detail-eyebrow">{copy.studyOptions}</p>
+              <p className="detail-summary-count"><strong>{new Intl.NumberFormat(lang).format(payload.meta.programCount)}</strong><span>{copy.programCount}</span></p>
+              <div className="detail-actions"><a href="#programs">{t("catalogDetail.availablePrograms")}<ArrowUpRight size={17} aria-hidden="true" /></a></div>
+              {university.website && <div className="detail-actions"><a className="is-secondary" href={university.website} target="_blank" rel="noopener noreferrer">{t("programs.visitUniversity")}<ExternalLink size={16} aria-hidden="true" /></a></div>}
+            </aside>
           </div>
         </div>
-        <div className="detail-factbar"><div className="detail-wrap">
-          <DetailBreadcrumbs label={copy.catalogue} items={[{ label: t("nav.countries"), path: localePath("/countries") }, { label: university.country, path: countryPath }, { label: university.city || "", path: cityPath }, { label: university.name }]} />
-          <DetailFacts items={[{ label: copy.programCount, value: payload.meta.programCount }, { label: t("common.type"), value: university.universityType }, { label: copy.institutionLocation, value: location }]} />
-        </div></div>
       </section>
       <nav data-detail-section="navigation" className="detail-nav" aria-label={university.name}><div className="detail-wrap">
         <a href="#overview">{copy.overview}</a><a href="#facts">{t("countryDetail.quickFacts")}</a><a href="#programs">{t("catalogDetail.availablePrograms")}</a>
+        {detailContentNavigation(editorial)}
       </div></nav>
       <section data-detail-section="overview" id="overview" className="detail-section">
         <div className="detail-wrap detail-split">
@@ -179,33 +191,22 @@ export default function UniversityDetail({ routeKey }: { routeKey: string }) {
         <div className="detail-wrap detail-split">
           <DetailHeading number="02" eyebrow={copy.overview} title={t("countryDetail.quickFacts")} />
           <dl className="detail-keylines">
-            <div><dt>{copy.institutionLocation}</dt><dd>{location}</dd></div>
-            {university.address && <div><dt>{t("catalogDetail.location")}</dt><dd>{university.address}</dd></div>}
-            {university.universityType && <div><dt>{t("common.type")}</dt><dd>{university.universityType}</dd></div>}
-            {rankings.map(([label, value]) => <div key={String(label)}><dt>{String(label)}</dt><dd>#{String(value)}</dd></div>)}
+            <div><dt><MapPin size={17} aria-hidden="true" />{copy.institutionLocation}</dt><dd>{location}</dd></div>
+            {university.address && <div><dt><Building2 size={17} aria-hidden="true" />{t("catalogDetail.location")}</dt><dd>{university.address}</dd></div>}
+            {university.universityType && <div><dt><GraduationCap size={17} aria-hidden="true" />{t("common.type")}</dt><dd>{university.universityType}</dd></div>}
+            {rankings.map(([label, value]) => <div key={String(label)}><dt><Award size={17} aria-hidden="true" />{String(label)}</dt><dd>#{String(value)}</dd></div>)}
           </dl>
         </div>
       </section>
       <section data-detail-section="programs" id="programs" className="detail-section is-sand">
         <div className="detail-wrap">
           <DetailHeading number="03" eyebrow={copy.studyOptions} title={t("catalogDetail.availablePrograms")} />
-          {degrees.length > 1 && <div className="detail-actions mb-7">{degrees.map(degree => <Link className="is-secondary" key={degree} href={`${localePath("/programs")}?universityId=${university.id}&degree=${encodeURIComponent(degree)}`}>{degree}</Link>)}</div>}
-          {payload.programs.length > 0 ? <>
-            <div className="detail-table-region" tabIndex={0} role="region" aria-label={t("catalogDetail.availablePrograms")}>
-              <table className="detail-table">
-                <thead><tr><th scope="col">{t("countryDetail.programs")}</th><th scope="col">{t("courseFinderPage.language")}</th><th scope="col">{t("courseFinderPage.duration")}</th><th scope="col">{t("courseFinderPage.tuitionFee")}</th></tr></thead>
-                <tbody>{payload.programs.map(program => <tr key={program.id}>
-                  <th scope="row"><p className="detail-eyebrow">{program.degree}</p><Link href={program.canonicalPath}>{program.name}</Link></th>
-                  <td>{program.language || "—"}</td><td>{program.duration || "—"}</td>
-                  <td><DetailPrice tuition={displayTuition(program, lang)} locale={lang} verifiedLabel={t("catalogDetail.verifiedPrice")} /></td>
-                </tr>)}</tbody>
-              </table>
-            </div>
-            <p className="detail-provenance">{copy.scrollTable}</p>
-          </> : <p className="detail-prose">{t("programs.noResults")}</p>}
+          <UniversityProgramBrowser key={`${university.id}:${lang}`} universityId={university.id} admissionsOpen={university.isActive !== false} />
           <div className="detail-actions"><Link href={`${localePath("/programs")}?universityId=${university.id}`}>{t("countryDetail.viewAllPrograms")} · {payload.meta.programCount}<ArrowUpRight size={17} aria-hidden="true" /></Link></div>
         </div>
       </section>
+      {detailContentSections(editorial, lang, localePath("/contact"))}
+      <DetailMobileActions data-detail-section="mobileActions"><a href="#programs">{t("catalogDetail.availablePrograms")}</a><Link className="is-secondary" href={localePath("/contact")}>{t("countryDetail.talkToAdvisor")}</Link></DetailMobileActions>
     </DetailLayout>
   );
 }

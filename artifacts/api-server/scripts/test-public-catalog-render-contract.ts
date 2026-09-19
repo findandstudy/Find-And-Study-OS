@@ -19,6 +19,28 @@ const indexHtml = `<!doctype html><html lang="en"><head>
 <meta name="twitter:description" content="fallback" /></head><body><div id="root"></div>
 <script>window.test=true</script><script type="module" src="/assets/app.js"></script></body></html>`;
 
+test("reviewed editorial SSR is bound, escaped, layout-controlled and cannot change SEO", async () => {
+  const { defaultDetailLayout } = await import("../src/lib/websiteDetailLayoutContract");
+  const model: PublicCatalogRenderModel = { kind: "program_detail", locale: "en", canonicalPath: "/en/programs/example-42", title: "Example", description: "Catalogue", indexable: false, alternatePaths: {}, relatedPrograms: [],
+    program: { id: 42, name: "Example", universityName: "University", universityPath: "/en/universities/example-1", country: "Turkey", city: null, degree: "Bachelor", field: null, duration: null, language: "English", tuitionFee: null, discountedFee: null, currency: "USD" },
+    editorial: { version: 1, kind: "program", entityId: 42, locale: "en", sections: [{ key: "faq", title: "Questions & answers", questions: [{ question: "When can I ask?", answer: "Contact admissions & discuss." }], sources: [{ label: "Source", url: "https://example.org/info?a=1&b=2" }], reviewedOn: "2026-09-01" }] },
+    detailLayout: defaultDetailLayout("program") };
+  const render = () => renderPublicCatalogHtml({ indexHtml, model, siteUrl: "https://example.test", nonce: "test" });
+  Object.assign(model.editorial!.sections[0], { body: "Sourced editorial body", cards: [{ title: "Support card", body: "Contact support", href: "https://example.org/support" }], steps: [{ title: "Prepare", body: "Review your documents" }], images: [{ src: "https://example.org/campus.jpg", alt: "Campus photo", caption: "Approved image" }], table: { columns: ["Item"], rows: [["Sourced item"]] } });
+  const html = render();
+  assert.match(html, /id="editorial-faq"/); assert.match(html, /Questions &amp; answers/);
+  assert.match(html, /Contact admissions &amp; discuss/); assert.match(html, /content="noindex, follow"/);
+  for (const text of ["Sourced editorial body", "Support card", "Contact support", "Prepare", "Review your documents", "Campus photo", "Approved image", "Sourced item"]) assert.ok(html.includes(text), text);
+  assert.doesNotMatch(html, /"@type":"FAQPage"/);
+  model.detailLayout!.hidden = ["editorial-faq"];
+  assert.doesNotMatch(render(), /id="editorial-faq"|href="#editorial-faq"|When can I ask/);
+  model.detailLayout = undefined;
+  model.editorial!.locale = "tr"; assert.doesNotMatch(render(), /When can I ask/);
+  model.editorial!.locale = "en"; model.editorial!.entityId = 43; assert.doesNotMatch(render(), /When can I ask/);
+  model.editorial!.entityId = 42; model.editorial!.sections[0].body = "<script>alert(1)</script>";
+  assert.doesNotMatch(render(), /When can I ask|alert\(1\)/);
+});
+
 test("admissions-closed program remains rendered and indexable without an available Offer", () => {
   const model: PublicCatalogRenderModel = {
     kind: "program_detail", locale: "en", canonicalPath: "/en/programs/example-42",

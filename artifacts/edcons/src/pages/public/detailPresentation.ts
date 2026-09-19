@@ -35,9 +35,13 @@ export function catalogueCount(value: unknown, label: string): string | null {
 }
 
 export type RequirementMetadata = { key: "country" | "campus" | "mode"; value: string };
-export function splitRequirements(value: string | null | undefined): { requirements: string[]; metadata: RequirementMetadata[] } {
+export function splitRequirements(value: string | null | undefined, context?: { canonicalPath?: string; id?: number }): { requirements: string[]; metadata: RequirementMetadata[] } {
+  const slug = context?.canonicalPath?.split("?")[0].replace(/\/$/, "").split("/").pop();
+  const exactSlug = slug && /^[a-z0-9]+(?:-[a-z0-9]+)+$/.test(slug) ? slug : null;
+  const withoutId = exactSlug && Number.isSafeInteger(context?.id) && exactSlug.endsWith(`-${context!.id}`) ? exactSlug.slice(0, -String(context!.id).length - 1) : null;
   const requirements: string[] = [], metadata: RequirementMetadata[] = [];
   for (const part of (value || "").split(/\s*\|\s*|\r?\n/).map(item => item.trim()).filter(Boolean)) {
+    if (part === exactSlug || part === withoutId) continue;
     const match = /^([^:]{1,40}):\s*(.+)$/.exec(part);
     const key = match?.[1].trim().toLowerCase().replace(/\s+/g, " ");
     // Importer references are not student admission requirements or evidence.
