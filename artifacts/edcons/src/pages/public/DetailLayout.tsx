@@ -1,6 +1,7 @@
 import { Children, cloneElement, isValidElement, useEffect, useState, type ReactNode } from "react";
 import { customFetch } from "@workspace/api-client-react";
 import { defaultDetailLayout, parseDetailLayout, type DetailLayoutKind } from "@/lib/website/detailLayoutContract";
+import "./detailEditorial.css";
 
 /** Reorders the existing React sections; catalogue facts and Apply components stay untouched. */
 export function DetailLayout({ kind, children }: { kind: DetailLayoutKind; children: ReactNode }) {
@@ -27,5 +28,5 @@ export function DetailLayout({ kind, children }: { kind: DetailLayoutKind; child
       const order = (node: ReactNode) => isValidElement(node) ? layout.sections.indexOf((node.props as Record<string, string>)["data-detail-section"]) : -1;
       return order(a) - order(b);
     });
-  return <>{nodes}</>;
+  return <div className={`public-detail detail-${kind}`}>{nodes}</div>;
 }

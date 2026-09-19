@@ -19,6 +19,58 @@ const indexHtml = `<!doctype html><html lang="en"><head>
 <meta name="twitter:description" content="fallback" /></head><body><div id="root"></div>
 <script>window.test=true</script><script type="module" src="/assets/app.js"></script></body></html>`;
 
+test("admissions-closed program remains rendered and indexable without an available Offer", () => {
+  const model: PublicCatalogRenderModel = {
+    kind: "program_detail", locale: "en", canonicalPath: "/en/programs/example-42",
+    title: "Example program", description: "Catalogue description", indexable: true,
+    alternatePaths: { en: "/en/programs/example-42" }, relatedPrograms: [],
+    program: {
+      id: 42, name: "Example program", universityName: "Example university",
+      universityPath: "/en/universities/example-7", universityIsActive: false,
+      country: "Turkey", city: "Istanbul", degree: "Bachelor", field: null,
+      countryPath: "/en/countries/turkey", cityPath: "/en/cities/istanbul-1",
+      duration: null, language: "English", tuitionFee: 1000, discountedFee: null, currency: "USD",
+      verifiedTuition: { amountMinor: "100000", currencyCode: "USD", frequency: "ANNUAL" },
+    },
+  };
+  const html = renderPublicCatalogHtml({ indexHtml, model, siteUrl: "https://example.test", nonce: "test" });
+  assert.match(html, /data-public-render-shell="program-detail"/);
+  assert.match(html, /Example program/);
+  assert.match(html, /content="index, follow"/);
+  assert.doesNotMatch(html, /"@type":"Offer"/);
+  assert.doesNotMatch(html, /data-application-cta/);
+  assert.match(html, /Applications closed/);
+  assert.match(html, /href="\/en\/countries\/turkey"/);
+  assert.match(html, /href="\/en\/cities\/istanbul-1"/);
+  model.program.universityIsActive = true;
+  const reopened = renderPublicCatalogHtml({ indexHtml, model, siteUrl: "https://example.test", nonce: "test" });
+  assert.match(reopened, /"@type":"Offer"/);
+  assert.match(reopened, /data-application-cta/);
+  model.program.verifiedTuition = null;
+  const legacy = renderPublicCatalogHtml({ indexHtml, model, siteUrl: "https://example.test", nonce: "test" });
+  assert.match(legacy, /catalogue price; not verified/);
+  assert.doesNotMatch(legacy, /"@type":"Offer"/);
+  assert.match(legacy, /href="#fees"/);
+  model.program.requirements = "IELTS: 6.0 | Edvoy Ref: private-import | Intake Years: 2024";
+  model.prices = Object.assign([{ id: "price", componentType: "TUITION", amountMinor: "100000", currencyCode: "USD", frequency: "ANNUAL" }], { truncated: true });
+  const overflow = renderPublicCatalogHtml({ indexHtml, model, siteUrl: "https://example.test", nonce: "test" });
+  assert.doesNotMatch(overflow, /"@type":"Offer"/);
+  assert.doesNotMatch(overflow, /catalogue price; not verified/);
+  assert.match(overflow, /IELTS: 6.0/);
+  assert.doesNotMatch(overflow, /private-import|Intake Years/);
+  assert.match(overflow, /data-detail-section="fees" id="fees"/);
+  model.detailLayout = { version: 2, kind: "program", sections: ["hero", "navigation", "overview", "fees", "requirements", "intakes", "related"], hidden: [] };
+  const reordered = renderPublicCatalogHtml({ indexHtml, model, siteUrl: "https://example.test", nonce: "test" });
+  assert.ok(reordered.indexOf('data-detail-section="fees"') < reordered.indexOf('data-detail-section="requirements"'));
+  model.detailLayout.hidden = ["fees"];
+  const hidden = renderPublicCatalogHtml({ indexHtml, model, siteUrl: "https://example.test", nonce: "test" });
+  assert.doesNotMatch(hidden, /href="#fees"|id="fees"/);
+  model.detailLayout = undefined;
+  model.prices = []; model.program.tuitionFee = null;
+  const noFee = renderPublicCatalogHtml({ indexHtml, model, siteUrl: "https://example.test", nonce: "test" });
+  assert.doesNotMatch(noFee, /href="#fees"|id="fees"/);
+});
+
 test("render mode and exact allowlist fail closed", () => {
   assert.equal(parsePublicWebRenderMode("ALL"), "all");
   assert.equal(parsePublicWebRenderMode("allowlist"), "allowlist");
@@ -509,7 +561,8 @@ test("read model is on-demand, bounded, stale-while-revalidate, and detail index
   assert.match(readModel, /async function readUniversityDetail/);
   assert.match(readModel, /async function readDestinationDetail/);
   assert.match(readModel, /async function readCityDetail/);
-  assert.match(readModel, /localizedDelivery\.mode !== "published"/);
+  assert.match(readModel, /indexable: Boolean\(localizedDelivery\.snapshot\) && seoState.indexable/);
+  assert.match(readModel, /alternatePaths: localizedDelivery\.snapshot \? seoState.alternates : \{\}/);
   assert.match(readModel, /localizedDelivery\.snapshot\?\.canonicalPath/);
   assert.match(readModel, /const candidateLimit = internalLinkMode === "published"/);
   assert.match(readModel, /async function readArticleDetail/);

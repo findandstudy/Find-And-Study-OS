@@ -64,11 +64,23 @@ import { DETAIL_LAYOUT_KINDS } from "../lib/websiteDetailLayoutContract";
 import { getSession, getSessionId } from "../lib/replitAuth";
 import { readWebsitePublishedPage } from "../lib/websitePublishedPage";
 import { readWebsiteCatalogFilters } from "../lib/websiteCatalogFilters";
+import { parseCatalogInventoryQuery } from "../lib/websiteCatalogInventoryContract";
+import { readWebsiteCatalogInventory } from "../lib/websiteCatalogInventory";
 
 const router = Router();
 router.get("/website/pages/:slug", readWebsitePublishedPage);
 const WEBSITE_ROLES = ["super_admin", "admin"] as const;
 const adminOnly = [requireAuth, requireRole(...WEBSITE_ROLES)] as const;
+
+router.get("/website/catalog-pages", ...adminOnly, async (req, res) => {
+  res.setHeader("Cache-Control", "private, no-store");
+  res.setHeader("X-Robots-Tag", "noindex, nofollow");
+  let query: ReturnType<typeof parseCatalogInventoryQuery>;
+  try { query = parseCatalogInventoryQuery(req.query); }
+  catch { res.status(400).json({ error: "Invalid catalogue inventory filters" }); return; }
+  try { res.json(await readWebsiteCatalogInventory(query)); }
+  catch { res.status(503).json({ error: "Catalogue inventory is temporarily unavailable" }); }
+});
 
 router.get("/website/detail-layouts", ...adminOnly, async (_req, res) => {
   res.setHeader("Cache-Control", "private, no-store");

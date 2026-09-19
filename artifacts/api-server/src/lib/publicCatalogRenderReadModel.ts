@@ -14,7 +14,7 @@ import {
   websitePageVersionsTable,
   websiteGlobalComponentsTable,
 } from "@workspace/db";
-import { and, asc, desc, eq, gte, isNotNull, isNull, lte, ne, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, isNotNull, isNull, lte, ne, or, sql, inArray } from "drizzle-orm";
 import {
   PUBLIC_CATALOG_RELATED_CANDIDATE_LIMIT,
   PUBLIC_CATALOG_RELATED_LIMIT,
@@ -37,7 +37,9 @@ import type {
 import { parsePublicCatalogPageBlockSource } from "./publicCatalogRenderContract";
 import { readPublishedDetailLayout } from "./websiteDetailLayouts";
 import { DETAIL_LAYOUT_KINDS, type DetailLayoutKind } from "./websiteDetailLayoutContract";
-import { websiteCatalogTaxonomy, countryMatches, catalogName } from "./websiteCatalogFilters";
+import { websiteCatalogTaxonomy, countryMatches, countryAliases, catalogName } from "./websiteCatalogFilters";
+import { readCatalogCountryFallback, matchCatalogCountry, resolvePublicCatalogLocationLinks } from "./publicCatalogLocationLinks";
+import { readPublicCatalogPrices } from "./publicCatalogPriceReadModel";
 import {
   readIndexableArticleIds,
   readIndexableProgramIds,
@@ -496,6 +498,7 @@ async function readProgramDetail(
       id: programsTable.id,
       name: sql<string>`COALESCE(${programTranslationsTable.name}, ${programsTable.name})`,
       description: sql<string | null>`COALESCE(${programTranslationsTable.description}, ${programsTable.description})`,
+      requirements: sql<string | null>`COALESCE(${programTranslationsTable.requirements}, ${programsTable.requirements})`,
       degree: programsTable.degree,
       field: sql<string | null>`COALESCE(${programTranslationsTable.field}, ${programsTable.field})`,
       duration: sql<string | null>`COALESCE(${programTranslationsTable.duration}, ${programsTable.duration})`,
@@ -506,6 +509,7 @@ async function readProgramDetail(
       translatedLocale: programTranslationsTable.locale,
       universityId: universitiesTable.id,
       universityName: universitiesTable.name,
+      universityIsActive: universitiesTable.isActive,
       country: universitiesTable.country,
       city: universitiesTable.city,
     })
@@ -604,35 +608,7 @@ async function readProgramDetail(
         asc(programIntakesTable.id),
       )
       .limit(24),
-    db
-      .select({
-        id: priceComponentsTable.id,
-        componentType: priceComponentsTable.componentType,
-        amountMinor: priceComponentsTable.amountMinor,
-        currencyCode: priceComponentsTable.currencyCode,
-        frequency: priceComponentsTable.frequency,
-      })
-      .from(priceComponentsTable)
-      .where(and(
-        eq(priceComponentsTable.programId, program.id),
-        eq(priceComponentsTable.status, "ACTIVE"),
-        isNotNull(priceComponentsTable.sourceVerifiedAt),
-        lte(priceComponentsTable.effectiveFrom, now),
-        or(
-          isNull(priceComponentsTable.effectiveUntil),
-          gte(priceComponentsTable.effectiveUntil, now),
-        ),
-        or(
-          isNull(priceComponentsTable.sourceExpiresAt),
-          gte(priceComponentsTable.sourceExpiresAt, now),
-        ),
-      ))
-      .orderBy(
-        asc(priceComponentsTable.componentType),
-        asc(priceComponentsTable.effectiveFrom),
-        asc(priceComponentsTable.id),
-      )
-      .limit(48),
+    readPublicCatalogPrices([program.id], now).then(prices => prices.get(program.id) ?? []),
   ]);
   const indexableRelatedIds = internalLinkMode === "published"
     ? await readIndexableProgramIds({
@@ -652,13 +628,13 @@ async function readProgramDetail(
         name: candidate.name,
       }),
     }));
-  const prices = priceRows.map((price) => ({
+  const prices = Object.assign(priceRows.map((price) => ({
     id: price.id,
     componentType: price.componentType,
     amountMinor: price.amountMinor.toString(),
     currencyCode: price.currencyCode,
     frequency: price.frequency,
-  }));
+  })), { truncated: !!priceRows.truncated });
   const verifiedTuition = prices.find((price) => price.componentType === "TUITION") || null;
   const fallbackDescription = [
     program.degree,
@@ -677,6 +653,7 @@ async function readProgramDetail(
     alternatePaths: seoState.alternates,
     relatedPrograms,
     program: {
+      ...await resolvePublicCatalogLocationLinks({ locale: route.locale, country: program.country, city: program.city }),
       id: program.id,
       name: program.name,
       universityName: program.universityName,
@@ -686,9 +663,11 @@ async function readProgramDetail(
         id: program.universityId,
         name: program.universityName,
       }),
+      universityIsActive: program.universityIsActive,
       country: program.country,
       city: program.city,
       degree: program.degree,
+      requirements: program.requirements,
       field: program.field,
       duration: program.duration,
       language: program.language,
@@ -732,6 +711,7 @@ async function readUniversityDetail(
       id: universitiesTable.id,
       name: universitiesTable.name,
       description: universitiesTable.description,
+      isActive: universitiesTable.isActive,
       country: universitiesTable.country,
       city: universitiesTable.city,
       universityType: universitiesTable.universityType,
@@ -836,9 +816,11 @@ async function readUniversityDetail(
     indexable: seoState.indexable,
     alternatePaths: seoState.alternates,
     university: {
+      ...await resolvePublicCatalogLocationLinks({ locale: route.locale, country: university.country, city: university.city }),
       id: university.id,
       name: localizedUniversity.name,
       country: university.country,
+      isActive: university.isActive,
       city: university.city,
       universityType: localizedUniversity.universityType,
       programCount: Number(countRow?.count ?? 0),
@@ -887,6 +869,16 @@ async function readDestinationDetail(
     ))
     .limit(1);
   if (!destination) {
+    const fallback = await readCatalogCountryFallback(route.locale, route.slug);
+    if (fallback) return {
+      kind: "destination_detail", locale: route.locale,
+      canonicalPath: fallback.meta.canonicalPath, title: fallback.destination.name,
+      description: `Study opportunities in ${fallback.destination.name}`,
+      indexable: false, alternatePaths: {},
+      destination: { ...fallback.destination, ...fallback.stats,
+        popularCities: fallback.cities.map(city => city.name), cityLinks: fallback.cities,
+        universities: fallback.universities },
+    };
     return {
       kind: "not_found",
       locale: route.locale,
@@ -899,11 +891,11 @@ async function readDestinationDetail(
 
   const policy = await getPublicCatalogPolicy();
   const universityConditions: any[] = [
-    sql`lower(trim(${universitiesTable.country})) = lower(trim(${destination.country}))`,
+    sql`lower(trim(${universitiesTable.country})) IN (${sql.join((countryAliases(matchCatalogCountry(destination.country, await db.select().from(countriesTable)) ?? { name: destination.country, code: destination.country })).map(alias => sql`${alias.toLowerCase().trim()}`), sql`, `)})`,
   ];
   addPublicCatalogConditions(universityConditions, policy);
   const programConditions: any[] = [
-    sql`lower(trim(${universitiesTable.country})) = lower(trim(${destination.country}))`,
+    ...universityConditions,
     eq(programsTable.isActive, true),
   ];
   addPublicCatalogConditions(programConditions, policy);
@@ -1032,6 +1024,10 @@ async function readDestinationDetail(
       visaInfo: localizedDestination.visaInfo,
       workPermit: localizedDestination.workPermit,
       popularCities: localizedDestination.popularCities,
+      cityLinks: (await Promise.all(localizedDestination.popularCities.slice(0, 24).map(async city => {
+        const links = await resolvePublicCatalogLocationLinks({ locale: route.locale, country: destination.country, city });
+        return links.cityPath ? { name: city, canonicalPath: links.cityPath } : null;
+      }))).filter((city): city is { name: string; canonicalPath: string } => city !== null),
       universityCount: Number(universityCount?.count ?? 0),
       programCount: Number(programCount?.count ?? 0),
       universities: deliveredUniversities.map((university) => ({
@@ -1089,7 +1085,7 @@ async function readCityDetail(
   const policy = await getPublicCatalogPolicy();
   const universityConditions: any[] = [
     sql`lower(trim(${universitiesTable.city})) = lower(trim(${city.name}))`,
-    sql`(lower(trim(${universitiesTable.country})) = lower(trim(${city.country})) OR upper(trim(${universitiesTable.country})) = upper(trim(${city.countryCode})))`,
+    sql`lower(trim(${universitiesTable.country})) IN (${sql.join(countryAliases({ name: city.country, code: city.countryCode }).map(alias => sql`${alias.toLowerCase().trim()}`), sql`, `)})`,
   ];
   addPublicCatalogConditions(universityConditions, policy);
   const programConditions: any[] = [
@@ -1099,7 +1095,7 @@ async function readCityDetail(
   const internalLinkMode = parsePublicWebInternalLinkMode(process.env.PUBLIC_WEB_INTERNAL_LINK_MODE);
   const candidateLimit = internalLinkMode === "published"
     ? PUBLIC_CATALOG_RELATED_CANDIDATE_LIMIT
-    : 0;
+    : PILOT_LIST_LIMIT;
 
   const [
     [universityCount],
@@ -1156,16 +1152,6 @@ async function readCityDetail(
     }),
   ]);
 
-  if (localizedDelivery.mode !== "published") {
-    return {
-      kind: "not_found",
-      locale: route.locale,
-      canonicalPath: route.path,
-      title: "City publication not found",
-      description: "The requested city has no published revision.",
-      indexable: false,
-    };
-  }
   const localizedCity = resolveLocalizedCityFields({
     locale: route.locale,
     delivery: localizedDelivery,
@@ -1269,9 +1255,10 @@ async function readCityDetail(
       localizedCity.description,
       `Study opportunities in ${localizedCity.name}, ${localizedCity.country}`,
     ),
-    indexable: seoState.indexable,
-    alternatePaths: seoState.alternates,
+    indexable: Boolean(localizedDelivery.snapshot) && seoState.indexable,
+    alternatePaths: localizedDelivery.snapshot ? seoState.alternates : {},
     city: {
+      ...await resolvePublicCatalogLocationLinks({ locale: route.locale, country: city.country, city: city.name }),
       id: city.id,
       name: localizedCity.name,
       country: localizedCity.country,

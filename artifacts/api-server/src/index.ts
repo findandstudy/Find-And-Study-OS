@@ -390,7 +390,9 @@ function serveStaticFrontend() {
       const durationMs = Number(process.hrtime.bigint() - startedAt) / 1_000_000;
       res.setHeader(
         "Cache-Control",
-        "public, max-age=0, s-maxage=300, stale-while-revalidate=3600",
+        rendered.value.kind === "program_detail" || rendered.value.kind === "university_detail"
+          ? "public, max-age=0, must-revalidate"
+          : "public, max-age=0, s-maxage=300, stale-while-revalidate=3600",
       );
       res.setHeader("Content-Security-Policy", publicCatalogCsp(nonce));
       res.setHeader("X-Public-Render", "ssr-isr-pilot");

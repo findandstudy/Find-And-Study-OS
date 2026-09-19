@@ -8,14 +8,14 @@
     "defaultEnforcement": "legacy_quarantine"
   },
   "totals": {
-    "routeRegistrations": 863,
+    "routeRegistrations": 864,
     "requireAuth": 767,
     "requireRole": 493,
     "requirePermission": 78,
     "requireScope": 0,
     "directRoleChecks": 32,
     "authOnlyRouteCandidates": 128,
-    "publicRouteCandidates": 173
+    "publicRouteCandidates": 174
   },
   "files": [
     {
@@ -470,7 +470,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/destinations.ts",
-      "sha256": "c908778237e5fe9846db2e8279d6e9b23fdfc265d909b1be26424d4df1bc290d",
+      "sha256": "8457a8a33fb31784b97542c0bd6606d6c491ba774f72451cbb513cfee6254145",
       "routeRegistrations": 2,
       "requireAuth": 0,
       "requireRole": 0,
@@ -890,7 +890,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/public-catalog.ts",
-      "sha256": "6c801af5481d4ba5b9b3e57c9561baaf65e5a70160516315cd4268e25bb768fb",
+      "sha256": "d8c2865f0259cf1ec6c2d5d99512bca1e09f8e5c77169cb258b72741b1da0ce0",
       "routeRegistrations": 2,
       "requireAuth": 0,
       "requireRole": 0,
@@ -1175,15 +1175,15 @@
     },
     {
       "path": "artifacts/api-server/src/routes/website.ts",
-      "sha256": "07f371b25ffc6c4f525384bcc771b476b4e42a9f7e495659d8770e8b4b7a46a9",
-      "routeRegistrations": 40,
+      "sha256": "682603ae9330821efeb223d3b25c77bf035b822930f2ab1e37bbaf0fad8dd4f2",
+      "routeRegistrations": 41,
       "requireAuth": 2,
       "requireRole": 1,
       "requirePermission": 0,
       "requireScope": 0,
       "directRoleChecks": 0,
       "authOnlyRouteCandidates": 0,
-      "publicRouteCandidates": 39,
+      "publicRouteCandidates": 40,
       "enforcement": "legacy_quarantine",
       "owner": "Platform Engineering",
       "note": "Route-local review required before corridor migration."

@@ -1,4 +1,5 @@
 import { DetailLayout } from "./DetailLayout";
+import { programAdmissionsOpen } from "@/lib/programAdmissions";
 import { useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { customFetch } from "@workspace/api-client-react";
@@ -6,25 +7,18 @@ import { useI18n } from "@/hooks/use-i18n";
 import { useSeo } from "@/hooks/use-seo";
 import { SITE_NAME, SITE_URL, useJsonLd } from "@/hooks/use-json-ld";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { normalizeCurrency } from "@/lib/currency";
-import {
-  ArrowLeft,
-  Award,
-  BookOpen,
-  Building2,
-  CalendarDays,
-  CheckCircle2,
-  Clock3,
-  Globe2,
-  GraduationCap,
-  MapPin,
-  WalletCards,
-} from "lucide-react";
+import { DetailArtwork, DetailBreadcrumbs, DetailCard, DetailFacts, DetailHeading, DetailPrice } from "./DetailEditorial";
+import { detailCopy, detailMoney, displayTuition, durationIsAmbiguous, localDetailPath, splitRequirements, tuitionOffer, type DetailTuition } from "./detailPresentation";
+
+import { ArrowLeft, BookOpen, ArrowUpRight } from "lucide-react";
 
 type ProgramDetailPayload = {
   data: {
     id: number;
+    isActive?: boolean;
+    tuition?: DetailTuition | null;
+    countryPath?: string | null;
+    cityPath?: string | null;
     name: string;
     description: string | null;
     degree: string | null;
@@ -44,6 +38,7 @@ type ProgramDetailPayload = {
     fallbackUsed: boolean;
     canonicalPath: string;
     universityId: number;
+    universityIsActive?: boolean;
     universityName: string;
     universityCountry: string;
     universityCity: string | null;
@@ -97,19 +92,6 @@ type ProgramDetailPayload = {
   };
 };
 
-function money(value: number | null, currency: string | null, locale: string) {
-  if (value === null) return null;
-  try {
-    return new Intl.NumberFormat(locale, {
-      style: "currency",
-      currency: normalizeCurrency(currency),
-      maximumFractionDigits: 0,
-    }).format(value);
-  } catch {
-    return `${value.toLocaleString(locale)} ${normalizeCurrency(currency)}`;
-  }
-}
-
 function localizedDate(value: string | null, locale: string): string | null {
   if (!value) return null;
   const date = new Date(value);
@@ -118,15 +100,12 @@ function localizedDate(value: string | null, locale: string): string | null {
     : new Intl.DateTimeFormat(locale, { day: "numeric", month: "short", year: "numeric" }).format(date);
 }
 
-function minorMoney(value: string, currency: string, locale: string): string | null {
+function minorAmount(value: string, currency: string): number | null {
   const amountMinor = Number(value);
-  if (!Number.isSafeInteger(amountMinor) || amountMinor < 0) return null;
-  return money(amountMinor / 100, currency, locale);
-}
-
-function minorAmount(value: string): number | null {
-  const amountMinor = Number(value);
-  return Number.isSafeInteger(amountMinor) && amountMinor >= 0 ? amountMinor / 100 : null;
+  if (!Number.isSafeInteger(amountMinor) || amountMinor < 0 || !detailMoney(0, currency, "en")) return null;
+  const digits = new Intl.NumberFormat("en", { style: "currency", currency }).resolvedOptions().maximumFractionDigits;
+  if (typeof digits !== "number") return null;
+  return amountMinor / (10 ** digits);
 }
 
 export default function ProgramDetail({ routeKey }: { routeKey: string }) {
@@ -136,9 +115,8 @@ export default function ProgramDetail({ routeKey }: { routeKey: string }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const program = payload?.data;
-  const verifiedTuition = payload?.prices.find((price) => price.componentType === "TUITION");
-  const verifiedFee = verifiedTuition ? minorAmount(verifiedTuition.amountMinor) : null;
-  const displayCurrency = verifiedTuition?.currencyCode || program?.currency;
+  const tuition = program ? displayTuition(program, lang) : null;
+  const copy = detailCopy(lang);
 
   useSeo({
     title: program?.name || t("programs.programDetails"),
@@ -168,11 +146,7 @@ export default function ProgramDetail({ routeKey }: { routeKey: string }) {
       },
       inLanguage: program.language || undefined,
       timeRequired: program.duration || undefined,
-      offers: verifiedFee !== null && verifiedTuition ? {
-        "@type": "Offer",
-        price: verifiedFee,
-        priceCurrency: normalizeCurrency(verifiedTuition.currencyCode),
-      } : undefined,
+      offers: tuitionOffer(tuition, programAdmissionsOpen(program)),
     },
     {
       "@context": "https://schema.org",
@@ -234,146 +208,126 @@ export default function ProgramDetail({ routeKey }: { routeKey: string }) {
     );
   }
 
-  const effectiveFee = verifiedFee;
   const visiblePrices = payload.prices.slice(0, 8);
+  const { requirements, metadata } = splitRequirements(program.requirements);
+  const countryPath = localDetailPath(program.countryPath), cityPath = localDetailPath(program.cityPath);
+  const hasFees = visiblePrices.length > 0 || tuition !== null;
+  const intakeNames = payload.intakes.map(intake => `${intake.intakeKey} ${intake.academicYear}`).join(" · ");
+  const campuses = [...new Set(payload.intakes.map(intake => intake.campusName).filter(Boolean))].join(" · ");
+  const institutionLocation = <>{cityPath ? <Link href={cityPath}>{program.universityCity}</Link> : program.universityCity}{program.universityCity && " · "}{countryPath ? <Link href={countryPath}>{program.universityCountry}</Link> : program.universityCountry}</>;
+  const apply = programAdmissionsOpen(program)
+    ? <Link href={`${localePath("/programs")}?programId=${program.id}`}>{t("courseFinderPage.apply")}<ArrowUpRight size={17} aria-hidden="true" /></Link>
+    : <button disabled>{t("courseFinderPage.apply")} · {t("common.inactive")}</button>;
 
   return (
     <DetailLayout kind="program">
-      <section data-detail-section="hero" className="border-b border-border/40 bg-gradient-to-br from-primary/10 via-background to-accent/10 py-16">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <Link href={localePath("/programs")} className="mb-7 inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-primary">
-            <ArrowLeft className="h-4 w-4" /> {t("countryDetail.viewAllPrograms")}
-          </Link>
-          <div className="grid items-center gap-8 lg:grid-cols-[1fr_auto]">
+      <section data-detail-section="hero">
+        <div className="detail-hero">
+          <div className="detail-hero-backdrop"><DetailArtwork /></div>
+          <div className="detail-wrap detail-hero-main">
             <div>
-              <div className="mb-4 flex flex-wrap gap-2">
-                {program.degree && <Badge>{program.degree}</Badge>}
-                {program.field && <Badge variant="secondary">{program.field}</Badge>}
-                {program.universityType && <Badge variant="outline">{program.universityType}</Badge>}
-              </div>
-              <h1 className="max-w-4xl font-display text-3xl font-bold leading-tight text-foreground md:text-5xl">{program.name}</h1>
-              <Link href={program.universityPath} className="mt-5 inline-flex items-center gap-2 font-semibold text-primary hover:underline">
-                <Building2 className="h-5 w-5" /> {program.universityName}
-              </Link>
-              <p className="mt-2 flex items-center gap-2 text-sm text-muted-foreground">
-                <MapPin className="h-4 w-4" /> {[program.universityCity, program.universityCountry].filter(Boolean).join(", ")}
-              </p>
+              <p className="detail-eyebrow">{copy.program} · {program.degree || program.field}</p>
+              <h1>{program.name}</h1>
+              <Link className="detail-hero-link" href={program.universityPath}>{program.universityName}<ArrowUpRight size={18} aria-hidden="true" /></Link>
+              <p className="detail-hero-lead">{[program.field, program.language].filter(Boolean).join(" · ")}</p>
             </div>
-            <div className="min-w-[260px] rounded-2xl border border-border/50 bg-card p-6 shadow-sm">
-              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{t("courseFinderPage.tuitionFee")}</p>
-              <p className="mt-2 text-3xl font-extrabold text-foreground">{money(effectiveFee, displayCurrency ?? null, lang) || "—"}</p>
-              {verifiedFee !== null && verifiedTuition && (
-                <p className="mt-3 flex items-center gap-1.5 text-xs text-emerald-700"><CheckCircle2 className="h-3.5 w-3.5" />{t("catalogDetail.verifiedPrice")}</p>
-              )}
-              <Button asChild className="mt-6 w-full rounded-xl">
-                <Link href={`${localePath("/programs")}?programId=${program.id}`}>{t("courseFinderPage.apply")}</Link>
-              </Button>
-            </div>
+            <aside className="detail-hero-card" aria-label={t("courseFinderPage.tuitionFee")}>
+              <p className="detail-eyebrow">{t("courseFinderPage.tuitionFee")}</p>
+              <DetailPrice tuition={tuition} locale={lang} verifiedLabel={t("catalogDetail.verifiedPrice")} />
+              {intakeNames && <p className="detail-provenance">{t("catalogDetail.availableIntakes")} · {intakeNames}</p>}
+              <div className="detail-actions">{apply}</div>
+              {!tuition && <div className="detail-actions"><Link href={localePath("/contact")} className="is-secondary">{t("countryDetail.talkToAdvisor")}</Link></div>}
+            </aside>
           </div>
         </div>
+        <div className="detail-factbar"><div className="detail-wrap">
+          <DetailBreadcrumbs label={copy.catalogue} items={[
+            { label: t("nav.programs"), path: localePath("/programs") },
+            { label: program.universityCountry, path: countryPath },
+            { label: program.universityCity || "", path: cityPath },
+            { label: program.universityName, path: program.universityPath },
+          ]} />
+          <DetailFacts items={[
+            { label: t("courseFinderPage.degree"), value: program.degree },
+            { label: durationIsAmbiguous(program.duration) ? copy.durationAsListed : t("courseFinderPage.duration"), value: program.duration },
+            { label: t("courseFinderPage.language"), value: program.language },
+            { label: campuses ? copy.campus : copy.institutionLocation, value: campuses || institutionLocation },
+          ]} />
+        </div></div>
       </section>
-
-      <nav data-detail-section="navigation" className="sticky top-0 z-20 border-b border-border/60 bg-background/95 backdrop-blur" aria-label={t("programs.programDetails")}>
-        <div className="mx-auto flex max-w-7xl gap-6 overflow-x-auto px-4 py-3 text-sm font-semibold [scrollbar-width:none] sm:px-6 lg:px-8 [&::-webkit-scrollbar]:hidden">
-          <a href="#overview" className="whitespace-nowrap text-muted-foreground hover:text-primary">{t("programs.programDetails")}</a>
-          {program.requirements ? <a href="#requirements" className="whitespace-nowrap text-muted-foreground hover:text-primary">{t("programs.requirements")}</a> : null}
-          {payload.intakes.length > 0 ? <a href="#intakes" className="whitespace-nowrap text-muted-foreground hover:text-primary">{t("catalogDetail.availableIntakes")}</a> : null}
-          {visiblePrices.length > 0 ? <a href="#fees" className="whitespace-nowrap text-muted-foreground hover:text-primary">{t("courseFinderPage.tuitionFee")}</a> : null}
-          {payload.related.length > 0 ? <a href="#related" className="whitespace-nowrap text-muted-foreground hover:text-primary">{t("catalogDetail.relatedPrograms")}</a> : null}
+      <nav data-detail-section="navigation" className="detail-nav" aria-label={t("programs.programDetails")}>
+        <div className="detail-wrap">
+          <a href="#overview">{copy.overview}</a>
+          {requirements.length > 0 && <a href="#requirements">{t("programs.requirements")}</a>}
+          {payload.intakes.length > 0 && <a href="#intakes">{t("catalogDetail.availableIntakes")}</a>}
+          {hasFees && <a href="#fees">{t("courseFinderPage.tuitionFee")}</a>}
+          {payload.related.length > 0 && <a href="#related">{t("catalogDetail.relatedPrograms")}</a>}
         </div>
       </nav>
-
-      <section data-detail-section="overview" id="overview" className="scroll-mt-20 py-12">
-        <div className="mx-auto grid max-w-7xl gap-8 px-4 sm:px-6 lg:grid-cols-3 lg:px-8">
-          <div className="space-y-8 lg:col-span-2">
-            {program.description && (
-              <article className="scroll-mt-24 rounded-2xl border border-border/50 bg-card p-6 md:p-8">
-                <h2 className="text-2xl font-bold">{t("countryDetail.about", { name: program.name })}</h2>
-                <p className="mt-4 whitespace-pre-line leading-7 text-muted-foreground">{program.description}</p>
-              </article>
-            )}
-            {program.requirements && (
-              <article id="requirements" className="scroll-mt-24 rounded-2xl border border-border/50 bg-card p-6 md:p-8">
-                <h2 className="flex items-center gap-2 text-2xl font-bold"><CheckCircle2 className="h-6 w-6 text-primary" />{t("programs.requirements")}</h2>
-                <p className="mt-4 whitespace-pre-line leading-7 text-muted-foreground">{program.requirements}</p>
-              </article>
-            )}
-            {payload.intakes.length > 0 && (
-              <section id="intakes" className="scroll-mt-24 rounded-2xl border border-border/50 bg-card p-6 md:p-8">
-                <h2 className="flex items-center gap-2 text-2xl font-bold"><CalendarDays className="h-6 w-6 text-primary" />{t("catalogDetail.availableIntakes")}</h2>
-                <div className="mt-5 grid gap-3 sm:grid-cols-2">
-                  {payload.intakes.map((intake) => (
-                    <div key={intake.id} className="rounded-xl border border-border/50 bg-secondary/30 p-4">
-                      <div className="flex items-start justify-between gap-3">
-                        <div><p className="font-bold">{intake.intakeKey}</p><p className="text-sm text-muted-foreground">{intake.academicYear} · {t(`catalogDetail.delivery${intake.deliveryMode === "ON_CAMPUS" ? "OnCampus" : intake.deliveryMode.charAt(0) + intake.deliveryMode.slice(1).toLowerCase()}`)}</p></div>
-                        <Badge variant={intake.capacityStatus === "OPEN" ? "default" : "secondary"}>{t(`catalogDetail.capacity${intake.capacityStatus.charAt(0) + intake.capacityStatus.slice(1).toLowerCase()}`)}</Badge>
-                      </div>
-                      {intake.campusName && <p className="mt-3 text-sm text-muted-foreground">{intake.campusName}</p>}
-                      {(localizedDate(intake.startsOn, lang) || localizedDate(intake.applicationDeadlineAt, lang)) && (
-                        <dl className="mt-4 grid grid-cols-2 gap-3 border-t border-border/50 pt-3 text-xs">
-                          {localizedDate(intake.startsOn, lang) ? <div><dt className="text-muted-foreground">{t("common.date")}</dt><dd className="mt-1 font-semibold">{localizedDate(intake.startsOn, lang)}</dd></div> : null}
-                          {localizedDate(intake.applicationDeadlineAt, lang) ? <div><dt className="text-muted-foreground">{t("studentJourney.deadline")}</dt><dd className="mt-1 font-semibold">{localizedDate(intake.applicationDeadlineAt, lang)}</dd></div> : null}
-                        </dl>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </section>
-            )}
-            {visiblePrices.length > 0 && (
-              <section id="fees" className="scroll-mt-24 rounded-2xl border border-border/50 bg-card p-6 md:p-8">
-                <h2 className="flex items-center gap-2 text-2xl font-bold"><WalletCards className="h-6 w-6 text-primary" />{t("courseFinderPage.tuitionFee")}</h2>
-                <dl className="mt-5 divide-y divide-border/60 rounded-xl border border-border/60">
-                  {visiblePrices.map((price) => (
-                    <div key={price.id} className="flex items-center justify-between gap-4 px-4 py-3 text-sm">
-                      <dt className="text-muted-foreground">{price.componentType === "TUITION" ? t("courseFinderPage.tuitionFee") : price.componentType === "DEPOSIT" ? t("catalogDetail.deposit") : price.componentType.replaceAll("_", " ").toLowerCase()}</dt>
-                      <dd className="text-right font-bold">{minorMoney(price.amountMinor, price.currencyCode, lang) || "—"}<span className="ml-1 font-normal text-muted-foreground">· {price.frequency.toLowerCase()}</span></dd>
-                    </div>
-                  ))}
-                </dl>
-                <p className="mt-4 flex items-center gap-2 text-xs text-emerald-700"><CheckCircle2 className="h-4 w-4" />{t("catalogDetail.verifiedPrice")}</p>
-              </section>
-            )}
-          </div>
-
-          <aside className="space-y-5">
-            <div className="rounded-2xl border border-border/50 bg-card p-6 lg:sticky lg:top-24">
-              <h2 className="font-bold">{t("programs.programDetails")}</h2>
-              <dl className="mt-5 space-y-4 text-sm">
-                {[
-                  [GraduationCap, t("courseFinderPage.degree"), program.degree],
-                  [BookOpen, t("courseFinderPage.field"), program.field],
-                  [Globe2, t("courseFinderPage.language"), program.language],
-                  [Clock3, t("courseFinderPage.duration"), program.duration],
-                  [CalendarDays, t("courseFinderPage.intakes"), payload.intakes.length > 0 ? payload.intakes.map((intake) => `${intake.intakeKey} ${intake.academicYear}`).join(", ") : null],
-                  [Award, t("courseFinderPage.scholarship"), money(program.scholarship, program.currency, lang)],
-                  [WalletCards, t("catalogDetail.deposit"), money(program.depositFee, program.currency, lang)],
-                ].filter((item) => Boolean(item[2])).map(([Icon, label, value]) => {
-                  const DetailIcon = Icon as typeof BookOpen;
-                  return <div key={String(label)} className="flex gap-3"><DetailIcon className="mt-0.5 h-4 w-4 shrink-0 text-primary" /><div><dt className="text-muted-foreground">{String(label)}</dt><dd className="font-semibold text-foreground">{String(value)}</dd></div></div>;
-                })}
-              </dl>
+      <section data-detail-section="overview" id="overview" className="detail-section">
+        <div className="detail-wrap">
+          <DetailHeading number="01" eyebrow={copy.program} title={copy.overview} />
+          <div className="detail-split">
+            <div>
+              {program.description ? <p className="detail-prose detail-snapshot">{program.description}</p> : <DetailFacts items={[
+                { label: t("courseFinderPage.degree"), value: program.degree },
+                { label: t("courseFinderPage.field"), value: program.field },
+                { label: t("courseFinderPage.language"), value: program.language },
+              ]} />}
+              {durationIsAmbiguous(program.duration) && <p className="detail-provenance">{copy.durationNote}</p>}
             </div>
-          </aside>
+            <div>
+              <p className="detail-eyebrow">{copy.courseInformation}</p>
+              <dl className="detail-keylines">
+                <div><dt>{copy.institution}</dt><dd><Link href={program.universityPath}>{program.universityName}</Link></dd></div>
+                <div><dt>{copy.institutionLocation}</dt><dd>{institutionLocation}</dd></div>
+                {metadata.map((item, index) => <div key={index}><dt>{copy[item.key]}</dt><dd>{item.value}</dd></div>)}
+              </dl>
+              {metadata.length > 0 && <p className="detail-provenance">{copy.catalogueNote}</p>}
+            </div>
+          </div>
         </div>
       </section>
-
-      {payload.related.length > 0 && (
-        <section data-detail-section="related" id="related" className="scroll-mt-24 bg-secondary/30 py-12">
-          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-            <h2 className="text-2xl font-bold">{t("catalogDetail.relatedPrograms")}</h2>
-            <div className="mt-7 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-              {payload.related.map((related) => (
-                <Link key={related.id} href={related.canonicalPath} className="rounded-2xl border border-border/50 bg-card p-5 transition-all hover:-translate-y-1 hover:border-primary/30 hover:shadow-md">
-                  <p className="text-xs font-semibold text-primary">{related.universityName}</p>
-                  <h3 className="mt-2 line-clamp-2 font-bold">{related.name}</h3>
-                  <p className="mt-3 text-sm text-muted-foreground">{[related.degree, related.duration, related.language].filter(Boolean).join(" · ")}</p>
-                </Link>
-              ))}
-            </div>
+      {requirements.length > 0 && <section data-detail-section="requirements" id="requirements" className="detail-section is-sky">
+        <div className="detail-wrap detail-split">
+          <DetailHeading number="02" eyebrow={copy.program} title={t("programs.requirements")} />
+          <ul className="detail-program-points">{requirements.map((item, index) => <li key={index}>{item}</li>)}</ul>
+        </div>
+      </section>}
+      {payload.intakes.length > 0 && <section data-detail-section="intakes" id="intakes" className="detail-section is-sand">
+        <div className="detail-wrap">
+          <DetailHeading number="03" eyebrow={copy.program} title={t("catalogDetail.availableIntakes")} />
+          <div className="detail-grid">{payload.intakes.map(intake => <article key={intake.id} className="detail-intake">
+            <p className="detail-eyebrow">{intake.academicYear}</p><h3>{intake.intakeKey}</h3>
+            <span className="detail-pill">{t(`catalogDetail.capacity${intake.capacityStatus.charAt(0) + intake.capacityStatus.slice(1).toLowerCase()}`)}</span>
+            <dl className="detail-keylines">
+              <div><dt>{copy.mode}</dt><dd>{t(`catalogDetail.delivery${intake.deliveryMode === "ON_CAMPUS" ? "OnCampus" : intake.deliveryMode.charAt(0) + intake.deliveryMode.slice(1).toLowerCase()}`)}</dd></div>
+              {intake.campusName && <div><dt>{copy.campus}</dt><dd>{intake.campusName}{intake.publicAddress && <><br />{intake.publicAddress}</>}</dd></div>}
+              {localizedDate(intake.startsOn, lang) && <div><dt>{t("common.date")}</dt><dd>{localizedDate(intake.startsOn, lang)}</dd></div>}
+              {localizedDate(intake.applicationDeadlineAt, lang) && <div><dt>{t("studentJourney.deadline")}</dt><dd>{localizedDate(intake.applicationDeadlineAt, lang)}</dd></div>}
+            </dl>
+          </article>)}</div>
+        </div>
+      </section>}
+      {hasFees && <section data-detail-section="fees" id="fees" className="detail-section is-sky">
+        <div className="detail-wrap detail-split">
+          <div><DetailHeading number="04" eyebrow={copy.program} title={t("courseFinderPage.tuitionFee")} /><p className="detail-provenance">{tuition?.source === "legacy" ? copy.legacyPrice : copy.priceBasis}</p></div>
+          <div>{tuition && <DetailPrice tuition={tuition} locale={lang} verifiedLabel={t("catalogDetail.verifiedPrice")} />}
+            <dl className="detail-keylines">{visiblePrices.map(price => <div key={price.id}>
+              <dt>{price.componentType === "TUITION" ? t("courseFinderPage.tuitionFee") : price.componentType === "DEPOSIT" ? t("catalogDetail.deposit") : price.componentType.replaceAll("_", " ").toLowerCase()}</dt>
+              <dd>{detailMoney(minorAmount(price.amountMinor, price.currencyCode), price.currencyCode, lang) || copy.confirmPrice}<small className="block">{price.frequency.replaceAll("_", " ").toLowerCase()}</small></dd>
+            </div>)}</dl>
           </div>
-        </section>
-      )}
+        </div>
+      </section>}
+      {payload.related.length > 0 && <section data-detail-section="related" id="related" className="detail-section">
+        <div className="detail-wrap">
+          <DetailHeading number="05" eyebrow={copy.studyOptions} title={t("catalogDetail.relatedPrograms")} />
+          <div className="detail-grid">{payload.related.map((related, index) => <DetailCard key={related.id} href={related.canonicalPath} eyebrow={related.universityName} title={related.name} index={index}>
+            <p>{[related.degree, related.duration, related.language].filter(Boolean).join(" · ")}</p>
+          </DetailCard>)}</div>
+        </div>
+      </section>}
     </DetailLayout>
   );
 }

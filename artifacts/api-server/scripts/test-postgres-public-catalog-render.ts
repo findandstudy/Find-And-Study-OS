@@ -208,9 +208,11 @@ test("render read model serves bounded data and coalesces the same cold key", as
       `/en/cities/${publicCatalogRouteKey(cityId, "Render Pilot City")}`,
     );
     assert.ok(cityRoute && cityRoute.kind === "city_detail");
-    const unpublishedCity = await getPublicCatalogRenderModel(cityRoute);
-    assert.equal(unpublishedCity.value.kind, "not_found");
-    assert.equal(unpublishedCity.value.indexable, false);
+    const sourceCity = await getPublicCatalogRenderModel(cityRoute);
+    assert.equal(sourceCity.value.kind, "city_detail", "active source-only cities are reachable without inventing a publication");
+    assert.equal(sourceCity.value.indexable, false);
+    assert.deepEqual(sourceCity.value.alternatePaths, {}, "source-only cities do not claim published language alternatives");
+    assert.equal(sourceCity.value.kind === "city_detail" ? sourceCity.value.city.id : null, cityId);
 
     const articleRoute = matchPublicCatalogRenderPath(
       `/en/guides/${publicCatalogRouteKey(articleId, "Render Pilot Guide")}`,

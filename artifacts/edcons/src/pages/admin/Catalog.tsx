@@ -23,6 +23,7 @@ import { cn } from "@/lib/utils";
 import { useI18n } from "@/hooks/use-i18n";
 import { useSeason } from "@/contexts/SeasonContext";
 import { LANGUAGE_META } from "@/lib/i18n";
+import { parseCatalogEntryNavigation, type CatalogSourceTab } from "@/lib/catalogEntryNavigation";
 import {
   chunkBulkImportRows,
   findProgramIdentityCollisions,
@@ -30,6 +31,36 @@ import {
 } from "@/lib/catalogBulkImport";
 
 /* ─── helpers ──────────────────────────────────────────────── */
+
+function catalogEntry(tab: CatalogSourceTab) {
+  const entry = parseCatalogEntryNavigation(window.location.search);
+  return entry.tab === tab ? entry : { ...entry, sourceId: null, q: "" };
+}
+
+function useOpenCatalogEntry<T extends { id: number }>(tab: CatalogSourceTab, rows: T[], open: (row: T) => void) {
+  const entry = useRef(catalogEntry(tab));
+  const opened = useRef(false);
+  const openRef = useRef(open);
+  openRef.current = open;
+  const { toast } = useToast();
+  useEffect(() => {
+    const id = entry.current.sourceId;
+    if (!id || !["programs", "universities"].includes(tab)) return;
+    let cancelled = false;
+    opened.current = true;
+    api(`/api/${tab}/${id}`).then(row => {
+      if (!cancelled && row?.id === id) openRef.current(row);
+    }).catch(() => { if (!cancelled) toast({ title: "Source record could not be opened", variant: "destructive" }); });
+    return () => { cancelled = true; };
+  }, [tab, toast]);
+  useEffect(() => {
+    if (opened.current || !entry.current.sourceId) return;
+    const row = rows.find(candidate => candidate.id === entry.current.sourceId);
+    if (!row) return;
+    opened.current = true;
+    open(row);
+  }, [rows, open]);
+}
 
 async function api(url: string, opts?: RequestInit) {
   const r = await apiFetch(url, opts);
@@ -462,7 +493,7 @@ function CountriesTab() {
   const { toast } = useToast();
   const qc = useQueryClient();
   const [page, setPage] = useState(1);
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(() => catalogEntry("countries").q);
   const dSearch = useDebounce(search);
   const [form, setForm] = useState<Partial<Country> | null>(null);
   const [bulkOpen, setBulkOpen] = useState(false);
@@ -491,6 +522,7 @@ function CountriesTab() {
     },
   });
   const countries: Country[] = data?.data ?? [];
+  useOpenCatalogEntry("countries", countries, setForm);
   const totalPages = Math.ceil((data?.meta?.total ?? 0) / 50);
 
   const sorted = useMemo(() => {
@@ -722,8 +754,11 @@ function CitiesTab() {
   const { toast } = useToast();
   const qc = useQueryClient();
   const [page, setPage] = useState(1);
-  const [search, setSearch] = useState("");
-  const [filterCountry, setFilterCountry] = useState("all");
+  const [search, setSearch] = useState(() => catalogEntry("cities").q);
+  const [filterCountry, setFilterCountry] = useState(() => {
+    const value = new URLSearchParams(window.location.search).get("countryId") ?? "";
+    return catalogEntry("cities").sourceId && /^[1-9]\d{0,9}$/.test(value) && Number(value) <= 2_147_483_647 ? value : "all";
+  });
   const dSearch = useDebounce(search);
   const [form, setForm] = useState<Partial<City> | null>(null);
   const [bulkOpen, setBulkOpen] = useState(false);
@@ -757,6 +792,7 @@ function CitiesTab() {
     },
   });
   const cities: City[] = data?.data ?? [];
+  useOpenCatalogEntry("cities", cities, setForm);
   const totalPages = Math.ceil((data?.meta?.total ?? 0) / 50);
 
   const sorted = useMemo(() => {
@@ -1022,7 +1058,7 @@ function UniversitiesTab() {
   const logoInputRef = useRef<HTMLInputElement>(null);
 
   const [page, setPage] = useState(1);
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(() => catalogEntry("universities").q);
   const dSearch = useDebounce(search);
   const [form, setForm] = useState<Partial<University> | null>(null);
   const [bulkOpen, setBulkOpen] = useState(false);
@@ -1236,6 +1272,7 @@ function UniversitiesTab() {
       });
     }
   };
+  useOpenCatalogEntry("universities", universities, university => { void openEditUniversity(university.id); });
 
   const templateRows = [
     { name: "Istanbul University", country: "Turkey", city: "Istanbul", website: "https://www.istanbul.edu.tr", description: "Leading state university", ranking: 351, universityType: "Public", taxType: "KDV", taxPercent: 18, qsRanking: 501, timesRanking: 601, shanghaiRanking: 401, cwtsLeidenRanking: 0, address: "Beyazıt, 34452 Fatih/İstanbul", logoUrl: "", onlinePaymentUrl: "", cricosLink: "", documentsLink: "", currentFeeListLink: "", initialDepositOptions: "Bank Transfer", admissionProcess: "Online application via portal", contactPersonName: "Ahmet Yılmaz", contactPersonPhone: "+90 212 440 0000", contactPersonEmail: "intl@istanbul.edu.tr", status: "open", isActive: "Yes" },
@@ -1634,7 +1671,7 @@ function ProgramsTab() {
   const qc = useQueryClient();
   const { season } = useSeason();
   const [page, setPage] = useState(1);
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(() => catalogEntry("programs").q);
   const [filterUni, setFilterUni] = useState("all");
   const dSearch = useDebounce(search);
   const [form, setForm] = useState<Partial<Program> | null>(null);
@@ -1688,6 +1725,7 @@ function ProgramsTab() {
     },
   });
   const programs: Program[] = data?.data ?? [];
+  useOpenCatalogEntry("programs", programs, setForm);
   const totalPages = data?.meta?.totalPages ?? 1;
 
   const translationDetails = useQuery<{ sourceLocale: string; targetLocales: string[]; data: ProgramTranslationRow[] }>({
@@ -3886,7 +3924,7 @@ export default function AdminCatalog() {
         <h1 className="text-2xl font-bold tracking-tight">{t("adminCatalog.title")}</h1>
         <p className="text-muted-foreground text-sm mt-1">{t("adminCatalog.subtitle")}</p>
       </div>
-      <Tabs defaultValue="countries" className="space-y-4">
+      <Tabs defaultValue={parseCatalogEntryNavigation(window.location.search).tab} className="space-y-4">
         <TabsList className="grid w-full grid-cols-5">
           {tabs.map(tab => (
             <TabsTrigger key={tab.value} value={tab.value} className="flex items-center gap-1.5">

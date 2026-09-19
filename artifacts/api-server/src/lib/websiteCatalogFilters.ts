@@ -9,7 +9,7 @@ export function countryMatches(value: string, country: { name: string; code: str
   if (!country) return false;
   return countryAliases(country).some(v => catalogName(v) === catalogName(value));
 }
-function countryAliases(country: { name: string; code: string }) {
+export function countryAliases(country: { name: string; code: string }) {
   const values = [country.name, country.code];
   if (country.code.toUpperCase() === "TR") values.push("Turkey", "Türkiye", "Turkiye");
   if (country.code.toUpperCase() === "GB") values.push("UK", "United Kingdom");

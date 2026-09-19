@@ -1,3 +1,5 @@
+import { projectPublicTuition, publicMinorAmount, publicCurrency } from "./publicCatalogTuition";
+import { publicCatalogRequirements } from "./publicCatalogRequirements";
 import {
   PROGRAM_SUPPORTED_LOCALES,
   type ProgramSupportedLocale,
@@ -146,6 +148,9 @@ type PublicCatalogRenderModelData =
         name: string;
         universityName: string;
         universityPath: string;
+        universityIsActive?: boolean;
+        countryPath?: string | null;
+        cityPath?: string | null;
         country: string;
         city: string | null;
         degree: string | null;
@@ -160,6 +165,7 @@ type PublicCatalogRenderModelData =
           currencyCode: string;
           frequency: string;
         } | null;
+        requirements?: string | null;
       };
       intakes?: Array<{
         id: string;
@@ -177,7 +183,7 @@ type PublicCatalogRenderModelData =
         amountMinor: string;
         currencyCode: string;
         frequency: string;
-      }>;
+      }> & { truncated?: boolean };
     }
   | {
       kind: "university_detail";
@@ -190,6 +196,9 @@ type PublicCatalogRenderModelData =
       university: {
         id: number;
         name: string;
+        isActive?: boolean;
+        countryPath?: string | null;
+        cityPath?: string | null;
         country: string;
         city: string | null;
         universityType: string | null;
@@ -212,7 +221,9 @@ type PublicCatalogRenderModelData =
       indexable: boolean;
       alternatePaths: Partial<Record<ProgramSupportedLocale, string>>;
       destination: {
-        id: number;
+        id: number | null;
+        catalogCountryId?: number;
+        cityLinks?: Array<{ name: string; canonicalPath: string }>;
         name: string;
         country: string;
         livingCost: string | null;
@@ -242,6 +253,8 @@ type PublicCatalogRenderModelData =
       indexable: boolean;
       alternatePaths: Partial<Record<ProgramSupportedLocale, string>>;
       city: {
+        countryPath?: string | null;
+        cityPath?: string | null;
         id: number;
         name: string;
         country: string;
@@ -519,30 +532,36 @@ function formatMinorPrice(
   currencyCode: unknown,
   locale: ProgramSupportedLocale,
 ): string | null {
-  const amount = typeof amountMinor === "string" || typeof amountMinor === "number"
-    ? Number(amountMinor)
-    : NaN;
-  const currency = normalizedCurrency(currencyCode);
-  if (!Number.isSafeInteger(amount) || amount < 0 || !currency) return null;
+  const amount = publicMinorAmount(amountMinor, currencyCode);
+  const currency = publicCurrency(currencyCode);
+  if (amount === null || !currency) return null;
   try {
     return new Intl.NumberFormat(locale, {
       style: "currency",
       currency,
-      maximumFractionDigits: 0,
-    }).format(amount / 100);
+    }).format(amount);
   } catch {
-    return `${(amount / 100).toLocaleString(locale)} ${currency}`;
+    return `${amount.toLocaleString(locale)} ${currency}`;
   }
+}
+
+function locationHierarchy(value: { country?: string; city?: string | null; countryPath?: string | null; cityPath?: string | null }): string {
+  const link = (label: string | null | undefined, path: string | null | undefined) => {
+    if (!label) return "";
+    const safe = path ? safePublicUrl(path) : null;
+    return safe ? `<a href="${escapeHtml(safe)}">${escapeHtml(label)}</a>` : escapeHtml(label);
+  };
+  return [link(value.country, value.countryPath), link(value.city, value.cityPath)].filter(Boolean).join(" / ");
 }
 
 function renderProgramDetail(model: Extract<PublicCatalogRenderModel, { kind: "program_detail" }>): string {
   const program = model.program;
+  const requirements = publicCatalogRequirements(program.requirements);
   const copy = RENDER_COPY[model.locale];
   const prices = model.prices ?? [];
   const verifiedTuition = program.verifiedTuition || prices.find((item) => item.componentType === "TUITION") || null;
-  const price = verifiedTuition
-    ? formatMinorPrice(verifiedTuition.amountMinor, verifiedTuition.currencyCode, model.locale)
-    : null;
+  const tuition = projectPublicTuition(program, prices.length ? prices : verifiedTuition ? [{ ...verifiedTuition, componentType: "TUITION" }] : []);
+  const price = tuition ? `${tuition.isFrom ? "From " : ""}${new Intl.NumberFormat(model.locale, { style: "currency", currency: tuition.currency }).format(tuition.amount)}${tuition.verified ? "" : " (catalogue price; not verified)"}` : null;
   const intakes = (model.intakes ?? []).map((intake) => `
       <article class="rounded-xl border border-border/60 p-4">
         <h3 class="font-semibold">${escapeHtml(intake.intakeKey)} · ${escapeHtml(String(intake.academicYear))}</h3>
@@ -552,13 +571,16 @@ function renderProgramDetail(model: Extract<PublicCatalogRenderModel, { kind: "p
     const formatted = formatMinorPrice(item.amountMinor, item.currencyCode, model.locale) || "—";
     return `<div><dt>${escapeHtml(item.componentType)}</dt><dd>${escapeHtml(formatted)} · ${escapeHtml(item.frequency.toLowerCase())}</dd></div>`;
   }).join("");
+  const feeContent = priceRows || (price ? `<div><dt>${escapeHtml(copy.tuition)}</dt><dd>${escapeHtml(price)}</dd></div>` : "");
   const related = model.relatedPrograms.map((item) => `<article class="rounded-2xl border border-border p-5"><p class="text-sm text-primary">${escapeHtml(item.universityName)}</p><h3 class="mt-2 text-lg font-bold"><a href="${escapeHtml(item.canonicalPath)}">${escapeHtml(item.name)}</a></h3><p class="mt-2 text-muted-foreground">${escapeHtml([item.degree, item.field].filter(Boolean).join(" · "))}</p></article>`).join("");
   return `<main data-public-render-shell="program-detail" class="mx-auto max-w-7xl px-4 py-24">
     <nav aria-label="Breadcrumb"><a href="/${escapeHtml(model.locale)}/programs">${escapeHtml(copy.programs)}</a> / <span>${escapeHtml(program.name)}</span></nav>
-    <nav class="mt-8 flex gap-5" aria-label="${escapeHtml(program.name)}"><a href="#overview">${escapeHtml(copy.degree)}</a><a href="#fees">${escapeHtml(copy.tuition)}</a>${related ? `<a href="#related">${escapeHtml(copy.programs)}</a>` : ""}</nav>
+    <nav class="mt-8 flex gap-5" aria-label="${escapeHtml(program.name)}"><a href="#overview">${escapeHtml(copy.degree)}</a>${feeContent ? `<a href="#fees">${escapeHtml(copy.tuition)}</a>` : ""}${related ? `<a href="#related">${escapeHtml(copy.programs)}</a>` : ""}</nav>
     <article id="overview" class="mt-8">
       <p class="text-sm text-primary"><a href="${escapeHtml(program.universityPath)}">${escapeHtml(program.universityName)}</a></p>
       <h1 class="mt-3 text-4xl font-bold">${escapeHtml(program.name)}</h1>
+      <nav aria-label="Location">${locationHierarchy(program)}</nav>
+      ${program.universityIsActive === false ? `<button type="button" disabled aria-disabled="true">Applications closed</button>` : `<a data-application-cta href="/${escapeHtml(model.locale)}/programs?programId=${program.id}">Apply</a>`}
       <p class="mt-4 text-muted-foreground">${escapeHtml(model.description)}</p>
       <dl class="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <div><dt>${escapeHtml(copy.degree)}</dt><dd>${escapeHtml(program.degree || "—")}</dd></div>
@@ -566,11 +588,12 @@ function renderProgramDetail(model: Extract<PublicCatalogRenderModel, { kind: "p
         <div><dt>${escapeHtml(copy.duration)}</dt><dd>${escapeHtml(program.duration || "—")}</dd></div>
         <div><dt>${escapeHtml(copy.language)}</dt><dd>${escapeHtml(program.language || "—")}</dd></div>
         <div><dt>${escapeHtml(copy.location)}</dt><dd>${escapeHtml([program.city, program.country].filter(Boolean).join(", "))}</dd></div>
-        <div id="fees"><dt>${escapeHtml(copy.tuition)}</dt><dd>${price === null ? "—" : escapeHtml(price)}</dd></div>
+        <div><dt>${escapeHtml(copy.tuition)}</dt><dd>${price === null ? "—" : escapeHtml(price)}</dd></div>
       </dl>
     </article>
-    ${intakes ? `<section id="intakes" class="mt-10"><h2 class="text-2xl font-bold">Available intakes</h2><div class="mt-5 grid gap-4 sm:grid-cols-2">${intakes}</div></section>` : ""}
-    ${priceRows ? `<section class="mt-10" aria-label="${escapeHtml(copy.tuition)}"><h2 class="text-2xl font-bold">${escapeHtml(copy.tuition)}</h2><dl class="mt-5 grid gap-4 sm:grid-cols-2">${priceRows}</dl></section>` : ""}
+    ${requirements ? `<section data-detail-section="requirements" id="requirements" class="mt-10"><h2>Requirements</h2><p>${escapeHtml(requirements)}</p></section>` : ""}
+    ${intakes ? `<section data-detail-section="intakes" id="intakes" class="mt-10"><h2 class="text-2xl font-bold">Available intakes</h2><div class="mt-5 grid gap-4 sm:grid-cols-2">${intakes}</div></section>` : ""}
+    ${feeContent ? `<section data-detail-section="fees" id="fees" class="mt-10" aria-label="${escapeHtml(copy.tuition)}"><h2 class="text-2xl font-bold">${escapeHtml(copy.tuition)}</h2><dl class="mt-5 grid gap-4 sm:grid-cols-2">${feeContent}</dl></section>` : ""}
     ${related ? `<section data-detail-section="related" id="related" class="mt-12" aria-label="${escapeHtml(copy.programs)}"><h2 class="text-2xl font-bold">${escapeHtml(copy.programs)}</h2><div class="mt-5 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">${related}</div></section>` : ""}
   </main>`;
 }
@@ -589,12 +612,13 @@ function renderUniversityDetail(model: Extract<PublicCatalogRenderModel, { kind:
     <article id="overview" class="mt-8">
       <p class="text-sm text-primary">${escapeHtml([university.city, university.country].filter(Boolean).join(", "))}</p>
       <h1 class="mt-3 text-4xl font-bold">${escapeHtml(university.name)}</h1>
+      <nav aria-label="Location">${locationHierarchy(university)}</nav>
       <p class="mt-4 text-muted-foreground">${escapeHtml(model.description)}</p>
-      <dl class="mt-8 grid gap-4 sm:grid-cols-3">
+      <section data-detail-section="facts" id="facts"><dl class="mt-8 grid gap-4 sm:grid-cols-3">
         <div><dt>${escapeHtml(copy.institutionType)}</dt><dd>${escapeHtml(university.universityType || "—")}</dd></div>
         <div><dt>${escapeHtml(copy.location)}</dt><dd>${escapeHtml([university.city, university.country].filter(Boolean).join(", "))}</dd></div>
         <div><dt>${escapeHtml(copy.programs)}</dt><dd>${escapeHtml(String(university.programCount))}</dd></div>
-      </dl>
+      </dl></section>
     </article>
     <section data-detail-section="programs" id="programs" class="mt-10"><h2 class="text-2xl font-bold">${escapeHtml(copy.programs)}</h2><div class="mt-5 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">${programs}</div></section>
   </main>`;
@@ -608,20 +632,23 @@ function renderDestinationDetail(model: Extract<PublicCatalogRenderModel, { kind
         <h2 class="text-lg font-bold"><a href="${escapeHtml(university.canonicalPath)}">${escapeHtml(university.name)}</a></h2>
         <p class="mt-2 text-muted-foreground">${escapeHtml([university.universityType, university.city].filter(Boolean).join(" · "))}</p>
       </article>`).join("");
-  const cities = destination.popularCities.map((city) => `<li>${escapeHtml(city)}</li>`).join("");
+  const cities = destination.popularCities.map((city) => {
+    const path = destination.cityLinks?.find(link => link.name === city)?.canonicalPath;
+    return `<li>${locationHierarchy({ city, cityPath: path })}</li>`;
+  }).join("");
   return `<main data-public-render-shell="destination-detail" class="mx-auto max-w-7xl px-4 py-24">
     <nav aria-label="Breadcrumb"><a href="/${escapeHtml(model.locale)}/countries">${escapeHtml(copy.countries)}</a> / <span>${escapeHtml(destination.name)}</span></nav>
     <article class="mt-8">
       <p class="text-sm text-primary">${escapeHtml(destination.country)}</p>
       <h1 class="mt-3 text-4xl font-bold">${escapeHtml(model.title)}</h1>
       <p class="mt-4 text-muted-foreground">${escapeHtml(model.description)}</p>
-      <dl class="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <section data-detail-section="facts" id="facts"><dl class="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <div><dt>${escapeHtml(copy.location)}</dt><dd>${escapeHtml(destination.country)}</dd></div>
         <div><dt>${escapeHtml(copy.programs)}</dt><dd>${escapeHtml(String(destination.programCount))}</dd></div>
         <div><dt>${escapeHtml(copy.language)}</dt><dd>${escapeHtml(destination.language || "—")}</dd></div>
         <div><dt>${escapeHtml(copy.tuition)}</dt><dd>${escapeHtml(destination.currency || "—")}</dd></div>
-      </dl>
-      ${cities ? `<ul class="mt-8 flex flex-wrap gap-3" aria-label="${escapeHtml(copy.location)}">${cities}</ul>` : ""}
+      </dl></section>
+      ${cities ? `<section data-detail-section="cities" id="cities"><ul class="mt-8 flex flex-wrap gap-3" aria-label="${escapeHtml(copy.location)}">${cities}</ul></section>` : ""}
     </article>
     <section data-detail-section="universities" class="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-3" aria-label="${escapeHtml(destination.name)}">${universities}</section>
   </main>`;
@@ -645,13 +672,14 @@ function renderCityDetail(model: Extract<PublicCatalogRenderModel, { kind: "city
     <nav aria-label="Breadcrumb"><a href="/${escapeHtml(model.locale)}/countries">${escapeHtml(copy.countries)}</a> / <span>${escapeHtml(city.country)}</span> / <span>${escapeHtml(city.name)}</span></nav>
     <article class="mt-8">
       <p class="text-sm text-primary">${escapeHtml(city.country)}</p>
+      <nav aria-label="Location">${locationHierarchy({ country: city.country, countryPath: city.countryPath })}</nav>
       <h1 class="mt-3 text-4xl font-bold">${escapeHtml(model.title)}</h1>
       <p class="mt-4 max-w-3xl text-muted-foreground">${escapeHtml(model.description)}</p>
-      <dl class="mt-8 grid gap-4 sm:grid-cols-3">
+      <section data-detail-section="facts" id="facts"><dl class="mt-8 grid gap-4 sm:grid-cols-3">
         <div><dt>${escapeHtml(copy.location)}</dt><dd>${escapeHtml(`${city.name}, ${city.country}`)}</dd></div>
         <div><dt>${escapeHtml(copy.institutionType)}</dt><dd>${escapeHtml(String(city.universityCount))}</dd></div>
         <div><dt>${escapeHtml(copy.programs)}</dt><dd>${escapeHtml(String(city.programCount))}</dd></div>
-      </dl>
+      </dl></section>
     </article>
     ${universities ? `<section data-detail-section="universities" class="mt-12"><h2 class="text-2xl font-bold">${escapeHtml(copy.institutionType)}</h2><div class="mt-5 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">${universities}</div></section>` : ""}
     ${programs ? `<section data-detail-section="programs" class="mt-12"><h2 class="text-2xl font-bold">${escapeHtml(copy.programs)}</h2><div class="mt-5 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">${programs}</div></section>` : ""}
@@ -869,11 +897,9 @@ function structuredData(model: PublicCatalogRenderModel, siteUrl: string): unkno
     const program = model.program;
     const prices = model.prices ?? [];
     const verifiedTuition = program.verifiedTuition || prices.find((item) => item.componentType === "TUITION") || null;
-    const amountMinor = verifiedTuition ? Number(verifiedTuition.amountMinor) : NaN;
-    const price = Number.isSafeInteger(amountMinor) && amountMinor >= 0
-      ? amountMinor / 100
-      : null;
-    const currency = verifiedTuition ? normalizedCurrency(verifiedTuition.currencyCode) : null;
+    const tuition = projectPublicTuition(program, prices.length ? prices : verifiedTuition ? [{ ...verifiedTuition, componentType: "TUITION" }] : []);
+    const price = tuition?.verified && !tuition.isFrom ? tuition.amount : null;
+    const currency = tuition?.currency ?? null;
     return {
       "@context": "https://schema.org",
       "@type": "Course",
@@ -887,7 +913,7 @@ function structuredData(model: PublicCatalogRenderModel, siteUrl: string): unkno
       },
       ...(program.language ? { inLanguage: program.language } : {}),
       ...(program.duration ? { timeRequired: program.duration } : {}),
-      ...(price !== null && currency ? {
+      ...(price !== null && currency && program.universityIsActive !== false ? {
         offers: {
           "@type": "Offer",
           price,

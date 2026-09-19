@@ -1,8 +1,8 @@
 import { Router, type IRouter, type Request, type Response } from "express";
+import { publicCatalogRequirements } from "../lib/publicCatalogRequirements";
 import {
   db,
   institutionCampusesTable,
-  priceComponentsTable,
   programIntakesTable,
   programsTable,
   programTranslationsTable,
@@ -14,9 +14,7 @@ import {
   desc,
   eq,
   gte,
-  isNotNull,
   isNull,
-  lte,
   ne,
   or,
   sql,
@@ -42,11 +40,15 @@ import {
   resolvePublishedEntitySeoState,
 } from "../lib/publicWebDiscoveryReadModel";
 import { resolveLocalizedUniversityFields } from "../lib/publicLocalizedEntityContract";
+import { readPublicCatalogPrices } from "../lib/publicCatalogPriceReadModel";
+import { projectPublicTuition, publicCurrency } from "../lib/publicCatalogTuition";
+import { resolvePublicCatalogLocationLinks } from "../lib/publicCatalogLocationLinks";
 
 const router: IRouter = Router();
 
 const PUBLIC_CACHE_CONTROL =
-  "public, max-age=60, s-maxage=300, stale-while-revalidate=3600";
+  // Admissions flags must revalidate after an admin closes applications.
+  "public, max-age=0, must-revalidate";
 
 function setPublicCatalogHeaders(res: Response): void {
   res.setHeader("Cache-Control", PUBLIC_CACHE_CONTROL);
@@ -115,6 +117,7 @@ router.get(
         translatedLocale: programTranslationsTable.locale,
         universityId: universitiesTable.id,
         universityName: universitiesTable.name,
+        universityIsActive: universitiesTable.isActive,
         universityCountry: universitiesTable.country,
         universityCity: universitiesTable.city,
         universityType: universitiesTable.universityType,
@@ -171,7 +174,7 @@ router.get(
     addPublicCatalogConditions(relatedConditions, policy);
 
     const now = new Date();
-    const [relatedRows, intakeRows, priceRows, seoState] = await Promise.all([
+    const [relatedRows, intakeRows, priceMap, seoState, locationLinks] = await Promise.all([
       db
         .select({
           id: programsTable.id,
@@ -241,47 +244,15 @@ router.get(
           asc(programIntakesTable.id),
         )
         .limit(24),
-      db
-        .select({
-          id: priceComponentsTable.id,
-          intakeId: priceComponentsTable.intakeId,
-          componentCode: priceComponentsTable.componentCode,
-          componentType: priceComponentsTable.componentType,
-          amountMinor: priceComponentsTable.amountMinor,
-          currencyCode: priceComponentsTable.currencyCode,
-          frequency: priceComponentsTable.frequency,
-          effectiveFrom: priceComponentsTable.effectiveFrom,
-          effectiveUntil: priceComponentsTable.effectiveUntil,
-          sourceVerifiedAt: priceComponentsTable.sourceVerifiedAt,
-          sourceExpiresAt: priceComponentsTable.sourceExpiresAt,
-        })
-        .from(priceComponentsTable)
-        .where(and(
-          eq(priceComponentsTable.programId, program.id),
-          eq(priceComponentsTable.status, "ACTIVE"),
-          isNotNull(priceComponentsTable.sourceVerifiedAt),
-          lte(priceComponentsTable.effectiveFrom, now),
-          or(
-            isNull(priceComponentsTable.effectiveUntil),
-            gte(priceComponentsTable.effectiveUntil, now),
-          ),
-          or(
-            isNull(priceComponentsTable.sourceExpiresAt),
-            gte(priceComponentsTable.sourceExpiresAt, now),
-          ),
-        ))
-        .orderBy(
-          asc(priceComponentsTable.componentType),
-          asc(priceComponentsTable.effectiveFrom),
-          asc(priceComponentsTable.id),
-        )
-        .limit(48),
+      readPublicCatalogPrices([program.id], now),
       resolvePublishedEntitySeoState({
         entityType: "program",
         entityId: program.id,
         locale,
       }),
+      resolvePublicCatalogLocationLinks({ locale, country: program.universityCountry, city: program.universityCity }),
     ]);
+    const priceRows = priceMap.get(program.id) ?? [];
 
     const deliveredLocaleReady = locale === "en" || program.translatedLocale === locale;
     const indexable = seoState.indexable && deliveredLocaleReady;
@@ -295,12 +266,16 @@ router.get(
     const relatedPrograms = relatedRows
       .filter((related) => relatedProgramIds === null || relatedProgramIds.has(related.id))
       .slice(0, PUBLIC_CATALOG_RELATED_LIMIT);
+    const relatedPrices = await readPublicCatalogPrices(relatedPrograms.map(row => row.id), now);
 
     setPublicCatalogHeaders(res);
     res.setHeader("Content-Location", canonicalPath);
     res.json({
       data: {
         ...program,
+        ...locationLinks,
+        requirements: publicCatalogRequirements(program.requirements),
+        tuition: projectPublicTuition(program, priceRows),
         translatedLocale: undefined,
         fallbackUsed: locale !== "en" && program.translatedLocale !== locale,
         universityLogoUrl: courseFinderUniversityLogoUrl(
@@ -317,12 +292,13 @@ router.get(
         }),
       },
       intakes: intakeRows,
-      prices: priceRows.map((price) => ({
+      prices: priceRows.filter(price => publicCurrency(price.currencyCode)).map((price) => ({
         ...price,
         amountMinor: price.amountMinor.toString(),
       })),
       related: relatedPrograms.map(({ score: _score, ...related }) => ({
         ...related,
+        tuition: projectPublicTuition(related, relatedPrices.get(related.id) ?? []),
         canonicalPath: publicCatalogPath({
           locale,
           entityType: "program",
@@ -370,6 +346,7 @@ router.get(
         website: universitiesTable.website,
         description: universitiesTable.description,
         ranking: universitiesTable.ranking,
+        isActive: universitiesTable.isActive,
         universityType: universitiesTable.universityType,
         qsRanking: universitiesTable.qsRanking,
         timesRanking: universitiesTable.timesRanking,
@@ -395,7 +372,7 @@ router.get(
       eq(programsTable.isActive, true),
     ];
     addPublicCatalogConditions(programConditions, policy);
-    const [[countRow], programRows, seoState, localizedDelivery] = await Promise.all([
+    const [[countRow], programRows, seoState, localizedDelivery, locationLinks] = await Promise.all([
       db
         .select({ count: sql<number>`count(*)` })
         .from(programsTable)
@@ -443,6 +420,7 @@ router.get(
         entityId: university.id,
         locale,
       }),
+      resolvePublicCatalogLocationLinks({ locale, country: university.country, city: university.city }),
     ]);
 
     const localizedUniversity = resolveLocalizedUniversityFields({
@@ -479,11 +457,13 @@ router.get(
     const deliveredPrograms = programRows
       .filter((program) => indexableProgramIds === null || indexableProgramIds.has(program.id))
       .slice(0, PUBLIC_CATALOG_UNIVERSITY_PROGRAM_LIMIT);
+    const programPrices = await readPublicCatalogPrices(deliveredPrograms.map(program => program.id));
     setPublicCatalogHeaders(res);
     res.setHeader("Content-Location", canonicalPath);
     res.json({
       data: {
         ...university,
+        ...locationLinks,
         name: localizedUniversity.name,
         description: localizedUniversity.description,
         universityType: localizedUniversity.universityType,
@@ -497,6 +477,7 @@ router.get(
       },
       programs: deliveredPrograms.map((program) => ({
         ...program,
+        tuition: projectPublicTuition(program, programPrices.get(program.id) ?? []),
         canonicalPath: publicCatalogPath({
           locale,
           entityType: "program",

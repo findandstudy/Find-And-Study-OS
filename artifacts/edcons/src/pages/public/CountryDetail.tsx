@@ -5,20 +5,20 @@ import { useSeo } from "@/hooks/use-seo";
 import { useJsonLd, SITE_URL, SITE_NAME } from "@/hooks/use-json-ld";
 import { customFetch } from "@workspace/api-client-react";
 import { Link } from "wouter";
-import { motion } from "framer-motion";
-import { Badge } from "@/components/ui/badge";
+import { DetailArtwork, DetailBreadcrumbs, DetailCard, DetailHeading, DetailImage } from "./DetailEditorial";
+import { catalogueCount, detailCopy } from "./detailPresentation";
+
 import { Button } from "@/components/ui/button";
 import { CountryFlag, countryCodeFromEmoji } from "@/components/CountryFlag";
 import type { Language } from "@/lib/i18n";
-import {
-  Globe2, GraduationCap, Building2, MapPin, DollarSign, Languages,
-  Wallet, Thermometer, FileText, Briefcase, ArrowLeft, ChevronRight,
-} from "lucide-react";
+import { Globe2, ArrowLeft, ArrowUpRight } from "lucide-react";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
 interface Destination {
-  id: number;
+  id: number | null;
+  source?: "catalog" | "destination";
+  catalogCountryId?: number;
   name: string;
   slug: string;
   country: string;
@@ -44,7 +44,7 @@ interface UniversityBrief {
   logoUrl: string | null;
   ranking: number | null;
   universityType: string | null;
-  programCount: number;
+  programCount?: number;
   canonicalPath: string;
 }
 
@@ -69,20 +69,6 @@ function fixStorageUrl(url: string | null | undefined): string | null {
     fixed = `${BASE_URL}${fixed.startsWith("/") ? "" : "/"}${fixed}`;
   }
   return fixed;
-}
-
-function InfoCard({ icon: Icon, label, value, color }: { icon: any; label: string; value: string; color: string }) {
-  return (
-    <div className="bg-card rounded-2xl border border-border/40 p-5 flex gap-4 items-start">
-      <div className={`w-10 h-10 rounded-xl ${color} flex items-center justify-center shrink-0`}>
-        <Icon className="w-5 h-5 text-white" />
-      </div>
-      <div>
-        <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-1">{label}</p>
-        <p className="text-sm text-foreground font-medium">{value}</p>
-      </div>
-    </div>
-  );
 }
 
 export default function CountryDetail({ slug }: { slug: string }) {
@@ -178,184 +164,91 @@ export default function CountryDetail({ slug }: { slug: string }) {
   }
 
   const { destination: dest, universities, stats } = data;
+  const copy = detailCopy(lang);
   const whyPoints = dest.whyStudyHere?.split(/\.\s+/).filter(p => p.trim().length > 5) || [];
   const cityNames = dest.popularCities?.split(",").map(c => c.trim()).filter(Boolean) || [];
   const cityLinks = new Map(data.cities.flatMap((city) => [
     [city.name.toLocaleLowerCase("en-US"), city.canonicalPath] as const,
     [city.sourceName.toLocaleLowerCase("en-US"), city.canonicalPath] as const,
   ]));
-
+  const cities = [...data.cities.map(city => ({ name: city.name, canonicalPath: city.canonicalPath })), ...cityNames
+    .filter(name => !cityLinks.has(name.toLocaleLowerCase("en-US")))
+    .map(name => ({ name, canonicalPath: null }))];
+  const facts = [
+    { label: t("countryDetail.language"), value: dest.language },
+    { label: t("countryDetail.currency"), value: dest.currency },
+    { label: t("countryDetail.livingCost"), value: dest.livingCost },
+    { label: t("countryDetail.climate"), value: dest.climate },
+    { label: t("countryDetail.visaInfo"), value: dest.visaInfo },
+    { label: t("countryDetail.workPermit"), value: dest.workPermit },
+  ].filter(fact => !!fact.value);
+  const iso = (dest.country && dest.country.length === 2 ? dest.country : null) || (dest.flagEmoji ? countryCodeFromEmoji(dest.flagEmoji) : null);
   return (
     <DetailLayout kind="destination">
-      <section data-detail-section="hero" className="pt-24 pb-16 bg-gradient-to-br from-primary/10 via-accent/5 to-primary/5 relative overflow-hidden">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <Link href={localePath("/countries")} className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-primary transition-colors mb-6">
-            <ArrowLeft className="w-4 h-4" /> {t("countryDetail.allDestinations")}
-          </Link>
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col md:flex-row md:items-center gap-6">
-            {(() => {
-              const iso = (dest.country && dest.country.length === 2 ? dest.country : null) || (dest.flagEmoji ? countryCodeFromEmoji(dest.flagEmoji) : null);
-              return iso ? (
-                <CountryFlag code={iso} size="3xl" rounded className="shadow-md" alt={dest.name} />
-              ) : (
-                <Globe2 className="w-20 h-20 text-primary" />
-              );
-            })()}
+      <section data-detail-section="hero">
+        <div className="detail-hero is-destination">
+          {dest.heroImageUrl && <div className="detail-hero-backdrop"><DetailImage src={fixStorageUrl(dest.heroImageUrl)} alt="" /></div>}
+          <div className="detail-wrap detail-hero-main is-wide">
             <div>
-              <h1 className="text-4xl md:text-5xl font-display font-bold text-foreground mb-3">
-                {(() => {
-                  const full = t("countryDetail.studyIn", { name: "|||" });
-                  const parts = full.split("|||");
-                  return <>{parts[0]}<span className="text-primary">{dest.name}</span>{parts[1] || ""}</>;
-                })()}
-              </h1>
-              {dest.shortDescription && (
-                <p className="text-lg text-muted-foreground max-w-2xl">{dest.shortDescription}</p>
-              )}
-              <div className="flex items-center gap-6 mt-4">
-                <span className="flex items-center gap-2 text-sm font-medium">
-                  <Building2 className="w-4 h-4 text-primary" /> {stats.universityCount} {t("countryDetail.universities")}
-                </span>
-                <span className="flex items-center gap-2 text-sm font-medium">
-                  <GraduationCap className="w-4 h-4 text-accent" /> {stats.programCount} {t("countryDetail.programs")}
-                </span>
+              <p className="detail-eyebrow">{copy.destination}</p>
+              {iso && <CountryFlag code={iso} size="xl" alt={dest.name} />}
+              <h1>{t("countryDetail.studyIn", { name: dest.name })}</h1>
+              {dest.shortDescription && <p className="detail-hero-lead">{dest.shortDescription}</p>}
+              <div className="detail-country-stats">
+                <div><strong>{stats.universityCount}</strong><span>{copy.universityCount}</span></div>
+                <div><strong>{stats.programCount}</strong><span>{copy.programCount}</span></div>
               </div>
             </div>
-          </motion.div>
+            <DetailArtwork />
+          </div>
         </div>
+        <div className="detail-wrap"><DetailBreadcrumbs label={copy.catalogue} items={[{ label: t("nav.countries"), path: localePath("/countries") }, { label: dest.name }]} /></div>
       </section>
-
-      <section data-detail-section="overview" className="py-12">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid lg:grid-cols-3 gap-8">
-            <div className="lg:col-span-2 space-y-8">
-              {dest.description && (
-                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.1 }}>
-                  <h2 className="text-2xl font-display font-bold text-foreground mb-4">{t("countryDetail.about", { name: dest.name })}</h2>
-                  <p className="text-muted-foreground leading-relaxed">{dest.description}</p>
-                </motion.div>
-              )}
-
-              {whyPoints.length > 0 && (
-                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }}>
-                  <h2 className="text-2xl font-display font-bold text-foreground mb-4">{t("countryDetail.whyStudy", { name: dest.name })}</h2>
-                  <div className="grid sm:grid-cols-2 gap-3">
-                    {whyPoints.map((point, i) => (
-                      <div key={i} className="flex gap-3 bg-card rounded-xl border border-border/40 p-4">
-                        <div className="w-6 h-6 rounded-full bg-primary/10 text-primary flex items-center justify-center shrink-0 text-xs font-bold mt-0.5">
-                          {i + 1}
-                        </div>
-                        <p className="text-sm text-foreground">{point.endsWith(".") ? point : `${point}.`}</p>
-                      </div>
-                    ))}
-                  </div>
-                </motion.div>
-              )}
-
-              {cityNames.length > 0 && (
-                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }}>
-                  <h2 className="text-2xl font-display font-bold text-foreground mb-4">{t("countryDetail.popularCities")}</h2>
-                  <div className="flex flex-wrap gap-3">
-                    {cityNames.map(city => {
-                      const cityPath = cityLinks.get(city.toLocaleLowerCase("en-US"));
-                      const content = <><MapPin className="w-4 h-4 text-primary" /><span className="text-sm font-medium text-foreground">{city}</span></>;
-                      return cityPath ? (
-                        <Link key={city} href={cityPath} className="flex items-center gap-2 bg-card rounded-full border border-border/40 px-4 py-2 transition-colors hover:border-primary/40 hover:text-primary">
-                          {content}
-                        </Link>
-                      ) : (
-                        <div key={city} className="flex items-center gap-2 bg-card rounded-full border border-border/40 px-4 py-2">
-                          {content}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </motion.div>
-              )}
-            </div>
-
-            <div className="space-y-4">
-              <h3 className="text-lg font-display font-bold text-foreground mb-2">{t("countryDetail.quickFacts")}</h3>
-              {dest.language && <InfoCard icon={Languages} label={t("countryDetail.language")} value={dest.language} color="bg-blue-500" />}
-              {dest.currency && <InfoCard icon={Wallet} label={t("countryDetail.currency")} value={dest.currency} color="bg-emerald-500" />}
-              {dest.livingCost && <InfoCard icon={DollarSign} label={t("countryDetail.livingCost")} value={dest.livingCost} color="bg-amber-500" />}
-              {dest.climate && <InfoCard icon={Thermometer} label={t("countryDetail.climate")} value={dest.climate} color="bg-orange-500" />}
-              {dest.visaInfo && <InfoCard icon={FileText} label={t("countryDetail.visaInfo")} value={dest.visaInfo} color="bg-violet-500" />}
-              {dest.workPermit && <InfoCard icon={Briefcase} label={t("countryDetail.workPermit")} value={dest.workPermit} color="bg-rose-500" />}
-            </div>
+      <nav data-detail-section="navigation" className="detail-nav" aria-label={dest.name}><div className="detail-wrap">
+        <a href="#overview">{copy.overview}</a>
+        {facts.length > 0 && <a href="#facts">{t("countryDetail.quickFacts")}</a>}
+        {cities.length > 0 && <a href="#cities">{t("countryDetail.popularCities")}</a>}
+        {universities.length > 0 && <a href="#universities">{t("countryDetail.universities")}</a>}
+        <a href="#cta">{copy.next}</a>
+      </div></nav>
+      <section data-detail-section="overview" id="overview" className="detail-section">
+        <div className="detail-wrap">
+          <DetailHeading number="01" eyebrow={copy.destination} title={t("countryDetail.about", { name: dest.name })} />
+          <div className="detail-split">
+            <p className="detail-prose detail-snapshot">{dest.description || dest.shortDescription || t("countryDetail.exploreOpportunities")}</p>
+            {whyPoints.length > 0 ? <div><p className="detail-eyebrow">{t("countryDetail.whyStudy", { name: dest.name })}</p><ul className="detail-program-points">{whyPoints.map((point, i) => <li key={i}>{point}</li>)}</ul></div> : <div className="detail-actions"><Link href={localePath(`/programs?country=${encodeURIComponent(dest.country)}`)}>{t("countryDetail.browsePrograms")}<ArrowUpRight size={17} aria-hidden="true" /></Link></div>}
           </div>
         </div>
       </section>
-
-      {universities.length > 0 && (
-        <section data-detail-section="universities" className="py-12 bg-secondary/30">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex items-center justify-between mb-8">
-              <h2 className="text-2xl font-display font-bold text-foreground">
-                {t("countryDetail.universitiesIn", { name: dest.name })}
-              </h2>
-              <Button asChild variant="outline" size="sm" className="rounded-full">
-                <Link href={localePath(`/programs?country=${encodeURIComponent(dest.country)}`)}>
-                  {t("countryDetail.viewAllPrograms")} <ChevronRight className="w-4 h-4 ml-1" />
-                </Link>
-              </Button>
-            </div>
-            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
-              {universities.map((uni, i) => {
-                const logoSrc = fixStorageUrl(uni.logoUrl);
-                return (
-                  <motion.div key={uni.id} initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: i * 0.05 }}
-                    className="bg-card rounded-2xl border border-border/40 overflow-hidden shadow-sm hover:shadow-md transition-shadow">
-                    <div className="p-5">
-                      <div className="flex items-center gap-3 mb-3">
-                        <div className="w-12 h-12 rounded-xl bg-secondary flex items-center justify-center shrink-0 overflow-hidden">
-                          {logoSrc ? (
-                            <img src={logoSrc} alt={uni.name} className="w-10 h-10 object-contain" loading="lazy"
-                              onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
-                          ) : (
-                            <Building2 className="w-6 h-6 text-muted-foreground" />
-                          )}
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <Link href={uni.canonicalPath} className="font-bold text-foreground text-sm truncate hover:text-primary hover:underline">{uni.name}</Link>
-                          {uni.city && (
-                            <p className="text-xs text-muted-foreground flex items-center gap-1">
-                              <MapPin className="w-3 h-3" /> {uni.city}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        {uni.universityType && (
-                          <Badge variant="secondary" className="text-xs">{uni.universityType}</Badge>
-                        )}
-                        {uni.ranking && (
-                          <Badge variant="outline" className="text-xs">{t("countryDetail.rank", { rank: uni.ranking })}</Badge>
-                        )}
-                        <Badge className="text-xs bg-primary/10 text-primary border-0">
-                          {t("countryDetail.programCount", { count: uni.programCount })}
-                        </Badge>
-                      </div>
-                    </div>
-                  </motion.div>
-                );
-              })}
-            </div>
-          </div>
-        </section>
-      )}
-
-      <section data-detail-section="cta" className="py-16 bg-gradient-to-r from-primary to-accent text-white mx-4 sm:mx-8 rounded-3xl mb-12 overflow-hidden relative">
-        <div className="max-w-3xl mx-auto px-8 text-center relative z-10">
-          <h2 className="text-3xl font-display font-bold mb-4">{t("countryDetail.readyToStudy", { name: dest.name })}</h2>
-          <p className="text-white/80 mb-8">{t("countryDetail.readyToStudyDesc")}</p>
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Button asChild size="lg" variant="secondary" className="rounded-full px-8 text-primary font-bold">
-              <Link href={localePath(`/programs?country=${encodeURIComponent(dest.country)}`)}>{t("countryDetail.browsePrograms")}</Link>
-            </Button>
-            <Button asChild size="lg" variant="outline" className="rounded-full px-8 text-white border-white/30 hover:bg-white/10 font-bold">
-              <Link href={localePath("/contact")}>{t("countryDetail.talkToAdvisor")}</Link>
-            </Button>
+      {facts.length > 0 && <section data-detail-section="facts" id="facts" className="detail-section is-sky">
+        <div className="detail-wrap detail-split">
+          <DetailHeading number="02" eyebrow={copy.overview} title={t("countryDetail.quickFacts")} />
+          <dl className="detail-keylines">{facts.map(fact => <div key={fact.label}><dt>{fact.label}</dt><dd>{fact.value}</dd></div>)}</dl>
+        </div>
+      </section>}
+      {cities.length > 0 && <section data-detail-section="cities" id="cities" className="detail-section is-dark">
+        <div className="detail-wrap">
+          <DetailHeading number="03" eyebrow={dest.name} title={t("countryDetail.popularCities")} />
+          <div className="detail-grid">{cities.map((city, index) => {
+            const cityPath = city.canonicalPath;
+            return cityPath ? <DetailCard key={city.name} href={cityPath} eyebrow={dest.name} title={city.name} index={index} /> : <article key={city.name} className="detail-catalog-card"><p className="detail-eyebrow">{dest.name}</p><h3>{city.name}</h3></article>;
+          })}</div>
+        </div>
+      </section>}
+      {universities.length > 0 && <section data-detail-section="universities" id="universities" className="detail-section is-sand">
+        <div className="detail-wrap">
+          <DetailHeading number="04" eyebrow={copy.studyOptions} title={t("countryDetail.universitiesIn", { name: dest.name })} />
+          <div className="detail-grid">{universities.map((uni, index) => <DetailCard key={uni.id} href={uni.canonicalPath} title={uni.name} eyebrow={uni.city || dest.name} index={index}>
+            <p>{[uni.universityType, catalogueCount(uni.programCount, t("countryDetail.programs"))].filter(Boolean).join(" · ")}</p>
+          </DetailCard>)}</div>
+        </div>
+      </section>}
+      <section data-detail-section="cta" id="cta" className="detail-section is-dark">
+        <div className="detail-wrap detail-cta">
+          <div><p className="detail-eyebrow">{copy.next}</p><h2>{t("countryDetail.readyToStudy", { name: dest.name })}</h2></div>
+          <div className="detail-actions">
+            <Link href={localePath(`/programs?country=${encodeURIComponent(dest.country)}`)}>{t("countryDetail.browsePrograms")}<ArrowUpRight size={17} aria-hidden="true" /></Link>
+            <Link className="is-secondary" href={localePath("/contact")}>{t("countryDetail.talkToAdvisor")}</Link>
           </div>
         </div>
       </section>

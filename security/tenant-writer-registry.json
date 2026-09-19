@@ -762,6 +762,15 @@
       "note": "Governed public-web publication store is maker-checker and receipt-bound; publication/index activation remains disabled."
     },
     {
+      "path": "artifacts/api-server/src/lib/publicCatalogPriceReadModel.ts",
+      "ownership": "tenant_owned",
+      "enforcement": "quarantine_required",
+      "risk": "high",
+      "owner": "Catalog & Content",
+      "externalPilot": "quarantine",
+      "note": "Bounded read-only verified catalogue price SELECT uses executor.execute; no price writes, external delivery or publication activation."
+    },
+    {
       "path": "artifacts/api-server/src/lib/publicCatalogQueryPolicy.ts",
       "ownership": "tenant_owned",
       "enforcement": "quarantine_required",

@@ -2,9 +2,10 @@ import { DetailLayout } from "./DetailLayout";
 import { useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { customFetch } from "@workspace/api-client-react";
-import { ArrowLeft, Building2, GraduationCap, MapPin } from "lucide-react";
+import { ArrowLeft, ArrowUpRight, MapPin } from "lucide-react";
 
-import { Badge } from "@/components/ui/badge";
+import { DetailArtwork, DetailBreadcrumbs, DetailCard, DetailFacts, DetailHeading } from "./DetailEditorial";
+import { detailCopy, localDetailPath } from "./detailPresentation";
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/hooks/use-i18n";
 import { SITE_NAME, SITE_URL, useJsonLd } from "@/hooks/use-json-ld";
@@ -16,6 +17,8 @@ type CityPayload = {
     name: string;
     country: string;
     countryCode: string;
+    countryPath?: string | null;
+    cityPath?: string | null;
     description: string | null;
     universityCount: number;
     programCount: number;
@@ -114,65 +117,59 @@ export default function CityDetail({ routeKey }: { routeKey: string }) {
     );
   }
 
+  const copy = detailCopy(lang);
+  const countryPath = localDetailPath(city.countryPath);
+  const programsPath = `${localePath("/programs")}?country=${encodeURIComponent(city.country)}&city=${encodeURIComponent(city.name)}`;
   return (
     <DetailLayout kind="city">
-      <section data-detail-section="hero" className="border-b border-border/40 bg-gradient-to-br from-primary/10 via-background to-accent/10 py-16">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <Link href={localePath("/countries")} className="mb-8 inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-primary"><ArrowLeft className="h-4 w-4" />{t("countryDetail.allDestinations")}</Link>
-          <div className="flex items-center gap-5">
-            <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-2xl bg-primary/10"><MapPin className="h-9 w-9 text-primary" /></div>
+      <section data-detail-section="hero">
+        <div className="detail-hero is-destination">
+          <div className="detail-wrap detail-hero-main is-wide">
             <div>
-              <p className="font-semibold text-primary">{city.country}</p>
-              <h1 className="mt-2 font-display text-3xl font-bold md:text-5xl">{city.name}</h1>
-              <div className="mt-4 flex flex-wrap gap-2"><Badge variant="outline">{city.universityCount} {t("countryDetail.universities")}</Badge><Badge variant="outline">{city.programCount} {t("countryDetail.programs")}</Badge></div>
+              <p className="detail-eyebrow">{copy.city}</p>
+              {countryPath ? <Link className="detail-hero-link" href={countryPath}>{city.country}<ArrowUpRight size={17} aria-hidden="true" /></Link> : <p className="detail-hero-lead">{city.country}</p>}
+              <h1>{city.name}</h1>
+              <div className="detail-country-stats">
+                <div><strong>{city.universityCount}</strong><span>{copy.universityCount}</span></div>
+                <div><strong>{city.programCount}</strong><span>{copy.programCount}</span></div>
+              </div>
+              <div className="detail-actions"><Link href={programsPath}>{t("countryDetail.viewAllPrograms")}<ArrowUpRight size={17} aria-hidden="true" /></Link></div>
             </div>
+            <DetailArtwork />
           </div>
         </div>
+        <div className="detail-wrap"><DetailBreadcrumbs label={copy.catalogue} items={[{ label: t("nav.countries"), path: localePath("/countries") }, { label: city.country, path: countryPath }, { label: city.name }]} /></div>
       </section>
-
-      <section data-detail-section="overview" className="py-12">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <article className="max-w-3xl rounded-2xl border border-border/50 bg-card p-6 md:p-8">
-            <h2 className="text-2xl font-bold">{t("countryDetail.about", { name: city.name })}</h2>
-            <p className="mt-4 whitespace-pre-line leading-7 text-muted-foreground">{city.description || payload.meta.description}</p>
-          </article>
+      <nav data-detail-section="navigation" className="detail-nav" aria-label={city.name}><div className="detail-wrap">
+        <a href="#overview">{copy.overview}</a><a href="#facts">{t("countryDetail.quickFacts")}</a>
+        {city.universities.length > 0 && <a href="#universities">{t("countryDetail.universities")}</a>}
+        {city.programs.length > 0 && <a href="#programs">{t("countryDetail.programs")}</a>}
+      </div></nav>
+      <section data-detail-section="overview" id="overview" className="detail-section">
+        <div className="detail-wrap detail-split">
+          <DetailHeading number="01" eyebrow={copy.city} title={t("countryDetail.about", { name: city.name })} />
+          <p className="detail-prose detail-snapshot">{city.description || payload.meta.description}</p>
         </div>
       </section>
-
-      {city.universities.length > 0 && (
-        <section data-detail-section="universities" className="bg-secondary/30 py-12">
-          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-            <h2 className="text-2xl font-bold">{t("countryDetail.universitiesIn", { name: city.name })}</h2>
-            <div className="mt-7 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-              {city.universities.map((university) => (
-                <Link key={university.id} href={university.canonicalPath} className="group rounded-2xl border border-border/50 bg-card p-5 transition-all hover:-translate-y-1 hover:border-primary/30 hover:shadow-md">
-                  <Building2 className="h-7 w-7 text-primary" />
-                  <h3 className="mt-4 font-bold group-hover:text-primary">{university.name}</h3>
-                  {university.universityType && <p className="mt-2 text-sm text-muted-foreground">{university.universityType}</p>}
-                </Link>
-              ))}
-            </div>
-          </div>
-        </section>
-      )}
-
-      {city.programs.length > 0 && (
-        <section data-detail-section="programs" className="py-12">
-          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-            <div className="flex flex-wrap items-end justify-between gap-4"><h2 className="text-2xl font-bold">{t("catalogDetail.availablePrograms")}</h2><Button asChild variant="outline" className="rounded-full"><Link href={`${localePath("/programs")}?country=${encodeURIComponent(city.country)}&city=${encodeURIComponent(city.name)}`}>{t("countryDetail.viewAllPrograms")}</Link></Button></div>
-            <div className="mt-7 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-              {city.programs.map((program) => (
-                <Link key={program.id} href={program.canonicalPath} className="group rounded-2xl border border-border/50 bg-card p-5 transition-all hover:-translate-y-1 hover:border-primary/30 hover:shadow-md">
-                  <GraduationCap className="h-7 w-7 text-primary" />
-                  <p className="mt-4 text-sm text-primary">{program.universityName}</p>
-                  <h3 className="mt-2 font-bold group-hover:text-primary">{program.name}</h3>
-                  <p className="mt-2 text-sm text-muted-foreground">{[program.degree, program.field].filter(Boolean).join(" · ")}</p>
-                </Link>
-              ))}
-            </div>
-          </div>
-        </section>
-      )}
+      <section data-detail-section="facts" id="facts" className="detail-section is-sky">
+        <div className="detail-wrap">
+          <DetailHeading number="02" eyebrow={city.name} title={t("countryDetail.quickFacts")} />
+          <DetailFacts items={[{ label: copy.country, value: countryPath ? <Link href={countryPath}>{city.country}</Link> : city.country }, { label: copy.universityCount, value: city.universityCount }, { label: copy.programCount, value: city.programCount }]} />
+        </div>
+      </section>
+      {city.universities.length > 0 && <section data-detail-section="universities" id="universities" className="detail-section is-sand">
+        <div className="detail-wrap">
+          <DetailHeading number="03" eyebrow={copy.studyOptions} title={t("countryDetail.universitiesIn", { name: city.name })} />
+          <div className="detail-grid">{city.universities.map((university, index) => <DetailCard key={university.id} href={university.canonicalPath} eyebrow={university.universityType} title={university.name} index={index} />)}</div>
+        </div>
+      </section>}
+      {city.programs.length > 0 && <section data-detail-section="programs" id="programs" className="detail-section">
+        <div className="detail-wrap">
+          <DetailHeading number="04" eyebrow={copy.studyOptions} title={t("catalogDetail.availablePrograms")} />
+          <div className="detail-grid">{city.programs.map((program, index) => <DetailCard key={program.id} href={program.canonicalPath} eyebrow={program.universityName} title={program.name} index={index}><p>{[program.degree, program.field].filter(Boolean).join(" · ")}</p></DetailCard>)}</div>
+          <div className="detail-actions"><Link href={programsPath}>{t("countryDetail.viewAllPrograms")}<ArrowUpRight size={17} aria-hidden="true" /></Link></div>
+        </div>
+      </section>}
     </DetailLayout>
   );
 }
