@@ -5,21 +5,28 @@ import { customFetch } from "@workspace/api-client-react";
 import { useI18n } from "@/hooks/use-i18n";
 import { useSeo } from "@/hooks/use-seo";
 import { SITE_NAME, SITE_URL, useJsonLd } from "@/hooks/use-json-ld";
-import { Badge } from "@/components/ui/badge";
+import { DetailBreadcrumbs, DetailHeading, DetailIdentity } from "./DetailEditorial";
+import { boundDetailContent, detailContentNavigation, detailContentSections, DetailMobileActions } from "./DetailContentSections";
+import { detailCopy, localDetailPath, type DetailTuition } from "./detailPresentation";
+import { UniversityProgramBrowser } from "./UniversityProgramBrowser";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Building2, ExternalLink, GraduationCap, MapPin } from "lucide-react";
-import { normalizeCurrency } from "@/lib/currency";
+import { ArrowLeft, Building2, ExternalLink, ArrowUpRight, MapPin, GraduationCap, Award } from "lucide-react";
+
 
 type UniversityPayload = {
+  editorial?: unknown;
   data: {
     id: number;
     name: string;
     country: string;
+    countryPath?: string | null;
+    cityPath?: string | null;
     city: string | null;
     website: string | null;
     description: string | null;
     ranking: number | null;
     universityType: string | null;
+    isActive?: boolean;
     qsRanking: number | null;
     timesRanking: number | null;
     shanghaiRanking: number | null;
@@ -35,6 +42,7 @@ type UniversityPayload = {
     field: string | null;
     language: string | null;
     duration: string | null;
+    tuition?: DetailTuition | null;
     tuitionFee: number | null;
     discountedFee: number | null;
     scholarship: number | null;
@@ -51,19 +59,6 @@ type UniversityPayload = {
   };
 };
 
-function money(value: number | null, currency: string | null, locale: string) {
-  if (value === null) return "—";
-  try {
-    return new Intl.NumberFormat(locale, {
-      style: "currency",
-      currency: normalizeCurrency(currency),
-      maximumFractionDigits: 0,
-    }).format(value);
-  } catch {
-    return `${value.toLocaleString(locale)} ${normalizeCurrency(currency)}`;
-  }
-}
-
 export default function UniversityDetail({ routeKey }: { routeKey: string }) {
   const { t, lang, localePath } = useI18n();
   const [, setLocation] = useLocation();
@@ -71,6 +66,7 @@ export default function UniversityDetail({ routeKey }: { routeKey: string }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const university = payload?.data;
+  const editorial = boundDetailContent(payload?.editorial, "university", university?.id, lang);
 
   useSeo({
     title: university?.name || t("countryDetail.universities"),
@@ -147,74 +143,70 @@ export default function UniversityDetail({ routeKey }: { routeKey: string }) {
     ["CWTS Leiden", university.cwtsLeidenRanking],
   ].filter((entry) => entry[1] !== null);
 
+  const copy = detailCopy(lang);
+  const countryPath = localDetailPath(university.countryPath), cityPath = localDetailPath(university.cityPath);
+  const degrees = [...new Set(payload.programs.map(program => program.degree).filter((value): value is string => !!value))];
+  const location = <>{cityPath ? <Link href={cityPath}>{university.city}</Link> : university.city}{university.city && " · "}{countryPath ? <Link href={countryPath}>{university.country}</Link> : university.country}</>;
   return (
     <DetailLayout kind="university">
-      <section data-detail-section="hero" className="border-b border-border/40 bg-gradient-to-br from-primary/10 via-background to-accent/10 py-16">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <Link href={localePath("/countries")} className="mb-8 inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-primary"><ArrowLeft className="h-4 w-4" />{t("countryDetail.allDestinations")}</Link>
-          <div className="flex flex-col gap-6 md:flex-row md:items-center">
-            <div className="flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-border/50 bg-card shadow-sm">
-              {university.logoUrl ? <img src={university.logoUrl} alt={university.name} className="h-full w-full object-contain p-2" /> : <Building2 className="h-11 w-11 text-primary" />}
+      <section data-detail-section="hero">
+        <div className="detail-hero">
+          <div className="detail-wrap detail-hero-top">
+            <DetailBreadcrumbs label={copy.catalogue} items={[{ label: t("nav.countries"), path: localePath("/countries") }, { label: university.country, path: countryPath }, { label: university.city || "", path: cityPath }, { label: university.name }]} />
+          </div>
+          <div className="detail-wrap detail-hero-main">
+            <div className="detail-hero-content">
+              <div className="detail-identity">
+                <DetailIdentity src={university.logoUrl} name={university.name} />
+                <p className="detail-eyebrow">{copy.institution}</p>
+              </div>
+              <h1>{university.name}</h1>
+              <p className="detail-hero-lead detail-icon-line"><MapPin size={18} aria-hidden="true" /><span>{location}</span></p>
+              <div className="detail-meta-pills">
+                {university.universityType && <span className="detail-meta-pill"><Building2 size={15} aria-hidden="true" />{university.universityType}</span>}
+                {degrees.map(degree => <span className="detail-meta-pill" key={degree}><GraduationCap size={15} aria-hidden="true" />{degree}</span>)}
+              </div>
+              {university.isActive === false && <p className="detail-provenance" role="status">{t("courseFinderPage.apply")} · {t("common.inactive")}</p>}
             </div>
-            <div className="min-w-0 flex-1">
-              <div className="mb-3 flex flex-wrap gap-2">{university.universityType && <Badge>{university.universityType}</Badge>}<Badge variant="outline">{payload.meta.programCount} {t("countryDetail.programs")}</Badge></div>
-              <h1 className="font-display text-3xl font-bold md:text-5xl">{university.name}</h1>
-              <p className="mt-3 flex items-center gap-2 text-muted-foreground"><MapPin className="h-4 w-4" />{[university.city, university.country].filter(Boolean).join(", ")}</p>
-            </div>
-            {university.website && <Button asChild variant="outline" className="rounded-full"><a href={university.website} target="_blank" rel="noopener noreferrer">{t("programs.visitUniversity")}<ExternalLink className="ml-2 h-4 w-4" /></a></Button>}
+            <aside className="detail-hero-card" aria-label={t("catalogDetail.availablePrograms")}>
+              <p className="detail-eyebrow">{copy.studyOptions}</p>
+              <p className="detail-summary-count"><strong>{new Intl.NumberFormat(lang).format(payload.meta.programCount)}</strong><span>{copy.programCount}</span></p>
+              <div className="detail-actions"><a href="#programs">{t("catalogDetail.availablePrograms")}<ArrowUpRight size={17} aria-hidden="true" /></a></div>
+              {university.website && <div className="detail-actions"><a className="is-secondary" href={university.website} target="_blank" rel="noopener noreferrer">{t("programs.visitUniversity")}<ExternalLink size={16} aria-hidden="true" /></a></div>}
+            </aside>
           </div>
         </div>
       </section>
-
-      <nav data-detail-section="navigation" className="sticky top-0 z-20 border-b border-border/60 bg-background/95 backdrop-blur" aria-label={university.name}>
-        <div className="mx-auto flex max-w-7xl gap-6 overflow-x-auto px-4 py-3 text-sm font-semibold [scrollbar-width:none] sm:px-6 lg:px-8 [&::-webkit-scrollbar]:hidden">
-          <a href="#overview" className="whitespace-nowrap text-muted-foreground hover:text-primary">{t("countryDetail.about", { name: university.name })}</a>
-          <a href="#facts" className="whitespace-nowrap text-muted-foreground hover:text-primary">{t("countryDetail.quickFacts")}</a>
-          <a href="#programs" className="whitespace-nowrap text-muted-foreground hover:text-primary">{t("catalogDetail.availablePrograms")}</a>
-        </div>
-      </nav>
-
-      <section data-detail-section="overview" id="overview" className="scroll-mt-20 py-12">
-        <div className="mx-auto grid max-w-7xl gap-8 px-4 sm:px-6 lg:grid-cols-3 lg:px-8">
-          <article className="rounded-2xl border border-border/50 bg-card p-6 md:p-8 lg:col-span-2">
-            <h2 className="text-2xl font-bold">{t("countryDetail.about", { name: university.name })}</h2>
-            <p className="mt-4 whitespace-pre-line leading-7 text-muted-foreground">{university.description || t("countryDetail.exploreOpportunities")}</p>
-            <dl className="mt-8 grid gap-4 border-t border-border/60 pt-6 sm:grid-cols-2 lg:grid-cols-3">
-              <div><dt className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{t("countryDetail.programs")}</dt><dd className="mt-2 text-2xl font-extrabold">{payload.meta.programCount}</dd></div>
-              <div><dt className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{t("catalogDetail.location")}</dt><dd className="mt-2 font-bold">{[university.city, university.country].filter(Boolean).join(", ")}</dd></div>
-              {university.universityType ? <div><dt className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{t("common.type")}</dt><dd className="mt-2 font-bold">{university.universityType}</dd></div> : null}
-            </dl>
-          </article>
-          <aside id="facts" className="scroll-mt-24 rounded-2xl border border-border/50 bg-card p-6 lg:sticky lg:top-24 lg:self-start">
-            <h2 className="font-bold">{t("countryDetail.quickFacts")}</h2>
-            <dl className="mt-5 space-y-4 text-sm">
-              <div><dt className="text-muted-foreground">{t("catalogDetail.location")}</dt><dd className="font-semibold">{university.address || [university.city, university.country].filter(Boolean).join(", ")}</dd></div>
-              {rankings.map(([label, value]) => <div key={String(label)}><dt className="text-muted-foreground">{String(label)}</dt><dd className="font-semibold">#{String(value)}</dd></div>)}
-            </dl>
-          </aside>
+      <nav data-detail-section="navigation" className="detail-nav" aria-label={university.name}><div className="detail-wrap">
+        <a href="#overview">{copy.overview}</a><a href="#facts">{t("countryDetail.quickFacts")}</a><a href="#programs">{t("catalogDetail.availablePrograms")}</a>
+        {detailContentNavigation(editorial)}
+      </div></nav>
+      <section data-detail-section="overview" id="overview" className="detail-section">
+        <div className="detail-wrap detail-split">
+          <DetailHeading number="01" eyebrow={copy.institution} title={t("countryDetail.about", { name: university.name })} />
+          <div>{university.description ? <p className="detail-prose detail-snapshot">{university.description}</p> : <><p className="detail-prose">{t("countryDetail.exploreOpportunities")}</p><div className="detail-actions"><a href="#programs">{t("catalogDetail.availablePrograms")}<ArrowUpRight size={17} aria-hidden="true" /></a></div></>}</div>
         </div>
       </section>
-
-      <section data-detail-section="programs" id="programs" className="scroll-mt-24 bg-secondary/30 py-12">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
-            <div><p className="text-sm font-semibold text-primary">{university.name}</p><h2 className="mt-1 text-2xl font-bold">{t("catalogDetail.availablePrograms")}</h2></div>
-            <Button asChild variant="outline" className="rounded-full"><Link href={`${localePath("/programs")}?universityId=${university.id}`}>{payload.meta.programCount} {t("countryDetail.programs")}</Link></Button>
-          </div>
-          {payload.programs.length > 0 ? (
-            <div className="mt-7 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-              {payload.programs.map((program) => (
-                <Link key={program.id} href={program.canonicalPath} className="group rounded-2xl border border-border/50 bg-card p-5 transition-all hover:-translate-y-1 hover:border-primary/30 hover:shadow-md">
-                  <div className="flex items-start justify-between gap-3"><GraduationCap className="h-6 w-6 shrink-0 text-primary" />{program.degree && <Badge variant="secondary">{program.degree}</Badge>}</div>
-                  <h3 className="mt-4 line-clamp-2 font-bold group-hover:text-primary">{program.name}</h3>
-                  <p className="mt-3 text-sm text-muted-foreground">{[program.field, program.duration, program.language].filter(Boolean).join(" · ")}</p>
-                  <p className="mt-5 font-extrabold">{money(program.discountedFee ?? program.tuitionFee, program.currency, lang)}</p>
-                </Link>
-              ))}
-            </div>
-          ) : <p className="mt-7 text-muted-foreground">{t("programs.noResults")}</p>}
+      <section data-detail-section="facts" id="facts" className="detail-section is-sky">
+        <div className="detail-wrap detail-split">
+          <DetailHeading number="02" eyebrow={copy.overview} title={t("countryDetail.quickFacts")} />
+          <dl className="detail-keylines">
+            <div><dt><MapPin size={17} aria-hidden="true" />{copy.institutionLocation}</dt><dd>{location}</dd></div>
+            {university.address && <div><dt><Building2 size={17} aria-hidden="true" />{t("catalogDetail.location")}</dt><dd>{university.address}</dd></div>}
+            {university.universityType && <div><dt><GraduationCap size={17} aria-hidden="true" />{t("common.type")}</dt><dd>{university.universityType}</dd></div>}
+            {rankings.map(([label, value]) => <div key={String(label)}><dt><Award size={17} aria-hidden="true" />{String(label)}</dt><dd>#{String(value)}</dd></div>)}
+          </dl>
         </div>
       </section>
+      <section data-detail-section="programs" id="programs" className="detail-section is-sand">
+        <div className="detail-wrap">
+          <DetailHeading number="03" eyebrow={copy.studyOptions} title={t("catalogDetail.availablePrograms")} />
+          <UniversityProgramBrowser key={`${university.id}:${lang}`} universityId={university.id} admissionsOpen={university.isActive !== false} />
+          <div className="detail-actions"><Link href={`${localePath("/programs")}?universityId=${university.id}`}>{t("countryDetail.viewAllPrograms")} · {payload.meta.programCount}<ArrowUpRight size={17} aria-hidden="true" /></Link></div>
+        </div>
+      </section>
+      {detailContentSections(editorial, lang, localePath("/contact"))}
+      <DetailMobileActions data-detail-section="mobileActions"><a href="#programs">{t("catalogDetail.availablePrograms")}</a><Link className="is-secondary" href={localePath("/contact")}>{t("countryDetail.talkToAdvisor")}</Link></DetailMobileActions>
     </DetailLayout>
   );
 }

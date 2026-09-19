@@ -2,20 +2,26 @@ import { DetailLayout } from "./DetailLayout";
 import { useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { customFetch } from "@workspace/api-client-react";
-import { ArrowLeft, Building2, GraduationCap, MapPin } from "lucide-react";
+import { ArrowLeft, ArrowUpRight, MapPin, Building2, GraduationCap, Globe2 } from "lucide-react";
 
-import { Badge } from "@/components/ui/badge";
+import { DetailBreadcrumbs, DetailCard, DetailFacts, DetailHeading } from "./DetailEditorial";
+import { boundDetailContent, detailContentNavigation, detailContentSections } from "./DetailContentSections";
+import { CityProgramCards, type CityProgramCardData } from "./CityProgramCards";
+import { detailCopy, localDetailPath } from "./detailPresentation";
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/hooks/use-i18n";
 import { SITE_NAME, SITE_URL, useJsonLd } from "@/hooks/use-json-ld";
 import { useSeo } from "@/hooks/use-seo";
 
 type CityPayload = {
+  editorial?: unknown;
   data: {
     id: number;
     name: string;
     country: string;
     countryCode: string;
+    countryPath?: string | null;
+    cityPath?: string | null;
     description: string | null;
     universityCount: number;
     programCount: number;
@@ -25,14 +31,7 @@ type CityPayload = {
       universityType: string | null;
       canonicalPath: string;
     }>;
-    programs: Array<{
-      id: number;
-      name: string;
-      universityName: string;
-      degree: string | null;
-      field: string | null;
-      canonicalPath: string;
-    }>;
+    programs: CityProgramCardData[];
   };
   meta: {
     title: string;
@@ -51,6 +50,7 @@ export default function CityDetail({ routeKey }: { routeKey: string }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const city = payload?.data;
+  const editorial = boundDetailContent(payload?.editorial, "city", city?.id, lang);
 
   useSeo({
     title: payload?.meta.title || t("countryDetail.studyDestination"),
@@ -114,65 +114,65 @@ export default function CityDetail({ routeKey }: { routeKey: string }) {
     );
   }
 
+  const copy = detailCopy(lang);
+  const overviewDescription = city.description?.trim();
+  const countryPath = localDetailPath(city.countryPath);
+  const programsPath = `${localePath("/programs")}?country=${encodeURIComponent(city.country)}&city=${encodeURIComponent(city.name)}`;
   return (
     <DetailLayout kind="city">
-      <section data-detail-section="hero" className="border-b border-border/40 bg-gradient-to-br from-primary/10 via-background to-accent/10 py-16">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <Link href={localePath("/countries")} className="mb-8 inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-primary"><ArrowLeft className="h-4 w-4" />{t("countryDetail.allDestinations")}</Link>
-          <div className="flex items-center gap-5">
-            <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-2xl bg-primary/10"><MapPin className="h-9 w-9 text-primary" /></div>
+      <section data-detail-section="hero">
+        <div className="detail-hero is-city">
+          <div className="detail-wrap detail-hero-top"><DetailBreadcrumbs label={copy.catalogue} items={[{ label: t("nav.countries"), path: localePath("/countries") }, { label: city.country, path: countryPath }, { label: city.name }]} /></div>
+          <div className="detail-wrap detail-hero-main">
             <div>
-              <p className="font-semibold text-primary">{city.country}</p>
-              <h1 className="mt-2 font-display text-3xl font-bold md:text-5xl">{city.name}</h1>
-              <div className="mt-4 flex flex-wrap gap-2"><Badge variant="outline">{city.universityCount} {t("countryDetail.universities")}</Badge><Badge variant="outline">{city.programCount} {t("countryDetail.programs")}</Badge></div>
+              <div className="detail-cover-label"><MapPin size={18} aria-hidden="true" /><span>{copy.city}</span></div>
+              <h1>{city.name}</h1>
+              {countryPath ? <Link className="detail-hero-link" href={countryPath}><Globe2 size={17} aria-hidden="true" />{city.country}<ArrowUpRight size={17} aria-hidden="true" /></Link> : <p className="detail-hero-lead">{city.country}</p>}
+              <div className="detail-actions"><Link href={programsPath}>{t("countryDetail.viewAllPrograms")}<ArrowUpRight size={17} aria-hidden="true" /></Link><Link className="is-secondary" href={localePath("/contact")}>{t("countryDetail.talkToAdvisor")}</Link></div>
             </div>
+            <aside className="detail-destination-summary" aria-label={copy.studyOptions}>
+              <p className="detail-eyebrow">{copy.studyOptions}</p>
+              <div className="detail-country-stats">
+                <div><Building2 size={21} aria-hidden="true" /><strong>{city.universityCount.toLocaleString(lang)}</strong><span>{copy.universityCount}</span></div>
+                <div><GraduationCap size={23} aria-hidden="true" /><strong>{city.programCount.toLocaleString(lang)}</strong><span>{copy.programCount}</span></div>
+              </div>
+              <p className="detail-summary-caption"><MapPin size={16} aria-hidden="true" />{city.name} · {city.country}</p>
+            </aside>
           </div>
         </div>
       </section>
-
-      <section data-detail-section="overview" className="py-12">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <article className="max-w-3xl rounded-2xl border border-border/50 bg-card p-6 md:p-8">
-            <h2 className="text-2xl font-bold">{t("countryDetail.about", { name: city.name })}</h2>
-            <p className="mt-4 whitespace-pre-line leading-7 text-muted-foreground">{city.description || payload.meta.description}</p>
-          </article>
+      <nav data-detail-section="navigation" className="detail-nav" aria-label={city.name}><div className="detail-wrap">
+        {overviewDescription && <a href="#overview">{copy.overview}</a>}<a href="#facts">{t("countryDetail.quickFacts")}</a>
+        {city.universities.length > 0 && <a href="#universities">{t("countryDetail.universities")}</a>}
+        {city.programs.length > 0 && <a href="#programs">{t("countryDetail.programs")}</a>}
+        {detailContentNavigation(editorial)}
+      </div></nav>
+      {overviewDescription && <section data-detail-section="overview" id="overview" className="detail-section">
+        <div className="detail-wrap detail-split">
+          <DetailHeading number="01" eyebrow={copy.city} title={t("countryDetail.about", { name: city.name })} />
+          <p className="detail-prose detail-snapshot">{overviewDescription}</p>
+        </div>
+      </section>}
+      <section data-detail-section="facts" id="facts" className="detail-section is-sky">
+        <div className="detail-wrap">
+          <DetailHeading number="02" eyebrow={city.name} title={t("countryDetail.quickFacts")} />
+          <DetailFacts items={[{ label: copy.country, icon: <Globe2 size={19} />, value: countryPath ? <Link href={countryPath}>{city.country}</Link> : city.country }, { label: copy.universityCount, icon: <Building2 size={19} />, value: city.universityCount }, { label: copy.programCount, icon: <GraduationCap size={19} />, value: city.programCount }]} />
         </div>
       </section>
-
-      {city.universities.length > 0 && (
-        <section data-detail-section="universities" className="bg-secondary/30 py-12">
-          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-            <h2 className="text-2xl font-bold">{t("countryDetail.universitiesIn", { name: city.name })}</h2>
-            <div className="mt-7 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-              {city.universities.map((university) => (
-                <Link key={university.id} href={university.canonicalPath} className="group rounded-2xl border border-border/50 bg-card p-5 transition-all hover:-translate-y-1 hover:border-primary/30 hover:shadow-md">
-                  <Building2 className="h-7 w-7 text-primary" />
-                  <h3 className="mt-4 font-bold group-hover:text-primary">{university.name}</h3>
-                  {university.universityType && <p className="mt-2 text-sm text-muted-foreground">{university.universityType}</p>}
-                </Link>
-              ))}
-            </div>
-          </div>
-        </section>
-      )}
-
-      {city.programs.length > 0 && (
-        <section data-detail-section="programs" className="py-12">
-          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-            <div className="flex flex-wrap items-end justify-between gap-4"><h2 className="text-2xl font-bold">{t("catalogDetail.availablePrograms")}</h2><Button asChild variant="outline" className="rounded-full"><Link href={`${localePath("/programs")}?country=${encodeURIComponent(city.country)}&city=${encodeURIComponent(city.name)}`}>{t("countryDetail.viewAllPrograms")}</Link></Button></div>
-            <div className="mt-7 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-              {city.programs.map((program) => (
-                <Link key={program.id} href={program.canonicalPath} className="group rounded-2xl border border-border/50 bg-card p-5 transition-all hover:-translate-y-1 hover:border-primary/30 hover:shadow-md">
-                  <GraduationCap className="h-7 w-7 text-primary" />
-                  <p className="mt-4 text-sm text-primary">{program.universityName}</p>
-                  <h3 className="mt-2 font-bold group-hover:text-primary">{program.name}</h3>
-                  <p className="mt-2 text-sm text-muted-foreground">{[program.degree, program.field].filter(Boolean).join(" · ")}</p>
-                </Link>
-              ))}
-            </div>
-          </div>
-        </section>
-      )}
+      {city.universities.length > 0 && <section data-detail-section="universities" id="universities" className="detail-section is-sand">
+        <div className="detail-wrap">
+          <DetailHeading number="03" eyebrow={copy.studyOptions} title={t("countryDetail.universitiesIn", { name: city.name })} />
+          <div className="detail-grid">{city.universities.map((university) => <DetailCard key={university.id} href={university.canonicalPath} eyebrow={university.universityType} title={university.name} kind="university" />)}</div>
+        </div>
+      </section>}
+      {city.programs.length > 0 && <section data-detail-section="programs" id="programs" className="detail-section">
+        <div className="detail-wrap">
+          <DetailHeading number="04" eyebrow={copy.studyOptions} title={t("catalogDetail.availablePrograms")} />
+          <CityProgramCards key={`${city.id}:${lang}`} programs={city.programs} />
+          <div className="detail-actions"><Link href={programsPath}>{t("countryDetail.viewAllPrograms")}<ArrowUpRight size={17} aria-hidden="true" /></Link></div>
+        </div>
+      </section>}
+      {detailContentSections(editorial, lang, localePath("/contact"))}
     </DetailLayout>
   );
 }

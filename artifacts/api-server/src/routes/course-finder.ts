@@ -1,4 +1,10 @@
 import { Router, type IRouter } from "express";
+import { createHash } from "node:crypto";
+import { parseCourseFinderDetailContext } from "../lib/courseFinderDetailContext";
+import { readIndexableUniversityProgramIds } from "../lib/publicWebDiscoveryReadModel";
+import { parsePublicWebInternalLinkMode } from "../lib/publicCatalogRouteContract";
+import { readPublicCatalogPrices } from "../lib/publicCatalogPriceReadModel";
+import { projectPublicTuition } from "../lib/publicCatalogTuition";
 import { getPublicCatalogCacheGeneration } from "../lib/publicCatalogRenderReadModel";
 import { db, programsTable, programTranslationsTable, universitiesTable, wishlistsTable, applicationsTable, commissionsTable, serviceFeesTable, studentsTable, pipelineStagesTable, settingsTable, documentsTable } from "@workspace/db";
 import { eq, ilike, sql, and, inArray, isNull, desc, or } from "drizzle-orm";
@@ -49,6 +55,17 @@ import { normalizeProgramLocale } from "../lib/programTranslationContract";
 import { publicCatalogPath } from "../lib/publicCatalogRouteContract";
 
 const router: IRouter = Router();
+
+async function detailReadScope(query: Record<string, unknown>) {
+  const universityId = parseCourseFinderDetailContext(query);
+  if (universityId === null) return null;
+  const locale = normalizeProgramLocale(query.locale);
+  const mode = parsePublicWebInternalLinkMode(process.env.PUBLIC_WEB_INTERNAL_LINK_MODE);
+  const ids = mode === "published" ? await readIndexableUniversityProgramIds({ universityId, locale }) : null;
+  const eligibility = ids === null ? undefined : ids.length ? inArray(programsTable.id, ids) : sql`false`;
+  const key = `detail:${universityId}:${locale}:${mode}:${createHash("sha256").update(JSON.stringify(ids)).digest("hex")}`;
+  return { universityId, eligibility, key };
+}
 
 const COURSE_FINDER_FILTER_CACHE_TTL_MS = 45_000;
 const COURSE_FINDER_FILTER_CACHE_MAX = 100;
@@ -147,6 +164,10 @@ function parseNonNegativeInt(raw: string | undefined): number | null {
 }
 
 router.get("/course-finder", async (req, res): Promise<void> => {
+  try { parseCourseFinderDetailContext(req.query); } catch {
+    res.status(400).json({ error: "INVALID_DETAIL_UNIVERSITY_CONTEXT" }); return;
+  }
+  const detailScope = await detailReadScope(req.query);
   const { country, city, universityType, universityId, programId, level, language, locale, field, search, intake, feeMin, feeMax, sort, page = "1", limit = "24" } = req.query as Record<string, string>;
   const contentLocale = normalizeProgramLocale(locale);
   const localizedProgramName = sql<string>`COALESCE(${programTranslationsTable.name}, ${programsTable.name})`;
@@ -154,12 +175,15 @@ router.get("/course-finder", async (req, res): Promise<void> => {
   // to be paginated — currently it requests `limit=500` for a single
   // university's program list. Invalid values fall back safely instead of
   // passing NaN to LIMIT/OFFSET and destabilising the API process.
-  const { page: pageNum, limit: limitNum, offset } =
-    parseCourseFinderPagination(page, limit);
+  const pagination = parseCourseFinderPagination(page, limit);
+  const pageNum = pagination.page;
+  const limitNum = detailScope ? Math.min(pagination.limit, 64) : pagination.limit;
+  const offset = detailScope ? (pageNum - 1) * limitNum : pagination.offset;
 
   const conditions = [eq(programsTable.isActive, true)];
   const publicPolicy = await resolveCourseFinderPolicy(req);
   addPublicCatalogConditions(conditions, publicPolicy);
+  if (detailScope?.eligibility) conditions.push(detailScope.eligibility);
   if (programId) {
     const pid = parseInt(programId, 10);
     if (!isNaN(pid)) conditions.push(eq(programsTable.id, pid));
@@ -222,7 +246,7 @@ router.get("/course-finder", async (req, res): Promise<void> => {
       : [universitiesTable.name, localizedProgramName];
 
   const user = (req as any).user;
-  const canSeeContacts = user && ([...STAFF_ROLES, ...AGENT_ROLES] as string[]).includes(user.role);
+  const canSeeContacts = !detailScope && user && ([...STAFF_ROLES, ...AGENT_ROLES] as string[]).includes(user.role);
   let canSeeInternalFees = !!user && ["super_admin", "agent", "sub_agent"].includes(user.role);
   let canSeeServiceFee = canSeeInternalFees;
   if (user?.role === "agent_staff") {
@@ -235,6 +259,7 @@ router.get("/course-finder", async (req, res): Promise<void> => {
     canSeeServiceFee = permissions.includes("view_service_fee");
   }
 
+  if (detailScope) { canSeeInternalFees = false; canSeeServiceFee = false; }
   const policyKey = publicPolicy
     ? `public:${publicCatalogPolicyCacheKey(publicPolicy)}`
     : "internal";
@@ -260,8 +285,10 @@ router.get("/course-finder", async (req, res): Promise<void> => {
     page: String(pageNum),
     limit: String(limitNum),
   });
-  const cacheKey = `${getPublicCatalogCacheGeneration()}:${policyKey}:${visibilityKey}:locale=${contentLocale}:${requestKey}`;
-  const cached = courseFinderListCache.get(cacheKey);
+  const cacheKey = `${getPublicCatalogCacheGeneration()}:${detailScope?.key ?? "default"}:${policyKey}:${visibilityKey}:locale=${contentLocale}:${requestKey}`;
+  // Verified detail-card evidence can expire without a catalogue mutation.
+  // Keep in-flight coalescing, but never replay its completed price projection.
+  const cached = detailScope ? undefined : courseFinderListCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) {
     res.setHeader("Cache-Control", "private, no-cache");
     res.setHeader("X-Course-Finder-List-Cache", "HIT");
@@ -344,6 +371,7 @@ router.get("/course-finder", async (req, res): Promise<void> => {
       // The total and current page are independent read-only queries. Running
       // them concurrently removes one full DB round trip from every listing load.
       const [[{ count }], rows] = await Promise.all([countQuery, rowsQuery]);
+      const detailPrices = detailScope ? await readPublicCatalogPrices(rows.map(row => row.id)) : null;
       const sanitizedRows = rows.map(({ universityHasLogo, ...row }) => {
         const sanitized = sanitizeCourseFinderProgram({
           ...row,
@@ -361,6 +389,7 @@ router.get("/course-finder", async (req, res): Promise<void> => {
         });
         return {
           ...sanitized,
+          ...(detailPrices ? { tuition: projectPublicTuition(row, detailPrices.get(row.id) ?? []) } : {}),
           canonicalPath: publicCatalogPath({
             locale: contentLocale,
             entityType: "program",
@@ -384,11 +413,11 @@ router.get("/course-finder", async (req, res): Promise<void> => {
           totalPages: Math.ceil(Number(count) / limitNum),
         },
       };
-      cacheCourseFinderList(cacheKey, nextPayload);
+      if (!detailScope) cacheCourseFinderList(cacheKey, nextPayload);
       return nextPayload;
     },
   });
-  res.setHeader("Cache-Control", "private, no-cache");
+  res.setHeader("Cache-Control", detailScope ? "no-store" : "private, no-cache");
   res.setHeader(
     "X-Course-Finder-List-Cache",
     wasCoalesced ? "COALESCED" : "MISS",
@@ -409,10 +438,14 @@ export function buildProgramFacetConditions(
   excludeKey?:
     | "country" | "city" | "universityType" | "universityId"
     | "level" | "language" | "field" | "fee" | "search",
-  opts?: { fuzzyField?: boolean; publicPolicy?: PublicCatalogPolicy | null },
+  opts?: { fuzzyField?: boolean; publicPolicy?: PublicCatalogPolicy | null; detailScope?: Awaited<ReturnType<typeof detailReadScope>> },
 ) {
   const conditions = [eq(programsTable.isActive, true)];
   addPublicCatalogConditions(conditions, opts?.publicPolicy ?? null);
+  if (opts?.detailScope) {
+    conditions.push(eq(programsTable.universityId, opts.detailScope.universityId));
+    if (opts.detailScope.eligibility) conditions.push(opts.detailScope.eligibility);
+  }
   if (excludeKey !== "country" && params.country) {
     const vals = params.country.split(",").map(s => s.trim()).filter(Boolean);
     if (vals.length === 1) conditions.push(ilike(universitiesTable.country, vals[0]));
@@ -481,13 +514,17 @@ export function buildProgramFacetConditions(
 }
 
 router.get("/course-finder/filters", async (req, res): Promise<void> => {
+  try { parseCourseFinderDetailContext(req.query); } catch {
+    res.status(400).json({ error: "INVALID_DETAIL_UNIVERSITY_CONTEXT" }); return;
+  }
   try {
+    const detailScope = await detailReadScope(req.query);
     const params = req.query as Record<string, string | undefined>;
     const publicPolicy = await resolveCourseFinderPolicy(req);
     const policyKey = publicPolicy
       ? `public:${publicCatalogPolicyCacheKey(publicPolicy)}`
       : "internal";
-    const cacheKey = `${getPublicCatalogCacheGeneration()}:${policyKey}:${courseFinderFilterCacheKey(params)}`;
+    const cacheKey = `${getPublicCatalogCacheGeneration()}:${detailScope?.key ?? "default"}:${policyKey}:${courseFinderFilterCacheKey(params)}`;
     const cached = courseFinderFilterCache.get(cacheKey);
     if (cached && cached.expiresAt > Date.now()) {
       res.setHeader("Cache-Control", "private, no-cache");
@@ -505,7 +542,7 @@ router.get("/course-finder/filters", async (req, res): Promise<void> => {
       enabled: true,
       execute: async (): Promise<CourseFinderFilterPayload> => {
         const join = eq(programsTable.universityId, universitiesTable.id);
-        const policyOpts = { publicPolicy };
+        const policyOpts = { publicPolicy, detailScope };
         const wCountry = buildProgramFacetConditions(params, "country", policyOpts);
         const wCity = buildProgramFacetConditions(params, "city", policyOpts);
         const wType = buildProgramFacetConditions(params, "universityType", policyOpts);

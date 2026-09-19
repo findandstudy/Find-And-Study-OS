@@ -7,6 +7,9 @@ import {
 } from "../lib/publicCatalogQueryPolicy";
 import { courseFinderUniversityLogoUrl } from "../lib/courseFinderVisibility";
 import { normalizeProgramLocale } from "../lib/programTranslationContract";
+import { readPublicCatalogCountryDirectory, readCatalogCountryFallback, matchCatalogCountry } from "../lib/publicCatalogLocationLinks";
+import { readPublishedDetailContent } from "../lib/websiteDetailContent";
+import { countryAliases } from "../lib/websiteCatalogFilters";
 import {
   parsePublicWebInternalLinkMode,
   publicCatalogPath,
@@ -40,7 +43,7 @@ router.get("/public/destinations", async (req: Request, res: Response): Promise<
     .orderBy(asc(destinationsTable.sortOrder), asc(destinationsTable.name))
     .limit(64);
 
-  const publicConditions: any[] = [eq(universitiesTable.isActive, true)];
+  const publicConditions: any[] = [];
   addPublicCatalogConditions(publicConditions, policy);
   const countryCounts = await db.select({
     countryKey: sql<string>`lower(trim(${universitiesTable.country}))`.as("country_key"),
@@ -115,7 +118,15 @@ router.get("/public/destinations", async (req: Request, res: Response): Promise<
   });
 
   res.setHeader("Cache-Control", "public, max-age=60, s-maxage=300, stale-while-revalidate=3600");
-  res.json(enriched);
+  const directory = await readPublicCatalogCountryDirectory(locale);
+  const fallbackCountries = directory.entries.filter(entry => !entry.destination).map(entry => ({
+    id: null, catalogCountryId: entry.country.id, source: "catalog", name: entry.country.name,
+    country: entry.country.name, slug: entry.canonicalPath.split("/").at(-1), canonicalPath: entry.canonicalPath,
+    shortDescription: null, description: null, imageUrl: null, isFeatured: false,
+    universityCount: entry.universityCount, programCount: entry.programCount,
+    contentPolicy: "CATALOG_SOURCE_FALLBACK", indexable: false,
+  }));
+  res.json([...enriched, ...fallbackCountries]);
 });
 
 router.get("/public/destinations/:slug", async (req: Request, res: Response): Promise<void> => {
@@ -142,14 +153,23 @@ router.get("/public/destinations/:slug", async (req: Request, res: Response): Pr
     .limit(1);
 
   if (!destination) {
+    const fallback = await readCatalogCountryFallback(locale, slug);
+    if (fallback) {
+      res.setHeader("Cache-Control", "public, max-age=60");
+      res.setHeader("X-Robots-Tag", "noindex, follow");
+      res.setHeader("Content-Location", fallback.meta.canonicalPath);
+      res.json({ ...fallback, editorial: await readPublishedDetailContent("destination", fallback.destination.catalogCountryId, locale) });
+      return;
+    }
     res.status(404).json({ error: "Destination not found" });
     return;
   }
 
   const policy = await getPublicCatalogPolicy();
+  const mappedCountry = matchCatalogCountry(destination.country, await db.select().from(countriesTable));
+  const aliases = mappedCountry ? countryAliases(mappedCountry) : [destination.country];
   const universityConditions: any[] = [
-    sql`lower(trim(${universitiesTable.country})) = lower(trim(${destination.country}))`,
-    eq(universitiesTable.isActive, true),
+    sql`lower(trim(${universitiesTable.country})) IN (${sql.join(aliases.map(alias => sql`${alias.toLowerCase().trim()}`), sql`, `)})`,
   ];
   addPublicCatalogConditions(universityConditions, policy);
 
@@ -171,7 +191,7 @@ router.get("/public/destinations/:slug", async (req: Request, res: Response): Pr
     .limit(internalLinkMode === "published" ? DESTINATION_LINK_CANDIDATE_LIMIT : DESTINATION_LINK_LIMIT);
 
   const programConditions: any[] = [
-    sql`lower(trim(${universitiesTable.country})) = lower(trim(${destination.country}))`,
+    ...universityConditions,
     eq(programsTable.isActive, true),
   ];
   addPublicCatalogConditions(programConditions, policy);
@@ -256,7 +276,7 @@ router.get("/public/destinations/:slug", async (req: Request, res: Response): Pr
     .where(and(
       eq(citiesTable.isActive, true),
       eq(countriesTable.isActive, true),
-      sql`(lower(trim(${countriesTable.name})) = lower(trim(${destination.country})) OR upper(trim(${countriesTable.code})) = upper(trim(${destination.country})))`,
+      mappedCountry ? eq(countriesTable.id, mappedCountry.id) : sql`false`,
     ))
     .orderBy(asc(citiesTable.name), asc(citiesTable.id))
     .limit(256);
@@ -338,15 +358,15 @@ router.get("/public/destinations/:slug", async (req: Request, res: Response): Pr
       delivery,
       base: { name: city.name, country: city.country, description: null },
     });
-    if (!localized.available || !delivery.snapshot || delivery.snapshot.indexState !== "INDEX") return [];
+    if (!localized.available) return [];
     const sourceKey = city.name.toLocaleLowerCase("en-US");
     const localizedKey = localized.name.toLocaleLowerCase("en-US");
-    if (!popularCityKeys.has(sourceKey) && !popularCityKeys.has(localizedKey)) return [];
+    if (popularCityKeys.size && !popularCityKeys.has(sourceKey) && !popularCityKeys.has(localizedKey)) return [];
     return [{
       id: city.id,
       name: localized.name,
       sourceName: city.name,
-      canonicalPath: delivery.snapshot.canonicalPath,
+      canonicalPath: delivery.snapshot?.canonicalPath || buildPublicWebCanonicalPath({ entityType: "CITY", entityId: city.id, locale, slug: city.name }),
     }];
   }).slice(0, 24);
 
@@ -367,6 +387,7 @@ router.get("/public/destinations/:slug", async (req: Request, res: Response): Pr
   res.json({
     destination: {
       ...destination,
+      catalogCountryId: mappedCountry?.id ?? null,
       name: localizedDestination.name,
       shortDescription: localizedDestination.shortDescription,
       description: localizedDestination.description,
@@ -380,6 +401,7 @@ router.get("/public/destinations/:slug", async (req: Request, res: Response): Pr
       popularCities: localizedDestination.popularCities.join(", ") || null,
       canonicalPath,
     },
+    editorial: mappedCountry ? await readPublishedDetailContent("destination", mappedCountry.id, locale) : null,
     universities,
     programs,
     cities,
