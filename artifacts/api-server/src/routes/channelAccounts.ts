@@ -1,382 +1,249 @@
-/**
- * Multi-account-per-channel CRUD (Task #554).
- *
- * Admin-only management of the rows in `channel_accounts`. Each channel
- * (whatsapp / messenger / instagram) can have more than one connected account,
- * each independently toggleable, with exactly one default per channel. The
- * legacy single-config `integrations` row is left untouched so the
- * null-channelAccountId fallback (resolveOutboundConfig / resolveInboundAccount)
- * keeps working for existing conversations and fresh deploys.
- *
- * Credential storage mirrors the integrations surface: secrets are masked on
- * the way out (maskSecrets), merged on the way in (mergeConfig — a masked value
- * containing "•" is treated as unchanged), and stored AES-256-GCM encrypted via
- * serializeAccountConfig. Nothing here ever persists a masked placeholder.
- */
-import { Router, type IRouter } from "express";
-import { db, channelAccountsTable, conversationsTable } from "@workspace/db";
-import { and, eq, ne, asc } from "drizzle-orm";
+/** Existing encrypted account registry. SMTP stays exclusively revision-bound under notification-email/senders. */
+import { Router, type IRouter, type Request, type Response, type NextFunction } from "express";
+import { db, channelAccountsTable, conversationsTable, communicationPipelineAccountsTable, pipelineStagesTable,
+  pipelineStageMessageDispatchesTable, messageCampaignRecipientsTable } from "@workspace/db";
+import { and, eq, ne, asc, sql, or } from "drizzle-orm";
 import { requireAuth, requireRole, logAudit } from "../lib/auth";
 import { ADMIN_ROLES } from "../lib/roles";
-import { isLiveIntegrationsEnabled } from "../lib/inbox/liveMode";
+import { emailAutomationHumanAllowed } from "../lib/notifications/emailAutomationPolicy";
 import { META_API_VERSION } from "../lib/inbox/channels/meta-shared";
 import { simulatedIntegrationTestResult, unsupportedIntegrationTestResult } from "../lib/integrationTestResult";
-import { maskSecrets, mergeConfig } from "../lib/configMasking";
 import { parseAccountConfig, serializeAccountConfig } from "../lib/inbox/channelAccountConfig";
-import { getZernioApiKey, resolveZernioProfileId } from "../lib/inbox/zernioSend";
+import { getZernioApiKey } from "../lib/inbox/zernioSend";
+import { verifyZernioManagedAccount } from "../lib/inbox/channelAccountVerification";
+import { accountCapabilities, accountFilter, accountKind, accountRecord, accountText, accountVerificationAllowed, assertAccountActivation,
+  ChannelAccountInputError, managedAccountConfig, managedExternalId, safeManagedAccountConfig } from "../lib/inbox/channelAccountManagementPolicy";
 
 const router: IRouter = Router();
-
-const SUPPORTED_CHANNELS = new Set(["whatsapp", "messenger", "instagram"]);
-
-/** Derive the channel-native external account id from a plain config object. */
-function deriveExternalAccountId(channel: string, config: Record<string, any>): string | null {
-  if (channel === "whatsapp") return config.phoneNumberId || null;
-  if (channel === "messenger") return config.pageId || null;
-  if (channel === "instagram") return config.igBusinessAccountId || config.pageId || null;
-  return null;
+router.use("/channel-accounts", (_req, res, next) => { res.setHeader("Cache-Control", "private, no-store"); next(); });
+async function humanAdmin(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    if (!await emailAutomationHumanAllowed(req)) { res.status(403).json({ error: "ACCOUNT_HUMAN_ADMIN_REQUIRED" }); return; }
+    next();
+  } catch { res.status(503).json({ error: "ACCOUNT_AUTHORITY_UNAVAILABLE" }); }
 }
-
-/** Serialize a channel_accounts row for the client (config secrets masked). */
-function serializeRow(row: typeof channelAccountsTable.$inferSelect): Record<string, any> {
-  const metadata = row.metadata && typeof row.metadata === "object"
-    ? row.metadata as Record<string, unknown>
-    : {};
-  return {
-    id: row.id,
-    channel: row.channel,
-    provider: row.provider,
-    displayName: row.displayName,
-    externalAccountId: row.externalAccountId,
-    config: maskSecrets(parseAccountConfig(row.configEncrypted)),
-    status: row.status,
-    isActive: row.isActive,
-    isDefault: row.isDefault,
+const handle = (work: (req: Request, res: Response) => Promise<void>) => async (req: Request, res: Response): Promise<void> => {
+  try { await work(req, res); }
+  catch (error) {
+    if (error instanceof ChannelAccountInputError) { res.status(error.status).json({ error: error.code }); return; }
+    // Provider/DB/encryption errors may contain secrets. Only stable codes leave this boundary.
+    res.status(503).json({ error: "ACCOUNT_OPERATION_UNAVAILABLE" });
+  }
+};
+function accountId(raw: unknown): number {
+  if (typeof raw !== "string" || !/^[1-9]\d*$/.test(raw) || !Number.isSafeInteger(Number(raw))) throw new ChannelAccountInputError("ACCOUNT_ID_INVALID");
+  return Number(raw);
+}
+function safeConfig(row: typeof channelAccountsTable.$inferSelect): Record<string, unknown> {
+  try { return parseAccountConfig(row.configEncrypted); } catch { return {}; }
+}
+function serializeRow(row: typeof channelAccountsTable.$inferSelect): Record<string, unknown> {
+  const metadata = row.metadata && typeof row.metadata === "object" ? row.metadata as Record<string, unknown> : {};
+  return { id: row.id, channel: row.channel === "facebook" && row.provider === "zernio" ? "messenger" : row.channel, provider: row.provider, displayName: row.displayName,
+    externalAccountId: row.externalAccountId, config: safeManagedAccountConfig(row.channel, row.provider, safeConfig(row)),
+    status: row.status, isActive: row.isActive, isDefault: row.isDefault,
     brandLabel: typeof metadata.brandLabel === "string" ? metadata.brandLabel : null,
     brandColor: typeof metadata.brandColor === "string" ? metadata.brandColor : null,
-    lastSeenAt: row.lastSeenAt,
-    createdAt: row.createdAt,
-    updatedAt: row.updatedAt,
-  };
+    capabilities: accountCapabilities(row.channel, row.provider),
+    lastSeenAt: row.lastSeenAt, createdAt: row.createdAt, updatedAt: row.updatedAt };
+}
+function brandMetadata(data: Record<string, unknown>, previous: unknown = {}): Record<string, unknown> {
+  const metadata = previous && typeof previous === "object" && !Array.isArray(previous) ? { ...previous as Record<string, unknown> } : {};
+  if (data.brandLabel !== undefined) metadata.brandLabel = accountText(data.brandLabel, 80, "ACCOUNT_BRAND_INVALID", true);
+  if (data.brandColor !== undefined) {
+    const color = accountText(data.brandColor, 7, "ACCOUNT_BRAND_INVALID", true);
+    if (color && !/^#[0-9a-f]{6}$/i.test(color)) throw new ChannelAccountInputError("ACCOUNT_BRAND_INVALID");
+    metadata.brandColor = color.toUpperCase();
+  }
+  return metadata;
+}
+function booleanInput(data: Record<string, unknown>, key: string): void {
+  if (data[key] !== undefined && typeof data[key] !== "boolean") throw new ChannelAccountInputError("ACCOUNT_BOOLEAN_INVALID");
+}
+type AccountTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+async function managementLock(tx: AccountTransaction): Promise<void> {
+  // Also serializes Zernio account identity across channels, without a new schema/index.
+  await tx.execute(sql`SET LOCAL lock_timeout = '2000ms'`);
+  await tx.execute(sql`SET LOCAL statement_timeout = '5000ms'`);
+  await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext('channel-account-management'), 0)`);
+}
+async function assertUniqueIdentity(tx: AccountTransaction, channel: string, provider: string, externalId: string | null, exceptId?: number): Promise<void> {
+  if (!externalId) return;
+  const [duplicate] = await tx.select({ id: channelAccountsTable.id }).from(channelAccountsTable)
+    .where(and(eq(channelAccountsTable.provider, provider), provider === "zernio" ? undefined : eq(channelAccountsTable.channel, channel),
+      eq(channelAccountsTable.externalAccountId, externalId), exceptId === undefined ? undefined : ne(channelAccountsTable.id, exceptId))).limit(1);
+  if (duplicate) throw new ChannelAccountInputError("ACCOUNT_IDENTITY_EXISTS", 409);
+}
+function channelGroup(channel: string) {
+  return channel === "messenger" || channel === "facebook"
+    ? or(eq(channelAccountsTable.channel, "messenger"), and(eq(channelAccountsTable.channel, "facebook"), eq(channelAccountsTable.provider, "zernio")))!
+    : eq(channelAccountsTable.channel, channel);
 }
 
-/** List accounts, optionally filtered by ?channel=. */
-router.get("/channel-accounts", requireAuth, requireRole(...ADMIN_ROLES), async (req, res): Promise<void> => {
-  const channel = typeof req.query.channel === "string" ? req.query.channel : undefined;
-  const rows = channel
-    ? await db.select().from(channelAccountsTable)
-        .where(eq(channelAccountsTable.channel, channel))
-        .orderBy(asc(channelAccountsTable.channel), asc(channelAccountsTable.id))
-    : await db.select().from(channelAccountsTable)
-        .orderBy(asc(channelAccountsTable.channel), asc(channelAccountsTable.id));
-  // SMTP senders have a separate session-only, revision-bound management surface.
-  res.json({ accounts: rows.filter(row => row.channel !== "email").map(serializeRow) });
-});
+/** Existing manager read access remains; no SMTP or unbounded config projection is exposed. */
+router.get("/channel-accounts", requireAuth, requireRole(...ADMIN_ROLES), handle(async (req, res) => {
+  const filter = accountFilter(req.query);
+  const rows = await db.select().from(channelAccountsTable).where(and(ne(channelAccountsTable.channel, "email"),
+    filter.channel ? channelGroup(filter.channel) : undefined,
+    filter.provider ? eq(channelAccountsTable.provider, filter.provider) : undefined))
+    .orderBy(asc(channelAccountsTable.channel), asc(channelAccountsTable.id)).limit(1001);
+  res.json({ accounts: rows.filter(row => row.channel !== "email").slice(0, 1000).map(serializeRow), hasMore: rows.length > 1000 });
+}));
 
-/** Create a new account on a channel. */
-router.post("/channel-accounts", requireAuth, requireRole(...ADMIN_ROLES), async (req, res): Promise<void> => {
-  const { channel, displayName, config, isActive, isDefault, brandLabel, brandColor } = req.body ?? {};
-  if (typeof channel !== "string" || !SUPPORTED_CHANNELS.has(channel)) {
-    res.status(400).json({ error: "Unsupported or missing channel" });
-    return;
-  }
-  if (typeof displayName !== "string" || displayName.trim().length === 0) {
-    res.status(400).json({ error: "displayName is required" });
-    return;
-  }
-  const plainConfig = (config && typeof config === "object") ? config as Record<string, any> : {};
-  const externalAccountId = deriveExternalAccountId(channel, plainConfig);
-
-  // First account on a channel becomes the default automatically.
-  const existing = await db.select({ id: channelAccountsTable.id })
-    .from(channelAccountsTable)
-    .where(eq(channelAccountsTable.channel, channel));
-  const makeDefault = isDefault === true || existing.length === 0;
-  const active = isActive === false ? false : true;
-  if (brandColor != null && (typeof brandColor !== "string" || !/^#[0-9a-f]{6}$/i.test(brandColor))) {
-    res.status(400).json({ error: "brandColor must be a six-digit hex color" });
-    return;
-  }
-
-  const result = await db.transaction(async (tx) => {
-    if (makeDefault) {
-      await tx.update(channelAccountsTable)
-        .set({ isDefault: false })
-        .where(eq(channelAccountsTable.channel, channel));
-    }
-    const [row] = await tx.insert(channelAccountsTable).values({
-      channel,
-      displayName: displayName.trim(),
-      externalAccountId,
-      configEncrypted: serializeAccountConfig(plainConfig),
-      status: active ? "active" : "inactive",
-      isActive: active,
-      isDefault: makeDefault,
-      metadata: {
-        ...(typeof brandLabel === "string" && brandLabel.trim() ? { brandLabel: brandLabel.trim().slice(0, 80) } : {}),
-        ...(typeof brandColor === "string" ? { brandColor: brandColor.toUpperCase() } : {}),
-      },
-    }).returning();
+router.post("/channel-accounts", requireAuth, requireRole(...ADMIN_ROLES), humanAdmin, handle(async (req, res) => {
+  const data = accountRecord(req.body);
+  const { channel, provider } = accountKind(data.channel, data.provider);
+  const displayName = accountText(data.displayName, 120, "ACCOUNT_NAME_REQUIRED");
+  const config = managedAccountConfig(channel, provider, data.config);
+  const externalAccountId = managedExternalId(channel, provider, config, data.externalAccountId);
+  const metadata = brandMetadata(data);
+  booleanInput(data, "isActive"); booleanInput(data, "isDefault");
+  const active = channel === "telegram" || channel === "sms" || provider === "zernio" ? false : data.isActive !== false;
+  if (active) assertAccountActivation(channel, provider, config, externalAccountId);
+  const result = await db.transaction(async tx => {
+    await managementLock(tx);
+    await assertUniqueIdentity(tx, channel, provider, externalAccountId);
+    const [existing] = await tx.select({ id: channelAccountsTable.id }).from(channelAccountsTable).where(channelGroup(channel)).limit(1);
+    const makeDefault = !accountCapabilities(channel, provider).configurationOnly && (data.isDefault === true || !existing);
+    if (makeDefault) await tx.update(channelAccountsTable).set({ isDefault: false }).where(channelGroup(channel));
+    const [row] = await tx.insert(channelAccountsTable).values({ channel, provider, displayName, externalAccountId,
+      configEncrypted: serializeAccountConfig(config), status: active ? "active" : "inactive", isActive: active, isDefault: makeDefault, metadata }).returning();
     return row;
   });
-
-  await logAudit(req.user!.id, "create_channel_account", "channel_account", result.id, { channel, displayName: result.displayName }, req.ip);
+  logAudit(req.user!.id, "create_channel_account", "channel_account", result.id, { channel, provider }, req.ip);
   res.status(201).json(serializeRow(result));
-});
+}));
 
-/** Update an account (name + merged config). */
-router.put("/channel-accounts/:id", requireAuth, requireRole(...ADMIN_ROLES), async (req, res): Promise<void> => {
-  const id = Number(req.params.id);
-  if (!Number.isInteger(id)) {
-    res.status(400).json({ error: "Invalid id" });
-    return;
-  }
+router.put("/channel-accounts/:id", requireAuth, requireRole(...ADMIN_ROLES), humanAdmin, handle(async (req, res) => {
+  const id = accountId(req.params.id);
+  const data = accountRecord(req.body);
   const [existing] = await db.select().from(channelAccountsTable).where(eq(channelAccountsTable.id, id));
-  if (!existing) {
-    res.status(404).json({ error: "Account not found" });
-    return;
-  }
-  const { displayName, config, brandLabel, brandColor } = req.body ?? {};
+  if (!existing) { res.status(404).json({ error: "ACCOUNT_NOT_FOUND" }); return; }
   if (existing.channel === "email") { res.status(409).json({ error: "managed_email_sender" }); return; }
-  if (brandColor != null && (typeof brandColor !== "string" || !/^#[0-9a-f]{6}$/i.test(brandColor))) {
-    res.status(400).json({ error: "brandColor must be a six-digit hex color" });
-    return;
-  }
-  const existingPlain = parseAccountConfig(existing.configEncrypted);
-  const mergedConfig = (config && typeof config === "object")
-    ? mergeConfig(existingPlain, config as Record<string, any>)
-    : existingPlain;
-  // Some provider-backed accounts (notably legacy Zernio WhatsApp lines) keep
-  // their stable routing identity in externalAccountId rather than in the
-  // direct Meta config fields. Editing only the display label or brand color
-  // must not erase that identity when phoneNumberId/pageId is absent.
-  const externalAccountId = existing.provider === "zernio"
-    ? existing.externalAccountId
-    : deriveExternalAccountId(existing.channel, mergedConfig) || existing.externalAccountId;
-  const existingMetadata = existing.metadata && typeof existing.metadata === "object"
-    ? existing.metadata as Record<string, unknown>
-    : {};
-  const metadata = {
-    ...existingMetadata,
-    ...(brandLabel !== undefined ? { brandLabel: typeof brandLabel === "string" ? brandLabel.trim().slice(0, 80) : "" } : {}),
-    ...(brandColor !== undefined ? { brandColor: typeof brandColor === "string" ? brandColor.toUpperCase() : "" } : {}),
-  };
-
-  const [result] = await db.update(channelAccountsTable).set({
-    displayName: typeof displayName === "string" && displayName.trim().length > 0 ? displayName.trim() : existing.displayName,
-    configEncrypted: serializeAccountConfig(mergedConfig),
-    externalAccountId,
-    metadata,
-  }).where(eq(channelAccountsTable.id, id)).returning();
-
-  await logAudit(req.user!.id, "update_channel_account", "channel_account", id, { channel: existing.channel }, req.ip);
-  res.json(serializeRow(result));
-});
-
-/** Toggle active/inactive. */
-router.patch("/channel-accounts/:id/toggle-active", requireAuth, requireRole(...ADMIN_ROLES), async (req, res): Promise<void> => {
-  const id = Number(req.params.id);
-  if (!Number.isInteger(id)) {
-    res.status(400).json({ error: "Invalid id" });
-    return;
-  }
-  const [existing] = await db.select().from(channelAccountsTable).where(eq(channelAccountsTable.id, id));
-  if (!existing) {
-    res.status(404).json({ error: "Account not found" });
-    return;
-  }
-  const willActivate = !existing.isActive;
-  if (existing.channel === "email") { res.status(409).json({ error: "managed_email_sender" }); return; }
-  const [result] = await db.update(channelAccountsTable).set({
-    isActive: willActivate,
-    status: willActivate ? "active" : "inactive",
-  }).where(eq(channelAccountsTable.id, id)).returning();
-
-  await logAudit(req.user!.id, "toggle_channel_account", "channel_account", id, { channel: existing.channel, isActive: result.isActive }, req.ip);
-  res.json(serializeRow(result));
-});
-
-/** Set this account as the channel default (clears the previous default). */
-router.patch("/channel-accounts/:id/set-default", requireAuth, requireRole(...ADMIN_ROLES), async (req, res): Promise<void> => {
-  const id = Number(req.params.id);
-  if (!Number.isInteger(id)) {
-    res.status(400).json({ error: "Invalid id" });
-    return;
-  }
-  const [existing] = await db.select().from(channelAccountsTable).where(eq(channelAccountsTable.id, id));
-  if (!existing) {
-    res.status(404).json({ error: "Account not found" });
-    return;
-  }
-  if (existing.channel === "email") { res.status(409).json({ error: "managed_email_sender" }); return; }
-  const result = await db.transaction(async (tx) => {
-    await tx.update(channelAccountsTable)
-      .set({ isDefault: false })
-      .where(and(eq(channelAccountsTable.channel, existing.channel), ne(channelAccountsTable.id, id)));
-    const [row] = await tx.update(channelAccountsTable)
-      .set({ isDefault: true })
-      .where(eq(channelAccountsTable.id, id))
-      .returning();
+  const { channel, provider } = accountKind(existing.channel, existing.provider);
+  if ((data.channel !== undefined && data.channel !== channel) || (data.provider !== undefined && data.provider !== provider)
+    || (data.externalAccountId !== undefined && data.externalAccountId !== existing.externalAccountId)) throw new ChannelAccountInputError("ACCOUNT_IDENTITY_IMMUTABLE", 409);
+  const result = await db.transaction(async tx => {
+    await managementLock(tx);
+    const [current] = await tx.select().from(channelAccountsTable).where(eq(channelAccountsTable.id, id)).for("update");
+    if (!current) throw new ChannelAccountInputError("ACCOUNT_NOT_FOUND", 404);
+    const config = managedAccountConfig(channel, provider, data.config, safeConfig(current));
+    const externalAccountId = managedExternalId(channel, provider, config, provider === "zernio" ? current.externalAccountId : undefined) || current.externalAccountId;
+    if (current.externalAccountId && current.externalAccountId !== externalAccountId) throw new ChannelAccountInputError("ACCOUNT_IDENTITY_IMMUTABLE", 409);
+    await assertUniqueIdentity(tx, channel, provider, externalAccountId, id);
+    const [row] = await tx.update(channelAccountsTable).set({
+      displayName: data.displayName === undefined ? current.displayName : accountText(data.displayName, 120, "ACCOUNT_NAME_REQUIRED"),
+      configEncrypted: serializeAccountConfig(config), externalAccountId, metadata: brandMetadata(data, current.metadata),
+      ...(accountCapabilities(channel, provider).configurationOnly ? { isActive: false, status: "inactive" } : {}),
+    }).where(eq(channelAccountsTable.id, id)).returning();
     return row;
   });
-
-  await logAudit(req.user!.id, "set_default_channel_account", "channel_account", id, { channel: existing.channel }, req.ip);
+  logAudit(req.user!.id, "update_channel_account", "channel_account", id, { channel, provider }, req.ip);
   res.json(serializeRow(result));
-});
+}));
 
-/** Delete an account. If it was the default, promote the oldest remaining one. */
-router.delete("/channel-accounts/:id", requireAuth, requireRole(...ADMIN_ROLES), async (req, res): Promise<void> => {
-  const id = Number(req.params.id);
-  if (!Number.isInteger(id)) {
-    res.status(400).json({ error: "Invalid id" });
-    return;
-  }
+router.patch("/channel-accounts/:id/toggle-active", requireAuth, requireRole(...ADMIN_ROLES), humanAdmin, handle(async (req, res) => {
+  const id = accountId(req.params.id);
   const [existing] = await db.select().from(channelAccountsTable).where(eq(channelAccountsTable.id, id));
-  if (!existing) {
-    res.status(404).json({ error: "Account not found" });
-    return;
-  }
+  if (!existing) { res.status(404).json({ error: "ACCOUNT_NOT_FOUND" }); return; }
   if (existing.channel === "email") { res.status(409).json({ error: "managed_email_sender" }); return; }
-  const [linkedConversation] = await db
-    .select({ id: conversationsTable.id })
-    .from(conversationsTable)
-    .where(eq(conversationsTable.channelAccountId, id))
-    .limit(1);
-  if (linkedConversation) {
-    res.status(409).json({
-      error: "account_has_conversations",
-      message: "This account has linked conversations and cannot be deleted until they are reassigned.",
-    });
-    return;
-  }
-  await db.transaction(async (tx) => {
+  const { channel, provider } = accountKind(existing.channel, existing.provider);
+  const result = await db.transaction(async tx => {
+    await managementLock(tx);
+    const [current] = await tx.select().from(channelAccountsTable).where(eq(channelAccountsTable.id, id)).for("update");
+    if (!current) throw new ChannelAccountInputError("ACCOUNT_NOT_FOUND", 404);
+    const active = !current.isActive;
+    if (active && accountCapabilities(channel, provider).configurationOnly) throw new ChannelAccountInputError("ACCOUNT_DELIVERY_UNSUPPORTED", 409);
+    if (active) {
+      const config = managedAccountConfig(channel, provider, undefined, safeConfig(current));
+      const externalId = managedExternalId(channel, provider, config, provider === "zernio" ? current.externalAccountId : undefined);
+      assertAccountActivation(channel, provider, config, externalId);
+      await assertUniqueIdentity(tx, channel, provider, externalId, id);
+    }
+    const [row] = await tx.update(channelAccountsTable).set({ isActive: active, status: active ? "active" : "inactive" }).where(eq(channelAccountsTable.id, id)).returning();
+    return row;
+  });
+  logAudit(req.user!.id, "toggle_channel_account", "channel_account", id, { channel, isActive: result.isActive }, req.ip);
+  res.json(serializeRow(result));
+}));
+
+router.patch("/channel-accounts/:id/set-default", requireAuth, requireRole(...ADMIN_ROLES), humanAdmin, handle(async (req, res) => {
+  const id = accountId(req.params.id);
+  const [existing] = await db.select().from(channelAccountsTable).where(eq(channelAccountsTable.id, id));
+  if (!existing) { res.status(404).json({ error: "ACCOUNT_NOT_FOUND" }); return; }
+  if (existing.channel === "email") { res.status(409).json({ error: "managed_email_sender" }); return; }
+  accountKind(existing.channel, existing.provider);
+  if (accountCapabilities(existing.channel, existing.provider).configurationOnly) throw new ChannelAccountInputError("ACCOUNT_DELIVERY_UNSUPPORTED", 409);
+  const result = await db.transaction(async tx => {
+    await managementLock(tx);
+    const [current] = await tx.select().from(channelAccountsTable).where(eq(channelAccountsTable.id, id)).for("update");
+    if (!current) throw new ChannelAccountInputError("ACCOUNT_NOT_FOUND", 404);
+    await tx.update(channelAccountsTable).set({ isDefault: false }).where(and(channelGroup(existing.channel), ne(channelAccountsTable.id, id)));
+    const [row] = await tx.update(channelAccountsTable).set({ isDefault: true }).where(eq(channelAccountsTable.id, id)).returning();
+    return row;
+  });
+  logAudit(req.user!.id, "set_default_channel_account", "channel_account", id, { channel: existing.channel }, req.ip);
+  res.json(serializeRow(result));
+}));
+
+router.delete("/channel-accounts/:id", requireAuth, requireRole(...ADMIN_ROLES), humanAdmin, handle(async (req, res) => {
+  const id = accountId(req.params.id);
+  const [existing] = await db.select().from(channelAccountsTable).where(eq(channelAccountsTable.id, id));
+  if (!existing) { res.status(404).json({ error: "ACCOUNT_NOT_FOUND" }); return; }
+  if (existing.channel === "email") { res.status(409).json({ error: "managed_email_sender" }); return; }
+  accountKind(existing.channel, existing.provider);
+  await db.transaction(async tx => {
+    await managementLock(tx);
+    const [current] = await tx.select().from(channelAccountsTable).where(eq(channelAccountsTable.id, id)).for("update");
+    if (!current) throw new ChannelAccountInputError("ACCOUNT_NOT_FOUND", 404);
+    const [linked] = await tx.select({ id: conversationsTable.id }).from(conversationsTable).where(eq(conversationsTable.channelAccountId, id)).limit(1);
+    if (linked) throw new ChannelAccountInputError("account_has_conversations", 409);
+    const [pipelineLink] = await tx.select({ id: communicationPipelineAccountsTable.id }).from(communicationPipelineAccountsTable).where(eq(communicationPipelineAccountsTable.channelAccountId, id)).limit(1);
+    const [stageLink] = await tx.select({ id: pipelineStagesTable.id }).from(pipelineStagesTable).where(sql`${pipelineStagesTable.automaticMessage}->>'channelAccountId' = ${String(id)}`).limit(1);
+    const [dispatchLink] = await tx.select({ id: pipelineStageMessageDispatchesTable.id }).from(pipelineStageMessageDispatchesTable).where(eq(pipelineStageMessageDispatchesTable.channelAccountId, id)).limit(1);
+    const [campaignLink] = await tx.select({ id: messageCampaignRecipientsTable.id }).from(messageCampaignRecipientsTable).where(eq(messageCampaignRecipientsTable.channelAccountId, id)).limit(1);
+    if (pipelineLink || stageLink || dispatchLink || campaignLink) throw new ChannelAccountInputError("ACCOUNT_IN_USE", 409);
     await tx.delete(channelAccountsTable).where(eq(channelAccountsTable.id, id));
-    if (existing.isDefault) {
-      const [next] = await tx.select().from(channelAccountsTable)
-        .where(eq(channelAccountsTable.channel, existing.channel))
-        .orderBy(asc(channelAccountsTable.id));
-      if (next) {
-        await tx.update(channelAccountsTable)
-          .set({ isDefault: true })
-          .where(eq(channelAccountsTable.id, next.id));
-      }
+    if (current.isDefault) {
+      const [next] = await tx.select().from(channelAccountsTable).where(channelGroup(existing.channel)).orderBy(asc(channelAccountsTable.id)).limit(1);
+      if (next) await tx.update(channelAccountsTable).set({ isDefault: true }).where(eq(channelAccountsTable.id, next.id));
     }
   });
-
-  await logAudit(req.user!.id, "delete_channel_account", "channel_account", id, { channel: existing.channel }, req.ip);
+  logAudit(req.user!.id, "delete_channel_account", "channel_account", id, { channel: existing.channel }, req.ip);
   res.json({ ok: true });
-});
+}));
 
-/** Test an account's live credentials (mirrors the integrations test logic). */
-router.post("/channel-accounts/:id/test", requireAuth, requireRole(...ADMIN_ROLES), async (req, res): Promise<void> => {
-  const id = Number(req.params.id);
-  if (!Number.isInteger(id)) {
-    res.status(400).json({ error: "Invalid id" });
-    return;
-  }
+/** Read-only credential check; never sends a message or registers a webhook. */
+router.post("/channel-accounts/:id/test", requireAuth, requireRole(...ADMIN_ROLES), humanAdmin, handle(async (req, res) => {
+  const id = accountId(req.params.id);
   const [existing] = await db.select().from(channelAccountsTable).where(eq(channelAccountsTable.id, id));
-  if (!existing) {
-    res.status(404).json({ error: "Account not found" });
-    return;
-  }
+  if (!existing) { res.status(404).json({ error: "ACCOUNT_NOT_FOUND" }); return; }
   if (existing.channel === "email") { res.status(409).json({ error: "managed_email_sender" }); return; }
-  const config = parseAccountConfig(existing.configEncrypted);
-
-  if (!isLiveIntegrationsEnabled()) {
-    res.json(simulatedIntegrationTestResult("Live credential check was skipped; simulated mode is not health evidence."));
-    return;
+  const { channel, provider } = accountKind(existing.channel, existing.provider);
+  if (!accountCapabilities(channel, provider).verificationSupported) {
+    res.json(unsupportedIntegrationTestResult("Configuration is stored; no connection verifier is implemented for this account type.")); return;
   }
-
-  if (existing.provider === "zernio") {
+  if (!accountVerificationAllowed()) { res.json(simulatedIntegrationTestResult("Live credential check was skipped; simulated mode is not health evidence.")); return; }
+  const config = safeConfig(existing);
+  let verified = false;
+  if (provider === "zernio") {
     const apiKey = await getZernioApiKey();
-    if (!apiKey) {
-      res.json({ success: false, message: "Zernio API key is not configured" });
-      return;
+    if (apiKey && existing.externalAccountId) verified = await verifyZernioManagedAccount(apiKey, existing.externalAccountId);
+  } else {
+    const externalId = channel === "whatsapp" ? config.phoneNumberId : channel === "messenger" ? config.pageId : config.igBusinessAccountId;
+    const token = channel === "whatsapp" ? config.accessToken : config.pageAccessToken;
+    if (typeof externalId === "string" && typeof token === "string" && externalId && token && !token.startsWith("enc::")) {
+      try {
+        const response = await fetch(`https://graph.facebook.com/${META_API_VERSION}/${encodeURIComponent(externalId)}`, {
+          headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(10_000), redirect: "error",
+        });
+        verified = response.ok;
+        await response.body?.cancel();
+      } catch { /* Provider errors may echo credentials; emit a stable result only. */ }
     }
-    if (!existing.externalAccountId) {
-      res.json({ success: false, message: "Zernio account ID is missing" });
-      return;
-    }
-    const resolved = await resolveZernioProfileId(apiKey, existing.externalAccountId);
-    res.json(resolved.id
-      ? { success: true, message: "Zernio WhatsApp account verified" }
-      : { success: false, message: resolved.error || "Zernio WhatsApp account could not be verified" });
-    return;
   }
-
-  if (existing.channel === "whatsapp") {
-    if (!config.phoneNumberId || !config.accessToken) {
-      res.json({ success: false, message: "Phone Number ID and Access Token are required" });
-      return;
-    }
-    try {
-      const r = await fetch(
-        `https://graph.facebook.com/${META_API_VERSION}/${encodeURIComponent(config.phoneNumberId)}`,
-        { headers: { Authorization: `Bearer ${config.accessToken}` } },
-      );
-      if (r.ok) {
-        res.json({ success: true, message: "WhatsApp Cloud API credentials verified" });
-      } else {
-        const body = await r.text();
-        res.json({ success: false, message: `WhatsApp test failed (${r.status}): ${body.slice(0, 200)}` });
-      }
-    } catch (err: any) {
-      res.json({ success: false, message: `WhatsApp test failed: ${err?.message || "Unknown error"}` });
-    }
-    return;
-  }
-
-  if (existing.channel === "messenger") {
-    if (!config.pageId || !config.pageAccessToken) {
-      res.json({ success: false, message: "Page ID and Page Access Token are required" });
-      return;
-    }
-    try {
-      const r = await fetch(
-        `https://graph.facebook.com/${META_API_VERSION}/${encodeURIComponent(config.pageId)}?fields=name`,
-        { headers: { Authorization: `Bearer ${config.pageAccessToken}` } },
-      );
-      const data: unknown = await r.json().catch(() => ({}));
-      if (r.ok) {
-        const name = typeof (data as { name?: unknown }).name === "string" ? (data as { name: string }).name : undefined;
-        res.json({ success: true, message: name ? `Messenger connected — Page: ${name}` : "Messenger credentials verified" });
-      } else {
-        const errMsg = (data as { error?: { message?: string } })?.error?.message || `HTTP ${r.status}`;
-        res.json({ success: false, message: `Messenger test failed (${r.status}): ${errMsg}` });
-      }
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Unknown error";
-      res.json({ success: false, message: `Messenger test failed: ${msg}` });
-    }
-    return;
-  }
-
-  if (existing.channel === "instagram") {
-    if (!config.igBusinessAccountId || !config.pageAccessToken) {
-      res.json({ success: false, message: "Instagram Business Account ID and Page Access Token are required" });
-      return;
-    }
-    try {
-      const r = await fetch(
-        `https://graph.facebook.com/${META_API_VERSION}/${encodeURIComponent(config.igBusinessAccountId)}?fields=username`,
-        { headers: { Authorization: `Bearer ${config.pageAccessToken}` } },
-      );
-      const data: unknown = await r.json().catch(() => ({}));
-      if (r.ok) {
-        const username = typeof (data as { username?: unknown }).username === "string" ? (data as { username: string }).username : undefined;
-        res.json({ success: true, message: username ? `Instagram connected — @${username}` : "Instagram credentials verified" });
-      } else {
-        const errMsg = (data as { error?: { message?: string } })?.error?.message || `HTTP ${r.status}`;
-        res.json({ success: false, message: `Instagram test failed (${r.status}): ${errMsg}` });
-      }
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Unknown error";
-      res.json({ success: false, message: `Instagram test failed: ${msg}` });
-    }
-    return;
-  }
-
-  res.json(unsupportedIntegrationTestResult("No real connection verifier is implemented for this account type."));
-});
+  res.json({ success: verified, verified, simulated: false, status: verified ? "verified" : "failed",
+    message: verified ? "Account credentials verified (read-only check)." : "Account credentials could not be verified." });
+}));
 
 export default router;

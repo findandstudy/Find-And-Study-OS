@@ -69,19 +69,53 @@ async function resolveLegacyConfig<T extends Record<string, any>>(
   return (decryptConfig((row.config as Record<string, any>) || {}) as T) || ({} as T);
 }
 
+/** Legacy webhook registrations have no account credentials. Bind their
+ * fallback to the exact enabled integration identity, never merely the channel.
+ * Instagram's business identity is authoritative when present; its page ID is
+ * only the legacy identity when no business identity was configured. */
+export function legacyConfigMatchesAccount(channel: string, externalAccountId: string | null,
+  config: Record<string, any> | null): boolean {
+  if (!externalAccountId || !config) return false;
+  const identity = channel === "whatsapp" ? config.phoneNumberId
+    : channel === "messenger" ? config.pageId
+    : channel === "instagram" ? config.igBusinessAccountId || config.pageId : null;
+  const token = channel === "whatsapp" ? config.accessToken : config.pageAccessToken;
+  return typeof identity === "string" && identity === externalAccountId
+    && typeof token === "string" && token.trim().length > 0
+    && !token.startsWith("enc::") && !token.includes("•");
+}
+
 /**
  * Resolve the OUTBOUND config to use for a conversation.
  *
  * When the conversation carries a `channelAccountId`, the matching active
- * channel_account's config is returned. When it is null (legacy conversations),
- * or the referenced account is missing/inactive, we fall back to the legacy
- * single-config integrations row so nothing breaks during/after migration.
+ * channel_account's config is returned. Credential-free legacy webhook rows
+ * may use the enabled integration only when its external identity matches
+ * exactly and the row is unambiguous. Disabled, missing or provider-owned
+ * accounts never switch credentials. Null legacy conversation IDs retain the
+ * historical fallback.
  */
 export async function resolveOutboundConfig<T extends Record<string, any>>(
   channel: string,
   channelAccountId: number | null | undefined,
   communicationPipelineId?: number | null,
 ): Promise<T | null> {
+  let explicitAccount: typeof channelAccountsTable.$inferSelect | undefined;
+  let boundLegacyConfig: T | null = null;
+  if (channelAccountId != null) {
+    [explicitAccount] = await db.select().from(channelAccountsTable)
+      .where(eq(channelAccountsTable.id, channelAccountId));
+    if (!explicitAccount || explicitAccount.channel !== channel ||
+        explicitAccount.provider !== "direct" || !explicitAccount.isActive) return null;
+    if (explicitAccount.configEncrypted == null) {
+      boundLegacyConfig = await resolveLegacyConfig<T>(channel);
+      if (!legacyConfigMatchesAccount(channel, explicitAccount.externalAccountId, boundLegacyConfig)) return null;
+      const identities = await db.select({ id: channelAccountsTable.id }).from(channelAccountsTable)
+        .where(and(eq(channelAccountsTable.channel, channel), eq(channelAccountsTable.provider, "direct"),
+          eq(channelAccountsTable.externalAccountId, explicitAccount.externalAccountId!))).limit(2);
+      if (identities.length !== 1 || identities[0].id !== explicitAccount.id) return null;
+    } else if (!explicitAccount.configEncrypted) return null;
+  }
   if (communicationPipelineId != null) {
     const [pipeline] = await db
       .select({
@@ -116,6 +150,7 @@ export async function resolveOutboundConfig<T extends Record<string, any>>(
           eq(communicationPipelineAccountsTable.canSend, true),
           eq(communicationPipelinesTable.isActive, true),
           eq(channelAccountsTable.channel, channel),
+          eq(channelAccountsTable.provider, "direct"),
           eq(channelAccountsTable.isActive, true),
         ),
       )
@@ -136,14 +171,8 @@ export async function resolveOutboundConfig<T extends Record<string, any>>(
     if (!pipeline.isDefault) return null;
   }
 
-  if (channelAccountId != null) {
-    const [acct] = await db
-      .select()
-      .from(channelAccountsTable)
-      .where(eq(channelAccountsTable.id, channelAccountId));
-    if (acct && acct.channel === channel && acct.isActive && acct.configEncrypted) {
-      return parseAccountConfig(acct.configEncrypted) as T;
-    }
+  if (explicitAccount) {
+    return boundLegacyConfig ?? parseAccountConfig(explicitAccount.configEncrypted) as T;
   }
   return resolveLegacyConfig<T>(channel);
 }
@@ -218,6 +247,7 @@ export async function resolveInboundAccount<T extends Record<string, any>>(
       and(
         eq(channelAccountsTable.channel, channel),
         eq(channelAccountsTable.externalAccountId, externalAccountId),
+        eq(channelAccountsTable.provider, "direct"),
       ),
     );
   if (!acct || !acct.isActive || !acct.configEncrypted) return null;

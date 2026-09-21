@@ -320,7 +320,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/channelAccounts.ts",
-      "sha256": "873af09a398aa9413e206f0092a9000006459d3e73bd05e490685198c6be0f8f",
+      "sha256": "f7808278a475a8c3da971308dfec31388de64a30ef1992e8818e1c012163631d",
       "routeRegistrations": 7,
       "requireAuth": 8,
       "requireRole": 7,
@@ -1175,7 +1175,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/webhooks.ts",
-      "sha256": "d88670ab3da27a142439bca82ba8b0042f32231e1f091c0c104ac2d94fe0b2c1",
+      "sha256": "44c30267aa6597ebba124ec9b5e00b3750a0f1217faa2db299dd38c649e5128e",
       "routeRegistrations": 7,
       "requireAuth": 0,
       "requireRole": 0,

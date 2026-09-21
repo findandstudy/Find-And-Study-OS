@@ -8,11 +8,12 @@
  *
  * Run: npx tsx --test scripts/test-zernio-broadcast.ts
  */
-import { test, beforeEach } from "node:test";
+import { test, beforeEach, after } from "node:test";
 import assert from "node:assert/strict";
 import {
   resolveZernioProfileId,
   __clearZernioProfileCacheForTests,
+  __setZernioAccountSendableOverrideForTests,
 } from "../src/lib/inbox/zernioSend";
 import {
   buildZernioTemplateComponents,
@@ -47,8 +48,11 @@ beforeEach(() => {
   responders = [];
   process.env.ALLOW_LIVE_INTEGRATIONS = "true";
   __clearZernioProfileCacheForTests();
+  __setZernioAccountSendableOverrideForTests(async () => true);
   mockFetch();
 });
+
+after(() => __setZernioAccountSendableOverrideForTests(null));
 
 test("WhatsApp template components use Zernio's lowercase discriminators", () => {
   const components = buildZernioTemplateComponents({

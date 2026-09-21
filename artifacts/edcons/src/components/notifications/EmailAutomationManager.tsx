@@ -20,13 +20,13 @@ type Confirmation = { path: string; body?: object; note: string };
 const blankTemplate = (): TemplateDraft => ({ name: "", category: "applications", language: "en", subject: "", content: "" });
 const blankSender = (): SenderDraft => ({ displayName: "", fromEmail: "", fromName: "", replyTo: "", host: "", port: 587, username: "", password: "", isActive: false });
 
-export function EmailAutomationManager() {
+export function EmailAutomationManager({ view = "all" }: { view?: "all" | "senders" } = {}) {
   const { lang, dir } = useI18n();
   const copy = emailAutomationCopy(lang);
   const { user } = useAuth();
   const client = useQueryClient();
   const library = useEmailLibrary();
-  const [tab, setTab] = useState<"templates" | "senders" | "history">("templates");
+  const [tab, setTab] = useState<"templates" | "senders" | "history">(view === "senders" ? "senders" : "templates");
   const [historySource, setHistorySource] = useState<"stage" | "system">("stage");
   const [draft, setDraft] = useState<TemplateDraft | null>(null);
   const [senderDraft, setSenderDraft] = useState<SenderDraft | null>(null);
@@ -85,7 +85,7 @@ export function EmailAutomationManager() {
       {library.capabilities.isError ? <p role="alert" className="text-sm text-destructive">{copy.loadError} <Button variant="outline" size="sm" onClick={() => void library.capabilities.refetch()}>{copy.refresh}</Button></p> : capability ? <p className="rounded-md border bg-secondary/40 p-3 text-sm" data-testid="email-runtime-status">{capability.enabled ? copy.enabled : copy.disabled}</p> : <p role="status">{copy.loading}</p>}
     </header>
     <div className="flex flex-wrap gap-2" role="group" aria-label={copy.title}>
-      {(["templates", "senders", "history"] as const).map(key => <Button key={key} type="button" size="sm" variant={tab === key ? "default" : "outline"} aria-pressed={tab === key} onClick={() => { setTab(key); setError(false); }}>{copy[key]}</Button>)}
+      {(view === "senders" ? ["senders"] as const : ["templates", "senders", "history"] as const).map(key => <Button key={key} type="button" size="sm" variant={tab === key ? "default" : "outline"} aria-pressed={tab === key} onClick={() => { setTab(key); setError(false); }}>{copy[key]}</Button>)}
       <Button type="button" variant="ghost" size="sm" className="ms-auto" disabled={activeQuery.isFetching || busy} onClick={() => { void activeQuery.refetch(); void library.capabilities.refetch(); }}>{copy.refresh}</Button>
     </div>
     {errorNotice}

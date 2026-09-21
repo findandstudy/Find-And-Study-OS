@@ -2,7 +2,7 @@ import { Router, type IRouter, type Request, type Response, type NextFunction } 
 import express from "express";
 import rateLimit from "express-rate-limit";
 import { db, integrationsTable, channelAccountsTable } from "@workspace/db";
-import { eq, and } from "drizzle-orm";
+import { eq, and, isNull, sql } from "drizzle-orm";
 import { processInboundMessage } from "../lib/inbox/processInbound";
 import { maybeAutoReply } from "../lib/inbox/botAutoReply";
 import { verifyWhatsAppSignature, parseWhatsAppWebhook, type WhatsAppConfig } from "../lib/inbox/channels/whatsapp";
@@ -12,6 +12,7 @@ import { parseMessengerWebhook, type MessengerConfig } from "../lib/inbox/channe
 import { parseInstagramWebhook, type InstagramConfig } from "../lib/inbox/channels/instagram";
 import { CHANNEL_MESSENGER, CHANNEL_INSTAGRAM } from "../lib/inbox/channels/constants";
 import { resolveInboundAccount, parseAccountConfig } from "../lib/inbox/channelAccountConfig";
+import { zernioWebhookChannel, existingZernioWebhookAccount } from "../lib/inbox/webhookAccountIdentity";
 import { decryptConfig, decryptString } from "../lib/encryption";
 import { logAudit } from "../lib/auth";
 import crypto from "crypto";
@@ -125,7 +126,7 @@ async function getWhatsAppSigningSecretCandidates(
     const rows = await db
       .select({ configEncrypted: channelAccountsTable.configEncrypted })
       .from(channelAccountsTable)
-      .where(and(eq(channelAccountsTable.channel, "whatsapp"), eq(channelAccountsTable.isActive, true)));
+      .where(and(eq(channelAccountsTable.channel, "whatsapp"), eq(channelAccountsTable.provider, "direct"), eq(channelAccountsTable.isActive, true)));
     for (const row of rows) add("configured_account", parseAccountConfig(row.configEncrypted).appSecret);
   } catch (err) {
     console.error("[WEBHOOK] WhatsApp signing-secret candidate lookup failed", err);
@@ -147,28 +148,39 @@ async function getInstagramConfig(): Promise<InstagramConfig | null> {
 
 async function ensureChannelAccount(channel: string, displayName: string, externalAccountId?: string): Promise<number | null> {
   try {
-    if (externalAccountId) {
-      const [existing] = await db
-        .select()
-        .from(channelAccountsTable)
-        .where(and(eq(channelAccountsTable.channel, channel), eq(channelAccountsTable.externalAccountId, externalAccountId)));
-      if (existing) return existing.id;
-      const [created] = await db
+    return await db.transaction(async (tx) => {
+      await tx.execute(sql`SET LOCAL lock_timeout = '2000ms'`);
+      await tx.execute(sql`SET LOCAL statement_timeout = '5000ms'`);
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext('channel-account-management'), 0)`);
+      if (externalAccountId) {
+        const existing = await tx
+          .select()
+          .from(channelAccountsTable)
+          .where(and(eq(channelAccountsTable.channel, channel), eq(channelAccountsTable.provider, "direct"), eq(channelAccountsTable.externalAccountId, externalAccountId)))
+          .limit(2);
+        // A known disabled or ambiguous identity must not escape into legacy
+        // processing or create a second active row.
+        if (existing.length > 0) return existing.length === 1 && existing[0].isActive ? existing[0].id : null;
+        const [created] = await tx
+          .insert(channelAccountsTable)
+          .values({ channel, provider: "direct", displayName, externalAccountId, status: "active" })
+          .returning();
+        return created.id;
+      }
+      const existing = await tx.select().from(channelAccountsTable)
+        .where(and(eq(channelAccountsTable.channel, channel), eq(channelAccountsTable.provider, "direct"), isNull(channelAccountsTable.externalAccountId)))
+        .limit(2);
+      if (existing.length > 0) return existing.length === 1 && existing[0].isActive ? existing[0].id : null;
+      const [created] = await tx
         .insert(channelAccountsTable)
-        .values({ channel, displayName, externalAccountId, status: "active" })
+        .values({ channel, provider: "direct", displayName, status: "active" })
         .returning();
       return created.id;
-    }
-    const [existing] = await db.select().from(channelAccountsTable).where(eq(channelAccountsTable.channel, channel));
-    if (existing) return existing.id;
-    const [created] = await db
-      .insert(channelAccountsTable)
-      .values({ channel, displayName, status: "active" })
-      .returning();
-    return created.id;
+    });
   } catch (err) {
-    console.error("[WEBHOOK] ensureChannelAccount error:", err);
-    return null;
+    // Infrastructure/lock failures must remain retryable provider failures;
+    // only a known inactive/ambiguous account may be acknowledged as ignored.
+    throw err;
   }
 }
 
@@ -267,7 +279,7 @@ async function gatherVerifyTokens(channel: string, legacyToken?: string): Promis
     const rows = await db
       .select()
       .from(channelAccountsTable)
-      .where(and(eq(channelAccountsTable.channel, channel), eq(channelAccountsTable.isActive, true)));
+      .where(and(eq(channelAccountsTable.channel, channel), eq(channelAccountsTable.provider, "direct"), eq(channelAccountsTable.isActive, true)));
     for (const r of rows) {
       const cfg = parseAccountConfig(r.configEncrypted);
       const t = cfg.webhookVerifyToken;
@@ -361,6 +373,10 @@ router.post("/webhooks/whatsapp", webhookLimiter, rawJson, async (req: Request, 
   const channelAccountId = perAccount
     ? perAccount.channelAccountId
     : await ensureChannelAccount("whatsapp", "WhatsApp Business", phoneNumberId ?? config.phoneNumberId);
+  if (channelAccountId == null) {
+    res.status(200).json({ ok: true, ignored: "account unavailable" });
+    return;
+  }
 
   let processed = 0;
   // Inbound text messages that are eligible to trigger the intake bot. We only
@@ -521,6 +537,10 @@ router.post("/webhooks/meta", webhookLimiter, rawJson, async (req: Request, res:
   const channelAccountId = perAccount
     ? perAccount.channelAccountId
     : await ensureChannelAccount(channel, displayName, externalAccountId ?? fallbackExternalId);
+  if (channelAccountId == null) {
+    res.status(200).json({ ok: true, ignored: "account unavailable" });
+    return;
+  }
 
   let processed = 0;
   const botCandidates: Array<{ conversationId: number; inboundMessageId: number }> = [];
@@ -678,6 +698,10 @@ async function handleWebFormPost(req: Request, res: Response): Promise<void> {
   }
 
   const channelAccountId = await ensureChannelAccount("web_form", "Web Form", cfg.formId || "default");
+  if (channelAccountId == null) {
+    res.status(200).json({ ok: true, ignored: "account unavailable" });
+    return;
+  }
 
   try {
     const result = await processInboundMessage({
@@ -775,63 +799,46 @@ router.post("/webhooks/zernio", webhookLimiter, rawJson, async (req, res): Promi
 
     if (body?.event === "message.received" && m?.direction === "incoming") {
       const zAccountId = String(acctPayload?.id ?? acctPayload?.accountId ?? "");
-      const platform   = String(m.platform ?? acctPayload?.platform ?? "");
+      const canonicalChannel = zernioWebhookChannel(m.platform ?? acctPayload?.platform);
+      if (!canonicalChannel || !/^[A-Za-z0-9_-]{1,160}$/.test(zAccountId)) {
+        res.status(200).json({ ok: true, skipped: "unsupported account identity" });
+        return;
+      }
 
-      let [acct] = await db
-        .select()
-        .from(channelAccountsTable)
-        .where(
-          and(
-            eq(channelAccountsTable.provider, "zernio"),
-            eq(channelAccountsTable.externalAccountId, zAccountId),
-            eq(channelAccountsTable.channel, platform),
-          ),
-        )
-        .limit(1);
+      const acct = await db.transaction(async (tx) => {
+        // Serialize account creation with the management surface. There is no
+        // provider identity unique constraint in the legacy registry.
+        await tx.execute(sql`SET LOCAL lock_timeout = '2000ms'`);
+        await tx.execute(sql`SET LOCAL statement_timeout = '5000ms'`);
+        await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext('channel-account-management'), 0)`);
+        const rows = await tx.select().from(channelAccountsTable)
+          .where(and(eq(channelAccountsTable.provider, "zernio"), eq(channelAccountsTable.externalAccountId, zAccountId)))
+          .limit(2);
+        const identity = existingZernioWebhookAccount(rows, canonicalChannel);
+        if (identity.kind === "blocked") return null;
+        if (identity.kind === "existing") return identity.account;
 
-      if (!acct) {
-        // Auto-register: first message from a new Zernio-connected account.
-        // Only applies to provider='zernio'; direct Meta/web-form rows are never touched.
+        // Keep automatic registration for authenticated, previously unseen
+        // provider identities only. facebook is canonicalized for new rows;
+        // historical facebook rows keep their channel and conversation keys.
         const a = acctPayload ?? {};
         const label = a.displayName || a.username || `${zAccountId.slice(0, 6)}`;
-        const displayName = `${platform.charAt(0).toUpperCase() + platform.slice(1)} - ${label}`;
-        const inserted = await db
-          .insert(channelAccountsTable)
-          .values({
-            channel: platform,
-            provider: "zernio",
-            externalAccountId: zAccountId,
-            displayName,
-            isActive: true,
-            status: "active",
-          })
-          .onConflictDoNothing()
-          .returning();
-        // If onConflictDoNothing swallowed the insert (race), re-fetch.
-        acct = inserted[0] ?? (
-          await db
-            .select()
-            .from(channelAccountsTable)
-            .where(
-              and(
-                eq(channelAccountsTable.provider, "zernio"),
-                eq(channelAccountsTable.externalAccountId, zAccountId),
-                eq(channelAccountsTable.channel, platform),
-              ),
-            )
-            .limit(1)
-        )[0];
-        if (acct) {
-          console.log(
-            `[INBOX] auto-registered zernio channel_account ${acct.id} (${platform}/${zAccountId})`,
-          );
-        }
-      }
+        const [created] = await tx.insert(channelAccountsTable).values({
+          channel: canonicalChannel,
+          provider: "zernio",
+          externalAccountId: zAccountId,
+          displayName: `${canonicalChannel.charAt(0).toUpperCase() + canonicalChannel.slice(1)} - ${label}`,
+          isActive: true,
+          status: "active",
+        }).returning();
+        return created;
+      });
 
       if (!acct || acct.isActive === false) {
         res.status(200).json({ ok: true, skipped: "inactive channel account" });
         return;
       }
+      const platform = acct.channel;
 
       // One-time diagnostic: log the exact field names Zernio sends on an
       // attachment so we can see whether a real filename/size field exists.
