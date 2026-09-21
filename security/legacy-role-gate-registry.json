@@ -590,7 +590,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/health.ts",
-      "sha256": "402fa6f1ee532a7591e1f429ab95fae918fbffc8094f60f806a1e10196578a99",
+      "sha256": "d7f4ae669a36d8332c8b686f2c3e9e387bfd8f686f66e42d4fa2b17aa9a1b645",
       "routeRegistrations": 4,
       "requireAuth": 2,
       "requireRole": 1,

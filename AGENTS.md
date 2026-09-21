@@ -594,3 +594,21 @@ Public import zincirine adapter approval + maker-checker, redacted preview, Ed25
 Kanıt: public-web ilgili saf testleri 160/160; planner 20/20, executor 6/6, source resolver 12/12, intake builder 4/4 + command 6/6 + store 9/9, adapter approval 20/20, preview 14/14, receipt 8/8, runtime boundary 8/8, preflight 19/19, server plan 9/9, job contract 14/14; PostgreSQL intake/source/store suite PASS, public catalog/discovery/render regresyonları PASS, security 37/37, rate-limit 6/6, CI wiring 4/4, migration authority 31 PASS + 1 Bash-unavailable SKIP, workspace typecheck ve API production build PASS. Disposable DB `127.0.0.1:5433/fasos_apply_local` kullanıldı; production credential/PII/provider çağrısı yoktur.
 
 Remote push, PR güncellemesi, staging/production deploy, `Find-And-Study-OS-Next` sync ve runtime aktivasyonu yapılmadı. Bağımsız review, exact-head remote CI, staging UAT, executor grant ve gerçek import pilotu sonraki NO-GO kapılarıdır. Kalıcı ayrıntı: `docs/PUBLIC_WEB_LOCAL_GATE_2026-09-09.md`, `docs/PUBLIC_WEB_STAGING_CANDIDATE_2026-09-09.md` ve `docs/ADR_2026-09-08_PUBLIC_WEB_CONTENT_AND_RENDERING_FOUNDATION.md`.
+
+## 21 Eylül 2026 — Sistem Sağlığı yerel iyileştirmesi
+
+`codex/public-detail-staging-20260919` üzerinde mevcut admin sağlık ekranı ve
+salt-okunur endpoint geliştirildi. On ayrı kontrol, eksik/eski ölçüm ayrımı,
+bağlantı havuzu beklemesi, portal kuyruk yaşı ve mevcut worker heartbeat'leri,
+opt-in süreç bazlı p95/p99, etki/inceleme bağlantıları ve görünür sekmede 30
+saniyelik yenileme eklendi. DB kontrolleri bounded READ ONLY transaction,
+bağlantı/sorgu süre sınırı ve iki eşzamanlı kontrol sınırı kullanır. Yedek
+kontrolü yalnız bounded dosya metadatasıdır; restore/offsite kanıtı değildir.
+Otomatik onarım, dış gönderim, worker başlatma veya yeni migration yoktur.
+
+Kanıt: backend/performance/read-path/security 78/78, frontend 17/17,
+sentetik EN masaüstü/TR mobil/AR RTL tarayıcı 3/3 PASS; API/Edcons typecheck
+ve yerel build, 23 locale i18n ve public bundle bütçesi PASS. Bağımsız yerel
+review tamamlandı. Gerçek PostgreSQL smoke/staging UAT yapılmadı; deployment,
+production, provider, runtime ayarı veya DB verisi değiştirilmedi. Ayrıntı ve
+operasyonel backlog: `docs/SYSTEM_HEALTH_IMPROVEMENTS_2026-09-21.md`.

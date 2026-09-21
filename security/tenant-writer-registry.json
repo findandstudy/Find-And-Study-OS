@@ -934,6 +934,15 @@
       "externalPilot": "quarantine"
     },
     {
+      "path": "artifacts/api-server/src/lib/systemHealthReadStore.ts",
+      "ownership": "platform_global",
+      "enforcement": "quarantine_required",
+      "risk": "medium",
+      "owner": "Platform Engineering",
+      "externalPilot": "quarantine",
+      "note": "Conservative client.query detection covers bounded BEGIN READ ONLY, transaction-local timeouts, aggregate SELECT and ROLLBACK only; no tenant mutation or external execution."
+    },
+    {
       "path": "artifacts/api-server/src/lib/toolRegistry.ts",
       "ownership": "mixed_legacy",
       "enforcement": "quarantine_required",

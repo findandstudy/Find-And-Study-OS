@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "test:system-health": "tsx --test ./scripts/test-system-health.ts ./scripts/test-system-health-performance.ts",
     "dev": "NODE_ENV=development tsx ./src/index.ts",
     "worker:portal-status": "NODE_OPTIONS=--max-old-space-size=512 tsx ./src/workers/portalStatusWorker.ts",
     "worker:portal-lifecycle": "NODE_OPTIONS=--max-old-space-size=384 tsx ./src/workers/portalLifecycleWorker.ts",
@@ -209,7 +210,7 @@
     "test:portal-operations-admin": "tsx --test ./scripts/test-portal-operations-admin.ts",
     "test:postgres-portal-lifecycle-guardian": "tsx --test ./scripts/test-postgres-portal-lifecycle-guardian.ts",
     "test:portal-lifecycle": "tsx --test ./scripts/test-portal-lifecycle-contract.ts",
-    "test:security-regressions": "tsx --test ./scripts/test-security-regressions.ts",
+    "test:security-regressions": "tsx --test ./scripts/test-security-regressions.ts ./scripts/test-system-health.ts ./scripts/test-system-health-performance.ts",
     "test:student-email-verification": "tsx --test ./scripts/test-student-email-verification-gate.ts",
     "test:student-journey-projection": "tsx --test ./scripts/test-student-journey-projection.ts",
     "test:student-journey-milestone-contract": "tsx --test ./scripts/test-student-journey-milestone-contract.ts",
