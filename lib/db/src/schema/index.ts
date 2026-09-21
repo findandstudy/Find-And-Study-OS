@@ -27,6 +27,7 @@ export * from "./applicationStageDocuments";
 export * from "./embeds";
 export * from "./destinations";
 export * from "./emailQueue";
+export * from "./emailAutomation";
 export * from "./quickLinks";
 export * from "./programDocumentRequirements";
 export * from "./degreeDocumentRequirements";

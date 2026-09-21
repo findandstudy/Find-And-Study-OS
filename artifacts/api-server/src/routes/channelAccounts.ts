@@ -69,7 +69,8 @@ router.get("/channel-accounts", requireAuth, requireRole(...ADMIN_ROLES), async 
         .orderBy(asc(channelAccountsTable.channel), asc(channelAccountsTable.id))
     : await db.select().from(channelAccountsTable)
         .orderBy(asc(channelAccountsTable.channel), asc(channelAccountsTable.id));
-  res.json({ accounts: rows.map(serializeRow) });
+  // SMTP senders have a separate session-only, revision-bound management surface.
+  res.json({ accounts: rows.filter(row => row.channel !== "email").map(serializeRow) });
 });
 
 /** Create a new account on a channel. */
@@ -136,6 +137,7 @@ router.put("/channel-accounts/:id", requireAuth, requireRole(...ADMIN_ROLES), as
     return;
   }
   const { displayName, config, brandLabel, brandColor } = req.body ?? {};
+  if (existing.channel === "email") { res.status(409).json({ error: "managed_email_sender" }); return; }
   if (brandColor != null && (typeof brandColor !== "string" || !/^#[0-9a-f]{6}$/i.test(brandColor))) {
     res.status(400).json({ error: "brandColor must be a six-digit hex color" });
     return;
@@ -184,6 +186,7 @@ router.patch("/channel-accounts/:id/toggle-active", requireAuth, requireRole(...
     return;
   }
   const willActivate = !existing.isActive;
+  if (existing.channel === "email") { res.status(409).json({ error: "managed_email_sender" }); return; }
   const [result] = await db.update(channelAccountsTable).set({
     isActive: willActivate,
     status: willActivate ? "active" : "inactive",
@@ -205,6 +208,7 @@ router.patch("/channel-accounts/:id/set-default", requireAuth, requireRole(...AD
     res.status(404).json({ error: "Account not found" });
     return;
   }
+  if (existing.channel === "email") { res.status(409).json({ error: "managed_email_sender" }); return; }
   const result = await db.transaction(async (tx) => {
     await tx.update(channelAccountsTable)
       .set({ isDefault: false })
@@ -232,6 +236,7 @@ router.delete("/channel-accounts/:id", requireAuth, requireRole(...ADMIN_ROLES),
     res.status(404).json({ error: "Account not found" });
     return;
   }
+  if (existing.channel === "email") { res.status(409).json({ error: "managed_email_sender" }); return; }
   const [linkedConversation] = await db
     .select({ id: conversationsTable.id })
     .from(conversationsTable)
@@ -274,6 +279,7 @@ router.post("/channel-accounts/:id/test", requireAuth, requireRole(...ADMIN_ROLE
     res.status(404).json({ error: "Account not found" });
     return;
   }
+  if (existing.channel === "email") { res.status(409).json({ error: "managed_email_sender" }); return; }
   const config = parseAccountConfig(existing.configEncrypted);
 
   if (!isLiveIntegrationsEnabled()) {

@@ -612,3 +612,23 @@ ve yerel build, 23 locale i18n ve public bundle bütçesi PASS. Bağımsız yere
 review tamamlandı. Gerçek PostgreSQL smoke/staging UAT yapılmadı; deployment,
 production, provider, runtime ayarı veya DB verisi değiştirilmedi. Ayrıntı ve
 operasyonel backlog: `docs/SYSTEM_HEALTH_IMPROVEMENTS_2026-09-21.md`.
+
+## 21 Eylül 2026 — Aşama e-postası ve ortak şablon yönetimi yerel eki
+
+Kullanıcının uygulama onayıyla mevcut `message_templates`, `channel_accounts`
+ve `email_queue` üzerinde onaylı/sürümlü e-posta şablonları, birden çok şifreli
+SMTP hesabı ve Application Pipeline için bağımsız Automatic Email eklendi.
+Direct/Agent/Sub-Agent kaynak seçimi alıcıyı değiştirmez; alıcı eşleşen aktif,
+doğrulanmış öğrenci hesabıdır. İki kişi onayı, exact sürüm/revision, atomik
+outbox/claim, belirsiz SMTP sonucunu otomatik retry etmeme ve geçmiş kayıtları
+geriye dönük göndermeme sınırları vardır. WhatsApp akışı korunmuştur.
+
+Yerel kanıt: birleşik API 130/130, genişletilmiş güvenlik zinciri 115/115
+(örtüşen testler), UI 14/14, sentetik EN desktop/TR mobile/AR RTL 3/3 PASS;
+API/Edcons typecheck/build PASS. Göreve özel boş PostgreSQL 16.15 üzerinde
+additive `0124–0125` ve ledger 126/126 fresh/replay PASS. Üretim dump/PII
+kullanılmadı. Yeni writer'lar legacy güvenlik karantinasında, external pilot
+allowlist sıfırdır. Commit/push, staging/production deploy, gerçek SMTP
+doğrulaması/gönderimi veya runtime aktivasyonu yapılmadı. Staging UAT ve
+kontrollü sağlayıcı pilotu ayrı kapıdır. Operasyon/rollback ve dosya envanteri:
+`docs/PIPELINE_EMAIL_AUTOMATION_2026-09-21.md`.

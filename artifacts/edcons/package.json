@@ -4,6 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "test:email-automation": "tsx --test ./scripts/test-email-automation-ui.ts",
+    "test:email-automation-browser": "node ./scripts/test-email-automation-browser.mjs",
     "test:system-health": "tsx --test ./scripts/test-system-health.ts",
     "test:system-health-browser": "node ./scripts/test-system-health-browser.mjs",
     "dev": "vite --config vite.config.ts --host 0.0.0.0",

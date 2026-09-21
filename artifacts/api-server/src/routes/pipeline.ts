@@ -2,14 +2,15 @@ import { Router, type IRouter } from "express";
 import {
   channelAccountsTable,
   db,
+  emailTemplateVersionsTable,
   messageTemplatesTable,
   pipelineStagesTable,
   portalAutomationSettingsTable,
   programDocumentRequirementsTable,
 } from "@workspace/db";
-import type { StageAction, StageAutomaticMessage } from "@workspace/db";
+import type { StageAction, StageAutomaticMessage, StageAutomaticEmail } from "@workspace/db";
 import { and, asc, eq, inArray, isNotNull, sql } from "drizzle-orm";
-import { requireAuth, requireRole } from "../lib/auth";
+import { requireAuth, requireRole, logAudit } from "../lib/auth";
 import { STAFF_ROLES, AGENT_ROLES } from "../lib/roles";
 import { clearStageFinanceCache } from "../lib/stageFinance";
 import {
@@ -17,6 +18,10 @@ import {
   stageAudienceAllows,
 } from "../lib/pipelineAudience";
 import { buildPortalTriggerStageSnapshot } from "../lib/portalTriggerStagePolicy.js";
+import { parseStageAutomaticEmail, stageEmailConfigsEqual } from "../lib/notifications/stageEmailPolicy";
+import { emailAutomationHumanAllowed } from "../lib/notifications/emailAutomationPolicy";
+import { STAGE_EMAIL_TEMPLATE_VARIABLES } from "../lib/notifications/emailTemplateLibrary";
+import { emailPolicyErrorCode } from "../lib/notifications/emailRuleBinding";
 
 const router: IRouter = Router();
 
@@ -458,6 +463,44 @@ router.put("/pipeline-stages/:entityType", requireAuth, requireRole(...MANAGER_R
   }
 
   const targetKeyByStageIdx: (string | null)[] = [];
+  const existingEmails = await db.select({ key: pipelineStagesTable.key, config: pipelineStagesTable.automaticEmail })
+    .from(pipelineStagesTable).where(eq(pipelineStagesTable.entityType, entityType));
+  const emailByKey = new Map(existingEmails.map(row => [row.key, row.config]));
+  let requestedAutomaticEmails: Array<StageAutomaticEmail | null>;
+  try {
+    requestedAutomaticEmails = stages.map((stage: any, i: number) => {
+      const raw = stage.automaticEmail === undefined ? emailByKey.get(normalizedKeys[i]) : stage.automaticEmail;
+      const parsed = parseStageAutomaticEmail(raw);
+      if (parsed && entityType !== "application") throw new Error("EMAIL_APPLICATION_STAGES_ONLY");
+      return parsed;
+    });
+  } catch (error) {
+    res.status(400).json({ error: emailPolicyErrorCode(error) });
+    return;
+  }
+  // Saving another setting must not erase email policies in older clients.
+  // Altering/removing an email policy requires a current non-impersonated human admin.
+  const emailChanged = existingEmails.some(row => row.config && !normalizedKeys.includes(row.key)) ||
+    requestedAutomaticEmails.some((config, i) => !stageEmailConfigsEqual(config, emailByKey.get(normalizedKeys[i])));
+  if (emailChanged && !await emailAutomationHumanAllowed(req)) {
+    res.status(403).json({ error: "EMAIL_CONFIGURATION_HUMAN_ADMIN_REQUIRED" });
+    return;
+  }
+  for (const config of requestedAutomaticEmails) {
+    if (!config) continue;
+    const [approved] = await db.select({ id: emailTemplateVersionsTable.id, variables: emailTemplateVersionsTable.variables }).from(emailTemplateVersionsTable)
+      .innerJoin(messageTemplatesTable, eq(messageTemplatesTable.id, emailTemplateVersionsTable.templateId))
+      .where(and(eq(emailTemplateVersionsTable.id, config.templateVersionId!), eq(emailTemplateVersionsTable.status, "approved"),
+        eq(messageTemplatesTable.isActive, true), inArray(messageTemplatesTable.channel, ["email", "all"])));
+    const [sender] = await db.select({ id: channelAccountsTable.id }).from(channelAccountsTable)
+      .where(and(eq(channelAccountsTable.id, config.senderAccountId!), eq(channelAccountsTable.channel, "email"),
+        eq(channelAccountsTable.provider, "smtp"), eq(channelAccountsTable.isActive, true),
+        sql`${channelAccountsTable.metadata}->'emailSender'->'verified' = 'true'::jsonb`));
+    if (!approved || !sender || approved.variables.some(key => !(STAGE_EMAIL_TEMPLATE_VARIABLES as readonly string[]).includes(key))) {
+      res.status(400).json({ error: "EMAIL_APPROVED_TEMPLATE_AND_VERIFIED_SENDER_REQUIRED" });
+      return;
+    }
+  }
   const targetErrors: string[] = [];
   for (let i = 0; i < stages.length; i++) {
     if (entityType !== "application") { targetKeyByStageIdx.push(null); continue; }
@@ -606,6 +649,7 @@ router.put("/pipeline-stages/:entityType", requireAuth, requireRole(...MANAGER_R
           serviceFeeFinanceStatus: entityType === "application" ? normFinance(s.serviceFeeFinanceStatus) : null,
           autoCancelSiblingsOnWon: entityType === "application" && !!s.autoCancelSiblingsOnWon,
           automaticMessage: requestedAutomaticMessages[i],
+          automaticEmail: requestedAutomaticEmails[i],
           visibleToRoles: normalizeStageAudienceRoles(s.visibleToRoles),
           transitionAllowedRoles: normalizeStageAudienceRoles(s.transitionAllowedRoles),
           actions: entityType === "application"
@@ -718,6 +762,8 @@ router.put("/pipeline-stages/:entityType", requireAuth, requireRole(...MANAGER_R
           : {}),
       }));
 
+    if (emailChanged) logAudit(req.user!.id, "pipeline_stage_email.configured", "pipeline", undefined,
+      { entityType, stages: inserted.map(stage => ({ key: stage.key, automaticEmail: stage.automaticEmail })) }, req.ip);
     res.json({
       stages: responseStages,
       warnings,

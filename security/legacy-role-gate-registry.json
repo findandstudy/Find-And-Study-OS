@@ -8,14 +8,14 @@
     "defaultEnforcement": "legacy_quarantine"
   },
   "totals": {
-    "routeRegistrations": 867,
+    "routeRegistrations": 881,
     "requireAuth": 769,
     "requireRole": 494,
     "requirePermission": 78,
     "requireScope": 0,
     "directRoleChecks": 32,
     "authOnlyRouteCandidates": 128,
-    "publicRouteCandidates": 177
+    "publicRouteCandidates": 191
   },
   "files": [
     {
@@ -215,7 +215,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/applications.ts",
-      "sha256": "6fc7de5bad03e45a6e9f70ffee36ee0e09347c14136646024c40992c155f0047",
+      "sha256": "090dec21c464c53fa1c790d560988adb8709b3c3e8046e350418b4dd34011918",
       "routeRegistrations": 13,
       "requireAuth": 14,
       "requireRole": 9,
@@ -320,7 +320,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/channelAccounts.ts",
-      "sha256": "a58cfe9f0fd390e26cc01054d28c39e28c12fb54eed07b318c7a59fb98a0f562",
+      "sha256": "873af09a398aa9413e206f0092a9000006459d3e73bd05e490685198c6be0f8f",
       "routeRegistrations": 7,
       "requireAuth": 8,
       "requireRole": 7,
@@ -529,6 +529,21 @@
       "note": "Route-local review required before corridor migration."
     },
     {
+      "path": "artifacts/api-server/src/routes/emailAutomation.ts",
+      "sha256": "8ae66a41a084b9d5dda4a7819ba7c1f6b0d9c5000554712d45fc5965f1d72b94",
+      "routeRegistrations": 14,
+      "requireAuth": 0,
+      "requireRole": 0,
+      "requirePermission": 0,
+      "requireScope": 0,
+      "directRoleChecks": 0,
+      "authOnlyRouteCandidates": 0,
+      "publicRouteCandidates": 14,
+      "enforcement": "legacy_quarantine",
+      "owner": "Platform Engineering",
+      "note": "Route-local review required before corridor migration."
+    },
+    {
       "path": "artifacts/api-server/src/routes/embed.ts",
       "sha256": "ac998d83fdd8d7180aafb951464887fb9e7c599707f325f915dff01b73bb37ff",
       "routeRegistrations": 29,
@@ -620,7 +635,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/index.ts",
-      "sha256": "89497b00844902f25d88afdc1bf46f27c36bfb7408f7e3eb91731e346219a05e",
+      "sha256": "820ae88c350b43e6bd853970842dde9d5a0b183c258782e4e3c8c8e64dec3807",
       "routeRegistrations": 0,
       "requireAuth": 0,
       "requireRole": 0,
@@ -710,7 +725,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/messages.ts",
-      "sha256": "3de0e615b92ff53470e74b83acc65bf2ce48bef4620f887c2ea1924c29030522",
+      "sha256": "9f936680dc40556b774861b6ff9695208a4654bd3c1e75afbca96dee5d212c07",
       "routeRegistrations": 24,
       "requireAuth": 25,
       "requireRole": 15,
@@ -725,7 +740,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/notifications.ts",
-      "sha256": "1698267713ee6140b3d28d714825fbc796f12babfa4c7863820e27eb0a4b57e3",
+      "sha256": "88592e9870e5a95773c9ce2a22b069ecec289a40154b47d449cba9fbd99d3dbb",
       "routeRegistrations": 11,
       "requireAuth": 12,
       "requireRole": 4,
@@ -770,7 +785,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/pipeline.ts",
-      "sha256": "e53e7d994ac5ccb6bd5e1c48499792bc5539b00186c3be5bf98e5f934f0188bc",
+      "sha256": "e939ad77300a830ab6d68a8013023d963e80ab7d93238cb9d21c34f7063ed9b1",
       "routeRegistrations": 3,
       "requireAuth": 4,
       "requireRole": 3,

@@ -2030,7 +2030,7 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, ...AG
       icon: "ArrowRight",
       recipientUserIds: recipientIds.length > 0 ? recipientIds : undefined,
       templateVars: { studentName: sName3, universityName: app.universityName || "", programName: app.programName || "", newStage: stageLabel, newStageKey: stageStr },
-      data: { stage: stageStr, stageLabel },
+      data: { applicationId: app.id, stage: stageStr, stageLabel },
       createdSource: app.createdSource,
     }).catch(() => {});
   }

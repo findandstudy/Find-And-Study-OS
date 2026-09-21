@@ -16,6 +16,8 @@ import {
   NOTIFICATION_CHANNELS,
 } from "@workspace/db";
 import { notificationBus, type NotificationBusEvent } from "../lib/notificationBus";
+import { emailAutomationHumanAllowed, requireEmailAutomationHuman } from "../lib/notifications/emailAutomationPolicy";
+import { bindNotificationEmailTemplate, REGISTERED_NOTIFICATION_EVENTS, emailPolicyErrorCode } from "../lib/notifications/emailRuleBinding";
 import { coalesceRead } from "../lib/readPathCoalescing";
 import {
   cacheNotificationCounts,
@@ -415,15 +417,26 @@ router.get("/notification-rules/schema", requireAuth, requireRole(...ADMIN_ROLES
   });
 });
 
-router.patch("/notification-rules/:id", requireAuth, requireRole(...ADMIN_ROLES), async (req, res): Promise<void> => {
+router.patch("/notification-rules/:id", requireAuth, requireRole(...ADMIN_ROLES), requireEmailAutomationHuman, async (req, res): Promise<void> => {
   const id = parseInt(String(req.params.id), 10);
   const updates: Record<string, unknown> = {};
+  const [existing] = await db.select({ template: notificationRulesTable.template, event: notificationRulesTable.event })
+    .from(notificationRulesTable).where(eq(notificationRulesTable.id, id));
+  if (!existing) { res.status(404).json({ error: "Rule not found" }); return; }
+  const oldBinding = existing.template as { emailTemplateVersionId?: number; emailSenderAccountId?: number } | null;
+  if ((oldBinding?.emailTemplateVersionId || oldBinding?.emailSenderAccountId || req.body.template?.emailTemplateVersionId ||
+    req.body.template?.emailSenderAccountId) && !await emailAutomationHumanAllowed(req)) {
+    res.status(403).json({ error: "EMAIL_CONFIGURATION_HUMAN_ADMIN_REQUIRED" }); return;
+  }
 
   if (req.body.channels !== undefined) updates.channels = req.body.channels;
   if (req.body.recipientType !== undefined) updates.recipientType = req.body.recipientType;
   if (req.body.recipientRoles !== undefined) updates.recipientRoles = req.body.recipientRoles;
   if (req.body.isActive !== undefined) updates.isActive = req.body.isActive;
-  if (req.body.template !== undefined) updates.template = req.body.template;
+  if (req.body.template !== undefined) {
+    try { updates.template = await bindNotificationEmailTemplate(req.body.template, existing.event); }
+    catch (error) { res.status(400).json({ error: emailPolicyErrorCode(error) }); return; }
+  }
 
   if (Object.keys(updates).length === 0) {
     res.status(400).json({ error: "No valid fields to update" });
@@ -445,12 +458,22 @@ router.patch("/notification-rules/:id", requireAuth, requireRole(...ADMIN_ROLES)
   res.json(rule);
 });
 
-router.post("/notification-rules", requireAuth, requireRole(...ADMIN_ROLES), async (req, res): Promise<void> => {
+router.post("/notification-rules", requireAuth, requireRole(...ADMIN_ROLES), requireEmailAutomationHuman, async (req, res): Promise<void> => {
   const { event, name, category, channels, recipientType, recipientRoles, template } = req.body;
 
   if (!event || !name) {
     res.status(400).json({ error: "Event and name are required" });
     return;
+  }
+
+  if (!REGISTERED_NOTIFICATION_EVENTS.has(event)) {
+    res.status(400).json({ error: "NOTIFICATION_EVENT_NOT_REGISTERED" }); return;
+  }
+  let boundTemplate = template || {};
+  if (template?.emailTemplateVersionId || template?.emailSenderAccountId) {
+    if (!await emailAutomationHumanAllowed(req)) { res.status(403).json({ error: "EMAIL_CONFIGURATION_HUMAN_ADMIN_REQUIRED" }); return; }
+    try { boundTemplate = await bindNotificationEmailTemplate(template, event); }
+    catch (error) { res.status(400).json({ error: emailPolicyErrorCode(error) }); return; }
   }
 
   const [rule] = await db
@@ -463,7 +486,7 @@ router.post("/notification-rules", requireAuth, requireRole(...ADMIN_ROLES), asy
       recipientType: recipientType || "specific",
       recipientRoles: recipientRoles || [],
       isActive: true,
-      template: template || {},
+      template: boundTemplate,
     })
     .returning();
 

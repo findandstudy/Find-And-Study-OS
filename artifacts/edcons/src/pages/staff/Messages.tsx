@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useLocation } from "wouter";
 import { inboxListFilters } from "@/lib/inboxListFilters";
+import { EMAIL_AUTOMATION_PATH, emailAutomationCopy } from "@/components/notifications/emailAutomationModel";
 import { runInboxBulkBlock } from "@/lib/inboxBulkBlock";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEntityViewTracker } from "@/hooks/use-entity-view-tracker";
@@ -5014,7 +5015,8 @@ interface Template {
 }
 
 function TemplatesTab() {
-  const { t: tx } = useI18n();
+  const { t: tx, lang } = useI18n();
+  const { user: templateUser } = useAuth();
   const { toast } = useToast();
   const [templates, setTemplates] = useState<Template[]>([]);
   const [loading, setLoading] = useState(true);
@@ -5349,6 +5351,7 @@ function TemplatesTab() {
             <p className="text-sm text-muted-foreground mt-1">
               Create and manage reusable message templates for quick communication.
             </p>
+            {["admin", "super_admin"].includes(templateUser?.role ?? "") && <a className="block mt-2 text-sm text-primary underline" href={EMAIL_AUTOMATION_PATH}>{emailAutomationCopy(lang).libraryLink}</a>}
           </div>
           <Button onClick={openNew} className="rounded-xl gap-2">
             <Plus className="w-4 h-4" /> New Template
@@ -5908,7 +5911,7 @@ export default function MessagesPage() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedConv, setSelectedConv] = useState<number | null>(initialInternalConversation);
   const [activeMessageTab, setActiveMessageTab] = useState(
-    initialInternalConversation !== null ? "messages" : "inbox",
+    initialInternalConversation !== null ? "messages" : new URLSearchParams(window.location.search).get("tab") === "templates" ? "templates" : "inbox",
   );
   const [search, setSearch] = useState("");
   const [newConvOpen, setNewConvOpen] = useState(false);

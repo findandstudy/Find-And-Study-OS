@@ -10,6 +10,8 @@ import type { PipelineStage, StageAction, StageActionType } from "@/hooks/use-pi
 import { useToast } from "@/hooks/use-toast";
 import { useI18n } from "@/hooks/use-i18n";
 import { preventPipelineDialogOutsideDismiss } from "@/lib/pipelineDialogDismiss";
+import { StageAutomaticEmailFields } from "@/components/notifications/EmailAutomationFields";
+import { emailStageValid, emailAutomationCopy } from "@/components/notifications/emailAutomationModel";
 
 type ActionTypeOrNone = StageActionType | "none";
 const ACTION_TYPE_OPTIONS: { value: ActionTypeOrNone; labelKey: string; defaultLabelKey: string; defaultColor: string }[] = [
@@ -578,6 +580,7 @@ function StageEditForm({
 
       {isApplicationStage && (
         <>
+          <StageAutomaticEmailFields value={stage.automaticEmail} onChange={automaticEmail => onChange({ ...stage, automaticEmail })} />
           <FormSection title={t("editStages.sectionApplicationSettings")}>
             <div className="space-y-1.5">
               <Label className="text-sm font-medium">{t("editStages.uploadPermissionLabel")}</Label>
@@ -742,7 +745,7 @@ export function EditStagesDialog({ open, onClose, stages, onSave, isSaving, enti
   const [automaticMessageOptionsLoading, setAutomaticMessageOptionsLoading] = useState(false);
   const [automaticMessageOptionsError, setAutomaticMessageOptionsError] = useState<string | null>(null);
   const { toast } = useToast();
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
 
   useEffect(() => {
     if (open) {
@@ -858,6 +861,11 @@ export function EditStagesDialog({ open, onClose, stages, onSave, isSaving, enti
     ));
     if (automaticMessageWithoutOrigin) {
       setError(`Select at least one record origin for ${automaticMessageWithoutOrigin.label}.`);
+      return;
+    }
+    const invalidEmail = localStages.find(stage => stage.automaticEmail?.enabled && (stage.entityType !== "application" || !emailStageValid(stage.automaticEmail)));
+    if (invalidEmail) {
+      setError(`${invalidEmail.label}: ${emailAutomationCopy(lang).required}`);
       return;
     }
     try {

@@ -13,6 +13,24 @@
   },
   "files": [
     {
+      "path": "artifacts/api-server/src/lib/notifications/stageEmailAutomation.ts",
+      "ownership": "external_integration",
+      "enforcement": "quarantine_required",
+      "risk": "high",
+      "owner": "Admissions Platform",
+      "externalPilot": "quarantine",
+      "note": "Default-off application stage intent to existing email queue; immutable template, pinned sender revision, verified student contact, current origin/stage validation. External activation and tenant corridor remain separate gates."
+    },
+    {
+      "path": "artifacts/api-server/src/routes/emailAutomation.ts",
+      "ownership": "privileged_config",
+      "enforcement": "quarantine_required",
+      "risk": "high",
+      "owner": "Admissions Platform",
+      "externalPilot": "quarantine",
+      "note": "Platform email account/template administration requires human admin session, no impersonation/API token, encrypted credentials and maker-checker approval. No implicit send or external-pilot grant."
+    },
+    {
       "path": "artifacts/api-server/src/index.ts",
       "ownership": "mixed_legacy",
       "enforcement": "quarantine_required",

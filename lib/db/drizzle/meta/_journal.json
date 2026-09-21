@@ -869,6 +869,20 @@
       "when": 1791792000000,
       "tag": "0123_public_web_draft_intake_replay_hardening",
       "breakpoints": true
+    },
+    {
+      "idx": 124,
+      "version": "7",
+      "when": 1791878400000,
+      "tag": "0124_pipeline_email_automation",
+      "breakpoints": true
+    },
+    {
+      "idx": 125,
+      "version": "7",
+      "when": 1791964800000,
+      "tag": "0125_pipeline_email_history_lookup",
+      "breakpoints": true
     }
   ]
 }

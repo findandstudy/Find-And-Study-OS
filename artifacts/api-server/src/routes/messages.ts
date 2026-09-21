@@ -8,6 +8,7 @@ import {
   usersTable,
   notificationsTable,
   messageTemplatesTable,
+  emailTemplateVersionsTable,
   studentsTable,
   leadsTable,
   agentsTable,
@@ -34,6 +35,7 @@ import { getAgentRecord, getAgentVisibleIds } from "../lib/agentVisibility";
 import { resolveAgentFeatures } from "../lib/agentFeatures";
 import { decryptConfig } from "../lib/encryption";
 import { sendTenantEmail } from "../lib/email";
+import { emailAutomationHumanAllowed } from "../lib/notifications/emailAutomationPolicy";
 
 const router: IRouter = Router();
 
@@ -1503,6 +1505,11 @@ router.post("/message-templates", requireAuth, requireRole(...ADMIN_ROLES, ...ST
 
 router.patch("/message-templates/:id", requireAuth, requireRole(...ADMIN_ROLES, ...STAFF_ROLES), async (req, res): Promise<void> => {
   const id = parseInt(String(req.params.id), 10);
+  const [versioned] = await db.select({ id: emailTemplateVersionsTable.id }).from(emailTemplateVersionsTable)
+    .where(eq(emailTemplateVersionsTable.templateId, id)).limit(1);
+  if (versioned && (!await emailAutomationHumanAllowed(req) || Object.keys(req.body ?? {}).some(key => !["name", "category"].includes(key)))) {
+    res.status(409).json({ error: "EMAIL_IMMUTABLE_VERSION_REQUIRED" }); return;
+  }
   const updates: Record<string, unknown> = {};
 
   const allowed = ["name", "category", "subject", "content", "channel", "language", "variables", "isActive"];
@@ -1532,6 +1539,9 @@ router.patch("/message-templates/:id", requireAuth, requireRole(...ADMIN_ROLES, 
 
 router.delete("/message-templates/:id", requireAuth, requireRole(...ADMIN_ROLES, ...STAFF_ROLES), async (req, res): Promise<void> => {
   const id = parseInt(String(req.params.id), 10);
+  const [versioned] = await db.select({ id: emailTemplateVersionsTable.id }).from(emailTemplateVersionsTable)
+    .where(eq(emailTemplateVersionsTable.templateId, id)).limit(1);
+  if (versioned) { res.status(409).json({ error: "EMAIL_VERSIONED_TEMPLATE_CANNOT_DELETE" }); return; }
   const [deleted] = await db
     .delete(messageTemplatesTable)
     .where(eq(messageTemplatesTable.id, id))

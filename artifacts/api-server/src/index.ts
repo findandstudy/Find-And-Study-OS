@@ -1428,8 +1428,9 @@ async function seedClaudeIntegration() {
     await pool.query(`ALTER TABLE email_queue ADD COLUMN IF NOT EXISTS max_retries INTEGER NOT NULL DEFAULT 3`);
     await pool.query(`ALTER TABLE email_queue ADD COLUMN IF NOT EXISTS next_retry_at TIMESTAMPTZ`);
     await pool.query(`CREATE INDEX IF NOT EXISTS email_queue_retry_idx ON email_queue (status, next_retry_at)`);
-    // Recover any rows stuck in 'processing' from a previous crashed worker.
-    await pool.query(`UPDATE email_queue SET status = 'pending' WHERE status = 'processing'`);
+    // A crashed sender may have received SMTP acceptance. Never blindly requeue
+    // processing rows here; the bounded email worker reconciles stale claims to
+    // UNKNOWN after the additive claim-column migration has been applied.
   } catch (err) {
     console.error("[migrate] email_queue retry columns:", err);
   }
