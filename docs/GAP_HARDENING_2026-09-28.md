@@ -207,6 +207,19 @@ verisi ve dış Academy alıcısı değiştirilmedi.
      listesi veya guideline içeriğini kopyalamıyor; yalnız key ve önceki/yeni
      sürüm zamanını kaydediyor.
 
+17. **AI extractor CRUD bütünlüğü ve evidence koruması**
+   - Extractor create/update/delete, default-scope devri ve audit sonucu tek
+     transaction'a alındı. Yönetim işlemleri advisory lock ile serialize ediliyor;
+     audit hatasında config veya default değişikliği rollback oluyor.
+   - Run geçmişi olan veya embed widget tarafından kullanılan extractor artık
+     fiziksel silinemiyor; `409 AI_EXTRACTOR_IN_USE` ile deactivation yoluna
+     yönlendiriliyor. Böylece run evidence cascade-delete ve aktif referansın
+     sessizce `NULL` olması engellendi.
+   - Yönetim request'i 256 KiB parser, 128 KiB serialized config, en fazla 200
+     field/rule/document-type ve bounded string limitlerine alındı. Beklenmeyen
+     DB/provider mesajları HTTP cevabında dışarı çıkarılmıyor; audit prompt veya
+     kural gövdesini kopyalamıyor.
+
 ## Doğrulama
 
 - Security regression: **115/115 PASS**.
@@ -256,6 +269,10 @@ verisi ve dış Academy alıcısı değiştirilmedi.
 - Genişletilmiş audit durability contract **48/48 PASS**; AI default save/reset
   rollback, stale-editor, payload-ceiling ve bounded-audit matrisi **5/5 PASS**;
   API ve Edcons typecheck **PASS**.
+- Genişletilmiş audit durability contract **55/55 PASS**; AI extractor create,
+  update, referenced-delete ve audit rollback matrisi **5/5 PASS**; extraction
+  compatibility **6/6 PASS**, education mapping/trigger **32/32 PASS**; API
+  typecheck ve production build **PASS**.
 - Migration authority/validation: **129/129 PASS**.
 - Disposable PostgreSQL 16.15: fresh `0→129`, upload grant migration, route E2E,
   DB helper fixture cleanup: **PASS**; cluster durduruldu.

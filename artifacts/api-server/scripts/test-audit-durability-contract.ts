@@ -14,6 +14,7 @@ const courseFinder = source("../src/routes/course-finder.ts");
 const apiIndex = source("../src/index.ts");
 const aiDefaults = source("../src/routes/ai-defaults.ts");
 const aiDefaultsUi = source("../../edcons/src/pages/admin/AiBuiltinDefaults.tsx");
+const aiExtractors = source("../src/routes/ai-extractors.ts");
 
 assert.match(auth, /\): Promise<void> \{\s*return db\.insert\(auditLogsTable\)/,
   "audit insert exposes a real awaitable completion boundary");
@@ -104,5 +105,17 @@ assert.match(aiDefaults, /Buffer\.byteLength\(JSON\.stringify\(value\)[\s\S]{0,8
   "AI config payload has a hard serialized-size ceiling");
 assert.equal((aiDefaultsUi.match(/expectedUpdatedAt: entry\.updatedAt/g) ?? []).length, 2,
   "AI defaults UI binds both save and reset to the version it displayed");
+assert.doesNotMatch(aiExtractors, /logAudit\(/,
+  "AI extractor mutations do not use the non-transactional legacy helper");
+for (const action of ["create_ai_extractor", "update_ai_extractor", "delete_ai_extractor"]) {
+  assert.match(aiExtractors, new RegExp(`await tx\\.insert\\(auditLogsTable\\)\\.values\\(\\{[^;]{0,260}action: "${action}"`),
+    `${action} is persisted before the extractor transaction commits`);
+}
+assert.match(aiExtractors, /AI_EXTRACTOR_IN_USE/,
+  "extractor deletion preserves run evidence and active widget references");
+assert.match(aiExtractors, /configJsonBody = json\(\{ limit: "256kb" \}\)/,
+  "extractor management payload has an early parser ceiling");
+assert.doesNotMatch(aiExtractors, /res\.status\(500\)\.json\(\{ error: msg \}\)/,
+  "extractor management does not disclose raw database errors");
 
-console.log("[audit-durability-contract] 48/48 PASS");
+console.log("[audit-durability-contract] 55/55 PASS");
