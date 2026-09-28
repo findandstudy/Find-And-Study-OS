@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { db, applicationsTable, notesTable, usersTable, studentsTable, leadsTable, agentsTable, commissionsTable, serviceFeesTable, programsTable, universitiesTable, pipelineStagesTable, applicationStageDocumentsTable, documentsTable, settingsTable, lifecycleCascadeStateTable, softDelete } from "@workspace/db";
+import { db, applicationsTable, notesTable, usersTable, studentsTable, leadsTable, agentsTable, commissionsTable, serviceFeesTable, programsTable, universitiesTable, pipelineStagesTable, applicationStageDocumentsTable, documentsTable, settingsTable, lifecycleCascadeStateTable, auditLogsTable, softDelete } from "@workspace/db";
 import { eq, sql, and, inArray, asc, desc, ilike, isNull, isNotNull, ne, lt, gte } from "drizzle-orm";
 import { normalizeGpaTo100 } from "../lib/gpaNormalize";
 import { requireAuth, requireRole, requireAgentStaffPermission, logAudit } from "../lib/auth";
@@ -2434,8 +2434,15 @@ router.delete("/applications/:id", requireAuth, requireRole(...STAFF_ROLES), req
     await tx.update(documentsTable)
       .set({ deletedAt: sql`now()` })
       .where(and(eq(documentsTable.applicationId, id), isNull(documentsTable.deletedAt)));
+    await tx.insert(auditLogsTable).values({
+      userId: req.user!.id,
+      action: "delete_application",
+      resource: "application",
+      resourceId: id,
+      changes: JSON.stringify({ soft: true }),
+      ipAddress: req.ip || null,
+    });
   });
-  await logAudit(req.user!.id, "delete_application", "application", id, { soft: true }, req.ip);
   res.sendStatus(204);
 });
 
@@ -2444,13 +2451,27 @@ router.delete("/applications/:id", requireAuth, requireRole(...STAFF_ROLES), req
 router.post("/applications/:id/purge", requireAuth, requireRole("super_admin"), async (req, res): Promise<void> => {
   const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
-  await db.transaction(async (tx) => {
+  const purged = await db.transaction(async (tx) => {
+    const [existing] = await tx.select({ id: applicationsTable.id })
+      .from(applicationsTable)
+      .where(eq(applicationsTable.id, id))
+      .for("update");
+    if (!existing) return false;
     await tx.delete(notesTable).where(and(eq(notesTable.resourceId, id), eq(notesTable.resourceType, "application")));
     await tx.delete(documentsTable).where(eq(documentsTable.applicationId, id));
     await tx.delete(applicationStageDocumentsTable).where(eq(applicationStageDocumentsTable.applicationId, id));
     await tx.delete(applicationsTable).where(eq(applicationsTable.id, id));
+    await tx.insert(auditLogsTable).values({
+      userId: req.user!.id,
+      action: "purge_application",
+      resource: "application",
+      resourceId: id,
+      changes: JSON.stringify({ hard: true }),
+      ipAddress: req.ip || null,
+    });
+    return true;
   });
-  await logAudit(req.user!.id, "purge_application", "application", id, { hard: true }, req.ip);
+  if (!purged) { res.status(404).json({ error: "Application not found" }); return; }
   res.json({ success: true });
 });
 

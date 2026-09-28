@@ -6,6 +6,7 @@ const auth = source("../src/lib/auth.ts");
 const tokens = source("../src/routes/apiTokens.ts");
 const email = source("../src/routes/emailAutomation.ts");
 const agents = source("../src/routes/agents.ts");
+const applications = source("../src/routes/applications.ts");
 
 assert.match(auth, /\): Promise<void> \{\s*return db\.insert\(auditLogsTable\)/,
   "audit insert exposes a real awaitable completion boundary");
@@ -28,5 +29,21 @@ assert.equal((agents.match(/await logAudit\([^\n]+"auth\.impersonate\.(?:start|e
   "all three legacy impersonation start/end paths await audit persistence");
 assert.match(agents, /await logAudit\(actor\.id, "agent\.academy_access\.update"/,
   "Academy privilege change awaits audit persistence");
+const destructiveApplicationRoutes = applications.slice(
+  applications.indexOf('router.delete("/applications/:id"'),
+  applications.indexOf('router.get("/applications/:id/notes"'),
+);
+assert.equal((destructiveApplicationRoutes.match(/await tx\.insert\(auditLogsTable\)\.values\(\{/g) ?? []).length, 2,
+  "application soft-delete and purge write audit in their mutation transaction");
+for (const action of ["delete_application", "purge_application"]) {
+  assert.match(destructiveApplicationRoutes, new RegExp(`action: "${action}"[\\s\\S]{0,100}resource: "application"`),
+    `${action} has a transaction-bound result receipt`);
+}
+assert.match(destructiveApplicationRoutes, /\.for\("update"\)/,
+  "hard purge locks and proves the application exists before deletion");
+assert.doesNotMatch(destructiveApplicationRoutes, /logAudit\(/,
+  "destructive application routes do not use the non-transactional legacy helper");
+assert.match(destructiveApplicationRoutes, /if \(!purged\) \{ res\.status\(404\)/,
+  "hard purge does not report success for a missing application");
 
-console.log("[audit-durability-contract] 15/15 PASS");
+console.log("[audit-durability-contract] 21/21 PASS");

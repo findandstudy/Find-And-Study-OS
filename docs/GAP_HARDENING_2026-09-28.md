@@ -139,6 +139,16 @@ verisi ve dış Academy alıcısı değiştirilmedi.
      tokenı iptal etmiyor; rotate eski tokenı iptal edip replacement bırakmıyor.
      Plain token hiçbir audit payload'una yazılmıyor.
 
+11. **Application destructive command + audit atomikliği**
+   - Tekil application soft-delete, bağlı document soft-delete ve
+     `delete_application` audit sonucu aynı transaction içinde.
+   - Super Admin hard purge; parent satırı transaction içinde `FOR UPDATE` ile
+     doğrulayıp notes/documents/stage documents/application ve
+     `purge_application` audit sonucunu birlikte commit ediyor.
+   - Audit insert hatası transaction'ı rollback ettirir; uygulama veya bağlı
+     kayıtlar audit kanıtı olmadan silinemez. Olmayan application purge artık
+     sahte başarı yerine `404` döndürüyor.
+
 ## Doğrulama
 
 - Security regression: **115/115 PASS**.
@@ -169,6 +179,8 @@ verisi ve dış Academy alıcısı değiştirilmedi.
 - API token transaction-bound audit contract **15/15 PASS**; gerçek Express route
   + in-memory rollback fault injection create/revoke/rotate **4/4 PASS**; API
   typecheck **PASS**.
+- Genişletilmiş audit durability contract **21/21 PASS**; application optimistic
+  concurrency **5/5 PASS**; API typecheck ve production build **PASS**.
 - Migration authority/validation: **129/129 PASS**.
 - Disposable PostgreSQL 16.15: fresh `0→129`, upload grant migration, route E2E,
   DB helper fixture cleanup: **PASS**; cluster durduruldu.
