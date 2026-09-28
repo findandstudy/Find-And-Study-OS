@@ -21,6 +21,7 @@ const leads = source("../src/routes/leads.ts");
 const tasks = source("../src/routes/tasks.ts");
 const campaigns = source("../src/routes/campaigns.ts");
 const cms = source("../src/routes/cms.ts");
+const portalExclusions = source("../src/routes/portalUniversityExclusions.ts");
 
 assert.match(auth, /\): Promise<void> \{\s*return db\.insert\(auditLogsTable\)/,
   "audit insert exposes a real awaitable completion boundary");
@@ -225,5 +226,17 @@ for (const action of [
   assert.match(cms, new RegExp(`await writeCmsAudit\\(tx, req, "${action}"`),
     `${action} persists its audit receipt before transaction commit`);
 }
+assert.doesNotMatch(portalExclusions, /logAudit\(/,
+  "portal exclusion mutations do not use the non-transactional legacy helper");
+assert.match(portalExclusions, /async function writeExclusionAudit[\s\S]*await tx\.insert\(auditLogsTable\)\.values/,
+  "portal exclusion audit helper requires the active transaction");
+for (const action of [
+  "create_portal_university_exclusion", "update_portal_university_exclusion", "delete_portal_university_exclusion",
+]) {
+  assert.match(portalExclusions, new RegExp(`await writeExclusionAudit\\(tx, req, "${action}"`),
+    `${action} persists its audit receipt before transaction commit`);
+}
+assert.match(portalExclusions, /pg_advisory_xact_lock\(hashtext/,
+  "portal exclusion identity changes serialize case-insensitive duplicate decisions");
 
-console.log("[audit-durability-contract] 111/111 PASS");
+console.log("[audit-durability-contract] 117/117 PASS");
