@@ -639,6 +639,11 @@ verisi ve dış Academy alıcısı değiştirilmedi.
   `13` sentetik user ve cache invalidation function kanıtı **PASS**. Geçici DB
   silindi ve yerel cluster kapatıldı. Bu staging off-host restore kanıtıdır;
   production offsite DR/RTO/RPO tatbikatı değildir.
+- Exact deployed release'e bağlı salt-okunur staging RBAC UAT yeniden koştu:
+  `11` sentetik rol, `126` login/GET authorization/logout kontrolü **PASS**.
+  Mutating workflow runner karantinası açılmadı. Koşu sonrasında app/DB healthy,
+  restart `0`, ledger `132`, fatal/unhandled log `0`; live integration, email,
+  background ve social provider/worker kapıları kapalı kaldı.
 
 ## 29 Eylül authentication audit ve password-reset yarış koruması
 
