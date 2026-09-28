@@ -657,8 +657,21 @@ verisi ve dış Academy alıcısı değiştirilmedi.
   kaybeden istek `400` alıyor ve hiçbir parola/session/audit mutation'ı üretmiyor.
 - Auth güvenlik sözleşmesi `39/39`, API typecheck ve birleşik security regression
   zinciri (hardening, replay, concurrency, cache, upload ve atomicity grupları;
-  audit durability `125/125`) **PASS**. Bu takip dilimi henüz staging'e
-  dağıtılmadı; production değiştirilmedi.
+  audit durability `125/125`) **PASS**.
+- Exact code-bearing `92f0eb001cadde8476047295b765d308759b4cc6` commit'i
+  `staging-20260928T212631Z-92f0eb001cad` release'i olarak staging'e alındı.
+  Geçişten önce gerçek `fasos_staging` veritabanının checksum'lı custom-format
+  yedeği alındı; network'süz geçici PostgreSQL `16.15` üzerinde `256` public
+  tablo ve `13` sentetik user restore edildi, arşiv envanterinde cache
+  invalidation function'ı ile üç trigger doğrulandı. DB container kimliği ve
+  başlangıç zamanı geçiş boyunca değişmedi.
+- Yeni release health/DB, `/healthz`, HSTS/noindex, altı canonical public rota,
+  non-root `10042:10042`, read-only rootfs, `CapDrop=ALL`,
+  `no-new-privileges`, restart `0`, migration source ledger `132`, üç cache
+  trigger'ı/function ve fatal/unhandled log yokluğu kontrollerini geçti. Exact
+  release'e bağlı salt-okunur RBAC UAT `11` rol ve `126` kontrolle yeniden
+  **PASS** oldu. Live integration, email delivery, background job ve social
+  provider/worker kapıları kapalı kaldı; production değiştirilmedi.
 
 Web-form üreticileri dağıtımdan önce `X-Webform-Timestamp`,
 `X-Webform-Request-Id` ve v1 zarfını imzalayan `X-Webform-Signature` sözleşmesine
