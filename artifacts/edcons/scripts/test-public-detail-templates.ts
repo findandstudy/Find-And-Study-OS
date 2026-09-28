@@ -222,7 +222,8 @@ test("identity uses a supplied logo or an explicitly decorative entity icon", ()
 test("public header reserves brand space and defers the large tenant logo beyond critical paint", () => {
   assert.match(publicLayout, /document\.readyState === "complete"/);
   assert.match(publicLayout, /window\.addEventListener\("load", schedule/);
-  assert.match(publicLayout, /requestIdleCallback\(reveal, \{ timeout: 2500 \}\)/);
+  assert.match(publicLayout, /setTimeout\(reveal, 5_000\)/);
+  assert.doesNotMatch(publicLayout, /requestIdleCallback\(reveal/);
   assert.match(publicLayout, /h-10 w-\[160px\].*sm:w-\[180px\]/);
   assert.match(publicLayout, /headerLogoLoaded \? "opacity-100" : "opacity-0"/);
   assert.match(publicLayout, /decoding="async"/);

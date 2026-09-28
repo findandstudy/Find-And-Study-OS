@@ -43,17 +43,18 @@ export function PublicLayout({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let timeoutId: ReturnType<typeof globalThis.setTimeout> | undefined;
-    let idleId: number | undefined;
     let disposed = false;
     const reveal = () => {
       if (!disposed) setHeaderLogoReady(true);
     };
     const schedule = () => {
-      if ("requestIdleCallback" in window) {
-        idleId = window.requestIdleCallback(reveal, { timeout: 2500 });
-      } else {
-        timeoutId = globalThis.setTimeout(reveal, 1200);
-      }
+      // The configured logo can be a comparatively large tenant asset. It is
+      // decorative during the initial public-page paint because the reserved
+      // brand mark and company name are already visible. An idle callback can
+      // run while critical route/locale chunks are still crossing a throttled
+      // connection, so use an explicit post-load delay instead of competing
+      // with the page's factual content and primary actions.
+      timeoutId = globalThis.setTimeout(reveal, 5_000);
     };
     if (document.readyState === "complete") schedule();
     else window.addEventListener("load", schedule, { once: true });
@@ -61,7 +62,6 @@ export function PublicLayout({ children }: { children: ReactNode }) {
       disposed = true;
       window.removeEventListener("load", schedule);
       if (timeoutId !== undefined) globalThis.clearTimeout(timeoutId);
-      if (idleId !== undefined && "cancelIdleCallback" in window) window.cancelIdleCallback(idleId);
     };
   }, []);
 
