@@ -358,4 +358,17 @@ for (const action of ["message_campaign.create", "message_campaign.retry_safe_fa
 assert.match(messageCampaigns, /const retriedCount = await db\.transaction\(async \(tx\) =>/,
   "safe message retry, campaign counters and audit use one transaction");
 
-console.log("[audit-durability-contract] 164/164 PASS");
+assert.match(applications, /async function writeLostCascadeAudit[\s\S]*await executor\.insert\(auditLogsTable\)\.values/,
+  "application lost-cascade audit uses the supplied mutation executor");
+assert.equal((applications.match(/await writeLostCascadeAudit\(/g) ?? []).length, 7,
+  "every lost-cascade result and explicit skip awaits its executor-bound audit");
+const lostCascadeCorridor = applications.slice(
+  applications.indexOf("async function cascadeApplicationLostStage"),
+  applications.indexOf('router.get("/applications"'),
+);
+assert.doesNotMatch(lostCascadeCorridor, /logAudit\(/,
+  "application lost-cascade lifecycle does not escape to the global audit helper");
+assert.match(applicationPatchRoute, /executor: tx,[\s\S]{0,160}cascadeApplicationLostStage\(lifecycleOpts\)/,
+  "single application stage cascade retains the parent transaction executor");
+
+console.log("[audit-durability-contract] 168/168 PASS");

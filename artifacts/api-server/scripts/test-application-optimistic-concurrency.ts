@@ -44,5 +44,20 @@ assert.doesNotMatch(
   /logAudit\(req\.user!\.id, "update_application"/,
   "application update does not use the non-transactional legacy audit helper",
 );
+assert.match(
+  source,
+  /async function writeLostCascadeAudit[\s\S]*await executor\.insert\(auditLogsTable\)\.values/,
+  "lost-cascade result audit uses the supplied transaction executor",
+);
+assert.equal(
+  (source.match(/await writeLostCascadeAudit\(/g) ?? []).length,
+  7,
+  "every lost-cascade outcome awaits its transaction-bound audit",
+);
+assert.match(
+  patch,
+  /executor: tx,[\s\S]{0,160}cascadeApplicationLostStage\(lifecycleOpts\)/,
+  "lost-cascade status and audit remain inside the application transaction",
+);
 
-console.log("[application-optimistic-concurrency] 10/10 PASS");
+console.log("[application-optimistic-concurrency] 13/13 PASS");

@@ -236,6 +236,25 @@ type LostCascadeTargets = {
 type DbTx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 type DbLike = typeof db | DbTx;
 
+async function writeLostCascadeAudit(
+  executor: DbLike,
+  actorUserId: number,
+  action: "stage.lost_cascade" | "stage.lost_cascade_skipped" | "stage.lost_cascade_restored",
+  resource: "application" | "student" | "lead",
+  resourceId: number,
+  changes: Record<string, unknown>,
+  ipAddress?: string,
+): Promise<void> {
+  await executor.insert(auditLogsTable).values({
+    userId: actorUserId,
+    action,
+    resource,
+    resourceId,
+    changes: JSON.stringify(changes),
+    ipAddress: ipAddress || null,
+  });
+}
+
 async function resolveLostCascadeTargets(applicationStage: string): Promise<LostCascadeTargets | null> {
   const [target] = await db.select({
     variant: pipelineStagesTable.variant,
@@ -350,7 +369,7 @@ async function cascadeApplicationLostStage(opts: {
       await executor.update(studentsTable)
         .set({ status: targets.studentStage })
         .where(and(eq(studentsTable.id, studentId), isNull(studentsTable.deletedAt)));
-      logAudit(actorUserId, "stage.lost_cascade", "student", studentId, {
+      await writeLostCascadeAudit(executor, actorUserId, "stage.lost_cascade", "student", studentId, {
         from: student.status,
         to: targets.studentStage,
         source: "application",
@@ -359,7 +378,7 @@ async function cascadeApplicationLostStage(opts: {
       }, ipAddress);
     }
   } else {
-    logAudit(actorUserId, "stage.lost_cascade_skipped", "student", studentId, {
+    await writeLostCascadeAudit(executor, actorUserId, "stage.lost_cascade_skipped", "student", studentId, {
       source: "application",
       sourceId: applicationId,
       reason: "student_has_non_lost_application",
@@ -370,7 +389,7 @@ async function cascadeApplicationLostStage(opts: {
   // direct-created applications deliberately remain unlinked; never guess a
   // lead from convertedStudentId because one student can have multiple leads.
   if (leadId == null) {
-    logAudit(actorUserId, "stage.lost_cascade_skipped", "application", applicationId, {
+    await writeLostCascadeAudit(executor, actorUserId, "stage.lost_cascade_skipped", "application", applicationId, {
       reason: "application_has_no_lead_link",
     }, ipAddress);
     return;
@@ -384,7 +403,7 @@ async function cascadeApplicationLostStage(opts: {
       isNull(leadsTable.deletedAt),
     ));
   if (!lead) {
-    logAudit(actorUserId, "stage.lost_cascade_skipped", "application", applicationId, {
+    await writeLostCascadeAudit(executor, actorUserId, "stage.lost_cascade_skipped", "application", applicationId, {
       leadId,
       reason: "lead_link_not_active_for_student",
     }, ipAddress);
@@ -410,7 +429,7 @@ async function cascadeApplicationLostStage(opts: {
     await executor.update(leadsTable)
       .set({ status: targets.leadStage })
       .where(and(eq(leadsTable.id, lead.id), isNull(leadsTable.deletedAt)));
-    logAudit(actorUserId, "stage.lost_cascade", "lead", lead.id, {
+    await writeLostCascadeAudit(executor, actorUserId, "stage.lost_cascade", "lead", lead.id, {
       from: lead.status,
       to: targets.leadStage,
       source: "application",
@@ -418,7 +437,7 @@ async function cascadeApplicationLostStage(opts: {
       rule: "all_lead_applications_lost",
     }, ipAddress);
   } else {
-    logAudit(actorUserId, "stage.lost_cascade_skipped", "lead", leadId, {
+    await writeLostCascadeAudit(executor, actorUserId, "stage.lost_cascade_skipped", "lead", leadId, {
       source: "application",
       sourceId: applicationId,
       reason: "lead_has_non_lost_application",
@@ -480,7 +499,7 @@ async function restoreApplicationLostCascade(opts: {
         .where(and(eq(leadsTable.id, entityId), isNull(leadsTable.deletedAt)));
     }
     await executor.delete(lifecycleCascadeStateTable).where(eq(lifecycleCascadeStateTable.id, state.id));
-    logAudit(actorUserId, "stage.lost_cascade_restored", entityType, entityId, {
+    await writeLostCascadeAudit(executor, actorUserId, "stage.lost_cascade_restored", entityType, entityId, {
       from: currentStatus,
       to: state.previousStatus,
       source: "application",

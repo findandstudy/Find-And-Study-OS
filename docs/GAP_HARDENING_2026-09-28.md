@@ -741,6 +741,19 @@ verisi ve dış Academy alıcısı değiştirilmedi.
   durability **164/164** ve API typecheck **PASS**. Bu dilim henüz staging'e
   dağıtılmadı; production değiştirilmedi.
 
+## 29 Eylül application lost-cascade audit bağı
+
+- Application stage değişiminde öğrenci/lead statüsünü LOST'a taşıyan veya eski
+  statüye geri alan lifecycle helper'ı artık global non-transactional audit
+  helper'ını kullanmıyor. Cascade, restore ve açık skip sonuçlarının yedisi de
+  çağıranın verdiği exact transaction executor'ına yazılıyor.
+- Böylece cascade audit insert'i başarısızsa application stage, lifecycle marker
+  ve student/lead status değişikliği birlikte rollback oluyor. Tekil ve bulk
+  stage yollarındaki mevcut `executor: tx` bağı korunuyor.
+- Application optimistic-concurrency contract **13/13**, audit durability
+  **168/168** ve API typecheck **PASS**. Bu dilim henüz staging'e dağıtılmadı;
+  production değiştirilmedi.
+
 ## 29 Eylül authentication audit ve password-reset yarış koruması
 
 - Login başarı/başarısızlık, e-posta doğrulama, parola sıfırlama isteği ve logout
