@@ -33,6 +33,7 @@ const universityBrowser = readFileSync(new URL("../src/pages/public/UniversityPr
 const programDialog = readFileSync(new URL("../src/pages/public/PublicProgramDetailDialog.tsx", import.meta.url), "utf8");
 const cityProgramCards = readFileSync(new URL("../src/pages/public/CityProgramCards.tsx", import.meta.url), "utf8");
 const main = readFileSync(new URL("../src/main.tsx", import.meta.url), "utf8");
+const publicLayout = readFileSync(new URL("../src/components/layout/PublicLayout.tsx", import.meta.url), "utf8");
 
 const cardFixture: PublicProgramCardData = {
   id: 145792, name: "Source program", canonicalPath: "/en/programs/source-program-145792",
@@ -216,6 +217,16 @@ test("identity uses a supplied logo or an explicitly decorative entity icon", ()
   assert.match(editorial, /failed !== src/);
   assert.match(program, /<DetailIdentity src=\{program\.universityLogoUrl\}/);
   assert.match(university, /<DetailIdentity src=\{university\.logoUrl\}/);
+});
+
+test("public header reserves brand space and defers the large tenant logo beyond critical paint", () => {
+  assert.match(publicLayout, /document\.readyState === "complete"/);
+  assert.match(publicLayout, /window\.addEventListener\("load", schedule/);
+  assert.match(publicLayout, /requestIdleCallback\(reveal, \{ timeout: 2500 \}\)/);
+  assert.match(publicLayout, /h-10 w-\[160px\].*sm:w-\[180px\]/);
+  assert.match(publicLayout, /headerLogoLoaded \? "opacity-100" : "opacity-0"/);
+  assert.match(publicLayout, /decoding="async"/);
+  assert.match(publicLayout, /fetchPriority="low"/);
 });
 
 test("all four detail heroes put the breadcrumb before their real title", () => {

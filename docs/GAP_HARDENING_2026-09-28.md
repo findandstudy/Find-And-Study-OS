@@ -428,6 +428,13 @@ verisi ve dış Academy alıcısı değiştirilmedi.
   güvenlik komutu ve hedefli audit/confidence komutu başarıyla tamamlandı.
 - Güncel frontend doğrulaması: i18n + **120/120** contract testi + typecheck +
   production build + sitemap + bundle budget **PASS**.
+- Public header, tenant logosunun yaklaşık `150 KB` ağırlığındaki kaynağını ilk
+  boya zincirinden çıkarmak için sabit boyutlu markalı fallback ile render edilir;
+  gerçek logo yalnız pencere yüklemesi sonrası idle zamanında alınır. Boyut rezervi
+  CLS üretmez, başarısız/geciken logoda okunabilir marka kimliği korunur. Hedefli
+  public-detail contract **44/44 PASS**; Edcons i18n + **121/121** contract testi +
+  typecheck + production build + sitemap + bundle budget **PASS**. Staging CWV
+  sonucu exact release dağıtımı sonrasında ayrıca kaydedilecektir.
 - Güncel API birleşik security regression: ana grup **118/118 PASS**; native
   hardening **118 PASS, 1 Windows symlink privilege SKIP**; tüm atomicity ve
   audit alt grupları **PASS**.
