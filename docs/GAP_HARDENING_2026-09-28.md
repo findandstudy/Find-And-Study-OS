@@ -728,6 +728,19 @@ verisi ve dış Academy alıcısı değiştirilmedi.
   **159/159**, API typecheck ve birleşik security regression zinciri **PASS**.
   Bu takip dilimi henüz staging'e dağıtılmadı; production değiştirilmedi.
 
+## 29 Eylül message campaign transaction bütünlüğü
+
+- WhatsApp message campaign kaydı, bounded alıcı ledger'i ve create audit sonucu
+  tek transaction'a alındı. Audit yazılamazsa kampanya veya kısmi alıcı seti
+  commit olmuyor.
+- Yalnız açık allowlist'teki kesin pre-send hata kodlarını yeniden kuyruğa alan
+  safe retry; alıcı durumları, kampanya sayaçları ve audit sonucunu aynı
+  transaction'da tamamlıyor. Ambiguous provider sonuçları retry dışı kalmaya
+  devam ediyor; dış gönderim kapıları açılmadı.
+- Retry fault-injection **2/2**, mevcut message-campaign contract **7/7**, audit
+  durability **164/164** ve API typecheck **PASS**. Bu dilim henüz staging'e
+  dağıtılmadı; production değiştirilmedi.
+
 ## 29 Eylül authentication audit ve password-reset yarış koruması
 
 - Login başarı/başarısızlık, e-posta doğrulama, parola sıfırlama isteği ve logout

@@ -5,10 +5,11 @@ import {
   messageCampaignRecipientsTable,
   messageTemplatesTable,
   channelAccountsTable,
+  auditLogsTable,
 } from "@workspace/db";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
-import { logAudit, requireAuth, requireRole } from "../lib/auth";
+import { requireAuth, requireRole } from "../lib/auth";
 import { ADMIN_ROLES, STAFF_ROLES } from "../lib/roles";
 import {
   loadWhatsAppEntitySnapshot,
@@ -18,6 +19,25 @@ import type { MessageTemplateEntityType } from "../lib/inbox/templateVariableCon
 import { resolveApprovedZernioTemplate } from "../lib/inbox/zernioTemplates";
 
 const router: IRouter = Router();
+
+type MessageCampaignTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+async function writeMessageCampaignAudit(
+  tx: MessageCampaignTransaction,
+  req: any,
+  action: string,
+  campaignId: number,
+  changes: Record<string, unknown>,
+): Promise<void> {
+  await tx.insert(auditLogsTable).values({
+    userId: req.user!.id,
+    action,
+    resource: "message_campaign",
+    resourceId: campaignId,
+    changes: JSON.stringify(changes),
+    ipAddress: req.ip || null,
+  });
+}
 
 const createCampaignSchema = z.object({
   name: z.string().trim().min(1).max(180).optional(),
@@ -174,7 +194,7 @@ router.post(
     const queuedCount = recipients.filter((row) => row.status === "queued").length;
     const skippedCount = recipients.length - queuedCount;
     const scheduledAt = parsed.data.scheduledAt || new Date();
-    const [campaign] = await db.transaction(async (tx) => {
+    const campaign = await db.transaction(async (tx) => {
       const [created] = await tx
         .insert(messageCampaignsTable)
         .values({
@@ -205,15 +225,7 @@ router.post(
           recipients.map((recipient) => ({ ...recipient, campaignId: created.id, channelAccountId: account.id })),
         );
       }
-      return [created];
-    });
-
-    logAudit(
-      req.user!.id,
-      "message_campaign.create",
-      "message_campaign",
-      campaign.id,
-      {
+      await writeMessageCampaignAudit(tx, req, "message_campaign.create", created.id, {
         entityType,
         templateId,
         totalCount: recipients.length,
@@ -221,9 +233,9 @@ router.post(
         skippedCount,
         scheduledAt: scheduledAt.toISOString(),
         channelAccountId: account.id,
-      },
-      req.ip,
-    );
+      });
+      return created;
+    });
 
     res.status(201).json({
       data: campaign,
@@ -307,42 +319,39 @@ router.post(
       res.status(404).json({ error: "campaign_not_found" });
       return;
     }
-    const retried = await db
-      .update(messageCampaignRecipientsTable)
-      .set({
-        status: "queued",
-        attempts: 0,
-        nextAttemptAt: new Date(),
-        errorCode: null,
-        errorDetail: null,
-      })
-      .where(and(
-        eq(messageCampaignRecipientsTable.campaignId, campaignId),
-        inArray(messageCampaignRecipientsTable.status, ["failed", "retrying"]),
-        inArray(messageCampaignRecipientsTable.errorCode, [...SAFE_BULK_RETRY_ERROR_CODES]),
-      ))
-      .returning({ id: messageCampaignRecipientsTable.id });
-    await db
-      .update(messageCampaignsTable)
-      .set(retried.length > 0 ? {
-        status: "queued",
-        completedAt: null,
-        queuedCount: sql`${messageCampaignsTable.queuedCount} + ${retried.length}`,
-        failedCount: sql`GREATEST(${messageCampaignsTable.failedCount} - ${retried.length}, 0)`,
-      } : {
-        status: campaign.status,
-        completedAt: campaign.completedAt,
-      })
-      .where(eq(messageCampaignsTable.id, campaignId));
-    logAudit(
-      req.user!.id,
-      "message_campaign.retry_safe_failures",
-      "message_campaign",
-      campaignId,
-      { retriedCount: retried.length },
-      req.ip,
-    );
-    res.json({ retried: retried.length });
+    const retriedCount = await db.transaction(async (tx) => {
+      const retried = await tx
+        .update(messageCampaignRecipientsTable)
+        .set({
+          status: "queued",
+          attempts: 0,
+          nextAttemptAt: new Date(),
+          errorCode: null,
+          errorDetail: null,
+        })
+        .where(and(
+          eq(messageCampaignRecipientsTable.campaignId, campaignId),
+          inArray(messageCampaignRecipientsTable.status, ["failed", "retrying"]),
+          inArray(messageCampaignRecipientsTable.errorCode, [...SAFE_BULK_RETRY_ERROR_CODES]),
+        ))
+        .returning({ id: messageCampaignRecipientsTable.id });
+      if (retried.length > 0) {
+        await tx
+          .update(messageCampaignsTable)
+          .set({
+            status: "queued",
+            completedAt: null,
+            queuedCount: sql`${messageCampaignsTable.queuedCount} + ${retried.length}`,
+            failedCount: sql`GREATEST(${messageCampaignsTable.failedCount} - ${retried.length}, 0)`,
+          })
+          .where(eq(messageCampaignsTable.id, campaignId));
+      }
+      await writeMessageCampaignAudit(tx, req, "message_campaign.retry_safe_failures", campaignId, {
+        retriedCount: retried.length,
+      });
+      return retried.length;
+    });
+    res.json({ retried: retriedCount });
   },
 );
 

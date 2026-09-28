@@ -28,6 +28,7 @@ const staffCards = source("../src/routes/staffCards.ts");
 const stageDocuments = source("../src/routes/applicationStageDocuments.ts");
 const missingDocsFulfillment = source("../src/lib/missingDocsFulfillment.ts");
 const personFeed = source("../src/routes/personFeed.ts");
+const messageCampaigns = source("../src/routes/messageCampaigns.ts");
 
 assert.match(auth, /\): Promise<void> \{\s*return db\.insert\(auditLogsTable\)/,
   "audit insert exposes a real awaitable completion boundary");
@@ -346,4 +347,15 @@ for (const action of ["create_note", "delete_note", "create_follow_up", "update_
 assert.match(personFeed, /fields: Object\.keys\(bodyParsed\.data\)\.sort\(\)/,
   "person feed follow-up audit records field names without note content");
 
-console.log("[audit-durability-contract] 159/159 PASS");
+assert.doesNotMatch(messageCampaigns, /logAudit\(/,
+  "message campaign mutations do not use the non-transactional legacy helper");
+assert.match(messageCampaigns, /async function writeMessageCampaignAudit[\s\S]*await tx\.insert\(auditLogsTable\)\.values/,
+  "message campaign audit helper requires the active transaction");
+for (const action of ["message_campaign.create", "message_campaign.retry_safe_failures"]) {
+  assert.match(messageCampaigns, new RegExp(`await writeMessageCampaignAudit\\(\\s*tx,\\s*req,\\s*"${action}"`),
+    `${action} persists its result before transaction commit`);
+}
+assert.match(messageCampaigns, /const retriedCount = await db\.transaction\(async \(tx\) =>/,
+  "safe message retry, campaign counters and audit use one transaction");
+
+console.log("[audit-durability-contract] 164/164 PASS");
