@@ -273,28 +273,33 @@ router.get("/staff-cards/:userId", requireAuth, requireStaffCardAdmin, async (re
 // Profil — lokasyon/timezone/baz alanlar
 // ─────────────────────────────────────────────────────────────────────────────
 const profileBodySchema = z.object({
-  firstName: z.string().trim().min(1).optional(),
-  lastName: z.string().trim().min(1).optional(),
-  phone: z.string().trim().nullable().optional(),
-  startDate: z.string().nullable().optional(),
-  homeAddress: z.string().nullable().optional(),
-  emergencyContactName: z.string().nullable().optional(),
-  emergencyContactPhone: z.string().nullable().optional(),
-  locationCountry: z.string().nullable().optional(),
-  locationCity: z.string().nullable().optional(),
-  timezone: z.string().nullable().optional(),
+  firstName: z.string().trim().min(1).max(120).optional(),
+  lastName: z.string().trim().min(1).max(120).optional(),
+  phone: z.string().trim().max(40).nullable().optional(),
+  startDate: optionalDateSchema,
+  homeAddress: z.string().trim().max(1000).nullable().optional(),
+  emergencyContactName: z.string().trim().max(120).nullable().optional(),
+  emergencyContactPhone: z.string().trim().max(40).nullable().optional(),
+  locationCountry: z.string().trim().max(120).nullable().optional(),
+  locationCity: z.string().trim().max(120).nullable().optional(),
+  timezone: z.string().trim().max(100).nullable().optional(),
   isActive: z.boolean().optional(),
 });
 
 router.put("/staff-cards/:userId/profile", requireAuth, requireStaffCardAdmin, async (req, res): Promise<void> => {
-  const userId = parseInt(String(req.params.userId), 10);
+  const userId = parsePositiveRouteId(req.params.userId);
+  if (!userId) { res.status(400).json({ error: "Invalid user id" }); return; }
   const parsed = profileBodySchema.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: "Invalid body" }); return; }
   const updates = parsed.data;
   if (Object.keys(updates).length === 0) { res.status(400).json({ error: "No fields" }); return; }
-  const [u] = await db.update(usersTable).set(updates).where(eq(usersTable.id, userId)).returning();
+  const u = await db.transaction(async (tx) => {
+    const [updated] = await tx.update(usersTable).set(updates).where(eq(usersTable.id, userId)).returning();
+    if (!updated) return null;
+    await writeStaffCardAudit(tx, req, "staff_card.profile.update", userId, { fields: Object.keys(updates).sort() });
+    return updated;
+  });
   if (!u) { res.status(404).json({ error: "User not found" }); return; }
-  logAudit(req.user!.id, "staff_card.profile.update", "user", userId, updates, req.ip);
   res.json({ success: true });
 });
 
@@ -309,9 +314,9 @@ const scheduleEntrySchema = z.object({
 }).refine(s => s.endMinutes > s.startMinutes, { message: "endMinutes must be greater than startMinutes" });
 
 router.put("/staff-cards/:userId/schedule", requireAuth, requireStaffCardAdmin, async (req, res): Promise<void> => {
-  const userId = parseInt(String(req.params.userId), 10);
-  if (Number.isNaN(userId)) { res.status(400).json({ error: "Invalid user id" }); return; }
-  const parsed = z.object({ entries: z.array(scheduleEntrySchema) }).safeParse(req.body);
+  const userId = parsePositiveRouteId(req.params.userId);
+  if (!userId) { res.status(400).json({ error: "Invalid user id" }); return; }
+  const parsed = z.object({ entries: z.array(scheduleEntrySchema).max(100) }).safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.issues[0]?.message || "Invalid body" }); return; }
   // Overlap validation per weekday
   const byDay: Record<number, Array<{ s: number; e: number }>> = {};
@@ -335,8 +340,8 @@ router.put("/staff-cards/:userId/schedule", requireAuth, requireStaffCardAdmin, 
         parsed.data.entries.map(e => ({ userId, weekday: e.weekday, startMinutes: e.startMinutes, endMinutes: e.endMinutes }))
       );
     }
+    await writeStaffCardAudit(tx, req, "staff_card.schedule.update", userId, { count: parsed.data.entries.length });
   });
-  logAudit(req.user!.id, "staff_card.schedule.update", "user", userId, { count: parsed.data.entries.length }, req.ip);
   res.json({ success: true });
 });
 
@@ -344,12 +349,13 @@ router.put("/staff-cards/:userId/schedule", requireAuth, requireStaffCardAdmin, 
 // Diller
 // ─────────────────────────────────────────────────────────────────────────────
 router.put("/staff-cards/:userId/languages", requireAuth, requireStaffCardAdmin, async (req, res): Promise<void> => {
-  const userId = parseInt(String(req.params.userId), 10);
+  const userId = parsePositiveRouteId(req.params.userId);
+  if (!userId) { res.status(400).json({ error: "Invalid user id" }); return; }
   const parsed = z.object({
     languages: z.array(z.object({
       language: z.string().trim().min(1).max(60),
       proficiency: z.string().trim().max(40).nullable().optional(),
-    })),
+    })).max(50),
   }).safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: "Invalid body" }); return; }
   await db.transaction(async (tx) => {
@@ -359,8 +365,8 @@ router.put("/staff-cards/:userId/languages", requireAuth, requireStaffCardAdmin,
         parsed.data.languages.map(l => ({ userId, language: l.language, proficiency: l.proficiency || null }))
       );
     }
+    await writeStaffCardAudit(tx, req, "staff_card.languages.update", userId, { count: parsed.data.languages.length });
   });
-  logAudit(req.user!.id, "staff_card.languages.update", "user", userId, { count: parsed.data.languages.length }, req.ip);
   res.json({ success: true });
 });
 
@@ -376,10 +382,10 @@ router.get("/staff-cards/:userId/countries", requireAuth, requireStaffCardAdmin,
 });
 
 router.put("/staff-cards/:userId/countries", requireAuth, requireStaffCardAdmin, async (req, res): Promise<void> => {
-  const userId = parseInt(String(req.params.userId), 10);
-  if (Number.isNaN(userId)) { res.status(400).json({ error: "Invalid user id" }); return; }
+  const userId = parsePositiveRouteId(req.params.userId);
+  if (!userId) { res.status(400).json({ error: "Invalid user id" }); return; }
   const parsed = z.object({
-    countries: z.array(z.string().trim().min(1).max(100)),
+    countries: z.array(z.string().trim().min(1).max(100)).max(100),
   }).safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: "Invalid body" }); return; }
   const deduped = Array.from(new Set(parsed.data.countries));
@@ -390,8 +396,8 @@ router.put("/staff-cards/:userId/countries", requireAuth, requireStaffCardAdmin,
         deduped.map(country => ({ userId, country }))
       );
     }
+    await writeStaffCardAudit(tx, req, "staff_card.countries.update", userId, { count: deduped.length });
   });
-  logAudit(req.user!.id, "staff_card.countries.update", "user", userId, { count: deduped.length }, req.ip);
   res.json({ success: true });
 });
 
@@ -533,21 +539,35 @@ router.get("/staff-cards/:userId/documents/:docId/download", requireAuth, requir
 // Atanmış acenteler — agency_assigned_staff M:N
 // ─────────────────────────────────────────────────────────────────────────────
 router.post("/staff-cards/:userId/assigned-agents", requireAuth, requireStaffCardAdmin, async (req, res): Promise<void> => {
-  const userId = parseInt(String(req.params.userId), 10);
+  const userId = parsePositiveRouteId(req.params.userId);
+  if (!userId) { res.status(400).json({ error: "Invalid user id" }); return; }
   const parsed = z.object({ agentId: z.number().int().positive(), isPrimary: z.boolean().optional() }).safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: "Invalid body" }); return; }
   const { agentId, isPrimary } = parsed.data;
-  await db.insert(agencyAssignedStaffTable).values({ userId, agentId, isPrimary: !!isPrimary }).onConflictDoNothing();
-  logAudit(req.user!.id, "staff_card.assigned_agent.add", "user", userId, { agentId, isPrimary: !!isPrimary }, req.ip);
+  await db.transaction(async (tx) => {
+    const inserted = await tx.insert(agencyAssignedStaffTable)
+      .values({ userId, agentId, isPrimary: !!isPrimary })
+      .onConflictDoNothing()
+      .returning({ agentId: agencyAssignedStaffTable.agentId });
+    if (inserted.length > 0) {
+      await writeStaffCardAudit(tx, req, "staff_card.assigned_agent.add", userId, { agentId, isPrimary: !!isPrimary });
+    }
+  });
   res.json({ success: true });
 });
 
 router.delete("/staff-cards/:userId/assigned-agents/:agentId", requireAuth, requireStaffCardAdmin, async (req, res): Promise<void> => {
-  const userId = parseInt(String(req.params.userId), 10);
-  const agentId = parseInt(String(req.params.agentId), 10);
-  await db.delete(agencyAssignedStaffTable)
-    .where(and(eq(agencyAssignedStaffTable.userId, userId), eq(agencyAssignedStaffTable.agentId, agentId)));
-  logAudit(req.user!.id, "staff_card.assigned_agent.remove", "user", userId, { agentId }, req.ip);
+  const userId = parsePositiveRouteId(req.params.userId);
+  const agentId = parsePositiveRouteId(req.params.agentId);
+  if (!userId || !agentId) { res.status(400).json({ error: "Invalid id" }); return; }
+  await db.transaction(async (tx) => {
+    const deleted = await tx.delete(agencyAssignedStaffTable)
+      .where(and(eq(agencyAssignedStaffTable.userId, userId), eq(agencyAssignedStaffTable.agentId, agentId)))
+      .returning({ agentId: agencyAssignedStaffTable.agentId });
+    if (deleted.length > 0) {
+      await writeStaffCardAudit(tx, req, "staff_card.assigned_agent.remove", userId, { agentId });
+    }
+  });
   res.sendStatus(204);
 });
 
@@ -555,7 +575,8 @@ router.delete("/staff-cards/:userId/assigned-agents/:agentId", requireAuth, requ
 // Atanmış öğrenciler — students.assigned_to_id
 // ─────────────────────────────────────────────────────────────────────────────
 router.post("/staff-cards/:userId/assigned-students", requireAuth, requireStaffCardAdmin, async (req, res): Promise<void> => {
-  const userId = parseInt(String(req.params.userId), 10);
+  const userId = parsePositiveRouteId(req.params.userId);
+  if (!userId) { res.status(400).json({ error: "Invalid user id" }); return; }
   const parsed = z.object({ studentId: z.number().int().positive() }).safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: "Invalid body" }); return; }
   const { studentId } = parsed.data;
@@ -574,18 +595,19 @@ router.post("/staff-cards/:userId/assigned-students", requireAuth, requireStaffC
         throwOnError: true,
       });
     }
+    await writeStaffCardAudit(tx, req, "staff_card.assigned_student.add", userId, { studentId });
     return student;
   });
   if (!updated) { res.status(404).json({ error: "Student not found" }); return; }
-  logAudit(req.user!.id, "staff_card.assigned_student.add", "user", userId, { studentId }, req.ip);
   res.json({ success: true });
 });
 
 router.delete("/staff-cards/:userId/assigned-students/:studentId", requireAuth, requireStaffCardAdmin, async (req, res): Promise<void> => {
-  const userId = parseInt(String(req.params.userId), 10);
-  const studentId = parseInt(String(req.params.studentId), 10);
+  const userId = parsePositiveRouteId(req.params.userId);
+  const studentId = parsePositiveRouteId(req.params.studentId);
+  if (!userId || !studentId) { res.status(400).json({ error: "Invalid id" }); return; }
   const canCascadeRemove = await userHasPermission({ id: req.user!.id, role: req.user!.role }, "records.cascade_assignment");
-  const changed = await db.transaction(async (tx) => {
+  await db.transaction(async (tx) => {
     const [student] = await tx.update(studentsTable).set({ assignedToId: null })
       .where(and(eq(studentsTable.id, studentId), eq(studentsTable.assignedToId, userId)))
       .returning({ id: studentsTable.id });
@@ -600,9 +622,9 @@ router.delete("/staff-cards/:userId/assigned-students/:studentId", requireAuth, 
         throwOnError: true,
       });
     }
+    await writeStaffCardAudit(tx, req, "staff_card.assigned_student.remove", userId, { studentId });
     return true;
   });
-  if (changed) logAudit(req.user!.id, "staff_card.assigned_student.remove", "user", userId, { studentId }, req.ip);
   res.sendStatus(204);
 });
 

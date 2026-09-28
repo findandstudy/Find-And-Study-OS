@@ -1,10 +1,29 @@
-import { db, leadAssignmentRulesTable, leadsTable, studentsTable, applicationsTable, universitiesTable, type LeadAssignmentRule } from "@workspace/db";
+import { db, auditLogsTable, leadAssignmentRulesTable, leadsTable, studentsTable, applicationsTable, universitiesTable, type LeadAssignmentRule } from "@workspace/db";
 import { and, asc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import { logAudit } from "./auth";
 import { resolveAgencyPlatformAssignee } from "./agencyStaff";
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 type DbLike = typeof db | Tx;
+
+async function writeAssignmentAudit(
+  executor: DbLike,
+  actorUserId: number | null,
+  action: string,
+  resource: string,
+  resourceId: number,
+  changes: Record<string, unknown>,
+  ipAddress?: string,
+): Promise<void> {
+  await executor.insert(auditLogsTable).values({
+    userId: actorUserId,
+    action,
+    resource,
+    resourceId,
+    changes: JSON.stringify(changes),
+    ipAddress: ipAddress || null,
+  });
+}
 
 interface LeadLike {
   id: number;
@@ -240,7 +259,7 @@ export async function cascadeLeadAssignment(opts: {
       await executor.update(studentsTable)
         .set({ assignedToId: newAssignedToId })
         .where(eq(studentsTable.id, student.id));
-      logAudit(actorUserId, nullFillOnly ? "assignment.null_fill_cascade" : "assignment.cascade", "student", student.id, {
+      await writeAssignmentAudit(executor, actorUserId, nullFillOnly ? "assignment.null_fill_cascade" : "assignment.cascade", "student", student.id, {
         from: student.assignedToId ?? null,
         to: newAssignedToId ?? null,
         source: "lead",
@@ -261,7 +280,7 @@ export async function cascadeLeadAssignment(opts: {
       await executor.update(leadsTable)
         .set({ assignedToId: newAssignedToId })
         .where(eq(leadsTable.id, siblingLead.id));
-      logAudit(actorUserId, nullFillOnly ? "assignment.null_fill_cascade" : "assignment.cascade", "lead", siblingLead.id, {
+      await writeAssignmentAudit(executor, actorUserId, nullFillOnly ? "assignment.null_fill_cascade" : "assignment.cascade", "lead", siblingLead.id, {
         from: siblingLead.assignedToId ?? null,
         to: newAssignedToId ?? null,
         source: "lead",
@@ -280,7 +299,7 @@ export async function cascadeLeadAssignment(opts: {
       await executor.update(applicationsTable)
         .set({ assignedToId: newAssignedToId })
         .where(eq(applicationsTable.id, app.id));
-      logAudit(actorUserId, nullFillOnly ? "assignment.null_fill_cascade" : "assignment.cascade", "application", app.id, {
+      await writeAssignmentAudit(executor, actorUserId, nullFillOnly ? "assignment.null_fill_cascade" : "assignment.cascade", "application", app.id, {
         from: app.assignedToId ?? null,
         to: newAssignedToId ?? null,
         source: "lead",
@@ -332,7 +351,7 @@ export async function cascadeStudentAssignment(opts: {
       await executor.update(leadsTable)
         .set({ assignedToId: newAssignedToId })
         .where(eq(leadsTable.id, lead.id));
-      logAudit(actorUserId, nullFillOnly ? "assignment.null_fill_cascade" : "assignment.cascade", "lead", lead.id, {
+      await writeAssignmentAudit(executor, actorUserId, nullFillOnly ? "assignment.null_fill_cascade" : "assignment.cascade", "lead", lead.id, {
         from: lead.assignedToId ?? null,
         to: newAssignedToId ?? null,
         source: "student",
@@ -351,7 +370,7 @@ export async function cascadeStudentAssignment(opts: {
       await executor.update(applicationsTable)
         .set({ assignedToId: newAssignedToId })
         .where(eq(applicationsTable.id, app.id));
-      logAudit(actorUserId, nullFillOnly ? "assignment.null_fill_cascade" : "assignment.cascade", "application", app.id, {
+      await writeAssignmentAudit(executor, actorUserId, nullFillOnly ? "assignment.null_fill_cascade" : "assignment.cascade", "application", app.id, {
         from: app.assignedToId ?? null,
         to: newAssignedToId ?? null,
         source: "student",
@@ -498,7 +517,7 @@ export async function cascadeApplicationAssignment(opts: {
       await executor.update(studentsTable)
         .set({ assignedToId: newAssignedToId })
         .where(eq(studentsTable.id, student.id));
-      logAudit(actorUserId, nullFillOnly ? "assignment.null_fill_cascade" : "assignment.cascade", "student", student.id, {
+      await writeAssignmentAudit(executor, actorUserId, nullFillOnly ? "assignment.null_fill_cascade" : "assignment.cascade", "student", student.id, {
         from: student.assignedToId ?? null,
         to: newAssignedToId ?? null,
         source: "application",
@@ -517,7 +536,7 @@ export async function cascadeApplicationAssignment(opts: {
       await executor.update(leadsTable)
         .set({ assignedToId: newAssignedToId })
         .where(eq(leadsTable.id, lead.id));
-      logAudit(actorUserId, nullFillOnly ? "assignment.null_fill_cascade" : "assignment.cascade", "lead", lead.id, {
+      await writeAssignmentAudit(executor, actorUserId, nullFillOnly ? "assignment.null_fill_cascade" : "assignment.cascade", "lead", lead.id, {
         from: lead.assignedToId ?? null,
         to: newAssignedToId ?? null,
         source: "application",
@@ -538,7 +557,7 @@ export async function cascadeApplicationAssignment(opts: {
       await executor.update(applicationsTable)
         .set({ assignedToId: newAssignedToId })
         .where(eq(applicationsTable.id, app.id));
-      logAudit(actorUserId, nullFillOnly ? "assignment.null_fill_cascade" : "assignment.cascade", "application", app.id, {
+      await writeAssignmentAudit(executor, actorUserId, nullFillOnly ? "assignment.null_fill_cascade" : "assignment.cascade", "application", app.id, {
         from: app.assignedToId ?? null,
         to: newAssignedToId ?? null,
         source: "application",
