@@ -5,8 +5,8 @@ import { readIndexableUniversityProgramIds } from "../lib/publicWebDiscoveryRead
 import { parsePublicWebInternalLinkMode } from "../lib/publicCatalogRouteContract";
 import { readPublicCatalogPrices } from "../lib/publicCatalogPriceReadModel";
 import { projectPublicTuition } from "../lib/publicCatalogTuition";
-import { getPublicCatalogCacheGeneration } from "../lib/publicCatalogRenderReadModel";
-import { db, programsTable, programTranslationsTable, universitiesTable, wishlistsTable, applicationsTable, commissionsTable, serviceFeesTable, studentsTable, pipelineStagesTable, settingsTable, documentsTable } from "@workspace/db";
+import { getPublicCatalogCacheGeneration, invalidatePublicCatalogRenderCache } from "../lib/publicCatalogRenderReadModel";
+import { db, programsTable, programTranslationsTable, universitiesTable, wishlistsTable, applicationsTable, commissionsTable, serviceFeesTable, studentsTable, pipelineStagesTable, settingsTable, documentsTable, auditLogsTable } from "@workspace/db";
 import { eq, ilike, sql, and, inArray, isNull, desc, or } from "drizzle-orm";
 import { requireAuth, requireRole, requireAgentStaffPermission, logAudit } from "../lib/auth";
 import { STAFF_ROLES, AGENT_ROLES, ADMIN_ROLES, isAgentRole } from "../lib/roles";
@@ -696,7 +696,7 @@ router.patch(
       return;
     }
 
-    const [existing] = await db.select({ id: settingsTable.id }).from(settingsTable).limit(1);
+    const [existing] = await db.select({ id: settingsTable.id, updatedAt: settingsTable.updatedAt }).from(settingsTable).limit(1);
     const update = {
       // New saves are represented entirely by a default rule plus per-country
       // overrides. Clearing the legacy allow-list avoids two competing sources.
@@ -705,15 +705,35 @@ router.patch(
       publicCatalogCountryRules: countryRules,
       updatedAt: new Date(),
     };
-    if (existing) {
-      await db.update(settingsTable).set(update).where(eq(settingsTable.id, existing.id));
-    } else {
-      await db.insert(settingsTable).values(update);
+    const saved = await db.transaction(async (tx) => {
+      const [row] = existing
+        ? await tx.update(settingsTable).set(update)
+          .where(and(eq(settingsTable.id, existing.id), eq(settingsTable.updatedAt, existing.updatedAt)))
+          .returning({ id: settingsTable.id })
+        : await tx.insert(settingsTable).values(update).returning({ id: settingsTable.id });
+      if (!row) return null;
+      await tx.insert(auditLogsTable).values({
+        userId: req.user!.id,
+        action: "update_public_catalog_settings",
+        resource: "settings",
+        resourceId: row.id,
+        changes: JSON.stringify({
+          allowedCountries: update.publicCatalogAllowedCountries,
+          allowedUniversityTypes: update.publicCatalogAllowedUniversityTypes,
+          countryRules: update.publicCatalogCountryRules,
+        }),
+        ipAddress: req.ip || null,
+      });
+      return row;
+    });
+    if (!saved) {
+      res.status(409).json({ error: "public_catalog_settings_version_conflict" });
+      return;
     }
     clearPublicCatalogPolicyCache();
     courseFinderFilterCache.clear();
+    invalidatePublicCatalogRenderCache({ entityType: "catalog" });
     const value = await getPublicCatalogPolicy();
-    logAudit(req.user!.id, "update_public_catalog_settings", "settings", existing?.id, value, req.ip);
     res.json(value);
   },
 );

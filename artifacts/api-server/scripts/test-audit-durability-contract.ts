@@ -10,6 +10,8 @@ const applications = source("../src/routes/applications.ts");
 const channelAccounts = source("../src/routes/channelAccounts.ts");
 const integrations = source("../src/routes/integrations.ts");
 const pipeline = source("../src/routes/pipeline.ts");
+const courseFinder = source("../src/routes/course-finder.ts");
+const apiIndex = source("../src/index.ts");
 
 assert.match(auth, /\): Promise<void> \{\s*return db\.insert\(auditLogsTable\)/,
   "audit insert exposes a real awaitable completion boundary");
@@ -77,5 +79,16 @@ for (const action of ["pipeline_stages.updated", "pipeline_stage_email.configure
 }
 assert.match(pipeline, /if \(stages\.length > 100\)/,
   "pipeline audit and replacement input has a hard stage-count ceiling");
+const publicSettingsRoute = courseFinder.slice(courseFinder.indexOf("router.patch("), courseFinder.indexOf('router.get("/course-finder/students"'));
+assert.doesNotMatch(publicSettingsRoute, /logAudit\(/,
+  "public catalogue settings do not use the non-transactional legacy helper");
+assert.match(publicSettingsRoute, /await tx\.insert\(auditLogsTable\)\.values\([\s\S]*action: "update_public_catalog_settings"/,
+  "public catalogue settings persist audit before the mutation transaction commits");
+assert.match(publicSettingsRoute, /public_catalog_settings_version_conflict/,
+  "public catalogue settings reject stale overwrites");
+assert.match(publicSettingsRoute, /invalidatePublicCatalogRenderCache\(\{ entityType: "catalog" \}\)/,
+  "public catalogue policy updates publish cross-process invalidation");
+assert.match(apiIndex, /publicCatalogInvalidationBus\.subscribe\([\s\S]{0,400}clearPublicCatalogPolicyCache\(\)/,
+  "cross-process catalogue invalidation also clears the policy cache");
 
-console.log("[audit-durability-contract] 37/37 PASS");
+console.log("[audit-durability-contract] 42/42 PASS");

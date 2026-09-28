@@ -41,9 +41,11 @@ assert.match(bootstrap, /await inboxBus\.shutdown\(\)/, "inbox listener is close
 assert.match(bootstrap, /await notificationBus\.shutdown\(\)/, "notification listener is closed during shutdown");
 assert.match(bootstrap, /notificationBus\.subscribe\(event => invalidateNotificationCounts\(event\.userId\)\)/,
   "remote notification events invalidate the process-local count cache");
-assert.match(bootstrap, /publicCatalogInvalidationBus\.subscribe\(applyPublicCatalogRenderCacheInvalidation\)/,
+assert.match(bootstrap, /publicCatalogInvalidationBus\.subscribe\(invalidation => \{[\s\S]{0,200}applyPublicCatalogRenderCacheInvalidation\(invalidation\)/,
   "public catalog invalidation listener is explicitly started during bootstrap");
+assert.match(bootstrap, /publicCatalogInvalidationBus\.subscribe\(invalidation => \{[\s\S]{0,400}clearPublicCatalogPolicyCache\(\)/,
+  "remote catalogue policy changes clear the process-local policy cache");
 assert.match(bootstrap, /await publicCatalogInvalidationBus\.shutdown\(\)/,
   "public catalog invalidation listener is closed during shutdown");
 
-console.log("[import-lifecycle] 18/18 PASS");
+console.log("[import-lifecycle] 19/19 PASS");

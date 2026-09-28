@@ -3435,16 +3435,22 @@ async function seedClaudeIntegration() {
 
   serveStaticFrontend();
 
-  const [{ feedBus }, { inboxBus }, { notificationBus }, { invalidateNotificationCounts }, { publicCatalogInvalidationBus }, { applyPublicCatalogRenderCacheInvalidation }] = await Promise.all([
+  const [{ feedBus }, { inboxBus }, { notificationBus }, { invalidateNotificationCounts }, { publicCatalogInvalidationBus }, { applyPublicCatalogRenderCacheInvalidation }, { clearPublicCatalogPolicyCache }] = await Promise.all([
     import("./lib/feedBus"),
     import("./lib/inbox/eventBus"),
     import("./lib/notificationBus"),
     import("./lib/notificationCountCache"),
     import("./lib/publicCatalogInvalidationBus"),
     import("./lib/publicCatalogRenderReadModel"),
+    import("./lib/publicCatalogQueryPolicy"),
   ]);
   const unsubscribeNotificationCountInvalidation = notificationBus.subscribe(event => invalidateNotificationCounts(event.userId));
-  const unsubscribePublicCatalogInvalidation = publicCatalogInvalidationBus.subscribe(applyPublicCatalogRenderCacheInvalidation);
+  const unsubscribePublicCatalogInvalidation = publicCatalogInvalidationBus.subscribe(invalidation => {
+    applyPublicCatalogRenderCacheInvalidation(invalidation);
+    if (!invalidation.entityType || invalidation.entityType === "catalog" || invalidation.entityType === "all") {
+      clearPublicCatalogPolicyCache();
+    }
+  });
   let shuttingDown = false;
   let httpServer: ReturnType<typeof app.listen> | null = null;
   const shutdown = async (signal: string, exitCode = 0) => {

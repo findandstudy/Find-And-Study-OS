@@ -185,6 +185,17 @@ verisi ve dış Academy alıcısı değiştirilmedi.
      içermiyor. Girdi ve audit boyutunu sınırlamak için pipeline başına hard 100
      stage tavanı eklendi.
 
+15. **Public katalog policy audit ve processler arası invalidasyon**
+   - Course Finder/public görünürlük policy mutation'ı ile audit sonucu aynı
+     transaction'a alındı. Audit insert hatasında ülke/tür görünürlük ayarı
+     değişmiyor; `updatedAt` drift'i eski yazıyı ezmek yerine `409` döndürüyor.
+   - Başarılı commit sonrasında mevcut public katalog invalidation bus'ı
+     kullanılıyor; yeni paralel cache altyapısı kurulmadı. Diğer API process'leri
+     SSR/Course Finder generation cache'inin yanında process-local policy
+     cache'ini de temizliyor.
+   - Audit yalnız normalize edilmiş ülke, üniversite türü ve ülke kuralı policy'sini
+     içeriyor; credential veya kullanıcı verisi içermiyor.
+
 ## Doğrulama
 
 - Security regression: **115/115 PASS**.
@@ -228,6 +239,9 @@ verisi ve dış Academy alıcısı değiştirilmedi.
   audit rollback/bounded-input matrisi **3/3 PASS**; stage completion-target
   **3/3 PASS**, portal trigger policy **4/4 PASS** ve disposable PostgreSQL stage
   behavior regresyonu **PASS**; API typecheck ve production build **PASS**.
+- Genişletilmiş audit durability contract **42/42 PASS**; public katalog policy
+  rollback/stale-write/success matrisi **3/3 PASS**; import/listener lifecycle
+  **19/19 PASS**; API typecheck ve production build **PASS**.
 - Migration authority/validation: **129/129 PASS**.
 - Disposable PostgreSQL 16.15: fresh `0→129`, upload grant migration, route E2E,
   DB helper fixture cleanup: **PASS**; cluster durduruldu.
