@@ -7,6 +7,7 @@ const tokens = source("../src/routes/apiTokens.ts");
 const email = source("../src/routes/emailAutomation.ts");
 const agents = source("../src/routes/agents.ts");
 const applications = source("../src/routes/applications.ts");
+const channelAccounts = source("../src/routes/channelAccounts.ts");
 
 assert.match(auth, /\): Promise<void> \{\s*return db\.insert\(auditLogsTable\)/,
   "audit insert exposes a real awaitable completion boundary");
@@ -45,5 +46,16 @@ assert.doesNotMatch(destructiveApplicationRoutes, /logAudit\(/,
   "destructive application routes do not use the non-transactional legacy helper");
 assert.match(destructiveApplicationRoutes, /if \(!purged\) \{ res\.status\(404\)/,
   "hard purge does not report success for a missing application");
+assert.doesNotMatch(channelAccounts, /logAudit\(/,
+  "channel account mutations do not use the non-transactional legacy helper");
+assert.match(channelAccounts, /async function writeAccountAudit[\s\S]*await tx\.insert\(auditLogsTable\)\.values/,
+  "channel account audit helper requires the active transaction");
+for (const action of [
+  "create_channel_account", "update_channel_account", "toggle_channel_account",
+  "set_default_channel_account", "delete_channel_account",
+]) {
+  assert.match(channelAccounts, new RegExp(`await writeAccountAudit\\(tx, req, "${action}"`),
+    `${action} writes its result before transaction commit`);
+}
 
-console.log("[audit-durability-contract] 21/21 PASS");
+console.log("[audit-durability-contract] 28/28 PASS");

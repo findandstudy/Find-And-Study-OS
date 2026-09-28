@@ -1,9 +1,9 @@
 /** Existing encrypted account registry. SMTP stays exclusively revision-bound under notification-email/senders. */
 import { Router, type IRouter, type Request, type Response, type NextFunction } from "express";
 import { db, channelAccountsTable, conversationsTable, communicationPipelineAccountsTable, pipelineStagesTable,
-  pipelineStageMessageDispatchesTable, messageCampaignRecipientsTable } from "@workspace/db";
+  pipelineStageMessageDispatchesTable, messageCampaignRecipientsTable, auditLogsTable } from "@workspace/db";
 import { and, eq, ne, asc, sql, or } from "drizzle-orm";
-import { requireAuth, requireRole, logAudit } from "../lib/auth";
+import { requireAuth, requireRole } from "../lib/auth";
 import { ADMIN_ROLES } from "../lib/roles";
 import { emailAutomationHumanAllowed } from "../lib/notifications/emailAutomationPolicy";
 import { META_API_VERSION } from "../lib/inbox/channels/meta-shared";
@@ -67,6 +67,16 @@ async function managementLock(tx: AccountTransaction): Promise<void> {
   await tx.execute(sql`SET LOCAL statement_timeout = '5000ms'`);
   await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext('channel-account-management'), 0)`);
 }
+async function writeAccountAudit(tx: AccountTransaction, req: Request, action: string, resourceId: number, changes: Record<string, unknown>): Promise<void> {
+  await tx.insert(auditLogsTable).values({
+    userId: req.user!.id,
+    action,
+    resource: "channel_account",
+    resourceId,
+    changes: JSON.stringify(changes),
+    ipAddress: req.ip || null,
+  });
+}
 async function assertUniqueIdentity(tx: AccountTransaction, channel: string, provider: string, externalId: string | null, exceptId?: number): Promise<void> {
   if (!externalId) return;
   const [duplicate] = await tx.select({ id: channelAccountsTable.id }).from(channelAccountsTable)
@@ -108,9 +118,9 @@ router.post("/channel-accounts", requireAuth, requireRole(...ADMIN_ROLES), human
     if (makeDefault) await tx.update(channelAccountsTable).set({ isDefault: false }).where(channelGroup(channel));
     const [row] = await tx.insert(channelAccountsTable).values({ channel, provider, displayName, externalAccountId,
       configEncrypted: serializeAccountConfig(config), status: active ? "active" : "inactive", isActive: active, isDefault: makeDefault, metadata }).returning();
+    await writeAccountAudit(tx, req, "create_channel_account", row.id, { channel, provider });
     return row;
   });
-  logAudit(req.user!.id, "create_channel_account", "channel_account", result.id, { channel, provider }, req.ip);
   res.status(201).json(serializeRow(result));
 }));
 
@@ -136,9 +146,9 @@ router.put("/channel-accounts/:id", requireAuth, requireRole(...ADMIN_ROLES), hu
       configEncrypted: serializeAccountConfig(config), externalAccountId, metadata: brandMetadata(data, current.metadata),
       ...(accountCapabilities(channel, provider).configurationOnly ? { isActive: false, status: "inactive" } : {}),
     }).where(eq(channelAccountsTable.id, id)).returning();
+    await writeAccountAudit(tx, req, "update_channel_account", id, { channel, provider });
     return row;
   });
-  logAudit(req.user!.id, "update_channel_account", "channel_account", id, { channel, provider }, req.ip);
   res.json(serializeRow(result));
 }));
 
@@ -161,9 +171,9 @@ router.patch("/channel-accounts/:id/toggle-active", requireAuth, requireRole(...
       await assertUniqueIdentity(tx, channel, provider, externalId, id);
     }
     const [row] = await tx.update(channelAccountsTable).set({ isActive: active, status: active ? "active" : "inactive" }).where(eq(channelAccountsTable.id, id)).returning();
+    await writeAccountAudit(tx, req, "toggle_channel_account", id, { channel, isActive: row.isActive });
     return row;
   });
-  logAudit(req.user!.id, "toggle_channel_account", "channel_account", id, { channel, isActive: result.isActive }, req.ip);
   res.json(serializeRow(result));
 }));
 
@@ -180,9 +190,9 @@ router.patch("/channel-accounts/:id/set-default", requireAuth, requireRole(...AD
     if (!current) throw new ChannelAccountInputError("ACCOUNT_NOT_FOUND", 404);
     await tx.update(channelAccountsTable).set({ isDefault: false }).where(and(channelGroup(existing.channel), ne(channelAccountsTable.id, id)));
     const [row] = await tx.update(channelAccountsTable).set({ isDefault: true }).where(eq(channelAccountsTable.id, id)).returning();
+    await writeAccountAudit(tx, req, "set_default_channel_account", id, { channel: current.channel });
     return row;
   });
-  logAudit(req.user!.id, "set_default_channel_account", "channel_account", id, { channel: existing.channel }, req.ip);
   res.json(serializeRow(result));
 }));
 
@@ -208,8 +218,8 @@ router.delete("/channel-accounts/:id", requireAuth, requireRole(...ADMIN_ROLES),
       const [next] = await tx.select().from(channelAccountsTable).where(channelGroup(existing.channel)).orderBy(asc(channelAccountsTable.id)).limit(1);
       if (next) await tx.update(channelAccountsTable).set({ isDefault: true }).where(eq(channelAccountsTable.id, next.id));
     }
+    await writeAccountAudit(tx, req, "delete_channel_account", id, { channel: current.channel });
   });
-  logAudit(req.user!.id, "delete_channel_account", "channel_account", id, { channel: existing.channel }, req.ip);
   res.json({ ok: true });
 }));
 

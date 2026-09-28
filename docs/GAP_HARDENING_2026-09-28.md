@@ -149,6 +149,17 @@ verisi ve dış Academy alıcısı değiştirilmedi.
      kayıtlar audit kanıtı olmadan silinemez. Olmayan application purge artık
      sahte başarı yerine `404` döndürüyor.
 
+12. **Çoklu iletişim hesabı mutation + audit atomikliği**
+   - WhatsApp/Meta/Zernio/Telegram/SMS hesaplarının create, update, active toggle,
+     default seçimi ve delete audit sonuçları mutation'ın kendi transaction'ına
+     taşındı; legacy fire-and-forget helper kaldırıldı.
+   - Account identity/advisory lock, configuration-only kanal, SMTP ayrımı,
+     kullanımda-hesap engeli ve varsayılan hesabı güvenli devretme davranışları
+     korunuyor.
+   - Audit insert hatası hesap/şifreli config değişikliğini rollback ediyor.
+     Audit payload yalnız kanal/provider kimliğini içeriyor; token, bot secret veya
+     SMTP credential içermiyor.
+
 ## Doğrulama
 
 - Security regression: **115/115 PASS**.
@@ -181,6 +192,9 @@ verisi ve dış Academy alıcısı değiştirilmedi.
   typecheck **PASS**.
 - Genişletilmiş audit durability contract **21/21 PASS**; application optimistic
   concurrency **5/5 PASS**; API typecheck ve production build **PASS**.
+- Genişletilmiş audit durability contract **28/28 PASS**; gerçek Express kanal
+  hesabı RBAC/live-off/reference/audit rollback matrisi **7/7 PASS**; API
+  typecheck **PASS**.
 - Migration authority/validation: **129/129 PASS**.
 - Disposable PostgreSQL 16.15: fresh `0→129`, upload grant migration, route E2E,
   DB helper fixture cleanup: **PASS**; cluster durduruldu.

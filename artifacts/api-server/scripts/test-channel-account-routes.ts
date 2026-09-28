@@ -19,7 +19,7 @@ const { serializeAccountConfig, parseAccountConfig } = await import("../src/lib/
 const { default: router } = await import("../src/routes/channelAccounts");
 type Row = Record<string, any>;
 const user = { id: 7, role: "super_admin", isActive: true };
-let rows: Row[] = [], deleted = 0, writes = 0, lockQueries: string[] = [];
+let rows: Row[] = [], audits: Row[] = [], deleted = 0, writes = 0, lockQueries: string[] = [], failAudit = false;
 let linked: unknown = null, impersonated = false, role = "super_admin", apiToken = false, noSession = false;
 const chain = (get: () => Row[]) => {
   const result: any = { then: (resolve: any, reject: any) => Promise.resolve().then(get).then(resolve, reject) };
@@ -32,7 +32,10 @@ mock.method(db, "select", (projection?: unknown) => ({ from: (table: unknown) =>
   return table === linked ? [{ id: 44 }] : [];
 }) }));
 mock.method(db, "insert", (table: unknown) => ({ values: (values: Row) => {
-  if (table === w.auditLogsTable) return Promise.resolve();
+  if (table === w.auditLogsTable) {
+    if (failAudit) return Promise.reject(new Error("SYNTHETIC_AUDIT_FAILURE"));
+    audits.push({ ...values }); return Promise.resolve();
+  }
   writes++;
   const row = { id: 42, createdAt: new Date(), updatedAt: new Date(), ...values }; rows = [row];
   return { returning: async () => [row] };
@@ -43,7 +46,12 @@ mock.method(db, "update", () => ({ set: (values: Row) => ({ where: () => {
 } }) }));
 mock.method(db, "delete", () => ({ where: async () => { deleted++; rows = []; } }));
 mock.method(db, "execute", async (query: unknown) => { lockQueries.push(String(query)); return []; });
-mock.method(db, "transaction", async (callback: (tx: typeof db) => Promise<unknown>) => callback(db));
+mock.method(db, "transaction", async (callback: (tx: typeof db) => Promise<unknown>) => {
+  const snapshot = rows.map(row => ({ ...row })), auditSnapshot = audits.map(row => ({ ...row }));
+  const writeSnapshot = writes, deleteSnapshot = deleted;
+  try { return await callback(db); }
+  catch (error) { rows = snapshot; audits = auditSnapshot; writes = writeSnapshot; deleted = deleteSnapshot; throw error; }
+});
 
 const app = express(); app.use(express.json());
 app.use((req, _res, next) => { req.user = { ...user, role } as any; req.apiTokenAuth = apiToken; req.cookies = noSession ? {} : { sid: "synthetic" }; next(); });
@@ -59,7 +67,7 @@ function request(method: string, path = "/channel-accounts", body?: unknown): Pr
     }); req.on("error", reject); if (json) req.write(json); req.end();
   });
 }
-beforeEach(() => { rows = []; deleted = 0; writes = 0; lockQueries = []; linked = null; impersonated = false; role = "super_admin"; apiToken = false; noSession = false; });
+beforeEach(() => { rows = []; audits = []; deleted = 0; writes = 0; lockQueries = []; failAudit = false; linked = null; impersonated = false; role = "super_admin"; apiToken = false; noSession = false; });
 after(async () => { await new Promise<void>(resolve => server.close(() => resolve())); await new Promise<void>(resolve => setImmediate(resolve)); await pool.end(); mock.restoreAll(); });
 
 test("POST persists encrypted Telegram/Twilio config but never activates unsupported delivery", async () => {
@@ -113,4 +121,21 @@ test("explicit live-disabled staging returns simulated NOT success with no provi
   try {
     const result = await request("POST", "/channel-accounts/42/test"); assert.equal(result.status, 200); assert.equal(result.data.simulated, true); assert.equal(result.data.success, false);
   } finally { process.env.NODE_ENV = "test"; }
+});
+test("account mutation and audit commit or roll back together", async () => {
+  failAudit = true;
+  const failed = await request("POST", "/channel-accounts", { channel: "telegram", displayName: "Atomic", config: { botToken: "123456789:synthetic_BOT_token_0123456789", defaultChatId: "@Atomic" } });
+  assert.equal(failed.status, 503);
+  assert.deepEqual(rows, []);
+  assert.deepEqual(audits, []);
+  assert.equal(writes, 0);
+
+  failAudit = false;
+  const created = await request("POST", "/channel-accounts", { channel: "telegram", displayName: "Atomic", config: { botToken: "123456789:synthetic_BOT_token_0123456789", defaultChatId: "@Atomic" } });
+  assert.equal(created.status, 201);
+  assert.equal(rows.length, 1);
+  assert.equal(audits.length, 1);
+  assert.equal(audits[0].action, "create_channel_account");
+  assert.equal(audits[0].resourceId, rows[0].id);
+  assert.equal(JSON.stringify(audits[0]).includes("synthetic_BOT_token"), false);
 });
