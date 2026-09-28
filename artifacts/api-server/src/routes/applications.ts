@@ -1959,8 +1959,6 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, ...AG
 
   try {
   if (updates.stage !== undefined) {
-    // Keep every stage-change entry point aligned with portal automation.
-    await syncApplicationFinance(id);
     const newStage = updates.stage as string;
     const [commStatus, sfStatus] = await Promise.all([
       getCommissionFinanceStatus(newStage),
@@ -2360,8 +2358,11 @@ router.post("/applications/bulk-action", requireAuth, requireRole(...STAFF_ROLES
           changes: JSON.stringify({ stage }),
           ipAddress: req.ip || null,
         });
+        // Keep the canonical finance projection in the same command boundary
+        // as the bulk stage mutation and its audit receipt. A reconciliation
+        // failure therefore rolls the application stage back as well.
+        await syncApplicationFinance(app.id, tx);
       });
-      await syncApplicationFinance(app.id);
       const [commStatus, sfStatus] = await Promise.all([
         getCommissionFinanceStatus(stage),
         getServiceFeeFinanceStatus(stage),

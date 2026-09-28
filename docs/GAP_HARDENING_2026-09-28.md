@@ -795,6 +795,18 @@ verisi ve dış Academy alıcısı değiştirilmedi.
   **PASS** oldu. Live integration, email delivery, background job ve social
   provider/worker kapıları kapalı kaldı; production değiştirilmedi.
 
+## 29 Eylül application bulk-stage finance atomikliği
+
+- Tekil stage komutunda transaction içinde zaten üretilen kanonik finance
+  projection'ı commit sonrasında ikinci kez çalıştıran yinelenen çağrı kaldırıldı.
+- Bulk stage komutunda application stage, LOST lifecycle etkileri, student status,
+  bounded audit sonucu ve kanonik finance projection artık aynı DB transaction'ında.
+  Finance reconciliation başarısızsa stage değişimi de rollback oluyor; istemci
+  commit edilmiş bir stage için yanıltıcı başarı/başarısızlık sınırında kalmıyor.
+- Application concurrency/transaction contract **14/14**, audit durability
+  **172/172** ve API typecheck **PASS**. Bu dilim henüz staging'e dağıtılmadı;
+  production değiştirilmedi.
+
 Web-form üreticileri dağıtımdan önce `X-Webform-Timestamp`,
 `X-Webform-Request-Id` ve v1 zarfını imzalayan `X-Webform-Signature` sözleşmesine
 geçmelidir. Eski token kullanımı yalnız kimlik doğrulama uyumluluğudur; replay

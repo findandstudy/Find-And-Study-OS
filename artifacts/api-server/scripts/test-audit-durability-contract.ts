@@ -80,6 +80,9 @@ for (const action of ["delete_application", "bulk_assign_applications", "bulk_mo
   assert.match(applicationBulkRoute, new RegExp(`await tx\\.insert\\(auditLogsTable\\)\\.values\\([^;]{0,700}action: "${action}"`),
     `${action} persists its audit receipt inside the mutation transaction`);
 }
+assert.match(applicationBulkRoute,
+  /action: "bulk_move_application"[\s\S]{0,520}await syncApplicationFinance\(app\.id, tx\);[\s\S]{0,80}\}\);/,
+  "bulk application stage and canonical finance projection commit with the audit receipt");
 for (const action of ["delete_application", "bulk_assign_applications", "bulk_move_application"]) {
   assert.doesNotMatch(applicationBulkRoute, new RegExp(`logAudit\\([^;]{0,180}"${action}"`),
     `${action} does not use the non-transactional legacy helper`);
