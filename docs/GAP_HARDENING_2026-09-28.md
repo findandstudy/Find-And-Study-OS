@@ -305,6 +305,11 @@ verisi ve dış Academy alıcısı değiştirilmedi.
   integer olarak normalize edilir ve tekrarlar ayıklanır; boş ad güncellemesi
   reddedilir. Gerçek Express rollback matrisi **5/5 PASS**, genişletilmiş audit
   durability contract **78/78 PASS**; API typecheck ve production build **PASS**.
+- Lead toplu silme, atama ve stage taşıma işlemleri de core mutation ile aynı
+  transaction içinde audit üretir. Toplu istekler 500 kayıtla sınırlandı;
+  strict pozitif ID normalizasyonu ve tekrar ayıklama eklendi. Genişletilmiş
+  audit durability contract **86/86 PASS**; API typecheck ve production build
+  **PASS**.
 - Migration authority/validation: **129/129 PASS**.
 - Disposable PostgreSQL 16.15: fresh `0→129`, upload grant migration, route E2E,
   DB helper fixture cleanup: **PASS**; cluster durduruldu.

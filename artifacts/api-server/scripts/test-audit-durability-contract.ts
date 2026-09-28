@@ -17,6 +17,7 @@ const aiDefaultsUi = source("../../edcons/src/pages/admin/AiBuiltinDefaults.tsx"
 const aiExtractors = source("../src/routes/ai-extractors.ts");
 const aiPersonas = source("../src/routes/ai-personas.ts");
 const leadAssignmentRules = source("../src/routes/leadAssignmentRules.ts");
+const leads = source("../src/routes/leads.ts");
 
 assert.match(auth, /\): Promise<void> \{\s*return db\.insert\(auditLogsTable\)/,
   "audit insert exposes a real awaitable completion boundary");
@@ -166,5 +167,19 @@ for (const action of ["create_lead_assignment_rule", "update_lead_assignment_rul
   assert.match(leadAssignmentRules, new RegExp(`await writeRuleAudit\\(tx, req, "${action}"`),
     `${action} persists its audit receipt before transaction commit`);
 }
+const leadBulkRoute = leads.slice(
+  leads.indexOf('router.post("/leads/bulk-action"'),
+  leads.indexOf('router.post("/leads/:id/convert"'),
+);
+assert.match(leadBulkRoute, /if \(ids\.length > 500\)[\s\S]{0,120}BULK_LEAD_LIMIT/,
+  "lead bulk mutations have a hard request-size ceiling");
+assert.match(leadBulkRoute, /\[\.\.\.new Set\(ids\.map\(Number\)/,
+  "lead bulk mutations deduplicate normalized positive identifiers");
+for (const action of ["delete_lead", "bulk_assign_leads", "bulk_move_leads"]) {
+  assert.match(leadBulkRoute, new RegExp(`await tx\\.insert\\(auditLogsTable\\)\\.values\\([^;]{0,700}action: "${action}"`),
+    `${action} persists its audit receipt inside the mutation transaction`);
+  assert.doesNotMatch(leadBulkRoute, new RegExp(`logAudit\\([^;]{0,180}"${action}"`),
+    `${action} does not use the non-transactional legacy helper`);
+}
 
-console.log("[audit-durability-contract] 78/78 PASS");
+console.log("[audit-durability-contract] 86/86 PASS");

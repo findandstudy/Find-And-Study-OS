@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { db, leadsTable, studentsTable, notesTable, usersTable, followUpsTable, agentsTable, documentsTable, embedSubmissionsTable, embedWidgetsTable, applicationsTable, programsTable, universitiesTable, pipelineStagesTable, settingsTable, softDelete, externalContactsTable, channelAccountsTable, lifecycleCascadeStateTable } from "@workspace/db";
+import { db, leadsTable, studentsTable, notesTable, usersTable, followUpsTable, agentsTable, documentsTable, embedSubmissionsTable, embedWidgetsTable, applicationsTable, programsTable, universitiesTable, pipelineStagesTable, settingsTable, softDelete, externalContactsTable, channelAccountsTable, lifecycleCascadeStateTable, auditLogsTable } from "@workspace/db";
 import { eq, ilike, or, sql, and, lt, lte, gte, asc, desc, inArray, isNull, isNotNull, ne } from "drizzle-orm";
 import { requireAuth, requireRole, requireAgentStaffPermission, logAudit } from "../lib/auth";
 import { publicLeadLimiter } from "../lib/limiters";
@@ -1428,12 +1428,14 @@ router.post("/leads/bulk-action", requireAuth, requireRole(...STAFF_ROLES), asyn
   const isAdmin = (ADMIN_ROLES as readonly string[]).includes(user.role);
   const { ids, action, assignedToId, status } = req.body;
   if (!Array.isArray(ids) || ids.length === 0) { res.status(400).json({ error: "ids required" }); return; }
+  if (ids.length > 500) { res.status(413).json({ error: "A maximum of 500 leads can be changed at once", code: "BULK_LEAD_LIMIT" }); return; }
   if (!["delete", "assign", "move"].includes(action)) { res.status(400).json({ error: "Invalid action" }); return; }
   // Task #494: non-admin may only bulk-assign their own records; delete/move remain admin-only
   if (!isAdmin && action !== "assign") {
     res.status(403).json({ error: "Only admins can bulk delete or move leads" }); return;
   }
-  const numericIds = ids.map(Number).filter((n: number) => !isNaN(n));
+  const numericIds = [...new Set(ids.map(Number).filter((n: number) => Number.isSafeInteger(n) && n > 0))];
+  if (numericIds.length === 0) { res.status(400).json({ error: "valid ids required" }); return; }
   let updated = 0;
   if (action === "delete") {
     const converted = await db.select({ id: leadsTable.id, studentId: leadsTable.convertedStudentId })
@@ -1451,8 +1453,18 @@ router.post("/leads/bulk-action", requireAuth, requireRole(...STAFF_ROLES), asyn
       });
       return;
     }
-    updated = await softDelete(leadsTable, numericIds, { actorUserId: user.id });
-    for (const id of numericIds) logAudit(user.id, "delete_lead", "lead", id, { soft: true }, req.ip);
+    updated = await db.transaction(async tx => {
+      const count = await softDelete(leadsTable, numericIds, { actorUserId: user.id, tx });
+      await tx.insert(auditLogsTable).values(numericIds.map(leadId => ({
+        userId: user.id,
+        action: "delete_lead",
+        resource: "lead",
+        resourceId: leadId,
+        changes: JSON.stringify({ soft: true, bulk: true }),
+        ipAddress: req.ip || null,
+      })));
+      return count;
+    });
   } else if (action === "assign" && assignedToId !== undefined) {
     const newAssignedToId = assignedToId ? Number(assignedToId) : null;
     // Non-admin: filter to only records they are the current assignee of
@@ -1493,9 +1505,15 @@ router.post("/leads/bulk-action", requireAuth, requireRole(...STAFF_ROLES), asyn
           });
         }
       }
+      await tx.insert(auditLogsTable).values({
+        userId: user.id,
+        action: "bulk_assign_leads",
+        resource: "lead",
+        changes: JSON.stringify({ ids: idsToUpdate, assignedToId: newAssignedToId }),
+        ipAddress: req.ip || null,
+      });
       return result.rowCount ?? idsToUpdate.length;
     });
-    await logAudit(user.id, "bulk_assign_leads", "lead", undefined, { ids: idsToUpdate, assignedToId }, req.ip);
     res.json({ success: true, updated, skipped }); return;
   } else if (action === "move" && status) {
     if (!(await canTransitionToPipelineStage("lead", String(status), user.role))) {
@@ -1514,9 +1532,15 @@ router.post("/leads/bulk-action", requireAuth, requireRole(...STAFF_ROLES), asyn
         eq(lifecycleCascadeStateTable.entityType, "lead"),
         inArray(lifecycleCascadeStateTable.entityId, numericIds),
       ));
+      await tx.insert(auditLogsTable).values({
+        userId: user.id,
+        action: "bulk_move_leads",
+        resource: "lead",
+        changes: JSON.stringify({ ids: numericIds, status }),
+        ipAddress: req.ip || null,
+      });
       return result.rowCount ?? affectedLeads.length;
     });
-    await logAudit(user.id, "bulk_move_leads", "lead", undefined, { ids: numericIds, status }, req.ip);
     for (const affectedLead of affectedLeads) {
       enqueueFtcLeadStageAnalytics(affectedLead, affectedLead.status, String(status));
     }
