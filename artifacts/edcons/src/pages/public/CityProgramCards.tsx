@@ -1,9 +1,12 @@
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { useI18n } from "@/hooks/use-i18n";
 import { PublicProgramCard } from "./PublicProgramCard";
-import { PublicProgramDetailDialog, type PublicProgramDetailData } from "./PublicProgramDetailDialog";
+import type { PublicProgramDetailData } from "./PublicProgramDetailDialog";
 import { DetailPrice } from "./DetailEditorial";
 import { displayTuition, splitRequirements, type DetailTuition } from "./detailPresentation";
+
+const PublicProgramDetailDialog = lazy(() => import("./PublicProgramDetailDialog")
+  .then(module => ({ default: module.PublicProgramDetailDialog })));
 
 /** Additive city API fields may be absent while an older response is cached. */
 export type CityProgramCardData = Omit<PublicProgramDetailData, "universityPath"> & {
@@ -29,8 +32,10 @@ export function CityProgramCards({ programs }: { programs: CityProgramCardData[]
       applyHref={`${localePath("/programs")}?programId=${program.id}`}
       applyDisabled={program.isActive !== true || program.universityIsActive !== true}
       omitLegacyTiming tuitionContent={price(program)} />)}</div>
-    <PublicProgramDetailDialog open={!!selected} onClose={() => setSelected(null)}
-      program={selected ? { ...selected, universityPath: selected.universityPath ?? "" } : null}
-      omitLegacyTiming tuitionContent={selected ? price(selected) : null} />
+    {selected ? <Suspense fallback={null}>
+      <PublicProgramDetailDialog open onClose={() => setSelected(null)}
+        program={{ ...selected, universityPath: selected.universityPath ?? "" }}
+        omitLegacyTiming tuitionContent={price(selected)} />
+    </Suspense> : null}
   </div>;
 }

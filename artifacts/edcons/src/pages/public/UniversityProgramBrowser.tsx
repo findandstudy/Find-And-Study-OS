@@ -1,11 +1,11 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { BookOpen, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import { customFetch } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/hooks/use-i18n";
 import { programAdmissionsOpen } from "@/lib/programAdmissions";
 import { PublicProgramCard } from "./PublicProgramCard";
-import { PublicProgramDetailDialog, type PublicProgramDetailData } from "./PublicProgramDetailDialog";
+import type { PublicProgramDetailData } from "./PublicProgramDetailDialog";
 import { PublicProgramFilters, type PublicProgramFacets, type PublicProgramSelection } from "./PublicProgramFilters";
 import { detailCopy, displayTuition, splitRequirements, type DetailTuition } from "./detailPresentation";
 import { DetailPrice } from "./DetailEditorial";
@@ -14,6 +14,8 @@ import { emptyProgramSelection, programPageNumbers, universityProgramQuery } fro
 type ProgramRow = PublicProgramDetailData & { universityId: number; isActive?: boolean; universityIsActive?: boolean; tuition?: DetailTuition | null };
 type Results = { data: ProgramRow[]; meta: { total: number; totalPages: number } };
 const emptyFacets: PublicProgramFacets = { countries: [], cities: [], universities: [], universityTypes: [], degrees: [], languages: [], fields: [], feeRange: null };
+const PublicProgramDetailDialog = lazy(() => import("./PublicProgramDetailDialog")
+  .then(module => ({ default: module.PublicProgramDetailDialog })));
 
 /** Full server-paged discovery inside one university, not the 12 related links. */
 export function UniversityProgramBrowser({ universityId, admissionsOpen }: { universityId: number; admissionsOpen: boolean }) {
@@ -70,7 +72,9 @@ export function UniversityProgramBrowser({ universityId, admissionsOpen }: { uni
       {programPageNumbers(page, result.meta.totalPages).map((number, index) => number === "..." ? <span key={`dots-${index}`} aria-hidden="true">…</span> : <button key={number} type="button" disabled={busy} onClick={() => setPage(number)} aria-label={t("programs.goToPage", { page: String(number) })} aria-current={number === page ? "page" : undefined} className={`w-10 h-10 rounded-full text-sm font-semibold ${number === page ? "bg-primary text-primary-foreground shadow-md" : "text-muted-foreground hover:bg-secondary"}`}>{number}</button>)}
       <Button variant="outline" size="icon" disabled={busy || page >= result.meta.totalPages} onClick={() => setPage(value => value + 1)} className="rounded-full w-10 h-10" aria-label={t("programs.nextPage")}><ChevronRight className="w-4 h-4 rtl:rotate-180" aria-hidden="true" /></Button>
     </nav>}
-    <PublicProgramDetailDialog open={!!detailProgram} onClose={() => setDetailProgram(null)} program={detailProgram} omitLegacyTiming
-      tuitionContent={detailProgram ? <div className="university-program-tuition"><p className="text-[10px] text-muted-foreground mb-1.5">{t("courseFinderPage.tuitionFee")}</p><DetailPrice tuition={displayTuition({ ...detailProgram, tuition: detailProgram.tuition ?? null }, lang)} locale={lang} verifiedLabel={t("catalogDetail.verifiedPrice")} /></div> : null} />
+    {detailProgram ? <Suspense fallback={null}>
+      <PublicProgramDetailDialog open onClose={() => setDetailProgram(null)} program={detailProgram} omitLegacyTiming
+        tuitionContent={<div className="university-program-tuition"><p className="text-[10px] text-muted-foreground mb-1.5">{t("courseFinderPage.tuitionFee")}</p><DetailPrice tuition={displayTuition({ ...detailProgram, tuition: detailProgram.tuition ?? null }, lang)} locale={lang} verifiedLabel={t("catalogDetail.verifiedPrice")} /></div>} />
+    </Suspense> : null}
   </div>;
 }

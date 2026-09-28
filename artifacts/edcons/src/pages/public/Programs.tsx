@@ -9,7 +9,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PublicProgramFilters } from "./PublicProgramFilters";
 import { PublicProgramCard } from "./PublicProgramCard";
-import { PublicProgramDetailDialog } from "./PublicProgramDetailDialog";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -36,6 +35,8 @@ import { useToast } from "@/hooks/use-toast";
 import { MAX_DOCUMENT_PARTS, isSingleImageDocumentType, mergeDocumentParts } from "@/lib/documentPartMerge";
 
 const DocumentScanner = lazy(() => import("@/components/LazyDocumentScanner"));
+const PublicProgramDetailDialog = lazy(() => import("./PublicProgramDetailDialog")
+  .then(module => ({ default: module.PublicProgramDetailDialog })));
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
@@ -1790,7 +1791,11 @@ export default function Programs() {
       </section>
 
       <ApplyDialog open={!!applyProgram} onClose={() => setApplyProgram(null)} program={applyProgram} countries={filters.countries} />
-      <PublicProgramDetailDialog open={!!detailProgram} onClose={() => setDetailProgram(null)} program={detailProgram} />
+      {detailProgram ? (
+        <Suspense fallback={null}>
+          <PublicProgramDetailDialog open onClose={() => setDetailProgram(null)} program={detailProgram} />
+        </Suspense>
+      ) : null}
     </>
   );
 }

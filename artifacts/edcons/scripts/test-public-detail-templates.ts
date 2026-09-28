@@ -281,7 +281,8 @@ test("Programs and university reuse the same card and filters without changing d
   }
   assert.match(programs, /onDetails=\{\(\) => setDetailProgram\(prog\)\} onApply=\{\(\) => setApplyProgram\(prog\)\}/);
   assert.match(programs, /<ApplyDialog open=\{!!applyProgram\} onClose=\{\(\) => setApplyProgram\(null\)\} program=\{applyProgram\}/);
-  assert.match(programs, /<PublicProgramDetailDialog open=\{!!detailProgram\} onClose=\{\(\) => setDetailProgram\(null\)\} program=\{detailProgram\}/);
+  assert.match(programs, /const PublicProgramDetailDialog = lazy\(\(\) => import\("\.\/PublicProgramDetailDialog"\)/);
+  assert.match(programs, /detailProgram \? \(\s*<Suspense fallback=\{null\}>\s*<PublicProgramDetailDialog open onClose=\{\(\) => setDetailProgram\(null\)\} program=\{detailProgram\}/);
   assert.match(programs, /if \(requestedProgramId && resp\.data\?\.length === 1\)\s*\{\s*setApplyProgram\(\(current\) => current \|\| resp\.data\[0\]\)/);
   assert.match(programCard, /onClick=\{onDetails\}/);
   assert.match(programCard, /onClick=\{onApply\}/);
@@ -294,7 +295,8 @@ test("Programs and university reuse the same card and filters without changing d
 
 test("university Info opens the shared modal while the program title remains canonical navigation", () => {
   for (const source of [programs, universityBrowser]) {
-    assert.match(source, /import \{ PublicProgramDetailDialog/);
+    assert.match(source, /lazy\(\(\) => import\("\.\/PublicProgramDetailDialog"\)/);
+    assert.match(source, /<Suspense fallback=\{null\}>/);
     assert.match(source, /<PublicProgramDetailDialog/);
   }
   assert.match(universityBrowser, /onDetails=\{\(\) => setDetailProgram\(\{ \.\.\.program, requirements: splitRequirements/);
@@ -310,9 +312,10 @@ test("university modal receives authoritative tuition and conservative requireme
   assert.match(universityBrowser, /requirements: splitRequirements\(program.requirements, \{ canonicalPath: program.canonicalPath, id: program.id \}\).requirements.join\("\\n"\)/);
   const modal = universityBrowser.slice(universityBrowser.indexOf("<PublicProgramDetailDialog"));
   assert.match(modal, /program=\{detailProgram\} omitLegacyTiming/);
-  assert.match(modal, /tuitionContent=\{detailProgram \?/);
+  assert.match(universityBrowser, /detailProgram \? <Suspense fallback=\{null\}>/);
+  assert.match(modal, /tuitionContent=\{<div className="university-program-tuition">/);
   assert.match(modal, /displayTuition\(\{ \.\.\.detailProgram, tuition: detailProgram.tuition \?\? null \}, lang\)/);
-  assert.match(modal, /: null\}/);
+  assert.match(universityBrowser, /<\/Suspense> : null\}/);
   const canonicalPath = "/en/programs/source-program-145792";
   assert.deepEqual(splitRequirements("source-program | Campus: Source city | Intake years: 2025/2026 | Deadline: 2025-01-01 | Edvoy ref: 123 | IELTS: 6.5 | A-level", { canonicalPath, id: 145792 }).requirements, ["IELTS: 6.5", "A-level"]);
 });
@@ -653,7 +656,8 @@ test("city programs reuse the shared card and Info modal without changing the bo
   assert.match(city, /const programsPath = `\$\{localePath\("\/programs"\)\}\?country=\$\{encodeURIComponent\(city\.country\)\}&city=\$\{encodeURIComponent\(city\.name\)\}`/);
   assert.match(city, /<Link href=\{programsPath\}>\{t\("countryDetail.viewAllPrograms"\)\}/);
   assert.match(cityProgramCards, /import \{ PublicProgramCard \}/);
-  assert.match(cityProgramCards, /import \{ PublicProgramDetailDialog/);
+  assert.match(cityProgramCards, /lazy\(\(\) => import\("\.\/PublicProgramDetailDialog"\)/);
+  assert.match(cityProgramCards, /selected \? <Suspense fallback=\{null\}>/);
   assert.match(cityProgramCards, /className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">\{programs\.map/);
   assert.match(cityProgramCards, /onDetails=\{\(\) => setSelected\(/);
   assert.match(cityProgramCards, /onClose=\{\(\) => setSelected\(null\)\}/);
@@ -682,8 +686,8 @@ test("city cards and modal cannot revive legacy fees or importer timing when aut
   assert.match(cityProgramCards, /displayTuition\(\{ \.\.\.program, tuition: program\.tuition \?\? null \}, lang\)/);
   assert.match(cityProgramCards, /requirements: splitRequirements\(program\.requirements, \{ canonicalPath: program\.canonicalPath, id: program\.id \}\)\.requirements\.join\("\\n"\)/);
   assert.match(cityProgramCards, /omitLegacyTiming tuitionContent=\{price\(program\)\}/);
-  assert.match(cityProgramCards, /omitLegacyTiming tuitionContent=\{selected \? price\(selected\) : null\}/);
-  assert.match(cityProgramCards, /program=\{selected \? \{ \.\.\.selected, universityPath: selected\.universityPath \?\? "" \} : null\}/);
+  assert.match(cityProgramCards, /omitLegacyTiming tuitionContent=\{price\(selected\)\}/);
+  assert.match(cityProgramCards, /program=\{\{ \.\.\.selected, universityPath: selected\.universityPath \?\? "" \}\}/);
   for (const tuition of [undefined, null]) {
     const html = renderPublicElement(createElement(CityProgramCards, { programs: [{ ...cardFixture, tuition, applicationFee: 90000, advancedFee: 80000 }] }));
     assert.match(html, /Confirm tuition with an adviser/);
