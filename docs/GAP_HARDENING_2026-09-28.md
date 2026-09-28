@@ -554,6 +554,27 @@ verisi ve dış Academy alıcısı değiştirilmedi.
   `2.704 ms`; aggregate TBT `172 ms`, CLS `0–0.0004` oldu. Dolayısıyla CWV kapısı
   dürüstçe **FAIL** kalır; sıradaki repo-içi darboğaz public kritik çeviri
   namespace'i/SSR handoff, repo-dışı kapı ise gerçek saha p75 verisidir.
+- Public kritik çeviri paketi 23 locale için build sırasında ayrı ve bounded
+  üretildi; kritik public rotalar ilk boyada yaklaşık `23 KB` ham İngilizce
+  sözlüğü kullanıyor, yaklaşık `258 KB` tam sözlüğü pencere load'undan sonra
+  getiriyor. Aynı locale'i tekrar seçen sync etkisinin tam sözlüğü erken
+  indirmesi de engellendi. Local EN/TR/AR smoke'ta yalnız kritik sözlük ilk
+  render öncesi istendi; TR metin ve AR RTL yönü korundu. API/Edcons typecheck,
+  production build, `23/23` sözlük üretimi ve public contract testleri **PASS**.
+  Exact `168ba936c35d81b42b5bedbb0d5ab00e690d24a6` commit'i
+  `staging-20260928T194633Z-168ba936c35d` olarak dağıtıldı; health HTTP 200,
+  DB bağlı, ledger `129/129`, restart `0`, non-root/read-only/CapDrop kontrolleri
+  **PASS** ve external delivery/worker flag'leri kapalı kaldı.
+- Çeviri ayrımından sonraki üç-tekrar medyanları `/en` `3.140 ms`, program
+  listesi `3.372 ms`, ülkeler `3.160 ms`, London `3.692 ms`, üniversite
+  `2.592 ms`, program detayı `2.616 ms`; aggregate TBT `164 ms`, CLS
+  `0–0.0004` oldu. Önceki aggregate LCP `3.804 → 3.140 ms` düşmesine rağmen
+  hedef `≤2.500 ms` olduğu için CWV kapısı **FAIL** kalır.
+- Aynı VPS üzerinde doğrudan container yanıtı `2–6 ms`, canonical HTTPS yanıtı
+  `24–39 ms` ölçüldü. Laboratuvardaki yaklaşık `1,1 sn` TTFB uygulama render
+  gecikmesi değildir; Fast-4G ağ emülasyonu maliyetidir. Optimizasyon kararı
+  bu nedenle yapay TTFB metriği yerine gerçek ilk-boyayı hızlandıran SSR/read
+  model kapsamına yönlendirildi.
 
 ## Uyumluluk ve rollout notu
 

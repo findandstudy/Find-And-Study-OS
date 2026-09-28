@@ -39,7 +39,7 @@ import { parsePublicCatalogPageBlockSource } from "./publicCatalogRenderContract
 import { readPublishedDetailLayout } from "./websiteDetailLayouts";
 import { DETAIL_LAYOUT_KINDS, type DetailLayoutKind } from "./websiteDetailLayoutContract";
 import { websiteCatalogTaxonomy, countryMatches, countryAliases, catalogName } from "./websiteCatalogFilters";
-import { readCatalogCountryFallback, matchCatalogCountry, resolvePublicCatalogLocationLinks } from "./publicCatalogLocationLinks";
+import { readCatalogCountryFallback, matchCatalogCountry, readPublicCatalogCountryDirectory, resolvePublicCatalogLocationLinks } from "./publicCatalogLocationLinks";
 import { readPublishedDetailContent } from "./websiteDetailContent";
 import { readPublicCatalogPrices } from "./publicCatalogPriceReadModel";
 import { projectPublicTuition } from "./publicCatalogTuition";
@@ -122,6 +122,7 @@ const inFlight = new Map<string, Promise<PublicCatalogRenderModel>>();
 let cacheGeneration = 0;
 
 const CATALOG_DERIVED_CACHE_KINDS = new Set([
+  "country_list",
   "program_list",
   "program_detail",
   "university_detail",
@@ -394,12 +395,35 @@ async function hydratePublicCatalogBlocks(
 }
 
 function cacheKey(route: PublicCatalogRenderRoute): string {
-  const identity = route.kind === "program_list"
+  const identity = route.kind === "program_list" || route.kind === "country_list"
     ? "index"
     : route.kind === "destination_detail" || route.kind === "page_detail"
       ? route.slug
       : route.identity?.id ?? route.routeKey;
   return `${route.locale}:${route.kind}:${identity}`;
+}
+
+async function readCountryList(
+  route: Extract<PublicCatalogRenderRoute, { kind: "country_list" }>,
+): Promise<PublicCatalogRenderModel> {
+  const directory = await readPublicCatalogCountryDirectory(route.locale);
+  return {
+    kind: "country_list",
+    locale: route.locale,
+    canonicalPath: route.path,
+    title: "Study destinations",
+    description: "Explore countries with currently available universities and study programmes.",
+    indexable: true,
+    countries: directory.entries.map((entry) => ({
+      id: entry.country.id,
+      name: entry.destination?.name || entry.country.name,
+      code: entry.country.code,
+      canonicalPath: entry.canonicalPath,
+      universityCount: entry.universityCount,
+      programCount: entry.programCount,
+      featured: entry.destination?.isFeatured === true,
+    })).sort((left, right) => Number(right.featured) - Number(left.featured) || left.name.localeCompare(right.name, route.locale)).slice(0, 64),
+  };
 }
 
 function pruneCache(now: number): void {
@@ -1668,6 +1692,7 @@ export async function readPageDetail(
 }
 
 async function loadModel(route: PublicCatalogRenderRoute): Promise<PublicCatalogRenderModel> {
+  if (route.kind === "country_list") return readCountryList(route);
   if (route.kind === "program_list") return readProgramList(route);
   if (route.kind === "program_detail") return readProgramDetail(route);
   if (route.kind === "university_detail") return readUniversityDetail(route);
@@ -1750,16 +1775,17 @@ export function applyPublicCatalogRenderCacheInvalidation(input: PublicCatalogIn
       || input.entityType === "all"
       || (input.entityType === "catalog" && CATALOG_DERIVED_CACHE_KINDS.has(kind))
       || (input.entityType === "program" && (
-        kind === "program_list"
+        kind === "country_list"
+        || kind === "program_list"
         || kind === "city_detail"
         || kind === "page_detail"
         || (kind === "program_detail" && input.entityId !== undefined && identity === String(input.entityId))
       ))
       || (input.entityType === "university" && (
-        kind === "program_list" || kind === "program_detail" || kind === "page_detail" || kind === "city_detail"
+        kind === "country_list" || kind === "program_list" || kind === "program_detail" || kind === "page_detail" || kind === "city_detail"
         || (kind === "university_detail" && input.entityId !== undefined && identity === String(input.entityId))
       ))
-      || (input.entityType === "destination" && (kind === "destination_detail" || kind === "page_detail"))
+      || (input.entityType === "destination" && (kind === "country_list" || kind === "destination_detail" || kind === "page_detail"))
       || (input.entityType === "city" && (kind === "city_detail" || kind === "page_detail"))
       || (input.entityType === "article" && kind === "article_detail"
         && input.entityId !== undefined && identity === String(input.entityId))

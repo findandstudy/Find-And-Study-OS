@@ -50,6 +50,11 @@ export function parsePublicCatalogPageBlockSource(value: unknown): PublicCatalog
 
 export type PublicCatalogRenderRoute =
   | {
+      kind: "country_list";
+      locale: ProgramSupportedLocale;
+      path: string;
+    }
+  | {
       kind: "program_list";
       locale: ProgramSupportedLocale;
       path: string;
@@ -107,6 +112,23 @@ type PublicCatalogRenderModelData =
       title: string;
       description: string;
       indexable: false;
+    }
+  | {
+      kind: "country_list";
+      locale: ProgramSupportedLocale;
+      canonicalPath: string;
+      title: string;
+      description: string;
+      indexable: true;
+      countries: Array<{
+        id: number;
+        name: string;
+        code: string;
+        canonicalPath: string;
+        universityCount: number;
+        programCount: number;
+        featured: boolean;
+      }>;
     }
   | {
       kind: "program_list";
@@ -411,6 +433,9 @@ export function matchPublicCatalogRenderPath(
   const segments = path.split("/").filter(Boolean);
   const locale = segments[0] as ProgramSupportedLocale;
   if (!PROGRAM_SUPPORTED_LOCALES.includes(locale)) return null;
+  if (segments.length === 2 && segments[1] === "countries") {
+    return { kind: "country_list", locale, path };
+  }
   if (segments.length === 2 && segments[1] === "programs") {
     return { kind: "program_list", locale, path };
   }
@@ -550,6 +575,20 @@ function renderProgramList(model: Extract<PublicCatalogRenderModel, { kind: "pro
       </article>`).join("");
   return `<main data-public-render-shell="program-list" class="mx-auto max-w-7xl px-4 py-24">
     <header><h1 class="text-4xl font-bold">${escapeHtml(model.title)}</h1><p class="mt-3 text-muted-foreground">${escapeHtml(model.description)}</p><p class="mt-2 text-sm">${model.total.toLocaleString(model.locale)} ${escapeHtml(copy.programs.toLocaleLowerCase(model.locale))}</p></header>
+    <section class="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">${cards}</section>
+  </main>`;
+}
+
+function renderCountryList(model: Extract<PublicCatalogRenderModel, { kind: "country_list" }>): string {
+  const copy = RENDER_COPY[model.locale];
+  const cards = model.countries.map((country) => `
+      <article class="rounded-2xl border border-border bg-card p-5">
+        <p class="text-sm font-semibold text-primary">${escapeHtml(country.code)}</p>
+        <h2 class="mt-2 text-xl font-bold"><a href="${escapeHtml(country.canonicalPath)}">${escapeHtml(country.name)}</a></h2>
+        <p class="mt-3 text-sm text-muted-foreground">${country.universityCount.toLocaleString(model.locale)} ${escapeHtml(copy.institutionType.toLocaleLowerCase(model.locale))} · ${country.programCount.toLocaleString(model.locale)} ${escapeHtml(copy.programs.toLocaleLowerCase(model.locale))}</p>
+      </article>`).join("");
+  return `<main data-public-render-shell="country-list" class="mx-auto max-w-7xl px-4 py-24">
+    <header><h1 class="text-4xl font-bold">${escapeHtml(model.title)}</h1><p class="mt-3 text-muted-foreground">${escapeHtml(model.description)}</p></header>
     <section class="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">${cards}</section>
   </main>`;
 }
@@ -973,6 +1012,25 @@ function structuredData(model: PublicCatalogRenderModel, siteUrl: string): unkno
       },
     };
   }
+  if (model.kind === "country_list") {
+    return {
+      "@context": "https://schema.org",
+      "@type": "CollectionPage",
+      name: model.title,
+      description: model.description,
+      url: `${siteUrl}${model.canonicalPath}`,
+      mainEntity: {
+        "@type": "ItemList",
+        numberOfItems: model.countries.length,
+        itemListElement: model.countries.map((country, index) => ({
+          "@type": "ListItem",
+          position: index + 1,
+          url: `${siteUrl}${country.canonicalPath}`,
+          name: country.name,
+        })),
+      },
+    };
+  }
   if (model.kind === "university_detail") {
     const university = model.university;
     return {
@@ -1143,8 +1201,10 @@ export function renderPublicCatalogHtml(input: {
   html = replaceMeta(html, "name", "twitter:title", input.model.title);
   html = replaceMeta(html, "name", "twitter:description", input.model.description);
 
-  let shell = input.model.kind === "program_list"
-    ? renderProgramList(input.model)
+  let shell = input.model.kind === "country_list"
+    ? renderCountryList(input.model)
+    : input.model.kind === "program_list"
+      ? renderProgramList(input.model)
     : input.model.kind === "program_detail"
       ? renderProgramDetail(input.model)
       : input.model.kind === "university_detail"

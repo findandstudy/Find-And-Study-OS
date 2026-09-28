@@ -124,6 +124,7 @@ test("production render middleware honors governed redirect and gone aliases", (
 });
 
 test("only bounded public content paths enter the render pilot and CMS pages cannot shadow system routes", () => {
+  assert.equal(matchPublicCatalogRenderPath("/en/countries")?.kind, "country_list");
   assert.equal(matchPublicCatalogRenderPath("/en/programs")?.kind, "program_list");
   const detail = matchPublicCatalogRenderPath("/tr/programs/bilgisayar-muhendisligi-42");
   assert.equal(detail?.kind, "program_detail");
@@ -151,6 +152,37 @@ test("only bounded public content paths enter the render pilot and CMS pages can
   assert.equal(matchPublicCatalogRenderPath("/en/guides"), null);
   assert.equal(matchPublicCatalogRenderPath("/en/programs/a/b"), null);
   assert.equal(matchPublicCatalogRenderPath("/en/universities"), null);
+});
+
+test("country directory SSR renders safe canonical links and CollectionPage data", () => {
+  const model: PublicCatalogRenderModel = {
+    kind: "country_list",
+    locale: "en",
+    canonicalPath: "/en/countries",
+    title: "Study destinations",
+    description: "Explore current destinations.",
+    indexable: true,
+    countries: [{
+      id: 1,
+      name: "United Kingdom <script>",
+      code: "GB",
+      canonicalPath: "/en/countries/united-kingdom",
+      universityCount: 12,
+      programCount: 48,
+      featured: true,
+    }],
+  };
+  const html = renderPublicCatalogHtml({
+    indexHtml: '<html lang="en"><head><title>App</title><link rel="canonical" href="/" /></head><body><div id="root"></div><script src="/assets/index.js"></script></body></html>',
+    model,
+    siteUrl: "https://example.test",
+    nonce: "safe-nonce",
+  });
+  assert.match(html, /data-public-render-shell="country-list"/);
+  assert.match(html, /href="\/en\/countries\/united-kingdom"/);
+  assert.match(html, /United Kingdom &lt;script&gt;/);
+  assert.doesNotMatch(html, /United Kingdom <script>/);
+  assert.match(html, /"@type":"CollectionPage"/);
 });
 
 test("rendered shell escapes catalogue content, emits canonical metadata, and nonces every script", () => {
