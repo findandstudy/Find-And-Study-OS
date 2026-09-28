@@ -136,6 +136,7 @@ import { normalizeInboxStudentExtraction } from "../lib/inboxStudentExtraction";
 import { writeAudit } from "../lib/auditLog";
 import { recomputeStudentPhoto } from "../lib/studentPhoto";
 import { callerOwnsObject } from "../lib/objectAuthz";
+import { consumeFinalizedUploadGrantInDrizzle } from "../lib/uploadGrant";
 import { loadDocCatalogKeySet } from "../lib/docCatalog";
 import {
   contentDispositionWithFilename,
@@ -4879,8 +4880,11 @@ router.post(
     }
 
     let bytes: Buffer;
+    let storedMimeType: string;
     try {
       const file = await inboxMediaStorage.getObjectEntityFile(fileKey);
+      const [metadata] = await file.getMetadata();
+      storedMimeType = String(metadata.contentType ?? "").split(";", 1)[0].trim().toLowerCase();
       [bytes] = await file.download();
     } catch (error) {
       console.error("[INBOX manual-document] uploaded object read failed:", error);
@@ -4889,6 +4893,11 @@ router.post(
     }
     if (bytes.length !== sizeBytes) {
       res.status(400).json({ error: "Uploaded file size does not match the declared size" });
+      return;
+    }
+    const declaredMimeType = mimeType.split(";", 1)[0].trim().toLowerCase();
+    if (!storedMimeType || storedMimeType !== declaredMimeType) {
+      res.status(400).json({ error: "Uploaded file type does not match the declared type" });
       return;
     }
     const bufferError = await validateStudentDocumentBuffer(
@@ -4941,21 +4950,39 @@ router.post(
       return;
     }
 
-    const [document] = await db.insert(documentsTable).values({
-      name: buildDocNameFromParts(ownerFirstName, ownerLastName, documentType, mimeType),
-      type: documentType,
-      status: "pending",
-      studentId: ownerType === "student" ? ownerId : null,
-      leadId: ownerType === "lead" ? ownerId : null,
-      applicationId: null,
-      fileKey,
-      mimeType,
-      sizeBytes,
-      source: "inbox_manual",
-      sourceConversationId: conversationId,
-      sourceMessageId: null,
-      sourceAttachmentId: null,
-    }).returning();
+    let document: typeof documentsTable.$inferSelect;
+    try {
+      document = await db.transaction(async (tx) => {
+        if (!await consumeFinalizedUploadGrantInDrizzle(tx, {
+          objectPath: fileKey,
+          uploadedBy: req.user!.id,
+          bytes,
+          contentType: storedMimeType,
+        })) throw new Error("INBOX_MANUAL_UPLOAD_GRANT_NOT_FINALIZED");
+        const [created] = await tx.insert(documentsTable).values({
+          name: buildDocNameFromParts(ownerFirstName, ownerLastName, documentType, storedMimeType),
+          type: documentType,
+          status: "pending",
+          studentId: ownerType === "student" ? ownerId : null,
+          leadId: ownerType === "lead" ? ownerId : null,
+          applicationId: null,
+          fileKey,
+          mimeType: storedMimeType,
+          sizeBytes: bytes.length,
+          source: "inbox_manual",
+          sourceConversationId: conversationId,
+          sourceMessageId: null,
+          sourceAttachmentId: null,
+        }).returning();
+        return created;
+      });
+    } catch (error) {
+      if (error instanceof Error && error.message === "INBOX_MANUAL_UPLOAD_GRANT_NOT_FINALIZED") {
+        res.status(409).json({ error: "Uploaded file is not finalized or has already been used" });
+        return;
+      }
+      throw error;
+    }
 
     if (
       ownerType === "student" &&

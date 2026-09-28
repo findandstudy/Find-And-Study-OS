@@ -264,6 +264,10 @@ verisi ve dış Academy alıcısı değiştirilmedi.
      üretemiyor.
    - Metin-only mesaj davranışı ve mevcut bildirim dağıtımı korunuyor; dış provider
      veya feature state'i açılmadı.
+   - Inbox Documents yan panelindeki manuel belge yükleme de object storage'daki
+     gerçek byte/boyut/MIME'ı yeniden doğruluyor. Grant tüketimi ile document insert
+     aynı transaction'da; eksik, değişmiş veya yeniden kullanılmış object belge
+     referansı oluşturamıyor.
 
 22. **Public staging CWV ölçüm kapısı ve ilk-boya düzeltmesi**
    - Yalnız exact `https://staging.findandstudy.com` origin'ine, explicit opt-in ile
@@ -429,6 +433,8 @@ verisi ve dış Academy alıcısı değiştirilmedi.
   audit alt grupları **PASS**.
 - Registration identity **3/3 PASS**; internal-message attachment grant contract
   **3/3 PASS**; API typecheck **PASS**.
+- Inbox manual-document grant ve stored-byte contract **3/3 PASS**; mesaj ekiyle
+  birleşik hedefli suite **6/6 PASS**.
 - Migration authority/validation: **129/129 PASS**.
 - Disposable PostgreSQL 16.15: fresh `0→129`, upload grant migration, route E2E,
   DB helper fixture cleanup: **PASS**; cluster durduruldu.
