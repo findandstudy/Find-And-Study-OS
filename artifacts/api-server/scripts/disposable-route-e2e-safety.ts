@@ -8,6 +8,7 @@ import path from "node:path";
 
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 export const EMPTY_BUSINESS_TABLES = [
+  "object_upload_grants",
   "users", "students", "agents", "leads", "applications", "documents",
   "object_owners", "sessions", "integrations", "channel_accounts", "email_queue",
   "conversations", "messages", "external_contacts", "notifications", "audit_logs",

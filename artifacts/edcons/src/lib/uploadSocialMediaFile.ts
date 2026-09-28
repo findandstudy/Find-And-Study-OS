@@ -1,4 +1,5 @@
 import { apiFetch } from "./apiFetch";
+import { finalizeObjectUpload } from "./finalizeObjectUpload";
 
 const BASE_URL = import.meta.env?.BASE_URL?.replace(/\/$/, "") || "";
 
@@ -81,6 +82,7 @@ export async function uploadSocialMediaFile(
   });
   if (!upload.ok)
     throw new Error(await errorMessage(upload, "Social media upload failed"));
+  await finalizeObjectUpload(prepared.objectPath);
 
   const registration = await apiFetch(`${BASE_URL}/api/social/media`, {
     method: "POST",

@@ -8,13 +8,13 @@
     "defaultEnforcement": "legacy_quarantine"
   },
   "totals": {
-    "routeRegistrations": 882,
-    "requireAuth": 769,
+    "routeRegistrations": 883,
+    "requireAuth": 770,
     "requireRole": 494,
     "requirePermission": 78,
     "requireScope": 0,
     "directRoleChecks": 32,
-    "authOnlyRouteCandidates": 128,
+    "authOnlyRouteCandidates": 129,
     "publicRouteCandidates": 192
   },
   "files": [
@@ -1040,7 +1040,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/socialOperations.ts",
-      "sha256": "c5c567735508d8eaa51d9ab1e1075441c2b3b19c881197eaa6763a1814ed3892",
+      "sha256": "f86ee77f8acbe37ae248ac6aacf043b571d22fb854fbace4b9d4d99bca1558d9",
       "routeRegistrations": 25,
       "requireAuth": 26,
       "requireRole": 0,
@@ -1085,14 +1085,14 @@
     },
     {
       "path": "artifacts/api-server/src/routes/storage.ts",
-      "sha256": "b9220b4c8a0f2dda5a4e4a42cf29cc86aafd003599f2b60b855973b1eb926741",
-      "routeRegistrations": 5,
-      "requireAuth": 5,
+      "sha256": "cd200a2f9f7be46622cd6895e08255436706cb85ebdc631667dfaf5658d983d7",
+      "routeRegistrations": 6,
+      "requireAuth": 6,
       "requireRole": 0,
       "requirePermission": 0,
       "requireScope": 0,
       "directRoleChecks": 0,
-      "authOnlyRouteCandidates": 4,
+      "authOnlyRouteCandidates": 5,
       "publicRouteCandidates": 1,
       "enforcement": "legacy_quarantine",
       "owner": "Platform Engineering",

@@ -22,6 +22,15 @@
       "note": "Immutable local PUT publication after route ownership validation. Exact-byte/MIME retry is a no-op; changed content conflicts. Cross-process lock and exclusive publication do not authorize a tenant pilot or replace scoped upload grants."
     },
     {
+      "path": "artifacts/api-server/src/lib/uploadGrant.ts",
+      "ownership": "tenant_owned",
+      "enforcement": "quarantine_required",
+      "risk": "high",
+      "owner": "Evidence & Storage",
+      "externalPilot": "quarantine",
+      "note": "Short-lived authenticated upload intent and atomic metadata/digest finalization foundation. It does not authorize external pilot activation or make legacy attachment consumers safe until every consumer requires and consumes a finalized grant."
+    },
+    {
       "path": "artifacts/api-server/src/lib/notifications/stageEmailAutomation.ts",
       "ownership": "external_integration",
       "enforcement": "quarantine_required",

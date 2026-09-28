@@ -3,6 +3,7 @@ import { z } from "zod";
 import * as nodePath from "node:path";
 import { requireAuth, requirePermission, logAudit } from "../lib/auth";
 import { callerOwnsObject, recordObjectOwner } from "../lib/objectAuthz";
+import { issueUploadGrant } from "../lib/uploadGrant";
 import {
   ObjectNotFoundError,
   ObjectStorageService,
@@ -1398,6 +1399,15 @@ router.post(
       const objectPath = objectStorage.normalizeObjectEntityPath(uploadURL);
       if (!(await recordObjectOwner(objectPath, req.user!.id))) {
         res.status(503).json({ error: "SOCIAL_MEDIA_UPLOAD_AUTH_UNAVAILABLE" });
+        return;
+      }
+      if (!(await issueUploadGrant({
+        objectPath,
+        uploadedBy: req.user!.id,
+        expectedSize: parsed.data.size,
+        expectedContentType: parsed.data.contentType,
+      }))) {
+        res.status(503).json({ error: "SOCIAL_MEDIA_UPLOAD_GRANT_UNAVAILABLE" });
         return;
       }
       res.setHeader("Cache-Control", "private, no-store");

@@ -3,7 +3,7 @@
 ## Kapsam
 
 23 Eylül 2026 incelemesindeki hâlâ açık ve bu repo içinde güvenle uygulanabilir
-üç boşluk kapatıldı. Production, staging, VPS, provider ayarı, gerçek kullanıcı
+dört boşluk kapatıldı. Production, staging, VPS, provider ayarı, gerçek kullanıcı
 verisi ve dış Academy alıcısı değiştirilmedi.
 
 ## Tamamlananlar
@@ -33,6 +33,18 @@ verisi ve dış Academy alıcısı değiştirilmedi.
    - Üç bus SIGTERM/SIGINT shutdown sırasında listener ve reconnect timer'larını
      bırakıyor.
 
+4. **Kalıcı upload grant ve finalizasyon temeli**
+   - Generic storage ve social upload URL'leri, authenticated owner, beklenen boyut,
+     MIME ve 15 dakikalık süreyle kalıcı granta bağlanıyor.
+   - Finalizasyon provider'dan okunan gerçek byte, MIME ve SHA-256 ile yapılıyor;
+     metadata farkı, expiry ve başka kullanıcı fail-closed reddediliyor.
+   - Claim tek atomic conditional UPDATE ile yapıldığından eşzamanlı talepler
+     aynı grantı iki kez kazanamıyor; exact retry güvenli replay oluyor.
+   - Local immutable PUT aynı authenticated akışta otomatik finalize ediliyor;
+     document ve social istemcileri provider upload sonrası finalize endpoint'ini çağırıyor.
+   - Bu temel henüz eski bütün attachment consumer'larına zorunlu consume kuralı
+     getirmez; o yüzden external pilot izni açılmadı ve writer quarantine'da kaldı.
+
 ## Doğrulama
 
 - Security regression: **115/115 PASS**.
@@ -40,12 +52,17 @@ verisi ve dış Academy alıcısı değiştirilmedi.
 - Web-form replay: **9/9 PASS**.
 - Application concurrency: **5/5 PASS**.
 - Import lifecycle: **12/12 PASS**.
+- Upload grant contract: **13/13 PASS**.
+- Upload grant PostgreSQL 16.15: **12/12 PASS**.
+- Disposable authenticated HTTP corridor: **PASS**; real login/session, CSRF,
+  owner-bound grant, initial upload, exact replay, immutable conflict,
+  cross-user/anonymous deny, logout, zero external delivery ve tam DB/storage cleanup.
 - API build/typecheck: **PASS**.
 - Edcons i18n + 114 contract testi + production build + sitemap + bundle budget:
   **PASS**.
-- Migration authority/validation: **128/128 PASS**.
-- Disposable PostgreSQL 16.15: mevcut disposable `126→128`, receipt table,
-  unique replay claim ve fixture cleanup: **PASS**; cluster durduruldu.
+- Migration authority/validation: **129/129 PASS**.
+- Disposable PostgreSQL 16.15: fresh `0→129`, upload grant migration, route E2E,
+  DB helper fixture cleanup: **PASS**; cluster durduruldu.
 - Legacy route ve tenant-writer normal drift kapıları: **PASS**; yeni seed writer
   quarantine altında sınıflandırıldı, hiçbir external-pilot izni açılmadı.
 
@@ -61,9 +78,9 @@ dilimde yapılmadı.
 
 - Academy receiver tarafında issuer/audience + single-use exchange: receiver bu
   repoda değil; koordineli iki taraflı değişiklik gerekir.
-- Genel cloud signed-PUT upload grant consume/finalization: local immutable
-  publisher hazır, fakat cloud provider completion receipt'i ve bütün attach
-  rotalarının tek sözleşmeye alınması ayrı migration/adapter dilimidir.
+- Bütün legacy attachment rotalarında `FINALIZED → CONSUMED` zorunluluğu:
+  grant/finalization temeli ve ana document/social istemcileri hazır; kalan ad-hoc
+  consumer'lar dar rotalar halinde migrate edilmeden global enforcement açılmaz.
 - Application kaydıyla finance/portal/genel notification intent'lerinin tümünü
   aynı transaction outbox'ına almak: stage email bunu yapıyor; kalan devam işleri
   dar command/worker dönüşümü ister.
@@ -73,4 +90,3 @@ dilimde yapılmadı.
 - Academy/provider sandbox E2E, offsite restore/DR, iki-process cache
   invalidation ve gerçek yüksek-hacim/CWV ölçümü harici ortam/credential veya
   operasyon penceresi gerektirir; production üzerinde otomatik çalıştırılmaz.
-

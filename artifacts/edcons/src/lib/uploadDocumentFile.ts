@@ -1,5 +1,6 @@
 import { apiFetch } from "./apiFetch";
 import { validateApplicationDocumentFileObj } from "./fileUploadValidation";
+import { finalizeObjectUpload } from "./finalizeObjectUpload";
 
 const BASE_URL = import.meta.env?.BASE_URL?.replace(/\/$/, "") || "";
 
@@ -62,6 +63,7 @@ export async function uploadDocumentFile(file: File): Promise<UploadResult> {
   if (!putRes.ok) {
     throw new Error(`Upload to storage failed (${putRes.status})`);
   }
+  await finalizeObjectUpload(objectPath);
 
   return { fileKey: objectPath, mimeType: file.type, sizeBytes: file.size };
 }
