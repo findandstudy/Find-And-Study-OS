@@ -234,6 +234,26 @@ verisi ve dış Academy alıcısı değiştirilmedi.
    - Manuel run'ın mevcut audit çağrısı artık request lifecycle içinde gerçekten
      await ediliyor; dış AI veya otomatik çalıştırma feature state'i açılmadı.
 
+19. **Data Quality onaylı düzeltme + audit atomikliği**
+   - Legacy application→lead ilişki onayı ile `approve_application_lead_link`
+     audit sonucu aynı transaction içinde yazılıyor. Audit insert başarısızsa
+     ilişki değişikliği commit edilmiyor.
+   - Idempotent tekrar ikinci audit üretmiyor; seçilen lead'in exact student
+     lineage kontrolü ve advisory transaction lock korunuyor.
+
+20. **Katalog veri güvenilirliği ve değişiklik etkisi ilk dilimi**
+   - Mevcut Data Quality ekranına verified `price_components`, aktif
+     `program_intakes` ve kanonik source record'ları yeniden kullanan salt-okunur
+     confidence görünümü eklendi; yeni factual tablo veya paralel katalog yok.
+   - Program bazında kaynak, son doğrulama, source expiry ve eksik
+     tuition/intake/deadline alanları gösteriliyor. Read-only etki önizlemesi aynı
+     kaydın kaç public detail sayfasını ve kaç aktif başvuruyu etkilediğini verir.
+   - Sorgu repeatable-read/read-only transaction, 8 saniye statement timeout ve
+     200 satır hard limit ile çalışır; sonuç private/no-store'dur. Otomatik
+     publish, tahmin, AI üretimi veya application mutation yoktur.
+   - Kaynak linki yalnız HTTP(S) ise UI'a çıkar; riskli URL şemaları fail-closed
+     elenir.
+
 ## Doğrulama
 
 - Security regression: **115/115 PASS**.
@@ -342,6 +362,18 @@ verisi ve dış Academy alıcısı değiştirilmedi.
   source→source döngüsü reddedilir. Gerçek Express rollback/duplicate matrisi
   **6/6 PASS**, audit durability contract **125/125 PASS**; API typecheck ve
   production build **PASS**.
+- Data Quality application→lead repair audit'i mutation transaction'ına alındı;
+  geniş audit durability contract **125/125 PASS** olarak kaldı. Katalog
+  confidence projection/source URL/read-only sınırı **3/3 PASS**; Operations
+  bounded read-model **3/3 PASS**; API/Edcons typecheck, API build ve Edcons
+  i18n + **119/119** contract testi + production build + sitemap + bundle budget
+  **PASS**.
+- Birleşik son security regression: ana grup **115/115 PASS**; native/security
+  hardening **118 PASS, 1 Windows symlink privilege SKIP**; web-form,
+  application concurrency, lifecycle, upload grant ve bütün route atomicity
+  alt grupları **PASS**. Sonrasında yanlış dosya adıyla yapılan ek bir test CLI
+  çağrısı ürün testi çalıştırmadan komut seviyesinde reddedildi; doğru birleşik
+  güvenlik komutu ve hedefli audit/confidence komutu başarıyla tamamlandı.
 - Migration authority/validation: **129/129 PASS**.
 - Disposable PostgreSQL 16.15: fresh `0→129`, upload grant migration, route E2E,
   DB helper fixture cleanup: **PASS**; cluster durduruldu.
