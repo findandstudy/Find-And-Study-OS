@@ -510,6 +510,30 @@ verisi ve dış Academy alıcısı değiştirilmedi.
 - Legacy route ve tenant-writer normal drift kapıları: **PASS**; yeni seed writer
   quarantine altında sınıflandırıldı, hiçbir external-pilot izni açılmadı.
 
+## 28 Eylül staging doğrulaması ve CWV takip dilimi
+
+- Exact `edfe3f87847191bc4e199b3c198409e9e28f646f` kaynak commit'i checksum'lı
+  staging yedeğinden sonra `staging-20260928T190154Z-edfe3f878471` release'i
+  olarak dağıtıldı. Uygulama/DB healthy, restart `0`, ledger `129/129`, runtime
+  UID/GID `10042:10042`, read-only root filesystem, dropped capabilities ve
+  `no-new-privileges` kontrolleri **PASS**. External delivery/background/portal
+  worker'ları kapalı kaldı; production değiştirilmedi.
+- Canonical staging origininde locale root, program listesi, ülke listesi,
+  London şehir, Abbey DLD üniversite ve örnek program sayfaları HTTP 200 +
+  `noindex, nofollow`; bilinmeyen program/şehir rotaları 404 fail-closed **PASS**.
+- Üç tekrarlı 390×844/Fast-4G/4×CPU staging laboratuvarı dürüstçe **FAIL**:
+  medyan LCP `/en` 4.128 sn, program listesi 4.108 sn, ülke listesi 3.644 sn,
+  London 4.524 sn; üniversite 2.240 sn ve program detayı 2.212 sn. CLS tümünde
+  `0–0.0004`; TBT program listesinde 203 ms ve program detayında 216 ms.
+- Waterfall ölçümü aktif locale ve public route chunk'larının ana modül
+  çalıştıktan sonra başladığını gösterdi. Module-local takip düzeltmesi Vite
+  manifestini üretir; SSR yalnız mevcut modelin locale/route chunk'ını ve güvenli
+  importlarını bounded `modulepreload` olarak ekler. Unsafe/missing manifest
+  girdileri fail-closed kalır. Hedefli sözleşme **47/47**, iki yeni preload testi
+  **2/2**, API/Edcons typecheck ve iki production build **PASS**. Bu takip
+  değişikliği yeniden staging'e çıkıp aynı üç-tekrar kapısı ölçülmeden performans
+  iyileşmesi iddia edilmez.
+
 ## Uyumluluk ve rollout notu
 
 Web-form üreticileri dağıtımdan önce `X-Webform-Timestamp`,

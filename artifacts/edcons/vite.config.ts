@@ -85,6 +85,10 @@ export default defineConfig({
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,
+    // The API SSR shell reads this manifest to preload only the active locale
+    // and public route chunk. This removes a mobile network waterfall without
+    // pulling portal-only modules into the anonymous entry bundle.
+    manifest: true,
     // Production maps must not be published with the static web root. Enable
     // hidden maps only for an explicit private error-monitoring upload step.
     sourcemap: !isProd && process.env.GENERATE_SOURCEMAPS === "1" ? "hidden" : false,

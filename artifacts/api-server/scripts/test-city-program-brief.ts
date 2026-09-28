@@ -28,7 +28,10 @@ test("city cards project only safe bounded public facts with canonical tuition a
 });
 
 test("program and university targeted invalidation include city cards", () => {
-  const invalidation = source.slice(source.indexOf("export function invalidatePublicCatalogRenderCache"));
+  const invalidation = source.slice(
+    source.indexOf("export function applyPublicCatalogRenderCacheInvalidation"),
+    source.indexOf("export function invalidatePublicCatalogRenderCache"),
+  );
   assert.match(invalidation, /input.entityType === "program"[\s\S]*?kind === "city_detail"/);
   assert.match(invalidation, /input.entityType === "university"[\s\S]*?kind === "city_detail"/);
 });

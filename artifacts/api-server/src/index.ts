@@ -21,6 +21,10 @@ import {
   renderPublicCatalogHtml,
   shouldRenderPublicCatalogPath,
 } from "./lib/publicCatalogRenderContract";
+import {
+  readPublicAssetManifest,
+  resolvePublicAssetPreloads,
+} from "./lib/publicAssetPreloads";
 import { shouldNoindexSpaPath } from "./lib/spaRobotsPolicy";
 import {
   parsePublicWebRobotsConfig,
@@ -322,6 +326,7 @@ function serveStaticFrontend() {
 
   const indexPath = path.join(distPath, "index.html");
   const indexHtml = fs.readFileSync(indexPath, "utf8");
+  const publicAssetManifest = readPublicAssetManifest(distPath);
   const configuredSiteUrl = (() => {
     try {
       const parsed = new URL(
@@ -387,6 +392,7 @@ function serveStaticFrontend() {
         model: rendered.value,
         siteUrl: configuredSiteUrl,
         nonce,
+        preloadHrefs: resolvePublicAssetPreloads(publicAssetManifest, rendered.value),
       });
       const durationMs = Number(process.hrtime.bigint() - startedAt) / 1_000_000;
       res.setHeader(

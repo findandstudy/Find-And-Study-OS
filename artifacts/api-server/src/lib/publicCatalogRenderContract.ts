@@ -1123,6 +1123,7 @@ export function renderPublicCatalogHtml(input: {
   model: PublicCatalogRenderModel;
   siteUrl: string;
   nonce: string;
+  preloadHrefs?: string[];
 }): string {
   const siteUrl = input.siteUrl.replace(/\/$/, "");
   const canonicalUrl = `${siteUrl}${input.model.canonicalPath}`;
@@ -1185,7 +1186,11 @@ export function renderPublicCatalogHtml(input: {
   if (alternatePaths.en) {
     hreflangLinks.push(`  <link rel="alternate" hreflang="x-default" href="${escapeHtml(`${siteUrl}${alternatePaths.en}`)}" />`);
   }
-  const extraHead = `  <meta name="csp-nonce" content="${escapeHtml(input.nonce)}" />\n  <meta name="public-render" content="ssr-isr-pilot" />\n${hreflangLinks.join("\n")}${hreflangLinks.length ? "\n" : ""}  <script nonce="${escapeHtml(input.nonce)}" type="application/ld+json">${safeJson(structuredData(input.model, siteUrl))}</script>\n`;
+  const preloadLinks = [...new Set(input.preloadHrefs ?? [])]
+    .filter((href) => /^\/assets\/[A-Za-z0-9._-]+\.js$/.test(href))
+    .slice(0, 16)
+    .map((href) => `  <link rel="modulepreload" crossorigin href="${escapeHtml(href)}" />`);
+  const extraHead = `  <meta name="csp-nonce" content="${escapeHtml(input.nonce)}" />\n  <meta name="public-render" content="ssr-isr-pilot" />\n${preloadLinks.join("\n")}${preloadLinks.length ? "\n" : ""}${hreflangLinks.join("\n")}${hreflangLinks.length ? "\n" : ""}  <script nonce="${escapeHtml(input.nonce)}" type="application/ld+json">${safeJson(structuredData(input.model, siteUrl))}</script>\n`;
   return html
     .replace("</head>", `${extraHead}${input.model.detailLayout ? `<script id="public-detail-layout" nonce="${escapeHtml(input.nonce)}" type="application/json">${safeJson(input.model.detailLayout)}</script>` : ""}</head>`)
     .replace(/<div\s+id=["']root["']\s*><\/div>/i, `<div id="root" data-public-render-shell-root="true">${shell}</div>`);
