@@ -17,6 +17,10 @@ import { validate, getValidated } from "../middlewares/validate";
 import { userHasPermission } from "../lib/permissions";
 import { canAssignUserRole, canManageTargetAccount } from "../lib/userAccountSecurity";
 import { evaluateLegacyUserImpersonation } from "../lib/impersonationPolicy";
+import { callerOwnsObject, canonicalizeKey } from "../lib/objectAuthz";
+import { ObjectStorageService } from "../lib/objectStorage";
+import { validateUploadedFileBuffer } from "../lib/fileUploadValidation";
+import { consumeFinalizedUploadGrantInDrizzle } from "../lib/uploadGrant";
 import {
   canLegacyActorAssignRole,
   evaluateLegacyUserManagement,
@@ -39,6 +43,35 @@ const createUserBodySchema = z.object({
 const branchIdBodySchema = z.number().int().positive().nullable();
 
 const router: IRouter = Router();
+const userAvatarObjectStorage = new ObjectStorageService();
+
+async function prepareUserAvatarUpload(objectPath: string): Promise<{
+  objectPath: string;
+  bytes: Buffer;
+  contentType: string;
+}> {
+  const objectKey = canonicalizeKey(objectPath);
+  if (!objectKey) throw new Error("USER_AVATAR_UPLOAD_INVALID_PATH");
+  const file = await userAvatarObjectStorage.getObjectEntityFile(`/objects/${objectKey}`);
+  const [metadata] = await file.getMetadata();
+  const contentType = String(metadata.contentType ?? "").split(";", 1)[0].trim().toLowerCase();
+  const [bytes] = await file.download();
+  const extensionByMime: Record<string, string> = {
+    "image/jpeg": "jpg",
+    "image/png": "png",
+    "image/webp": "webp",
+    "image/gif": "gif",
+  };
+  const extension = extensionByMime[contentType];
+  if (!extension) throw new Error("USER_AVATAR_UPLOAD_UNSUPPORTED_TYPE");
+  if (bytes.length <= 0 || bytes.length > 5 * 1024 * 1024) {
+    throw new Error("USER_AVATAR_UPLOAD_INVALID_SIZE");
+  }
+  if (await validateUploadedFileBuffer(`avatar.${extension}`, contentType, bytes)) {
+    throw new Error("USER_AVATAR_UPLOAD_SIGNATURE_MISMATCH");
+  }
+  return { objectPath, bytes, contentType };
+}
 
 const ALLOWED_PATCH_FIELDS = ["email", "firstName", "lastName", "phone", "language", "avatarUrl", "startDate", "homeAddress", "passportNumber", "contractUrl", "passportUrl", "emergencyContactName", "emergencyContactPhone"];
 const ADMIN_PATCH_FIELDS = [...ALLOWED_PATCH_FIELDS, "role", "isActive", "permissionOverrides", "branchId"];
@@ -299,6 +332,7 @@ router.patch("/users/:id", requireAuth, async (req, res): Promise<void> => {
     id: usersTable.id,
     role: usersTable.role,
     branchId: usersTable.branchId,
+    avatarUrl: usersTable.avatarUrl,
     deletedAt: usersTable.deletedAt,
   })
     .from(usersTable).where(eq(usersTable.id, id));
@@ -425,6 +459,36 @@ router.patch("/users/:id", requireAuth, async (req, res): Promise<void> => {
     }
   }
 
+  let preparedAvatar: Awaited<ReturnType<typeof prepareUserAvatarUpload>> | null = null;
+  if (updates.avatarUrl !== undefined) {
+    const avatarUrl = typeof updates.avatarUrl === "string" ? updates.avatarUrl.trim() : updates.avatarUrl;
+    if (avatarUrl === targetCheck.avatarUrl) {
+      delete updates.avatarUrl;
+    } else if (avatarUrl === "" || avatarUrl === null) {
+      updates.avatarUrl = null;
+    } else if (typeof avatarUrl !== "string" || !avatarUrl.startsWith("/api/storage/objects/")) {
+      res.status(400).json({ error: "Avatar must be an uploaded storage object" });
+      return;
+    } else {
+      if (!(await callerOwnsObject(req.user!.id, avatarUrl))) {
+        res.status(403).json({ error: "The uploaded avatar does not belong to this account" });
+        return;
+      }
+      try {
+        preparedAvatar = await prepareUserAvatarUpload(avatarUrl);
+        updates.avatarUrl = avatarUrl;
+      } catch (error) {
+        const code = error instanceof Error ? error.message : "USER_AVATAR_UPLOAD_INVALID";
+        if (code === "USER_AVATAR_UPLOAD_INVALID_SIZE") {
+          res.status(413).json({ error: "Avatar is empty or exceeds 5 MB", code });
+        } else {
+          res.status(400).json({ error: "Avatar content is invalid", code });
+        }
+        return;
+      }
+    }
+  }
+
   if (Object.keys(updates).length === 0) {
     res.status(400).json({ error: "No valid fields to update" });
     return;
@@ -437,19 +501,36 @@ router.patch("/users/:id", requireAuth, async (req, res): Promise<void> => {
   }
   let user: any = null;
   let syncedAgentId: number | null = null;
-  await db.transaction(async (tx) => {
-    const [u] = await tx.update(usersTable).set(updates).where(eq(usersTable.id, id)).returning();
-    if (!u) return;
-    user = u;
-    if (updates.phone !== undefined && AGENT_ROLES.includes(u.role as any)) {
-      const phoneE164 = toE164(u.phone ?? null);
-      const [agentRow] = await tx.update(agentsTable)
-        .set({ phone: u.phone ?? null, phoneE164 })
-        .where(eq(agentsTable.userId, u.id))
-        .returning({ id: agentsTable.id });
-      syncedAgentId = agentRow?.id ?? null;
+  try {
+    await db.transaction(async (tx) => {
+      if (preparedAvatar && !await consumeFinalizedUploadGrantInDrizzle(tx, {
+        objectPath: preparedAvatar.objectPath,
+        uploadedBy: req.user!.id,
+        bytes: preparedAvatar.bytes,
+        contentType: preparedAvatar.contentType,
+      })) throw new Error("USER_AVATAR_UPLOAD_GRANT_NOT_FINALIZED");
+      const [u] = await tx.update(usersTable).set(updates).where(eq(usersTable.id, id)).returning();
+      if (!u) return;
+      user = u;
+      if (updates.phone !== undefined && AGENT_ROLES.includes(u.role as any)) {
+        const phoneE164 = toE164(u.phone ?? null);
+        const [agentRow] = await tx.update(agentsTable)
+          .set({ phone: u.phone ?? null, phoneE164 })
+          .where(eq(agentsTable.userId, u.id))
+          .returning({ id: agentsTable.id });
+        syncedAgentId = agentRow?.id ?? null;
+      }
+    });
+  } catch (error) {
+    if (error instanceof Error && error.message === "USER_AVATAR_UPLOAD_GRANT_NOT_FINALIZED") {
+      res.status(409).json({
+        error: "Uploaded avatar is not finalized or has already been used",
+        code: "UPLOAD_GRANT_NOT_FINALIZED",
+      });
+      return;
     }
-  });
+    throw error;
+  }
   if (!user) { res.status(404).json({ error: "User not found" }); return; }
   await logAudit(req.user!.id, "update_user", "user", id, updates, req.ip);
   if (updates.phone !== undefined && AGENT_ROLES.includes(user.role as any) && syncedAgentId !== null) {
