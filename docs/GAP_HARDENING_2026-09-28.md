@@ -578,6 +578,22 @@ verisi ve dış Academy alıcısı değiştirilmedi.
 
 ## Uyumluluk ve rollout notu
 
+## 28 Eylül application stage/finance atomiklik dilimi
+
+- Stage veya atama değiştiren PATCH mevcut `expectedUpdatedAt` optimistic
+  concurrency sınırını korur; stale istemci `409 APPLICATION_VERSION_CONFLICT`
+  alır ve hiçbir finance/notification etkisi başlatamaz.
+- Kanonik `syncApplicationFinance` artık isteğe bağlı mevcut transaction
+  executor'ını kabul eder. Stage update, durable `update_application` audit
+  receipt'i ve commission/service-fee projection aynı DB transaction'ında
+  tamamlanır; finance reconciliation başarısızsa stage commit edilmez.
+- Eski post-commit reconciliation geçici uyumluluk için idempotent olarak
+  tutuldu ancak artık başarılı atomik komutu yanıltıcı bir HTTP hatasına
+  çeviremez. Yeni yazı yolu kanonik transaction içi projection'dır.
+- Application concurrency contract `9/9`, birleşik security regresyonları
+  `37/37`, library/workspace ve API typecheck **PASS**. Bu dilim dış provider
+  veya production üzerinde çalıştırılmadı.
+
 Web-form üreticileri dağıtımdan önce `X-Webform-Timestamp`,
 `X-Webform-Request-Id` ve v1 zarfını imzalayan `X-Webform-Signature` sözleşmesine
 geçmelidir. Eski token kullanımı yalnız kimlik doğrulama uyumluluğudur; replay

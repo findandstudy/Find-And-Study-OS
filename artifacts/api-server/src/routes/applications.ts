@@ -1913,6 +1913,12 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, ...AG
           changes: JSON.stringify(auditChanges),
           ipAddress: req.ip || null,
         });
+        if (updates.stage !== undefined) {
+          // Stage and its finance projection are one atomic command. If the
+          // reconciliation fails, neither the stage nor the audit receipt is
+          // committed; callers may safely retry with the same version.
+          await syncApplicationFinance(updatedApp.id, tx);
+        }
         return updatedApp;
       });
   if (!app) {
@@ -1932,6 +1938,7 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, ...AG
     res.status(404).json({ error: "Application not found" }); return;
   }
 
+  try {
   if (updates.stage !== undefined) {
     // Keep every stage-change entry point aligned with portal automation.
     await syncApplicationFinance(id);
@@ -2019,6 +2026,15 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, ...AG
         }
       }
     }
+  }
+  } catch (error) {
+    // The canonical finance projection committed atomically with the stage
+    // above. This compatibility reconciliation is temporary and must never
+    // turn an already-committed command into a misleading HTTP failure.
+    console.error("[applications] post-commit legacy finance reconciliation failed", {
+      applicationId: id,
+      message: error instanceof Error ? error.message : "unknown_error",
+    });
   }
 
   if (updates.stage !== undefined) {
