@@ -28,6 +28,7 @@ import { logAudit } from "../lib/auth";
 import { validate, getValidated } from "../middlewares/validate";
 import { consumeEmailVerificationToken, issueEmailVerificationToken } from "../lib/emailVerificationToken";
 import { evaluateRegistrationCandidate } from "../lib/studentRegistrationMatching";
+import { registrationIdentitySchema } from "../lib/registrationIdentitySchema";
 
 const loginBodySchema = z.object({
   email: z.string().trim().toLowerCase().email(),
@@ -281,7 +282,15 @@ router.post("/auth/login", validate({ body: loginBodySchema }), async (req: Requ
 });
 
 router.post("/auth/register", async (req: Request, res: Response) => {
-  const { email, password, firstName, lastName, phone } = req.body;
+  const identity = registrationIdentitySchema.safeParse(req.body);
+  if (!identity.success) {
+    res.status(400).json({
+      error: "INVALID_REGISTRATION_IDENTITY",
+      fields: identity.error.issues.map((issue) => issue.path.join(".")),
+    });
+    return;
+  }
+  const { email: normalizedEmail, password, firstName, lastName, phone } = identity.data;
   const matchingProfile = req.body.matchingProfile == null
     ? null
     : registrationProfileSchema.safeParse(req.body.matchingProfile);
@@ -290,13 +299,6 @@ router.post("/auth/register", async (req: Request, res: Response) => {
     res.status(400).json({ error: "INVALID_MATCHING_PROFILE", fields: matchingProfile.error.issues.map(issue => issue.path.join(".")) });
     return;
   }
-  if (!email || !password || !firstName || !lastName) {
-    res.status(400).json({ error: "All fields are required" });
-    return;
-  }
-
-  const normalizedEmail = email.toLowerCase().trim();
-
   const ip = getRateLimitIp(req);
   try {
     await rateLimiter.consume(`register:${ip}`);

@@ -32,6 +32,7 @@ const programFilters = readFileSync(new URL("../src/pages/public/PublicProgramFi
 const universityBrowser = readFileSync(new URL("../src/pages/public/UniversityProgramBrowser.tsx", import.meta.url), "utf8");
 const programDialog = readFileSync(new URL("../src/pages/public/PublicProgramDetailDialog.tsx", import.meta.url), "utf8");
 const cityProgramCards = readFileSync(new URL("../src/pages/public/CityProgramCards.tsx", import.meta.url), "utf8");
+const main = readFileSync(new URL("../src/main.tsx", import.meta.url), "utf8");
 
 const cardFixture: PublicProgramCardData = {
   id: 145792, name: "Source program", canonicalPath: "/en/programs/source-program-145792",
@@ -470,6 +471,14 @@ test("new presentation preserves canonical SEO, governed sections and guarded ap
   assert.match(program, /<button disabled>/);
   assert.match(program, /<div className="detail-actions">\{apply\}<\/div>/);
   assert.match(program, /offers: tuitionOffer\(tuition, programAdmissionsOpen\(program\)\)/);
+});
+
+test("SSR shell remains visible until the client route has rendered its heading", () => {
+  assert.match(main, /public-render-shell-handoff/);
+  assert.match(main, /new MutationObserver/);
+  assert.match(main, /rootElement\.querySelector\("h1"\)/);
+  assert.match(main, /window\.setTimeout\(handoff, 15_000\)/);
+  assert.doesNotMatch(main, /rootElement\.replaceChildren\(\)/);
 });
 
 test("missing optional facts and tuition do not become invented values", () => {

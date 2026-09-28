@@ -254,6 +254,36 @@ verisi ve dış Academy alıcısı değiştirilmedi.
    - Kaynak linki yalnız HTTP(S) ise UI'a çıkar; riskli URL şemaları fail-closed
      elenir.
 
+21. **Mesaj eki tek-kullanımlı grant tüketimi**
+   - Staff, öğrenci ve acente internal-message ekleri artık metadata'daki boyut ve
+     MIME'a güvenmiyor; object storage'daki gerçek metadata ve byte'lar yeniden
+     okunup karşılaştırılıyor.
+   - `FINALIZED → CONSUMED` geçişi mesaj insert'i ve conversation preview
+     güncellemesiyle aynı transaction içinde. Eksik, değiştirilmiş, başka
+     kullanıcıya ait veya daha önce tüketilmiş object hiçbir mesaj referansı
+     üretemiyor.
+   - Metin-only mesaj davranışı ve mevcut bildirim dağıtımı korunuyor; dış provider
+     veya feature state'i açılmadı.
+
+22. **Public staging CWV ölçüm kapısı ve ilk-boya düzeltmesi**
+   - Yalnız exact `https://staging.findandstudy.com` origin'ine, explicit opt-in ile
+     çalışan 390px/Fast-4G/4×CPU, üç tekrarlı ve median raporlu salt-okunur ölçüm
+     aracı eklendi. Form, auth veya mutation çalıştırmıyor.
+   - Mevcut staging baseline dürüstçe FAIL verdi: altı rota medyanında LCP 4.508–
+     5.340 ms, TBT 47–398 ms, CLS 0; aggregate median LCP 4.840 ms, TTFB 1.015 ms.
+   - SSR shell artık React route'un kendi H1'i hazır olana kadar ilk boyayı koruyor;
+     eski anlık shell silme kaynaklı boş ekran kaldırıldı. Tema bootstrap'ında üç
+     logonun birden eager indirilmesi kaldırıldı; aktif layout yalnız gereken logo
+     varyantını yüklüyor.
+   - Bu kod düzeltmeleri staging'e çıkıp aynı üç-tekrar kapısı yeniden koşmadan CWV
+     PASS iddiası yoktur.
+
+23. **Registration input maliyet ve sınır koruması**
+   - E-posta DB sorgusu, bcrypt ve doğrulama e-postasından önce normalize ve
+     validate ediliyor. E-posta, parola, ad ve telefon alanları hard bounded.
+   - Geçersiz veya aşırı büyük identity girdileri pahalı iş ya da yan etki
+     üretmeden `INVALID_REGISTRATION_IDENTITY` ile reddediliyor.
+
 ## Doğrulama
 
 - Security regression: **115/115 PASS**.
@@ -374,6 +404,13 @@ verisi ve dış Academy alıcısı değiştirilmedi.
   alt grupları **PASS**. Sonrasında yanlış dosya adıyla yapılan ek bir test CLI
   çağrısı ürün testi çalıştırmadan komut seviyesinde reddedildi; doğru birleşik
   güvenlik komutu ve hedefli audit/confidence komutu başarıyla tamamlandı.
+- Güncel frontend doğrulaması: i18n + **120/120** contract testi + typecheck +
+  production build + sitemap + bundle budget **PASS**.
+- Güncel API birleşik security regression: ana grup **118/118 PASS**; native
+  hardening **118 PASS, 1 Windows symlink privilege SKIP**; tüm atomicity ve
+  audit alt grupları **PASS**.
+- Registration identity **3/3 PASS**; internal-message attachment grant contract
+  **3/3 PASS**; API typecheck **PASS**.
 - Migration authority/validation: **129/129 PASS**.
 - Disposable PostgreSQL 16.15: fresh `0→129`, upload grant migration, route E2E,
   DB helper fixture cleanup: **PASS**; cluster durduruldu.
@@ -392,9 +429,9 @@ dilimde yapılmadı.
 
 - Academy receiver tarafında issuer/audience + single-use exchange: receiver bu
   repoda değil; koordineli iki taraflı değişiklik gerekir.
-- Kalan seyrek legacy attachment rotalarında `FINALIZED → CONSUMED` zorunluluğu:
-  generic producer'lar, social asset ve canonical document/lead consumer'ları
-  hazır; kalan her consumer kendi kayıt transaction'ına taşınmadan global
+- İncelenen staff/student/agent internal-message attachment consumer'ları artık
+  `FINALIZED → CONSUMED` zorunluluğunda. Repo genelindeki başka seyrek legacy
+  consumer'lar envanter bazında kendi kayıt transaction'larına alınmadan global
   enforcement açılmaz.
 - Application kaydıyla finance/portal/genel notification intent'lerinin tümünü
   aynı transaction outbox'ına almak: stage email bunu yapıyor; kalan devam işleri

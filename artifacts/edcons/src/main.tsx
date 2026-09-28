@@ -126,10 +126,40 @@ if (import.meta.env.DEV) {
 
 const rootElement = document.getElementById("root")!;
 // The SSR/ISR pilot emits a safe semantic shell for crawlers and first paint.
-// It is intentionally not a React hydration payload yet, so remove it before
-// createRoot mounts to avoid duplicate DOM and hydration mismatch warnings.
+// It is intentionally not a React hydration payload. Keep that factual shell
+// visible until the client route has rendered its own heading; clearing it
+// before the lazy route/data boundary resolves creates a blank first paint and
+// turns the client heading into a needlessly late LCP candidate.
 if (rootElement.hasAttribute("data-public-render-shell-root")) {
-  rootElement.replaceChildren();
+  const shell = document.createElement("div");
+  shell.id = "public-render-shell-handoff";
+  shell.setAttribute("aria-hidden", "false");
+  while (rootElement.firstChild) shell.appendChild(rootElement.firstChild);
+  rootElement.before(shell);
   rootElement.removeAttribute("data-public-render-shell-root");
+  rootElement.setAttribute("aria-hidden", "true");
+  rootElement.style.position = "absolute";
+  rootElement.style.inset = "0";
+  rootElement.style.visibility = "hidden";
+  rootElement.style.pointerEvents = "none";
+
+  let handedOff = false;
+  const handoff = () => {
+    if (handedOff) return;
+    handedOff = true;
+    observer.disconnect();
+    clearTimeout(failSafe);
+    shell.remove();
+    rootElement.removeAttribute("aria-hidden");
+    rootElement.style.removeProperty("position");
+    rootElement.style.removeProperty("inset");
+    rootElement.style.removeProperty("visibility");
+    rootElement.style.removeProperty("pointer-events");
+  };
+  const observer = new MutationObserver(() => {
+    if (rootElement.querySelector("h1")) requestAnimationFrame(handoff);
+  });
+  observer.observe(rootElement, { childList: true, subtree: true });
+  const failSafe = window.setTimeout(handoff, 15_000);
 }
 createRoot(rootElement).render(<App />);

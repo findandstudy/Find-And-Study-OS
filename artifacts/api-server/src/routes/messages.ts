@@ -36,8 +36,92 @@ import { resolveAgentFeatures } from "../lib/agentFeatures";
 import { decryptConfig } from "../lib/encryption";
 import { sendTenantEmail } from "../lib/email";
 import { emailAutomationHumanAllowed } from "../lib/notifications/emailAutomationPolicy";
+import { ObjectNotFoundError, ObjectStorageService } from "../lib/objectStorage";
+import { consumeFinalizedUploadGrantInDrizzle } from "../lib/uploadGrant";
 
 const router: IRouter = Router();
+const messageObjectStorage = new ObjectStorageService();
+
+type MessageAttachmentInput = {
+  fileName: string;
+  fileUrl: string;
+  fileType?: string;
+  fileSize: number;
+};
+
+function attachmentObjectPath(attachment: MessageAttachmentInput): string | null {
+  const prefix = "/api/storage/objects/";
+  if (!attachment.fileUrl.startsWith(prefix)) return null;
+  const objectPath = attachment.fileUrl.slice("/api/storage".length);
+  return objectPath.startsWith("/objects/") ? objectPath : null;
+}
+
+async function verifyMessageAttachment(attachment: MessageAttachmentInput): Promise<{
+  objectPath: string;
+  bytes: Buffer;
+  contentType: string;
+}> {
+  const objectPath = attachmentObjectPath(attachment);
+  if (!objectPath) throw new Error("MESSAGE_ATTACHMENT_INVALID");
+  try {
+    const file = await messageObjectStorage.getObjectEntityFile(objectPath);
+    const [storedMetadata] = await file.getMetadata();
+    const size = Number(storedMetadata.size);
+    const contentType = String(storedMetadata.contentType ?? "").split(";", 1)[0].trim().toLowerCase();
+    if (!Number.isSafeInteger(size) || size <= 0 || size > 25 * 1024 * 1024 || !contentType) {
+      throw new Error("MESSAGE_ATTACHMENT_INVALID");
+    }
+    const [bytes] = await file.download();
+    const declaredType = String(attachment.fileType ?? "").split(";", 1)[0].trim().toLowerCase();
+    if (bytes.length !== size || attachment.fileSize !== size || (declaredType && declaredType !== contentType)) {
+      throw new Error("MESSAGE_ATTACHMENT_CHANGED");
+    }
+    return { objectPath, bytes, contentType };
+  } catch (error) {
+    if (error instanceof ObjectNotFoundError) throw new Error("MESSAGE_ATTACHMENT_NOT_FOUND");
+    throw error;
+  }
+}
+
+async function persistInternalMessage(input: {
+  conversationId: number;
+  senderId: number;
+  content: string;
+  channel: string;
+  metadata: Record<string, unknown>;
+  replyToId?: number | null;
+  attachment?: MessageAttachmentInput | null;
+  markSenderRead?: boolean;
+}) {
+  const verified = input.attachment ? await verifyMessageAttachment(input.attachment) : null;
+  return db.transaction(async (tx) => {
+    if (verified && !await consumeFinalizedUploadGrantInDrizzle(tx, {
+      objectPath: verified.objectPath,
+      uploadedBy: input.senderId,
+      bytes: verified.bytes,
+      contentType: verified.contentType,
+    })) throw new Error("MESSAGE_UPLOAD_GRANT_NOT_FINALIZED");
+    const [message] = await tx.insert(messagesTable).values({
+      conversationId: input.conversationId,
+      senderId: input.senderId,
+      content: input.content,
+      channel: input.channel,
+      status: "sent",
+      replyToId: input.replyToId || null,
+      metadata: input.metadata,
+    }).returning();
+    const preview = input.attachment ? `📎 ${input.attachment.fileName}` : input.content.substring(0, 100);
+    await tx.update(conversationsTable).set({ lastMessageAt: new Date(), lastMessagePreview: preview })
+      .where(eq(conversationsTable.id, input.conversationId));
+    if (input.markSenderRead) {
+      await tx.update(conversationParticipantsTable).set({ lastReadAt: new Date() }).where(and(
+        eq(conversationParticipantsTable.conversationId, input.conversationId),
+        eq(conversationParticipantsTable.userId, input.senderId),
+      ));
+    }
+    return message;
+  });
+}
 
 const STAFF_ROLE_LIST = ["super_admin", "admin", "manager", "staff", "consultant", "accountant", "editor"];
 
@@ -513,37 +597,21 @@ router.post("/conversations/:id/messages", requireAuth, requireRole(...STAFF_ROL
 
   const messageContent = content?.trim() || (hasAttachment ? `📎 ${metadata.attachment.fileName}` : "");
 
-  const [message] = await db
-    .insert(messagesTable)
-    .values({
-      conversationId,
-      senderId: userId,
-      content: messageContent,
-      channel,
-      status: "sent",
-      replyToId: replyToId || null,
-      metadata: metadata || {},
-    })
-    .returning();
-
-  const preview = hasAttachment ? `📎 ${metadata.attachment.fileName}` : messageContent.substring(0, 100);
-  await db
-    .update(conversationsTable)
-    .set({
-      lastMessageAt: new Date(),
-      lastMessagePreview: preview,
-    })
-    .where(eq(conversationsTable.id, conversationId));
-
-  await db
-    .update(conversationParticipantsTable)
-    .set({ lastReadAt: new Date() })
-    .where(
-      and(
-        eq(conversationParticipantsTable.conversationId, conversationId),
-        eq(conversationParticipantsTable.userId, userId)
-      )
-    );
+  let message;
+  try {
+    message = await persistInternalMessage({
+      conversationId, senderId: userId, content: messageContent, channel,
+      replyToId, metadata: metadata || {}, attachment: hasAttachment ? metadata.attachment : null,
+      markSenderRead: true,
+    });
+  } catch (error) {
+    const code = error instanceof Error ? error.message : "";
+    if (code.startsWith("MESSAGE_ATTACHMENT_") || code === "MESSAGE_UPLOAD_GRANT_NOT_FINALIZED") {
+      res.status(code === "MESSAGE_ATTACHMENT_NOT_FOUND" ? 400 : 409).json({ error: "Attachment is missing, changed, or already used" });
+      return;
+    }
+    throw error;
+  }
 
   const otherParticipants = await db
     .select({ userId: conversationParticipantsTable.userId })
@@ -1704,12 +1772,20 @@ router.post("/student/conversations/:id/messages", requireAuth, async (req, res)
 
   const messageContent = content?.trim() || (hasAttachment ? `📎 ${metadata.attachment.fileName}` : "");
 
-  const [message] = await db.insert(messagesTable).values({
-    conversationId, senderId: userId, content: messageContent, channel: "internal", status: "sent", metadata: metadata || {},
-  }).returning();
-
-  const preview = hasAttachment ? `📎 ${metadata.attachment.fileName}` : messageContent.substring(0, 100);
-  await db.update(conversationsTable).set({ lastMessageAt: new Date(), lastMessagePreview: preview }).where(eq(conversationsTable.id, conversationId));
+  let message;
+  try {
+    message = await persistInternalMessage({
+      conversationId, senderId: userId, content: messageContent, channel: "internal",
+      metadata: metadata || {}, attachment: hasAttachment ? metadata.attachment : null,
+    });
+  } catch (error) {
+    const code = error instanceof Error ? error.message : "";
+    if (code.startsWith("MESSAGE_ATTACHMENT_") || code === "MESSAGE_UPLOAD_GRANT_NOT_FINALIZED") {
+      res.status(code === "MESSAGE_ATTACHMENT_NOT_FOUND" ? 400 : 409).json({ error: "Attachment is missing, changed, or already used" });
+      return;
+    }
+    throw error;
+  }
 
   const otherParticipants = await db
     .select({ odUserId: conversationParticipantsTable.userId })
@@ -1989,12 +2065,20 @@ router.post("/agent/conversations/:id/messages", requireAuth, requireAgentStaffP
 
   const messageContent = content?.trim() || (hasAttachment ? `📎 ${metadata.attachment.fileName}` : "");
 
-  const [message] = await db.insert(messagesTable).values({
-    conversationId, senderId: userId, content: messageContent, channel: "internal", status: "sent", metadata: metadata || {},
-  }).returning();
-
-  const preview = hasAttachment ? `📎 ${metadata.attachment.fileName}` : messageContent.substring(0, 100);
-  await db.update(conversationsTable).set({ lastMessageAt: new Date(), lastMessagePreview: preview }).where(eq(conversationsTable.id, conversationId));
+  let message;
+  try {
+    message = await persistInternalMessage({
+      conversationId, senderId: userId, content: messageContent, channel: "internal",
+      metadata: metadata || {}, attachment: hasAttachment ? metadata.attachment : null,
+    });
+  } catch (error) {
+    const code = error instanceof Error ? error.message : "";
+    if (code.startsWith("MESSAGE_ATTACHMENT_") || code === "MESSAGE_UPLOAD_GRANT_NOT_FINALIZED") {
+      res.status(code === "MESSAGE_ATTACHMENT_NOT_FOUND" ? 400 : 409).json({ error: "Attachment is missing, changed, or already used" });
+      return;
+    }
+    throw error;
+  }
 
   const otherParticipants = await db
     .select({ odUserId: conversationParticipantsTable.userId })

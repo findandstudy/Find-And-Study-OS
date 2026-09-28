@@ -225,25 +225,6 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   }, [applyThemeColors, settings]);
 
   useEffect(() => {
-    const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
-    const sources = [
-      settings.logoUrl ? `${BASE}/api/settings/branding/logo` : null,
-      settings.logoDarkUrl ? `${BASE}/api/settings/branding/logo?variant=dark` : null,
-      settings.logoSquareUrl ? `${BASE}/api/settings/branding/logo?variant=square` : null,
-    ].filter((source): source is string => Boolean(source));
-
-    // Warm every configured logo variant once. Route changes and theme
-    // switches can then reuse the decoded browser image instead of briefly
-    // showing an empty logo slot while another request completes.
-    for (const source of sources) {
-      const image = new Image();
-      image.decoding = "async";
-      image.src = source;
-      void image.decode?.().catch(() => undefined);
-    }
-  }, [settings.logoUrl, settings.logoDarkUrl, settings.logoSquareUrl]);
-
-  useEffect(() => {
     refreshSettings();
   }, [refreshSettings]);
 
