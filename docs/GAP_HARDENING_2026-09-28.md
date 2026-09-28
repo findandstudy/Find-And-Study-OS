@@ -475,6 +475,13 @@ verisi ve dış Academy alıcısı değiştirilmedi.
   cache invalidasyonu commit sonrasına taşınmıştır. Hedefli contract **4/4**,
   public-settings atomicity **3/3**, geniş hardening **132 PASS + 1 Windows
   symlink privilege SKIP**, API typecheck ve production build **PASS**.
+- Yönetici acente oluşturma/düzenleme akışındaki logo, kimlik belgesi, işletme
+  belgesi ve manuel sözleşme yüklemeleri de uploader ownership + gerçek
+  bayt/MIME + dosya imzası + dar boyut politikasına bağlandı. Grant tüketimi,
+  kullanıcı/acente kaydı veya profil mutation'ı ve bounded audit aynı
+  transaction içinde; başarısız ya da yeniden kullanılmış grant kullanıcıyı
+  veya acente kaydını yarım bırakmıyor. Hedefli contract **5/5 PASS**; API
+  typecheck **PASS**.
 - Migration authority/validation: **129/129 PASS**.
 - Disposable PostgreSQL 16.15: fresh `0→129`, upload grant migration, route E2E,
   DB helper fixture cleanup: **PASS**; cluster durduruldu.

@@ -59,7 +59,7 @@ const router: IRouter = Router();
 const agentProfileObjectStorage = new ObjectStorageService();
 
 type PreparedAgentProfileUpload = {
-  field: "logoUrl" | "businessCertUrl";
+  field: "logoUrl" | "agentIdProofUrl" | "businessCertUrl" | "contractUrl";
   objectPath: string;
   bytes: Buffer;
   contentType: string;
@@ -92,7 +92,14 @@ async function prepareAgentProfileUpload(
   // server-derived synthetic name so signature validation compares the
   // authoritative MIME with the matching format instead of trusting a client
   // filename that is not persisted in the object key.
-  const fileName = `${field === "logoUrl" ? "logo" : "certificate"}.${extensionByMime[contentType]}`;
+  const fileStem = field === "logoUrl"
+    ? "logo"
+    : field === "agentIdProofUrl"
+      ? "identity-proof"
+      : field === "contractUrl"
+        ? "contract"
+        : "certificate";
+  const fileName = `${fileStem}.${extensionByMime[contentType]}`;
   if (await validateUploadedFileBuffer(fileName, contentType, bytes)) {
     throw new Error("AGENT_PROFILE_UPLOAD_SIGNATURE_MISMATCH");
   }
@@ -1710,6 +1717,31 @@ router.post("/agents", requireAuth, requireRole(...MANAGER_ROLES), async (req, r
   if (secondaryBrandColor !== undefined && !isHexBrandColor(secondaryBrandColor)) {
     res.status(400).json({ error: "Invalid secondary brand color" }); return;
   }
+  const preparedProfileUploads: PreparedAgentProfileUpload[] = [];
+  for (const [field, value] of [
+    ["logoUrl", logoUrl],
+    ["agentIdProofUrl", agentIdProofUrl],
+    ["businessCertUrl", businessCertUrl],
+    ["contractUrl", contractUrl],
+  ] as const) {
+    if (!value) continue;
+    if (!isValidStorageUrl(value)) {
+      res.status(400).json({ error: `Invalid URL for ${field}` });
+      return;
+    }
+    if (!(await callerOwnsObject(req.user!.id, value))) {
+      res.status(403).json({ error: `The uploaded object does not belong to this account (${field})` });
+      return;
+    }
+    try {
+      preparedProfileUploads.push(await prepareAgentProfileUpload(field, value));
+    } catch (error) {
+      const code = error instanceof Error ? error.message : "AGENT_PROFILE_UPLOAD_INVALID";
+      res.status(code === "AGENT_PROFILE_UPLOAD_INVALID_SIZE" ? 413 : 400)
+        .json({ error: `Uploaded file content is invalid (${field})`, code });
+      return;
+    }
+  }
   const normalizedPlanTier = normalizeAgentPlan(planTier);
   const normalizedFeatureOverrides = normalizeFeatureOverrides(featureOverrides);
   // Normalize at the source: the email_verification_codes row created below
@@ -1729,38 +1761,44 @@ router.post("/agents", requireAuth, requireRole(...MANAGER_ROLES), async (req, r
   const generatedPassword = generateAgentPassword();
   const generatedPasswordHash = await bcrypt.hash(generatedPassword, 10);
 
-  let userId: number | null = null;
-  {
-    const [existingUser] = await db.select().from(usersTable).where(ilike(usersTable.email, normalizedAccountEmail));
-    if (existingUser) {
-      // Only reuse an existing account when it already belongs to the agent
-      // family. Refuse to take over (and silently reset the password of) an
-      // internal/staff/student account that merely shares this email — doing
-      // so would let agent creation reset credentials and reactivate
-      // unrelated accounts.
-      if (!AGENT_ROLES.includes(existingUser.role)) {
-        res.status(409).json({ error: "An account with this email already exists and is not an agent account. Use a different email." });
-        return;
-      }
-      userId = existingUser.id;
-      // Provision the existing agent account for direct login: normalize the
-      // stored address, mark email verified + active, and (re)set a fresh
-      // password so the credentials email is valid.
-      await db.update(usersTable)
-        .set({ email: normalizedAccountEmail, emailVerified: true, isActive: true, passwordHash: generatedPasswordHash })
-        .where(eq(usersTable.id, existingUser.id));
-    } else {
-      const role = parentAgentId ? "sub_agent" : "agent";
-      const [newUser] = await db.insert(usersTable).values({
-        email: normalizedAccountEmail, firstName, lastName, role,
-        phone: phone || null, phoneE164: toE164(phone || null),
-        emailVerified: true, isActive: true, passwordHash: generatedPasswordHash,
-      }).returning();
-      userId = newUser.id;
-    }
+  const [existingUser] = await db.select().from(usersTable).where(ilike(usersTable.email, normalizedAccountEmail));
+  // Only reuse an existing account when it already belongs to the agent
+  // family. Refuse to take over (and silently reset the password of) an
+  // internal/staff/student account that merely shares this email — doing
+  // so would let agent creation reset credentials and reactivate unrelated
+  // accounts.
+  if (existingUser && !AGENT_ROLES.includes(existingUser.role)) {
+    res.status(409).json({ error: "An account with this email already exists and is not an agent account. Use a different email." });
+    return;
   }
 
-  const [agent] = await db.insert(agentsTable).values({
+  let userId: number | null = null;
+  let agent: typeof agentsTable.$inferSelect;
+  try {
+    agent = await db.transaction(async (tx) => {
+      for (const upload of preparedProfileUploads) {
+        if (!await consumeFinalizedUploadGrantInDrizzle(tx, {
+          objectPath: upload.objectPath,
+          uploadedBy: req.user!.id,
+          bytes: upload.bytes,
+          contentType: upload.contentType,
+        })) throw new Error("AGENT_PROFILE_UPLOAD_GRANT_NOT_FINALIZED");
+      }
+      if (existingUser) {
+        userId = existingUser.id;
+        await tx.update(usersTable)
+          .set({ email: normalizedAccountEmail, emailVerified: true, isActive: true, passwordHash: generatedPasswordHash })
+          .where(eq(usersTable.id, existingUser.id));
+      } else {
+        const role = parentAgentId ? "sub_agent" : "agent";
+        const [newUser] = await tx.insert(usersTable).values({
+          email: normalizedAccountEmail, firstName, lastName, role,
+          phone: phone || null, phoneE164: toE164(phone || null),
+          emailVerified: true, isActive: true, passwordHash: generatedPasswordHash,
+        }).returning();
+        userId = newUser.id;
+      }
+      const [created] = await tx.insert(agentsTable).values({
     userId,
     firstName, lastName, status,
     entityType: ent,
@@ -1794,8 +1832,25 @@ router.post("/agents", requireAuth, requireRole(...MANAGER_ROLES), async (req, r
     featureOverrides: normalizedFeatureOverrides,
     primaryBrandColor: primaryBrandColor ? String(primaryBrandColor).toUpperCase() : "#1D4ED8",
     secondaryBrandColor: secondaryBrandColor ? String(secondaryBrandColor).toUpperCase() : "#10B981",
-    embedToken: crypto.randomUUID(),
-  }).returning();
+        embedToken: crypto.randomUUID(),
+      }).returning();
+      await tx.insert(auditLogsTable).values({
+        userId: req.user!.id,
+        action: "agent.create",
+        resource: "agent",
+        resourceId: created.id,
+        changes: JSON.stringify({ uploadedFields: preparedProfileUploads.map((upload) => upload.field) }),
+        ipAddress: req.ip ?? null,
+      });
+      return created;
+    });
+  } catch (error) {
+    if (error instanceof Error && error.message === "AGENT_PROFILE_UPLOAD_GRANT_NOT_FINALIZED") {
+      res.status(409).json({ error: "Uploaded file is not finalized or has already been used", code: "UPLOAD_GRANT_NOT_FINALIZED" });
+      return;
+    }
+    throw error;
+  }
   await syncAgentAcademyPermission(agent);
 
   // Persist agency-assigned staff (multi). Accepts either the new
@@ -1998,6 +2053,28 @@ router.patch("/agents/:id", requireAuth, requireRole(...MANAGER_ROLES), async (r
   }
   const [oldAgent] = await db.select().from(agentsTable).where(eq(agentsTable.id, id));
   if (!oldAgent) { res.status(404).json({ error: "Agent not found" }); return; }
+  const preparedProfileUploads: PreparedAgentProfileUpload[] = [];
+  for (const field of ["logoUrl", "agentIdProofUrl", "businessCertUrl", "contractUrl"] as const) {
+    if (updates[field] === undefined || updates[field] === oldAgent[field]) continue;
+    const value = updates[field];
+    if (value === null || value === "") continue;
+    if (typeof value !== "string" || !isValidStorageUrl(value)) {
+      res.status(400).json({ error: `Invalid URL for ${field}` });
+      return;
+    }
+    if (!(await callerOwnsObject(req.user!.id, value))) {
+      res.status(403).json({ error: `The uploaded object does not belong to this account (${field})` });
+      return;
+    }
+    try {
+      preparedProfileUploads.push(await prepareAgentProfileUpload(field, value));
+    } catch (error) {
+      const code = error instanceof Error ? error.message : "AGENT_PROFILE_UPLOAD_INVALID";
+      res.status(code === "AGENT_PROFILE_UPLOAD_INVALID_SIZE" ? 413 : 400)
+        .json({ error: `Uploaded file content is invalid (${field})`, code });
+      return;
+    }
+  }
 
   // branchIds is a separate concern (join table), handle it before/after the agent update.
   if (req.body.branchIds !== undefined && Array.isArray(req.body.branchIds)) {
@@ -2025,7 +2102,45 @@ router.patch("/agents/:id", requireAuth, requireRole(...MANAGER_ROLES), async (r
   // No regular fields? Return early.
   let agent = oldAgent;
   if (Object.keys(updates).length > 0) {
-    [agent] = await db.update(agentsTable).set(updates).where(eq(agentsTable.id, id)).returning();
+    const fieldChanges: Record<string, { from: unknown; to: unknown }> = {};
+    for (const key of Object.keys(updates)) {
+      const oldVal = (oldAgent as Record<string, unknown>)[key];
+      const newVal = updates[key];
+      if (String(oldVal ?? "") !== String(newVal ?? "")) {
+        fieldChanges[key] = { from: oldVal ?? null, to: newVal ?? null };
+      }
+    }
+    try {
+      agent = await db.transaction(async (tx) => {
+        for (const upload of preparedProfileUploads) {
+          if (!await consumeFinalizedUploadGrantInDrizzle(tx, {
+            objectPath: upload.objectPath,
+            uploadedBy: req.user!.id,
+            bytes: upload.bytes,
+            contentType: upload.contentType,
+          })) throw new Error("AGENT_PROFILE_UPLOAD_GRANT_NOT_FINALIZED");
+        }
+        const [saved] = await tx.update(agentsTable).set(updates).where(eq(agentsTable.id, id)).returning();
+        if (!saved) throw new Error("AGENT_NOT_FOUND");
+        if (Object.keys(fieldChanges).length > 0) {
+          await tx.insert(auditLogsTable).values({
+            userId: req.user!.id,
+            action: "agent_profile_field_changed",
+            resource: "agent_profile",
+            resourceId: id,
+            changes: JSON.stringify(fieldChanges),
+            ipAddress: req.ip ?? null,
+          });
+        }
+        return saved;
+      });
+    } catch (error) {
+      if (error instanceof Error && error.message === "AGENT_PROFILE_UPLOAD_GRANT_NOT_FINALIZED") {
+        res.status(409).json({ error: "Uploaded file is not finalized or has already been used", code: "UPLOAD_GRANT_NOT_FINALIZED" });
+        return;
+      }
+      throw error;
+    }
   }
   if (updates.planTier !== undefined || updates.featureOverrides !== undefined) {
     await syncAgentAcademyPermission(agent);
@@ -2088,13 +2203,6 @@ router.patch("/agents/:id", requireAuth, requireRole(...MANAGER_ROLES), async (r
   }
 
   const auditChanges: Record<string, { from: unknown; to: unknown }> = {};
-  for (const key of Object.keys(updates)) {
-    const oldVal = (oldAgent as Record<string, unknown>)[key];
-    const newVal = (agent as Record<string, unknown>)[key];
-    if (String(oldVal ?? "") !== String(newVal ?? "")) {
-      auditChanges[key] = { from: oldVal ?? null, to: newVal ?? null };
-    }
-  }
   if (req.body.branchIds !== undefined) {
     auditChanges["branchIds"] = { from: null, to: Array.isArray(req.body.branchIds) ? req.body.branchIds.join(",") : String(req.body.branchIds) };
   }
