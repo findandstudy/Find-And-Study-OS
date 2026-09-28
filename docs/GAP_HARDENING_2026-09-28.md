@@ -715,6 +715,19 @@ verisi ve dış Academy alıcısı değiştirilmedi.
   kontrol PASS** verdi. External delivery, background ve social/portal worker
   kapıları kapalı kaldı; production değiştirilmedi.
 
+## 29 Eylül person feed mutation atomikliği
+
+- Kişi zaman çizelgesindeki note create/delete ve follow-up create/update
+  mutation'ları ile bounded audit sonucu aynı DB transaction'ına alındı. Audit
+  insert başarısızsa note/follow-up değişikliği rollback oluyor; feed event'i
+  yalnız başarılı commit sonrasında yayımlanıyor.
+- Follow-up audit'i gönderilen özel not içeriğini kopyalamıyor; yalnız kayıt
+  kimliği ve değişen alan adlarını tutuyor. Note audit'i yalnız note kimliği ve
+  internal görünürlük sınıfını içeriyor.
+- Fault-injection matrisi **3/3**, genişletilmiş audit durability contract
+  **159/159**, API typecheck ve birleşik security regression zinciri **PASS**.
+  Bu takip dilimi henüz staging'e dağıtılmadı; production değiştirilmedi.
+
 ## 29 Eylül authentication audit ve password-reset yarış koruması
 
 - Login başarı/başarısızlık, e-posta doğrulama, parola sıfırlama isteği ve logout

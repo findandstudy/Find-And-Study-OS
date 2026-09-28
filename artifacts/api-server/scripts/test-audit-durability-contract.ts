@@ -27,6 +27,7 @@ const dataQuality = source("../src/routes/dataQuality.ts");
 const staffCards = source("../src/routes/staffCards.ts");
 const stageDocuments = source("../src/routes/applicationStageDocuments.ts");
 const missingDocsFulfillment = source("../src/lib/missingDocsFulfillment.ts");
+const personFeed = source("../src/routes/personFeed.ts");
 
 assert.match(auth, /\): Promise<void> \{\s*return db\.insert\(auditLogsTable\)/,
   "audit insert exposes a real awaitable completion boundary");
@@ -334,4 +335,15 @@ assert.doesNotMatch(missingDocsFulfillment, /setImmediate\s*\(/,
 assert.doesNotMatch(missingDocsFulfillment, /logAudit\(/,
   "missing-document auto-advance does not use the non-transactional audit helper");
 
-console.log("[audit-durability-contract] 152/152 PASS");
+assert.doesNotMatch(personFeed, /logAudit\(/,
+  "person feed mutations do not use the non-transactional legacy helper");
+assert.match(personFeed, /async function writePersonFeedAudit[\s\S]*await tx\.insert\(auditLogsTable\)\.values/,
+  "person feed audit helper requires the active transaction");
+for (const action of ["create_note", "delete_note", "create_follow_up", "update_follow_up"]) {
+  assert.match(personFeed, new RegExp(`await writePersonFeedAudit\\(\\s*tx,\\s*req,\\s*"${action}"`),
+    `${action} persists its result before transaction commit`);
+}
+assert.match(personFeed, /fields: Object\.keys\(bodyParsed\.data\)\.sort\(\)/,
+  "person feed follow-up audit records field names without note content");
+
+console.log("[audit-durability-contract] 159/159 PASS");
