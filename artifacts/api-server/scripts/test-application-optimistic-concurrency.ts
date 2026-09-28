@@ -18,5 +18,15 @@ assert.ok(
   patch.indexOf('if (!app)') < patch.indexOf('dispatchNotification({'),
   "conflict exits before notification effects",
 );
+assert.match(
+  patch,
+  /await tx\.insert\(auditLogsTable\)\.values\(\{[\s\S]{0,180}action: "update_application"/,
+  "application update and its audit receipt share the same transaction",
+);
+assert.doesNotMatch(
+  patch,
+  /logAudit\(req\.user!\.id, "update_application"/,
+  "application update does not use the non-transactional legacy audit helper",
+);
 
-console.log("[application-optimistic-concurrency] 5/5 PASS");
+console.log("[application-optimistic-concurrency] 7/7 PASS");

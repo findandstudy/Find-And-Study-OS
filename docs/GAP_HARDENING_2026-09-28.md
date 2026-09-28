@@ -291,6 +291,10 @@ verisi ve dış Academy alıcısı değiştirilmedi.
   rollback, tool-bypass ve evidence-delete matrisi **6/6 PASS**; AI schedule
   **12/12 PASS**, bounded/fair lane scheduler **5/5 PASS**; API typecheck ve
   production build **PASS**.
+- Genişletilmiş audit durability contract **65/65 PASS**; application alan,
+  atama ve stage güncellemesi business mutation ile aynı transaction içinde
+  audit receipt üretir; application optimistic concurrency **7/7 PASS**; API
+  typecheck ve production build **PASS**.
 - Migration authority/validation: **129/129 PASS**.
 - Disposable PostgreSQL 16.15: fresh `0→129`, upload grant migration, route E2E,
   DB helper fixture cleanup: **PASS**; cluster durduruldu.

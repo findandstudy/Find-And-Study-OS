@@ -42,6 +42,14 @@ const destructiveApplicationRoutes = applications.slice(
   applications.indexOf('router.delete("/applications/:id"'),
   applications.indexOf('router.get("/applications/:id/notes"'),
 );
+const applicationPatchRoute = applications.slice(
+  applications.indexOf('router.patch("/applications/:id"'),
+  applications.indexOf('router.post("/applications/bulk-action"'),
+);
+assert.match(applicationPatchRoute, /await tx\.insert\(auditLogsTable\)\.values\(\{[\s\S]{0,180}action: "update_application"/,
+  "application patch persists its audit receipt before the mutation transaction commits");
+assert.doesNotMatch(applicationPatchRoute, /logAudit\(req\.user!\.id, "update_application"/,
+  "application patch does not use the non-transactional legacy helper");
 assert.equal((destructiveApplicationRoutes.match(/await tx\.insert\(auditLogsTable\)\.values\(\{/g) ?? []).length, 2,
   "application soft-delete and purge write audit in their mutation transaction");
 for (const action of ["delete_application", "purge_application"]) {
@@ -134,4 +142,4 @@ assert.match(aiPersonas, /await logAudit\(req\.user!\.id, "run_ai_persona"/,
 assert.doesNotMatch(personaCrud, /res\.status\(500\)\.json\(\{ error: msg \}\)/,
   "persona management does not disclose raw database errors");
 
-console.log("[audit-durability-contract] 63/63 PASS");
+console.log("[audit-durability-contract] 65/65 PASS");

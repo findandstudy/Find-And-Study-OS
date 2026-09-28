@@ -1859,9 +1859,16 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, ...AG
   const canCascadeAssignment = appAssignmentChanged
     ? await userHasPermission({ id: req.user!.id, role: req.user!.role }, "records.cascade_assignment")
     : false;
-  const needsAtomicJourneyUpdate = appAssignmentChanged || updates.stage !== undefined;
-  const app = needsAtomicJourneyUpdate
-    ? await db.transaction(async (tx) => {
+  const auditChanges = updates.universityApplicationId !== undefined
+    ? {
+        ...updates,
+        universityApplicationId: {
+          from: preUpdateApp?.universityApplicationId ?? null,
+          to: updates.universityApplicationId ?? null,
+        },
+      }
+    : updates;
+  const app = await db.transaction(async (tx) => {
         const [updatedApp] = await tx.update(applicationsTable).set(updates).where(and(...conditions)).returning();
         if (!updatedApp) return null;
         const newAssignedToId = typeof updatedApp.assignedToId === "number" ? updatedApp.assignedToId : null;
@@ -1898,9 +1905,16 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, ...AG
             eq(lifecycleCascadeStateTable.entityId, updatedApp.studentId),
           ));
         }
+        await tx.insert(auditLogsTable).values({
+          userId: req.user!.id,
+          action: "update_application",
+          resource: "application",
+          resourceId: id,
+          changes: JSON.stringify(auditChanges),
+          ipAddress: req.ip || null,
+        });
         return updatedApp;
-      })
-    : (await db.update(applicationsTable).set(updates).where(and(...conditions)).returning())[0];
+      });
   if (!app) {
     if (expectedUpdatedAt) {
       const [current] = await db.select({ updatedAt: applicationsTable.updatedAt })
@@ -2017,17 +2031,6 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, ...AG
       console.log(`[APPLICATIONS] Stage '${updates.stage}' mapped student #${app.studentId} → status='${mappedStudentStage}'`);
     }
   }
-
-  const auditChanges = updates.universityApplicationId !== undefined
-    ? {
-        ...updates,
-        universityApplicationId: {
-          from: preUpdateApp?.universityApplicationId ?? null,
-          to: app.universityApplicationId ?? null,
-        },
-      }
-    : updates;
-  logAudit(req.user!.id, "update_application", "application", id, auditChanges, req.ip);
 
   if (updates.stage !== undefined) {
     const stageStr = String(updates.stage);
