@@ -611,7 +611,19 @@ verisi ve dış Academy alıcısı değiştirilmedi.
   `0130` repair migration'ı eklendi. Staging executor'ının yalnız ilk statement'ı
   ledger'lediği gözlenince üç trigger kurulumu ve DB-side assertion tek atomik
   statement taşıyan ileri yönlü `0131` ile kapatıldı. Gerçek PostgreSQL
-  notification teslimatı staging adoption kapısında ayrıca doğrulanmalıdır.
+  notification teslimatı aşağıdaki staging adoption kapısında ayrıca doğrulandı.
+- Exact code-bearing `7384a36bd308fbde38a085fb608ccaec6d33c687` commit'i,
+  checksum'ı doğrulanmış ve network'süz PostgreSQL 16.15 restore smoke'u geçmiş
+  `staging-predeploy-20260928T204622Z-7384a36bd308.dump` yedeğine bağlanarak
+  staging'e alındı. Migration adoption `132/132`; bağımsız DB kontrolü function
+  + üç statement trigger'ını doğruladı. Sıfır satır değiştiren güvenli UPDATE ile
+  gerçek `LISTEN/NOTIFY` teslimatı `applications` namespace'i için **PASS** oldu.
+- Uygulama `staging-20260928T205628Z-7384a36bd308` release'ine geçirildi.
+  Health/DB, canonical public ülke-şehir-üniversite-program rotaları, noindex,
+  HSTS, non-root `10042:10042`, read-only rootfs, `CapDrop=ALL`,
+  `no-new-privileges`, restart `0` kontrolleri **PASS**. DB container yeniden
+  başlatılmadı; live integration, email delivery, background job ve tüm social
+  provider/worker bayrakları kapalı kaldı. Production değiştirilmedi.
 
 Web-form üreticileri dağıtımdan önce `X-Webform-Timestamp`,
 `X-Webform-Request-Id` ve v1 zarfını imzalayan `X-Webform-Signature` sözleşmesine
