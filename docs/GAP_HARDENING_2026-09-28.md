@@ -622,18 +622,20 @@ dilimde yapılmadı.
   `FINALIZED → CONSUMED` zorunluluğunda. Repo genelindeki başka seyrek legacy
   consumer'lar envanter bazında kendi kayıt transaction'larına alınmadan global
   enforcement açılmaz.
-- Application kaydıyla finance/portal/genel notification intent'lerinin tümünü
-  aynı transaction outbox'ına almak: stage email bunu yapıyor; kalan devam işleri
-  dar command/worker dönüşümü ister.
+- Application stage/owner komutu optimistic version bağı, durable audit ve finance
+  projection'ını aynı transaction'da tamamlar; reconciliation hatası stage yazısını
+  geri alır ve kaybeden yarış yan etki üretmez. Portal ve genel notification devam
+  işlerinin tamamını aynı standarda taşımak ayrı dar command/worker dönüşümleridir.
 - High-impact legacy audit'lerin tamamını aynı transaction'da durable
   attempt/result receipt'e taşımak: kritik mevcut çağrılarda gerçek await sınırı
   kuruldu; failure durumunda business mutation'la atomik receipt için dar command
   migration'ları hâlâ gerekir.
 - 80 legacy route'un tenant/capability koridoru: kademeli migration programıdır,
   tek global refactor değildir.
-- Facet gibi kullanıcı-scope process-local cache'lerin kalan çoklu-process
-  invalidasyonları ayrı dar fazlardır; public katalog/Course Finder ve notification
-  count iki-process koridorları tamamlandı.
+- Public katalog/Course Finder, notification count ve application/lead/student
+  facet cache'leri committed PostgreSQL notification ile çoklu-process
+  invalidasyon koridoruna alındı. Yeni process-local cache eklenirse aynı sözleşme
+  veya yalnız kısa TTL ile açıkça sınıflandırılmalıdır.
 - Academy/provider sandbox E2E, offsite restore/DR ve gerçek yüksek-hacim/CWV
   ölçümü harici ortam/credential veya operasyon penceresi gerektirir; production
   üzerinde otomatik çalıştırılmaz.
