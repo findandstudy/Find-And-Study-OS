@@ -694,6 +694,27 @@ verisi ve dış Academy alıcısı değiştirilmedi.
   pipeline completion-target **3/3 PASS**, API typecheck **PASS**. Bu dilim henüz
   staging'e dağıtılmadı; production değiştirilmedi.
 
+## 29 Eylül staff/stage belge paketi staging adoption
+
+- Staff salary/commission audit atomikliği, staff document tek-kullanımlı upload
+  grant tüketimi ve application stage-document yaşam döngüsü exact
+  `52bf75b6d205db97fbf8d663759e366f0932b290` code commit'inde birleştirildi.
+  Birleşik security regression zinciri, audit durability **152/152**, pipeline
+  completion-target **3/3**, API typecheck ve production build **PASS** oldu.
+- Dağıtım öncesi `fasos_staging` için checksum'lı custom-format yedek alındı:
+  `staging-predeploy-20260928T214906Z-52bf75b6d205-fasos_staging.dump`.
+  Arşiv okunabilirliği doğrulandı; ayrı, ağsız ve tmpfs tabanlı PostgreSQL 16.15
+  restore tatbikatında **256** public tablo, **13** sentetik user ve **132/132**
+  migration doğrulandı. Geçici restore container'ı kaldırıldı.
+- Uygulama yalnız staging'de
+  `staging-20260928T215554Z-52bf75b6d205` release'ine geçirildi. Uygulama ve DB
+  healthy, app restart `0`, DB container başlangıç zamanı değişmedi; runtime
+  `10042:10042`, read-only rootfs, `CapDrop=ALL` ve `no-new-privileges` kaldı.
+  Yedi canonical public rota HTTP 200, ledger **132/132**, son loglarda
+  fatal/unhandled `0` ve release-bound salt-okunur RBAC UAT **11 rol / 126
+  kontrol PASS** verdi. External delivery, background ve social/portal worker
+  kapıları kapalı kaldı; production değiştirilmedi.
+
 ## 29 Eylül authentication audit ve password-reset yarış koruması
 
 - Login başarı/başarısızlık, e-posta doğrulama, parola sıfırlama isteği ve logout
