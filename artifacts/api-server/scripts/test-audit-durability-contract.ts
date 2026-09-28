@@ -30,6 +30,7 @@ const missingDocsFulfillment = source("../src/lib/missingDocsFulfillment.ts");
 const personFeed = source("../src/routes/personFeed.ts");
 const messageCampaigns = source("../src/routes/messageCampaigns.ts");
 const inbox = source("../src/routes/inbox.ts");
+const contractBrands = source("../src/routes/contractBrands.ts");
 
 assert.match(auth, /\): Promise<void> \{\s*return db\.insert\(auditLogsTable\)/,
   "audit insert exposes a real awaitable completion boundary");
@@ -388,4 +389,17 @@ assert.match(localContactBlockRoute, /await tx\.insert\(auditLogsTable\)\.values
 assert.doesNotMatch(localContactBlockRoute, /logAudit\(/,
   "local contact block does not use the non-transactional legacy helper");
 
-console.log("[audit-durability-contract] 172/172 PASS");
+assert.doesNotMatch(contractBrands, /writeAudit|logAudit\(/,
+  "contract brand mutations do not use a non-transactional audit helper");
+assert.equal((contractBrands.match(/await db\.transaction\(async tx =>/g) ?? []).length, 3,
+  "contract brand create, update and deactivate each use one mutation transaction");
+for (const action of ["contract_brand.create", "contract_brand.update", "contract_brand.deactivate"]) {
+  assert.match(contractBrands, new RegExp(`await tx\\.insert\\(auditLogsTable\\)\\.values\\(\\{[\\s\\S]{0,260}action: "${action}"`),
+    `${action} persists its result before transaction commit`);
+}
+assert.match(contractBrands, /if \(!Object\.prototype\.hasOwnProperty\.call\(incoming, "companySignatureDataUrl"\)[\s\S]{0,180}incoming\.companySignatureDataUrl = existingConfig\.companySignatureDataUrl/,
+  "contract brand update keeps an inherited signature when the field is omitted");
+assert.match(contractBrands, /changes: JSON\.stringify\(\{ key, name \}\)/,
+  "contract brand create audit remains bounded and excludes branding payloads");
+
+console.log("[audit-durability-contract] 178/178 PASS");
