@@ -181,5 +181,17 @@ for (const action of ["delete_lead", "bulk_assign_leads", "bulk_move_leads"]) {
   assert.doesNotMatch(leadBulkRoute, new RegExp(`logAudit\\([^;]{0,180}"${action}"`),
     `${action} does not use the non-transactional legacy helper`);
 }
+const destructiveLeadRoutes = leads.slice(
+  leads.indexOf('router.delete("/leads/:id"'),
+  leads.indexOf('router.post("/leads/bulk-action"'),
+);
+for (const action of ["delete_lead", "purge_lead"]) {
+  assert.match(destructiveLeadRoutes, new RegExp(`await tx\\.insert\\(auditLogsTable\\)\\.values\\(\\{[^;]{0,400}action: "${action}"`),
+    `${action} persists its audit receipt inside the destructive transaction`);
+}
+assert.match(destructiveLeadRoutes, /\.for\("update"\)/,
+  "lead purge locks and proves the lead exists before deletion");
+assert.doesNotMatch(destructiveLeadRoutes, /logAudit\(/,
+  "destructive lead routes do not use the non-transactional legacy helper");
 
-console.log("[audit-durability-contract] 86/86 PASS");
+console.log("[audit-durability-contract] 90/90 PASS");

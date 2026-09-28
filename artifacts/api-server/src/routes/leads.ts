@@ -1398,8 +1398,17 @@ router.delete("/leads/:id", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_RO
       res.status(403).json({ error: "Access denied" }); return;
     }
   }
-  await softDelete(leadsTable, [id], { actorUserId: delUser.id });
-  await logAudit(delUser.id, "delete_lead", "lead", id, { soft: true }, req.ip);
+  await db.transaction(async tx => {
+    await softDelete(leadsTable, [id], { actorUserId: delUser.id, tx });
+    await tx.insert(auditLogsTable).values({
+      userId: delUser.id,
+      action: "delete_lead",
+      resource: "lead",
+      resourceId: id,
+      changes: JSON.stringify({ soft: true }),
+      ipAddress: req.ip || null,
+    });
+  });
   res.sendStatus(204);
 });
 
@@ -1407,20 +1416,40 @@ router.delete("/leads/:id", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_RO
 router.post("/leads/:id/purge", requireAuth, requireRole("super_admin"), async (req, res): Promise<void> => {
   const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
-  const [originStudent] = await db.select({ id: studentsTable.id }).from(studentsTable)
-    .where(and(eq(studentsTable.originLeadId, id), isNull(studentsTable.deletedAt)))
-    .limit(1);
-  if (originStudent) {
+  const purgeResult = await db.transaction(async tx => {
+    const [existing] = await tx.select({ id: leadsTable.id })
+      .from(leadsTable)
+      .where(eq(leadsTable.id, id))
+      .for("update");
+    if (!existing) return { status: "missing" as const };
+    const [originStudent] = await tx.select({ id: studentsTable.id }).from(studentsTable)
+      .where(and(eq(studentsTable.originLeadId, id), isNull(studentsTable.deletedAt)))
+      .limit(1);
+    if (originStudent) return { status: "active_student" as const, studentId: originStudent.id };
+    await tx.delete(leadsTable).where(eq(leadsTable.id, id));
+    await tx.insert(auditLogsTable).values({
+      userId: req.user!.id,
+      action: "purge_lead",
+      resource: "lead",
+      resourceId: id,
+      changes: JSON.stringify({ hard: true }),
+      ipAddress: req.ip || null,
+    });
+    return { status: "purged" as const };
+  });
+  if (purgeResult.status === "missing") {
+    res.status(404).json({ error: "Lead not found" });
+    return;
+  }
+  if (purgeResult.status === "active_student") {
     res.status(409).json({
       error: "This lead is the origin of an active student journey and cannot be permanently deleted",
       code: "LEAD_HAS_ACTIVE_STUDENT_JOURNEY",
-      studentId: originStudent.id,
+      studentId: purgeResult.studentId,
     });
     return;
   }
-  const result = await db.delete(leadsTable).where(eq(leadsTable.id, id));
-  await logAudit(req.user!.id, "purge_lead", "lead", id, { hard: true }, req.ip);
-  res.json({ success: true, deleted: result.rowCount ?? 0 });
+  res.json({ success: true, deleted: 1 });
 });
 
 router.post("/leads/bulk-action", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {

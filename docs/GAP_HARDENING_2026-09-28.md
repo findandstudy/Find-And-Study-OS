@@ -310,6 +310,11 @@ verisi ve dış Academy alıcısı değiştirilmedi.
   strict pozitif ID normalizasyonu ve tekrar ayıklama eklendi. Genişletilmiş
   audit durability contract **86/86 PASS**; API typecheck ve production build
   **PASS**.
+- Tekil lead soft-delete ve Super Admin purge koridorları transaction-bound
+  audit'e taşındı. Purge, lead satırını kilitleyip aktif student journey bağını
+  aynı transaction içinde yeniden doğrulamadan kalıcı silme yapmaz. Genişletilmiş
+  audit durability contract **90/90 PASS**; API typecheck ve production build
+  **PASS**.
 - Migration authority/validation: **129/129 PASS**.
 - Disposable PostgreSQL 16.15: fresh `0→129`, upload grant migration, route E2E,
   DB helper fixture cleanup: **PASS**; cluster durduruldu.
