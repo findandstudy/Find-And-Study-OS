@@ -839,6 +839,61 @@ dilimde yapılmadı.
   **PASS**. Live integration, email delivery, background job, AI auto-reply ve
   tüm social provider/worker kapıları kapalı kaldı. Production'a dokunulmadı.
 
+## 29 Eylül staff-card atomikliği ve public preload daraltması
+
+- Staff profile, schedule, language, country, assigned-agent ve
+  assigned-student mutation'ları ile bunların bounded audit sonuçları aynı DB
+  transaction'ına alındı. Cascade assignment audit'i artık fire-and-forget
+  değildir; audit başarısızlığında business mutation da rollback olur.
+- Route kimlikleri strict positive integer olarak sınırlandı. Profil metinleri
+  bounded, schedule `100`, dil `50`, ülke `100` kayıtla sınırlıdır. Profil audit
+  payload'ı PII değeri taşımak yerine yalnız değişen alan adlarını tutar.
+- Yeni staff-card fault-injection sözleşmesi **4/4**, API typecheck ve birleşik
+  security regression zinciri **PASS**; audit durability paketi **172/172**
+  geçti.
+- SSR public asset helper'ı, route chunk'ının recursive import ağacını kritik
+  preload kuyruğuna taşımayı bıraktı. Base HTML'deki paylaşılan vendor/runtime
+  preload'ları korunurken yalnız ilgili route entry'si server tarafından
+  ekleniyor. Program rotasındaki module-preload sayısı staging'de `19 → 4`
+  oldu; dialog/upload/document gibi etkileşim-sonrası chunk'lar ilk ağ önceliğini
+  artık tüketmiyor.
+- Focused preload sözleşmesi **2/2**, public catalog SSR render **48/48**, 23
+  locale parity, 121 frontend contract, sitemap, API typecheck ve production
+  build/bundle budget **PASS**. Başlangıç JS gzip `143.884` byte, CSS gzip
+  `41.306` byte olarak ölçüldü.
+
+## 29 Eylül exact `34e1efb9c687` staging release ve CWV yeniden ölçümü
+
+- Code-bearing `34e1efb9c6871b34fbce3acdfc694b8624a9bddf` commit'i immutable
+  `findandstudy-staging-app:34e1efb9c687` image'i olarak build edildi. Image
+  SHA-256 değeri
+  `70f57661c17d17387d235a2d501dd5e7133cb205bec8528b0ed0528c0ec3d698`.
+- Geçiş öncesi doğru `fasos_staging` hedefinden
+  `staging-predeploy-20260928T230404Z-34e1efb9c687-fasos_staging.dump` yedeği
+  alındı ve checksum doğrulandı. PostgreSQL `16.15`, `--network none` ve tmpfs
+  kullanan izole restore; `132` ledger satırı, `256` public tablo ve `13`
+  sentetik user ile **PASS**.
+- Yalnız app containerı
+  `staging-20260928T230557Z-34e1efb9c687` release'ine geçirildi. DB containerı
+  `2026-09-01T18:14:26Z` başlangıç kimliğini ve restart `0` durumunu korudu.
+  Health/DB, HSTS, global noindex, ledger `132/132`, non-root `10042:10042`,
+  read-only rootfs, `CapDrop=ALL`, no-new-privileges ve fatal/unhandled log `0`
+  kontrolleri **PASS**.
+- Exact release'e bağlı salt-okunur RBAC UAT yeniden çalıştırıldı: **11 rol / 126
+  kontrol PASS**. Live integration, email delivery, background job, AI
+  auto-reply ve bütün social provider/worker kapıları kapalı kaldı. Production'a
+  dokunulmadı.
+- Aynı 390×844, Fast 4G, 4× CPU ve üç tekrar profiliyle altı public rota tekrar
+  ölçüldü. Aggregate medyan LCP `3.176 → 3.060 ms`; program listesi LCP
+  `3.556 → 3.356 ms`, şehir `3.580 → 3.380 ms`, ülke `3.256 → 3.060 ms` ve
+  program detail `2.516 → 2.400 ms` oldu. Aggregate TBT `187 ms`, CLS `0`.
+- CWV kapısı dürüstçe **FAIL** kalır: program listesi TBT `216 ms`, program
+  detail TBT `226 ms`; ana sayfa, program listesi, ülke ve şehir LCP değerleri
+  `2.500 ms` hedefinin üzerindedir. Yavaş kaynaklar yaklaşık `82,7 KB` React
+  vendor, `41,3 KB` main JS, `39,5 KB` main CSS ve detail rotalarında `150 KB`
+  tenant logo transferidir. Bu artık deploy doğrulaması değil, ayrı dar bundle,
+  media ve gerçek HTTP/2/RUM optimizasyon kapısıdır.
+
 ## Repo dışı veya ayrı kapı isteyen kalanlar
 
 - Academy receiver tarafında issuer/audience + single-use exchange: receiver bu
