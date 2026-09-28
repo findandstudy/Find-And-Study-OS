@@ -173,6 +173,18 @@ verisi ve dış Academy alıcısı değiştirilmedi.
    - Audit payload yalnız integration anahtarı ve aktiflik sonucunu içeriyor;
      API key, token, webhook secret ve diğer config değerlerini içermiyor.
 
+14. **Pipeline stage replacement + audit atomikliği**
+   - Lead/student/application aşamalarının replace-all kaydı ile genel
+     `pipeline_stages.updated` sonucu aynı transaction içinde yazılıyor. Audit
+     insert hatasında eski stage seti korunuyor; yarım pipeline commit edilmiyor.
+   - Otomatik e-posta ayarı değişmişse mevcut `pipeline_stage_email.configured`
+     olayı da aynı transaction içinde üretiliyor. Böylece iletişim politikasının
+     değişmesi audit'ten önce görünür hale gelemiyor.
+   - Genel audit; entity type, bounded stage anahtarları ve otomatik WhatsApp/e-posta
+     etkin stage anahtarlarını içeriyor; template gövdesi veya sender secret'ı
+     içermiyor. Girdi ve audit boyutunu sınırlamak için pipeline başına hard 100
+     stage tavanı eklendi.
+
 ## Doğrulama
 
 - Security regression: **115/115 PASS**.
@@ -212,6 +224,10 @@ verisi ve dış Academy alıcısı değiştirilmedi.
   integration create/update/toggle rollback, stale-write ve live-off matrisi
   **6/6 PASS**; integration bağlantı güvenliği **10/10 PASS**; API typecheck ve
   production build **PASS**.
+- Genişletilmiş audit durability contract **37/37 PASS**; gerçek Express pipeline
+  audit rollback/bounded-input matrisi **3/3 PASS**; stage completion-target
+  **3/3 PASS**, portal trigger policy **4/4 PASS** ve disposable PostgreSQL stage
+  behavior regresyonu **PASS**; API typecheck ve production build **PASS**.
 - Migration authority/validation: **129/129 PASS**.
 - Disposable PostgreSQL 16.15: fresh `0→129`, upload grant migration, route E2E,
   DB helper fixture cleanup: **PASS**; cluster durduruldu.

@@ -9,6 +9,7 @@ const agents = source("../src/routes/agents.ts");
 const applications = source("../src/routes/applications.ts");
 const channelAccounts = source("../src/routes/channelAccounts.ts");
 const integrations = source("../src/routes/integrations.ts");
+const pipeline = source("../src/routes/pipeline.ts");
 
 assert.match(auth, /\): Promise<void> \{\s*return db\.insert\(auditLogsTable\)/,
   "audit insert exposes a real awaitable completion boundary");
@@ -68,5 +69,13 @@ for (const action of ["update_integration", "toggle_integration"]) {
 }
 assert.equal((integrations.match(/integration_version_conflict/g) ?? []).length, 2,
   "integration update and toggle both reject stale writes");
+assert.doesNotMatch(pipeline, /logAudit\(/,
+  "pipeline replacement does not use the non-transactional legacy helper");
+for (const action of ["pipeline_stages.updated", "pipeline_stage_email.configured"]) {
+  assert.match(pipeline, new RegExp(`await tx\\.insert\\(auditLogsTable\\)\\.values\\(\\{[\\s\\S]{0,180}action: "${action}"`),
+    `${action} is persisted before the stage replacement transaction commits`);
+}
+assert.match(pipeline, /if \(stages\.length > 100\)/,
+  "pipeline audit and replacement input has a hard stage-count ceiling");
 
-console.log("[audit-durability-contract] 33/33 PASS");
+console.log("[audit-durability-contract] 37/37 PASS");

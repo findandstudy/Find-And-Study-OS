@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import {
   channelAccountsTable,
+  auditLogsTable,
   db,
   emailTemplateVersionsTable,
   messageTemplatesTable,
@@ -10,7 +11,7 @@ import {
 } from "@workspace/db";
 import type { StageAction, StageAutomaticMessage, StageAutomaticEmail } from "@workspace/db";
 import { and, asc, eq, inArray, isNotNull, sql } from "drizzle-orm";
-import { requireAuth, requireRole, logAudit } from "../lib/auth";
+import { requireAuth, requireRole } from "../lib/auth";
 import { STAFF_ROLES, AGENT_ROLES } from "../lib/roles";
 import { clearStageFinanceCache } from "../lib/stageFinance";
 import {
@@ -422,6 +423,10 @@ router.put("/pipeline-stages/:entityType", requireAuth, requireRole(...MANAGER_R
     res.status(400).json({ error: "stages array is required" });
     return;
   }
+  if (stages.length > 100) {
+    res.status(400).json({ error: "A pipeline cannot contain more than 100 stages" });
+    return;
+  }
 
   for (const s of stages) {
     if (!s.key || !s.label) {
@@ -718,6 +723,32 @@ router.put("/pipeline-stages/:entityType", requireAuth, requireRole(...MANAGER_R
         }
       }
 
+      await tx.insert(auditLogsTable).values({
+        userId: req.user!.id,
+        action: "pipeline_stages.updated",
+        resource: "pipeline",
+        changes: JSON.stringify({
+          entityType,
+          stageCount: rows.length,
+          stageKeys: rows.map(stage => stage.key),
+          automaticMessageStages: rows.filter(stage => stage.automaticMessage?.enabled === true).map(stage => stage.key),
+          automaticEmailStages: rows.filter(stage => stage.automaticEmail?.enabled === true).map(stage => stage.key),
+        }),
+        ipAddress: req.ip || null,
+      });
+      if (emailChanged) {
+        await tx.insert(auditLogsTable).values({
+          userId: req.user!.id,
+          action: "pipeline_stage_email.configured",
+          resource: "pipeline",
+          changes: JSON.stringify({
+            entityType,
+            stages: rows.map(stage => ({ key: stage.key, automaticEmail: stage.automaticEmail })),
+          }),
+          ipAddress: req.ip || null,
+        });
+      }
+
       return { rows, triggerStageReconciliation };
     });
 
@@ -762,8 +793,6 @@ router.put("/pipeline-stages/:entityType", requireAuth, requireRole(...MANAGER_R
           : {}),
       }));
 
-    if (emailChanged) logAudit(req.user!.id, "pipeline_stage_email.configured", "pipeline", undefined,
-      { entityType, stages: inserted.map(stage => ({ key: stage.key, automaticEmail: stage.automaticEmail })) }, req.ip);
     res.json({
       stages: responseStages,
       warnings,
