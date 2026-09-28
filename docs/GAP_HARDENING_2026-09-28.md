@@ -631,6 +631,14 @@ verisi ve dış Academy alıcısı değiştirilmedi.
   `3.120 ms`, TBT `161 ms`, CLS `0` oldu. Üniversite eşiği geçti, program
   detayı yalnız `52 ms` ile kaçırdı; diğer dört rota nedeniyle kapı dürüstçe
   **FAIL** kalır. Bu ölçüm saha p75/RUM veya production kapasite kanıtı değildir.
+- Pre-deploy sentetik staging yedeği VPS dışındaki ayrı Windows host'a alındı.
+  `6.178.730` byte dosyanın SHA-256 değeri
+  `93ce6359272ee29bedf3bdacbdec0dc5ea7a05cb14fdc67a83c3453b037e7ec2`
+  olarak sidecar ile birebir eşleşti. PostgreSQL `16.15` üzerinde ayrı
+  `fasos_restore_offsite_7384` veritabanına restore; DB adı, ledger `131`,
+  `13` sentetik user ve cache invalidation function kanıtı **PASS**. Geçici DB
+  silindi ve yerel cluster kapatıldı. Bu staging off-host restore kanıtıdır;
+  production offsite DR/RTO/RPO tatbikatı değildir.
 
 ## 29 Eylül authentication audit ve password-reset yarış koruması
 
