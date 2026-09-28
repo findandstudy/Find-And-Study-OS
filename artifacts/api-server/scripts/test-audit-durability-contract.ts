@@ -16,6 +16,7 @@ const aiDefaults = source("../src/routes/ai-defaults.ts");
 const aiDefaultsUi = source("../../edcons/src/pages/admin/AiBuiltinDefaults.tsx");
 const aiExtractors = source("../src/routes/ai-extractors.ts");
 const aiPersonas = source("../src/routes/ai-personas.ts");
+const leadAssignmentRules = source("../src/routes/leadAssignmentRules.ts");
 
 assert.match(auth, /\): Promise<void> \{\s*return db\.insert\(auditLogsTable\)/,
   "audit insert exposes a real awaitable completion boundary");
@@ -157,5 +158,13 @@ assert.match(aiPersonas, /await logAudit\(req\.user!\.id, "run_ai_persona"/,
   "manual persona runs await their result audit attempt");
 assert.doesNotMatch(personaCrud, /res\.status\(500\)\.json\(\{ error: msg \}\)/,
   "persona management does not disclose raw database errors");
+assert.doesNotMatch(leadAssignmentRules, /logAudit\(/,
+  "lead assignment rule mutations do not use the non-transactional legacy helper");
+assert.match(leadAssignmentRules, /async function writeRuleAudit[\s\S]*await tx\.insert\(auditLogsTable\)\.values/,
+  "lead assignment rule audit helper requires the active transaction");
+for (const action of ["create_lead_assignment_rule", "update_lead_assignment_rule", "delete_lead_assignment_rule"]) {
+  assert.match(leadAssignmentRules, new RegExp(`await writeRuleAudit\\(tx, req, "${action}"`),
+    `${action} persists its audit receipt before transaction commit`);
+}
 
-console.log("[audit-durability-contract] 73/73 PASS");
+console.log("[audit-durability-contract] 78/78 PASS");
