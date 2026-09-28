@@ -4,8 +4,34 @@ import { and, eq, isNull, sql } from "drizzle-orm";
 import { requireAuth, requireRole } from "../lib/auth";
 import { ADMIN_ROLES } from "../lib/roles";
 import { duplicateCandidatesCte } from "../lib/reportingDuplicateSemantics";
+import { pool } from "@workspace/db";
+import {
+  CATALOG_DATA_CONFIDENCE_STATEMENT_TIMEOUT_MS,
+  readCatalogDataConfidence,
+} from "../lib/catalogDataConfidenceReadModel";
 
 const router: IRouter = Router();
+
+router.get("/admin/data-quality/catalog-confidence", requireAuth, requireRole(...ADMIN_ROLES), async (_req, res): Promise<void> => {
+  res.setHeader("Cache-Control", "private, no-store");
+  let client = null;
+  try {
+    client = await pool.connect();
+    await client.query("BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY");
+    await client.query(`SET LOCAL statement_timeout = '${CATALOG_DATA_CONFIDENCE_STATEMENT_TIMEOUT_MS}ms'`);
+    const result = await readCatalogDataConfidence(client);
+    await client.query("COMMIT");
+    res.json(result);
+  } catch (error) {
+    await client?.query("ROLLBACK").catch(() => undefined);
+    console.error("[data-quality] catalog confidence read failed", {
+      code: (error as { code?: string } | null)?.code,
+    });
+    res.status(503).json({ error: "Catalogue confidence is temporarily unavailable" });
+  } finally {
+    client?.release();
+  }
+});
 
 type DuplicateRow = {
   entity: "student" | "lead";

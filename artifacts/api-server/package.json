@@ -35,6 +35,7 @@
     "test:cms-mutation-atomicity": "tsx --test ./scripts/test-cms-mutation-atomicity.ts",
     "test:portal-exclusion-atomicity": "tsx --test ./scripts/test-portal-exclusion-atomicity.ts",
     "test:portal-fallback-atomicity": "tsx --test ./scripts/test-portal-fallback-atomicity.ts",
+    "test:catalog-data-confidence": "tsx --test ./scripts/test-catalog-data-confidence.ts",
     "test:channel-account-routes": "tsx --test ./scripts/test-channel-account-routes.ts",
     "test:postgres-website-page-authoring": "tsx --test ./scripts/test-postgres-website-page-authoring.ts",
     "test:website-catalog-inventory": "tsx --test ./scripts/test-website-catalog-inventory.ts",
