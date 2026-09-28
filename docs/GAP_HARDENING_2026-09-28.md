@@ -325,6 +325,11 @@ verisi ve dış Academy alıcısı değiştirilmedi.
   bounded, update audit'i yalnız değişen alan adlarını taşır. Gerçek Express
   rollback matrisi **6/6 PASS**, genişletilmiş audit durability contract
   **103/103 PASS**; API typecheck ve production build **PASS**.
+- Public CMS team-member ve office create/update/delete işlemleri
+  transaction-bound audit'e taşındı. Metin/URL/translation payload'ları bounded;
+  audit yalnız değişen alan adlarını içerir. Gerçek Express rollback ve payload
+  matrisi **8/8 PASS**, genişletilmiş audit durability contract **111/111 PASS**;
+  API typecheck ve production build **PASS**.
 - Migration authority/validation: **129/129 PASS**.
 - Disposable PostgreSQL 16.15: fresh `0→129`, upload grant migration, route E2E,
   DB helper fixture cleanup: **PASS**; cluster durduruldu.

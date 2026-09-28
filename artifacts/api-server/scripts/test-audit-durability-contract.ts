@@ -20,6 +20,7 @@ const leadAssignmentRules = source("../src/routes/leadAssignmentRules.ts");
 const leads = source("../src/routes/leads.ts");
 const tasks = source("../src/routes/tasks.ts");
 const campaigns = source("../src/routes/campaigns.ts");
+const cms = source("../src/routes/cms.ts");
 
 assert.match(auth, /\): Promise<void> \{\s*return db\.insert\(auditLogsTable\)/,
   "audit insert exposes a real awaitable completion boundary");
@@ -213,5 +214,16 @@ for (const action of ["campaign.create", "campaign.update", "campaign.archive", 
   assert.match(campaigns, new RegExp(`await writeCampaignAudit\\(tx, req, "${action}"`),
     `${action} persists its audit receipt before transaction commit`);
 }
+assert.doesNotMatch(cms, /logAudit\(/,
+  "public CMS mutations do not use the non-transactional legacy helper");
+assert.match(cms, /async function writeCmsAudit[\s\S]*await tx\.insert\(auditLogsTable\)\.values/,
+  "public CMS audit helper requires the active transaction");
+for (const action of [
+  "cms.team_member.create", "cms.team_member.update", "cms.team_member.delete",
+  "cms.office.create", "cms.office.update", "cms.office.delete",
+]) {
+  assert.match(cms, new RegExp(`await writeCmsAudit\\(tx, req, "${action}"`),
+    `${action} persists its audit receipt before transaction commit`);
+}
 
-console.log("[audit-durability-contract] 103/103 PASS");
+console.log("[audit-durability-contract] 111/111 PASS");
