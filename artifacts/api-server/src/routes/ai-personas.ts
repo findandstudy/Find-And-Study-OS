@@ -1,10 +1,12 @@
-import { Router, type IRouter } from "express";
+import { Router, type IRouter, json } from "express";
 import { z } from "zod";
 import {
   db,
   aiPersonasTable,
   aiPersonaRunsTable,
   aiActionQueueTable,
+  aiPersonaMessagesTable,
+  auditLogsTable,
   usersTable,
   portalSubmissionsTable,
   portalAdapterSpecsTable,
@@ -24,6 +26,7 @@ import { buildPortalDeployProposalPayload } from "../lib/portalAiGuardianApprova
 import { aiRetryDelaySeconds, classifyAiFailure } from "../lib/aiFailurePolicy";
 
 const router: IRouter = Router();
+const personaConfigBody = json({ limit: "256kb" });
 
 const personaSchema = z.object({
   name: z.string().min(1).max(200),
@@ -33,22 +36,22 @@ const personaSchema = z.object({
     .max(120)
     .regex(/^[a-z0-9-]+$/i, "slug must be alphanumeric/hyphens"),
   personaType: z.enum(["advisor", "operator"]),
-  description: z.string().optional().nullable(),
-  avatarUrl: z.string().optional().nullable(),
+  description: z.string().max(2_000).optional().nullable(),
+  avatarUrl: z.string().max(2_048).optional().nullable(),
   provider: z.enum(["anthropic", "openai"]),
-  model: z.string().min(1),
-  systemPrompt: z.string().default(""),
-  guidelines: z.string().default(""),
-  negativePrompt: z.string().default(""),
+  model: z.string().min(1).max(120),
+  systemPrompt: z.string().max(32_000).default(""),
+  guidelines: z.string().max(32_000).default(""),
+  negativePrompt: z.string().max(32_000).default(""),
   temperature: z.coerce.number().min(0).max(2).default(0.7),
   maxTokens: z.coerce.number().int().min(64).max(32000).default(2048),
-  allowedDataScopes: z.array(z.string()).default([]),
-  toolsEnabled: z.array(z.string()).default([]),
+  allowedDataScopes: z.array(z.string().min(1).max(120)).max(100).default([]),
+  toolsEnabled: z.array(z.string().min(1).max(120)).max(100).default([]),
   triggerMode: z.enum(["manual", "scheduled", "event_driven"]).default("manual"),
-  scheduleCron: z.string().optional().nullable(),
-  eventSubscriptions: z.array(z.string()).optional().nullable(),
-  outputTargets: z.array(z.string()).default([]),
-  monthlyCostCapUsd: z.coerce.number().nullable().optional(),
+  scheduleCron: z.string().max(200).optional().nullable(),
+  eventSubscriptions: z.array(z.string().min(1).max(160)).max(100).optional().nullable(),
+  outputTargets: z.array(z.string().min(1).max(160)).max(100).default([]),
+  monthlyCostCapUsd: z.coerce.number().min(0).max(1_000_000).nullable().optional(),
   isActive: z.boolean().default(false),
 });
 
@@ -182,6 +185,7 @@ router.post(
   "/ai-personas",
   requireAuth,
   requireRole(...ADMIN_ROLES),
+  personaConfigBody,
   async (req, res): Promise<void> => {
     const parsed = personaSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -189,6 +193,10 @@ router.post(
       return;
     }
     const data = parsed.data;
+    if (Buffer.byteLength(JSON.stringify(data), "utf8") > 131_072) {
+      res.status(413).json({ error: "AI persona configuration exceeds 128 KiB" });
+      return;
+    }
     const guard = guardToolsForType(data.personaType, data.toolsEnabled);
     if (!guard.ok) {
       res.status(400).json({
@@ -197,9 +205,9 @@ router.post(
       return;
     }
     try {
-      const [inserted] = await db
-        .insert(aiPersonasTable)
-        .values({
+      const inserted = await db.transaction(async (tx) => {
+        await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext('ai-persona-management'), 0)`);
+        const [created] = await tx.insert(aiPersonasTable).values({
           name: data.name,
           slug: data.slug,
           personaType: data.personaType,
@@ -222,10 +230,11 @@ router.post(
             data.monthlyCostCapUsd == null ? null : String(data.monthlyCostCapUsd),
           isActive: data.isActive,
           createdBy: req.user!.id,
-        })
-        .returning();
-      logAudit(req.user!.id, "create_ai_persona", "ai_persona", inserted.id, {
-        name: inserted.name,
+        }).returning();
+        await tx.insert(auditLogsTable).values({ userId: req.user!.id, action: "create_ai_persona", resource: "ai_persona",
+          resourceId: created.id, changes: JSON.stringify({ slug: created.slug, personaType: created.personaType, provider: created.provider,
+            triggerMode: created.triggerMode, isActive: created.isActive }), ipAddress: req.ip || null });
+        return created;
       });
       res.status(201).json({ persona: inserted });
     } catch (e) {
@@ -234,7 +243,7 @@ router.post(
         res.status(409).json({ error: "Slug already exists" });
         return;
       }
-      res.status(500).json({ error: msg });
+      res.status(503).json({ error: "AI_PERSONA_OPERATION_UNAVAILABLE" });
     }
   },
 );
@@ -244,9 +253,10 @@ router.put(
   "/ai-personas/:id",
   requireAuth,
   requireRole(...ADMIN_ROLES),
+  personaConfigBody,
   async (req, res): Promise<void> => {
     const id = Number(req.params.id);
-    if (!Number.isFinite(id)) {
+    if (!Number.isSafeInteger(id) || id <= 0) {
       res.status(400).json({ error: "Invalid id" });
       return;
     }
@@ -256,46 +266,38 @@ router.put(
       return;
     }
     const data = parsed.data;
-    if (data.personaType && data.toolsEnabled) {
-      const guard = guardToolsForType(data.personaType, data.toolsEnabled);
-      if (!guard.ok) {
-        res.status(400).json({
-          error: `Advisor persona cannot enable side-effect tool: ${guard.offending}`,
-        });
-        return;
-      }
-    } else if (data.toolsEnabled || data.personaType) {
-      const [existing] = await db
-        .select()
-        .from(aiPersonasTable)
-        .where(eq(aiPersonasTable.id, id));
-      if (existing) {
-        const t = (data.personaType ?? existing.personaType) as "advisor" | "operator";
-        const tools = data.toolsEnabled ?? (existing.toolsEnabled as string[]) ?? [];
-        const guard = guardToolsForType(t, tools);
-        if (!guard.ok) {
-          res.status(400).json({
-            error: `Advisor persona cannot enable side-effect tool: ${guard.offending}`,
-          });
-          return;
-        }
-      }
+    if (Buffer.byteLength(JSON.stringify(data), "utf8") > 131_072) {
+      res.status(413).json({ error: "AI persona configuration exceeds 128 KiB" });
+      return;
     }
     const updates: Record<string, unknown> = { ...data };
     if (data.temperature != null) updates.temperature = String(data.temperature);
     if (data.monthlyCostCapUsd !== undefined)
       updates.monthlyCostCapUsd =
         data.monthlyCostCapUsd == null ? null : String(data.monthlyCostCapUsd);
-    const [updated] = await db
-      .update(aiPersonasTable)
-      .set(updates)
-      .where(eq(aiPersonasTable.id, id))
-      .returning();
+    const result = await db.transaction(async (tx) => {
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext('ai-persona-management'), 0)`);
+      const [current] = await tx.select().from(aiPersonasTable).where(eq(aiPersonasTable.id, id)).for("update");
+      if (!current) return { status: "missing" as const };
+      const type = (data.personaType ?? current.personaType) as "advisor" | "operator";
+      const tools = data.toolsEnabled ?? (current.toolsEnabled as string[]) ?? [];
+      const guard = guardToolsForType(type, tools);
+      if (!guard.ok) return { status: "unsafe" as const, offending: guard.offending };
+      const [saved] = await tx.update(aiPersonasTable).set(updates).where(eq(aiPersonasTable.id, id)).returning();
+      await tx.insert(auditLogsTable).values({ userId: req.user!.id, action: "update_ai_persona", resource: "ai_persona",
+        resourceId: id, changes: JSON.stringify({ changedFields: Object.keys(data).sort(), slug: saved.slug, personaType: saved.personaType,
+          provider: saved.provider, triggerMode: saved.triggerMode, isActive: saved.isActive }), ipAddress: req.ip || null });
+      return { status: "updated" as const, row: saved };
+    });
+    if (result.status === "unsafe") {
+      res.status(400).json({ error: `Advisor persona cannot enable side-effect tool: ${result.offending}` });
+      return;
+    }
+    const updated = result.status === "updated" ? result.row : null;
     if (!updated) {
       res.status(404).json({ error: "Not found" });
       return;
     }
-    logAudit(req.user!.id, "update_ai_persona", "ai_persona", id, data);
     res.json({ persona: updated });
   },
 );
@@ -307,19 +309,34 @@ router.delete(
   requireRole(...ADMIN_ROLES),
   async (req, res): Promise<void> => {
     const id = Number(req.params.id);
-    if (!Number.isFinite(id)) {
+    if (!Number.isSafeInteger(id) || id <= 0) {
       res.status(400).json({ error: "Invalid id" });
       return;
     }
-    const [deleted] = await db
-      .delete(aiPersonasTable)
-      .where(eq(aiPersonasTable.id, id))
-      .returning({ id: aiPersonasTable.id });
+    const result = await db.transaction(async (tx) => {
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext('ai-persona-management'), 0)`);
+      const [current] = await tx.select().from(aiPersonasTable).where(eq(aiPersonasTable.id, id)).for("update");
+      if (!current) return "missing" as const;
+      const [[run], [action], [message]] = await Promise.all([
+        tx.select({ id: aiPersonaRunsTable.id }).from(aiPersonaRunsTable).where(eq(aiPersonaRunsTable.personaId, id)).limit(1),
+        tx.select({ id: aiActionQueueTable.id }).from(aiActionQueueTable).where(eq(aiActionQueueTable.personaId, id)).limit(1),
+        tx.select({ id: aiPersonaMessagesTable.id }).from(aiPersonaMessagesTable).where(eq(aiPersonaMessagesTable.personaId, id)).limit(1),
+      ]);
+      if (run || action || message) return "in_use" as const;
+      await tx.delete(aiPersonasTable).where(eq(aiPersonasTable.id, id));
+      await tx.insert(auditLogsTable).values({ userId: req.user!.id, action: "delete_ai_persona", resource: "ai_persona",
+        resourceId: id, changes: JSON.stringify({ slug: current.slug, personaType: current.personaType, provider: current.provider }), ipAddress: req.ip || null });
+      return "deleted" as const;
+    });
+    if (result === "in_use") {
+      res.status(409).json({ error: "AI_PERSONA_IN_USE", message: "Deactivate this persona instead of deleting its run, action, or conversation evidence." });
+      return;
+    }
+    const deleted = result === "deleted" ? { id } : null;
     if (!deleted) {
       res.status(404).json({ error: "Not found" });
       return;
     }
-    logAudit(req.user!.id, "delete_ai_persona", "ai_persona", id);
     res.json({ ok: true });
   },
 );
@@ -343,7 +360,7 @@ router.post(
         triggeredBy: "manual",
         triggerActor: req.user!.id,
       });
-      logAudit(req.user!.id, "run_ai_persona", "ai_persona", id, {
+      await logAudit(req.user!.id, "run_ai_persona", "ai_persona", id, {
         runId: result.runId,
         status: result.status,
       });

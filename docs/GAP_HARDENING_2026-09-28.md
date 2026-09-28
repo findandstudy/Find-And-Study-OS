@@ -220,6 +220,20 @@ verisi ve dış Academy alıcısı değiştirilmedi.
      DB/provider mesajları HTTP cevabında dışarı çıkarılmıyor; audit prompt veya
      kural gövdesini kopyalamıyor.
 
+18. **AI persona CRUD bütünlüğü ve evidence koruması**
+   - Persona create/update/delete ve audit sonucu tek transaction içinde; yönetim
+     komutları advisory lock ile serialize ediliyor. Audit hatası persona
+     mutation'ını rollback ediyor.
+   - Update guard artık persisted persona type/tool birleşimini transaction içinde
+     yeniden değerlendiriyor. Yalnız `personaType` değiştirerek side-effect tool
+     taşıyan operator'ü advisor'a dönüştürme bypass'ı kapandı.
+   - Run, approval action veya conversation geçmişi olan persona fiziksel
+     silinemiyor; `409 AI_PERSONA_IN_USE` ile deactivation yoluna yönlendiriliyor.
+     Yönetim body sınırı 256 KiB/serialized config 128 KiB; prompt/list/string
+     alanları bounded. Raw DB hatası ve prompt içeriği audit/HTTP cevabına çıkmıyor.
+   - Manuel run'ın mevcut audit çağrısı artık request lifecycle içinde gerçekten
+     await ediliyor; dış AI veya otomatik çalıştırma feature state'i açılmadı.
+
 ## Doğrulama
 
 - Security regression: **115/115 PASS**.
@@ -273,6 +287,10 @@ verisi ve dış Academy alıcısı değiştirilmedi.
   update, referenced-delete ve audit rollback matrisi **5/5 PASS**; extraction
   compatibility **6/6 PASS**, education mapping/trigger **32/32 PASS**; API
   typecheck ve production build **PASS**.
+- Genişletilmiş audit durability contract **63/63 PASS**; AI persona CRUD
+  rollback, tool-bypass ve evidence-delete matrisi **6/6 PASS**; AI schedule
+  **12/12 PASS**, bounded/fair lane scheduler **5/5 PASS**; API typecheck ve
+  production build **PASS**.
 - Migration authority/validation: **129/129 PASS**.
 - Disposable PostgreSQL 16.15: fresh `0→129`, upload grant migration, route E2E,
   DB helper fixture cleanup: **PASS**; cluster durduruldu.

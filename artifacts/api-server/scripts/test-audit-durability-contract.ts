@@ -15,6 +15,7 @@ const apiIndex = source("../src/index.ts");
 const aiDefaults = source("../src/routes/ai-defaults.ts");
 const aiDefaultsUi = source("../../edcons/src/pages/admin/AiBuiltinDefaults.tsx");
 const aiExtractors = source("../src/routes/ai-extractors.ts");
+const aiPersonas = source("../src/routes/ai-personas.ts");
 
 assert.match(auth, /\): Promise<void> \{\s*return db\.insert\(auditLogsTable\)/,
   "audit insert exposes a real awaitable completion boundary");
@@ -117,5 +118,20 @@ assert.match(aiExtractors, /configJsonBody = json\(\{ limit: "256kb" \}\)/,
   "extractor management payload has an early parser ceiling");
 assert.doesNotMatch(aiExtractors, /res\.status\(500\)\.json\(\{ error: msg \}\)/,
   "extractor management does not disclose raw database errors");
+const personaCrud = aiPersonas.slice(aiPersonas.indexOf("// Create"), aiPersonas.indexOf("// Manual run"));
+assert.doesNotMatch(personaCrud, /logAudit\(/,
+  "AI persona CRUD does not use the non-transactional legacy helper");
+for (const action of ["create_ai_persona", "update_ai_persona", "delete_ai_persona"]) {
+  assert.match(personaCrud, new RegExp(`await tx\\.insert\\(auditLogsTable\\)\\.values\\(\\{[^;]{0,300}action: "${action}"`),
+    `${action} is persisted before the persona transaction commits`);
+}
+assert.match(personaCrud, /AI_PERSONA_IN_USE/,
+  "persona deletion preserves run, action and conversation evidence");
+assert.match(aiPersonas, /personaConfigBody = json\(\{ limit: "256kb" \}\)/,
+  "persona management payload has an early parser ceiling");
+assert.match(aiPersonas, /await logAudit\(req\.user!\.id, "run_ai_persona"/,
+  "manual persona runs await their result audit attempt");
+assert.doesNotMatch(personaCrud, /res\.status\(500\)\.json\(\{ error: msg \}\)/,
+  "persona management does not disclose raw database errors");
 
-console.log("[audit-durability-contract] 55/55 PASS");
+console.log("[audit-durability-contract] 63/63 PASS");
