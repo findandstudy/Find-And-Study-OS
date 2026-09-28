@@ -105,7 +105,6 @@ function getDocTypesForDegree(degree: string | null | undefined): DocType[] {
   if (normalized.includes("foundation")) return DEGREE_DOC_MAP.foundation;
   return DEFAULT_DOC_TYPES;
 }
-
 type UploadedDoc = { key: string; label: string; file: File; base64: string; mediaType: string; isImage: boolean; partCount?: number };
 
 function compressImage(file: File, maxWidth = 1600, quality = 0.78): Promise<string> {
