@@ -29,6 +29,7 @@ const stageDocuments = source("../src/routes/applicationStageDocuments.ts");
 const missingDocsFulfillment = source("../src/lib/missingDocsFulfillment.ts");
 const personFeed = source("../src/routes/personFeed.ts");
 const messageCampaigns = source("../src/routes/messageCampaigns.ts");
+const inbox = source("../src/routes/inbox.ts");
 
 assert.match(auth, /\): Promise<void> \{\s*return db\.insert\(auditLogsTable\)/,
   "audit insert exposes a real awaitable completion boundary");
@@ -371,4 +372,17 @@ assert.doesNotMatch(lostCascadeCorridor, /logAudit\(/,
 assert.match(applicationPatchRoute, /executor: tx,[\s\S]{0,160}cascadeApplicationLostStage\(lifecycleOpts\)/,
   "single application stage cascade retains the parent transaction executor");
 
-console.log("[audit-durability-contract] 168/168 PASS");
+const localContactBlockRoute = inbox.slice(
+  inbox.lastIndexOf("router.patch(", inbox.indexOf('"/inbox/conversations/:id/block"')),
+  inbox.lastIndexOf("router.post(", inbox.indexOf('"/inbox/conversations/:id/match"')),
+);
+assert.match(localContactBlockRoute, /const contact = await db\.transaction\(async \(tx\) =>/,
+  "local external-contact block uses one mutation transaction");
+assert.match(localContactBlockRoute, /await tx[\s\S]{0,40}\.update\(externalContactsTable\)[\s\S]*await tx[\s\S]{0,40}\.update\(conversationsTable\)/,
+  "contact blocking and bot shutdown commit together");
+assert.match(localContactBlockRoute, /await tx\.insert\(auditLogsTable\)\.values\(\{[\s\S]{0,180}block_external_contact/,
+  "local contact block persists its result audit before commit");
+assert.doesNotMatch(localContactBlockRoute, /logAudit\(/,
+  "local contact block does not use the non-transactional legacy helper");
+
+console.log("[audit-durability-contract] 172/172 PASS");

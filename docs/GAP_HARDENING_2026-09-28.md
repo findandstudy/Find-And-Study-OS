@@ -754,6 +754,19 @@ verisi ve dış Academy alıcısı değiştirilmedi.
   **168/168** ve API typecheck **PASS**. Bu dilim henüz staging'e dağıtılmadı;
   production değiştirilmedi.
 
+## 29 Eylül inbox local block atomikliği
+
+- Inbox local external-contact block/unblock mutation'ı, block sırasında botun
+  kapatılması ve bounded audit sonucu tek DB transaction'ına alındı. Audit veya
+  bot güncellemesi başarısızsa contact block durumu da rollback oluyor.
+- Gerçek WhatsApp provider block koridoru değiştirilmedi; explicit enable/live
+  gate, rate-limit ve request/result audit sözleşmesini koruyor. Hiçbir provider
+  bağlantısı veya dış gönderim açılmadı.
+- Audit durability **172/172**, inbox indicator **3/3** ve API typecheck **PASS**.
+  Tam inbox entegrasyon paketi yerel `127.0.0.1:5432/test` fixture DB olmadığı
+  için bu koşuda başlatılmadı; disposable PostgreSQL kapısında yeniden
+  çalıştırılacak. Bu dilim henüz staging'e dağıtılmadı; production değiştirilmedi.
+
 ## 29 Eylül authentication audit ve password-reset yarış koruması
 
 - Login başarı/başarısızlık, e-posta doğrulama, parola sıfırlama isteği ve logout

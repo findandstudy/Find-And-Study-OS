@@ -1985,22 +1985,33 @@ router.patch(
       res.status(404).json({ error: "Conversation has no external contact" });
       return;
     }
-    const [contact] = await db
-      .update(externalContactsTable)
-      .set({ isBlocked: blocked, blockedAt: blocked ? new Date() : null })
-      .where(eq(externalContactsTable.id, conversation.externalContactId))
-      .returning({ id: externalContactsTable.id, isBlocked: externalContactsTable.isBlocked, blockedAt: externalContactsTable.blockedAt });
+    const contact = await db.transaction(async (tx) => {
+      const [updated] = await tx
+        .update(externalContactsTable)
+        .set({ isBlocked: blocked, blockedAt: blocked ? new Date() : null })
+        .where(eq(externalContactsTable.id, conversation.externalContactId!))
+        .returning({ id: externalContactsTable.id, isBlocked: externalContactsTable.isBlocked, blockedAt: externalContactsTable.blockedAt });
+      if (!updated) return null;
+      if (blocked) {
+        await tx
+          .update(conversationsTable)
+          .set({ botEnabled: false, botReplyCount: 0 })
+          .where(eq(conversationsTable.externalContactId, conversation.externalContactId!));
+      }
+      await tx.insert(auditLogsTable).values({
+        userId: req.user!.id,
+        action: blocked ? "block_external_contact" : "unblock_external_contact",
+        resource: "external_contact",
+        resourceId: updated.id,
+        changes: JSON.stringify({ conversationId: id }),
+        ipAddress: req.ip || null,
+      });
+      return updated;
+    });
     if (!contact) {
       res.status(404).json({ error: "External contact not found" });
       return;
     }
-    if (blocked) {
-      await db
-        .update(conversationsTable)
-        .set({ botEnabled: false, botReplyCount: 0 })
-        .where(eq(conversationsTable.externalContactId, conversation.externalContactId));
-    }
-    await logAudit(req.user!.id, blocked ? "block_external_contact" : "unblock_external_contact", "external_contact", contact.id, { conversationId: id }, req.ip);
     res.json({ data: contact });
   },
 );
