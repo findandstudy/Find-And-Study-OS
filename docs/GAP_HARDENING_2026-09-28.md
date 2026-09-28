@@ -318,6 +318,19 @@ verisi ve dış Academy alıcısı değiştirilmedi.
      periyodu mevcut kanonik enum'u kullanır ve 36 kayıt tavanını korur. Route
      kimlikleri partial veya unsafe integer kabul etmez.
 
+26. **Personel belgesi finalized-grant tüketimi**
+   - Staff-card belge kaydı artık istemcinin boyut/MIME beyanıyla referans
+     oluşturmuyor. Private object authoritative metadata ve byte'larından yeniden
+     okunuyor; kanonik path, belge türü MIME allowlist'i, gerçek byte boyutu ve
+     imza/magic kontrolü geçmeden kayıt açılamıyor.
+   - Uploader'a bağlı `FINALIZED → CONSUMED` grant geçişi, staff document insert
+     ve bounded audit ile aynı transaction içinde. Eksik, foreign, değiştirilmiş,
+     finalize edilmemiş veya daha önce kullanılmış object `409` ile fail-closed;
+     belge referansı ya da audit bırakmıyor.
+   - Belge soft-delete ve audit aynı transaction'a alındı. Download audit denemesi
+     stream başlamadan request yaşam döngüsünde bekleniyor; object path audit veya
+     API cevabına çıkarılmıyor.
+
 ## Doğrulama
 
 - Security regression: **115/115 PASS**.
@@ -660,6 +673,9 @@ verisi ve dış Academy alıcısı değiştirilmedi.
   genişletilmiş audit durability contract **137/137 PASS**, API typecheck ve
   birleşik security regression zinciri **PASS**. Bu dilim henüz staging'e
   dağıtılmadı; production değiştirilmedi.
+- Staff document authoritative-byte/finalized-grant/audit sözleşmesi **4/4
+  PASS**; API typecheck **PASS**. Bu dilim henüz staging'e dağıtılmadı;
+  production değiştirilmedi.
 
 ## 29 Eylül authentication audit ve password-reset yarış koruması
 
@@ -699,7 +715,7 @@ dilimde yapılmadı.
 
 - Academy receiver tarafında issuer/audience + single-use exchange: receiver bu
   repoda değil; koordineli iki taraflı değişiklik gerekir.
-- İncelenen staff/student/agent internal-message attachment consumer'ları artık
+- İncelenen staff-card/student/agent/internal-message attachment consumer'ları artık
   `FINALIZED → CONSUMED` zorunluluğunda. Repo genelindeki başka seyrek legacy
   consumer'lar envanter bazında kendi kayıt transaction'larına alınmadan global
   enforcement açılmaz.

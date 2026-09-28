@@ -30,6 +30,9 @@ import { userHasPermission } from "../lib/permissions";
 import { ObjectStorageService, ObjectNotFoundError } from "../lib/objectStorage";
 import { recompressStoredObjectIfNeeded } from "../lib/documentBytes";
 import { UploadTooLargeError } from "../lib/uploads/processUpload";
+import { canonicalizeKey } from "../lib/objectAuthz";
+import { validateUploadedFileBuffer } from "../lib/fileUploadValidation";
+import { consumeFinalizedUploadGrantInDrizzle } from "../lib/uploadGrant";
 import { Readable } from "stream";
 
 const router: IRouter = Router();
@@ -67,6 +70,29 @@ function parsePositiveRouteId(value: unknown): number | null {
   if (!/^[1-9]\d*$/.test(text)) return null;
   const id = Number(text);
   return Number.isSafeInteger(id) ? id : null;
+}
+
+async function prepareStaffDocumentUpload(input: {
+  objectPath: string;
+  filename: string;
+  rule: { maxBytes: number; mimeTypes: readonly string[] };
+}): Promise<{ bytes: Buffer; contentType: string }> {
+  const objectKey = canonicalizeKey(input.objectPath);
+  if (!objectKey) throw new Error("STAFF_DOCUMENT_UPLOAD_INVALID_PATH");
+  const file = await objectStorage.getObjectEntityFile(`/objects/${objectKey}`);
+  const [metadata] = await file.getMetadata();
+  const contentType = String(metadata.contentType ?? "").split(";", 1)[0].trim().toLowerCase();
+  if (!input.rule.mimeTypes.includes(contentType)) {
+    throw new Error("STAFF_DOCUMENT_UPLOAD_UNSUPPORTED_TYPE");
+  }
+  const [bytes] = await file.download();
+  if (bytes.length <= 0 || bytes.length > input.rule.maxBytes) {
+    throw new Error("STAFF_DOCUMENT_UPLOAD_INVALID_SIZE");
+  }
+  if (await validateUploadedFileBuffer(input.filename, contentType, bytes)) {
+    throw new Error("STAFF_DOCUMENT_UPLOAD_SIGNATURE_MISMATCH");
+  }
+  return { bytes, contentType };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -404,8 +430,22 @@ router.post("/staff-cards/:userId/documents", requireAuth, requireStaffCardAdmin
     res.status(400).json({ error: `Object path must use prefix ${expectedPrefix}` });
     return;
   }
-  let finalSizeBytes = sizeBytes;
-  let finalMimeType = mimeType;
+  let preparedUpload: { bytes: Buffer; contentType: string };
+  try {
+    preparedUpload = await prepareStaffDocumentUpload({ objectPath, filename, rule });
+  } catch (error) {
+    const code = error instanceof Error ? error.message : "STAFF_DOCUMENT_UPLOAD_INVALID";
+    if (code === "STAFF_DOCUMENT_UPLOAD_INVALID_SIZE") {
+      res.status(413).json({ error: "Uploaded document is empty or too large", code });
+    } else if (error instanceof ObjectNotFoundError) {
+      res.status(400).json({ error: "Uploaded document could not be found", code: "STAFF_DOCUMENT_UPLOAD_NOT_FOUND" });
+    } else {
+      res.status(400).json({ error: "Uploaded document content is invalid", code });
+    }
+    return;
+  }
+  let finalSizeBytes = preparedUpload.bytes.length;
+  let finalMimeType = preparedUpload.contentType;
   try {
     const recompressed = await recompressStoredObjectIfNeeded(objectPath, mimeType);
     if (recompressed?.recompressed) {
@@ -420,11 +460,37 @@ router.post("/staff-cards/:userId/documents", requireAuth, requireStaffCardAdmin
     console.error("[STAFF-CARDS] recompressStoredObjectIfNeeded failed, keeping original:", err);
   }
 
-  const [doc] = await db.insert(staffDocumentsTable).values({
-    userId, docType, filename, objectPath, sizeBytes: finalSizeBytes, mimeType: finalMimeType,
-    uploadedBy: req.user!.id,
-  }).returning();
-  logAudit(req.user!.id, "staff_card.document.upload", "user", userId, { docType, filename, sizeBytes }, req.ip);
+  let doc: typeof staffDocumentsTable.$inferSelect;
+  try {
+    doc = await db.transaction(async (tx) => {
+      if (!await consumeFinalizedUploadGrantInDrizzle(tx, {
+        objectPath,
+        uploadedBy: req.user!.id,
+        bytes: preparedUpload.bytes,
+        contentType: preparedUpload.contentType,
+      })) throw new Error("STAFF_DOCUMENT_UPLOAD_GRANT_NOT_FINALIZED");
+      const [inserted] = await tx.insert(staffDocumentsTable).values({
+        userId, docType, filename, objectPath, sizeBytes: finalSizeBytes, mimeType: finalMimeType,
+        uploadedBy: req.user!.id,
+      }).returning();
+      await writeStaffCardAudit(tx, req, "staff_card.document.upload", userId, {
+        documentId: inserted.id,
+        docType,
+        sizeBytes: finalSizeBytes,
+        mimeType: finalMimeType,
+      });
+      return inserted;
+    });
+  } catch (error) {
+    if (error instanceof Error && error.message === "STAFF_DOCUMENT_UPLOAD_GRANT_NOT_FINALIZED") {
+      res.status(409).json({
+        error: "Upload must be finalized, owned by the caller and unused before registration",
+        code: "UPLOAD_GRANT_NOT_FINALIZED",
+      });
+      return;
+    }
+    throw error;
+  }
   const { objectPath: _op, ...safe } = doc;
   res.status(201).json(safe);
 });
@@ -435,8 +501,10 @@ router.delete("/staff-cards/:userId/documents/:docId", requireAuth, requireStaff
   const [doc] = await db.select().from(staffDocumentsTable)
     .where(and(eq(staffDocumentsTable.id, docId), eq(staffDocumentsTable.userId, userId), isNull(staffDocumentsTable.deletedAt)));
   if (!doc) { res.status(404).json({ error: "Document not found" }); return; }
-  await db.update(staffDocumentsTable).set({ deletedAt: sql`now()` }).where(eq(staffDocumentsTable.id, docId));
-  logAudit(req.user!.id, "staff_card.document.delete", "user", userId, { docId, docType: doc.docType }, req.ip);
+  await db.transaction(async (tx) => {
+    await tx.update(staffDocumentsTable).set({ deletedAt: sql`now()` }).where(eq(staffDocumentsTable.id, docId));
+    await writeStaffCardAudit(tx, req, "staff_card.document.delete", userId, { docId, docType: doc.docType });
+  });
   res.sendStatus(204);
 });
 
@@ -449,7 +517,7 @@ router.get("/staff-cards/:userId/documents/:docId/download", requireAuth, requir
   try {
     const file = await objectStorage.getObjectEntityFile(doc.objectPath);
     res.setHeader("Content-Disposition", `attachment; filename="${doc.filename.replace(/"/g, "")}"`);
-    logAudit(req.user!.id, "staff_card.document.download", "user", userId, { docId, docType: doc.docType }, req.ip);
+    await logAudit(req.user!.id, "staff_card.document.download", "user", userId, { docId, docType: doc.docType }, req.ip);
     await objectStorage.streamObjectToResponse(req, res, file, {
       contentType: doc.mimeType || undefined,
       cacheControl: "private, no-store",
