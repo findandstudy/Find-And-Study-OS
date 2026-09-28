@@ -284,6 +284,22 @@ verisi ve dış Academy alıcısı değiştirilmedi.
    - Geçersiz veya aşırı büyük identity girdileri pahalı iş ya da yan etki
      üretmeden `INVALID_REGISTRATION_IDENTITY` ile reddediliyor.
 
+24. **Staging public ilk-ekran ikinci performans dilimi**
+   - Şehir, üniversite ve program detaylarındaki aşağı-kat program tarayıcıları
+     dinamik import + viewport yakınlığına kadar erteleme ile ilk hydration yolundan
+     ayrıldı. Kart ve filtrelerin mevcut ortak bileşenleri değiştirilmedi.
+   - Public logo decode'u async/düşük fetch priority oldu. Countries koleksiyonunun
+     salt dekoratif giriş/kart animasyonları animation runtime gerektirmeyen mevcut CSS
+     transition davranışına indirildi.
+   - Exact feature head `d0f090df1c81f3f697d42c721b50c0deb41f2e4a`, staging
+     release `staging-20260928T170302Z-d0f090df1c81` olarak yayına alındı;
+     health HTTP 200 ve `dbConnected=true` verdi. Production değiştirilmedi.
+   - Üç-tekrarlı staging medyanında üniversite LCP `2.220 ms`, program detay
+     LCP `2.288 ms`; aggregate TBT `126 ms`, CLS `0` oldu. Ana/liste/şehir LCP
+     `3.744–4.080 ms` kaldığı için CWV kapısı dürüstçe **FAIL** kalır.
+     Sentetik tekrarların ikincisinden itibaren yaklaşık `1 sn` TTFB görüldü;
+     bu, saha p75 kanıtı değil ve rate-limit/edge davranışı ayrı ölçülmelidir.
+
 ## Doğrulama
 
 - Security regression: **115/115 PASS**.
