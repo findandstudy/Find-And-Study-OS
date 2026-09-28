@@ -315,6 +315,11 @@ verisi ve dış Academy alıcısı değiştirilmedi.
   aynı transaction içinde yeniden doğrulamadan kalıcı silme yapmaz. Genişletilmiş
   audit durability contract **90/90 PASS**; API typecheck ve production build
   **PASS**.
+- Task create/update/archive/bulk-archive/restore işlemleri mutation ile aynı
+  transaction içinde bounded audit üretir; audit açıklama veya görev gövdesini
+  kopyalamaz. Assignee ID doğrulaması strict pozitif safe-integer oldu. Gerçek
+  Express rollback matrisi **6/6 PASS**, genişletilmiş audit durability contract
+  **97/97 PASS**; API typecheck ve production build **PASS**.
 - Migration authority/validation: **129/129 PASS**.
 - Disposable PostgreSQL 16.15: fresh `0→129`, upload grant migration, route E2E,
   DB helper fixture cleanup: **PASS**; cluster durduruldu.

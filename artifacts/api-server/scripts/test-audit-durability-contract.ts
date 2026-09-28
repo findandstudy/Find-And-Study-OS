@@ -18,6 +18,7 @@ const aiExtractors = source("../src/routes/ai-extractors.ts");
 const aiPersonas = source("../src/routes/ai-personas.ts");
 const leadAssignmentRules = source("../src/routes/leadAssignmentRules.ts");
 const leads = source("../src/routes/leads.ts");
+const tasks = source("../src/routes/tasks.ts");
 
 assert.match(auth, /\): Promise<void> \{\s*return db\.insert\(auditLogsTable\)/,
   "audit insert exposes a real awaitable completion boundary");
@@ -193,5 +194,15 @@ assert.match(destructiveLeadRoutes, /\.for\("update"\)/,
   "lead purge locks and proves the lead exists before deletion");
 assert.doesNotMatch(destructiveLeadRoutes, /logAudit\(/,
   "destructive lead routes do not use the non-transactional legacy helper");
+assert.doesNotMatch(tasks, /logAudit\(/,
+  "task mutations do not use the non-transactional legacy helper");
+assert.match(tasks, /async function writeTaskAudit[\s\S]*await tx\.insert\(auditLogsTable\)\.values/,
+  "task audit helper requires the active transaction");
+for (const action of ["task.create", "task.update", "task.archive", "task.restore"]) {
+  assert.match(tasks, new RegExp(`await writeTaskAudit\\(tx, req, "${action}"`),
+    `${action} persists its audit receipt before transaction commit`);
+}
+assert.match(tasks, /await tx\.insert\(auditLogsTable\)\.values\(rows\.map\(task => \(\{[\s\S]{0,220}action: "task\.archive"/,
+  "bulk task archive persists every result audit in its mutation transaction");
 
-console.log("[audit-durability-contract] 90/90 PASS");
+console.log("[audit-durability-contract] 97/97 PASS");

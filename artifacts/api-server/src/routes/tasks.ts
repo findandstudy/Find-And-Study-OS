@@ -1,7 +1,7 @@
-import { Router, type IRouter } from "express";
-import { db, tasksTable, usersTable, type TaskNote } from "@workspace/db";
+import { Router, type IRouter, type Request } from "express";
+import { db, tasksTable, usersTable, auditLogsTable, type TaskNote } from "@workspace/db";
 import { eq, and, desc, isNull, isNotNull, or, sql, inArray } from "drizzle-orm";
-import { requireAuth, requireRole, requireAgentStaffPermission, logAudit } from "../lib/auth";
+import { requireAuth, requireRole, requireAgentStaffPermission } from "../lib/auth";
 import { ADMIN_ROLES, STAFF_ROLES } from "../lib/roles";
 import { dispatchNotification } from "../lib/notificationDispatcher";
 
@@ -26,6 +26,23 @@ function isAdmin(role: string): boolean {
 
 function isStaff(role: string): boolean {
   return (STAFF_ROLES as readonly string[]).includes(role);
+}
+
+async function writeTaskAudit(
+  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  req: Request,
+  action: string,
+  taskId: number,
+  changes: Record<string, unknown> = {},
+): Promise<void> {
+  await tx.insert(auditLogsTable).values({
+    userId: req.user!.id,
+    action,
+    resource: "task",
+    resourceId: taskId,
+    changes: JSON.stringify(changes),
+    ipAddress: req.ip || null,
+  });
 }
 
 async function getUserDisplayName(userId: number): Promise<string> {
@@ -101,7 +118,7 @@ router.post("/tasks", requireAuth, requireRole(...ADMIN_ROLES), async (req, res)
   let resolvedAssignedToName: string | null = assignedToName ?? null;
   if (assignedTo !== undefined && assignedTo !== null) {
     const assigneeId = Number(assignedTo);
-    if (!Number.isFinite(assigneeId)) {
+    if (!Number.isSafeInteger(assigneeId) || assigneeId <= 0) {
       res.status(400).json({ error: "Invalid assignedTo" });
       return;
     }
@@ -116,20 +133,22 @@ router.post("/tasks", requireAuth, requireRole(...ADMIN_ROLES), async (req, res)
   }
 
   const initialStatus = (status as Status) || "todo";
-  const [created] = await db.insert(tasksTable).values({
-    title: title.trim(),
-    description: description?.toString().trim() || null,
-    assignedTo: assignedTo === undefined || assignedTo === null ? null : Number(assignedTo),
-    assignedToName: resolvedAssignedToName,
-    dueDate: dueDate || null,
-    priority: (priority as Priority) || "medium",
-    status: initialStatus,
-    completedAt: initialStatus === "done" ? new Date() : null,
-    taskNotes: [],
-    createdBy: req.user!.id,
-  }).returning();
-
-  logAudit(req.user!.id, "task.create", "task", created.id, { title: created.title });
+  const created = await db.transaction(async tx => {
+    const [row] = await tx.insert(tasksTable).values({
+      title: title.trim(),
+      description: description?.toString().trim() || null,
+      assignedTo: assignedTo === undefined || assignedTo === null ? null : Number(assignedTo),
+      assignedToName: resolvedAssignedToName,
+      dueDate: dueDate || null,
+      priority: (priority as Priority) || "medium",
+      status: initialStatus,
+      completedAt: initialStatus === "done" ? new Date() : null,
+      taskNotes: [],
+      createdBy: req.user!.id,
+    }).returning();
+    await writeTaskAudit(tx, req, "task.create", row.id, { assigned: row.assignedTo !== null, status: row.status });
+    return row;
+  });
 
   if (created.assignedTo) {
     const actorName = `${req.user!.firstName ?? ""} ${req.user!.lastName ?? ""}`.trim() || req.user!.email || "Bir yönetici";
@@ -208,7 +227,7 @@ router.put("/tasks/:id", requireAuth, requireRole(...STAFF_ROLES), async (req, r
       updates.assignedToName = null;
     } else {
       const assigneeId = Number(assignedTo);
-      if (!Number.isFinite(assigneeId)) {
+      if (!Number.isSafeInteger(assigneeId) || assigneeId <= 0) {
         res.status(400).json({ error: "Invalid assignedTo" });
         return;
       }
@@ -231,9 +250,13 @@ router.put("/tasks/:id", requireAuth, requireRole(...STAFF_ROLES), async (req, r
 
   updates.updatedAt = new Date();
 
-  const [updated] = await db.update(tasksTable).set(updates).where(eq(tasksTable.id, id)).returning();
+  const updated = await db.transaction(async tx => {
+    const [row] = await tx.update(tasksTable).set(updates).where(eq(tasksTable.id, id)).returning();
+    if (!row) return null;
+    await writeTaskAudit(tx, req, "task.update", id, { changedFields: Object.keys(updates).filter(key => key !== "updatedAt").sort() });
+    return row;
+  });
   if (!updated) { res.status(404).json({ error: "Task not found" }); return; }
-  logAudit(me.id, "task.update", "task", id, updates);
 
   if (
     updated.assignedTo &&
@@ -263,13 +286,16 @@ router.delete("/tasks/:id", requireAuth, requireRole(...ADMIN_ROLES), async (req
   const id = parseInt(String(req.params.id), 10);
   if (!Number.isFinite(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const now = new Date();
-  const [updated] = await db
-    .update(tasksTable)
-    .set({ archivedAt: now, updatedAt: now })
-    .where(and(eq(tasksTable.id, id), isNull(tasksTable.archivedAt)))
-    .returning();
+  const updated = await db.transaction(async tx => {
+    const [row] = await tx.update(tasksTable)
+      .set({ archivedAt: now, updatedAt: now })
+      .where(and(eq(tasksTable.id, id), isNull(tasksTable.archivedAt)))
+      .returning();
+    if (!row) return null;
+    await writeTaskAudit(tx, req, "task.archive", id);
+    return row;
+  });
   if (!updated) { res.status(404).json({ error: "Task not found" }); return; }
-  logAudit(req.user!.id, "task.archive", "task", id);
   res.json({ success: true });
 });
 
@@ -291,15 +317,23 @@ router.post("/tasks/bulk-archive", requireAuth, requireRole(...ADMIN_ROLES), asy
   }
 
   const now = new Date();
-  const updated = await db
-    .update(tasksTable)
-    .set({ archivedAt: now, updatedAt: now })
-    .where(and(inArray(tasksTable.id, ids), isNull(tasksTable.archivedAt)))
-    .returning({ id: tasksTable.id });
-
-  for (const task of updated) {
-    logAudit(req.user!.id, "task.archive", "task", task.id, { source: "bulk" });
-  }
+  const updated = await db.transaction(async tx => {
+    const rows = await tx.update(tasksTable)
+      .set({ archivedAt: now, updatedAt: now })
+      .where(and(inArray(tasksTable.id, ids), isNull(tasksTable.archivedAt)))
+      .returning({ id: tasksTable.id });
+    if (rows.length > 0) {
+      await tx.insert(auditLogsTable).values(rows.map(task => ({
+        userId: req.user!.id,
+        action: "task.archive",
+        resource: "task",
+        resourceId: task.id,
+        changes: JSON.stringify({ source: "bulk" }),
+        ipAddress: req.ip || null,
+      })));
+    }
+    return rows;
+  });
 
   res.json({ success: true, archived: updated.length });
 });
@@ -307,13 +341,16 @@ router.post("/tasks/bulk-archive", requireAuth, requireRole(...ADMIN_ROLES), asy
 router.post("/tasks/restore/:id", requireAuth, requireRole(...ADMIN_ROLES), async (req, res): Promise<void> => {
   const id = parseInt(String(req.params.id), 10);
   if (!Number.isFinite(id)) { res.status(400).json({ error: "Invalid id" }); return; }
-  const [updated] = await db
-    .update(tasksTable)
-    .set({ archivedAt: null, updatedAt: new Date() })
-    .where(and(eq(tasksTable.id, id), isNotNull(tasksTable.archivedAt)))
-    .returning();
+  const updated = await db.transaction(async tx => {
+    const [row] = await tx.update(tasksTable)
+      .set({ archivedAt: null, updatedAt: new Date() })
+      .where(and(eq(tasksTable.id, id), isNotNull(tasksTable.archivedAt)))
+      .returning();
+    if (!row) return null;
+    await writeTaskAudit(tx, req, "task.restore", id);
+    return row;
+  });
   if (!updated) { res.status(404).json({ error: "Archived task not found" }); return; }
-  logAudit(req.user!.id, "task.restore", "task", id);
   res.json(updated);
 });
 
