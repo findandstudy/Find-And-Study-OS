@@ -997,42 +997,85 @@ router.post("/agents/me/sub-agents", requireAuth, requireRole("agent"), async (r
     res.status(400).json({ error: "First name and last name are required" });
     return;
   }
+  let preparedLogo: PreparedAgentProfileUpload | null = null;
+  if (logoUrl) {
+    if (!isValidStorageUrl(logoUrl)) {
+      res.status(400).json({ error: "Sub-agent logo must be an uploaded storage object" });
+      return;
+    }
+    if (!(await callerOwnsObject(userId, logoUrl))) {
+      res.status(403).json({ error: "The uploaded sub-agent logo does not belong to this account" });
+      return;
+    }
+    try {
+      preparedLogo = await prepareAgentProfileUpload("logoUrl", logoUrl);
+    } catch (error) {
+      const code = error instanceof Error ? error.message : "AGENT_PROFILE_UPLOAD_INVALID";
+      res.status(code === "AGENT_PROFILE_UPLOAD_INVALID_SIZE" ? 413 : 400)
+        .json({ error: "Uploaded sub-agent logo content is invalid", code });
+      return;
+    }
+  }
 
-  let newUserId: number | null = null;
+  let existingUser: typeof usersTable.$inferSelect | undefined;
   if (email) {
-    const [existingUser] = await db.select().from(usersTable).where(eq(usersTable.email, email));
+    [existingUser] = await db.select().from(usersTable).where(eq(usersTable.email, email));
     if (existingUser) {
       res.status(400).json({ error: "A user with this email already exists" });
       return;
     }
-    const userValues: any = { email, firstName, lastName, role: "sub_agent", phone: phone || null, phoneE164: toE164(phone || null), emailVerified: true };
-    if (password) {
-      const pwd = validatePassword(password);
-      if (!pwd.ok) { res.status(400).json({ error: pwd.message }); return; }
-      userValues.passwordHash = await bcrypt.hash(pwd.value, 10);
-    }
-    const [newUser] = await db.insert(usersTable).values(userValues).returning();
-    newUserId = newUser.id;
+  }
+  let passwordHash: string | undefined;
+  if (password) {
+    const pwd = validatePassword(password);
+    if (!pwd.ok) { res.status(400).json({ error: pwd.message }); return; }
+    passwordHash = await bcrypt.hash(pwd.value, 10);
   }
 
-  const [subAgent] = await db.insert(agentsTable).values({
-    userId: newUserId,
-    parentAgentId: parentAgent.id,
-    firstName,
-    lastName,
-    email: email || null,
-    phone: phone || null,
-    phoneE164: toE164(phone || null),
-    commissionRate: commissionRate ? parseFloat(commissionRate) : (parentAgent.subAgentCommissionRate || null),
-    status: "active",
-    agencyCode: sql`('FAS-' || TO_CHAR(CURRENT_TIMESTAMP AT TIME ZONE 'UTC', 'YYYYMMDD') || '-' || LPAD(nextval('agent_agency_code_seq')::text, 6, '0'))`,
-    country: parentAgent.country || null,
-    companyName: companyName || parentAgent.companyName || null,
-    businessName: parentAgent.businessName || null,
-    logoUrl: logoUrl || null,
-    hideServiceFees: hideServiceFees === true,
-    embedToken: crypto.randomUUID(),
-  }).returning();
+  let subAgent: typeof agentsTable.$inferSelect;
+  try {
+    subAgent = await db.transaction(async (tx) => {
+      if (preparedLogo && !await consumeFinalizedUploadGrantInDrizzle(tx, {
+        objectPath: preparedLogo.objectPath,
+        uploadedBy: userId,
+        bytes: preparedLogo.bytes,
+        contentType: preparedLogo.contentType,
+      })) throw new Error("AGENT_PROFILE_UPLOAD_GRANT_NOT_FINALIZED");
+      let newUserId: number | null = null;
+      if (email) {
+        const [newUser] = await tx.insert(usersTable).values({
+          email, firstName, lastName, role: "sub_agent", phone: phone || null,
+          phoneE164: toE164(phone || null), emailVerified: true, passwordHash,
+        }).returning();
+        newUserId = newUser.id;
+      }
+      const [created] = await tx.insert(agentsTable).values({
+        userId: newUserId, parentAgentId: parentAgent.id, firstName, lastName,
+        email: email || null, phone: phone || null, phoneE164: toE164(phone || null),
+        commissionRate: commissionRate ? parseFloat(commissionRate) : (parentAgent.subAgentCommissionRate || null),
+        status: "active",
+        agencyCode: sql`('FAS-' || TO_CHAR(CURRENT_TIMESTAMP AT TIME ZONE 'UTC', 'YYYYMMDD') || '-' || LPAD(nextval('agent_agency_code_seq')::text, 6, '0'))`,
+        country: parentAgent.country || null,
+        companyName: companyName || parentAgent.companyName || null,
+        businessName: parentAgent.businessName || null,
+        logoUrl: logoUrl || null,
+        hideServiceFees: hideServiceFees === true,
+        embedToken: crypto.randomUUID(),
+      }).returning();
+      await tx.insert(auditLogsTable).values({
+        userId, action: "agent.sub_agent.create", resource: "agent", resourceId: created.id,
+        changes: JSON.stringify({ parentAgentId: parentAgent.id, logoUploaded: Boolean(preparedLogo) }),
+        ipAddress: req.ip ?? null,
+      });
+      return created;
+    });
+  } catch (error) {
+    if (error instanceof Error && error.message === "AGENT_PROFILE_UPLOAD_GRANT_NOT_FINALIZED") {
+      res.status(409).json({ error: "Uploaded logo is not finalized or has already been used", code: "UPLOAD_GRANT_NOT_FINALIZED" });
+      return;
+    }
+    throw error;
+  }
 
   try {
     await dispatchNotification({
@@ -1082,19 +1125,58 @@ router.patch("/agents/me/sub-agents/:id", requireAuth, requireRole("agent"), asy
   if (Object.prototype.hasOwnProperty.call(updates, "phone")) {
     (updates as any).phoneE164 = toE164((updates as any).phone);
   }
-  const [updated] = await db.update(agentsTable).set(updates).where(eq(agentsTable.id, subAgentId)).returning();
-  if (subAgent.userId && (updates.firstName !== undefined || updates.lastName !== undefined || updates.email !== undefined || updates.phone !== undefined)) {
-    const userUpdates: Record<string, unknown> = {};
-    if (updates.firstName !== undefined) userUpdates.firstName = updates.firstName;
-    if (updates.lastName !== undefined) userUpdates.lastName = updates.lastName;
-    if (updates.email !== undefined) userUpdates.email = updates.email;
-    if (updates.phone !== undefined) {
-      userUpdates.phone = updates.phone;
-      (userUpdates as any).phoneE164 = toE164((updates as any).phone);
+  let preparedLogo: PreparedAgentProfileUpload | null = null;
+  if (updates.logoUrl !== undefined && updates.logoUrl !== subAgent.logoUrl) {
+    const value = updates.logoUrl;
+    if (value !== null) {
+      if (typeof value !== "string" || !isValidStorageUrl(value)) {
+        res.status(400).json({ error: "Sub-agent logo must be an uploaded storage object" }); return;
+      }
+      if (!(await callerOwnsObject(userId, value))) {
+        res.status(403).json({ error: "The uploaded sub-agent logo does not belong to this account" }); return;
+      }
+      try {
+        preparedLogo = await prepareAgentProfileUpload("logoUrl", value);
+      } catch (error) {
+        const code = error instanceof Error ? error.message : "AGENT_PROFILE_UPLOAD_INVALID";
+        res.status(code === "AGENT_PROFILE_UPLOAD_INVALID_SIZE" ? 413 : 400)
+          .json({ error: "Uploaded sub-agent logo content is invalid", code });
+        return;
+      }
     }
-    if (Object.keys(userUpdates).length > 0) {
-      await db.update(usersTable).set(userUpdates).where(eq(usersTable.id, subAgent.userId));
+  } else if (updates.logoUrl === subAgent.logoUrl) {
+    delete updates.logoUrl;
+  }
+  let updated: typeof agentsTable.$inferSelect;
+  try {
+    updated = await db.transaction(async (tx) => {
+      if (preparedLogo && !await consumeFinalizedUploadGrantInDrizzle(tx, {
+        objectPath: preparedLogo.objectPath, uploadedBy: userId,
+        bytes: preparedLogo.bytes, contentType: preparedLogo.contentType,
+      })) throw new Error("AGENT_PROFILE_UPLOAD_GRANT_NOT_FINALIZED");
+      const [saved] = await tx.update(agentsTable).set(updates).where(eq(agentsTable.id, subAgentId)).returning();
+      if (subAgent.userId && (updates.firstName !== undefined || updates.lastName !== undefined || updates.email !== undefined || updates.phone !== undefined)) {
+        const userUpdates: Record<string, unknown> = {};
+        if (updates.firstName !== undefined) userUpdates.firstName = updates.firstName;
+        if (updates.lastName !== undefined) userUpdates.lastName = updates.lastName;
+        if (updates.email !== undefined) userUpdates.email = updates.email;
+        if (updates.phone !== undefined) {
+          userUpdates.phone = updates.phone;
+          userUpdates.phoneE164 = toE164(updates.phone as string | null);
+        }
+        if (Object.keys(userUpdates).length > 0) await tx.update(usersTable).set(userUpdates).where(eq(usersTable.id, subAgent.userId));
+      }
+      await tx.insert(auditLogsTable).values({
+        userId, action: "agent.sub_agent.update", resource: "agent", resourceId: subAgentId,
+        changes: JSON.stringify({ changedFields: Object.keys(updates) }), ipAddress: req.ip ?? null,
+      });
+      return saved;
+    });
+  } catch (error) {
+    if (error instanceof Error && error.message === "AGENT_PROFILE_UPLOAD_GRANT_NOT_FINALIZED") {
+      res.status(409).json({ error: "Uploaded logo is not finalized or has already been used", code: "UPLOAD_GRANT_NOT_FINALIZED" }); return;
     }
+    throw error;
   }
 
   const subAgentRateChanged = updates.commissionRate !== undefined && updates.commissionRate !== subAgent.commissionRate;

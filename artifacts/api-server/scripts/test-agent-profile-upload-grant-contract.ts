@@ -12,6 +12,11 @@ const adminCreateBoundary = source.slice(adminCreateStart, adminCreateEnd);
 const adminPatchStart = source.indexOf('router.patch("/agents/:id"');
 const adminPatchEnd = source.indexOf('router.delete("/agents/:id"');
 const adminPatchBoundary = source.slice(adminPatchStart, adminPatchEnd);
+const subAgentCreateStart = source.indexOf('router.post("/agents/me/sub-agents"');
+const subAgentPatchStart = source.indexOf('router.patch("/agents/me/sub-agents/:id"');
+const subAgentDeleteStart = source.indexOf('router.delete("/agents/me/sub-agents/:id"');
+const subAgentCreateBoundary = source.slice(subAgentCreateStart, subAgentPatchStart);
+const subAgentPatchBoundary = source.slice(subAgentPatchStart, subAgentDeleteStart);
 
 test("agent profile uploads are re-read and signature checked", () => {
   assert.ok(start >= 0 && end > start);
@@ -61,4 +66,25 @@ test("admin agent edits consume uploads with the profile mutation and audit", ()
   const auditAt = adminPatchBoundary.indexOf("await tx.insert(auditLogsTable)");
   assert.ok(consumeAt >= 0 && updateAt > consumeAt && auditAt > updateAt);
   assert.match(adminPatchBoundary, /AGENT_PROFILE_UPLOAD_GRANT_NOT_FINALIZED/);
+});
+
+test("sub-agent creation consumes an owned logo with user, agent and audit rows", () => {
+  assert.ok(subAgentCreateStart >= 0 && subAgentPatchStart > subAgentCreateStart);
+  assert.match(subAgentCreateBoundary, /callerOwnsObject\(userId, logoUrl\)/);
+  const consumeAt = subAgentCreateBoundary.indexOf("consumeFinalizedUploadGrantInDrizzle(tx,");
+  const userAt = subAgentCreateBoundary.indexOf("await tx.insert(usersTable)");
+  const agentAt = subAgentCreateBoundary.indexOf("await tx.insert(agentsTable)");
+  const auditAt = subAgentCreateBoundary.indexOf("await tx.insert(auditLogsTable)");
+  assert.ok(consumeAt >= 0 && userAt > consumeAt && agentAt > userAt && auditAt > agentAt);
+  assert.doesNotMatch(subAgentCreateBoundary, /await db\.insert\((usersTable|agentsTable)\)/);
+});
+
+test("sub-agent edit consumes an owned logo with linked user and audit mutations", () => {
+  assert.ok(subAgentPatchStart >= 0 && subAgentDeleteStart > subAgentPatchStart);
+  assert.match(subAgentPatchBoundary, /callerOwnsObject\(userId, value\)/);
+  const consumeAt = subAgentPatchBoundary.indexOf("consumeFinalizedUploadGrantInDrizzle(tx,");
+  const agentAt = subAgentPatchBoundary.indexOf("await tx.update(agentsTable)");
+  const userAt = subAgentPatchBoundary.indexOf("await tx.update(usersTable)");
+  const auditAt = subAgentPatchBoundary.indexOf("await tx.insert(auditLogsTable)");
+  assert.ok(consumeAt >= 0 && agentAt > consumeAt && userAt > agentAt && auditAt > userAt);
 });
