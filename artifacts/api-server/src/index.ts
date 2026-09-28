@@ -11,6 +11,7 @@ import { getCsrfCookieOptions } from "./lib/cookieOptions";
 import { getCurrentSeason } from "./lib/season";
 import { seedDocumentTypes } from "./scripts/seedDocumentTypes";
 import { seedCurrencies } from "./scripts/seedCurrencies";
+import { seedNotificationRules } from "./lib/notificationRuleSeed";
 import { HARDCODED_EXTRACTOR_FIELDS, HARDCODED_EXTRACTOR_RULES } from "./lib/aiDefaultConfigs";
 import { seedAiAgentConfig } from "./lib/inbox/aiAgentConfig";
 import { seedProgramScopeSource } from "./lib/inbox/knowledgeSources";
@@ -2953,6 +2954,7 @@ async function seedClaudeIntegration() {
     }
     await seedDocumentTypes(pool);
     await seedCurrencies(pool);
+    await seedNotificationRules();
 
     // Idempotent: ensure the assignment.inconsistency notification rule exists
     // for environments seeded before this event was introduced.
@@ -3433,7 +3435,11 @@ async function seedClaudeIntegration() {
 
   serveStaticFrontend();
 
-  const { feedBus } = await import("./lib/feedBus");
+  const [{ feedBus }, { inboxBus }, { notificationBus }] = await Promise.all([
+    import("./lib/feedBus"),
+    import("./lib/inbox/eventBus"),
+    import("./lib/notificationBus"),
+  ]);
   let shuttingDown = false;
   let httpServer: ReturnType<typeof app.listen> | null = null;
   const shutdown = async (signal: string, exitCode = 0) => {
@@ -3470,6 +3476,14 @@ async function seedClaudeIntegration() {
     }
     try { await feedBus.shutdown(); } catch (error) {
       console.error("[shutdown] feedBus shutdown failed:", error);
+      exitCode = 1;
+    }
+    try { await inboxBus.shutdown(); } catch (error) {
+      console.error("[shutdown] inboxBus shutdown failed:", error);
+      exitCode = 1;
+    }
+    try { await notificationBus.shutdown(); } catch (error) {
+      console.error("[shutdown] notificationBus shutdown failed:", error);
       exitCode = 1;
     }
     process.exit(exitCode);

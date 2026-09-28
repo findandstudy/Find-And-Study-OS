@@ -845,6 +845,12 @@ async function testWebFormRouteRejectsBadToken(
         message: "hello",
       };
       const body = JSON.stringify(submission);
+      const replayHeaders = (requestId: string) => ({
+        "X-Webform-Timestamp": String(Math.floor(Date.now() / 1000)),
+        "X-Webform-Request-Id": requestId,
+      });
+      const tokenRequestId = `tok_${RUN_ID}`.replace(/[^A-Za-z0-9._:-]/g, "_").padEnd(16, "0");
+      const signatureRequestId = `sig_${RUN_ID}`.replace(/[^A-Za-z0-9._:-]/g, "_").padEnd(16, "0");
 
       // No token, no signature -> 401.
       const noAuth = await fetch(`${url}/api/webhooks/web-form`, {
@@ -865,6 +871,7 @@ async function testWebFormRouteRejectsBadToken(
         headers: {
           "Content-Type": "application/json",
           "X-Webform-Token": "definitely-not-the-secret",
+          ...replayHeaders(`wrong_${tokenRequestId}`),
         },
         body,
       });
@@ -881,6 +888,7 @@ async function testWebFormRouteRejectsBadToken(
         headers: {
           "Content-Type": "application/json",
           "X-Webform-Signature": "0".repeat(64),
+          ...replayHeaders(`bad_${signatureRequestId}`),
         },
         body,
       });
@@ -909,7 +917,11 @@ async function testWebFormRouteRejectsBadToken(
       // Valid X-Webform-Token header (server-to-server credential) -> 200.
       const okRes = await fetch(`${url}/api/webhooks/web-form`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", "X-Webform-Token": secret },
+        headers: {
+          "Content-Type": "application/json",
+          "X-Webform-Token": secret,
+          ...replayHeaders(tokenRequestId),
+        },
         body,
       });
       let okResStatusOk = okRes.status === 200;
@@ -935,15 +947,19 @@ async function testWebFormRouteRejectsBadToken(
       // doesn't collide on the same web_form dedup hash bucket.
       const submission2 = { ...submission, message: "second test" };
       const body2 = JSON.stringify(submission2);
+      const signatureTimestamp = String(Math.floor(Date.now() / 1000));
       const validSig = crypto
         .createHmac("sha256", secret)
+        .update(`${signatureTimestamp}.${signatureRequestId}.`)
         .update(body2)
         .digest("hex");
       const okSig = await fetch(`${url}/api/webhooks/web-form`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "X-Webform-Signature": validSig,
+          "X-Webform-Signature": `v1=${validSig}`,
+          "X-Webform-Timestamp": signatureTimestamp,
+          "X-Webform-Request-Id": signatureRequestId,
         },
         body: body2,
       });

@@ -215,7 +215,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/applications.ts",
-      "sha256": "090dec21c464c53fa1c790d560988adb8709b3c3e8046e350418b4dd34011918",
+      "sha256": "9682e5acf1fbf34a3af75e522090c8a6d7074cbbb5da316580c1e6bf0134125c",
       "routeRegistrations": 13,
       "requireAuth": 14,
       "requireRole": 9,
@@ -740,7 +740,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/notifications.ts",
-      "sha256": "88592e9870e5a95773c9ce2a22b069ecec289a40154b47d449cba9fbd99d3dbb",
+      "sha256": "cacfe936c16f487fff5d800c07ea3e6414c08afe5eb1a85b6545186743c6f9b2",
       "routeRegistrations": 11,
       "requireAuth": 12,
       "requireRole": 4,
@@ -1190,7 +1190,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/webhooks.ts",
-      "sha256": "44c30267aa6597ebba124ec9b5e00b3750a0f1217faa2db299dd38c649e5128e",
+      "sha256": "54133856de28d53216683f47d21bbee80b4bfe200e3a32b6979fc64041820d67",
       "routeRegistrations": 7,
       "requireAuth": 0,
       "requireRole": 0,

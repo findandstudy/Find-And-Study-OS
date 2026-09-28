@@ -31,6 +31,15 @@
       "note": "Default-off application stage intent to existing email queue; immutable template, pinned sender revision, verified student contact, current origin/stage validation. External activation and tenant corridor remain separate gates."
     },
     {
+      "path": "artifacts/api-server/src/lib/notificationRuleSeed.ts",
+      "ownership": "platform_global",
+      "enforcement": "quarantine_required",
+      "risk": "medium",
+      "owner": "Platform Engineering",
+      "externalPilot": "quarantine",
+      "note": "Idempotent built-in notification-rule seed invoked only by explicit worker-zero bootstrap; importing route modules performs no write. No tenant corridor or external-pilot authorization."
+    },
+    {
       "path": "artifacts/api-server/src/routes/emailAutomation.ts",
       "ownership": "privileged_config",
       "enforcement": "quarantine_required",

@@ -2,8 +2,9 @@
  * Narrow, synthetic HTTP auth/local-storage corridor. Requires a NEW disposable
  * PostgreSQL cluster prepared by the caller; never starts/migrates/drops a DB.
  * Composes actual auth/CSRF/storage routes, upload processing and object policy.
- * Deliberately does NOT import app.ts/index.ts (unrelated route imports currently
- * start LISTEN connections and seed notification rules as module side effects).
+ * Deliberately composes only the auth/storage corridor so its mutation and
+ * residue denominator stays narrow. Route/module imports are now side-effect
+ * free; the full application surface remains outside this focused test.
  * One rollback-only DB connection intentionally replaces normal pool behavior.
  * Not browser E2E, application workflow, or transaction-concurrency certification.
  */

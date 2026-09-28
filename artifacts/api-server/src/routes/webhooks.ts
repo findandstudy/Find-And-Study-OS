@@ -6,7 +6,7 @@ import { eq, and, isNull, sql } from "drizzle-orm";
 import { processInboundMessage } from "../lib/inbox/processInbound";
 import { maybeAutoReply } from "../lib/inbox/botAutoReply";
 import { verifyWhatsAppSignature, parseWhatsAppWebhook, type WhatsAppConfig } from "../lib/inbox/channels/whatsapp";
-import { verifyWebFormSignature, parseWebFormPayload } from "../lib/inbox/channels/webForm";
+import { parseWebFormPayload, parseWebFormReplayEnvelope, verifyWebFormReplaySignature } from "../lib/inbox/channels/webForm";
 import { verifyMetaSignature, hasMetaChanges } from "../lib/inbox/channels/meta-shared";
 import { parseMessengerWebhook, type MessengerConfig } from "../lib/inbox/channels/messenger";
 import { parseInstagramWebhook, type InstagramConfig } from "../lib/inbox/channels/instagram";
@@ -667,12 +667,25 @@ async function handleWebFormPost(req: Request, res: Response): Promise<void> {
     res.status(503).json({ error: "Webhook authentication is not configured" });
     return;
   }
+  let replayEnvelope: ReturnType<typeof parseWebFormReplayEnvelope>;
+  let replayPayloadHash = "";
   {
     const sig = req.headers["x-webform-signature"] as string | undefined;
     const raw = (req as RequestWithRawBody).rawBody;
     const tokenHeader = (req.headers["x-webform-token"] as string | undefined) || undefined;
-
-    const sigOk = sig ? verifyWebFormSignature(raw ?? Buffer.alloc(0), sig, cfg.secret) : false;
+    replayEnvelope = parseWebFormReplayEnvelope(
+      req.headers["x-webform-timestamp"] as string | undefined,
+      req.headers["x-webform-request-id"] as string | undefined,
+    );
+    if (!replayEnvelope) {
+      res.status(401).json({ error: "Missing, stale, or invalid webhook replay headers" });
+      return;
+    }
+    const exactRaw = raw ?? Buffer.alloc(0);
+    replayPayloadHash = crypto.createHash("sha256").update(exactRaw).digest("hex");
+    const sigOk = sig
+      ? verifyWebFormReplaySignature(exactRaw, sig, cfg.secret, replayEnvelope)
+      : false;
     const tokenOk = timingSafeEq(tokenHeader, cfg.secret);
     if (!sigOk && !tokenOk) {
       logAudit(null, "webhook_auth_failed", "webhook:web_form", undefined, {
@@ -703,6 +716,39 @@ async function handleWebFormPost(req: Request, res: Response): Promise<void> {
     return;
   }
 
+  const formScope = String(cfg.formId || formIdParam || "default").slice(0, 200);
+  const claim = await db.execute(sql`
+    INSERT INTO web_form_ingest_receipts
+      (form_scope, request_id, payload_sha256, request_timestamp, status)
+    VALUES
+      (${formScope}, ${replayEnvelope.requestId}, ${replayPayloadHash},
+       to_timestamp(${replayEnvelope.timestamp}), 'PROCESSING')
+    ON CONFLICT (form_scope, request_id) DO NOTHING
+    RETURNING status, payload_sha256
+  `) as unknown as { rows: Array<{ status: string; payload_sha256: string }> };
+  if (claim.rows.length === 0) {
+    const existing = await db.execute(sql`
+      SELECT status, payload_sha256
+      FROM web_form_ingest_receipts
+      WHERE form_scope = ${formScope} AND request_id = ${replayEnvelope.requestId}
+    `) as unknown as { rows: Array<{ status: string; payload_sha256: string }> };
+    const receipt = existing.rows[0];
+    if (!receipt || receipt.payload_sha256 !== replayPayloadHash) {
+      res.status(409).json({ error: "Webhook request id conflicts with different content" });
+      return;
+    }
+    if (receipt.status === "COMPLETED") {
+      res.status(200).json({ ok: true, replayed: true });
+      return;
+    }
+    res.status(receipt.status === "PROCESSING" ? 202 : 409).json({
+      ok: receipt.status === "PROCESSING",
+      replayed: true,
+      status: receipt.status.toLowerCase(),
+    });
+    return;
+  }
+
   try {
     const result = await processInboundMessage({
       channel: "web_form",
@@ -723,6 +769,15 @@ async function handleWebFormPost(req: Request, res: Response): Promise<void> {
       },
     });
 
+    await db.execute(sql`
+      UPDATE web_form_ingest_receipts
+      SET status = 'COMPLETED', completed_at = now()
+      WHERE form_scope = ${formScope}
+        AND request_id = ${replayEnvelope.requestId}
+        AND payload_sha256 = ${replayPayloadHash}
+        AND status = 'PROCESSING'
+    `);
+
     // If the request looks like a regular HTML form submission and a redirectUrl is
     // configured, follow it so the user lands on the configured thank-you page.
     const accept = String(req.headers["accept"] || "").toLowerCase();
@@ -734,6 +789,14 @@ async function handleWebFormPost(req: Request, res: Response): Promise<void> {
     }
     res.status(200).json({ ok: true, ...result });
   } catch (err) {
+    await db.execute(sql`
+      UPDATE web_form_ingest_receipts
+      SET status = 'FAILED', failed_at = now()
+      WHERE form_scope = ${formScope}
+        AND request_id = ${replayEnvelope.requestId}
+        AND payload_sha256 = ${replayPayloadHash}
+        AND status = 'PROCESSING'
+    `).catch(() => undefined);
     console.error("[WEBHOOK] web_form process error:", err);
     res.status(500).json({ error: "Processing failed" });
   }

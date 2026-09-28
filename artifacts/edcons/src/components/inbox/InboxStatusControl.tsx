@@ -43,6 +43,9 @@ function blockedApplicationStageMessage(
       ? `${fallback}: ${result.missingDocTypes.join(", ")}`
       : fallback;
   }
+  if (result.kind === "conflict") {
+    return "Başvuru başka bir kullanıcı tarafından güncellendi. Güncel kaydı açıp tekrar deneyin.";
+  }
   return result.message || fallback;
 }
 

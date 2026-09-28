@@ -1492,6 +1492,23 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, ...AG
   const id = parseInt(String(req.params.id), 10);
   const user = req.user!;
   const isStaff = STAFF_ROLES.includes(user.role as any);
+  const changesConcurrencySensitiveState = req.body.stage !== undefined || req.body.assignedToId !== undefined;
+  const expectedUpdatedAtRaw = req.body.expectedUpdatedAt;
+  let expectedUpdatedAt: Date | null = null;
+  if (changesConcurrencySensitiveState) {
+    if (typeof expectedUpdatedAtRaw !== "string") {
+      res.status(428).json({
+        error: "The current application version is required",
+        code: "APPLICATION_VERSION_REQUIRED",
+      });
+      return;
+    }
+    expectedUpdatedAt = new Date(expectedUpdatedAtRaw);
+    if (!Number.isFinite(expectedUpdatedAt.getTime()) || expectedUpdatedAt.toISOString() !== expectedUpdatedAtRaw) {
+      res.status(400).json({ error: "expectedUpdatedAt must be a canonical ISO timestamp" });
+      return;
+    }
+  }
 
   const isAdmin = (ADMIN_ROLES as readonly string[]).includes(user.role);
   const perms = isAdmin || !isStaff
@@ -1801,6 +1818,7 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, ...AG
     agentId: applicationsTable.agentId,
     branchId: applicationsTable.branchId,
     universityApplicationId: applicationsTable.universityApplicationId,
+    updatedAt: applicationsTable.updatedAt,
   }).from(applicationsTable).where(and(eq(applicationsTable.id, id), isNull(applicationsTable.deletedAt)));
 
   // KURAL 1: non-admin staff cannot update agent-sourced applications
@@ -1818,6 +1836,7 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, ...AG
     if (visibleIds.length === 0) { res.status(403).json({ error: "No agent record found" }); return; }
     conditions.push(inArray(applicationsTable.agentId, visibleIds));
   }
+  if (expectedUpdatedAt) conditions.push(eq(applicationsTable.updatedAt, expectedUpdatedAt));
 
   const lostCascadeTargets = updates.stage !== undefined
     ? await resolveLostCascadeTargets(String(updates.stage))
@@ -1882,7 +1901,22 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, ...AG
         return updatedApp;
       })
     : (await db.update(applicationsTable).set(updates).where(and(...conditions)).returning())[0];
-  if (!app) { res.status(404).json({ error: "Application not found" }); return; }
+  if (!app) {
+    if (expectedUpdatedAt) {
+      const [current] = await db.select({ updatedAt: applicationsTable.updatedAt })
+        .from(applicationsTable)
+        .where(and(...conditions.slice(0, -1)));
+      if (current) {
+        res.status(409).json({
+          error: "Application changed after this screen was loaded. Refresh and review the latest values.",
+          code: "APPLICATION_VERSION_CONFLICT",
+          currentUpdatedAt: current.updatedAt.toISOString(),
+        });
+        return;
+      }
+    }
+    res.status(404).json({ error: "Application not found" }); return;
+  }
 
   if (updates.stage !== undefined) {
     // Keep every stage-change entry point aligned with portal automation.

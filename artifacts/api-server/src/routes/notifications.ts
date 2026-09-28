@@ -11,7 +11,6 @@ import { eq, and, desc, sql, isNull, inArray, like, or } from "drizzle-orm";
 import { requireAuth, requireRole, logAudit } from "../lib/auth";
 import { ADMIN_ROLES } from "../lib/roles";
 import {
-  DEFAULT_NOTIFICATION_RULES,
   NOTIFICATION_EVENTS,
   NOTIFICATION_CHANNELS,
 } from "@workspace/db";
@@ -196,29 +195,6 @@ router.get("/notifications/events", requireAuth, (req, res): void => {
   req.on("close", cleanup);
   req.on("error", cleanup);
 });
-
-async function seedNotificationRules() {
-  const existing = await db.select().from(notificationRulesTable);
-  const existingEvents = new Set(existing.map(r => r.event));
-
-  let added = 0;
-  for (const rule of DEFAULT_NOTIFICATION_RULES) {
-    if (existingEvents.has(rule.event)) continue;
-    await db.insert(notificationRulesTable).values({
-      event: rule.event,
-      name: rule.name,
-      category: rule.category,
-      channels: rule.channels,
-      recipientType: rule.recipientType,
-      recipientRoles: rule.recipientRoles,
-      isActive: true,
-    });
-    added++;
-  }
-  if (added > 0) console.log(`[notifications] Seeded ${added} new notification rules`);
-}
-
-seedNotificationRules().catch((err) => console.error("[notifications] Seed error:", err));
 
 router.get("/notifications", requireAuth, async (req, res): Promise<void> => {
   const userId = req.user!.id;
