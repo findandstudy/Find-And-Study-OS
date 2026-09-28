@@ -72,6 +72,9 @@ verisi ve dış Academy alıcısı değiştirilmedi.
      uygulamıyor.
    - Public detail read-model generation'ı ve generation-key kullanan Course
      Finder cache'leri diğer process'te de ilerliyor.
+   - Notification bus için bootstrap seviyesinde global abone eklendi; başka API
+     process'inde oluşan bildirim ilgili kullanıcının process-local sayaç cache'ini
+     anında düşürüyor, mevcut SSE aboneliği aynen korunuyor.
    - Import bağlantı açmıyor; listener yalnız explicit bootstrap'ta başlıyor ve
      SIGTERM/SIGINT shutdown sınırında kapanıyor.
 
@@ -83,6 +86,7 @@ verisi ve dış Academy alıcısı değiştirilmedi.
 - Application concurrency: **5/5 PASS**.
 - Import lifecycle (catalog bus dahil): **17/17 PASS**.
 - İki bağımsız process + PostgreSQL katalog invalidasyonu: **4/4 PASS**.
+- İki bağımsız process + PostgreSQL bildirim sayacı invalidasyonu: **3/3 PASS**.
 - Upload grant contract: **18/18 PASS**.
 - Frontend upload finalization inventory: **18/18 PASS**.
 - Upload grant PostgreSQL 16.15: **17/17 PASS**.
@@ -125,9 +129,9 @@ dilimde yapılmadı.
   migration'ları hâlâ gerekir.
 - 80 legacy route'un tenant/capability koridoru: kademeli migration programıdır,
   tek global refactor değildir.
-- Facet/notification-count gibi kullanıcı-scope process-local cache'lerin kalan
-  çoklu-process invalidasyonları ayrı dar fazlardır; public katalog/Course Finder
-  iki-process koridoru tamamlandı.
+- Facet gibi kullanıcı-scope process-local cache'lerin kalan çoklu-process
+  invalidasyonları ayrı dar fazlardır; public katalog/Course Finder ve notification
+  count iki-process koridorları tamamlandı.
 - Academy/provider sandbox E2E, offsite restore/DR ve gerçek yüksek-hacim/CWV
   ölçümü harici ortam/credential veya operasyon penceresi gerektirir; production
   üzerinde otomatik çalıştırılmaz.

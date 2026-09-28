@@ -77,6 +77,7 @@ async function connectListenClient(): Promise<void> {
         throw err;
       }
       listenClient = client;
+      console.log("[notificationBus] LISTEN connection established");
       return;
     } finally {
       connecting = null;

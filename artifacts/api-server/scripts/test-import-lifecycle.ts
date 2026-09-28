@@ -39,9 +39,11 @@ assert.doesNotMatch(namingBeforeFirstExport, /void\s+loadDbLabels\s*\(/, "docume
 assert.match(bootstrap, /await seedNotificationRules\(\)/, "notification seed is owned by explicit bootstrap");
 assert.match(bootstrap, /await inboxBus\.shutdown\(\)/, "inbox listener is closed during shutdown");
 assert.match(bootstrap, /await notificationBus\.shutdown\(\)/, "notification listener is closed during shutdown");
+assert.match(bootstrap, /notificationBus\.subscribe\(event => invalidateNotificationCounts\(event\.userId\)\)/,
+  "remote notification events invalidate the process-local count cache");
 assert.match(bootstrap, /publicCatalogInvalidationBus\.subscribe\(applyPublicCatalogRenderCacheInvalidation\)/,
   "public catalog invalidation listener is explicitly started during bootstrap");
 assert.match(bootstrap, /await publicCatalogInvalidationBus\.shutdown\(\)/,
   "public catalog invalidation listener is closed during shutdown");
 
-console.log("[import-lifecycle] 17/17 PASS");
+console.log("[import-lifecycle] 18/18 PASS");
