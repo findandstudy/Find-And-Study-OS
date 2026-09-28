@@ -619,6 +619,40 @@ test("logout is a CSRF-protected POST and no longer mutates state through GET", 
   assert.match(logoutClientSource, /clearAuthCache\(\)/);
 });
 
+test("authentication audit attempts finish inside the request lifecycle", () => {
+  const lifecycleActions = [
+    "auth.login.failure",
+    "auth.login.success",
+    "auth.email_verify",
+    "auth.password_reset.request",
+    "auth.logout",
+  ];
+  for (const action of lifecycleActions) {
+    assert.match(
+      authRouteSource,
+      new RegExp(`(?:await logAudit|logAudit\\([^;]+${action}[\\s\\S]*?\\)\\s*,?)`),
+      `${action} must remain request-bound`,
+    );
+  }
+  assert.doesNotMatch(
+    authRouteSource,
+    /^\s*logAudit\([^\n]*(?:auth\.login|auth\.email_verify|auth\.password_reset|auth\.set_password|auth\.logout)[^\n]*\);\s*$/m,
+  );
+});
+
+test("password-reset token claim, password mutation and audit are atomic", () => {
+  assert.match(authRouteSource, /const passwordResetCommitted = await db\.transaction/);
+  assert.match(authRouteSource, /eq\(usersTable\.passwordResetToken, tokenHash\)/);
+  assert.match(authRouteSource, /gt\(usersTable\.passwordResetExpires, new Date\(\)\)/);
+  assert.match(authRouteSource, /\.returning\(\{ id: usersTable\.id \}\)/);
+  assert.match(authRouteSource, /await tx\.delete\(sessionsTable\)/);
+  assert.match(authRouteSource, /await tx\.insert\(auditLogsTable\)\.values\(\[/);
+  assert.match(authRouteSource, /action: "auth\.set_password"/);
+  assert.match(authRouteSource, /action: "auth\.password_reset\.complete"/);
+  assert.match(authRouteSource, /if \(!passwordResetCommitted\)/);
+  assert.doesNotMatch(authRouteSource, /logAudit\(user\.id, "auth\.(?:set_password|password_reset\.complete)"/);
+});
+
 test("contract PDF rendering is network-isolated and does not log signer PII", () => {
   assert.match(contractPdfSource, /Contract rendering is intentionally network-isolated/);
   assert.match(contractPdfSource, /return route\.abort\(\)/);

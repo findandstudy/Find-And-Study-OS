@@ -624,6 +624,28 @@ verisi ve dış Academy alıcısı değiştirilmedi.
   `no-new-privileges`, restart `0` kontrolleri **PASS**. DB container yeniden
   başlatılmadı; live integration, email delivery, background job ve tüm social
   provider/worker bayrakları kapalı kaldı. Production değiştirilmedi.
+- Aynı final release üzerinde 29 Eylül'de 390×844/Fast-4G/4×CPU profiliyle
+  altı rotanın üçer tekrarlı CWV laboratuvarı yeniden koştu. Medyan LCP ana
+  sayfa `3.152 ms`, program listesi `3.356 ms`, ülkeler `3.120 ms`, London
+  `3.588 ms`, üniversite `2.492 ms`, program detayı `2.552 ms`; aggregate LCP
+  `3.120 ms`, TBT `161 ms`, CLS `0` oldu. Üniversite eşiği geçti, program
+  detayı yalnız `52 ms` ile kaçırdı; diğer dört rota nedeniyle kapı dürüstçe
+  **FAIL** kalır. Bu ölçüm saha p75/RUM veya production kapasite kanıtı değildir.
+
+## 29 Eylül authentication audit ve password-reset yarış koruması
+
+- Login başarı/başarısızlık, e-posta doğrulama, parola sıfırlama isteği ve logout
+  audit denemeleri response sonrasına bırakılmıyor; request yaşam döngüsünde
+  tamamlanmaları bekleniyor. Legacy non-throwing audit uyumluluğu değişmedi.
+- Password-reset token'ı hash üretimi sırasında iki eşzamanlı istek tarafından
+  yeniden kullanılamıyor. Exact token + geçerlilik koşullu claim, parola yazımı ve
+  tüm mevcut session'ların iptali ve `auth.set_password` +
+  `auth.password_reset.complete` audit kayıtları tek DB transaction'ında;
+  kaybeden istek `400` alıyor ve hiçbir parola/session/audit mutation'ı üretmiyor.
+- Auth güvenlik sözleşmesi `39/39`, API typecheck ve birleşik security regression
+  zinciri (hardening, replay, concurrency, cache, upload ve atomicity grupları;
+  audit durability `125/125`) **PASS**. Bu takip dilimi henüz staging'e
+  dağıtılmadı; production değiştirilmedi.
 
 Web-form üreticileri dağıtımdan önce `X-Webform-Timestamp`,
 `X-Webform-Request-Id` ve v1 zarfını imzalayan `X-Webform-Signature` sözleşmesine
