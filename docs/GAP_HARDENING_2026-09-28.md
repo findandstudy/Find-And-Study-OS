@@ -498,6 +498,12 @@ verisi ve dış Academy alıcısı değiştirilmedi.
   PDF/DOC/DOCX imzası ve 25 MB sınırı doğrulanıyor; grant tüketimi, sözleşme
   create/update ve bounded audit aynı transaction içinde. Aynı dosya referanslı
   retry grant tüketmiyor. Hedefli contract **3/3 PASS**, API typecheck **PASS**.
+- Finansal tahsilat/ödeme kanıtı eki uploader ownership ve object storage'daki
+  gerçek byte/MIME üzerinden PDF/JPEG/PNG/WebP + 10 MB sınırında doğrulanıyor.
+  Grant tüketimi idempotent finance request claim'inden sonra, transaction insert,
+  komisyon yeniden hesaplama ve kalıcı mutation receipt'iyle aynı transaction'da;
+  replay ikinci kez grant tüketmiyor. Hedefli contract **2/2 PASS**, API typecheck
+  **PASS**.
 - Migration authority/validation: **129/129 PASS**.
 - Disposable PostgreSQL 16.15: fresh `0→129`, upload grant migration, route E2E,
   DB helper fixture cleanup: **PASS**; cluster durduruldu.
