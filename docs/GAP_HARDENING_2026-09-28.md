@@ -482,6 +482,12 @@ verisi ve dış Academy alıcısı değiştirilmedi.
   transaction içinde; başarısız ya da yeniden kullanılmış grant kullanıcıyı
   veya acente kaydını yarım bırakmıyor. Hedefli contract **5/5 PASS**; API
   typecheck **PASS**.
+- Staff profilindeki avatar, sözleşme ve pasaport dosyaları ortak güvenli
+  consumer'a alındı. Private object uploader'a ait olmalı; gerçek bayt/MIME,
+  dosya imzası ve alan bazlı 5/10 MB sınırı yeniden doğrulanıyor. Üç alanın
+  grant tüketimi, user mutation ve bounded audit aynı transaction'da; aynı
+  referansla retry no-op. Hedefli contract **4/4 PASS**, user-management policy
+  **6/6 PASS**, API typecheck **PASS**.
 - Migration authority/validation: **129/129 PASS**.
 - Disposable PostgreSQL 16.15: fresh `0→129`, upload grant migration, route E2E,
   DB helper fixture cleanup: **PASS**; cluster durduruldu.

@@ -11,12 +11,12 @@ const boundary = source.slice(start, end);
 
 test("user avatar upload is restricted to owned verified image bytes", () => {
   assert.ok(start >= 0 && end > start);
-  assert.match(source, /callerOwnsObject\(req\.user!\.id, avatarUrl\)/);
+  assert.match(source, /callerOwnsObject\(req\.user!\.id, value\)/);
   assert.match(source, /getObjectEntityFile\(`\/objects\/\$\{objectKey\}`\)/);
   assert.match(source, /await file\.getMetadata\(\)/);
   assert.match(source, /await file\.download\(\)/);
-  assert.match(source, /bytes\.length > 5 \* 1024 \* 1024/);
-  assert.match(source, /validateUploadedFileBuffer\(`avatar\.\$\{extension\}`, contentType, bytes\)/);
+  assert.match(source, /field === "avatarUrl" \? 5 \* 1024 \* 1024 : 10 \* 1024 \* 1024/);
+  assert.match(source, /validateUploadedFileBuffer\(`\$\{stem\}\.\$\{extension\}`, contentType, bytes\)/);
 });
 
 test("user create consumes avatar grant with row and audit", () => {
@@ -31,18 +31,21 @@ test("user create consumes avatar grant with row and audit", () => {
   assert.doesNotMatch(createBoundary, /await db\s*\.insert\(usersTable\)/);
 });
 
-test("avatar grant consumption and user reference update share a transaction", () => {
+test("avatar, contract and passport grant consumption share the user transaction and audit", () => {
+  assert.match(boundary, /\["avatarUrl", "contractUrl", "passportUrl"\]/);
   const consumeAt = boundary.indexOf("consumeFinalizedUploadGrantInDrizzle(tx,");
   const updateAt = boundary.indexOf("await tx.update(usersTable)");
-  assert.ok(consumeAt >= 0 && updateAt > consumeAt);
+  const auditAt = boundary.indexOf("await tx.insert(auditLogsTable)");
+  assert.ok(consumeAt >= 0 && updateAt > consumeAt && auditAt > updateAt);
   assert.match(boundary, /await db\.transaction\(async \(tx\) =>/);
-  assert.match(boundary, /USER_AVATAR_UPLOAD_GRANT_NOT_FINALIZED/);
+  assert.match(boundary, /USER_FILE_UPLOAD_GRANT_NOT_FINALIZED/);
   assert.match(boundary, /status\(409\)/);
+  assert.doesNotMatch(boundary, /await logAudit\(req\.user!\.id, "update_user"/);
 });
 
-test("same avatar retry is a no-op and does not consume another grant", () => {
-  const sameAt = boundary.indexOf("avatarUrl === targetCheck.avatarUrl");
-  const deleteAt = boundary.indexOf("delete updates.avatarUrl", sameAt);
-  const prepareAt = boundary.indexOf("prepareUserAvatarUpload(avatarUrl)");
+test("same file retry is a no-op and does not consume another grant", () => {
+  const sameAt = boundary.indexOf("value === targetCheck[field]");
+  const deleteAt = boundary.indexOf("delete updates[field]", sameAt);
+  const prepareAt = boundary.indexOf("prepareUserUpload(field, value)");
   assert.ok(sameAt >= 0 && deleteAt > sameAt && prepareAt > deleteAt);
 });

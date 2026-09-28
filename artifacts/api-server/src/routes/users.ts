@@ -43,16 +43,18 @@ const createUserBodySchema = z.object({
 const branchIdBodySchema = z.number().int().positive().nullable();
 
 const router: IRouter = Router();
-const userAvatarObjectStorage = new ObjectStorageService();
+const userFileObjectStorage = new ObjectStorageService();
 
-async function prepareUserAvatarUpload(objectPath: string): Promise<{
+type UserUploadField = "avatarUrl" | "contractUrl" | "passportUrl";
+
+async function prepareUserUpload(field: UserUploadField, objectPath: string): Promise<{
   objectPath: string;
   bytes: Buffer;
   contentType: string;
 }> {
   const objectKey = canonicalizeKey(objectPath);
-  if (!objectKey) throw new Error("USER_AVATAR_UPLOAD_INVALID_PATH");
-  const file = await userAvatarObjectStorage.getObjectEntityFile(`/objects/${objectKey}`);
+  if (!objectKey) throw new Error("USER_FILE_UPLOAD_INVALID_PATH");
+  const file = await userFileObjectStorage.getObjectEntityFile(`/objects/${objectKey}`);
   const [metadata] = await file.getMetadata();
   const contentType = String(metadata.contentType ?? "").split(";", 1)[0].trim().toLowerCase();
   const [bytes] = await file.download();
@@ -62,15 +64,27 @@ async function prepareUserAvatarUpload(objectPath: string): Promise<{
     "image/webp": "webp",
     "image/gif": "gif",
   };
+  if (field !== "avatarUrl") extensionByMime["application/pdf"] = "pdf";
   const extension = extensionByMime[contentType];
-  if (!extension) throw new Error("USER_AVATAR_UPLOAD_UNSUPPORTED_TYPE");
-  if (bytes.length <= 0 || bytes.length > 5 * 1024 * 1024) {
-    throw new Error("USER_AVATAR_UPLOAD_INVALID_SIZE");
+  if (!extension) throw new Error("USER_FILE_UPLOAD_UNSUPPORTED_TYPE");
+  const maxSize = field === "avatarUrl" ? 5 * 1024 * 1024 : 10 * 1024 * 1024;
+  if (bytes.length <= 0 || bytes.length > maxSize) {
+    throw new Error("USER_FILE_UPLOAD_INVALID_SIZE");
   }
-  if (await validateUploadedFileBuffer(`avatar.${extension}`, contentType, bytes)) {
-    throw new Error("USER_AVATAR_UPLOAD_SIGNATURE_MISMATCH");
+  const stem = field === "avatarUrl" ? "avatar" : field === "passportUrl" ? "passport" : "contract";
+  if (await validateUploadedFileBuffer(`${stem}.${extension}`, contentType, bytes)) {
+    throw new Error("USER_FILE_UPLOAD_SIGNATURE_MISMATCH");
   }
   return { objectPath, bytes, contentType };
+}
+
+async function prepareUserAvatarUpload(objectPath: string) {
+  try {
+    return await prepareUserUpload("avatarUrl", objectPath);
+  } catch (error) {
+    const code = error instanceof Error ? error.message : "USER_FILE_UPLOAD_INVALID";
+    throw new Error(code.replace("USER_FILE_UPLOAD_", "USER_AVATAR_UPLOAD_"));
+  }
 }
 
 const ALLOWED_PATCH_FIELDS = ["email", "firstName", "lastName", "phone", "language", "avatarUrl", "startDate", "homeAddress", "passportNumber", "contractUrl", "passportUrl", "emergencyContactName", "emergencyContactPhone"];
@@ -377,6 +391,8 @@ router.patch("/users/:id", requireAuth, async (req, res): Promise<void> => {
     role: usersTable.role,
     branchId: usersTable.branchId,
     avatarUrl: usersTable.avatarUrl,
+    contractUrl: usersTable.contractUrl,
+    passportUrl: usersTable.passportUrl,
     deletedAt: usersTable.deletedAt,
   })
     .from(usersTable).where(eq(usersTable.id, id));
@@ -503,31 +519,29 @@ router.patch("/users/:id", requireAuth, async (req, res): Promise<void> => {
     }
   }
 
-  let preparedAvatar: Awaited<ReturnType<typeof prepareUserAvatarUpload>> | null = null;
-  if (updates.avatarUrl !== undefined) {
-    const avatarUrl = typeof updates.avatarUrl === "string" ? updates.avatarUrl.trim() : updates.avatarUrl;
-    if (avatarUrl === targetCheck.avatarUrl) {
-      delete updates.avatarUrl;
-    } else if (avatarUrl === "" || avatarUrl === null) {
-      updates.avatarUrl = null;
-    } else if (typeof avatarUrl !== "string" || !avatarUrl.startsWith("/api/storage/objects/")) {
-      res.status(400).json({ error: "Avatar must be an uploaded storage object" });
+  const preparedFiles: Array<Awaited<ReturnType<typeof prepareUserUpload>> & { field: UserUploadField }> = [];
+  for (const field of ["avatarUrl", "contractUrl", "passportUrl"] as const) {
+    if (updates[field] === undefined) continue;
+    const value = typeof updates[field] === "string" ? updates[field].trim() : updates[field];
+    if (value === targetCheck[field]) {
+      delete updates[field];
+    } else if (value === "" || value === null) {
+      updates[field] = null;
+    } else if (typeof value !== "string" || !value.startsWith("/api/storage/objects/")) {
+      res.status(400).json({ error: `${field} must be an uploaded storage object` });
       return;
     } else {
-      if (!(await callerOwnsObject(req.user!.id, avatarUrl))) {
-        res.status(403).json({ error: "The uploaded avatar does not belong to this account" });
+      if (!(await callerOwnsObject(req.user!.id, value))) {
+        res.status(403).json({ error: `The uploaded file does not belong to this account (${field})` });
         return;
       }
       try {
-        preparedAvatar = await prepareUserAvatarUpload(avatarUrl);
-        updates.avatarUrl = avatarUrl;
+        preparedFiles.push({ field, ...(await prepareUserUpload(field, value)) });
+        updates[field] = value;
       } catch (error) {
-        const code = error instanceof Error ? error.message : "USER_AVATAR_UPLOAD_INVALID";
-        if (code === "USER_AVATAR_UPLOAD_INVALID_SIZE") {
-          res.status(413).json({ error: "Avatar is empty or exceeds 5 MB", code });
-        } else {
-          res.status(400).json({ error: "Avatar content is invalid", code });
-        }
+        const code = error instanceof Error ? error.message : "USER_FILE_UPLOAD_INVALID";
+        res.status(code === "USER_FILE_UPLOAD_INVALID_SIZE" ? 413 : 400)
+          .json({ error: `Uploaded file content is invalid (${field})`, code });
         return;
       }
     }
@@ -547,12 +561,14 @@ router.patch("/users/:id", requireAuth, async (req, res): Promise<void> => {
   let syncedAgentId: number | null = null;
   try {
     await db.transaction(async (tx) => {
-      if (preparedAvatar && !await consumeFinalizedUploadGrantInDrizzle(tx, {
-        objectPath: preparedAvatar.objectPath,
-        uploadedBy: req.user!.id,
-        bytes: preparedAvatar.bytes,
-        contentType: preparedAvatar.contentType,
-      })) throw new Error("USER_AVATAR_UPLOAD_GRANT_NOT_FINALIZED");
+      for (const file of preparedFiles) {
+        if (!await consumeFinalizedUploadGrantInDrizzle(tx, {
+          objectPath: file.objectPath,
+          uploadedBy: req.user!.id,
+          bytes: file.bytes,
+          contentType: file.contentType,
+        })) throw new Error("USER_FILE_UPLOAD_GRANT_NOT_FINALIZED");
+      }
       const [u] = await tx.update(usersTable).set(updates).where(eq(usersTable.id, id)).returning();
       if (!u) return;
       user = u;
@@ -564,11 +580,19 @@ router.patch("/users/:id", requireAuth, async (req, res): Promise<void> => {
           .returning({ id: agentsTable.id });
         syncedAgentId = agentRow?.id ?? null;
       }
+      await tx.insert(auditLogsTable).values({
+        userId: req.user!.id,
+        action: "update_user",
+        resource: "user",
+        resourceId: id,
+        changes: JSON.stringify({ changedFields: Object.keys(updates) }),
+        ipAddress: req.ip ?? null,
+      });
     });
   } catch (error) {
-    if (error instanceof Error && error.message === "USER_AVATAR_UPLOAD_GRANT_NOT_FINALIZED") {
+    if (error instanceof Error && error.message === "USER_FILE_UPLOAD_GRANT_NOT_FINALIZED") {
       res.status(409).json({
-        error: "Uploaded avatar is not finalized or has already been used",
+        error: "Uploaded file is not finalized or has already been used",
         code: "UPLOAD_GRANT_NOT_FINALIZED",
       });
       return;
@@ -576,7 +600,6 @@ router.patch("/users/:id", requireAuth, async (req, res): Promise<void> => {
     throw error;
   }
   if (!user) { res.status(404).json({ error: "User not found" }); return; }
-  await logAudit(req.user!.id, "update_user", "user", id, updates, req.ip);
   if (updates.phone !== undefined && AGENT_ROLES.includes(user.role as any) && syncedAgentId !== null) {
     await writeAudit({
       userId: req.user!.id,
