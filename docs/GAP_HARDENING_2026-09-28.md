@@ -533,6 +533,27 @@ verisi ve dış Academy alıcısı değiştirilmedi.
   **2/2**, API/Edcons typecheck ve iki production build **PASS**. Bu takip
   değişikliği yeniden staging'e çıkıp aynı üç-tekrar kapısı ölçülmeden performans
   iyileşmesi iddia edilmez.
+- Manifest tabanlı preload dilimi exact `14c431f9ba79231b03437e2fa20ae8f4bb63f668`
+  commit'i ve `staging-20260928T191715Z-14c431f9ba79` release'iyle staging'e
+  çıkarıldı. HTML kanıtında aktif `en` ve ilgili route chunk'ları bounded
+  `modulepreload` olarak yer aldı; health HTTP 200, DB bağlı, ledger `129/129`,
+  restart `0`, UID/GID `10042:10042`, read-only rootfs ve `CapDrop=ALL` kaldı.
+- Aynı üç-tekrar kapısında preload sonrası üniversite medyan LCP `2.492 ms` oldu;
+  ancak aggregate LCP `3.736 ms`, program liste TBT `215 ms` ve program detay
+  LCP/TBT `2.652 ms/250 ms` nedeniyle sonuç yine **FAIL** oldu. Bu ölçüm locale
+  sözlüğü, ortak React/CSS ve route bağımlılıklarının hâlâ kritik zincirde olduğunu
+  doğruladı.
+- Yaklaşık `150 KB` tenant logosunun idle callback ile kritik route indirmeleriyle
+  yarışabildiği görüldü. Logo, okunabilir ve sabit boyutlu mevcut marka fallback'i
+  korunarak pencere load'undan beş saniye sonraya alındı; hedefli contract
+  `44/44` ve Edcons typecheck **PASS**. Exact `85ad4d103de1d090320ccfe2bc7d8fe37c6ad893`
+  commit'i `staging-20260928T192902Z-85ad4d103de1` release'i olarak dağıtıldı.
+- Logo ertelendikten sonra program liste transferi `494.126 → 343.555` byte'a
+  düştü. Buna rağmen son medyanlar `/en` `3.936 ms`, program listesi `3.804 ms`,
+  ülkeler `3.924 ms`, London `4.044 ms`, üniversite `2.720 ms`, program detayı
+  `2.704 ms`; aggregate TBT `172 ms`, CLS `0–0.0004` oldu. Dolayısıyla CWV kapısı
+  dürüstçe **FAIL** kalır; sıradaki repo-içi darboğaz public kritik çeviri
+  namespace'i/SSR handoff, repo-dışı kapı ise gerçek saha p75 verisidir.
 
 ## Uyumluluk ve rollout notu
 

@@ -46,7 +46,6 @@ export function resolvePublicAssetPreloads(
   model: PublicCatalogRenderModel,
 ): string[] {
   const sourceKeys = [
-    `src/lib/i18n/translations/${model.locale}.json`,
     ROUTE_SOURCE_BY_KIND[model.kind],
   ].filter((value): value is string => Boolean(value));
   const queued = [...sourceKeys];

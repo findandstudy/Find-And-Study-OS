@@ -11,6 +11,22 @@
     // Storage may be unavailable in privacy-restricted browsers.
   }
 
+  try {
+    var parts = window.location.pathname.split("/").filter(Boolean);
+    var supported = /^(en|tr|ar|fr|ru|fa|zh|hi|es|id|ur|tk|ky|kk|uz|tg|bn|pt|ne|vi|ko|uk|it)$/;
+    var publicSections = /^(|about|countries|destinations|cities|programs|universities|guides|blog|contact|agency)$/;
+    if (supported.test(parts[0] || "") && publicSections.test(parts[1] || "")) {
+      var preload = document.createElement("link");
+      preload.rel = "preload";
+      preload.as = "fetch";
+      preload.crossOrigin = "anonymous";
+      preload.href = "/i18n-critical/" + parts[0] + ".json";
+      document.head.appendChild(preload);
+    }
+  } catch (_) {
+    // A preload hint is optional; the provider retains the full dictionary fallback.
+  }
+
   function showBootstrapError() {
     var root = document.getElementById("root");
     if (!root || root.children.length) return;
