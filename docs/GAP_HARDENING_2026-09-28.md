@@ -604,9 +604,12 @@ verisi ve dış Academy alıcısı değiştirilmedi.
   Rol/tenant scope cache anahtarları değişmedi; rollback olan transaction için
   PostgreSQL notification teslim edilmediğinden gereksiz veya erken eviction
   olmaz. Listener kesintisinde mevcut TTL güvenli fallback olarak kalır.
-- Invalidation davranışı ve migration/wiring sözleşmesi `13/13`, migration
-  ledger `130/130`, API typecheck **PASS**. Gerçek PostgreSQL trigger teslimatı
-  staging migration/adoption kapısında ayrıca doğrulanmalıdır.
+- Invalidation davranışı ve migration/wiring sözleşmesi `14/14`, migration
+  ledger `131/131`, API typecheck **PASS**. İlk staging adoption'ında `0129`
+  ledger'e girmesine rağmen trigger nesneleri gözlenmedi; geçmiş değiştirilmeden
+  explicit statement boundary ve DB-side üç-trigger assertion içeren ileri yönlü
+  `0130` repair migration'ı eklendi. Gerçek PostgreSQL notification teslimatı
+  staging adoption kapısında ayrıca doğrulanmalıdır.
 
 Web-form üreticileri dağıtımdan önce `X-Webform-Timestamp`,
 `X-Webform-Request-Id` ve v1 zarfını imzalayan `X-Webform-Signature` sözleşmesine
