@@ -44,8 +44,12 @@ verisi ve dış Academy alıcısı değiştirilmedi.
      generic URL kullanan 18 frontend akışı ile social istemcisi provider upload
      sonrası aynı finalize endpoint'ini çağırıyor. Ayrı ticket tabanlı public
      agency upload kendi tek-kullanımlı immutable sözleşmesini koruyor.
-   - Bu temel henüz eski bütün attachment consumer'larına zorunlu consume kuralı
-     getirmez; o yüzden external pilot izni açılmadı ve writer quarantine'da kaldı.
+   - Canonical öğrenci/application belge kaydı ile lead belge kaydı da grantı
+     `FINALIZED → CONSUMED` olarak eski kaydı pasife alma ve yeni belgeyi ekleme
+     işlemleriyle aynı transaction'da claim ediyor. Kullanılmış/finalize edilmemiş
+     object hiçbir belge referansı üretemiyor.
+   - Daha seyrek legacy attachment consumer'ları henüz global zorunlu consume
+     kuralına alınmadı; external pilot izni açılmadı ve writer quarantine'da kaldı.
    - Social media asset kaydı, grantı `FINALIZED → CONSUMED` olarak asset
      insert ve immutable operation receipt ile aynı transaction'da claim ediyor;
      aynı staging object ikinci bir asset kaydında kullanılamıyor.
@@ -67,9 +71,10 @@ verisi ve dış Academy alıcısı değiştirilmedi.
 - Web-form replay: **9/9 PASS**.
 - Application concurrency: **5/5 PASS**.
 - Import lifecycle: **12/12 PASS**.
-- Upload grant contract: **15/15 PASS**.
+- Upload grant contract: **18/18 PASS**.
 - Frontend upload finalization inventory: **18/18 PASS**.
-- Upload grant PostgreSQL 16.15: **15/15 PASS**.
+- Upload grant PostgreSQL 16.15: **17/17 PASS**.
+- Document/lead ownership + finalized-grant route corridor: **14/14 PASS**.
 - Audit durability contract: **13/13 PASS**.
 - Disposable authenticated HTTP corridor: **PASS**; real login/session, CSRF,
   owner-bound grant, initial upload, exact replay, immutable conflict,
@@ -95,9 +100,10 @@ dilimde yapılmadı.
 
 - Academy receiver tarafında issuer/audience + single-use exchange: receiver bu
   repoda değil; koordineli iki taraflı değişiklik gerekir.
-- Bütün legacy attachment rotalarında `FINALIZED → CONSUMED` zorunluluğu:
-  grant/finalization temeli ve generic frontend producer'lar hazır; consumer
-  kaydıyla aynı transaction'da consume edilmeden global enforcement açılmaz.
+- Kalan seyrek legacy attachment rotalarında `FINALIZED → CONSUMED` zorunluluğu:
+  generic producer'lar, social asset ve canonical document/lead consumer'ları
+  hazır; kalan her consumer kendi kayıt transaction'ına taşınmadan global
+  enforcement açılmaz.
 - Application kaydıyla finance/portal/genel notification intent'lerinin tümünü
   aynı transaction outbox'ına almak: stage email bunu yapıyor; kalan devam işleri
   dar command/worker dönüşümü ister.

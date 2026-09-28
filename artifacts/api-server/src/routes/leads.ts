@@ -29,6 +29,7 @@ import { checkMandatoryDocs, checkMandatoryDocsForStudent, reEvaluateMandatoryDo
 import { getDocLabel } from "../lib/docNaming";
 import { recompressStoredObjectIfNeeded } from "../lib/documentBytes";
 import { UploadTooLargeError } from "../lib/uploads/processUpload";
+import { consumeFinalizedUploadGrantInDrizzle } from "../lib/uploadGrant";
 import { resolveResidenceAddress } from "../lib/studentAddressDefaults";
 import { validatePassportNumber } from "@workspace/portal-adapters/identity-validation";
 import { buildStableSignedStudentPhotoThumbnailPath } from "@workspace/portal-adapters";
@@ -1019,6 +1020,12 @@ router.post("/leads/:id/documents", requireAuth, requireRole(...STAFF_ROLES, ...
         isNull(documentsTable.deletedAt),
       );
   const doc = await db.transaction(async (tx) => {
+    if (!await consumeFinalizedUploadGrantInDrizzle(tx, {
+      objectPath: fileKey,
+      uploadedBy: user.id,
+      bytes: head,
+      contentType: mimeType,
+    })) throw new Error("LEAD_DOCUMENT_UPLOAD_GRANT_NOT_FINALIZED");
     await tx.update(documentsTable)
       .set({ deletedAt: new Date() })
       .where(previousScope);
@@ -1034,7 +1041,14 @@ router.post("/leads/:id/documents", requireAuth, requireRole(...STAFF_ROLES, ...
       sizeBytes: storedSizeBytes,
     }).returning();
     return inserted;
+  }).catch((error) => {
+    if (error instanceof Error && error.message === "LEAD_DOCUMENT_UPLOAD_GRANT_NOT_FINALIZED") return null;
+    throw error;
   });
+  if (!doc) {
+    res.status(409).json({ error: "Upload must be finalized and unused before registration", code: "UPLOAD_GRANT_NOT_FINALIZED" });
+    return;
+  }
   await logAudit(user.id, "create_document", "document", doc.id, { name: safeName, type, leadId: id, studentId: lead.convertedStudentId ?? null }, req.ip);
 
   // Converted-lead uploads are student profile documents too. Run the same

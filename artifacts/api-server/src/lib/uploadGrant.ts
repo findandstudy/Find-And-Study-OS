@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { pool } from "@workspace/db";
+import { sql, type SQL } from "drizzle-orm";
 import { canonicalizeKey } from "./objectAuthz";
 
 export const UPLOAD_GRANT_TTL_MS = 15 * 60 * 1000;
@@ -70,6 +71,32 @@ export async function consumeFinalizedUploadGrant(
        AND final_size = $3 AND final_content_type = $4 AND content_sha256 = $5`,
     [objectKey, input.uploadedBy, input.bytes.length, contentType, sha256, input.now ?? new Date()],
   );
+  return result.rowCount === 1;
+}
+
+export async function consumeFinalizedUploadGrantInDrizzle(
+  executor: { execute: (query: SQL) => Promise<{ rowCount?: number | null }> },
+  input: {
+    objectPath: string;
+    uploadedBy: number;
+    bytes: Buffer;
+    contentType: string;
+    now?: Date;
+  },
+): Promise<boolean> {
+  const objectKey = canonicalizeKey(input.objectPath);
+  const contentType = normalizedContentType(input.contentType);
+  if (!objectKey || input.bytes.length <= 0 || input.bytes.length > 25 * 1024 * 1024 || !contentType) {
+    return false;
+  }
+  const sha256 = createHash("sha256").update(input.bytes).digest("hex");
+  const result = await executor.execute(sql`
+    UPDATE object_upload_grants
+    SET status = 'CONSUMED', consumed_at = ${input.now ?? new Date()}
+    WHERE object_key = ${objectKey} AND uploaded_by = ${input.uploadedBy}
+      AND status = 'FINALIZED' AND final_size = ${input.bytes.length}
+      AND final_content_type = ${contentType} AND content_sha256 = ${sha256}
+  `);
   return result.rowCount === 1;
 }
 

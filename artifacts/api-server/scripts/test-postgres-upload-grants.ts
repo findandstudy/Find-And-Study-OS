@@ -19,7 +19,7 @@ assert.equal(identity.rows[0]?.port, 5433);
 
 const run = crypto.randomUUID();
 const email = `upload-grant-${run}@example.invalid`;
-const keys = [`uploads/${run}-ok`, `uploads/${run}-expired`];
+const keys = [`uploads/${run}-ok`, `uploads/${run}-expired`, `uploads/${run}-drizzle`];
 let userId = 0;
 try {
   userId = Number((await admin.query(
@@ -33,7 +33,7 @@ try {
     );
   }
 
-  const { issueUploadGrant, finalizeUploadGrant, consumeFinalizedUploadGrant, UPLOAD_GRANT_TTL_MS } = await import("../src/lib/uploadGrant");
+  const { issueUploadGrant, finalizeUploadGrant, consumeFinalizedUploadGrant, consumeFinalizedUploadGrantInDrizzle, UPLOAD_GRANT_TTL_MS } = await import("../src/lib/uploadGrant");
   const bytes = Buffer.from("synthetic-upload-grant-content", "utf8");
   assert.equal(await issueUploadGrant({
     objectPath: `/objects/${keys[0]}`, uploadedBy: userId,
@@ -94,7 +94,22 @@ try {
     [keys[0]],
   );
   assert.deepEqual(consumed.rows[0], { status: "CONSUMED", consumed: true });
-  console.log("[postgres-upload-grants] 15/15 PASS");
+
+  assert.equal(await issueUploadGrant({
+    objectPath: `/objects/${keys[2]}`, uploadedBy: userId,
+    expectedSize: bytes.length, expectedContentType: "text/plain",
+  }), true);
+  assert.equal((await finalizeUploadGrant({
+    objectPath: `/objects/${keys[2]}`, uploadedBy: userId,
+    declaredSize: bytes.length, declaredContentType: "text/plain",
+    bytes, contentType: "text/plain",
+  })).ok, true);
+  const { db } = await import("@workspace/db");
+  assert.equal(await db.transaction(tx => consumeFinalizedUploadGrantInDrizzle(tx, {
+    objectPath: `/objects/${keys[2]}`, uploadedBy: userId, bytes, contentType: "text/plain",
+  })), true);
+  assert.equal((await admin.query("SELECT status FROM object_upload_grants WHERE object_key=$1", [keys[2]])).rows[0]?.status, "CONSUMED");
+  console.log("[postgres-upload-grants] 17/17 PASS");
 } finally {
   await admin.query("DELETE FROM object_upload_grants WHERE object_key = ANY($1::text[])", [keys]);
   await admin.query("DELETE FROM object_owners WHERE object_key = ANY($1::text[])", [keys]);

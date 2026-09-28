@@ -8,6 +8,8 @@ const helper = readFileSync(new URL("../src/lib/uploadGrant.ts", import.meta.url
 const storage = readFileSync(new URL("../src/routes/storage.ts", import.meta.url), "utf8");
 const documentClient = readFileSync(new URL("../../edcons/src/lib/uploadDocumentFile.ts", import.meta.url), "utf8");
 const socialClient = readFileSync(new URL("../../edcons/src/lib/uploadSocialMediaFile.ts", import.meta.url), "utf8");
+const documentsRoute = readFileSync(new URL("../src/routes/documents.ts", import.meta.url), "utf8");
+const leadsRoute = readFileSync(new URL("../src/routes/leads.ts", import.meta.url), "utf8");
 
 assert.match(migration, /PRIMARY KEY REFERENCES "object_owners"/, "one grant is bound to one owned object key");
 assert.match(migration, /CHECK \("status" IN \('ISSUED', 'FINALIZED', 'CONSUMED'\)\)/, "grant lifecycle is bounded");
@@ -31,5 +33,13 @@ assert.match(socialClient, /uploadAndFinalizeObject\(prepared\.uploadURL, prepar
 assert.match(readFileSync(new URL("../src/routes/socialOperations.ts", import.meta.url), "utf8"),
   /consumeFinalizedUploadGrant\(client,[\s\S]+REGISTER_SOCIAL_MEDIA_ASSET/,
   "social asset consumes the grant inside its receipt transaction");
+assert.match(documentsRoute,
+  /db\.transaction\(async \(tx\) => \{[\s\S]+consumeFinalizedUploadGrantInDrizzle\(tx,[\s\S]+tx\.insert\(documentsTable\)/,
+  "student/application document consumes the grant in the same transaction as registration");
+assert.match(leadsRoute,
+  /db\.transaction\(async \(tx\) => \{[\s\S]+consumeFinalizedUploadGrantInDrizzle\(tx,[\s\S]+tx\.insert\(documentsTable\)/,
+  "lead document consumes the grant in the same transaction as registration");
+assert.match(helper, /UPDATE object_upload_grants[\s\S]+status = 'FINALIZED'[\s\S]+content_sha256/,
+  "Drizzle consumer binds finalized size, MIME and digest atomically");
 
-console.log("[upload-grant-contract] 15/15 PASS");
+console.log("[upload-grant-contract] 18/18 PASS");

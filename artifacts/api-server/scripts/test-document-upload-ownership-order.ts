@@ -41,6 +41,7 @@ let owner: number | null | undefined = userId + 1;
 let storedBody = Buffer.from("not-a-valid-pdf");
 let events: string[] = [];
 let inserted: Record<string, unknown> | undefined;
+let finalizedGrant = true;
 
 function queryRows(table: unknown, where: unknown): unknown[] {
   if (table === objectOwnersTable) {
@@ -84,9 +85,11 @@ mock.method(db, "transaction", async (fn: (tx: typeof db) => unknown) => {
   events.push("transaction");
   return fn(db);
 });
-for (const method of ["delete", "execute"] as const) {
-  mock.method(db, method, () => { throw new Error("UNEXPECTED_DATABASE_MUTATION"); });
-}
+mock.method(db, "delete", () => { throw new Error("UNEXPECTED_DATABASE_MUTATION"); });
+mock.method(db, "execute", () => {
+  events.push("consume-grant");
+  return Promise.resolve({ rowCount: finalizedGrant ? 1 : 0, rows: [] });
+});
 
 const { ObjectStorageService } = await import("../src/lib/objectStorage");
 mock.method(ObjectStorageService.prototype, "getObjectEntityFile", async (path: string) => {
@@ -140,6 +143,7 @@ beforeEach(() => {
   storedBody = Buffer.from("not-a-valid-pdf");
   events = [];
   inserted = undefined;
+  finalizedGrant = true;
 });
 after(async () => {
   await pool.end();
@@ -176,8 +180,23 @@ for (const [target, role] of [["document", "student"], ["document", "agent"], ["
     assert.equal(events[0], "ownership");
     assert.ok(events.includes("read-bytes"));
     assert.ok(events.includes("recompress-metadata"));
+    assert.ok(events.includes("consume-grant"));
     assert.ok(events.includes("insert-reference"));
     assert.equal(events.includes("delete-bytes"), false);
+  });
+}
+
+for (const [target, role] of [["document", "student"], ["lead", "agent"]] as const) {
+  test(`${target}: unfinalized or consumed grant cannot register a reference`, async () => {
+    owner = userId;
+    storedBody = validBody;
+    finalizedGrant = false;
+    const result = await invoke(target, role);
+    assert.equal(result.status, 409);
+    assert.equal(result.body.code, "UPLOAD_GRANT_NOT_FINALIZED");
+    assert.ok(events.includes("consume-grant"));
+    assert.equal(events.includes("insert-reference"), false);
+    assert.equal(inserted, undefined);
   });
 }
 

@@ -485,7 +485,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/documents.ts",
-      "sha256": "f85f9ed9536f7dcd48ff71c9be9ca4acf2fc06f09cbbf86bb8d67b60dcb286f6",
+      "sha256": "5f3409038727bdc57c2b291e5281baa83e39ac843e37f385b50078c241fc599a",
       "routeRegistrations": 14,
       "requireAuth": 14,
       "requireRole": 6,
@@ -695,7 +695,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/leads.ts",
-      "sha256": "60a1c84af4b464fe298f5af454721a24fb12741efd9bbf10908e609342df0820",
+      "sha256": "bdb6969e40e25055ce7baab2a51b5b2b1011832526cf482c3d2c2442ef2a2690",
       "routeRegistrations": 24,
       "requireAuth": 23,
       "requireRole": 22,
