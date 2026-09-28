@@ -27,6 +27,7 @@ const editorial = readFileSync(new URL("../src/pages/public/DetailEditorial.tsx"
 const css = readFileSync(new URL("../src/pages/public/detailEditorial.css", import.meta.url), "utf8");
 const layout = readFileSync(new URL("../src/pages/public/DetailLayout.tsx", import.meta.url), "utf8");
 const programs = readFileSync(new URL("../src/pages/public/Programs.tsx", import.meta.url), "utf8");
+const programApplicationDialog = readFileSync(new URL("../src/pages/public/PublicProgramApplicationDialog.tsx", import.meta.url), "utf8");
 const programCard = readFileSync(new URL("../src/pages/public/PublicProgramCard.tsx", import.meta.url), "utf8");
 const programFilters = readFileSync(new URL("../src/pages/public/PublicProgramFilters.tsx", import.meta.url), "utf8");
 const universityBrowser = readFileSync(new URL("../src/pages/public/UniversityProgramBrowser.tsx", import.meta.url), "utf8");
@@ -101,7 +102,7 @@ test("public detail fees require explicit valid currencies without inventing USD
   assert.equal(detailMoney(1000, "JPY", "en-US"), "¥1,000");
   assert.match(detailMoney(1.234, "KWD", "en-US")!, /1\.234/);
   assert.match(
-    readFileSync(new URL("../src/pages/public/Programs.tsx", import.meta.url), "utf8"),
+    programCard,
     /normalizeCurrency\(currency\)/,
   );
 });
@@ -280,7 +281,10 @@ test("Programs and university reuse the same card and filters without changing d
     assert.match(source, /<PublicProgramFilters/);
   }
   assert.match(programs, /onDetails=\{\(\) => setDetailProgram\(prog\)\} onApply=\{\(\) => setApplyProgram\(prog\)\}/);
-  assert.match(programs, /<ApplyDialog open=\{!!applyProgram\} onClose=\{\(\) => setApplyProgram\(null\)\} program=\{applyProgram\}/);
+  assert.match(programs, /const PublicProgramApplicationDialog = lazy\(\(\) => import\("\.\/PublicProgramApplicationDialog"\)\)/);
+  assert.match(programs, /applyProgram \? \(\s*<Suspense fallback=\{null\}>\s*<PublicProgramApplicationDialog\s*open\s*onClose=\{\(\) => setApplyProgram\(null\)\}/);
+  assert.match(programApplicationDialog, /export default function PublicProgramApplicationDialog/);
+  assert.match(programApplicationDialog, /await fetch\(`\$\{BASE_URL\}\/api\/public\/apply`/);
   assert.match(programs, /const PublicProgramDetailDialog = lazy\(\(\) => import\("\.\/PublicProgramDetailDialog"\)/);
   assert.match(programs, /detailProgram \? \(\s*<Suspense fallback=\{null\}>\s*<PublicProgramDetailDialog open onClose=\{\(\) => setDetailProgram\(null\)\} program=\{detailProgram\}/);
   assert.match(programs, /if \(requestedProgramId && resp\.data\?\.length === 1\)\s*\{\s*setApplyProgram\(\(current\) => current \|\| resp\.data\[0\]\)/);
