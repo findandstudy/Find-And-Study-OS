@@ -129,6 +129,16 @@ verisi ve dış Academy alıcısı değiştirilmedi.
      load ve render task iptal ediliyor. Sınır aşımı mevcut güvenli icon/fallback
      görünümüne düşüyor; mesaj veya öğrenci kaydını değiştirmiyor.
 
+10. **API token mutation + audit atomikliği**
+   - API token create, revoke ve rotate işlemlerinin audit sonucu artık credential
+     mutation'ıyla aynı veritabanı transaction'ında yazılıyor; non-throwing legacy
+     audit helper bu üç yüksek etkili komutta kullanılmıyor.
+   - Revoke satırı transaction içinde kilitleniyor. Eşzamanlı veya tekrar revoke,
+     ikinci bir mutation/audit üretmeden mevcut durumu döndürüyor.
+   - Audit insert hatasında create hiçbir credential bırakmıyor; revoke aktif
+     tokenı iptal etmiyor; rotate eski tokenı iptal edip replacement bırakmıyor.
+     Plain token hiçbir audit payload'una yazılmıyor.
+
 ## Doğrulama
 
 - Security regression: **115/115 PASS**.
@@ -156,6 +166,9 @@ verisi ve dış Academy alıcısı değiştirilmedi.
   tasarlandığı gibi **FAIL**; bu sonuç release kapısını açık tutar.
 - PDF preview runtime: concurrency, known-size admission, dishonest streaming
   overflow ve küçük PDF kabulü **4/4 PASS**; frontend typecheck **PASS**.
+- API token transaction-bound audit contract **15/15 PASS**; gerçek Express route
+  + in-memory rollback fault injection create/revoke/rotate **4/4 PASS**; API
+  typecheck **PASS**.
 - Migration authority/validation: **129/129 PASS**.
 - Disposable PostgreSQL 16.15: fresh `0→129`, upload grant migration, route E2E,
   DB helper fixture cleanup: **PASS**; cluster durduruldu.

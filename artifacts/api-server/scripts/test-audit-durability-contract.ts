@@ -11,9 +11,12 @@ assert.match(auth, /\): Promise<void> \{\s*return db\.insert\(auditLogsTable\)/,
   "audit insert exposes a real awaitable completion boundary");
 assert.doesNotMatch(auth, /setImmediate\s*\(/,
   "audit persistence is not deferred beyond the request lifecycle");
+assert.doesNotMatch(tokens, /logAudit\(/, "API token mutations do not use the non-transactional legacy helper");
+assert.equal((tokens.match(/await tx\.insert\(auditLogsTable\)\.values\(\{/g) ?? []).length, 3,
+  "API token create, revoke and rotate write their audit result inside the mutation transaction");
 for (const action of ["create", "revoke", "rotate"]) {
-  assert.match(tokens, new RegExp(`await logAudit\\(req\\.user!\\.id, "${action}"`),
-    `API token ${action} awaits audit persistence`);
+  assert.match(tokens, new RegExp(`action: "${action}"[\\s\\S]{0,100}resource: "api_token"`),
+    `API token ${action} persists a bounded result receipt`);
 }
 for (const action of ["sender_created", "sender_updated", "sender_verified", "template_created", "version_created"]) {
   assert.match(email, new RegExp(`await logAudit\\(req\\.user!\\.id, "notification_email\\.${action}"`),
@@ -26,4 +29,4 @@ assert.equal((agents.match(/await logAudit\([^\n]+"auth\.impersonate\.(?:start|e
 assert.match(agents, /await logAudit\(actor\.id, "agent\.academy_access\.update"/,
   "Academy privilege change awaits audit persistence");
 
-console.log("[audit-durability-contract] 13/13 PASS");
+console.log("[audit-durability-contract] 15/15 PASS");
