@@ -78,6 +78,19 @@ verisi ve dış Academy alıcısı değiştirilmedi.
    - Import bağlantı açmıyor; listener yalnız explicit bootstrap'ta başlıyor ve
      SIGTERM/SIGINT shutdown sınırında kapanıyor.
 
+7. **Run-owned büyük katalog performans kapısı**
+   - Yalnız exact disposable `127.0.0.1:5433/fasos_apply_local` üzerinde çalışan,
+     1.000 üniversite + 200.000 program kurup sonunda kendi üniversite prefix'i
+     üzerinden cascade-cleanup yapan tekrar edilebilir benchmark eklendi.
+   - Gerçek Course Finder join + translation fallback + `%term%` search + sort +
+     deep offset list/count, yedi facet sorgusu ve 32 eşzamanlı farklı arama ölçülüyor.
+   - PostgreSQL 16.15 son yerel kanıtında list planı 110,99 ms, cold list+count
+     155,65 ms, yedi facet 238,26 ms; 32-query burst 0 hata, p50 665,62 ms,
+     p95 1.034,56 ms, p99 1.043,64 ms oldu. Hard safety ceilings PASS.
+   - Plan 200.000 programda parallel sequential scan gösterdi. Ölçüm mevcut
+     güvenlik tavanının altında olduğu için kanıtsız geniş GIN/extension migration'ı
+     eklenmedi; bu sonuç production kapasite veya uzun soak sertifikası değildir.
+
 ## Doğrulama
 
 - Security regression: **115/115 PASS**.
@@ -87,6 +100,7 @@ verisi ve dış Academy alıcısı değiştirilmedi.
 - Import lifecycle (catalog bus dahil): **17/17 PASS**.
 - İki bağımsız process + PostgreSQL katalog invalidasyonu: **4/4 PASS**.
 - İki bağımsız process + PostgreSQL bildirim sayacı invalidasyonu: **3/3 PASS**.
+- Disposable 200.000-program Course Finder plan/cold/facet/burst gate: **PASS**.
 - Upload grant contract: **18/18 PASS**.
 - Frontend upload finalization inventory: **18/18 PASS**.
 - Upload grant PostgreSQL 16.15: **17/17 PASS**.
