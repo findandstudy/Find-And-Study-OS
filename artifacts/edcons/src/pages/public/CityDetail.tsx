@@ -1,12 +1,13 @@
 import { DetailLayout } from "./DetailLayout";
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { customFetch } from "@workspace/api-client-react";
 import { ArrowLeft, ArrowUpRight, MapPin, Building2, GraduationCap, Globe2 } from "lucide-react";
 
 import { DetailBreadcrumbs, DetailCard, DetailFacts, DetailHeading } from "./DetailEditorial";
 import { boundDetailContent, detailContentNavigation, detailContentSections } from "./DetailContentSections";
-import { CityProgramCards, type CityProgramCardData } from "./CityProgramCards";
+import type { CityProgramCardData } from "./CityProgramCards";
+import { DeferredBelowFold } from "./DeferredBelowFold";
 import { detailCopy, localDetailPath } from "./detailPresentation";
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/hooks/use-i18n";
@@ -42,6 +43,8 @@ type CityPayload = {
     requestedPathIsCanonical: boolean;
   };
 };
+
+const CityProgramCards = lazy(() => import("./CityProgramCards").then(module => ({ default: module.CityProgramCards })));
 
 export default function CityDetail({ routeKey }: { routeKey: string }) {
   const { t, lang, localePath } = useI18n();
@@ -168,7 +171,7 @@ export default function CityDetail({ routeKey }: { routeKey: string }) {
       {city.programs.length > 0 && <section data-detail-section="programs" id="programs" className="detail-section">
         <div className="detail-wrap">
           <DetailHeading number="04" eyebrow={copy.studyOptions} title={t("catalogDetail.availablePrograms")} />
-          <CityProgramCards key={`${city.id}:${lang}`} programs={city.programs} />
+          <DeferredBelowFold><Suspense fallback={<div className="h-72 animate-pulse rounded-3xl bg-secondary" />}><CityProgramCards key={`${city.id}:${lang}`} programs={city.programs} /></Suspense></DeferredBelowFold>
           <div className="detail-actions"><Link href={programsPath}>{t("countryDetail.viewAllPrograms")}<ArrowUpRight size={17} aria-hidden="true" /></Link></div>
         </div>
       </section>}

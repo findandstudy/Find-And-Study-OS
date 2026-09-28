@@ -1,5 +1,5 @@
 import { DetailLayout } from "./DetailLayout";
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { customFetch } from "@workspace/api-client-react";
 import { useI18n } from "@/hooks/use-i18n";
@@ -8,7 +8,7 @@ import { SITE_NAME, SITE_URL, useJsonLd } from "@/hooks/use-json-ld";
 import { DetailBreadcrumbs, DetailHeading, DetailIdentity } from "./DetailEditorial";
 import { boundDetailContent, detailContentNavigation, detailContentSections, DetailMobileActions } from "./DetailContentSections";
 import { detailCopy, localDetailPath, type DetailTuition } from "./detailPresentation";
-import { UniversityProgramBrowser } from "./UniversityProgramBrowser";
+import { DeferredBelowFold } from "./DeferredBelowFold";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Building2, ExternalLink, ArrowUpRight, MapPin, GraduationCap, Award } from "lucide-react";
 
@@ -58,6 +58,8 @@ type UniversityPayload = {
     programLinkPolicy: "PUBLISHED_INDEXABLE_ONLY" | "LEGACY_UNGATED";
   };
 };
+
+const UniversityProgramBrowser = lazy(() => import("./UniversityProgramBrowser").then(module => ({ default: module.UniversityProgramBrowser })));
 
 export default function UniversityDetail({ routeKey }: { routeKey: string }) {
   const { t, lang, localePath } = useI18n();
@@ -201,7 +203,7 @@ export default function UniversityDetail({ routeKey }: { routeKey: string }) {
       <section data-detail-section="programs" id="programs" className="detail-section is-sand">
         <div className="detail-wrap">
           <DetailHeading number="03" eyebrow={copy.studyOptions} title={t("catalogDetail.availablePrograms")} />
-          <UniversityProgramBrowser key={`${university.id}:${lang}`} universityId={university.id} admissionsOpen={university.isActive !== false} />
+          <DeferredBelowFold minHeight={520}><Suspense fallback={<div className="h-[32rem] animate-pulse rounded-3xl bg-secondary" />}><UniversityProgramBrowser key={`${university.id}:${lang}`} universityId={university.id} admissionsOpen={university.isActive !== false} /></Suspense></DeferredBelowFold>
           <div className="detail-actions"><Link href={`${localePath("/programs")}?universityId=${university.id}`}>{t("countryDetail.viewAllPrograms")} · {payload.meta.programCount}<ArrowUpRight size={17} aria-hidden="true" /></Link></div>
         </div>
       </section>

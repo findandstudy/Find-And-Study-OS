@@ -67,6 +67,8 @@ export function PublicLayout({ children }: { children: ReactNode }) {
               <img
                 src={logoUrl}
                 alt={companyName}
+                decoding="async"
+                fetchPriority="low"
                 className="h-10 max-w-[180px] object-contain group-hover:scale-105 transition-transform duration-300"
               />
             ) : (

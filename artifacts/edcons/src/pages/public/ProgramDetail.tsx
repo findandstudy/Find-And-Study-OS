@@ -1,6 +1,6 @@
 import { DetailLayout } from "./DetailLayout";
 import { programAdmissionsOpen } from "@/lib/programAdmissions";
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { customFetch } from "@workspace/api-client-react";
 import { useI18n } from "@/hooks/use-i18n";
@@ -9,7 +9,8 @@ import { SITE_NAME, SITE_URL, useJsonLd } from "@/hooks/use-json-ld";
 import { Button } from "@/components/ui/button";
 import { DetailBreadcrumbs, DetailFacts, DetailHeading, DetailIdentity, DetailPrice } from "./DetailEditorial";
 import { boundDetailContent, detailContentNavigation, detailContentSections, DetailMobileActions } from "./DetailContentSections";
-import { CityProgramCards, type CityProgramCardData } from "./CityProgramCards";
+import type { CityProgramCardData } from "./CityProgramCards";
+import { DeferredBelowFold } from "./DeferredBelowFold";
 import { detailCopy, detailMoney, displayTuition, durationIsAmbiguous, localDetailPath, splitRequirements, tuitionOffer, type DetailTuition } from "./detailPresentation";
 
 import { ArrowLeft, BookOpen, ArrowUpRight, Building2, GraduationCap, Clock3, Languages, MapPin, CalendarDays, FileText, Wallet } from "lucide-react";
@@ -94,6 +95,8 @@ type ProgramDetailPayload = {
     relatedPolicy: "PUBLISHED_INDEXABLE_ONLY" | "LEGACY_UNGATED";
   };
 };
+
+const CityProgramCards = lazy(() => import("./CityProgramCards").then(module => ({ default: module.CityProgramCards })));
 
 function localizedDate(value: string | null, locale: string): string | null {
   if (!value) return null;
@@ -339,7 +342,7 @@ export default function ProgramDetail({ routeKey }: { routeKey: string }) {
       {payload.related.length > 0 && <section data-detail-section="related" id="related" className="detail-section">
         <div className="detail-wrap">
           <DetailHeading number="05" eyebrow={copy.studyOptions} title={t("catalogDetail.relatedPrograms")} />
-          <CityProgramCards key={`${program.id}:${lang}`} programs={payload.related} />
+          <DeferredBelowFold><Suspense fallback={<div className="h-72 animate-pulse rounded-3xl bg-secondary" />}><CityProgramCards key={`${program.id}:${lang}`} programs={payload.related} /></Suspense></DeferredBelowFold>
         </div>
       </section>}
       {detailContentSections(editorial, lang, localePath("/contact"))}
