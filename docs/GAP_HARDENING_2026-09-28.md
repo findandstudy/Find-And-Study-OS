@@ -460,6 +460,12 @@ verisi ve dış Academy alıcısı değiştirilmedi.
   symlink privilege SKIP** hardening grubu, web-form replay `9/9`, application
   concurrency `7/7`, import lifecycle `19/19`, upload grant `18/18`, tüm dar
   mutation atomicity paketleri ve audit durability `125/125` geçti.
+- Private-storage şube logoları da uploader ownership + gerçek bayt/MIME +
+  görsel imzası + 5 MB sınırıyla doğrulanır. Create/update sırasında grant
+  tüketimi, branch mutation ve bounded audit aynı transaction'dadır; aynı URL
+  retry'si grant tüketmez. Mevcut HTTPS logo referansları uyumluluk için
+  korunur. Hedefli contract **4/4 PASS**; geniş security-hardening **128 PASS,
+  1 Windows symlink privilege SKIP**; API typecheck ve production build **PASS**.
 - Migration authority/validation: **129/129 PASS**.
 - Disposable PostgreSQL 16.15: fresh `0→129`, upload grant migration, route E2E,
   DB helper fixture cleanup: **PASS**; cluster durduruldu.

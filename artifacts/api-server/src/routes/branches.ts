@@ -1,11 +1,15 @@
 import { Router, type IRouter } from "express";
-import { db, branchesTable, agentBranchesTable, agentsTable, usersTable } from "@workspace/db";
+import { db, branchesTable, agentBranchesTable, agentsTable, usersTable, auditLogsTable } from "@workspace/db";
 import { eq, isNull, and, sql, inArray, getTableColumns } from "drizzle-orm";
 import { z } from "zod";
 import { requireAuth, requireRole, logAudit } from "../lib/auth";
 import { validate, getValidated } from "../middlewares/validate";
 import { STAFF_ROLES } from "../lib/roles";
 import { getVisibleBranchIds } from "../lib/branchScope";
+import { callerOwnsObject, canonicalizeKey } from "../lib/objectAuthz";
+import { ObjectStorageService } from "../lib/objectStorage";
+import { validateUploadedFileBuffer } from "../lib/fileUploadValidation";
+import { consumeFinalizedUploadGrantInDrizzle } from "../lib/uploadGrant";
 
 // Optional URL/email fields arrive from the UI as "" when the user clears them.
 // Coerce blank strings to null BEFORE .email()/.url() so clearing a field never
@@ -55,6 +59,49 @@ const patchBranchBodySchema = z.object({
 });
 
 const router: IRouter = Router();
+const branchLogoObjectStorage = new ObjectStorageService();
+
+async function prepareBranchLogoUpload(objectPath: string): Promise<{
+  objectPath: string;
+  bytes: Buffer;
+  contentType: string;
+}> {
+  const objectKey = canonicalizeKey(objectPath);
+  if (!objectKey) throw new Error("BRANCH_LOGO_UPLOAD_INVALID_PATH");
+  const file = await branchLogoObjectStorage.getObjectEntityFile(`/objects/${objectKey}`);
+  const [metadata] = await file.getMetadata();
+  const contentType = String(metadata.contentType ?? "").split(";", 1)[0].trim().toLowerCase();
+  const [bytes] = await file.download();
+  const extensionByMime: Record<string, string> = {
+    "image/jpeg": "jpg",
+    "image/png": "png",
+    "image/webp": "webp",
+    "image/gif": "gif",
+  };
+  const extension = extensionByMime[contentType];
+  if (!extension) throw new Error("BRANCH_LOGO_UPLOAD_UNSUPPORTED_TYPE");
+  if (bytes.length <= 0 || bytes.length > 5 * 1024 * 1024) {
+    throw new Error("BRANCH_LOGO_UPLOAD_INVALID_SIZE");
+  }
+  if (await validateUploadedFileBuffer(`branch-logo.${extension}`, contentType, bytes)) {
+    throw new Error("BRANCH_LOGO_UPLOAD_SIGNATURE_MISMATCH");
+  }
+  return { objectPath, bytes, contentType };
+}
+
+async function resolveBranchLogoUpload(
+  userId: number,
+  logoUrl: string | null | undefined,
+): Promise<Awaited<ReturnType<typeof prepareBranchLogoUpload>> | null> {
+  if (!logoUrl?.startsWith("/api/storage/objects/")) return null;
+  if (!(await callerOwnsObject(userId, logoUrl))) throw new Error("BRANCH_LOGO_UPLOAD_NOT_OWNED");
+  try {
+    return await prepareBranchLogoUpload(logoUrl);
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith("BRANCH_LOGO_UPLOAD_")) throw error;
+    throw new Error("BRANCH_LOGO_UPLOAD_UNREADABLE");
+  }
+}
 
 // List branches. Staff can read; super_admin sees all incl. archived (?archived=1).
 router.get("/branches", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
@@ -91,22 +138,50 @@ router.post("/branches", requireAuth, requireRole("super_admin"), validate({ bod
   const { name, country, city, contactName, contactEmail, contactPhone, contactUserId, logoUrl, notes } =
     getValidated<{ body: typeof createBranchBodySchema }>(req).body;
   try {
-    const [branch] = await db.insert(branchesTable).values({
-      name,
-      country: country || null,
-      city: city || null,
-      contactName: contactName || null,
-      contactEmail: contactEmail || null,
-      contactPhone: contactPhone || null,
-      contactUserId: contactUserId ?? null,
-      logoUrl: logoUrl || null,
-      notes: notes || null,
-    }).returning();
-    await logAudit(req.user!.id, "platform_config.branch.create", "branch", branch.id, {
-      name: branch.name,
-    }, req.ip);
+    const preparedLogo = await resolveBranchLogoUpload(req.user!.id, logoUrl);
+    const branch = await db.transaction(async (tx) => {
+      if (preparedLogo && !await consumeFinalizedUploadGrantInDrizzle(tx, {
+        objectPath: preparedLogo.objectPath,
+        uploadedBy: req.user!.id,
+        bytes: preparedLogo.bytes,
+        contentType: preparedLogo.contentType,
+      })) throw new Error("BRANCH_LOGO_UPLOAD_GRANT_NOT_FINALIZED");
+      const [created] = await tx.insert(branchesTable).values({
+        name,
+        country: country || null,
+        city: city || null,
+        contactName: contactName || null,
+        contactEmail: contactEmail || null,
+        contactPhone: contactPhone || null,
+        contactUserId: contactUserId ?? null,
+        logoUrl: logoUrl || null,
+        notes: notes || null,
+      }).returning();
+      await tx.insert(auditLogsTable).values({
+        userId: req.user!.id,
+        action: "platform_config.branch.create",
+        resource: "branch",
+        resourceId: created.id,
+        changes: JSON.stringify({ changedFields: ["name"] }),
+        ipAddress: req.ip ?? null,
+      });
+      return created;
+    });
     res.status(201).json(branch);
   } catch (err: any) {
+    if (err?.message === "BRANCH_LOGO_UPLOAD_NOT_OWNED") {
+      res.status(403).json({ error: "The uploaded branch logo does not belong to this account" });
+      return;
+    }
+    if (err?.message === "BRANCH_LOGO_UPLOAD_GRANT_NOT_FINALIZED") {
+      res.status(409).json({ error: "Uploaded logo is not finalized or has already been used", code: "UPLOAD_GRANT_NOT_FINALIZED" });
+      return;
+    }
+    if (String(err?.message ?? "").startsWith("BRANCH_LOGO_UPLOAD_")) {
+      res.status(err?.message === "BRANCH_LOGO_UPLOAD_INVALID_SIZE" ? 413 : 400)
+        .json({ error: "Uploaded branch logo content is invalid", code: err.message });
+      return;
+    }
     if (err?.code === "23505") {
       res.status(409).json({ error: "Bu isimde bir şube zaten var." });
       return;
@@ -125,18 +200,49 @@ router.patch("/branches/:id", requireAuth, requireRole("super_admin"), validate(
       updates[k] = (rawBody as Record<string, unknown>)[k] ?? null;
     }
   }
+  const [existing] = await db.select().from(branchesTable).where(eq(branchesTable.id, id));
+  if (!existing) { res.status(404).json({ error: "Branch not found" }); return; }
+  if (updates.logoUrl !== undefined && updates.logoUrl === existing.logoUrl) delete updates.logoUrl;
   if (Object.keys(updates).length === 0) {
-    res.status(400).json({ error: "No fields to update" });
+    res.json(existing);
     return;
   }
   try {
-    const [branch] = await db.update(branchesTable).set(updates).where(eq(branchesTable.id, id)).returning();
-    if (!branch) { res.status(404).json({ error: "Branch not found" }); return; }
-    await logAudit(req.user!.id, "platform_config.branch.update", "branch", id, {
-      changedFields: Object.keys(updates),
-    }, req.ip);
+    const preparedLogo = await resolveBranchLogoUpload(req.user!.id, updates.logoUrl as string | null | undefined);
+    const branch = await db.transaction(async (tx) => {
+      if (preparedLogo && !await consumeFinalizedUploadGrantInDrizzle(tx, {
+        objectPath: preparedLogo.objectPath,
+        uploadedBy: req.user!.id,
+        bytes: preparedLogo.bytes,
+        contentType: preparedLogo.contentType,
+      })) throw new Error("BRANCH_LOGO_UPLOAD_GRANT_NOT_FINALIZED");
+      const [saved] = await tx.update(branchesTable).set(updates).where(eq(branchesTable.id, id)).returning();
+      if (!saved) throw new Error("BRANCH_NOT_FOUND");
+      await tx.insert(auditLogsTable).values({
+        userId: req.user!.id,
+        action: "platform_config.branch.update",
+        resource: "branch",
+        resourceId: id,
+        changes: JSON.stringify({ changedFields: Object.keys(updates) }),
+        ipAddress: req.ip ?? null,
+      });
+      return saved;
+    });
     res.json(branch);
   } catch (err: any) {
+    if (err?.message === "BRANCH_LOGO_UPLOAD_NOT_OWNED") {
+      res.status(403).json({ error: "The uploaded branch logo does not belong to this account" });
+      return;
+    }
+    if (err?.message === "BRANCH_LOGO_UPLOAD_GRANT_NOT_FINALIZED") {
+      res.status(409).json({ error: "Uploaded logo is not finalized or has already been used", code: "UPLOAD_GRANT_NOT_FINALIZED" });
+      return;
+    }
+    if (String(err?.message ?? "").startsWith("BRANCH_LOGO_UPLOAD_")) {
+      res.status(err?.message === "BRANCH_LOGO_UPLOAD_INVALID_SIZE" ? 413 : 400)
+        .json({ error: "Uploaded branch logo content is invalid", code: err.message });
+      return;
+    }
     if (err?.code === "23505") {
       res.status(409).json({ error: "Bu isimde bir şube zaten var." });
       return;
