@@ -466,6 +466,13 @@ verisi ve dış Academy alıcısı değiştirilmedi.
   retry'si grant tüketmez. Mevcut HTTPS logo referansları uyumluluk için
   korunur. Hedefli contract **4/4 PASS**; geniş security-hardening **128 PASS,
   1 Windows symlink privilege SKIP**; API typecheck ve production build **PASS**.
+- Platform ayarlarındaki 13 marka/SEO/PDF görsel alanı private-storage yolu
+  aldığında aynı doğrulama sınırından geçer. Bir object birden fazla alana
+  bağlanırsa grant yalnız bir kez tüketilir; settings insert/update ve bounded
+  audit aynı transaction'dadır. Değişmeyen alan retry'si grant tüketmez ve
+  cache invalidasyonu commit sonrasına taşınmıştır. Hedefli contract **4/4**,
+  public-settings atomicity **3/3**, geniş hardening **132 PASS + 1 Windows
+  symlink privilege SKIP**, API typecheck ve production build **PASS**.
 - Migration authority/validation: **129/129 PASS**.
 - Disposable PostgreSQL 16.15: fresh `0→129`, upload grant migration, route E2E,
   DB helper fixture cleanup: **PASS**; cluster durduruldu.
