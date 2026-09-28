@@ -336,6 +336,12 @@ verisi ve dış Academy alıcısı değiştirilmedi.
   audit'e kopyalanmaz. Gerçek Express rollback/duplicate matrisi **5/5 PASS**,
   genişletilmiş audit durability contract **117/117 PASS**; API typecheck ve
   production build **PASS**.
+- Portal program fallback create/update/delete işlemleri transaction-bound
+  audit'e taşındı. Business-key create lock'u ve DB unique guard korunurken
+  fallback fan-out 20 ile sınırlandı, ID'ler deduplicate edilir ve doğrudan
+  source→source döngüsü reddedilir. Gerçek Express rollback/duplicate matrisi
+  **6/6 PASS**, audit durability contract **125/125 PASS**; API typecheck ve
+  production build **PASS**.
 - Migration authority/validation: **129/129 PASS**.
 - Disposable PostgreSQL 16.15: fresh `0→129`, upload grant migration, route E2E,
   DB helper fixture cleanup: **PASS**; cluster durduruldu.

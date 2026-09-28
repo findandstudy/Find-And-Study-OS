@@ -12,15 +12,16 @@
  *           Program adları display için programs tablosundan çözülür.
  */
 
-import { Router, type IRouter } from "express";
+import { Router, type IRouter, type Request } from "express";
 import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 import {
   db,
   portalProgramFallbacksTable,
   programsTable,
+  auditLogsTable,
 } from "@workspace/db";
-import { logAudit, requireAuth, requireRole } from "../lib/auth";
+import { requireAuth, requireRole } from "../lib/auth";
 import { ADMIN_ROLES } from "../lib/roles";
 import { getValidated, validate } from "../middlewares/validate";
 
@@ -92,6 +93,23 @@ function serialize(row: FallbackRow, names: Record<number, string>) {
   };
 }
 
+async function writeFallbackAudit(
+  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  req: Request,
+  action: string,
+  resourceId: number,
+  changedFields: string[],
+): Promise<void> {
+  await tx.insert(auditLogsTable).values({
+    userId: req.user!.id,
+    action,
+    resource: "portal_program_fallback",
+    resourceId,
+    changes: JSON.stringify({ changedFields: [...changedFields].sort() }),
+    ipAddress: req.ip || null,
+  });
+}
+
 // ---------------------------------------------------------------------------
 // GET /portal-program-fallbacks?universityKey=...
 // ---------------------------------------------------------------------------
@@ -135,9 +153,9 @@ router.get(
 // POST /portal-program-fallbacks
 // ---------------------------------------------------------------------------
 const createBodySchema = z.object({
-  universityKey: z.string().min(1),
+  universityKey: z.string().trim().min(1).max(200),
   sourceProgramId: z.number().int().positive(),
-  fallbackProgramIds: z.array(z.number().int().positive()).default([]),
+  fallbackProgramIds: z.array(z.number().int().positive()).max(20).default([]),
   autoSubmit: z.boolean().optional(),
   enabled: z.boolean().optional(),
 });
@@ -150,7 +168,11 @@ router.post(
   validate({ body: createBodySchema }),
   async (req, res): Promise<void> => {
     const body = getValidated<CreateSchemas>(req).body;
-    const user = req.user!;
+    const fallbackProgramIds = [...new Set(body.fallbackProgramIds)];
+    if (fallbackProgramIds.includes(body.sourceProgramId)) {
+      res.status(400).json({ error: "SOURCE_CANNOT_BE_FALLBACK" });
+      return;
+    }
 
     let row: FallbackRow;
     try {
@@ -184,7 +206,7 @@ router.post(
           .values({
             universityKey: body.universityKey,
             sourceProgramId: body.sourceProgramId,
-            fallbackProgramIds: body.fallbackProgramIds,
+            fallbackProgramIds,
             autoSubmit: body.autoSubmit ?? true,
             enabled: body.enabled ?? true,
           })
@@ -193,6 +215,7 @@ router.post(
         if (!created) {
           throw new Error("Portal program fallback insert returned no row");
         }
+        await writeFallbackAudit(tx, req, "create_portal_program_fallback", created.id, ["created"]);
         return created;
       });
     } catch (error) {
@@ -209,19 +232,6 @@ router.post(
       throw error;
     }
 
-    logAudit(
-      user.id,
-      "create_portal_program_fallback",
-      "portal_program_fallback",
-      row.id,
-      {
-        universityKey: row.universityKey,
-        sourceProgramId: row.sourceProgramId,
-        fallbackCount: row.fallbackProgramIds.length,
-      },
-      req.ip,
-    );
-
     const names = await resolveProgramNames([
       row.sourceProgramId,
       ...row.fallbackProgramIds,
@@ -235,7 +245,7 @@ router.post(
 // ---------------------------------------------------------------------------
 const updateBodySchema = z
   .object({
-    fallbackProgramIds: z.array(z.number().int().positive()).optional(),
+    fallbackProgramIds: z.array(z.number().int().positive()).max(20).optional(),
     autoSubmit: z.boolean().optional(),
     enabled: z.boolean().optional(),
   })
@@ -252,51 +262,44 @@ router.patch(
   async (req, res): Promise<void> => {
     const { id } = getValidated<UpdateSchemas>(req).params;
     const body = getValidated<UpdateSchemas>(req).body;
-    const user = req.user!;
-
-    const [existing] = await db
-      .select({ id: portalProgramFallbacksTable.id })
-      .from(portalProgramFallbacksTable)
-      .where(
-        and(
+    const result = await db.transaction(async tx => {
+      const [existing] = await tx.select().from(portalProgramFallbacksTable)
+        .where(and(
           eq(portalProgramFallbacksTable.id, id),
           isNull(portalProgramFallbacksTable.deletedAt),
-        ),
-      )
-      .limit(1);
-
-    if (!existing) {
-      res.status(404).json({ error: "NOT_FOUND" });
-      return;
-    }
-
-    const [row] = await db
-      .update(portalProgramFallbacksTable)
-      .set({
-        ...(body.fallbackProgramIds !== undefined && {
-          fallbackProgramIds: body.fallbackProgramIds,
-        }),
+        ))
+        .for("update");
+      if (!existing) return { status: "missing" as const };
+      const fallbackProgramIds = body.fallbackProgramIds === undefined
+        ? undefined
+        : [...new Set(body.fallbackProgramIds)];
+      if (fallbackProgramIds?.includes(existing.sourceProgramId)) {
+        return { status: "self_reference" as const };
+      }
+      const updates = {
+        ...(fallbackProgramIds !== undefined && { fallbackProgramIds }),
         ...(body.autoSubmit !== undefined && { autoSubmit: body.autoSubmit }),
         ...(body.enabled !== undefined && { enabled: body.enabled }),
         updatedAt: new Date(),
-      })
-      .where(eq(portalProgramFallbacksTable.id, id))
-      .returning();
+      };
+      const [row] = await tx.update(portalProgramFallbacksTable).set(updates)
+        .where(and(eq(portalProgramFallbacksTable.id, id), isNull(portalProgramFallbacksTable.deletedAt)))
+        .returning();
+      if (!row) return { status: "missing" as const };
+      await writeFallbackAudit(tx, req, "update_portal_program_fallback", id,
+        Object.keys(updates).filter(key => key !== "updatedAt"));
+      return { status: "updated" as const, row };
+    });
 
-    logAudit(
-      user.id,
-      "update_portal_program_fallback",
-      "portal_program_fallback",
-      id,
-      {
-        ...(body.fallbackProgramIds !== undefined && {
-          fallbackCount: body.fallbackProgramIds.length,
-        }),
-        ...(body.autoSubmit !== undefined && { autoSubmit: body.autoSubmit }),
-        ...(body.enabled !== undefined && { enabled: body.enabled }),
-      },
-      req.ip,
-    );
+    if (result.status === "missing") {
+      res.status(404).json({ error: "NOT_FOUND" });
+      return;
+    }
+    if (result.status === "self_reference") {
+      res.status(400).json({ error: "SOURCE_CANNOT_BE_FALLBACK" });
+      return;
+    }
+    const row = result.row;
 
     const names = await resolveProgramNames([
       row.sourceProgramId,
@@ -316,37 +319,28 @@ router.delete(
   validate({ params: idParamsSchema }),
   async (req, res): Promise<void> => {
     const { id } = getValidated<IdSchemas>(req).params;
-    const user = req.user!;
-
-    const [existing] = await db
-      .select({ id: portalProgramFallbacksTable.id })
-      .from(portalProgramFallbacksTable)
-      .where(
-        and(
+    const deleted = await db.transaction(async tx => {
+      const [existing] = await tx.select({ id: portalProgramFallbacksTable.id })
+        .from(portalProgramFallbacksTable)
+        .where(and(
           eq(portalProgramFallbacksTable.id, id),
           isNull(portalProgramFallbacksTable.deletedAt),
-        ),
-      )
-      .limit(1);
+        ))
+        .for("update");
+      if (!existing) return false;
+      const [row] = await tx.update(portalProgramFallbacksTable)
+        .set({ deletedAt: new Date() })
+        .where(and(eq(portalProgramFallbacksTable.id, id), isNull(portalProgramFallbacksTable.deletedAt)))
+        .returning({ id: portalProgramFallbacksTable.id });
+      if (!row) return false;
+      await writeFallbackAudit(tx, req, "delete_portal_program_fallback", id, ["deleted"]);
+      return true;
+    });
 
-    if (!existing) {
+    if (!deleted) {
       res.status(404).json({ error: "NOT_FOUND" });
       return;
     }
-
-    await db
-      .update(portalProgramFallbacksTable)
-      .set({ deletedAt: new Date() })
-      .where(eq(portalProgramFallbacksTable.id, id));
-
-    logAudit(
-      user.id,
-      "delete_portal_program_fallback",
-      "portal_program_fallback",
-      id,
-      {},
-      req.ip,
-    );
 
     res.json({ ok: true });
   },

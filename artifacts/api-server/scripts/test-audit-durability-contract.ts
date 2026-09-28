@@ -22,6 +22,7 @@ const tasks = source("../src/routes/tasks.ts");
 const campaigns = source("../src/routes/campaigns.ts");
 const cms = source("../src/routes/cms.ts");
 const portalExclusions = source("../src/routes/portalUniversityExclusions.ts");
+const portalFallbacks = source("../src/routes/portalProgramFallbacks.ts");
 
 assert.match(auth, /\): Promise<void> \{\s*return db\.insert\(auditLogsTable\)/,
   "audit insert exposes a real awaitable completion boundary");
@@ -238,5 +239,21 @@ for (const action of [
 }
 assert.match(portalExclusions, /pg_advisory_xact_lock\(hashtext/,
   "portal exclusion identity changes serialize case-insensitive duplicate decisions");
+assert.doesNotMatch(portalFallbacks, /logAudit\(/,
+  "portal fallback mutations do not use the non-transactional legacy helper");
+assert.match(portalFallbacks, /async function writeFallbackAudit[\s\S]*await tx\.insert\(auditLogsTable\)\.values/,
+  "portal fallback audit helper requires the active transaction");
+for (const action of [
+  "create_portal_program_fallback", "update_portal_program_fallback", "delete_portal_program_fallback",
+]) {
+  assert.match(portalFallbacks, new RegExp(`await writeFallbackAudit\\(tx, req, "${action}"`),
+    `${action} persists its audit receipt before transaction commit`);
+}
+assert.match(portalFallbacks, /pg_advisory_xact_lock\(hashtextextended/,
+  "portal fallback creation serializes its business key");
+assert.match(portalFallbacks, /SOURCE_CANNOT_BE_FALLBACK/,
+  "portal fallback rules reject a direct source-program cycle");
+assert.match(portalFallbacks, /fallbackProgramIds: z\.array[\s\S]{0,80}\.max\(20\)/,
+  "portal fallback fan-out is hard bounded");
 
-console.log("[audit-durability-contract] 117/117 PASS");
+console.log("[audit-durability-contract] 125/125 PASS");
