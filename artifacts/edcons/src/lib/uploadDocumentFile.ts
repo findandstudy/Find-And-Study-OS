@@ -1,6 +1,6 @@
 import { apiFetch } from "./apiFetch";
 import { validateApplicationDocumentFileObj } from "./fileUploadValidation";
-import { finalizeObjectUpload } from "./finalizeObjectUpload";
+import { uploadAndFinalizeObject } from "./finalizeObjectUpload";
 
 const BASE_URL = import.meta.env?.BASE_URL?.replace(/\/$/, "") || "";
 
@@ -55,16 +55,13 @@ export async function uploadDocumentFile(file: File): Promise<UploadResult> {
   const { uploadURL, objectPath } = await reqRes.json() as { uploadURL: string; objectPath: string };
   if (!uploadURL || !objectPath) throw new Error("Invalid upload URL response");
 
-  const putRes = await fetch(uploadURL, {
-    method: "PUT",
+  const putRes = await uploadAndFinalizeObject(uploadURL, objectPath, {
     body: file,
     headers: { "Content-Type": file.type },
   });
   if (!putRes.ok) {
     throw new Error(`Upload to storage failed (${putRes.status})`);
   }
-  await finalizeObjectUpload(objectPath);
-
   return { fileKey: objectPath, mimeType: file.type, sizeBytes: file.size };
 }
 

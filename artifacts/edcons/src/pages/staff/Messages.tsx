@@ -3,6 +3,7 @@ import { useLocation } from "wouter";
 import { inboxListFilters } from "@/lib/inboxListFilters";
 import { EMAIL_AUTOMATION_PATH, emailAutomationCopy } from "@/components/notifications/emailAutomationModel";
 import { runInboxBulkBlock } from "@/lib/inboxBulkBlock";
+import { uploadAndFinalizeObject } from "@/lib/finalizeObjectUpload";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEntityViewTracker } from "@/hooks/use-entity-view-tracker";
 import {
@@ -124,10 +125,9 @@ async function retryMediaPreparation<T>(operation: () => Promise<T>): Promise<T>
   throw new TransientMediaUploadError();
 }
 
-async function uploadInboxObject(uploadURL: string, file: File): Promise<void> {
+async function uploadInboxObject(uploadURL: string, objectPath: string, file: File): Promise<void> {
   await retryMediaPreparation(async () => {
-    const response = await fetch(uploadURL, {
-      method: "PUT",
+    const response = await uploadAndFinalizeObject(uploadURL, objectPath, {
       body: file,
       headers: { "Content-Type": file.type || "application/octet-stream" },
     });
@@ -1378,7 +1378,7 @@ function InboxTab() {
       const { uploadURL, objectPath } = urlRes;
       // PUT is idempotent for the same prepared object path, so retrying it
       // cannot create a duplicate outbound message.
-      await uploadInboxObject(uploadURL, file);
+      await uploadInboxObject(uploadURL, objectPath, file);
       const storageKey = String(objectPath)
         .replace(/^\/+/, "")
         .replace(/^(?:objects\/)+/, "");
@@ -4254,7 +4254,7 @@ function MessageThread({
         body: JSON.stringify({ name: file.name, size: file.size, contentType: file.type }),
       });
       const { uploadURL, objectPath } = urlRes as any;
-      const uploadResp = await fetch(uploadURL, { method: "PUT", body: file, headers: { "Content-Type": file.type } });
+      const uploadResp = await uploadAndFinalizeObject(uploadURL, objectPath, { body: file, headers: { "Content-Type": file.type } });
       if (!uploadResp.ok) throw new Error(t("messagesPage.fileUploadFailed"));
       return {
         fileName: file.name,

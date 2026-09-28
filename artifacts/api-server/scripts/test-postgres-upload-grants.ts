@@ -33,7 +33,7 @@ try {
     );
   }
 
-  const { issueUploadGrant, finalizeUploadGrant, UPLOAD_GRANT_TTL_MS } = await import("../src/lib/uploadGrant");
+  const { issueUploadGrant, finalizeUploadGrant, consumeFinalizedUploadGrant, UPLOAD_GRANT_TTL_MS } = await import("../src/lib/uploadGrant");
   const bytes = Buffer.from("synthetic-upload-grant-content", "utf8");
   assert.equal(await issueUploadGrant({
     objectPath: `/objects/${keys[0]}`, uploadedBy: userId,
@@ -83,7 +83,18 @@ try {
   assert.equal(row.rows[0].final_size, bytes.length);
   assert.equal(row.rows[0].final_content_type, "text/plain");
   assert.match(row.rows[0].content_sha256, /^[0-9a-f]{64}$/);
-  console.log("[postgres-upload-grants] 12/12 PASS");
+  assert.equal(await consumeFinalizedUploadGrant(admin, {
+    objectPath: `/objects/${keys[0]}`, uploadedBy: userId, bytes, contentType: "text/plain",
+  }), true);
+  assert.equal(await consumeFinalizedUploadGrant(admin, {
+    objectPath: `/objects/${keys[0]}`, uploadedBy: userId, bytes, contentType: "text/plain",
+  }), false);
+  const consumed = await admin.query(
+    "SELECT status, consumed_at IS NOT NULL AS consumed FROM object_upload_grants WHERE object_key=$1",
+    [keys[0]],
+  );
+  assert.deepEqual(consumed.rows[0], { status: "CONSUMED", consumed: true });
+  console.log("[postgres-upload-grants] 15/15 PASS");
 } finally {
   await admin.query("DELETE FROM object_upload_grants WHERE object_key = ANY($1::text[])", [keys]);
   await admin.query("DELETE FROM object_owners WHERE object_key = ANY($1::text[])", [keys]);

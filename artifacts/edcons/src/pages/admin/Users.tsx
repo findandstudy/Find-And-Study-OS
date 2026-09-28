@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useListUsers } from "@workspace/api-client-react";
 import { customFetch } from "@workspace/api-client-react";
+import { uploadAndFinalizeObject } from "@/lib/finalizeObjectUpload";
 import { TablePagination, useTablePagination } from "@/components/TablePagination";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -242,7 +243,7 @@ function UsersTab() {
         body: JSON.stringify({ name: file.name, size: file.size, contentType: file.type }),
       });
       if (!(urlRes as any).uploadURL || !(urlRes as any).objectPath) throw new Error("Failed to get upload URL");
-      const putRes = await fetch((urlRes as any).uploadURL, { method: "PUT", body: file, headers: { "Content-Type": file.type } });
+      const putRes = await uploadAndFinalizeObject((urlRes as any).uploadURL, (urlRes as any).objectPath, { body: file, headers: { "Content-Type": file.type } });
       if (!putRes.ok) throw new Error("Upload failed");
       const strippedPath = (urlRes as any).objectPath.replace(/^\/objects/, "");
       const avatarUrl = `${BASE_URL}/api/storage/objects${strippedPath}`;
@@ -385,7 +386,7 @@ function UsersTab() {
         body: JSON.stringify({ name: file.name, size: file.size, contentType: file.type }),
       });
       if (!(urlRes as any).uploadURL || !(urlRes as any).objectPath) throw new Error("Failed to get upload URL");
-      const putRes = await fetch((urlRes as any).uploadURL, { method: "PUT", body: file, headers: { "Content-Type": file.type } });
+      const putRes = await uploadAndFinalizeObject((urlRes as any).uploadURL, (urlRes as any).objectPath, { body: file, headers: { "Content-Type": file.type } });
       if (!putRes.ok) throw new Error("Upload failed");
       const strippedPath = (urlRes as any).objectPath.replace(/^\/objects/, "");
       const avatarUrl = `${BASE_URL}/api/storage/objects${strippedPath}`;

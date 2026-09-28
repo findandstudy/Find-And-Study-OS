@@ -10,6 +10,7 @@ import { MessageSquare, Send, ArrowLeft, Loader2, Paperclip, FileText, X, Downlo
 import { useLocation } from "wouter";
 import { useI18n } from "@/hooks/use-i18n";
 import { formatTime } from "@/lib/i18n";
+import { uploadAndFinalizeObject } from "@/lib/finalizeObjectUpload";
 
 function getInitials(first?: string | null, last?: string | null) {
   return `${(first || "")[0] || ""}${(last || "")[0] || ""}`.toUpperCase() || "?";
@@ -74,7 +75,7 @@ export default function StudentMessages() {
         body: JSON.stringify({ name: file.name, size: file.size, contentType: file.type }),
       });
       const { uploadURL, objectPath } = urlRes as any;
-      const uploadResp = await fetch(uploadURL, { method: "PUT", body: file, headers: { "Content-Type": file.type } });
+      const uploadResp = await uploadAndFinalizeObject(uploadURL, objectPath, { body: file, headers: { "Content-Type": file.type } });
       if (!uploadResp.ok) throw new Error(t("studentMessages.uploadFailedShort"));
       return { fileName: file.name, fileUrl: `/api/storage${objectPath}`, fileType: file.type, fileSize: file.size };
     } catch (err: any) {

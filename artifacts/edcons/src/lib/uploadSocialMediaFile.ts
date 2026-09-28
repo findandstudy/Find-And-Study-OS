@@ -1,5 +1,5 @@
 import { apiFetch } from "./apiFetch";
-import { finalizeObjectUpload } from "./finalizeObjectUpload";
+import { uploadAndFinalizeObject } from "./finalizeObjectUpload";
 
 const BASE_URL = import.meta.env?.BASE_URL?.replace(/\/$/, "") || "";
 
@@ -74,16 +74,13 @@ export async function uploadSocialMediaFile(
       "Social media upload preparation returned an invalid response",
     );
 
-  const upload = await fetch(prepared.uploadURL, {
-    method: "PUT",
+  const upload = await uploadAndFinalizeObject(prepared.uploadURL, prepared.objectPath, {
     redirect: "error",
     headers: { "Content-Type": file.type },
     body: file,
   });
   if (!upload.ok)
     throw new Error(await errorMessage(upload, "Social media upload failed"));
-  await finalizeObjectUpload(prepared.objectPath);
-
   const registration = await apiFetch(`${BASE_URL}/api/social/media`, {
     method: "POST",
     redirect: "error",

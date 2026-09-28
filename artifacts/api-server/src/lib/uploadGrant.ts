@@ -43,6 +43,36 @@ export type UploadGrantFinalizeResult =
   | { ok: true; replayed: boolean; sha256: string }
   | { ok: false; reason: "invalid" | "not_found" | "expired" | "metadata_mismatch" | "conflict" };
 
+type QueryExecutor = {
+  query: (text: string, values?: unknown[]) => Promise<{ rowCount: number | null }>;
+};
+
+export async function consumeFinalizedUploadGrant(
+  executor: QueryExecutor,
+  input: {
+    objectPath: string;
+    uploadedBy: number;
+    bytes: Buffer;
+    contentType: string;
+    now?: Date;
+  },
+): Promise<boolean> {
+  const objectKey = canonicalizeKey(input.objectPath);
+  const contentType = normalizedContentType(input.contentType);
+  if (!objectKey || input.bytes.length <= 0 || input.bytes.length > 25 * 1024 * 1024 || !contentType) {
+    return false;
+  }
+  const sha256 = createHash("sha256").update(input.bytes).digest("hex");
+  const result = await executor.query(
+    `UPDATE object_upload_grants
+     SET status = 'CONSUMED', consumed_at = $6
+     WHERE object_key = $1 AND uploaded_by = $2 AND status = 'FINALIZED'
+       AND final_size = $3 AND final_content_type = $4 AND content_sha256 = $5`,
+    [objectKey, input.uploadedBy, input.bytes.length, contentType, sha256, input.now ?? new Date()],
+  );
+  return result.rowCount === 1;
+}
+
 export async function finalizeUploadGrant(input: {
   objectPath: string;
   uploadedBy: number;

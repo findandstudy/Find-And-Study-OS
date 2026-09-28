@@ -41,9 +41,14 @@ verisi ve dış Academy alıcısı değiştirilmedi.
    - Claim tek atomic conditional UPDATE ile yapıldığından eşzamanlı talepler
      aynı grantı iki kez kazanamıyor; exact retry güvenli replay oluyor.
    - Local immutable PUT aynı authenticated akışta otomatik finalize ediliyor;
-     document ve social istemcileri provider upload sonrası finalize endpoint'ini çağırıyor.
+     generic URL kullanan 18 frontend akışı ile social istemcisi provider upload
+     sonrası aynı finalize endpoint'ini çağırıyor. Ayrı ticket tabanlı public
+     agency upload kendi tek-kullanımlı immutable sözleşmesini koruyor.
    - Bu temel henüz eski bütün attachment consumer'larına zorunlu consume kuralı
      getirmez; o yüzden external pilot izni açılmadı ve writer quarantine'da kaldı.
+   - Social media asset kaydı, grantı `FINALIZED → CONSUMED` olarak asset
+     insert ve immutable operation receipt ile aynı transaction'da claim ediyor;
+     aynı staging object ikinci bir asset kaydında kullanılamıyor.
 
 5. **Legacy audit await sınırı**
    - `logAudit` artık `setImmediate` arkasında sahte bir `await` sınırı sunmuyor;
@@ -62,8 +67,9 @@ verisi ve dış Academy alıcısı değiştirilmedi.
 - Web-form replay: **9/9 PASS**.
 - Application concurrency: **5/5 PASS**.
 - Import lifecycle: **12/12 PASS**.
-- Upload grant contract: **13/13 PASS**.
-- Upload grant PostgreSQL 16.15: **12/12 PASS**.
+- Upload grant contract: **15/15 PASS**.
+- Frontend upload finalization inventory: **18/18 PASS**.
+- Upload grant PostgreSQL 16.15: **15/15 PASS**.
 - Audit durability contract: **13/13 PASS**.
 - Disposable authenticated HTTP corridor: **PASS**; real login/session, CSRF,
   owner-bound grant, initial upload, exact replay, immutable conflict,
@@ -90,8 +96,8 @@ dilimde yapılmadı.
 - Academy receiver tarafında issuer/audience + single-use exchange: receiver bu
   repoda değil; koordineli iki taraflı değişiklik gerekir.
 - Bütün legacy attachment rotalarında `FINALIZED → CONSUMED` zorunluluğu:
-  grant/finalization temeli ve ana document/social istemcileri hazır; kalan ad-hoc
-  consumer'lar dar rotalar halinde migrate edilmeden global enforcement açılmaz.
+  grant/finalization temeli ve generic frontend producer'lar hazır; consumer
+  kaydıyla aynı transaction'da consume edilmeden global enforcement açılmaz.
 - Application kaydıyla finance/portal/genel notification intent'lerinin tümünü
   aynı transaction outbox'ına almak: stage email bunu yapıyor; kalan devam işleri
   dar command/worker dönüşümü ister.

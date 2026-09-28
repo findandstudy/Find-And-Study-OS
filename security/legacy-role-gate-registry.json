@@ -1040,7 +1040,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/socialOperations.ts",
-      "sha256": "f86ee77f8acbe37ae248ac6aacf043b571d22fb854fbace4b9d4d99bca1558d9",
+      "sha256": "ff968925722de032823a83e468ef0955cf2039d197cb8c1f162f473376a732e3",
       "routeRegistrations": 25,
       "requireAuth": 26,
       "requireRole": 0,

@@ -411,7 +411,7 @@ test("PUT route retains auth, ownership and processing before exclusive publicat
 test("inbox same-URL retry includes busy publication responses", async () => {
   const source = await fs.readFile(new URL("../../edcons/src/pages/staff/Messages.tsx", import.meta.url), "utf8");
   assert.match(source, /TRANSIENT_MEDIA_STATUSES = new Set\(\[502, 503, 504\]\)/);
-  assert.match(source, /function uploadInboxObject\(uploadURL: string,[\s\S]*?retryMediaPreparation\([\s\S]*?fetch\(uploadURL/);
+  assert.match(source, /function uploadInboxObject\(uploadURL: string, objectPath: string,[\s\S]*?retryMediaPreparation\([\s\S]*?uploadAndFinalizeObject\(uploadURL, objectPath/);
 });
 
 test("local URL issuance rejects prefixes the publisher cannot accept before ownership grant", async () => {

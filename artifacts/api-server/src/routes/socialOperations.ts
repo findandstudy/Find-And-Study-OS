@@ -3,7 +3,7 @@ import { z } from "zod";
 import * as nodePath from "node:path";
 import { requireAuth, requirePermission, logAudit } from "../lib/auth";
 import { callerOwnsObject, recordObjectOwner } from "../lib/objectAuthz";
-import { issueUploadGrant } from "../lib/uploadGrant";
+import { consumeFinalizedUploadGrant, issueUploadGrant } from "../lib/uploadGrant";
 import {
   ObjectNotFoundError,
   ObjectStorageService,
@@ -1497,6 +1497,12 @@ router.post(
             payload,
           );
           if (replay) return replay;
+          if (!(await consumeFinalizedUploadGrant(client, {
+            objectPath: payload.objectPath,
+            uploadedBy: context.legacyUserId,
+            bytes: buffer,
+            contentType: storedMimeType,
+          }))) throw new Error("SOCIAL_MEDIA_UPLOAD_GRANT_NOT_FINALIZED");
           const id = nextSocialId();
           const result = await client.query<{
             id: string;

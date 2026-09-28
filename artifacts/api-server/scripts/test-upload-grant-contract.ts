@@ -19,10 +19,17 @@ assert.match(helper, /WHERE object_key = \$1 AND uploaded_by = \$2 AND status = 
 assert.match(helper, /AND expires_at >= \$7 AND expected_size = \$3/,
   "atomic claim binds expiry and declared size");
 assert.match(helper, /expected_size[^]*expected_content_type/, "declared metadata is bound to the grant");
+assert.match(helper, /SET status = 'CONSUMED', consumed_at = \$6[\s\S]+status = 'FINALIZED'/,
+  "consumer claim is an atomic finalized-to-consumed transition");
 assert.match(storage, /router\.post\("\/storage\/uploads\/finalize"/, "authenticated finalization route exists");
 assert.ok(storage.indexOf("getMetadata()") < storage.indexOf("file.download()", storage.indexOf("uploads/finalize")), "provider size is checked before bytes are downloaded");
 assert.match(storage, /await finalizeUploadGrant\(/, "local upload finalizes inside its authenticated PUT handler");
-assert.match(documentClient, /await finalizeObjectUpload\(objectPath\)/, "canonical document helper finalizes before registration");
-assert.match(socialClient, /await finalizeObjectUpload\(prepared\.objectPath\)/, "social helper finalizes before registration");
+assert.match(documentClient, /uploadAndFinalizeObject\(uploadURL, objectPath/,
+  "canonical document helper finalizes before registration");
+assert.match(socialClient, /uploadAndFinalizeObject\(prepared\.uploadURL, prepared\.objectPath/,
+  "social helper finalizes before registration");
+assert.match(readFileSync(new URL("../src/routes/socialOperations.ts", import.meta.url), "utf8"),
+  /consumeFinalizedUploadGrant\(client,[\s\S]+REGISTER_SOCIAL_MEDIA_ASSET/,
+  "social asset consumes the grant inside its receipt transaction");
 
-console.log("[upload-grant-contract] 13/13 PASS");
+console.log("[upload-grant-contract] 15/15 PASS");

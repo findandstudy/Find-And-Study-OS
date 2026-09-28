@@ -14,3 +14,13 @@ export async function finalizeObjectUpload(objectPath: string): Promise<void> {
     throw new Error(body?.error || `Upload finalization failed (${response.status})`);
   }
 }
+
+export async function uploadAndFinalizeObject(
+  uploadURL: string,
+  objectPath: string,
+  init: RequestInit,
+): Promise<Response> {
+  const response = await fetch(uploadURL, { ...init, method: "PUT" });
+  if (response.ok) await finalizeObjectUpload(objectPath);
+  return response;
+}
