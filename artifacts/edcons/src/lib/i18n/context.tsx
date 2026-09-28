@@ -98,14 +98,13 @@ export function I18nProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let cancelled = false;
-    // Gate the first render on BOTH the active language AND the English
-    // fallback dictionary — getTranslation falls back to en for missing
-    // keys, so en must be in the cache before anything renders or partially
-    // translated locales would flash raw keys.
-    const loads: Promise<boolean>[] = [loadLanguage(lang)];
-    if (lang !== DEFAULT_LANGUAGE) loads.push(loadLanguage(DEFAULT_LANGUAGE));
-    void Promise.all(loads).then(() => {
-      if (!cancelled) setReady(true);
+    // Every supported locale is build-checked for exact key and placeholder
+    // parity. Loading English as well as the active locale doubled the first
+    // navigation payload for 22 locales without providing a real fallback.
+    // English remains available on demand if a future controlled caller loads
+    // it, while the active dictionary alone gates the initial render.
+    void loadLanguage(lang).then((loaded) => {
+      if (!cancelled && loaded) setReady(true);
     });
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -96,7 +96,10 @@ export default defineConfig({
             return "vendor-react";
           }
           if (id.includes("@tanstack/react-query")) return "vendor-react";
-          if (id.includes("@radix-ui/")) return "vendor-radix";
+          // Do not collapse every Radix package into one eagerly preloaded
+          // chunk. Public navigation needs only Slot/Button; a forced shared
+          // chunk pulled dialogs, menus, selects and other portal-only code
+          // into every anonymous visit.
           if (id.includes("react-phone-number-input") || id.includes("libphonenumber-js")) {
             return "vendor-phone";
           }
@@ -107,6 +110,9 @@ export default defineConfig({
           if (id.includes("/xlsx/")) return "vendor-excel";
           if (id.includes("/framer-motion/")) return "vendor-motion";
           if (id.includes("@dnd-kit/") || id.includes("@hello-pangea/dnd")) return "vendor-dnd";
+          // One icon chunk avoids dozens of latency-bound HTTP/1 requests in
+          // the local/mobile fallback path. Unlike the former Radix bucket it
+          // remains small and tree-shaken enough for the public budget.
           if (id.includes("/lucide-react/") || id.includes("/react-icons/")) return "vendor-icons";
           // NOTE: recharts/d3/victory-vendor are deliberately NOT manually
           // chunked. Splitting them into a separate vendor chunk created a

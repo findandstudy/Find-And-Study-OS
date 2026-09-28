@@ -2,7 +2,6 @@ import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Cookie } from "lucide-react";
 import { useI18n } from "@/hooks/use-i18n";
-import { motion, AnimatePresence } from "framer-motion";
 
 const CONSENT_KEY = "cookie_consent";
 
@@ -32,14 +31,9 @@ export function CookieBanner() {
   }
 
   return (
-    <AnimatePresence>
+    <>
       {visible && (
-        <motion.div
-          key="cookie-banner"
-          initial={{ y: 80, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          exit={{ y: 80, opacity: 0 }}
-          transition={{ type: "spring", stiffness: 300, damping: 30 }}
+        <div
           className="fixed bottom-0 left-0 right-0 z-50 bg-background/95 backdrop-blur-sm border-t border-border shadow-2xl"
           role="region"
           aria-label="Cookie consent"
@@ -76,8 +70,8 @@ export function CookieBanner() {
               </Button>
             </div>
           </div>
-        </motion.div>
+        </div>
       )}
-    </AnimatePresence>
+    </>
   );
 }

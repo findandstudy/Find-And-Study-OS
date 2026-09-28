@@ -1,5 +1,4 @@
 import { useId, useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
 import { Search, SlidersHorizontal, ChevronUp, ChevronDown, Globe2, MapPin, Building2, GraduationCap, BookOpen, Languages, Award, DollarSign, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { MultiSelectFilter } from "@/components/ui/multi-select-filter";
@@ -61,7 +60,7 @@ export function PublicProgramFilters({ filters, selection, onSelect, onFeeChange
         {showFilters ? <ChevronUp className="w-4 h-4" aria-hidden="true" /> : <ChevronDown className="w-4 h-4" aria-hidden="true" />}
       </button>
     </div>
-    <AnimatePresence initial={false}>{showFilters && <motion.div key="filter-panel" initial={{ opacity: 0, height: 0, overflow: "hidden" }} animate={{ opacity: 1, height: "auto", overflow: "visible" }} exit={{ opacity: 0, height: 0, overflow: "hidden" }} transition={{ duration: 0.25, ease: "easeInOut" }}>
+    {showFilters && <div>
       <div id={panelId} className="pt-5 space-y-4">
         <div className="h-px bg-gradient-to-r from-transparent via-border/60 to-transparent" />
         {!universityLocked && <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-4 gap-y-3">{locationControls.map(control)}</div>}
@@ -82,6 +81,6 @@ export function PublicProgramFilters({ filters, selection, onSelect, onFeeChange
           <button type="button" onClick={onClear} className="inline-flex items-center gap-1.5 text-sm text-destructive/80 hover:text-destructive font-semibold transition-colors bg-destructive/5 hover:bg-destructive/10 px-3 py-1.5 rounded-lg"><X className="w-3.5 h-3.5" aria-hidden="true" />{t("programs.clearFilters")}</button>
         </div>}
       </div>
-    </motion.div>}</AnimatePresence>
+    </div>}
   </div>;
 }

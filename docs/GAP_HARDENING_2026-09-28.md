@@ -91,6 +91,33 @@ verisi ve dış Academy alıcısı değiştirilmedi.
      güvenlik tavanının altında olduğu için kanıtsız geniş GIN/extension migration'ı
      eklenmedi; bu sonuç production kapasite veya uzun soak sertifikası değildir.
 
+8. **Public başlangıç paketi ve yerel CWV laboratuvarı**
+   - Public rotalarda portal-only auth prefetch, akademik yıl, activity tracker,
+     dashboard guard/provider ve toast başlangıçtan ayrıldı; aktif public rota ile
+     yalnız seçili dil paketi paralel yükleniyor.
+   - Ana sayfadaki yaklaşık 980 KB dekoratif PNG ve başlangıç animasyonu CSS tabanlı
+     sunuma çevrildi. Cookie banner, program kartları ve filtrelerde ilk boya için
+     gerekli olmayan animation runtime kaldırıldı.
+   - Program başvurusundaki kamera/belge tarayıcı yalnız gerçekten açıldığında
+     indirilen ayrı chunk oldu. Başvurunun gerçek belge birleştirme davranışı ve
+     mevcut form akışı korunuyor.
+   - Başlangıç JavaScript bütçesi 300 KiB'dan 180 KiB gzip'e sıkılaştırıldı;
+     portal component ve animation runtime'larının module-preload ile public
+     başlangıca geri dönmesi testle engellendi. Güncel kanıt 142.965 byte gzip'tir;
+     faz başlangıcındaki 256.002 byte'a göre yaklaşık `%44` azalmadır.
+   - Yalnız disposable PostgreSQL, kapalı dış entegrasyonlar, yerel production build,
+     390×844 viewport, Fast 4G ve 4× CPU profiliyle çalışan tekrar edilebilir CWV
+     laboratuvarı eklendi. Araç sonuçlarını açıkça `LOCAL_LAB_NOT_FIELD_DATA`
+     olarak işaretler, LCP/CLS/TBT ölçümü yoksa veya eşik aşılırsa fail eder.
+   - İlk ölçümden sonraki en iyi karşılaştırmada ana sayfa LCP `9.156 → 4.176 ms`,
+     TBT `641 → 60 ms`; program detay LCP `2.720 → 2.128 ms`; üniversite detay
+     LCP `2.660 → 2.148 ms` oldu. CLS tüm rotalarda `0` kaldı.
+   - Son doğrulama koşusu ağ/JIT değişkenliğini de görünür tuttu ve eşikleri dürüstçe
+     **FAIL** etti: route sonuçları içinde LCP `2.092–4.436 ms`, TBT `161–553 ms`,
+     p95 LCP `4.436 ms`, p95 TBT `553 ms`, CLS `0`. Bu nedenle production CWV
+     hazır iddiası yoktur. Program liste sonucunun API sonrası yeniden boyanması,
+     büyük İngilizce sözlük ve ilk yük ortak vendor maliyeti kalan darboğazlardır.
+
 ## Doğrulama
 
 - Security regression: **115/115 PASS**.
@@ -112,6 +139,10 @@ verisi ve dış Academy alıcısı değiştirilmedi.
 - API build/typecheck: **PASS**.
 - Edcons i18n + 114 contract testi + production build + sitemap + bundle budget:
   **PASS**.
+- Edcons güncel doğrulama: i18n parity + **115/115** contract testi + typecheck +
+  production build + sitemap + sıkılaştırılmış 180 KiB başlangıç bütçesi: **PASS**.
+- Yerel mobil CWV laboratuvarı: çalıştı, ölçüm üretti, gerçek eşikleri aşınca
+  tasarlandığı gibi **FAIL**; bu sonuç release kapısını açık tutar.
 - Migration authority/validation: **129/129 PASS**.
 - Disposable PostgreSQL 16.15: fresh `0→129`, upload grant migration, route E2E,
   DB helper fixture cleanup: **PASS**; cluster durduruldu.
@@ -149,3 +180,7 @@ dilimde yapılmadı.
 - Academy/provider sandbox E2E, offsite restore/DR ve gerçek yüksek-hacim/CWV
   ölçümü harici ortam/credential veya operasyon penceresi gerektirir; production
   üzerinde otomatik çalıştırılmaz.
+- Public web için gerçek HTTP/2 staging ölçümü, en az üç tekrarlı lab medyanı ve
+  mümkün olduğunda saha p75/CrUX/RUM kanıtı olmadan CWV release kapısı kapanmaz.
+  Mevcut tek-process HTTP/1 yerel laboratuvar regresyon kapısıdır; saha kanıtı
+  veya üretim kapasite sertifikası değildir.

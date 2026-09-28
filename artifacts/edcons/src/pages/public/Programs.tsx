@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { lazy, Suspense, useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useProgramDocRequirements, useResolveDocMeta } from "@/lib/programDocTypes";
 import { toLatinUpper, digitsOnly } from "@/lib/textTransform";
 import { Link, useLocation } from "wouter";
@@ -32,10 +32,10 @@ import {
   SlidersHorizontal, Building2, Award, ChevronDown, ChevronUp, Info, ExternalLink,
   AlertTriangle, FileText, Camera, Calendar, Shield,
 } from "lucide-react";
-import { DocumentScanner } from "@/components/DocumentScanner";
-import { motion, AnimatePresence } from "framer-motion";
 import { useToast } from "@/hooks/use-toast";
 import { MAX_DOCUMENT_PARTS, isSingleImageDocumentType, mergeDocumentParts } from "@/lib/documentPartMerge";
+
+const DocumentScanner = lazy(() => import("@/components/LazyDocumentScanner"));
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
@@ -327,7 +327,7 @@ function DropZone({ docType, uploaded, onUpload, onRemove, applicationSession }:
         )}
         <input ref={inputRef} type="file" multiple={!isSingleImageDocumentType(docType.key)} accept={docType.accept} className="hidden"
           onChange={(e) => { void handleFiles(Array.from(e.target.files || [])); e.target.value = ""; }} />
-        <DocumentScanner open={scannerOpen} onClose={() => setScannerOpen(false)} baseName={docType.key} onCapture={handleFile} />
+        {scannerOpen && <Suspense fallback={null}><DocumentScanner open onClose={() => setScannerOpen(false)} baseName={docType.key} onCapture={handleFile} /></Suspense>}
       </div>
     );
   }
@@ -361,7 +361,7 @@ function DropZone({ docType, uploaded, onUpload, onRemove, applicationSession }:
         <Camera className="w-3 h-3" />
         {t("scanner.scanWithCamera")}
       </button>
-      <DocumentScanner open={scannerOpen} onClose={() => setScannerOpen(false)} baseName={docType.key} onCapture={handleFile} />
+      {scannerOpen && <Suspense fallback={null}><DocumentScanner open onClose={() => setScannerOpen(false)} baseName={docType.key} onCapture={handleFile} /></Suspense>}
     </div>
   );
 }
@@ -1665,7 +1665,7 @@ export default function Programs() {
       <section className="pt-24 pb-6 bg-gradient-to-br from-primary/5 via-accent/5 to-primary/5 relative">
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-primary/[0.07] via-transparent to-transparent" />
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }}>
+          <div>
             <div className="text-center mb-10">
               <span className="inline-flex items-center gap-2 bg-primary/10 text-primary text-sm font-semibold px-4 py-2 rounded-full mb-6 border border-primary/20">
                 <GraduationCap className="w-4 h-4" /> {t("programs.badge")}
@@ -1677,9 +1677,9 @@ export default function Programs() {
                 {t("programs.subtitle")}
               </p>
             </div>
-          </motion.div>
+          </div>
 
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, delay: 0.15 }}>
+          <div>
             <div className="-mb-8">
               <PublicProgramFilters
                 filters={filters}
@@ -1689,13 +1689,13 @@ export default function Programs() {
                 search={search} onSearchChange={setSearch} onClear={clearAllFilters} total={total}
               />
             </div>
-          </motion.div>
+          </div>
         </div>
       </section>
 
       <section className="pt-2 pb-16">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }}
+          <div
             className="flex items-center justify-between mb-8 bg-card/60 backdrop-blur-sm rounded-2xl px-6 py-4 border border-border/30 shadow-sm">
             <div className="flex items-center gap-3">
               <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
@@ -1705,7 +1705,7 @@ export default function Programs() {
                 {t("programs.showingResults", { count: String(total) })}
               </p>
             </div>
-          </motion.div>
+          </div>
 
           {isLoading ? (
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -1727,7 +1727,7 @@ export default function Programs() {
               ))}
             </div>
           ) : programs.length === 0 ? (
-            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
+            <div
               className="text-center py-24 bg-gradient-to-br from-primary/[0.03] via-accent/[0.03] to-primary/[0.03] rounded-3xl border border-border/30">
               <div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-6">
                 <Globe2 className="w-10 h-10 text-primary/40" />
@@ -1737,7 +1737,7 @@ export default function Programs() {
               <Button variant="outline" onClick={clearAllFilters} className="rounded-full px-6">
                 <X className="w-4 h-4 mr-2" /> {t("programs.clearFilters")}
               </Button>
-            </motion.div>
+            </div>
           ) : (
             <>
               <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">

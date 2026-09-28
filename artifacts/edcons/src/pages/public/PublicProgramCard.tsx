@@ -1,6 +1,5 @@
 import type { ReactNode } from "react";
 import { Link } from "wouter";
-import { motion } from "framer-motion";
 import { Award, BookOpen, Building2, Calendar, Clock, Globe2, GraduationCap, Info, Languages, MapPin, Shield } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -85,7 +84,7 @@ function fixStorageUrl(url: string | null | undefined): string | null {
 const detailsClassName = "w-9 h-9 rounded-full border-2 border-border/60 flex items-center justify-center text-muted-foreground hover:border-primary/40 hover:text-primary hover:bg-primary/5 transition-all shrink-0";
 const applyClassName = "flex-1 min-w-0 rounded-xl font-bold shadow-md shadow-primary/10 hover:shadow-lg hover:shadow-primary/20 transition-all duration-300";
 
-export function PublicProgramCard({ program: prog, index, onApply, onDetails, applyHref, applyDisabled = false, tuitionContent, omitLegacyTiming = false }: PublicProgramCardProps) {
+export function PublicProgramCard({ program: prog, index: _index, onApply, onDetails, applyHref, applyDisabled = false, tuitionContent, omitLegacyTiming = false }: PublicProgramCardProps) {
   const { t } = useI18n();
   const effectiveFee = prog.discountedFee ?? prog.tuitionFee;
   const hasDiscount = !!(prog.discountedFee && prog.tuitionFee && prog.discountedFee < prog.tuitionFee);
@@ -108,7 +107,7 @@ export function PublicProgramCard({ program: prog, index, onApply, onDetails, ap
   const applyLabel = <>{t("courseFinderPage.apply")} <span aria-hidden="true" className="inline-block rtl:rotate-180">→</span></>;
 
   return (
-    <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: index * 0.04, duration: 0.4 }}
+    <div
       className="public-program-card group min-w-0 bg-card rounded-2xl overflow-hidden shadow-md shadow-black/[0.04] hover:-translate-y-1.5 hover:shadow-xl hover:shadow-primary/[0.08] transition-all duration-300 border border-border/40 hover:border-primary/20 flex flex-col">
       <div className="flex items-center gap-3 px-4 py-3 border-b border-border/50 bg-card">
         {universityWebsite ? (
@@ -233,6 +232,6 @@ export function PublicProgramCard({ program: prog, index, onApply, onDetails, ap
           )}
         </div>
       </div>
-    </motion.div>
+    </div>
   );
 }
