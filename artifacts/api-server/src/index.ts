@@ -3441,7 +3441,7 @@ async function seedClaudeIntegration() {
 
   serveStaticFrontend();
 
-  const [{ feedBus }, { inboxBus }, { notificationBus }, { invalidateNotificationCounts }, { publicCatalogInvalidationBus }, { applyPublicCatalogRenderCacheInvalidation }, { clearPublicCatalogPolicyCache }] = await Promise.all([
+  const [{ feedBus }, { inboxBus }, { notificationBus }, { invalidateNotificationCounts }, { publicCatalogInvalidationBus }, { applyPublicCatalogRenderCacheInvalidation }, { clearPublicCatalogPolicyCache }, { facetCacheInvalidationBus }, { invalidateFacetCache }] = await Promise.all([
     import("./lib/feedBus"),
     import("./lib/inbox/eventBus"),
     import("./lib/notificationBus"),
@@ -3449,6 +3449,8 @@ async function seedClaudeIntegration() {
     import("./lib/publicCatalogInvalidationBus"),
     import("./lib/publicCatalogRenderReadModel"),
     import("./lib/publicCatalogQueryPolicy"),
+    import("./lib/facetCacheInvalidationBus"),
+    import("./lib/facetCache"),
   ]);
   const unsubscribeNotificationCountInvalidation = notificationBus.subscribe(event => invalidateNotificationCounts(event.userId));
   const unsubscribePublicCatalogInvalidation = publicCatalogInvalidationBus.subscribe(invalidation => {
@@ -3456,6 +3458,9 @@ async function seedClaudeIntegration() {
     if (!invalidation.entityType || invalidation.entityType === "catalog" || invalidation.entityType === "all") {
       clearPublicCatalogPolicyCache();
     }
+  });
+  const unsubscribeFacetCacheInvalidation = facetCacheInvalidationBus.subscribe(namespace => {
+    invalidateFacetCache(namespace);
   });
   let shuttingDown = false;
   let httpServer: ReturnType<typeof app.listen> | null = null;
@@ -3507,6 +3512,11 @@ async function seedClaudeIntegration() {
     unsubscribePublicCatalogInvalidation();
     try { await publicCatalogInvalidationBus.shutdown(); } catch (error) {
       console.error("[shutdown] public catalog invalidation bus shutdown failed:", error);
+      exitCode = 1;
+    }
+    unsubscribeFacetCacheInvalidation();
+    try { await facetCacheInvalidationBus.shutdown(); } catch (error) {
+      console.error("[shutdown] facet cache invalidation bus shutdown failed:", error);
       exitCode = 1;
     }
     process.exit(exitCode);

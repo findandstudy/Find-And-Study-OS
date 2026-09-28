@@ -594,6 +594,20 @@ verisi ve dış Academy alıcısı değiştirilmedi.
   `37/37`, library/workspace ve API typecheck **PASS**. Bu dilim dış provider
   veya production üzerinde çalıştırılmadı.
 
+## 28 Eylül çoklu-process facet cache tutarlılığı dilimi
+
+- Application, lead ve student facet cache'leri scope/filter fingerprint ve
+  mevcut bounded TTL davranışını korur. Yeni `0129` migration'ı bu üç tablodaki
+  committed INSERT/UPDATE/DELETE statement'ları için yalnız namespace taşıyan,
+  PII-free PostgreSQL notification üretir.
+- Her API process'i aynı kanalı dinler ve yalnız ilgili namespace'i temizler.
+  Rol/tenant scope cache anahtarları değişmedi; rollback olan transaction için
+  PostgreSQL notification teslim edilmediğinden gereksiz veya erken eviction
+  olmaz. Listener kesintisinde mevcut TTL güvenli fallback olarak kalır.
+- Invalidation davranışı ve migration/wiring sözleşmesi `13/13`, migration
+  ledger `130/130`, API typecheck **PASS**. Gerçek PostgreSQL trigger teslimatı
+  staging migration/adoption kapısında ayrıca doğrulanmalıdır.
+
 Web-form üreticileri dağıtımdan önce `X-Webform-Timestamp`,
 `X-Webform-Request-Id` ve v1 zarfını imzalayan `X-Webform-Signature` sözleşmesine
 geçmelidir. Eski token kullanımı yalnız kimlik doğrulama uyumluluğudur; replay
