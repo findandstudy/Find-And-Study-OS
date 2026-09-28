@@ -50,6 +50,22 @@ assert.match(applicationPatchRoute, /await tx\.insert\(auditLogsTable\)\.values\
   "application patch persists its audit receipt before the mutation transaction commits");
 assert.doesNotMatch(applicationPatchRoute, /logAudit\(req\.user!\.id, "update_application"/,
   "application patch does not use the non-transactional legacy helper");
+const applicationBulkRoute = applications.slice(
+  applications.indexOf('router.post("/applications/bulk-action"'),
+  applications.indexOf('router.delete("/applications/:id"'),
+);
+assert.match(applicationBulkRoute, /if \(ids\.length > 500\)[\s\S]{0,120}BULK_APPLICATION_LIMIT/,
+  "application bulk mutations have a hard request-size ceiling");
+assert.match(applicationBulkRoute, /\[\.\.\.new Set\(ids\.map\(Number\)/,
+  "application bulk mutations deduplicate normalized positive identifiers");
+for (const action of ["delete_application", "bulk_assign_applications", "bulk_move_application"]) {
+  assert.match(applicationBulkRoute, new RegExp(`await tx\\.insert\\(auditLogsTable\\)\\.values\\([^;]{0,700}action: "${action}"`),
+    `${action} persists its audit receipt inside the mutation transaction`);
+}
+for (const action of ["delete_application", "bulk_assign_applications", "bulk_move_application"]) {
+  assert.doesNotMatch(applicationBulkRoute, new RegExp(`logAudit\\([^;]{0,180}"${action}"`),
+    `${action} does not use the non-transactional legacy helper`);
+}
 assert.equal((destructiveApplicationRoutes.match(/await tx\.insert\(auditLogsTable\)\.values\(\{/g) ?? []).length, 2,
   "application soft-delete and purge write audit in their mutation transaction");
 for (const action of ["delete_application", "purge_application"]) {
@@ -142,4 +158,4 @@ assert.match(aiPersonas, /await logAudit\(req\.user!\.id, "run_ai_persona"/,
 assert.doesNotMatch(personaCrud, /res\.status\(500\)\.json\(\{ error: msg \}\)/,
   "persona management does not disclose raw database errors");
 
-console.log("[audit-durability-contract] 65/65 PASS");
+console.log("[audit-durability-contract] 73/73 PASS");

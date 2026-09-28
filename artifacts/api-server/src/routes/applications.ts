@@ -2144,6 +2144,7 @@ router.post("/applications/bulk-action", requireAuth, requireRole(...STAFF_ROLES
   const isAdmin = (ADMIN_ROLES as readonly string[]).includes(user.role);
   const { ids, action, assignedToId, stage } = req.body;
   if (!Array.isArray(ids) || ids.length === 0) { res.status(400).json({ error: "ids required" }); return; }
+  if (ids.length > 500) { res.status(413).json({ error: "A maximum of 500 applications can be changed at once", code: "BULK_APPLICATION_LIMIT" }); return; }
   if (!["delete", "assign", "move", "run_portal_automation"].includes(action)) { res.status(400).json({ error: "Invalid action" }); return; }
   // Task #494: non-admin may only bulk-assign their own records; delete/move remain admin-only.
   // run_portal_automation is staff-accessible (same gate as the rest of the Applications
@@ -2151,17 +2152,28 @@ router.post("/applications/bulk-action", requireAuth, requireRole(...STAFF_ROLES
   if (!isAdmin && !["assign", "run_portal_automation"].includes(action)) {
     res.status(403).json({ error: "Only admins can bulk delete or move applications" }); return;
   }
-  const numericIds = ids.map(Number).filter((n: number) => !isNaN(n));
+  const numericIds = [...new Set(ids.map(Number).filter((n: number) => Number.isInteger(n) && n > 0))];
+  if (numericIds.length === 0) { res.status(400).json({ error: "valid ids required" }); return; }
   let updated = 0;
   if (action === "delete") {
     const existing = await db.select({ id: applicationsTable.id }).from(applicationsTable).where(and(inArray(applicationsTable.id, numericIds), isNull(applicationsTable.deletedAt)));
     const liveIds = existing.map(r => r.id);
-    updated = await softDelete(applicationsTable, liveIds, { actorUserId: user.id });
-    if (liveIds.length > 0) {
-      // documents lacks deletedBy; cascade soft-delete with deletedAt only.
-      await db.update(documentsTable).set({ deletedAt: new Date() }).where(and(inArray(documentsTable.applicationId, liveIds), isNull(documentsTable.deletedAt)));
-    }
-    for (const id of liveIds) logAudit(user.id, "delete_application", "application", id, { soft: true }, req.ip);
+    updated = await db.transaction(async (tx) => {
+      const count = await softDelete(applicationsTable, liveIds, { actorUserId: user.id, tx });
+      if (liveIds.length > 0) {
+        // documents lacks deletedBy; cascade soft-delete with deletedAt only.
+        await tx.update(documentsTable).set({ deletedAt: new Date() }).where(and(inArray(documentsTable.applicationId, liveIds), isNull(documentsTable.deletedAt)));
+        await tx.insert(auditLogsTable).values(liveIds.map(applicationId => ({
+          userId: user.id,
+          action: "delete_application",
+          resource: "application",
+          resourceId: applicationId,
+          changes: JSON.stringify({ soft: true, bulk: true }),
+          ipAddress: req.ip || null,
+        })));
+      }
+      return count;
+    });
   } else if (action === "assign" && assignedToId !== undefined) {
     const newAssignedToId = assignedToId ? Number(assignedToId) : null;
     // Non-admin: filter to only records they are the current assignee of
@@ -2200,9 +2212,15 @@ router.post("/applications/bulk-action", requireAuth, requireRole(...STAFF_ROLES
           });
         }
       }
+      await tx.insert(auditLogsTable).values({
+        userId: user.id,
+        action: "bulk_assign_applications",
+        resource: "application",
+        changes: JSON.stringify({ ids: idsToUpdate, assignedToId: newAssignedToId }),
+        ipAddress: req.ip || null,
+      });
       return result.rowCount ?? idsToUpdate.length;
     });
-    await logAudit(user.id, "bulk_assign_applications", "application", undefined, { ids: idsToUpdate, assignedToId }, req.ip);
     res.json({ success: true, updated, skipped }); return;
   } else if (action === "move" && stage) {
     if (!(await canTransitionToPipelineStage("application", String(stage), user.role))) {
@@ -2299,6 +2317,14 @@ router.post("/applications/bulk-action", requireAuth, requireRole(...STAFF_ROLES
             eq(lifecycleCascadeStateTable.entityId, app.studentId),
           ));
         }
+        await tx.insert(auditLogsTable).values({
+          userId: req.user!.id,
+          action: "bulk_move_application",
+          resource: "application",
+          resourceId: app.id,
+          changes: JSON.stringify({ stage }),
+          ipAddress: req.ip || null,
+        });
       });
       await syncApplicationFinance(app.id);
       const [commStatus, sfStatus] = await Promise.all([
@@ -2382,7 +2408,6 @@ router.post("/applications/bulk-action", requireAuth, requireRole(...STAFF_ROLES
         await autoCancelSiblingApplications(app.id, app.studentId);
       }
 
-      await logAudit(req.user!.id, "bulk_move_application", "application", app.id, { stage }, req.ip);
       updated++;
     }
     if (bulkSkipped.length > 0) {

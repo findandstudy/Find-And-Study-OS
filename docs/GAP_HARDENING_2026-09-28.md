@@ -295,6 +295,11 @@ verisi ve dış Academy alıcısı değiştirilmedi.
   atama ve stage güncellemesi business mutation ile aynı transaction içinde
   audit receipt üretir; application optimistic concurrency **7/7 PASS**; API
   typecheck ve production build **PASS**.
+- Application toplu silme, atama ve stage taşıma işlemleri de kendi core
+  mutation transaction'larında durable audit üretir. Girdi 500 kayıtla
+  sınırlandı; pozitif ID'ler normalize edilip tekrarlar ayıklanır. Genişletilmiş
+  audit durability contract **73/73 PASS**; API typecheck ve production build
+  **PASS**.
 - Migration authority/validation: **129/129 PASS**.
 - Disposable PostgreSQL 16.15: fresh `0→129`, upload grant migration, route E2E,
   DB helper fixture cleanup: **PASS**; cluster durduruldu.
