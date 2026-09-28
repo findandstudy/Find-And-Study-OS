@@ -256,6 +256,7 @@ test("production prefix and canonical additive migration tail are pinned", () =>
       "0128_object_upload_grants",
       "0129_facet_cache_invalidation",
       "0130_facet_cache_invalidation_repair",
+      "0131_facet_cache_trigger_install",
     ],
   );
 

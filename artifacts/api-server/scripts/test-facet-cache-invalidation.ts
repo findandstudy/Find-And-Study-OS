@@ -27,21 +27,28 @@ assert.deepEqual(await readApplications(), { generation: 2 });
 invalidateFacetCache();
 assert.deepEqual(await readApplications(), { generation: 3 });
 
-const migration = readFileSync(
-  new URL("../../../lib/db/drizzle/0130_facet_cache_invalidation_repair.sql", import.meta.url),
+const triggerMigration = readFileSync(
+  new URL("../../../lib/db/drizzle/0131_facet_cache_trigger_install.sql", import.meta.url),
   "utf8",
 );
 for (const table of ["applications", "leads", "students"]) {
-  assert.match(migration, new RegExp(`AFTER INSERT OR UPDATE OR DELETE ON (?:public\\.)?${table}`));
+  assert.match(triggerMigration, new RegExp(`AFTER INSERT OR UPDATE OR DELETE ON public\\.${table}`));
 }
-assert.match(migration, /FOR EACH STATEMENT/);
-assert.match(migration, /pg_notify\([\s\S]*'facet_cache_invalidation'/);
-assert.doesNotMatch(migration, /row_to_json|OLD\.|NEW\./);
-assert.match(migration, /installed_count <> 3/);
+assert.match(triggerMigration, /FOR EACH STATEMENT/);
+assert.match(triggerMigration, /installed_count <> 3/);
+assert.equal((triggerMigration.match(/^DO \$\$/gm) ?? []).length, 1);
+assert.doesNotMatch(triggerMigration, /statement-breakpoint/);
+
+const functionMigration = readFileSync(
+  new URL("../../../lib/db/drizzle/0130_facet_cache_invalidation_repair.sql", import.meta.url),
+  "utf8",
+);
+assert.match(functionMigration, /pg_notify\([\s\S]*'facet_cache_invalidation'/);
+assert.doesNotMatch(functionMigration, /row_to_json|OLD\.|NEW\./);
 
 const indexSource = readFileSync(new URL("../src/index.ts", import.meta.url), "utf8");
 assert.match(indexSource, /facetCacheInvalidationBus\.subscribe\(namespace =>/);
 assert.match(indexSource, /invalidateFacetCache\(namespace\)/);
 assert.match(indexSource, /facetCacheInvalidationBus\.shutdown\(\)/);
 
-console.log("[facet-cache-invalidation] 14/14 PASS");
+console.log("[facet-cache-invalidation] 16/16 PASS");
