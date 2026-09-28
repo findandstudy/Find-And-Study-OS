@@ -8,14 +8,14 @@
     "defaultEnforcement": "legacy_quarantine"
   },
   "totals": {
-    "routeRegistrations": 881,
+    "routeRegistrations": 882,
     "requireAuth": 769,
     "requireRole": 494,
     "requirePermission": 78,
     "requireScope": 0,
     "directRoleChecks": 32,
     "authOnlyRouteCandidates": 128,
-    "publicRouteCandidates": 191
+    "publicRouteCandidates": 192
   },
   "files": [
     {
@@ -260,7 +260,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/auth.ts",
-      "sha256": "d9a6ac83e97ce6b4f1438a56c9e9ec83c97a422cab23f079762a719f673fa6b3",
+      "sha256": "8944a779fdcc06cc1b091efa8560fcdd8f3627aab51ef110c3f6203ab4925f65",
       "routeRegistrations": 10,
       "requireAuth": 0,
       "requireRole": 0,
@@ -635,7 +635,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/index.ts",
-      "sha256": "820ae88c350b43e6bd853970842dde9d5a0b183c258782e4e3c8c8e64dec3807",
+      "sha256": "7a392b4cf994ecacc1764099ed190cb87c328419cfe0c707736480ae2c70e780",
       "routeRegistrations": 0,
       "requireAuth": 0,
       "requireRole": 0,
@@ -1099,6 +1099,21 @@
       "note": "Route-local review required before corridor migration."
     },
     {
+      "path": "artifacts/api-server/src/routes/studentRegistrationMatching.ts",
+      "sha256": "3ad7fcefb25219a23eeb1940df9ed43fa6728ec485a7110bbadb42112b81f2af",
+      "routeRegistrations": 1,
+      "requireAuth": 0,
+      "requireRole": 0,
+      "requirePermission": 0,
+      "requireScope": 0,
+      "directRoleChecks": 0,
+      "authOnlyRouteCandidates": 0,
+      "publicRouteCandidates": 1,
+      "enforcement": "legacy_quarantine",
+      "owner": "Platform Engineering",
+      "note": "Route-local review required before corridor migration."
+    },
+    {
       "path": "artifacts/api-server/src/routes/students.ts",
       "sha256": "5be3c580d79ae332c06aad684f85665bf6322a29ff6865228ef034e4e37b560d",
       "routeRegistrations": 27,
@@ -1130,7 +1145,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/universities.ts",
-      "sha256": "76ef471de2b57bc60cf9f4be7044679f44f3cac22a13032e8c026ee29fd6a58b",
+      "sha256": "4eb39e371cf4b16f790a24501a6b91ed2c6dcdb592d1c95b1f7828c4ed13b6e6",
       "routeRegistrations": 24,
       "requireAuth": 18,
       "requireRole": 16,
