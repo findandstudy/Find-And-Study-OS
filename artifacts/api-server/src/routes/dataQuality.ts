@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
-import { applicationsTable, db, leadsTable, studentsTable } from "@workspace/db";
+import { applicationsTable, auditLogsTable, db, leadsTable, studentsTable } from "@workspace/db";
 import { and, eq, isNull, sql } from "drizzle-orm";
-import { logAudit, requireAuth, requireRole } from "../lib/auth";
+import { requireAuth, requireRole } from "../lib/auth";
 import { ADMIN_ROLES } from "../lib/roles";
 import { duplicateCandidatesCte } from "../lib/reportingDuplicateSemantics";
 
@@ -258,6 +258,14 @@ router.post("/admin/data-quality/application-lead-links/:applicationId/approve",
       .where(and(eq(applicationsTable.id, applicationId), isNull(applicationsTable.leadId)))
       .returning({ id: applicationsTable.id, studentId: applicationsTable.studentId, leadId: applicationsTable.leadId });
     if (!updated) return { status: 409 as const, error: "Application link changed concurrently; reload the report" };
+    await tx.insert(auditLogsTable).values({
+      userId: req.user!.id,
+      action: "approve_application_lead_link",
+      resource: "application",
+      resourceId: applicationId,
+      changes: JSON.stringify({ leadId, studentId: updated.studentId }),
+      ipAddress: req.ip || null,
+    });
     return { status: 200 as const, app: updated, idempotent: false };
   });
 
@@ -266,12 +274,6 @@ router.post("/admin/data-quality/application-lead-links/:applicationId/approve",
     return;
   }
   const linkedApp = outcome.app;
-  if (!outcome.idempotent) {
-    await logAudit(req.user!.id, "approve_application_lead_link", "application", applicationId, {
-      leadId,
-      studentId: linkedApp.studentId,
-    }, req.ip);
-  }
   res.json({ success: true, application: linkedApp, idempotent: outcome.idempotent });
 });
 

@@ -23,12 +23,17 @@ const campaigns = source("../src/routes/campaigns.ts");
 const cms = source("../src/routes/cms.ts");
 const portalExclusions = source("../src/routes/portalUniversityExclusions.ts");
 const portalFallbacks = source("../src/routes/portalProgramFallbacks.ts");
+const dataQuality = source("../src/routes/dataQuality.ts");
 
 assert.match(auth, /\): Promise<void> \{\s*return db\.insert\(auditLogsTable\)/,
   "audit insert exposes a real awaitable completion boundary");
 assert.doesNotMatch(auth, /setImmediate\s*\(/,
   "audit persistence is not deferred beyond the request lifecycle");
 assert.doesNotMatch(tokens, /logAudit\(/, "API token mutations do not use the non-transactional legacy helper");
+assert.doesNotMatch(dataQuality, /logAudit\(/,
+  "application-lead repair does not use the non-transactional legacy helper");
+assert.match(dataQuality, /await tx\.insert\(auditLogsTable\)\.values\(\{[\s\S]{0,220}action: "approve_application_lead_link"/,
+  "application-lead repair persists its audit receipt before transaction commit");
 assert.equal((tokens.match(/await tx\.insert\(auditLogsTable\)\.values\(\{/g) ?? []).length, 3,
   "API token create, revoke and rotate write their audit result inside the mutation transaction");
 for (const action of ["create", "revoke", "rotate"]) {
