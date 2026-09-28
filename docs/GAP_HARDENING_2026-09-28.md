@@ -455,6 +455,11 @@ verisi ve dış Academy alıcısı değiştirilmedi.
   referansı aynı transaction'dadır. Aynı avatarla idempotent retry yeni grant
   tüketmez. Hedefli contract **3/3 PASS**; geniş security-hardening **124 PASS,
   1 Windows symlink privilege SKIP**; API typecheck ve production build **PASS**.
+- Bu iki yeni upload consumer'ı sonrasında birleşik `test:security-regressions`
+  zinciri bütünüyle **PASS** oldu: ana güvenlik grubu, **124 PASS + 1 Windows
+  symlink privilege SKIP** hardening grubu, web-form replay `9/9`, application
+  concurrency `7/7`, import lifecycle `19/19`, upload grant `18/18`, tüm dar
+  mutation atomicity paketleri ve audit durability `125/125` geçti.
 - Migration authority/validation: **129/129 PASS**.
 - Disposable PostgreSQL 16.15: fresh `0→129`, upload grant migration, route E2E,
   DB helper fixture cleanup: **PASS**; cluster durduruldu.
