@@ -9,7 +9,7 @@
     "test:system-health": "tsx --test ./scripts/test-system-health.ts",
     "test:system-health-browser": "node ./scripts/test-system-health-browser.mjs",
     "dev": "vite --config vite.config.ts --host 0.0.0.0",
-    "build": "node scripts/check-i18n.mjs && tsx --test ./scripts/test-language-country-codes.ts ./scripts/test-public-detail-templates.ts ./scripts/test-dashboard-localization.ts ./scripts/test-page-builder-templates.ts ./scripts/test-catalog-pages-inventory.ts ./scripts/test-detail-content-editor.ts ./scripts/test-detail-content-sections.ts ./scripts/test-system-health.ts ./scripts/test-course-finder-api.ts ./scripts/test-course-finder-document-flow.ts ./scripts/test-upload-finalization.ts && vite build --config vite.config.ts && node generate-sitemap.mjs && node scripts/check-public-bundle-budget.mjs",
+    "build": "node scripts/check-i18n.mjs && tsx --test ./scripts/test-language-country-codes.ts ./scripts/test-public-detail-templates.ts ./scripts/test-dashboard-localization.ts ./scripts/test-page-builder-templates.ts ./scripts/test-catalog-pages-inventory.ts ./scripts/test-detail-content-editor.ts ./scripts/test-detail-content-sections.ts ./scripts/test-system-health.ts ./scripts/test-course-finder-api.ts ./scripts/test-course-finder-document-flow.ts ./scripts/test-upload-finalization.ts ./scripts/test-pdf-preview-runtime.ts && vite build --config vite.config.ts && node generate-sitemap.mjs && node scripts/check-public-bundle-budget.mjs",
     "test:upload-finalization": "tsx scripts/test-upload-finalization.ts",
     "test:page-builder": "tsx --test ./scripts/test-page-builder-templates.ts",
     "test:page-builder-browser": "node ./scripts/test-page-builder-browser.mjs",

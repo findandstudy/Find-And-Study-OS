@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import * as pdfjsLib from "pdfjs-dist";
 import { useI18n } from "@/hooks/use-i18n";
+import { fetchBoundedBytes, fetchBoundedPdf, runBoundedPdfPreview } from "@/lib/pdfPreviewRuntime";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
   "pdfjs-dist/build/pdf.worker.min.mjs",
@@ -70,14 +71,14 @@ export default function PdfAttachmentCard({ url, serverThumbUrl, name, fileSize,
   useEffect(() => {
     if (!visible || !serverThumbUrl) { if (!serverThumbUrl) setServerThumbFailed(true); return; }
     let cancelled = false;
+    const controller = new AbortController();
     let objectUrl: string | null = null;
     (async () => {
       try {
-        const resp = await fetch(serverThumbUrl, { credentials: "include" });
-        if (!resp.ok) throw new Error(String(resp.status));
-        const pages = Number(resp.headers.get("X-Pdf-Page-Count"));
-        const blob = await resp.blob();
-        if (!blob.size || !blob.type.toLowerCase().startsWith("image/")) {
+        const thumbnail = await fetchBoundedBytes(serverThumbUrl, controller.signal, 2 * 1024 * 1024);
+        const pages = Number(thumbnail.headers.get("X-Pdf-Page-Count"));
+        const blob = new Blob([thumbnail.data], { type: thumbnail.contentType });
+        if (!blob.size || !thumbnail.contentType.toLowerCase().startsWith("image/")) {
           throw new Error("Invalid PDF thumbnail response");
         }
         if (cancelled) return;
@@ -90,6 +91,7 @@ export default function PdfAttachmentCard({ url, serverThumbUrl, name, fileSize,
     })();
     return () => {
       cancelled = true;
+      controller.abort();
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
   }, [serverThumbUrl, visible]);
@@ -97,51 +99,44 @@ export default function PdfAttachmentCard({ url, serverThumbUrl, name, fileSize,
   useEffect(() => {
     if (!visible || serverThumb || !serverThumbFailed) return;
     let cancelled = false;
+    const controller = new AbortController();
     setRendered(false);
     setFailed(false);
 
     async function render() {
       try {
-        const resp = await fetch(url, { credentials: "include" });
-        if (!resp.ok) { if (!cancelled) setFailed(true); return; }
-        const data = await resp.arrayBuffer();
-        if (cancelled) return;
-        if (fileSize == null && data.byteLength > 0) setSizeBytes(data.byteLength);
-
-        const pdf = await pdfjsLib.getDocument({ data }).promise;
-        if (cancelled) return;
-        setPageCount(pdf.numPages);
-
-        const page = await pdf.getPage(1);
-        if (cancelled) return;
-        const canvas = canvasRef.current;
-        if (!canvas) return;
-
-        const unscaled = page.getViewport({ scale: 1 });
-        const targetWidth = 480;
-        const scale = targetWidth / unscaled.width;
-        const viewport = page.getViewport({ scale });
-
-        canvas.width = viewport.width;
-        // Crop tall pages to a WhatsApp-like banner aspect (~2.2:1).
-        canvas.height = Math.min(viewport.height, Math.round(viewport.width / 2.2));
-
-        const ctx = canvas.getContext("2d")!;
-        ctx.fillStyle = "#ffffff";
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        const renderTask = (page.render as (p: { canvasContext: object; viewport: object }) => { promise: Promise<void> })(
-          { canvasContext: ctx, viewport },
-        );
-        await renderTask.promise;
-
-        if (!cancelled) setRendered(true);
+        await runBoundedPdfPreview(fileSize, controller.signal, async (signal) => {
+          const data = await fetchBoundedPdf(url, signal);
+          if (cancelled) return;
+          if (fileSize == null && data.byteLength > 0) setSizeBytes(data.byteLength);
+          const loadingTask = pdfjsLib.getDocument({ data });
+          signal.addEventListener("abort", () => loadingTask.destroy(), { once: true });
+          const pdf = await loadingTask.promise;
+          if (cancelled) return;
+          setPageCount(pdf.numPages);
+          const page = await pdf.getPage(1);
+          if (cancelled) return;
+          const canvas = canvasRef.current;
+          if (!canvas) return;
+          const unscaled = page.getViewport({ scale: 1 });
+          const viewport = page.getViewport({ scale: 480 / unscaled.width });
+          canvas.width = viewport.width;
+          canvas.height = Math.min(viewport.height, Math.round(viewport.width / 2.2));
+          const ctx = canvas.getContext("2d")!;
+          ctx.fillStyle = "#ffffff";
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+          const renderTask = page.render({ canvas, canvasContext: ctx, viewport });
+          signal.addEventListener("abort", () => renderTask.cancel(), { once: true });
+          await renderTask.promise;
+          if (!cancelled) setRendered(true);
+        });
       } catch {
         if (!cancelled) setFailed(true);
       }
     }
 
     render();
-    return () => { cancelled = true; };
+    return () => { cancelled = true; controller.abort(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [url, visible, serverThumb, serverThumbFailed]);
 

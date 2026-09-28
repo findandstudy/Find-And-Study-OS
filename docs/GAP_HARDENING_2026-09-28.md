@@ -118,6 +118,17 @@ verisi ve dış Academy alıcısı değiştirilmedi.
      hazır iddiası yoktur. Program liste sonucunun API sonrası yeniden boyanması,
      büyük İngilizce sözlük ve ilk yük ortak vendor maliyeti kalan darboğazlardır.
 
+9. **Bounded PDF önizleme çalışma zamanı**
+   - Mesaj PDF kartı ve öğrenci PDF fotoğraf önizlemesi aynı process-local kabul
+     sınırını kullanıyor: aynı anda en fazla iki decode/render, en fazla 12 bekleyen
+     iş ve toplam 64 MiB rezervasyon.
+   - Bilinen veya akış sırasında ölçülen PDF 20 MiB'ı, server thumbnail 2 MiB'ı
+     aşarsa tüm gövdeyi belleğe almadan indirme iptal ediliyor. Yanlış/eksik
+     `Content-Length` akış sayımıyla fail-closed yakalanıyor.
+   - Her iş için 15 saniye timeout var; component unmount olduğunda fetch, pdfjs
+     load ve render task iptal ediliyor. Sınır aşımı mevcut güvenli icon/fallback
+     görünümüne düşüyor; mesaj veya öğrenci kaydını değiştirmiyor.
+
 ## Doğrulama
 
 - Security regression: **115/115 PASS**.
@@ -143,6 +154,8 @@ verisi ve dış Academy alıcısı değiştirilmedi.
   production build + sitemap + sıkılaştırılmış 180 KiB başlangıç bütçesi: **PASS**.
 - Yerel mobil CWV laboratuvarı: çalıştı, ölçüm üretti, gerçek eşikleri aşınca
   tasarlandığı gibi **FAIL**; bu sonuç release kapısını açık tutar.
+- PDF preview runtime: concurrency, known-size admission, dishonest streaming
+  overflow ve küçük PDF kabulü **4/4 PASS**; frontend typecheck **PASS**.
 - Migration authority/validation: **129/129 PASS**.
 - Disposable PostgreSQL 16.15: fresh `0→129`, upload grant migration, route E2E,
   DB helper fixture cleanup: **PASS**; cluster durduruldu.
