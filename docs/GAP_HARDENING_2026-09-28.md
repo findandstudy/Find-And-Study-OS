@@ -320,6 +320,11 @@ verisi ve dış Academy alıcısı değiştirilmedi.
   kopyalamaz. Assignee ID doğrulaması strict pozitif safe-integer oldu. Gerçek
   Express rollback matrisi **6/6 PASS**, genişletilmiş audit durability contract
   **97/97 PASS**; API typecheck ve production build **PASS**.
+- Campaign create/update/archive/restore işlemleri transaction-bound audit'e
+  taşındı. University ID ve liste boyutları sınırlandı; isim/açıklama girişleri
+  bounded, update audit'i yalnız değişen alan adlarını taşır. Gerçek Express
+  rollback matrisi **6/6 PASS**, genişletilmiş audit durability contract
+  **103/103 PASS**; API typecheck ve production build **PASS**.
 - Migration authority/validation: **129/129 PASS**.
 - Disposable PostgreSQL 16.15: fresh `0→129`, upload grant migration, route E2E,
   DB helper fixture cleanup: **PASS**; cluster durduruldu.
