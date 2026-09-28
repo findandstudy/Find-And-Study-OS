@@ -291,12 +291,14 @@ verisi ve dış Academy alıcısı değiştirilmedi.
    - Public logo decode'u async/düşük fetch priority oldu. Countries koleksiyonunun
      salt dekoratif giriş/kart animasyonları animation runtime gerektirmeyen mevcut CSS
      transition davranışına indirildi.
-   - Exact feature head `d0f090df1c81f3f697d42c721b50c0deb41f2e4a`, staging
-     release `staging-20260928T170302Z-d0f090df1c81` olarak yayına alındı;
+   - Exact code head `18ff6c9288f6d81ecb98a565cf66540107ea09b5`, staging
+     release `staging-20260928T171314Z-18ff6c9288f6` olarak yayına alındı;
      health HTTP 200 ve `dbConnected=true` verdi. Production değiştirilmedi.
-   - Üç-tekrarlı staging medyanında üniversite LCP `2.220 ms`, program detay
-     LCP `2.288 ms`; aggregate TBT `126 ms`, CLS `0` oldu. Ana/liste/şehir LCP
-     `3.744–4.080 ms` kaldığı için CWV kapısı dürüstçe **FAIL** kalır.
+   - Üç-tekrarlı son staging medyanında üniversite LCP `2.356 ms`, program
+     detay LCP `2.288 ms`; aggregate TBT `134 ms`, CLS `0` oldu. Countries
+     animation runtime kaldırılınca bu rota `42.274 byte` daha az transfer etti
+     ve TBT medyanı `126 → 45 ms` oldu. Ana/liste/şehir LCP `3.572–4.168 ms`
+     kaldığı için CWV kapısı dürüstçe **FAIL** kalır.
      Sentetik tekrarların ikincisinden itibaren yaklaşık `1 sn` TTFB görüldü;
      bu, saha p75 kanıtı değil ve rate-limit/edge davranışı ayrı ölçülmelidir.
 
