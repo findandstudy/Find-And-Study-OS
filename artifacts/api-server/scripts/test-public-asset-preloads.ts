@@ -7,7 +7,7 @@ function model(kind: PublicCatalogRenderModel["kind"], locale = "en"): PublicCat
   return { kind, locale } as PublicCatalogRenderModel;
 }
 
-test("SSR preloads the route chunk and safe imports without the full locale dictionary", () => {
+test("SSR preloads only the route entry so interaction-only imports do not compete with LCP", () => {
   const manifest: PublicAssetManifest = {
     "src/lib/i18n/translations/en.json": {
       file: "assets/en-abc123.js",
@@ -24,10 +24,9 @@ test("SSR preloads the route chunk and safe imports without the full locale dict
 
   assert.deepEqual(resolvePublicAssetPreloads(manifest, model("program_detail")), [
     "/assets/ProgramDetail-def456.js",
-    "/assets/vendor-react-ghi789.js",
-    "/assets/DetailContentSections-jkl012.js",
   ]);
   assert.ok(!resolvePublicAssetPreloads(manifest, model("program_detail")).includes("/assets/en-abc123.js"));
+  assert.ok(!resolvePublicAssetPreloads(manifest, model("program_detail")).includes("/assets/DetailContentSections-jkl012.js"));
 });
 
 test("unsafe and missing manifest entries fail closed", () => {

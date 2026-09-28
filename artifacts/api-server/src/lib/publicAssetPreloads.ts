@@ -45,28 +45,16 @@ export function resolvePublicAssetPreloads(
   manifest: PublicAssetManifest,
   model: PublicCatalogRenderModel,
 ): string[] {
-  const sourceKeys = [
-    ROUTE_SOURCE_BY_KIND[model.kind],
-  ].filter((value): value is string => Boolean(value));
-  const queued = [...sourceKeys];
-  const visited = new Set<string>();
-  const hrefs = new Set<string>();
+  const sourceKey = ROUTE_SOURCE_BY_KIND[model.kind];
+  if (!sourceKey) return [];
+  const chunk = safeChunk(manifest, sourceKey);
+  if (!chunk || typeof chunk.file !== "string" || !SAFE_ASSET_FILE.test(chunk.file)) return [];
 
-  while (queued.length > 0 && visited.size < 32 && hrefs.size < 16) {
-    const key = queued.shift()!;
-    if (visited.has(key)) continue;
-    visited.add(key);
-    const chunk = safeChunk(manifest, key);
-    if (!chunk) continue;
-    if (typeof chunk.file === "string" && SAFE_ASSET_FILE.test(chunk.file)) {
-      hrefs.add(`/${chunk.file}`);
-    }
-    if (Array.isArray(chunk.imports)) {
-      for (const imported of chunk.imports) {
-        if (typeof imported === "string" && !visited.has(imported)) queued.push(imported);
-      }
-    }
-  }
-
-  return [...hrefs];
+  // The base HTML already preloads the shared runtime/vendor graph. Recursing
+  // through every route import also pulled interaction-only dialog, upload and
+  // document-processing chunks into the critical network queue. On constrained
+  // mobile connections those speculative downloads competed with the blocking
+  // stylesheet and delayed the server-rendered LCP. Hint only the route entry;
+  // Vite's module graph loads its dependencies when hydration actually begins.
+  return [`/${chunk.file}`];
 }
