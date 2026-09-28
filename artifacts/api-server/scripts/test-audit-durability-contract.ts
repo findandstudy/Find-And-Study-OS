@@ -8,6 +8,7 @@ const email = source("../src/routes/emailAutomation.ts");
 const agents = source("../src/routes/agents.ts");
 const applications = source("../src/routes/applications.ts");
 const channelAccounts = source("../src/routes/channelAccounts.ts");
+const integrations = source("../src/routes/integrations.ts");
 
 assert.match(auth, /\): Promise<void> \{\s*return db\.insert\(auditLogsTable\)/,
   "audit insert exposes a real awaitable completion boundary");
@@ -57,5 +58,15 @@ for (const action of [
   assert.match(channelAccounts, new RegExp(`await writeAccountAudit\\(tx, req, "${action}"`),
     `${action} writes its result before transaction commit`);
 }
+assert.doesNotMatch(integrations, /logAudit\(/,
+  "integration config mutations do not use the non-transactional legacy helper");
+assert.match(integrations, /async function writeIntegrationAudit[\s\S]*await tx\.insert\(auditLogsTable\)\.values/,
+  "integration audit helper requires the active transaction");
+for (const action of ["update_integration", "toggle_integration"]) {
+  assert.match(integrations, new RegExp(`await writeIntegrationAudit\\(tx, req, "${action}"`),
+    `${action} writes its result before transaction commit`);
+}
+assert.equal((integrations.match(/integration_version_conflict/g) ?? []).length, 2,
+  "integration update and toggle both reject stale writes");
 
-console.log("[audit-durability-contract] 28/28 PASS");
+console.log("[audit-durability-contract] 33/33 PASS");

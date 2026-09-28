@@ -160,6 +160,19 @@ verisi ve dış Academy alıcısı değiştirilmedi.
      Audit payload yalnız kanal/provider kimliğini içeriyor; token, bot secret veya
      SMTP credential içermiyor.
 
+13. **Integration config mutation + audit atomikliği**
+   - Integration create/update ve enable/disable audit sonuçları artık ayar
+     mutation'ıyla aynı transaction içinde yazılıyor; audit yazılamazsa şifreli
+     config veya aktiflik durumu da commit edilmiyor.
+   - Update ve toggle, okunan `updatedAt` sürümüne bağlandı. Arada başka bir yazı
+     olmuşsa eski istek değişikliği ezmek yerine kararlı
+     `integration_version_conflict` ile `409` döndürüyor.
+   - Cache invalidasyonu yalnız transaction başarıyla commit ettikten sonra
+     çalışıyor. Live-integration deployment kapısı ve WhatsApp zorunlu secret
+     kontrolleri korunuyor.
+   - Audit payload yalnız integration anahtarı ve aktiflik sonucunu içeriyor;
+     API key, token, webhook secret ve diğer config değerlerini içermiyor.
+
 ## Doğrulama
 
 - Security regression: **115/115 PASS**.
@@ -195,6 +208,10 @@ verisi ve dış Academy alıcısı değiştirilmedi.
 - Genişletilmiş audit durability contract **28/28 PASS**; gerçek Express kanal
   hesabı RBAC/live-off/reference/audit rollback matrisi **7/7 PASS**; API
   typecheck **PASS**.
+- Genişletilmiş audit durability contract **33/33 PASS**; gerçek Express
+  integration create/update/toggle rollback, stale-write ve live-off matrisi
+  **6/6 PASS**; integration bağlantı güvenliği **10/10 PASS**; API typecheck ve
+  production build **PASS**.
 - Migration authority/validation: **129/129 PASS**.
 - Disposable PostgreSQL 16.15: fresh `0→129`, upload grant migration, route E2E,
   DB helper fixture cleanup: **PASS**; cluster durduruldu.
