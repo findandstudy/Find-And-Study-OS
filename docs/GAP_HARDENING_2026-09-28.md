@@ -763,9 +763,12 @@ verisi ve dış Academy alıcısı değiştirilmedi.
   gate, rate-limit ve request/result audit sözleşmesini koruyor. Hiçbir provider
   bağlantısı veya dış gönderim açılmadı.
 - Audit durability **172/172**, inbox indicator **3/3** ve API typecheck **PASS**.
-  Tam inbox entegrasyon paketi yerel `127.0.0.1:5432/test` fixture DB olmadığı
-  için bu koşuda başlatılmadı; disposable PostgreSQL kapısında yeniden
-  çalıştırılacak. Bu dilim henüz staging'e dağıtılmadı; production değiştirilmedi.
+  Tam inbox entegrasyon paketi fresh `132/132` şemalı disposable PostgreSQL
+  `16.15` üzerinde; WhatsApp/Meta/Web Form signature gate, webhook dedup ve
+  identity-resolution kontrolleriyle **PASS**. İlk VPS container denemesi host
+  bellek baskısında `137` ile kapandı; aynı exact source yerel portable
+  PostgreSQL üzerinde temiz sentetik DB ile tekrar edilerek geçti. Production
+  değiştirilmedi.
 
 ## 29 Eylül authentication audit ve password-reset yarış koruması
 
@@ -812,6 +815,29 @@ Web-form üreticileri dağıtımdan önce `X-Webform-Timestamp`,
 geçmelidir. Eski token kullanımı yalnız kimlik doğrulama uyumluluğudur; replay
 başlıklarını kaldırmaz. Migration additive'dir. Staging UAT ve deployment bu
 dilimde yapılmadı.
+
+## 29 Eylül final staging adoption
+
+- Code-bearing commit `01d49e8620d96d0f520238aa3511ea08a821ac6e`, immutable
+  `findandstudy-staging-app:01d49e8620d9` image'i olarak build edildi. Build;
+  23-locale i18n parity, 121 frontend contract, public bundle budget, backend,
+  portal-worker typecheck ve migration validation `132/132` kapılarını geçti.
+- Geçişten önce doğru explicit `fasos_staging` hedefinden checksum'lı custom
+  backup alındı:
+  `staging-predeploy-20260928T221958Z-01d49e8620d9-fasos_staging.dump`.
+  PostgreSQL `16.15`, `--network none` ve tmpfs kullanan restore drill; 132
+  ledger satırı, 256 public tablo ve 13 sentetik user ile **PASS**. Yanlış
+  default boş DB'yi hedefleyen ilk deneme kabul edilmedi ve onun iki dosyası
+  exact path doğrulamasından sonra kaldırıldı.
+- Yalnız staging app containerı `staging-20260928T223811Z-01d49e8620d9`
+  release'ine geçirildi; staging DB containerı `2026-09-01T18:14:26Z` başlangıç
+  kimliğini ve restart `0` durumunu korudu. App health/DB, healthz, HSTS,
+  global noindex, yedi public/admin route, ledger `132/132`, non-root
+  `10042:10042`, read-only rootfs, `CapDrop=ALL`, no-new-privileges, restart `0`
+  ve fatal/unhandled log `0` kontrolleri **PASS**.
+- Exact release'e bağlı salt-okunur RBAC UAT `11` role / `126` check ile
+  **PASS**. Live integration, email delivery, background job, AI auto-reply ve
+  tüm social provider/worker kapıları kapalı kaldı. Production'a dokunulmadı.
 
 ## Repo dışı veya ayrı kapı isteyen kalanlar
 
