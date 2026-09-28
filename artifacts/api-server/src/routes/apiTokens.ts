@@ -115,7 +115,7 @@ router.post("/api-tokens", requireAuth, requireRole(...ADMIN_ROLES), blockTokenA
     })
     .returning();
 
-  logAudit(req.user!.id, "create", "api_token", row.id, { name, scopes, expiresAt }, getClientIp(req) ?? undefined);
+  await logAudit(req.user!.id, "create", "api_token", row.id, { name, scopes, expiresAt }, getClientIp(req) ?? undefined);
 
   // `token` is the only time the plain value is ever exposed.
   res.status(201).json({ token: plain, ...publicToken(row) });
@@ -148,7 +148,7 @@ router.post("/api-tokens/:id/revoke", requireAuth, requireRole(...ADMIN_ROLES), 
     .where(eq(apiTokensTable.id, id))
     .returning();
 
-  logAudit(req.user!.id, "revoke", "api_token", id, { name: existing.name }, getClientIp(req) ?? undefined);
+  await logAudit(req.user!.id, "revoke", "api_token", id, { name: existing.name }, getClientIp(req) ?? undefined);
 
   res.json(publicToken(updated));
 });
@@ -193,7 +193,7 @@ router.post("/api-tokens/:id/rotate", requireAuth, requireRole(...ADMIN_ROLES), 
     res.status(404).json({ error: "Active token not found" });
     return;
   }
-  logAudit(req.user!.id, "rotate", "api_token", result.replacement.id, {
+  await logAudit(req.user!.id, "rotate", "api_token", result.replacement.id, {
     previousTokenId: result.previous.id,
     expiresAt: result.replacement.expiresAt,
   }, getClientIp(req) ?? undefined);

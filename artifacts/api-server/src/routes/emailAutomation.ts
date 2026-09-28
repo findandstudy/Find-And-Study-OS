@@ -54,7 +54,7 @@ router.post("/notification-email/senders", handle(async (req, res) => {
     configEncrypted: serializeAccountConfig({ host: input.host, port: input.port, username: input.username, password: input.password }),
     metadata: { emailSender: { revision: 1, fromEmail: input.fromEmail, fromName: input.fromName, replyTo: input.replyTo,
       verified: false, createdById: req.user!.id, lastChangedById: req.user!.id } } }).returning();
-  logAudit(req.user!.id, "notification_email.sender_created", "channel_account", row.id, { revision: 1 }, req.ip);
+  await logAudit(req.user!.id, "notification_email.sender_created", "channel_account", row.id, { revision: 1 }, req.ip);
   res.status(201).json({ sender: safeEmailSender(row) });
 }));
 
@@ -74,7 +74,7 @@ router.patch("/notification-email/senders/:id", handle(async (req, res) => {
         verified: false, createdById: meta.createdById, lastChangedById: req.user!.id } }, updatedAt: new Date() }).where(senderWhere(id)).returning();
     return updated;
   });
-  logAudit(req.user!.id, "notification_email.sender_updated", "channel_account", id, { revision: emailSenderMetadata(row.metadata)?.revision }, req.ip);
+  await logAudit(req.user!.id, "notification_email.sender_updated", "channel_account", id, { revision: emailSenderMetadata(row.metadata)?.revision }, req.ip);
   res.json({ sender: safeEmailSender(row) });
 }));
 
@@ -98,7 +98,7 @@ router.post("/notification-email/senders/:id/verify", handle(async (req, res) =>
       metadata: { emailSender: { ...currentMeta, verified: true, approvedById: req.user!.id } }, updatedAt: new Date() }).where(senderWhere(id)).returning();
     return updated;
   });
-  logAudit(req.user!.id, "notification_email.sender_verified", "channel_account", id, { revision: expected, kind: "smtp_connection_authentication" }, req.ip);
+  await logAudit(req.user!.id, "notification_email.sender_verified", "channel_account", id, { revision: expected, kind: "smtp_connection_authentication" }, req.ip);
   res.json({ sender: safeEmailSender(row) });
 }));
 
@@ -121,7 +121,7 @@ router.post("/notification-email/templates", handle(async (req, res) => {
     const [version] = await tx.insert(emailTemplateVersionsTable).values({ templateId: template.id, version: 1, status: "draft", ...fields, createdById: req.user!.id }).returning();
     return { template, version };
   });
-  logAudit(req.user!.id, "notification_email.template_created", "message_template", result.template.id, { versionId: result.version.id }, req.ip);
+  await logAudit(req.user!.id, "notification_email.template_created", "message_template", result.template.id, { versionId: result.version.id }, req.ip);
   res.status(201).json(result);
 }));
 
@@ -135,7 +135,7 @@ router.post("/notification-email/templates/:id/versions", handle(async (req, res
     const [created] = await tx.insert(emailTemplateVersionsTable).values({ templateId: id, version: (last?.version ?? 0) + 1, status: "draft", ...fields, createdById: req.user!.id }).returning();
     return created;
   });
-  logAudit(req.user!.id, "notification_email.version_created", "message_template", id, { versionId: version.id }, req.ip);
+  await logAudit(req.user!.id, "notification_email.version_created", "message_template", id, { versionId: version.id }, req.ip);
   res.status(201).json({ version });
 }));
 
@@ -169,7 +169,7 @@ for (const [action, target] of [["submit", "review"], ["approve", "approved"], [
         ...(target === "approved" ? { approvedById: req.user!.id, approvedAt: new Date() } : {}) }).where(eq(emailTemplateVersionsTable.id, id)).returning();
       return updated;
     });
-    logAudit(req.user!.id, `notification_email.version_${action}`, "message_template", version.templateId, { versionId: id }, req.ip);
+    await logAudit(req.user!.id, `notification_email.version_${action}`, "message_template", version.templateId, { versionId: id }, req.ip);
     res.json({ version });
   }));
 }

@@ -110,7 +110,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/agents.ts",
-      "sha256": "900af462a2bb42645d7d06e79e2bbd764ac6e7822f2ee6b96fbfab7e95e56ac3",
+      "sha256": "0e23f5b787a0a044e3590063c06bb55e416fec64bf87ffd3492c2811470d9a6a",
       "routeRegistrations": 38,
       "requireAuth": 39,
       "requireRole": 33,
@@ -200,7 +200,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/apiTokens.ts",
-      "sha256": "dbc98f5dcca5ee3fc2639dd8da88342e0bf149692287c7015da8eaffc5e2ebf4",
+      "sha256": "ddd73f8227ee8d89ad2c597fdb92004d224afbeb3aac8e9f53752df83d8136e2",
       "routeRegistrations": 5,
       "requireAuth": 6,
       "requireRole": 5,
@@ -530,7 +530,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/emailAutomation.ts",
-      "sha256": "8ae66a41a084b9d5dda4a7819ba7c1f6b0d9c5000554712d45fc5965f1d72b94",
+      "sha256": "91ba1467098b7e0f20fb3585768772912cb58604cda9cb2b281039855bd8a544",
       "routeRegistrations": 14,
       "requireAuth": 0,
       "requireRole": 0,

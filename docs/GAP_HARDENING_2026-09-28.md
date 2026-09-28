@@ -45,6 +45,16 @@ verisi ve dış Academy alıcısı değiştirilmedi.
    - Bu temel henüz eski bütün attachment consumer'larına zorunlu consume kuralı
      getirmez; o yüzden external pilot izni açılmadı ve writer quarantine'da kaldı.
 
+5. **Legacy audit await sınırı**
+   - `logAudit` artık `setImmediate` arkasında sahte bir `await` sınırı sunmuyor;
+     gerçek insert promise'ini döndürüyor.
+   - API token create/revoke/rotate, e-posta sender/template approval, legacy
+     impersonation start/end ve Academy access değişiklikleri request bitmeden audit
+     denemesinin tamamlanmasını bekliyor.
+   - Legacy helper uyumluluk için insert hatasını hâlâ diagnostic olarak yakalıyor.
+     Bu iyileştirme, ayrı transaction-bound attempt/result receipt programının
+     yerine geçmez ve o işi tamamlanmış saymaz.
+
 ## Doğrulama
 
 - Security regression: **115/115 PASS**.
@@ -54,6 +64,7 @@ verisi ve dış Academy alıcısı değiştirilmedi.
 - Import lifecycle: **12/12 PASS**.
 - Upload grant contract: **13/13 PASS**.
 - Upload grant PostgreSQL 16.15: **12/12 PASS**.
+- Audit durability contract: **13/13 PASS**.
 - Disposable authenticated HTTP corridor: **PASS**; real login/session, CSRF,
   owner-bound grant, initial upload, exact replay, immutable conflict,
   cross-user/anonymous deny, logout, zero external delivery ve tam DB/storage cleanup.
@@ -84,9 +95,12 @@ dilimde yapılmadı.
 - Application kaydıyla finance/portal/genel notification intent'lerinin tümünü
   aynı transaction outbox'ına almak: stage email bunu yapıyor; kalan devam işleri
   dar command/worker dönüşümü ister.
-- High-impact legacy audit'lerin tamamını durable attempt/result receipt'e
-  taşımak ve 80 legacy route'un tenant/capability koridoru: kademeli migration
-  programıdır, tek global refactor değildir.
+- High-impact legacy audit'lerin tamamını aynı transaction'da durable
+  attempt/result receipt'e taşımak: kritik mevcut çağrılarda gerçek await sınırı
+  kuruldu; failure durumunda business mutation'la atomik receipt için dar command
+  migration'ları hâlâ gerekir.
+- 80 legacy route'un tenant/capability koridoru: kademeli migration programıdır,
+  tek global refactor değildir.
 - Academy/provider sandbox E2E, offsite restore/DR, iki-process cache
   invalidation ve gerçek yüksek-hacim/CWV ölçümü harici ortam/credential veya
   operasyon penceresi gerektirir; production üzerinde otomatik çalıştırılmaz.

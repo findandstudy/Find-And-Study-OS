@@ -1147,7 +1147,7 @@ router.post("/agents/me/sub-agents/:id/impersonate", requireAuth, requireRole("a
 
   const sid = await createSession(sessionData);
   res.cookie(SESSION_COOKIE, sid, getSessionCookieOptions(req, SESSION_TTL));
-  logAudit(req.user!.id, "auth.impersonate.start", "user", targetUser.id, { targetRole: targetUser.role, via: "agents/sub-agents" }, req.ip);
+  await logAudit(req.user!.id, "auth.impersonate.start", "user", targetUser.id, { targetRole: targetUser.role, via: "agents/sub-agents" }, req.ip);
   res.json({ success: true, redirectTo: "/agent" });
 });
 
@@ -1169,7 +1169,7 @@ router.post("/agents/me/return-to-agent", requireAuth, async (req, res): Promise
   res.cookie(SESSION_COOKIE, originalSid, getSessionCookieOptions(req, SESSION_TTL));
   const originalUserId = originalSession.user?.id ?? null;
   const impersonatedUserId = req.user?.id;
-  logAudit(originalUserId, "auth.impersonate.end", "user", impersonatedUserId, {}, req.ip);
+  await logAudit(originalUserId, "auth.impersonate.end", "user", impersonatedUserId, {}, req.ip);
   res.json({ success: true, redirectTo: "/" });
 });
 
@@ -1542,7 +1542,7 @@ router.patch("/agents/:id/academy-access", requireAuth, async (req, res): Promis
     res.status(403).json({ error: "Agent not in your branch scope" }); return;
   }
   await setUserAcademyAccessOverride(targetAgent.userId, parsed.data.academyAccess);
-  logAudit(actor.id, "agent.academy_access.update", "agent", agentId, { academyAccess: parsed.data.academyAccess }, req.ip);
+  await logAudit(actor.id, "agent.academy_access.update", "agent", agentId, { academyAccess: parsed.data.academyAccess }, req.ip);
   res.json({ success: true });
 });
 
@@ -2346,7 +2346,7 @@ router.post("/agents/:id/impersonate", requireAuth, async (req, res, next): Prom
 
   const sid = await createSession(sessionData);
   res.cookie(SESSION_COOKIE, sid, getSessionCookieOptions(req, SESSION_TTL));
-  logAudit(req.user!.id, "auth.impersonate.start", "user", targetUser.id, { targetRole: targetUser.role, via: "agents" }, req.ip);
+  await logAudit(req.user!.id, "auth.impersonate.start", "user", targetUser.id, { targetRole: targetUser.role, via: "agents" }, req.ip);
   res.json({ success: true, redirectTo: "/agent" });
 });
 

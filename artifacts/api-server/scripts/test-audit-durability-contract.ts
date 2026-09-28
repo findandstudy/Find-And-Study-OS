@@ -1,0 +1,29 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+
+const source = (path: string) => readFileSync(new URL(path, import.meta.url), "utf8");
+const auth = source("../src/lib/auth.ts");
+const tokens = source("../src/routes/apiTokens.ts");
+const email = source("../src/routes/emailAutomation.ts");
+const agents = source("../src/routes/agents.ts");
+
+assert.match(auth, /\): Promise<void> \{\s*return db\.insert\(auditLogsTable\)/,
+  "audit insert exposes a real awaitable completion boundary");
+assert.doesNotMatch(auth, /setImmediate\s*\(/,
+  "audit persistence is not deferred beyond the request lifecycle");
+for (const action of ["create", "revoke", "rotate"]) {
+  assert.match(tokens, new RegExp(`await logAudit\\(req\\.user!\\.id, "${action}"`),
+    `API token ${action} awaits audit persistence`);
+}
+for (const action of ["sender_created", "sender_updated", "sender_verified", "template_created", "version_created"]) {
+  assert.match(email, new RegExp(`await logAudit\\(req\\.user!\\.id, "notification_email\\.${action}"`),
+    `email ${action} awaits audit persistence`);
+}
+assert.match(email, /await logAudit\(req\.user!\.id, `notification_email\.version_\$\{action\}`/,
+  "email approval lifecycle awaits audit persistence");
+assert.equal((agents.match(/await logAudit\([^\n]+"auth\.impersonate\.(?:start|end)"/g) ?? []).length, 3,
+  "all three legacy impersonation start/end paths await audit persistence");
+assert.match(agents, /await logAudit\(actor\.id, "agent\.academy_access\.update"/,
+  "Academy privilege change awaits audit persistence");
+
+console.log("[audit-durability-contract] 13/13 PASS");
