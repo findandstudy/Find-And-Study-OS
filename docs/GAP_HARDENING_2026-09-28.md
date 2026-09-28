@@ -442,6 +442,13 @@ verisi ve dış Academy alıcısı değiştirilmedi.
   **3/3 PASS**; API typecheck **PASS**.
 - Inbox manual-document grant ve stored-byte contract **3/3 PASS**; mesaj ekiyle
   birleşik hedefli suite **6/6 PASS**.
+- Acente self-service logo ve işletme belgesi kayıtları artık yalnız object-owner
+  eşleşmesine güvenmez: provider'dan gerçek bayt/MIME yeniden okunur, dosya
+  imzası ve dar tür/boyut politikası doğrulanır; `FINALIZED → CONSUMED` grant,
+  profil referansı ve durable audit aynı DB transaction'ında yazılır. Aynı
+  finalized grant'in yeniden kullanımı `409` ile fail-closed'dur. Hedefli
+  contract **3/3 PASS**; geniş security-hardening **121 PASS, 1 Windows symlink
+  privilege SKIP**; API typecheck ve production build **PASS**.
 - Migration authority/validation: **129/129 PASS**.
 - Disposable PostgreSQL 16.15: fresh `0→129`, upload grant migration, route E2E,
   DB helper fixture cleanup: **PASS**; cluster durduruldu.

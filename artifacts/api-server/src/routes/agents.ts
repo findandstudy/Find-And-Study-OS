@@ -19,7 +19,7 @@ import {
   toAgentInsertValues,
   type AgentCatalog,
 } from "../lib/exportImportExcel";
-import { db, agentsTable, agentIntegrationsTable, usersTable, rolesTable, DEFAULT_ROLE_PERMISSIONS, getAllPermissions, commissionsTable, agentBranchesTable, branchesTable, contractTemplatesTable, signingSessionsTable, settingsTable, emailVerificationCodesTable, conversationsTable, messagesTable, broadcastsTable, messageTemplatesTable, notesTable, applicationStageDocumentsTable } from "@workspace/db";
+import { db, agentsTable, agentIntegrationsTable, usersTable, rolesTable, DEFAULT_ROLE_PERMISSIONS, getAllPermissions, commissionsTable, agentBranchesTable, branchesTable, contractTemplatesTable, signingSessionsTable, settingsTable, emailVerificationCodesTable, conversationsTable, messagesTable, broadcastsTable, messageTemplatesTable, notesTable, applicationStageDocumentsTable, auditLogsTable } from "@workspace/db";
 import { getNewestSignedContractUrl } from "../lib/signContract";
 import { eq, sql, isNull, isNotNull, and, or, ilike, inArray, desc, type SQL } from "drizzle-orm";
 import { requireAuth, requireRole, requireAgentStaffPermission, logAudit, AGENT_STAFF_PERMISSIONS as PERM_KEYS } from "../lib/auth";
@@ -41,6 +41,9 @@ import { getCurrentSeason } from "../lib/season";
 import { setAgencyStaff, getAgencyStaff, getAgencyStaffWithLegacy, getAgencyStaffMap, parseStaffInput, staffDisplayName } from "../lib/agencyStaff";
 import { validatePassword } from "../lib/passwordPolicy";
 import { callerOwnsObject, canonicalizeKey } from "../lib/objectAuthz";
+import { ObjectStorageService } from "../lib/objectStorage";
+import { validateUploadedFileBuffer } from "../lib/fileUploadValidation";
+import { consumeFinalizedUploadGrantInDrizzle } from "../lib/uploadGrant";
 import {
   isHexBrandColor,
   normalizeAgentPlan,
@@ -53,6 +56,48 @@ import { maskSecrets, mergeConfig } from "../lib/configMasking";
 import { applyPermissionOverrides } from "../lib/permissions";
 
 const router: IRouter = Router();
+const agentProfileObjectStorage = new ObjectStorageService();
+
+type PreparedAgentProfileUpload = {
+  field: "logoUrl" | "businessCertUrl";
+  objectPath: string;
+  bytes: Buffer;
+  contentType: string;
+};
+
+async function prepareAgentProfileUpload(
+  field: PreparedAgentProfileUpload["field"],
+  objectPath: string,
+): Promise<PreparedAgentProfileUpload> {
+  const objectKey = canonicalizeKey(objectPath);
+  if (!objectKey) throw new Error("AGENT_PROFILE_UPLOAD_INVALID_PATH");
+  const file = await agentProfileObjectStorage.getObjectEntityFile(`/objects/${objectKey}`);
+  const [metadata] = await file.getMetadata();
+  const contentType = String(metadata.contentType ?? "").split(";", 1)[0].trim().toLowerCase();
+  const [bytes] = await file.download();
+  const allowed = field === "logoUrl"
+    ? new Set(["image/jpeg", "image/png", "image/webp", "image/gif"])
+    : new Set(["application/pdf", "image/jpeg", "image/png", "image/webp"]);
+  if (!allowed.has(contentType)) throw new Error("AGENT_PROFILE_UPLOAD_UNSUPPORTED_TYPE");
+  const maxSize = field === "logoUrl" ? 5 * 1024 * 1024 : 10 * 1024 * 1024;
+  if (bytes.length <= 0 || bytes.length > maxSize) throw new Error("AGENT_PROFILE_UPLOAD_INVALID_SIZE");
+  const extensionByMime: Record<string, string> = {
+    "application/pdf": "pdf",
+    "image/jpeg": "jpg",
+    "image/png": "png",
+    "image/webp": "webp",
+    "image/gif": "gif",
+  };
+  // Generic object keys are UUIDs without the original extension. Use a
+  // server-derived synthetic name so signature validation compares the
+  // authoritative MIME with the matching format instead of trusting a client
+  // filename that is not persisted in the object key.
+  const fileName = `${field === "logoUrl" ? "logo" : "certificate"}.${extensionByMime[contentType]}`;
+  if (await validateUploadedFileBuffer(fileName, contentType, bytes)) {
+    throw new Error("AGENT_PROFILE_UPLOAD_SIGNATURE_MISMATCH");
+  }
+  return { field, objectPath, bytes, contentType };
+}
 
 /**
  * Generate a random login password that satisfies the password policy
@@ -666,6 +711,7 @@ router.patch("/agents/me", requireAuth, requireRole("agent", "sub_agent"), async
   if (!agent) { res.status(404).json({ error: "Agent profile not found" }); return; }
   const features = resolveAgentFeatures(agent.planTier, agent.featureOverrides);
   const updates: Record<string, unknown> = {};
+  const preparedUploads: PreparedAgentProfileUpload[] = [];
   for (const key of AGENT_SELF_PATCH_FIELDS) {
     if (req.body[key] !== undefined) {
       const val = req.body[key] || null;
@@ -676,6 +722,20 @@ router.patch("/agents/me", requireAuth, requireRole("agent", "sub_agent"), async
       if ((key === "logoUrl" || key === "businessCertUrl") && val && !(await callerOwnsObject(userId, val))) {
         res.status(403).json({ error: `The uploaded object does not belong to this account (${key})` });
         return;
+      }
+      if ((agent as Record<string, unknown>)[key] === val) continue;
+      if ((key === "logoUrl" || key === "businessCertUrl") && typeof val === "string") {
+        try {
+          preparedUploads.push(await prepareAgentProfileUpload(key, val));
+        } catch (error) {
+          const code = error instanceof Error ? error.message : "AGENT_PROFILE_UPLOAD_INVALID";
+          if (code === "AGENT_PROFILE_UPLOAD_INVALID_SIZE") {
+            res.status(413).json({ error: `Uploaded file is empty or too large (${key})`, code });
+          } else {
+            res.status(400).json({ error: `Uploaded file content is invalid (${key})`, code });
+          }
+          return;
+        }
       }
       if (key === "businessName" && val && typeof val === "string" && val.length > 200) {
         res.status(400).json({ error: "Business name too long (max 200 characters)" });
@@ -696,22 +756,48 @@ router.patch("/agents/me", requireAuth, requireRole("agent", "sub_agent"), async
     res.json(agent);
     return;
   }
-  const [updated] = await db.update(agentsTable).set(updates).where(eq(agentsTable.id, agent.id)).returning();
   const changedFields: Record<string, { from: unknown; to: unknown }> = {};
   for (const key of Object.keys(updates)) {
     const oldVal = (agent as Record<string, unknown>)[key];
     const newVal = updates[key];
     if (oldVal !== newVal) changedFields[key] = { from: oldVal ?? null, to: newVal ?? null };
   }
-  if (Object.keys(changedFields).length > 0) {
-    await writeAudit({
-      userId,
-      action: "agent_profile_field_changed",
-      resource: "agent_profile",
-      resourceId: agent.id,
-      changes: changedFields,
-      ipAddress: req.ip ?? null,
+  let updated: typeof agentsTable.$inferSelect;
+  try {
+    updated = await db.transaction(async (tx) => {
+      for (const upload of preparedUploads) {
+        if (!await consumeFinalizedUploadGrantInDrizzle(tx, {
+          objectPath: upload.objectPath,
+          uploadedBy: userId,
+          bytes: upload.bytes,
+          contentType: upload.contentType,
+        })) throw new Error("AGENT_PROFILE_UPLOAD_GRANT_NOT_FINALIZED");
+      }
+      const [saved] = await tx.update(agentsTable)
+        .set(updates)
+        .where(eq(agentsTable.id, agent.id))
+        .returning();
+      await tx.insert(auditLogsTable).values({
+        userId,
+        action: "agent_profile_field_changed",
+        resource: "agent_profile",
+        resourceId: agent.id,
+        changes: JSON.stringify(changedFields),
+        ipAddress: req.ip ?? null,
+      });
+      return saved;
     });
+  } catch (error) {
+    if (error instanceof Error && error.message === "AGENT_PROFILE_UPLOAD_GRANT_NOT_FINALIZED") {
+      res.status(409).json({
+        error: "Uploaded file is not finalized or has already been used",
+        code: "UPLOAD_GRANT_NOT_FINALIZED",
+      });
+      return;
+    }
+    throw error;
+  }
+  if (Object.keys(changedFields).length > 0) {
     try {
       const agentName = `${agent.firstName ?? ""} ${agent.lastName ?? ""}`.trim() || agent.companyName || `Agent #${agent.id}`;
       await dispatchAgentProfileChangedNotif({
