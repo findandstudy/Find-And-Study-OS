@@ -5,12 +5,15 @@ import {
   universitiesTable,
   destinationsTable,
   usersTable,
+  auditLogsTable,
   getUniversityContractStatus,
   type UniversityContractStatus,
 } from "@workspace/db";
 import { and, eq, ilike, isNull, isNotNull, desc, lt, lte, gt, gte, or, type SQL } from "drizzle-orm";
 import { requireAuth, requirePermission } from "../lib/auth";
 import { writeAudit } from "../lib/auditLog";
+import { consumeFinalizedUploadGrantInDrizzle } from "../lib/uploadGrant";
+import { prepareOwnedStoredContract } from "../lib/storedContractUpload";
 
 const router: IRouter = Router();
 
@@ -232,37 +235,40 @@ router.post("/university-contracts", requireAuth, requirePermission("university_
 
     const fileObjectKey = sanitizeUploadedKey(body.fileObjectKey);
     if (fileObjectKey) validateContractFile(body.fileMime, body.fileName);
+    const actorUserId = req.user!.id;
+    const preparedFile = fileObjectKey ? await prepareOwnedStoredContract(actorUserId, fileObjectKey) : null;
 
     const assignedUserIds = parseAssignedUserIds(body.assignedUserIds) ?? [];
 
-    const [row] = await db.insert(universityContractsTable).values({
-      universityId,
-      destinationId,
-      country: uni.country,
-      year: Number.isInteger(year as number) ? (year as number) : null,
-      effectiveDate,
-      expiryDate,
-      fileObjectKey,
-      fileName: body.fileName ? String(body.fileName).slice(0, 500) : null,
-      fileMime: body.fileMime ? String(body.fileMime).slice(0, 200) : null,
-      fileSize: Number.isInteger(body.fileSize) ? body.fileSize : null,
-      notes: body.notes ? String(body.notes).slice(0, 5000) : null,
-      uploadedByUserId: (req as any).user?.id ?? null,
-      assignedUserIds,
-    }).returning();
-
-    await writeAudit({
-      userId: (req as any).user?.id ?? null,
-      action: "university_contract.created",
-      resource: "university_contract",
-      resourceId: row.id,
-      changes: { universityId, country: uni.country, expiryDate: expiryDate?.toISOString() },
-      ipAddress: req.ip,
+    const row = await db.transaction(async (tx) => {
+      if (preparedFile && !await consumeFinalizedUploadGrantInDrizzle(tx, {
+        ...preparedFile, uploadedBy: actorUserId,
+      })) throw new Error("CONTRACT_UPLOAD_GRANT_NOT_FINALIZED");
+      const [created] = await tx.insert(universityContractsTable).values({
+        universityId, destinationId, country: uni.country,
+        year: Number.isInteger(year as number) ? (year as number) : null,
+        effectiveDate, expiryDate, fileObjectKey,
+        fileName: body.fileName ? String(body.fileName).slice(0, 500) : null,
+        fileMime: preparedFile?.contentType ?? (body.fileMime ? String(body.fileMime).slice(0, 200) : null),
+        fileSize: preparedFile?.bytes.length ?? (Number.isInteger(body.fileSize) ? body.fileSize : null),
+        notes: body.notes ? String(body.notes).slice(0, 5000) : null,
+        uploadedByUserId: actorUserId, assignedUserIds,
+      }).returning();
+      await tx.insert(auditLogsTable).values({
+        userId: actorUserId, action: "university_contract.created", resource: "university_contract",
+        resourceId: created.id,
+        changes: JSON.stringify({ universityId, country: uni.country, expiryDate: expiryDate?.toISOString(), fileUploaded: Boolean(preparedFile) }),
+        ipAddress: req.ip ?? null,
+      });
+      return created;
     });
 
     res.status(201).json({ data: enrichRow(row) });
   } catch (err) {
     if (err instanceof InvalidInputError) { res.status(400).json({ error: err.message }); return; }
+    if (err instanceof Error && err.message === "CONTRACT_UPLOAD_NOT_OWNED") { res.status(403).json({ error: "Uploaded contract does not belong to this account" }); return; }
+    if (err instanceof Error && err.message === "CONTRACT_UPLOAD_GRANT_NOT_FINALIZED") { res.status(409).json({ error: "Uploaded contract is not finalized or has already been used", code: "UPLOAD_GRANT_NOT_FINALIZED" }); return; }
+    if (err instanceof Error && err.message.startsWith("CONTRACT_UPLOAD_")) { res.status(err.message === "CONTRACT_UPLOAD_INVALID_SIZE" ? 413 : 400).json({ error: "Uploaded contract content is invalid", code: err.message }); return; }
     console.error("[university-contracts] create:", err);
     res.status(500).json({ error: "Failed to create contract" });
   }
@@ -317,6 +323,12 @@ router.patch("/university-contracts/:id", requireAuth, requirePermission("univer
       updates.fileMime = body.fileMime ? String(body.fileMime).slice(0, 200) : null;
       updates.fileSize = Number.isInteger(body.fileSize) ? body.fileSize : null;
     }
+    if (updates.fileObjectKey === existing.fileObjectKey) {
+      delete updates.fileObjectKey;
+      delete updates.fileName;
+      delete updates.fileMime;
+      delete updates.fileSize;
+    }
 
     const assignedUserIds = parseAssignedUserIds(body.assignedUserIds);
     if (assignedUserIds !== undefined) updates.assignedUserIds = assignedUserIds;
@@ -331,21 +343,32 @@ router.patch("/university-contracts/:id", requireAuth, requirePermission("univer
 
     if (Object.keys(updates).length === 0) { res.status(400).json({ error: "No fields to update" }); return; }
 
-    const [row] = await db.update(universityContractsTable).set(updates)
-      .where(eq(universityContractsTable.id, id)).returning();
-
-    await writeAudit({
-      userId: (req as any).user?.id ?? null,
-      action: "university_contract.updated",
-      resource: "university_contract",
-      resourceId: id,
-      changes: updates as object,
-      ipAddress: req.ip,
+    const actorUserId = req.user!.id;
+    const nextFileKey = typeof updates.fileObjectKey === "string" ? updates.fileObjectKey : null;
+    const preparedFile = nextFileKey ? await prepareOwnedStoredContract(actorUserId, nextFileKey) : null;
+    if (preparedFile) {
+      updates.fileMime = preparedFile.contentType;
+      updates.fileSize = preparedFile.bytes.length;
+    }
+    const row = await db.transaction(async (tx) => {
+      if (preparedFile && !await consumeFinalizedUploadGrantInDrizzle(tx, {
+        ...preparedFile, uploadedBy: actorUserId,
+      })) throw new Error("CONTRACT_UPLOAD_GRANT_NOT_FINALIZED");
+      const [saved] = await tx.update(universityContractsTable).set(updates)
+        .where(eq(universityContractsTable.id, id)).returning();
+      await tx.insert(auditLogsTable).values({
+        userId: actorUserId, action: "university_contract.updated", resource: "university_contract",
+        resourceId: id, changes: JSON.stringify({ changedFields: Object.keys(updates) }), ipAddress: req.ip ?? null,
+      });
+      return saved;
     });
 
     res.json({ data: enrichRow(row) });
   } catch (err) {
     if (err instanceof InvalidInputError) { res.status(400).json({ error: err.message }); return; }
+    if (err instanceof Error && err.message === "CONTRACT_UPLOAD_NOT_OWNED") { res.status(403).json({ error: "Uploaded contract does not belong to this account" }); return; }
+    if (err instanceof Error && err.message === "CONTRACT_UPLOAD_GRANT_NOT_FINALIZED") { res.status(409).json({ error: "Uploaded contract is not finalized or has already been used", code: "UPLOAD_GRANT_NOT_FINALIZED" }); return; }
+    if (err instanceof Error && err.message.startsWith("CONTRACT_UPLOAD_")) { res.status(err.message === "CONTRACT_UPLOAD_INVALID_SIZE" ? 413 : 400).json({ error: "Uploaded contract content is invalid", code: err.message }); return; }
     console.error("[university-contracts] update:", err);
     res.status(500).json({ error: "Failed to update contract" });
   }

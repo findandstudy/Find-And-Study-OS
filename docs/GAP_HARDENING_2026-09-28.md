@@ -493,6 +493,11 @@ verisi ve dış Academy alıcısı değiştirilmedi.
   user'ı, alt-acente profili ve audit tek transaction'da yazılıyor. Böylece
   yarım kullanıcı/profil veya tekrar kullanılan logo grantı kalmıyor. Acente
   upload contract'ı **7/7 PASS**, API typecheck **PASS**.
+- Şirket ve üniversite sözleşme dosyaları artık istemcinin dosya adı/MIME/boyut
+  beyanına güvenmiyor. Uploader ownership, provider'daki gerçek byte/MIME,
+  PDF/DOC/DOCX imzası ve 25 MB sınırı doğrulanıyor; grant tüketimi, sözleşme
+  create/update ve bounded audit aynı transaction içinde. Aynı dosya referanslı
+  retry grant tüketmiyor. Hedefli contract **3/3 PASS**, API typecheck **PASS**.
 - Migration authority/validation: **129/129 PASS**.
 - Disposable PostgreSQL 16.15: fresh `0→129`, upload grant migration, route E2E,
   DB helper fixture cleanup: **PASS**; cluster durduruldu.
