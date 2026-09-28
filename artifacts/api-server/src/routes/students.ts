@@ -42,7 +42,7 @@ import { validatePassportNumber } from "@workspace/portal-adapters/identity-vali
 import { validateStudentCreateFields } from "../lib/studentCreateValidation";
 import { recordRequestSpan } from "../lib/requestTelemetry";
 import { buildFacetFilterInput, loadFacetValue } from "../lib/facetCache";
-import { getStudentPhotoThumbnail } from "../lib/studentPhotoThumbnail";
+import { getStudentPhotoThumbnail, studentPhotoThumbnailResponsePolicy } from "../lib/studentPhotoThumbnail";
 import { studentHasServablePhotoSql } from "../lib/studentPhoto";
 import { buildStudentJourneyProjection } from "../lib/studentJourneyProjection";
 import { isStudentJourneyEnabled } from "../lib/studentJourneyFeature";
@@ -415,21 +415,22 @@ router.get("/students/:id/photo/thumbnail", photoAccessGuard, async (req, res): 
     res.status(404).json({ error: "No photo" }); return;
   }
 
-  const etag = `\"student-photo-thumb-${photoDoc.id}\"`;
-  if (req.headers["if-none-match"] === etag) {
-    res.status(304).end();
-    return;
-  }
   try {
     const thumbnail = await getStudentPhotoThumbnail(
       `${photoDoc.id}:${photoDoc.createdAt?.getTime() || 0}`,
       photoDoc,
       `${photoDoc.firstName} ${photoDoc.lastName}`,
     );
+    const policy = studentPhotoThumbnailResponsePolicy(thumbnail, req.headers["if-none-match"]);
+    res.setHeader("Cache-Control", policy.cacheControl);
+    if (policy.etag) res.setHeader("ETag", policy.etag);
+    else res.removeHeader("ETag");
+    if (policy.notModified) {
+      res.status(304).end();
+      return;
+    }
     res.setHeader("Content-Type", "image/jpeg");
     res.setHeader("Content-Length", String(thumbnail.buffer.length));
-    res.setHeader("Cache-Control", "private, max-age=300");
-    res.setHeader("ETag", etag);
     res.setHeader("X-Thumbnail-Cache", thumbnail.cacheStatus);
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.end(thumbnail.buffer);

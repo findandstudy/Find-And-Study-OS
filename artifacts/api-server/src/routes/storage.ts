@@ -1,6 +1,5 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import { z } from "zod";
-import * as fsPromises from "node:fs/promises";
 import * as nodePath from "node:path";
 import { ObjectStorageService, ObjectNotFoundError } from "../lib/objectStorage";
 import { requireAuth } from "../lib/auth";
@@ -13,6 +12,13 @@ import {
 import { checkAndIncrementRateLimit } from "../lib/pgRateLimiter";
 import { validateApplicationDocumentFile, validateUploadedFile } from "../lib/fileUploadValidation";
 import { processUpload, UploadTooLargeError } from "../lib/uploads/processUpload";
+import {
+  isValidLocalUploadPath,
+  LocalUploadBusyError,
+  LocalUploadConflictError,
+  publishLocalUpload,
+  UnsafeLocalUploadPathError,
+} from "../lib/localUploadPublication";
 import {
   socialMediaSyntheticFileName,
   validateSocialMediaBuffer,
@@ -89,6 +95,14 @@ router.post("/storage/uploads/request-url", requireAuth, async (req: Request, re
 
   try {
     const { name, size, contentType, prefix } = parsed.data;
+
+    // Refuse local aliases/reserved staging paths before issuing an ownership
+    // grant for a URL that the local PUT handler would necessarily reject.
+    if (process.env.STORAGE_DRIVER === "local" && prefix
+      && !isValidLocalUploadPath(prefix.replace(/\/$/, ""))) {
+      res.status(400).json({ error: "Invalid upload prefix" });
+      return;
+    }
 
     // Provisional applicants only need storage for the contract/onboarding
     // evidence shown in their limited portal. Do not let the generic upload
@@ -222,7 +236,7 @@ router.put("/storage/local-upload/:encoded", requireAuth, async (req: Request, r
     return;
   }
 
-  if (relPath.includes("..") || relPath.includes("\\") || relPath.startsWith("/")) {
+  if (!isValidLocalUploadPath(relPath)) {
     res.status(400).json({ error: "Invalid path" });
     return;
   }
@@ -235,14 +249,6 @@ router.put("/storage/local-upload/:encoded", requireAuth, async (req: Request, r
   const localDir = process.env.STORAGE_LOCAL_DIR ?? "";
   if (!localDir) {
     res.status(500).json({ error: "STORAGE_LOCAL_DIR not configured" });
-    return;
-  }
-
-  const localPath = nodePath.join(localDir, relPath);
-
-  // Guard against path traversal after join
-  if (!localPath.startsWith(localDir + nodePath.sep) && localPath !== localDir) {
-    res.status(400).json({ error: "Invalid path" });
     return;
   }
 
@@ -263,8 +269,6 @@ router.put("/storage/local-upload/:encoded", requireAuth, async (req: Request, r
   }
 
   try {
-    await fsPromises.mkdir(nodePath.dirname(localPath), { recursive: true });
-
     const chunks: Buffer[] = [];
     let receivedBytes = 0;
     for await (const chunk of req) {
@@ -328,11 +332,23 @@ router.put("/storage/local-upload/:encoded", requireAuth, async (req: Request, r
       }
     }
 
-    await fsPromises.writeFile(localPath, body);
-    await fsPromises.writeFile(`${localPath}.ct`, finalContentType);
+    await publishLocalUpload({ root: localDir, relativePath: relPath, body, contentType: finalContentType });
 
     res.status(200).json({ ok: true });
   } catch (error) {
+    if (error instanceof LocalUploadBusyError) {
+      res.setHeader("Retry-After", "1");
+      res.status(503).json({ error: "Upload is in progress; retry shortly" });
+      return;
+    }
+    if (error instanceof LocalUploadConflictError) {
+      res.status(409).json({ error: "Upload target already exists; request a new upload URL" });
+      return;
+    }
+    if (error instanceof UnsafeLocalUploadPathError) {
+      res.status(400).json({ error: "Invalid upload target" });
+      return;
+    }
     console.error("[local-upload] write failed:", error);
     res.status(500).json({ error: "Failed to store file" });
   }

@@ -193,6 +193,20 @@ export class ObjectNotFoundError extends Error {
   }
 }
 
+export class ObjectReadCancellationUnavailableError extends Error {
+  constructor() {
+    super("Bounded object reads are not supported by this storage driver");
+    this.name = "ObjectReadCancellationUnavailableError";
+  }
+}
+
+/** A local object can disappear between path resolution and stream opening.
+ * Never reinterpret permission/provider failures as an absent object. */
+export function normalizeObjectReadError(error: unknown): unknown {
+  const code = (error as { code?: unknown } | null)?.code;
+  return code === 404 || code === "ENOENT" ? new ObjectNotFoundError() : error;
+}
+
 export class InvalidObjectRangeError extends Error {
   constructor(public readonly size: number) {
     super("Requested range is not satisfiable");
@@ -580,7 +594,10 @@ export class ObjectStorageService {
 
   // ── getObjectEntityFile ───────────────────────────────────────────────────
 
-  async getObjectEntityFile(objectPath: string): Promise<ObjectFileHandle> {
+  async getObjectEntityFile(
+    objectPath: string,
+    options?: { requireCancellableRead?: boolean },
+  ): Promise<ObjectFileHandle> {
     if (!objectPath.startsWith("/objects/")) {
       throw new ObjectNotFoundError();
     }
@@ -591,6 +608,13 @@ export class ObjectStorageService {
       const localFile = new LocalStorageFile(localPath, relPath);
       return localFile;
     }
+
+    // The installed GCS SDK can close its returned stream while a pre-response
+    // auth/request remains live. Bounded consumers must fail BEFORE any SDK or
+    // metadata request, rather than release their admission slot prematurely.
+    // Restore this capability only with a verified cancellation adapter. Default
+    // document/download callers deliberately retain their existing GCS contract.
+    if (options?.requireCancellableRead) throw new ObjectReadCancellationUnavailableError();
 
     const parts = objectPath.slice(1).split("/");
     if (parts.length < 2) throw new ObjectNotFoundError();

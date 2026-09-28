@@ -1,17 +1,34 @@
 import { execFile } from "node:child_process";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { createReadStream } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import sharp from "sharp";
 import { loadDocumentBytes, type DocBytesSource } from "./documentBytes";
+import { readBoundedDocumentStream } from "./documentByteLimits";
+import { createThumbnailAdmission } from "./studentPhotoThumbnailAdmission";
 
 const THUMBNAIL_SIZE = 128;
 const CACHE_TTL_MS = 6 * 60 * 60_000;
 const MAX_CACHE_BYTES = 32 * 1024 * 1024;
 const MAX_RENDERABLE_PDF_BYTES = 25 * 1024 * 1024;
-const MAX_PDF_RENDER_CONCURRENCY = 2;
+const MAX_SOURCE_BYTES = MAX_RENDERABLE_PDF_BYTES;
+const MAX_INPUT_PIXELS = 16_000_000;
+const MAX_RENDERED_BYTES = 1024 * 1024;
+const SOURCE_READ_TIMEOUT_MS = 10_000;
+const thumbnailAdmission = createThumbnailAdmission({
+  maxActive: 2,
+  maxQueued: 8,
+  maxReservedBytes: 2 * MAX_SOURCE_BYTES,
+  queueTimeoutMs: 5_000,
+});
 const execFileAsync = promisify(execFile);
+
+// Fixed 128px JPEG for admission failures: no further image jobs, user data or
+// unbounded per-label fallback work can be created when the queue is already full.
+const OVERLOAD_PLACEHOLDER = Buffer.from("/9j/2wBDAAcFBQYFBAcGBgYIBwcICxILCwoKCxYPEA0SGhYbGhkWGRgcICgiHB4mHhgZIzAkJiorLS4tGyIyNTEsNSgsLSz/2wBDAQcICAsJCxULCxUsHRkdLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCz/wAARCACAAIADASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAf/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFgEBAQEAAAAAAAAAAAAAAAAAAAME/8QAFBEBAAAAAAAAAAAAAAAAAAAAAP/aAAwDAQACEQMRAD8AvwDSkAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA//9k=", "base64");
 
 interface ThumbnailEntry {
   buffer: Buffer;
@@ -19,23 +36,9 @@ interface ThumbnailEntry {
 }
 
 const cache = new Map<string, ThumbnailEntry>();
-const inFlight = new Map<string, Promise<Buffer>>();
+type ThumbnailResult = { buffer: Buffer; cacheable: boolean };
+const inFlight = new Map<string, Promise<ThumbnailResult>>();
 let cacheBytes = 0;
-let activePdfRenders = 0;
-const pdfRenderWaiters: Array<() => void> = [];
-
-async function withPdfRenderSlot<T>(operation: () => Promise<T>): Promise<T> {
-  if (activePdfRenders >= MAX_PDF_RENDER_CONCURRENCY) {
-    await new Promise<void>(resolve => pdfRenderWaiters.push(resolve));
-  }
-  activePdfRenders += 1;
-  try {
-    return await operation();
-  } finally {
-    activePdfRenders -= 1;
-    pdfRenderWaiters.shift()?.();
-  }
-}
 
 function safeInitials(label: string): string {
   const parts = label.trim().split(/\s+/).filter(Boolean);
@@ -51,7 +54,8 @@ async function placeholderThumbnail(label: string): Promise<Buffer> {
         font-family="Arial, sans-serif" font-size="38" font-weight="700" fill="#173b92">${initials}</text>
     </svg>
   `);
-  return sharp(svg).jpeg({ quality: 78, mozjpeg: true }).toBuffer();
+  return sharp(svg, { limitInputPixels: MAX_INPUT_PIXELS }).timeout({ seconds: 5 })
+    .jpeg({ quality: 78, mozjpeg: true }).toBuffer();
 }
 
 function isPdf(buffer: Buffer, declaredMimeType: string): boolean {
@@ -62,53 +66,58 @@ function isPdf(buffer: Buffer, declaredMimeType: string): boolean {
 async function renderPdfFirstPage(buffer: Buffer): Promise<Buffer | null> {
   if (buffer.length === 0 || buffer.length > MAX_RENDERABLE_PDF_BYTES) return null;
 
-  return withPdfRenderSlot(async () => {
-    const tempDirectory = await mkdtemp(join(tmpdir(), "fas-student-photo-"));
-    const pdfPath = join(tempDirectory, "source.pdf");
-    const outputBase = join(tempDirectory, "page");
-    const outputPath = `${outputBase}.jpg`;
+  // The outer admission slot covers download, both renderers, decode and cleanup.
+  const tempDirectory = await mkdtemp(join(tmpdir(), "fas-student-photo-"));
+  const pdfPath = join(tempDirectory, "source.pdf");
+  const outputBase = join(tempDirectory, "page");
+  const outputPath = `${outputBase}.jpg`;
+  try {
+    await writeFile(pdfPath, buffer);
+    let rendered = false;
     try {
-      await writeFile(pdfPath, buffer);
-      let rendered = false;
+      await execFileAsync(
+        "pdftoppm",
+        ["-jpeg", "-f", "1", "-l", "1", "-scale-to", "512", "-singlefile", pdfPath, outputBase],
+        { timeout: 20_000, killSignal: "SIGKILL", maxBuffer: 1024 * 1024 },
+      );
+      rendered = true;
+    } catch {
       try {
         await execFileAsync(
-          "pdftoppm",
-          ["-jpeg", "-f", "1", "-l", "1", "-scale-to", "512", "-singlefile", pdfPath, outputBase],
-          { timeout: 20_000, maxBuffer: 1024 * 1024 },
+          "gs",
+          [
+            "-dSAFER",
+            "-dBATCH",
+            "-dNOPAUSE",
+            "-dFirstPage=1",
+            "-dLastPage=1",
+            "-dFIXEDMEDIA",
+            "-dPDFFitPage",
+            "-sDEVICE=jpeg",
+            "-r96",
+            "-g512x512",
+            `-sOutputFile=${outputPath}`,
+            pdfPath,
+          ],
+          { timeout: 20_000, killSignal: "SIGKILL", maxBuffer: 1024 * 1024 },
         );
         rendered = true;
       } catch {
-        try {
-          await execFileAsync(
-            "gs",
-            [
-              "-dSAFER",
-              "-dBATCH",
-              "-dNOPAUSE",
-              "-dFirstPage=1",
-              "-dLastPage=1",
-              "-sDEVICE=jpeg",
-              "-r96",
-              `-sOutputFile=${outputPath}`,
-              pdfPath,
-            ],
-            { timeout: 20_000, maxBuffer: 1024 * 1024 },
-          );
-          rendered = true;
-        } catch {
-          // A missing/failed renderer is not fatal. The caller returns initials.
-        }
+        // A missing/failed renderer is not fatal. The caller returns initials.
       }
-      if (!rendered) return null;
-      return await readFile(outputPath);
-    } finally {
-      await rm(tempDirectory, { recursive: true, force: true });
     }
-  });
+    if (!rendered) return null;
+    return await readBoundedDocumentStream(createReadStream(outputPath, { end: MAX_RENDERED_BYTES }), {
+      maxBytes: MAX_RENDERED_BYTES, readTimeoutMs: SOURCE_READ_TIMEOUT_MS,
+    });
+  } finally {
+    await rm(tempDirectory, { recursive: true, force: true });
+  }
 }
 
 async function normalizeThumbnail(buffer: Buffer): Promise<Buffer> {
-  return sharp(buffer, { failOn: "warning" })
+  return sharp(buffer, { failOn: "warning", limitInputPixels: MAX_INPUT_PIXELS, pages: 1, animated: false })
+    .timeout({ seconds: 5 })
     .rotate()
     .resize(THUMBNAIL_SIZE, THUMBNAIL_SIZE, {
       fit: "cover",
@@ -119,19 +128,22 @@ async function normalizeThumbnail(buffer: Buffer): Promise<Buffer> {
     .toBuffer();
 }
 
-async function createThumbnail(source: DocBytesSource, fallbackLabel: string): Promise<Buffer> {
-  const loaded = await loadDocumentBytes(source);
-  if (!loaded) return placeholderThumbnail(fallbackLabel);
+async function createThumbnail(source: DocBytesSource, fallbackLabel: string): Promise<ThumbnailResult> {
   try {
-    if (isPdf(loaded.buffer, loaded.mimeType)) {
-      const firstPage = await renderPdfFirstPage(loaded.buffer);
-      return firstPage
-        ? await normalizeThumbnail(firstPage)
-        : await placeholderThumbnail(fallbackLabel);
-    }
-    return await normalizeThumbnail(loaded.buffer);
+    return await thumbnailAdmission.run(MAX_SOURCE_BYTES, async () => {
+      try {
+        const loaded = await loadDocumentBytes(source, { maxBytes: MAX_SOURCE_BYTES, readTimeoutMs: SOURCE_READ_TIMEOUT_MS });
+        if (loaded) {
+          const image = isPdf(loaded.buffer, loaded.mimeType) ? await renderPdfFirstPage(loaded.buffer) : loaded.buffer;
+          if (image) return { buffer: await normalizeThumbnail(image), cacheable: true };
+        }
+      } catch {
+        // Invalid/oversize/timed-out inputs are never rendered outside admission.
+      }
+      return { buffer: await placeholderThumbnail(fallbackLabel), cacheable: false };
+    });
   } catch {
-    return placeholderThumbnail(fallbackLabel);
+    return { buffer: OVERLOAD_PLACEHOLDER, cacheable: false };
   }
 }
 
@@ -151,12 +163,12 @@ export async function getStudentPhotoThumbnail(
   cacheKey: string,
   source: DocBytesSource,
   fallbackLabel: string,
-): Promise<{ buffer: Buffer; cacheStatus: "hit" | "miss" | "coalesced" }> {
+): Promise<{ buffer: Buffer; cacheStatus: "hit" | "miss" | "coalesced"; cacheable: boolean }> {
   const cached = cache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) {
     cache.delete(cacheKey);
     cache.set(cacheKey, cached);
-    return { buffer: cached.buffer, cacheStatus: "hit" };
+    return { buffer: cached.buffer, cacheStatus: "hit", cacheable: true };
   }
   if (cached) {
     cacheBytes -= cached.buffer.length;
@@ -164,17 +176,29 @@ export async function getStudentPhotoThumbnail(
   }
 
   const active = inFlight.get(cacheKey);
-  if (active) return { buffer: await active, cacheStatus: "coalesced" };
+  if (active) return { ...await active, cacheStatus: "coalesced" };
 
   const pending = createThumbnail(source, fallbackLabel);
   inFlight.set(cacheKey, pending);
   try {
-    const buffer = await pending;
-    store(cacheKey, buffer);
-    return { buffer, cacheStatus: "miss" };
+    const { buffer, cacheable } = await pending;
+    // Queue/decoder failures must not poison the six-hour success cache.
+    if (cacheable) store(cacheKey, buffer);
+    return { buffer, cacheStatus: "miss", cacheable };
   } finally {
     inFlight.delete(cacheKey);
   }
+}
+
+/** Evaluate only after authorization and a successful render/cache lookup. */
+export function studentPhotoThumbnailResponsePolicy(thumbnail: ThumbnailResult, ifNoneMatch: string | string[] | undefined): {
+  cacheControl: string; etag: string | null; notModified: boolean;
+} {
+  if (!thumbnail.cacheable) return { cacheControl: "private, no-store", etag: null, notModified: false };
+  // Old document-id-only validators may refer to a cached error placeholder.
+  // A successful representation gets its own opaque validator instead.
+  const etag = `"student-photo-thumb-v2-${createHash("sha256").update(thumbnail.buffer).digest("hex")}"`;
+  return { cacheControl: "private, max-age=300", etag, notModified: ifNoneMatch === etag };
 }
 
 export function clearStudentPhotoThumbnailCacheForTests(): void {

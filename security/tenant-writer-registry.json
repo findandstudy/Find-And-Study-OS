@@ -13,6 +13,15 @@
   },
   "files": [
     {
+      "path": "artifacts/api-server/src/lib/localUploadPublication.ts",
+      "ownership": "tenant_owned",
+      "enforcement": "quarantine_required",
+      "risk": "high",
+      "owner": "Platform Engineering",
+      "externalPilot": "quarantine",
+      "note": "Immutable local PUT publication after route ownership validation. Exact-byte/MIME retry is a no-op; changed content conflicts. Cross-process lock and exclusive publication do not authorize a tenant pilot or replace scoped upload grants."
+    },
+    {
       "path": "artifacts/api-server/src/lib/notifications/stageEmailAutomation.ts",
       "ownership": "external_integration",
       "enforcement": "quarantine_required",

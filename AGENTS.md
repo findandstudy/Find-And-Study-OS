@@ -632,3 +632,84 @@ allowlist sıfırdır. Commit/push, staging/production deploy, gerçek SMTP
 doğrulaması/gönderimi veya runtime aktivasyonu yapılmadı. Staging UAT ve
 kontrollü sağlayıcı pilotu ayrı kapıdır. Operasyon/rollback ve dosya envanteri:
 `docs/PIPELINE_EMAIL_AUTOMATION_2026-09-21.md`.
+
+## 23 Eylül 2026 — Yerel güvenlik/performance hardening (deploy edilmedi)
+
+Kullanıcının “işleri yapmaya devam et” onayıyla
+`codex/public-detail-staging-20260919` branch'inde `c2b872ab…` tabanı üzerindeki
+çalışma ağacında sharp 0.35.4 / nodemailer 9.1.1, explicit-off dış entegrasyon
+politikası ve Academy handoff engeli, immutable local PUT yayıncısı, Course
+Finder tek retry owner + 30s read bütçesi ve sınırlı thumbnail/başarıya bağlı
+HTTP cache uygulandı. Mevcut yazmalı staging workflow UAT helper'ı run girişinde
+ve Session ağ sınırında fail-closed karantinaya alındı; env opt-in açamaz.
+
+Son birleşik yerel gruplar 338 PASS / 1 Windows file-symlink SKIP / 0 FAIL;
+API/Edcons ve library typecheck, yerel build, 23 locale i18n, sitemap/bundle ve
+normal writer/route inventory PASS. pnpm production graph audit 641 dependency
+üzerinde 0 bilinen advisory; bu çalışan image/pentest veya production readiness
+kanıtı değildir. External pilot allowlist sıfır ve legacy quarantine korunur.
+
+Önemli sınır: GCS SDK pre-response stream iptali gerçek upstream iptalini
+kanıtlamadığından yalnız bounded thumbnail yolu ağ başlamadan unsupported
+placeholder verir; normal GCS download contract'ı korunur. GCS thumbnail adapter,
+upload grant expiry/consume, PDF processing retry determinizmi, Linux fsync/
+symlink, güvenli disposable E2E, replay/receiver koordinasyonu, load/CWV ve DR
+açıktır. Source reservation process-RSS hard cap değildir. Crash sonrası local
+upload lock otomatik çalınmaz. Commit/push/deploy, DB/migration, staging/
+production/provider/runtime ayarı değiştirilmedi. Kanonik kapsam/dosya/test ve
+backlog: `docs/SECURITY_PERFORMANCE_HARDENING_2026-09-23.md`.
+
+## 28 Eylül 2026 — Güvenlik öncelikli yerel devam (deploy edilmedi)
+
+Kullanıcının “başla” onayıyla aynı feature branch'in commit edilmemiş çalışma
+ağacında dosya sahipliği kontrolü I/O öncesine taşındı; public acente upload'u
+mevcut immutable publisher'a bağlandı ve Academy production receiver token'ı
+canonical production base URL/ortam sınırıyla korundu. Ayrı process testinde
+bulunan EEXIST sonrası lock kaldırma yarışı retryable Busy ile düzeltildi;
+kilit çalma veya symlink/non-directory gevşetmesi yoktur. Mevcut CSRF middleware
+aynı davranış/sırayla ayrı dosyaya alınarak gerçek auth/storage HTTP testinde
+yeniden kullanıldı. Auth ürün davranışı veya receiver contract'ı değiştirilmedi.
+
+Son birleşik API grubu 256 PASS / 1 Windows file-symlink SKIP / 0 FAIL;
+Linux gate/staging quarantine/package-manager/public CI saf grubu 36 PASS.
+Disposable PostgreSQL 16.15 üzerinde mevcut ledger 126/126 fresh PASS; yalnız
+127.0.0.1:5433/fasos_apply_local ve göreve özel yeni cluster kullanıldı. Dar
+auth/storage HTTP testi iki kez PASS: owner/anon erişimi, immutable yükleme,
+CSRF ve logout sonrası eski cookie replay 401 doğrulandı. Tek rollback-only
+fas_app bağlantısı kullanıldı; bütün public tablo sayıları geri döndü,
+users/object_owners/sessions/diğer client sayıları 0/0/0/0. Sequence geri sarma
+iddiası yoktur. Fixture storage temizlendi, yalnız göreve ait cluster durduruldu;
+cluster dosyaları tutuldu. Tam browser/global bootstrap/pool concurrency testi
+değildir. Typecheck/API yerel build ve normal writer/route inventory PASS;
+641 dependency audit 0 bilinen advisory; external pilot allowlist sıfırdır.
+
+Gerçek Linux kapısı BLOCKED: Docker daemon hazır değil; host/service değişikliği
+yapılmadı. Hazır Linux ortamı için beş suite/minimum 61 assertion'lı fail-closed
+runner eklendi; saf test başarısı gerçek Linux başarısı değildir. Tam app import'unun
+eager notification seed ve LISTEN/reconnect yan etkileri izole testte bulundu;
+bu mimari borç ayrı lifecycle/teardown işi olarak açıktır. General upload grant
+expiry/consume, cloud upload/thumbnail, webhook replay, Academy receiver tarafı,
+full E2E/load/CWV/DR kapıları tamamlanmadı. Staging/production/VPS/provider,
+mevcut DB/PII, commit/push/merge/deploy değiştirilmedi. Kanıt, dosya envanteri,
+rollout koşulları ve açık işler: `docs/SECURITY_DISPOSABLE_E2E_2026-09-28.md`.
+
+## 28 Eylül 2026 — Student Register öncesi katalog eşleştirme (deploy edilmedi)
+
+Kullanıcının ApplyBoard referans metnini uygulama onayıyla mevcut Student Register,
+Catalog, Course Finder ve auth akışları genişletildi. Kayıt öncesinde uyruk,
+eğitim seviyesi, hedef seviye, not ve dil beyanı alınır; aktif/açık katalogdan
+açıklanabilir destinasyon/program önerileri gösterilir. Bilinmeyen veya evidence'i
+eksik/süresi dolmuş kabul kuralı uygun sayılmaz, `review_required` olur; not
+dönüşümü ve runtime AI yoktur. Üniversite genel kuralları program override'ı
+yoksa miras alınır. Seçilen program kayıt anında yeniden kontrol edilir; yeni
+kullanıcı, beyan profili ve doğrulama kodu tek transaction'da yazılır.
+
+Additive `0126_student_registration_matching.sql` ve journal 127/127, göreve özel
+disposable PostgreSQL 16.15 fresh migration 127/127 PASS. Workspace/API typecheck,
+API production build, 11/11 eşleştirme testi ve student verification/rate-limit
+regresyonu 12/12 PASS. Edcons 23-locale i18n, 114 contract testi, production
+build, sitemap ve public bundle budget PASS.
+Cluster durduruldu; staging/production/PII/provider, commit/push/deploy değişmedi.
+Gerçek kaynaklı katalog veri girişi, 23 locale çeviri, hacim p95/p99 ve browser
+UAT ayrı release kapılarıdır. Kanıt ve kapsam:
+`docs/STUDENT_REGISTRATION_MATCHING_2026-09-28.md`.

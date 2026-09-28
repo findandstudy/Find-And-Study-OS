@@ -220,6 +220,19 @@ router.post("/documents", requireAuth, requireAgentStaffPermission("documents"),
     return;
   }
 
+  // Authorize the object before reading, validating, deleting or recompressing
+  // its bytes. Rejecting a foreign key only after validation would let callers
+  // alter another uploader's object through the rejected-upload cleanup path.
+  // Preserve the existing staff allowance and non-staff ownership requirement.
+  if (fileKey && !isStaff) {
+    const owned = await callerOwnsObject(user.id, fileKey);
+    if (!owned) {
+      console.warn("[DOCUMENTS] upload object ownership denied");
+      res.status(403).json({ error: "You can only attach files that you have uploaded" });
+      return;
+    }
+  }
+
   let descriptiveName: string | null = null;
   let resolvedStudentId: number | null = studentId ?? null;
   if (!resolvedStudentId && applicationId) {
@@ -315,19 +328,6 @@ router.post("/documents", requireAuth, requireAgentStaffPermission("documents"),
         return;
       }
       console.error("[DOCUMENTS] recompressStoredObjectIfNeeded failed, keeping original:", err);
-    }
-  }
-
-  // Ownership guard: non-staff callers (students and agents) may only attach
-  // storage objects they uploaded themselves. This closes the IDOR where an
-  // attacker supplies a victim's object key to exfiltrate private files via
-  // the document download endpoint. Staff are trusted and bypass this check.
-  if (fileKey && !isStaff) {
-    const owned = await callerOwnsObject(user.id, fileKey);
-    if (!owned) {
-      console.warn(`[DOCUMENTS] fileKey ownership violation: userId=${user.id} role=${user.role} key=${fileKey}`);
-      res.status(403).json({ error: "You can only attach files that you have uploaded" });
-      return;
     }
   }
 

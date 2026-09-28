@@ -25,6 +25,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatMoney } from "@/lib/currency";
+import { CourseFinderApiError, courseFinderApiFetch, isTransientCourseFinderError } from "@/components/course-finder/api";
 import {
   collectProposalStudyLevels,
   loadProposalDocumentRequirements,
@@ -44,7 +45,6 @@ import {
 import { MAX_DOCUMENT_PARTS, isSingleImageDocumentType, mergeDocumentParts } from "@/lib/documentPartMerge";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
-const TRANSIENT_API_STATUSES = new Set([502, 503, 504]);
 const COURSE_FINDER_VIEW_STORAGE_KEY = "course-finder-view-mode";
 
 const LazyPdfMarkupModal = lazy(() =>
@@ -59,25 +59,6 @@ const LazyDocumentScanner = lazy(() =>
   })),
 );
 
-class CourseFinderApiError extends Error {
-  constructor(
-    message: string,
-    readonly status: number | null,
-    readonly transient: boolean,
-  ) {
-    super(message);
-    this.name = "CourseFinderApiError";
-  }
-}
-
-function isTransientCourseFinderError(error: unknown): boolean {
-  return error instanceof CourseFinderApiError && error.transient;
-}
-
-function retryDelay(attempt: number): Promise<void> {
-  return new Promise((resolve) => window.setTimeout(resolve, 400 * (2 ** attempt)));
-}
-
 function getCsrfToken(): string {
   const m = document.cookie.match(/(?:^|;\s*)csrf_token=([^;]*)/);
   return m ? decodeURIComponent(m[1]) : "";
@@ -90,49 +71,7 @@ async function apiFetch(url: string, opts?: RequestInit) {
     headers.set("x-csrf-token", getCsrfToken());
   }
 
-  const attempts = method === "GET" || method === "HEAD" ? 4 : 1;
-  for (let attempt = 0; attempt < attempts; attempt += 1) {
-    let res: Response;
-    try {
-      res = await fetch(url, { ...opts, credentials: "include", headers });
-    } catch (error) {
-      if (
-        opts?.signal?.aborted ||
-        (error instanceof DOMException && error.name === "AbortError")
-      ) {
-        throw error;
-      }
-      if (attempt < attempts - 1) {
-        await retryDelay(attempt);
-        continue;
-      }
-      throw new CourseFinderApiError(
-        error instanceof Error ? error.message : "Network request failed",
-        null,
-        true,
-      );
-    }
-
-    const transient = TRANSIENT_API_STATUSES.has(res.status);
-    if (transient && attempt < attempts - 1) {
-      await retryDelay(attempt);
-      continue;
-    }
-    if (!res.ok) {
-      const contentType = res.headers.get("content-type") || "";
-      const text = await res.text().catch(() => "");
-      // Nginx sends a full HTML error document for upstream failures. Never
-      // expose that implementation detail in a user-facing toast.
-      const safeMessage = !/text\/html/i.test(contentType) && !/^\s*<!?html/i.test(text)
-        ? text.slice(0, 500)
-        : "";
-      throw new CourseFinderApiError(safeMessage || `API ${res.status}`, res.status, transient);
-    }
-    if (res.status === 204) return null;
-    return res.json();
-  }
-
-  throw new CourseFinderApiError("Network request failed", null, true);
+  return courseFinderApiFetch(url, { ...opts, headers });
 }
 
 type Program = {
@@ -361,6 +300,7 @@ export default function CourseFinder() {
 
   const { data: filterOptions } = useQuery<FilterOptions>({
     queryKey: ["course-finder-filters", filterParams],
+    retry: false, // The transport owns the bounded retry/deadline budget.
     queryFn: ({ signal }) => apiFetch(
       `${BASE_URL}/api/course-finder/filters${filterParams ? `?${filterParams}` : ""}`,
       { signal },
@@ -428,6 +368,7 @@ export default function CourseFinder() {
     refetch,
   } = useQuery<CourseFinderPage>({
     queryKey: ["course-finder", queryParams],
+    retry: false,
     queryFn: ({ signal }) => apiFetch(`${BASE_URL}/api/course-finder?${queryParams}`, { signal }),
     staleTime: 60_000,
     gcTime: 10 * 60_000,
@@ -449,6 +390,7 @@ export default function CourseFinder() {
     const prefetchTimer = window.setTimeout(() => {
       void queryClient.prefetchQuery<CourseFinderPage>({
         queryKey: ["course-finder", nextQueryParams],
+        retry: false,
         queryFn: ({ signal }) => apiFetch(
           `${BASE_URL}/api/course-finder?${nextQueryParams}`,
           { signal },
@@ -463,6 +405,7 @@ export default function CourseFinder() {
 
   const { data: wishlistIds = [] } = useQuery<number[]>({
     queryKey: ["wishlists"],
+    retry: false,
     queryFn: () => apiFetch(`${BASE_URL}/api/wishlists`),
     enabled: !!user,
   });
@@ -582,6 +525,7 @@ export default function CourseFinder() {
     effectiveHideServiceFees?: boolean;
   }>({
     queryKey: ["agent-me-pdf"],
+    retry: false,
     queryFn: () => apiFetch(`${BASE_URL}/api/agents/me`),
     enabled: !!isAgentSide,
     staleTime: 10 * 60_000,
@@ -640,6 +584,7 @@ export default function CourseFinder() {
         proposalPdfImport,
         queryClient.fetchQuery<PdfSettings>({
           queryKey: ["settings-for-pdf"],
+          retry: false,
           queryFn: () => apiFetch(`${BASE_URL}/api/settings/client`),
           staleTime: 10 * 60_000,
           gcTime: 30 * 60_000,
@@ -2360,6 +2305,7 @@ function ApplyDialog({ program: p, onClose, currentUser, agentShareRate, hideSer
   // missing and caused uploads to be rejected as belonging to another student.
   const { data: selfStudentProfile } = useQuery<any>({
     queryKey: ["course-finder-self-student", currentUser?.id],
+    retry: false, // Never replay the lazy profile PUT through query retries.
     queryFn: async () => {
       try {
         return await apiFetch(`${BASE_URL}/api/students/me`);
@@ -2407,6 +2353,7 @@ function ApplyDialog({ program: p, onClose, currentUser, agentShareRate, hideSer
   // documents already stored on the student's profile.
   const { data: existingStudentDocs = [] } = useQuery<any[]>({
     queryKey: ["apply-existing-docs", selectedStudent?.id],
+    retry: false,
     queryFn: () => apiFetch(`${BASE_URL}/api/documents?studentId=${selectedStudent!.id}`),
     enabled: !!p && !!selectedStudent?.id,
     staleTime: 30_000,
@@ -2447,6 +2394,7 @@ function ApplyDialog({ program: p, onClose, currentUser, agentShareRate, hideSer
 
   const { data: recentStudents = [], isLoading: loadingRecent } = useQuery<StudentOption[]>({
     queryKey: ["apply-recent-students"],
+    retry: false,
     queryFn: () => apiFetch(`${BASE_URL}/api/course-finder/students?limit=3`),
     enabled: !!p && !isStudentUser,
     staleTime: 30_000,
@@ -2454,6 +2402,7 @@ function ApplyDialog({ program: p, onClose, currentUser, agentShareRate, hideSer
 
   const { data: searchResults = [], isLoading: loadingSearch } = useQuery<StudentOption[]>({
     queryKey: ["apply-search-students", debouncedSearch],
+    retry: false,
     queryFn: () => apiFetch(`${BASE_URL}/api/course-finder/students?search=${encodeURIComponent(debouncedSearch)}&limit=10`),
     enabled: !!p && !isStudentUser && debouncedSearch.length >= 2,
     staleTime: 10_000,

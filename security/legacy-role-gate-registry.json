@@ -20,7 +20,7 @@
   "files": [
     {
       "path": "artifacts/api-server/src/routes/academySso.ts",
-      "sha256": "1c6a1890876e5c811d97104299bd15ba4b5fb97f50761c2419f0cc0799466bb5",
+      "sha256": "cf42e53062ac54b846156c368d4088419ae398c0fafe1aa46f2752babf85eccc",
       "routeRegistrations": 1,
       "requireAuth": 2,
       "requireRole": 1,
@@ -65,7 +65,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/agentApplications.ts",
-      "sha256": "8e01d0c6b517127ff7a19f8540af8f5b78c2f590ef93c97fdf86db56689aa623",
+      "sha256": "ecacd417b73a7020f4b7dcb7837bab3cbfc69065f3e5b18bf23f24ecaf9577b4",
       "routeRegistrations": 19,
       "requireAuth": 11,
       "requireRole": 9,
@@ -485,7 +485,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/documents.ts",
-      "sha256": "b71a9e99cf21a4440d6fa7f78810b82b682a8f1e46b3d6cc19d746e897eaab84",
+      "sha256": "f85f9ed9536f7dcd48ff71c9be9ca4acf2fc06f09cbbf86bb8d67b60dcb286f6",
       "routeRegistrations": 14,
       "requireAuth": 14,
       "requireRole": 6,
@@ -665,7 +665,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/integrations.ts",
-      "sha256": "0c54dd8da10c8307ac2e1aef5c3c2668ab6a84b92f97005f059fe86c39d94445",
+      "sha256": "3ed967e57215a7928fcd951056b1c28cb61b257ae22053c2c0b43dc4e6c51784",
       "routeRegistrations": 6,
       "requireAuth": 7,
       "requireRole": 6,
@@ -695,7 +695,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/leads.ts",
-      "sha256": "f6f6f25af7b318447df11d4ca32cce2589da09deb0b26bf65a9508a66446f480",
+      "sha256": "60a1c84af4b464fe298f5af454721a24fb12741efd9bbf10908e609342df0820",
       "routeRegistrations": 24,
       "requireAuth": 23,
       "requireRole": 22,
@@ -1085,7 +1085,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/storage.ts",
-      "sha256": "a569c9f7000f477b2ba982bd483151761ef3f4c06cee6463e7eaafc82a9936ce",
+      "sha256": "b9220b4c8a0f2dda5a4e4a42cf29cc86aafd003599f2b60b855973b1eb926741",
       "routeRegistrations": 5,
       "requireAuth": 5,
       "requireRole": 0,
@@ -1100,7 +1100,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/students.ts",
-      "sha256": "436079a3e29c0486994a91830f25ea00897c9e4eed495e198edcc8aba58130a7",
+      "sha256": "5be3c580d79ae332c06aad684f85665bf6322a29ff6865228ef034e4e37b560d",
       "routeRegistrations": 27,
       "requireAuth": 27,
       "requireRole": 16,

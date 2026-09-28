@@ -186,11 +186,15 @@ type University = {
   cricosLink?: string | null; documentsLink?: string | null; currentFeeListLink?: string | null;
   initialDepositOptions?: string | null; admissionProcess?: string | null;
   contactPersonName?: string | null; contactPersonPhone?: string | null; contactPersonEmail?: string | null;
+  nationalityPolicy?: "unknown" | "open" | "restricted"; acceptedNationalityCodes?: string[];
+  defaultRequiredEducationLevel?: string | null; defaultMinGradeValue?: number | null; defaultGradeScale?: string | null;
+  defaultLanguageRequirements?: Array<{ test: string; overall: number }>; defaultConditionalAdmission?: boolean;
+  admissionSourceUrl?: string | null; admissionVerifiedAt?: string | null; admissionValidUntil?: string | null;
   status: string;
 };
 type UniversityOption = Pick<University, "id" | "name">;
 type ProgramTranslationSummary = { total: number; published: number; pending: number; failed: number; manual: number; target: number };
-type Program = { id: number; universityId: number; universityName?: string | null; name: string; description?: string | null; degree?: string | null; field?: string | null; language?: string | null; duration?: string | null; tuitionFee?: number | null; currency?: string | null; scholarship?: number | null; intakes?: string | null; requirements?: string | null; commissionRate?: number | null; applicationFee?: number | null; advancedFee?: number | null; depositFee?: number | null; serviceFeeAmount?: number | null; discountedFee?: number | null; languageFee?: number | null; feeType?: string | null; minGpa?: number | null; minLanguageScore?: number | null; quota?: number | null; isActive: boolean; translationSummary?: ProgramTranslationSummary };
+type Program = { id: number; universityId: number; universityName?: string | null; name: string; description?: string | null; degree?: string | null; field?: string | null; language?: string | null; duration?: string | null; tuitionFee?: number | null; currency?: string | null; scholarship?: number | null; intakes?: string | null; requirements?: string | null; commissionRate?: number | null; applicationFee?: number | null; advancedFee?: number | null; depositFee?: number | null; serviceFeeAmount?: number | null; discountedFee?: number | null; languageFee?: number | null; feeType?: string | null; minGpa?: number | null; minLanguageScore?: number | null; quota?: number | null; isActive: boolean; requiredEducationLevel?: string | null; minGradeValue?: number | null; gradeScale?: string | null; languageRequirements?: Array<{ test: string; overall: number }> | null; conditionalAdmission?: boolean | null; admissionSourceUrl?: string | null; admissionVerifiedAt?: string | null; admissionValidUntil?: string | null; translationSummary?: ProgramTranslationSummary };
 
 type ProgramTranslationRow = {
   programId: number;
@@ -1598,6 +1602,44 @@ function UniversitiesTab() {
               </div>
             </div>
 
+            <div className="rounded-lg border border-blue-200 bg-blue-50/50 p-4 space-y-3">
+              <div>
+                <p className="text-xs font-semibold text-blue-700 uppercase tracking-wider">Student matching eligibility</p>
+                <p className="text-xs text-muted-foreground mt-1">These are university-wide defaults. Programs may override them. Rules without current evidence are never treated as a confirmed match.</p>
+              </div>
+              <div>
+                <Label>Nationality policy</Label>
+                <Select value={form?.nationalityPolicy ?? "unknown"} onValueChange={v => setF({ nationalityPolicy: v as University["nationalityPolicy"], acceptedNationalityCodes: v === "restricted" ? (form?.acceptedNationalityCodes ?? []) : [] })}>
+                  <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                  <SelectContent><SelectItem value="unknown">Not verified</SelectItem><SelectItem value="open">Open to all nationalities</SelectItem><SelectItem value="restricted">Only selected nationalities</SelectItem></SelectContent>
+                </Select>
+              </div>
+              {form?.nationalityPolicy === "restricted" && <div>
+                <Label>Accepted nationalities</Label>
+                <div className="mt-2 max-h-40 overflow-y-auto rounded-md border bg-background p-2 grid grid-cols-2 gap-1">
+                  {allCountries.filter(country => country.isActive).map(country => {
+                    const selected = (form?.acceptedNationalityCodes ?? []).includes(country.code);
+                    return <label key={country.code} className="flex items-center gap-2 rounded px-2 py-1 text-xs hover:bg-muted"><Checkbox checked={selected} onCheckedChange={checked => setF({ acceptedNationalityCodes: checked ? [...new Set([...(form?.acceptedNationalityCodes ?? []), country.code])] : (form?.acceptedNationalityCodes ?? []).filter(value => value !== country.code) })} /><CountryFlag code={country.code} size="sm" /> {country.name}</label>;
+                  })}
+                </div>
+              </div>}
+              <div className="grid grid-cols-2 gap-3">
+                <div><Label>Required previous education</Label><Select value={form?.defaultRequiredEducationLevel ?? "none"} onValueChange={v => setF({ defaultRequiredEducationLevel: v === "none" ? null : v })}><SelectTrigger className="mt-1"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="none">Not verified</SelectItem><SelectItem value="high_school">High school</SelectItem><SelectItem value="bachelor">Bachelor</SelectItem><SelectItem value="master">Master</SelectItem></SelectContent></Select></div>
+                <div><Label>Grade scale</Label><Select value={form?.defaultGradeScale ?? "none"} onValueChange={v => setF({ defaultGradeScale: v === "none" ? null : v })}><SelectTrigger className="mt-1"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="none">Not verified</SelectItem><SelectItem value="percent_100">100 point</SelectItem><SelectItem value="gpa_4">GPA 4.0</SelectItem><SelectItem value="gpa_5">GPA 5.0</SelectItem><SelectItem value="gpa_10">GPA 10.0</SelectItem></SelectContent></Select></div>
+                <div><Label>Minimum grade</Label><Input className="mt-1" type="number" step="0.01" value={form?.defaultMinGradeValue ?? ""} onChange={e => setF({ defaultMinGradeValue: e.target.value ? Number(e.target.value) : null })} /></div>
+                <div className="flex items-center justify-between rounded border px-3 mt-5"><Label>Conditional language admission</Label><Switch checked={form?.defaultConditionalAdmission ?? false} onCheckedChange={v => setF({ defaultConditionalAdmission: v })} /></div>
+              </div>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between"><Label>Default accepted language tests</Label><Button type="button" size="sm" variant="outline" onClick={() => setF({ defaultLanguageRequirements: [...(form?.defaultLanguageRequirements ?? []), { test: "ielts", overall: 6 }] })}><Plus className="h-3 w-3 mr-1" /> Add</Button></div>
+                {(form?.defaultLanguageRequirements ?? []).map((rule, index) => <div key={index} className="grid grid-cols-[1fr_110px_36px] gap-2"><Select value={rule.test} onValueChange={test => setF({ defaultLanguageRequirements: (form?.defaultLanguageRequirements ?? []).map((item, itemIndex) => itemIndex === index ? { ...item, test } : item) })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{["ielts", "toefl", "pte", "duolingo"].map(test => <SelectItem key={test} value={test}>{test.toUpperCase()}</SelectItem>)}</SelectContent></Select><Input type="number" step="0.5" value={rule.overall} onChange={e => setF({ defaultLanguageRequirements: (form?.defaultLanguageRequirements ?? []).map((item, itemIndex) => itemIndex === index ? { ...item, overall: Number(e.target.value) } : item) })} /><Button type="button" size="icon" variant="ghost" onClick={() => setF({ defaultLanguageRequirements: (form?.defaultLanguageRequirements ?? []).filter((_, itemIndex) => itemIndex !== index) })}><Trash2 className="h-4 w-4" /></Button></div>)}
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                <div><Label>Official source URL</Label><Input className="mt-1" type="url" placeholder="https://…" value={form?.admissionSourceUrl ?? ""} onChange={e => setF({ admissionSourceUrl: e.target.value || null })} /></div>
+                <div><Label>Last verified</Label><Input className="mt-1" type="date" value={form?.admissionVerifiedAt?.slice(0, 10) ?? ""} onChange={e => setF({ admissionVerifiedAt: e.target.value ? new Date(`${e.target.value}T00:00:00.000Z`).toISOString() : null })} /></div>
+                <div><Label>Valid until</Label><Input className="mt-1" type="date" value={form?.admissionValidUntil?.slice(0, 10) ?? ""} onChange={e => setF({ admissionValidUntil: e.target.value ? new Date(`${e.target.value}T23:59:59.999Z`).toISOString() : null })} /></div>
+              </div>
+            </div>
+
             {/* ── Contact Person (Super Admin only) ─── */}
             {isSuperAdmin && (
               <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
@@ -2274,6 +2316,7 @@ function ProgramsTab() {
                 <SelectContent>{universities.map(u => <SelectItem key={u.id} value={String(u.id)}>{u.name}</SelectItem>)}</SelectContent>
               </Select>
             </div>
+
             <div><Label>{t("catalogPage.programNameRequired")}</Label><Input className="mt-1" value={form?.name ?? ""} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} /></div>
             <div><Label>{t("catalogPage.programDescriptionEnglish")}</Label><Textarea className="mt-1" rows={4} value={form?.description ?? ""} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder={t("catalogPage.programDescriptionPlaceholder")} /></div>
             <div className="grid grid-cols-2 gap-3">
@@ -2354,6 +2397,50 @@ function ProgramsTab() {
                   <Label className="text-xs">{t("catalogPage.quota")}</Label>
                   <Input className="mt-1" type="number" step="1" min="1" placeholder={t("catalogPage.quotaPlaceholder")} value={form?.quota ?? ""} onChange={e => setForm(f => ({ ...f, quota: e.target.value ? Math.max(1, Math.round(Number(e.target.value))) : null }))} />
                 </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3 border-t border-amber-200 pt-3">
+                <div>
+                  <Label className="text-xs">Required previous education</Label>
+                  <Select value={form?.requiredEducationLevel ?? "none"} onValueChange={v => setForm(f => ({ ...f, requiredEducationLevel: v === "none" ? null : v }))}>
+                    <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Not verified</SelectItem>
+                      <SelectItem value="high_school">High school</SelectItem>
+                      <SelectItem value="bachelor">Bachelor</SelectItem>
+                      <SelectItem value="master">Master</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label className="text-xs">Grade scale</Label>
+                  <Select value={form?.gradeScale ?? "none"} onValueChange={v => setForm(f => ({ ...f, gradeScale: v === "none" ? null : v }))}>
+                    <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Not verified</SelectItem>
+                      <SelectItem value="percent_100">100 point</SelectItem>
+                      <SelectItem value="gpa_4">GPA 4.0</SelectItem>
+                      <SelectItem value="gpa_5">GPA 5.0</SelectItem>
+                      <SelectItem value="gpa_10">GPA 10.0</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div><Label className="text-xs">Minimum grade</Label><Input className="mt-1" type="number" step="0.01" value={form?.minGradeValue ?? ""} onChange={e => setForm(f => ({ ...f, minGradeValue: e.target.value ? Number(e.target.value) : null }))} /></div>
+                <div className="flex items-center justify-between rounded border px-3 mt-5"><Label className="text-xs">Conditional language admission</Label><Switch checked={form?.conditionalAdmission ?? false} onCheckedChange={v => setForm(f => ({ ...f, conditionalAdmission: v }))} /></div>
+              </div>
+              <div className="border-t border-amber-200 pt-3 space-y-2">
+                <div className="flex items-center justify-between"><Label className="text-xs">Accepted language tests</Label><Button type="button" size="sm" variant="outline" onClick={() => setForm(f => ({ ...f, languageRequirements: [...(f?.languageRequirements ?? []), { test: "ielts", overall: 6 }] }))}><Plus className="h-3 w-3 mr-1" /> Add</Button></div>
+                {(form?.languageRequirements ?? []).map((rule, index) => <div key={index} className="grid grid-cols-[1fr_110px_36px] gap-2">
+                  <Select value={rule.test} onValueChange={test => setForm(f => ({ ...f, languageRequirements: (f?.languageRequirements ?? []).map((item, itemIndex) => itemIndex === index ? { ...item, test } : item) }))}>
+                    <SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{["ielts", "toefl", "pte", "duolingo"].map(test => <SelectItem key={test} value={test}>{test.toUpperCase()}</SelectItem>)}</SelectContent>
+                  </Select>
+                  <Input type="number" step="0.5" value={rule.overall} onChange={e => setForm(f => ({ ...f, languageRequirements: (f?.languageRequirements ?? []).map((item, itemIndex) => itemIndex === index ? { ...item, overall: Number(e.target.value) } : item) }))} />
+                  <Button type="button" size="icon" variant="ghost" onClick={() => setForm(f => ({ ...f, languageRequirements: (f?.languageRequirements ?? []).filter((_, itemIndex) => itemIndex !== index) }))}><Trash2 className="h-4 w-4" /></Button>
+                </div>)}
+              </div>
+              <div className="grid grid-cols-3 gap-3 border-t border-amber-200 pt-3">
+                <div><Label className="text-xs">Official source URL</Label><Input className="mt-1" type="url" value={form?.admissionSourceUrl ?? ""} onChange={e => setForm(f => ({ ...f, admissionSourceUrl: e.target.value || null }))} /></div>
+                <div><Label className="text-xs">Last verified</Label><Input className="mt-1" type="date" value={form?.admissionVerifiedAt?.slice(0, 10) ?? ""} onChange={e => setForm(f => ({ ...f, admissionVerifiedAt: e.target.value ? new Date(`${e.target.value}T00:00:00.000Z`).toISOString() : null }))} /></div>
+                <div><Label className="text-xs">Valid until</Label><Input className="mt-1" type="date" value={form?.admissionValidUntil?.slice(0, 10) ?? ""} onChange={e => setForm(f => ({ ...f, admissionValidUntil: e.target.value ? new Date(`${e.target.value}T23:59:59.999Z`).toISOString() : null }))} /></div>
               </div>
             </div>
 

@@ -4,7 +4,7 @@ import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import { z } from "zod";
 import { toLatinUpper, normalizePhoneField } from "../lib/textNormalize";
-import { db, usersTable, emailVerificationCodesTable, studentsTable, leadsTable } from "@workspace/db";
+import { db, usersTable, emailVerificationCodesTable, studentsTable, leadsTable, studentRegistrationProfilesTable, countriesTable, programsTable, universitiesTable } from "@workspace/db";
 import { getEffectivePermissionSet } from "../lib/permissions";
 import { eq, and, gt, sql, isNotNull, isNull } from "drizzle-orm";
 import { sendEmail } from "../lib/email";
@@ -27,11 +27,68 @@ import { PasswordSchema } from "../lib/passwordPolicy";
 import { logAudit } from "../lib/auth";
 import { validate, getValidated } from "../middlewares/validate";
 import { consumeEmailVerificationToken, issueEmailVerificationToken } from "../lib/emailVerificationToken";
+import { evaluateRegistrationCandidate } from "../lib/studentRegistrationMatching";
 
 const loginBodySchema = z.object({
   email: z.string().trim().toLowerCase().email(),
   password: z.string().min(1),
 });
+
+const countryCodeSchema = z.string().trim().toUpperCase().regex(/^[A-Z]{2}$/);
+const registrationProfileSchema = z.object({
+  nationalityCode: countryCodeSchema.optional(),
+  educationCountryCode: countryCodeSchema.optional(),
+  completedEducationLevel: z.string().trim().min(1).max(80).optional(),
+  targetEducationLevel: z.string().trim().min(1).max(80).optional(),
+  gradeValue: z.number().finite().min(0).max(1000).optional(),
+  gradeScale: z.string().trim().min(1).max(40).optional(),
+  languageTest: z.string().trim().min(1).max(40).optional(),
+  languageOverall: z.number().finite().min(0).max(1000).optional(),
+  languageSubscores: z.record(z.string(), z.number().finite().min(0).max(1000)).default({}),
+  languageTestDate: z.string().datetime().optional(),
+  preferredCountryCodes: z.array(countryCodeSchema).max(20).default([]),
+  preferredFields: z.array(z.string().trim().min(1).max(120)).max(10).default([]),
+  budgetAmount: z.number().finite().nonnegative().max(10_000_000).optional(),
+  budgetCurrency: z.string().trim().toUpperCase().regex(/^[A-Z]{3}$/).optional(),
+  fundingSource: z.string().trim().min(1).max(80).optional(),
+  selectedProgramId: z.number().int().positive().optional(),
+}).strict();
+
+async function selectedProgramMatchesDeclaration(profile: z.infer<typeof registrationProfileSchema>): Promise<boolean> {
+  if (!profile.selectedProgramId) return true;
+  const [program] = await db.select({
+    id: programsTable.id,
+    degree: programsTable.degree,
+    nationalityPolicy: universitiesTable.nationalityPolicy,
+    acceptedNationalityCodes: universitiesTable.acceptedNationalityCodes,
+    nationalitySourceUrl: universitiesTable.admissionSourceUrl,
+    nationalityVerifiedAt: universitiesTable.admissionVerifiedAt,
+    nationalityValidUntil: universitiesTable.admissionValidUntil,
+    requiredEducationLevel: sql<string | null>`coalesce(${programsTable.requiredEducationLevel}, ${universitiesTable.defaultRequiredEducationLevel})`,
+    minGradeValue: sql<number | null>`coalesce(${programsTable.minGradeValue}, ${universitiesTable.defaultMinGradeValue})`,
+    gradeScale: sql<string | null>`coalesce(${programsTable.gradeScale}, ${universitiesTable.defaultGradeScale})`,
+    legacyMinGpa: programsTable.minGpa,
+    languageRequirements: sql<unknown>`coalesce(${programsTable.languageRequirements}, ${universitiesTable.defaultLanguageRequirements})`,
+    legacyMinLanguageScore: programsTable.minLanguageScore,
+    conditionalAdmission: sql<boolean>`coalesce(${programsTable.conditionalAdmission}, ${universitiesTable.defaultConditionalAdmission})`,
+    requirementSourceUrl: sql<string | null>`coalesce(${programsTable.admissionSourceUrl}, ${universitiesTable.admissionSourceUrl})`,
+    requirementVerifiedAt: sql<Date | null>`coalesce(${programsTable.admissionVerifiedAt}, ${universitiesTable.admissionVerifiedAt})`,
+    requirementValidUntil: sql<Date | null>`coalesce(${programsTable.admissionValidUntil}, ${universitiesTable.admissionValidUntil})`,
+    countryCode: countriesTable.code,
+    field: programsTable.field,
+    fee: sql<number | null>`coalesce(${programsTable.discountedFee}, ${programsTable.tuitionFee})`,
+    currency: programsTable.currency,
+  }).from(programsTable)
+    .innerJoin(universitiesTable, eq(programsTable.universityId, universitiesTable.id))
+    .leftJoin(countriesTable, sql`lower(trim(${countriesTable.name})) = lower(trim(${universitiesTable.country}))`)
+    .where(and(
+      eq(programsTable.id, profile.selectedProgramId),
+      eq(programsTable.isActive, true),
+      eq(universitiesTable.isActive, true),
+      eq(universitiesTable.status, "open"),
+    )).limit(1);
+  return Boolean(program && evaluateRegistrationCandidate(profile, program).status !== "not_met");
+}
 
 import { RateLimiterPostgres } from "rate-limiter-flexible";
 import { pool } from "@workspace/db";
@@ -225,7 +282,14 @@ router.post("/auth/login", validate({ body: loginBodySchema }), async (req: Requ
 
 router.post("/auth/register", async (req: Request, res: Response) => {
   const { email, password, firstName, lastName, phone } = req.body;
+  const matchingProfile = req.body.matchingProfile == null
+    ? null
+    : registrationProfileSchema.safeParse(req.body.matchingProfile);
 
+  if (matchingProfile && !matchingProfile.success) {
+    res.status(400).json({ error: "INVALID_MATCHING_PROFILE", fields: matchingProfile.error.issues.map(issue => issue.path.join(".")) });
+    return;
+  }
   if (!email || !password || !firstName || !lastName) {
     res.status(400).json({ error: "All fields are required" });
     return;
@@ -246,6 +310,10 @@ router.post("/auth/register", async (req: Request, res: Response) => {
     res.status(400).json({ error: pwdResult.error.errors[0]?.message || "Invalid password" });
     return;
   }
+  if (matchingProfile?.success && !await selectedProgramMatchesDeclaration(matchingProfile.data)) {
+    res.status(400).json({ error: "SELECTED_PROGRAM_NO_LONGER_MATCHES" });
+    return;
+  }
 
   const [existing] = await db.select().from(usersTable).where(eq(usersTable.email, normalizedEmail));
   if (existing) {
@@ -259,6 +327,18 @@ router.post("/auth/register", async (req: Request, res: Response) => {
       const hash = await bcrypt.hash(password, 10);
       await db.update(usersTable).set({ passwordHash: hash, isActive: false, emailVerified: false, firstName: toLatinUpper(firstName.trim()), lastName: toLatinUpper(lastName.trim()), phone: phone ? normalizePhoneField(phone) : null }).where(eq(usersTable.id, existing.id));
       await db.update(studentsTable).set({ deletedAt: null }).where(eq(studentsTable.id, archivedStudent.id));
+      if (matchingProfile?.success) {
+        await db.insert(studentRegistrationProfilesTable).values({
+          userId: existing.id,
+          ...matchingProfile.data,
+          languageTestDate: matchingProfile.data.languageTestDate ? new Date(matchingProfile.data.languageTestDate) : null,
+        }).onConflictDoUpdate({ target: studentRegistrationProfilesTable.userId, set: {
+          ...matchingProfile.data,
+          languageTestDate: matchingProfile.data.languageTestDate ? new Date(matchingProfile.data.languageTestDate) : null,
+          declarationStatus: "declared",
+          updatedAt: new Date(),
+        } });
+      }
 
       const code = generateVerificationCode();
       await db.insert(emailVerificationCodesTable).values({ email: normalizedEmail, code, expiresAt: new Date(Date.now() + 15 * 60 * 1000) });
@@ -279,30 +359,41 @@ router.post("/auth/register", async (req: Request, res: Response) => {
 
   const [archivedStudentByEmail] = await db.select().from(studentsTable).where(and(eq(studentsTable.email, normalizedEmail), isNotNull(studentsTable.deletedAt)));
 
+  const code = generateVerificationCode();
   const hash = await bcrypt.hash(password, 10);
-  const [user] = await db.insert(usersTable).values({
-    email: normalizedEmail,
-    firstName: toLatinUpper(firstName.trim()),
-    lastName: toLatinUpper(lastName.trim()),
-    phone: phone ? normalizePhoneField(phone) : null,
-    passwordHash: hash,
-    role: "student",
-    isActive: false,
-    emailVerified: false,
-    language: "en",
-  }).returning();
+  const user = await db.transaction(async (tx) => {
+    const [created] = await tx.insert(usersTable).values({
+      email: normalizedEmail,
+      firstName: toLatinUpper(firstName.trim()),
+      lastName: toLatinUpper(lastName.trim()),
+      phone: phone ? normalizePhoneField(phone) : null,
+      passwordHash: hash,
+      role: "student",
+      isActive: false,
+      emailVerified: false,
+      language: "en",
+    }).returning();
+    if (archivedStudentByEmail) {
+      await tx.update(studentsTable).set({ deletedAt: null, userId: created.id }).where(eq(studentsTable.id, archivedStudentByEmail.id));
+    }
+    if (matchingProfile?.success) {
+      await tx.insert(studentRegistrationProfilesTable).values({
+        userId: created.id,
+        ...matchingProfile.data,
+        languageTestDate: matchingProfile.data.languageTestDate ? new Date(matchingProfile.data.languageTestDate) : null,
+      });
+    }
+    await tx.insert(emailVerificationCodesTable).values({
+      email: normalizedEmail,
+      code,
+      expiresAt: new Date(Date.now() + 15 * 60 * 1000),
+    });
+    return created;
+  });
 
   if (archivedStudentByEmail) {
-    await db.update(studentsTable).set({ deletedAt: null, userId: user.id }).where(eq(studentsTable.id, archivedStudentByEmail.id));
     console.log(`[AUTH REGISTER] Restored archived student #${archivedStudentByEmail.id} for new user #${user.id}`);
   }
-
-  const code = generateVerificationCode();
-  await db.insert(emailVerificationCodesTable).values({
-    email: normalizedEmail,
-    code,
-    expiresAt: new Date(Date.now() + 15 * 60 * 1000),
-  });
 
   console.log(`[EMAIL VERIFICATION] Code sent to ${normalizedEmail.replace(/(.{2}).*(@.*)/, "$1***$2")}`);
 
@@ -376,6 +467,30 @@ router.post("/auth/verify-email", async (req: Request, res: Response) => {
   // the same email (e.g. they came in through a different funnel first).
   if (user.role === "student" && user.email) {
     try {
+      const [profile] = await db.select().from(studentRegistrationProfilesTable)
+        .where(eq(studentRegistrationProfilesTable.userId, user.id)).limit(1);
+      if (profile) {
+        const [country] = profile.nationalityCode
+          ? await db.select({ name: countriesTable.name }).from(countriesTable).where(eq(countriesTable.code, profile.nationalityCode)).limit(1)
+          : [];
+        const [existingStudent] = await db.select({ id: studentsTable.id }).from(studentsTable)
+          .where(and(eq(studentsTable.userId, user.id), isNull(studentsTable.deletedAt))).limit(1);
+        if (!existingStudent) {
+          await db.insert(studentsTable).values({
+            userId: user.id,
+            firstName: toLatinUpper((user.firstName || "").trim()).slice(0, 100) || "STUDENT",
+            lastName: toLatinUpper((user.lastName || "").trim()).slice(0, 100) || "REGISTRATION",
+            email: user.email.slice(0, 255),
+            phone: user.phone ? normalizePhoneField(user.phone).slice(0, 30) : null,
+            phoneE164: toE164(user.phone ? normalizePhoneField(user.phone) : null),
+            nationality: country?.name ?? profile.nationalityCode,
+            interestedLevel: profile.targetEducationLevel,
+            gpa: profile.gradeValue == null ? null : String(profile.gradeValue),
+            languageScore: profile.languageOverall == null ? null : `${profile.languageTest || "declared"}:${profile.languageOverall}`,
+            ...directOrigin(),
+          });
+        }
+      }
       const [existingLead] = await db
         .select({ id: leadsTable.id })
         .from(leadsTable)

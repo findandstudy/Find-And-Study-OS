@@ -930,6 +930,18 @@ router.post("/leads/:id/documents", requireAuth, requireRole(...STAFF_ROLES, ...
   if (!fileKey || typeof fileKey !== "string") { res.status(400).json({ error: "fileKey is required" }); return; }
   if (!mimeType) { res.status(400).json({ error: "mimeType is required for file uploads" }); return; }
 
+  // A rejected upload may trigger object cleanup. Enforce the existing agent
+  // ownership requirement before any read/validation/deletion of that object;
+  // staff retain their existing allowance.
+  if (isAgentRole(user.role)) {
+    const owned = await callerOwnsObject(user.id, fileKey);
+    if (!owned) {
+      console.warn("[LEADS] upload object ownership denied");
+      res.status(403).json({ error: "You can only attach files that you have uploaded" });
+      return;
+    }
+  }
+
   const validationFileName = originalFileName
     ? sanitizeFileName(originalFileName)
     : (() => {
@@ -969,17 +981,6 @@ router.post("/leads/:id/documents", requireAuth, requireRole(...STAFF_ROLES, ...
     const httpStatus = bufferError.type === "size_exceeded" ? 413 : 400;
     res.status(httpStatus).json({ error: bufferError.message });
     return;
-  }
-
-  // Ownership guard: agent callers may only attach storage objects they
-  // uploaded themselves. Staff are trusted and bypass this check.
-  if (isAgentRole(user.role)) {
-    const owned = await callerOwnsObject(user.id, fileKey);
-    if (!owned) {
-      console.warn(`[LEADS] fileKey ownership violation: userId=${user.id} role=${user.role} key=${fileKey}`);
-      res.status(403).json({ error: "You can only attach files that you have uploaded" });
-      return;
-    }
   }
 
   let storedMimeType = mimeType;

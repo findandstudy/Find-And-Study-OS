@@ -29,7 +29,10 @@ const UNI_PATCH_FIELDS = [
   "cwtsLeidenRanking", "address", "onlinePaymentUrl", "cricosLink", "documentsLink",
   "currentFeeListLink", "initialDepositOptions", "admissionProcess",
   "contactPersonName", "contactPersonPhone", "contactPersonEmail", "status",
-  "assignedStaffIds",
+  "assignedStaffIds", "nationalityPolicy", "acceptedNationalityCodes",
+  "defaultRequiredEducationLevel", "defaultMinGradeValue", "defaultGradeScale",
+  "defaultLanguageRequirements", "defaultConditionalAdmission",
+  "admissionSourceUrl", "admissionVerifiedAt", "admissionValidUntil",
 ];
 
 const CONTACT_FIELDS = ["contactPersonName", "contactPersonPhone", "contactPersonEmail"];
@@ -56,8 +59,61 @@ const PROG_PATCH_FIELDS = [
   "tuitionFee", "currency", "scholarship", "intakes", "requirements",
   "commissionRate", "applicationFee", "advancedFee", "depositFee",
   "serviceFeeAmount", "discountedFee", "languageFee", "feeType",
-  "minGpa", "minLanguageScore", "quota", "isActive",
+  "minGpa", "minLanguageScore", "quota", "isActive", "requiredEducationLevel",
+  "minGradeValue", "gradeScale", "languageRequirements", "conditionalAdmission",
+  "admissionSourceUrl", "admissionVerifiedAt", "admissionValidUntil",
 ];
+
+function normalizeAdmissionUrl(value: unknown): string | null {
+  if (value == null || value === "") return null;
+  if (typeof value !== "string" || value.length > 2048) throw new Error("admissionSourceUrl must be a valid HTTPS URL");
+  const url = new URL(value);
+  if (url.protocol !== "https:" || url.username || url.password) throw new Error("admissionSourceUrl must be a valid HTTPS URL");
+  return url.toString();
+}
+
+function normalizeAdmissionDate(value: unknown, field = "admissionVerifiedAt"): Date | null {
+  if (value == null || value === "") return null;
+  const date = new Date(String(value));
+  if (!Number.isFinite(date.getTime())) throw new Error(`${field} must be a valid date`);
+  return date;
+}
+
+function requireCurrentAdmissionEvidence(input: {
+  source: string | null; verifiedAt: Date | null; validUntil: Date | null; hasRules: boolean;
+}) {
+  if (!input.hasRules) return;
+  if (!input.source || !input.verifiedAt || !input.validUntil) {
+    throw new Error("Verified admission rules require source URL, last verified date and valid-until date");
+  }
+  if (input.validUntil.getTime() < input.verifiedAt.getTime()) {
+    throw new Error("admissionValidUntil must be on or after admissionVerifiedAt");
+  }
+}
+
+function normalizeNationalityPolicy(policy: unknown, values: unknown) {
+  if (!["unknown", "open", "restricted"].includes(String(policy))) throw new Error("Invalid nationalityPolicy");
+  if (!Array.isArray(values) || values.length > 250) throw new Error("acceptedNationalityCodes must be an array");
+  const accepted = [...new Set(values.map(value => String(value).trim().toUpperCase()))];
+  if (!accepted.every(value => /^[A-Z]{2}$/.test(value))) throw new Error("acceptedNationalityCodes must contain ISO alpha-2 codes");
+  if (policy === "restricted" && accepted.length === 0) throw new Error("Restricted policy requires at least one nationality");
+  return policy === "restricted" ? accepted : [];
+}
+
+function normalizeLanguageRequirements(value: unknown) {
+  if (value == null) return [];
+  if (!Array.isArray(value) || value.length > 20) throw new Error("languageRequirements must be an array");
+  return value.map((row) => {
+    if (!row || typeof row !== "object") throw new Error("Invalid language requirement");
+    const item = row as Record<string, unknown>;
+    const test = String(item.test || "").trim().toLowerCase();
+    const overall = Number(item.overall);
+    if (!/^[a-z0-9_-]{2,40}$/.test(test) || !Number.isFinite(overall) || overall < 0 || overall > 1000) {
+      throw new Error("Invalid language requirement");
+    }
+    return { test, overall };
+  });
+}
 
 /* ─── UNIVERSITIES ───────────────────────────────────────────── */
 
@@ -194,8 +250,32 @@ router.post("/universities", requireAuth, requireRole(...MANAGER_ROLES), async (
     cwtsLeidenRanking, address, onlinePaymentUrl, cricosLink, documentsLink,
     currentFeeListLink, initialDepositOptions, admissionProcess,
     contactPersonName, contactPersonPhone, contactPersonEmail, status = "open",
+    nationalityPolicy = "unknown", acceptedNationalityCodes = [],
+    defaultRequiredEducationLevel, defaultMinGradeValue, defaultGradeScale,
+    defaultLanguageRequirements = [], defaultConditionalAdmission = false,
+    admissionSourceUrl, admissionVerifiedAt, admissionValidUntil,
   } = req.body;
   if (!name || !country) { res.status(400).json({ error: "name and country are required" }); return; }
+  let normalizedNationalities: string[];
+  let normalizedUniversitySource: string | null;
+  let normalizedUniversityVerifiedAt: Date | null;
+  let normalizedUniversityValidUntil: Date | null;
+  let normalizedDefaultLanguages: Array<{ test: string; overall: number }>;
+  try {
+    normalizedNationalities = normalizeNationalityPolicy(nationalityPolicy, acceptedNationalityCodes);
+    normalizedUniversitySource = normalizeAdmissionUrl(admissionSourceUrl);
+    normalizedUniversityVerifiedAt = normalizeAdmissionDate(admissionVerifiedAt);
+    normalizedUniversityValidUntil = normalizeAdmissionDate(admissionValidUntil, "admissionValidUntil");
+    normalizedDefaultLanguages = normalizeLanguageRequirements(defaultLanguageRequirements);
+    requireCurrentAdmissionEvidence({
+      source: normalizedUniversitySource,
+      verifiedAt: normalizedUniversityVerifiedAt,
+      validUntil: normalizedUniversityValidUntil,
+      hasRules: nationalityPolicy !== "unknown" || Boolean(defaultRequiredEducationLevel)
+        || defaultMinGradeValue != null || normalizedDefaultLanguages.length > 0,
+    });
+  }
+  catch (error) { res.status(400).json({ error: (error as Error).message }); return; }
   const [uni] = await db.insert(universitiesTable).values({
     name, country, city: city || null, website: website || null, logoUrl: logoUrl || null,
     description: description || null, ranking: ranking ? Number(ranking) : null, isActive,
@@ -214,6 +294,16 @@ router.post("/universities", requireAuth, requireRole(...MANAGER_ROLES), async (
     contactPersonPhone: contactPersonPhone || null,
     contactPersonEmail: contactPersonEmail || null,
     status,
+    nationalityPolicy,
+    acceptedNationalityCodes: normalizedNationalities,
+    defaultRequiredEducationLevel: defaultRequiredEducationLevel || null,
+    defaultMinGradeValue: defaultMinGradeValue == null || defaultMinGradeValue === "" ? null : Number(defaultMinGradeValue),
+    defaultGradeScale: defaultGradeScale || null,
+    defaultLanguageRequirements: normalizedDefaultLanguages,
+    defaultConditionalAdmission: Boolean(defaultConditionalAdmission),
+    admissionSourceUrl: normalizedUniversitySource,
+    admissionVerifiedAt: normalizedUniversityVerifiedAt,
+    admissionValidUntil: normalizedUniversityValidUntil,
   }).returning();
   invalidatePublicCatalogRenderCache({ entityType: "catalog" });
   invalidatePublicWebDiscoveryCache();
@@ -271,9 +361,48 @@ router.patch("/universities/:id", requireAuth, requireRole(...MANAGER_ROLES), as
         return;
       }
       updates[key] = Array.from(new Set(raw as number[]));
+    } else if (key === "nationalityPolicy" || key === "acceptedNationalityCodes") {
+      // Normalize both fields together after collecting the patch.
+      updates[key] = req.body[key];
+    } else if (key === "admissionSourceUrl") {
+      try { updates[key] = normalizeAdmissionUrl(req.body[key]); }
+      catch (error) { res.status(400).json({ error: (error as Error).message }); return; }
+    } else if (key === "admissionVerifiedAt" || key === "admissionValidUntil") {
+      try { updates[key] = normalizeAdmissionDate(req.body[key], key); }
+      catch (error) { res.status(400).json({ error: (error as Error).message }); return; }
+    } else if (key === "defaultLanguageRequirements") {
+      try { updates[key] = normalizeLanguageRequirements(req.body[key]); }
+      catch (error) { res.status(400).json({ error: (error as Error).message }); return; }
     } else {
       updates[key] = req.body[key];
     }
+  }
+  if (updates.nationalityPolicy !== undefined || updates.acceptedNationalityCodes !== undefined) {
+    const [current] = await db.select({
+      policy: universitiesTable.nationalityPolicy,
+      codes: universitiesTable.acceptedNationalityCodes,
+    }).from(universitiesTable).where(eq(universitiesTable.id, id));
+    if (!current) { res.status(404).json({ error: "University not found" }); return; }
+    const policy = updates.nationalityPolicy ?? current.policy;
+    const values = updates.acceptedNationalityCodes ?? current.codes;
+    try {
+      updates.nationalityPolicy = policy;
+      updates.acceptedNationalityCodes = normalizeNationalityPolicy(policy, values);
+    } catch (error) { res.status(400).json({ error: (error as Error).message }); return; }
+  }
+  if (UNI_PATCH_FIELDS.some(key => updates[key] !== undefined)) {
+    const [current] = await db.select().from(universitiesTable).where(eq(universitiesTable.id, id));
+    if (!current) { res.status(404).json({ error: "University not found" }); return; }
+    const merged = { ...current, ...updates } as typeof current;
+    try {
+      requireCurrentAdmissionEvidence({
+        source: merged.admissionSourceUrl,
+        verifiedAt: merged.admissionVerifiedAt,
+        validUntil: merged.admissionValidUntil,
+        hasRules: merged.nationalityPolicy !== "unknown" || Boolean(merged.defaultRequiredEducationLevel)
+          || merged.defaultMinGradeValue != null || (merged.defaultLanguageRequirements?.length ?? 0) > 0,
+      });
+    } catch (error) { res.status(400).json({ error: (error as Error).message }); return; }
   }
   if (Object.keys(updates).length === 0) { res.status(400).json({ error: "No valid fields" }); return; }
   const [uni] = await db.update(universitiesTable).set(updates).where(eq(universitiesTable.id, id)).returning();
@@ -436,6 +565,8 @@ router.post("/programs", requireAuth, requireRole(...MANAGER_ROLES), async (req,
     tuitionFee, currency = "USD", scholarship, intakes, requirements, commissionRate,
     applicationFee, advancedFee, depositFee, serviceFeeAmount, discountedFee, languageFee,
     feeType, minGpa, minLanguageScore, quota, isActive = true,
+    requiredEducationLevel, minGradeValue, gradeScale, languageRequirements,
+    conditionalAdmission, admissionSourceUrl, admissionVerifiedAt, admissionValidUntil,
   } = req.body;
   if (!universityId || !name) { res.status(400).json({ error: "universityId and name are required" }); return; }
   const n = (v: any) => (v !== undefined && v !== "" && v !== null ? Number(v) : null);
@@ -445,6 +576,22 @@ router.post("/programs", requireAuth, requireRole(...MANAGER_ROLES), async (req,
     if (isNaN(qv) || qv < 1) { res.status(400).json({ error: "quota must be a positive integer (>= 1) or empty" }); return; }
     quotaVal = qv;
   }
+  let normalizedProgramLanguages: Array<{ test: string; overall: number }>;
+  let normalizedProgramSource: string | null;
+  let normalizedProgramVerifiedAt: Date | null;
+  let normalizedProgramValidUntil: Date | null;
+  try {
+    normalizedProgramLanguages = normalizeLanguageRequirements(languageRequirements);
+    normalizedProgramSource = normalizeAdmissionUrl(admissionSourceUrl);
+    normalizedProgramVerifiedAt = normalizeAdmissionDate(admissionVerifiedAt);
+    normalizedProgramValidUntil = normalizeAdmissionDate(admissionValidUntil, "admissionValidUntil");
+    requireCurrentAdmissionEvidence({
+      source: normalizedProgramSource,
+      verifiedAt: normalizedProgramVerifiedAt,
+      validUntil: normalizedProgramValidUntil,
+      hasRules: Boolean(requiredEducationLevel) || minGradeValue != null || normalizedProgramLanguages.length > 0,
+    });
+  } catch (error) { res.status(400).json({ error: (error as Error).message }); return; }
   const [prog] = await db.insert(programsTable).values({
     universityId: Number(universityId), name, description: description || null, degree: degree || null, field: field || null,
     language: language || null, duration: duration || null,
@@ -461,6 +608,14 @@ router.post("/programs", requireAuth, requireRole(...MANAGER_ROLES), async (req,
     feeType: feeType || null,
     minGpa: n(minGpa),
     minLanguageScore: n(minLanguageScore),
+    requiredEducationLevel: requiredEducationLevel || null,
+    minGradeValue: n(minGradeValue),
+    gradeScale: gradeScale || null,
+    languageRequirements: languageRequirements == null ? null : normalizedProgramLanguages,
+    conditionalAdmission: conditionalAdmission == null ? null : Boolean(conditionalAdmission),
+    admissionSourceUrl: normalizedProgramSource,
+    admissionVerifiedAt: normalizedProgramVerifiedAt,
+    admissionValidUntil: normalizedProgramValidUntil,
     quota: quotaVal,
     isActive,
   }).returning();
@@ -692,6 +847,12 @@ router.patch("/programs/:id", requireAuth, requireRole(...MANAGER_ROLES), async 
   for (const key of PROG_PATCH_FIELDS) {
     if (req.body[key] !== undefined) updates[key] = req.body[key];
   }
+  try {
+    if (updates.languageRequirements !== undefined) updates.languageRequirements = normalizeLanguageRequirements(updates.languageRequirements);
+    if (updates.admissionSourceUrl !== undefined) updates.admissionSourceUrl = normalizeAdmissionUrl(updates.admissionSourceUrl);
+    if (updates.admissionVerifiedAt !== undefined) updates.admissionVerifiedAt = normalizeAdmissionDate(updates.admissionVerifiedAt);
+    if (updates.admissionValidUntil !== undefined) updates.admissionValidUntil = normalizeAdmissionDate(updates.admissionValidUntil, "admissionValidUntil");
+  } catch (error) { res.status(400).json({ error: (error as Error).message }); return; }
   if (updates.quota !== undefined) {
     if (updates.quota === null || updates.quota === "") {
       updates.quota = null;
@@ -701,6 +862,18 @@ router.patch("/programs/:id", requireAuth, requireRole(...MANAGER_ROLES), async 
       updates.quota = qv;
     }
   }
+  const [currentProgram] = await db.select().from(programsTable).where(eq(programsTable.id, id));
+  if (!currentProgram) { res.status(404).json({ error: "Program not found" }); return; }
+  const mergedProgram = { ...currentProgram, ...updates } as typeof currentProgram;
+  try {
+    requireCurrentAdmissionEvidence({
+      source: mergedProgram.admissionSourceUrl,
+      verifiedAt: mergedProgram.admissionVerifiedAt,
+      validUntil: mergedProgram.admissionValidUntil,
+      hasRules: Boolean(mergedProgram.requiredEducationLevel) || mergedProgram.minGradeValue != null
+        || (mergedProgram.languageRequirements?.length ?? 0) > 0,
+    });
+  } catch (error) { res.status(400).json({ error: (error as Error).message }); return; }
   if (Object.keys(updates).length === 0) { res.status(400).json({ error: "No valid fields" }); return; }
   const [prog] = await db.update(programsTable).set(updates).where(eq(programsTable.id, id)).returning();
   if (!prog) { res.status(404).json({ error: "Program not found" }); return; }

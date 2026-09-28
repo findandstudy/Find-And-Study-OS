@@ -76,7 +76,7 @@ router.put("/integrations/:key", requireAuth, requireRole(...ADMIN_ROLES), async
     res.status(403).json({
       error: "live_integrations_disabled",
       message:
-        "This integration can only be enabled in production. Set NODE_ENV=production or ALLOW_LIVE_INTEGRATIONS=true.",
+        "Live integrations are disabled by the deployment environment.",
     });
     return;
   }
@@ -156,17 +156,17 @@ router.patch("/integrations/:key/toggle", requireAuth, requireRole(...ADMIN_ROLE
   }
 
   const willEnable = !existing.isEnabled;
-  if (LIVE_GATED_KEYS.has(String(req.params.key)) && willEnable && !isLiveIntegrationsEnabled()) {
+  if (LIVE_GATED_KEYS.has(integrationKey) && willEnable && !isLiveIntegrationsEnabled()) {
     res.status(403).json({
       error: "live_integrations_disabled",
       message:
-        "This integration can only be enabled in production. Set NODE_ENV=production or ALLOW_LIVE_INTEGRATIONS=true.",
+        "Live integrations are disabled by the deployment environment.",
     });
     return;
   }
 
   // Same WA secrets check as PUT — toggling must not bypass mandatory creds.
-  if (String(req.params.key) === "whatsapp" && willEnable) {
+  if (integrationKey === "whatsapp" && willEnable) {
     const plain = decryptConfig(existing.config as Record<string, any>);
     if (!plain.appSecret || !plain.webhookVerifyToken) {
       res.status(400).json({
@@ -193,6 +193,7 @@ router.patch("/integrations/:key/toggle", requireAuth, requireRole(...ADMIN_ROLE
 });
 
 router.post("/integrations/:key/test", requireAuth, requireRole(...ADMIN_ROLES), async (req, res): Promise<void> => {
+  const integrationKey = String(req.params.key).trim().toLowerCase();
   const [integration] = await db
     .select()
     .from(integrationsTable)
@@ -200,6 +201,16 @@ router.post("/integrations/:key/test", requireAuth, requireRole(...ADMIN_ROLES),
 
   if (!integration) {
     res.status(404).json({ error: "Integration not found" });
+    return;
+  }
+
+  // Credential checks also contact providers (SMTP verify and Anthropic test
+  // prompts included). Stop before decrypting credentials, DNS or SDK creation.
+  if (
+    (LIVE_GATED_KEYS.has(integrationKey) || integrationKey === "smtp" || isAnthropicConnectionKey(integrationKey))
+    && !isLiveIntegrationsEnabled()
+  ) {
+    res.json(simulatedIntegrationTestResult("Live credential check was skipped; simulated mode is not health evidence."));
     return;
   }
 

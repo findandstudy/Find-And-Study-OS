@@ -29,3 +29,13 @@ export const publicFormLimiter = rateLimit({
   store: new PgRateLimitStore(WINDOW_MS, "website-form"),
   keyGenerator: (req) => getRateLimitIp(req),
 });
+
+export const publicStudentMatchingLimiter = rateLimit({
+  windowMs: WINDOW_MS,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many matching requests. Please try again later." },
+  store: new PgRateLimitStore(WINDOW_MS, "student-matching"),
+  keyGenerator: (req) => getRateLimitIp(req),
+});

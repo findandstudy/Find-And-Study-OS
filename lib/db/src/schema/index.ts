@@ -68,6 +68,7 @@ export * from "./portalWorkerJobs";
 export * from "./knowledgeSources";
 export * from "./educationRecords";
 export * from "./studentEducationRecords";
+export * from "./studentRegistrationProfiles";
 export * from "./operationalMetadata";
 export * from "./agentApplications";
 export * from "./authorization";

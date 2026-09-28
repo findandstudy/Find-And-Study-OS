@@ -13,6 +13,10 @@ const appSource = readFileSync(
   new URL("../src/app.ts", import.meta.url),
   "utf8",
 );
+const csrfSource = readFileSync(
+  new URL("../src/middlewares/csrf.ts", import.meta.url),
+  "utf8",
+);
 const indexSource = readFileSync(
   new URL("../src/index.ts", import.meta.url),
   "utf8",
@@ -212,15 +216,16 @@ const testEnvRunnerSource = readFileSync(
 
 test("authenticated course-finder writes are not exempt from CSRF", () => {
   assert.doesNotMatch(
-    appSource,
+    csrfSource,
     /startsWith\(["']\/api\/course-finder["']\)/,
   );
-  assert.match(appSource, /const CSRF_SAFE_METHODS/);
-  assert.match(appSource, /cookieToken !== headerToken/);
+  assert.match(appSource, /app\.use\(csrfProtection\)/);
+  assert.match(csrfSource, /const CSRF_SAFE_METHODS/);
+  assert.match(csrfSource, /cookieToken !== headerToken/);
 });
 
 test("the SPA fallback does not issue a second conflicting CSRF cookie", () => {
-  assert.match(appSource, /csrfCookieIssued/);
+  assert.match(csrfSource, /csrfCookieIssued/);
   assert.match(indexSource, /cookies\?\.csrf_token/);
   assert.match(indexSource, /csrfCookieIssued\?: boolean/);
 });

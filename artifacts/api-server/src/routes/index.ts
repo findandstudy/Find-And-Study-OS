@@ -78,6 +78,7 @@ import socialAdvertisingRouter from "./socialAdvertising";
 import operationsRouter from "./operations";
 import { tokenScopeGuard } from "../middlewares/tokenScopeGuard";
 import { studentEmailVerificationGate } from "../middlewares/studentEmailVerificationGate";
+import studentRegistrationMatchingRouter from "./studentRegistrationMatching";
 
 const router: IRouter = Router();
 
@@ -221,6 +222,7 @@ router.use(operationsRouter);
 router.use(healthRouter);
 router.use(storageRouter);
 router.use(authRouter);
+router.use(studentRegistrationMatchingRouter);
 router.use(usersRouter);
 router.use(leadsRouter);
 router.use(studentsRouter);
