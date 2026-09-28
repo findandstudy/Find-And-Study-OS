@@ -15,6 +15,7 @@ import {
   websiteGlobalComponentsTable,
 } from "@workspace/db";
 import { and, asc, desc, eq, gte, isNotNull, isNull, lte, ne, or, sql, inArray } from "drizzle-orm";
+import { publicCatalogInvalidationBus, type PublicCatalogInvalidation } from "./publicCatalogInvalidationBus";
 import {
   PUBLIC_CATALOG_RELATED_CANDIDATE_LIMIT,
   PUBLIC_CATALOG_RELATED_LIMIT,
@@ -1738,12 +1739,7 @@ export async function getPublicCatalogRenderModel(
 
 export function getPublicCatalogCacheGeneration(): number { return cacheGeneration; }
 
-export function invalidatePublicCatalogRenderCache(input: {
-  detailTemplate?: DetailLayoutKind;
-  entityType?: "program" | "university" | "destination" | "city" | "catalog" | "article" | "page" | "all";
-  entityId?: number;
-  locale?: string;
-} = {}): number {
+export function applyPublicCatalogRenderCacheInvalidation(input: PublicCatalogInvalidation = {}): number {
   let removed = 0;
   const candidateKeys = new Set([...cache.keys(), ...inFlight.keys()]);
   const matches = (key: string): boolean => {
@@ -1779,5 +1775,11 @@ export function invalidatePublicCatalogRenderCache(input: {
   // Other catalogue consumers (Course Finder) also key their caches by this generation.
   // A mutation must advance it even when no SSR entry happens to be cached.
   cacheGeneration += 1;
+  return removed;
+}
+
+export function invalidatePublicCatalogRenderCache(input: PublicCatalogInvalidation = {}): number {
+  const removed = applyPublicCatalogRenderCacheInvalidation(input);
+  publicCatalogInvalidationBus.publish(input);
   return removed;
 }

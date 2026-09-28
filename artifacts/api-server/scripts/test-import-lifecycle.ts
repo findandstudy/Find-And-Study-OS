@@ -8,6 +8,7 @@ function source(relativePath: string): string {
 const feedBus = source("lib/feedBus.ts");
 const inboxBus = source("lib/inbox/eventBus.ts");
 const notificationBus = source("lib/notificationBus.ts");
+const publicCatalogInvalidationBus = source("lib/publicCatalogInvalidationBus.ts");
 const notificationsRoute = source("routes/notifications.ts");
 const docCatalog = source("lib/docCatalog.ts");
 const docNaming = source("lib/docNaming.ts");
@@ -17,6 +18,7 @@ for (const [name, bus] of [
   ["feed", feedBus],
   ["inbox", inboxBus],
   ["notification", notificationBus],
+  ["public catalog invalidation", publicCatalogInvalidationBus],
 ] as const) {
   const exportAt = bus.indexOf("export const");
   assert.ok(exportAt > 0, `${name} bus export exists`);
@@ -37,5 +39,9 @@ assert.doesNotMatch(namingBeforeFirstExport, /void\s+loadDbLabels\s*\(/, "docume
 assert.match(bootstrap, /await seedNotificationRules\(\)/, "notification seed is owned by explicit bootstrap");
 assert.match(bootstrap, /await inboxBus\.shutdown\(\)/, "inbox listener is closed during shutdown");
 assert.match(bootstrap, /await notificationBus\.shutdown\(\)/, "notification listener is closed during shutdown");
+assert.match(bootstrap, /publicCatalogInvalidationBus\.subscribe\(applyPublicCatalogRenderCacheInvalidation\)/,
+  "public catalog invalidation listener is explicitly started during bootstrap");
+assert.match(bootstrap, /await publicCatalogInvalidationBus\.shutdown\(\)/,
+  "public catalog invalidation listener is closed during shutdown");
 
-console.log("[import-lifecycle] 12/12 PASS");
+console.log("[import-lifecycle] 17/17 PASS");

@@ -807,6 +807,15 @@
       "note": "Governed public-web publication store is maker-checker and receipt-bound; publication/index activation remains disabled."
     },
     {
+      "path": "artifacts/api-server/src/lib/publicCatalogInvalidationBus.ts",
+      "ownership": "tenant_owned",
+      "enforcement": "quarantine_required",
+      "risk": "medium",
+      "owner": "Catalog & Content",
+      "externalPilot": "quarantine",
+      "note": "Bounded allowlisted PostgreSQL NOTIFY payload invalidates process-local public catalog/Course Finder cache generations across API processes; it performs no domain write or rollout activation."
+    },
+    {
       "path": "artifacts/api-server/src/lib/publicCatalogPriceReadModel.ts",
       "ownership": "tenant_owned",
       "enforcement": "quarantine_required",

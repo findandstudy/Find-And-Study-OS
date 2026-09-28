@@ -64,13 +64,25 @@ verisi ve dış Academy alıcısı değiştirilmedi.
      Bu iyileştirme, ayrı transaction-bound attempt/result receipt programının
      yerine geçmez ve o işi tamamlanmış saymaz.
 
+6. **Public katalog iki-process cache invalidasyonu**
+   - Mevcut PostgreSQL altyapısı üzerinde bounded/allowlist payload'lı
+     `LISTEN/NOTIFY` invalidation bus eklendi; Redis veya paralel cache servisi yok.
+   - Local mutation aynı process cache'ini hemen temizliyor, ardından diğer API
+     process'lerine invalidation yayıyor. Kaynak process kendi event'ini tekrar
+     uygulamıyor.
+   - Public detail read-model generation'ı ve generation-key kullanan Course
+     Finder cache'leri diğer process'te de ilerliyor.
+   - Import bağlantı açmıyor; listener yalnız explicit bootstrap'ta başlıyor ve
+     SIGTERM/SIGINT shutdown sınırında kapanıyor.
+
 ## Doğrulama
 
 - Security regression: **115/115 PASS**.
 - Security hardening/native bağımlılık: **116 PASS, 1 Windows symlink SKIP**.
 - Web-form replay: **9/9 PASS**.
 - Application concurrency: **5/5 PASS**.
-- Import lifecycle: **12/12 PASS**.
+- Import lifecycle (catalog bus dahil): **17/17 PASS**.
+- İki bağımsız process + PostgreSQL katalog invalidasyonu: **4/4 PASS**.
 - Upload grant contract: **18/18 PASS**.
 - Frontend upload finalization inventory: **18/18 PASS**.
 - Upload grant PostgreSQL 16.15: **17/17 PASS**.
@@ -113,6 +125,9 @@ dilimde yapılmadı.
   migration'ları hâlâ gerekir.
 - 80 legacy route'un tenant/capability koridoru: kademeli migration programıdır,
   tek global refactor değildir.
-- Academy/provider sandbox E2E, offsite restore/DR, iki-process cache
-  invalidation ve gerçek yüksek-hacim/CWV ölçümü harici ortam/credential veya
-  operasyon penceresi gerektirir; production üzerinde otomatik çalıştırılmaz.
+- Facet/notification-count gibi kullanıcı-scope process-local cache'lerin kalan
+  çoklu-process invalidasyonları ayrı dar fazlardır; public katalog/Course Finder
+  iki-process koridoru tamamlandı.
+- Academy/provider sandbox E2E, offsite restore/DR ve gerçek yüksek-hacim/CWV
+  ölçümü harici ortam/credential veya operasyon penceresi gerektirir; production
+  üzerinde otomatik çalıştırılmaz.

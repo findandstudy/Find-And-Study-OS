@@ -3435,11 +3435,14 @@ async function seedClaudeIntegration() {
 
   serveStaticFrontend();
 
-  const [{ feedBus }, { inboxBus }, { notificationBus }] = await Promise.all([
+  const [{ feedBus }, { inboxBus }, { notificationBus }, { publicCatalogInvalidationBus }, { applyPublicCatalogRenderCacheInvalidation }] = await Promise.all([
     import("./lib/feedBus"),
     import("./lib/inbox/eventBus"),
     import("./lib/notificationBus"),
+    import("./lib/publicCatalogInvalidationBus"),
+    import("./lib/publicCatalogRenderReadModel"),
   ]);
+  const unsubscribePublicCatalogInvalidation = publicCatalogInvalidationBus.subscribe(applyPublicCatalogRenderCacheInvalidation);
   let shuttingDown = false;
   let httpServer: ReturnType<typeof app.listen> | null = null;
   const shutdown = async (signal: string, exitCode = 0) => {
@@ -3484,6 +3487,11 @@ async function seedClaudeIntegration() {
     }
     try { await notificationBus.shutdown(); } catch (error) {
       console.error("[shutdown] notificationBus shutdown failed:", error);
+      exitCode = 1;
+    }
+    unsubscribePublicCatalogInvalidation();
+    try { await publicCatalogInvalidationBus.shutdown(); } catch (error) {
+      console.error("[shutdown] public catalog invalidation bus shutdown failed:", error);
       exitCode = 1;
     }
     process.exit(exitCode);
