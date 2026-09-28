@@ -1,5 +1,5 @@
 import { Router, type IRouter, type Request } from "express";
-import { db, usersTable, rolesTable, studentsTable, softDelete, agentsTable, branchesTable } from "@workspace/db";
+import { db, usersTable, rolesTable, studentsTable, softDelete, agentsTable, branchesTable, auditLogsTable } from "@workspace/db";
 import { eq, ilike, or, sql, and, isNull, desc, inArray, notInArray } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import { requireAuth, requireRole, requirePermission, logAudit } from "../lib/auth";
@@ -283,21 +283,65 @@ router.post("/users", requireAuth, requirePermission("users.create"), validate({
     passwordHash = await bcrypt.hash(pwd.value, 10);
   }
 
-  const [user] = await db
-    .insert(usersTable)
-    .values({
-      email: normalizedEmail,
-      firstName, lastName, role,
-      phone: phone || null,
-      language: language || "en",
-      avatarUrl: avatarUrl || null,
-      branchId: branchId ?? null,
-      isActive: true,
-      emailVerified: true,
-      passwordHash: passwordHash || null,
-    })
-    .returning();
-  await logAudit(req.user!.id, "create_user", "user", user.id, { role, branchId: branchId ?? null }, req.ip);
+  let preparedAvatar: Awaited<ReturnType<typeof prepareUserAvatarUpload>> | null = null;
+  if (avatarUrl) {
+    if (!avatarUrl.startsWith("/api/storage/objects/")) {
+      res.status(400).json({ error: "Avatar must be an uploaded storage object" });
+      return;
+    }
+    if (!(await callerOwnsObject(req.user!.id, avatarUrl))) {
+      res.status(403).json({ error: "The uploaded avatar does not belong to this account" });
+      return;
+    }
+    try {
+      preparedAvatar = await prepareUserAvatarUpload(avatarUrl);
+    } catch (error) {
+      const code = error instanceof Error ? error.message : "USER_AVATAR_UPLOAD_INVALID";
+      if (code === "USER_AVATAR_UPLOAD_INVALID_SIZE") {
+        res.status(413).json({ error: "Avatar is empty or exceeds 5 MB", code });
+      } else {
+        res.status(400).json({ error: "Avatar content is invalid", code });
+      }
+      return;
+    }
+  }
+  let user: typeof usersTable.$inferSelect;
+  try {
+    user = await db.transaction(async (tx) => {
+      if (preparedAvatar && !await consumeFinalizedUploadGrantInDrizzle(tx, {
+        objectPath: preparedAvatar.objectPath,
+        uploadedBy: req.user!.id,
+        bytes: preparedAvatar.bytes,
+        contentType: preparedAvatar.contentType,
+      })) throw new Error("USER_AVATAR_UPLOAD_GRANT_NOT_FINALIZED");
+      const [created] = await tx.insert(usersTable).values({
+        email: normalizedEmail,
+        firstName, lastName, role,
+        phone: phone || null,
+        language: language || "en",
+        avatarUrl: avatarUrl || null,
+        branchId: branchId ?? null,
+        isActive: true,
+        emailVerified: true,
+        passwordHash: passwordHash || null,
+      }).returning();
+      await tx.insert(auditLogsTable).values({
+        userId: req.user!.id,
+        action: "create_user",
+        resource: "user",
+        resourceId: created.id,
+        changes: JSON.stringify({ role, branchId: branchId ?? null }),
+        ipAddress: req.ip ?? null,
+      });
+      return created;
+    });
+  } catch (error) {
+    if (error instanceof Error && error.message === "USER_AVATAR_UPLOAD_GRANT_NOT_FINALIZED") {
+      res.status(409).json({ error: "Uploaded avatar is not finalized or has already been used", code: "UPLOAD_GRANT_NOT_FINALIZED" });
+      return;
+    }
+    throw error;
+  }
   const { passwordHash: _ph, replitId: _ri, ...safeNewUser } = user as any;
   res.status(201).json(safeNewUser);
 });

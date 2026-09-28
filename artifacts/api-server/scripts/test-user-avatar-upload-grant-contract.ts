@@ -3,8 +3,10 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 const source = readFileSync(new URL("../src/routes/users.ts", import.meta.url), "utf8");
+const createStart = source.indexOf('router.post("/users"');
 const start = source.indexOf('router.patch("/users/:id"');
 const end = source.indexOf('router.delete("/users/:id"');
+const createBoundary = source.slice(createStart, start);
 const boundary = source.slice(start, end);
 
 test("user avatar upload is restricted to owned verified image bytes", () => {
@@ -15,6 +17,18 @@ test("user avatar upload is restricted to owned verified image bytes", () => {
   assert.match(source, /await file\.download\(\)/);
   assert.match(source, /bytes\.length > 5 \* 1024 \* 1024/);
   assert.match(source, /validateUploadedFileBuffer\(`avatar\.\$\{extension\}`, contentType, bytes\)/);
+});
+
+test("user create consumes avatar grant with row and audit", () => {
+  assert.ok(createStart >= 0 && start > createStart);
+  const consumeAt = createBoundary.indexOf("consumeFinalizedUploadGrantInDrizzle(tx,");
+  const insertAt = createBoundary.indexOf("await tx.insert(usersTable)");
+  const auditAt = createBoundary.indexOf("await tx.insert(auditLogsTable)");
+  assert.ok(consumeAt >= 0 && insertAt > consumeAt && auditAt > insertAt);
+  assert.match(createBoundary, /await db\.transaction\(async \(tx\) =>/);
+  assert.match(createBoundary, /USER_AVATAR_UPLOAD_GRANT_NOT_FINALIZED/);
+  assert.match(createBoundary, /status\(409\)/);
+  assert.doesNotMatch(createBoundary, /await db\s*\.insert\(usersTable\)/);
 });
 
 test("avatar grant consumption and user reference update share a transaction", () => {

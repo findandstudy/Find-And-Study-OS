@@ -449,12 +449,14 @@ verisi ve dış Academy alıcısı değiştirilmedi.
   finalized grant'in yeniden kullanımı `409` ile fail-closed'dur. Hedefli
   contract **3/3 PASS**; geniş security-hardening **121 PASS, 1 Windows symlink
   privilege SKIP**; API typecheck ve production build **PASS**.
-- Kullanıcı avatar güncellemesi de aynı tek-kullanımlık upload sınırına alındı:
+- Kullanıcı oluşturma ve avatar güncelleme de aynı tek-kullanımlık upload sınırına alındı:
   yalnız isteği yapan actor'a bağlı private object kabul edilir; gerçek provider
   baytı/MIME, görsel imzası ve 5 MB sınırı doğrulanır; grant tüketimi ile user
   referansı aynı transaction'dadır. Aynı avatarla idempotent retry yeni grant
-  tüketmez. Hedefli contract **3/3 PASS**; geniş security-hardening **124 PASS,
-  1 Windows symlink privilege SKIP**; API typecheck ve production build **PASS**.
+  tüketmez. Create sırasında user row ve audit de grant tüketimiyle aynı
+  transaction'dadır. Hedefli contract **4/4 PASS**; user-management policy
+  **6/6**; güncel geniş security-hardening **133 PASS, 1 Windows symlink
+  privilege SKIP**; API typecheck ve production build **PASS**.
 - Bu iki yeni upload consumer'ı sonrasında birleşik `test:security-regressions`
   zinciri bütünüyle **PASS** oldu: ana güvenlik grubu, **124 PASS + 1 Windows
   symlink privilege SKIP** hardening grubu, web-form replay `9/9`, application
