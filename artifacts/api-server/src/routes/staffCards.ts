@@ -13,6 +13,7 @@ import {
   staffDocumentsTable,
   staffSalaryPaymentsTable,
   staffCommissionsTable,
+  auditLogsTable,
   settingsTable,
   userSessionsTable,
   userPresenceTable,
@@ -37,6 +38,36 @@ const objectStorage = new ObjectStorageService();
 // Sadece super_admin + admin (manager dahil değil — kullanıcı talebi net).
 const STAFF_CARD_ADMINS = ["super_admin", "admin"];
 const requireStaffCardAdmin = requireRole(...STAFF_CARD_ADMINS);
+
+type StaffCardTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+async function writeStaffCardAudit(
+  tx: StaffCardTransaction,
+  req: Request,
+  action: string,
+  userId: number,
+  changes: Record<string, unknown>,
+): Promise<void> {
+  await tx.insert(auditLogsTable).values({
+    userId: req.user!.id,
+    action,
+    resource: "user",
+    resourceId: userId,
+    changes: JSON.stringify(changes),
+    ipAddress: req.ip || null,
+  });
+}
+
+const boundedDateSchema = z.string().trim().min(1).max(40)
+  .refine((value) => Number.isFinite(Date.parse(value)), { message: "Invalid date" });
+const optionalDateSchema = boundedDateSchema.nullable().optional();
+
+function parsePositiveRouteId(value: unknown): number | null {
+  const text = String(value ?? "");
+  if (!/^[1-9]\d*$/.test(text)) return null;
+  const id = Number(text);
+  return Number.isSafeInteger(id) ? id : null;
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Liste — staff/manager rolündeki kullanıcılar
@@ -514,40 +545,49 @@ const salaryBodySchema = z.object({
   amount: z.coerce.number().nonnegative(),
   currency: z.string().trim().length(3).default("USD"),
   period: z.enum(STAFF_SALARY_PERIODS as unknown as [string, ...string[]]).default("monthly"),
-  payDate: z.string().nullable().optional(),
+  payDate: optionalDateSchema,
   status: z.enum(STAFF_SALARY_STATUSES as unknown as [string, ...string[]]).default("pending"),
-  notes: z.string().nullable().optional(),
+  notes: z.string().trim().max(2_000).nullable().optional(),
 });
 
 router.post("/staff-cards/:userId/salary-payments", requireAuth, requireStaffCardAdmin, async (req, res): Promise<void> => {
-  const userId = parseInt(String(req.params.userId), 10);
+  const userId = parsePositiveRouteId(req.params.userId);
+  if (userId === null) { res.status(400).json({ error: "Invalid user id" }); return; }
   const parsed = salaryBodySchema.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.issues[0]?.message || "Invalid body" }); return; }
   const d = parsed.data;
-  const [row] = await db.insert(staffSalaryPaymentsTable).values({
-    userId,
-    amount: String(d.amount),
-    currency: d.currency,
-    period: d.period,
-    payDate: d.payDate ? new Date(d.payDate) : null,
-    status: d.status,
-    notes: d.notes || null,
-    createdBy: req.user!.id,
-  }).returning();
-  logAudit(req.user!.id, "staff_card.salary.create", "user", userId, { id: row.id, amount: d.amount, currency: d.currency }, req.ip);
+  const row = await db.transaction(async (tx) => {
+    const [created] = await tx.insert(staffSalaryPaymentsTable).values({
+      userId,
+      amount: String(d.amount),
+      currency: d.currency.toUpperCase(),
+      period: d.period,
+      payDate: d.payDate ? new Date(d.payDate) : null,
+      status: d.status,
+      notes: d.notes || null,
+      createdBy: req.user!.id,
+    }).returning();
+    await writeStaffCardAudit(tx, req, "staff_card.salary.create", userId, {
+      id: created.id,
+      amount: d.amount,
+      currency: d.currency.toUpperCase(),
+      status: d.status,
+    });
+    return created;
+  });
   res.status(201).json(row);
 });
 
 router.post("/staff-cards/:userId/salary-payments/bulk", requireAuth, requireStaffCardAdmin, async (req, res): Promise<void> => {
-  const userId = parseInt(String(req.params.userId), 10);
-  if (Number.isNaN(userId)) { res.status(400).json({ error: "Invalid user id" }); return; }
+  const userId = parsePositiveRouteId(req.params.userId);
+  if (userId === null) { res.status(400).json({ error: "Invalid user id" }); return; }
   const bulkSchema = z.object({
     count: z.coerce.number().int().min(1).max(36),
-    startDate: z.string().optional(),
+    startDate: boundedDateSchema.optional(),
     amount: z.coerce.number().positive(),
-    currency: z.string().trim().min(2).max(5).default("USD"),
-    period: z.string().default("monthly"),
-    notes: z.string().nullable().optional(),
+    currency: z.string().trim().length(3).default("USD"),
+    period: z.enum(STAFF_SALARY_PERIODS as unknown as [string, ...string[]]).default("monthly"),
+    notes: z.string().trim().max(2_000).nullable().optional(),
   });
   const parsed = bulkSchema.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.issues[0]?.message || "Invalid body" }); return; }
@@ -559,39 +599,59 @@ router.post("/staff-cards/:userId/salary-payments/bulk", requireAuth, requireSta
     const d = new Date(base.getFullYear(), base.getMonth() + i, 1);
     return { userId, amount: String(amount), currency: currency.toUpperCase(), period, payDate: d, status: "pending" as const, notes: notes || null, createdBy: req.user!.id };
   });
-  const created = await db.insert(staffSalaryPaymentsTable).values(rows).returning();
-  logAudit(req.user!.id, "staff_card.salary.bulk_create", "user", userId, { count, amount, currency }, req.ip);
+  const created = await db.transaction(async (tx) => {
+    const inserted = await tx.insert(staffSalaryPaymentsTable).values(rows).returning();
+    await writeStaffCardAudit(tx, req, "staff_card.salary.bulk_create", userId, {
+      count: inserted.length,
+      amount,
+      currency: currency.toUpperCase(),
+      period,
+    });
+    return inserted;
+  });
   res.status(201).json({ created: created.length, rows: created });
 });
 
 router.patch("/staff-cards/:userId/salary-payments/:id", requireAuth, requireStaffCardAdmin, async (req, res): Promise<void> => {
-  const userId = parseInt(String(req.params.userId), 10);
-  const id = parseInt(String(req.params.id), 10);
+  const userId = parsePositiveRouteId(req.params.userId);
+  const id = parsePositiveRouteId(req.params.id);
+  if (userId === null || id === null) { res.status(400).json({ error: "Invalid id" }); return; }
   const parsed = salaryBodySchema.partial().safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: "Invalid body" }); return; }
   const d = parsed.data;
   const updates: Record<string, unknown> = {};
   if (d.amount !== undefined) updates.amount = String(d.amount);
-  if (d.currency !== undefined) updates.currency = d.currency;
+  if (d.currency !== undefined) updates.currency = d.currency.toUpperCase();
   if (d.period !== undefined) updates.period = d.period;
   if (d.payDate !== undefined) updates.payDate = d.payDate ? new Date(d.payDate) : null;
   if (d.status !== undefined) updates.status = d.status;
   if (d.notes !== undefined) updates.notes = d.notes;
   if (Object.keys(updates).length === 0) { res.status(400).json({ error: "No fields" }); return; }
-  const [row] = await db.update(staffSalaryPaymentsTable).set(updates)
-    .where(and(eq(staffSalaryPaymentsTable.id, id), eq(staffSalaryPaymentsTable.userId, userId)))
-    .returning();
+  const row = await db.transaction(async (tx) => {
+    const [updated] = await tx.update(staffSalaryPaymentsTable).set(updates)
+      .where(and(eq(staffSalaryPaymentsTable.id, id), eq(staffSalaryPaymentsTable.userId, userId)))
+      .returning();
+    if (!updated) return null;
+    await writeStaffCardAudit(tx, req, "staff_card.salary.update", userId, {
+      id,
+      fields: Object.keys(updates).sort(),
+    });
+    return updated;
+  });
   if (!row) { res.status(404).json({ error: "Not found" }); return; }
-  logAudit(req.user!.id, "staff_card.salary.update", "user", userId, { id, ...updates }, req.ip);
   res.json(row);
 });
 
 router.delete("/staff-cards/:userId/salary-payments/:id", requireAuth, requireStaffCardAdmin, async (req, res): Promise<void> => {
-  const userId = parseInt(String(req.params.userId), 10);
-  const id = parseInt(String(req.params.id), 10);
-  await db.delete(staffSalaryPaymentsTable)
-    .where(and(eq(staffSalaryPaymentsTable.id, id), eq(staffSalaryPaymentsTable.userId, userId)));
-  logAudit(req.user!.id, "staff_card.salary.delete", "user", userId, { id }, req.ip);
+  const userId = parsePositiveRouteId(req.params.userId);
+  const id = parsePositiveRouteId(req.params.id);
+  if (userId === null || id === null) { res.status(400).json({ error: "Invalid id" }); return; }
+  await db.transaction(async (tx) => {
+    const [deleted] = await tx.delete(staffSalaryPaymentsTable)
+      .where(and(eq(staffSalaryPaymentsTable.id, id), eq(staffSalaryPaymentsTable.userId, userId)))
+      .returning({ id: staffSalaryPaymentsTable.id });
+    if (deleted) await writeStaffCardAudit(tx, req, "staff_card.salary.delete", userId, { id });
+  });
   res.sendStatus(204);
 });
 
@@ -605,40 +665,50 @@ const commissionBodySchema = z.object({
   agentId: z.number().int().positive().nullable().optional(),
   applicationId: z.number().int().positive().nullable().optional(),
   status: z.enum(STAFF_COMMISSION_STATUSES as unknown as [string, ...string[]]).default("pending"),
-  payDate: z.string().nullable().optional(),
-  notes: z.string().nullable().optional(),
+  payDate: optionalDateSchema,
+  notes: z.string().trim().max(2_000).nullable().optional(),
 });
 
 router.post("/staff-cards/:userId/commissions", requireAuth, requireStaffCardAdmin, async (req, res): Promise<void> => {
-  const userId = parseInt(String(req.params.userId), 10);
+  const userId = parsePositiveRouteId(req.params.userId);
+  if (userId === null) { res.status(400).json({ error: "Invalid user id" }); return; }
   const parsed = commissionBodySchema.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.issues[0]?.message || "Invalid body" }); return; }
   const d = parsed.data;
-  const [row] = await db.insert(staffCommissionsTable).values({
-    userId,
-    amount: String(d.amount),
-    currency: d.currency,
-    studentId: d.studentId ?? null,
-    agentId: d.agentId ?? null,
-    applicationId: d.applicationId ?? null,
-    status: d.status,
-    payDate: d.payDate ? new Date(d.payDate) : null,
-    notes: d.notes || null,
-    createdBy: req.user!.id,
-  }).returning();
-  logAudit(req.user!.id, "staff_card.commission.create", "user", userId, { id: row.id, amount: d.amount }, req.ip);
+  const row = await db.transaction(async (tx) => {
+    const [created] = await tx.insert(staffCommissionsTable).values({
+      userId,
+      amount: String(d.amount),
+      currency: d.currency.toUpperCase(),
+      studentId: d.studentId ?? null,
+      agentId: d.agentId ?? null,
+      applicationId: d.applicationId ?? null,
+      status: d.status,
+      payDate: d.payDate ? new Date(d.payDate) : null,
+      notes: d.notes || null,
+      createdBy: req.user!.id,
+    }).returning();
+    await writeStaffCardAudit(tx, req, "staff_card.commission.create", userId, {
+      id: created.id,
+      amount: d.amount,
+      currency: d.currency.toUpperCase(),
+      status: d.status,
+    });
+    return created;
+  });
   res.status(201).json(row);
 });
 
 router.patch("/staff-cards/:userId/commissions/:id", requireAuth, requireStaffCardAdmin, async (req, res): Promise<void> => {
-  const userId = parseInt(String(req.params.userId), 10);
-  const id = parseInt(String(req.params.id), 10);
+  const userId = parsePositiveRouteId(req.params.userId);
+  const id = parsePositiveRouteId(req.params.id);
+  if (userId === null || id === null) { res.status(400).json({ error: "Invalid id" }); return; }
   const parsed = commissionBodySchema.partial().safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: "Invalid body" }); return; }
   const d = parsed.data;
   const updates: Record<string, unknown> = {};
   if (d.amount !== undefined) updates.amount = String(d.amount);
-  if (d.currency !== undefined) updates.currency = d.currency;
+  if (d.currency !== undefined) updates.currency = d.currency.toUpperCase();
   if (d.studentId !== undefined) updates.studentId = d.studentId;
   if (d.agentId !== undefined) updates.agentId = d.agentId;
   if (d.applicationId !== undefined) updates.applicationId = d.applicationId;
@@ -646,20 +716,31 @@ router.patch("/staff-cards/:userId/commissions/:id", requireAuth, requireStaffCa
   if (d.payDate !== undefined) updates.payDate = d.payDate ? new Date(d.payDate) : null;
   if (d.notes !== undefined) updates.notes = d.notes;
   if (Object.keys(updates).length === 0) { res.status(400).json({ error: "No fields" }); return; }
-  const [row] = await db.update(staffCommissionsTable).set(updates)
-    .where(and(eq(staffCommissionsTable.id, id), eq(staffCommissionsTable.userId, userId)))
-    .returning();
+  const row = await db.transaction(async (tx) => {
+    const [updated] = await tx.update(staffCommissionsTable).set(updates)
+      .where(and(eq(staffCommissionsTable.id, id), eq(staffCommissionsTable.userId, userId)))
+      .returning();
+    if (!updated) return null;
+    await writeStaffCardAudit(tx, req, "staff_card.commission.update", userId, {
+      id,
+      fields: Object.keys(updates).sort(),
+    });
+    return updated;
+  });
   if (!row) { res.status(404).json({ error: "Not found" }); return; }
-  logAudit(req.user!.id, "staff_card.commission.update", "user", userId, { id, ...updates }, req.ip);
   res.json(row);
 });
 
 router.delete("/staff-cards/:userId/commissions/:id", requireAuth, requireStaffCardAdmin, async (req, res): Promise<void> => {
-  const userId = parseInt(String(req.params.userId), 10);
-  const id = parseInt(String(req.params.id), 10);
-  await db.delete(staffCommissionsTable)
-    .where(and(eq(staffCommissionsTable.id, id), eq(staffCommissionsTable.userId, userId)));
-  logAudit(req.user!.id, "staff_card.commission.delete", "user", userId, { id }, req.ip);
+  const userId = parsePositiveRouteId(req.params.userId);
+  const id = parsePositiveRouteId(req.params.id);
+  if (userId === null || id === null) { res.status(400).json({ error: "Invalid id" }); return; }
+  await db.transaction(async (tx) => {
+    const [deleted] = await tx.delete(staffCommissionsTable)
+      .where(and(eq(staffCommissionsTable.id, id), eq(staffCommissionsTable.userId, userId)))
+      .returning({ id: staffCommissionsTable.id });
+    if (deleted) await writeStaffCardAudit(tx, req, "staff_card.commission.delete", userId, { id });
+  });
   res.sendStatus(204);
 });
 

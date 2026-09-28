@@ -24,6 +24,7 @@ const cms = source("../src/routes/cms.ts");
 const portalExclusions = source("../src/routes/portalUniversityExclusions.ts");
 const portalFallbacks = source("../src/routes/portalProgramFallbacks.ts");
 const dataQuality = source("../src/routes/dataQuality.ts");
+const staffCards = source("../src/routes/staffCards.ts");
 
 assert.match(auth, /\): Promise<void> \{\s*return db\.insert\(auditLogsTable\)/,
   "audit insert exposes a real awaitable completion boundary");
@@ -261,4 +262,31 @@ assert.match(portalFallbacks, /SOURCE_CANNOT_BE_FALLBACK/,
 assert.match(portalFallbacks, /fallbackProgramIds: z\.array[\s\S]{0,80}\.max\(20\)/,
   "portal fallback fan-out is hard bounded");
 
-console.log("[audit-durability-contract] 125/125 PASS");
+const staffFinancialRoutes = staffCards.slice(
+  staffCards.indexOf("// Maaş ödemeleri"),
+  staffCards.indexOf("// Activity raporu"),
+);
+assert.match(staffCards, /async function writeStaffCardAudit[\s\S]*await tx\.insert\(auditLogsTable\)\.values/,
+  "staff financial audit helper requires the active transaction");
+for (const action of [
+  "staff_card.salary.create",
+  "staff_card.salary.bulk_create",
+  "staff_card.salary.update",
+  "staff_card.salary.delete",
+  "staff_card.commission.create",
+  "staff_card.commission.update",
+  "staff_card.commission.delete",
+]) {
+  assert.match(staffFinancialRoutes, new RegExp(`await writeStaffCardAudit\\(tx, req, "${action}"`),
+    `${action} persists its result before transaction commit`);
+}
+assert.doesNotMatch(staffFinancialRoutes, /logAudit\(/,
+  "staff salary and commission mutations do not use the non-transactional legacy helper");
+assert.match(staffFinancialRoutes, /notes: z\.string\(\)\.trim\(\)\.max\(2_000\)/,
+  "staff financial notes have a hard request-size ceiling");
+assert.match(staffCards, /const boundedDateSchema = z\.string\(\)\.trim\(\)\.min\(1\)\.max\(40\)/,
+  "staff financial date inputs are bounded before parsing");
+assert.match(staffCards, /function parsePositiveRouteId[\s\S]{0,220}Number\.isSafeInteger/,
+  "staff financial route identifiers reject partial and unsafe integers");
+
+console.log("[audit-durability-contract] 137/137 PASS");

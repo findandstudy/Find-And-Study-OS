@@ -306,6 +306,18 @@ verisi ve dış Academy alıcısı değiştirilmedi.
      Sentetik tekrarların ikincisinden itibaren yaklaşık `1 sn` TTFB görüldü;
      bu, saha p75 kanıtı değil ve rate-limit/edge davranışı ayrı ölçülmelidir.
 
+25. **Personel maaş/komisyon mutation ve audit atomikliği**
+   - Personel maaş kaydı create/bulk-create/update/delete ile komisyon
+     create/update/delete sonuçları kendi business mutation transaction'larında
+     audit üretir. Audit insert başarısızsa finansal kayıt da commit edilmez.
+   - Başarılı update audit'i not veya finansal açıklama içeriğini kopyalamaz;
+     yalnız kayıt ID'si ve değişen alan adlarını taşır. Silinmiş/olmayan kaydın
+     idempotent tekrarında sahte audit üretilmez.
+   - Para birimi üç karakterle sınırlandırılıp normalize edilir; tarih girdileri
+     parse öncesi bounded/valid, notlar en fazla 2.000 karakterdir. Bulk maaş
+     periyodu mevcut kanonik enum'u kullanır ve 36 kayıt tavanını korur. Route
+     kimlikleri partial veya unsafe integer kabul etmez.
+
 ## Doğrulama
 
 - Security regression: **115/115 PASS**.
@@ -644,6 +656,10 @@ verisi ve dış Academy alıcısı değiştirilmedi.
   Mutating workflow runner karantinası açılmadı. Koşu sonrasında app/DB healthy,
   restart `0`, ledger `132`, fatal/unhandled log `0`; live integration, email,
   background ve social provider/worker kapıları kapalı kaldı.
+- Staff salary/commission mutation rollback fault-injection matrisi **6/6 PASS**;
+  genişletilmiş audit durability contract **137/137 PASS**, API typecheck ve
+  birleşik security regression zinciri **PASS**. Bu dilim henüz staging'e
+  dağıtılmadı; production değiştirilmedi.
 
 ## 29 Eylül authentication audit ve password-reset yarış koruması
 
