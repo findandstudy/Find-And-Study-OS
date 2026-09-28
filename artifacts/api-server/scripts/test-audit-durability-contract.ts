@@ -25,6 +25,8 @@ const portalExclusions = source("../src/routes/portalUniversityExclusions.ts");
 const portalFallbacks = source("../src/routes/portalProgramFallbacks.ts");
 const dataQuality = source("../src/routes/dataQuality.ts");
 const staffCards = source("../src/routes/staffCards.ts");
+const stageDocuments = source("../src/routes/applicationStageDocuments.ts");
+const missingDocsFulfillment = source("../src/lib/missingDocsFulfillment.ts");
 
 assert.match(auth, /\): Promise<void> \{\s*return db\.insert\(auditLogsTable\)/,
   "audit insert exposes a real awaitable completion boundary");
@@ -289,4 +291,47 @@ assert.match(staffCards, /const boundedDateSchema = z\.string\(\)\.trim\(\)\.min
 assert.match(staffCards, /function parsePositiveRouteId[\s\S]{0,220}Number\.isSafeInteger/,
   "staff financial route identifiers reject partial and unsafe integers");
 
-console.log("[audit-durability-contract] 137/137 PASS");
+const stageDocumentCreate = stageDocuments.slice(
+  stageDocuments.indexOf('router.post("/applications/:id/stage-documents"'),
+  stageDocuments.indexOf('router.patch("/applications/:id/stage-documents/:docId"'),
+);
+const stageDocumentUpdate = stageDocuments.slice(
+  stageDocuments.indexOf('router.patch("/applications/:id/stage-documents/:docId"'),
+  stageDocuments.indexOf('router.delete("/applications/:id/stage-documents/:docId"'),
+);
+const stageDocumentDelete = stageDocuments.slice(
+  stageDocuments.indexOf('router.delete("/applications/:id/stage-documents/:docId"'),
+  stageDocuments.indexOf('router.get("/applications/:id/missing-doc-notes"'),
+);
+assert.match(stageDocumentCreate, /await db\.transaction\(async \(tx\) =>/,
+  "stage document create uses one mutation transaction");
+assert.match(stageDocumentCreate, /await tx\.insert\(applicationStageDocumentsTable\)[\s\S]*await tx\.insert\(documentsTable\)/,
+  "stage document and student mirror are committed together");
+assert.match(stageDocumentCreate, /await tx\.insert\(auditLogsTable\)\.values\(\{[\s\S]{0,180}action: "upload_stage_document"/,
+  "stage document create persists audit before commit");
+assert.doesNotMatch(stageDocumentCreate, /logAudit\(/,
+  "stage document create does not use the non-transactional audit helper");
+assert.match(stageDocumentUpdate, /await db\.transaction\(async \(tx\) =>[\s\S]*await tx\.update\(applicationStageDocumentsTable\)[\s\S]*action: "update_stage_document"/,
+  "stage document metadata update and audit are atomic");
+assert.doesNotMatch(stageDocumentUpdate, /logAudit\(/,
+  "stage document update does not use the non-transactional audit helper");
+assert.match(stageDocumentDelete, /await db\.transaction\(async \(tx\) =>/,
+  "stage document delete uses one mutation transaction");
+assert.match(stageDocumentDelete, /await tx\.delete\(applicationStageDocumentsTable\)[\s\S]*await tx\.update\(documentsTable\)/,
+  "stage document deletion and mirror retirement are committed together");
+assert.match(stageDocumentDelete, /await tx\.insert\(auditLogsTable\)\.values\(\{[\s\S]{0,180}action: "delete_stage_document"/,
+  "stage document delete persists audit before commit");
+assert.doesNotMatch(stageDocumentDelete, /logAudit\(/,
+  "stage document delete does not use the non-transactional audit helper");
+assert.match(stageDocumentUpdate, /fields: Object\.keys\(updates\)\.sort\(\)/,
+  "stage document metadata audit excludes submitted values");
+assert.match(missingDocsFulfillment, /await tx\.update\(applicationsTable\)[\s\S]{0,900}await tx\.insert\(auditLogsTable\)\.values/,
+  "missing-document stage advance and audit share one transaction");
+assert.match(missingDocsFulfillment, /action: "auto_stage_advance_missing_docs_fulfilled"/,
+  "missing-document auto-advance writes its durable result action");
+assert.doesNotMatch(missingDocsFulfillment, /setImmediate\s*\(/,
+  "missing-document audit is not deferred beyond transaction commit");
+assert.doesNotMatch(missingDocsFulfillment, /logAudit\(/,
+  "missing-document auto-advance does not use the non-transactional audit helper");
+
+console.log("[audit-durability-contract] 152/152 PASS");

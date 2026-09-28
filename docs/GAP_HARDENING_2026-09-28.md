@@ -331,6 +331,19 @@ verisi ve dış Academy alıcısı değiştirilmedi.
      stream başlamadan request yaşam döngüsünde bekleniyor; object path audit veya
      API cevabına çıkarılmıyor.
 
+27. **Başvuru stage-document ve missing-doc geçiş bütünlüğü**
+   - Stage document, öğrenci belge aynası ve bounded upload audit'i tek transaction
+     içinde yazılıyor. Mirror veya audit hatası ana belgeyi tek başına bırakmıyor;
+     yarım görünürlük commit edilmiyor.
+   - Stage-document metadata update ile delete; mirror retirement ve audit
+     sonuçlarıyla aynı transaction'a alındı. Update audit'i submitted tarih
+     değerini kopyalamadan yalnız değişen alan adlarını taşır.
+   - Tüm eksik belgeler tamamlandığında oluşan otomatik application stage advance
+     audit'i artık `setImmediate` ile transaction sonrasına bırakılmıyor. Stage
+     update ve `auto_stage_advance_missing_docs_fulfilled` sonucu aynı transaction
+     içinde; audit hatasında fulfillment/advance rollback olur, belge upload'ı
+     mevcut güvenli idempotent hook sınırında korunur.
+
 ## Doğrulama
 
 - Security regression: **115/115 PASS**.
@@ -676,6 +689,10 @@ verisi ve dış Academy alıcısı değiştirilmedi.
 - Staff document authoritative-byte/finalized-grant/audit sözleşmesi **4/4
   PASS**; API typecheck **PASS**. Bu dilim henüz staging'e dağıtılmadı;
   production değiştirilmedi.
+- Stage-document create/update/delete/mirror ve missing-doc auto-advance audit
+  sözleşmeleriyle genişletilmiş audit durability contract **152/152 PASS**;
+  pipeline completion-target **3/3 PASS**, API typecheck **PASS**. Bu dilim henüz
+  staging'e dağıtılmadı; production değiştirilmedi.
 
 ## 29 Eylül authentication audit ve password-reset yarış koruması
 

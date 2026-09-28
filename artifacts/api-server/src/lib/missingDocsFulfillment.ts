@@ -1,7 +1,6 @@
-import { db, applicationStageDocumentsTable, applicationsTable, pipelineStagesTable } from "@workspace/db";
+import { db, applicationStageDocumentsTable, applicationsTable, pipelineStagesTable, auditLogsTable } from "@workspace/db";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { areEquivalentDocTypes } from "@workspace/doc-equivalence";
-import { logAudit } from "./auth";
 
 /**
  * Task #187 — Missing-doc fulfillment + auto stage-advance.
@@ -171,14 +170,18 @@ export async function handleMissingDocFulfillment(
           .set({ stage: targetStageRow.key, updatedAt: new Date() })
           .where(eq(applicationsTable.id, applicationId));
 
-        const fromStageForAudit = app.stage;
-        setImmediate(() => {
-          logAudit(triggerUserId, "auto_stage_advance_missing_docs_fulfilled", "application", applicationId, {
-            fromStage: fromStageForAudit,
+        await tx.insert(auditLogsTable).values({
+          userId: triggerUserId,
+          action: "auto_stage_advance_missing_docs_fulfilled",
+          resource: "application",
+          resourceId: applicationId,
+          changes: JSON.stringify({
+            fromStage: app.stage,
             sourceStage: sourceStageKey,
             toStage: targetStageRow.key,
             fulfilledCount: matchedIds.length,
-          });
+          }),
+          ipAddress: null,
         });
         break;
       }
