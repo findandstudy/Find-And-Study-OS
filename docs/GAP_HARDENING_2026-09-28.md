@@ -196,6 +196,17 @@ verisi ve dış Academy alıcısı değiştirilmedi.
    - Audit yalnız normalize edilmiş ülke, üniversite türü ve ülke kuralı policy'sini
      içeriyor; credential veya kullanıcı verisi içermiyor.
 
+16. **AI default config transaction, sürüm ve boyut sınırı**
+   - Built-in extractor/persona varsayılanlarının save/reset mutation'ı ve audit
+     sonucu aynı transaction'a taşındı. Audit insert hatasında prompt/config veya
+     reset sonucu commit edilmiyor.
+   - Her key için transaction-scoped advisory lock var. Admin arayüzü okuduğu
+     `updatedAt` sürümünü save ve reset komutuna bağlıyor; daha yeni değişiklik
+     varsa eski editör `ai_default_version_conflict` ile `409` alıyor.
+   - JSON config için hard 64 KiB serialized sınır eklendi. Audit prompt, field
+     listesi veya guideline içeriğini kopyalamıyor; yalnız key ve önceki/yeni
+     sürüm zamanını kaydediyor.
+
 ## Doğrulama
 
 - Security regression: **115/115 PASS**.
@@ -242,6 +253,9 @@ verisi ve dış Academy alıcısı değiştirilmedi.
 - Genişletilmiş audit durability contract **42/42 PASS**; public katalog policy
   rollback/stale-write/success matrisi **3/3 PASS**; import/listener lifecycle
   **19/19 PASS**; API typecheck ve production build **PASS**.
+- Genişletilmiş audit durability contract **48/48 PASS**; AI default save/reset
+  rollback, stale-editor, payload-ceiling ve bounded-audit matrisi **5/5 PASS**;
+  API ve Edcons typecheck **PASS**.
 - Migration authority/validation: **129/129 PASS**.
 - Disposable PostgreSQL 16.15: fresh `0→129`, upload grant migration, route E2E,
   DB helper fixture cleanup: **PASS**; cluster durduruldu.

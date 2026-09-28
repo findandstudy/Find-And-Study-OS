@@ -12,6 +12,8 @@ const integrations = source("../src/routes/integrations.ts");
 const pipeline = source("../src/routes/pipeline.ts");
 const courseFinder = source("../src/routes/course-finder.ts");
 const apiIndex = source("../src/index.ts");
+const aiDefaults = source("../src/routes/ai-defaults.ts");
+const aiDefaultsUi = source("../../edcons/src/pages/admin/AiBuiltinDefaults.tsx");
 
 assert.match(auth, /\): Promise<void> \{\s*return db\.insert\(auditLogsTable\)/,
   "audit insert exposes a real awaitable completion boundary");
@@ -90,5 +92,17 @@ assert.match(publicSettingsRoute, /invalidatePublicCatalogRenderCache\(\{ entity
   "public catalogue policy updates publish cross-process invalidation");
 assert.match(apiIndex, /publicCatalogInvalidationBus\.subscribe\([\s\S]{0,400}clearPublicCatalogPolicyCache\(\)/,
   "cross-process catalogue invalidation also clears the policy cache");
+assert.doesNotMatch(aiDefaults, /logAudit\(/,
+  "AI default mutations do not use the non-transactional legacy helper");
+for (const action of ["update_ai_default", "reset_ai_default"]) {
+  assert.match(aiDefaults, new RegExp(`await tx\\.insert\\(auditLogsTable\\)\\.values\\(\\{[\\s\\S]{0,180}action: "${action}"`),
+    `${action} is persisted before the AI config transaction commits`);
+}
+assert.match(aiDefaults, /pg_advisory_xact_lock\(hashtext\('ai-default-config'\)/,
+  "AI config writes are serialized per key");
+assert.match(aiDefaults, /Buffer\.byteLength\(JSON\.stringify\(value\)[\s\S]{0,80}> 65_536/,
+  "AI config payload has a hard serialized-size ceiling");
+assert.equal((aiDefaultsUi.match(/expectedUpdatedAt: entry\.updatedAt/g) ?? []).length, 2,
+  "AI defaults UI binds both save and reset to the version it displayed");
 
-console.log("[audit-durability-contract] 42/42 PASS");
+console.log("[audit-durability-contract] 48/48 PASS");
