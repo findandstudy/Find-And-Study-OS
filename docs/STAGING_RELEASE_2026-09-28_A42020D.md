@@ -79,3 +79,47 @@ chain and the 150 KB branding-logo response on detail pages.
 The release is suitable for staging UAT. It is not a production GO, a
 high-volume capacity certificate, field-CWV proof or permission to enable any
 external integration.
+
+## Performance follow-up release — 29 September 2026
+
+The public Programs application flow was moved out of the initial Programs
+route graph and into a lazy dialog chunk without changing its API or upload
+contract.
+
+- Source commit: `4b484b5cf27d2e7adc03f15f3535ea91f5478ca0`
+- Staging release: `staging-20260929T001404Z-4b484b5cf27d`
+- Image: `findandstudy-staging-app:4b484b5cf27d`
+- Image ID: `sha256:f26c4cdf20fb2def7586d631df76e4b8467da0557ffbca8d5343595a53d3ba1d`
+- Programs route chunk transfer: `4,828` bytes in the staging lab run; the
+  deferred application-dialog chunk is absent until the application flow is
+  opened.
+
+The pre-switch backup
+`staging-predeploy-20260929T001247Z-4b484b5cf27d-fasos_staging.dump` passed its
+SHA-256 check and an isolated PostgreSQL 16.15 restore. The restored ledger was
+`132`, the public ordinary-table count was `256`, and the synthetic user count
+was `13`. The production database was not accessed. The staging database
+container retained the exact same container ID, start time and restart count
+(`0`) across the app-only switch.
+
+Runtime, HSTS/noindex, critical public-route, System Health and delivery-gate
+checks passed. The app is healthy with restart count `0`, runs as
+`10042:10042` with a read-only root filesystem, all capabilities dropped and
+`no-new-privileges`. Exact-release RBAC UAT passed for 11 roles and 126 checks.
+
+The repeated mobile Fast 4G / 4x CPU lab run still failed the CWV release gate:
+
+| Route | Median LCP | Median TBT | Median CLS | Result |
+| --- | ---: | ---: | ---: | --- |
+| `/en` | 3204 ms | 64 ms | 0 | FAIL LCP |
+| `/en/programs` | 3196 ms | 230 ms | 0 | FAIL LCP/TBT |
+| `/en/countries` | 3160 ms | 102 ms | 0.0004 | FAIL LCP |
+| `/en/cities/london-2` | 3392 ms | 175 ms | 0 | FAIL LCP |
+| `/en/universities/abbey-dld-colleges-1563` | 2328 ms | 191 ms | 0 | PASS |
+| Representative program detail | 2316 ms | 214 ms | 0 | FAIL TBT |
+
+Aggregate median: LCP `3160 ms`, TBT `175 ms`, CLS `0`, TTFB `1042.6 ms`.
+The route split is therefore deployed and verified, but the full lab gate stays
+open. Remaining measured work is the SSR-shell/client handoff, the shared
+React/application/CSS/icon critical chain, and the 150 KB branding asset on
+detail pages. This follow-up remains staging-only and is not a production GO.
