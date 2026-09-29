@@ -547,6 +547,34 @@ test("internal home fallback hero preserves the existing React fallback geometry
   assert.match(client, /text-5xl md:text-7xl/);
 });
 
+test("first-visit consent is server-rendered, escaped and usable before React", () => {
+  const model: PublicCatalogRenderModel = {
+    kind: "not_found",
+    locale: "en",
+    canonicalPath: "/en/missing",
+    title: "Missing",
+    description: "Missing page",
+    indexable: false,
+    consentCopy: {
+      title: "Cookie <preferences>",
+      description: "Choose essential cookies & continue.",
+      essentialOnly: "Essential only",
+      acceptAll: "Accept all",
+    },
+  };
+  const html = renderPublicCatalogHtml({ indexHtml, model, siteUrl: "https://findandstudy.com", nonce: "consent-nonce" });
+  assert.match(html, /class="public-consent-shell/);
+  assert.match(html, /data-cookie-consent-choice="essential"/);
+  assert.match(html, /data-cookie-consent-choice="all"/);
+  assert.match(html, /Cookie &lt;preferences&gt;/);
+  assert.match(html, /cookies &amp; continue/);
+  assert.doesNotMatch(html, /Cookie <preferences>/);
+  const bootstrap = readFileSync(new URL("../../edcons/public/bootstrap.js", import.meta.url), "utf8");
+  assert.match(bootstrap, /cookie-consent-known/);
+  assert.match(bootstrap, /data-cookie-consent-choice/);
+  assert.match(bootstrap, /localStorage\.setItem\("cookie_consent", choice\)/);
+});
+
 test("CMS catalogue grid renders current data bindings without storing duplicate facts", () => {
   const model: PublicCatalogRenderModel = {
     kind: "page_detail",

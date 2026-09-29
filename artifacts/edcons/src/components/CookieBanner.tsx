@@ -26,6 +26,7 @@ export function CookieBanner() {
     try {
       localStorage.setItem(CONSENT_KEY, choice);
     } catch {}
+    document.documentElement.classList.add("cookie-consent-known");
     setVisible(false);
   }
 

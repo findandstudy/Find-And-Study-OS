@@ -36,6 +36,8 @@ const cityProgramCards = readFileSync(new URL("../src/pages/public/CityProgramCa
 const main = readFileSync(new URL("../src/main.tsx", import.meta.url), "utf8");
 const publicLayout = readFileSync(new URL("../src/components/layout/PublicLayout.tsx", import.meta.url), "utf8");
 const cookieBanner = readFileSync(new URL("../src/components/CookieBanner.tsx", import.meta.url), "utf8");
+const bootstrap = readFileSync(new URL("../public/bootstrap.js", import.meta.url), "utf8");
+const indexCss = readFileSync(new URL("../src/index.css", import.meta.url), "utf8");
 
 const cardFixture: PublicProgramCardData = {
   id: 145792, name: "Source program", canonicalPath: "/en/programs/source-program-145792",
@@ -83,6 +85,9 @@ test("program information architecture stays data-bound", () => {
 test("first-visit cookie consent is present in the initial client render", () => {
   assert.match(cookieBanner, /useState\(\(\) => !getConsent\(\)\)/);
   assert.doesNotMatch(cookieBanner, /useEffect\s*\(/);
+  assert.match(cookieBanner, /classList\.add\("cookie-consent-known"\)/);
+  assert.match(bootstrap, /data-cookie-consent-choice/);
+  assert.match(indexCss, /\.cookie-consent-known \.public-consent-shell/);
 });
 
 test("university template keeps overview, facts and governed programs connected", () => {

@@ -71,6 +71,30 @@ const CACHE_FRESH_MS = 5 * 60_000;
 const CACHE_STALE_MS = 60 * 60_000;
 const CACHE_MAX_ENTRIES = 500;
 const publicHomeFallbackCache = new Map<ProgramSupportedLocale, PublicCatalogRenderModel>();
+const publicConsentCopyCache = new Map<ProgramSupportedLocale, NonNullable<PublicCatalogRenderModel["consentCopy"]>>();
+
+function readPublicConsentCopy(locale: ProgramSupportedLocale): PublicCatalogRenderModel["consentCopy"] | undefined {
+  const cached = publicConsentCopyCache.get(locale);
+  if (cached) return cached;
+  try {
+    const file = path.join(process.cwd(), "artifacts", "edcons", "dist", "public", "i18n-critical", `${locale}.json`);
+    const stat = fs.statSync(file);
+    if (!stat.isFile() || stat.size <= 0 || stat.size > 65_536) return undefined;
+    const parsed = JSON.parse(fs.readFileSync(file, "utf8")) as Record<string, unknown>;
+    const cookie = isRecord(parsed.cookie) ? parsed.cookie : {};
+    const value = {
+      title: boundedString(cookie.title, 200).trim(),
+      description: boundedString(cookie.description, 1_000).trim(),
+      essentialOnly: boundedString(cookie.essentialOnly, 200).trim(),
+      acceptAll: boundedString(cookie.acceptAll, 200).trim(),
+    };
+    if (Object.values(value).some(item => !item)) return undefined;
+    publicConsentCopyCache.set(locale, value);
+    return value;
+  } catch {
+    return undefined;
+  }
+}
 
 function readPublicHomeFallback(locale: ProgramSupportedLocale): PublicCatalogRenderModel | null {
   const cached = publicHomeFallbackCache.get(locale);
@@ -1781,6 +1805,7 @@ function refresh(key: string, route: PublicCatalogRenderRoute): Promise<PublicCa
   let pending: Promise<PublicCatalogRenderModel>;
   pending = loadModel(route)
     .then(async (value) => {
+      value.consentCopy = readPublicConsentCopy(route.locale);
       const kind = value.kind.replace(/_detail$/, "") as DetailLayoutKind;
       if (DETAIL_LAYOUT_KINDS.includes(kind)) value.detailLayout = await readPublishedDetailLayout(kind);
       let contentId: number | undefined;

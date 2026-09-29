@@ -103,6 +103,12 @@ export type PublicCatalogRenderRoute =
 export type PublicCatalogRenderModel = PublicCatalogRenderModelData & {
   editorial?: import("./websiteDetailContentContract").DetailContent | null;
   detailLayout?: import("./websiteDetailLayoutContract").DetailLayout;
+  consentCopy?: {
+    title: string;
+    description: string;
+    essentialOnly: string;
+    acceptAll: string;
+  };
 };
 type PublicCatalogRenderModelData =
   | {
@@ -530,6 +536,17 @@ function escapeHtml(value: unknown): string {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
+}
+
+function renderConsentShell(model: PublicCatalogRenderModel): string {
+  const copy = model.consentCopy;
+  if (!copy) return "";
+  return `<aside class="public-consent-shell fixed bottom-0 left-0 right-0 z-50 bg-background/95 border-t border-border shadow-2xl" role="region" aria-label="${escapeHtml(copy.title)}">
+    <div class="max-w-7xl mx-auto px-4 py-4 sm:px-6 flex flex-col sm:flex-row items-start sm:items-center gap-4">
+      <div class="flex-1 min-w-0"><p class="text-sm font-semibold text-foreground leading-snug">${escapeHtml(copy.title)}</p><p class="text-xs text-muted-foreground mt-0.5 leading-relaxed">${escapeHtml(copy.description)}</p></div>
+      <div class="flex items-center gap-2 shrink-0 self-end sm:self-auto"><button type="button" data-cookie-consent-choice="essential" class="inline-flex items-center justify-center rounded-lg border border-input bg-background px-3 h-8 text-xs">${escapeHtml(copy.essentialOnly)}</button><button type="button" data-cookie-consent-choice="all" class="inline-flex items-center justify-center rounded-lg bg-primary text-primary-foreground px-4 h-8 text-xs">${escapeHtml(copy.acceptAll)}</button></div>
+    </div>
+  </aside>`;
 }
 
 function safeJson(value: unknown): string {
@@ -1286,7 +1303,7 @@ export function renderPublicCatalogHtml(input: {
   const extraHead = `  <meta name="csp-nonce" content="${escapeHtml(input.nonce)}" />\n  <meta name="public-render" content="ssr-isr-pilot" />\n${preloadLinks.join("\n")}${preloadLinks.length ? "\n" : ""}${hreflangLinks.join("\n")}${hreflangLinks.length ? "\n" : ""}  <script nonce="${escapeHtml(input.nonce)}" type="application/ld+json">${safeJson(structuredData(input.model, siteUrl))}</script>\n`;
   return html
     .replace("</head>", `${extraHead}${input.model.detailLayout ? `<script id="public-detail-layout" nonce="${escapeHtml(input.nonce)}" type="application/json">${safeJson(input.model.detailLayout)}</script>` : ""}</head>`)
-    .replace(/<div\s+id=["']root["']\s*><\/div>/i, `<div id="root" data-public-render-shell-root="true">${shell}</div>`);
+    .replace(/<div\s+id=["']root["']\s*><\/div>/i, `<div id="root" data-public-render-shell-root="true">${shell}${renderConsentShell(input.model)}</div>`);
 }
 
 export function publicCatalogCsp(nonce: string): string {

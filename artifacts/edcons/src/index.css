@@ -288,3 +288,7 @@ textarea:focus-visible {
   outline: 2px solid hsl(var(--primary-foreground));
   outline-offset: 2px;
 }
+
+.cookie-consent-known .public-consent-shell {
+  display: none;
+}
