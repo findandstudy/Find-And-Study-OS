@@ -573,9 +573,14 @@ function renderProgramList(model: Extract<PublicCatalogRenderModel, { kind: "pro
         <p class="mt-2 text-muted-foreground">${escapeHtml([program.degree, program.field, program.duration, program.language].filter(Boolean).join(" · "))}</p>
         <p class="mt-2 text-sm text-muted-foreground">${escapeHtml([program.city, program.country].filter(Boolean).join(", "))}</p>
       </article>`).join("");
-  return `<main data-public-render-shell="program-list" class="mx-auto max-w-7xl px-4 py-24">
-    <header><h1 class="text-4xl font-bold">${escapeHtml(model.title)}</h1><p class="mt-3 text-muted-foreground">${escapeHtml(model.description)}</p><p class="mt-2 text-sm">${model.total.toLocaleString(model.locale)} ${escapeHtml(copy.programs.toLocaleLowerCase(model.locale))}</p></header>
-    <section class="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">${cards}</section>
+  return `<main data-public-render-shell="program-list">
+    <header class="pt-24 pb-6 bg-gradient-to-br from-primary/5 via-accent/5 to-primary/5 text-center">
+      <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <h1 class="text-4xl md:text-5xl font-display font-bold text-foreground mb-4">${escapeHtml(model.title)}</h1>
+        <p class="text-lg text-muted-foreground max-w-2xl mx-auto">${escapeHtml(model.description)}</p>
+      </div>
+    </header>
+    <section class="mx-auto mt-8 grid max-w-7xl gap-5 px-4 sm:grid-cols-2 sm:px-6 lg:grid-cols-3 lg:px-8"><p class="sr-only">${model.total.toLocaleString(model.locale)} ${escapeHtml(copy.programs.toLocaleLowerCase(model.locale))}</p>${cards}</section>
   </main>`;
 }
 
@@ -587,9 +592,14 @@ function renderCountryList(model: Extract<PublicCatalogRenderModel, { kind: "cou
         <h2 class="mt-2 text-xl font-bold"><a href="${escapeHtml(country.canonicalPath)}">${escapeHtml(country.name)}</a></h2>
         <p class="mt-3 text-sm text-muted-foreground">${country.universityCount.toLocaleString(model.locale)} ${escapeHtml(copy.institutionType.toLocaleLowerCase(model.locale))} · ${country.programCount.toLocaleString(model.locale)} ${escapeHtml(copy.programs.toLocaleLowerCase(model.locale))}</p>
       </article>`).join("");
-  return `<main data-public-render-shell="country-list" class="mx-auto max-w-7xl px-4 py-24">
-    <header><h1 class="text-4xl font-bold">${escapeHtml(model.title)}</h1><p class="mt-3 text-muted-foreground">${escapeHtml(model.description)}</p></header>
-    <section class="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">${cards}</section>
+  return `<main data-public-render-shell="country-list">
+    <header class="pt-24 pb-16 bg-gradient-to-br from-primary/5 via-accent/5 to-primary/5 text-center">
+      <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <h1 class="text-4xl md:text-6xl font-display font-bold text-foreground mb-6">${escapeHtml(model.title)}</h1>
+        <p class="text-xl text-muted-foreground max-w-2xl mx-auto">${escapeHtml(model.description)}</p>
+      </div>
+    </header>
+    <section class="mx-auto mt-8 grid max-w-7xl gap-5 px-4 sm:grid-cols-2 sm:px-6 lg:grid-cols-3 lg:px-8">${cards}</section>
   </main>`;
 }
 

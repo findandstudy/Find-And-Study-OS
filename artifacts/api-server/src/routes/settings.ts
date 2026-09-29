@@ -9,9 +9,12 @@ import { invalidateSuppressAutomationCache } from "../lib/notificationDispatcher
 import { callerOwnsObject, canonicalizeKey } from "../lib/objectAuthz";
 import { validateUploadedFileBuffer } from "../lib/fileUploadValidation";
 import { consumeFinalizedUploadGrantInDrizzle } from "../lib/uploadGrant";
+import { createHeaderLogoDerivative, type HeaderLogoDerivative } from "../lib/brandingLogoDerivative";
 
 const router: IRouter = Router();
 const objectStorageService = new ObjectStorageService();
+const headerLogoDerivativeCache = new Map<string, HeaderLogoDerivative>();
+const HEADER_LOGO_CACHE_MAX = 8;
 
 const SETTINGS_IMAGE_FIELDS = new Set([
   "logoUrl", "logoDarkUrl", "faviconUrl", "logoSquareUrl", "appleTouchIconUrl",
@@ -346,7 +349,9 @@ router.get("/settings/available-years", requireAuth, async (req, res): Promise<v
 
 router.get("/settings/branding/logo", async (req, res): Promise<void> => {
   try {
-    const variantKey = req.query.variant === "dark"
+    const requestedVariant = String(req.query.variant ?? "");
+    const isHeaderDerivative = requestedVariant === "header" || requestedVariant === "header-dark";
+    const variantKey = requestedVariant === "dark" || requestedVariant === "header-dark"
       ? "logoDarkUrl"
       : req.query.variant === "square"
         ? "logoSquareUrl"
@@ -376,6 +381,34 @@ router.get("/settings/branding/logo", async (req, res): Promise<void> => {
 
     const objectPath = `/objects/${match[1]}`;
     const objectFile = await objectStorageService.getObjectEntityFile(objectPath);
+    if (isHeaderDerivative) {
+      let derivative = headerLogoDerivativeCache.get(url);
+      if (!derivative) {
+        const [metadata] = await objectFile.getMetadata();
+        const sourceBytes = Number(metadata.size ?? 0);
+        if (!Number.isFinite(sourceBytes) || sourceBytes <= 0 || sourceBytes > 5 * 1024 * 1024) {
+          res.status(422).json({ error: "Logo source is outside the supported size" });
+          return;
+        }
+        const [source] = await objectFile.download();
+        derivative = await createHeaderLogoDerivative(source);
+        while (headerLogoDerivativeCache.size >= HEADER_LOGO_CACHE_MAX) {
+          const oldest = headerLogoDerivativeCache.keys().next().value;
+          if (oldest === undefined) break;
+          headerLogoDerivativeCache.delete(oldest);
+        }
+        headerLogoDerivativeCache.set(url, derivative);
+      }
+      res.setHeader("Cache-Control", "public, max-age=3600");
+      res.setHeader("Content-Type", derivative.contentType);
+      res.setHeader("ETag", derivative.etag);
+      if (req.headers["if-none-match"] === derivative.etag) {
+        res.status(304).end();
+        return;
+      }
+      res.status(200).send(derivative.bytes);
+      return;
+    }
     await objectStorageService.streamObjectToResponse(req, res, objectFile, {
       cacheControl: "public, max-age=3600",
     });

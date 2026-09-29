@@ -89,7 +89,7 @@ try {
       });
       await cdp.send("Emulation.setCPUThrottlingRate", { rate: 4 });
       await page.addInitScript(() => {
-        window.__cwvLab = { lcp: 0, lcpElement: null, lcpUrl: null, cls: 0, longTasks: [] };
+        window.__cwvLab = { lcp: 0, lcpElement: null, lcpUrl: null, lcpHistory: [], cls: 0, longTasks: [] };
         new PerformanceObserver((list) => {
           const entries = list.getEntries();
           const latest = entries[entries.length - 1];
@@ -97,6 +97,11 @@ try {
             window.__cwvLab.lcp = latest.startTime;
             window.__cwvLab.lcpElement = latest.element?.tagName || null;
             window.__cwvLab.lcpUrl = latest.url || null;
+            window.__cwvLab.lcpHistory.push({
+              startTime: latest.startTime,
+              element: latest.element?.tagName || null,
+              shell: latest.element?.closest?.("[data-public-render-shell]")?.getAttribute("data-public-render-shell") || null,
+            });
           }
         }).observe({ type: "largest-contentful-paint", buffered: true });
         new PerformanceObserver((list) => {
@@ -124,6 +129,7 @@ try {
           lcpMs: state.lcp,
           lcpElement: state.lcpElement,
           lcpUrl: state.lcpUrl,
+          lcpHistory: state.lcpHistory,
           cls: state.cls,
           tbtMs: state.longTasks.reduce((total, duration) => total + Math.max(0, duration - 50), 0),
           ttfbMs: navigation?.responseStart || 0,
@@ -145,6 +151,11 @@ try {
         lcpMs: round(metrics.lcpMs),
         lcpElement: metrics.lcpElement,
         lcpUrl: metrics.lcpUrl,
+        lcpHistory: metrics.lcpHistory.map((entry) => ({
+          startTime: round(entry.startTime),
+          element: entry.element,
+          shell: entry.shell,
+        })),
         cls: round(metrics.cls, 4),
         tbtMs: round(metrics.tbtMs),
         ttfbMs: round(metrics.ttfbMs),

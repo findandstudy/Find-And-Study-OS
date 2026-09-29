@@ -69,42 +69,45 @@ const CACHE_FRESH_MS = 5 * 60_000;
 const CACHE_STALE_MS = 60 * 60_000;
 const CACHE_MAX_ENTRIES = 500;
 
-const LIST_TITLES: Record<ProgramSupportedLocale, string> = {
-  en: "Study programs", tr: "Eğitim programları", ar: "البرامج الدراسية",
-  fr: "Programmes d’études", ru: "Учебные программы", fa: "برنامه‌های تحصیلی",
-  zh: "留学课程", hi: "अध्ययन कार्यक्रम", es: "Programas de estudio",
-  id: "Program studi", ur: "تعلیمی پروگرام", tk: "Okuw programmalary",
-  ky: "Окуу программалары", kk: "Оқу бағдарламалары", uz: "Ta’lim dasturlari",
-  tg: "Барномаҳои таҳсил", bn: "শিক্ষা প্রোগ্রাম", pt: "Programas de estudo",
-  ne: "अध्ययन कार्यक्रमहरू", vi: "Chương trình học", ko: "유학 프로그램",
-  uk: "Навчальні програми", it: "Programmi di studio",
+type PublicListCopy = {
+  programTitle: string;
+  programDescription: string;
+  countryTitle: string;
+  countryDescription: string;
 };
 
-const LIST_DESCRIPTIONS: Record<ProgramSupportedLocale, string> = {
-  en: "Compare current study opportunities from universities around the world.",
-  tr: "Dünyanın farklı üniversitelerindeki güncel eğitim fırsatlarını karşılaştırın.",
-  ar: "قارن فرص الدراسة الحالية في الجامعات حول العالم.",
-  fr: "Comparez les possibilités d’études actuelles dans les universités du monde entier.",
-  ru: "Сравните актуальные возможности обучения в университетах по всему миру.",
-  fa: "فرصت‌های تحصیلی به‌روز دانشگاه‌های سراسر جهان را مقایسه کنید.",
-  zh: "比较世界各地大学的最新留学机会。",
-  hi: "दुनिया भर के विश्वविद्यालयों में उपलब्ध वर्तमान अध्ययन अवसरों की तुलना करें।",
-  es: "Compara oportunidades de estudio actuales en universidades de todo el mundo.",
-  id: "Bandingkan peluang studi terbaru di universitas di seluruh dunia.",
-  ur: "دنیا بھر کی جامعات میں موجودہ تعلیمی مواقع کا موازنہ کریں۔",
-  tk: "Dünýäniň dürli uniwersitetlerindäki häzirki okuw mümkinçiliklerini deňeşdiriň.",
-  ky: "Дүйнөдөгү университеттердин учурдагы окуу мүмкүнчүлүктөрүн салыштырыңыз.",
-  kk: "Әлем университеттеріндегі қазіргі оқу мүмкіндіктерін салыстырыңыз.",
-  uz: "Dunyo universitetlaridagi amaldagi ta’lim imkoniyatlarini solishtiring.",
-  tg: "Имкониятҳои ҷории таҳсилро дар донишгоҳҳои ҷаҳон муқоиса кунед.",
-  bn: "বিশ্বজুড়ে বিশ্ববিদ্যালয়ের বর্তমান পড়াশোনার সুযোগগুলো তুলনা করুন।",
-  pt: "Compare as oportunidades de estudo atuais em universidades de todo o mundo.",
-  ne: "विश्वभरका विश्वविद्यालयमा उपलब्ध हालका अध्ययन अवसरहरू तुलना गर्नुहोस्।",
-  vi: "So sánh các cơ hội học tập hiện có tại các trường đại học trên toàn thế giới.",
-  ko: "전 세계 대학의 최신 유학 기회를 비교해 보세요.",
-  uk: "Порівнюйте актуальні можливості навчання в університетах усього світу.",
-  it: "Confronta le opportunità di studio attuali nelle università di tutto il mondo.",
+// Keep the factual SSR shell aligned with the existing public React copy. A
+// different server/client heading becomes a second, later LCP candidate during
+// the shell handoff and also creates a visible copy flash on slow connections.
+const PUBLIC_LIST_COPY: Record<ProgramSupportedLocale, PublicListCopy> = {
+  en: { programTitle: "Discover Programs", programDescription: "Browse thousands of programs from top universities worldwide.", countryTitle: "Explore Study Destinations", countryDescription: "Discover the best countries for your education journey. Each destination offers unique opportunities and experiences." },
+  tr: { programTitle: "Programları Keşfedin", programDescription: "Dünya çapında en iyi üniversitelerden binlerce programı inceleyin.", countryTitle: "Eğitim Destinasyonlarını Keşfedin", countryDescription: "Eğitim yolculuğunuz için en iyi ülkeleri keşfedin. Her destinasyon benzersiz fırsatlar ve deneyimler sunar." },
+  ar: { programTitle: "اكتشف البرامج", programDescription: "تصفح آلاف البرامج من أفضل الجامعات حول العالم.", countryTitle: "اكتشف وجهات الدراسة", countryDescription: "اكتشف أفضل الدول لرحلتك التعليمية. كل وجهة تقدم فرصاً وتجارب فريدة." },
+  fr: { programTitle: "Découvrez les Programmes", programDescription: "Parcourez des milliers de programmes des meilleures universités du monde.", countryTitle: "Explorez les destinations d'études", countryDescription: "Découvrez les meilleurs pays pour votre parcours éducatif. Chaque destination offre des opportunités uniques." },
+  ru: { programTitle: "Откройте Программы", programDescription: "Просмотрите тысячи программ лучших университетов мира.", countryTitle: "Исследуйте направления обучения", countryDescription: "Откройте лучшие страны для вашего образования. Каждое направление предлагает уникальные возможности." },
+  fa: { programTitle: "کشف برنامه‌ها", programDescription: "هزاران برنامه از بهترین دانشگاه‌ها را مرور کنید.", countryTitle: "کاوش در مقاصد تحصیلی", countryDescription: "بهترین کشورها را برای سفر آموزشی خود کشف کنید." },
+  zh: { programTitle: "发现 项目", programDescription: "浏览全球顶尖大学的数千个项目。", countryTitle: "探索留学 目的地", countryDescription: "发现最适合您教育之旅的国家。每个目的地都提供独特的机会和体验。" },
+  hi: { programTitle: "कार्यक्रम खोजें", programDescription: "विश्व के शीर्ष विश्वविद्यालयों से हज़ारों कार्यक्रम ब्राउज़ करें।", countryTitle: "अध्ययन गंतव्य खोजें", countryDescription: "अपनी शिक्षा यात्रा के लिए सर्वश्रेष्ठ देशों की खोज करें।" },
+  es: { programTitle: "Descubre Programas", programDescription: "Explora miles de programas de las mejores universidades del mundo.", countryTitle: "Explora destinos de estudio", countryDescription: "Descubre los mejores países para tu viaje educativo. Cada destino ofrece oportunidades únicas." },
+  id: { programTitle: "Temukan Program", programDescription: "Jelajahi ribuan program dari universitas terbaik di dunia.", countryTitle: "Jelajahi Destinasi Studi", countryDescription: "Temukan negara terbaik untuk perjalanan pendidikan Anda. Setiap destinasi menawarkan peluang unik." },
+  ur: { programTitle: "تلاش پروگرام", programDescription: "عالمی عالمی یونیورسٹیسٹس سے ہزاروں پروگراموں کا جائزہ لیں", countryTitle: "مطالعے کی تحقیق سمت", countryDescription: "ہر منتخب کے لئے خاص موقعات اور تجربات فراہم کرتے ہیں ۔" },
+  tk: { programTitle: "Netijeler Programler", programDescription: "Bütin dünýäde uniwersitetleriň müňlerçe programmasyny görmeli bolýar.", countryTitle: "Yhlasly okamagy öwren Maksad Hatlar", countryDescription: "Her bir ýere baranyňda, bilim almak üçin gowy ýurtlaryň bardygyna göz ýetir." },
+  ky: { programTitle: "Ажырымдуу Программалар", programDescription: "Дүйнө жүзү боюнча жогорку университеттерден миңдеген программаларды көрүү.", countryTitle: "Изилдөөнү изилдөө Жайгашкан жери", countryDescription: "Билим берүү үчүн эң жакшы өлкөлөрдү таап алгыла." },
+  kk: { programTitle: "Ажыратылды Бағдарламалар", programDescription: "Бүкіл әлемдік университеттерде мыңдаған бағдарламаларды қара.", countryTitle: "Егізін зерттеуді зерттеу Қайда", countryDescription: "Біліміңіздің ең жақсы елдерін байқаңыз. Әрбір мақсатқа бір мүмкіндік пен тәжірибе сунуш етеді." },
+  uz: { programTitle: "Yigʻish Dasturlar", programDescription: "Hamma yuqori universitetlardan minglab dasturlar koʻrish.", countryTitle: "Name Taʼrifi:", countryDescription: "Ta'lim sohasida rivojlanish uchun eng yaxshi davlatlarni rivojlata olinadi. Har joyda har bir o'sha imkoniyatlar va ta'lim sohalar bor." },
+  tg: { programTitle: "Кофтан Барномаҳо", programDescription: "Тамошо кардани ҳазорҳо барномаҳо аз университетҳои болои умумиҷаҳон.", countryTitle: "Омӯзиши омӯзиш Ҷойгиршавӣ", countryDescription: "Дар ҳар ҷойи таъинот имкониятҳо ва таҷрибаҳои ягонаро пешкаш кунед." },
+  bn: { programTitle: "আবিষ্কার করুন প্রোগ্রাম", programDescription: "বিশ্বব্যাপী শীর্ষ বিশ্ববিদ্যালয় থেকে হাজার হাজার প্রোগ্রাম ব্রাউজ করুন৷", countryTitle: "অন্বেষণ অধ্যয়ন গন্তব্যস্থল", countryDescription: "​​শিক্ষার জন্য সেরা দেশগুলি প্রতিটি গন্তব্য অনন্য সুযোগ এবং অভিজ্ঞতা প্রদান করে৷" },
+  pt: { programTitle: "Descubra Programas", programDescription: "Navegue por milhares de programas das melhores universidades do mundo.", countryTitle: "Explorar estudos Destinos", countryDescription: "Descubra os melhores países para sua jornada educacional. Cada destino oferece oportunidades e experiências únicas." },
+  ne: { programTitle: "डिस्कवर कार्यक्रम", programDescription: "विश्वभरका शीर्ष विश्वविद्यालयहरूबाट हजारौं कार्यक्रमहरू ब्राउज गर्नुहोस्।", countryTitle: "अन्वेषण अध्ययन गन्तव्यहरू", countryDescription: "​​शिक्षाको लागि उत्तम देशहरू प्रत्येक गन्तव्यले अद्वितीय अवसरहरू र अनुभवहरू प्रदान गर्दछ।" },
+  vi: { programTitle: "Khám phá Chương trình", programDescription: "Duyệt qua hàng nghìn chương trình từ các trường đại học hàng đầu trên toàn thế giới.", countryTitle: "Khám phá nghiên cứu Điểm đến", countryDescription: "Khám phá những quốc gia tốt nhất cho hành trình học tập của bạn. Mỗi điểm đến mang lại những cơ hội và trải nghiệm độc đáo." },
+  ko: { programTitle: "발견 프로그램", programDescription: "전 세계 최고의 대학에서 수천 개의 프로그램을 찾아보세요.", countryTitle: "학습 탐색 목적지", countryDescription: "교육 여정에 가장 적합한 국가를 찾아보세요. 각 목적지는 고유한 기회와 경험을 제공합니다." },
+  uk: { programTitle: "Відкрийте Програми", programDescription: "Переглядайте тисячі програм із початку університети по всьому світу.", countryTitle: "Досліджуйте навчання Напрямки", countryDescription: "Відкрийте для себе найкращі країни для вашої освітньої подорожі. Кожен напрямок пропонує унікальні можливості та враження." },
+  it: { programTitle: "Scopri Programmi", programDescription: "Sfoglia migliaia di programmi dalle migliori università di tutto il mondo.", countryTitle: "Esplora Studio Destinazioni", countryDescription: "Scopri i paesi migliori per il tuo percorso formativo. Ogni destinazione offre opportunità ed esperienze uniche." },
 };
+
+export function publicCatalogListCopy(locale: ProgramSupportedLocale): PublicListCopy {
+  return PUBLIC_LIST_COPY[locale] ?? PUBLIC_LIST_COPY.en;
+}
 
 type CacheEntry = {
   freshUntil: number;
@@ -407,12 +410,13 @@ async function readCountryList(
   route: Extract<PublicCatalogRenderRoute, { kind: "country_list" }>,
 ): Promise<PublicCatalogRenderModel> {
   const directory = await readPublicCatalogCountryDirectory(route.locale);
+  const copy = publicCatalogListCopy(route.locale);
   return {
     kind: "country_list",
     locale: route.locale,
     canonicalPath: route.path,
-    title: "Study destinations",
-    description: "Explore countries with currently available universities and study programmes.",
+    title: copy.countryTitle,
+    description: copy.countryDescription,
     indexable: true,
     countries: directory.entries.map((entry) => ({
       id: entry.country.id,
@@ -483,13 +487,13 @@ async function readProgramList(
       .orderBy(asc(universitiesTable.name), asc(localizedName), asc(programsTable.id))
       .limit(PILOT_LIST_LIMIT),
   ]);
-  const title = LIST_TITLES[route.locale] || LIST_TITLES.en;
+  const copy = publicCatalogListCopy(route.locale);
   return {
     kind: "program_list",
     locale: route.locale,
     canonicalPath: route.path,
-    title,
-    description: LIST_DESCRIPTIONS[route.locale] || LIST_DESCRIPTIONS.en,
+    title: copy.programTitle,
+    description: copy.programDescription,
     total: Number(countRow?.count ?? 0),
     indexable: true,
     programs: rows.map((program) => ({

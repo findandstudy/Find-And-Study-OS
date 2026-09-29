@@ -23,7 +23,7 @@ export function PublicLayout({ children }: { children: ReactNode }) {
     ? settings.logoDarkUrl
     : settings.logoUrl;
   const logoUrl = hasLogo
-    ? `${BASE_URL}/api/settings/branding/logo${resolvedTheme === "dark" && settings.logoDarkUrl ? "?variant=dark" : ""}`
+    ? `${BASE_URL}/api/settings/branding/logo?variant=${resolvedTheme === "dark" && settings.logoDarkUrl ? "header-dark" : "header"}`
     : null;
   const companyName = settings.companyName || "Find And Study OS";
 
