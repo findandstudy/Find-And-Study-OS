@@ -596,7 +596,7 @@ test("legacy-only tuition keeps its price without rendering an empty component b
 
 test("active section navigation is local, follows visible DOM order and cleans up every listener", () => {
   const start = layout.indexOf("const element = root.current;");
-  const end = layout.indexOf("const navigation", start);
+  const end = layout.indexOf("const cleanLinks", start);
   assert.ok(start >= 0 && end > start);
   const effect = layout.slice(start, end);
   assert.match(effect, /if \(!element\) return/);
@@ -609,13 +609,11 @@ test("active section navigation is local, follows visible DOM order and cleans u
   assert.match(effect, /window\.addEventListener\("scroll", schedule, \{ passive: true \}\)/);
   assert.match(effect, /window\.addEventListener\("resize", schedule\)/);
   assert.match(effect, /return \(\) => \{ window\.cancelAnimationFrame\(frame\); window\.removeEventListener\("scroll", schedule\); window\.removeEventListener\("resize", schedule\); \}/);
-  assert.match(effect, /\[kind, layout\]/);
-  assert.doesNotMatch(effect, /children\]/);
-  assert.match(layout, /node\.props\["data-detail-section"\] !== "navigation"/);
-  assert.match(layout, /layout\.hidden\.includes\(child\.props\.href\.slice\(1\)\)/);
-  assert.match(layout, /"aria-current": child\.props\.href\.slice\(1\) === activeSection \? "location"/);
-  assert.doesNotMatch(layout, /cleanLinks|navigation\(child,/);
-  assert.match(layout, /Keeping\s*\n\s*\/\/ the section subtrees intact/);
+  assert.match(effect, /\[kind, layout, children\]/);
+  assert.match(layout, /node\.props\.href\?\.startsWith\("#"\) && layout\.hidden\.includes\(node\.props\.href\.slice\(1\)\)\) return null/);
+  assert.match(layout, /const inNavigation = insideNavigation \|\| node\.props\["data-detail-section"\] === "navigation"/);
+  assert.match(layout, /"aria-current": node\.props\.href\.slice\(1\) === activeSection \? "location"/);
+  assert.match(layout, /cleanLinks\(child, inNavigation\)/);
   assert.match(layout, /layout\.sections\.indexOf/);
   assert.match(css, /\.detail-nav a\[aria-current="location"\]/);
 });

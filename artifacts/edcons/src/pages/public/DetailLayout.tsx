@@ -46,33 +46,23 @@ export function DetailLayout({ kind, children }: { kind: DetailLayoutKind; child
     window.addEventListener("scroll", schedule, { passive: true });
     window.addEventListener("resize", schedule);
     return () => { window.cancelAnimationFrame(frame); window.removeEventListener("scroll", schedule); window.removeEventListener("resize", schedule); };
-  }, [kind, layout]);
-  const navigation = (node: ReactNode): ReactNode => {
-    if (!isValidElement<{ children?: ReactNode; "data-detail-section"?: string }>(node)
-        || node.props["data-detail-section"] !== "navigation") return node;
-    const containers = Children.toArray(node.props.children).map(container => {
-      if (!isValidElement<{ children?: ReactNode }>(container)) return container;
-      const links = Children.toArray(container.props.children)
-        .filter(child => !isValidElement<{ href?: string }>(child)
-          || !child.props.href?.startsWith("#")
-          || !layout.hidden.includes(child.props.href.slice(1)))
-        .map(child => isValidElement<{ href?: string; "aria-current"?: "location" }>(child)
-            && child.props.href?.startsWith("#")
-          ? cloneElement(child, { "aria-current": child.props.href.slice(1) === activeSection ? "location" : undefined })
-          : child)
-        .sort((a, b) => {
-          const index = (child: ReactNode) => isValidElement<{ href?: string }>(child) && child.props.href?.startsWith("#")
-            ? layout.sections.indexOf(child.props.href.slice(1)) : layout.sections.length;
-          return index(a) - index(b);
-        });
-      return cloneElement(container, {}, links);
-    });
-    return cloneElement(node, {}, containers);
+  }, [kind, layout, children]);
+  const cleanLinks = (node: ReactNode, insideNavigation = false): ReactNode => {
+    if (!isValidElement<{ href?: string; children?: ReactNode; "data-detail-section"?: string; "aria-current"?: "location" }>(node)) return node;
+    if (node.type === "a" && node.props.href?.startsWith("#") && layout.hidden.includes(node.props.href.slice(1))) return null;
+    const inNavigation = insideNavigation || node.props["data-detail-section"] === "navigation";
+    const props = inNavigation && node.type === "a" && node.props.href?.startsWith("#")
+      ? { "aria-current": node.props.href.slice(1) === activeSection ? "location" as const : undefined } : {};
+    let nested = node.props.children ? Children.toArray(node.props.children).map(child => cleanLinks(child, inNavigation)).filter(Boolean) : null;
+    if (inNavigation && nested?.every(child => isValidElement<{ href?: string }>(child) && child.props.href?.startsWith("#"))) {
+      nested.sort((a, b) => {
+        const index = (child: ReactNode) => isValidElement<{ href?: string }>(child) ? layout.sections.indexOf(child.props.href!.slice(1)) : -1;
+        return index(a) - index(b);
+      });
+    }
+    return cloneElement(node, props, nested ?? node.props.children);
   };
-  // Layout settings only affect top-level sections and the chapter bar. Keeping
-  // the section subtrees intact avoids cloning every card, fact and CTA during
-  // the initial client handoff and active-section updates.
-  const nodes = Children.toArray(children).map(child => navigation(child)).filter(node => !isValidElement(node) || !layout.hidden.includes((node.props as Record<string, string>)["data-detail-section"]))
+  const nodes = Children.toArray(children).map(child => cleanLinks(child)).filter(node => !isValidElement(node) || !layout.hidden.includes((node.props as Record<string, string>)["data-detail-section"]))
     .sort((a, b) => {
       const order = (node: ReactNode) => { const index = isValidElement(node) ? layout.sections.indexOf((node.props as Record<string, string>)["data-detail-section"]) : -1; return index < 0 ? layout.sections.length : index; };
       return order(a) - order(b);
