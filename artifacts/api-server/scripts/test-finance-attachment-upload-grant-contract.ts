@@ -14,7 +14,6 @@ test("finance attachments are owner-bound and checked from stored bytes", () => 
   assert.match(source, /bytes\.length > 10 \* 1024 \* 1024/);
   assert.match(source, /validateUploadedFileBuffer\(`receipt\.\$\{extension\}`, contentType, bytes\)/);
 });
-
 test("finance attachment grant is consumed inside the idempotent mutation transaction", () => {
   const transactionAt = boundary.indexOf("await db.transaction(async (databaseTx) =>");
   const replayAt = boundary.indexOf("if (mutation.replay)");
@@ -25,4 +24,3 @@ test("finance attachment grant is consumed inside the idempotent mutation transa
   assert.ok(insertAt > consumeAt && receiptAt > insertAt);
   assert.match(boundary, /Finance attachment is not finalized or has already been used/);
 });
-

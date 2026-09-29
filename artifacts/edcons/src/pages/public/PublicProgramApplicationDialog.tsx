@@ -127,7 +127,6 @@ function compressImage(file: File, maxWidth = 1600, quality = 0.78): Promise<str
     reader.readAsDataURL(file);
   });
 }
-
 function fileToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();

@@ -46,7 +46,6 @@ mock.method(db, "transaction", async (callback: (tx: typeof db) => Promise<unkno
   try { return await callback(db); }
   catch (error) { tokens = tokenSnapshot; audits = auditSnapshot; throw error; }
 });
-
 const app = express();
 app.use(express.json());
 app.use((req, _res, next) => {
@@ -118,4 +117,3 @@ test("successful create returns the secret once and persists one bounded audit r
   assert.equal(audits[0].resourceId, tokens[0].id);
   assert.equal(JSON.stringify(audits[0]).includes(result.data.token), false);
 });
-

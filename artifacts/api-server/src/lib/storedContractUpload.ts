@@ -38,4 +38,3 @@ export async function prepareOwnedStoredContract(
   }
   return { objectPath, bytes, contentType };
 }
-

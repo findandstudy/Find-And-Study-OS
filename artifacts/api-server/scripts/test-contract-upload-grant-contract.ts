@@ -30,4 +30,3 @@ for (const [name, source, table] of [
     assert.match(source, /status\(409\)/);
   });
 }
-

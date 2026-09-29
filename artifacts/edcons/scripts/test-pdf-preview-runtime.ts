@@ -24,7 +24,6 @@ test("PDF preview runtime admits only two active jobs", async () => {
   await Promise.all(jobs);
   assert.equal(maximum, 2);
 });
-
 test("oversized known PDF is rejected before the task runs", async () => {
   let called = false;
   await assert.rejects(
@@ -63,4 +62,3 @@ test("bounded fetch accepts a small PDF body", async () => {
     globalThis.fetch = originalFetch;
   }
 });
-
