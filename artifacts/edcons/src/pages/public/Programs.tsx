@@ -17,6 +17,7 @@ import {
 const PublicProgramDetailDialog = lazy(() => import("./PublicProgramDetailDialog")
   .then(module => ({ default: module.PublicProgramDetailDialog })));
 const PublicProgramApplicationDialog = lazy(() => import("./PublicProgramApplicationDialog"));
+const PUBLIC_PROGRAM_PAGE_SIZE = 12;
 
 function useDebounce(value: string, delay: number) {
   const [debounced, setDebounced] = useState(value);
@@ -96,6 +97,7 @@ export default function Programs() {
   const [feeMin, setFeeMin] = useState("");
   const [feeMax, setFeeMax] = useState("");
   const [programs, setPrograms] = useState<Program[]>([]);
+  const [hasLoadedInitialPrograms, setHasLoadedInitialPrograms] = useState(false);
 
   useJsonLd([
     {
@@ -190,10 +192,15 @@ export default function Programs() {
   }, [debouncedSearch, country, city, universityType, universityId, level, language, field, debouncedFeeMin, debouncedFeeMax]);
 
   useEffect(() => {
+    // Let the first result page settle before loading the seven cascading
+    // facet groups. This keeps the initial programme cards and their database
+    // query ahead of optional filter metadata without changing later filter
+    // refresh behaviour.
+    if (!hasLoadedInitialPrograms) return;
     customFetch<Filters>(`/api/course-finder/filters${filterParams ? `?${filterParams}` : ""}`, { method: "GET" })
       .then(data => setFilters(data))
       .catch(() => {});
-  }, [filterParams]);
+  }, [filterParams, hasLoadedInitialPrograms]);
 
   // Auto-prune selections that the new option list no longer contains, so a
   // stale pick (e.g. City=Istanbul after switching Country to Germany) does
@@ -222,7 +229,7 @@ export default function Programs() {
   const fetchPrograms = useCallback(async () => {
     setIsLoading(true);
     try {
-      const params = new URLSearchParams({ page: String(page), limit: "24" });
+      const params = new URLSearchParams({ page: String(page), limit: String(PUBLIC_PROGRAM_PAGE_SIZE) });
       params.set("scope", "public");
       params.set("locale", lang);
       if (debouncedSearch) params.set("search", debouncedSearch);
@@ -254,6 +261,7 @@ export default function Programs() {
       setPrograms([]);
     } finally {
       setIsLoading(false);
+      setHasLoadedInitialPrograms(true);
     }
   }, [page, debouncedSearch, country, city, universityType, universityId, level, language, field, debouncedFeeMin, debouncedFeeMax, lang]);
 

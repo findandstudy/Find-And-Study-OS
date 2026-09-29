@@ -82,6 +82,13 @@ test("program information architecture stays data-bound", () => {
   assert.doesNotMatch(program, /dangerouslySetInnerHTML/);
 });
 
+test("program discovery keeps initial cards bounded and defers optional facets", () => {
+  assert.match(programs, /const PUBLIC_PROGRAM_PAGE_SIZE = 12/);
+  assert.match(programs, /limit: String\(PUBLIC_PROGRAM_PAGE_SIZE\)/);
+  assert.match(programs, /if \(!hasLoadedInitialPrograms\) return/);
+  assert.match(programs, /setHasLoadedInitialPrograms\(true\)/);
+});
+
 test("first-visit cookie consent is present in the initial client render", () => {
   assert.match(cookieBanner, /useState\(\(\) => !getConsent\(\)\)/);
   assert.doesNotMatch(cookieBanner, /useEffect\s*\(/);
