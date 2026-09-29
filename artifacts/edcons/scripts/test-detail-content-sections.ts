@@ -16,6 +16,8 @@ const fixture: DetailContent = { version: 1, kind: "program", entityId: 42, loca
   steps: [{ title: "Ask", body: "Use the existing enquiry flow" }],
   images: [{ src: "/images/photo.jpg", alt: "Reviewed source photograph", caption: "Caption" }],
 }] };
+const contentSectionsSource = readFileSync(new URL("../src/pages/public/DetailContentSections.tsx", import.meta.url), "utf8");
+const galleryDialogSource = readFileSync(new URL("../src/pages/public/DetailGalleryDialog.tsx", import.meta.url), "utf8");
 
 test("editorial content is bound to the exact kind, entity and locale", () => {
   assert.deepEqual(boundDetailContent(fixture, "program", 42, "en"), fixture);
@@ -41,6 +43,15 @@ test("renderer exposes accessible gallery, FAQ, source, table and steps without 
   assert.doesNotMatch(markup, /verified review|AggregateRating|application\/ld\+json|dangerouslySetInnerHTML/i);
   const nav = renderToStaticMarkup(React.createElement(React.Fragment, null, detailContentNavigation(fixture)));
   assert.match(nav, /href="#editorial-faq"/);
+});
+
+test("the gallery dialog is loaded only after an explicit image interaction", () => {
+  assert.match(contentSectionsSource, /lazy\(\(\) => import\("\.\/DetailGalleryDialog"\)\)/);
+  assert.match(contentSectionsSource, /selected && <Suspense fallback=\{null\}>/);
+  assert.doesNotMatch(contentSectionsSource, /from "@\/components\/ui\/dialog"/);
+  assert.match(galleryDialogSource, /onCloseAutoFocus=/);
+  assert.match(galleryDialogSource, /onClosedAutoFocus\(\)/);
+  assert.match(galleryDialogSource, /alt=\{image\.alt\}/);
 });
 
 test("unsafe and malformed supplemental values fail closed before rendering", () => {

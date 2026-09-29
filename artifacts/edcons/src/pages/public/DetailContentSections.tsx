@@ -1,7 +1,8 @@
-import React, { useRef, useState, type ReactNode } from "react";
+import React, { lazy, Suspense, useRef, useState, type ReactNode } from "react";
 import { ArrowUpRight, BookOpen, ChevronDown, ExternalLink } from "lucide-react";
-import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { parseDetailContent, type DetailContent, type DetailContentKind, type DetailContentSection } from "@/lib/website/detailContentContract";
+
+const DetailGalleryDialog = lazy(() => import("./DetailGalleryDialog"));
 
 /** Reject stale responses for a different entity or language; never mix translations. */
 export function boundDetailContent(value: unknown, kind: DetailContentKind, entityId: number | undefined, locale: string): DetailContent | null {
@@ -49,13 +50,17 @@ function Gallery({ images, title, locale }: { images: NonNullable<DetailContentS
         <span aria-hidden="true"><ArrowUpRight size={19} /></span>
       </button>{image.caption && <figcaption>{image.caption}</figcaption>}
     </figure>)}</div>
-    <Dialog open={!!selected} onOpenChange={open => { if (!open) setSelected(null); }}>
-      <DialogContent className="w-[calc(100%_-_2rem)] max-w-4xl max-h-[90vh] overflow-y-auto rtl:[&>button]:right-auto rtl:[&>button]:left-4" aria-describedby={undefined} dir={["ar", "fa", "ur"].includes(locale) ? "rtl" : "ltr"}
-        onCloseAutoFocus={event => { if (opener.current?.isConnected) { event.preventDefault(); opener.current.focus({ preventScroll: true }); } }}>
-        <DialogTitle className="min-w-0 break-words pe-7 text-start">{selected?.caption || selected?.alt || title}</DialogTitle>
-        {selected && <img src={selected.src} alt={selected.alt} className="max-h-[70vh] w-full object-contain" />}
-      </DialogContent>
-    </Dialog>
+    {selected && <Suspense fallback={null}><DetailGalleryDialog
+      image={selected}
+      title={title}
+      locale={locale}
+      onClose={() => setSelected(null)}
+      onClosedAutoFocus={() => {
+        if (!opener.current?.isConnected) return false;
+        opener.current.focus({ preventScroll: true });
+        return true;
+      }}
+    /></Suspense>}
   </>;
 }
 
