@@ -1360,5 +1360,3 @@ export default function PublicProgramApplicationDialog({ open, onClose, program,
     </Dialog>
   );
 }
-
-
