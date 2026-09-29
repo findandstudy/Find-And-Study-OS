@@ -274,7 +274,6 @@ function DropZone({ docType, uploaded, onUpload, onRemove, applicationSession }:
     </div>
   );
 }
-
 function AiBadge() {
   return <span className="ml-1.5 text-[10px] bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300 px-1.5 py-0.5 rounded-full font-semibold tracking-wide">AI</span>;
 }
