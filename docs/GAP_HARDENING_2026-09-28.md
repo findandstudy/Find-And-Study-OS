@@ -920,6 +920,19 @@ dilimde yapılmadı.
   mode değişimleri ile bunların bulk karşılıkları business mutation ve audit
   sonucunu aynı PostgreSQL transaction'ında yazar. Audit insert başarısızsa
   partner/routing kararı da rollback olur; kayıtsız otomasyon kararı kalmaz.
+- Program mapping update/backfill ile declarative adapter create/update/delete
+  işlemleri de safety reset ve audit sonucu ile aynı transaction'a alındı.
+  Adapter audit'i serbest config gövdesini değil yalnız anahtar ve değişen alan
+  adlarını tutar. Test-login kuyruğu idempotent worker komutundan sonra audit
+  attempt tamamlanmadan `202 Accepted` döndürmez.
+- Portal Automation'ın paralel program-override, multi-portal routing ve catalog
+  membership yönetim yolları da mutation/safety-reset ile audit'i tek
+  transaction'da tamamlar. CRM üniversite relink komutu, sahibi ayrı helper'da
+  olsa da audit attempt bitmeden başarı yanıtı döndürmez.
+- Inbox'ta conversation note ve follow-up task oluşturma, ilgili kayıtlarla
+  audit sonucunu aynı transaction'da tamamlar. AI agent/RAG yönetim komutları
+  audit attempt tamamlanmadan başarı dönmez; RAG update audit'i gönderilen
+  içerik değerleri yerine yalnız değişen alan adlarını saklar.
 - Aktivasyon/readiness kontrolleri transaction öncesindeki fail-closed kapılar
   olarak korunur. Deaktivasyon yine `autoProcess=false` ve `fanOutMode=off`
   kill-switch sonucunu aynı transaction'da uygular.
@@ -941,8 +954,9 @@ dilimde yapılmadı.
   projection'ını aynı transaction'da tamamlar; reconciliation hatası stage yazısını
   geri alır ve kaybeden yarış yan etki üretmez. Notification rule, portal global
   settings/credential ve portal partner control-plane yazıları da bu standarda
-  taşındı; kalan düşük etkili portal adapter/test-queue yolları ayrı dar
-  command/worker dönüşümleridir.
+  taşındı. Worker queue ile audit'in tek transaction olması farklı paketlerdeki
+  komut sahipliği nedeniyle ileride ayrı command-adapter sözleşmesi gerektirir;
+  mevcut test-login yolu audit tamamlanmadan başarı bildirmez.
 - High-impact legacy audit'lerin tamamını aynı transaction'da durable
   attempt/result receipt'e taşımak: kritik mevcut çağrılarda gerçek await sınırı
   kuruldu; failure durumunda business mutation'la atomik receipt için dar command

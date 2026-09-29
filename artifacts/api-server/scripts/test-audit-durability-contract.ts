@@ -33,6 +33,7 @@ const inbox = source("../src/routes/inbox.ts");
 const contractBrands = source("../src/routes/contractBrands.ts");
 const notifications = source("../src/routes/notifications.ts");
 const portalMgmt = source("../src/routes/portalMgmt.ts");
+const portalAutomation = source("../src/routes/portalAutomation.ts");
 
 assert.match(auth, /\): Promise<void> \{\s*return db\.insert\(auditLogsTable\)/,
   "audit insert exposes a real awaitable completion boundary");
@@ -80,9 +81,49 @@ for (const action of [
   "bulk_enable_portal_auto_process",
   "bulk_disable_portal_auto_process",
   "bulk_delete_portal_university",
+  "update_portal_program_mapping",
+  "migrate_portal_program_mapping_ids_to_names",
+  "create_portal_adapter",
+  "update_portal_adapter",
+  "delete_portal_adapter",
 ]) {
   assert.doesNotMatch(portalMgmt, new RegExp(`logAudit\\([^;]{0,320}"${action}"`),
     `${action} does not leave a committed portal decision without its audit receipt`);
+}
+assert.match(portalMgmt, /await logAudit\(req\.user!\.id, "queue_portal_test_login"/,
+  "portal test-login command waits for its audit attempt before returning acceptance");
+assert.match(portalMgmt, /changedFields: Object\.keys\(body\)\.sort\(\)/,
+  "portal adapter audit records changed field names without declarative configuration content");
+for (const action of ["conversation_note_create", "conversation_task_create"]) {
+  assert.match(inbox,
+    new RegExp(`await tx\\.insert\\(auditLogsTable\\)\\.values\\(\\{[^;]{0,420}action: "${action}"`),
+    `${action} commits its audit receipt with the inbox mutation`);
+  assert.doesNotMatch(inbox, new RegExp(`logAudit\\([^;]{0,260}"${action}"`),
+    `${action} no longer uses a post-commit legacy audit`);
+}
+for (const action of [
+  "update_ai_agent_config",
+  "update_knowledge_source_program_scope",
+  "create_knowledge_source_rag",
+  "update_knowledge_source_rag",
+  "reprocess_knowledge_source_rag",
+  "delete_knowledge_source_rag",
+]) {
+  assert.match(inbox, new RegExp(`await logAudit\\([^;]{0,260}"${action}"`),
+    `${action} does not report success before its audit attempt completes`);
+}
+assert.match(inbox, /update_knowledge_source_rag"[\s\S]{0,180}changedFields: Object\.keys\(parsed\.data\)\.sort\(\)/,
+  "RAG source update audit does not persist submitted content values");
+assert.doesNotMatch(portalAutomation, /(?<!await )logAudit\(/,
+  "portal automation routes never return before a legacy audit attempt completes");
+for (const action of [
+  "update_portal_program_mapping",
+  "portal.routing.update",
+  "portal.membership.update",
+]) {
+  assert.match(portalAutomation,
+    new RegExp(`await tx\\.insert\\(auditLogsTable\\)\\.values\\(\\{[^;]{0,520}action: "${action.replaceAll(".", "\\.")}"`),
+    `${action} commits its audit receipt with the portal automation mutation`);
 }
 for (const action of ["upsert_portal_credentials", "delete_portal_credentials"]) {
   assert.match(portalCredentialRoutes, new RegExp(`await tx\\.insert\\(auditLogsTable\\)\\.values\\(\\{[^;]{0,420}action: "${action}"`),

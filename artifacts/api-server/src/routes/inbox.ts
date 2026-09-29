@@ -2283,7 +2283,7 @@ router.post(
     await applyLeadAssignmentRules({ ...lead, channelAccountId: conv.channelAccountId }, req.ip);
     // Single-owner rule: sync conversation ⇄ freshly created lead ownership.
     await syncConversationOwner(id, req.user!.id, req.ip);
-    logAudit(
+    await logAudit(
       req.user!.id,
       "create_lead_from_inbox_smart",
       "lead",
@@ -4104,7 +4104,7 @@ router.post(
 
     const cached = readAiSummary(conv.metadata);
     if (cached && cached.messageCount === messageCount) {
-      logAudit(userId, "conversation_summarize", "conversation", conversationId, {
+      await logAudit(userId, "conversation_summarize", "conversation", conversationId, {
         messageCount,
         fromCache: true,
       }, req.ip);
@@ -4189,7 +4189,7 @@ router.post(
       return;
     }
 
-    logAudit(userId, "conversation_summarize", "conversation", conversationId, {
+    await logAudit(userId, "conversation_summarize", "conversation", conversationId, {
       messageCount,
       fromCache,
       model: summary.model,
@@ -4255,14 +4255,21 @@ router.post(
         isInternal: true,
       });
 
+      await tx.insert(auditLogsTable).values({
+        userId,
+        action: "conversation_note_create",
+        resource: "conversation",
+        resourceId: conversationId,
+        changes: JSON.stringify({
+          noteId: primary.id,
+          resourceType: primaryResourceType,
+          resourceId: primaryResourceId,
+        }),
+        ipAddress: req.ip ?? null,
+      });
+
       return primary;
     });
-
-    logAudit(userId, "conversation_note_create", "conversation", conversationId, {
-      noteId: primaryNote.id,
-      resourceType: primaryResourceType,
-      resourceId: primaryResourceId,
-    }, req.ip);
 
     res.status(201).json({
       data: {
@@ -4311,26 +4318,35 @@ router.post(
     // Student takes priority: a converted lead has both leadId and studentId set;
     // follow-ups should attach to the student (canonical post-conversion anchor).
     const resourceType: "lead" | "student" = link.studentId ? "student" : "lead";
-    const [task] = await db
-      .insert(followUpsTable)
-      .values({
-        leadId: link.leadId,
-        studentId: link.studentId,
-        resourceType,
-        title: body.title,
-        scheduledAt: new Date(body.scheduledAt),
-        assignedToId: body.assignedToId ?? userId,
-        notes: body.notes ?? null,
-        createdById: userId,
-      })
-      .returning();
-
-    logAudit(userId, "conversation_task_create", "conversation", conversationId, {
-      taskId: task.id,
-      resourceType,
-      leadId: link.leadId,
-      studentId: link.studentId,
-    }, req.ip);
+    const task = await db.transaction(async (tx) => {
+      const [created] = await tx
+        .insert(followUpsTable)
+        .values({
+          leadId: link.leadId,
+          studentId: link.studentId,
+          resourceType,
+          title: body.title,
+          scheduledAt: new Date(body.scheduledAt),
+          assignedToId: body.assignedToId ?? userId,
+          notes: body.notes ?? null,
+          createdById: userId,
+        })
+        .returning();
+      await tx.insert(auditLogsTable).values({
+        userId,
+        action: "conversation_task_create",
+        resource: "conversation",
+        resourceId: conversationId,
+        changes: JSON.stringify({
+          taskId: created.id,
+          resourceType,
+          leadId: link.leadId,
+          studentId: link.studentId,
+        }),
+        ipAddress: req.ip ?? null,
+      });
+      return created;
+    });
 
     res.status(201).json({ data: task });
   },
@@ -4496,7 +4512,7 @@ router.put(
         patch = stripAlreadyEnabledAiAgentControls(current, patch);
       }
       const config = await writeAiAgentConfig(patch, aiBotId);
-      logAudit(req.user!.id, "update_ai_agent_config", "integration", undefined, {
+      await logAudit(req.user!.id, "update_ai_agent_config", "integration", undefined, {
         aiBotId,
         enabled: config.enabled,
         externalAutoReplyEnabled: config.externalAutoReplyEnabled,
@@ -4617,7 +4633,7 @@ router.put(
       return;
     }
     const source = await writeProgramScopeSource(parsed.data, aiBotId);
-    logAudit(req.user!.id, "update_knowledge_source_program_scope", "integration", undefined, {
+    await logAudit(req.user!.id, "update_knowledge_source_program_scope", "integration", undefined, {
       aiBotId,
       isActive: source.isActive,
       enabled: source.scope.enabled,
@@ -4703,7 +4719,7 @@ router.post(
       name: parsed.data.name,
       config: ragSourceConfigFromInput(parsed.data),
     });
-    logAudit(req.user!.id, "create_knowledge_source_rag", "integration", source.id, { type: source.type, name: source.name }, req.ip);
+    await logAudit(req.user!.id, "create_knowledge_source_rag", "integration", source.id, { type: source.type, name: source.name }, req.ip);
     res.status(201).json({ source });
   },
 );
@@ -4725,7 +4741,9 @@ router.patch(
     }
     const source = await updateRagSource(id, aiBotId, parsed.data);
     if (!source) { res.status(404).json({ error: "Not found" }); return; }
-    logAudit(req.user!.id, "update_knowledge_source_rag", "integration", id, parsed.data, req.ip);
+    await logAudit(req.user!.id, "update_knowledge_source_rag", "integration", id, {
+      changedFields: Object.keys(parsed.data).sort(),
+    }, req.ip);
     res.json({ source });
   },
 );
@@ -4742,7 +4760,7 @@ router.post(
     if (!id) { res.status(400).json({ error: "Invalid id" }); return; }
     const ok = await reprocessRagSource(id, aiBotId);
     if (!ok) { res.status(404).json({ error: "Not found" }); return; }
-    logAudit(req.user!.id, "reprocess_knowledge_source_rag", "integration", id, {}, req.ip);
+    await logAudit(req.user!.id, "reprocess_knowledge_source_rag", "integration", id, {}, req.ip);
     res.json({ success: true });
   },
 );
@@ -4759,7 +4777,7 @@ router.delete(
     if (!id) { res.status(400).json({ error: "Invalid id" }); return; }
     const ok = await deleteRagSource(id, aiBotId);
     if (!ok) { res.status(404).json({ error: "Not found" }); return; }
-    logAudit(req.user!.id, "delete_knowledge_source_rag", "integration", id, {}, req.ip);
+    await logAudit(req.user!.id, "delete_knowledge_source_rag", "integration", id, {}, req.ip);
     res.json({ success: true });
   },
 );
