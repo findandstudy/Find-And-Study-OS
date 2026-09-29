@@ -1,6 +1,6 @@
 import { DetailLayout } from "./DetailLayout";
 import { programAdmissionsOpen } from "@/lib/programAdmissions";
-import { lazy, startTransition, Suspense, useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { customFetch } from "@workspace/api-client-react";
 import { useI18n } from "@/hooks/use-i18n";
@@ -176,22 +176,16 @@ export default function ProgramDetail({ routeKey }: { routeKey: string }) {
     )
       .then((result) => {
         if (cancelled) return;
-        // The factual SSR shell already carries the critical heading. Render
-        // the complete interactive detail as non-urgent work so React can
-        // yield between below-fold sections on slower mobile CPUs.
-        startTransition(() => {
-          setPayload(result);
-          setLoading(false);
-          if (!result.meta.requestedPathIsCanonical) {
-            setLocation(result.meta.canonicalPath, { replace: true });
-          }
-        });
+        setPayload(result);
+        if (!result.meta.requestedPathIsCanonical) {
+          setLocation(result.meta.canonicalPath, { replace: true });
+        }
       })
       .catch(() => {
-        if (!cancelled) startTransition(() => {
-          setError(true);
-          setLoading(false);
-        });
+        if (!cancelled) setError(true);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
       });
     return () => { cancelled = true; };
   }, [lang, routeKey, setLocation]);
