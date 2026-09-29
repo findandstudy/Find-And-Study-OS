@@ -137,7 +137,18 @@ try {
           }
         }).observe({ type: "layout-shift", buffered: true });
         new PerformanceObserver((list) => {
-          for (const entry of list.getEntries()) window.__cwvLab.longTasks.push(entry.duration);
+          for (const entry of list.getEntries()) {
+            window.__cwvLab.longTasks.push({
+              startTime: entry.startTime,
+              duration: entry.duration,
+              attribution: (entry.attribution || []).slice(0, 5).map((item) => ({
+                name: item.name || null,
+                containerType: item.containerType || null,
+                containerName: item.containerName || null,
+                containerSrc: item.containerSrc || null,
+              })),
+            });
+          }
         }).observe({ type: "longtask", buffered: true });
       }, consentMode);
 
@@ -159,7 +170,8 @@ try {
           lcpHistory: state.lcpHistory,
           cls: state.cls,
           shifts: state.shifts,
-          tbtMs: state.longTasks.reduce((total, duration) => total + Math.max(0, duration - 50), 0),
+          longTasks: state.longTasks,
+          tbtMs: state.longTasks.reduce((total, entry) => total + Math.max(0, entry.duration - 50), 0),
           ttfbMs: navigation?.responseStart || 0,
           transferredBytes: performance.getEntriesByType("resource")
             .reduce((total, entry) => total + (entry.transferSize || 0), 0),
@@ -191,6 +203,11 @@ try {
           startTime: round(entry.startTime),
           value: round(entry.value, 4),
           sources: entry.sources,
+        })),
+        longTasks: metrics.longTasks.map((entry) => ({
+          startTime: round(entry.startTime),
+          duration: round(entry.duration),
+          attribution: entry.attribution,
         })),
         tbtMs: round(metrics.tbtMs),
         ttfbMs: round(metrics.ttfbMs),
