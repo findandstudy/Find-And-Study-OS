@@ -5,16 +5,21 @@ import "./detailEditorial.css";
 
 /** Reorders the existing React sections; catalogue facts and Apply components stay untouched. */
 export function DetailLayout({ kind, children }: { kind: DetailLayoutKind; children: ReactNode }) {
-  const initial = () => {
+  const embedded = () => {
     try { const parsed = parseDetailLayout(JSON.parse(document.getElementById("public-detail-layout")?.textContent ?? "null")); if (parsed?.kind === kind) return parsed; } catch { /* Built-in safe layout. */ }
-    return defaultDetailLayout(kind);
+    return null;
   };
-  const [layout, setLayout] = useState(initial);
+  const [layout, setLayout] = useState(() => embedded() ?? defaultDetailLayout(kind));
   const root = useRef<HTMLDivElement>(null);
   const [activeSection, setActiveSection] = useState("");
   useEffect(() => {
+    const serverLayout = embedded();
+    if (serverLayout) {
+      setLayout(serverLayout);
+      return;
+    }
     const controller = new AbortController();
-    setLayout(initial());
+    setLayout(defaultDetailLayout(kind));
     customFetch(`/api/public/web/detail-layouts/${kind}`, { signal: controller.signal })
       .then(value => { const parsed = parseDetailLayout(value); if (parsed?.kind === kind) setLayout(parsed); })
       .catch(() => { /* Safe built-in layout on unavailable or invalid configuration. */ });

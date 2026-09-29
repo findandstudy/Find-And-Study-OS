@@ -35,6 +35,15 @@ test("server and browser module-local contracts stay byte-equivalent", () => {
   const normalize = (url: URL) => readFileSync(url, "utf8").replace(/\r\n/g, "\n").trim();
   assert.equal(normalize(new URL("../src/lib/websiteDetailLayoutContract.ts", import.meta.url)), normalize(new URL("../../edcons/src/lib/website/detailLayoutContract.ts", import.meta.url)));
 });
+test("published layouts use a bounded coalesced cache cleared by render invalidation", () => {
+  const reader = readFileSync(new URL("../src/lib/websiteDetailLayouts.ts", import.meta.url), "utf8");
+  const invalidation = readFileSync(new URL("../src/lib/publicCatalogRenderReadModel.ts", import.meta.url), "utf8");
+  assert.match(reader, /PUBLISHED_LAYOUT_TTL_MS = 60_000/);
+  assert.match(reader, /publishedLayoutInFlight\.get\(kind\)/);
+  assert.match(reader, /publishedLayoutGeneration\.get\(kind\)/);
+  assert.match(reader, /export function invalidatePublishedDetailLayout/);
+  assert.match(invalidation, /if \(input\.detailTemplate\) invalidatePublishedDetailLayout\(input\.detailTemplate\)/);
+});
 test("SSR applies published layout without changing canonical facts or index policy", () => {
   const model: PublicCatalogRenderModel = { kind: "city_detail", locale: "ar", canonicalPath: "/ar/cities/city-1", title: "City", description: "Source description", indexable: false, alternatePaths: {},
     detailLayout: parseDetailLayout({ version: 2, kind: "city", sections: ["hero", "navigation", "overview", "facts", "programs", "universities"], hidden: [] })!,

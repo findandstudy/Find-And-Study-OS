@@ -503,6 +503,12 @@ test("new presentation preserves canonical SEO, governed sections and guarded ap
   assert.match(program, /offers: tuitionOffer\(tuition, programAdmissionsOpen\(program\)\)/);
 });
 
+test("SSR-provided detail layout avoids a duplicate client request while SPA navigation still refreshes", () => {
+  assert.match(layout, /const serverLayout = embedded\(\)/);
+  assert.match(layout, /if \(serverLayout\) \{\s*setLayout\(serverLayout\);\s*return;/);
+  assert.match(layout, /customFetch\(`\/api\/public\/web\/detail-layouts\/\$\{kind\}`/);
+});
+
 test("SSR shell remains visible until the client route has rendered its heading", () => {
   assert.match(main, /public-render-shell-handoff/);
   assert.match(main, /new MutationObserver/);

@@ -36,7 +36,7 @@ import type {
   PublicCatalogPageBlockSource,
 } from "./publicCatalogRenderContract";
 import { parsePublicCatalogPageBlockSource } from "./publicCatalogRenderContract";
-import { readPublishedDetailLayout } from "./websiteDetailLayouts";
+import { invalidatePublishedDetailLayout, readPublishedDetailLayout } from "./websiteDetailLayouts";
 import { DETAIL_LAYOUT_KINDS, type DetailLayoutKind } from "./websiteDetailLayoutContract";
 import { websiteCatalogTaxonomy, countryMatches, countryAliases, catalogName } from "./websiteCatalogFilters";
 import { readCatalogCountryFallback, matchCatalogCountry, readPublicCatalogCountryDirectory, resolvePublicCatalogLocationLinks } from "./publicCatalogLocationLinks";
@@ -1862,6 +1862,7 @@ export async function getPublicCatalogRenderModel(
 export function getPublicCatalogCacheGeneration(): number { return cacheGeneration; }
 
 export function applyPublicCatalogRenderCacheInvalidation(input: PublicCatalogInvalidation = {}): number {
+  if (input.detailTemplate) invalidatePublishedDetailLayout(input.detailTemplate);
   let removed = 0;
   const candidateKeys = new Set([...cache.keys(), ...inFlight.keys()]);
   const matches = (key: string): boolean => {

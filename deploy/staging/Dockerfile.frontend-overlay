@@ -2,7 +2,7 @@
 # is confined to the already-built API bundle and public frontend and the
 # parent image is an exact, previously attested release. The tiny build context
 # avoids rebuilding the dependency graph on a constrained staging host.
-ARG FASOS_STAGING_BASE_IMAGE
+ARG FASOS_STAGING_BASE_IMAGE=findandstudy-staging-app:base-image-must-be-overridden
 FROM ${FASOS_STAGING_BASE_IMAGE}
 
 ARG FASOS_SOURCE_COMMIT
