@@ -541,6 +541,10 @@ test("internal home fallback hero preserves the existing React fallback geometry
   assert.match(html, /max-w-2xl mx-auto leading-relaxed/);
   assert.match(html, /rounded-full px-8 h-14/);
   assert.match(html, /href="\/en\/programs"/);
+  const client = readFileSync(new URL("../../edcons/src/pages/public/PublicPage.tsx", import.meta.url), "utf8");
+  assert.match(client, /case "home_fallback_hero"/);
+  assert.match(client, /pt-24 pb-32 lg:pt-36 lg:pb-40/);
+  assert.match(client, /text-5xl md:text-7xl/);
 });
 
 test("CMS catalogue grid renders current data bindings without storing duplicate facts", () => {

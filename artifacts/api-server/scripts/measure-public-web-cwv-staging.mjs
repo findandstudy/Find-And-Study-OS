@@ -95,9 +95,13 @@ try {
       await cdp.send("Emulation.setCPUThrottlingRate", { rate: 4 });
       await page.addInitScript((selectedConsentMode) => {
         if (selectedConsentMode === "essential") {
+          // Match a returning browser on the current persisted-state schema;
+          // otherwise the application's version guard intentionally clears
+          // all stale storage before CookieBanner reads the preference.
+          localStorage.setItem("edcons_client_state_version", "2026-06-06");
           localStorage.setItem("cookie_consent", "essential");
         }
-        window.__cwvLab = { lcp: 0, lcpElement: null, lcpUrl: null, lcpHistory: [], cls: 0, longTasks: [] };
+        window.__cwvLab = { lcp: 0, lcpElement: null, lcpUrl: null, lcpHistory: [], cls: 0, shifts: [], longTasks: [] };
         new PerformanceObserver((list) => {
           const entries = list.getEntries();
           const latest = entries[entries.length - 1];
@@ -116,7 +120,20 @@ try {
         }).observe({ type: "largest-contentful-paint", buffered: true });
         new PerformanceObserver((list) => {
           for (const entry of list.getEntries()) {
-            if (!entry.hadRecentInput) window.__cwvLab.cls += entry.value;
+            if (!entry.hadRecentInput) {
+              window.__cwvLab.cls += entry.value;
+              window.__cwvLab.shifts.push({
+                startTime: entry.startTime,
+                value: entry.value,
+                sources: (entry.sources || []).slice(0, 5).map((source) => ({
+                  element: source.node?.tagName || null,
+                  className: typeof source.node?.className === "string" ? source.node.className.slice(0, 240) : null,
+                  text: String(source.node?.textContent || "").replace(/\s+/g, " ").trim().slice(0, 240) || null,
+                  previousRect: source.previousRect ? { x: source.previousRect.x, y: source.previousRect.y, width: source.previousRect.width, height: source.previousRect.height } : null,
+                  currentRect: source.currentRect ? { x: source.currentRect.x, y: source.currentRect.y, width: source.currentRect.width, height: source.currentRect.height } : null,
+                })),
+              });
+            }
           }
         }).observe({ type: "layout-shift", buffered: true });
         new PerformanceObserver((list) => {
@@ -141,6 +158,7 @@ try {
           lcpUrl: state.lcpUrl,
           lcpHistory: state.lcpHistory,
           cls: state.cls,
+          shifts: state.shifts,
           tbtMs: state.longTasks.reduce((total, duration) => total + Math.max(0, duration - 50), 0),
           ttfbMs: navigation?.responseStart || 0,
           transferredBytes: performance.getEntriesByType("resource")
@@ -169,6 +187,11 @@ try {
           shell: entry.shell,
         })),
         cls: round(metrics.cls, 4),
+        shifts: metrics.shifts.map((entry) => ({
+          startTime: round(entry.startTime),
+          value: round(entry.value, 4),
+          sources: entry.sources,
+        })),
         tbtMs: round(metrics.tbtMs),
         ttfbMs: round(metrics.ttfbMs),
         transferredBytes: Math.round(metrics.transferredBytes),
