@@ -35,6 +35,8 @@ const initialJavascriptGzipBytes = (
 const initialCssGzipBytes = (
   await Promise.all(stylesheets.map(gzipBytes))
 ).reduce((total, size) => total + size, 0);
+const initialCss = (await Promise.all(stylesheets.map((urlPath) => readFile(localAssetPath(urlPath), "utf8")))).join("\n");
+assert.doesNotMatch(initialCss, /https?:\/\//i, "initial CSS must not depend on third-party styles or fonts");
 const bootstrapBytes = (await stat(path.join(publicRoot, "bootstrap.js"))).size;
 
 assert.ok(
