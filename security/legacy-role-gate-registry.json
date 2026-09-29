@@ -620,7 +620,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/inbox.ts",
-      "sha256": "cb936526c19019dd55ea61363a67a5cafebf44c173fba370ab6121172893663e",
+      "sha256": "454ba2d55d93cd095d185e039f564054a875c9c8bceeaffa8e58c8cec8d9bbf8",
       "routeRegistrations": 57,
       "requireAuth": 58,
       "requireRole": 56,
@@ -740,7 +740,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/notifications.ts",
-      "sha256": "cacfe936c16f487fff5d800c07ea3e6414c08afe5eb1a85b6545186743c6f9b2",
+      "sha256": "5f2e424591833eeb40e795d83c98f8744b870137a903722f1eca3691395a2fb8",
       "routeRegistrations": 11,
       "requireAuth": 12,
       "requireRole": 4,
@@ -815,7 +815,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/portalAutomation.ts",
-      "sha256": "430875b8e2018fd14044e582124d5f7c46ee223bac3ec700074ebabdd032d583",
+      "sha256": "f5afb0637786bf76abd53b0a2b6908828f845f4cf858d54ffe147872fd6e5c0f",
       "routeRegistrations": 44,
       "requireAuth": 45,
       "requireRole": 40,
@@ -830,7 +830,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/portalMgmt.ts",
-      "sha256": "25ac81861f73196c90709fc89ecd1c00f98d714069cc7861fbb6c9427ee38daa",
+      "sha256": "cc3b3f84a5df1f812dfc8d7174cd7500b3912bf6899037e7f3b3713adfd4fdad",
       "routeRegistrations": 25,
       "requireAuth": 26,
       "requireRole": 26,
