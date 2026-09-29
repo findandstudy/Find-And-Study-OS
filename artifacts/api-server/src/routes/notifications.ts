@@ -6,9 +6,10 @@ import {
   applicationsTable,
   studentsTable,
   pipelineStagesTable,
+  auditLogsTable,
 } from "@workspace/db";
 import { eq, and, desc, sql, isNull, inArray, like, or } from "drizzle-orm";
-import { requireAuth, requireRole, logAudit } from "../lib/auth";
+import { requireAuth, requireRole } from "../lib/auth";
 import { ADMIN_ROLES } from "../lib/roles";
 import {
   NOTIFICATION_EVENTS,
@@ -395,6 +396,11 @@ router.get("/notification-rules/schema", requireAuth, requireRole(...ADMIN_ROLES
 
 router.patch("/notification-rules/:id", requireAuth, requireRole(...ADMIN_ROLES), requireEmailAutomationHuman, async (req, res): Promise<void> => {
   const id = parseInt(String(req.params.id), 10);
+  const expectedUpdatedAt = new Date(String(req.body.expectedUpdatedAt ?? ""));
+  if (!Number.isInteger(id) || id <= 0 || Number.isNaN(expectedUpdatedAt.getTime())) {
+    res.status(400).json({ error: "A valid rule id and expectedUpdatedAt are required" });
+    return;
+  }
   const updates: Record<string, unknown> = {};
   const [existing] = await db.select({ template: notificationRulesTable.template, event: notificationRulesTable.event })
     .from(notificationRulesTable).where(eq(notificationRulesTable.id, id));
@@ -419,18 +425,39 @@ router.patch("/notification-rules/:id", requireAuth, requireRole(...ADMIN_ROLES)
     return;
   }
 
-  const [rule] = await db
-    .update(notificationRulesTable)
-    .set(updates)
-    .where(eq(notificationRulesTable.id, id))
-    .returning();
+  const rule = await db.transaction(async (tx) => {
+    const [updatedRule] = await tx
+      .update(notificationRulesTable)
+      .set(updates)
+      .where(and(
+        eq(notificationRulesTable.id, id),
+        eq(notificationRulesTable.updatedAt, expectedUpdatedAt),
+      ))
+      .returning();
+
+    if (!updatedRule) return null;
+    await tx.insert(auditLogsTable).values({
+      userId: req.user!.id,
+      action: "update_notification_rule",
+      resource: "notification_rule",
+      resourceId: id,
+      changes: JSON.stringify({
+        event: existing.event,
+        changedFields: Object.keys(updates).sort(),
+      }),
+      ipAddress: req.ip ?? null,
+    });
+    return updatedRule;
+  });
 
   if (!rule) {
-    res.status(404).json({ error: "Rule not found" });
+    res.status(409).json({
+      error: "Notification rule changed since it was loaded",
+      code: "NOTIFICATION_RULE_VERSION_CONFLICT",
+    });
     return;
   }
 
-  await logAudit(req.user!.id, "update_notification_rule", "notification_rule", id, updates, req.ip);
   res.json(rule);
 });
 
@@ -452,21 +479,31 @@ router.post("/notification-rules", requireAuth, requireRole(...ADMIN_ROLES), req
     catch (error) { res.status(400).json({ error: emailPolicyErrorCode(error) }); return; }
   }
 
-  const [rule] = await db
-    .insert(notificationRulesTable)
-    .values({
-      event,
-      name,
-      category: category || "general",
-      channels: channels || ["in_app"],
-      recipientType: recipientType || "specific",
-      recipientRoles: recipientRoles || [],
-      isActive: true,
-      template: boundTemplate,
-    })
-    .returning();
+  const rule = await db.transaction(async (tx) => {
+    const [createdRule] = await tx
+      .insert(notificationRulesTable)
+      .values({
+        event,
+        name,
+        category: category || "general",
+        channels: channels || ["in_app"],
+        recipientType: recipientType || "specific",
+        recipientRoles: recipientRoles || [],
+        isActive: true,
+        template: boundTemplate,
+      })
+      .returning();
+    await tx.insert(auditLogsTable).values({
+      userId: req.user!.id,
+      action: "create_notification_rule",
+      resource: "notification_rule",
+      resourceId: createdRule.id,
+      changes: JSON.stringify({ event }),
+      ipAddress: req.ip ?? null,
+    });
+    return createdRule;
+  });
 
-  await logAudit(req.user!.id, "create_notification_rule", "notification_rule", rule.id, { event }, req.ip);
   res.status(201).json(rule);
 });
 

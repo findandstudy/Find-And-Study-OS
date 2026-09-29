@@ -31,6 +31,7 @@ interface NotificationRule {
   recipientRoles: string[];
   isActive: boolean;
   template?: NotifTemplate;
+  updatedAt: string;
 }
 
 interface LangTemplate { subject?: string; body?: string; }
@@ -191,14 +192,15 @@ export function NotificationRulesManager({ isAdmin, notifications, setNotificati
 
     setSaving(rule.id);
     try {
-      await customFetch(`/api/notification-rules/${rule.id}`, {
+      const updated = await customFetch<NotificationRule>(`/api/notification-rules/${rule.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ channels: newChannels }),
+        body: JSON.stringify({ channels: newChannels, expectedUpdatedAt: rule.updatedAt }),
       });
-      setRules(prev => prev.map(r => r.id === rule.id ? { ...r, channels: newChannels } : r));
+      setRules(prev => prev.map(r => r.id === rule.id ? updated : r));
     } catch {
       toast({ title: t("notificationRules.failedToUpdate"), variant: "destructive" });
+      await fetchRules();
     } finally {
       setSaving(null);
     }
@@ -208,14 +210,15 @@ export function NotificationRulesManager({ isAdmin, notifications, setNotificati
     if (!canManageRules) return;
     setSaving(rule.id);
     try {
-      await customFetch(`/api/notification-rules/${rule.id}`, {
+      const updated = await customFetch<NotificationRule>(`/api/notification-rules/${rule.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ isActive: !rule.isActive }),
+        body: JSON.stringify({ isActive: !rule.isActive, expectedUpdatedAt: rule.updatedAt }),
       });
-      setRules(prev => prev.map(r => r.id === rule.id ? { ...r, isActive: !r.isActive } : r));
+      setRules(prev => prev.map(r => r.id === rule.id ? updated : r));
     } catch {
       toast({ title: t("notificationRules.failedToUpdate"), variant: "destructive" });
+      await fetchRules();
     } finally {
       setSaving(null);
     }
@@ -290,18 +293,19 @@ export function NotificationRulesManager({ isAdmin, notifications, setNotificati
       emailSenderAccountId: useEmailLibrary ? emailBinding.senderAccountId : null,
     };
     try {
-      await customFetch(`/api/notification-rules/${editingTemplate.id}`, {
+      const updated = await customFetch<NotificationRule>(`/api/notification-rules/${editingTemplate.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ template }),
+        body: JSON.stringify({ template, expectedUpdatedAt: editingTemplate.updatedAt }),
       });
       setRules(prev => prev.map(r =>
-        r.id === editingTemplate.id ? { ...r, template } : r
+        r.id === editingTemplate.id ? updated : r
       ));
       toast({ title: t("notificationRules.templateSaved") });
       setEditingTemplate(null);
     } catch {
       toast({ title: t("notificationRules.failedToSaveTemplate"), variant: "destructive" });
+      await fetchRules();
     } finally {
       setSavingTemplate(false);
     }

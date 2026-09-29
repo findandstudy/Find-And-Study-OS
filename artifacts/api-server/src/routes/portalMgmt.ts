@@ -33,6 +33,7 @@ import {
   universitiesTable,
   programsTable,
   GENERAL_MAPPING_KEY,
+  auditLogsTable,
 } from "@workspace/db";
 import {
   resolveAdapterByKey,
@@ -344,6 +345,7 @@ router.put(
         .orderBy(asc(portalAutomationSettingsTable.id))
         .limit(1);
 
+      let saved: typeof portalAutomationSettingsTable.$inferSelect;
       if (existing) {
         const [updated] = await tx
           .update(portalAutomationSettingsTable)
@@ -361,24 +363,42 @@ router.put(
           })
           .where(eq(portalAutomationSettingsTable.id, existing.id))
           .returning();
-        return updated;
+        saved = updated;
+      } else {
+        const [inserted] = await tx
+          .insert(portalAutomationSettingsTable)
+          .values({
+            isEnabled:                   body.isEnabled,
+            triggerStages:               snapshot.validConfiguredKeys,
+            mode:                        body.mode,
+            scope:                       body.scope,
+            selectedUniversityKeys:      body.selectedUniversityKeys,
+            autoProcessEnabled:          body.autoProcessEnabled ?? false,
+            autoProcessIntervalMinutes:  body.autoProcessIntervalMinutes ?? 20,
+            fallbackEnabled:             body.fallbackEnabled ?? false,
+            fanOutMode:                  body.fanOutMode ?? "off",
+          })
+          .returning();
+        saved = inserted;
       }
-
-      const [inserted] = await tx
-        .insert(portalAutomationSettingsTable)
-        .values({
-          isEnabled:                   body.isEnabled,
-          triggerStages:               snapshot.validConfiguredKeys,
-          mode:                        body.mode,
-          scope:                       body.scope,
-          selectedUniversityKeys:      body.selectedUniversityKeys,
-          autoProcessEnabled:          body.autoProcessEnabled ?? false,
-          autoProcessIntervalMinutes:  body.autoProcessIntervalMinutes ?? 20,
-          fallbackEnabled:             body.fallbackEnabled ?? false,
-          fanOutMode:                  body.fanOutMode ?? "off",
-        })
-        .returning();
-      return inserted;
+      await tx.insert(auditLogsTable).values({
+        userId: user.id,
+        action: "update_portal_automation_settings",
+        resource: "portal_automation_settings",
+        resourceId: saved.id,
+        changes: JSON.stringify({
+          isEnabled: body.isEnabled,
+          mode: body.mode,
+          scope: body.scope,
+          triggerStagesCount: saved.triggerStages.length,
+          autoProcessEnabled: body.autoProcessEnabled,
+          autoProcessIntervalMinutes: body.autoProcessIntervalMinutes,
+          fallbackEnabled: body.fallbackEnabled,
+          fanOutMode: body.fanOutMode,
+        }),
+        ipAddress: req.ip ?? null,
+      });
+      return saved;
     }).catch((error: Error & { code?: string; details?: string[] }) => {
       if (error.code === "UNKNOWN_TRIGGER_STAGE" || error.code === "INELIGIBLE_TRIGGER_STAGE" || error.code === "TRIGGER_STAGE_REQUIRED") {
         res.status(400).json({
@@ -391,24 +411,6 @@ router.put(
       throw error;
     });
     if (!row) return;
-
-    logAudit(
-      user.id,
-      "update_portal_automation_settings",
-      "portal_automation_settings",
-      row.id,
-      {
-        isEnabled: body.isEnabled,
-        mode: body.mode,
-        scope: body.scope,
-        triggerStagesCount: row.triggerStages.length,
-        autoProcessEnabled: body.autoProcessEnabled,
-        autoProcessIntervalMinutes: body.autoProcessIntervalMinutes,
-        fallbackEnabled: body.fallbackEnabled,
-        fanOutMode: body.fanOutMode,
-      },
-      req.ip,
-    );
 
     res.json(row);
   },
@@ -1916,6 +1918,14 @@ router.put(
       safetyReset = await db.transaction(async (tx) => {
         const reset = await resetPortalCredentialExecutionStateTx(tx, storageKey);
         await setPortalCredentials(null, storageKey, { username, password, extra }, tx);
+        await tx.insert(auditLogsTable).values({
+          userId: req.user!.id,
+          action: "upsert_portal_credentials",
+          resource: "portal_credentials",
+          resourceId: uni.id,
+          changes: JSON.stringify({ portalKey, storageKey, safetyReset: reset }),
+          ipAddress: req.ip ?? null,
+        });
         return reset;
       });
     } catch (error) {
@@ -1929,15 +1939,6 @@ router.put(
       }
       throw error;
     }
-
-    logAudit(
-      req.user!.id,
-      "upsert_portal_credentials",
-      "portal_credentials",
-      uni.id,
-      { portalKey, storageKey, safetyReset },
-      req.ip,
-    );
 
     res.json({ ok: true, safetyReset });
   },
@@ -1985,6 +1986,14 @@ router.delete(
         if (!result.length) return { ok: false as const };
 
         const safetyReset = await resetPortalCredentialExecutionStateTx(tx, storageKey);
+        await tx.insert(auditLogsTable).values({
+          userId: req.user!.id,
+          action: "delete_portal_credentials",
+          resource: "portal_credentials",
+          resourceId: result[0].id,
+          changes: JSON.stringify({ portalKey, storageKey, safetyReset }),
+          ipAddress: req.ip ?? null,
+        });
 
         return {
           ok: true as const,
@@ -2008,15 +2017,6 @@ router.delete(
       res.status(404).json({ error: "NOT_FOUND", message: "No active credentials found for this portal key" });
       return;
     }
-
-    logAudit(
-      req.user!.id,
-      "delete_portal_credentials",
-      "portal_credentials",
-      mutation.credentialId,
-      { portalKey, storageKey, safetyReset: mutation.safetyReset },
-      req.ip,
-    );
 
     res.json({ ok: true, safetyReset: mutation.safetyReset });
   },

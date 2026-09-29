@@ -31,11 +31,44 @@ const personFeed = source("../src/routes/personFeed.ts");
 const messageCampaigns = source("../src/routes/messageCampaigns.ts");
 const inbox = source("../src/routes/inbox.ts");
 const contractBrands = source("../src/routes/contractBrands.ts");
+const notifications = source("../src/routes/notifications.ts");
+const portalMgmt = source("../src/routes/portalMgmt.ts");
 
 assert.match(auth, /\): Promise<void> \{\s*return db\.insert\(auditLogsTable\)/,
   "audit insert exposes a real awaitable completion boundary");
 assert.doesNotMatch(auth, /setImmediate\s*\(/,
   "audit persistence is not deferred beyond the request lifecycle");
+assert.doesNotMatch(notifications, /logAudit\(/,
+  "notification rule mutations do not use the non-transactional legacy helper");
+for (const action of ["create_notification_rule", "update_notification_rule"]) {
+  assert.match(notifications, new RegExp(`await tx\\.insert\\(auditLogsTable\\)\\.values\\(\\{[^;]{0,360}action: "${action}"`),
+    `${action} persists its audit receipt before the rule transaction commits`);
+}
+assert.match(notifications, /changedFields: Object\.keys\(updates\)\.sort\(\)/,
+  "notification rule update audit records bounded field names instead of template contents");
+assert.match(notifications, /eq\(notificationRulesTable\.updatedAt, expectedUpdatedAt\)/,
+  "notification rule updates are bound to the version displayed by the client");
+assert.match(notifications, /NOTIFICATION_RULE_VERSION_CONFLICT/,
+  "notification rule lost updates return a deterministic conflict");
+const portalCredentialRoutes = portalMgmt.slice(
+  portalMgmt.lastIndexOf("router.put(", portalMgmt.indexOf('"/portal-universities/:portalKey/credentials"')),
+  portalMgmt.indexOf("export default router"),
+);
+const portalSettingsRoute = portalMgmt.slice(
+  portalMgmt.indexOf('"/portal-automation/settings"', portalMgmt.indexOf('router.put(')),
+  portalMgmt.indexOf("// ===========================================================================\n// PORTAL UNIVERSITIES"),
+);
+assert.match(portalSettingsRoute,
+  /await tx\.insert\(auditLogsTable\)\.values\(\{[^;]{0,420}action: "update_portal_automation_settings"/,
+  "portal automation settings and their result audit commit atomically");
+assert.doesNotMatch(portalSettingsRoute, /logAudit\([^;]{0,260}"update_portal_automation_settings"/,
+  "portal automation settings do not use the non-transactional legacy helper");
+for (const action of ["upsert_portal_credentials", "delete_portal_credentials"]) {
+  assert.match(portalCredentialRoutes, new RegExp(`await tx\\.insert\\(auditLogsTable\\)\\.values\\(\\{[^;]{0,420}action: "${action}"`),
+    `${action} persists its result before the credential transaction commits`);
+  assert.doesNotMatch(portalCredentialRoutes, new RegExp(`logAudit\\([^;]{0,260}"${action}"`),
+    `${action} does not use the non-transactional legacy helper`);
+}
 assert.doesNotMatch(tokens, /logAudit\(/, "API token mutations do not use the non-transactional legacy helper");
 assert.doesNotMatch(dataQuality, /logAudit\(/,
   "application-lead repair does not use the non-transactional legacy helper");

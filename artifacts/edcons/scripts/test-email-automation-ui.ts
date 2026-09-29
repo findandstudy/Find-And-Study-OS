@@ -64,6 +64,10 @@ test("existing rule legacy editor preserved; binding nullable and explicit", () 
   assert.match(rules, /emailSenderAccountId: useEmailLibrary \? emailBinding.senderAccountId : null/);
   assert.match(rules, /translations\["en"\]/);
   assert.match(rules, /PASSIVE_CHANNELS = new Set\(\["telegram", "sms"\]\)/);
+  assert.equal((rules.match(/expectedUpdatedAt: (?:rule|editingTemplate)\.updatedAt/g) ?? []).length, 3,
+    "every rule mutation is bound to the version displayed by the administrator");
+  assert.equal((rules.match(/catch \{[\s\S]{0,160}await fetchRules\(\)/g) ?? []).length, 3,
+    "all rule write conflicts refresh authoritative server state");
 });
 test("email controls application only and WhatsApp config preserved", () => {
   const stages = source("components/EditStagesDialog.tsx");

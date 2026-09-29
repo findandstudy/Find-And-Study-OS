@@ -894,6 +894,26 @@ dilimde yapılmadı.
   tenant logo transferidir. Bu artık deploy doğrulaması değil, ayrı dar bundle,
   media ve gerçek HTTP/2/RUM optimizasyon kapısıdır.
 
+## 29 Eylül notification rule ve portal control-plane atomikliği
+
+- Notification rule create/update ile bounded audit sonucu aynı transaction'a
+  alındı. Audit insert başarısızsa kanal, aktiflik veya template binding değişimi
+  commit edilmiyor; audit template subject/body içeriğini değil yalnız event ve
+  değişen alan adlarını taşıyor.
+- Rule update artık arayüzün okuduğu exact `updatedAt` sürümüne bağlıdır. İki
+  yönetici aynı eski kaydı düzenlerse ikinci yazı `409
+  NOTIFICATION_RULE_VERSION_CONFLICT` alır ve arayüz authoritative listeyi
+  yeniden yükler; sessiz last-write-wins yoktur.
+- Portal automation global settings save ve portal credential upsert/delete
+  audit sonuçları kendi mutation transaction'larına taşındı. Audit yazılamazsa
+  automation policy veya credential/safety-reset sonucu görünür hale gelmiyor.
+  Credential secret'ları audit payload'una eklenmedi; mevcut in-flight çalışma
+  karantinası ve fail-closed sınırlar korundu.
+- Notification fault-injection matrisi **4/4**, notification UI contract
+  **15/15**, audit durability **178/178**, API ve frontend typecheck ile birleşik
+  security regression zinciri **PASS**. Bu dilim henüz staging'e dağıtılmadı;
+  production değiştirilmedi.
+
 ## Repo dışı veya ayrı kapı isteyen kalanlar
 
 - Academy receiver tarafında issuer/audience + single-use exchange: receiver bu
