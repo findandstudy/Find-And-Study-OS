@@ -861,6 +861,16 @@ function spacerHeightClass(value: unknown): string {
 
 function renderPublicPageBlock(block: PublicPageBlock, index: number): string {
   const content = block.content;
+  if (block.blockType === "home_fallback_hero") {
+    const title = pageText(content.title, 500);
+    const subtitle = pageText(content.subtitle, 2_000);
+    const badge = pageText(content.badge, 200);
+    const href = safePublicUrl(content.ctaUrl);
+    const label = pageText(content.ctaLabel, 200);
+    const secondaryHref = safePublicUrl(content.secondaryUrl);
+    const secondaryLabel = pageText(content.secondaryLabel, 200);
+    return `<section class="relative pt-24 pb-32 lg:pt-36 lg:pb-40 overflow-hidden"><div class="absolute inset-0 z-0" aria-hidden="true"><div class="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,hsl(var(--primary)/0.12),transparent_38%),radial-gradient(circle_at_80%_10%,hsl(var(--accent)/0.10),transparent_34%)]"></div><div class="absolute inset-0 bg-gradient-to-b from-background/0 via-background/50 to-background"></div></div><div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 text-center"><div>${badge ? `<div class="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 text-primary font-medium text-sm mb-8 border border-primary/20 shadow-sm"><svg aria-hidden="true" class="w-4 h-4 fill-primary" viewBox="0 0 24 24" width="16" height="16"><path d="m12 2.5 2.9 5.9 6.5.9-4.7 4.6 1.1 6.5-5.8-3.1-5.8 3.1 1.1-6.5-4.7-4.6 6.5-.9L12 2.5Z"></path></svg>${escapeHtml(badge)}</div>` : ""}<h1 class="text-5xl md:text-7xl font-bold font-display tracking-tight text-foreground max-w-4xl mx-auto leading-[1.1]">${escapeHtml(title)}</h1>${subtitle ? `<p class="mt-6 text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed">${escapeHtml(subtitle)}</p>` : ""}<div class="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">${href && label ? `<a class="inline-flex items-center justify-center rounded-full px-8 h-14 text-base font-medium bg-primary text-primary-foreground shadow-xl shadow-primary/25 hover:shadow-primary/40 hover:-translate-y-1 transition-all duration-300" href="${escapeHtml(href)}">${escapeHtml(label)}<svg aria-hidden="true" class="ms-2 w-5 h-5" viewBox="0 0 24 24" width="20" height="20"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14m-6-6 6 6-6 6"></path></svg></a>` : ""}${secondaryHref && secondaryLabel ? `<a class="inline-flex items-center justify-center rounded-full px-8 h-14 text-base font-medium border border-input bg-white/50 backdrop-blur hover:bg-white transition-all duration-300" href="${escapeHtml(secondaryHref)}">${escapeHtml(secondaryLabel)}</a>` : ""}</div></div></div></section>`;
+  }
   if (block.blockType === "hero") {
     const title = pageText(content.title, 500);
     const subtitle = pageText(content.subtitle, 2_000);

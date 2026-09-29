@@ -504,6 +504,45 @@ test("CMS page detail renders only the immutable projection and escapes block co
   assert.match(html, /hreflang="x-default"/);
 });
 
+test("internal home fallback hero preserves the existing React fallback geometry", () => {
+  const model: PublicCatalogRenderModel = {
+    kind: "page_detail",
+    locale: "en",
+    canonicalPath: "/en",
+    title: "Home",
+    description: "Home page",
+    indexable: true,
+    alternatePaths: { en: "/en" },
+    page: {
+      id: 0,
+      title: "Study abroad",
+      slug: "home",
+      versionNumber: 0,
+      publishedAt: new Date(0).toISOString(),
+      blocks: [{
+        blockType: "home_fallback_hero",
+        content: {
+          badge: "Trusted guidance",
+          title: "Study abroad",
+          subtitle: "Find your program",
+          ctaLabel: "Get started",
+          ctaUrl: "/en/programs",
+          secondaryLabel: "Browse programs",
+          secondaryUrl: "/en/programs",
+        },
+        settings: {},
+        sortOrder: 0,
+      }],
+    },
+  };
+  const html = renderPublicCatalogHtml({ indexHtml, model, siteUrl: "https://findandstudy.com", nonce: "home-nonce" });
+  assert.match(html, /pt-24 pb-32 lg:pt-36 lg:pb-40/);
+  assert.match(html, /text-5xl md:text-7xl/);
+  assert.match(html, /max-w-2xl mx-auto leading-relaxed/);
+  assert.match(html, /rounded-full px-8 h-14/);
+  assert.match(html, /href="\/en\/programs"/);
+});
+
 test("CMS catalogue grid renders current data bindings without storing duplicate facts", () => {
   const model: PublicCatalogRenderModel = {
     kind: "page_detail",

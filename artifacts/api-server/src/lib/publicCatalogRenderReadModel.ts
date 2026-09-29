@@ -107,7 +107,10 @@ function readPublicHomeFallback(locale: ProgramSupportedLocale): PublicCatalogRe
         versionNumber: 0,
         publishedAt: new Date(0).toISOString(),
         blocks: [{
-          blockType: "hero",
+          // This internal-only block mirrors Home.tsx's existing static
+          // fallback. Keeping it distinct from the CMS hero prevents the SSR
+          // shell from changing size when the public React app takes over.
+          blockType: "home_fallback_hero",
           content: {
             title,
             subtitle,

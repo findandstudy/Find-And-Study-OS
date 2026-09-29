@@ -15,6 +15,11 @@ if (!Number.isSafeInteger(repetitions) || repetitions < 3 || repetitions > 5) {
   throw new Error("STAGING_PUBLIC_WEB_CWV_REPETITIONS must be between 3 and 5");
 }
 
+const consentMode = process.env.STAGING_PUBLIC_WEB_CWV_CONSENT_MODE || "fresh";
+if (!["fresh", "essential"].includes(consentMode)) {
+  throw new Error("STAGING_PUBLIC_WEB_CWV_CONSENT_MODE must be fresh or essential");
+}
+
 const paths = (process.env.STAGING_PUBLIC_WEB_CWV_PATHS || [
   "/en",
   "/en/programs",
@@ -88,7 +93,10 @@ try {
         connectionType: "cellular4g",
       });
       await cdp.send("Emulation.setCPUThrottlingRate", { rate: 4 });
-      await page.addInitScript(() => {
+      await page.addInitScript((selectedConsentMode) => {
+        if (selectedConsentMode === "essential") {
+          localStorage.setItem("cookie_consent", "essential");
+        }
         window.__cwvLab = { lcp: 0, lcpElement: null, lcpUrl: null, lcpHistory: [], cls: 0, longTasks: [] };
         new PerformanceObserver((list) => {
           const entries = list.getEntries();
@@ -114,7 +122,7 @@ try {
         new PerformanceObserver((list) => {
           for (const entry of list.getEntries()) window.__cwvLab.longTasks.push(entry.duration);
         }).observe({ type: "longtask", buffered: true });
-      });
+      }, consentMode);
 
       const response = await page.goto(`${origin.origin}${pathname}`, {
         waitUntil: "networkidle",
@@ -197,6 +205,7 @@ const result = {
   kind: "STAGING_LAB_NOT_FIELD_DATA",
   origin: origin.origin,
   profile: "mobile-390-fast4g-4xCPU",
+  consentMode,
   repetitions,
   thresholds: { lcpMs: 2_500, cls: 0.1, tbtMs: 200 },
   attempts,
