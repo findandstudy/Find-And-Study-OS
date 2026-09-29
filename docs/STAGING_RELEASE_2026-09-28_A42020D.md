@@ -123,3 +123,71 @@ The route split is therefore deployed and verified, but the full lab gate stays
 open. Remaining measured work is the SSR-shell/client handoff, the shared
 React/application/CSS/icon critical chain, and the 150 KB branding asset on
 detail pages. This follow-up remains staging-only and is not a production GO.
+
+## Public SSR handoff and current staging release — 29 September 2026
+
+The existing critical locale dictionaries now provide a factual SSR homepage
+fallback when no unique published CMS homepage exists. The server and client
+render the same existing homepage hero geometry. This removed the client
+handoff that previously collapsed the hero and moved the footer through the
+viewport. The CWV runner now records LCP history, layout-shift sources and long
+task attribution, and reports first-visit consent separately from an existing
+essential-only preference.
+
+- Exact source commit: `b301361fe4a164abc2a28efe04e4a14876ccfcd0`
+- Staging release: `staging-20260929T015025Z-b301361fe4a1`
+- Image: `findandstudy-staging-app:b301361fe4a1`
+- Image ID: `sha256:d59f75ee8895e173cf4b7d8b549b5699483dd28573e5aa8ef39708a708875025`
+- Runtime remains non-root `10042:10042`, read-only, `cap_drop=ALL` and
+  `no-new-privileges=true`; `.git` and `.github` are absent.
+
+Three checksum-attested app-switch backups were created during the bounded
+staging iterations. The final pre-switch restore evidence is
+`staging-predeploy-20260929T014543Z-0487c07449ff-fasos_staging.dump`; its
+isolated PostgreSQL 16.15 restore passed with ledger `132`, public tables `256`
+and users `13`. The database container identity remained
+`62d069cf01fbf71d1dff0a53df1f58ce074c74bab69ef8f7960156cdf8c6e1ff`, start
+time `2026-09-01T18:14:26.114902524Z` and restart count `0` throughout.
+
+The final release is healthy with app restart count `0`, `dbConnected=true`,
+and exact release identity. Homepage, program list, country list/detail, city,
+university, representative program and System Health routes return HTTP 200.
+The migration ledger remains `132`; recent logs have no fatal, panic,
+uncaught, unhandled or OOM match. Exact-release RBAC UAT passed `11` roles and
+`126` checks. Production, `Next`, workers and external delivery were not
+changed or enabled.
+
+The existing-consent mobile 390 / Fast 4G / 4x CPU lab run produced:
+
+| Route | Median LCP | Median TBT | Median CLS | Result |
+| --- | ---: | ---: | ---: | --- |
+| `/en` | 2308 ms | 119 ms | 0 | PASS |
+| `/en/programs` | 2316 ms | 198 ms | 0 | PASS |
+| `/en/countries` | 2292 ms | 93 ms | 0.0004 | PASS |
+| `/en/cities/london-2` | 2308 ms | 174 ms | 0 | PASS |
+| `/en/universities/abbey-dld-colleges-1563` | 2292 ms | 194 ms | 0 | PASS |
+| Representative program detail | 2340 ms | 248 ms | 0 | **FAIL TBT** |
+
+Aggregate median: LCP `2308 ms`, TBT `174 ms`, CLS `0`, TTFB `1033.3 ms`.
+The homepage's focused final check also passed at LCP `2252 ms`, TBT `109 ms`
+and CLS `0`. A bounded React transition experiment raised the program-detail
+TBT to `254 ms`; it was therefore reverted and the faster prior behavior is in
+the final image. Thresholds were not relaxed.
+
+The first-visit profile remains separately open: the privacy-preserving cookie
+banner can become the late LCP candidate on the city detail route (measured
+median `3524 ms` before the final frontend handoff fix; the city rendering
+path itself was unchanged). This is not represented as a content-performance
+pass. A privacy-safe consent UI rendering strategy and the program-detail
+main-thread split remain explicit performance backlog items; field p75 RUM is
+still required.
+
+During an earlier full source-image build attempt for commit `df1270aa…`, the
+8 GB/no-swap staging host exhausted memory and the kernel restarted the
+staging app once. That image was not deployed, the database was unaffected,
+and all subsequent releases used bounded derivative images from verified
+parents. The incident is retained here rather than hidden from release
+evidence.
+
+Current status: **STAGING DEPLOYED — RUNTIME/RBAC/SSR PASS; CWV GATE PARTIAL
+(PROGRAM TBT AND FIRST-VISIT CONSENT LCP OPEN).** This is not production GO.
