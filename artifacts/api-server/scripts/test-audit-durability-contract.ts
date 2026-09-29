@@ -63,6 +63,27 @@ assert.match(portalSettingsRoute,
   "portal automation settings and their result audit commit atomically");
 assert.doesNotMatch(portalSettingsRoute, /logAudit\([^;]{0,260}"update_portal_automation_settings"/,
   "portal automation settings do not use the non-transactional legacy helper");
+assert.match(portalMgmt,
+  /async function insertPortalAuditTx\([\s\S]{0,520}await tx\.insert\(auditLogsTable\)\.values\(/,
+  "portal partner control-plane mutations have a transaction-bound audit writer");
+for (const action of [
+  "create_portal_university",
+  "enable_portal_auto_process",
+  "disable_portal_auto_process",
+  "set_portal_fan_out_mode",
+  "activate_portal_university",
+  "deactivate_portal_university",
+  "update_portal_university",
+  "delete_portal_university",
+  "bulk_activate_portal_university",
+  "bulk_deactivate_portal_university",
+  "bulk_enable_portal_auto_process",
+  "bulk_disable_portal_auto_process",
+  "bulk_delete_portal_university",
+]) {
+  assert.doesNotMatch(portalMgmt, new RegExp(`logAudit\\([^;]{0,320}"${action}"`),
+    `${action} does not leave a committed portal decision without its audit receipt`);
+}
 for (const action of ["upsert_portal_credentials", "delete_portal_credentials"]) {
   assert.match(portalCredentialRoutes, new RegExp(`await tx\\.insert\\(auditLogsTable\\)\\.values\\(\\{[^;]{0,420}action: "${action}"`),
     `${action} persists its result before the credential transaction commits`);

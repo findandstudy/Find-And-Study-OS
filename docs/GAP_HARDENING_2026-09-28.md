@@ -914,6 +914,21 @@ dilimde yapılmadı.
   security regression zinciri **PASS**. Bu dilim henüz staging'e dağıtılmadı;
   production değiştirilmedi.
 
+## 29 Eylül portal partner kararlarının atomik audit sınırı
+
+- Portal partner oluşturma, düzenleme, silme; aktiflik, auto-process ve fan-out
+  mode değişimleri ile bunların bulk karşılıkları business mutation ve audit
+  sonucunu aynı PostgreSQL transaction'ında yazar. Audit insert başarısızsa
+  partner/routing kararı da rollback olur; kayıtsız otomasyon kararı kalmaz.
+- Aktivasyon/readiness kontrolleri transaction öncesindeki fail-closed kapılar
+  olarak korunur. Deaktivasyon yine `autoProcess=false` ve `fanOutMode=off`
+  kill-switch sonucunu aynı transaction'da uygular.
+- Audit payload'ları yalnız partner kimliği, bounded ayar alanları ve etkilenen
+  ID listelerini içerir; portal credential secret'ları bu koridora dahil değildir.
+- Audit durability sözleşmesi bütün tekil ve bulk portal partner kararlarının
+  legacy fire-and-forget `logAudit` yoluna geri dönemeyeceğini doğrular. Bu
+  dilim staging'e henüz dağıtılmadı; production değiştirilmedi.
+
 ## Repo dışı veya ayrı kapı isteyen kalanlar
 
 - Academy receiver tarafında issuer/audience + single-use exchange: receiver bu
@@ -924,8 +939,10 @@ dilimde yapılmadı.
   enforcement açılmaz.
 - Application stage/owner komutu optimistic version bağı, durable audit ve finance
   projection'ını aynı transaction'da tamamlar; reconciliation hatası stage yazısını
-  geri alır ve kaybeden yarış yan etki üretmez. Portal ve genel notification devam
-  işlerinin tamamını aynı standarda taşımak ayrı dar command/worker dönüşümleridir.
+  geri alır ve kaybeden yarış yan etki üretmez. Notification rule, portal global
+  settings/credential ve portal partner control-plane yazıları da bu standarda
+  taşındı; kalan düşük etkili portal adapter/test-queue yolları ayrı dar
+  command/worker dönüşümleridir.
 - High-impact legacy audit'lerin tamamını aynı transaction'da durable
   attempt/result receipt'e taşımak: kritik mevcut çağrılarda gerçek await sınırı
   kuruldu; failure durumunda business mutation'la atomik receipt için dar command
