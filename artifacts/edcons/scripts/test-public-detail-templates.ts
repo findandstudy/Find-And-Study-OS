@@ -35,6 +35,7 @@ const programDialog = readFileSync(new URL("../src/pages/public/PublicProgramDet
 const cityProgramCards = readFileSync(new URL("../src/pages/public/CityProgramCards.tsx", import.meta.url), "utf8");
 const main = readFileSync(new URL("../src/main.tsx", import.meta.url), "utf8");
 const publicLayout = readFileSync(new URL("../src/components/layout/PublicLayout.tsx", import.meta.url), "utf8");
+const cookieBanner = readFileSync(new URL("../src/components/CookieBanner.tsx", import.meta.url), "utf8");
 
 const cardFixture: PublicProgramCardData = {
   id: 145792, name: "Source program", canonicalPath: "/en/programs/source-program-145792",
@@ -77,6 +78,11 @@ test("program information architecture stays data-bound", () => {
   assert.match(program, /PUBLISHED_INDEXABLE_ONLY/);
   assert.doesNotMatch(program, /Fenerbahçe|3000|30 Nov 2026|unsplash/i);
   assert.doesNotMatch(program, /dangerouslySetInnerHTML/);
+});
+
+test("first-visit cookie consent is present in the initial client render", () => {
+  assert.match(cookieBanner, /useState\(\(\) => !getConsent\(\)\)/);
+  assert.doesNotMatch(cookieBanner, /useEffect\s*\(/);
 });
 
 test("university template keeps overview, facts and governed programs connected", () => {

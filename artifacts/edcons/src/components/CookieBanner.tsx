@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Cookie } from "lucide-react";
 import { useI18n } from "@/hooks/use-i18n";
@@ -17,11 +17,10 @@ function getConsent(): CookieConsent {
 
 export function CookieBanner() {
   const { t } = useI18n();
-  const [visible, setVisible] = useState(false);
-
-  useEffect(() => {
-    if (!getConsent()) setVisible(true);
-  }, []);
+  // Read consent in the lazy initializer so a first-visit banner is part of
+  // the initial React render. Mounting it from an effect made the banner a
+  // late LCP candidate on otherwise-stable public detail pages.
+  const [visible, setVisible] = useState(() => !getConsent());
 
   function accept(choice: "all" | "essential") {
     try {
