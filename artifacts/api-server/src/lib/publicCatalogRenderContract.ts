@@ -433,6 +433,9 @@ export function matchPublicCatalogRenderPath(
   const segments = path.split("/").filter(Boolean);
   const locale = segments[0] as ProgramSupportedLocale;
   if (!PROGRAM_SUPPORTED_LOCALES.includes(locale)) return null;
+  if (segments.length === 1) {
+    return { kind: "page_detail", locale, path, slug: "home" };
+  }
   if (segments.length === 2 && segments[1] === "countries") {
     return { kind: "country_list", locale, path };
   }
@@ -749,18 +752,25 @@ function renderCityDetail(model: Extract<PublicCatalogRenderModel, { kind: "city
         <h3 class="mt-2 text-lg font-bold"><a href="${escapeHtml(program.canonicalPath)}">${escapeHtml(program.name)}</a></h3>
         <p class="mt-2 text-muted-foreground">${escapeHtml([program.degree, program.field].filter(Boolean).join(" · "))}</p>
       </article>`).join("");
-  return `<main data-public-render-shell="city-detail" class="mx-auto max-w-7xl px-4 py-24">
-    <nav aria-label="Breadcrumb"><a href="/${escapeHtml(model.locale)}/countries">${escapeHtml(copy.countries)}</a> / <span>${escapeHtml(city.country)}</span> / <span>${escapeHtml(city.name)}</span></nav>
-    <article class="mt-8">
-      <p class="text-sm text-primary">${escapeHtml(city.country)}</p>
-      <nav aria-label="Location">${locationHierarchy({ country: city.country, countryPath: city.countryPath })}</nav>
-      <h1 class="mt-3 text-4xl font-bold">${escapeHtml(model.title)}</h1>
-      <p class="mt-4 max-w-3xl text-muted-foreground">${escapeHtml(model.description)}</p>
+  return `<main data-public-render-shell="city-detail" class="public-detail detail-city">
+    <section data-detail-section="hero"><div class="detail-hero is-city">
+      <div class="detail-wrap detail-hero-top"><nav class="detail-breadcrumbs" aria-label="Breadcrumb"><a href="/${escapeHtml(model.locale)}/countries">${escapeHtml(copy.countries)}</a><span aria-hidden="true"> / </span>${city.countryPath ? `<a href="${escapeHtml(city.countryPath)}">${escapeHtml(city.country)}</a><span aria-hidden="true"> / </span>` : `<span>${escapeHtml(city.country)}</span><span aria-hidden="true"> / </span>`}<span>${escapeHtml(city.name)}</span></nav></div>
+      <div class="detail-wrap detail-hero-main"><div>
+        <div class="detail-cover-label"><span>${escapeHtml(copy.location)}</span></div>
+        <h1>${escapeHtml(city.name)}</h1>
+        ${city.countryPath ? `<a class="detail-hero-link" href="${escapeHtml(city.countryPath)}">${escapeHtml(city.country)}</a>` : `<p class="detail-hero-lead">${escapeHtml(city.country)}</p>`}
+      </div><aside class="detail-destination-summary" aria-label="${escapeHtml(copy.programs)}">
+        <p class="detail-eyebrow">${escapeHtml(copy.programs)}</p>
+        <div class="detail-country-stats"><div><strong>${escapeHtml(String(city.universityCount))}</strong><span>${escapeHtml(copy.institutionType)}</span></div><div><strong>${escapeHtml(String(city.programCount))}</strong><span>${escapeHtml(copy.programs)}</span></div></div>
+        <p class="detail-summary-caption">${escapeHtml(`${city.name} · ${city.country}`)}</p>
+      </aside></div>
+    </div></section>
+    <article class="detail-section is-sky"><div class="detail-wrap">
       <section data-detail-section="facts" id="facts"><dl class="mt-8 grid gap-4 sm:grid-cols-3">
         <div><dt>${escapeHtml(copy.location)}</dt><dd>${escapeHtml(`${city.name}, ${city.country}`)}</dd></div>
         <div><dt>${escapeHtml(copy.institutionType)}</dt><dd>${escapeHtml(String(city.universityCount))}</dd></div>
         <div><dt>${escapeHtml(copy.programs)}</dt><dd>${escapeHtml(String(city.programCount))}</dd></div>
-      </dl></section>
+      </dl></section></div>
     </article>
     ${universities ? `<section data-detail-section="universities" class="mt-12"><h2 class="text-2xl font-bold">${escapeHtml(copy.institutionType)}</h2><div class="mt-5 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">${universities}</div></section>` : ""}
     ${programs ? `<section data-detail-section="programs" class="mt-12"><h2 class="text-2xl font-bold">${escapeHtml(copy.programs)}</h2><div class="mt-5 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">${programs}</div></section>` : ""}
@@ -857,7 +867,10 @@ function renderPublicPageBlock(block: PublicPageBlock, index: number): string {
     const badge = pageText(content.badge, 200);
     const href = safePublicUrl(content.ctaUrl);
     const label = pageText(content.ctaLabel, 200);
-    return `<section class="px-4 py-20 text-center"><div class="mx-auto max-w-5xl">${badge ? `<p class="text-sm text-primary">${escapeHtml(badge)}</p>` : ""}<h1 class="mt-3 text-4xl font-bold">${escapeHtml(title)}</h1>${subtitle ? `<p class="mx-auto mt-5 max-w-3xl text-lg text-muted-foreground">${escapeHtml(subtitle)}</p>` : ""}${href && label ? `<p class="mt-7"><a class="rounded-full bg-primary px-6 py-3 text-primary-foreground" href="${escapeHtml(href)}">${escapeHtml(label)}</a></p>` : ""}</div></section>`;
+    const secondaryHref = safePublicUrl(content.secondaryUrl);
+    const secondaryLabel = pageText(content.secondaryLabel, 200);
+    const background = safePublicImageUrl(content.backgroundImage);
+    return `<section class="relative overflow-hidden px-4 py-24 text-center">${background ? `<img src="${escapeHtml(background)}" alt="" class="absolute inset-0 h-full w-full object-cover opacity-15" loading="eager" />` : ""}<div class="relative mx-auto max-w-5xl">${badge ? `<p class="text-sm font-semibold text-primary">${escapeHtml(badge)}</p>` : ""}<h1 class="mt-3 font-display text-4xl font-bold md:text-6xl">${escapeHtml(title)}</h1>${subtitle ? `<p class="mx-auto mt-5 max-w-3xl text-lg text-muted-foreground">${escapeHtml(subtitle)}</p>` : ""}<div class="mt-8 flex flex-wrap justify-center gap-3">${href && label ? `<a class="inline-flex rounded-full bg-primary px-6 py-3 font-semibold text-primary-foreground" href="${escapeHtml(href)}">${escapeHtml(label)}</a>` : ""}${secondaryHref && secondaryLabel ? `<a class="inline-flex rounded-full border border-current px-6 py-3 font-semibold" href="${escapeHtml(secondaryHref)}">${escapeHtml(secondaryLabel)}</a>` : ""}</div></div></section>`;
   }
   if (block.blockType === "rich_text") {
     const body = articlePlainText(pageText(content.content, 200_000));

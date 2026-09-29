@@ -124,6 +124,9 @@ test("production render middleware honors governed redirect and gone aliases", (
 });
 
 test("only bounded public content paths enter the render pilot and CMS pages cannot shadow system routes", () => {
+  const home = matchPublicCatalogRenderPath("/en");
+  assert.equal(home?.kind, "page_detail");
+  assert.equal(home?.kind === "page_detail" ? home.slug : null, "home");
   assert.equal(matchPublicCatalogRenderPath("/en/countries")?.kind, "country_list");
   assert.equal(matchPublicCatalogRenderPath("/en/programs")?.kind, "program_list");
   const detail = matchPublicCatalogRenderPath("/tr/programs/bilgisayar-muhendisligi-42");
