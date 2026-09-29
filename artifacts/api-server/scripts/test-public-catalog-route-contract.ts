@@ -65,6 +65,7 @@ test("canonical paths normalize locale and detect stale slugs", () => {
 test("public catalogue detail APIs are bounded and never select private CRM fields", () => {
   const route = read("../src/routes/public-catalog.ts");
   const renderReadModel = read("../src/lib/publicCatalogRenderReadModel.ts");
+  const invalidationBus = read("../src/lib/publicCatalogInvalidationBus.ts");
   const localizedRequirements = "requirements: sql<string | null>`COALESCE(${programTranslationsTable.requirements}, ${programsTable.requirements})`";
   assert.ok(route.includes(localizedRequirements), "API requirements prefer the published translation");
   assert.ok(renderReadModel.includes(localizedRequirements), "SSR requirements match the API translation projection");
@@ -103,7 +104,8 @@ test("public catalogue detail APIs are bounded and never select private CRM fiel
   assert.match(route, /programIntakesTable\.applicationDeadlineAt/);
   assert.match(renderReadModel, /programIntakesTable\.sourceExpiresAt/);
   assert.match(renderReadModel, /cacheGeneration/);
-  assert.match(renderReadModel, /entityType\?: .*catalog/);
+  assert.match(renderReadModel, /publicCatalogInvalidationBus, type PublicCatalogInvalidation/);
+  assert.match(invalidationBus, /entityType\?: .*"catalog"/);
   assert.match(renderReadModel, /inFlight\.get\(key\) === pending/);
   assert.match(renderReadModel, /hasPublishedTranslation/);
   assert.match(renderReadModel, /sourceBlocks/);
