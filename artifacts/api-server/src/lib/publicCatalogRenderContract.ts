@@ -433,9 +433,6 @@ export function matchPublicCatalogRenderPath(
   const segments = path.split("/").filter(Boolean);
   const locale = segments[0] as ProgramSupportedLocale;
   if (!PROGRAM_SUPPORTED_LOCALES.includes(locale)) return null;
-  if (segments.length === 1) {
-    return { kind: "page_detail", locale, path, slug: "home" };
-  }
   if (segments.length === 2 && segments[1] === "countries") {
     return { kind: "country_list", locale, path };
   }
