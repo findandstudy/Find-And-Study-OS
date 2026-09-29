@@ -8,9 +8,9 @@
     "defaultEnforcement": "legacy_quarantine"
   },
   "totals": {
-    "routeRegistrations": 883,
-    "requireAuth": 770,
-    "requireRole": 494,
+    "routeRegistrations": 884,
+    "requireAuth": 771,
+    "requireRole": 495,
     "requirePermission": 78,
     "requireScope": 0,
     "directRoleChecks": 32,
@@ -110,7 +110,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/agents.ts",
-      "sha256": "0e23f5b787a0a044e3590063c06bb55e416fec64bf87ffd3492c2811470d9a6a",
+      "sha256": "434274236b56dcdb1fcb8f94433583d9ba55b41b78fe5bdeefd73fa5e8339420",
       "routeRegistrations": 38,
       "requireAuth": 39,
       "requireRole": 33,
@@ -125,7 +125,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/ai-defaults.ts",
-      "sha256": "211309b2c573d8ecc0b96565eef6b49cc68d3b680393aef97ef6b05d41b2e319",
+      "sha256": "449a06f55fb4ac76302bfb6aff94c9f34fbb8b7f2f709efaa6d578be5796d90f",
       "routeRegistrations": 4,
       "requireAuth": 5,
       "requireRole": 4,
@@ -155,7 +155,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/ai-extractors.ts",
-      "sha256": "731e3dc6beb21a6393b0e2f77da1eaadedd8e184112476bc673185beca023416",
+      "sha256": "7ea2df42d7b129a76ef8f18f27990dd21b9b3b29ef2d24d508c32a4070babb49",
       "routeRegistrations": 7,
       "requireAuth": 8,
       "requireRole": 7,
@@ -170,7 +170,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/ai-personas.ts",
-      "sha256": "88190d3be13b971369555a2a8e7949cf103c34eca4139103af290cd8b51e99a6",
+      "sha256": "340ac597411a25c9cb866df4fe8df75f9d6f9afa97f627f89304ae87b1a6b91d",
       "routeRegistrations": 12,
       "requireAuth": 13,
       "requireRole": 12,
@@ -200,7 +200,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/apiTokens.ts",
-      "sha256": "ddd73f8227ee8d89ad2c597fdb92004d224afbeb3aac8e9f53752df83d8136e2",
+      "sha256": "c66c68bb667833a19e3d471ab9c1d721572f753403142e708e4ab87898e39b30",
       "routeRegistrations": 5,
       "requireAuth": 6,
       "requireRole": 5,
@@ -215,7 +215,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/applications.ts",
-      "sha256": "9682e5acf1fbf34a3af75e522090c8a6d7074cbbb5da316580c1e6bf0134125c",
+      "sha256": "65477ff5ed1a503cc7345c72f30c672104779433a4ee3cf758762b59dc79235b",
       "routeRegistrations": 13,
       "requireAuth": 14,
       "requireRole": 9,
@@ -230,7 +230,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/applicationStageDocuments.ts",
-      "sha256": "466d69dbb713d068a63db10db0b9802a293d10c772a7d0064348356e7ef96453",
+      "sha256": "4e826415bd59405d3564c32e5860cd0d22d544a2aebf2410602caa4d5f21d914",
       "routeRegistrations": 11,
       "requireAuth": 11,
       "requireRole": 0,
@@ -260,7 +260,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/auth.ts",
-      "sha256": "8944a779fdcc06cc1b091efa8560fcdd8f3627aab51ef110c3f6203ab4925f65",
+      "sha256": "944ca36ebfa2d299bab816e1287b66211decf59dcc9b9b700a68300097ae91f5",
       "routeRegistrations": 10,
       "requireAuth": 0,
       "requireRole": 0,
@@ -275,7 +275,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/branches.ts",
-      "sha256": "cfffdf5f72ce1a34c43621d531a1cb258ab578a75a22ded62c5470c31230121d",
+      "sha256": "dbd5b7503c43c2278a8bdfabf595d8612dd0d5b566f1b05aece1e9f9986394a0",
       "routeRegistrations": 6,
       "requireAuth": 7,
       "requireRole": 6,
@@ -290,7 +290,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/campaigns.ts",
-      "sha256": "f04c0ef1475b8e2f09ae549f34fb5070e35909b55d53b66f86ac34cab4fa67ee",
+      "sha256": "f7ed6429c84ff941ac1e8b43326ccb72d287fdebe75ef453c52a3649d59bd5e3",
       "routeRegistrations": 7,
       "requireAuth": 8,
       "requireRole": 7,
@@ -320,7 +320,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/channelAccounts.ts",
-      "sha256": "f7808278a475a8c3da971308dfec31388de64a30ef1992e8818e1c012163631d",
+      "sha256": "6e7f7e0fdc643c2e981b165671cfb39671b86ff2e7c3f2cb761238a45636cdbf",
       "routeRegistrations": 7,
       "requireAuth": 8,
       "requireRole": 7,
@@ -335,7 +335,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/cms.ts",
-      "sha256": "b83251c1bb9adf059e2363c8d8d369e8b1bb33e73f999effc8ead03b3a7abab9",
+      "sha256": "1a024b13fce205544d505925b4548d003328afec09e0e2cf7bf9e3ab3bdd2758",
       "routeRegistrations": 8,
       "requireAuth": 2,
       "requireRole": 1,
@@ -350,7 +350,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/companyContracts.ts",
-      "sha256": "881418a0ef8d5015f67a1b608956b620c85f8494fec3a4e3a90ea5118cc76a57",
+      "sha256": "845dc1f2fed018bc6b001813da48f3c16a79694e8a93006bd89bfd00146ea1f5",
       "routeRegistrations": 7,
       "requireAuth": 8,
       "requireRole": 0,
@@ -380,7 +380,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/contractBrands.ts",
-      "sha256": "5b5fae4531603f1c6489c991ab85530a92fff74d53fad7e976e99b5ad8f47b76",
+      "sha256": "8494f00523d67f40d01d49f770d314a7b892e53dffae3bc95011cd4e1cc5b9e5",
       "routeRegistrations": 4,
       "requireAuth": 5,
       "requireRole": 0,
@@ -425,7 +425,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/course-finder.ts",
-      "sha256": "386fdc1eab28d24f864f4b681f9fad064656974b69bb49c12e41c23a4849f130",
+      "sha256": "2f172f3bc469667b14df67bd852b04c0515d0e2fa2ac8125263a6d3752fa5b1d",
       "routeRegistrations": 10,
       "requireAuth": 9,
       "requireRole": 3,
@@ -440,10 +440,10 @@
     },
     {
       "path": "artifacts/api-server/src/routes/dataQuality.ts",
-      "sha256": "6c69bb19494b4929a48a444b8567e76adf415adbfaf9bc0503d6c5957025edf3",
-      "routeRegistrations": 4,
-      "requireAuth": 5,
-      "requireRole": 4,
+      "sha256": "f642c25aa9cfe0adafc2538890e1939d58c5d9a44e981b67862f3e698593b6ea",
+      "routeRegistrations": 5,
+      "requireAuth": 6,
+      "requireRole": 5,
       "requirePermission": 0,
       "requireScope": 0,
       "directRoleChecks": 0,
@@ -575,7 +575,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/finance.ts",
-      "sha256": "0849cea9ad72d66f5d1518c32e4acd3d5697aedf06d4369c148ddae439aa8ffe",
+      "sha256": "f7e4906401a2b529e863a364dc825c8d129569ffe0af1eb6e717f73bb1062cdd",
       "routeRegistrations": 36,
       "requireAuth": 37,
       "requireRole": 36,
@@ -620,7 +620,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/inbox.ts",
-      "sha256": "f722082b2e82b592531beedaeb69330b2d40023941b367f4f3334282573d166c",
+      "sha256": "cb936526c19019dd55ea61363a67a5cafebf44c173fba370ab6121172893663e",
       "routeRegistrations": 57,
       "requireAuth": 58,
       "requireRole": 56,
@@ -665,7 +665,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/integrations.ts",
-      "sha256": "3ed967e57215a7928fcd951056b1c28cb61b257ae22053c2c0b43dc4e6c51784",
+      "sha256": "2b43d049350fad23344fdbb74069a873a6ad23a02b5c3dca08eab56a0f331d9e",
       "routeRegistrations": 6,
       "requireAuth": 7,
       "requireRole": 6,
@@ -680,7 +680,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/leadAssignmentRules.ts",
-      "sha256": "76b5b1c1358244dc0a2bc7f6d497a02627ad3c29d97e0e3483ca1bc97fc39a57",
+      "sha256": "705690cc73626088e969819dff5bbfed42b51d855083d1e86410c80fe7a92359",
       "routeRegistrations": 4,
       "requireAuth": 5,
       "requireRole": 4,
@@ -695,7 +695,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/leads.ts",
-      "sha256": "bdb6969e40e25055ce7baab2a51b5b2b1011832526cf482c3d2c2442ef2a2690",
+      "sha256": "7adaf5d49640d1c58ede88932454c6b5597ba1ad767e882e0e8250c85b2160b5",
       "routeRegistrations": 24,
       "requireAuth": 23,
       "requireRole": 22,
@@ -710,7 +710,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/messageCampaigns.ts",
-      "sha256": "fd235111b458e2676cfd33341d2b3ec623a2f37c7b45a32a9a391dd99d036aac",
+      "sha256": "951ffe402d40bf9b41d39af1a08b74763bab46defa9736d00b03a1d417633ac4",
       "routeRegistrations": 4,
       "requireAuth": 5,
       "requireRole": 4,
@@ -725,7 +725,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/messages.ts",
-      "sha256": "9f936680dc40556b774861b6ff9695208a4654bd3c1e75afbca96dee5d212c07",
+      "sha256": "3499d1b36adb6905c22eaded8cf7b8ac9b8a33faa8d667f159abd0f0b24af8de",
       "routeRegistrations": 24,
       "requireAuth": 25,
       "requireRole": 15,
@@ -770,7 +770,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/personFeed.ts",
-      "sha256": "86fc64b702b82d080d98a903c6c4b5832b7ff1693779efa0618f0c89492240b4",
+      "sha256": "1e3bf278c85e2e2bb0e97cc8ae1ed3fb55852ac371ef045ebb37a05a0b4acd9c",
       "routeRegistrations": 6,
       "requireAuth": 7,
       "requireRole": 6,
@@ -785,7 +785,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/pipeline.ts",
-      "sha256": "e939ad77300a830ab6d68a8013023d963e80ab7d93238cb9d21c34f7063ed9b1",
+      "sha256": "1f733779b45ea30db1d13617804bc1172f80988d7b6220325d3472790584358d",
       "routeRegistrations": 3,
       "requireAuth": 4,
       "requireRole": 3,
@@ -845,7 +845,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/portalProgramFallbacks.ts",
-      "sha256": "dd58327526b1fe6b9b738175808a0f14be4d7739e222a5122321d855a318a0f2",
+      "sha256": "d84aa0cb585003d55a68f388cddd657e28e062147695a78b691fb3d23edcdd40",
       "routeRegistrations": 4,
       "requireAuth": 5,
       "requireRole": 5,
@@ -860,7 +860,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/portalUniversityExclusions.ts",
-      "sha256": "23ac5770169918c37aa99a60f8722fb126b05947bc96afcf80c2a1556437a03d",
+      "sha256": "ae4036a6b42219d4ef68e8cb29a723dcb772a99d14e5b11db6b0f6429f822ba3",
       "routeRegistrations": 5,
       "requireAuth": 6,
       "requireRole": 6,
@@ -1010,7 +1010,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/settings.ts",
-      "sha256": "737465260793cc944c89bf2cfcbee81b87f23ad2c135090a4b021292805d45da",
+      "sha256": "99fbce3f7303354afa2a1bca803d3c58ff5ee0f5b5f0f661894118b993259e75",
       "routeRegistrations": 8,
       "requireAuth": 7,
       "requireRole": 4,
@@ -1055,7 +1055,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/staffCards.ts",
-      "sha256": "2e6dc21b50344542e725deac1f0f6dcf1ea0ccf9d9a73e54b6389099412d7278",
+      "sha256": "5a55b51621f2af58cbc9a18ec58d6de7f8805a551b1f59f94397756948777de2",
       "routeRegistrations": 23,
       "requireAuth": 24,
       "requireRole": 1,
@@ -1130,7 +1130,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/tasks.ts",
-      "sha256": "5d62eabcef06b9362a55f9e68821f7b9e391a800a590a34c36a13313e5e9cff3",
+      "sha256": "21668e44af3248ce0b68816a99f4deb48811dead7b288cd0af77a555aeb5a82f",
       "routeRegistrations": 9,
       "requireAuth": 10,
       "requireRole": 9,
@@ -1160,7 +1160,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/universityContracts.ts",
-      "sha256": "67570481a7ab90c7001d39cec571c99d9d4e5b6c8af5669fae24dbbc4e11e3cb",
+      "sha256": "893567c034d24eea337a938ecb5e9b4e888100e58d7778b34ad62ce5832bd9d3",
       "routeRegistrations": 6,
       "requireAuth": 7,
       "requireRole": 0,
@@ -1175,7 +1175,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/users.ts",
-      "sha256": "64aba5ba0ad142beb092fa7acde73b209394a418dc5beed1bc176b0c875cc0cc",
+      "sha256": "518e048725cb76d2052e0d01d58c6be5ad7827a21ba9c32e2fd72d3226b18790",
       "routeRegistrations": 10,
       "requireAuth": 11,
       "requireRole": 3,

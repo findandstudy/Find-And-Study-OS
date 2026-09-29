@@ -13,6 +13,33 @@
   },
   "files": [
     {
+      "path": "artifacts/api-server/src/lib/catalogDataConfidenceReadModel.ts",
+      "ownership": "tenant_owned",
+      "enforcement": "runtime_scoped",
+      "risk": "medium",
+      "owner": "Catalog Platform",
+      "externalPilot": "quarantine",
+      "note": "Bounded catalogue confidence projection executes only inside the admin route's repeatable-read, read-only transaction with an 8s statement timeout. The conservative scanner sees its query call as a writer surface; this classification grants no mutation or external-pilot authority."
+    },
+    {
+      "path": "artifacts/api-server/src/lib/facetCache.ts",
+      "ownership": "tenant_owned",
+      "enforcement": "runtime_scoped",
+      "risk": "medium",
+      "owner": "Platform Engineering",
+      "externalPilot": "quarantine",
+      "note": "Process-local bounded facet cache keys include the caller's scope and filter fingerprints. Committed namespace invalidation or the existing TTL removes entries; classification does not authorize a tenant pilot."
+    },
+    {
+      "path": "artifacts/api-server/src/lib/facetCacheInvalidationBus.ts",
+      "ownership": "platform_global",
+      "enforcement": "runtime_scoped",
+      "risk": "medium",
+      "owner": "Platform Engineering",
+      "externalPilot": "quarantine",
+      "note": "PII-free allowlisted namespace LISTEN/NOTIFY consumer starts only at explicit bootstrap, reconnects with a bounded timer and releases its dedicated connection on shutdown. It can evict cache only; it grants no data or external-effect authority."
+    },
+    {
       "path": "artifacts/api-server/src/lib/localUploadPublication.ts",
       "ownership": "tenant_owned",
       "enforcement": "quarantine_required",
