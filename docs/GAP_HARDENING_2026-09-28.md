@@ -942,23 +942,21 @@ dilimde yapılmadı.
   legacy fire-and-forget `logAudit` yoluna geri dönemeyeceğini doğrular. Bu
   dilim staging'e henüz dağıtılmadı; production değiştirilmedi.
 
-## 29 Eylül factual SSR'ı koruyan below-fold layout daraltması
+## 29 Eylül reddedilen below-fold layout adayı ve exact staging CWV
 
-- Program detay sayfasındaki overview, requirements, intake, fee, related ve
-  onaylı editorial bölümlerinin gerçek metinleri ilk HTML/DOM içinde kalır;
-  ücret, intake, anchor, erişilebilirlik ve arama motoru içeriği client-only
-  placeholder'a dönüştürülmedi.
-- Bu bölümler ilk mobil viewport'un altında olduğu için tarayıcıya
-  `content-visibility:auto` ve ölçüm sonrası gerçek yüksekliği hatırlayan bounded
-  intrinsic-size ipucu verildi. Böylece içerik yaklaşana kadar layout/paint
-  maliyeti ertelenir; hash/anchor navigasyonu ve mevcut React veri bağı değişmez.
-- Daha agresif client-side section mount adayı local A/B'de TBT'yi düşürse de
-  factual SSR sözleşmesini zayıflattığı için reddedildi ve kaynakta tutulmadı.
-- Public detail template **47/47**, detail content/section **14/14**, birleşik
-  frontend contract **125/125**, 23 locale eşliği, production build, sitemap ve
-  bundle budget **PASS**. Başlangıç JS gzip `143.847`, CSS gzip `41.339` byte.
-  Gerçek HTTP/2 staging CWV sonucu ancak bu exact commit dağıtıldıktan sonra
-  yeniden ölçülür; local sonuç release kanıtı olarak sunulmaz.
+- Program detayındaki factual SSR metnini client-only mount'a dönüştüren aday,
+  local TBT'yi düşürmesine rağmen ücret/intake/SEO sözleşmesini zayıflattığı için
+  kaynakta tutulmadı. İçeriği DOM'da tutan `content-visibility` adayı ayrıca
+  exact commit ile staging'de ölçüldü.
+- Staging ölçümünde altı rotanın medyan LCP değerlerinin tamamı `2.500 ms`
+  altında kaldı; aggregate medyan LCP `2.304 ms`, TBT `170 ms`, CLS `0` oldu.
+  Program detail TBT medyanı ise `240 ms` ile `200 ms` kapısını geçmedi. CSS
+  adayı ölçülmüş bir iyileşme göstermediği için geri alındı; sırf metriği yeşil
+  göstermek amacıyla factual SSR veya anchor/erişilebilirlik davranışı bozulmadı.
+- CWV kapısı dürüstçe **FAIL** kalır. Kalan uzun görev React vendor/ilk client
+  commit koridorundadır; yeni bir section gizleme hilesi değil, route-hydration
+  ve shared runtime ayrıştırması gerektirir. Bu ayrı dar mimari çalışma ve saha
+  RUM kanıtı ister.
 
 ## Repo dışı veya ayrı kapı isteyen kalanlar
 

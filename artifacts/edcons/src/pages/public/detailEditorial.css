@@ -25,18 +25,6 @@
 /* Approved, entity-bound CMS sections. No global design-system overrides. */
 .detail-editorial-section:nth-of-type(even) { background: var(--detail-sand); }
 
-/* Keep below-fold catalogue content linkable and indexable without charging its
-   full layout/paint cost to the first viewport. The browser replaces the
-   intrinsic block size with the measured size when a section approaches. */
-[data-detail-section="overview"],
-[data-detail-section="requirements"],
-[data-detail-section="intakes"],
-[data-detail-section="fees"],
-[data-detail-section="related"],
-[data-detail-section^="editorial-"] {
-  content-visibility: auto;
-  contain-intrinsic-size: auto 720px;
-}
 .detail-editorial-heading { display: flex; align-items: center; gap: 14px; margin-bottom: 24px; }
 .detail-editorial-heading > span { display: grid; place-items: center; width: 42px; height: 42px; border: 1px solid var(--detail-line); border-radius: 13px; color: var(--detail-accent); background: var(--detail-paper); flex-shrink: 0; }
 .detail-editorial-heading h2 { margin: 0; font-size: clamp(24px, 2.5vw, 32px); font-weight: 700; line-height: 1.25; letter-spacing: -.035em; }

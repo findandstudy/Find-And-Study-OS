@@ -73,8 +73,6 @@ test("each public detail integrates only bound approved content; apply stays on 
   assert.match(program, /programs=\{payload.related\}/);
   const styles = readFileSync(new URL("../src/pages/public/detailEditorial.css", import.meta.url), "utf8");
   assert.match(styles, /\.detail-editorial-table \{ overflow-x: auto/);
-  assert.match(styles, /\[data-detail-section="related"\][\s\S]*content-visibility:\s*auto/);
-  assert.match(styles, /\[data-detail-section\^="editorial-"\][\s\S]*contain-intrinsic-size:\s*auto 720px/);
   assert.match(styles, /env\(safe-area-inset-bottom\)/);
   assert.match(styles, /prefers-reduced-motion/);
 });
