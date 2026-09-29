@@ -56,18 +56,79 @@ import {
   resolvePublishedEntitySeoState,
 } from "./publicWebDiscoveryReadModel";
 import { buildPublicWebCanonicalPath } from "./publicWebContentContract";
-import type { ProgramSupportedLocale } from "./programTranslationContract";
+import { PROGRAM_SUPPORTED_LOCALES, type ProgramSupportedLocale } from "./programTranslationContract";
 import {
   resolveLocalizedDestinationFields,
   resolveLocalizedCityFields,
   resolveLocalizedUniversityFields,
   selectLocalizedEntityDelivery,
 } from "./publicLocalizedEntityContract";
+import fs from "node:fs";
+import path from "node:path";
 
 const PILOT_LIST_LIMIT = 12;
 const CACHE_FRESH_MS = 5 * 60_000;
 const CACHE_STALE_MS = 60 * 60_000;
 const CACHE_MAX_ENTRIES = 500;
+const publicHomeFallbackCache = new Map<ProgramSupportedLocale, PublicCatalogRenderModel>();
+
+function readPublicHomeFallback(locale: ProgramSupportedLocale): PublicCatalogRenderModel | null {
+  const cached = publicHomeFallbackCache.get(locale);
+  if (cached) return cached;
+  try {
+    const file = path.join(process.cwd(), "artifacts", "edcons", "dist", "public", "i18n-critical", `${locale}.json`);
+    const stat = fs.statSync(file);
+    if (!stat.isFile() || stat.size <= 0 || stat.size > 65_536) return null;
+    const parsed = JSON.parse(fs.readFileSync(file, "utf8")) as Record<string, unknown>;
+    const hero = isRecord(parsed.hero) ? parsed.hero : {};
+    const seo = isRecord(parsed.seo) ? parsed.seo : {};
+    const title = boundedString(hero.title, 500).trim();
+    const subtitle = boundedString(hero.subtitle, 2_000).trim();
+    const badge = boundedString(hero.badge, 200).trim();
+    const cta = boundedString(hero.cta, 200).trim();
+    const browse = boundedString(hero.browse, 200).trim();
+    const metaTitle = boundedString(seo.homeTitle, 500).trim();
+    const metaDescription = boundedString(seo.homeDesc, 2_000).trim();
+    if (!title || !subtitle || !metaTitle || !metaDescription) return null;
+    const canonicalPath = `/${locale}`;
+    const alternatePaths = Object.fromEntries(PROGRAM_SUPPORTED_LOCALES.map(item => [item, `/${item}`]));
+    const value: PublicCatalogRenderModel = {
+      kind: "page_detail",
+      locale,
+      canonicalPath,
+      title: metaTitle,
+      description: metaDescription,
+      indexable: true,
+      alternatePaths,
+      page: {
+        id: 0,
+        title,
+        slug: "home",
+        versionNumber: 0,
+        publishedAt: new Date(0).toISOString(),
+        blocks: [{
+          blockType: "hero",
+          content: {
+            title,
+            subtitle,
+            badge,
+            ctaLabel: cta,
+            ctaUrl: `/${locale}/programs`,
+            secondaryLabel: browse,
+            secondaryUrl: `/${locale}/programs`,
+          },
+          settings: {},
+          sortOrder: 0,
+        }],
+        seo: { robotsIndex: true, robotsFollow: true },
+      },
+    };
+    publicHomeFallbackCache.set(locale, value);
+    return value;
+  } catch {
+    return null;
+  }
+}
 
 type PublicListCopy = {
   programTitle: string;
@@ -1570,6 +1631,8 @@ export async function readPageDetail(
   // Ambiguous legacy aliases must not select an arbitrary published page.
   const page = pages.length === 1 ? pages[0] : null;
   if (!page || !page.publishedAt) {
+    const fallback = route.slug === "home" ? readPublicHomeFallback(route.locale) : null;
+    if (fallback) return fallback;
     return {
       kind: "not_found",
       locale: route.locale,
@@ -1595,6 +1658,8 @@ export async function readPageDetail(
     .orderBy(desc(websitePageVersionsTable.versionNumber))
     .limit(1);
   if (!version || !version.publishedAt) {
+    const fallback = route.slug === "home" ? readPublicHomeFallback(route.locale) : null;
+    if (fallback) return fallback;
     return {
       kind: "not_found",
       locale: route.locale,

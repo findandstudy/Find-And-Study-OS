@@ -100,6 +100,8 @@ try {
             window.__cwvLab.lcpHistory.push({
               startTime: latest.startTime,
               element: latest.element?.tagName || null,
+              className: typeof latest.element?.className === "string" ? latest.element.className.slice(0, 240) : null,
+              text: String(latest.element?.textContent || "").replace(/\s+/g, " ").trim().slice(0, 240) || null,
               shell: latest.element?.closest?.("[data-public-render-shell]")?.getAttribute("data-public-render-shell") || null,
             });
           }
@@ -154,6 +156,8 @@ try {
         lcpHistory: metrics.lcpHistory.map((entry) => ({
           startTime: round(entry.startTime),
           element: entry.element,
+          className: entry.className,
+          text: entry.text,
           shell: entry.shell,
         })),
         cls: round(metrics.cls, 4),
