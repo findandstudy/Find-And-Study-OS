@@ -2,6 +2,10 @@ import { mapDocType } from "./docType.js";
 import { validateIdentityFields } from "./identityValidation.js";
 import type { SubmitFiles, SubmitProfile } from "./types.js";
 import { SALESFORCE_SCHOOLS } from "./universities/salesforce/config.js";
+import {
+  requiredSitAcademicHistoryLevel,
+  resolveSitAcademicHistory,
+} from "./universities/sit/helpers.js";
 
 export type PortalPreflightField = keyof SubmitProfile;
 export type PortalPreflightDocument = keyof SubmitFiles;
@@ -305,6 +309,18 @@ export function evaluatePortalPreflight(input: {
     ) {
       incompatibleFields.push({ field: error.field, reason: "invalid" });
       incompatibleSet.add(error.field);
+    }
+  }
+
+  if (adapterKey === "sit") {
+    const requiredLevel = requiredSitAcademicHistoryLevel(input.profile.level);
+    const history = resolveSitAcademicHistory(input.profile, requiredLevel);
+    if (!isPresent(history.country)) {
+      const field = `educationRecords.${requiredLevel}.country`;
+      if (!missingSet.has(field)) {
+        missingFields.push(field);
+        missingSet.add(field);
+      }
     }
   }
 

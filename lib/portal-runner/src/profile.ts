@@ -224,7 +224,7 @@ export function mergePortalEducationRecords(
       studentId: row.studentId,
       level: row.level,
       schoolName: row.institution,
-      country: null,
+      country: row.country,
       fieldOfStudy: row.program,
       startMonth: null,
       startYear: null,
@@ -251,6 +251,7 @@ export function mergePortalEducationRecords(
     byLevel.set(row.level, {
       ...existing,
       schoolName: fill(existing.schoolName, supplemental.schoolName),
+      country: fill(existing.country, supplemental.country),
       fieldOfStudy: fill(existing.fieldOfStudy, supplemental.fieldOfStudy),
       endYear: fill(existing.endYear, supplemental.endYear),
       languageScore: fill(existing.languageScore, supplemental.languageScore),

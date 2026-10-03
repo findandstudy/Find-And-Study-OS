@@ -942,7 +942,7 @@ router.post("/students", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES
 
     if (resolvedEducationRecords.length > 0) {
       await tx.insert(studentEducationRecordsTable).values(
-        resolvedEducationRecords.map(({ country: _country, ...record }) => ({
+        resolvedEducationRecords.map((record) => ({
           ...record,
           studentId: insertedStudent.id,
         })),
@@ -1050,7 +1050,7 @@ router.get("/students/:id", requireAuth, requireAgentStaffPermission("students")
 });
 
 // --- Education records (FAZ 2) -------------------------------------------
-const EDUCATION_LEVELS = ["high_school", "bachelor", "master"] as const;
+const EDUCATION_LEVELS = ["high_school", "bachelor", "master", "doctorate"] as const;
 
 router.get("/students/:id/education", requireAuth, requireAgentStaffPermission("students"), async (req, res): Promise<void> => {
   const id = parseInt(String(req.params.id), 10);
@@ -1159,7 +1159,7 @@ router.put("/students/:id/education", requireAuth, requireAgentStaffPermission("
   const s = (v: any, max: number) => (v === undefined || v === null || v === "") ? null : String(v).slice(0, max);
   const seenLevels = new Set<string>();
   const cleaned: Array<{
-    level: string; institution: string | null; program: string | null;
+    level: string; institution: string | null; program: string | null; country: string | null;
     graduationYear: number | null; gpa: string | null; gpaRaw: string | null;
     gpaScale: number | null; languageScore: string | null; sortOrder: number;
   }> = [];
@@ -1181,6 +1181,7 @@ router.put("/students/:id/education", requireAuth, requireAgentStaffPermission("
       level,
       institution: s(r.institution, 300),
       program: level === "high_school" ? null : s(r.program, 300),
+      country: s(r.country, 100),
       graduationYear: Number.isFinite(gy as number) ? gy : null,
       gpa: s(r.gpa, 20),
       gpaRaw: s(r.gpaRaw, 50),

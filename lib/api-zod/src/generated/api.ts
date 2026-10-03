@@ -15,7 +15,6 @@ export const HealthCheckResponse = zod.object({
   "status": zod.string()
 })
 
-
 /**
  * @summary Get current user
  */
@@ -538,9 +537,10 @@ export const CreateStudentBody = zod.object({
   "interestedLevel": zod.string().nullish(),
   "season": zod.string().nullish(),
   "educationRecords": zod.array(zod.object({
-  "level": zod.enum(['high_school', 'bachelor', 'master']),
+  "level": zod.enum(['high_school', 'bachelor', 'master', 'doctorate']),
   "institution": zod.string().nullish(),
   "program": zod.string().nullish(),
+  "country": zod.string().nullish(),
   "graduationYear": zod.number().int().nullish(),
   "gpa": zod.string().nullish(),
   "gpaRaw": zod.string().nullish(),
@@ -720,9 +720,10 @@ export const GetStudentEducationResponse = zod.object({
   "records": zod.array(zod.object({
   "id": zod.number().int(),
   "studentId": zod.number().int(),
-  "level": zod.enum(['high_school', 'bachelor', 'master']),
+  "level": zod.enum(['high_school', 'bachelor', 'master', 'doctorate']),
   "institution": zod.string().nullish(),
   "program": zod.string().nullish(),
+  "country": zod.string().nullish(),
   "graduationYear": zod.number().int().nullish(),
   "gpa": zod.string().nullish(),
   "gpaRaw": zod.string().nullish(),
@@ -744,9 +745,10 @@ export const PutStudentEducationParams = zod.object({
 
 export const PutStudentEducationBody = zod.object({
   "records": zod.array(zod.object({
-  "level": zod.enum(['high_school', 'bachelor', 'master']),
+  "level": zod.enum(['high_school', 'bachelor', 'master', 'doctorate']),
   "institution": zod.string().nullish(),
   "program": zod.string().nullish(),
+  "country": zod.string().nullish(),
   "graduationYear": zod.number().int().nullish(),
   "gpa": zod.string().nullish(),
   "gpaRaw": zod.string().nullish(),
@@ -759,9 +761,10 @@ export const PutStudentEducationResponse = zod.object({
   "records": zod.array(zod.object({
   "id": zod.number().int(),
   "studentId": zod.number().int(),
-  "level": zod.enum(['high_school', 'bachelor', 'master']),
+  "level": zod.enum(['high_school', 'bachelor', 'master', 'doctorate']),
   "institution": zod.string().nullish(),
   "program": zod.string().nullish(),
+  "country": zod.string().nullish(),
   "graduationYear": zod.number().int().nullish(),
   "gpa": zod.string().nullish(),
   "gpaRaw": zod.string().nullish(),
@@ -6203,7 +6206,6 @@ export const VerifySocialAccountResponse = zod.object({
   "errorCode": zod.string().nullish(),
   "replay": zod.boolean().optional()
 })
-
 
 /**
  * @summary List publication intents in the selected tenant scope

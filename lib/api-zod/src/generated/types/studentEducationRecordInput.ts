@@ -14,6 +14,8 @@ export interface StudentEducationRecordInput {
   /** @nullable */
   program?: string | null;
   /** @nullable */
+  country?: string | null;
+  /** @nullable */
   graduationYear?: number | null;
   /** @nullable */
   gpa?: string | null;

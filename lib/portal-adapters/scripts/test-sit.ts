@@ -650,7 +650,7 @@ test("EDU3 — Master applicant uses the explicit Bachelor education record", ()
   });
 });
 
-test("EDU4 — historical rows use controlled legacy and nationality fallbacks", () => {
+test("EDU4 — historical rows keep school country missing instead of using nationality", () => {
   const result = resolveSitAcademicHistory(
     {
       nationality: "Afganistan",
@@ -662,7 +662,7 @@ test("EDU4 — historical rows use controlled legacy and nationality fallbacks",
     "bachelor",
   );
   assert.deepEqual(result, {
-    country: "Afghanistan",
+    country: "",
     schoolName: "HISTORICAL BACHELOR SCHOOL",
     gpa: "73",
   });

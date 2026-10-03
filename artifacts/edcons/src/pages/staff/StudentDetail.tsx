@@ -101,7 +101,7 @@ function buildDownloadFilename(docType: string, firstName: string, lastName: str
 // the applied study level (applications take precedence over interestedLevel).
 // PUT is replace-set: saving one level re-sends the whole merged record set.
 // ---------------------------------------------------------------------------
-const EDUCATION_LEVELS_UI: EducationLevel[] = ["high_school", "bachelor", "master"];
+const EDUCATION_LEVELS_UI: EducationLevel[] = ["high_school", "bachelor", "master", "doctorate"];
 
 function AcademicInfoCard({
   studentId,
@@ -150,10 +150,11 @@ function AcademicInfoCard({
     high_school: t("studentAcademic.highSchool"),
     bachelor: t("studentAcademic.bachelor"),
     master: t("studentAcademic.master"),
+    doctorate: t("studentAcademic.doctorate"),
   };
 
   const [editLevel, setEditLevel] = useState<EducationLevel | null>(null);
-  const [form, setForm] = useState({ institution: "", program: "", graduationYear: "", gpa: "", languageScore: "" });
+  const [form, setForm] = useState({ institution: "", program: "", country: "", graduationYear: "", gpa: "", languageScore: "" });
   const [saving, setSaving] = useState(false);
 
   function openEdit(level: EducationLevel) {
@@ -161,6 +162,7 @@ function AcademicInfoCard({
     setForm({
       institution: rec.institution ?? "",
       program: rec.program ?? "",
+      country: rec.country ?? "",
       graduationYear: rec.graduationYear != null ? String(rec.graduationYear) : "",
       gpa: rec.gpa ?? "",
       languageScore: rec.languageScore ?? "",
@@ -179,6 +181,7 @@ function AcademicInfoCard({
         level: editLevel,
         institution: form.institution || null,
         program: editLevel === "high_school" ? null : (form.program || null),
+        country: form.country || null,
         graduationYear: form.graduationYear ? Number(form.graduationYear) : null,
         gpa: form.gpa || null,
         languageScore: form.languageScore || null,
@@ -190,6 +193,7 @@ function AcademicInfoCard({
             level: l,
             institution: r.institution ?? null,
             program: r.program ?? null,
+            country: r.country ?? null,
             graduationYear: r.graduationYear ?? null,
             gpa: r.gpa ?? null,
             gpaRaw: r.gpaRaw ?? null,
@@ -223,7 +227,7 @@ function AcademicInfoCard({
         </div>
       ) : (
         <div className="space-y-4">
-          {required.map((level) => {
+          {EDUCATION_LEVELS_UI.filter((level) => required.includes(level) || byLevel.has(level)).map((level) => {
             const rec = byLevel.get(level);
             const fields = academicFieldsForLevel(level);
             return (
@@ -244,6 +248,7 @@ function AcademicInfoCard({
                   {fields.includes("program") && (
                     <InfoRow icon={<FileText className="w-4 h-4" />} label={t("studentAcademic.program")} value={rec?.program} />
                   )}
+                  <InfoRow icon={<Globe className="w-4 h-4" />} label={t("studentAcademic.country")} value={rec?.country} />
                   <InfoRow icon={<Calendar className="w-4 h-4" />} label={t("studentAcademic.graduationYear")} value={rec?.graduationYear != null ? String(rec.graduationYear) : null} />
                   <InfoRow icon={<FileText className="w-4 h-4" />} label={t("studentAcademic.gpa")} value={rec?.gpa ? `${rec.gpa}${rec.gpaScale ? ` / ${rec.gpaScale}` : ""}${rec.gpaRaw && rec.gpaRaw !== rec.gpa ? ` (${rec.gpaRaw})` : ""}` : null} />
                   <InfoRow icon={<Globe className="w-4 h-4" />} label={t("studentAcademic.languageScore")} value={rec?.languageScore} />
@@ -270,6 +275,19 @@ function AcademicInfoCard({
                 <Input value={form.program} onChange={(e) => setForm((f) => ({ ...f, program: e.target.value }))} />
               </div>
             )}
+            <div>
+              <Label className="text-xs font-medium">{t("studentAcademic.country")}</Label>
+              <div className="flex gap-2">
+                <div className="flex-1">
+                  <NationalityCombobox value={form.country} onChange={(country) => setForm((f) => ({ ...f, country }))} />
+                </div>
+                {form.country && (
+                  <Button type="button" variant="outline" onClick={() => setForm((f) => ({ ...f, country: "" }))}>
+                    {t("studentAcademic.clearCountry")}
+                  </Button>
+                )}
+              </div>
+            </div>
             <div className="flex gap-3">
               <div className="flex-1">
                 <Label className="text-xs font-medium">{t("studentAcademic.graduationYear")}</Label>

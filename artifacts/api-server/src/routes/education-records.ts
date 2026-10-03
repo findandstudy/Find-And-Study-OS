@@ -5,7 +5,7 @@ import { requireAuth, requireRole } from "../lib/auth";
 import { STAFF_ROLES, ADMIN_ROLES, AGENT_ROLES } from "../lib/roles";
 import { buildAgentSourceScope, isAgentSourcedAndBlockedForStaff } from "../lib/rbac/agentSourceScope";
 
-const VALID_LEVELS = new Set(["high_school", "bachelor", "master"]);
+const VALID_LEVELS = new Set(["high_school", "bachelor", "master", "doctorate"]);
 
 const router = Router();
 

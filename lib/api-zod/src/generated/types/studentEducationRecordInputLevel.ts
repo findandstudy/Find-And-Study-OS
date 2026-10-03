@@ -13,4 +13,5 @@ export const StudentEducationRecordInputLevel = {
   high_school: 'high_school',
   bachelor: 'bachelor',
   master: 'master',
+  doctorate: 'doctorate',
 } as const;

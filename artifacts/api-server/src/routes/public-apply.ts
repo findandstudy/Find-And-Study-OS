@@ -874,7 +874,7 @@ router.post("/public/apply", applyLimiter, applyJson, async (req: Request, res: 
         );
         if (resolvedEducation.length > 0) {
           const studentRows = resolvedEducation.map(
-            ({ country: _country, ...record }) => ({
+            (record) => ({
               ...record,
               studentId: resultStudentId!,
             }),

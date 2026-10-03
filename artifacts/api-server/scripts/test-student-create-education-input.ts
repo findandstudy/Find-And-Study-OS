@@ -68,6 +68,23 @@ test("high school cannot carry a fabricated program", () => {
   if (result.ok) assert.equal(result.records[0]?.program, null);
 });
 
+test("supports four education levels and an explicit null country", () => {
+  const result = cleanStudentEducationRecords([
+    { level: "high_school", country: "Türkiye" },
+    { level: "bachelor", country: "Germany" },
+    { level: "master", country: null },
+    { level: "doctorate", country: "United Kingdom" },
+  ]);
+  assert.equal(result.ok, true);
+  if (!result.ok) return;
+  assert.deepEqual(result.records.map((record) => record.country), [
+    "Türkiye",
+    "Germany",
+    null,
+    "United Kingdom",
+  ]);
+});
+
 test("rejects implausible graduation years and GPA values above their scale", () => {
   assert.equal(cleanStudentEducationRecords([{
     level: "bachelor",

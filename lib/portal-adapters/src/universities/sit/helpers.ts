@@ -496,10 +496,25 @@ export function sitAcademicHistoryLevelFromCountryLabel(
 }
 
 /**
+ * The completed education level whose country SIT requires for an application.
+ * This is intentionally derived from the requested study level, never from
+ * nationality or any other identity field.
+ */
+export function requiredSitAcademicHistoryLevel(
+  applicationLevel: string | undefined | null,
+): SitAcademicHistoryLevel {
+  const f = fold(applicationLevel ?? "");
+  if (/\b(phd|ph d|doctorate|doctoral|doktora)\b/.test(f)) return "master";
+  if (/\b(master|msc|ma|graduate|yuksek lisans)\b/.test(f)) return "bachelor";
+  return "high_school";
+}
+
+/**
  * Pick the matching structured education row for SIT. Explicit
  * education_records always win. Legacy student columns remain a compatibility
- * fallback for historical students; nationality is used only as the final
- * country fallback because the old CRM had no education-country column.
+ * fallback for historical school names, but citizenship is never a school
+ * country fallback. Missing country must remain missing so preflight can stop
+ * an unsafe portal submission.
  */
 export function resolveSitAcademicHistory(
   profile: SitAcademicHistoryInput,
@@ -531,7 +546,6 @@ export function resolveSitAcademicHistory(
     (requiredLevel === "high_school"
       ? profile.highSchoolCountry?.trim() || profile.schoolCountry?.trim()
       : "") ||
-    profile.nationality?.trim() ||
     "";
 
   return {

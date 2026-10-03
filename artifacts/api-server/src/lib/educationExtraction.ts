@@ -21,7 +21,7 @@ import {
 } from "@workspace/db";
 import { normalizeGpaEvidenceTo100 } from "./gpaNormalize";
 
-export const EDUCATION_LEVEL_VALUES = ["high_school", "bachelor", "master"] as const;
+export const EDUCATION_LEVEL_VALUES = ["high_school", "bachelor", "master", "doctorate"] as const;
 
 /** Canonical value accepted by education_records_source_check for AI output. */
 export const AI_EDUCATION_RECORD_SOURCE = "ai_extracted" as const;
@@ -31,6 +31,7 @@ export const aiEducationRecordSchema = z.object({
   level: z.enum(EDUCATION_LEVEL_VALUES),
   institution: z.string().nullish(),
   program: z.string().nullish(),
+  country: z.string().nullish(),
   graduationYear: z.union([z.number(), z.string()]).nullish(),
   gpa: z.union([z.number(), z.string()]).nullish(),
   languageScore: z.string().nullish(),
@@ -44,6 +45,7 @@ export interface EducationRecordOutput {
   level: EducationLevel;
   institution: string | null;
   program: string | null;
+  country: string | null;
   graduationYear: number | null;
   gpa: string | null;
   gpaRaw: string | null;
@@ -68,6 +70,8 @@ export function buildEducationPromptSection(levelKey: string): string {
               : '"institution": university name';
           case "program":
             return '"program": department/major/program name';
+          case "country":
+            return '"country": country where the school or university is located, only when explicitly shown in the document';
           case "graduationYear":
             return '"graduationYear": 4-digit graduation year (number)';
           case "gpa":
@@ -125,6 +129,7 @@ function normalizeRecord(rec: AiEducationRecord): EducationRecordOutput {
     level: rec.level,
     institution: clean(rec.institution),
     program: rec.level === "high_school" ? null : clean(rec.program),
+    country: clean(rec.country),
     graduationYear: Number.isFinite(gyNum) ? gyNum : null,
     gpa,
     gpaRaw,
@@ -138,6 +143,7 @@ export function educationRecordHasData(rec: EducationRecordOutput): boolean {
   return (
     rec.institution != null ||
     rec.program != null ||
+    rec.country != null ||
     rec.gpa != null ||
     rec.graduationYear != null ||
     rec.languageScore != null
