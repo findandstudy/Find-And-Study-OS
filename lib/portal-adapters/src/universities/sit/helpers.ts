@@ -299,8 +299,7 @@ export function isSitExcludedUniversity(
   );
   if (nameTokens === "") return false;
   return SIT_EXCLUDED_UNIVERSITIES.some(
-    (entry) =>
-      distinctiveTokenKey(distinctiveTokens(entry)) === nameTokens,
+    (entry) => distinctiveTokenKey(distinctiveTokens(entry)) === nameTokens,
   );
 }
 
@@ -475,6 +474,54 @@ export interface SitAcademicHistoryInput {
   nationality?: string;
   highSchoolCountry?: string;
   schoolCountry?: string;
+}
+
+const SIT_CREATE_FIELD_LABELS: Record<string, string> = {
+  email: "e-posta",
+  gender: "cinsiyet",
+  dob: "doğum tarihi",
+  nationality: "uyruk",
+  passportNo: "pasaport no",
+  firstName: "ad",
+  lastName: "soyad",
+  issueDate: "pasaport veriliş tarihi",
+  expiryDate: "pasaport bitiş tarihi",
+  phone: "telefon",
+  address: "adres",
+  city: "şehir",
+  residenceCountry: "ikamet ülkesi",
+  schoolName: "okul adı",
+  gpa: "GPA",
+  educationLevel: "eğitim seviyesi",
+  uploads: "belgeler",
+  transferStudent: "transfer öğrenci seçimi",
+  haveTc: "TC seçimi",
+  blueCard: "mavi kart seçimi",
+  "academicCountry:high_school": "lise ülkesi",
+  "academicCountry:bachelor": "lisans ülkesi",
+  "academicCountry:master": "yüksek lisans ülkesi",
+};
+
+/** Build one PII-free, staff-readable final-submit failure. */
+export function buildSitStudentCreateFailureDetail(input: {
+  unsetCritical: string[];
+  inlineError?: string | null;
+  stepTitle?: string | null;
+}): string {
+  const unset = [...new Set(input.unsetCritical)]
+    .map((field) => SIT_CREATE_FIELD_LABELS[field] || field)
+    .filter(Boolean);
+  const inline = (input.inlineError || "").trim();
+  if (unset.length > 0) {
+    return (
+      `öğrenci kaydedilemedi: zorunlu alan doldurulamadı (${unset.join(", ")})` +
+      (inline ? ` — portal hatası: ${inline}` : "")
+    );
+  }
+  if (inline)
+    return `öğrenci kaydedilemedi — portal doğrulama hatası: ${inline}`;
+  const step = (input.stepTitle || "bilinmeyen adım").trim();
+  return `SIT öğrenci oluşturulamadı — son adım: "${step}"`;
 }
 
 /**
@@ -872,7 +919,7 @@ export function matchSitMemberUniversity(
   for (const entry of matches) {
     canonical.set(fold(entry), entry);
   }
-  return canonical.size === 1 ? [...canonical.values()][0] ?? null : null;
+  return canonical.size === 1 ? ([...canonical.values()][0] ?? null) : null;
 }
 
 export function isSitMember(

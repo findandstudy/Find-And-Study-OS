@@ -33,6 +33,7 @@ import {
   sitAcademicHistoryLevelFromCountryLabel,
   sitAcademicSchoolNameLabelPattern,
   resolveSitAcademicHistory,
+  buildSitStudentCreateFailureDetail,
   isSitContactStepLabels,
   hasSitProgramSubjectAnchor,
   buildSitProgramMissingContext,
@@ -80,6 +81,31 @@ import {
   setCredsOverride,
 } from "../src/portalCreds.js";
 
+test("SIT-DIAG1 — academic country failures use staff-readable labels", () => {
+  assert.equal(
+    buildSitStudentCreateFailureDetail({
+      unsetCritical: ["academicCountry:bachelor", "schoolName"],
+      inlineError: "Required",
+      stepTitle: "Educational Background",
+    }),
+    "öğrenci kaydedilemedi: zorunlu alan doldurulamadı (lisans ülkesi, okul adı) — portal hatası: Required",
+  );
+});
+
+test("SIT-DIAG2 — final-submit validation and unknown-step fallbacks are explicit", () => {
+  assert.equal(
+    buildSitStudentCreateFailureDetail({
+      unsetCritical: [],
+      inlineError: "Country is required",
+    }),
+    "öğrenci kaydedilemedi — portal doğrulama hatası: Country is required",
+  );
+  assert.equal(
+    buildSitStudentCreateFailureDetail({ unsetCritical: [] }),
+    'SIT öğrenci oluşturulamadı — son adım: "bilinmeyen adım"',
+  );
+});
+
 test("NAV1 — expected /students → /auth/login redirect is recoverable", () => {
   assert.equal(
     isExpectedSitAuthRedirect(
@@ -108,8 +134,14 @@ test("CREDS1 — concurrent SIT sessions retain isolated credentials", () => {
   const firstSession = {};
   const secondSession = {};
   setCredsOverride("sit", { user: "shared@example.test", password: "shared" });
-  bindPortalSessionCreds(firstSession, { user: "first@example.test", password: "one" });
-  bindPortalSessionCreds(secondSession, { user: "second@example.test", password: "two" });
+  bindPortalSessionCreds(firstSession, {
+    user: "first@example.test",
+    password: "one",
+  });
+  bindPortalSessionCreds(secondSession, {
+    user: "second@example.test",
+    password: "two",
+  });
   clearCredsOverride("sit");
 
   assert.deepEqual(portalSessionCreds(firstSession, "sit"), {
@@ -500,10 +532,7 @@ test("AL3 — allowlist resolves members and rejects direct Haliç routing", () 
     matchAllowedUniversity("Beykoz Üniversitesi"),
     "Beykoz Üniversitesi",
   );
-  assert.equal(
-    matchAllowedUniversity("haliç universitesi"),
-    null,
-  );
+  assert.equal(matchAllowedUniversity("haliç universitesi"), null);
   assert.equal(
     matchAllowedUniversity("Istanbul Aydin University"),
     "İstanbul Aydın Üniversitesi",
@@ -913,17 +942,32 @@ test("PHOTO1B — list photo signatures stay stable inside a cache bucket", () =
       Date.now = () => bucketStartMs + 1_000;
       const first = buildStableSignedStudentPhotoPath(123, 15 * 60, 5 * 60);
       Date.now = () => bucketStartMs + 120_000;
-      const sameBucket = buildStableSignedStudentPhotoPath(123, 15 * 60, 5 * 60);
+      const sameBucket = buildStableSignedStudentPhotoPath(
+        123,
+        15 * 60,
+        5 * 60,
+      );
       assert.equal(sameBucket, first);
       assert.ok(first);
-      const thumbnail = buildStableSignedStudentPhotoThumbnailPath(123, 15 * 60, 5 * 60);
+      const thumbnail = buildStableSignedStudentPhotoThumbnailPath(
+        123,
+        15 * 60,
+        5 * 60,
+      );
       assert.equal(thumbnail, first!.replace("/photo?", "/photo/thumbnail?"));
 
       const match = first!.match(/exp=(\d+)&sig=([0-9a-f]+)/)!;
-      assert.equal(verifyStudentPhotoSignature(123, Number(match[1]), match[2]), true);
+      assert.equal(
+        verifyStudentPhotoSignature(123, Number(match[1]), match[2]),
+        true,
+      );
 
       Date.now = () => bucketStartMs + 301_000;
-      const nextBucket = buildStableSignedStudentPhotoPath(123, 15 * 60, 5 * 60);
+      const nextBucket = buildStableSignedStudentPhotoPath(
+        123,
+        15 * 60,
+        5 * 60,
+      );
       assert.notEqual(nextBucket, first);
     } finally {
       Date.now = originalNow;
