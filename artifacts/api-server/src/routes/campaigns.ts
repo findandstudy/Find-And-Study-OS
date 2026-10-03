@@ -1,7 +1,7 @@
-import { Router, type IRouter } from "express";
-import { db, campaignsTable, universitiesTable, agentsTable } from "@workspace/db";
+import { Router, type IRouter, type Request } from "express";
+import { db, campaignsTable, universitiesTable, agentsTable, auditLogsTable } from "@workspace/db";
 import { eq, and, desc, isNull, isNotNull, inArray, sql } from "drizzle-orm";
-import { requireAuth, requireRole, logAudit } from "../lib/auth";
+import { requireAuth, requireRole } from "../lib/auth";
 import { ADMIN_ROLES } from "../lib/roles";
 
 const router: IRouter = Router();
@@ -35,10 +35,10 @@ function sanitizeNumberArray(input: unknown): number[] {
   if (!Array.isArray(input)) return [];
   const out: number[] = [];
   for (const v of input) {
-    const n = typeof v === "number" ? v : parseInt(String(v), 10);
-    if (!isNaN(n) && n > 0) out.push(n);
+    const n = Number(v);
+    if (Number.isSafeInteger(n) && n > 0) out.push(n);
   }
-  return Array.from(new Set(out));
+  return Array.from(new Set(out)).slice(0, 500);
 }
 
 function sanitizeStringArray(input: unknown): string[] {
@@ -50,7 +50,24 @@ function sanitizeStringArray(input: unknown): string[] {
       if (t) out.push(t);
     }
   }
-  return Array.from(new Set(out));
+  return Array.from(new Set(out)).slice(0, 200);
+}
+
+async function writeCampaignAudit(
+  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  req: Request,
+  action: string,
+  campaignId: number,
+  changes: Record<string, unknown> = {},
+): Promise<void> {
+  await tx.insert(auditLogsTable).values({
+    userId: req.user!.id,
+    action,
+    resource: "campaign",
+    resourceId: campaignId,
+    changes: JSON.stringify(changes),
+    ipAddress: req.ip || null,
+  });
 }
 
 router.get("/campaigns", requireAuth, requireRole(...ADMIN_ROLES), async (req, res): Promise<void> => {
@@ -103,23 +120,22 @@ router.post("/campaigns", requireAuth, requireRole(...ADMIN_ROLES), async (req, 
   const found = await db.select({ id: universitiesTable.id }).from(universitiesTable).where(inArray(universitiesTable.id, unis));
   if (found.length !== unis.length) { res.status(400).json({ error: "One or more universities are invalid" }); return; }
 
-  const [created] = await db
-    .insert(campaignsTable)
-    .values({
-      name: name.trim(),
-      description: typeof description === "string" ? description.trim() || null : null,
-      changeType,
-      changePercent: pct,
-      startDate,
-      endDate,
-      universityIds: unis,
-      agentCountries: countries,
-      isActive: isActive !== false,
-      createdBy: req.user!.id,
-    })
-    .returning();
-
-  logAudit(req.user!.id, "campaign.create", "campaign", created.id, { name: created.name, percent: pct, type: changeType });
+  const created = await db.transaction(async tx => {
+    const [row] = await tx.insert(campaignsTable).values({
+        name: name.trim().slice(0, 200),
+        description: typeof description === "string" ? description.trim().slice(0, 10_000) || null : null,
+        changeType,
+        changePercent: pct,
+        startDate,
+        endDate,
+        universityIds: unis,
+        agentCountries: countries,
+        isActive: isActive !== false,
+        createdBy: req.user!.id,
+      }).returning();
+    await writeCampaignAudit(tx, req, "campaign.create", row.id, { type: row.changeType, active: row.isActive });
+    return row;
+  });
   res.status(201).json({ ...created, status: statusOf(created) });
 });
 
@@ -135,9 +151,9 @@ router.put("/campaigns/:id", requireAuth, requireRole(...ADMIN_ROLES), async (re
 
   if (name !== undefined) {
     if (typeof name !== "string" || !name.trim()) { res.status(400).json({ error: "Name is required" }); return; }
-    updates.name = name.trim();
+    updates.name = name.trim().slice(0, 200);
   }
-  if (description !== undefined) updates.description = typeof description === "string" ? (description.trim() || null) : null;
+  if (description !== undefined) updates.description = typeof description === "string" ? (description.trim().slice(0, 10_000) || null) : null;
   if (changeType !== undefined) {
     if (!isValidType(changeType)) { res.status(400).json({ error: "Invalid change type" }); return; }
     updates.changeType = changeType;
@@ -168,35 +184,47 @@ router.put("/campaigns/:id", requireAuth, requireRole(...ADMIN_ROLES), async (re
   }
   if (agentCountries !== undefined) updates.agentCountries = sanitizeStringArray(agentCountries);
   if (isActive !== undefined) updates.isActive = !!isActive;
+  if (Object.keys(updates).length === 0) { res.status(400).json({ error: "No fields to update" }); return; }
 
-  const [updated] = await db.update(campaignsTable).set(updates).where(eq(campaignsTable.id, id)).returning();
-  logAudit(req.user!.id, "campaign.update", "campaign", id, updates);
+  const updated = await db.transaction(async tx => {
+    const [row] = await tx.update(campaignsTable).set(updates).where(eq(campaignsTable.id, id)).returning();
+    if (!row) return null;
+    await writeCampaignAudit(tx, req, "campaign.update", id, { changedFields: Object.keys(updates).sort() });
+    return row;
+  });
+  if (!updated) { res.status(404).json({ error: "Campaign not found" }); return; }
   res.json({ ...updated, status: statusOf(updated) });
 });
 
 router.delete("/campaigns/:id", requireAuth, requireRole(...ADMIN_ROLES), async (req, res): Promise<void> => {
   const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
-  const [updated] = await db
-    .update(campaignsTable)
-    .set({ archivedAt: new Date(), isActive: false })
-    .where(and(eq(campaignsTable.id, id), isNull(campaignsTable.archivedAt)))
-    .returning();
+  const updated = await db.transaction(async tx => {
+    const [row] = await tx.update(campaignsTable)
+      .set({ archivedAt: new Date(), isActive: false })
+      .where(and(eq(campaignsTable.id, id), isNull(campaignsTable.archivedAt)))
+      .returning();
+    if (!row) return null;
+    await writeCampaignAudit(tx, req, "campaign.archive", id);
+    return row;
+  });
   if (!updated) { res.status(404).json({ error: "Campaign not found" }); return; }
-  logAudit(req.user!.id, "campaign.archive", "campaign", id);
   res.json({ ok: true });
 });
 
 router.post("/campaigns/:id/restore", requireAuth, requireRole(...ADMIN_ROLES), async (req, res): Promise<void> => {
   const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
-  const [updated] = await db
-    .update(campaignsTable)
-    .set({ archivedAt: null })
-    .where(and(eq(campaignsTable.id, id), isNotNull(campaignsTable.archivedAt)))
-    .returning();
+  const updated = await db.transaction(async tx => {
+    const [row] = await tx.update(campaignsTable)
+      .set({ archivedAt: null })
+      .where(and(eq(campaignsTable.id, id), isNotNull(campaignsTable.archivedAt)))
+      .returning();
+    if (!row) return null;
+    await writeCampaignAudit(tx, req, "campaign.restore", id);
+    return row;
+  });
   if (!updated) { res.status(404).json({ error: "Campaign not found" }); return; }
-  logAudit(req.user!.id, "campaign.restore", "campaign", id);
   res.json({ ...updated, status: statusOf(updated) });
 });
 

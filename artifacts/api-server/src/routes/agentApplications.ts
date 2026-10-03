@@ -36,6 +36,13 @@ import { setAgencyStaff } from "../lib/agencyStaff";
 import { buildAgencyPortalInvitationEmail, getAppBaseUrl, sendEmail } from "../lib/email";
 import { writeAudit } from "../lib/auditLog";
 import { ObjectStorageService } from "../lib/objectStorage";
+import {
+  isValidLocalUploadPath,
+  LocalUploadBusyError,
+  LocalUploadConflictError,
+  publishLocalUpload,
+  UnsafeLocalUploadPathError,
+} from "../lib/localUploadPublication";
 import { validateUploadedFileBuffer } from "../lib/fileUploadValidation";
 import {
   agentApplicationUploadPrefix,
@@ -483,6 +490,16 @@ router.put(
       res.status(403).json({ error: "Upload authorization does not match this document" });
       return;
     }
+    const relativePath = objectPath.slice("/objects/".length);
+    if (!isValidLocalUploadPath(relativePath)) {
+      res.status(400).json({ error: "Invalid upload path" });
+      return;
+    }
+    const root = process.env.STORAGE_LOCAL_DIR;
+    if (!root) {
+      res.status(503).json({ error: "Document storage is unavailable" });
+      return;
+    }
     const buffer = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
     const contentType = String(req.headers["content-type"] || "").split(";")[0].toLowerCase();
     const fileName = String(req.headers["x-file-name"] || "document");
@@ -490,8 +507,24 @@ router.put(
     if (validationError) { res.status(400).json({ error: validationError }); return; }
     const signatureError = await validateUploadedFileBuffer(fileName, contentType, buffer);
     if (signatureError) { res.status(400).json({ error: signatureError.message }); return; }
-    await objectStorageService.overwriteObjectBuffer(objectPath, buffer, contentType);
-    res.status(204).end();
+    // A still-valid ticket must not replace evidence that an application may
+    // already reference. Reuse the authenticated upload's exclusive publisher;
+    // identical retries retain the existing 204 contract, different bytes fail.
+    try {
+      await publishLocalUpload({ root, relativePath, body: buffer, contentType });
+      res.status(204).end();
+    } catch (error) {
+      if (error instanceof LocalUploadBusyError) {
+        res.setHeader("Retry-After", "1");
+        res.status(503).json({ error: "Document upload is in progress; retry shortly" });
+      } else if (error instanceof LocalUploadConflictError) {
+        res.status(409).json({ error: "Document already uploaded; request a new upload URL to replace it" });
+      } else if (error instanceof UnsafeLocalUploadPathError) {
+        res.status(400).json({ error: "Invalid upload path" });
+      } else {
+        res.status(503).json({ error: "Document storage is unavailable" });
+      }
+    }
   },
 );
 

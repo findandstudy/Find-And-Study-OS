@@ -29,6 +29,7 @@ test("Pages draft and preview HTTP routes enforce roles and use current PostgreS
   app.use((req, _res, next) => {
     const role = req.header("x-fixture-role");
     if (role) req.cookies = { sid: fixtureSid(role) };
+    if (req.header("x-fixture-api-token")) req.apiTokenAuth = true as any;
     if (role) req.user = { id: role === "super_admin" ? 2147483001 : 2147483000, role, isActive: true, replitId: "fixture", email: null, firstName: null, lastName: null, avatarUrl: null, language: "en" };
     next();
   });
@@ -167,6 +168,49 @@ test("Pages draft and preview HTTP routes enforce roles and use current PostgreS
     assert.deepEqual(await readPublishedDetailLayout("city"), cityLayout, "batch failure rolls back all members");
     assert.equal((await request("/website/detail-layouts/publish", "super_admin", { approved: true, selections: [{ pageId: latest.pageId, digest: latest.digest }] })).status, 200);
     assert.deepEqual(await readPublishedDetailLayout("city"), changed);
+    const { readPublishedDetailContent } = await import("../src/lib/websiteDetailContent");
+    assert.ok(countryId);
+    const content = { version: 1, kind: "destination", entityId: countryId, locale: "en", sections: [{ key: "faq", title: "Synthetic questions", body: "Synthetic local fixture only", sources: [{ label: "Synthetic", url: "https://example.org/fixture" }], reviewedOn: "2026-09-01" }] };
+    assert.equal((await request("/website/detail-content/draft", "agent", { content, expectedUpdatedAt: null })).status, 403);
+    assert.equal((await request("/website/detail-content/draft", "admin", { content: { ...content, entityId: 2147482000 }, expectedUpdatedAt: null })).status, 404);
+    const editorialResponse = await request("/website/detail-content/draft", "admin", { content, expectedUpdatedAt: null });
+    assert.equal(editorialResponse.status, 200);
+    const editorial = await editorialResponse.json();
+    layoutIds.push(editorial.pageId);
+    await pool.query("UPDATE sessions SET sess=jsonb_set(sess::jsonb,'{originalSid}','\"impersonated\"'::jsonb) WHERE sid=$1", [fixtureSid("admin")]);
+    assert.equal((await request("/website/detail-content/draft", "admin", { content, expectedUpdatedAt: editorial.updatedAt })).status, 403);
+    assert.equal((await request("/website/detail-layouts/draft", "admin", { layout: cityLayout, expectedUpdatedAt: null })).status, 403);
+    await pool.query("UPDATE sessions SET sess=sess::jsonb - 'originalSid' WHERE sid=$1", [fixtureSid("admin")]);
+    for (const extra of [{ authorization: "Bearer fixture" }, { "x-fixture-api-token": "true" }]) for (const [path, body] of [["/website/detail-content/draft", { content, expectedUpdatedAt: editorial.updatedAt }], ["/website/detail-layouts/draft", { layout: cityLayout, expectedUpdatedAt: null }]] as const) {
+      assert.equal((await fetch(`${origin}/api${path}`, { method: "POST", headers: { "x-fixture-role": "admin", "Content-Type": "application/json", ...extra }, body: JSON.stringify(body) })).status, 403);
+    }
+    assert.equal(await readPublishedDetailContent("destination", countryId, "en"), null, "draft never public");
+    assert.equal((await request(`/website/pages/${editorial.pageId}`, "admin", { status: "published" }, "PUT")).status, 409);
+    const encodedEditorialId = String(editorial.pageId).split("").map(digit => `%${digit.charCodeAt(0).toString(16)}`).join("");
+    for (const path of [`/website/pages/${editorial.pageId}/publish`, `/website/pages/${editorial.pageId}/unpublish`, `/website/pages/${editorial.pageId}/save-draft`, `/website/pages/${editorial.pageId}/restore-version/1`, `/WEBSITE/PAGES/${encodedEditorialId}/publish/`]) {
+      assert.equal((await request(path, "super_admin", {})).status, 409, `reserved editorial protected: ${path}`);
+    }
+    for (const path of ["/website/pages", "/website/page-blocks", "/website/page-versions"]) {
+      assert.equal((await request(path, "admin", [{ pageId: editorial.pageId }])).status, 400);
+    }
+    assert.equal((await request("/website/detail-content/draft", "admin", { content, expectedUpdatedAt: null })).status, 409);
+    const approve = { pageId: editorial.pageId, digest: editorial.digest, approved: true };
+    assert.equal((await request("/website/detail-content/publish", "admin", approve)).status, 403);
+    await pool.query("UPDATE sessions SET sess=jsonb_set(sess::jsonb,'{originalSid}','\"impersonated\"'::jsonb) WHERE sid=$1", [fixtureSid("super_admin")]);
+    assert.equal((await request("/website/detail-content/publish", "super_admin", approve)).status, 403);
+    await pool.query("UPDATE sessions SET sess=sess::jsonb - 'originalSid' WHERE sid=$1", [fixtureSid("super_admin")]);
+    assert.equal((await request("/website/detail-content/publish", "super_admin", { ...approve, digest: "a".repeat(64) })).status, 409);
+    assert.equal((await request("/website/detail-content/publish", "super_admin", approve)).status, 200);
+    assert.deepEqual(await readPublishedDetailContent("destination", countryId, "en"), content);
+    assert.equal(await readPublishedDetailContent("destination", countryId, "tr"), null, "exact locale only");
+    assert.equal((await request("/website/detail-content/publish", "super_admin", approve)).status, 409, "replay denied");
+    const saved = await (await request(`/website/detail-content?kind=destination&entityId=${countryId}&locale=en`, "admin")).json();
+    assert.equal((await request("/website/detail-content/draft", "admin", { content: { ...content, sections: [] }, expectedUpdatedAt: saved.updatedAt })).status, 200);
+    assert.deepEqual(await readPublishedDetailContent("destination", countryId, "en"), content, "new draft preserves approved version");
+    const nextDraft = await (await request(`/website/detail-content?kind=destination&entityId=${countryId}&locale=en`, "admin")).json();
+    const race = await Promise.all([request("/website/detail-content/publish", "super_admin", { pageId: nextDraft.pageId, digest: nextDraft.digest, approved: true }), request("/website/detail-content/publish", "super_admin", { pageId: nextDraft.pageId, digest: nextDraft.digest, approved: true })]);
+    assert.deepEqual(race.map(response => response.status).sort(), [200, 409], "exact approval concurrency publishes once");
+    assert.deepEqual((await readPublishedDetailContent("destination", countryId, "en"))?.sections, [], "explicit empty publication removes supplemental sections");
   } finally {
     await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
     await pool.query("DELETE FROM website_pages WHERE slug IN ($1,$2)", [slug, `/${slug}`]);

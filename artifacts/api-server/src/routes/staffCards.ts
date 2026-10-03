@@ -13,6 +13,7 @@ import {
   staffDocumentsTable,
   staffSalaryPaymentsTable,
   staffCommissionsTable,
+  auditLogsTable,
   settingsTable,
   userSessionsTable,
   userPresenceTable,
@@ -29,6 +30,9 @@ import { userHasPermission } from "../lib/permissions";
 import { ObjectStorageService, ObjectNotFoundError } from "../lib/objectStorage";
 import { recompressStoredObjectIfNeeded } from "../lib/documentBytes";
 import { UploadTooLargeError } from "../lib/uploads/processUpload";
+import { canonicalizeKey } from "../lib/objectAuthz";
+import { validateUploadedFileBuffer } from "../lib/fileUploadValidation";
+import { consumeFinalizedUploadGrantInDrizzle } from "../lib/uploadGrant";
 import { Readable } from "stream";
 
 const router: IRouter = Router();
@@ -37,6 +41,59 @@ const objectStorage = new ObjectStorageService();
 // Sadece super_admin + admin (manager dahil değil — kullanıcı talebi net).
 const STAFF_CARD_ADMINS = ["super_admin", "admin"];
 const requireStaffCardAdmin = requireRole(...STAFF_CARD_ADMINS);
+
+type StaffCardTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+async function writeStaffCardAudit(
+  tx: StaffCardTransaction,
+  req: Request,
+  action: string,
+  userId: number,
+  changes: Record<string, unknown>,
+): Promise<void> {
+  await tx.insert(auditLogsTable).values({
+    userId: req.user!.id,
+    action,
+    resource: "user",
+    resourceId: userId,
+    changes: JSON.stringify(changes),
+    ipAddress: req.ip || null,
+  });
+}
+
+const boundedDateSchema = z.string().trim().min(1).max(40)
+  .refine((value) => Number.isFinite(Date.parse(value)), { message: "Invalid date" });
+const optionalDateSchema = boundedDateSchema.nullable().optional();
+
+function parsePositiveRouteId(value: unknown): number | null {
+  const text = String(value ?? "");
+  if (!/^[1-9]\d*$/.test(text)) return null;
+  const id = Number(text);
+  return Number.isSafeInteger(id) ? id : null;
+}
+
+async function prepareStaffDocumentUpload(input: {
+  objectPath: string;
+  filename: string;
+  rule: { maxBytes: number; mimeTypes: readonly string[] };
+}): Promise<{ bytes: Buffer; contentType: string }> {
+  const objectKey = canonicalizeKey(input.objectPath);
+  if (!objectKey) throw new Error("STAFF_DOCUMENT_UPLOAD_INVALID_PATH");
+  const file = await objectStorage.getObjectEntityFile(`/objects/${objectKey}`);
+  const [metadata] = await file.getMetadata();
+  const contentType = String(metadata.contentType ?? "").split(";", 1)[0].trim().toLowerCase();
+  if (!input.rule.mimeTypes.includes(contentType)) {
+    throw new Error("STAFF_DOCUMENT_UPLOAD_UNSUPPORTED_TYPE");
+  }
+  const [bytes] = await file.download();
+  if (bytes.length <= 0 || bytes.length > input.rule.maxBytes) {
+    throw new Error("STAFF_DOCUMENT_UPLOAD_INVALID_SIZE");
+  }
+  if (await validateUploadedFileBuffer(input.filename, contentType, bytes)) {
+    throw new Error("STAFF_DOCUMENT_UPLOAD_SIGNATURE_MISMATCH");
+  }
+  return { bytes, contentType };
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Liste — staff/manager rolündeki kullanıcılar
@@ -216,28 +273,33 @@ router.get("/staff-cards/:userId", requireAuth, requireStaffCardAdmin, async (re
 // Profil — lokasyon/timezone/baz alanlar
 // ─────────────────────────────────────────────────────────────────────────────
 const profileBodySchema = z.object({
-  firstName: z.string().trim().min(1).optional(),
-  lastName: z.string().trim().min(1).optional(),
-  phone: z.string().trim().nullable().optional(),
-  startDate: z.string().nullable().optional(),
-  homeAddress: z.string().nullable().optional(),
-  emergencyContactName: z.string().nullable().optional(),
-  emergencyContactPhone: z.string().nullable().optional(),
-  locationCountry: z.string().nullable().optional(),
-  locationCity: z.string().nullable().optional(),
-  timezone: z.string().nullable().optional(),
+  firstName: z.string().trim().min(1).max(120).optional(),
+  lastName: z.string().trim().min(1).max(120).optional(),
+  phone: z.string().trim().max(40).nullable().optional(),
+  startDate: optionalDateSchema,
+  homeAddress: z.string().trim().max(1000).nullable().optional(),
+  emergencyContactName: z.string().trim().max(120).nullable().optional(),
+  emergencyContactPhone: z.string().trim().max(40).nullable().optional(),
+  locationCountry: z.string().trim().max(120).nullable().optional(),
+  locationCity: z.string().trim().max(120).nullable().optional(),
+  timezone: z.string().trim().max(100).nullable().optional(),
   isActive: z.boolean().optional(),
 });
 
 router.put("/staff-cards/:userId/profile", requireAuth, requireStaffCardAdmin, async (req, res): Promise<void> => {
-  const userId = parseInt(String(req.params.userId), 10);
+  const userId = parsePositiveRouteId(req.params.userId);
+  if (!userId) { res.status(400).json({ error: "Invalid user id" }); return; }
   const parsed = profileBodySchema.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: "Invalid body" }); return; }
   const updates = parsed.data;
   if (Object.keys(updates).length === 0) { res.status(400).json({ error: "No fields" }); return; }
-  const [u] = await db.update(usersTable).set(updates).where(eq(usersTable.id, userId)).returning();
+  const u = await db.transaction(async (tx) => {
+    const [updated] = await tx.update(usersTable).set(updates).where(eq(usersTable.id, userId)).returning();
+    if (!updated) return null;
+    await writeStaffCardAudit(tx, req, "staff_card.profile.update", userId, { fields: Object.keys(updates).sort() });
+    return updated;
+  });
   if (!u) { res.status(404).json({ error: "User not found" }); return; }
-  logAudit(req.user!.id, "staff_card.profile.update", "user", userId, updates, req.ip);
   res.json({ success: true });
 });
 
@@ -252,9 +314,9 @@ const scheduleEntrySchema = z.object({
 }).refine(s => s.endMinutes > s.startMinutes, { message: "endMinutes must be greater than startMinutes" });
 
 router.put("/staff-cards/:userId/schedule", requireAuth, requireStaffCardAdmin, async (req, res): Promise<void> => {
-  const userId = parseInt(String(req.params.userId), 10);
-  if (Number.isNaN(userId)) { res.status(400).json({ error: "Invalid user id" }); return; }
-  const parsed = z.object({ entries: z.array(scheduleEntrySchema) }).safeParse(req.body);
+  const userId = parsePositiveRouteId(req.params.userId);
+  if (!userId) { res.status(400).json({ error: "Invalid user id" }); return; }
+  const parsed = z.object({ entries: z.array(scheduleEntrySchema).max(100) }).safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.issues[0]?.message || "Invalid body" }); return; }
   // Overlap validation per weekday
   const byDay: Record<number, Array<{ s: number; e: number }>> = {};
@@ -278,8 +340,8 @@ router.put("/staff-cards/:userId/schedule", requireAuth, requireStaffCardAdmin, 
         parsed.data.entries.map(e => ({ userId, weekday: e.weekday, startMinutes: e.startMinutes, endMinutes: e.endMinutes }))
       );
     }
+    await writeStaffCardAudit(tx, req, "staff_card.schedule.update", userId, { count: parsed.data.entries.length });
   });
-  logAudit(req.user!.id, "staff_card.schedule.update", "user", userId, { count: parsed.data.entries.length }, req.ip);
   res.json({ success: true });
 });
 
@@ -287,12 +349,13 @@ router.put("/staff-cards/:userId/schedule", requireAuth, requireStaffCardAdmin, 
 // Diller
 // ─────────────────────────────────────────────────────────────────────────────
 router.put("/staff-cards/:userId/languages", requireAuth, requireStaffCardAdmin, async (req, res): Promise<void> => {
-  const userId = parseInt(String(req.params.userId), 10);
+  const userId = parsePositiveRouteId(req.params.userId);
+  if (!userId) { res.status(400).json({ error: "Invalid user id" }); return; }
   const parsed = z.object({
     languages: z.array(z.object({
       language: z.string().trim().min(1).max(60),
       proficiency: z.string().trim().max(40).nullable().optional(),
-    })),
+    })).max(50),
   }).safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: "Invalid body" }); return; }
   await db.transaction(async (tx) => {
@@ -302,8 +365,8 @@ router.put("/staff-cards/:userId/languages", requireAuth, requireStaffCardAdmin,
         parsed.data.languages.map(l => ({ userId, language: l.language, proficiency: l.proficiency || null }))
       );
     }
+    await writeStaffCardAudit(tx, req, "staff_card.languages.update", userId, { count: parsed.data.languages.length });
   });
-  logAudit(req.user!.id, "staff_card.languages.update", "user", userId, { count: parsed.data.languages.length }, req.ip);
   res.json({ success: true });
 });
 
@@ -319,10 +382,10 @@ router.get("/staff-cards/:userId/countries", requireAuth, requireStaffCardAdmin,
 });
 
 router.put("/staff-cards/:userId/countries", requireAuth, requireStaffCardAdmin, async (req, res): Promise<void> => {
-  const userId = parseInt(String(req.params.userId), 10);
-  if (Number.isNaN(userId)) { res.status(400).json({ error: "Invalid user id" }); return; }
+  const userId = parsePositiveRouteId(req.params.userId);
+  if (!userId) { res.status(400).json({ error: "Invalid user id" }); return; }
   const parsed = z.object({
-    countries: z.array(z.string().trim().min(1).max(100)),
+    countries: z.array(z.string().trim().min(1).max(100)).max(100),
   }).safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: "Invalid body" }); return; }
   const deduped = Array.from(new Set(parsed.data.countries));
@@ -333,8 +396,8 @@ router.put("/staff-cards/:userId/countries", requireAuth, requireStaffCardAdmin,
         deduped.map(country => ({ userId, country }))
       );
     }
+    await writeStaffCardAudit(tx, req, "staff_card.countries.update", userId, { count: deduped.length });
   });
-  logAudit(req.user!.id, "staff_card.countries.update", "user", userId, { count: deduped.length }, req.ip);
   res.json({ success: true });
 });
 
@@ -373,8 +436,22 @@ router.post("/staff-cards/:userId/documents", requireAuth, requireStaffCardAdmin
     res.status(400).json({ error: `Object path must use prefix ${expectedPrefix}` });
     return;
   }
-  let finalSizeBytes = sizeBytes;
-  let finalMimeType = mimeType;
+  let preparedUpload: { bytes: Buffer; contentType: string };
+  try {
+    preparedUpload = await prepareStaffDocumentUpload({ objectPath, filename, rule });
+  } catch (error) {
+    const code = error instanceof Error ? error.message : "STAFF_DOCUMENT_UPLOAD_INVALID";
+    if (code === "STAFF_DOCUMENT_UPLOAD_INVALID_SIZE") {
+      res.status(413).json({ error: "Uploaded document is empty or too large", code });
+    } else if (error instanceof ObjectNotFoundError) {
+      res.status(400).json({ error: "Uploaded document could not be found", code: "STAFF_DOCUMENT_UPLOAD_NOT_FOUND" });
+    } else {
+      res.status(400).json({ error: "Uploaded document content is invalid", code });
+    }
+    return;
+  }
+  let finalSizeBytes = preparedUpload.bytes.length;
+  let finalMimeType = preparedUpload.contentType;
   try {
     const recompressed = await recompressStoredObjectIfNeeded(objectPath, mimeType);
     if (recompressed?.recompressed) {
@@ -389,11 +466,37 @@ router.post("/staff-cards/:userId/documents", requireAuth, requireStaffCardAdmin
     console.error("[STAFF-CARDS] recompressStoredObjectIfNeeded failed, keeping original:", err);
   }
 
-  const [doc] = await db.insert(staffDocumentsTable).values({
-    userId, docType, filename, objectPath, sizeBytes: finalSizeBytes, mimeType: finalMimeType,
-    uploadedBy: req.user!.id,
-  }).returning();
-  logAudit(req.user!.id, "staff_card.document.upload", "user", userId, { docType, filename, sizeBytes }, req.ip);
+  let doc: typeof staffDocumentsTable.$inferSelect;
+  try {
+    doc = await db.transaction(async (tx) => {
+      if (!await consumeFinalizedUploadGrantInDrizzle(tx, {
+        objectPath,
+        uploadedBy: req.user!.id,
+        bytes: preparedUpload.bytes,
+        contentType: preparedUpload.contentType,
+      })) throw new Error("STAFF_DOCUMENT_UPLOAD_GRANT_NOT_FINALIZED");
+      const [inserted] = await tx.insert(staffDocumentsTable).values({
+        userId, docType, filename, objectPath, sizeBytes: finalSizeBytes, mimeType: finalMimeType,
+        uploadedBy: req.user!.id,
+      }).returning();
+      await writeStaffCardAudit(tx, req, "staff_card.document.upload", userId, {
+        documentId: inserted.id,
+        docType,
+        sizeBytes: finalSizeBytes,
+        mimeType: finalMimeType,
+      });
+      return inserted;
+    });
+  } catch (error) {
+    if (error instanceof Error && error.message === "STAFF_DOCUMENT_UPLOAD_GRANT_NOT_FINALIZED") {
+      res.status(409).json({
+        error: "Upload must be finalized, owned by the caller and unused before registration",
+        code: "UPLOAD_GRANT_NOT_FINALIZED",
+      });
+      return;
+    }
+    throw error;
+  }
   const { objectPath: _op, ...safe } = doc;
   res.status(201).json(safe);
 });
@@ -404,8 +507,10 @@ router.delete("/staff-cards/:userId/documents/:docId", requireAuth, requireStaff
   const [doc] = await db.select().from(staffDocumentsTable)
     .where(and(eq(staffDocumentsTable.id, docId), eq(staffDocumentsTable.userId, userId), isNull(staffDocumentsTable.deletedAt)));
   if (!doc) { res.status(404).json({ error: "Document not found" }); return; }
-  await db.update(staffDocumentsTable).set({ deletedAt: sql`now()` }).where(eq(staffDocumentsTable.id, docId));
-  logAudit(req.user!.id, "staff_card.document.delete", "user", userId, { docId, docType: doc.docType }, req.ip);
+  await db.transaction(async (tx) => {
+    await tx.update(staffDocumentsTable).set({ deletedAt: sql`now()` }).where(eq(staffDocumentsTable.id, docId));
+    await writeStaffCardAudit(tx, req, "staff_card.document.delete", userId, { docId, docType: doc.docType });
+  });
   res.sendStatus(204);
 });
 
@@ -418,7 +523,7 @@ router.get("/staff-cards/:userId/documents/:docId/download", requireAuth, requir
   try {
     const file = await objectStorage.getObjectEntityFile(doc.objectPath);
     res.setHeader("Content-Disposition", `attachment; filename="${doc.filename.replace(/"/g, "")}"`);
-    logAudit(req.user!.id, "staff_card.document.download", "user", userId, { docId, docType: doc.docType }, req.ip);
+    await logAudit(req.user!.id, "staff_card.document.download", "user", userId, { docId, docType: doc.docType }, req.ip);
     await objectStorage.streamObjectToResponse(req, res, file, {
       contentType: doc.mimeType || undefined,
       cacheControl: "private, no-store",
@@ -434,21 +539,35 @@ router.get("/staff-cards/:userId/documents/:docId/download", requireAuth, requir
 // Atanmış acenteler — agency_assigned_staff M:N
 // ─────────────────────────────────────────────────────────────────────────────
 router.post("/staff-cards/:userId/assigned-agents", requireAuth, requireStaffCardAdmin, async (req, res): Promise<void> => {
-  const userId = parseInt(String(req.params.userId), 10);
+  const userId = parsePositiveRouteId(req.params.userId);
+  if (!userId) { res.status(400).json({ error: "Invalid user id" }); return; }
   const parsed = z.object({ agentId: z.number().int().positive(), isPrimary: z.boolean().optional() }).safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: "Invalid body" }); return; }
   const { agentId, isPrimary } = parsed.data;
-  await db.insert(agencyAssignedStaffTable).values({ userId, agentId, isPrimary: !!isPrimary }).onConflictDoNothing();
-  logAudit(req.user!.id, "staff_card.assigned_agent.add", "user", userId, { agentId, isPrimary: !!isPrimary }, req.ip);
+  await db.transaction(async (tx) => {
+    const inserted = await tx.insert(agencyAssignedStaffTable)
+      .values({ userId, agentId, isPrimary: !!isPrimary })
+      .onConflictDoNothing()
+      .returning({ agentId: agencyAssignedStaffTable.agentId });
+    if (inserted.length > 0) {
+      await writeStaffCardAudit(tx, req, "staff_card.assigned_agent.add", userId, { agentId, isPrimary: !!isPrimary });
+    }
+  });
   res.json({ success: true });
 });
 
 router.delete("/staff-cards/:userId/assigned-agents/:agentId", requireAuth, requireStaffCardAdmin, async (req, res): Promise<void> => {
-  const userId = parseInt(String(req.params.userId), 10);
-  const agentId = parseInt(String(req.params.agentId), 10);
-  await db.delete(agencyAssignedStaffTable)
-    .where(and(eq(agencyAssignedStaffTable.userId, userId), eq(agencyAssignedStaffTable.agentId, agentId)));
-  logAudit(req.user!.id, "staff_card.assigned_agent.remove", "user", userId, { agentId }, req.ip);
+  const userId = parsePositiveRouteId(req.params.userId);
+  const agentId = parsePositiveRouteId(req.params.agentId);
+  if (!userId || !agentId) { res.status(400).json({ error: "Invalid id" }); return; }
+  await db.transaction(async (tx) => {
+    const deleted = await tx.delete(agencyAssignedStaffTable)
+      .where(and(eq(agencyAssignedStaffTable.userId, userId), eq(agencyAssignedStaffTable.agentId, agentId)))
+      .returning({ agentId: agencyAssignedStaffTable.agentId });
+    if (deleted.length > 0) {
+      await writeStaffCardAudit(tx, req, "staff_card.assigned_agent.remove", userId, { agentId });
+    }
+  });
   res.sendStatus(204);
 });
 
@@ -456,7 +575,8 @@ router.delete("/staff-cards/:userId/assigned-agents/:agentId", requireAuth, requ
 // Atanmış öğrenciler — students.assigned_to_id
 // ─────────────────────────────────────────────────────────────────────────────
 router.post("/staff-cards/:userId/assigned-students", requireAuth, requireStaffCardAdmin, async (req, res): Promise<void> => {
-  const userId = parseInt(String(req.params.userId), 10);
+  const userId = parsePositiveRouteId(req.params.userId);
+  if (!userId) { res.status(400).json({ error: "Invalid user id" }); return; }
   const parsed = z.object({ studentId: z.number().int().positive() }).safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: "Invalid body" }); return; }
   const { studentId } = parsed.data;
@@ -475,18 +595,19 @@ router.post("/staff-cards/:userId/assigned-students", requireAuth, requireStaffC
         throwOnError: true,
       });
     }
+    await writeStaffCardAudit(tx, req, "staff_card.assigned_student.add", userId, { studentId });
     return student;
   });
   if (!updated) { res.status(404).json({ error: "Student not found" }); return; }
-  logAudit(req.user!.id, "staff_card.assigned_student.add", "user", userId, { studentId }, req.ip);
   res.json({ success: true });
 });
 
 router.delete("/staff-cards/:userId/assigned-students/:studentId", requireAuth, requireStaffCardAdmin, async (req, res): Promise<void> => {
-  const userId = parseInt(String(req.params.userId), 10);
-  const studentId = parseInt(String(req.params.studentId), 10);
+  const userId = parsePositiveRouteId(req.params.userId);
+  const studentId = parsePositiveRouteId(req.params.studentId);
+  if (!userId || !studentId) { res.status(400).json({ error: "Invalid id" }); return; }
   const canCascadeRemove = await userHasPermission({ id: req.user!.id, role: req.user!.role }, "records.cascade_assignment");
-  const changed = await db.transaction(async (tx) => {
+  await db.transaction(async (tx) => {
     const [student] = await tx.update(studentsTable).set({ assignedToId: null })
       .where(and(eq(studentsTable.id, studentId), eq(studentsTable.assignedToId, userId)))
       .returning({ id: studentsTable.id });
@@ -501,9 +622,9 @@ router.delete("/staff-cards/:userId/assigned-students/:studentId", requireAuth, 
         throwOnError: true,
       });
     }
+    await writeStaffCardAudit(tx, req, "staff_card.assigned_student.remove", userId, { studentId });
     return true;
   });
-  if (changed) logAudit(req.user!.id, "staff_card.assigned_student.remove", "user", userId, { studentId }, req.ip);
   res.sendStatus(204);
 });
 
@@ -514,40 +635,49 @@ const salaryBodySchema = z.object({
   amount: z.coerce.number().nonnegative(),
   currency: z.string().trim().length(3).default("USD"),
   period: z.enum(STAFF_SALARY_PERIODS as unknown as [string, ...string[]]).default("monthly"),
-  payDate: z.string().nullable().optional(),
+  payDate: optionalDateSchema,
   status: z.enum(STAFF_SALARY_STATUSES as unknown as [string, ...string[]]).default("pending"),
-  notes: z.string().nullable().optional(),
+  notes: z.string().trim().max(2_000).nullable().optional(),
 });
 
 router.post("/staff-cards/:userId/salary-payments", requireAuth, requireStaffCardAdmin, async (req, res): Promise<void> => {
-  const userId = parseInt(String(req.params.userId), 10);
+  const userId = parsePositiveRouteId(req.params.userId);
+  if (userId === null) { res.status(400).json({ error: "Invalid user id" }); return; }
   const parsed = salaryBodySchema.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.issues[0]?.message || "Invalid body" }); return; }
   const d = parsed.data;
-  const [row] = await db.insert(staffSalaryPaymentsTable).values({
-    userId,
-    amount: String(d.amount),
-    currency: d.currency,
-    period: d.period,
-    payDate: d.payDate ? new Date(d.payDate) : null,
-    status: d.status,
-    notes: d.notes || null,
-    createdBy: req.user!.id,
-  }).returning();
-  logAudit(req.user!.id, "staff_card.salary.create", "user", userId, { id: row.id, amount: d.amount, currency: d.currency }, req.ip);
+  const row = await db.transaction(async (tx) => {
+    const [created] = await tx.insert(staffSalaryPaymentsTable).values({
+      userId,
+      amount: String(d.amount),
+      currency: d.currency.toUpperCase(),
+      period: d.period,
+      payDate: d.payDate ? new Date(d.payDate) : null,
+      status: d.status,
+      notes: d.notes || null,
+      createdBy: req.user!.id,
+    }).returning();
+    await writeStaffCardAudit(tx, req, "staff_card.salary.create", userId, {
+      id: created.id,
+      amount: d.amount,
+      currency: d.currency.toUpperCase(),
+      status: d.status,
+    });
+    return created;
+  });
   res.status(201).json(row);
 });
 
 router.post("/staff-cards/:userId/salary-payments/bulk", requireAuth, requireStaffCardAdmin, async (req, res): Promise<void> => {
-  const userId = parseInt(String(req.params.userId), 10);
-  if (Number.isNaN(userId)) { res.status(400).json({ error: "Invalid user id" }); return; }
+  const userId = parsePositiveRouteId(req.params.userId);
+  if (userId === null) { res.status(400).json({ error: "Invalid user id" }); return; }
   const bulkSchema = z.object({
     count: z.coerce.number().int().min(1).max(36),
-    startDate: z.string().optional(),
+    startDate: boundedDateSchema.optional(),
     amount: z.coerce.number().positive(),
-    currency: z.string().trim().min(2).max(5).default("USD"),
-    period: z.string().default("monthly"),
-    notes: z.string().nullable().optional(),
+    currency: z.string().trim().length(3).default("USD"),
+    period: z.enum(STAFF_SALARY_PERIODS as unknown as [string, ...string[]]).default("monthly"),
+    notes: z.string().trim().max(2_000).nullable().optional(),
   });
   const parsed = bulkSchema.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.issues[0]?.message || "Invalid body" }); return; }
@@ -559,39 +689,59 @@ router.post("/staff-cards/:userId/salary-payments/bulk", requireAuth, requireSta
     const d = new Date(base.getFullYear(), base.getMonth() + i, 1);
     return { userId, amount: String(amount), currency: currency.toUpperCase(), period, payDate: d, status: "pending" as const, notes: notes || null, createdBy: req.user!.id };
   });
-  const created = await db.insert(staffSalaryPaymentsTable).values(rows).returning();
-  logAudit(req.user!.id, "staff_card.salary.bulk_create", "user", userId, { count, amount, currency }, req.ip);
+  const created = await db.transaction(async (tx) => {
+    const inserted = await tx.insert(staffSalaryPaymentsTable).values(rows).returning();
+    await writeStaffCardAudit(tx, req, "staff_card.salary.bulk_create", userId, {
+      count: inserted.length,
+      amount,
+      currency: currency.toUpperCase(),
+      period,
+    });
+    return inserted;
+  });
   res.status(201).json({ created: created.length, rows: created });
 });
 
 router.patch("/staff-cards/:userId/salary-payments/:id", requireAuth, requireStaffCardAdmin, async (req, res): Promise<void> => {
-  const userId = parseInt(String(req.params.userId), 10);
-  const id = parseInt(String(req.params.id), 10);
+  const userId = parsePositiveRouteId(req.params.userId);
+  const id = parsePositiveRouteId(req.params.id);
+  if (userId === null || id === null) { res.status(400).json({ error: "Invalid id" }); return; }
   const parsed = salaryBodySchema.partial().safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: "Invalid body" }); return; }
   const d = parsed.data;
   const updates: Record<string, unknown> = {};
   if (d.amount !== undefined) updates.amount = String(d.amount);
-  if (d.currency !== undefined) updates.currency = d.currency;
+  if (d.currency !== undefined) updates.currency = d.currency.toUpperCase();
   if (d.period !== undefined) updates.period = d.period;
   if (d.payDate !== undefined) updates.payDate = d.payDate ? new Date(d.payDate) : null;
   if (d.status !== undefined) updates.status = d.status;
   if (d.notes !== undefined) updates.notes = d.notes;
   if (Object.keys(updates).length === 0) { res.status(400).json({ error: "No fields" }); return; }
-  const [row] = await db.update(staffSalaryPaymentsTable).set(updates)
-    .where(and(eq(staffSalaryPaymentsTable.id, id), eq(staffSalaryPaymentsTable.userId, userId)))
-    .returning();
+  const row = await db.transaction(async (tx) => {
+    const [updated] = await tx.update(staffSalaryPaymentsTable).set(updates)
+      .where(and(eq(staffSalaryPaymentsTable.id, id), eq(staffSalaryPaymentsTable.userId, userId)))
+      .returning();
+    if (!updated) return null;
+    await writeStaffCardAudit(tx, req, "staff_card.salary.update", userId, {
+      id,
+      fields: Object.keys(updates).sort(),
+    });
+    return updated;
+  });
   if (!row) { res.status(404).json({ error: "Not found" }); return; }
-  logAudit(req.user!.id, "staff_card.salary.update", "user", userId, { id, ...updates }, req.ip);
   res.json(row);
 });
 
 router.delete("/staff-cards/:userId/salary-payments/:id", requireAuth, requireStaffCardAdmin, async (req, res): Promise<void> => {
-  const userId = parseInt(String(req.params.userId), 10);
-  const id = parseInt(String(req.params.id), 10);
-  await db.delete(staffSalaryPaymentsTable)
-    .where(and(eq(staffSalaryPaymentsTable.id, id), eq(staffSalaryPaymentsTable.userId, userId)));
-  logAudit(req.user!.id, "staff_card.salary.delete", "user", userId, { id }, req.ip);
+  const userId = parsePositiveRouteId(req.params.userId);
+  const id = parsePositiveRouteId(req.params.id);
+  if (userId === null || id === null) { res.status(400).json({ error: "Invalid id" }); return; }
+  await db.transaction(async (tx) => {
+    const [deleted] = await tx.delete(staffSalaryPaymentsTable)
+      .where(and(eq(staffSalaryPaymentsTable.id, id), eq(staffSalaryPaymentsTable.userId, userId)))
+      .returning({ id: staffSalaryPaymentsTable.id });
+    if (deleted) await writeStaffCardAudit(tx, req, "staff_card.salary.delete", userId, { id });
+  });
   res.sendStatus(204);
 });
 
@@ -605,40 +755,50 @@ const commissionBodySchema = z.object({
   agentId: z.number().int().positive().nullable().optional(),
   applicationId: z.number().int().positive().nullable().optional(),
   status: z.enum(STAFF_COMMISSION_STATUSES as unknown as [string, ...string[]]).default("pending"),
-  payDate: z.string().nullable().optional(),
-  notes: z.string().nullable().optional(),
+  payDate: optionalDateSchema,
+  notes: z.string().trim().max(2_000).nullable().optional(),
 });
 
 router.post("/staff-cards/:userId/commissions", requireAuth, requireStaffCardAdmin, async (req, res): Promise<void> => {
-  const userId = parseInt(String(req.params.userId), 10);
+  const userId = parsePositiveRouteId(req.params.userId);
+  if (userId === null) { res.status(400).json({ error: "Invalid user id" }); return; }
   const parsed = commissionBodySchema.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.issues[0]?.message || "Invalid body" }); return; }
   const d = parsed.data;
-  const [row] = await db.insert(staffCommissionsTable).values({
-    userId,
-    amount: String(d.amount),
-    currency: d.currency,
-    studentId: d.studentId ?? null,
-    agentId: d.agentId ?? null,
-    applicationId: d.applicationId ?? null,
-    status: d.status,
-    payDate: d.payDate ? new Date(d.payDate) : null,
-    notes: d.notes || null,
-    createdBy: req.user!.id,
-  }).returning();
-  logAudit(req.user!.id, "staff_card.commission.create", "user", userId, { id: row.id, amount: d.amount }, req.ip);
+  const row = await db.transaction(async (tx) => {
+    const [created] = await tx.insert(staffCommissionsTable).values({
+      userId,
+      amount: String(d.amount),
+      currency: d.currency.toUpperCase(),
+      studentId: d.studentId ?? null,
+      agentId: d.agentId ?? null,
+      applicationId: d.applicationId ?? null,
+      status: d.status,
+      payDate: d.payDate ? new Date(d.payDate) : null,
+      notes: d.notes || null,
+      createdBy: req.user!.id,
+    }).returning();
+    await writeStaffCardAudit(tx, req, "staff_card.commission.create", userId, {
+      id: created.id,
+      amount: d.amount,
+      currency: d.currency.toUpperCase(),
+      status: d.status,
+    });
+    return created;
+  });
   res.status(201).json(row);
 });
 
 router.patch("/staff-cards/:userId/commissions/:id", requireAuth, requireStaffCardAdmin, async (req, res): Promise<void> => {
-  const userId = parseInt(String(req.params.userId), 10);
-  const id = parseInt(String(req.params.id), 10);
+  const userId = parsePositiveRouteId(req.params.userId);
+  const id = parsePositiveRouteId(req.params.id);
+  if (userId === null || id === null) { res.status(400).json({ error: "Invalid id" }); return; }
   const parsed = commissionBodySchema.partial().safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: "Invalid body" }); return; }
   const d = parsed.data;
   const updates: Record<string, unknown> = {};
   if (d.amount !== undefined) updates.amount = String(d.amount);
-  if (d.currency !== undefined) updates.currency = d.currency;
+  if (d.currency !== undefined) updates.currency = d.currency.toUpperCase();
   if (d.studentId !== undefined) updates.studentId = d.studentId;
   if (d.agentId !== undefined) updates.agentId = d.agentId;
   if (d.applicationId !== undefined) updates.applicationId = d.applicationId;
@@ -646,20 +806,31 @@ router.patch("/staff-cards/:userId/commissions/:id", requireAuth, requireStaffCa
   if (d.payDate !== undefined) updates.payDate = d.payDate ? new Date(d.payDate) : null;
   if (d.notes !== undefined) updates.notes = d.notes;
   if (Object.keys(updates).length === 0) { res.status(400).json({ error: "No fields" }); return; }
-  const [row] = await db.update(staffCommissionsTable).set(updates)
-    .where(and(eq(staffCommissionsTable.id, id), eq(staffCommissionsTable.userId, userId)))
-    .returning();
+  const row = await db.transaction(async (tx) => {
+    const [updated] = await tx.update(staffCommissionsTable).set(updates)
+      .where(and(eq(staffCommissionsTable.id, id), eq(staffCommissionsTable.userId, userId)))
+      .returning();
+    if (!updated) return null;
+    await writeStaffCardAudit(tx, req, "staff_card.commission.update", userId, {
+      id,
+      fields: Object.keys(updates).sort(),
+    });
+    return updated;
+  });
   if (!row) { res.status(404).json({ error: "Not found" }); return; }
-  logAudit(req.user!.id, "staff_card.commission.update", "user", userId, { id, ...updates }, req.ip);
   res.json(row);
 });
 
 router.delete("/staff-cards/:userId/commissions/:id", requireAuth, requireStaffCardAdmin, async (req, res): Promise<void> => {
-  const userId = parseInt(String(req.params.userId), 10);
-  const id = parseInt(String(req.params.id), 10);
-  await db.delete(staffCommissionsTable)
-    .where(and(eq(staffCommissionsTable.id, id), eq(staffCommissionsTable.userId, userId)));
-  logAudit(req.user!.id, "staff_card.commission.delete", "user", userId, { id }, req.ip);
+  const userId = parsePositiveRouteId(req.params.userId);
+  const id = parsePositiveRouteId(req.params.id);
+  if (userId === null || id === null) { res.status(400).json({ error: "Invalid id" }); return; }
+  await db.transaction(async (tx) => {
+    const [deleted] = await tx.delete(staffCommissionsTable)
+      .where(and(eq(staffCommissionsTable.id, id), eq(staffCommissionsTable.userId, userId)))
+      .returning({ id: staffCommissionsTable.id });
+    if (deleted) await writeStaffCardAudit(tx, req, "staff_card.commission.delete", userId, { id });
+  });
   res.sendStatus(204);
 });
 

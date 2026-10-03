@@ -299,8 +299,7 @@ export function isSitExcludedUniversity(
   );
   if (nameTokens === "") return false;
   return SIT_EXCLUDED_UNIVERSITIES.some(
-    (entry) =>
-      distinctiveTokenKey(distinctiveTokens(entry)) === nameTokens,
+    (entry) => distinctiveTokenKey(distinctiveTokens(entry)) === nameTokens,
   );
 }
 
@@ -477,6 +476,54 @@ export interface SitAcademicHistoryInput {
   schoolCountry?: string;
 }
 
+const SIT_CREATE_FIELD_LABELS: Record<string, string> = {
+  email: "e-posta",
+  gender: "cinsiyet",
+  dob: "doğum tarihi",
+  nationality: "uyruk",
+  passportNo: "pasaport no",
+  firstName: "ad",
+  lastName: "soyad",
+  issueDate: "pasaport veriliş tarihi",
+  expiryDate: "pasaport bitiş tarihi",
+  phone: "telefon",
+  address: "adres",
+  city: "şehir",
+  residenceCountry: "ikamet ülkesi",
+  schoolName: "okul adı",
+  gpa: "GPA",
+  educationLevel: "eğitim seviyesi",
+  uploads: "belgeler",
+  transferStudent: "transfer öğrenci seçimi",
+  haveTc: "TC seçimi",
+  blueCard: "mavi kart seçimi",
+  "academicCountry:high_school": "lise ülkesi",
+  "academicCountry:bachelor": "lisans ülkesi",
+  "academicCountry:master": "yüksek lisans ülkesi",
+};
+
+/** Build one PII-free, staff-readable final-submit failure. */
+export function buildSitStudentCreateFailureDetail(input: {
+  unsetCritical: string[];
+  inlineError?: string | null;
+  stepTitle?: string | null;
+}): string {
+  const unset = [...new Set(input.unsetCritical)]
+    .map((field) => SIT_CREATE_FIELD_LABELS[field] || field)
+    .filter(Boolean);
+  const inline = (input.inlineError || "").trim();
+  if (unset.length > 0) {
+    return (
+      `öğrenci kaydedilemedi: zorunlu alan doldurulamadı (${unset.join(", ")})` +
+      (inline ? ` — portal hatası: ${inline}` : "")
+    );
+  }
+  if (inline)
+    return `öğrenci kaydedilemedi — portal doğrulama hatası: ${inline}`;
+  const step = (input.stepTitle || "bilinmeyen adım").trim();
+  return `SIT öğrenci oluşturulamadı — son adım: "${step}"`;
+}
+
 /**
  * Resolve which completed-education record a live SIT country question asks
  * for. SIT changes the label by application level:
@@ -496,10 +543,25 @@ export function sitAcademicHistoryLevelFromCountryLabel(
 }
 
 /**
+ * The completed education level whose country SIT requires for an application.
+ * This is intentionally derived from the requested study level, never from
+ * nationality or any other identity field.
+ */
+export function requiredSitAcademicHistoryLevel(
+  applicationLevel: string | undefined | null,
+): SitAcademicHistoryLevel {
+  const f = fold(applicationLevel ?? "");
+  if (/\b(phd|ph d|doctorate|doctoral|doktora)\b/.test(f)) return "master";
+  if (/\b(master|msc|ma|graduate|yuksek lisans)\b/.test(f)) return "bachelor";
+  return "high_school";
+}
+
+/**
  * Pick the matching structured education row for SIT. Explicit
  * education_records always win. Legacy student columns remain a compatibility
- * fallback for historical students; nationality is used only as the final
- * country fallback because the old CRM had no education-country column.
+ * fallback for historical school names, but citizenship is never a school
+ * country fallback. Missing country must remain missing so preflight can stop
+ * an unsafe portal submission.
  */
 export function resolveSitAcademicHistory(
   profile: SitAcademicHistoryInput,
@@ -531,7 +593,6 @@ export function resolveSitAcademicHistory(
     (requiredLevel === "high_school"
       ? profile.highSchoolCountry?.trim() || profile.schoolCountry?.trim()
       : "") ||
-    profile.nationality?.trim() ||
     "";
 
   return {
@@ -858,7 +919,7 @@ export function matchSitMemberUniversity(
   for (const entry of matches) {
     canonical.set(fold(entry), entry);
   }
-  return canonical.size === 1 ? [...canonical.values()][0] ?? null : null;
+  return canonical.size === 1 ? ([...canonical.values()][0] ?? null) : null;
 }
 
 export function isSitMember(

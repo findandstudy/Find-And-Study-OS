@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { useI18n } from "@/hooks/use-i18n";
 import { Loader2, FileSignature, Eraser, AlertCircle, LogOut, Upload, X, Lock } from "lucide-react";
 import { performLogout } from "@/lib/logout";
+import { uploadAndFinalizeObject } from "@/lib/finalizeObjectUpload";
 
 const BASE_URL = (import.meta.env.BASE_URL || "/").replace(/\/$/, "");
 const CURRENT_YEAR = String(new Date().getFullYear());
@@ -91,7 +92,7 @@ async function uploadFileToStorage(file: File): Promise<string> {
     body: JSON.stringify({ name: file.name, size: file.size, contentType: file.type, prefix: "agent-onboarding" }),
   });
   if (!urlRes.uploadURL || !urlRes.objectPath) throw new Error("Failed to get upload URL");
-  const putRes = await fetch(urlRes.uploadURL, { method: "PUT", body: file, headers: { "Content-Type": file.type } });
+  const putRes = await uploadAndFinalizeObject(urlRes.uploadURL, urlRes.objectPath, { body: file, headers: { "Content-Type": file.type } });
   if (!putRes.ok) throw new Error("Upload failed");
   const strippedPath = urlRes.objectPath.replace(/^\/objects/, "");
   return `${BASE_URL}/api/storage/objects${strippedPath}`;

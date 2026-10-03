@@ -37,7 +37,11 @@ import {
   portalSessionCreds,
   type ResolvedCreds,
 } from "../../portalCreds.js";
-import { fold, matchProgram, type ProgramCandidate } from "../../programMatch.js";
+import {
+  fold,
+  matchProgram,
+  type ProgramCandidate,
+} from "../../programMatch.js";
 import { db, portalProgramCacheTable } from "@workspace/db";
 import {
   SIT_URLS,
@@ -70,6 +74,7 @@ import {
   hasSitProgramSubjectAnchor,
   buildSitProgramMissingContext,
   matchSitProgramExactFormatting,
+  buildSitStudentCreateFailureDetail,
 } from "./helpers.js";
 import {
   findStudent,
@@ -115,7 +120,8 @@ function sitPublicAssetBase(): string | null {
   // Durable production fallback: the canonical public app origin. Keeps external
   // create webhooks working even if PUBLIC_APP_BASE is ever unset in prod. In
   // non-production we return null so localhost/dev never leaks a prod URL.
-  if (process.env.NODE_ENV === "production") return "https://apply.findandstudy.com";
+  if (process.env.NODE_ENV === "production")
+    return "https://apply.findandstudy.com";
   return null;
 }
 
@@ -244,7 +250,8 @@ function defaultAcademicYear(now: Date = new Date()): string {
 // ---------------------------------------------------------------------------
 // Small typed locator utilities (no `any`).
 // ---------------------------------------------------------------------------
-const sleep = (page: Page, ms: number): Promise<void> => page.waitForTimeout(ms);
+const sleep = (page: Page, ms: number): Promise<void> =>
+  page.waitForTimeout(ms);
 
 /** Extract a YYYY-MM-DD date from an ISO-8601 string; undefined if unparseable. */
 function isoDateOnly(v: string | undefined | null): string | undefined {
@@ -359,7 +366,9 @@ export function isExpectedSitAuthRedirect(
 ): boolean {
   if (!SIT_LOGIN.loginUrlMarker.test(currentUrl)) return false;
   const message = error instanceof Error ? error.message : String(error ?? "");
-  return /ERR_ABORTED|navigation.*interrupted|frame was detached/i.test(message);
+  return /ERR_ABORTED|navigation.*interrupted|frame was detached/i.test(
+    message,
+  );
 }
 
 /** Read document.body.innerText (best-effort; "" on failure). */
@@ -401,7 +410,11 @@ async function resolveControl(
         // Only trust an explicit association (wrapping <label> or label[for=id]);
         // a loose sibling-label lookup can bind a neighbouring field's label in
         // dense form groups and mis-fill the wrong control.
-        const label = (el.closest("label")?.textContent || forLabel?.textContent || "")
+        const label = (
+          el.closest("label")?.textContent ||
+          forLabel?.textContent ||
+          ""
+        )
           .trim()
           .replace(/\s+/g, " ");
         const input = el as HTMLInputElement;
@@ -414,7 +427,9 @@ async function resolveControl(
         ]
           .filter(Boolean)
           .join(" ");
-        const visible = !!(el.offsetParent !== null || el.getClientRects().length);
+        const visible = !!(
+          el.offsetParent !== null || el.getClientRects().length
+        );
         return { hay, visible };
       });
       if (meta.visible && labelRe.test(meta.hay)) return h;
@@ -458,7 +473,9 @@ async function fillField(
   if (h) {
     try {
       await h.fill(value);
-      const got = await h.evaluate((el) => (el as HTMLInputElement).value || "");
+      const got = await h.evaluate(
+        (el) => (el as HTMLInputElement).value || "",
+      );
       await h.press("Tab").catch(() => {});
       return !!got;
     } catch {
@@ -582,17 +599,27 @@ async function selectField(
   const scopedSel = formItemByLabel(page, labelRe).locator("select").first();
   if (await scopedSel.count().catch(() => 0)) {
     try {
-      const value = await findHydratedNativeSelectValue(
-        page,
-        () => scopedSel.evaluate(readNativeSelectState, optionRe.source),
+      const value = await findHydratedNativeSelectValue(page, () =>
+        scopedSel.evaluate(readNativeSelectState, optionRe.source),
       );
       if (value != null) {
         await scopedSel.selectOption(value).catch(() => {});
-        const ok = await scopedSel
-          .evaluate(
-            (el, v) => (el as unknown as HTMLSelectElement).value === v,
-            value,
-          )
+        await scopedSel.dispatchEvent("input").catch(() => {});
+        await scopedSel.dispatchEvent("change").catch(() => {});
+        await scopedSel.dispatchEvent("blur").catch(() => {});
+        await sleep(page, 500);
+        const ok = await formItemByLabel(page, labelRe)
+          .locator("select")
+          .first()
+          .evaluate((el, reSrc) => {
+            const select = el as unknown as HTMLSelectElement;
+            const option = select.options[select.selectedIndex];
+            const re = new RegExp(String(reSrc), "i");
+            return Boolean(
+              option &&
+              (re.test(option.textContent || "") || re.test(option.value)),
+            );
+          }, optionRe.source)
           .catch(() => false);
         if (ok) return true;
       }
@@ -604,17 +631,26 @@ async function selectField(
   const sel = await resolveControl(page, labelRe, "select");
   if (sel) {
     try {
-      const value = await findHydratedNativeSelectValue(
-        page,
-        () => sel.evaluate(readNativeSelectState, optionRe.source),
+      const value = await findHydratedNativeSelectValue(page, () =>
+        sel.evaluate(readNativeSelectState, optionRe.source),
       );
       if (value != null) {
         await sel.selectOption(value).catch(() => {});
+        await sel.dispatchEvent("input").catch(() => {});
+        await sel.dispatchEvent("change").catch(() => {});
+        await sel.dispatchEvent("blur").catch(() => {});
+        await sleep(page, 500);
         // Assert the intended option is now selected (not merely non-empty).
-        const ok = await sel.evaluate(
-          (el, v) => (el as unknown as HTMLSelectElement).value === v,
-          value,
-        );
+        const refreshed = await resolveControl(page, labelRe, "select");
+        const ok = await refreshed?.evaluate((el, reSrc) => {
+          const select = el as unknown as HTMLSelectElement;
+          const option = select.options[select.selectedIndex];
+          const re = new RegExp(String(reSrc), "i");
+          return Boolean(
+            option &&
+            (re.test(option.textContent || "") || re.test(option.value)),
+          );
+        }, optionRe.source);
         if (ok) return true;
       }
     } catch {
@@ -622,7 +658,8 @@ async function selectField(
     }
   }
   // 2. Custom role=button combobox (existing behaviour).
-  if (await selectCombo(page, labelRe, optionRe).catch(() => false)) return true;
+  if (await selectCombo(page, labelRe, optionRe).catch(() => false))
+    return true;
   // 3. Searchable combobox: type the query into the input, then pick the option.
   if (query) {
     const inp = await resolveControl(page, labelRe, "input");
@@ -641,7 +678,12 @@ async function selectField(
         if (await opt.count()) {
           await opt.click({ timeout: 3000 }).catch(() => {});
           await sleep(page, 900);
-          return true;
+          const selected = await formItemByLabel(page, labelRe)
+            .locator('button[role="combobox"]')
+            .first()
+            .textContent()
+            .catch(() => "");
+          if (optionRe.test((selected || "").trim())) return true;
         }
         await page.keyboard.press("Escape").catch(() => {});
       } catch {
@@ -708,26 +750,25 @@ async function selectSitApplyingFor(
   // sidebar cmdk input ("Search menu items..."); the former global `.last()`
   // lookup could type the degree into that unrelated menu and leave this
   // required field empty on every Bachelor/Master/Associate submission.
-  const optionRoots = page
-    .locator(
-      '[role="listbox"]:visible, ' +
-        '[data-radix-popper-content-wrapper]:visible, ' +
-        '[data-slot="popover-content"]:visible, ' +
-        '[cmdk-list]:visible, ' +
-        '[data-slot="command-list"]:visible',
-    );
+  const optionRoots = page.locator(
+    '[role="listbox"]:visible, ' +
+      "[data-radix-popper-content-wrapper]:visible, " +
+      '[data-slot="popover-content"]:visible, ' +
+      "[cmdk-list]:visible, " +
+      '[data-slot="command-list"]:visible',
+  );
   // Only trust a popup root after the target trigger reports itself expanded.
   // The last visible root is the newly opened dropdown; older visible cmdk
   // roots belong to the persistent sidebar.
-  const rootCount = expanded
-    ? await optionRoots.count().catch(() => 0)
-    : 0;
+  const rootCount = expanded ? await optionRoots.count().catch(() => 0) : 0;
   const optionRoot = optionRoots.last();
 
   let searched = false;
   if (rootCount > 0) {
     const commandInput = optionRoot
-      .locator('[cmdk-input], [data-slot="command-input"], input[role="combobox"]')
+      .locator(
+        '[cmdk-input], [data-slot="command-input"], input[role="combobox"]',
+      )
       .first();
     if (
       (await commandInput.count().catch(() => 0)) &&
@@ -744,7 +785,7 @@ async function selectSitApplyingFor(
     option = optionRoot
       .locator(
         '[cmdk-item], [data-slot="command-item"], ' +
-          '[data-radix-collection-item], [data-value], button',
+          "[data-radix-collection-item], [data-value], button",
       )
       .filter({ hasText: exactOption })
       .first();
@@ -855,8 +896,18 @@ async function fillDateInput(
 }
 
 const MONTHS_EN = [
-  "january", "february", "march", "april", "may", "june",
-  "july", "august", "september", "october", "november", "december",
+  "january",
+  "february",
+  "march",
+  "april",
+  "may",
+  "june",
+  "july",
+  "august",
+  "september",
+  "october",
+  "november",
+  "december",
 ];
 
 /**
@@ -898,7 +949,12 @@ async function clickCalendarDay(
           (el.getAttribute("aria-label") || "") +
           " " +
           (el.getAttribute("data-day") || "");
-        return { text: (el.textContent || "").trim(), outside, disabled, label };
+        return {
+          text: (el.textContent || "").trim(),
+          outside,
+          disabled,
+          label,
+        };
       })
       .catch(() => null);
     if (!info || info.disabled || info.outside) continue;
@@ -915,12 +971,16 @@ async function clickCalendarDay(
     const better = matches.find(
       (m) =>
         m.label.includes(iso) ||
-        (new RegExp(monthName, "i").test(m.label) && m.label.includes(String(year))),
+        (new RegExp(monthName, "i").test(m.label) &&
+          m.label.includes(String(year))),
     );
     if (better === undefined) return false;
     pick = better.idx;
   }
-  await loc.nth(pick).click({ timeout: 2000 }).catch(() => {});
+  await loc
+    .nth(pick)
+    .click({ timeout: 2000 })
+    .catch(() => {});
   return true;
 }
 
@@ -964,11 +1024,15 @@ async function fillPopoverDate(
   const day = parseInt(d, 10);
 
   const trigger = item
-    .locator('button[data-slot="popover-trigger"], button, [role="button"], [role="combobox"]')
+    .locator(
+      'button[data-slot="popover-trigger"], button, [role="button"], [role="combobox"]',
+    )
     .first();
   if (!(await trigger.count().catch(() => 0))) return false;
 
-  const initialText = ((await trigger.textContent().catch(() => "")) || "").trim();
+  const initialText = (
+    (await trigger.textContent().catch(() => "")) || ""
+  ).trim();
   const yearRe = new RegExp(`\\b${year}\\b`);
   const dayRe = new RegExp(`\\b0?${day}\\b`);
   const verify = async (): Promise<boolean> => {
@@ -984,7 +1048,9 @@ async function fillPopoverDate(
   // to <body>, so it can't be found inside the form-item): prefer aria-controls,
   // then the open-state popover, and only then a loose last() fallback.
   const resolvePopover = async (): Promise<Locator> => {
-    const controls = await trigger.getAttribute("aria-controls").catch(() => null);
+    const controls = await trigger
+      .getAttribute("aria-controls")
+      .catch(() => null);
     if (controls) {
       const byId = page.locator(`[id="${controls}"]`);
       if (await byId.count().catch(() => 0)) return byId.first();
@@ -1062,7 +1128,9 @@ async function fillPopoverDate(
           const name = MONTHS_EN[monthNum - 1];
           const mopt =
             opts.find((o) => o.v === String(monthNum - 1)) ||
-            (opts.length <= 13 ? opts.find((o) => o.v === String(monthNum)) : undefined) ||
+            (opts.length <= 13
+              ? opts.find((o) => o.v === String(monthNum))
+              : undefined) ||
             opts.find((o) => new RegExp(`^${name}`, "i").test(o.t));
           if (mopt) {
             await s.selectOption(mopt.v).catch(() => {});
@@ -1071,7 +1139,12 @@ async function fillPopoverDate(
         }
       }
       if (
-        (await clickCalendarDay(popover, day, monthNum - 1, parseInt(year, 10))) &&
+        (await clickCalendarDay(
+          popover,
+          day,
+          monthNum - 1,
+          parseInt(year, 10),
+        )) &&
         (await verify())
       ) {
         return true;
@@ -1102,7 +1175,12 @@ async function fillPopoverDate(
       await sleep(page, 120);
     }
     if (
-      (await clickCalendarDay(popover, day, monthNum - 1, parseInt(year, 10))) &&
+      (await clickCalendarDay(
+        popover,
+        day,
+        monthNum - 1,
+        parseInt(year, 10),
+      )) &&
       (await verify())
     ) {
       return true;
@@ -1201,8 +1279,22 @@ async function selectCombo(
     await sleep(page, 1100);
     // Clicking is not proof: Radix/cmdk can swallow a click while the visible
     // value remains "-Select-". Require exact intended-value readback.
-    const selectedText = ((await trigger.textContent().catch(() => "")) || "").trim();
-    if (valueRe.test(selectedText)) return true;
+    const selectedText = (
+      (await trigger.textContent().catch(() => "")) || ""
+    ).trim();
+    if (valueRe.test(selectedText)) {
+      // React can rebuild the academic field after the option click. Re-resolve
+      // the trigger and require the intended value to survive that render.
+      await sleep(page, 500);
+      const stableText = (
+        (await formItemByLabel(page, triggerRe)
+          .locator('button[role="combobox"]')
+          .first()
+          .textContent()
+          .catch(() => "")) || ""
+      ).trim();
+      if (valueRe.test(stableText)) return true;
+    }
   }
   // Close the dropdown to avoid blocking later interactions.
   await page.keyboard.press("Escape").catch(() => {});
@@ -1215,7 +1307,9 @@ async function selectCombo(
  */
 async function dismissInactivityModal(page: Page): Promise<void> {
   try {
-    const stay = page.getByRole("button", { name: SIT_MODAL.stayLoggedIn }).first();
+    const stay = page
+      .getByRole("button", { name: SIT_MODAL.stayLoggedIn })
+      .first();
     if ((await stay.count()) && (await stay.isVisible().catch(() => false))) {
       await stay.click({ timeout: 4000 }).catch(() => {});
       await sleep(page, 800);
@@ -1250,7 +1344,9 @@ async function setToggle(
   const item = page
     .locator('div[data-slot="form-item"]')
     .filter({
-      has: page.locator('label[data-slot="form-label"]', { hasText: headingRe }),
+      has: page.locator('label[data-slot="form-label"]', {
+        hasText: headingRe,
+      }),
     })
     .first();
 
@@ -1401,7 +1497,10 @@ async function dumpWizardForm(
     // (the contact-step dump only ever saw a menu search box).
     const collected: any[] = [];
     for (const frame of page.frames()) {
-      const frameName = frame === page.mainFrame() ? "" : (frame.url() || frame.name() || "sub").slice(0, 60);
+      const frameName =
+        frame === page.mainFrame()
+          ? ""
+          : (frame.url() || frame.name() || "sub").slice(0, 60);
       const dump = (await frame
         .evaluate(DEEP_CONTROL_DUMP_JS)
         .catch(() => [])) as any[];
@@ -1623,7 +1722,9 @@ async function uploadViaChooser(
  */
 function cleanPhone(raw: string): string {
   if (!raw) return "";
-  let s = String(raw).trim().replace(/[^\d+]/g, "");
+  let s = String(raw)
+    .trim()
+    .replace(/[^\d+]/g, "");
   if (s.startsWith("00")) s = "+" + s.slice(2);
   if (!s.startsWith("+")) return s;
   // Ülke kodundan sonra yanlışlıkla kalan ulusal trunk hanesini düzelt.
@@ -1631,7 +1732,7 @@ function cleanPhone(raw: string): string {
   // hanesiyle başlıyorsa devreye girer — geçerli bir numaraya asla dokunmaz.
   const trunkFix: Array<[string, number, string]> = [
     ["+998", 9, "8"], // Uzbekistan
-    ["+7", 10, "8"],  // Russia / Kazakhstan
+    ["+7", 10, "8"], // Russia / Kazakhstan
     ["+994", 9, "0"], // Azerbaijan
     ["+996", 9, "0"], // Kyrgyzstan
     ["+992", 9, "8"], // Tajikistan
@@ -1661,13 +1762,28 @@ async function uploadDocRow(
     // Text-based discovery: getByRole with name= uses accessible name which may
     // differ from visible text in SIT's SPA. has-text filter on the raw button
     // text is more robust when aria labels are missing.
-    let addBtn = page.locator("button").filter({ hasText: /add new document/i }).first();
-    if (!(await addBtn.count())) addBtn = page.locator("button").filter({ hasText: /add.*document/i }).first();
-    if (!(await addBtn.count())) addBtn = page.getByRole("button", { name: /add (new )?doc/i }).first();
+    let addBtn = page
+      .locator("button")
+      .filter({ hasText: /add new document/i })
+      .first();
+    if (!(await addBtn.count()))
+      addBtn = page
+        .locator("button")
+        .filter({ hasText: /add.*document/i })
+        .first();
+    if (!(await addBtn.count()))
+      addBtn = page.getByRole("button", { name: /add (new )?doc/i }).first();
     if (!(await addBtn.count())) {
       // Last resort: any button visible on screen whose text includes "Add"
       const allBtns = await page.locator("button").allTextContents();
-      logger.warn(`[sit] uploadDocRow ${key}: 'Add New Document' butonu yok — görünür butonlar: ${JSON.stringify(allBtns.map((t: string) => t.trim()).filter(Boolean).slice(0, 15))}`);
+      logger.warn(
+        `[sit] uploadDocRow ${key}: 'Add New Document' butonu yok — görünür butonlar: ${JSON.stringify(
+          allBtns
+            .map((t: string) => t.trim())
+            .filter(Boolean)
+            .slice(0, 15),
+        )}`,
+      );
       return false;
     }
     await addBtn.scrollIntoViewIfNeeded().catch(() => {});
@@ -1696,12 +1812,12 @@ async function uploadDocRow(
             '[role="option"], [cmdk-item], [data-slot="command-item"]',
           ),
         );
-        return els
-          .map((e) => (e.textContent || "").trim())
-          .filter(Boolean);
+        return els.map((e) => (e.textContent || "").trim()).filter(Boolean);
       })
       .catch(() => [] as string[]);
-    logger.info(`[sit] DOCOPTS ${key} kw=${keyword} => ${JSON.stringify(opts)}`);
+    logger.info(
+      `[sit] DOCOPTS ${key} kw=${keyword} => ${JSON.stringify(opts)}`,
+    );
 
     let picked = false;
     try {
@@ -1734,14 +1850,18 @@ async function uploadDocRow(
         .setInputFiles(docPath)
         .catch(() => {});
       await page.waitForTimeout(900);
-      logger.info(`[sit] DOCUP ${key} picked=${picked} via=setInputFiles fc=${fc}`);
+      logger.info(
+        `[sit] DOCUP ${key} picked=${picked} via=setInputFiles fc=${fc}`,
+      );
       return true;
     }
 
     // Fallback: a browse/choose button that opens a native file chooser.
     try {
       const browseBtn = page
-        .getByRole("button", { name: /choose|browse|upload|select file|dosya/i })
+        .getByRole("button", {
+          name: /choose|browse|upload|select file|dosya/i,
+        })
         .last();
       if (await browseBtn.count()) {
         const [chooser] = await Promise.all([
@@ -1755,7 +1875,9 @@ async function uploadDocRow(
       }
     } catch {}
 
-    logger.warn(`[sit] uploadDocRow ${key}: tip seçildi ama file input/chooser bulunamadı (picked=${picked})`);
+    logger.warn(
+      `[sit] uploadDocRow ${key}: tip seçildi ama file input/chooser bulunamadı (picked=${picked})`,
+    );
     return false;
   } catch (e) {
     logger.warn(`[sit] uploadDocRow ${key} hata: ${(e as any)?.message}`);
@@ -1798,7 +1920,10 @@ function closestCandidates(
 ): { name: string; score: number }[] {
   const qt = simpleTokens(queryName);
   return pool
-    .map((c) => ({ name: c.name, score: simpleOverlapScore(qt, simpleTokens(c.name)) }))
+    .map((c) => ({
+      name: c.name,
+      score: simpleOverlapScore(qt, simpleTokens(c.name)),
+    }))
     .sort((a, b) => b.score - a.score)
     .slice(0, topN);
 }
@@ -1894,13 +2019,20 @@ async function performLogin(page: Page, creds: ResolvedCreds): Promise<void> {
  */
 async function resolveCreatedStudentId(
   page: Page,
-  by: { email?: string; passportNumber?: string; firstName?: string; lastName?: string },
+  by: {
+    email?: string;
+    passportNumber?: string;
+    firstName?: string;
+    lastName?: string;
+  },
 ): Promise<string | null> {
   // ~1+2+3+4+5+5+5+8+10+12 = ~55s across 10 attempts — tolerant of Zoho/SIT
   // indexing lag (25s previously proved too short in production: the create
   // webhook persisted, but the record only became queryable after the poll
   // window closed → "öğrenci id çözümlenemedi" despite a real create).
-  const backoffMs = [1000, 2000, 3000, 4000, 5000, 5000, 5000, 8000, 10000, 12000];
+  const backoffMs = [
+    1000, 2000, 3000, 4000, 5000, 5000, 5000, 8000, 10000, 12000,
+  ];
   const started = Date.now();
   for (let i = 0; i < backoffMs.length; i++) {
     await sleep(page, backoffMs[i]);
@@ -1948,9 +2080,7 @@ export const sitAdapter: SitAdapter = {
     // still defers to the strict matcher for the actual decision.
     if (isAllowedUniversity(name)) return true;
     const f = fold(name);
-    return SIT_ALLOWLIST_FOLDED.some(
-      (entry) => f === entry,
-    );
+    return SIT_ALLOWLIST_FOLDED.some((entry) => f === entry);
   },
 
   async login(opts?: LoginOpts): Promise<AdapterSession> {
@@ -2128,7 +2258,8 @@ export const sitAdapter: SitAdapter = {
       // existing Zoho student is a known gap until SIT provides such a
       // webhook; logged clearly so it is never silently lost.
       const hasAssetsToBackfill =
-        !!profile.photoUrl?.trim() || (profile.studentDocuments?.length ?? 0) > 0;
+        !!profile.photoUrl?.trim() ||
+        (profile.studentDocuments?.length ?? 0) > 0;
       logger.info(
         `[sit] mevcut öğrenci bulundu (id=${existing.ref.id}) — yeniden kullanılıyor` +
           (hasAssetsToBackfill
@@ -2171,7 +2302,10 @@ export const sitAdapter: SitAdapter = {
     // attached during create via the wizard's file-choosers (the whole reason
     // for this rewrite). Refuse to create a student that would carry no docs.
     const anyLocalFile = !!(
-      files.photo || files.passport || files.transcript || files.diploma
+      files.photo ||
+      files.passport ||
+      files.transcript ||
+      files.diploma
     );
     const anyAssetIntent =
       !!profile.photoUrl?.trim() || (profile.studentDocuments?.length ?? 0) > 0;
@@ -2194,7 +2328,8 @@ export const sitAdapter: SitAdapter = {
         created: false,
         alreadyExists: false,
         createdViaWebhook: false,
-        detail: "öğrenci oluşturulamadı: fotoğraf/belge yok (sıfır-belge koruması)",
+        detail:
+          "öğrenci oluşturulamadı: fotoğraf/belge yok (sıfır-belge koruması)",
       };
     }
 
@@ -2213,7 +2348,9 @@ export const sitAdapter: SitAdapter = {
       // overlay, selector drift). Log the real page state and re-navigate once.
       const diagHeading = await page
         .evaluate(() =>
-          (document.querySelector("h1,h2,h3")?.textContent || "").trim().slice(0, 120),
+          (document.querySelector("h1,h2,h3")?.textContent || "")
+            .trim()
+            .slice(0, 120),
         )
         .catch(() => "");
       logger.warn(
@@ -2224,13 +2361,19 @@ export const sitAdapter: SitAdapter = {
       if (!(await clickButton(page, SIT_NAV.addStudentName))) {
         const diagHeading2 = await page
           .evaluate(() =>
-            (document.querySelector("h1,h2,h3")?.textContent || "").trim().slice(0, 120),
+            (document.querySelector("h1,h2,h3")?.textContent || "")
+              .trim()
+              .slice(0, 120),
           )
           .catch(() => "");
         logger.warn(
           `[sit] Add Student düğmesi kurtarma sonrası da yok — url=${page.url()} başlık="${diagHeading2}"`,
         );
-        await captureWizardFail(page, `addstudent${Date.now().toString(36)}`, "add-student-missing");
+        await captureWizardFail(
+          page,
+          `addstudent${Date.now().toString(36)}`,
+          "add-student-missing",
+        );
         // Retryable: transient session/hydration problems must not silently
         // cascade into "öğrenci id çözümlenemedi" at the application step.
         throw new Error(
@@ -2340,7 +2483,11 @@ export const sitAdapter: SitAdapter = {
       if (dob) {
         mark(
           "dob",
-          await setDateField(page, SIT_STUDENT_FIELDS.dateOfBirth, profile.dateOfBirth),
+          await setDateField(
+            page,
+            SIT_STUDENT_FIELDS.dateOfBirth,
+            profile.dateOfBirth,
+          ),
         );
       }
       mark(
@@ -2472,8 +2619,12 @@ export const sitAdapter: SitAdapter = {
         const selIdx = await page.evaluate(() => {
           const arr = Array.from(document.querySelectorAll("select"));
           for (let k = 0; k < arr.length; k++) {
-            const fi = (arr[k] as HTMLElement).closest('[data-slot="form-item"]');
-            const lab = fi ? (fi.querySelector("label")?.textContent || "").toLowerCase() : "";
+            const fi = (arr[k] as HTMLElement).closest(
+              '[data-slot="form-item"]',
+            );
+            const lab = fi
+              ? (fi.querySelector("label")?.textContent || "").toLowerCase()
+              : "";
             if (lab.includes("residence")) return k;
           }
           return -1;
@@ -2484,7 +2635,10 @@ export const sitAdapter: SitAdapter = {
           .catch(() => [] as string[]);
         const isContactStep =
           selIdx >= 0 || isSitContactStepLabels(visibleLabels);
-        const cval2 = toEnglishCountryName(profile.nationality) || profile.nationality || "";
+        const cval2 =
+          toEnglishCountryName(profile.nationality) ||
+          profile.nationality ||
+          "";
         let cOk = false;
         let telOk = false;
         let telDbg = "not-contact";
@@ -2495,18 +2649,28 @@ export const sitAdapter: SitAdapter = {
             const cs = page.locator("select").nth(selIdx);
             try {
               await cs.selectOption({ label: cval2 });
-              await cs.evaluate((el: Element) => el.dispatchEvent(new Event("change", { bubbles: true }))).catch(() => {});
+              await cs
+                .evaluate((el: Element) =>
+                  el.dispatchEvent(new Event("change", { bubbles: true })),
+                )
+                .catch(() => {});
               cOk = true;
             } catch {}
             if (!cOk) {
-              const opts = (await cs.locator("option").allTextContents()).map((o) => o.trim());
+              const opts = (await cs.locator("option").allTextContents()).map(
+                (o) => o.trim(),
+              );
               const hit =
                 opts.find((o) => o.toLowerCase() === cval2.toLowerCase()) ||
                 opts.find((o) => o.toLowerCase().includes(cval2.toLowerCase()));
               if (hit) {
                 try {
                   await cs.selectOption({ label: hit });
-                  await cs.evaluate((el: Element) => el.dispatchEvent(new Event("change", { bubbles: true }))).catch(() => {});
+                  await cs
+                    .evaluate((el: Element) =>
+                      el.dispatchEvent(new Event("change", { bubbles: true })),
+                    )
+                    .catch(() => {});
                   cOk = true;
                 } catch {}
               }
@@ -2553,19 +2717,25 @@ export const sitAdapter: SitAdapter = {
               const telCount = await allTel.count();
               for (let ti = 0; ti < telCount; ti++) {
                 const telEl = allTel.nth(ti);
-                const ph = ((await telEl.getAttribute("placeholder").catch(() => "")) || "").trim();
+                const ph = (
+                  (await telEl.getAttribute("placeholder").catch(() => "")) ||
+                  ""
+                ).trim();
                 // Dial-code boxes have short placeholders like "+90", "+1", "+"; skip them.
                 if (/^\+?\d{0,4}$/.test(ph)) continue;
-                const r = await telEl.evaluate((el: Element, v: string) => {
-                  const inp = el as HTMLInputElement;
-                  const proto = Object.getPrototypeOf(inp);
-                  const d = Object.getOwnPropertyDescriptor(proto, "value");
-                  if (d?.set) d.set.call(inp, v); else inp.value = v;
-                  inp.dispatchEvent(new Event("input", { bubbles: true }));
-                  inp.dispatchEvent(new Event("change", { bubbles: true }));
-                  inp.dispatchEvent(new Event("blur", { bubbles: true }));
-                  return "val=" + inp.value;
-                }, phoneVal).catch(() => "");
+                const r = await telEl
+                  .evaluate((el: Element, v: string) => {
+                    const inp = el as HTMLInputElement;
+                    const proto = Object.getPrototypeOf(inp);
+                    const d = Object.getOwnPropertyDescriptor(proto, "value");
+                    if (d?.set) d.set.call(inp, v);
+                    else inp.value = v;
+                    inp.dispatchEvent(new Event("input", { bubbles: true }));
+                    inp.dispatchEvent(new Event("change", { bubbles: true }));
+                    inp.dispatchEvent(new Event("blur", { bubbles: true }));
+                    return "val=" + inp.value;
+                  }, phoneVal)
+                  .catch(() => "");
                 if (r && r.startsWith("val=") && r.length > 4) {
                   telDbg = "pw-direct " + r;
                   telOk = true;
@@ -2580,7 +2750,8 @@ export const sitAdapter: SitAdapter = {
                 const r = (await frame
                   .evaluate(DEEP_FILL_INPUT_JS, {
                     val: phoneVal,
-                    labelRe: "(mobile|phone|telefon|tel\\b|gsm|whatsapp|number)",
+                    labelRe:
+                      "(mobile|phone|telefon|tel\\b|gsm|whatsapp|number)",
                     excludeRe: "(code|kod|dial|country)",
                   })
                   .catch(() => "eval-err")) as string;
@@ -2596,9 +2767,18 @@ export const sitAdapter: SitAdapter = {
           }
         }
         logger.info(
-          "[sit] CONTACTFIX2 contact=" + isContactStep + " telOk=" + telOk +
-            " telDbg=" + telDbg + " cval='" + cval2 + "' selIdx=" + selIdx +
-            " cOk=" + cOk,
+          "[sit] CONTACTFIX2 contact=" +
+            isContactStep +
+            " telOk=" +
+            telOk +
+            " telDbg=" +
+            telDbg +
+            " cval='" +
+            cval2 +
+            "' selIdx=" +
+            selIdx +
+            " cOk=" +
+            cOk,
         );
       } catch (e) {
         logger.info("[sit] CONTACTFIX err " + (e as any)?.message);
@@ -2616,7 +2796,11 @@ export const sitAdapter: SitAdapter = {
       try {
         const cityVal = String(profile.addressCity || "").trim();
         if (cityVal) {
-          const cityOk = await fillField(page, SIT_STUDENT_FIELDS.city, cityVal);
+          const cityOk = await fillField(
+            page,
+            SIT_STUDENT_FIELDS.city,
+            cityVal,
+          );
           mark("city", cityOk);
           logger.info(`[sit] CITYFILL city='${cityVal}' ok=${cityOk}`);
         }
@@ -2626,10 +2810,15 @@ export const sitAdapter: SitAdapter = {
       // Robust residence-country: target the labelled select directly (independent of
       // the country label regex) and fuzzy-match the English nationality country name.
       try {
-        const cval = toEnglishCountryName(profile.nationality) || profile.nationality || "";
+        const cval =
+          toEnglishCountryName(profile.nationality) ||
+          profile.nationality ||
+          "";
         if (cval) {
           const csel = page
-            .locator('div[data-slot="form-item"]:has(label:has-text("Country of Residence")) select')
+            .locator(
+              'div[data-slot="form-item"]:has(label:has-text("Country of Residence")) select',
+            )
             .first();
           if (await csel.count()) {
             const cur = await csel.inputValue().catch(() => "");
@@ -2640,10 +2829,14 @@ export const sitAdapter: SitAdapter = {
                 done = true;
               } catch {}
               if (!done) {
-                const opts = (await csel.locator("option").allTextContents()).map((o) => o.trim());
+                const opts = (
+                  await csel.locator("option").allTextContents()
+                ).map((o) => o.trim());
                 const hit =
                   opts.find((o) => o.toLowerCase() === cval.toLowerCase()) ||
-                  opts.find((o) => cval && o.toLowerCase().includes(cval.toLowerCase()));
+                  opts.find(
+                    (o) => cval && o.toLowerCase().includes(cval.toLowerCase()),
+                  );
                 if (hit) {
                   try {
                     await csel.selectOption({ label: hit });
@@ -2733,7 +2926,10 @@ export const sitAdapter: SitAdapter = {
           // Log the live option texts so an unmapped nationality is diagnosable
           // from the run log instead of a silent BULUNAMADI.
           try {
-            const opts = await formItemByLabel(page, SIT_STUDENT_FIELDS.nationality)
+            const opts = await formItemByLabel(
+              page,
+              SIT_STUDENT_FIELDS.nationality,
+            )
               .locator("select")
               .first()
               .evaluate((el) =>
@@ -2822,7 +3018,11 @@ export const sitAdapter: SitAdapter = {
       // Academics
       mark(
         "schoolName",
-        await fillField(page, SIT_STUDENT_FIELDS.schoolName, profile.schoolName),
+        await fillField(
+          page,
+          SIT_STUDENT_FIELDS.schoolName,
+          profile.schoolName,
+        ),
       );
       if (gpa !== undefined) {
         mark("gpa", await fillField(page, SIT_STUDENT_FIELDS.gpa, String(gpa)));
@@ -2836,27 +3036,32 @@ export const sitAdapter: SitAdapter = {
       }
 
       if (stepLog.length) {
-        logger.info(`[sit] wizard adım=${step + 1} alanlar: ${stepLog.join(", ")}`);
+        logger.info(
+          `[sit] wizard adım=${step + 1} alanlar: ${stepLog.join(", ")}`,
+        );
       }
 
       // Documents — attach each local file once, into its own slot. Track whether
       // this step actually EXPOSED an upload affordance so a failure before the
       // documents step is distinguishable from a failed upload.
       const wantUploads = !!(
-        files.photo || files.passport || files.transcript || files.diploma
+        files.photo ||
+        files.passport ||
+        files.transcript ||
+        files.diploma
       );
       const photoAffordanceCount = await page
-          .getByRole("button", { name: SIT_UPLOAD.photoTrigger })
-          .count()
-          .catch(() => 0);
+        .getByRole("button", { name: SIT_UPLOAD.photoTrigger })
+        .count()
+        .catch(() => 0);
       const attachmentAffordanceCount = await page
-          .getByRole("button", { name: SIT_UPLOAD.attachmentTrigger })
-          .count()
-          .catch(() => 0);
+        .getByRole("button", { name: SIT_UPLOAD.attachmentTrigger })
+        .count()
+        .catch(() => 0);
       const addDocumentAffordanceCount = await page
-          .getByRole("button", { name: /add (new )?doc(?:ument)?/i })
-          .count()
-          .catch(() => 0);
+        .getByRole("button", { name: /add (new )?doc(?:ument)?/i })
+        .count()
+        .catch(() => 0);
       const saveStudentActionCount = await page
         .getByRole("button", { name: SIT_BUTTONS.saveStudent })
         .count()
@@ -2891,43 +3096,87 @@ export const sitAdapter: SitAdapter = {
           // could make the final Create Student validation fail.
           try {
             const rowDump = await page.evaluate(() => {
-              const files = document.querySelectorAll('input[type="file"]').length;
-              const selects = Array.from(document.querySelectorAll("select")).map((se) => {
-                const fi = (se as HTMLElement).closest('[data-slot="form-item"]');
-                const lab = fi ? (fi.querySelector("label")?.textContent || "").trim() : "";
-                return lab + " [" + (se as HTMLSelectElement).options.length + "]";
+              const files =
+                document.querySelectorAll('input[type="file"]').length;
+              const selects = Array.from(
+                document.querySelectorAll("select"),
+              ).map((se) => {
+                const fi = (se as HTMLElement).closest(
+                  '[data-slot="form-item"]',
+                );
+                const lab = fi
+                  ? (fi.querySelector("label")?.textContent || "").trim()
+                  : "";
+                return (
+                  lab + " [" + (se as HTMLSelectElement).options.length + "]"
+                );
               });
-              const combos = Array.from(document.querySelectorAll('button[role="combobox"]')).map((b) => (b.textContent || "").trim());
-              const btns = Array.from(document.querySelectorAll("button")).map((b) => (b.textContent || "").trim()).filter(Boolean).slice(0, 20);
+              const combos = Array.from(
+                document.querySelectorAll('button[role="combobox"]'),
+              ).map((b) => (b.textContent || "").trim());
+              const btns = Array.from(document.querySelectorAll("button"))
+                .map((b) => (b.textContent || "").trim())
+                .filter(Boolean)
+                .slice(0, 20);
               return { files, selects, combos, btns };
             });
             logger.info("[sit] DOCROW " + JSON.stringify(rowDump));
           } catch (e) {
             logger.info("[sit] DOCROW err " + (e as any)?.message);
           }
-          logger.info(`[sit] wizard adım=${step + 1}: belge yükleme adımına ulaşıldı`);
+          logger.info(
+            `[sit] wizard adım=${step + 1}: belge yükleme adımına ulaşıldı`,
+          );
         }
       }
       if (onDocumentsStep) {
         if (files.photo && !photoUploaded) {
-          if (await uploadViaChooser(page, SIT_UPLOAD.photoTrigger, files.photo)) {
+          if (
+            await uploadViaChooser(page, SIT_UPLOAD.photoTrigger, files.photo)
+          ) {
             photoUploaded = true;
             logger.info(`[sit] wizard adım=${step + 1} yükleme: foto=ok`);
           }
         }
         const docJobs: Array<[string, RegExp, string]> = [];
         if (files.passport) {
-          docJobs.push(["passport", SIT_UPLOAD.passportTrigger, files.passport]);
+          docJobs.push([
+            "passport",
+            SIT_UPLOAD.passportTrigger,
+            files.passport,
+          ]);
         }
         if (files.transcript) {
-          docJobs.push(["transcript", SIT_UPLOAD.transcriptTrigger, files.transcript]);
+          docJobs.push([
+            "transcript",
+            SIT_UPLOAD.transcriptTrigger,
+            files.transcript,
+          ]);
         }
         if (files.diploma) {
           docJobs.push(["diploma", SIT_UPLOAD.diplomaTrigger, files.diploma]);
         }
-        if (files.english) { docJobs.push(["english", SIT_UPLOAD.attachmentTrigger, files.english]); }
-        if (files.motivation) { docJobs.push(["motivation", SIT_UPLOAD.attachmentTrigger, files.motivation]); }
-        if (files.recommendation) { docJobs.push(["recommendation", SIT_UPLOAD.attachmentTrigger, files.recommendation]); }
+        if (files.english) {
+          docJobs.push([
+            "english",
+            SIT_UPLOAD.attachmentTrigger,
+            files.english,
+          ]);
+        }
+        if (files.motivation) {
+          docJobs.push([
+            "motivation",
+            SIT_UPLOAD.attachmentTrigger,
+            files.motivation,
+          ]);
+        }
+        if (files.recommendation) {
+          docJobs.push([
+            "recommendation",
+            SIT_UPLOAD.attachmentTrigger,
+            files.recommendation,
+          ]);
+        }
         for (const [key, trig, docPath] of docJobs) {
           if (uploadedDocs.has(key)) continue;
           if (await uploadDocRow(page, key, key, docPath)) {
@@ -2982,63 +3231,135 @@ export const sitAdapter: SitAdapter = {
           // Per-field: log which labels are still showing required-field markers
           // and attempt one targeted re-fill per empty field.
           try {
-            const emptyLabels: string[] = await page.evaluate(() => {
-              const results: string[] = [];
-              // SIT marks required-but-empty fields with a red asterisk in the label
-              // and a visible error message below the input.
-              document.querySelectorAll('[data-slot="form-item"], .form-item, [class*=field]').forEach((fi) => {
-                const lab = (fi.querySelector("label")?.textContent || "").trim();
-                const hasError = !!fi.querySelector('[data-slot="form-message"], .error, [class*=error], [aria-invalid]');
-                const inputEmpty = Array.from(fi.querySelectorAll("input, textarea, select")).some((el) => {
-                  const inp = el as HTMLInputElement;
-                  return !inp.disabled && !inp.readOnly && inp.type !== "hidden" && !inp.value;
-                });
-                if (lab && (hasError || inputEmpty)) results.push(lab);
-              });
-              return results;
-            }).catch(() => [] as string[]);
+            const emptyLabels: string[] = await page
+              .evaluate(() => {
+                const results: string[] = [];
+                // SIT marks required-but-empty fields with a red asterisk in the label
+                // and a visible error message below the input.
+                document
+                  .querySelectorAll(
+                    '[data-slot="form-item"], .form-item, [class*=field]',
+                  )
+                  .forEach((fi) => {
+                    const lab = (
+                      fi.querySelector("label")?.textContent || ""
+                    ).trim();
+                    const hasError = !!fi.querySelector(
+                      '[data-slot="form-message"], .error, [class*=error], [aria-invalid]',
+                    );
+                    const inputEmpty = Array.from(
+                      fi.querySelectorAll("input, textarea, select"),
+                    ).some((el) => {
+                      const inp = el as HTMLInputElement;
+                      return (
+                        !inp.disabled &&
+                        !inp.readOnly &&
+                        inp.type !== "hidden" &&
+                        !inp.value
+                      );
+                    });
+                    if (lab && (hasError || inputEmpty)) results.push(lab);
+                  });
+                return results;
+              })
+              .catch(() => [] as string[]);
             if (emptyLabels.length) {
-              lastValidationLabels = [...new Set(emptyLabels.map((label) =>
-                label.replace(/\s*\*+\s*$/, "").trim(),
-              ).filter(Boolean))];
-              logger.warn(`[sit] boş alanlar (adım ${step + 1}): ${emptyLabels.join(" | ")}`);
+              lastValidationLabels = [
+                ...new Set(
+                  emptyLabels
+                    .map((label) => label.replace(/\s*\*+\s*$/, "").trim())
+                    .filter(Boolean),
+                ),
+              ];
+              logger.warn(
+                `[sit] boş alanlar (adım ${step + 1}): ${emptyLabels.join(" | ")}`,
+              );
               // Re-fill contact fields if we're on the Contact step
-              const isContactStep = emptyLabels.some((l) => /email|mobile|phone|residence|country/i.test(l));
+              const isContactStep = emptyLabels.some((l) =>
+                /email|mobile|phone|residence|country/i.test(l),
+              );
               if (isContactStep) {
                 // Re-fill email
-                if (emptyLabels.some((l) => /email/i.test(l)) && profile.email) {
-                  await page.evaluate((v: string) => {
-                    const el = document.querySelector('input[name="email"], input[type="email"]') as HTMLInputElement | null;
-                    if (!el) return;
-                    const d = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(el), "value");
-                    if (d?.set) d.set.call(el, v); else el.value = v;
-                    ["input", "change", "blur"].forEach((t) => el.dispatchEvent(new Event(t, { bubbles: true })));
-                  }, profile.email).catch(() => {});
+                if (
+                  emptyLabels.some((l) => /email/i.test(l)) &&
+                  profile.email
+                ) {
+                  await page
+                    .evaluate((v: string) => {
+                      const el = document.querySelector(
+                        'input[name="email"], input[type="email"]',
+                      ) as HTMLInputElement | null;
+                      if (!el) return;
+                      const d = Object.getOwnPropertyDescriptor(
+                        Object.getPrototypeOf(el),
+                        "value",
+                      );
+                      if (d?.set) d.set.call(el, v);
+                      else el.value = v;
+                      ["input", "change", "blur"].forEach((t) =>
+                        el.dispatchEvent(new Event(t, { bubbles: true })),
+                      );
+                    }, profile.email)
+                    .catch(() => {});
                 }
                 // Re-fill phone: direct input[type=tel]
                 if (emptyLabels.some((l) => /mobile|phone/i.test(l))) {
-                  const phoneVal2 = cleanPhone((profile as any).phoneE164 || profile.phone || "");
+                  const phoneVal2 = cleanPhone(
+                    (profile as any).phoneE164 || profile.phone || "",
+                  );
                   if (phoneVal2) {
-                    await page.locator('input[type="tel"]').first().evaluate((el: Element, v: string) => {
-                      const inp = el as HTMLInputElement;
-                      const d = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(inp), "value");
-                      if (d?.set) d.set.call(inp, v); else inp.value = v;
-                      ["input", "change", "blur"].forEach((t) => inp.dispatchEvent(new Event(t, { bubbles: true })));
-                    }, phoneVal2).catch(() => {});
+                    await page
+                      .locator('input[type="tel"]')
+                      .first()
+                      .evaluate((el: Element, v: string) => {
+                        const inp = el as HTMLInputElement;
+                        const d = Object.getOwnPropertyDescriptor(
+                          Object.getPrototypeOf(inp),
+                          "value",
+                        );
+                        if (d?.set) d.set.call(inp, v);
+                        else inp.value = v;
+                        ["input", "change", "blur"].forEach((t) =>
+                          inp.dispatchEvent(new Event(t, { bubbles: true })),
+                        );
+                      }, phoneVal2)
+                      .catch(() => {});
                   }
                 }
                 // Re-fill Country of Residence: target by label-scoped select
                 if (emptyLabels.some((l) => /residence|country/i.test(l))) {
-                  const cvalR = toEnglishCountryName(profile.nationality) || profile.nationality || "";
+                  const cvalR =
+                    toEnglishCountryName(profile.nationality) ||
+                    profile.nationality ||
+                    "";
                   if (cvalR) {
-                    const cselR = page.locator('div[data-slot="form-item"]:has(label:has-text("Country of Residence")) select').first();
+                    const cselR = page
+                      .locator(
+                        'div[data-slot="form-item"]:has(label:has-text("Country of Residence")) select',
+                      )
+                      .first();
                     if (await cselR.count()) {
-                      await cselR.selectOption({ label: cvalR }).catch(async () => {
-                        const opts = (await cselR.locator("option").allTextContents()).map((o) => o.trim());
-                        const hit = opts.find((o) => o.toLowerCase().includes(cvalR.toLowerCase()));
-                        if (hit) await cselR.selectOption({ label: hit }).catch(() => {});
-                      });
-                      await cselR.evaluate((el: Element) => el.dispatchEvent(new Event("change", { bubbles: true }))).catch(() => {});
+                      await cselR
+                        .selectOption({ label: cvalR })
+                        .catch(async () => {
+                          const opts = (
+                            await cselR.locator("option").allTextContents()
+                          ).map((o) => o.trim());
+                          const hit = opts.find((o) =>
+                            o.toLowerCase().includes(cvalR.toLowerCase()),
+                          );
+                          if (hit)
+                            await cselR
+                              .selectOption({ label: hit })
+                              .catch(() => {});
+                        });
+                      await cselR
+                        .evaluate((el: Element) =>
+                          el.dispatchEvent(
+                            new Event("change", { bubbles: true }),
+                          ),
+                        )
+                        .catch(() => {});
                     }
                   }
                 }
@@ -3047,18 +3368,24 @@ export const sitAdapter: SitAdapter = {
             }
           } catch {}
           if (validationRetries >= 2) {
-            await captureWizardFail(page, idToken, `step${step + 1}-validation`);
+            await captureWizardFail(
+              page,
+              idToken,
+              `step${step + 1}-validation`,
+            );
             const unset = Object.keys(critical).filter(
               (k) => critical[k] && !everSet.has(k),
             );
             throw new Error(
               `SIT: wizard adım=${step + 1} doğrulamadan geçemedi` +
                 `${inline ? ` (${inline})` : ""}` +
-                `${lastValidationLabels.length
-                  ? ` — portalda hata işaretli alanlar: ${lastValidationLabels.join(", ")}`
-                  : unset.length
-                    ? ` — ayarlanamayan alanlar: ${unset.join(", ")}`
-                    : ""}` +
+                `${
+                  lastValidationLabels.length
+                    ? ` — portalda hata işaretli alanlar: ${lastValidationLabels.join(", ")}`
+                    : unset.length
+                      ? ` — ayarlanamayan alanlar: ${unset.join(", ")}`
+                      : ""
+                }` +
                 " — tekrar denenecek",
             );
           }
@@ -3073,7 +3400,9 @@ export const sitAdapter: SitAdapter = {
 
     // --- DRY: wizard filled + uploads attempted → stop before the final save ---
     if (!doSubmit) {
-      logger.info("[sit] DRY: öğrenci wizard dolduruldu, kaydetmeden durduruldu");
+      logger.info(
+        "[sit] DRY: öğrenci wizard dolduruldu, kaydetmeden durduruldu",
+      );
       return {
         studentId: null,
         created: false,
@@ -3100,20 +3429,27 @@ export const sitAdapter: SitAdapter = {
     }
     try {
       const upDump = await page.evaluate(() => {
-        const btns = Array.from(document.querySelectorAll("button")).map((b) => (b.textContent || "").trim()).filter(Boolean).slice(0, 25);
+        const btns = Array.from(document.querySelectorAll("button"))
+          .map((b) => (b.textContent || "").trim())
+          .filter(Boolean)
+          .slice(0, 25);
         const files = document.querySelectorAll('input[type="file"]').length;
-        const heading = (document.querySelector("h1,h2,h3")?.textContent || "").trim();
+        const heading = (
+          document.querySelector("h1,h2,h3")?.textContent || ""
+        ).trim();
         return { heading, files, btns };
       });
       logger.info("[sit] UPLOADSTEP " + JSON.stringify(upDump));
     } catch {}
     const missingUploads: string[] = [];
     if (files.photo && !photoUploaded) missingUploads.push("foto");
-    if (files.passport && !uploadedDocs.has("passport")) missingUploads.push("pasaport");
+    if (files.passport && !uploadedDocs.has("passport"))
+      missingUploads.push("pasaport");
     if (files.transcript && !uploadedDocs.has("transcript")) {
       missingUploads.push("transkript");
     }
-    if (files.diploma && !uploadedDocs.has("diploma")) missingUploads.push("diploma");
+    if (files.diploma && !uploadedDocs.has("diploma"))
+      missingUploads.push("diploma");
     if (missingUploads.length > 0) {
       await captureWizardFail(page, idToken, "documents-missing");
       logger.warn(
@@ -3168,82 +3504,79 @@ export const sitAdapter: SitAdapter = {
     };
     page.on("response", onSaveResponse);
     try {
-    for (let attempt = 0; attempt < 2 && !saved; attempt++) {
-      await dismissInactivityModal(page);
-      const clicked = await clickButton(page, SIT_BUTTONS.saveStudent);
-      if (!clicked) {
-        // Save button not present (not on the final step / overlay / selector
-        // drift) — this attempt did nothing, so do NOT treat it as a save.
-        logger.warn(
-          `[sit] Kaydet düğmesi bulunamadı (deneme ${attempt + 1})`,
-        );
-        await sleep(page, 1500);
-        continue;
-      }
-      await sleep(page, 5000);
-      const txt = await bodyText(page);
-      if (SIT_ERRORS.duplicate.test(txt)) {
-        logger.info("[sit] kayıt sırasında mükerrer tespit edildi");
-        duplicateSeen = true;
-        break;
-      }
-      // ALWAYS capture inline validation ([aria-invalid], .error,
-      // [role=alert]) after a save click — the body-regex checks alone missed
-      // component-level validation and produced phantom "saved" results.
-      lastInlineErrors = await readInlineErrors(page).catch(() => "");
-      if (lastInlineErrors) {
-        logger.warn(
-          `[sit] kayıt inline doğrulama hatası (deneme ${attempt + 1}): ${lastInlineErrors}`,
-        );
-        continue;
-      }
-      if (SIT_ERRORS.serverError.test(txt)) {
-        logger.warn(`[sit] kayıt sunucu hatası (deneme ${attempt + 1})`);
-        continue;
-      }
-      if (SIT_ERRORS.validation.test(txt)) {
-        logger.warn(`[sit] kayıt doğrulama hatası (deneme ${attempt + 1})`);
-        continue;
-      }
-      // POSITIVE proof required — never assume success just because no error
-      // text matched. Proof = the wizard actually went away: navigated off the
-      // create route, or the Save button/step heading disappeared.
-      const urlNow = page.url();
-      const navigatedAway =
-        urlNow !== wizardUrlBefore &&
-        !/\/(new|create|add)\b/i.test(urlNow);
-      const saveBtnStillThere = await page
-        .getByRole("button", { name: SIT_BUTTONS.saveStudent })
-        .first()
-        .isVisible()
-        .catch(() => false);
-      if (navigatedAway) {
-        saved = true;
-        logger.info(
-          `[sit] kayıt kanıtı: yönlendirme (url=${urlNow})`,
-        );
-      } else {
-        // Save button gone alone is NOT proof (it can be transiently hidden
-        // by an overlay). Without a redirect, a quick identity lookup is the
-        // final arbiter — the student must actually be findable.
-        const quick = await resolveCreatedStudentId(page, {
-          email: profile.email,
-          passportNumber: profile.passportNumber,
-          firstName: profile.firstName,
-          lastName: profile.lastName,
-        }).catch(() => null);
-        if (quick) {
-          saved = true;
-          logger.info(
-            `[sit] kayıt kanıtı: hızlı arama id=${quick} (saveBtnGone=${!saveBtnStillThere})`,
-          );
-        } else {
+      for (let attempt = 0; attempt < 2 && !saved; attempt++) {
+        await dismissInactivityModal(page);
+        const clicked = await clickButton(page, SIT_BUTTONS.saveStudent);
+        if (!clicked) {
+          // Save button not present (not on the final step / overlay / selector
+          // drift) — this attempt did nothing, so do NOT treat it as a save.
           logger.warn(
-            `[sit] kayıt kanıtı YOK (deneme ${attempt + 1}) — yönlendirme yok, öğrenci bulunamadı (saveBtnGone=${!saveBtnStillThere})`,
+            `[sit] Kaydet düğmesi bulunamadı (deneme ${attempt + 1})`,
           );
+          await sleep(page, 1500);
+          continue;
+        }
+        await sleep(page, 5000);
+        const txt = await bodyText(page);
+        if (SIT_ERRORS.duplicate.test(txt)) {
+          logger.info("[sit] kayıt sırasında mükerrer tespit edildi");
+          duplicateSeen = true;
+          break;
+        }
+        // ALWAYS capture inline validation ([aria-invalid], .error,
+        // [role=alert]) after a save click — the body-regex checks alone missed
+        // component-level validation and produced phantom "saved" results.
+        lastInlineErrors = await readInlineErrors(page).catch(() => "");
+        if (lastInlineErrors) {
+          logger.warn(
+            `[sit] kayıt inline doğrulama hatası (deneme ${attempt + 1}): ${lastInlineErrors}`,
+          );
+          continue;
+        }
+        if (SIT_ERRORS.serverError.test(txt)) {
+          logger.warn(`[sit] kayıt sunucu hatası (deneme ${attempt + 1})`);
+          continue;
+        }
+        if (SIT_ERRORS.validation.test(txt)) {
+          logger.warn(`[sit] kayıt doğrulama hatası (deneme ${attempt + 1})`);
+          continue;
+        }
+        // POSITIVE proof required — never assume success just because no error
+        // text matched. Proof = the wizard actually went away: navigated off the
+        // create route, or the Save button/step heading disappeared.
+        const urlNow = page.url();
+        const navigatedAway =
+          urlNow !== wizardUrlBefore && !/\/(new|create|add)\b/i.test(urlNow);
+        const saveBtnStillThere = await page
+          .getByRole("button", { name: SIT_BUTTONS.saveStudent })
+          .first()
+          .isVisible()
+          .catch(() => false);
+        if (navigatedAway) {
+          saved = true;
+          logger.info(`[sit] kayıt kanıtı: yönlendirme (url=${urlNow})`);
+        } else {
+          // Save button gone alone is NOT proof (it can be transiently hidden
+          // by an overlay). Without a redirect, a quick identity lookup is the
+          // final arbiter — the student must actually be findable.
+          const quick = await resolveCreatedStudentId(page, {
+            email: profile.email,
+            passportNumber: profile.passportNumber,
+            firstName: profile.firstName,
+            lastName: profile.lastName,
+          }).catch(() => null);
+          if (quick) {
+            saved = true;
+            logger.info(
+              `[sit] kayıt kanıtı: hızlı arama id=${quick} (saveBtnGone=${!saveBtnStillThere})`,
+            );
+          } else {
+            logger.warn(
+              `[sit] kayıt kanıtı YOK (deneme ${attempt + 1}) — yönlendirme yok, öğrenci bulunamadı (saveBtnGone=${!saveBtnStillThere})`,
+            );
+          }
         }
       }
-    }
     } finally {
       page.off("response", onSaveResponse);
     }
@@ -3304,13 +3637,13 @@ export const sitAdapter: SitAdapter = {
     // are also logged and returned in `detail` so the board shows a useful message.
     const diagInline = await readInlineErrors(page).catch(() => "");
     const diagTitle = await page
-      .evaluate(
-        () =>
-          (
-            document.querySelector("h1,h2,[data-slot='heading']")?.textContent || ""
-          )
-            .trim()
-            .slice(0, 120),
+      .evaluate(() =>
+        (
+          document.querySelector("h1,h2,[data-slot='heading']")?.textContent ||
+          ""
+        )
+          .trim()
+          .slice(0, 120),
       )
       .catch(() => "");
     const diagUrl = page.url();
@@ -3331,39 +3664,12 @@ export const sitAdapter: SitAdapter = {
     }
     // Honest failure message: name the concrete blocker when known —
     // never-filled critical fields or the captured inline validation error.
-    const TR_FIELD: Record<string, string> = {
-      email: "e-posta",
-      gender: "cinsiyet",
-      dob: "doğum tarihi",
-      nationality: "uyruk",
-      passportNo: "pasaport no",
-      firstName: "ad",
-      lastName: "soyad",
-      issueDate: "pasaport veriliş tarihi",
-      expiryDate: "pasaport bitiş tarihi",
-      phone: "telefon",
-      address: "adres",
-      city: "şehir",
-      residenceCountry: "ikamet ülkesi",
-      schoolName: "okul adı",
-      gpa: "GPA",
-      educationLevel: "eğitim seviyesi",
-      uploads: "belgeler",
-      transferStudent: "transfer öğrenci seçimi",
-      haveTc: "TC seçimi",
-      blueCard: "mavi kart seçimi",
-    };
-    const unsetTr = unsetCritical.map((k) => TR_FIELD[k] || k);
     const inlineMsg = lastInlineErrors || diagInline;
-    let diagDetail: string;
-    if (unsetTr.length) {
-      diagDetail = `öğrenci kaydedilemedi: zorunlu alan doldurulamadı (${unsetTr.join(", ")})`;
-      if (inlineMsg) diagDetail += ` — portal hatası: ${inlineMsg}`;
-    } else if (inlineMsg) {
-      diagDetail = `öğrenci kaydedilemedi — portal doğrulama hatası: ${inlineMsg}`;
-    } else {
-      diagDetail = `SIT öğrenci oluşturulamadı — son adım: "${diagTitle}", url: ${diagUrl}`;
-    }
+    const diagDetail = buildSitStudentCreateFailureDetail({
+      unsetCritical,
+      inlineError: inlineMsg,
+      stepTitle: diagTitle,
+    });
 
     return {
       studentId: null,
@@ -3570,8 +3876,7 @@ export const sitAdapter: SitAdapter = {
           ...base,
           programMissing: true,
           ...buildSitProgramMissingContext(profile.programName, pool),
-          detail:
-            `Program bulunamadı: "${profile.programName}" — en yakın aday güvenli eşleşme şartlarını sağlamadı`,
+          detail: `Program bulunamadı: "${profile.programName}" — en yakın aday güvenli eşleşme şartlarını sağlamadı`,
         };
       }
       match = found;
@@ -3681,7 +3986,9 @@ export const sitAdapter: SitAdapter = {
 
     // --- CREATE via the n8n webhook (Zoho assigns the id) ---
     const studentName = `${profile.firstName} ${profile.lastName}`.trim();
-    logger.info(`[sit] webhook create başlatılıyor (program="${matched.name}")`);
+    logger.info(
+      `[sit] webhook create başlatılıyor (program="${matched.name}")`,
+    );
     const webhookResult = await createApplicationViaWebhook(page, {
       student: studentId,
       program: matched.id,
@@ -3734,7 +4041,9 @@ export const sitAdapter: SitAdapter = {
           webhookResult.detail,
       };
     }
-    logger.info(`[sit] başvuru webhook ile oluşturuldu (id=${webhookResult.id})`);
+    logger.info(
+      `[sit] başvuru webhook ile oluşturuldu (id=${webhookResult.id})`,
+    );
     return {
       ...base,
       submitted: true,
@@ -3753,8 +4062,7 @@ export const sitAdapter: SitAdapter = {
     doSubmit: boolean = true,
   ): Promise<SubmitResult> {
     logger.info(`[sit] submit — program: ${profile.programName}`);
-    const effectiveSubmit =
-      doSubmit && process.env.PORTAL_DRYRUN !== "1";
+    const effectiveSubmit = doSubmit && process.env.PORTAL_DRYRUN !== "1";
 
     const student = await this.createStudent(
       session,

@@ -132,19 +132,18 @@ export function logAudit(
   resourceId?: number,
   changes?: object,
   ipAddress?: string
-): void {
-  setImmediate(async () => {
-    try {
-      await db.insert(auditLogsTable).values({
-        userId,
-        action,
-        resource,
-        resourceId,
-        changes: changes ? JSON.stringify(changes) : null,
-        ipAddress: ipAddress || null,
-      });
-    } catch (err) {
-      console.error("[audit] Failed to write audit log:", err);
-    }
+): Promise<void> {
+  return db.insert(auditLogsTable).values({
+    userId,
+    action,
+    resource,
+    resourceId,
+    changes: changes ? JSON.stringify(changes) : null,
+    ipAddress: ipAddress || null,
+  }).then(() => undefined).catch((err) => {
+    // Legacy callers that intentionally treat audit as diagnostic remain
+    // non-throwing. High-impact callers await this promise so the insert is no
+    // longer deferred beyond the request lifecycle.
+    console.error("[audit] Failed to write audit log:", err);
   });
 }

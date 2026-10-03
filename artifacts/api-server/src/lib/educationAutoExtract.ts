@@ -314,6 +314,7 @@ export async function runEducationExtraction(
           level: rec.level,
           institution: rec.institution,
           program: rec.program,
+          country: rec.country,
           graduationYear: rec.graduationYear,
           gpa: rec.gpa,
           gpaRaw: rec.gpaRaw,
@@ -325,6 +326,7 @@ export async function runEducationExtraction(
           ? {
               institution: sql`coalesce(nullif(btrim(${studentEducationRecordsTable.institution}), ''), ${values.institution})`,
               program: sql`coalesce(nullif(btrim(${studentEducationRecordsTable.program}), ''), ${values.program})`,
+              country: sql`coalesce(nullif(btrim(${studentEducationRecordsTable.country}), ''), ${values.country})`,
               graduationYear: sql`coalesce(${studentEducationRecordsTable.graduationYear}, ${values.graduationYear})`,
               gpa: sql`coalesce(nullif(btrim(${studentEducationRecordsTable.gpa}), ''), ${values.gpa})`,
               gpaRaw: sql`coalesce(nullif(btrim(${studentEducationRecordsTable.gpaRaw}), ''), ${values.gpaRaw})`,
@@ -336,6 +338,7 @@ export async function runEducationExtraction(
           : {
               institution: values.institution,
               program: values.program,
+              country: values.country,
               graduationYear: values.graduationYear,
               gpa: values.gpa,
               gpaRaw: values.gpaRaw,
@@ -359,6 +362,7 @@ export async function runEducationExtraction(
           studentId,
           level: rec.level,
           schoolName: rec.institution,
+          country: rec.country,
           fieldOfStudy: rec.program,
           endYear: rec.graduationYear,
           gpa: rec.gpa ?? rec.gpaRaw,
@@ -374,6 +378,7 @@ export async function runEducationExtraction(
         const detailedSet = opts.mergeMissingOnly
           ? {
               schoolName: sql`coalesce(nullif(btrim(${educationRecordsTable.schoolName}), ''), ${detailedValues.schoolName})`,
+              country: sql`coalesce(nullif(btrim(${educationRecordsTable.country}), ''), ${detailedValues.country})`,
               fieldOfStudy: sql`coalesce(nullif(btrim(${educationRecordsTable.fieldOfStudy}), ''), ${detailedValues.fieldOfStudy})`,
               endYear: sql`coalesce(${educationRecordsTable.endYear}, ${detailedValues.endYear})`,
               gpa: sql`coalesce(nullif(btrim(${educationRecordsTable.gpa}), ''), ${detailedValues.gpa})`,
@@ -383,6 +388,7 @@ export async function runEducationExtraction(
             }
           : {
               schoolName: detailedValues.schoolName,
+              country: detailedValues.country,
               fieldOfStudy: detailedValues.fieldOfStudy,
               endYear: detailedValues.endYear,
               gpa: detailedValues.gpa,

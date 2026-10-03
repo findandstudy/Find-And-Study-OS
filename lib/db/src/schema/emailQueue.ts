@@ -1,4 +1,4 @@
-import { pgTable, serial, text, timestamp, integer, index } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, timestamp, integer, index, jsonb, uniqueIndex } from "drizzle-orm/pg-core";
 
 export const emailQueueTable = pgTable("email_queue", {
   id: serial("id").primaryKey(),
@@ -12,7 +12,17 @@ export const emailQueueTable = pgTable("email_queue", {
   retryCount: integer("retry_count").notNull().default(0),
   maxRetries: integer("max_retries").notNull().default(3),
   nextRetryAt: timestamp("next_retry_at", { withTimezone: true }),
+  senderAccountId: integer("sender_account_id"),
+  senderRevision: integer("sender_revision"),
+  templateVersionId: integer("template_version_id"),
+  idempotencyKey: text("idempotency_key"),
+  claimToken: text("claim_token"),
+  claimedAt: timestamp("claimed_at", { withTimezone: true }),
+  deliveryErrorCode: text("delivery_error_code"),
+  providerMessageId: text("provider_message_id"),
+  attachments: jsonb("attachments").$type<Array<{filename: string; contentBase64: string; contentType?: string; sha256: string}> | null>(),
 }, (table) => [
   index("email_queue_status_idx").on(table.status),
   index("email_queue_retry_idx").on(table.status, table.nextRetryAt),
+  uniqueIndex("email_queue_idempotency_uidx").on(table.idempotencyKey),
 ]);

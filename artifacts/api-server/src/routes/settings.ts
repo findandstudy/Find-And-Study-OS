@@ -1,13 +1,55 @@
 import { Router, type IRouter } from "express";
-import { db, settingsTable } from "@workspace/db";
+import { db, settingsTable, auditLogsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
-import { requireAuth, requireRole, logAudit } from "../lib/auth";
+import { requireAuth, requireRole } from "../lib/auth";
 import { MANAGER_ROLES } from "../lib/roles";
 import { ObjectStorageService, ObjectNotFoundError } from "../lib/objectStorage";
 import { normalizeYears, invalidateSeasonCache } from "../lib/season";
 import { invalidateSuppressAutomationCache } from "../lib/notificationDispatcher";
+import { callerOwnsObject, canonicalizeKey } from "../lib/objectAuthz";
+import { validateUploadedFileBuffer } from "../lib/fileUploadValidation";
+import { consumeFinalizedUploadGrantInDrizzle } from "../lib/uploadGrant";
+import { createHeaderLogoDerivative, type HeaderLogoDerivative } from "../lib/brandingLogoDerivative";
 
 const router: IRouter = Router();
+const objectStorageService = new ObjectStorageService();
+const headerLogoDerivativeCache = new Map<string, HeaderLogoDerivative>();
+const HEADER_LOGO_CACHE_MAX = 8;
+
+const SETTINGS_IMAGE_FIELDS = new Set([
+  "logoUrl", "logoDarkUrl", "faviconUrl", "logoSquareUrl", "appleTouchIconUrl",
+  "pwaIconUrl", "emailLogoUrl", "pdfLogoUrl", "ogImageUrl", "twitterImageUrl",
+  "shareImageUrl", "orgSchemaLogoUrl", "pdfSealImageUrl",
+]);
+
+async function prepareSettingsImageUpload(objectPath: string): Promise<{
+  objectKey: string;
+  objectPath: string;
+  bytes: Buffer;
+  contentType: string;
+}> {
+  const objectKey = canonicalizeKey(objectPath);
+  if (!objectKey) throw new Error("SETTINGS_IMAGE_UPLOAD_INVALID_PATH");
+  const file = await objectStorageService.getObjectEntityFile(`/objects/${objectKey}`);
+  const [metadata] = await file.getMetadata();
+  const contentType = String(metadata.contentType ?? "").split(";", 1)[0].trim().toLowerCase();
+  const [bytes] = await file.download();
+  const extensionByMime: Record<string, string> = {
+    "image/jpeg": "jpg",
+    "image/png": "png",
+    "image/webp": "webp",
+    "image/gif": "gif",
+  };
+  const extension = extensionByMime[contentType];
+  if (!extension) throw new Error("SETTINGS_IMAGE_UPLOAD_UNSUPPORTED_TYPE");
+  if (bytes.length <= 0 || bytes.length > 5 * 1024 * 1024) {
+    throw new Error("SETTINGS_IMAGE_UPLOAD_INVALID_SIZE");
+  }
+  if (await validateUploadedFileBuffer(`branding.${extension}`, contentType, bytes)) {
+    throw new Error("SETTINGS_IMAGE_UPLOAD_SIGNATURE_MISMATCH");
+  }
+  return { objectKey, objectPath, bytes, contentType };
+}
 
 const SETTINGS_PATCH_FIELDS = [
   "defaultLanguage", "supportedLanguages", "companyName", "companyEmail",
@@ -171,7 +213,6 @@ router.patch("/settings", requireAuth, requireRole("super_admin"), async (req, r
 
   if (updates.availableYears !== undefined) {
     updates.availableYears = normalizeYears(updates.availableYears);
-    invalidateSeasonCache();
   }
   if (updates.supportedLanguages !== undefined) {
     const normalized = normalizeSupportedLanguages(updates.supportedLanguages);
@@ -197,11 +238,18 @@ router.patch("/settings", requireAuth, requireRole("super_admin"), async (req, r
     }
     updates.defaultSigningDeadlineDays = n;
   }
-  if (updates.suppressAutomationAppNotifications !== undefined) {
-    invalidateSuppressAutomationCache();
-  }
-
   const [existing] = await db.select().from(settingsTable);
+  if (existing) {
+    for (const key of Object.keys(updates)) {
+      if ((existing as Record<string, unknown>)[key] === updates[key]) delete updates[key];
+    }
+  }
+  if (Object.keys(updates).length === 0) {
+    const safeExisting: Record<string, any> = { ...(existing ?? {}) };
+    for (const f of CREDENTIAL_FIELDS) delete safeExisting[f];
+    res.json(safeExisting);
+    return;
+  }
   const effectiveLanguages = String(
     updates.supportedLanguages ?? existing?.supportedLanguages ?? SYSTEM_LANGUAGE_CODES.join(","),
   ).split(",");
@@ -210,23 +258,72 @@ router.patch("/settings", requireAuth, requireRole("super_admin"), async (req, r
     res.status(400).json({ error: "defaultLanguage must be included in supportedLanguages" });
     return;
   }
-  let updated;
-  if (!existing) {
-    const [created] = await db.insert(settingsTable).values({
-      defaultLanguage: "en",
-      supportedLanguages: SYSTEM_LANGUAGE_CODES.join(","),
-      whatsappEnabled: false,
-      metaLeadEnabled: false,
-      ...updates,
-    }).returning();
-    updated = created;
-  } else {
-    const [u] = await db.update(settingsTable).set(updates).where(eq(settingsTable.id, existing.id)).returning();
-    updated = u;
+  const preparedByKey = new Map<string, Awaited<ReturnType<typeof prepareSettingsImageUpload>>>();
+  try {
+    for (const field of SETTINGS_IMAGE_FIELDS) {
+      const value = updates[field];
+      if (typeof value !== "string" || !value.startsWith("/api/storage/objects/")) continue;
+      if (!(await callerOwnsObject(req.user!.id, value))) {
+        res.status(403).json({ error: `The uploaded image does not belong to this account (${field})` });
+        return;
+      }
+      const objectKey = canonicalizeKey(value);
+      if (!objectKey) throw new Error("SETTINGS_IMAGE_UPLOAD_INVALID_PATH");
+      if (!preparedByKey.has(objectKey)) {
+        preparedByKey.set(objectKey, await prepareSettingsImageUpload(value));
+      }
+    }
+  } catch (error) {
+    const code = error instanceof Error ? error.message : "SETTINGS_IMAGE_UPLOAD_INVALID";
+    if (code === "SETTINGS_IMAGE_UPLOAD_INVALID_SIZE") {
+      res.status(413).json({ error: "Brand image is empty or exceeds 5 MB", code });
+    } else {
+      res.status(400).json({ error: "Brand image content is invalid", code });
+    }
+    return;
   }
-  await logAudit(req.user!.id, "platform_config.settings.update", "settings", updated.id, {
-    changedFields: Object.keys(updates),
-  }, req.ip);
+  let updated: typeof settingsTable.$inferSelect;
+  try {
+    updated = await db.transaction(async (tx) => {
+      for (const prepared of preparedByKey.values()) {
+        if (!await consumeFinalizedUploadGrantInDrizzle(tx, {
+          objectPath: prepared.objectPath,
+          uploadedBy: req.user!.id,
+          bytes: prepared.bytes,
+          contentType: prepared.contentType,
+        })) throw new Error("SETTINGS_IMAGE_UPLOAD_GRANT_NOT_FINALIZED");
+      }
+      let saved: typeof settingsTable.$inferSelect;
+      if (!existing) {
+        [saved] = await tx.insert(settingsTable).values({
+          defaultLanguage: "en",
+          supportedLanguages: SYSTEM_LANGUAGE_CODES.join(","),
+          whatsappEnabled: false,
+          metaLeadEnabled: false,
+          ...updates,
+        }).returning();
+      } else {
+        [saved] = await tx.update(settingsTable).set(updates).where(eq(settingsTable.id, existing.id)).returning();
+      }
+      await tx.insert(auditLogsTable).values({
+        userId: req.user!.id,
+        action: "platform_config.settings.update",
+        resource: "settings",
+        resourceId: saved.id,
+        changes: JSON.stringify({ changedFields: Object.keys(updates) }),
+        ipAddress: req.ip ?? null,
+      });
+      return saved;
+    });
+  } catch (error) {
+    if (error instanceof Error && error.message === "SETTINGS_IMAGE_UPLOAD_GRANT_NOT_FINALIZED") {
+      res.status(409).json({ error: "Uploaded image is not finalized or has already been used", code: "UPLOAD_GRANT_NOT_FINALIZED" });
+      return;
+    }
+    throw error;
+  }
+  if (updates.availableYears !== undefined) invalidateSeasonCache();
+  if (updates.suppressAutomationAppNotifications !== undefined) invalidateSuppressAutomationCache();
   const safe: Record<string, any> = { ...updated };
   for (const f of CREDENTIAL_FIELDS) {
     delete safe[f];
@@ -250,11 +347,11 @@ router.get("/settings/available-years", requireAuth, async (req, res): Promise<v
   });
 });
 
-const objectStorageService = new ObjectStorageService();
-
 router.get("/settings/branding/logo", async (req, res): Promise<void> => {
   try {
-    const variantKey = req.query.variant === "dark"
+    const requestedVariant = String(req.query.variant ?? "");
+    const isHeaderDerivative = requestedVariant === "header" || requestedVariant === "header-dark";
+    const variantKey = requestedVariant === "dark" || requestedVariant === "header-dark"
       ? "logoDarkUrl"
       : req.query.variant === "square"
         ? "logoSquareUrl"
@@ -284,6 +381,34 @@ router.get("/settings/branding/logo", async (req, res): Promise<void> => {
 
     const objectPath = `/objects/${match[1]}`;
     const objectFile = await objectStorageService.getObjectEntityFile(objectPath);
+    if (isHeaderDerivative) {
+      let derivative = headerLogoDerivativeCache.get(url);
+      if (!derivative) {
+        const [metadata] = await objectFile.getMetadata();
+        const sourceBytes = Number(metadata.size ?? 0);
+        if (!Number.isFinite(sourceBytes) || sourceBytes <= 0 || sourceBytes > 5 * 1024 * 1024) {
+          res.status(422).json({ error: "Logo source is outside the supported size" });
+          return;
+        }
+        const [source] = await objectFile.download();
+        derivative = await createHeaderLogoDerivative(source);
+        while (headerLogoDerivativeCache.size >= HEADER_LOGO_CACHE_MAX) {
+          const oldest = headerLogoDerivativeCache.keys().next().value;
+          if (oldest === undefined) break;
+          headerLogoDerivativeCache.delete(oldest);
+        }
+        headerLogoDerivativeCache.set(url, derivative);
+      }
+      res.setHeader("Cache-Control", "public, max-age=3600");
+      res.setHeader("Content-Type", derivative.contentType);
+      res.setHeader("ETag", derivative.etag);
+      if (req.headers["if-none-match"] === derivative.etag) {
+        res.status(304).end();
+        return;
+      }
+      res.status(200).send(derivative.bytes);
+      return;
+    }
     await objectStorageService.streamObjectToResponse(req, res, objectFile, {
       cacheControl: "public, max-age=3600",
     });

@@ -12,15 +12,16 @@
  *           requireRole(...ADMIN_ROLES), soft-delete, unique (universityKey,nationality)→409.
  */
 
-import { Router, type IRouter } from "express";
+import { Router, type IRouter, type Request } from "express";
 import { and, asc, eq, isNotNull, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 import {
   db,
   portalUniversityExclusionsTable,
   studentsTable,
+  auditLogsTable,
 } from "@workspace/db";
-import { logAudit, requireAuth, requireRole } from "../lib/auth";
+import { requireAuth, requireRole } from "../lib/auth";
 import { ADMIN_ROLES } from "../lib/roles";
 import { getValidated, validate } from "../middlewares/validate";
 
@@ -42,6 +43,23 @@ function serialize(row: ExclusionRow) {
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
+}
+
+async function writeExclusionAudit(
+  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  req: Request,
+  action: string,
+  resourceId: number,
+  changedFields: string[],
+): Promise<void> {
+  await tx.insert(auditLogsTable).values({
+    userId: req.user!.id,
+    action,
+    resource: "portal_university_exclusion",
+    resourceId,
+    changes: JSON.stringify({ changedFields: [...changedFields].sort() }),
+    ipAddress: req.ip || null,
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -110,10 +128,10 @@ router.get(
 // POST /portal-automation/university-exclusions
 // ---------------------------------------------------------------------------
 const createBodySchema = z.object({
-  universityKey: z.string().min(1),
-  nationality: z.string().min(1),
-  agencyName: z.string().min(1).optional(),
-  note: z.string().min(1).optional(),
+  universityKey: z.string().trim().min(1).max(200),
+  nationality: z.string().trim().min(1).max(200),
+  agencyName: z.string().trim().min(1).max(300).optional(),
+  note: z.string().trim().min(1).max(4_000).optional(),
   enabled: z.boolean().optional(),
 });
 type CreateSchemas = { body: typeof createBodySchema };
@@ -125,58 +143,38 @@ router.post(
   validate({ body: createBodySchema }),
   async (req, res): Promise<void> => {
     const body = getValidated<CreateSchemas>(req).body;
-    const user = req.user!;
-
     const nationality = body.nationality.trim();
     const universityKey = body.universityKey.trim();
-
-    // Uniqueness: one active rule per (universityKey, nationality).
-    // Match is case-insensitive (Phase 1 detection is also case-insensitive).
-    const [existing] = await db
-      .select({ id: portalUniversityExclusionsTable.id })
-      .from(portalUniversityExclusionsTable)
-      .where(
-        and(
-          eq(portalUniversityExclusionsTable.universityKey, universityKey),
+    const result = await db.transaction(async tx => {
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`${universityKey.toLowerCase()}\u0000${nationality.toLowerCase()}`}))`);
+      const [existing] = await tx.select({ id: portalUniversityExclusionsTable.id })
+        .from(portalUniversityExclusionsTable)
+        .where(and(
+          sql`lower(${portalUniversityExclusionsTable.universityKey}) = lower(${universityKey})`,
           sql`lower(${portalUniversityExclusionsTable.nationality}) = lower(${nationality})`,
           isNull(portalUniversityExclusionsTable.deletedAt),
-        ),
-      )
-      .limit(1);
+        ))
+        .limit(1);
+      if (existing) return { status: "duplicate" as const };
+      const [row] = await tx.insert(portalUniversityExclusionsTable).values({
+          universityKey,
+          nationality,
+          agencyName: body.agencyName?.trim() || null,
+          note: body.note?.trim() || null,
+          enabled: body.enabled ?? true,
+        }).returning();
+      await writeExclusionAudit(tx, req, "create_portal_university_exclusion", row.id, ["created"]);
+      return { status: "created" as const, row };
+    });
 
-    if (existing) {
+    if (result.status === "duplicate") {
       res.status(409).json({
         error: "DUPLICATE_NATIONALITY",
         message: `An exclusion for '${nationality}' already exists for '${universityKey}'`,
       });
       return;
     }
-
-    const [row] = await db
-      .insert(portalUniversityExclusionsTable)
-      .values({
-        universityKey,
-        nationality,
-        agencyName: body.agencyName?.trim() || null,
-        note: body.note?.trim() || null,
-        enabled: body.enabled ?? true,
-      })
-      .returning();
-
-    logAudit(
-      user.id,
-      "create_portal_university_exclusion",
-      "portal_university_exclusion",
-      row.id,
-      {
-        universityKey: row.universityKey,
-        nationality: row.nationality,
-        agencyName: row.agencyName,
-      },
-      req.ip,
-    );
-
-    res.status(201).json(serialize(row));
+    res.status(201).json(serialize(result.row));
   },
 );
 
@@ -185,9 +183,9 @@ router.post(
 // ---------------------------------------------------------------------------
 const updateBodySchema = z
   .object({
-    nationality: z.string().min(1).optional(),
-    agencyName: z.string().nullable().optional(),
-    note: z.string().nullable().optional(),
+    nationality: z.string().trim().min(1).max(200).optional(),
+    agencyName: z.string().trim().max(300).nullable().optional(),
+    note: z.string().trim().max(4_000).nullable().optional(),
     enabled: z.boolean().optional(),
   })
   .refine((b) => Object.keys(b).length > 0, {
@@ -206,80 +204,58 @@ router.patch(
   async (req, res): Promise<void> => {
     const { id } = getValidated<UpdateSchemas>(req).params;
     const body = getValidated<UpdateSchemas>(req).body;
-    const user = req.user!;
-
-    const [existing] = await db
-      .select()
-      .from(portalUniversityExclusionsTable)
-      .where(
-        and(
+    const result = await db.transaction(async tx => {
+      const [existing] = await tx.select().from(portalUniversityExclusionsTable)
+        .where(and(
           eq(portalUniversityExclusionsTable.id, id),
           isNull(portalUniversityExclusionsTable.deletedAt),
-        ),
-      )
-      .limit(1);
+        ))
+        .limit(1)
+        .for("update");
+      if (!existing) return { status: "missing" as const };
 
-    if (!existing) {
-      res.status(404).json({ error: "NOT_FOUND" });
-      return;
-    }
-
-    const nationality =
-      body.nationality !== undefined ? body.nationality.trim() : undefined;
-
-    // If the nationality changes, re-check uniqueness against other rows.
-    if (nationality && nationality.toLowerCase() !== existing.nationality.toLowerCase()) {
-      const [clash] = await db
-        .select({ id: portalUniversityExclusionsTable.id })
-        .from(portalUniversityExclusionsTable)
-        .where(
-          and(
-            eq(
-              portalUniversityExclusionsTable.universityKey,
-              existing.universityKey,
-            ),
+      const nationality = body.nationality !== undefined ? body.nationality.trim() : undefined;
+      if (nationality && nationality.toLowerCase() !== existing.nationality.toLowerCase()) {
+        await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`${existing.universityKey.toLowerCase()}\u0000${nationality.toLowerCase()}`}))`);
+        const [clash] = await tx.select({ id: portalUniversityExclusionsTable.id })
+          .from(portalUniversityExclusionsTable)
+          .where(and(
+            sql`lower(${portalUniversityExclusionsTable.universityKey}) = lower(${existing.universityKey})`,
             sql`lower(${portalUniversityExclusionsTable.nationality}) = lower(${nationality})`,
             isNull(portalUniversityExclusionsTable.deletedAt),
-          ),
-        )
-        .limit(1);
-      if (clash) {
-        res.status(409).json({
-          error: "DUPLICATE_NATIONALITY",
-          message: `An exclusion for '${nationality}' already exists for '${existing.universityKey}'`,
-        });
-        return;
+          ))
+          .limit(1);
+        if (clash) return { status: "duplicate" as const, universityKey: existing.universityKey, nationality };
       }
-    }
 
-    const [row] = await db
-      .update(portalUniversityExclusionsTable)
-      .set({
+      const updates = {
         ...(nationality !== undefined && { nationality }),
-        ...(body.agencyName !== undefined && {
-          agencyName: body.agencyName?.trim() || null,
-        }),
+        ...(body.agencyName !== undefined && { agencyName: body.agencyName?.trim() || null }),
         ...(body.note !== undefined && { note: body.note?.trim() || null }),
         ...(body.enabled !== undefined && { enabled: body.enabled }),
         updatedAt: new Date(),
-      })
-      .where(eq(portalUniversityExclusionsTable.id, id))
-      .returning();
+      };
+      const [row] = await tx.update(portalUniversityExclusionsTable).set(updates)
+        .where(and(eq(portalUniversityExclusionsTable.id, id), isNull(portalUniversityExclusionsTable.deletedAt)))
+        .returning();
+      if (!row) return { status: "missing" as const };
+      await writeExclusionAudit(tx, req, "update_portal_university_exclusion", id,
+        Object.keys(updates).filter(key => key !== "updatedAt"));
+      return { status: "updated" as const, row };
+    });
 
-    logAudit(
-      user.id,
-      "update_portal_university_exclusion",
-      "portal_university_exclusion",
-      id,
-      {
-        ...(nationality !== undefined && { nationality }),
-        ...(body.agencyName !== undefined && { agencyName: body.agencyName }),
-        ...(body.enabled !== undefined && { enabled: body.enabled }),
-      },
-      req.ip,
-    );
-
-    res.json(serialize(row));
+    if (result.status === "missing") {
+      res.status(404).json({ error: "NOT_FOUND" });
+      return;
+    }
+    if (result.status === "duplicate") {
+      res.status(409).json({
+        error: "DUPLICATE_NATIONALITY",
+        message: `An exclusion for '${result.nationality}' already exists for '${result.universityKey}'`,
+      });
+      return;
+    }
+    res.json(serialize(result.row));
   },
 );
 
@@ -293,38 +269,28 @@ router.delete(
   validate({ params: idParamsSchema }),
   async (req, res): Promise<void> => {
     const { id } = getValidated<IdSchemas>(req).params;
-    const user = req.user!;
-
-    const [existing] = await db
-      .select({ id: portalUniversityExclusionsTable.id })
-      .from(portalUniversityExclusionsTable)
-      .where(
-        and(
+    const deleted = await db.transaction(async tx => {
+      const [existing] = await tx.select({ id: portalUniversityExclusionsTable.id })
+        .from(portalUniversityExclusionsTable)
+        .where(and(
           eq(portalUniversityExclusionsTable.id, id),
           isNull(portalUniversityExclusionsTable.deletedAt),
-        ),
-      )
-      .limit(1);
+        ))
+        .for("update");
+      if (!existing) return false;
+      const [row] = await tx.update(portalUniversityExclusionsTable)
+        .set({ deletedAt: new Date() })
+        .where(and(eq(portalUniversityExclusionsTable.id, id), isNull(portalUniversityExclusionsTable.deletedAt)))
+        .returning({ id: portalUniversityExclusionsTable.id });
+      if (!row) return false;
+      await writeExclusionAudit(tx, req, "delete_portal_university_exclusion", id, ["deleted"]);
+      return true;
+    });
 
-    if (!existing) {
+    if (!deleted) {
       res.status(404).json({ error: "NOT_FOUND" });
       return;
     }
-
-    await db
-      .update(portalUniversityExclusionsTable)
-      .set({ deletedAt: new Date() })
-      .where(eq(portalUniversityExclusionsTable.id, id));
-
-    logAudit(
-      user.id,
-      "delete_portal_university_exclusion",
-      "portal_university_exclusion",
-      id,
-      {},
-      req.ip,
-    );
-
     res.json({ ok: true });
   },
 );

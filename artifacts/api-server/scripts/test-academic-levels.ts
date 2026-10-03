@@ -86,7 +86,7 @@ describe("academicFieldsForLevel", () => {
   it("high_school has no program field", () => {
     const fields = academicFieldsForLevel("high_school");
     assert.ok(!fields.includes("program"));
-    assert.deepEqual(fields, ["institution", "graduationYear", "gpa", "languageScore"]);
+    assert.deepEqual(fields, ["institution", "country", "graduationYear", "gpa", "languageScore"]);
   });
 
   it("bachelor/master include program", () => {
@@ -94,6 +94,7 @@ describe("academicFieldsForLevel", () => {
       assert.deepEqual(academicFieldsForLevel(lvl), [
         "institution",
         "program",
+        "country",
         "graduationYear",
         "gpa",
         "languageScore",

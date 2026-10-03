@@ -5827,10 +5827,12 @@ components:
           type: integer
         level:
           type: string
-          enum: [high_school, bachelor, master]
+          enum: [high_school, bachelor, master, doctorate]
         institution:
           type: ["string", "null"]
         program:
+          type: ["string", "null"]
+        country:
           type: ["string", "null"]
         graduationYear:
           type: ["integer", "null"]
@@ -5861,10 +5863,12 @@ components:
       properties:
         level:
           type: string
-          enum: [high_school, bachelor, master]
+          enum: [high_school, bachelor, master, doctorate]
         institution:
           type: ["string", "null"]
         program:
+          type: ["string", "null"]
+        country:
           type: ["string", "null"]
         graduationYear:
           type: ["integer", "null"]

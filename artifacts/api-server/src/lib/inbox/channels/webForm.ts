@@ -27,6 +27,56 @@ export function verifyWebFormSignature(rawBody: Buffer | string, signatureHeader
   }
 }
 
+export const WEB_FORM_REPLAY_WINDOW_SECONDS = 5 * 60;
+const WEB_FORM_REQUEST_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{15,127}$/;
+
+export type WebFormReplayEnvelope = {
+  requestId: string;
+  timestamp: number;
+};
+
+export function parseWebFormReplayEnvelope(
+  timestampHeader: string | undefined,
+  requestIdHeader: string | undefined,
+  nowMs = Date.now(),
+): WebFormReplayEnvelope | null {
+  if (!timestampHeader || !/^(?:0|[1-9][0-9]{0,12})$/.test(timestampHeader)) return null;
+  const timestamp = Number(timestampHeader);
+  if (!Number.isSafeInteger(timestamp)) return null;
+  const nowSeconds = Math.floor(nowMs / 1000);
+  if (Math.abs(nowSeconds - timestamp) > WEB_FORM_REPLAY_WINDOW_SECONDS) return null;
+  const requestId = requestIdHeader?.trim() ?? "";
+  if (!WEB_FORM_REQUEST_ID_RE.test(requestId)) return null;
+  return { requestId, timestamp };
+}
+
+/**
+ * Versioned replay-safe signature. The timestamp and durable request id are
+ * authenticated together with the exact request bytes.
+ */
+export function verifyWebFormReplaySignature(
+  rawBody: Buffer | string,
+  signatureHeader: string | undefined,
+  secret: string | undefined,
+  envelope: WebFormReplayEnvelope,
+): boolean {
+  if (!secret || secret.length < 16 || !signatureHeader) return false;
+  const supplied = signatureHeader.startsWith("v1=") ? signatureHeader.slice(3) : signatureHeader;
+  if (!/^[0-9a-f]{64}$/i.test(supplied)) return false;
+  const mac = crypto.createHmac("sha256", secret);
+  mac.update(String(envelope.timestamp));
+  mac.update(".");
+  mac.update(envelope.requestId);
+  mac.update(".");
+  mac.update(rawBody);
+  const expected = mac.digest("hex");
+  try {
+    return crypto.timingSafeEqual(Buffer.from(expected, "ascii"), Buffer.from(supplied.toLowerCase(), "ascii"));
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Parse a web form payload into a normalized inbound submission.
  * Expected shape (lenient): { name, email, phone, message, agent_ref, form_id, submission_id }

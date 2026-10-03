@@ -27,6 +27,13 @@ export interface StageAutomaticMessage {
   originTypes: Array<"direct" | "agent" | "sub_agent">;
 }
 
+export interface StageAutomaticEmail {
+  enabled: boolean;
+  templateVersionId: number | null;
+  senderAccountId: number | null;
+  originTypes: Array<"direct" | "agent" | "sub_agent">;
+}
+
 export type StageAudienceRole = "super_admin" | "admin" | "staff" | "agent" | "sub_agent" | "agent_staff";
 
 export const DEFAULT_STAGE_AUDIENCE_ROLES: StageAudienceRole[] = [
@@ -74,6 +81,7 @@ export const pipelineStagesTable = pgTable("pipeline_stages", {
   // The database transition trigger snapshots these ids into a durable
   // dispatch row; delivery itself remains asynchronous and fail-safe.
   automaticMessage: jsonb("automatic_message").$type<StageAutomaticMessage | null>(),
+  automaticEmail: jsonb("automatic_email").$type<StageAutomaticEmail | null>(),
   // Viewing and transitioning are intentionally separate controls.  The
   // values are audience groups rather than raw application roles so new
   // platform staff roles inherit the expected "staff" behaviour.

@@ -1,8 +1,7 @@
 import express, { Router, type IRouter } from "express";
-import { contractBrandProfilesTable, db } from "@workspace/db";
+import { auditLogsTable, contractBrandProfilesTable, db } from "@workspace/db";
 import { asc, eq } from "drizzle-orm";
 import { requireAuth, requirePermission } from "../lib/auth";
-import { writeAudit } from "../lib/auditLog";
 import {
   hasContractCompanySignature,
   publicContractBranding,
@@ -44,15 +43,25 @@ router.post("/contract-brands", requireAuth, requirePermission("contract_templat
     const brandingError = validateContractBrandingInput(req.body?.config);
     if (brandingError) { res.status(400).json({ error: brandingError }); return; }
     const userId = (req as any).user?.id ?? null;
-    const [row] = await db.insert(contractBrandProfilesTable).values({
-      key,
-      name,
-      config: sanitizeContractBranding(req.body?.config),
-      isActive: req.body?.isActive !== false,
-      createdByUserId: userId,
-      updatedByUserId: userId,
-    }).returning();
-    await writeAudit({ userId, action: "contract_brand.create", resource: "contract_brand", resourceId: row.id, changes: { key, name }, ipAddress: req.ip });
+    const row = await db.transaction(async tx => {
+      const [created] = await tx.insert(contractBrandProfilesTable).values({
+        key,
+        name,
+        config: sanitizeContractBranding(req.body?.config),
+        isActive: req.body?.isActive !== false,
+        createdByUserId: userId,
+        updatedByUserId: userId,
+      }).returning();
+      await tx.insert(auditLogsTable).values({
+        userId,
+        action: "contract_brand.create",
+        resource: "contract_brand",
+        resourceId: created.id,
+        changes: JSON.stringify({ key, name }),
+        ipAddress: req.ip ?? null,
+      });
+      return created;
+    });
     res.status(201).json({ data: presentBrandProfile(row) });
   } catch (err: any) {
     if (err?.code === "23505") { res.status(409).json({ error: "Brand key already exists" }); return; }
@@ -65,44 +74,59 @@ router.patch("/contract-brands/:id", requireAuth, requirePermission("contract_te
   try {
     const id = Number(req.params.id);
     if (!Number.isInteger(id) || id <= 0) { res.status(400).json({ error: "Invalid id" }); return; }
-    const [existing] = await db.select().from(contractBrandProfilesTable).where(eq(contractBrandProfilesTable.id, id));
-    if (!existing) { res.status(404).json({ error: "Not found" }); return; }
-    const updates: Record<string, unknown> = { updatedByUserId: (req as any).user?.id ?? null };
-    const auditChanges: Record<string, unknown> = {};
-    if ("key" in (req.body || {})) {
-      const key = normalizeKey(req.body.key);
-      if (!key) { res.status(400).json({ error: "Invalid brand key" }); return; }
-      updates.key = key;
-      auditChanges.key = key;
-    }
-    if ("name" in (req.body || {})) {
-      const name = String(req.body.name || "").trim().slice(0, 120);
-      if (!name) { res.status(400).json({ error: "Name is required" }); return; }
-      updates.name = name;
-      auditChanges.name = name;
-    }
-    if ("config" in (req.body || {})) {
-      const brandingError = validateContractBrandingInput(req.body.config);
-      if (brandingError) { res.status(400).json({ error: brandingError }); return; }
-      const incoming = req.body.config && typeof req.body.config === "object" && !Array.isArray(req.body.config)
-        ? { ...req.body.config }
-        : {};
-      const existingConfig = sanitizeContractBranding(existing.config) || {};
-      if (!Object.prototype.hasOwnProperty.call(incoming, "companySignatureDataUrl") && existingConfig.companySignatureDataUrl) {
-        incoming.companySignatureDataUrl = existingConfig.companySignatureDataUrl;
+    const row = await db.transaction(async tx => {
+      const [existing] = await tx.select().from(contractBrandProfilesTable).where(eq(contractBrandProfilesTable.id, id));
+      if (!existing) return null;
+      const userId = (req as any).user?.id ?? null;
+      const updates: Record<string, unknown> = { updatedByUserId: userId };
+      const auditChanges: Record<string, unknown> = {};
+      if ("key" in (req.body || {})) {
+        const key = normalizeKey(req.body.key);
+        if (!key) throw new Error("INVALID_BRAND_KEY");
+        updates.key = key;
+        auditChanges.key = key;
       }
-      updates.config = sanitizeContractBranding(incoming);
-      auditChanges.configUpdated = true;
-      auditChanges.companySignatureConfigured = hasContractCompanySignature(updates.config);
-    }
-    if ("isActive" in (req.body || {})) {
-      updates.isActive = req.body.isActive !== false;
-      auditChanges.isActive = updates.isActive;
-    }
-    const [row] = await db.update(contractBrandProfilesTable).set(updates).where(eq(contractBrandProfilesTable.id, id)).returning();
-    await writeAudit({ userId: (req as any).user?.id ?? null, action: "contract_brand.update", resource: "contract_brand", resourceId: id, changes: auditChanges, ipAddress: req.ip });
+      if ("name" in (req.body || {})) {
+        const name = String(req.body.name || "").trim().slice(0, 120);
+        if (!name) throw new Error("INVALID_BRAND_NAME");
+        updates.name = name;
+        auditChanges.name = name;
+      }
+      if ("config" in (req.body || {})) {
+        const brandingError = validateContractBrandingInput(req.body.config);
+        if (brandingError) throw new Error(`INVALID_BRAND_CONFIG:${brandingError}`);
+        const incoming = req.body.config && typeof req.body.config === "object" && !Array.isArray(req.body.config)
+          ? { ...req.body.config }
+          : {};
+        const existingConfig = sanitizeContractBranding(existing.config) || {};
+        if (!Object.prototype.hasOwnProperty.call(incoming, "companySignatureDataUrl") && existingConfig.companySignatureDataUrl) {
+          incoming.companySignatureDataUrl = existingConfig.companySignatureDataUrl;
+        }
+        updates.config = sanitizeContractBranding(incoming);
+        auditChanges.configUpdated = true;
+        auditChanges.companySignatureConfigured = hasContractCompanySignature(updates.config);
+      }
+      if ("isActive" in (req.body || {})) {
+        updates.isActive = req.body.isActive !== false;
+        auditChanges.isActive = updates.isActive;
+      }
+      const [updated] = await tx.update(contractBrandProfilesTable).set(updates).where(eq(contractBrandProfilesTable.id, id)).returning();
+      await tx.insert(auditLogsTable).values({
+        userId,
+        action: "contract_brand.update",
+        resource: "contract_brand",
+        resourceId: id,
+        changes: JSON.stringify(auditChanges),
+        ipAddress: req.ip ?? null,
+      });
+      return updated;
+    });
+    if (!row) { res.status(404).json({ error: "Not found" }); return; }
     res.json({ data: presentBrandProfile(row) });
   } catch (err: any) {
+    if (err instanceof Error && err.message === "INVALID_BRAND_KEY") { res.status(400).json({ error: "Invalid brand key" }); return; }
+    if (err instanceof Error && err.message === "INVALID_BRAND_NAME") { res.status(400).json({ error: "Name is required" }); return; }
+    if (err instanceof Error && err.message.startsWith("INVALID_BRAND_CONFIG:")) { res.status(400).json({ error: err.message.slice("INVALID_BRAND_CONFIG:".length) }); return; }
     if (err?.code === "23505") { res.status(409).json({ error: "Brand key already exists" }); return; }
     console.error("[contract-brands] update:", err);
     res.status(500).json({ error: "Failed to update contract brand" });
@@ -113,9 +137,20 @@ router.delete("/contract-brands/:id", requireAuth, requirePermission("contract_t
   try {
     const id = Number(req.params.id);
     if (!Number.isInteger(id) || id <= 0) { res.status(400).json({ error: "Invalid id" }); return; }
-    const [row] = await db.update(contractBrandProfilesTable).set({ isActive: false, updatedByUserId: (req as any).user?.id ?? null }).where(eq(contractBrandProfilesTable.id, id)).returning();
+    const userId = (req as any).user?.id ?? null;
+    const row = await db.transaction(async tx => {
+      const [updated] = await tx.update(contractBrandProfilesTable).set({ isActive: false, updatedByUserId: userId }).where(eq(contractBrandProfilesTable.id, id)).returning();
+      if (!updated) return null;
+      await tx.insert(auditLogsTable).values({
+        userId,
+        action: "contract_brand.deactivate",
+        resource: "contract_brand",
+        resourceId: id,
+        ipAddress: req.ip ?? null,
+      });
+      return updated;
+    });
     if (!row) { res.status(404).json({ error: "Not found" }); return; }
-    await writeAudit({ userId: (req as any).user?.id ?? null, action: "contract_brand.deactivate", resource: "contract_brand", resourceId: id, ipAddress: req.ip });
     res.json({ success: true });
   } catch (err) {
     console.error("[contract-brands] deactivate:", err);

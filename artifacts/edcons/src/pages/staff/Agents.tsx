@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { customFetch } from "@workspace/api-client-react";
+import { uploadAndFinalizeObject } from "@/lib/finalizeObjectUpload";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -395,7 +396,7 @@ export default function AgentsPage() {
         body: JSON.stringify({ name: file.name, size: file.size, contentType: file.type }),
       });
       if (!urlRes.uploadURL) throw new Error("No upload URL");
-      const putRes = await fetch(urlRes.uploadURL, { method: "PUT", body: file, headers: { "Content-Type": file.type } });
+      const putRes = await uploadAndFinalizeObject(urlRes.uploadURL, urlRes.objectPath, { body: file, headers: { "Content-Type": file.type } });
       if (!putRes.ok) throw new Error("Upload failed");
       const strippedPath = urlRes.objectPath.replace(/^\/objects/, "");
       const publicUrl = `${BASE_URL}/api/storage/objects${strippedPath}`;

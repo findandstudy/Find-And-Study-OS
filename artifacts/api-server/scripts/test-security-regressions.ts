@@ -13,6 +13,10 @@ const appSource = readFileSync(
   new URL("../src/app.ts", import.meta.url),
   "utf8",
 );
+const csrfSource = readFileSync(
+  new URL("../src/middlewares/csrf.ts", import.meta.url),
+  "utf8",
+);
 const indexSource = readFileSync(
   new URL("../src/index.ts", import.meta.url),
   "utf8",
@@ -212,15 +216,16 @@ const testEnvRunnerSource = readFileSync(
 
 test("authenticated course-finder writes are not exempt from CSRF", () => {
   assert.doesNotMatch(
-    appSource,
+    csrfSource,
     /startsWith\(["']\/api\/course-finder["']\)/,
   );
-  assert.match(appSource, /const CSRF_SAFE_METHODS/);
-  assert.match(appSource, /cookieToken !== headerToken/);
+  assert.match(appSource, /app\.use\(csrfProtection\)/);
+  assert.match(csrfSource, /const CSRF_SAFE_METHODS/);
+  assert.match(csrfSource, /cookieToken !== headerToken/);
 });
 
 test("the SPA fallback does not issue a second conflicting CSRF cookie", () => {
-  assert.match(appSource, /csrfCookieIssued/);
+  assert.match(csrfSource, /csrfCookieIssued/);
   assert.match(indexSource, /cookies\?\.csrf_token/);
   assert.match(indexSource, /csrfCookieIssued\?: boolean/);
 });
@@ -612,6 +617,40 @@ test("logout is a CSRF-protected POST and no longer mutates state through GET", 
   assert.match(authRouteSource, /res\.status\(204\)\.end\(\)/);
   assert.match(logoutClientSource, /customFetch\("\/api\/auth\/logout", \{ method: "POST" \}\)/);
   assert.match(logoutClientSource, /clearAuthCache\(\)/);
+});
+
+test("authentication audit attempts finish inside the request lifecycle", () => {
+  const lifecycleActions = [
+    "auth.login.failure",
+    "auth.login.success",
+    "auth.email_verify",
+    "auth.password_reset.request",
+    "auth.logout",
+  ];
+  for (const action of lifecycleActions) {
+    assert.match(
+      authRouteSource,
+      new RegExp(`(?:await logAudit|logAudit\\([^;]+${action}[\\s\\S]*?\\)\\s*,?)`),
+      `${action} must remain request-bound`,
+    );
+  }
+  assert.doesNotMatch(
+    authRouteSource,
+    /^\s*logAudit\([^\n]*(?:auth\.login|auth\.email_verify|auth\.password_reset|auth\.set_password|auth\.logout)[^\n]*\);\s*$/m,
+  );
+});
+
+test("password-reset token claim, password mutation and audit are atomic", () => {
+  assert.match(authRouteSource, /const passwordResetCommitted = await db\.transaction/);
+  assert.match(authRouteSource, /eq\(usersTable\.passwordResetToken, tokenHash\)/);
+  assert.match(authRouteSource, /gt\(usersTable\.passwordResetExpires, new Date\(\)\)/);
+  assert.match(authRouteSource, /\.returning\(\{ id: usersTable\.id \}\)/);
+  assert.match(authRouteSource, /await tx\.delete\(sessionsTable\)/);
+  assert.match(authRouteSource, /await tx\.insert\(auditLogsTable\)\.values\(\[/);
+  assert.match(authRouteSource, /action: "auth\.set_password"/);
+  assert.match(authRouteSource, /action: "auth\.password_reset\.complete"/);
+  assert.match(authRouteSource, /if \(!passwordResetCommitted\)/);
+  assert.doesNotMatch(authRouteSource, /logAudit\(user\.id, "auth\.(?:set_password|password_reset\.complete)"/);
 });
 
 test("contract PDF rendering is network-isolated and does not log signer PII", () => {

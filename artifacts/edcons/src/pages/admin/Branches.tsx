@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { customFetch } from "@workspace/api-client-react";
+import { uploadAndFinalizeObject } from "@/lib/finalizeObjectUpload";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -201,7 +202,7 @@ export default function BranchesPage() {
         body: JSON.stringify({ name: file.name, size: file.size, contentType: file.type, prefix: "branding" }),
       });
       if (!urlRes.uploadURL) throw new Error(t("branches.uploadLinkFailed"));
-      const putRes = await fetch(urlRes.uploadURL, { method: "PUT", body: file, headers: { "Content-Type": file.type } });
+      const putRes = await uploadAndFinalizeObject(urlRes.uploadURL, urlRes.objectPath, { body: file, headers: { "Content-Type": file.type } });
       if (!putRes.ok) throw new Error(t("branches.uploadFailed"));
       const stripped = urlRes.objectPath.replace(/^\/objects/, "");
       const publicUrl = `${BASE_URL}/api/storage/objects${stripped}`;

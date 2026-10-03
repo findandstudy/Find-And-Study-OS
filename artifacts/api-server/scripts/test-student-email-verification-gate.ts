@@ -49,6 +49,11 @@ test("unverified student can request and consume email verification", async () =
   assert.equal(verify.status, 200);
 });
 
+test("unverified student can rerun the public pre-registration matcher", async () => {
+  const result = await request(buildApp(unverifiedStudent), "POST", "/public/student-registration/matches");
+  assert.equal(result.status, 200);
+});
+
 test("unverified student cannot access protected student APIs", async () => {
   const result = await request(buildApp(unverifiedStudent), "GET", "/students/me");
   assert.equal(result.status, 403);

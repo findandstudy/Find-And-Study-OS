@@ -2,6 +2,7 @@ import { after, beforeEach, test } from "node:test";
 import assert from "node:assert/strict";
 import {
   __setZernioApiKeyOverrideForTests,
+  __setZernioAccountSendableOverrideForTests,
   sendViaZernio,
 } from "../src/lib/inbox/zernioSend";
 import {
@@ -31,6 +32,7 @@ beforeEach(() => {
   calls = [];
   process.env.ALLOW_LIVE_INTEGRATIONS = "true";
   __setZernioApiKeyOverrideForTests("test-key");
+  __setZernioAccountSendableOverrideForTests(async () => true);
   __setSafeOutboundRequestOverrideForTests(async (url, options) => {
     const response = await globalThis.fetch(url, {
       method: options.method,
@@ -52,6 +54,7 @@ beforeEach(() => {
 
 after(() => {
   __setZernioApiKeyOverrideForTests(null);
+  __setZernioAccountSendableOverrideForTests(null);
   __setSafeOutboundRequestOverrideForTests(null);
   globalThis.fetch = realFetch;
   if (originalAllowLiveIntegrations === undefined) {

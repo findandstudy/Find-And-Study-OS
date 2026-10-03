@@ -21,6 +21,13 @@ export interface StageAutomaticMessage {
   originTypes: Array<"direct" | "agent" | "sub_agent">;
 }
 
+export interface StageAutomaticEmail {
+  enabled: boolean;
+  templateVersionId: number | null;
+  senderAccountId: number | null;
+  originTypes: Array<"direct" | "agent" | "sub_agent">;
+}
+
 export interface PipelineStage {
   id?: number;
   entityType: string;
@@ -46,6 +53,7 @@ export interface PipelineStage {
   serviceFeeFinanceStatus?: string | null;
   autoCancelSiblingsOnWon?: boolean;
   automaticMessage?: StageAutomaticMessage | null;
+  automaticEmail?: StageAutomaticEmail | null;
   visibleToRoles?: string[];
   transitionAllowedRoles?: string[];
   // Task #167 — up to 2 admin-defined action buttons (application only).

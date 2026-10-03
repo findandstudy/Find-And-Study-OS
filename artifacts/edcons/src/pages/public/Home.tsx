@@ -5,7 +5,6 @@ import { useTemplatePage, useTemplatePageSeo } from "./useTemplatePage";
 import { Block } from "./PublicPage";
 import { useJsonLd, SITE_URL, SITE_NAME, ORG_SCHEMA } from "@/hooks/use-json-ld";
 import { ArrowRight, BookOpen, FileText, Globe2, ShieldCheck, Star, Users } from "lucide-react";
-import { motion } from "framer-motion";
 import { Link } from "wouter";
 
 export default function Home() {
@@ -41,23 +40,13 @@ export default function Home() {
   return (
     <>
       <section className="relative pt-24 pb-32 lg:pt-36 lg:pb-40 overflow-hidden">
-        <div className="absolute inset-0 z-0">
-          <img 
-            src={`${import.meta.env.BASE_URL}images/hero-bg.png`} 
-            alt=""
-            width={1920}
-            height={1080}
-            className="w-full h-full object-cover opacity-10"
-          />
+        <div className="absolute inset-0 z-0" aria-hidden="true">
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,hsl(var(--primary)/0.12),transparent_38%),radial-gradient(circle_at_80%_10%,hsl(var(--accent)/0.10),transparent_34%)]" />
           <div className="absolute inset-0 bg-gradient-to-b from-background/0 via-background/50 to-background" />
         </div>
         
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 text-center">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, ease: "easeOut" }}
-          >
+          <div>
             <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 text-primary font-medium text-sm mb-8 border border-primary/20 shadow-sm">
               <Star className="w-4 h-4 fill-primary" />
               {t("hero.badge")}
@@ -81,7 +70,7 @@ export default function Home() {
                 <Link href={localePath("/programs")}>{t("hero.browse")}</Link>
               </Button>
             </div>
-          </motion.div>
+          </div>
         </div>
       </section>
 

@@ -12,6 +12,7 @@ import { SUPPORTED_LANGUAGES, LANGUAGE_META } from "@/lib/i18n";
 import { useState } from "react";
 import { useLocation } from "wouter";
 import DetailTemplates from "./DetailTemplates";
+import CatalogPagesInventory from "./CatalogPagesInventory";
 
 interface WebsitePage {
   id: number;
@@ -99,7 +100,9 @@ export default function WebsitePages() {
           </DialogContent>
         </Dialog>
 
+        <CatalogPagesInventory />
         <DetailTemplates />
+        <h2 className="text-xl font-semibold">CMS pages</h2>
         <div className="flex flex-col sm:flex-row gap-3">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />

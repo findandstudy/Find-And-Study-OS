@@ -249,6 +249,42 @@ async function withPublicScope<T>(
   }
 }
 
+/** Admin inventory metadata only; uses the same configured read scope as public
+ * delivery. Disabled/unconfigured publication is unknown, not an invented draft.
+ */
+export async function readPublicEntityPublicationSummaries(input: {
+  entityType: "program" | "university" | "destination" | "city";
+  entityIds: readonly number[];
+  locale: ProgramSupportedLocale;
+}) {
+  const config = publicWebDiscoveryConfigFromEnvironment();
+  type Summary = { entityId: number; status: string; indexState: string | null; revisionNumber: number | null; qualityStatus: string | null; translationStatus: string | null };
+  const entries = new Map<number, Summary>();
+  if (config.mode !== "published" || !config.scope) return { evaluated: false, entries };
+  const ids = [...new Set(input.entityIds)].filter(id => Number.isSafeInteger(id) && id > 0 && id <= 2_147_483_647).slice(0, 50);
+  if (!ids.length) return { evaluated: true, entries };
+  const column = ENTITY_ID_COLUMNS[input.entityType];
+  const result = await withPublicScope(config.scope, client => client.query<{
+    entity_id: number; status: string | null; index_state: string | null; revision_number: string | null; quality_status: string | null; translation_status: string | null;
+  }>(`SELECT content.${column} AS entity_id,state.status,state.index_state,
+             revision.revision_number,revision.quality_status,revision.translation_status
+        FROM public_web_content_records content
+        LEFT JOIN public_web_publication_states state
+          ON state.tenant_id=content.tenant_id AND state.organization_id=content.organization_id AND state.content_record_id=content.id
+        LEFT JOIN public_web_content_revisions revision
+          ON revision.tenant_id=state.tenant_id AND revision.organization_id=state.organization_id
+         AND revision.content_record_id=state.content_record_id AND revision.id=state.revision_id
+       WHERE content.tenant_id=$1 AND content.organization_id=$2 AND content.entity_type=$3
+         AND content.locale=$4 AND content.${column}=ANY($5::integer[])
+       ORDER BY content.${column} LIMIT 50`,
+    [config.scope!.tenantId, config.scope!.organizationId, input.entityType.toUpperCase(), input.locale, ids]));
+  for (const row of result.rows) entries.set(Number(row.entity_id), {
+    entityId: Number(row.entity_id), status: row.status ?? "NO_PUBLICATION_STATE", indexState: row.index_state,
+    revisionNumber: row.revision_number === null ? null : Number(row.revision_number), qualityStatus: row.quality_status, translationStatus: row.translation_status,
+  });
+  return { evaluated: true, entries };
+}
+
 export async function readPublishedSitemapCounts(
   scope: PublicWebDiscoveryScope,
 ): Promise<PublicWebSitemapCount[]> {
@@ -804,6 +840,41 @@ export async function readIndexableProgramIds(input: {
       [scope.tenantId, scope.organizationId, input.locale, programIds],
     );
     return new Set(result.rows.map((row) => Number(row.program_id)));
+  });
+}
+
+/** Detail search needs the full eligible university set before SQL count/pagination. */
+export async function readIndexableUniversityProgramIds(input: {
+  locale: ProgramSupportedLocale;
+  universityId: number;
+}): Promise<number[]> {
+  const config = publicWebDiscoveryConfigFromEnvironment();
+  if (config.mode !== "published" || !config.scope) return [];
+  if (!Number.isSafeInteger(input.universityId) || input.universityId <= 0) return [];
+  const scope = config.scope;
+  return withPublicScope(scope, async (client) => {
+    const result = await client.query<{ program_id: number }>(
+      `SELECT DISTINCT content.program_id
+         FROM public_web_content_records content
+         JOIN public_web_publication_states state
+           ON state.tenant_id=content.tenant_id
+          AND state.organization_id=content.organization_id
+          AND state.content_record_id=content.id
+         JOIN programs program ON program.id=content.program_id
+        WHERE content.tenant_id=$1 AND content.organization_id=$2
+          AND content.entity_type='PROGRAM' AND content.locale=$3
+          AND program.university_id=$4
+          AND state.status='PUBLISHED' AND state.index_state='INDEX'
+          AND (content.locale='en' OR EXISTS (
+            SELECT 1 FROM program_translations translation
+             WHERE translation.program_id=content.program_id
+               AND translation.locale=content.locale AND translation.status='published'
+          ))
+        ORDER BY content.program_id LIMIT 10001`,
+      [scope.tenantId, scope.organizationId, input.locale, input.universityId],
+    );
+    if (result.rows.length > 10000) throw new Error("PUBLIC_DETAIL_PROGRAM_SCOPE_OVERFLOW");
+    return result.rows.map(row => Number(row.program_id));
   });
 }
 

@@ -1,0 +1,19 @@
+# Staging-only bounded application overlay. Use only when the reviewed delta
+# is confined to the already-built API bundle and public frontend and the
+# parent image is an exact, previously attested release. The tiny build context
+# avoids rebuilding the dependency graph on a constrained staging host.
+ARG FASOS_STAGING_BASE_IMAGE=findandstudy-staging-app:base-image-must-be-overridden
+FROM ${FASOS_STAGING_BASE_IMAGE}
+
+ARG FASOS_SOURCE_COMMIT
+RUN test -n "$FASOS_SOURCE_COMMIT"
+
+USER 0:0
+RUN rm -rf /app/artifacts/edcons/dist/public \
+  /app/artifacts/api-server/dist \
+  && install -d -o 10042 -g 10042 -m 0750 /app/artifacts/edcons/dist/public \
+  && install -d -o 10042 -g 10042 -m 0750 /app/artifacts/api-server/dist
+COPY --chown=10042:10042 public/ /app/artifacts/edcons/dist/public/
+COPY --chown=10042:10042 api-server/ /app/artifacts/api-server/dist/
+LABEL org.opencontainers.image.revision=$FASOS_SOURCE_COMMIT
+USER 10042:10042

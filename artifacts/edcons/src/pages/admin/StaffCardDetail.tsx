@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { customFetch } from "@workspace/api-client-react";
+import { uploadAndFinalizeObject } from "@/lib/finalizeObjectUpload";
 
 const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 import { Card } from "@/components/ui/card";
@@ -418,7 +419,7 @@ function DocumentsSection({ documents, userId, onSaved }: { documents: any[]; us
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: file.name, size: file.size, contentType: file.type || "application/octet-stream", prefix: `staff-documents/${userId}` }),
       });
-      const putRes = await fetch(uploadURL, { method: "PUT", body: file, headers: { "Content-Type": file.type || "application/octet-stream" } });
+      const putRes = await uploadAndFinalizeObject(uploadURL, objectPath, { body: file, headers: { "Content-Type": file.type || "application/octet-stream" } });
       if (!putRes.ok) throw new Error(`Upload failed (${putRes.status})`);
       await customFetch(`/api/staff-cards/${userId}/documents`, {
         method: "POST", headers: { "Content-Type": "application/json" },

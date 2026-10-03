@@ -23,7 +23,7 @@ import { sql } from "drizzle-orm";
  *    exactly one DB query.
  *  - On DB failure we serve the last good cache (or {}), keeping the
  *    widget and import alive instead of failing the whole request.
- *  - Warmed on module load (best-effort, errors swallowed).
+ *  - Loaded lazily on first use; importing the module has no DB side effect.
  *  - `invalidateDocCatalog()` drops the cache instantly so admin
  *    create/update/delete is reflected on the very next read instead of
  *    waiting up to 5 minutes.
@@ -158,6 +158,3 @@ export function invalidateDocCatalog(): void {
   cacheUntil = 0;
   generation++;
 }
-
-// Best-effort warm-up; failures are already logged inside loadDocCatalog.
-void loadDocCatalog();

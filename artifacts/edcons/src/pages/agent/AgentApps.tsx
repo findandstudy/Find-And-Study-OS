@@ -414,7 +414,7 @@ function EditApplicationDialog({ open, onClose, app, stages }: { open: boolean; 
   }
 
   const updateApp = useMutation({
-    mutationFn: (payload: Record<string, unknown>) => apiFetch(`${BASE_URL}/api/applications/${app?.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }),
+    mutationFn: (payload: Record<string, unknown>) => apiFetch(`${BASE_URL}/api/applications/${app?.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...payload, expectedUpdatedAt: app?.updatedAt }) }),
     onSuccess: () => { toast({ title: "Application updated" }); queryClient.invalidateQueries({ queryKey: ["applications"] }); onClose(); },
     onError: () => { toast({ title: "Error", description: "Failed to update", variant: "destructive" }); },
   });

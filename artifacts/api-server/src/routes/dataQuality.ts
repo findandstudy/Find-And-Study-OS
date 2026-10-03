@@ -1,11 +1,37 @@
 import { Router, type IRouter } from "express";
-import { applicationsTable, db, leadsTable, studentsTable } from "@workspace/db";
+import { applicationsTable, auditLogsTable, db, leadsTable, studentsTable } from "@workspace/db";
 import { and, eq, isNull, sql } from "drizzle-orm";
-import { logAudit, requireAuth, requireRole } from "../lib/auth";
+import { requireAuth, requireRole } from "../lib/auth";
 import { ADMIN_ROLES } from "../lib/roles";
 import { duplicateCandidatesCte } from "../lib/reportingDuplicateSemantics";
+import { pool } from "@workspace/db";
+import {
+  CATALOG_DATA_CONFIDENCE_STATEMENT_TIMEOUT_MS,
+  readCatalogDataConfidence,
+} from "../lib/catalogDataConfidenceReadModel";
 
 const router: IRouter = Router();
+
+router.get("/admin/data-quality/catalog-confidence", requireAuth, requireRole(...ADMIN_ROLES), async (_req, res): Promise<void> => {
+  res.setHeader("Cache-Control", "private, no-store");
+  let client = null;
+  try {
+    client = await pool.connect();
+    await client.query("BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY");
+    await client.query(`SET LOCAL statement_timeout = '${CATALOG_DATA_CONFIDENCE_STATEMENT_TIMEOUT_MS}ms'`);
+    const result = await readCatalogDataConfidence(client);
+    await client.query("COMMIT");
+    res.json(result);
+  } catch (error) {
+    await client?.query("ROLLBACK").catch(() => undefined);
+    console.error("[data-quality] catalog confidence read failed", {
+      code: (error as { code?: string } | null)?.code,
+    });
+    res.status(503).json({ error: "Catalogue confidence is temporarily unavailable" });
+  } finally {
+    client?.release();
+  }
+});
 
 type DuplicateRow = {
   entity: "student" | "lead";
@@ -258,6 +284,14 @@ router.post("/admin/data-quality/application-lead-links/:applicationId/approve",
       .where(and(eq(applicationsTable.id, applicationId), isNull(applicationsTable.leadId)))
       .returning({ id: applicationsTable.id, studentId: applicationsTable.studentId, leadId: applicationsTable.leadId });
     if (!updated) return { status: 409 as const, error: "Application link changed concurrently; reload the report" };
+    await tx.insert(auditLogsTable).values({
+      userId: req.user!.id,
+      action: "approve_application_lead_link",
+      resource: "application",
+      resourceId: applicationId,
+      changes: JSON.stringify({ leadId, studentId: updated.studentId }),
+      ipAddress: req.ip || null,
+    });
     return { status: 200 as const, app: updated, idempotent: false };
   });
 
@@ -266,12 +300,6 @@ router.post("/admin/data-quality/application-lead-links/:applicationId/approve",
     return;
   }
   const linkedApp = outcome.app;
-  if (!outcome.idempotent) {
-    await logAudit(req.user!.id, "approve_application_lead_link", "application", applicationId, {
-      leadId,
-      studentId: linkedApp.studentId,
-    }, req.ip);
-  }
   res.json({ success: true, application: linkedApp, idempotent: outcome.idempotent });
 });
 

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from "react"
 import { useAuth } from "@/hooks/use-auth";
 import { customFetch } from "@workspace/api-client-react";
 import { createDocumentRecord, uploadDocumentFile } from "@/lib/uploadDocumentFile";
+import { uploadAndFinalizeObject } from "@/lib/finalizeObjectUpload";
 import { toLatinUpper } from "@/lib/textTransform";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
@@ -194,7 +195,7 @@ export default function StudentAccount() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: `avatar-${user.id}-${Date.now()}.${file.name.split(".").pop()}`, size: file.size, contentType: file.type }),
       });
-      const uploadRes = await fetch(uploadURL, { method: "PUT", body: file, headers: { "Content-Type": file.type } });
+      const uploadRes = await uploadAndFinalizeObject(uploadURL, objectPath, { body: file, headers: { "Content-Type": file.type } });
       if (!uploadRes.ok) throw new Error(t("account.errUploadImageFailed"));
       const avatarUrl = `/api/storage/objects/${objectPath.replace(/^\/objects\//, "")}`;
       await customFetch(`/api/users/${user.id}`, {

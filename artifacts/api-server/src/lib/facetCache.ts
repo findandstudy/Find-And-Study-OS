@@ -99,3 +99,15 @@ export async function loadFacetValue<T>(options: {
 export function clearFacetCacheForTests(): void {
   facetCache.clear();
 }
+
+/** Clear one committed entity namespace, or all namespaces when omitted. */
+export function invalidateFacetCache(namespace?: string): void {
+  if (!namespace) {
+    facetCache.clear();
+    return;
+  }
+  const prefix = `${namespace}:`;
+  for (const key of facetCache.keys()) {
+    if (key.startsWith(prefix)) facetCache.delete(key);
+  }
+}

@@ -3,6 +3,7 @@ import { z } from "zod";
 import * as nodePath from "node:path";
 import { requireAuth, requirePermission, logAudit } from "../lib/auth";
 import { callerOwnsObject, recordObjectOwner } from "../lib/objectAuthz";
+import { consumeFinalizedUploadGrant, issueUploadGrant } from "../lib/uploadGrant";
 import {
   ObjectNotFoundError,
   ObjectStorageService,
@@ -1400,6 +1401,15 @@ router.post(
         res.status(503).json({ error: "SOCIAL_MEDIA_UPLOAD_AUTH_UNAVAILABLE" });
         return;
       }
+      if (!(await issueUploadGrant({
+        objectPath,
+        uploadedBy: req.user!.id,
+        expectedSize: parsed.data.size,
+        expectedContentType: parsed.data.contentType,
+      }))) {
+        res.status(503).json({ error: "SOCIAL_MEDIA_UPLOAD_GRANT_UNAVAILABLE" });
+        return;
+      }
       res.setHeader("Cache-Control", "private, no-store");
       res.json({
         uploadURL,
@@ -1487,6 +1497,12 @@ router.post(
             payload,
           );
           if (replay) return replay;
+          if (!(await consumeFinalizedUploadGrant(client, {
+            objectPath: payload.objectPath,
+            uploadedBy: context.legacyUserId,
+            bytes: buffer,
+            contentType: storedMimeType,
+          }))) throw new Error("SOCIAL_MEDIA_UPLOAD_GRANT_NOT_FINALIZED");
           const id = nextSocialId();
           const result = await client.query<{
             id: string;

@@ -421,6 +421,7 @@ router.post("/ai/extract-document", ...aiPanelAccess, aiRateLimit(10, "ai-authen
             record: {
               level,
               institution: upsertRow.schoolName != null ? String(upsertRow.schoolName) : null,
+              country: upsertRow.country != null ? String(upsertRow.country) : null,
               program: upsertRow.fieldOfStudy != null ? String(upsertRow.fieldOfStudy) : null,
               graduationYear: upsertRow.endYear,
               gpa: upsertRow.gpa,

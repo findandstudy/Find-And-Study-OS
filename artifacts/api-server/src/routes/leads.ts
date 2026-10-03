@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { db, leadsTable, studentsTable, notesTable, usersTable, followUpsTable, agentsTable, documentsTable, embedSubmissionsTable, embedWidgetsTable, applicationsTable, programsTable, universitiesTable, pipelineStagesTable, settingsTable, softDelete, externalContactsTable, channelAccountsTable, lifecycleCascadeStateTable } from "@workspace/db";
+import { db, leadsTable, studentsTable, notesTable, usersTable, followUpsTable, agentsTable, documentsTable, embedSubmissionsTable, embedWidgetsTable, applicationsTable, programsTable, universitiesTable, pipelineStagesTable, settingsTable, softDelete, externalContactsTable, channelAccountsTable, lifecycleCascadeStateTable, auditLogsTable } from "@workspace/db";
 import { eq, ilike, or, sql, and, lt, lte, gte, asc, desc, inArray, isNull, isNotNull, ne } from "drizzle-orm";
 import { requireAuth, requireRole, requireAgentStaffPermission, logAudit } from "../lib/auth";
 import { publicLeadLimiter } from "../lib/limiters";
@@ -29,6 +29,7 @@ import { checkMandatoryDocs, checkMandatoryDocsForStudent, reEvaluateMandatoryDo
 import { getDocLabel } from "../lib/docNaming";
 import { recompressStoredObjectIfNeeded } from "../lib/documentBytes";
 import { UploadTooLargeError } from "../lib/uploads/processUpload";
+import { consumeFinalizedUploadGrantInDrizzle } from "../lib/uploadGrant";
 import { resolveResidenceAddress } from "../lib/studentAddressDefaults";
 import { validatePassportNumber } from "@workspace/portal-adapters/identity-validation";
 import { buildStableSignedStudentPhotoThumbnailPath } from "@workspace/portal-adapters";
@@ -930,6 +931,18 @@ router.post("/leads/:id/documents", requireAuth, requireRole(...STAFF_ROLES, ...
   if (!fileKey || typeof fileKey !== "string") { res.status(400).json({ error: "fileKey is required" }); return; }
   if (!mimeType) { res.status(400).json({ error: "mimeType is required for file uploads" }); return; }
 
+  // A rejected upload may trigger object cleanup. Enforce the existing agent
+  // ownership requirement before any read/validation/deletion of that object;
+  // staff retain their existing allowance.
+  if (isAgentRole(user.role)) {
+    const owned = await callerOwnsObject(user.id, fileKey);
+    if (!owned) {
+      console.warn("[LEADS] upload object ownership denied");
+      res.status(403).json({ error: "You can only attach files that you have uploaded" });
+      return;
+    }
+  }
+
   const validationFileName = originalFileName
     ? sanitizeFileName(originalFileName)
     : (() => {
@@ -971,17 +984,6 @@ router.post("/leads/:id/documents", requireAuth, requireRole(...STAFF_ROLES, ...
     return;
   }
 
-  // Ownership guard: agent callers may only attach storage objects they
-  // uploaded themselves. Staff are trusted and bypass this check.
-  if (isAgentRole(user.role)) {
-    const owned = await callerOwnsObject(user.id, fileKey);
-    if (!owned) {
-      console.warn(`[LEADS] fileKey ownership violation: userId=${user.id} role=${user.role} key=${fileKey}`);
-      res.status(403).json({ error: "You can only attach files that you have uploaded" });
-      return;
-    }
-  }
-
   let storedMimeType = mimeType;
   let storedSizeBytes = sizeBytes ? Number(sizeBytes) : null;
   try {
@@ -1018,6 +1020,12 @@ router.post("/leads/:id/documents", requireAuth, requireRole(...STAFF_ROLES, ...
         isNull(documentsTable.deletedAt),
       );
   const doc = await db.transaction(async (tx) => {
+    if (!await consumeFinalizedUploadGrantInDrizzle(tx, {
+      objectPath: fileKey,
+      uploadedBy: user.id,
+      bytes: head,
+      contentType: mimeType,
+    })) throw new Error("LEAD_DOCUMENT_UPLOAD_GRANT_NOT_FINALIZED");
     await tx.update(documentsTable)
       .set({ deletedAt: new Date() })
       .where(previousScope);
@@ -1033,7 +1041,14 @@ router.post("/leads/:id/documents", requireAuth, requireRole(...STAFF_ROLES, ...
       sizeBytes: storedSizeBytes,
     }).returning();
     return inserted;
+  }).catch((error) => {
+    if (error instanceof Error && error.message === "LEAD_DOCUMENT_UPLOAD_GRANT_NOT_FINALIZED") return null;
+    throw error;
   });
+  if (!doc) {
+    res.status(409).json({ error: "Upload must be finalized and unused before registration", code: "UPLOAD_GRANT_NOT_FINALIZED" });
+    return;
+  }
   await logAudit(user.id, "create_document", "document", doc.id, { name: safeName, type, leadId: id, studentId: lead.convertedStudentId ?? null }, req.ip);
 
   // Converted-lead uploads are student profile documents too. Run the same
@@ -1383,8 +1398,17 @@ router.delete("/leads/:id", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_RO
       res.status(403).json({ error: "Access denied" }); return;
     }
   }
-  await softDelete(leadsTable, [id], { actorUserId: delUser.id });
-  await logAudit(delUser.id, "delete_lead", "lead", id, { soft: true }, req.ip);
+  await db.transaction(async tx => {
+    await softDelete(leadsTable, [id], { actorUserId: delUser.id, tx });
+    await tx.insert(auditLogsTable).values({
+      userId: delUser.id,
+      action: "delete_lead",
+      resource: "lead",
+      resourceId: id,
+      changes: JSON.stringify({ soft: true }),
+      ipAddress: req.ip || null,
+    });
+  });
   res.sendStatus(204);
 });
 
@@ -1392,20 +1416,40 @@ router.delete("/leads/:id", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_RO
 router.post("/leads/:id/purge", requireAuth, requireRole("super_admin"), async (req, res): Promise<void> => {
   const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
-  const [originStudent] = await db.select({ id: studentsTable.id }).from(studentsTable)
-    .where(and(eq(studentsTable.originLeadId, id), isNull(studentsTable.deletedAt)))
-    .limit(1);
-  if (originStudent) {
+  const purgeResult = await db.transaction(async tx => {
+    const [existing] = await tx.select({ id: leadsTable.id })
+      .from(leadsTable)
+      .where(eq(leadsTable.id, id))
+      .for("update");
+    if (!existing) return { status: "missing" as const };
+    const [originStudent] = await tx.select({ id: studentsTable.id }).from(studentsTable)
+      .where(and(eq(studentsTable.originLeadId, id), isNull(studentsTable.deletedAt)))
+      .limit(1);
+    if (originStudent) return { status: "active_student" as const, studentId: originStudent.id };
+    await tx.delete(leadsTable).where(eq(leadsTable.id, id));
+    await tx.insert(auditLogsTable).values({
+      userId: req.user!.id,
+      action: "purge_lead",
+      resource: "lead",
+      resourceId: id,
+      changes: JSON.stringify({ hard: true }),
+      ipAddress: req.ip || null,
+    });
+    return { status: "purged" as const };
+  });
+  if (purgeResult.status === "missing") {
+    res.status(404).json({ error: "Lead not found" });
+    return;
+  }
+  if (purgeResult.status === "active_student") {
     res.status(409).json({
       error: "This lead is the origin of an active student journey and cannot be permanently deleted",
       code: "LEAD_HAS_ACTIVE_STUDENT_JOURNEY",
-      studentId: originStudent.id,
+      studentId: purgeResult.studentId,
     });
     return;
   }
-  const result = await db.delete(leadsTable).where(eq(leadsTable.id, id));
-  await logAudit(req.user!.id, "purge_lead", "lead", id, { hard: true }, req.ip);
-  res.json({ success: true, deleted: result.rowCount ?? 0 });
+  res.json({ success: true, deleted: 1 });
 });
 
 router.post("/leads/bulk-action", requireAuth, requireRole(...STAFF_ROLES), async (req, res): Promise<void> => {
@@ -1413,12 +1457,14 @@ router.post("/leads/bulk-action", requireAuth, requireRole(...STAFF_ROLES), asyn
   const isAdmin = (ADMIN_ROLES as readonly string[]).includes(user.role);
   const { ids, action, assignedToId, status } = req.body;
   if (!Array.isArray(ids) || ids.length === 0) { res.status(400).json({ error: "ids required" }); return; }
+  if (ids.length > 500) { res.status(413).json({ error: "A maximum of 500 leads can be changed at once", code: "BULK_LEAD_LIMIT" }); return; }
   if (!["delete", "assign", "move"].includes(action)) { res.status(400).json({ error: "Invalid action" }); return; }
   // Task #494: non-admin may only bulk-assign their own records; delete/move remain admin-only
   if (!isAdmin && action !== "assign") {
     res.status(403).json({ error: "Only admins can bulk delete or move leads" }); return;
   }
-  const numericIds = ids.map(Number).filter((n: number) => !isNaN(n));
+  const numericIds = [...new Set(ids.map(Number).filter((n: number) => Number.isSafeInteger(n) && n > 0))];
+  if (numericIds.length === 0) { res.status(400).json({ error: "valid ids required" }); return; }
   let updated = 0;
   if (action === "delete") {
     const converted = await db.select({ id: leadsTable.id, studentId: leadsTable.convertedStudentId })
@@ -1436,8 +1482,18 @@ router.post("/leads/bulk-action", requireAuth, requireRole(...STAFF_ROLES), asyn
       });
       return;
     }
-    updated = await softDelete(leadsTable, numericIds, { actorUserId: user.id });
-    for (const id of numericIds) logAudit(user.id, "delete_lead", "lead", id, { soft: true }, req.ip);
+    updated = await db.transaction(async tx => {
+      const count = await softDelete(leadsTable, numericIds, { actorUserId: user.id, tx });
+      await tx.insert(auditLogsTable).values(numericIds.map(leadId => ({
+        userId: user.id,
+        action: "delete_lead",
+        resource: "lead",
+        resourceId: leadId,
+        changes: JSON.stringify({ soft: true, bulk: true }),
+        ipAddress: req.ip || null,
+      })));
+      return count;
+    });
   } else if (action === "assign" && assignedToId !== undefined) {
     const newAssignedToId = assignedToId ? Number(assignedToId) : null;
     // Non-admin: filter to only records they are the current assignee of
@@ -1478,9 +1534,15 @@ router.post("/leads/bulk-action", requireAuth, requireRole(...STAFF_ROLES), asyn
           });
         }
       }
+      await tx.insert(auditLogsTable).values({
+        userId: user.id,
+        action: "bulk_assign_leads",
+        resource: "lead",
+        changes: JSON.stringify({ ids: idsToUpdate, assignedToId: newAssignedToId }),
+        ipAddress: req.ip || null,
+      });
       return result.rowCount ?? idsToUpdate.length;
     });
-    await logAudit(user.id, "bulk_assign_leads", "lead", undefined, { ids: idsToUpdate, assignedToId }, req.ip);
     res.json({ success: true, updated, skipped }); return;
   } else if (action === "move" && status) {
     if (!(await canTransitionToPipelineStage("lead", String(status), user.role))) {
@@ -1499,9 +1561,15 @@ router.post("/leads/bulk-action", requireAuth, requireRole(...STAFF_ROLES), asyn
         eq(lifecycleCascadeStateTable.entityType, "lead"),
         inArray(lifecycleCascadeStateTable.entityId, numericIds),
       ));
+      await tx.insert(auditLogsTable).values({
+        userId: user.id,
+        action: "bulk_move_leads",
+        resource: "lead",
+        changes: JSON.stringify({ ids: numericIds, status }),
+        ipAddress: req.ip || null,
+      });
       return result.rowCount ?? affectedLeads.length;
     });
-    await logAudit(user.id, "bulk_move_leads", "lead", undefined, { ids: numericIds, status }, req.ip);
     for (const affectedLead of affectedLeads) {
       enqueueFtcLeadStageAnalytics(affectedLead, affectedLead.status, String(status));
     }

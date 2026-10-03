@@ -594,3 +594,122 @@ Public import zincirine adapter approval + maker-checker, redacted preview, Ed25
 Kanıt: public-web ilgili saf testleri 160/160; planner 20/20, executor 6/6, source resolver 12/12, intake builder 4/4 + command 6/6 + store 9/9, adapter approval 20/20, preview 14/14, receipt 8/8, runtime boundary 8/8, preflight 19/19, server plan 9/9, job contract 14/14; PostgreSQL intake/source/store suite PASS, public catalog/discovery/render regresyonları PASS, security 37/37, rate-limit 6/6, CI wiring 4/4, migration authority 31 PASS + 1 Bash-unavailable SKIP, workspace typecheck ve API production build PASS. Disposable DB `127.0.0.1:5433/fasos_apply_local` kullanıldı; production credential/PII/provider çağrısı yoktur.
 
 Remote push, PR güncellemesi, staging/production deploy, `Find-And-Study-OS-Next` sync ve runtime aktivasyonu yapılmadı. Bağımsız review, exact-head remote CI, staging UAT, executor grant ve gerçek import pilotu sonraki NO-GO kapılarıdır. Kalıcı ayrıntı: `docs/PUBLIC_WEB_LOCAL_GATE_2026-09-09.md`, `docs/PUBLIC_WEB_STAGING_CANDIDATE_2026-09-09.md` ve `docs/ADR_2026-09-08_PUBLIC_WEB_CONTENT_AND_RENDERING_FOUNDATION.md`.
+
+## 21 Eylül 2026 — Sistem Sağlığı yerel iyileştirmesi
+
+`codex/public-detail-staging-20260919` üzerinde mevcut admin sağlık ekranı ve
+salt-okunur endpoint geliştirildi. On ayrı kontrol, eksik/eski ölçüm ayrımı,
+bağlantı havuzu beklemesi, portal kuyruk yaşı ve mevcut worker heartbeat'leri,
+opt-in süreç bazlı p95/p99, etki/inceleme bağlantıları ve görünür sekmede 30
+saniyelik yenileme eklendi. DB kontrolleri bounded READ ONLY transaction,
+bağlantı/sorgu süre sınırı ve iki eşzamanlı kontrol sınırı kullanır. Yedek
+kontrolü yalnız bounded dosya metadatasıdır; restore/offsite kanıtı değildir.
+Otomatik onarım, dış gönderim, worker başlatma veya yeni migration yoktur.
+
+Kanıt: backend/performance/read-path/security 78/78, frontend 17/17,
+sentetik EN masaüstü/TR mobil/AR RTL tarayıcı 3/3 PASS; API/Edcons typecheck
+ve yerel build, 23 locale i18n ve public bundle bütçesi PASS. Bağımsız yerel
+review tamamlandı. Gerçek PostgreSQL smoke/staging UAT yapılmadı; deployment,
+production, provider, runtime ayarı veya DB verisi değiştirilmedi. Ayrıntı ve
+operasyonel backlog: `docs/SYSTEM_HEALTH_IMPROVEMENTS_2026-09-21.md`.
+
+## 21 Eylül 2026 — Aşama e-postası ve ortak şablon yönetimi yerel eki
+
+Kullanıcının uygulama onayıyla mevcut `message_templates`, `channel_accounts`
+ve `email_queue` üzerinde onaylı/sürümlü e-posta şablonları, birden çok şifreli
+SMTP hesabı ve Application Pipeline için bağımsız Automatic Email eklendi.
+Direct/Agent/Sub-Agent kaynak seçimi alıcıyı değiştirmez; alıcı eşleşen aktif,
+doğrulanmış öğrenci hesabıdır. İki kişi onayı, exact sürüm/revision, atomik
+outbox/claim, belirsiz SMTP sonucunu otomatik retry etmeme ve geçmiş kayıtları
+geriye dönük göndermeme sınırları vardır. WhatsApp akışı korunmuştur.
+
+Yerel kanıt: birleşik API 130/130, genişletilmiş güvenlik zinciri 115/115
+(örtüşen testler), UI 14/14, sentetik EN desktop/TR mobile/AR RTL 3/3 PASS;
+API/Edcons typecheck/build PASS. Göreve özel boş PostgreSQL 16.15 üzerinde
+additive `0124–0125` ve ledger 126/126 fresh/replay PASS. Üretim dump/PII
+kullanılmadı. Yeni writer'lar legacy güvenlik karantinasında, external pilot
+allowlist sıfırdır. Commit/push, staging/production deploy, gerçek SMTP
+doğrulaması/gönderimi veya runtime aktivasyonu yapılmadı. Staging UAT ve
+kontrollü sağlayıcı pilotu ayrı kapıdır. Operasyon/rollback ve dosya envanteri:
+`docs/PIPELINE_EMAIL_AUTOMATION_2026-09-21.md`.
+
+## 23 Eylül 2026 — Yerel güvenlik/performance hardening (deploy edilmedi)
+
+Kullanıcının “işleri yapmaya devam et” onayıyla
+`codex/public-detail-staging-20260919` branch'inde `c2b872ab…` tabanı üzerindeki
+çalışma ağacında sharp 0.35.4 / nodemailer 9.1.1, explicit-off dış entegrasyon
+politikası ve Academy handoff engeli, immutable local PUT yayıncısı, Course
+Finder tek retry owner + 30s read bütçesi ve sınırlı thumbnail/başarıya bağlı
+HTTP cache uygulandı. Mevcut yazmalı staging workflow UAT helper'ı run girişinde
+ve Session ağ sınırında fail-closed karantinaya alındı; env opt-in açamaz.
+
+Son birleşik yerel gruplar 338 PASS / 1 Windows file-symlink SKIP / 0 FAIL;
+API/Edcons ve library typecheck, yerel build, 23 locale i18n, sitemap/bundle ve
+normal writer/route inventory PASS. pnpm production graph audit 641 dependency
+üzerinde 0 bilinen advisory; bu çalışan image/pentest veya production readiness
+kanıtı değildir. External pilot allowlist sıfır ve legacy quarantine korunur.
+
+Önemli sınır: GCS SDK pre-response stream iptali gerçek upstream iptalini
+kanıtlamadığından yalnız bounded thumbnail yolu ağ başlamadan unsupported
+placeholder verir; normal GCS download contract'ı korunur. GCS thumbnail adapter,
+upload grant expiry/consume, PDF processing retry determinizmi, Linux fsync/
+symlink, güvenli disposable E2E, replay/receiver koordinasyonu, load/CWV ve DR
+açıktır. Source reservation process-RSS hard cap değildir. Crash sonrası local
+upload lock otomatik çalınmaz. Commit/push/deploy, DB/migration, staging/
+production/provider/runtime ayarı değiştirilmedi. Kanonik kapsam/dosya/test ve
+backlog: `docs/SECURITY_PERFORMANCE_HARDENING_2026-09-23.md`.
+
+## 28 Eylül 2026 — Güvenlik öncelikli yerel devam (deploy edilmedi)
+
+Kullanıcının “başla” onayıyla aynı feature branch'in commit edilmemiş çalışma
+ağacında dosya sahipliği kontrolü I/O öncesine taşındı; public acente upload'u
+mevcut immutable publisher'a bağlandı ve Academy production receiver token'ı
+canonical production base URL/ortam sınırıyla korundu. Ayrı process testinde
+bulunan EEXIST sonrası lock kaldırma yarışı retryable Busy ile düzeltildi;
+kilit çalma veya symlink/non-directory gevşetmesi yoktur. Mevcut CSRF middleware
+aynı davranış/sırayla ayrı dosyaya alınarak gerçek auth/storage HTTP testinde
+yeniden kullanıldı. Auth ürün davranışı veya receiver contract'ı değiştirilmedi.
+
+Son birleşik API grubu 256 PASS / 1 Windows file-symlink SKIP / 0 FAIL;
+Linux gate/staging quarantine/package-manager/public CI saf grubu 36 PASS.
+Disposable PostgreSQL 16.15 üzerinde mevcut ledger 126/126 fresh PASS; yalnız
+127.0.0.1:5433/fasos_apply_local ve göreve özel yeni cluster kullanıldı. Dar
+auth/storage HTTP testi iki kez PASS: owner/anon erişimi, immutable yükleme,
+CSRF ve logout sonrası eski cookie replay 401 doğrulandı. Tek rollback-only
+fas_app bağlantısı kullanıldı; bütün public tablo sayıları geri döndü,
+users/object_owners/sessions/diğer client sayıları 0/0/0/0. Sequence geri sarma
+iddiası yoktur. Fixture storage temizlendi, yalnız göreve ait cluster durduruldu;
+cluster dosyaları tutuldu. Tam browser/global bootstrap/pool concurrency testi
+değildir. Typecheck/API yerel build ve normal writer/route inventory PASS;
+641 dependency audit 0 bilinen advisory; external pilot allowlist sıfırdır.
+
+Gerçek Linux kapısı BLOCKED: Docker daemon hazır değil; host/service değişikliği
+yapılmadı. Hazır Linux ortamı için beş suite/minimum 61 assertion'lı fail-closed
+runner eklendi; saf test başarısı gerçek Linux başarısı değildir. Tam app import'unun
+eager notification seed ve LISTEN/reconnect yan etkileri izole testte bulundu;
+bu mimari borç ayrı lifecycle/teardown işi olarak açıktır. General upload grant
+expiry/consume, cloud upload/thumbnail, webhook replay, Academy receiver tarafı,
+full E2E/load/CWV/DR kapıları tamamlanmadı. Staging/production/VPS/provider,
+mevcut DB/PII, commit/push/merge/deploy değiştirilmedi. Kanıt, dosya envanteri,
+rollout koşulları ve açık işler: `docs/SECURITY_DISPOSABLE_E2E_2026-09-28.md`.
+
+## 28 Eylül 2026 — Student Register öncesi katalog eşleştirme (deploy edilmedi)
+
+Kullanıcının ApplyBoard referans metnini uygulama onayıyla mevcut Student Register,
+Catalog, Course Finder ve auth akışları genişletildi. Kayıt öncesinde uyruk,
+eğitim seviyesi, hedef seviye, not ve dil beyanı alınır; aktif/açık katalogdan
+açıklanabilir destinasyon/program önerileri gösterilir. Bilinmeyen veya evidence'i
+eksik/süresi dolmuş kabul kuralı uygun sayılmaz, `review_required` olur; not
+dönüşümü ve runtime AI yoktur. Üniversite genel kuralları program override'ı
+yoksa miras alınır. Seçilen program kayıt anında yeniden kontrol edilir; yeni
+kullanıcı, beyan profili ve doğrulama kodu tek transaction'da yazılır.
+
+Additive `0126_student_registration_matching.sql` ve journal 127/127, göreve özel
+disposable PostgreSQL 16.15 fresh migration 127/127 PASS. Workspace/API typecheck,
+API production build, 11/11 eşleştirme testi ve student verification/rate-limit
+regresyonu 12/12 PASS. Edcons 23-locale i18n, 114 contract testi, production
+build, sitemap ve public bundle budget PASS.
+Cluster durduruldu; staging/production/PII/provider, commit/push/deploy değişmedi.
+Gerçek kaynaklı katalog veri girişi, 23 locale çeviri, hacim p95/p99 ve browser
+UAT ayrı release kapılarıdır. Kanıt ve kapsam:
+`docs/STUDENT_REGISTRATION_MATCHING_2026-09-28.md`.

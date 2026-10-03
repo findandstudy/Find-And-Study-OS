@@ -1,0 +1,15 @@
+{
+  "date": "2026-09-23",
+  "sourceBaseCommit": "c2b872abe22848a50e61f12d73ff6b5b11591379",
+  "scope": "local working-tree production dependency graph; not deployed SBOM",
+  "command": "pnpm@10.33.2 audit --prod --json",
+  "exitCode": 0,
+  "runtimeVerified": { "sharp": "0.35.4", "libheif": "1.23.2", "nodemailer": "9.1.1" },
+  "result": {
+    "actions": [], "advisories": {}, "muted": [],
+    "metadata": {
+      "vulnerabilities": { "info": 0, "low": 0, "moderate": 0, "high": 0, "critical": 0 },
+      "dependencies": 641, "devDependencies": 0, "optionalDependencies": 0, "totalDependencies": 641
+    }
+  }
+}

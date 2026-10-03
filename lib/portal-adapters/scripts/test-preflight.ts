@@ -27,6 +27,12 @@ const complete: SubmitProfile = {
   cityOfBirth: "London",
   gpa: 90,
   graduationYear: 2024,
+  educationRecords: [{
+    level: "high_school",
+    schoolName: "London High School",
+    country: "United Kingdom",
+    gpa: "90",
+  }],
   passportIssueDate: "2024-01-01",
   passportExpiryDate: "2034-01-01",
 };
@@ -76,6 +82,44 @@ test("SIT requires its photo and structured address contract", () => {
   assert.equal(result.ready, false);
   assert.ok(result.missingFields.includes("addressCity"));
   assert.ok(result.missingDocuments.includes("photo"));
+});
+
+test("SIT blocks when the required prior-education country is missing", () => {
+  const result = evaluatePortalPreflight({
+    adapterKey: "sit",
+    profile: {
+      ...complete,
+      nationality: "United Kingdom",
+      educationRecords: [{ level: "high_school", schoolName: "London High School" }],
+    },
+    files: { ...threeDocs, photo: "/tmp/photo.jpg" },
+  });
+  assert.equal(result.ready, false);
+  assert.ok(result.missingFields.includes("educationRecords.high_school.country"));
+});
+
+test("SIT derives the required education country from the application level", () => {
+  const master = evaluatePortalPreflight({
+    adapterKey: "sit",
+    profile: {
+      ...complete,
+      level: "Master",
+      educationRecords: [{ level: "bachelor", schoolName: "Example University", country: "Türkiye" }],
+    },
+    files: { ...threeDocs, photo: "/tmp/photo.jpg" },
+  });
+  assert.equal(master.ready, true);
+
+  const doctorate = evaluatePortalPreflight({
+    adapterKey: "sit",
+    profile: {
+      ...complete,
+      level: "Doctorate",
+      educationRecords: [{ level: "master", schoolName: "Example University", country: "Türkiye" }],
+    },
+    files: { ...threeDocs, photo: "/tmp/photo.jpg" },
+  });
+  assert.equal(doctorate.ready, true);
 });
 
 test("Medipol preflight mirrors its profile and four-document contract", () => {

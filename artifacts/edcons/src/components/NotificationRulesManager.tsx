@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -8,7 +9,11 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { useI18n } from "@/hooks/use-i18n";
+import { useAuth } from "@/hooks/use-auth";
 import { SUPPORTED_LANGUAGES } from "@/lib/i18n";
+import { EmailAutomationManager } from "@/components/notifications/EmailAutomationManager";
+import { EmailLibrarySelection } from "@/components/notifications/EmailAutomationFields";
+import { canManageNotificationRules, emailAutomationCopy } from "@/components/notifications/emailAutomationModel";
 import {
   Bell, Mail, MessageCircle, Send, Smartphone, Check, X,
   Loader2, ChevronDown, ChevronRight, Settings2, Pencil, Eye, Save,
@@ -26,10 +31,11 @@ interface NotificationRule {
   recipientRoles: string[];
   isActive: boolean;
   template?: NotifTemplate;
+  updatedAt: string;
 }
 
 interface LangTemplate { subject?: string; body?: string; }
-interface NotifTemplate extends LangTemplate { translations?: Record<string, LangTemplate>; }
+interface NotifTemplate extends LangTemplate { translations?: Record<string, LangTemplate>; emailTemplateVersionId?: number | null; emailSenderAccountId?: number | null; }
 
 // Email/notification template languages are derived from the canonical
 // system language list (Settings → Language & Region) so the editor always
@@ -53,6 +59,7 @@ const EVENT_LABEL_KEYS: Record<string, string> = {
 
 function hasTemplateContent(tpl?: NotifTemplate): boolean {
   if (!tpl) return false;
+  if (tpl.emailTemplateVersionId) return true;
   if (tpl.subject || tpl.body) return true;
   const tr = tpl.translations || {};
   return Object.values(tr).some(v => v && (v.subject || v.body));
@@ -135,8 +142,27 @@ export function NotificationRulesManager({ isAdmin, notifications, setNotificati
   const [activeLang, setActiveLang] = useState<string>("tr");
   const [savingTemplate, setSavingTemplate] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
+  const [emailBinding, setEmailBinding] = useState<{ templateVersionId: number | null; senderAccountId: number | null }>({ templateVersionId: null, senderAccountId: null });
+  const [useEmailLibrary, setUseEmailLibrary] = useState(false);
   const { toast } = useToast();
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
+  const { user: emailManager } = useAuth();
+  const actor = emailManager as (typeof emailManager & { isImpersonating?: boolean });
+  const eligibleAdministrator = isAdmin && canManageNotificationRules(actor, true);
+  // A role alone is not proof of a real human session. Reuse the backend's
+  // session-only capability endpoint, which rejects tokens and impersonation.
+  const ruleAuthority = useQuery({
+    queryKey: ["notification-rule-write-authority", actor?.id, actor?.role, actor?.isImpersonating === true],
+    enabled: eligibleAdministrator, retry: false, staleTime: 0, gcTime: 0,
+    queryFn: ({ signal }) => customFetch<{ canManage: boolean }>("/api/notification-email/capabilities", { signal, cache: "no-store" }),
+  });
+  const canManageRules = eligibleAdministrator && canManageNotificationRules(actor, ruleAuthority.isSuccess && !ruleAuthority.isFetching && ruleAuthority.data.canManage === true);
+  const canManageEmail = canManageRules;
+  const emailCopy = emailAutomationCopy(lang);
+
+  useEffect(() => {
+    if (!eligibleAdministrator || ruleAuthority.isError || (ruleAuthority.isSuccess && ruleAuthority.data.canManage !== true)) setEditingTemplate(null);
+  }, [eligibleAdministrator, ruleAuthority.isError, ruleAuthority.isSuccess, ruleAuthority.data?.canManage]);
 
   useEffect(() => {
     if (isAdmin) fetchRules();
@@ -158,6 +184,7 @@ export function NotificationRulesManager({ isAdmin, notifications, setNotificati
   }
 
   async function toggleChannel(rule: NotificationRule, channel: string) {
+    if (!canManageRules) return;
     const has = rule.channels.includes(channel);
     const newChannels = has
       ? rule.channels.filter(c => c !== channel)
@@ -165,30 +192,33 @@ export function NotificationRulesManager({ isAdmin, notifications, setNotificati
 
     setSaving(rule.id);
     try {
-      await customFetch(`/api/notification-rules/${rule.id}`, {
+      const updated = await customFetch<NotificationRule>(`/api/notification-rules/${rule.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ channels: newChannels }),
+        body: JSON.stringify({ channels: newChannels, expectedUpdatedAt: rule.updatedAt }),
       });
-      setRules(prev => prev.map(r => r.id === rule.id ? { ...r, channels: newChannels } : r));
+      setRules(prev => prev.map(r => r.id === rule.id ? updated : r));
     } catch {
       toast({ title: t("notificationRules.failedToUpdate"), variant: "destructive" });
+      await fetchRules();
     } finally {
       setSaving(null);
     }
   }
 
   async function toggleActive(rule: NotificationRule) {
+    if (!canManageRules) return;
     setSaving(rule.id);
     try {
-      await customFetch(`/api/notification-rules/${rule.id}`, {
+      const updated = await customFetch<NotificationRule>(`/api/notification-rules/${rule.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ isActive: !rule.isActive }),
+        body: JSON.stringify({ isActive: !rule.isActive, expectedUpdatedAt: rule.updatedAt }),
       });
-      setRules(prev => prev.map(r => r.id === rule.id ? { ...r, isActive: !r.isActive } : r));
+      setRules(prev => prev.map(r => r.id === rule.id ? updated : r));
     } catch {
       toast({ title: t("notificationRules.failedToUpdate"), variant: "destructive" });
+      await fetchRules();
     } finally {
       setSaving(null);
     }
@@ -203,7 +233,10 @@ export function NotificationRulesManager({ isAdmin, notifications, setNotificati
   }
 
   function openTemplateEditor(rule: NotificationRule) {
+    if (!canManageRules) return;
     setEditingTemplate(rule);
+    setUseEmailLibrary(Boolean(rule.template?.emailTemplateVersionId));
+    setEmailBinding({ templateVersionId: rule.template?.emailTemplateVersionId ?? null, senderAccountId: rule.template?.emailSenderAccountId ?? null });
     const next = emptyTranslations();
     const tpl = rule.template;
     if (tpl?.translations && Object.keys(tpl.translations).length > 0) {
@@ -234,7 +267,11 @@ export function NotificationRulesManager({ isAdmin, notifications, setNotificati
   }
 
   async function saveTemplate() {
-    if (!editingTemplate) return;
+    if (!canManageRules || !editingTemplate) return;
+    if (useEmailLibrary && (!emailBinding.templateVersionId || !emailBinding.senderAccountId)) {
+      toast({ title: emailCopy.required, variant: "destructive" });
+      return;
+    }
     setSavingTemplate(true);
     const translations: Record<string, LangTemplate> = {};
     for (const [k, v] of Object.entries(templateTranslations)) {
@@ -251,20 +288,24 @@ export function NotificationRulesManager({ isAdmin, notifications, setNotificati
         ? "tr"
         : Object.keys(translations)[0];
     const top = defaultLang ? translations[defaultLang] : { subject: "", body: "" };
-    const template: NotifTemplate = { subject: top.subject || "", body: top.body || "", translations };
+    const template: NotifTemplate = { subject: top.subject || "", body: top.body || "", translations,
+      emailTemplateVersionId: useEmailLibrary ? emailBinding.templateVersionId : null,
+      emailSenderAccountId: useEmailLibrary ? emailBinding.senderAccountId : null,
+    };
     try {
-      await customFetch(`/api/notification-rules/${editingTemplate.id}`, {
+      const updated = await customFetch<NotificationRule>(`/api/notification-rules/${editingTemplate.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ template }),
+        body: JSON.stringify({ template, expectedUpdatedAt: editingTemplate.updatedAt }),
       });
       setRules(prev => prev.map(r =>
-        r.id === editingTemplate.id ? { ...r, template } : r
+        r.id === editingTemplate.id ? updated : r
       ));
       toast({ title: t("notificationRules.templateSaved") });
       setEditingTemplate(null);
     } catch {
       toast({ title: t("notificationRules.failedToSaveTemplate"), variant: "destructive" });
+      await fetchRules();
     } finally {
       setSavingTemplate(false);
     }
@@ -339,6 +380,11 @@ export function NotificationRulesManager({ isAdmin, notifications, setNotificati
               {t("notificationRules.rulesCount", { count: rules.length })}
             </Badge>
           </div>
+
+          {!canManageRules && <p className="mb-4 text-sm text-muted-foreground" data-testid="notification-rules-readonly">
+            {eligibleAdministrator && ruleAuthority.isFetching ? emailCopy.copy("Checking editing permission…", "Düzenleme yetkisi kontrol ediliyor…") : emailCopy.copy("Read-only. Editing notification rules requires a verified, non-impersonated Admin or Super Admin session.", "Salt okunur. Bildirim kurallarını düzenlemek için yetkisi doğrulanmış, kullanıcı taklidi olmayan Admin veya Super Admin oturumu gerekir.")}
+            {eligibleAdministrator && ruleAuthority.isError && <Button variant="outline" size="sm" className="ms-2" onClick={() => void ruleAuthority.refetch()}>{emailCopy.refresh}</Button>}
+          </p>}
 
           {loading ? (
             <div className="flex items-center justify-center py-12">
@@ -416,7 +462,8 @@ export function NotificationRulesManager({ isAdmin, notifications, setNotificati
                                     <button
                                       key={ch}
                                       onClick={() => toggleChannel(rule, ch)}
-                                      disabled={saving === rule.id || !rule.isActive}
+                                      data-testid="notification-rule-channel"
+                                      disabled={!canManageRules || saving === rule.id || !rule.isActive}
                                       className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium border transition-all ${
                                         active
                                           ? meta.color
@@ -431,7 +478,8 @@ export function NotificationRulesManager({ isAdmin, notifications, setNotificati
                                 })}
                                 <button
                                   onClick={() => openTemplateEditor(rule)}
-                                  disabled={!rule.isActive}
+                                  data-testid="notification-rule-template"
+                                  disabled={!canManageRules || !rule.isActive}
                                   className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium border border-orange-200 bg-orange-500/10 text-orange-600 hover:bg-orange-500/20 transition-all ml-1"
                                 >
                                   <Pencil className="w-3 h-3" />
@@ -441,7 +489,9 @@ export function NotificationRulesManager({ isAdmin, notifications, setNotificati
                             </div>
                             <button
                               onClick={() => toggleActive(rule)}
-                              disabled={saving === rule.id}
+                              data-testid="notification-rule-active"
+                              aria-label={t("notificationRules.systemRules") + ": " + rule.name}
+                              disabled={!canManageRules || saving === rule.id}
                               className={`relative w-10 h-5 rounded-full transition-all shrink-0 mt-1 ${
                                 rule.isActive ? "bg-primary" : "bg-secondary border border-border"
                               }`}
@@ -466,7 +516,9 @@ export function NotificationRulesManager({ isAdmin, notifications, setNotificati
         </Card>
       )}
 
-      {editingTemplate && (
+      {canManageEmail && <EmailAutomationManager />}
+
+      {canManageRules && editingTemplate && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
           <div className="bg-background rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
             <div className="p-6 border-b border-border/50">
@@ -487,6 +539,11 @@ export function NotificationRulesManager({ isAdmin, notifications, setNotificati
             </div>
 
             <div className="p-6 space-y-5">
+              {canManageEmail && <section className="rounded-lg border p-3 space-y-3" data-testid="notification-email-binding">
+                <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={useEmailLibrary} onChange={e => setUseEmailLibrary(e.target.checked)} />{emailCopy.copy("Use an approved shared email template", "Onaylı ortak e-posta şablonu kullan")}</label>
+                <p className="text-xs text-muted-foreground">{emailCopy.copy("Applies only to this rule's email channel. The event and recipients stay unchanged. Unbound rules keep the existing language editor below.", "Yalnızca bu kuralın e-posta kanalı için geçerlidir. Olay ve alıcılar değişmez. Bağlanmamış kurallar aşağıdaki mevcut dil düzenleyicisini kullanır.")}</p>
+                {useEmailLibrary && <EmailLibrarySelection {...emailBinding} onChange={setEmailBinding} allowedVariables={TEMPLATE_VARS[editingTemplate.event] ?? []} />}
+              </section>}
               <div>
                 <Label className="text-sm font-medium mb-2 block">{t("notificationRules.templateLanguage")}</Label>
                 <div className="flex flex-wrap items-center gap-1.5">
@@ -599,7 +656,7 @@ export function NotificationRulesManager({ isAdmin, notifications, setNotificati
               </Button>
               <Button
                 onClick={saveTemplate}
-                disabled={savingTemplate}
+                disabled={!canManageRules || savingTemplate}
                 className="gap-1.5"
               >
                 {savingTemplate ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}

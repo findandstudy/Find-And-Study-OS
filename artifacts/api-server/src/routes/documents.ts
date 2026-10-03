@@ -19,6 +19,7 @@ import { recomputeStudentPhoto } from "../lib/studentPhoto";
 import { maybeTriggerAutoEducationExtract } from "../lib/educationAutoExtract";
 import { callerOwnsObject } from "../lib/objectAuthz";
 import { hasStoredDocumentContent } from "../lib/documentContentPolicy";
+import { consumeFinalizedUploadGrantInDrizzle } from "../lib/uploadGrant";
 import archiver from "archiver";
 import { PDFDocument } from "pdf-lib";
 
@@ -220,6 +221,19 @@ router.post("/documents", requireAuth, requireAgentStaffPermission("documents"),
     return;
   }
 
+  // Authorize the object before reading, validating, deleting or recompressing
+  // its bytes. Rejecting a foreign key only after validation would let callers
+  // alter another uploader's object through the rejected-upload cleanup path.
+  // Preserve the existing staff allowance and non-staff ownership requirement.
+  if (fileKey && !isStaff) {
+    const owned = await callerOwnsObject(user.id, fileKey);
+    if (!owned) {
+      console.warn("[DOCUMENTS] upload object ownership denied");
+      res.status(403).json({ error: "You can only attach files that you have uploaded" });
+      return;
+    }
+  }
+
   let descriptiveName: string | null = null;
   let resolvedStudentId: number | null = studentId ?? null;
   if (!resolvedStudentId && applicationId) {
@@ -255,6 +269,8 @@ router.post("/documents", requireAuth, requireAgentStaffPermission("documents"),
     ? descriptiveName
     : (name ? sanitizeFileName(name) : name);
 
+  let verifiedUploadBytes: Buffer | null = null;
+  let verifiedUploadMimeType: string | null = null;
   if (fileKey) {
     if (!mimeType) {
       res.status(400).json({ error: "mimeType is required for file uploads" });
@@ -285,6 +301,8 @@ router.post("/documents", requireAuth, requireAgentStaffPermission("documents"),
       res.status(502).json({ error: "Failed to verify uploaded file." });
       return;
     }
+    verifiedUploadBytes = head;
+    verifiedUploadMimeType = mimeType;
     const bufferError = await validateStudentDocumentBuffer(type, validationFileName, mimeType, head);
     if (bufferError) {
       try {
@@ -318,19 +336,6 @@ router.post("/documents", requireAuth, requireAgentStaffPermission("documents"),
     }
   }
 
-  // Ownership guard: non-staff callers (students and agents) may only attach
-  // storage objects they uploaded themselves. This closes the IDOR where an
-  // attacker supplies a victim's object key to exfiltrate private files via
-  // the document download endpoint. Staff are trusted and bypass this check.
-  if (fileKey && !isStaff) {
-    const owned = await callerOwnsObject(user.id, fileKey);
-    if (!owned) {
-      console.warn(`[DOCUMENTS] fileKey ownership violation: userId=${user.id} role=${user.role} key=${fileKey}`);
-      res.status(403).json({ error: "You can only attach files that you have uploaded" });
-      return;
-    }
-  }
-
   const effectiveStatus = isStaff ? status : "pending";
 
   // Application-scoped uploads are only honoured for staff; everyone else
@@ -349,35 +354,53 @@ router.post("/documents", requireAuth, requireAgentStaffPermission("documents"),
   // (e.g. a metadata-only POST or an abandoned GCS upload) would soft-delete
   // the existing content-bearing record and leave an empty stub in its place —
   // the exact pattern that produced the 2026-06-02 data corruption.
-  if (resolvedStudentId && type && (fileKey || fileUrl)) {
-    const scopeCondition = targetApplicationId
-      ? eq(documentsTable.applicationId, targetApplicationId)
-      : isNull(documentsTable.applicationId);
-    const oldDocs = await db.select({ id: documentsTable.id }).from(documentsTable).where(
-      and(
-        eq(documentsTable.studentId, resolvedStudentId),
-        eq(documentsTable.type, type),
-        scopeCondition,
-        isNull(documentsTable.deletedAt)
-      )
-    );
-    if (oldDocs.length > 0) {
-      await db.update(documentsTable)
-        .set({ deletedAt: new Date() })
-        .where(inArray(documentsTable.id, oldDocs.map(d => d.id)));
+  const doc = await db.transaction(async (tx) => {
+    if (fileKey) {
+      if (!verifiedUploadBytes || !verifiedUploadMimeType || !await consumeFinalizedUploadGrantInDrizzle(tx, {
+        objectPath: fileKey,
+        uploadedBy: user.id,
+        bytes: verifiedUploadBytes,
+        contentType: verifiedUploadMimeType,
+      })) throw new Error("DOCUMENT_UPLOAD_GRANT_NOT_FINALIZED");
     }
-  }
+    if (resolvedStudentId && type && (fileKey || fileUrl)) {
+      const scopeCondition = targetApplicationId
+        ? eq(documentsTable.applicationId, targetApplicationId)
+        : isNull(documentsTable.applicationId);
+      await tx.update(documentsTable).set({ deletedAt: new Date() }).where(and(
+        eq(documentsTable.studentId, resolvedStudentId), eq(documentsTable.type, type),
+        scopeCondition, isNull(documentsTable.deletedAt),
+      ));
+    }
+    const [inserted] = await tx.insert(documentsTable).values({
+      name: safeName, type, status: effectiveStatus,
+      studentId: resolvedStudentId, applicationId: targetApplicationId,
+      fileUrl: fileUrl || null, fileKey: fileKey || null,
+      mimeType: mimeType || null, sizeBytes: sizeBytes ? Number(sizeBytes) : null,
+      notes: notes || null,
+    }).returning();
 
-  const [doc] = await db.insert(documentsTable).values({
-    name: safeName, type, status: effectiveStatus,
-    studentId: resolvedStudentId,
-    applicationId: targetApplicationId,
-    fileUrl: fileUrl || null,
-    fileKey: fileKey || null,
-    mimeType: mimeType || null,
-    sizeBytes: sizeBytes ? Number(sizeBytes) : null,
-    notes: notes || null,
-  }).returning();
+    if (targetApplicationId && inserted.studentId && type) {
+      const existingProfile = await tx.select({ id: documentsTable.id }).from(documentsTable).where(and(
+        eq(documentsTable.studentId, inserted.studentId), eq(documentsTable.type, type),
+        isNull(documentsTable.applicationId), isNull(documentsTable.deletedAt),
+      ));
+      if (existingProfile.length === 0) await tx.insert(documentsTable).values({
+        name: safeName, type, status: effectiveStatus, studentId: inserted.studentId,
+        applicationId: null, fileUrl: fileUrl || null, fileKey: fileKey || null,
+        mimeType: mimeType || null, sizeBytes: sizeBytes ? Number(sizeBytes) : null,
+        notes: notes || null,
+      });
+    }
+    return inserted;
+  }).catch((error) => {
+    if (error instanceof Error && error.message === "DOCUMENT_UPLOAD_GRANT_NOT_FINALIZED") return null;
+    throw error;
+  });
+  if (!doc) {
+    res.status(409).json({ error: "Upload must be finalized and unused before registration", code: "UPLOAD_GRANT_NOT_FINALIZED" });
+    return;
+  }
   await logAudit(user.id, "create_document", "document", doc.id, { name, type }, req.ip);
 
   // When a document is uploaded for a specific application and the student does
@@ -386,29 +409,6 @@ router.post("/documents", requireAuth, requireAgentStaffPermission("documents"),
   // The copy reuses the same stored file (fileKey), so no bytes are duplicated.
   // If the student already has a profile-level document of this type, leave it
   // untouched — the new upload stays only in the application's documents.
-  if (targetApplicationId && doc.studentId && type) {
-    const existingProfile = await db.select({ id: documentsTable.id }).from(documentsTable).where(
-      and(
-        eq(documentsTable.studentId, doc.studentId),
-        eq(documentsTable.type, type),
-        isNull(documentsTable.applicationId),
-        isNull(documentsTable.deletedAt)
-      )
-    );
-    if (existingProfile.length === 0) {
-      await db.insert(documentsTable).values({
-        name: safeName, type, status: effectiveStatus,
-        studentId: doc.studentId,
-        applicationId: null,
-        fileUrl: fileUrl || null,
-        fileKey: fileKey || null,
-        mimeType: mimeType || null,
-        sizeBytes: sizeBytes ? Number(sizeBytes) : null,
-        notes: notes || null,
-      });
-    }
-  }
-
   // AUTO-TRIGGER: transcript/diploma/degree upload for a student whose
   // education records are still empty fires the FAZ 1 extraction core in
   // the background. Fire-and-forget by contract — the upload response never

@@ -1,3 +1,6 @@
+import { projectPublicTuition, publicMinorAmount, publicCurrency } from "./publicCatalogTuition";
+import { publicCatalogRequirements } from "./publicCatalogRequirements";
+import { parseDetailContent } from "./websiteDetailContentContract";
 import {
   PROGRAM_SUPPORTED_LOCALES,
   type ProgramSupportedLocale,
@@ -17,7 +20,7 @@ export const PUBLIC_WEB_RESERVED_PAGE_SLUGS = new Set([
 ]);
 
 export function isReservedPublicPageSlug(value: unknown): boolean {
-  return String(value ?? "").startsWith("_detail-layout-") || PUBLIC_WEB_RESERVED_PAGE_SLUGS.has(String(value ?? "").trim().toLowerCase());
+  return /^_detail-(layout|content)-/i.test(String(value ?? "")) || PUBLIC_WEB_RESERVED_PAGE_SLUGS.has(String(value ?? "").trim().toLowerCase());
 }
 
 export type PublicPageBlock = {
@@ -46,6 +49,11 @@ export function parsePublicCatalogPageBlockSource(value: unknown): PublicCatalog
 }
 
 export type PublicCatalogRenderRoute =
+  | {
+      kind: "country_list";
+      locale: ProgramSupportedLocale;
+      path: string;
+    }
   | {
       kind: "program_list";
       locale: ProgramSupportedLocale;
@@ -93,7 +101,14 @@ export type PublicCatalogRenderRoute =
     };
 
 export type PublicCatalogRenderModel = PublicCatalogRenderModelData & {
+  editorial?: import("./websiteDetailContentContract").DetailContent | null;
   detailLayout?: import("./websiteDetailLayoutContract").DetailLayout;
+  consentCopy?: {
+    title: string;
+    description: string;
+    essentialOnly: string;
+    acceptAll: string;
+  };
 };
 type PublicCatalogRenderModelData =
   | {
@@ -103,6 +118,23 @@ type PublicCatalogRenderModelData =
       title: string;
       description: string;
       indexable: false;
+    }
+  | {
+      kind: "country_list";
+      locale: ProgramSupportedLocale;
+      canonicalPath: string;
+      title: string;
+      description: string;
+      indexable: true;
+      countries: Array<{
+        id: number;
+        name: string;
+        code: string;
+        canonicalPath: string;
+        universityCount: number;
+        programCount: number;
+        featured: boolean;
+      }>;
     }
   | {
       kind: "program_list";
@@ -146,6 +178,9 @@ type PublicCatalogRenderModelData =
         name: string;
         universityName: string;
         universityPath: string;
+        universityIsActive?: boolean;
+        countryPath?: string | null;
+        cityPath?: string | null;
         country: string;
         city: string | null;
         degree: string | null;
@@ -160,6 +195,7 @@ type PublicCatalogRenderModelData =
           currencyCode: string;
           frequency: string;
         } | null;
+        requirements?: string | null;
       };
       intakes?: Array<{
         id: string;
@@ -177,7 +213,7 @@ type PublicCatalogRenderModelData =
         amountMinor: string;
         currencyCode: string;
         frequency: string;
-      }>;
+      }> & { truncated?: boolean };
     }
   | {
       kind: "university_detail";
@@ -190,6 +226,9 @@ type PublicCatalogRenderModelData =
       university: {
         id: number;
         name: string;
+        isActive?: boolean;
+        countryPath?: string | null;
+        cityPath?: string | null;
         country: string;
         city: string | null;
         universityType: string | null;
@@ -212,7 +251,9 @@ type PublicCatalogRenderModelData =
       indexable: boolean;
       alternatePaths: Partial<Record<ProgramSupportedLocale, string>>;
       destination: {
-        id: number;
+        id: number | null;
+        catalogCountryId?: number;
+        cityLinks?: Array<{ name: string; canonicalPath: string }>;
         name: string;
         country: string;
         livingCost: string | null;
@@ -242,6 +283,8 @@ type PublicCatalogRenderModelData =
       indexable: boolean;
       alternatePaths: Partial<Record<ProgramSupportedLocale, string>>;
       city: {
+        countryPath?: string | null;
+        cityPath?: string | null;
         id: number;
         name: string;
         country: string;
@@ -259,6 +302,20 @@ type PublicCatalogRenderModelData =
           id: number;
           name: string;
           universityName: string;
+          universityId?: number;
+          universityPath?: string;
+          universityType?: string | null;
+          universityCity?: string | null;
+          universityCountry?: string | null;
+          universityLogoUrl?: string | null;
+          universityWebsite?: string | null;
+          universityIsActive?: boolean;
+          isActive?: boolean;
+          language?: string | null;
+          duration?: string | null;
+          description?: string | null;
+          requirements?: string | null;
+          tuition?: ReturnType<typeof projectPublicTuition>;
           degree: string | null;
           field: string | null;
           canonicalPath: string;
@@ -382,6 +439,12 @@ export function matchPublicCatalogRenderPath(
   const segments = path.split("/").filter(Boolean);
   const locale = segments[0] as ProgramSupportedLocale;
   if (!PROGRAM_SUPPORTED_LOCALES.includes(locale)) return null;
+  if (segments.length === 1) {
+    return { kind: "page_detail", locale, path, slug: "home" };
+  }
+  if (segments.length === 2 && segments[1] === "countries") {
+    return { kind: "country_list", locale, path };
+  }
   if (segments.length === 2 && segments[1] === "programs") {
     return { kind: "program_list", locale, path };
   }
@@ -475,11 +538,38 @@ function escapeHtml(value: unknown): string {
     .replace(/'/g, "&#39;");
 }
 
+function renderConsentShell(model: PublicCatalogRenderModel): string {
+  const copy = model.consentCopy;
+  if (!copy) return "";
+  return `<aside class="public-consent-shell fixed bottom-0 left-0 right-0 z-50 bg-background/95 border-t border-border shadow-2xl" role="region" aria-label="${escapeHtml(copy.title)}">
+    <div class="max-w-7xl mx-auto px-4 py-4 sm:px-6 flex flex-col sm:flex-row items-start sm:items-center gap-4">
+      <div class="flex-1 min-w-0"><p class="text-sm font-semibold text-foreground leading-snug">${escapeHtml(copy.title)}</p><p class="text-xs text-muted-foreground mt-0.5 leading-relaxed">${escapeHtml(copy.description)}</p></div>
+      <div class="flex items-center gap-2 shrink-0 self-end sm:self-auto"><button type="button" data-cookie-consent-choice="essential" class="inline-flex items-center justify-center rounded-lg border border-input bg-background px-3 h-8 text-xs">${escapeHtml(copy.essentialOnly)}</button><button type="button" data-cookie-consent-choice="all" class="inline-flex items-center justify-center rounded-lg bg-primary text-primary-foreground px-4 h-8 text-xs">${escapeHtml(copy.acceptAll)}</button></div>
+    </div>
+  </aside>`;
+}
+
 function safeJson(value: unknown): string {
   return JSON.stringify(value)
     .replace(/</g, "\\u003c")
     .replace(/>/g, "\\u003e")
     .replace(/&/g, "\\u0026");
+}
+
+/** Mirrors the visitor-visible editorial content without authoring state or raw HTML. */
+function renderDetailContent(model: PublicCatalogRenderModel): string {
+  const content = parseDetailContent(model.editorial);
+  const entityId = model.kind === "program_detail" ? model.program.id : model.kind === "university_detail" ? model.university.id
+    : model.kind === "city_detail" ? model.city.id : model.kind === "destination_detail" ? model.destination.catalogCountryId : null;
+  if (!content || content.locale !== model.locale || content.entityId !== entityId || `${content.kind}_detail` !== model.kind) return "";
+  return content.sections.map(section => {
+    const cards = section.cards?.map(card => `<article><h3>${card.href ? `<a href="${escapeHtml(card.href)}" rel="noopener noreferrer">${escapeHtml(card.title)}</a>` : escapeHtml(card.title)}</h3><p>${escapeHtml(card.body)}</p></article>`).join("") || "";
+    const images = section.images?.map(image => `<figure><img loading="lazy" decoding="async" src="${escapeHtml(image.src)}" alt="${escapeHtml(image.alt)}" width="800" height="560" />${image.caption ? `<figcaption>${escapeHtml(image.caption)}</figcaption>` : ""}</figure>`).join("") || "";
+    const table = section.table ? `<div role="region" aria-label="${escapeHtml(section.title)}" tabindex="0" style="overflow-x:auto"><table><caption>${escapeHtml(section.title)}</caption><thead><tr>${section.table.columns.map(column => `<th scope="col">${escapeHtml(column)}</th>`).join("")}</tr></thead><tbody>${section.table.rows.map(row => `<tr>${row.map((cell,index) => index ? `<td>${escapeHtml(cell)}</td>` : `<th scope="row">${escapeHtml(cell)}</th>`).join("")}</tr>`).join("")}</tbody></table></div>` : "";
+    const steps = section.steps ? `<ol>${section.steps.map(step => `<li><h3>${escapeHtml(step.title)}</h3><p>${escapeHtml(step.body)}</p></li>`).join("")}</ol>` : "";
+    const faq = section.questions?.map(item => `<details><summary>${escapeHtml(item.question)}</summary><p>${escapeHtml(item.answer)}</p></details>`).join("") || "";
+    return `<section data-detail-section="editorial-${section.key}" id="editorial-${section.key}" class="mt-10"><h2>${escapeHtml(section.title)}</h2>${section.body ? `<p>${escapeHtml(section.body)}</p>` : ""}${images}${cards}${table}${steps}${faq}<footer>${section.sources.map(source => `<cite><a href="${escapeHtml(source.url)}" rel="noopener noreferrer">${escapeHtml(source.label)}</a></cite>`).join(" · ")} <time datetime="${section.reviewedOn}">${section.reviewedOn}</time></footer></section>`;
+  }).join("");
 }
 
 function replaceMeta(
@@ -503,9 +593,33 @@ function renderProgramList(model: Extract<PublicCatalogRenderModel, { kind: "pro
         <p class="mt-2 text-muted-foreground">${escapeHtml([program.degree, program.field, program.duration, program.language].filter(Boolean).join(" · "))}</p>
         <p class="mt-2 text-sm text-muted-foreground">${escapeHtml([program.city, program.country].filter(Boolean).join(", "))}</p>
       </article>`).join("");
-  return `<main data-public-render-shell="program-list" class="mx-auto max-w-7xl px-4 py-24">
-    <header><h1 class="text-4xl font-bold">${escapeHtml(model.title)}</h1><p class="mt-3 text-muted-foreground">${escapeHtml(model.description)}</p><p class="mt-2 text-sm">${model.total.toLocaleString(model.locale)} ${escapeHtml(copy.programs.toLocaleLowerCase(model.locale))}</p></header>
-    <section class="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">${cards}</section>
+  return `<main data-public-render-shell="program-list">
+    <header class="pt-24 pb-6 bg-gradient-to-br from-primary/5 via-accent/5 to-primary/5 text-center">
+      <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <h1 class="text-4xl md:text-5xl font-display font-bold text-foreground mb-4">${escapeHtml(model.title)}</h1>
+        <p class="text-lg text-muted-foreground max-w-2xl mx-auto">${escapeHtml(model.description)}</p>
+      </div>
+    </header>
+    <section class="mx-auto mt-8 grid max-w-7xl gap-5 px-4 sm:grid-cols-2 sm:px-6 lg:grid-cols-3 lg:px-8"><p class="sr-only">${model.total.toLocaleString(model.locale)} ${escapeHtml(copy.programs.toLocaleLowerCase(model.locale))}</p>${cards}</section>
+  </main>`;
+}
+
+function renderCountryList(model: Extract<PublicCatalogRenderModel, { kind: "country_list" }>): string {
+  const copy = RENDER_COPY[model.locale];
+  const cards = model.countries.map((country) => `
+      <article class="rounded-2xl border border-border bg-card p-5">
+        <p class="text-sm font-semibold text-primary">${escapeHtml(country.code)}</p>
+        <h2 class="mt-2 text-xl font-bold"><a href="${escapeHtml(country.canonicalPath)}">${escapeHtml(country.name)}</a></h2>
+        <p class="mt-3 text-sm text-muted-foreground">${country.universityCount.toLocaleString(model.locale)} ${escapeHtml(copy.institutionType.toLocaleLowerCase(model.locale))} · ${country.programCount.toLocaleString(model.locale)} ${escapeHtml(copy.programs.toLocaleLowerCase(model.locale))}</p>
+      </article>`).join("");
+  return `<main data-public-render-shell="country-list">
+    <header class="pt-24 pb-16 bg-gradient-to-br from-primary/5 via-accent/5 to-primary/5 text-center">
+      <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <h1 class="text-4xl md:text-6xl font-display font-bold text-foreground mb-6">${escapeHtml(model.title)}</h1>
+        <p class="text-xl text-muted-foreground max-w-2xl mx-auto">${escapeHtml(model.description)}</p>
+      </div>
+    </header>
+    <section class="mx-auto mt-8 grid max-w-7xl gap-5 px-4 sm:grid-cols-2 sm:px-6 lg:grid-cols-3 lg:px-8">${cards}</section>
   </main>`;
 }
 
@@ -519,30 +633,36 @@ function formatMinorPrice(
   currencyCode: unknown,
   locale: ProgramSupportedLocale,
 ): string | null {
-  const amount = typeof amountMinor === "string" || typeof amountMinor === "number"
-    ? Number(amountMinor)
-    : NaN;
-  const currency = normalizedCurrency(currencyCode);
-  if (!Number.isSafeInteger(amount) || amount < 0 || !currency) return null;
+  const amount = publicMinorAmount(amountMinor, currencyCode);
+  const currency = publicCurrency(currencyCode);
+  if (amount === null || !currency) return null;
   try {
     return new Intl.NumberFormat(locale, {
       style: "currency",
       currency,
-      maximumFractionDigits: 0,
-    }).format(amount / 100);
+    }).format(amount);
   } catch {
-    return `${(amount / 100).toLocaleString(locale)} ${currency}`;
+    return `${amount.toLocaleString(locale)} ${currency}`;
   }
+}
+
+function locationHierarchy(value: { country?: string; city?: string | null; countryPath?: string | null; cityPath?: string | null }): string {
+  const link = (label: string | null | undefined, path: string | null | undefined) => {
+    if (!label) return "";
+    const safe = path ? safePublicUrl(path) : null;
+    return safe ? `<a href="${escapeHtml(safe)}">${escapeHtml(label)}</a>` : escapeHtml(label);
+  };
+  return [link(value.country, value.countryPath), link(value.city, value.cityPath)].filter(Boolean).join(" / ");
 }
 
 function renderProgramDetail(model: Extract<PublicCatalogRenderModel, { kind: "program_detail" }>): string {
   const program = model.program;
+  const requirements = publicCatalogRequirements(program.requirements, { canonicalPath: model.canonicalPath, id: program.id });
   const copy = RENDER_COPY[model.locale];
   const prices = model.prices ?? [];
   const verifiedTuition = program.verifiedTuition || prices.find((item) => item.componentType === "TUITION") || null;
-  const price = verifiedTuition
-    ? formatMinorPrice(verifiedTuition.amountMinor, verifiedTuition.currencyCode, model.locale)
-    : null;
+  const tuition = projectPublicTuition(program, prices.length ? prices : verifiedTuition ? [{ ...verifiedTuition, componentType: "TUITION" }] : []);
+  const price = tuition ? `${tuition.isFrom ? "From " : ""}${new Intl.NumberFormat(model.locale, { style: "currency", currency: tuition.currency }).format(tuition.amount)}${tuition.verified ? "" : " (catalogue price; not verified)"}` : null;
   const intakes = (model.intakes ?? []).map((intake) => `
       <article class="rounded-xl border border-border/60 p-4">
         <h3 class="font-semibold">${escapeHtml(intake.intakeKey)} · ${escapeHtml(String(intake.academicYear))}</h3>
@@ -552,13 +672,16 @@ function renderProgramDetail(model: Extract<PublicCatalogRenderModel, { kind: "p
     const formatted = formatMinorPrice(item.amountMinor, item.currencyCode, model.locale) || "—";
     return `<div><dt>${escapeHtml(item.componentType)}</dt><dd>${escapeHtml(formatted)} · ${escapeHtml(item.frequency.toLowerCase())}</dd></div>`;
   }).join("");
+  const feeContent = priceRows || (price ? `<div><dt>${escapeHtml(copy.tuition)}</dt><dd>${escapeHtml(price)}</dd></div>` : "");
   const related = model.relatedPrograms.map((item) => `<article class="rounded-2xl border border-border p-5"><p class="text-sm text-primary">${escapeHtml(item.universityName)}</p><h3 class="mt-2 text-lg font-bold"><a href="${escapeHtml(item.canonicalPath)}">${escapeHtml(item.name)}</a></h3><p class="mt-2 text-muted-foreground">${escapeHtml([item.degree, item.field].filter(Boolean).join(" · "))}</p></article>`).join("");
   return `<main data-public-render-shell="program-detail" class="mx-auto max-w-7xl px-4 py-24">
     <nav aria-label="Breadcrumb"><a href="/${escapeHtml(model.locale)}/programs">${escapeHtml(copy.programs)}</a> / <span>${escapeHtml(program.name)}</span></nav>
-    <nav class="mt-8 flex gap-5" aria-label="${escapeHtml(program.name)}"><a href="#overview">${escapeHtml(copy.degree)}</a><a href="#fees">${escapeHtml(copy.tuition)}</a>${related ? `<a href="#related">${escapeHtml(copy.programs)}</a>` : ""}</nav>
+    <nav class="mt-8 flex gap-5" aria-label="${escapeHtml(program.name)}"><a href="#overview">${escapeHtml(copy.degree)}</a>${feeContent ? `<a href="#fees">${escapeHtml(copy.tuition)}</a>` : ""}${related ? `<a href="#related">${escapeHtml(copy.programs)}</a>` : ""}</nav>
     <article id="overview" class="mt-8">
       <p class="text-sm text-primary"><a href="${escapeHtml(program.universityPath)}">${escapeHtml(program.universityName)}</a></p>
       <h1 class="mt-3 text-4xl font-bold">${escapeHtml(program.name)}</h1>
+      <nav aria-label="Location">${locationHierarchy(program)}</nav>
+      ${program.universityIsActive === false ? `<button type="button" disabled aria-disabled="true">Applications closed</button>` : `<a data-application-cta href="/${escapeHtml(model.locale)}/programs?programId=${program.id}">Apply</a>`}
       <p class="mt-4 text-muted-foreground">${escapeHtml(model.description)}</p>
       <dl class="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <div><dt>${escapeHtml(copy.degree)}</dt><dd>${escapeHtml(program.degree || "—")}</dd></div>
@@ -566,11 +689,12 @@ function renderProgramDetail(model: Extract<PublicCatalogRenderModel, { kind: "p
         <div><dt>${escapeHtml(copy.duration)}</dt><dd>${escapeHtml(program.duration || "—")}</dd></div>
         <div><dt>${escapeHtml(copy.language)}</dt><dd>${escapeHtml(program.language || "—")}</dd></div>
         <div><dt>${escapeHtml(copy.location)}</dt><dd>${escapeHtml([program.city, program.country].filter(Boolean).join(", "))}</dd></div>
-        <div id="fees"><dt>${escapeHtml(copy.tuition)}</dt><dd>${price === null ? "—" : escapeHtml(price)}</dd></div>
+        <div><dt>${escapeHtml(copy.tuition)}</dt><dd>${price === null ? "—" : escapeHtml(price)}</dd></div>
       </dl>
     </article>
-    ${intakes ? `<section id="intakes" class="mt-10"><h2 class="text-2xl font-bold">Available intakes</h2><div class="mt-5 grid gap-4 sm:grid-cols-2">${intakes}</div></section>` : ""}
-    ${priceRows ? `<section class="mt-10" aria-label="${escapeHtml(copy.tuition)}"><h2 class="text-2xl font-bold">${escapeHtml(copy.tuition)}</h2><dl class="mt-5 grid gap-4 sm:grid-cols-2">${priceRows}</dl></section>` : ""}
+    ${requirements ? `<section data-detail-section="requirements" id="requirements" class="mt-10"><h2>Requirements</h2><p>${escapeHtml(requirements)}</p></section>` : ""}
+    ${intakes ? `<section data-detail-section="intakes" id="intakes" class="mt-10"><h2 class="text-2xl font-bold">Available intakes</h2><div class="mt-5 grid gap-4 sm:grid-cols-2">${intakes}</div></section>` : ""}
+    ${feeContent ? `<section data-detail-section="fees" id="fees" class="mt-10" aria-label="${escapeHtml(copy.tuition)}"><h2 class="text-2xl font-bold">${escapeHtml(copy.tuition)}</h2><dl class="mt-5 grid gap-4 sm:grid-cols-2">${feeContent}</dl></section>` : ""}
     ${related ? `<section data-detail-section="related" id="related" class="mt-12" aria-label="${escapeHtml(copy.programs)}"><h2 class="text-2xl font-bold">${escapeHtml(copy.programs)}</h2><div class="mt-5 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">${related}</div></section>` : ""}
   </main>`;
 }
@@ -589,12 +713,13 @@ function renderUniversityDetail(model: Extract<PublicCatalogRenderModel, { kind:
     <article id="overview" class="mt-8">
       <p class="text-sm text-primary">${escapeHtml([university.city, university.country].filter(Boolean).join(", "))}</p>
       <h1 class="mt-3 text-4xl font-bold">${escapeHtml(university.name)}</h1>
+      <nav aria-label="Location">${locationHierarchy(university)}</nav>
       <p class="mt-4 text-muted-foreground">${escapeHtml(model.description)}</p>
-      <dl class="mt-8 grid gap-4 sm:grid-cols-3">
+      <section data-detail-section="facts" id="facts"><dl class="mt-8 grid gap-4 sm:grid-cols-3">
         <div><dt>${escapeHtml(copy.institutionType)}</dt><dd>${escapeHtml(university.universityType || "—")}</dd></div>
         <div><dt>${escapeHtml(copy.location)}</dt><dd>${escapeHtml([university.city, university.country].filter(Boolean).join(", "))}</dd></div>
         <div><dt>${escapeHtml(copy.programs)}</dt><dd>${escapeHtml(String(university.programCount))}</dd></div>
-      </dl>
+      </dl></section>
     </article>
     <section data-detail-section="programs" id="programs" class="mt-10"><h2 class="text-2xl font-bold">${escapeHtml(copy.programs)}</h2><div class="mt-5 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">${programs}</div></section>
   </main>`;
@@ -608,20 +733,23 @@ function renderDestinationDetail(model: Extract<PublicCatalogRenderModel, { kind
         <h2 class="text-lg font-bold"><a href="${escapeHtml(university.canonicalPath)}">${escapeHtml(university.name)}</a></h2>
         <p class="mt-2 text-muted-foreground">${escapeHtml([university.universityType, university.city].filter(Boolean).join(" · "))}</p>
       </article>`).join("");
-  const cities = destination.popularCities.map((city) => `<li>${escapeHtml(city)}</li>`).join("");
+  const cities = destination.popularCities.map((city) => {
+    const path = destination.cityLinks?.find(link => link.name === city)?.canonicalPath;
+    return `<li>${locationHierarchy({ city, cityPath: path })}</li>`;
+  }).join("");
   return `<main data-public-render-shell="destination-detail" class="mx-auto max-w-7xl px-4 py-24">
     <nav aria-label="Breadcrumb"><a href="/${escapeHtml(model.locale)}/countries">${escapeHtml(copy.countries)}</a> / <span>${escapeHtml(destination.name)}</span></nav>
     <article class="mt-8">
       <p class="text-sm text-primary">${escapeHtml(destination.country)}</p>
       <h1 class="mt-3 text-4xl font-bold">${escapeHtml(model.title)}</h1>
       <p class="mt-4 text-muted-foreground">${escapeHtml(model.description)}</p>
-      <dl class="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <section data-detail-section="facts" id="facts"><dl class="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <div><dt>${escapeHtml(copy.location)}</dt><dd>${escapeHtml(destination.country)}</dd></div>
         <div><dt>${escapeHtml(copy.programs)}</dt><dd>${escapeHtml(String(destination.programCount))}</dd></div>
         <div><dt>${escapeHtml(copy.language)}</dt><dd>${escapeHtml(destination.language || "—")}</dd></div>
         <div><dt>${escapeHtml(copy.tuition)}</dt><dd>${escapeHtml(destination.currency || "—")}</dd></div>
-      </dl>
-      ${cities ? `<ul class="mt-8 flex flex-wrap gap-3" aria-label="${escapeHtml(copy.location)}">${cities}</ul>` : ""}
+      </dl></section>
+      ${cities ? `<section data-detail-section="cities" id="cities"><ul class="mt-8 flex flex-wrap gap-3" aria-label="${escapeHtml(copy.location)}">${cities}</ul></section>` : ""}
     </article>
     <section data-detail-section="universities" class="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-3" aria-label="${escapeHtml(destination.name)}">${universities}</section>
   </main>`;
@@ -641,17 +769,25 @@ function renderCityDetail(model: Extract<PublicCatalogRenderModel, { kind: "city
         <h3 class="mt-2 text-lg font-bold"><a href="${escapeHtml(program.canonicalPath)}">${escapeHtml(program.name)}</a></h3>
         <p class="mt-2 text-muted-foreground">${escapeHtml([program.degree, program.field].filter(Boolean).join(" · "))}</p>
       </article>`).join("");
-  return `<main data-public-render-shell="city-detail" class="mx-auto max-w-7xl px-4 py-24">
-    <nav aria-label="Breadcrumb"><a href="/${escapeHtml(model.locale)}/countries">${escapeHtml(copy.countries)}</a> / <span>${escapeHtml(city.country)}</span> / <span>${escapeHtml(city.name)}</span></nav>
-    <article class="mt-8">
-      <p class="text-sm text-primary">${escapeHtml(city.country)}</p>
-      <h1 class="mt-3 text-4xl font-bold">${escapeHtml(model.title)}</h1>
-      <p class="mt-4 max-w-3xl text-muted-foreground">${escapeHtml(model.description)}</p>
-      <dl class="mt-8 grid gap-4 sm:grid-cols-3">
+  return `<main data-public-render-shell="city-detail" class="public-detail detail-city">
+    <section data-detail-section="hero"><div class="detail-hero is-city">
+      <div class="detail-wrap detail-hero-top"><nav class="detail-breadcrumbs" aria-label="Breadcrumb"><a href="/${escapeHtml(model.locale)}/countries">${escapeHtml(copy.countries)}</a><span aria-hidden="true"> / </span>${city.countryPath ? `<a href="${escapeHtml(city.countryPath)}">${escapeHtml(city.country)}</a><span aria-hidden="true"> / </span>` : `<span>${escapeHtml(city.country)}</span><span aria-hidden="true"> / </span>`}<span>${escapeHtml(city.name)}</span></nav></div>
+      <div class="detail-wrap detail-hero-main"><div>
+        <div class="detail-cover-label"><span>${escapeHtml(copy.location)}</span></div>
+        <h1>${escapeHtml(city.name)}</h1>
+        ${city.countryPath ? `<a class="detail-hero-link" href="${escapeHtml(city.countryPath)}">${escapeHtml(city.country)}</a>` : `<p class="detail-hero-lead">${escapeHtml(city.country)}</p>`}
+      </div><aside class="detail-destination-summary" aria-label="${escapeHtml(copy.programs)}">
+        <p class="detail-eyebrow">${escapeHtml(copy.programs)}</p>
+        <div class="detail-country-stats"><div><strong>${escapeHtml(String(city.universityCount))}</strong><span>${escapeHtml(copy.institutionType)}</span></div><div><strong>${escapeHtml(String(city.programCount))}</strong><span>${escapeHtml(copy.programs)}</span></div></div>
+        <p class="detail-summary-caption">${escapeHtml(`${city.name} · ${city.country}`)}</p>
+      </aside></div>
+    </div></section>
+    <article class="detail-section is-sky"><div class="detail-wrap">
+      <section data-detail-section="facts" id="facts"><dl class="mt-8 grid gap-4 sm:grid-cols-3">
         <div><dt>${escapeHtml(copy.location)}</dt><dd>${escapeHtml(`${city.name}, ${city.country}`)}</dd></div>
         <div><dt>${escapeHtml(copy.institutionType)}</dt><dd>${escapeHtml(String(city.universityCount))}</dd></div>
         <div><dt>${escapeHtml(copy.programs)}</dt><dd>${escapeHtml(String(city.programCount))}</dd></div>
-      </dl>
+      </dl></section></div>
     </article>
     ${universities ? `<section data-detail-section="universities" class="mt-12"><h2 class="text-2xl font-bold">${escapeHtml(copy.institutionType)}</h2><div class="mt-5 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">${universities}</div></section>` : ""}
     ${programs ? `<section data-detail-section="programs" class="mt-12"><h2 class="text-2xl font-bold">${escapeHtml(copy.programs)}</h2><div class="mt-5 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">${programs}</div></section>` : ""}
@@ -742,13 +878,26 @@ function spacerHeightClass(value: unknown): string {
 
 function renderPublicPageBlock(block: PublicPageBlock, index: number): string {
   const content = block.content;
+  if (block.blockType === "home_fallback_hero") {
+    const title = pageText(content.title, 500);
+    const subtitle = pageText(content.subtitle, 2_000);
+    const badge = pageText(content.badge, 200);
+    const href = safePublicUrl(content.ctaUrl);
+    const label = pageText(content.ctaLabel, 200);
+    const secondaryHref = safePublicUrl(content.secondaryUrl);
+    const secondaryLabel = pageText(content.secondaryLabel, 200);
+    return `<section class="relative pt-24 pb-32 lg:pt-36 lg:pb-40 overflow-hidden"><div class="absolute inset-0 z-0" aria-hidden="true"><div class="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,hsl(var(--primary)/0.12),transparent_38%),radial-gradient(circle_at_80%_10%,hsl(var(--accent)/0.10),transparent_34%)]"></div><div class="absolute inset-0 bg-gradient-to-b from-background/0 via-background/50 to-background"></div></div><div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 text-center"><div>${badge ? `<div class="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 text-primary font-medium text-sm mb-8 border border-primary/20 shadow-sm"><svg aria-hidden="true" class="w-4 h-4 fill-primary" viewBox="0 0 24 24" width="16" height="16"><path d="m12 2.5 2.9 5.9 6.5.9-4.7 4.6 1.1 6.5-5.8-3.1-5.8 3.1 1.1-6.5-4.7-4.6 6.5-.9L12 2.5Z"></path></svg>${escapeHtml(badge)}</div>` : ""}<h1 class="text-5xl md:text-7xl font-bold font-display tracking-tight text-foreground max-w-4xl mx-auto leading-[1.1]">${escapeHtml(title)}</h1>${subtitle ? `<p class="mt-6 text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed">${escapeHtml(subtitle)}</p>` : ""}<div class="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">${href && label ? `<a class="inline-flex items-center justify-center rounded-full px-8 h-14 text-base font-medium bg-primary text-primary-foreground shadow-xl shadow-primary/25 hover:shadow-primary/40 hover:-translate-y-1 transition-all duration-300" href="${escapeHtml(href)}">${escapeHtml(label)}<svg aria-hidden="true" class="ms-2 w-5 h-5" viewBox="0 0 24 24" width="20" height="20"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14m-6-6 6 6-6 6"></path></svg></a>` : ""}${secondaryHref && secondaryLabel ? `<a class="inline-flex items-center justify-center rounded-full px-8 h-14 text-base font-medium border border-input bg-white/50 backdrop-blur hover:bg-white transition-all duration-300" href="${escapeHtml(secondaryHref)}">${escapeHtml(secondaryLabel)}</a>` : ""}</div></div></div></section>`;
+  }
   if (block.blockType === "hero") {
     const title = pageText(content.title, 500);
     const subtitle = pageText(content.subtitle, 2_000);
     const badge = pageText(content.badge, 200);
     const href = safePublicUrl(content.ctaUrl);
     const label = pageText(content.ctaLabel, 200);
-    return `<section class="px-4 py-20 text-center"><div class="mx-auto max-w-5xl">${badge ? `<p class="text-sm text-primary">${escapeHtml(badge)}</p>` : ""}<h1 class="mt-3 text-4xl font-bold">${escapeHtml(title)}</h1>${subtitle ? `<p class="mx-auto mt-5 max-w-3xl text-lg text-muted-foreground">${escapeHtml(subtitle)}</p>` : ""}${href && label ? `<p class="mt-7"><a class="rounded-full bg-primary px-6 py-3 text-primary-foreground" href="${escapeHtml(href)}">${escapeHtml(label)}</a></p>` : ""}</div></section>`;
+    const secondaryHref = safePublicUrl(content.secondaryUrl);
+    const secondaryLabel = pageText(content.secondaryLabel, 200);
+    const background = safePublicImageUrl(content.backgroundImage);
+    return `<section class="relative overflow-hidden px-4 py-24 text-center">${background ? `<img src="${escapeHtml(background)}" alt="" class="absolute inset-0 h-full w-full object-cover opacity-15" loading="eager" />` : ""}<div class="relative mx-auto max-w-5xl">${badge ? `<p class="text-sm font-semibold text-primary">${escapeHtml(badge)}</p>` : ""}<h1 class="mt-3 font-display text-4xl font-bold md:text-6xl">${escapeHtml(title)}</h1>${subtitle ? `<p class="mx-auto mt-5 max-w-3xl text-lg text-muted-foreground">${escapeHtml(subtitle)}</p>` : ""}<div class="mt-8 flex flex-wrap justify-center gap-3">${href && label ? `<a class="inline-flex rounded-full bg-primary px-6 py-3 font-semibold text-primary-foreground" href="${escapeHtml(href)}">${escapeHtml(label)}</a>` : ""}${secondaryHref && secondaryLabel ? `<a class="inline-flex rounded-full border border-current px-6 py-3 font-semibold" href="${escapeHtml(secondaryHref)}">${escapeHtml(secondaryLabel)}</a>` : ""}</div></div></section>`;
   }
   if (block.blockType === "rich_text") {
     const body = articlePlainText(pageText(content.content, 200_000));
@@ -869,11 +1018,9 @@ function structuredData(model: PublicCatalogRenderModel, siteUrl: string): unkno
     const program = model.program;
     const prices = model.prices ?? [];
     const verifiedTuition = program.verifiedTuition || prices.find((item) => item.componentType === "TUITION") || null;
-    const amountMinor = verifiedTuition ? Number(verifiedTuition.amountMinor) : NaN;
-    const price = Number.isSafeInteger(amountMinor) && amountMinor >= 0
-      ? amountMinor / 100
-      : null;
-    const currency = verifiedTuition ? normalizedCurrency(verifiedTuition.currencyCode) : null;
+    const tuition = projectPublicTuition(program, prices.length ? prices : verifiedTuition ? [{ ...verifiedTuition, componentType: "TUITION" }] : []);
+    const price = tuition?.verified && !tuition.isFrom ? tuition.amount : null;
+    const currency = tuition?.currency ?? null;
     return {
       "@context": "https://schema.org",
       "@type": "Course",
@@ -887,7 +1034,7 @@ function structuredData(model: PublicCatalogRenderModel, siteUrl: string): unkno
       },
       ...(program.language ? { inLanguage: program.language } : {}),
       ...(program.duration ? { timeRequired: program.duration } : {}),
-      ...(price !== null && currency ? {
+      ...(price !== null && currency && program.universityIsActive !== false ? {
         offers: {
           "@type": "Offer",
           price,
@@ -911,6 +1058,25 @@ function structuredData(model: PublicCatalogRenderModel, siteUrl: string): unkno
           position: index + 1,
           url: `${siteUrl}${program.canonicalPath}`,
           name: program.name,
+        })),
+      },
+    };
+  }
+  if (model.kind === "country_list") {
+    return {
+      "@context": "https://schema.org",
+      "@type": "CollectionPage",
+      name: model.title,
+      description: model.description,
+      url: `${siteUrl}${model.canonicalPath}`,
+      mainEntity: {
+        "@type": "ItemList",
+        numberOfItems: model.countries.length,
+        itemListElement: model.countries.map((country, index) => ({
+          "@type": "ListItem",
+          position: index + 1,
+          url: `${siteUrl}${country.canonicalPath}`,
+          name: country.name,
         })),
       },
     };
@@ -1065,6 +1231,7 @@ export function renderPublicCatalogHtml(input: {
   model: PublicCatalogRenderModel;
   siteUrl: string;
   nonce: string;
+  preloadHrefs?: string[];
 }): string {
   const siteUrl = input.siteUrl.replace(/\/$/, "");
   const canonicalUrl = `${siteUrl}${input.model.canonicalPath}`;
@@ -1084,8 +1251,10 @@ export function renderPublicCatalogHtml(input: {
   html = replaceMeta(html, "name", "twitter:title", input.model.title);
   html = replaceMeta(html, "name", "twitter:description", input.model.description);
 
-  let shell = input.model.kind === "program_list"
-    ? renderProgramList(input.model)
+  let shell = input.model.kind === "country_list"
+    ? renderCountryList(input.model)
+    : input.model.kind === "program_list"
+      ? renderProgramList(input.model)
     : input.model.kind === "program_detail"
       ? renderProgramDetail(input.model)
       : input.model.kind === "university_detail"
@@ -1099,10 +1268,11 @@ export function renderPublicCatalogHtml(input: {
               : input.model.kind === "page_detail"
                 ? renderPageDetail(input.model)
                 : renderNotFound(input.model);
+  shell = shell.replace("</main>", `${renderDetailContent(input.model)}</main>`);
   if (input.model.detailLayout) {
     const layout = input.model.detailLayout;
     const sections = new Map<string, string>();
-    shell = shell.replace(/<section data-detail-section="([a-z]+)"[\s\S]*?<\/section>/g, (markup, key) => { sections.set(key, markup); return ""; });
+    shell = shell.replace(/<section data-detail-section="([a-zA-Z-]+)"[\s\S]*?<\/section>/g, (markup, key) => { sections.set(key, markup); return ""; });
     const ordered = layout.sections.filter(key => !layout.hidden.includes(key)).map(key => sections.get(key) ?? "").join("");
     shell = shell.replace("</main>", `${ordered}</main>`);
     for (const key of layout.hidden) shell = shell.replace(new RegExp(`<a href="#${key}"[^>]*>[\\s\\S]*?<\\/a>`, "g"), "");
@@ -1126,10 +1296,14 @@ export function renderPublicCatalogHtml(input: {
   if (alternatePaths.en) {
     hreflangLinks.push(`  <link rel="alternate" hreflang="x-default" href="${escapeHtml(`${siteUrl}${alternatePaths.en}`)}" />`);
   }
-  const extraHead = `  <meta name="csp-nonce" content="${escapeHtml(input.nonce)}" />\n  <meta name="public-render" content="ssr-isr-pilot" />\n${hreflangLinks.join("\n")}${hreflangLinks.length ? "\n" : ""}  <script nonce="${escapeHtml(input.nonce)}" type="application/ld+json">${safeJson(structuredData(input.model, siteUrl))}</script>\n`;
+  const preloadLinks = [...new Set(input.preloadHrefs ?? [])]
+    .filter((href) => /^\/assets\/[A-Za-z0-9._-]+\.js$/.test(href))
+    .slice(0, 16)
+    .map((href) => `  <link rel="modulepreload" crossorigin href="${escapeHtml(href)}" />`);
+  const extraHead = `  <meta name="csp-nonce" content="${escapeHtml(input.nonce)}" />\n  <meta name="public-render" content="ssr-isr-pilot" />\n${preloadLinks.join("\n")}${preloadLinks.length ? "\n" : ""}${hreflangLinks.join("\n")}${hreflangLinks.length ? "\n" : ""}  <script nonce="${escapeHtml(input.nonce)}" type="application/ld+json">${safeJson(structuredData(input.model, siteUrl))}</script>\n`;
   return html
     .replace("</head>", `${extraHead}${input.model.detailLayout ? `<script id="public-detail-layout" nonce="${escapeHtml(input.nonce)}" type="application/json">${safeJson(input.model.detailLayout)}</script>` : ""}</head>`)
-    .replace(/<div\s+id=["']root["']\s*><\/div>/i, `<div id="root" data-public-render-shell-root="true">${shell}</div>`);
+    .replace(/<div\s+id=["']root["']\s*><\/div>/i, `<div id="root" data-public-render-shell-root="true">${shell}${renderConsentShell(input.model)}</div>`);
 }
 
 export function publicCatalogCsp(nonce: string): string {

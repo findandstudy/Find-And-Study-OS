@@ -18,6 +18,7 @@ import {
   portalAutomationSettingsTable,
   portalLifecycleProposalsTable,
   portalLifecycleProposalReviewsTable,
+  auditLogsTable,
 } from "@workspace/db";
 import {
   buildWorkbookBuffer,
@@ -2696,7 +2697,7 @@ router.post(
   async (req, res): Promise<void> => {
     const { force } = getValidated<RelinkUniversitiesSchemas>(req).body;
     const result = await reconcilePortalUniversityCrmLinks({ force: !!force });
-    logAudit(
+    await logAudit(
       req.user!.id,
       "relink_portal_universities",
       "portal_universities",
@@ -3778,28 +3779,30 @@ router.put(
       .where(eq(portalProgramMappingTable.universityKey, key))
       .limit(1);
 
-    let row;
-    if (existing) {
-      [row] = await db
-        .update(portalProgramMappingTable)
-        .set({ programOverrides, updatedAt: new Date() })
-        .where(eq(portalProgramMappingTable.id, existing.id))
-        .returning();
-    } else {
-      [row] = await db
-        .insert(portalProgramMappingTable)
-        .values({ universityKey: key, programOverrides })
-        .returning();
-    }
-
-    logAudit(
-      user.id,
-      "update_portal_program_mapping",
-      "portal_program_mapping",
-      row.id,
-      { universityKey: key, programOverrides: Object.keys(programOverrides).length },
-      req.ip,
-    );
+    const row = await db.transaction(async (tx) => {
+      const saved = existing
+        ? (await tx
+            .update(portalProgramMappingTable)
+            .set({ programOverrides, updatedAt: new Date() })
+            .where(eq(portalProgramMappingTable.id, existing.id))
+            .returning())[0]
+        : (await tx
+            .insert(portalProgramMappingTable)
+            .values({ universityKey: key, programOverrides })
+            .returning())[0];
+      await tx.insert(auditLogsTable).values({
+        userId: user.id,
+        action: "update_portal_program_mapping",
+        resource: "portal_program_mapping",
+        resourceId: saved.id,
+        changes: JSON.stringify({
+          universityKey: key,
+          programOverrides: Object.keys(programOverrides).length,
+        }),
+        ipAddress: req.ip ?? null,
+      });
+      return saved;
+    });
 
     res.json({
       universityKey: key,
@@ -4315,16 +4318,15 @@ router.put(
             ),
           );
       }
+      await tx.insert(auditLogsTable).values({
+        userId: user.id,
+        action: "portal.routing.update",
+        resource: "portal_university",
+        resourceId: portal.id,
+        changes: JSON.stringify({ portalKey: key, universityKeys: requested }),
+        ipAddress: req.ip ?? null,
+      });
     });
-
-    logAudit(
-      user.id,
-      "portal.routing.update",
-      "portal_university",
-      portal.id,
-      { portalKey: key, universityKeys: requested },
-      req.ip,
-    );
 
     const members = await db
       .select({
@@ -4653,16 +4655,19 @@ router.put(
             set: { portalKey: key, updatedAt: new Date() },
           });
       }
+      await tx.insert(auditLogsTable).values({
+        userId: user.id,
+        action: "portal.membership.update",
+        resource: "portal_university",
+        resourceId: portal.id,
+        changes: JSON.stringify({
+          portalKey: key,
+          catalogUniversityIds: requested,
+          force: force ?? false,
+        }),
+        ipAddress: req.ip ?? null,
+      });
     });
-
-    logAudit(
-      user.id,
-      "portal.membership.update",
-      "portal_university",
-      portal.id,
-      { portalKey: key, catalogUniversityIds: requested, force: force ?? false },
-      req.ip,
-    );
 
     const members = await db
       .select({

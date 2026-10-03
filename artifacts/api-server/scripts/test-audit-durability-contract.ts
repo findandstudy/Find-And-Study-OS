@@ -1,0 +1,500 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+
+const source = (path: string) => readFileSync(new URL(path, import.meta.url), "utf8");
+const auth = source("../src/lib/auth.ts");
+const tokens = source("../src/routes/apiTokens.ts");
+const email = source("../src/routes/emailAutomation.ts");
+const agents = source("../src/routes/agents.ts");
+const applications = source("../src/routes/applications.ts");
+const channelAccounts = source("../src/routes/channelAccounts.ts");
+const integrations = source("../src/routes/integrations.ts");
+const pipeline = source("../src/routes/pipeline.ts");
+const courseFinder = source("../src/routes/course-finder.ts");
+const apiIndex = source("../src/index.ts");
+const aiDefaults = source("../src/routes/ai-defaults.ts");
+const aiDefaultsUi = source("../../edcons/src/pages/admin/AiBuiltinDefaults.tsx");
+const aiExtractors = source("../src/routes/ai-extractors.ts");
+const aiPersonas = source("../src/routes/ai-personas.ts");
+const leadAssignmentRules = source("../src/routes/leadAssignmentRules.ts");
+const leads = source("../src/routes/leads.ts");
+const tasks = source("../src/routes/tasks.ts");
+const campaigns = source("../src/routes/campaigns.ts");
+const cms = source("../src/routes/cms.ts");
+const portalExclusions = source("../src/routes/portalUniversityExclusions.ts");
+const portalFallbacks = source("../src/routes/portalProgramFallbacks.ts");
+const dataQuality = source("../src/routes/dataQuality.ts");
+const staffCards = source("../src/routes/staffCards.ts");
+const stageDocuments = source("../src/routes/applicationStageDocuments.ts");
+const missingDocsFulfillment = source("../src/lib/missingDocsFulfillment.ts");
+const personFeed = source("../src/routes/personFeed.ts");
+const messageCampaigns = source("../src/routes/messageCampaigns.ts");
+const inbox = source("../src/routes/inbox.ts");
+const contractBrands = source("../src/routes/contractBrands.ts");
+const notifications = source("../src/routes/notifications.ts");
+const portalMgmt = source("../src/routes/portalMgmt.ts");
+const portalAutomation = source("../src/routes/portalAutomation.ts");
+
+assert.match(auth, /\): Promise<void> \{\s*return db\.insert\(auditLogsTable\)/,
+  "audit insert exposes a real awaitable completion boundary");
+assert.doesNotMatch(auth, /setImmediate\s*\(/,
+  "audit persistence is not deferred beyond the request lifecycle");
+assert.doesNotMatch(notifications, /logAudit\(/,
+  "notification rule mutations do not use the non-transactional legacy helper");
+for (const action of ["create_notification_rule", "update_notification_rule"]) {
+  assert.match(notifications, new RegExp(`await tx\\.insert\\(auditLogsTable\\)\\.values\\(\\{[^;]{0,360}action: "${action}"`),
+    `${action} persists its audit receipt before the rule transaction commits`);
+}
+assert.match(notifications, /changedFields: Object\.keys\(updates\)\.sort\(\)/,
+  "notification rule update audit records bounded field names instead of template contents");
+assert.match(notifications, /eq\(notificationRulesTable\.updatedAt, expectedUpdatedAt\)/,
+  "notification rule updates are bound to the version displayed by the client");
+assert.match(notifications, /NOTIFICATION_RULE_VERSION_CONFLICT/,
+  "notification rule lost updates return a deterministic conflict");
+const portalCredentialRoutes = portalMgmt.slice(
+  portalMgmt.lastIndexOf("router.put(", portalMgmt.indexOf('"/portal-universities/:portalKey/credentials"')),
+  portalMgmt.indexOf("export default router"),
+);
+const portalSettingsRoute = portalMgmt.slice(
+  portalMgmt.indexOf('"/portal-automation/settings"', portalMgmt.indexOf('router.put(')),
+  portalMgmt.indexOf("// ===========================================================================\n// PORTAL UNIVERSITIES"),
+);
+assert.match(portalSettingsRoute,
+  /await tx\.insert\(auditLogsTable\)\.values\(\{[^;]{0,420}action: "update_portal_automation_settings"/,
+  "portal automation settings and their result audit commit atomically");
+assert.doesNotMatch(portalSettingsRoute, /logAudit\([^;]{0,260}"update_portal_automation_settings"/,
+  "portal automation settings do not use the non-transactional legacy helper");
+assert.match(portalMgmt,
+  /async function insertPortalAuditTx\([\s\S]{0,520}await tx\.insert\(auditLogsTable\)\.values\(/,
+  "portal partner control-plane mutations have a transaction-bound audit writer");
+for (const action of [
+  "create_portal_university",
+  "enable_portal_auto_process",
+  "disable_portal_auto_process",
+  "set_portal_fan_out_mode",
+  "activate_portal_university",
+  "deactivate_portal_university",
+  "update_portal_university",
+  "delete_portal_university",
+  "bulk_activate_portal_university",
+  "bulk_deactivate_portal_university",
+  "bulk_enable_portal_auto_process",
+  "bulk_disable_portal_auto_process",
+  "bulk_delete_portal_university",
+  "update_portal_program_mapping",
+  "migrate_portal_program_mapping_ids_to_names",
+  "create_portal_adapter",
+  "update_portal_adapter",
+  "delete_portal_adapter",
+]) {
+  assert.doesNotMatch(portalMgmt, new RegExp(`logAudit\\([^;]{0,320}"${action}"`),
+    `${action} does not leave a committed portal decision without its audit receipt`);
+}
+assert.match(portalMgmt, /await logAudit\(req\.user!\.id, "queue_portal_test_login"/,
+  "portal test-login command waits for its audit attempt before returning acceptance");
+assert.match(portalMgmt, /changedFields: Object\.keys\(body\)\.sort\(\)/,
+  "portal adapter audit records changed field names without declarative configuration content");
+for (const action of ["conversation_note_create", "conversation_task_create"]) {
+  assert.match(inbox,
+    new RegExp(`await tx\\.insert\\(auditLogsTable\\)\\.values\\(\\{[^;]{0,420}action: "${action}"`),
+    `${action} commits its audit receipt with the inbox mutation`);
+  assert.doesNotMatch(inbox, new RegExp(`logAudit\\([^;]{0,260}"${action}"`),
+    `${action} no longer uses a post-commit legacy audit`);
+}
+for (const action of [
+  "update_ai_agent_config",
+  "update_knowledge_source_program_scope",
+  "create_knowledge_source_rag",
+  "update_knowledge_source_rag",
+  "reprocess_knowledge_source_rag",
+  "delete_knowledge_source_rag",
+]) {
+  assert.match(inbox, new RegExp(`await logAudit\\([^;]{0,260}"${action}"`),
+    `${action} does not report success before its audit attempt completes`);
+}
+assert.match(inbox, /update_knowledge_source_rag"[\s\S]{0,180}changedFields: Object\.keys\(parsed\.data\)\.sort\(\)/,
+  "RAG source update audit does not persist submitted content values");
+assert.doesNotMatch(portalAutomation, /(?<!await )logAudit\(/,
+  "portal automation routes never return before a legacy audit attempt completes");
+for (const action of [
+  "update_portal_program_mapping",
+  "portal.routing.update",
+  "portal.membership.update",
+]) {
+  assert.match(portalAutomation,
+    new RegExp(`await tx\\.insert\\(auditLogsTable\\)\\.values\\(\\{[^;]{0,520}action: "${action.replaceAll(".", "\\.")}"`),
+    `${action} commits its audit receipt with the portal automation mutation`);
+}
+for (const action of ["upsert_portal_credentials", "delete_portal_credentials"]) {
+  assert.match(portalCredentialRoutes, new RegExp(`await tx\\.insert\\(auditLogsTable\\)\\.values\\(\\{[^;]{0,420}action: "${action}"`),
+    `${action} persists its result before the credential transaction commits`);
+  assert.doesNotMatch(portalCredentialRoutes, new RegExp(`logAudit\\([^;]{0,260}"${action}"`),
+    `${action} does not use the non-transactional legacy helper`);
+}
+assert.doesNotMatch(tokens, /logAudit\(/, "API token mutations do not use the non-transactional legacy helper");
+assert.doesNotMatch(dataQuality, /logAudit\(/,
+  "application-lead repair does not use the non-transactional legacy helper");
+assert.match(dataQuality, /await tx\.insert\(auditLogsTable\)\.values\(\{[\s\S]{0,220}action: "approve_application_lead_link"/,
+  "application-lead repair persists its audit receipt before transaction commit");
+assert.equal((tokens.match(/await tx\.insert\(auditLogsTable\)\.values\(\{/g) ?? []).length, 3,
+  "API token create, revoke and rotate write their audit result inside the mutation transaction");
+for (const action of ["create", "revoke", "rotate"]) {
+  assert.match(tokens, new RegExp(`action: "${action}"[\\s\\S]{0,100}resource: "api_token"`),
+    `API token ${action} persists a bounded result receipt`);
+}
+for (const action of ["sender_created", "sender_updated", "sender_verified", "template_created", "version_created"]) {
+  assert.match(email, new RegExp(`await logAudit\\(req\\.user!\\.id, "notification_email\\.${action}"`),
+    `email ${action} awaits audit persistence`);
+}
+assert.match(email, /await logAudit\(req\.user!\.id, `notification_email\.version_\$\{action\}`/,
+  "email approval lifecycle awaits audit persistence");
+assert.equal((agents.match(/await logAudit\([^\n]+"auth\.impersonate\.(?:start|end)"/g) ?? []).length, 3,
+  "all three legacy impersonation start/end paths await audit persistence");
+assert.match(agents, /await logAudit\(actor\.id, "agent\.academy_access\.update"/,
+  "Academy privilege change awaits audit persistence");
+const destructiveApplicationRoutes = applications.slice(
+  applications.indexOf('router.delete("/applications/:id"'),
+  applications.indexOf('router.get("/applications/:id/notes"'),
+);
+const applicationPatchRoute = applications.slice(
+  applications.indexOf('router.patch("/applications/:id"'),
+  applications.indexOf('router.post("/applications/bulk-action"'),
+);
+assert.match(applicationPatchRoute, /await tx\.insert\(auditLogsTable\)\.values\(\{[\s\S]{0,180}action: "update_application"/,
+  "application patch persists its audit receipt before the mutation transaction commits");
+assert.doesNotMatch(applicationPatchRoute, /logAudit\(req\.user!\.id, "update_application"/,
+  "application patch does not use the non-transactional legacy helper");
+const applicationBulkRoute = applications.slice(
+  applications.indexOf('router.post("/applications/bulk-action"'),
+  applications.indexOf('router.delete("/applications/:id"'),
+);
+assert.match(applicationBulkRoute, /if \(ids\.length > 500\)[\s\S]{0,120}BULK_APPLICATION_LIMIT/,
+  "application bulk mutations have a hard request-size ceiling");
+assert.match(applicationBulkRoute, /\[\.\.\.new Set\(ids\.map\(Number\)/,
+  "application bulk mutations deduplicate normalized positive identifiers");
+for (const action of ["delete_application", "bulk_assign_applications", "bulk_move_application"]) {
+  assert.match(applicationBulkRoute, new RegExp(`await tx\\.insert\\(auditLogsTable\\)\\.values\\([^;]{0,700}action: "${action}"`),
+    `${action} persists its audit receipt inside the mutation transaction`);
+}
+assert.match(applicationBulkRoute,
+  /action: "bulk_move_application"[\s\S]{0,520}await syncApplicationFinance\(app\.id, tx\);[\s\S]{0,80}\}\);/,
+  "bulk application stage and canonical finance projection commit with the audit receipt");
+for (const action of ["delete_application", "bulk_assign_applications", "bulk_move_application"]) {
+  assert.doesNotMatch(applicationBulkRoute, new RegExp(`logAudit\\([^;]{0,180}"${action}"`),
+    `${action} does not use the non-transactional legacy helper`);
+}
+assert.equal((destructiveApplicationRoutes.match(/await tx\.insert\(auditLogsTable\)\.values\(\{/g) ?? []).length, 2,
+  "application soft-delete and purge write audit in their mutation transaction");
+for (const action of ["delete_application", "purge_application"]) {
+  assert.match(destructiveApplicationRoutes, new RegExp(`action: "${action}"[\\s\\S]{0,100}resource: "application"`),
+    `${action} has a transaction-bound result receipt`);
+}
+assert.match(destructiveApplicationRoutes, /\.for\("update"\)/,
+  "hard purge locks and proves the application exists before deletion");
+assert.doesNotMatch(destructiveApplicationRoutes, /logAudit\(/,
+  "destructive application routes do not use the non-transactional legacy helper");
+assert.match(destructiveApplicationRoutes, /if \(!purged\) \{ res\.status\(404\)/,
+  "hard purge does not report success for a missing application");
+assert.doesNotMatch(channelAccounts, /logAudit\(/,
+  "channel account mutations do not use the non-transactional legacy helper");
+assert.match(channelAccounts, /async function writeAccountAudit[\s\S]*await tx\.insert\(auditLogsTable\)\.values/,
+  "channel account audit helper requires the active transaction");
+for (const action of [
+  "create_channel_account", "update_channel_account", "toggle_channel_account",
+  "set_default_channel_account", "delete_channel_account",
+]) {
+  assert.match(channelAccounts, new RegExp(`await writeAccountAudit\\(tx, req, "${action}"`),
+    `${action} writes its result before transaction commit`);
+}
+assert.doesNotMatch(integrations, /logAudit\(/,
+  "integration config mutations do not use the non-transactional legacy helper");
+assert.match(integrations, /async function writeIntegrationAudit[\s\S]*await tx\.insert\(auditLogsTable\)\.values/,
+  "integration audit helper requires the active transaction");
+for (const action of ["update_integration", "toggle_integration"]) {
+  assert.match(integrations, new RegExp(`await writeIntegrationAudit\\(tx, req, "${action}"`),
+    `${action} writes its result before transaction commit`);
+}
+assert.equal((integrations.match(/integration_version_conflict/g) ?? []).length, 2,
+  "integration update and toggle both reject stale writes");
+assert.doesNotMatch(pipeline, /logAudit\(/,
+  "pipeline replacement does not use the non-transactional legacy helper");
+for (const action of ["pipeline_stages.updated", "pipeline_stage_email.configured"]) {
+  assert.match(pipeline, new RegExp(`await tx\\.insert\\(auditLogsTable\\)\\.values\\(\\{[\\s\\S]{0,180}action: "${action}"`),
+    `${action} is persisted before the stage replacement transaction commits`);
+}
+assert.match(pipeline, /if \(stages\.length > 100\)/,
+  "pipeline audit and replacement input has a hard stage-count ceiling");
+const publicSettingsRoute = courseFinder.slice(courseFinder.indexOf("router.patch("), courseFinder.indexOf('router.get("/course-finder/students"'));
+assert.doesNotMatch(publicSettingsRoute, /logAudit\(/,
+  "public catalogue settings do not use the non-transactional legacy helper");
+assert.match(publicSettingsRoute, /await tx\.insert\(auditLogsTable\)\.values\([\s\S]*action: "update_public_catalog_settings"/,
+  "public catalogue settings persist audit before the mutation transaction commits");
+assert.match(publicSettingsRoute, /public_catalog_settings_version_conflict/,
+  "public catalogue settings reject stale overwrites");
+assert.match(publicSettingsRoute, /invalidatePublicCatalogRenderCache\(\{ entityType: "catalog" \}\)/,
+  "public catalogue policy updates publish cross-process invalidation");
+assert.match(apiIndex, /publicCatalogInvalidationBus\.subscribe\([\s\S]{0,400}clearPublicCatalogPolicyCache\(\)/,
+  "cross-process catalogue invalidation also clears the policy cache");
+assert.doesNotMatch(aiDefaults, /logAudit\(/,
+  "AI default mutations do not use the non-transactional legacy helper");
+for (const action of ["update_ai_default", "reset_ai_default"]) {
+  assert.match(aiDefaults, new RegExp(`await tx\\.insert\\(auditLogsTable\\)\\.values\\(\\{[\\s\\S]{0,180}action: "${action}"`),
+    `${action} is persisted before the AI config transaction commits`);
+}
+assert.match(aiDefaults, /pg_advisory_xact_lock\(hashtext\('ai-default-config'\)/,
+  "AI config writes are serialized per key");
+assert.match(aiDefaults, /Buffer\.byteLength\(JSON\.stringify\(value\)[\s\S]{0,80}> 65_536/,
+  "AI config payload has a hard serialized-size ceiling");
+assert.equal((aiDefaultsUi.match(/expectedUpdatedAt: entry\.updatedAt/g) ?? []).length, 2,
+  "AI defaults UI binds both save and reset to the version it displayed");
+assert.doesNotMatch(aiExtractors, /logAudit\(/,
+  "AI extractor mutations do not use the non-transactional legacy helper");
+for (const action of ["create_ai_extractor", "update_ai_extractor", "delete_ai_extractor"]) {
+  assert.match(aiExtractors, new RegExp(`await tx\\.insert\\(auditLogsTable\\)\\.values\\(\\{[^;]{0,260}action: "${action}"`),
+    `${action} is persisted before the extractor transaction commits`);
+}
+assert.match(aiExtractors, /AI_EXTRACTOR_IN_USE/,
+  "extractor deletion preserves run evidence and active widget references");
+assert.match(aiExtractors, /configJsonBody = json\(\{ limit: "256kb" \}\)/,
+  "extractor management payload has an early parser ceiling");
+assert.doesNotMatch(aiExtractors, /res\.status\(500\)\.json\(\{ error: msg \}\)/,
+  "extractor management does not disclose raw database errors");
+const personaCrud = aiPersonas.slice(aiPersonas.indexOf("// Create"), aiPersonas.indexOf("// Manual run"));
+assert.doesNotMatch(personaCrud, /logAudit\(/,
+  "AI persona CRUD does not use the non-transactional legacy helper");
+for (const action of ["create_ai_persona", "update_ai_persona", "delete_ai_persona"]) {
+  assert.match(personaCrud, new RegExp(`await tx\\.insert\\(auditLogsTable\\)\\.values\\(\\{[^;]{0,300}action: "${action}"`),
+    `${action} is persisted before the persona transaction commits`);
+}
+assert.match(personaCrud, /AI_PERSONA_IN_USE/,
+  "persona deletion preserves run, action and conversation evidence");
+assert.match(aiPersonas, /personaConfigBody = json\(\{ limit: "256kb" \}\)/,
+  "persona management payload has an early parser ceiling");
+assert.match(aiPersonas, /await logAudit\(req\.user!\.id, "run_ai_persona"/,
+  "manual persona runs await their result audit attempt");
+assert.doesNotMatch(personaCrud, /res\.status\(500\)\.json\(\{ error: msg \}\)/,
+  "persona management does not disclose raw database errors");
+assert.doesNotMatch(leadAssignmentRules, /logAudit\(/,
+  "lead assignment rule mutations do not use the non-transactional legacy helper");
+assert.match(leadAssignmentRules, /async function writeRuleAudit[\s\S]*await tx\.insert\(auditLogsTable\)\.values/,
+  "lead assignment rule audit helper requires the active transaction");
+for (const action of ["create_lead_assignment_rule", "update_lead_assignment_rule", "delete_lead_assignment_rule"]) {
+  assert.match(leadAssignmentRules, new RegExp(`await writeRuleAudit\\(tx, req, "${action}"`),
+    `${action} persists its audit receipt before transaction commit`);
+}
+const leadBulkRoute = leads.slice(
+  leads.indexOf('router.post("/leads/bulk-action"'),
+  leads.indexOf('router.post("/leads/:id/convert"'),
+);
+assert.match(leadBulkRoute, /if \(ids\.length > 500\)[\s\S]{0,120}BULK_LEAD_LIMIT/,
+  "lead bulk mutations have a hard request-size ceiling");
+assert.match(leadBulkRoute, /\[\.\.\.new Set\(ids\.map\(Number\)/,
+  "lead bulk mutations deduplicate normalized positive identifiers");
+for (const action of ["delete_lead", "bulk_assign_leads", "bulk_move_leads"]) {
+  assert.match(leadBulkRoute, new RegExp(`await tx\\.insert\\(auditLogsTable\\)\\.values\\([^;]{0,700}action: "${action}"`),
+    `${action} persists its audit receipt inside the mutation transaction`);
+  assert.doesNotMatch(leadBulkRoute, new RegExp(`logAudit\\([^;]{0,180}"${action}"`),
+    `${action} does not use the non-transactional legacy helper`);
+}
+const destructiveLeadRoutes = leads.slice(
+  leads.indexOf('router.delete("/leads/:id"'),
+  leads.indexOf('router.post("/leads/bulk-action"'),
+);
+for (const action of ["delete_lead", "purge_lead"]) {
+  assert.match(destructiveLeadRoutes, new RegExp(`await tx\\.insert\\(auditLogsTable\\)\\.values\\(\\{[^;]{0,400}action: "${action}"`),
+    `${action} persists its audit receipt inside the destructive transaction`);
+}
+assert.match(destructiveLeadRoutes, /\.for\("update"\)/,
+  "lead purge locks and proves the lead exists before deletion");
+assert.doesNotMatch(destructiveLeadRoutes, /logAudit\(/,
+  "destructive lead routes do not use the non-transactional legacy helper");
+assert.doesNotMatch(tasks, /logAudit\(/,
+  "task mutations do not use the non-transactional legacy helper");
+assert.match(tasks, /async function writeTaskAudit[\s\S]*await tx\.insert\(auditLogsTable\)\.values/,
+  "task audit helper requires the active transaction");
+for (const action of ["task.create", "task.update", "task.archive", "task.restore"]) {
+  assert.match(tasks, new RegExp(`await writeTaskAudit\\(tx, req, "${action}"`),
+    `${action} persists its audit receipt before transaction commit`);
+}
+assert.match(tasks, /await tx\.insert\(auditLogsTable\)\.values\(rows\.map\(task => \(\{[\s\S]{0,220}action: "task\.archive"/,
+  "bulk task archive persists every result audit in its mutation transaction");
+assert.doesNotMatch(campaigns, /logAudit\(/,
+  "campaign mutations do not use the non-transactional legacy helper");
+assert.match(campaigns, /async function writeCampaignAudit[\s\S]*await tx\.insert\(auditLogsTable\)\.values/,
+  "campaign audit helper requires the active transaction");
+for (const action of ["campaign.create", "campaign.update", "campaign.archive", "campaign.restore"]) {
+  assert.match(campaigns, new RegExp(`await writeCampaignAudit\\(tx, req, "${action}"`),
+    `${action} persists its audit receipt before transaction commit`);
+}
+assert.doesNotMatch(cms, /logAudit\(/,
+  "public CMS mutations do not use the non-transactional legacy helper");
+assert.match(cms, /async function writeCmsAudit[\s\S]*await tx\.insert\(auditLogsTable\)\.values/,
+  "public CMS audit helper requires the active transaction");
+for (const action of [
+  "cms.team_member.create", "cms.team_member.update", "cms.team_member.delete",
+  "cms.office.create", "cms.office.update", "cms.office.delete",
+]) {
+  assert.match(cms, new RegExp(`await writeCmsAudit\\(tx, req, "${action}"`),
+    `${action} persists its audit receipt before transaction commit`);
+}
+assert.doesNotMatch(portalExclusions, /logAudit\(/,
+  "portal exclusion mutations do not use the non-transactional legacy helper");
+assert.match(portalExclusions, /async function writeExclusionAudit[\s\S]*await tx\.insert\(auditLogsTable\)\.values/,
+  "portal exclusion audit helper requires the active transaction");
+for (const action of [
+  "create_portal_university_exclusion", "update_portal_university_exclusion", "delete_portal_university_exclusion",
+]) {
+  assert.match(portalExclusions, new RegExp(`await writeExclusionAudit\\(tx, req, "${action}"`),
+    `${action} persists its audit receipt before transaction commit`);
+}
+assert.match(portalExclusions, /pg_advisory_xact_lock\(hashtext/,
+  "portal exclusion identity changes serialize case-insensitive duplicate decisions");
+assert.doesNotMatch(portalFallbacks, /logAudit\(/,
+  "portal fallback mutations do not use the non-transactional legacy helper");
+assert.match(portalFallbacks, /async function writeFallbackAudit[\s\S]*await tx\.insert\(auditLogsTable\)\.values/,
+  "portal fallback audit helper requires the active transaction");
+for (const action of [
+  "create_portal_program_fallback", "update_portal_program_fallback", "delete_portal_program_fallback",
+]) {
+  assert.match(portalFallbacks, new RegExp(`await writeFallbackAudit\\(tx, req, "${action}"`),
+    `${action} persists its audit receipt before transaction commit`);
+}
+assert.match(portalFallbacks, /pg_advisory_xact_lock\(hashtextextended/,
+  "portal fallback creation serializes its business key");
+assert.match(portalFallbacks, /SOURCE_CANNOT_BE_FALLBACK/,
+  "portal fallback rules reject a direct source-program cycle");
+assert.match(portalFallbacks, /fallbackProgramIds: z\.array[\s\S]{0,80}\.max\(20\)/,
+  "portal fallback fan-out is hard bounded");
+
+const staffFinancialRoutes = staffCards.slice(
+  staffCards.indexOf("// Maaş ödemeleri"),
+  staffCards.indexOf("// Activity raporu"),
+);
+assert.match(staffCards, /async function writeStaffCardAudit[\s\S]*await tx\.insert\(auditLogsTable\)\.values/,
+  "staff financial audit helper requires the active transaction");
+for (const action of [
+  "staff_card.salary.create",
+  "staff_card.salary.bulk_create",
+  "staff_card.salary.update",
+  "staff_card.salary.delete",
+  "staff_card.commission.create",
+  "staff_card.commission.update",
+  "staff_card.commission.delete",
+]) {
+  assert.match(staffFinancialRoutes, new RegExp(`await writeStaffCardAudit\\(tx, req, "${action}"`),
+    `${action} persists its result before transaction commit`);
+}
+assert.doesNotMatch(staffFinancialRoutes, /logAudit\(/,
+  "staff salary and commission mutations do not use the non-transactional legacy helper");
+assert.match(staffFinancialRoutes, /notes: z\.string\(\)\.trim\(\)\.max\(2_000\)/,
+  "staff financial notes have a hard request-size ceiling");
+assert.match(staffCards, /const boundedDateSchema = z\.string\(\)\.trim\(\)\.min\(1\)\.max\(40\)/,
+  "staff financial date inputs are bounded before parsing");
+assert.match(staffCards, /function parsePositiveRouteId[\s\S]{0,220}Number\.isSafeInteger/,
+  "staff financial route identifiers reject partial and unsafe integers");
+
+const stageDocumentCreate = stageDocuments.slice(
+  stageDocuments.indexOf('router.post("/applications/:id/stage-documents"'),
+  stageDocuments.indexOf('router.patch("/applications/:id/stage-documents/:docId"'),
+);
+const stageDocumentUpdate = stageDocuments.slice(
+  stageDocuments.indexOf('router.patch("/applications/:id/stage-documents/:docId"'),
+  stageDocuments.indexOf('router.delete("/applications/:id/stage-documents/:docId"'),
+);
+const stageDocumentDelete = stageDocuments.slice(
+  stageDocuments.indexOf('router.delete("/applications/:id/stage-documents/:docId"'),
+  stageDocuments.indexOf('router.get("/applications/:id/missing-doc-notes"'),
+);
+assert.match(stageDocumentCreate, /await db\.transaction\(async \(tx\) =>/,
+  "stage document create uses one mutation transaction");
+assert.match(stageDocumentCreate, /await tx\.insert\(applicationStageDocumentsTable\)[\s\S]*await tx\.insert\(documentsTable\)/,
+  "stage document and student mirror are committed together");
+assert.match(stageDocumentCreate, /await tx\.insert\(auditLogsTable\)\.values\(\{[\s\S]{0,180}action: "upload_stage_document"/,
+  "stage document create persists audit before commit");
+assert.doesNotMatch(stageDocumentCreate, /logAudit\(/,
+  "stage document create does not use the non-transactional audit helper");
+assert.match(stageDocumentUpdate, /await db\.transaction\(async \(tx\) =>[\s\S]*await tx\.update\(applicationStageDocumentsTable\)[\s\S]*action: "update_stage_document"/,
+  "stage document metadata update and audit are atomic");
+assert.doesNotMatch(stageDocumentUpdate, /logAudit\(/,
+  "stage document update does not use the non-transactional audit helper");
+assert.match(stageDocumentDelete, /await db\.transaction\(async \(tx\) =>/,
+  "stage document delete uses one mutation transaction");
+assert.match(stageDocumentDelete, /await tx\.delete\(applicationStageDocumentsTable\)[\s\S]*await tx\.update\(documentsTable\)/,
+  "stage document deletion and mirror retirement are committed together");
+assert.match(stageDocumentDelete, /await tx\.insert\(auditLogsTable\)\.values\(\{[\s\S]{0,180}action: "delete_stage_document"/,
+  "stage document delete persists audit before commit");
+assert.doesNotMatch(stageDocumentDelete, /logAudit\(/,
+  "stage document delete does not use the non-transactional audit helper");
+assert.match(stageDocumentUpdate, /fields: Object\.keys\(updates\)\.sort\(\)/,
+  "stage document metadata audit excludes submitted values");
+assert.match(missingDocsFulfillment, /await tx\.update\(applicationsTable\)[\s\S]{0,900}await tx\.insert\(auditLogsTable\)\.values/,
+  "missing-document stage advance and audit share one transaction");
+assert.match(missingDocsFulfillment, /action: "auto_stage_advance_missing_docs_fulfilled"/,
+  "missing-document auto-advance writes its durable result action");
+assert.doesNotMatch(missingDocsFulfillment, /setImmediate\s*\(/,
+  "missing-document audit is not deferred beyond transaction commit");
+assert.doesNotMatch(missingDocsFulfillment, /logAudit\(/,
+  "missing-document auto-advance does not use the non-transactional audit helper");
+
+assert.doesNotMatch(personFeed, /logAudit\(/,
+  "person feed mutations do not use the non-transactional legacy helper");
+assert.match(personFeed, /async function writePersonFeedAudit[\s\S]*await tx\.insert\(auditLogsTable\)\.values/,
+  "person feed audit helper requires the active transaction");
+for (const action of ["create_note", "delete_note", "create_follow_up", "update_follow_up"]) {
+  assert.match(personFeed, new RegExp(`await writePersonFeedAudit\\(\\s*tx,\\s*req,\\s*"${action}"`),
+    `${action} persists its result before transaction commit`);
+}
+assert.match(personFeed, /fields: Object\.keys\(bodyParsed\.data\)\.sort\(\)/,
+  "person feed follow-up audit records field names without note content");
+
+assert.doesNotMatch(messageCampaigns, /logAudit\(/,
+  "message campaign mutations do not use the non-transactional legacy helper");
+assert.match(messageCampaigns, /async function writeMessageCampaignAudit[\s\S]*await tx\.insert\(auditLogsTable\)\.values/,
+  "message campaign audit helper requires the active transaction");
+for (const action of ["message_campaign.create", "message_campaign.retry_safe_failures"]) {
+  assert.match(messageCampaigns, new RegExp(`await writeMessageCampaignAudit\\(\\s*tx,\\s*req,\\s*"${action}"`),
+    `${action} persists its result before transaction commit`);
+}
+assert.match(messageCampaigns, /const retriedCount = await db\.transaction\(async \(tx\) =>/,
+  "safe message retry, campaign counters and audit use one transaction");
+
+assert.match(applications, /async function writeLostCascadeAudit[\s\S]*await executor\.insert\(auditLogsTable\)\.values/,
+  "application lost-cascade audit uses the supplied mutation executor");
+assert.equal((applications.match(/await writeLostCascadeAudit\(/g) ?? []).length, 7,
+  "every lost-cascade result and explicit skip awaits its executor-bound audit");
+const lostCascadeCorridor = applications.slice(
+  applications.indexOf("async function cascadeApplicationLostStage"),
+  applications.indexOf('router.get("/applications"'),
+);
+assert.doesNotMatch(lostCascadeCorridor, /logAudit\(/,
+  "application lost-cascade lifecycle does not escape to the global audit helper");
+assert.match(applicationPatchRoute, /executor: tx,[\s\S]{0,160}cascadeApplicationLostStage\(lifecycleOpts\)/,
+  "single application stage cascade retains the parent transaction executor");
+
+const localContactBlockRoute = inbox.slice(
+  inbox.lastIndexOf("router.patch(", inbox.indexOf('"/inbox/conversations/:id/block"')),
+  inbox.lastIndexOf("router.post(", inbox.indexOf('"/inbox/conversations/:id/match"')),
+);
+assert.match(localContactBlockRoute, /const contact = await db\.transaction\(async \(tx\) =>/,
+  "local external-contact block uses one mutation transaction");
+assert.match(localContactBlockRoute, /await tx[\s\S]{0,40}\.update\(externalContactsTable\)[\s\S]*await tx[\s\S]{0,40}\.update\(conversationsTable\)/,
+  "contact blocking and bot shutdown commit together");
+assert.match(localContactBlockRoute, /await tx\.insert\(auditLogsTable\)\.values\(\{[\s\S]{0,180}block_external_contact/,
+  "local contact block persists its result audit before commit");
+assert.doesNotMatch(localContactBlockRoute, /logAudit\(/,
+  "local contact block does not use the non-transactional legacy helper");
+
+assert.doesNotMatch(contractBrands, /writeAudit|logAudit\(/,
+  "contract brand mutations do not use a non-transactional audit helper");
+assert.equal((contractBrands.match(/await db\.transaction\(async tx =>/g) ?? []).length, 3,
+  "contract brand create, update and deactivate each use one mutation transaction");
+for (const action of ["contract_brand.create", "contract_brand.update", "contract_brand.deactivate"]) {
+  assert.match(contractBrands, new RegExp(`await tx\\.insert\\(auditLogsTable\\)\\.values\\(\\{[\\s\\S]{0,260}action: "${action}"`),
+    `${action} persists its result before transaction commit`);
+}
+assert.match(contractBrands, /if \(!Object\.prototype\.hasOwnProperty\.call\(incoming, "companySignatureDataUrl"\)[\s\S]{0,180}incoming\.companySignatureDataUrl = existingConfig\.companySignatureDataUrl/,
+  "contract brand update keeps an inherited signature when the field is omitted");
+assert.match(contractBrands, /changes: JSON\.stringify\(\{ key, name \}\)/,
+  "contract brand create audit remains bounded and excludes branding payloads");
+
+console.log("[audit-durability-contract] 178/178 PASS");

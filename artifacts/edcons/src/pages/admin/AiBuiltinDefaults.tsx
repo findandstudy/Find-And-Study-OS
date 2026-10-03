@@ -90,7 +90,7 @@ function SingleDefault({ entry, fieldDef, onSaved, onReset }: {
       const value = stringToValue(draft, fieldDef.editType);
       const result = await customFetch<DefaultEntry>(`/api/ai-defaults/${entry.key}`, {
         method: "PUT",
-        body: JSON.stringify({ value }),
+        body: JSON.stringify({ value, expectedUpdatedAt: entry.updatedAt }),
       });
       onSaved(entry.key, result);
       setEditing(false);
@@ -106,7 +106,10 @@ function SingleDefault({ entry, fieldDef, onSaved, onReset }: {
     if (!confirm(t("aiDefault.confirmReset", { key: fieldDef.label }))) return;
     setResetting(true);
     try {
-      await customFetch(`/api/ai-defaults/${entry.key}`, { method: "DELETE" });
+      await customFetch(`/api/ai-defaults/${entry.key}`, {
+        method: "DELETE",
+        body: JSON.stringify({ expectedUpdatedAt: entry.updatedAt }),
+      });
       onReset(entry.key);
       setEditing(false);
       toast({ title: t("aiDefault.toastReset") });

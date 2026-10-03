@@ -5,6 +5,8 @@ import {
   LANGUAGE_META,
   getTranslation,
   isLanguageLoaded,
+  isPartialLanguageLoaded,
+  installPartialTranslations,
   loadLanguage,
   isValidLanguage,
   detectBrowserLanguage,
@@ -18,6 +20,28 @@ const STORAGE_KEY = "edcons_lang";
 const HINT_KEY_PREFIX = "edcons_lang_hint_";
 const EMAIL_HINT_KEY_PREFIX = "edcons_lang_hint_email_";
 const LAST_USER_KEY = "edcons_lang_last_user";
+const PUBLIC_CRITICAL_SECTIONS = new Set([
+  "", "about", "countries", "destinations", "cities", "programs",
+  "universities", "guides", "blog", "contact", "agency",
+]);
+
+export function isCriticalPublicPath(pathname: string): boolean {
+  const parts = pathname.split("/").filter(Boolean);
+  return parts.length >= 1 && isValidLanguage(parts[0]) && PUBLIC_CRITICAL_SECTIONS.has(parts[1] ?? "");
+}
+
+async function loadCriticalPublicLanguage(lang: Language): Promise<boolean> {
+  if (isPartialLanguageLoaded(lang) || isLanguageLoaded(lang)) return true;
+  try {
+    const response = await fetch(`/i18n-critical/${lang}.json`, { credentials: "same-origin", cache: "force-cache" });
+    if (!response.ok) return false;
+    const length = Number(response.headers.get("content-length") || 0);
+    if (length > 128 * 1024) return false;
+    return installPartialTranslations(lang, await response.json());
+  } catch {
+    return false;
+  }
+}
 
 /**
  * Persist a per-user language hint in localStorage so multiple users sharing
@@ -91,23 +115,51 @@ function resolveInitialLang(): Language {
 
 export function I18nProvider({ children }: { children: ReactNode }) {
   const [lang, setLangState] = useState<Language>(resolveInitialLang);
+  const criticalPublic = typeof window !== "undefined" && isCriticalPublicPath(window.location.pathname);
   // Translations are lazy-loaded per language (bundle-size optimization).
   // `ready` gates the FIRST render only: children mount after the active
   // language's dictionary is in the cache, so t() never shows raw keys.
-  const [ready, setReady] = useState<boolean>(() => isLanguageLoaded(lang));
+  const [ready, setReady] = useState<boolean>(() => isLanguageLoaded(lang) || (criticalPublic && isPartialLanguageLoaded(lang)));
+  const [dictionaryRevision, setDictionaryRevision] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
-    // Gate the first render on BOTH the active language AND the English
-    // fallback dictionary — getTranslation falls back to en for missing
-    // keys, so en must be in the cache before anything renders or partially
-    // translated locales would flash raw keys.
-    const loads: Promise<boolean>[] = [loadLanguage(lang)];
-    if (lang !== DEFAULT_LANGUAGE) loads.push(loadLanguage(DEFAULT_LANGUAGE));
-    void Promise.all(loads).then(() => {
-      if (!cancelled) setReady(true);
-    });
-    return () => { cancelled = true; };
+    // Every supported locale is build-checked for exact key and placeholder
+    // parity. Loading English as well as the active locale doubled the first
+    // navigation payload for 22 locales without providing a real fallback.
+    // English remains available on demand if a future controlled caller loads
+    // it, while the active dictionary alone gates the initial render.
+    let timeoutId: ReturnType<typeof globalThis.setTimeout> | undefined;
+    const loadFull = () => {
+      timeoutId = globalThis.setTimeout(() => {
+        void loadLanguage(lang).then((loaded) => {
+          if (!cancelled && loaded) setDictionaryRevision((value) => value + 1);
+        });
+      }, 4_000);
+    };
+    if (criticalPublic) {
+      void loadCriticalPublicLanguage(lang).then((loaded) => {
+        if (cancelled) return;
+        if (loaded) {
+          setReady(true);
+          if (document.readyState === "complete") loadFull();
+          else window.addEventListener("load", loadFull, { once: true });
+        } else {
+          void loadLanguage(lang).then((fullLoaded) => {
+            if (!cancelled && fullLoaded) setReady(true);
+          });
+        }
+      });
+    } else {
+      void loadLanguage(lang).then((loaded) => {
+        if (!cancelled && loaded) setReady(true);
+      });
+    }
+    return () => {
+      cancelled = true;
+      window.removeEventListener("load", loadFull);
+      if (timeoutId !== undefined) globalThis.clearTimeout(timeoutId);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -117,6 +169,10 @@ export function I18nProvider({ children }: { children: ReactNode }) {
 
   const setLang = useCallback((newLang: Language) => {
     if (!isValidLanguage(newLang)) return;
+    // Route synchronization calls setLang for the locale already selected by
+    // resolveInitialLang(). Do not turn that no-op into an eager download of
+    // the full portal dictionary while a public critical dictionary is active.
+    if (newLang === lang) return;
     const token = ++langSwitchToken.current;
     // Keep showing the CURRENT language until the new dictionary is loaded —
     // switching state first would flash raw keys / English fallbacks.
@@ -126,7 +182,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
       setLangState(newLang);
       localStorage.setItem(STORAGE_KEY, newLang);
     });
-  }, []);
+  }, [lang]);
 
   useEffect(() => {
     const isRTL = RTL_LANGUAGES.includes(lang);
@@ -136,7 +192,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
 
   const t = useCallback(
     (key: string, params?: Record<string, string | number>) => getTranslation(lang, key, params),
-    [lang]
+    [lang, dictionaryRevision]
   );
 
   const isRTL = RTL_LANGUAGES.includes(lang);

@@ -3,11 +3,13 @@ import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
 import nodemailer from "nodemailer";
 import type { Transporter } from "nodemailer";
-import { db, emailQueueTable, integrationsTable, settingsTable } from "@workspace/db";
+import { db, integrationsTable, settingsTable } from "@workspace/db";
 import { pool } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { isLiveIntegrationsEnabled } from "./inbox/liveMode";
 import { isBlockedOutboundIp } from "./safeOutboundRequest";
+import { decryptConfig, isEncrypted } from "./encryption";
+import { classifyEmailTransportError, emailDeliveryAllowed, executeClaimedEmail, isEmailMailbox, serializeEmailAttachments, stageEmailDeliveryErrorCode, type ClaimedEmail, type EmailAttemptResult } from "./emailDeliveryPolicy";
 
 let cachedTransporter: Transporter | null = null;
 let transporterConfigHash = "";
@@ -58,8 +60,8 @@ async function getSmtpConfig(): Promise<SmtpConfig | null> {
 
   if (!integration || !integration.isEnabled) return null;
 
-  const config = integration.config as Record<string, any>;
-  if (!config.host || !config.username || !config.password) return null;
+  const config = decryptConfig(integration.config as Record<string, any>);
+  if (!config.host || !config.username || !config.password || isEncrypted(config.password)) return null;
 
   return {
     host: config.host,
@@ -86,7 +88,7 @@ async function getSenderDefaults(): Promise<{ senderName: string; senderEmail: s
 }
 
 function buildConfigHash(host: string, port: number, user: string, pass: string): string {
-  return `${host}:${port}:${user}:${pass}`;
+  return crypto.createHash("sha256").update(JSON.stringify([host, port, user, pass])).digest("hex");
 }
 
 export async function createSmtpTransporter(config: SmtpConfig): Promise<Transporter> {
@@ -100,6 +102,11 @@ export async function createSmtpTransporter(config: SmtpConfig): Promise<Transpo
     host: resolvedHost,
     port,
     secure,
+    connectionTimeout: 10_000,
+    greetingTimeout: 10_000,
+    socketTimeout: 30_000,
+    disableFileAccess: true,
+    disableUrlAccess: true,
     // Force STARTTLS on non-implicit-TLS ports so credentials and message
     // bodies are never sent over a plaintext connection.
     ...(secure ? {} : { requireTLS: true }),
@@ -131,15 +138,17 @@ export async function sendTenantEmail(
   email: { subject: string; html: string; text: string },
 ): Promise<boolean> {
   if (
-    process.env.NODE_ENV === "test"
+    !emailDeliveryAllowed()
+    || process.env.NODE_ENV === "test"
     || process.env.EMAIL_DELIVERY_DISABLED === "true"
     || !isLiveIntegrationsEnabled()
   ) {
-    console.log(`[TENANT EMAIL] Live delivery disabled; skipped: ${email.subject}`);
     return false;
   }
+  if (!isEmailMailbox(to) || !isEmailMailbox(config.fromEmail || config.username) || /[\r\n\x00]/.test(email.subject)) return false;
   const transporter = await createSmtpTransporter(config);
-  await transporter.sendMail({
+  if (!emailDeliveryAllowed()) { transporter.close(); return false; }
+  try { await transporter.sendMail({
     from: {
       name: config.fromName || "Agency",
       address: config.fromEmail || config.username,
@@ -149,7 +158,8 @@ export async function sendTenantEmail(
     html: email.html,
     text: email.text,
   });
-  return true;
+    return true;
+  } finally { transporter.close(); }
 }
 
 async function getTransporter(): Promise<{ transporter: Transporter; fromEmail: string; fromName: string; replyTo?: string } | null> {
@@ -180,6 +190,7 @@ async function getTransporter(): Promise<{ transporter: Transporter; fromEmail: 
 }
 
 export function invalidateSmtpCache(): void {
+  cachedTransporter?.close();
   cachedTransporter = null;
   transporterConfigHash = "";
 }
@@ -190,38 +201,84 @@ export interface EmailAttachment {
   contentType?: string;
 }
 
-async function sendViaSmtp(
-  to: string,
-  subject: string,
-  html: string,
-  text: string,
-  attachments?: EmailAttachment[],
-): Promise<boolean> {
+async function sendViaSmtp(item: ClaimedEmail, attachments?: EmailAttachment[]): Promise<EmailAttemptResult> {
+  if (!emailDeliveryAllowed()) return { status: "pending", code: "EMAIL_DELIVERY_DISABLED" };
+  let smtp: Awaited<ReturnType<typeof getTransporter>>;
+  let closeAfterSend = false;
+  let revalidatePinnedSender: (() => Promise<boolean>) | undefined;
   try {
-    const smtp = await getTransporter();
-    if (!smtp) {
-      console.log("[EMAIL] SMTP not configured or disabled, email queued only");
-      return false;
+    if (item.sender_account_id !== null) {
+      if (!Number.isSafeInteger(item.sender_revision) || Number(item.sender_revision) <= 0) return { status: "blocked", code: "EMAIL_SENDER_REVISION_REQUIRED" };
+      const { resolveEmailSenderAccount } = await import("./notifications/emailSenderAccounts");
+      const pinned = await resolveEmailSenderAccount(item.sender_account_id, item.sender_revision!);
+      if (!pinned) return { status: "blocked", code: "EMAIL_SENDER_UNAVAILABLE" };
+      const fingerprint = crypto.createHash("sha256").update(JSON.stringify(pinned)).digest("hex");
+      revalidatePinnedSender = async () => {
+        const current = await resolveEmailSenderAccount(item.sender_account_id!, item.sender_revision!);
+        return !!current && crypto.createHash("sha256").update(JSON.stringify(current)).digest("hex") === fingerprint;
+      };
+      smtp = {
+        transporter: await createSmtpTransporter({ host: pinned.host, port: pinned.port, username: pinned.user, password: pinned.pass, fromEmail: pinned.fromEmail, fromName: pinned.fromName }),
+        fromEmail: pinned.fromEmail, fromName: pinned.fromName, replyTo: pinned.replyTo || undefined,
+      };
+      closeAfterSend = true;
+    } else {
+      smtp = await getTransporter();
+      if (!smtp) return { status: "pending", code: "SMTP_NOT_CONFIGURED" };
     }
-
-    const from = `"${smtp.fromName}" <${smtp.fromEmail}>`;
-
-    await smtp.transporter.sendMail({
-      from,
-      to,
-      subject,
-      html,
-      text,
-      ...(smtp.replyTo ? { replyTo: smtp.replyTo } : {}),
-      ...(attachments && attachments.length > 0 ? { attachments } : {}),
-    });
-
-    console.log(`[EMAIL] Sent via SMTP to ${to}: ${subject}`);
-    return true;
-  } catch (err) {
-    console.error(`[EMAIL] SMTP send failed for ${to}:`, err);
-    return false;
+  } catch {
+    return { status: "blocked", code: "SMTP_CONFIGURATION_UNAVAILABLE" };
   }
+
+  try {
+    if (!isEmailMailbox(smtp.fromEmail) || (smtp.replyTo && !isEmailMailbox(smtp.replyTo)) || /[\r\n\x00]/.test(smtp.fromName)) {
+      return { status: "blocked", code: "EMAIL_SENDER_INVALID" };
+    }
+    if (item.template_version_id !== null) {
+      try {
+        const approved = await pool.query(`SELECT v.id FROM message_template_email_versions v
+          JOIN message_templates t ON t.id=v.template_id
+          WHERE v.id=$1 AND v.status='approved' AND t.is_active=true AND t.channel IN ('email','all')`, [item.template_version_id]);
+        if (!approved.rows.length) return { status: "blocked", code: "EMAIL_TEMPLATE_NOT_APPROVED" };
+      } catch { return { status: "blocked", code: "EMAIL_TEMPLATE_POLICY_UNAVAILABLE" }; }
+    }
+    if (item.idempotency_key?.startsWith("stage-email:")) {
+      try {
+        const { validateStageEmailQueueItem } = await import("./notifications/stageEmailAutomation");
+        const verdict = await validateStageEmailQueueItem(item.id);
+        if (!verdict.allowed) return { status: "blocked", code: stageEmailDeliveryErrorCode(verdict.code) };
+      } catch { return { status: "blocked", code: "STAGE_EMAIL_POLICY_UNAVAILABLE" }; }
+    }
+    // Re-evaluate after resolving credentials and policies, at the last send boundary.
+    if (!emailDeliveryAllowed()) return { status: "pending", code: "EMAIL_DELIVERY_DISABLED" };
+    const owned = await pool.query("SELECT id FROM email_queue WHERE id=$1 AND status='processing' AND claim_token=$2", [item.id, item.claim_token]);
+    if (!owned.rows.length) return { status: "unknown", code: "EMAIL_CLAIM_LOST" };
+    // DNS/transport setup can outlive a sender edit or deactivation. Generic
+    // notification rows need this check too, not only the stage-specific lane.
+    if (revalidatePinnedSender) {
+      try {
+        if (!await revalidatePinnedSender()) return { status: "blocked", code: "EMAIL_SENDER_CHANGED_OR_UNVERIFIED" };
+      } catch { return { status: "blocked", code: "EMAIL_SENDER_POLICY_UNAVAILABLE" }; }
+    }
+    if (!emailDeliveryAllowed()) return { status: "pending", code: "EMAIL_DELIVERY_DISABLED" };
+    const messageId = `<fas-email-${item.id}@${smtp.fromEmail.split("@")[1].toLowerCase()}>`;
+    try {
+      const result = await smtp.transporter.sendMail({
+        from: { name: smtp.fromName, address: smtp.fromEmail },
+        to: item.to_email, subject: item.subject, html: item.html_body, text: item.text_body,
+        messageId,
+        ...(smtp.replyTo ? { replyTo: smtp.replyTo } : {}),
+        ...(attachments?.length ? { attachments } : {}),
+      });
+      if (Array.isArray(result.accepted) && result.accepted.length > 0 && (!Array.isArray(result.rejected) || result.rejected.length === 0)) {
+        return { status: "sent", code: null, messageId };
+      }
+      if (Array.isArray(result.rejected) && result.rejected.length > 0 && (!Array.isArray(result.accepted) || result.accepted.length === 0)) {
+        return { status: "failed", code: "SMTP_RECIPIENT_REJECTED" };
+      }
+      return { status: "unknown", code: "SMTP_OUTCOME_UNKNOWN" };
+    } catch (error) { return classifyEmailTransportError(error); }
+  } finally { if (closeAfterSend) smtp.transporter.close(); }
 }
 
 export function generateSecureToken(): string {
@@ -280,7 +337,7 @@ export async function getEmailBranding(): Promise<EmailBranding> {
     brandingCache = { data, fetchedAt: Date.now() };
     return data;
   } catch (err) {
-    console.error("[EMAIL] Failed to load branding:", err);
+    console.error("[EMAIL] Failed to load branding");
     return { logoUrl: null, primaryColor: "#1e3a5f", buttonColor: "#1e3a5f", companyName: "Find And Study OS" };
   }
 }
@@ -1037,107 +1094,131 @@ export async function buildSignedContractAdminEmail(params: {
   return { subject, html: emailShell(brand, "Signed contract", bodyHtml), text };
 }
 
+export interface SendEmailOptions {
+  attachments?: EmailAttachment[];
+  senderAccountId?: number;
+  senderRevision?: number;
+  templateVersionId?: number;
+  idempotencyKey?: string;
+}
+
+const QUEUE_RETURN_FIELDS = `id, claim_token, to_email, subject, html_body, text_body,
+  retry_count, max_retries, sender_account_id, sender_revision, template_version_id, idempotency_key, attachments`;
+
+async function claimEmail(queueId?: number): Promise<ClaimedEmail | null> {
+  if (!emailDeliveryAllowed()) return null;
+  const token = crypto.randomUUID();
+  const { rows } = await pool.query<ClaimedEmail>(
+    `UPDATE email_queue SET status = 'processing', claim_token = $1, claimed_at = NOW(), delivery_error_code = NULL
+     WHERE id IN (
+       SELECT id FROM email_queue WHERE status = 'pending'
+         AND (next_retry_at IS NULL OR next_retry_at <= NOW())
+         AND ($2::integer IS NULL OR id = $2)
+       ORDER BY created_at, id LIMIT 1 FOR UPDATE SKIP LOCKED
+     ) RETURNING ${QUEUE_RETURN_FIELDS}`,
+    [token, queueId ?? null],
+  );
+  return rows[0] ?? null;
+}
+
+async function deliverClaimed(item: ClaimedEmail): Promise<boolean> {
+  return executeClaimedEmail(item, {
+    allowed: emailDeliveryAllowed,
+    send: async (row, attachments) => {
+      // Never execute a stale/replaced claim. Recovery only moves to UNKNOWN.
+      const current = await pool.query("SELECT id FROM email_queue WHERE id=$1 AND status='processing' AND claim_token=$2", [row.id, row.claim_token]);
+      if (!current.rows.length) return { status: "unknown", code: "EMAIL_CLAIM_LOST" };
+      return sendViaSmtp(row, attachments);
+    },
+    save: async (row, result) => {
+      await pool.query(
+        `UPDATE email_queue SET status=$3, retry_count=$4, delivery_error_code=$5,
+           provider_message_id=coalesce($6,provider_message_id),
+           sent_at=CASE WHEN $3='sent' THEN NOW() ELSE sent_at END,
+           next_retry_at=CASE WHEN $7::integer IS NULL THEN NULL ELSE NOW()+($7 * INTERVAL '1 second') END,
+           claim_token=NULL, claimed_at=NULL
+         WHERE id=$1 AND status='processing' AND claim_token=$2`,
+        [row.id, row.claim_token, result.status, result.retryCount, result.code, result.messageId ?? null, result.backoffSeconds],
+      );
+    },
+    onSaveFailure: () => console.error("[EMAIL] Delivery receipt persistence failed; claimed item requires reconciliation"),
+  });
+}
+
 export async function sendEmail(
   to: string,
   email: { subject: string; html: string; text: string },
-  opts?: { attachments?: EmailAttachment[] },
+  opts?: SendEmailOptions,
 ): Promise<boolean> {
-  // Route-level integration tests use the developer database, which may carry
-  // a real SMTP integration copied from another environment. Never persist or
-  // deliver mail in test/dry-run mode; synthetic recipients must not escape the
-  // test process and the shared local queue must remain clean.
-  if (process.env.NODE_ENV === "test" || process.env.EMAIL_DELIVERY_DISABLED === "true") {
-    console.log(`[EMAIL] Delivery disabled; skipped: ${email.subject}`);
+  // Do not enqueue or send in test/simulation mode, including copied local queues.
+  if (!emailDeliveryAllowed()) return false;
+  if (!isEmailMailbox(to) || !email || typeof email.subject !== "string" || /[\r\n\x00]/.test(email.subject)
+    || email.subject.length > 998 || typeof email.html !== "string" || typeof email.text !== "string"
+    || Buffer.byteLength(email.html) + Buffer.byteLength(email.text) > 2 * 1024 * 1024) return false;
+  const senderId = opts?.senderAccountId ?? null;
+  const senderRevision = opts?.senderRevision ?? null;
+  const templateVersion = opts?.templateVersionId ?? null;
+  if ((senderId === null) !== (senderRevision === null)
+    || [senderId, senderRevision, templateVersion].some(value => value !== null && (!Number.isSafeInteger(value) || value <= 0))) return false;
+  const idempotencyKey = opts?.idempotencyKey ?? null;
+  if (idempotencyKey !== null && !/^[A-Za-z0-9:._-]{1,200}$/.test(idempotencyKey)) return false;
+
+  let queueId: number;
+  try {
+    const attachments = serializeEmailAttachments(opts?.attachments);
+    // There is deliberately no send fallback when durable queue insertion fails.
+    const inserted = await pool.query<{ id: number }>(
+      `INSERT INTO email_queue
+        (to_email,subject,html_body,text_body,status,sender_account_id,sender_revision,template_version_id,idempotency_key,attachments)
+       VALUES ($1,$2,$3,$4,'pending',$5,$6,$7,$8,$9::jsonb)
+       ON CONFLICT (idempotency_key) DO NOTHING RETURNING id`,
+      [to, email.subject, email.html, email.text, senderId, senderRevision, templateVersion, idempotencyKey, attachments === null ? null : JSON.stringify(attachments)],
+    );
+    if (!inserted.rows[0]) {
+      if (!idempotencyKey) return false;
+      // Same key with different content is not a resend/overwrite authority.
+      const replay = await pool.query<{ id: number; status: string }>(
+        `SELECT id,status FROM email_queue WHERE idempotency_key=$1 AND to_email=$2 AND subject=$3
+          AND html_body=$4 AND text_body=$5 AND sender_account_id IS NOT DISTINCT FROM $6::integer
+          AND sender_revision IS NOT DISTINCT FROM $7::integer AND template_version_id IS NOT DISTINCT FROM $8::integer
+          AND attachments IS NOT DISTINCT FROM $9::jsonb`,
+        [idempotencyKey, to, email.subject, email.html, email.text, senderId, senderRevision, templateVersion, attachments === null ? null : JSON.stringify(attachments)],
+      );
+      if (!replay.rows[0]) return false;
+      if (replay.rows[0].status === "sent") return true;
+      queueId = replay.rows[0].id;
+    } else queueId = inserted.rows[0].id;
+    const claimed = await claimEmail(queueId);
+    if (!claimed) return false;
+    return await deliverClaimed(claimed);
+  } catch {
+    console.error("[EMAIL] Durable email delivery failed");
     return false;
   }
-  console.log(`[EMAIL] Queuing email: ${email.subject}`);
+}
 
-  let queueId: number | undefined;
-  try {
-    const [row] = await db.insert(emailQueueTable).values({
-      toEmail: to,
-      subject: email.subject,
-      htmlBody: email.html,
-      textBody: email.text,
-      status: "pending",
-    }).returning({ id: emailQueueTable.id });
-    queueId = row?.id;
-  } catch (err) {
-    console.error("[EMAIL] Failed to persist email to queue:", err);
-  }
-
-  const sent = await sendViaSmtp(to, email.subject, email.html, email.text, opts?.attachments);
-  if (sent && queueId) {
-    try {
-      await db.update(emailQueueTable)
-        .set({ status: "sent", sentAt: new Date() })
-        .where(eq(emailQueueTable.id, queueId));
-    } catch (err) {
-      console.error("[EMAIL] Failed to update queue status:", err);
-    }
-  }
-  return sent;
+/** A crash or ambiguous SMTP acknowledgement can mean the message was accepted.
+ * Stale processing is quarantined as UNKNOWN, never changed back to pending. */
+export async function recoverStaleEmailClaims(): Promise<void> {
+  if (!emailDeliveryAllowed()) return;
+  await pool.query(`UPDATE email_queue SET status='unknown', delivery_error_code='EMAIL_CLAIM_STALE',
+    claim_token=NULL, claimed_at=NULL
+    WHERE status='processing' AND (claimed_at IS NULL OR claimed_at < NOW()-INTERVAL '15 minutes')`);
 }
 
 export async function processEmailQueue(): Promise<number> {
+  if (!emailDeliveryAllowed()) return 0;
   let processed = 0;
   try {
-    // Atomically claim up to 20 retryable-and-due pending emails.
-    // The UPDATE ... WHERE id IN (SELECT ... FOR UPDATE SKIP LOCKED)
-    // pattern is cluster-safe: concurrent workers skip rows already
-    // being claimed, preventing duplicate delivery attempts.
-    const { rows } = await pool.query<{
-      id: number;
-      to_email: string;
-      subject: string;
-      html_body: string;
-      text_body: string;
-      retry_count: number;
-      max_retries: number;
-    }>(
-      `UPDATE email_queue SET status = 'processing'
-       WHERE id IN (
-         SELECT id FROM email_queue
-         WHERE status = 'pending'
-           AND (next_retry_at IS NULL OR next_retry_at <= NOW())
-         ORDER BY created_at
-         LIMIT 20
-         FOR UPDATE SKIP LOCKED
-       )
-       RETURNING id, to_email, subject, html_body, text_body, retry_count, max_retries`
-    );
-
-    if (rows.length === 0) return 0;
-
-    for (const email of rows) {
-      const sent = await sendViaSmtp(email.to_email, email.subject, email.html_body, email.text_body);
-      if (sent) {
-        await pool.query(
-          `UPDATE email_queue SET status = 'sent', sent_at = NOW() WHERE id = $1`,
-          [email.id]
-        );
-        processed++;
-      } else {
-        const newRetryCount = email.retry_count + 1;
-        if (newRetryCount >= email.max_retries) {
-          await pool.query(
-            `UPDATE email_queue SET status = 'failed', retry_count = $2 WHERE id = $1`,
-            [email.id, newRetryCount]
-          );
-          console.warn(`[EMAIL] Permanently failed for queue id=${email.id} after ${newRetryCount} attempts`);
-        } else {
-          // Exponential backoff: 2^retry_count minutes (2, 4, 8 min for attempts 1-3)
-          const backoffSec = Math.pow(2, newRetryCount) * 60;
-          await pool.query(
-            `UPDATE email_queue SET status = 'pending', retry_count = $2, next_retry_at = NOW() + ($3 * INTERVAL '1 second') WHERE id = $1`,
-            [email.id, newRetryCount, backoffSec]
-          );
-          console.log(`[EMAIL] Will retry queue id=${email.id} in ${backoffSec}s (attempt ${newRetryCount}/${email.max_retries})`);
-        }
-      }
+    await recoverStaleEmailClaims();
+    // One claim at a time avoids leasing a large batch while SMTP is slow.
+    for (let i = 0; i < 20 && emailDeliveryAllowed(); i++) {
+      const item = await claimEmail();
+      if (!item) break;
+      if (await deliverClaimed(item)) processed++;
     }
-  } catch (err) {
-    console.error("[EMAIL] Queue processing error:", err);
+  } catch {
+    console.error("[EMAIL] Queue processing failed");
   }
   return processed;
 }
@@ -1147,7 +1228,14 @@ let emailWorkerInFlight: Promise<void> | null = null;
 
 function runEmailWorkerSweep(label: "Initial queue" | "Queue processed"): void {
   if (emailWorkerInFlight) return;
-  emailWorkerInFlight = processEmailQueue()
+  emailWorkerInFlight = (async () => {
+    if (!emailDeliveryAllowed()) return 0;
+    try {
+      const { processStageEmailOutbox } = await import("./notifications/stageEmailAutomation");
+      await processStageEmailOutbox();
+    } catch { console.warn("[EMAIL] Stage outbox processing deferred"); }
+    return processEmailQueue();
+  })()
     .then((count) => {
       if (count > 0) console.log(`[EMAIL] ${label}: sent ${count} emails`);
     })

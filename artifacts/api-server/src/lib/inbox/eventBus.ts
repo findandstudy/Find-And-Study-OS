@@ -33,9 +33,13 @@ localEmitter.setMaxListeners(0);
 
 let listenClient: any = null;
 let connecting: Promise<void> | null = null;
+let isShuttingDown = false;
+let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
 function scheduleReconnect(): void {
-  setTimeout(() => {
+  if (isShuttingDown || reconnectTimer || localEmitter.listenerCount("event") === 0) return;
+  reconnectTimer = setTimeout(() => {
+    reconnectTimer = null;
     connectListenClient().catch((err) => {
       console.error("[inboxBus] reconnect failed, will retry", err);
       scheduleReconnect();
@@ -85,16 +89,14 @@ async function connectListenClient(): Promise<void> {
   return connecting;
 }
 
-void connectListenClient().catch((err) => {
-  console.error("[inboxBus] initial LISTEN failed", err);
-});
-
 export const inboxBus = {
   subscribe(handler: (event: InboxBusEvent) => void): () => void {
-    void connectListenClient().catch(() => {
-      // already logged
-    });
+    isShuttingDown = false;
     localEmitter.on("event", handler);
+    void connectListenClient().catch((err) => {
+      console.error("[inboxBus] initial LISTEN failed, will retry", err);
+      scheduleReconnect();
+    });
     return () => {
       localEmitter.off("event", handler);
     };
@@ -106,5 +108,21 @@ export const inboxBus = {
       .catch((err: unknown) => {
         console.error("[inboxBus] publish failed", err);
       });
+  },
+  async shutdown(): Promise<void> {
+    isShuttingDown = true;
+    if (reconnectTimer) {
+      clearTimeout(reconnectTimer);
+      reconnectTimer = null;
+    }
+    const client = listenClient;
+    listenClient = null;
+    if (!client) return;
+    try {
+      await client.query(`UNLISTEN ${CHANNEL}`);
+      client.release();
+    } catch {
+      try { client.release(true); } catch { /* ignore */ }
+    }
   },
 };

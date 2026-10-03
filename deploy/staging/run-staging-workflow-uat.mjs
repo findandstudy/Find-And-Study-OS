@@ -2,6 +2,17 @@
 import { fileURLToPath } from "node:url";
 
 const EXACT_STAGING_ORIGIN = "https://staging.findandstudy.com";
+const WORKFLOW_UAT_QUARANTINE_REASON =
+  "Mutating workflow UAT is quarantined: run-owned fixtures, merge rejection, remote no-egress evidence and complete residue reconciliation are not implemented. Use the separately authorized RBAC-only runner; environment opt-ins cannot unlock this workflow.";
+
+function assertWorkflowExecutionAvailable() {
+  // 2026-09-23: local ALLOW_* flags cannot attest the remote delivery fence.
+  // The legacy flow below can mutate fixed profiles, merge existing students,
+  // then purge dependencies it did not create. Keep it unreachable until a
+  // separately reviewed disposable/run-owned lifecycle replaces that contract.
+  // Do not add an environment-only bypass or treat synthetic names as ownership.
+  fail(WORKFLOW_UAT_QUARANTINE_REASON);
+}
 const EMAILS = {
   superAdmin: "audit-superadmin@audit.test",
   staff: "audit-staff@audit.test",
@@ -75,6 +86,8 @@ class Session {
     if (url.origin !== this.origin) {
       fail(`request target escaped the fixed staging origin: ${url.origin}`);
     }
+    // Also fence exported helpers: importing Session must not bypass run().
+    assertWorkflowExecutionAvailable();
     const headers = new Headers(options.headers ?? {});
     const cookies = cookieHeader(this.cookies);
     if (cookies) headers.set("cookie", cookies);
@@ -163,6 +176,8 @@ async function bestEffort(cleanupErrors, label, action) {
 }
 
 async function run() {
+  // Block before reading credentials, probing health, logging in or mutation.
+  assertWorkflowExecutionAvailable();
   if (process.env.ALLOW_STAGING_WORKFLOW_UAT !== "true") {
     fail("ALLOW_STAGING_WORKFLOW_UAT=true is required");
   }
@@ -600,6 +615,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
 export {
   EMAILS,
   EXACT_STAGING_ORIGIN,
+  WORKFLOW_UAT_QUARANTINE_REASON,
   Session,
   listRows,
   parseSetCookies,

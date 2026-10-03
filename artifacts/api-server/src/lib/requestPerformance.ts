@@ -18,6 +18,7 @@ import {
   requestPerformanceEventLoopResolutionMs,
   shouldLogRequestPerformance,
 } from "./requestPerformancePolicy";
+import { isSystemHealthPerformanceRequest, recordSystemHealthRequest } from "./systemHealthPerformance";
 
 export {
   requestPerformanceSampleRate,
@@ -94,6 +95,9 @@ export function requestPerformanceMiddleware(
   }
 
   startRequestPerformanceEventLoopMonitor();
+  // Express trims req.path while a mounted router handles the response. Decide
+  // eligibility here, before next(), without retaining the URL or query string.
+  const trackHealthPerformance = isSystemHealthPerformanceRequest(req.path, "");
 
   runWithReadPathMetrics(() => runWithDbRequestMetrics(() => runWithRequestTelemetry(() => {
     const startedAt = process.hrtime.bigint();
@@ -135,8 +139,13 @@ export function requestPerformanceMiddleware(
 
     res.once("finish", () => {
       const totalMs = elapsedMs(startedAt);
-      if (!shouldLogRequestPerformance(totalMs, res.statusCode)) return;
       const dbMetrics = getDbRequestMetricsSnapshot();
+      // Collect every eligible completion before log sampling. Only bounded
+      // numerical aggregates reach System Health; liveness/SSE are excluded.
+      if (trackHealthPerformance && !String(res.getHeader("Content-Type") || "").toLowerCase().includes("text/event-stream")) {
+        recordSystemHealthRequest(totalMs, res.statusCode, dbMetrics && dbMetrics.acquireCount > 0 ? dbMetrics.acquireWaitMs : null);
+      }
+      if (!shouldLogRequestPerformance(totalMs, res.statusCode)) return;
       const requestTelemetry = getRequestTelemetrySnapshot();
       const contentLength = Number(res.getHeader("Content-Length"));
       const responseHasNoBody = req.method === "HEAD" || res.statusCode === 204 || res.statusCode === 304;

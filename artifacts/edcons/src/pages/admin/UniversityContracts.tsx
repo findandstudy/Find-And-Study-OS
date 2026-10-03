@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { customFetch } from "@workspace/api-client-react";
+import { uploadAndFinalizeObject } from "@/lib/finalizeObjectUpload";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -349,7 +350,7 @@ export default function UniversityContractsPage({ openId }: Props = {}) {
         body: JSON.stringify({ name: file.name, size: file.size, contentType: file.type }),
       });
       if (!urlRes.uploadURL) throw new Error(t("universityContracts.uploadLinkFailed"));
-      const putRes = await fetch(urlRes.uploadURL, { method: "PUT", body: file, headers: { "Content-Type": file.type } });
+      const putRes = await uploadAndFinalizeObject(urlRes.uploadURL, urlRes.objectPath, { body: file, headers: { "Content-Type": file.type } });
       if (!putRes.ok) throw new Error(t("universityContracts.uploadFailed"));
       setForm(f => ({
         ...f,

@@ -31,4 +31,6 @@ test("missing-document fulfillment still waits for all requested documents", asy
 
   assert.match(source, /if \(stillOpen\.length > 0\) continue/);
   assert.match(source, /targetId: pipelineStagesTable\.missingDocsFulfilledTargetStageId/);
+  assert.match(source, /await tx\.insert\(auditLogsTable\)\.values/);
+  assert.doesNotMatch(source, /setImmediate\s*\(/);
 });
