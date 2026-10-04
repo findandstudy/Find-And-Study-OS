@@ -315,6 +315,15 @@ function serveStaticFrontend() {
     express.static(path.join(distPath, "assets"))
   );
 
+  // A missing hashed module must never fall through to the SPA/SSR HTML
+  // handler. Browsers reject that HTML as a JavaScript module and surface an
+  // opaque dynamic-import error. Return an honest, non-cacheable 404 instead.
+  app.use("/assets", (_req: express.Request, res: express.Response) => {
+    res.setHeader("Cache-Control", "no-store");
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.status(404).type("text/plain").send("Asset not found");
+  });
+
   app.use(express.static(distPath, {
     index: false,
     setHeaders: (res, filePath) => {
@@ -399,9 +408,7 @@ function serveStaticFrontend() {
         "Cache-Control",
         rendered.value.kind === "program_detail" || rendered.value.kind === "city_detail"
           ? "no-store"
-          : rendered.value.kind === "university_detail"
-          ? "public, max-age=0, must-revalidate"
-          : "public, max-age=0, s-maxage=300, stale-while-revalidate=3600",
+          : "public, max-age=0, must-revalidate",
       );
       res.setHeader("Content-Security-Policy", publicCatalogCsp(nonce));
       res.setHeader("X-Public-Render", "ssr-isr-pilot");

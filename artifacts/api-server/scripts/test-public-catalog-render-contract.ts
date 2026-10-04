@@ -123,6 +123,18 @@ test("production render middleware honors governed redirect and gone aliases", (
   assert.match(source, /X-Content-Type-Options/);
 });
 
+test("hashed assets never fall through to HTML and public HTML cannot outlive a release", () => {
+  const source = readFileSync(new URL("../src/index.ts", import.meta.url), "utf8");
+  assert.match(source, /app\.use\("\/assets"[\s\S]*?Asset not found/);
+  assert.match(source, /res\.status\(404\)\.type\("text\/plain"\)/);
+  assert.match(source, /public, max-age=0, must-revalidate/);
+  const renderBlock = source.slice(
+    source.indexOf("const rendered = await getPublicCatalogRenderModel"),
+    source.indexOf("res.status(rendered.value.kind"),
+  );
+  assert.doesNotMatch(renderBlock, /stale-while-revalidate/);
+});
+
 test("only bounded public content paths enter the render pilot and CMS pages cannot shadow system routes", () => {
   const home = matchPublicCatalogRenderPath("/en");
   assert.equal(home?.kind, "page_detail");
