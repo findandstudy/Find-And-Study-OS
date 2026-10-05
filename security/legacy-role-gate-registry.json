@@ -140,7 +140,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/ai-extract.ts",
-      "sha256": "80394d9f69f1badf9a768c9b34f5c0970b4725257af44a8d10fce2bd2c3976a2",
+      "sha256": "ccc50a7e68f0d4744f4d52fde2d4f2b72d5c247623c62cae315f56b5e8671ff1",
       "routeRegistrations": 4,
       "requireAuth": 5,
       "requireRole": 3,
@@ -500,7 +500,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/education-records.ts",
-      "sha256": "92e4a21dc978e7f659ea73dc4ad17ffb0fc7641a251514ddbfc8636c35aa3b7d",
+      "sha256": "43793776cd27b138328db97766776d8218abef17d411b03dd687a0132cc75c53",
       "routeRegistrations": 2,
       "requireAuth": 3,
       "requireRole": 2,
@@ -890,7 +890,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/public-apply.ts",
-      "sha256": "88a69b9a2321494af743f527dd0ca92a73db24f5d7cf65dec0e2b808bbcef710",
+      "sha256": "fc897ab3b42befd080a88fe6976091b7281334d3b0d97f69ca7ee0e17c22397c",
       "routeRegistrations": 3,
       "requireAuth": 0,
       "requireRole": 0,
@@ -1115,7 +1115,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/students.ts",
-      "sha256": "5be3c580d79ae332c06aad684f85665bf6322a29ff6865228ef034e4e37b560d",
+      "sha256": "19b518c9683c4e8f4291e683caff7a6f513d2c31e466233177325c80d790fb54",
       "routeRegistrations": 27,
       "requireAuth": 27,
       "requireRole": 16,
