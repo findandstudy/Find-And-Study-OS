@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { toLatinUpper, digitsOnly } from "@/lib/textTransform";
 import { customFetch } from "@workspace/api-client-react";
+import { uploadAndFinalizeObject } from "@/lib/finalizeObjectUpload";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -92,7 +93,7 @@ async function uploadFileToStorage(file: File): Promise<string> {
     body: JSON.stringify({ name: file.name, size: file.size, contentType: file.type }),
   });
   if (!urlRes.uploadURL || !urlRes.objectPath) throw new Error("Failed to get upload URL");
-  const putRes = await fetch(urlRes.uploadURL, { method: "PUT", body: file, headers: { "Content-Type": file.type } });
+  const putRes = await uploadAndFinalizeObject(urlRes.uploadURL, urlRes.objectPath, { body: file, headers: { "Content-Type": file.type } });
   if (!putRes.ok) throw new Error("Upload failed");
   const strippedPath = urlRes.objectPath.replace(/^\/objects/, "");
   return `${BASE_URL}/api/storage/objects${strippedPath}`;

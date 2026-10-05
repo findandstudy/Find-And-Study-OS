@@ -2,6 +2,7 @@ export const STUDENT_EDUCATION_LEVELS = [
   "high_school",
   "bachelor",
   "master",
+  "doctorate",
 ] as const;
 
 export type CleanStudentEducationRecord = {
@@ -45,7 +46,7 @@ export function cleanStudentEducationRecords(input: unknown): CleanResult {
     return { ok: false, error: "educationRecords must be an array" };
   }
   if (input.length > STUDENT_EDUCATION_LEVELS.length) {
-    return { ok: false, error: "educationRecords supports at most 3 records" };
+    return { ok: false, error: `educationRecords supports at most ${STUDENT_EDUCATION_LEVELS.length} records` };
   }
 
   const seen = new Set<string>();

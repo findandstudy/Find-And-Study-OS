@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { customFetch } from "@workspace/api-client-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -9,6 +9,9 @@ import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useI18n } from "@/hooks/use-i18n";
+import { useAuth } from "@/hooks/use-auth";
+import { EmailAutomationManager } from "./notifications/EmailAutomationManager";
+import { accountListPath, accountTestState, accountWebhookPath, canManageIntegrationAccounts, integrationAccountScope, integrationAccountsCopy, type AccountChannel, type AccountScope } from "./integrationAccountModel";
 import {
   Mail, MessageCircle, Send, Bot, Plug, Key, Eye, EyeOff,
   Loader2, Check, X, ExternalLink, Search, Zap, Globe,
@@ -67,6 +70,7 @@ interface ChannelAccount {
   isDefault: boolean;
   brandLabel: string | null;
   brandColor: string | null;
+  capabilities?: { configurationOnly?: boolean; verificationSupported?: boolean; inboxSupported?: boolean };
 }
 
 const ACCOUNT_COLOR_PRESETS = ["#143591", "#E31E24", "#059669", "#7C3AED", "#EA580C", "#0F766E"];
@@ -322,7 +326,10 @@ function namedAnthropicDef(data: IntegrationData): IntegrationDef {
 
 export function IntegrationsManager() {
   const { toast } = useToast();
-  const { t } = useI18n();
+  const { t, lang, dir } = useI18n();
+  const { user } = useAuth();
+  const accountCopy = integrationAccountsCopy(lang);
+  const canManageAccounts = canManageIntegrationAccounts(user);
   const [integrations, setIntegrations] = useState<IntegrationData[]>([]);
   const [loading, setLoading] = useState(true);
   const [editDef, setEditDef] = useState<IntegrationDef | null>(null);
@@ -493,7 +500,7 @@ export function IntegrationsManager() {
   });
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 min-w-0" dir={dir} data-testid="integrations-manager">
       {liveMode && !liveMode.live && (
         <div className="flex items-start gap-3 p-4 rounded-xl border border-amber-300 bg-amber-50 text-amber-900">
           <Shield className="w-5 h-5 mt-0.5 flex-shrink-0" />
@@ -507,7 +514,7 @@ export function IntegrationsManager() {
         </div>
       )}
       <Card className="border-none shadow-lg shadow-black/5 p-6">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
           <div>
             <h2 className="font-display font-bold text-lg flex items-center gap-2">
               <Zap className="w-5 h-5 text-primary" /> Integrations
@@ -517,23 +524,20 @@ export function IntegrationsManager() {
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <Button size="sm" variant="outline" className="gap-1" onClick={openNewAnthropicConnection}>
-              <Plus className="w-4 h-4" /> Add Anthropic connection
-            </Button>
             <Badge className="bg-primary/10 text-primary border-primary/20">
               {integrations.filter((i) => i.isEnabled).length} active
             </Badge>
           </div>
         </div>
 
-        <div className="flex items-center gap-3 mb-6">
+        <div className="flex flex-wrap items-center gap-3 mb-6">
           <div className="relative flex-1 max-w-xs">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Search className="absolute start-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
               placeholder="Search integrations..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="pl-9 h-9 rounded-xl"
+              className="ps-9 h-9 rounded-xl"
             />
           </div>
           <div className="flex gap-1.5 flex-wrap">
@@ -567,6 +571,7 @@ export function IntegrationsManager() {
               return (
                 <div
                   key={def.key}
+                  data-testid={`integration-card-${def.key}`}
                   className={`relative border rounded-xl p-4 transition-all hover:shadow-md ${
                     isActive ? "border-primary/30 bg-primary/5" : "border-border/50 hover:border-border"
                   }`}
@@ -589,21 +594,26 @@ export function IntegrationsManager() {
 
                   <p className="text-xs text-muted-foreground mt-3 line-clamp-2">{defDesc(def)}</p>
 
-                  <div className="flex items-center gap-2 mt-3">
+                  {def.key === "smtp" && <p className="text-xs text-muted-foreground mt-2">{accountCopy.emailHint}</p>}
+                  {(def.key === "telegram" || def.key === "sms_twilio") && <p className="text-xs text-muted-foreground mt-2">{accountCopy.nativeHint}</p>}
+                  <div className="flex flex-wrap items-center gap-2 mt-3">
                     <Button
                       size="sm"
                       variant="outline"
                       className="h-7 text-xs rounded-lg gap-1 flex-1"
                       onClick={() => openEdit(def)}
                     >
-                      <Key className="w-3 h-3" /> Configure
+                      <Key className="w-3 h-3" /> {["smtp", "telegram", "sms_twilio"].includes(def.key) ? accountCopy.legacy : accountCopy.copy("Configure", "Yapılandır")}
                     </Button>
-                    {def.accountChannel && (
+                    {integrationAccountScope(def.key) && (
                       <Button
                         size="sm"
                         variant="ghost"
                         className="h-7 text-xs rounded-lg gap-1"
                         onClick={() => setAccountsDef(def)}
+                        disabled={def.key === "smtp" && !canManageAccounts}
+                        title={!canManageAccounts ? accountCopy.adminRequired : undefined}
+                        data-testid={`integration-accounts-${def.key}`}
                       >
                         <Users className="w-3 h-3" /> {t("integrationsManager.channelAccounts.accountsButton")}
                       </Button>
@@ -621,6 +631,8 @@ export function IntegrationsManager() {
                       </Button>
                     )}
                   </div>
+
+                  {def.key === "claude" && <Button size="sm" variant="outline" className="mt-3 h-auto min-h-8 whitespace-normal gap-1" onClick={openNewAnthropicConnection} data-testid="add-anthropic-connection"><Plus className="h-3 w-3 shrink-0" />{accountCopy.anthropic}</Button>}
 
                   {isActive && (
                     <div className="absolute top-2 right-2">
@@ -855,10 +867,19 @@ export function IntegrationsManager() {
         </DialogContent>
       </Dialog>
 
-      {accountsDef && accountsDef.accountChannel && (
+      {accountsDef && integrationAccountScope(accountsDef.key)?.kind === "email" && (
+        <Dialog open onOpenChange={open => { if (!open) setAccountsDef(null); }}>
+          <DialogContent dir={dir} className="max-w-3xl max-h-[90vh] overflow-y-auto w-[calc(100%-2rem)]" data-testid="smtp-accounts-dialog">
+            <DialogHeader><DialogTitle>{defName(accountsDef)} · {t("integrationsManager.channelAccounts.accountsButton")}</DialogTitle></DialogHeader>
+            <p className="text-sm text-muted-foreground">{accountCopy.emailHint}</p>
+            <EmailAutomationManager view="senders" />
+          </DialogContent>
+        </Dialog>
+      )}
+      {accountsDef && integrationAccountScope(accountsDef.key)?.kind === "channel" && (
         <ChannelAccountsDialog
           def={accountsDef}
-          channel={accountsDef.accountChannel}
+          scope={integrationAccountScope(accountsDef.key) as Extract<AccountScope, { kind: "channel" }>}
           liveMode={liveMode}
           onClose={() => setAccountsDef(null)}
         />
@@ -877,17 +898,24 @@ export function IntegrationsManager() {
  */
 function ChannelAccountsDialog({
   def,
-  channel,
+  scope,
   liveMode,
   onClose,
 }: {
   def: IntegrationDef;
-  channel: string;
+  scope: Extract<AccountScope, { kind: "channel" }>;
   liveMode: { live: boolean; reason: string } | null;
   onClose: () => void;
 }) {
   const { toast } = useToast();
-  const { t } = useI18n();
+  const { t, lang, dir } = useI18n();
+  const { user } = useAuth();
+  const copy = integrationAccountsCopy(lang);
+  const canManage = canManageIntegrationAccounts(user);
+  const [channel, setChannel] = useState<AccountChannel>(scope.channels[0]);
+  const [externalAccountId, setExternalAccountId] = useState("");
+  const [loadError, setLoadError] = useState(false);
+  const loadController = useRef<AbortController | null>(null);
   const [accounts, setAccounts] = useState<ChannelAccount[]>([]);
   const [loading, setLoading] = useState(true);
   const [mode, setMode] = useState<"list" | "form">("list");
@@ -901,25 +929,42 @@ function ChannelAccountsDialog({
   const [showPw, setShowPw] = useState<Set<string>>(new Set());
 
   const ca = (k: string, vars?: Record<string, any>) => t(`integrationsManager.channelAccounts.${k}`, vars);
+  const listPath = accountListPath(scope);
+  const configurationOnly = scope.provider === "direct" && (channel === "telegram" || channel === "sms");
+  const accountFields: FieldDef[] = scope.provider === "zernio"
+    ? []
+    : channel === "telegram"
+      ? [{ key: "botToken", label: copy.botToken, type: "password", required: true }, { key: "defaultChatId", label: copy.defaultChatId, type: "text" }]
+      : channel === "sms"
+        ? [{ key: "accountSid", label: copy.accountSid, type: "text", required: true }, { key: "authToken", label: copy.authToken, type: "password", required: true }, { key: "fromNumber", label: copy.fromNumber, type: "text", required: true, placeholder: "+1234567890" }]
+        : def.fields;
 
   useEffect(() => {
     load();
+    return () => loadController.current?.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [channel]);
+  }, [listPath]);
 
   async function load() {
+    loadController.current?.abort();
+    const controller = new AbortController(); loadController.current = controller;
     setLoading(true);
+    setLoadError(false);
     try {
-      const res = await customFetch(`/api/channel-accounts?channel=${encodeURIComponent(channel)}`);
-      setAccounts((res as any)?.accounts || []);
+      const res = await customFetch(listPath, { signal: controller.signal });
+      if (controller.signal.aborted) return;
+      if (!Array.isArray((res as any)?.accounts)) throw new Error("Invalid account list");
+      setAccounts(((res as any).accounts as ChannelAccount[]).filter(account => account.provider === scope.provider && scope.channels.includes(account.channel as AccountChannel)));
     } catch {
-      toast({ title: ca("loadFailed"), variant: "destructive" });
+      if (!controller.signal.aborted) { setAccounts([]); setLoadError(true); }
     } finally {
-      setLoading(false);
+      if (!controller.signal.aborted) setLoading(false);
     }
   }
 
   function openNew() {
+    if (!canManage) return;
+    setChannel(scope.channels[0]); setExternalAccountId("");
     setEditingId(null);
     setDisplayName("");
     setBrandLabel("");
@@ -930,6 +975,8 @@ function ChannelAccountsDialog({
   }
 
   function openEditAccount(acc: ChannelAccount) {
+    if (!canManage || acc.provider !== scope.provider || !scope.channels.includes(acc.channel as AccountChannel)) return;
+    setChannel(acc.channel as AccountChannel); setExternalAccountId(acc.externalAccountId || "");
     setEditingId(acc.id);
     setDisplayName(acc.displayName);
     setBrandLabel(acc.brandLabel || acc.displayName);
@@ -952,8 +999,13 @@ function ChannelAccountsDialog({
   }
 
   async function save() {
+    if (!canManage || saving) return;
     if (!displayName.trim()) {
       toast({ title: ca("displayNameRequired"), variant: "destructive" });
+      return;
+    }
+    if (accountFields.some(field => field.required && !(field.type === "password" && editingId !== null) && !String(config[field.key] ?? "").trim())) {
+      toast({ title: copy.copy("Complete the required account fields.", "Zorunlu hesap alanlarını doldurun."), variant: "destructive" });
       return;
     }
     setSaving(true);
@@ -962,7 +1014,8 @@ function ChannelAccountsDialog({
         await customFetch(`/api/channel-accounts`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ channel, displayName: displayName.trim(), brandLabel: brandLabel.trim(), brandColor, config }),
+          body: JSON.stringify({ channel, provider: scope.provider, displayName: displayName.trim(), brandLabel: brandLabel.trim(), brandColor, config,
+            ...(scope.provider === "zernio" ? { externalAccountId: externalAccountId.trim(), isActive: false } : configurationOnly ? { isActive: false } : {}) }),
         });
       } else {
         await customFetch(`/api/channel-accounts/${editingId}`, {
@@ -974,23 +1027,22 @@ function ChannelAccountsDialog({
       toast({ title: ca("saved") });
       setMode("list");
       load();
-    } catch (err: any) {
-      const msg = err?.body?.error || err?.body?.message || err?.message || ca("saveFailed");
-      toast({ title: msg, variant: "destructive" });
+    } catch {
+      toast({ title: ca("saveFailed"), variant: "destructive" });
     } finally {
       setSaving(false);
     }
   }
 
   async function action(fn: () => Promise<any>, id: number, okTitle?: string) {
+    if (!canManage || busyId !== null) return;
     setBusyId(id);
     try {
       await fn();
       if (okTitle) toast({ title: okTitle });
       load();
-    } catch (err: any) {
-      const msg = err?.body?.error || err?.body?.message || err?.message || ca("saveFailed");
-      toast({ title: msg, variant: "destructive" });
+    } catch {
+      toast({ title: ca("saveFailed"), variant: "destructive" });
     } finally {
       setBusyId(null);
     }
@@ -1010,38 +1062,41 @@ function ChannelAccountsDialog({
   }
 
   async function test(id: number) {
+    if (!canManage || busyId !== null || configurationOnly) return;
     setBusyId(id);
     try {
       const res = await customFetch(`/api/channel-accounts/${id}/test`, { method: "POST" });
-      const ok = (res as any)?.success !== false;
-      toast({ title: (res as any)?.message || (ok ? ca("testPassed") : ca("testFailed")), variant: ok ? undefined : "destructive" });
-    } catch (err: any) {
-      const msg = err?.body?.error || err?.body?.message || err?.message || ca("testFailed");
-      toast({ title: msg, variant: "destructive" });
+      const result = accountTestState(res as any);
+      toast({ title: result === "unverified" ? copy.noVerification : result === "verified" ? ca("testPassed") : ca("testFailed"), variant: result === "failed" ? "destructive" : undefined });
+    } catch {
+      toast({ title: ca("testFailed"), variant: "destructive" });
     } finally {
       setBusyId(null);
     }
   }
 
-  const webhookCallback = channel === "whatsapp"
-    ? `${window.location.origin}/api/webhooks/whatsapp`
-    : `${window.location.origin}/api/webhooks/meta`;
+  const webhookPath = accountWebhookPath(scope.provider, channel);
+  const webhookCallback = webhookPath ? `${window.location.origin}${webhookPath}` : null;
   const Icon = def.icon;
 
   return (
-    <Dialog open onOpenChange={(v) => { if (!v) onClose(); }}>
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+    <Dialog open onOpenChange={(v) => { if (!v && !saving && busyId === null) onClose(); }}>
+      <DialogContent dir={dir} className="max-w-lg max-h-[90vh] overflow-y-auto w-[calc(100%-2rem)]" data-testid="channel-accounts-dialog">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-3">
             <div className={`w-10 h-10 rounded-xl flex items-center justify-center border ${def.color}`}>
               <Icon className="w-5 h-5" />
             </div>
             <div>
-              <p>{ca("title")}</p>
+              <p>{def.name} · {ca("title")}</p>
               <p className="text-xs text-muted-foreground font-normal mt-0.5">{ca("subtitle")}</p>
             </div>
           </DialogTitle>
         </DialogHeader>
+
+        {scope.provider === "zernio" && <p className="text-xs text-muted-foreground">{copy.zernioHint}</p>}
+        {configurationOnly && <p className="rounded-lg border border-amber-300 p-3 text-xs text-muted-foreground" data-testid="account-configuration-only">{copy.nativeHint}</p>}
+        {!canManage && <p role="status" className="text-xs text-muted-foreground">{copy.adminRequired}</p>}
 
         {mode === "list" ? (
           <div className="space-y-3 py-2">
@@ -1049,6 +1104,8 @@ function ChannelAccountsDialog({
               <div className="flex items-center justify-center py-10">
                 <Loader2 className="w-6 h-6 animate-spin text-primary" />
               </div>
+            ) : loadError ? (
+              <div role="alert" className="text-sm text-destructive">{copy.loadError}<Button size="sm" variant="outline" onClick={() => void load()}>{copy.retry}</Button></div>
             ) : accounts.length === 0 ? (
               <p className="text-sm text-muted-foreground text-center py-8">{ca("noAccounts")}</p>
             ) : (
@@ -1061,6 +1118,8 @@ function ChannelAccountsDialog({
                           <span className="h-3 w-3 shrink-0 rounded-full border" style={{ backgroundColor: acc.brandColor || "#143591" }} />
                         )}
                         <p className="font-medium text-sm truncate">{acc.displayName}</p>
+                        {scope.provider === "zernio" && <Badge variant="outline">{acc.channel}</Badge>}
+                        {acc.capabilities?.configurationOnly && <Badge variant="outline">{copy.configurationOnly}</Badge>}
                         {acc.isDefault && (
                           <Badge className="bg-primary/10 text-primary border-primary/20 gap-1 text-[10px]">
                             <Star className="w-2.5 h-2.5" /> {ca("default")}
@@ -1085,46 +1144,53 @@ function ChannelAccountsDialog({
                   <div className="flex items-center gap-1.5 mt-2 flex-wrap">
                     {!acc.isDefault && (
                       <Button size="sm" variant="outline" className="h-7 text-xs rounded-lg gap-1"
-                        disabled={busyId === acc.id} onClick={() => setDefault(acc.id)}>
+                        data-testid={`account-default-${acc.id}`} disabled={!canManage || busyId !== null || configurationOnly || acc.capabilities?.configurationOnly} onClick={() => setDefault(acc.id)}>
                         <Star className="w-3 h-3" /> {ca("setDefault")}
                       </Button>
                     )}
                     <Button size="sm" variant="ghost" className="h-7 text-xs rounded-lg gap-1"
-                      disabled={busyId === acc.id} onClick={() => toggleActive(acc.id)}>
+                      data-testid={`account-toggle-${acc.id}`} disabled={!canManage || busyId !== null || configurationOnly || acc.capabilities?.configurationOnly} onClick={() => toggleActive(acc.id)}>
                       <Power className="w-3 h-3" /> {acc.isActive ? ca("deactivate") : ca("activate")}
                     </Button>
                     <Button size="sm" variant="ghost" className="h-7 text-xs rounded-lg gap-1"
-                      disabled={busyId === acc.id} onClick={() => test(acc.id)}>
+                      data-testid={`account-test-${acc.id}`} disabled={!canManage || busyId !== null || configurationOnly || acc.capabilities?.verificationSupported === false || (scope.provider === "zernio" && acc.channel !== "whatsapp")} onClick={() => test(acc.id)}>
                       {busyId === acc.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Zap className="w-3 h-3" />} {ca("test")}
                     </Button>
                     <Button size="sm" variant="ghost" className="h-7 text-xs rounded-lg gap-1"
-                      disabled={busyId === acc.id} onClick={() => openEditAccount(acc)}>
+                      data-testid={`account-edit-${acc.id}`} disabled={!canManage || busyId !== null} onClick={() => openEditAccount(acc)}>
                       <Key className="w-3 h-3" /> {ca("edit")}
                     </Button>
                     <Button size="sm" variant="ghost" className="h-7 text-xs rounded-lg gap-1 text-red-600 hover:text-red-700"
-                      disabled={busyId === acc.id} onClick={() => remove(acc.id)}>
+                      disabled={!canManage || busyId !== null} onClick={() => remove(acc.id)}>
                       <Trash2 className="w-3 h-3" /> {ca("delete")}
                     </Button>
                   </div>
                 </div>
               ))
             )}
-            <Button variant="outline" className="w-full rounded-xl gap-1.5" onClick={openNew}>
+            <Button data-testid="account-add" variant="outline" className="w-full rounded-xl gap-1.5" disabled={!canManage || loading || loadError || busyId !== null} onClick={openNew}>
               <Plus className="w-4 h-4" /> {ca("addAccount")}
             </Button>
           </div>
         ) : (
           <div className="space-y-4 py-2">
+            {(scope.provider === "zernio" || configurationOnly) && <p className="text-xs text-muted-foreground">{copy.inactiveHint}</p>}
+            {scope.provider === "zernio" && <>
+              <label className="block text-sm space-y-1"><span>{copy.channel}</span><select className="h-9 rounded-lg w-full border bg-background px-2" value={channel} disabled={editingId !== null} onChange={event => setChannel(event.target.value as AccountChannel)}>{scope.channels.map(value => <option key={value} value={value}>{value === "messenger" ? "Facebook / Messenger" : value === "whatsapp" ? "WhatsApp" : value === "telegram" ? "Telegram" : "Instagram"}</option>)}</select></label>
+              <label className="block text-sm space-y-1"><span>{copy.externalId}</span><Input value={externalAccountId} disabled={editingId !== null} maxLength={256} required onChange={event => setExternalAccountId(event.target.value)} /></label>
+              <p className="text-xs text-muted-foreground">{copy.immutable}</p>
+            </>}
             {liveMode && !liveMode.live && (
               <div className="text-xs p-3 rounded-lg border border-amber-300 bg-amber-50 text-amber-900">
                 {ca("simulatedNote")}
               </div>
             )}
             <div>
-              <Label className="text-xs flex items-center gap-1">
+              <Label htmlFor="channel-account-name" className="text-xs flex items-center gap-1">
                 {ca("displayName")}<span className="text-red-500">*</span>
               </Label>
               <Input
+                id="channel-account-name"
                 placeholder={ca("displayNamePlaceholder")}
                 value={displayName}
                 onChange={(e) => setDisplayName(e.target.value)}
@@ -1174,25 +1240,28 @@ function ChannelAccountsDialog({
                 </div>
               </div>
             )}
-            {def.fields.map((field) => (
+            {editingId !== null && <p className="text-xs text-muted-foreground">{copy.secretHint}</p>}
+            {accountFields.map((field) => (
               <div key={field.key}>
-                <Label className="text-xs flex items-center gap-1">
-                  {resolveFieldLabel(def, field, t)}
+                <Label htmlFor={`channel-account-${field.key}`} className="text-xs flex items-center gap-1">
+                  {configurationOnly || scope.provider === "zernio" ? field.label : resolveFieldLabel(def, field, t)}
                   {field.required && <span className="text-red-500">*</span>}
                 </Label>
                 <div className="relative mt-1">
                   <Input
+                    id={`channel-account-${field.key}`}
                     type={field.type === "password" && !showPw.has(field.key) ? "password" : field.type === "password" ? "text" : field.type}
                     placeholder={field.placeholder}
                     value={config[field.key] || ""}
                     onChange={(e) => setConfig((prev) => ({ ...prev, [field.key]: e.target.value }))}
-                    className="h-9 rounded-xl pr-10"
+                    className="h-9 rounded-xl pe-10"
                   />
                   {field.type === "password" && (
                     <button
                       type="button"
                       onClick={() => toggleShowPw(field.key)}
-                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                      aria-label={showPw.has(field.key) ? copy.hideSecret : copy.showSecret}
+                      className="absolute end-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                     >
                       {showPw.has(field.key) ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </button>
@@ -1200,9 +1269,9 @@ function ChannelAccountsDialog({
                 </div>
               </div>
             ))}
-            <div className="space-y-2 p-3 rounded-xl bg-secondary/40 border border-border/50">
-              <p className="text-xs font-semibold">{t("integrationsManager.metaWebhook.title")}</p>
-              <p className="text-[11px] text-muted-foreground">{ca("webhookPerAccountNote")}</p>
+            {webhookCallback && <div className="space-y-2 p-3 rounded-xl bg-secondary/40 border border-border/50">
+              <p className="text-xs font-semibold">{scope.provider === "zernio" ? copy.webhook : t("integrationsManager.metaWebhook.title")}</p>
+              {scope.provider !== "zernio" && <p className="text-[11px] text-muted-foreground">{ca("webhookPerAccountNote")}</p>}
               <Label className="text-[11px]">{t("integrationsManager.metaWebhook.callbackUrl")}</Label>
               <div className="flex items-center gap-1.5">
                 <Input readOnly value={webhookCallback} className="h-8 rounded-lg text-[11px] font-mono" />
@@ -1211,17 +1280,17 @@ function ChannelAccountsDialog({
                   <Copy className="w-3 h-3" /> {t("integrationsManager.metaWebhook.copy")}
                 </Button>
               </div>
-            </div>
+            </div>}
           </div>
         )}
 
         <DialogFooter>
           {mode === "list" ? (
-            <Button variant="outline" onClick={onClose} className="rounded-xl">{ca("close")}</Button>
+            <Button variant="outline" disabled={busyId !== null} onClick={onClose} className="rounded-xl">{ca("close")}</Button>
           ) : (
             <>
-              <Button variant="outline" onClick={() => setMode("list")} className="rounded-xl">{ca("cancel")}</Button>
-              <Button onClick={save} disabled={saving} className="rounded-xl gap-1.5">
+              <Button variant="outline" disabled={saving} onClick={() => setMode("list")} className="rounded-xl">{ca("cancel")}</Button>
+              <Button data-testid="account-save" onClick={save} disabled={saving || !canManage || (scope.provider === "zernio" && !externalAccountId.trim())} className="rounded-xl gap-1.5">
                 {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
                 {ca("save")}
               </Button>

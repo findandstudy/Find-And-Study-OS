@@ -5,6 +5,7 @@ import {
   customFetch,
 } from "@workspace/api-client-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { uploadAndFinalizeObject } from "@/lib/finalizeObjectUpload";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -1019,8 +1020,7 @@ function TransactionModal({
         method: "POST",
         body: JSON.stringify({ name: file.name, size: file.size, contentType: file.type }),
       });
-      const putResp = await fetch(data.uploadURL, {
-        method: "PUT",
+      const putResp = await uploadAndFinalizeObject(data.uploadURL, data.objectPath, {
         body: file,
         headers: { "Content-Type": file.type },
       });

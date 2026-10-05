@@ -249,6 +249,15 @@ test("production prefix and canonical additive migration tail are pinned", () =>
       "0121_public_web_city_publication_guard",
       "0122_public_web_draft_intake",
       "0123_public_web_draft_intake_replay_hardening",
+      "0124_pipeline_email_automation",
+      "0125_pipeline_email_history_lookup",
+      "0126_student_registration_matching",
+      "0127_web_form_replay_receipts",
+      "0128_object_upload_grants",
+      "0129_facet_cache_invalidation",
+      "0130_facet_cache_invalidation_repair",
+      "0131_facet_cache_trigger_install",
+      "0132_education_country",
     ],
   );
 

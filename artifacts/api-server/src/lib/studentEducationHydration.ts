@@ -69,6 +69,7 @@ function recordHasData(record: HydratableEducationRecord | undefined): boolean {
     [
       record.institution,
       record.program,
+      record.country,
       record.graduationYear,
       record.gpa,
       record.gpaRaw,

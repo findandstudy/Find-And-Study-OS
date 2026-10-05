@@ -17,10 +17,12 @@ localEmitter.setMaxListeners(0);
 let listenClient: any = null;
 let connecting: Promise<void> | null = null;
 let isShuttingDown = false;
+let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
 function scheduleReconnect(): void {
-  if (isShuttingDown) return;
-  setTimeout(() => {
+  if (isShuttingDown || reconnectTimer || localEmitter.listenerCount("feed") === 0) return;
+  reconnectTimer = setTimeout(() => {
+    reconnectTimer = null;
     connectListenClient().catch((err) => {
       console.error("[feedBus] reconnect failed, will retry", err);
       scheduleReconnect();
@@ -70,12 +72,6 @@ async function connectListenClient(): Promise<void> {
   return connecting;
 }
 
-// Eagerly start the LISTEN connection on module load.
-void connectListenClient().catch((err) => {
-  console.error("[feedBus] initial LISTEN failed, will retry", err);
-  scheduleReconnect();
-});
-
 export const feedBus = {
   /**
    * Publish an event via pg_notify. The payload must fit within Postgres'
@@ -93,14 +89,16 @@ export const feedBus = {
 
   /**
    * Subscribe to feed events. Returns an unsubscribe function.
-   * The LISTEN client is started lazily on first subscribe but is also
-   * started eagerly at module load, so there is effectively no delay.
+   * The LISTEN client is started lazily on first subscribe. Importing this
+   * module never opens a database connection.
    */
   subscribe(handler: (event: FeedBusEvent) => void): () => void {
-    void connectListenClient().catch(() => {
-      // already logged above
-    });
+    isShuttingDown = false;
     localEmitter.on("feed", handler);
+    void connectListenClient().catch((err) => {
+      console.error("[feedBus] initial LISTEN failed, will retry", err);
+      scheduleReconnect();
+    });
     return () => {
       localEmitter.off("feed", handler);
     };
@@ -111,6 +109,10 @@ export const feedBus = {
    */
   async shutdown(): Promise<void> {
     isShuttingDown = true;
+    if (reconnectTimer) {
+      clearTimeout(reconnectTimer);
+      reconnectTimer = null;
+    }
     const client = listenClient;
     listenClient = null;
     if (!client) return;

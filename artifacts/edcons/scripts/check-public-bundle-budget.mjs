@@ -35,17 +35,31 @@ const initialJavascriptGzipBytes = (
 const initialCssGzipBytes = (
   await Promise.all(stylesheets.map(gzipBytes))
 ).reduce((total, size) => total + size, 0);
+const initialCss = (await Promise.all(stylesheets.map((urlPath) => readFile(localAssetPath(urlPath), "utf8")))).join("\n");
+assert.doesNotMatch(initialCss, /https?:\/\//i, "initial CSS must not depend on third-party styles or fonts");
 const bootstrapBytes = (await stat(path.join(publicRoot, "bootstrap.js"))).size;
 
 assert.ok(
-  initialJavascriptGzipBytes <= 300 * 1024,
-  `initial JavaScript exceeds 300 KiB gzip: ${initialJavascriptGzipBytes}`,
+  initialJavascriptGzipBytes <= 180 * 1024,
+  `initial JavaScript exceeds 180 KiB gzip: ${initialJavascriptGzipBytes}`,
 );
 assert.ok(
   initialCssGzipBytes <= 60 * 1024,
   `initial CSS exceeds 60 KiB gzip: ${initialCssGzipBytes}`,
 );
 assert.ok(bootstrapBytes <= 4 * 1024, `bootstrap exceeds 4 KiB: ${bootstrapBytes}`);
+assert.ok(
+  modulePreloads.every((asset) => !asset.includes("vendor-motion")),
+  "public bootstrap must not preload the animation runtime",
+);
+assert.ok(
+  modulePreloads.every((asset) => !asset.includes("vendor-radix")),
+  "public bootstrap must not preload the portal component runtime",
+);
+assert.ok(
+  initialJavascript.every((asset) => !asset.includes("detail-preview-renderer")),
+  "public bootstrap must not preload the Pages-only static preview renderer",
+);
 
 const localeCodes = [
   "en", "tr", "ar", "fr", "ru", "fa", "zh", "hi", "es", "id", "ur",
@@ -54,7 +68,14 @@ const localeCodes = [
 const assetNames = await readdir(path.join(publicRoot, "assets"));
 const localeChunkSizes = {};
 for (const locale of localeCodes) {
-  const matches = assetNames.filter((name) => new RegExp(`^${locale}-[A-Za-z0-9_-]+\\.js$`).test(name));
+  const prefixed = assetNames.filter((name) => new RegExp(`^${locale}-[A-Za-z0-9_-]+\\.js$`).test(name));
+  // Route-level splitting can legitimately produce names such as id-card-*.
+  // Translation dictionaries are the only locale-prefixed chunks above the
+  // conservative 200 KiB raw floor; classify by both name and artifact shape.
+  const matches = [];
+  for (const name of prefixed) {
+    if ((await stat(path.join(publicRoot, "assets", name))).size >= 200 * 1024) matches.push(name);
+  }
   assert.equal(matches.length, 1, `expected exactly one lazy chunk for locale ${locale}`);
   const urlPath = `/assets/${matches[0]}`;
   assert.ok(!initialJavascript.includes(urlPath), `${locale} locale was eagerly preloaded`);

@@ -19,6 +19,80 @@ const indexHtml = `<!doctype html><html lang="en"><head>
 <meta name="twitter:description" content="fallback" /></head><body><div id="root"></div>
 <script>window.test=true</script><script type="module" src="/assets/app.js"></script></body></html>`;
 
+test("reviewed editorial SSR is bound, escaped, layout-controlled and cannot change SEO", async () => {
+  const { defaultDetailLayout } = await import("../src/lib/websiteDetailLayoutContract");
+  const model: PublicCatalogRenderModel = { kind: "program_detail", locale: "en", canonicalPath: "/en/programs/example-42", title: "Example", description: "Catalogue", indexable: false, alternatePaths: {}, relatedPrograms: [],
+    program: { id: 42, name: "Example", universityName: "University", universityPath: "/en/universities/example-1", country: "Turkey", city: null, degree: "Bachelor", field: null, duration: null, language: "English", tuitionFee: null, discountedFee: null, currency: "USD" },
+    editorial: { version: 1, kind: "program", entityId: 42, locale: "en", sections: [{ key: "faq", title: "Questions & answers", questions: [{ question: "When can I ask?", answer: "Contact admissions & discuss." }], sources: [{ label: "Source", url: "https://example.org/info?a=1&b=2" }], reviewedOn: "2026-09-01" }] },
+    detailLayout: defaultDetailLayout("program") };
+  const render = () => renderPublicCatalogHtml({ indexHtml, model, siteUrl: "https://example.test", nonce: "test" });
+  Object.assign(model.editorial!.sections[0], { body: "Sourced editorial body", cards: [{ title: "Support card", body: "Contact support", href: "https://example.org/support" }], steps: [{ title: "Prepare", body: "Review your documents" }], images: [{ src: "https://example.org/campus.jpg", alt: "Campus photo", caption: "Approved image" }], table: { columns: ["Item"], rows: [["Sourced item"]] } });
+  const html = render();
+  assert.match(html, /id="editorial-faq"/); assert.match(html, /Questions &amp; answers/);
+  assert.match(html, /Contact admissions &amp; discuss/); assert.match(html, /content="noindex, follow"/);
+  for (const text of ["Sourced editorial body", "Support card", "Contact support", "Prepare", "Review your documents", "Campus photo", "Approved image", "Sourced item"]) assert.ok(html.includes(text), text);
+  assert.doesNotMatch(html, /"@type":"FAQPage"/);
+  model.detailLayout!.hidden = ["editorial-faq"];
+  assert.doesNotMatch(render(), /id="editorial-faq"|href="#editorial-faq"|When can I ask/);
+  model.detailLayout = undefined;
+  model.editorial!.locale = "tr"; assert.doesNotMatch(render(), /When can I ask/);
+  model.editorial!.locale = "en"; model.editorial!.entityId = 43; assert.doesNotMatch(render(), /When can I ask/);
+  model.editorial!.entityId = 42; model.editorial!.sections[0].body = "<script>alert(1)</script>";
+  assert.doesNotMatch(render(), /When can I ask|alert\(1\)/);
+});
+
+test("admissions-closed program remains rendered and indexable without an available Offer", () => {
+  const model: PublicCatalogRenderModel = {
+    kind: "program_detail", locale: "en", canonicalPath: "/en/programs/example-42",
+    title: "Example program", description: "Catalogue description", indexable: true,
+    alternatePaths: { en: "/en/programs/example-42" }, relatedPrograms: [],
+    program: {
+      id: 42, name: "Example program", universityName: "Example university",
+      universityPath: "/en/universities/example-7", universityIsActive: false,
+      country: "Turkey", city: "Istanbul", degree: "Bachelor", field: null,
+      countryPath: "/en/countries/turkey", cityPath: "/en/cities/istanbul-1",
+      duration: null, language: "English", tuitionFee: 1000, discountedFee: null, currency: "USD",
+      verifiedTuition: { amountMinor: "100000", currencyCode: "USD", frequency: "ANNUAL" },
+    },
+  };
+  const html = renderPublicCatalogHtml({ indexHtml, model, siteUrl: "https://example.test", nonce: "test" });
+  assert.match(html, /data-public-render-shell="program-detail"/);
+  assert.match(html, /Example program/);
+  assert.match(html, /content="index, follow"/);
+  assert.doesNotMatch(html, /"@type":"Offer"/);
+  assert.doesNotMatch(html, /data-application-cta/);
+  assert.match(html, /Applications closed/);
+  assert.match(html, /href="\/en\/countries\/turkey"/);
+  assert.match(html, /href="\/en\/cities\/istanbul-1"/);
+  model.program.universityIsActive = true;
+  const reopened = renderPublicCatalogHtml({ indexHtml, model, siteUrl: "https://example.test", nonce: "test" });
+  assert.match(reopened, /"@type":"Offer"/);
+  assert.match(reopened, /data-application-cta/);
+  model.program.verifiedTuition = null;
+  const legacy = renderPublicCatalogHtml({ indexHtml, model, siteUrl: "https://example.test", nonce: "test" });
+  assert.match(legacy, /catalogue price; not verified/);
+  assert.doesNotMatch(legacy, /"@type":"Offer"/);
+  assert.match(legacy, /href="#fees"/);
+  model.program.requirements = "IELTS: 6.0 | Edvoy Ref: private-import | Intake Years: 2024";
+  model.prices = Object.assign([{ id: "price", componentType: "TUITION", amountMinor: "100000", currencyCode: "USD", frequency: "ANNUAL" }], { truncated: true });
+  const overflow = renderPublicCatalogHtml({ indexHtml, model, siteUrl: "https://example.test", nonce: "test" });
+  assert.doesNotMatch(overflow, /"@type":"Offer"/);
+  assert.doesNotMatch(overflow, /catalogue price; not verified/);
+  assert.match(overflow, /IELTS: 6.0/);
+  assert.doesNotMatch(overflow, /private-import|Intake Years/);
+  assert.match(overflow, /data-detail-section="fees" id="fees"/);
+  model.detailLayout = { version: 2, kind: "program", sections: ["hero", "navigation", "overview", "fees", "requirements", "intakes", "related"], hidden: [] };
+  const reordered = renderPublicCatalogHtml({ indexHtml, model, siteUrl: "https://example.test", nonce: "test" });
+  assert.ok(reordered.indexOf('data-detail-section="fees"') < reordered.indexOf('data-detail-section="requirements"'));
+  model.detailLayout.hidden = ["fees"];
+  const hidden = renderPublicCatalogHtml({ indexHtml, model, siteUrl: "https://example.test", nonce: "test" });
+  assert.doesNotMatch(hidden, /href="#fees"|id="fees"/);
+  model.detailLayout = undefined;
+  model.prices = []; model.program.tuitionFee = null;
+  const noFee = renderPublicCatalogHtml({ indexHtml, model, siteUrl: "https://example.test", nonce: "test" });
+  assert.doesNotMatch(noFee, /href="#fees"|id="fees"/);
+});
+
 test("render mode and exact allowlist fail closed", () => {
   assert.equal(parsePublicWebRenderMode("ALL"), "all");
   assert.equal(parsePublicWebRenderMode("allowlist"), "allowlist");
@@ -49,7 +123,23 @@ test("production render middleware honors governed redirect and gone aliases", (
   assert.match(source, /X-Content-Type-Options/);
 });
 
+test("hashed assets never fall through to HTML and public HTML cannot outlive a release", () => {
+  const source = readFileSync(new URL("../src/index.ts", import.meta.url), "utf8");
+  assert.match(source, /app\.use\("\/assets"[\s\S]*?Asset not found/);
+  assert.match(source, /res\.status\(404\)\.type\("text\/plain"\)/);
+  assert.match(source, /public, max-age=0, must-revalidate/);
+  const renderBlock = source.slice(
+    source.indexOf("const rendered = await getPublicCatalogRenderModel"),
+    source.indexOf("res.status(rendered.value.kind"),
+  );
+  assert.doesNotMatch(renderBlock, /stale-while-revalidate/);
+});
+
 test("only bounded public content paths enter the render pilot and CMS pages cannot shadow system routes", () => {
+  const home = matchPublicCatalogRenderPath("/en");
+  assert.equal(home?.kind, "page_detail");
+  assert.equal(home?.kind === "page_detail" ? home.slug : null, "home");
+  assert.equal(matchPublicCatalogRenderPath("/en/countries")?.kind, "country_list");
   assert.equal(matchPublicCatalogRenderPath("/en/programs")?.kind, "program_list");
   const detail = matchPublicCatalogRenderPath("/tr/programs/bilgisayar-muhendisligi-42");
   assert.equal(detail?.kind, "program_detail");
@@ -77,6 +167,37 @@ test("only bounded public content paths enter the render pilot and CMS pages can
   assert.equal(matchPublicCatalogRenderPath("/en/guides"), null);
   assert.equal(matchPublicCatalogRenderPath("/en/programs/a/b"), null);
   assert.equal(matchPublicCatalogRenderPath("/en/universities"), null);
+});
+
+test("country directory SSR renders safe canonical links and CollectionPage data", () => {
+  const model: PublicCatalogRenderModel = {
+    kind: "country_list",
+    locale: "en",
+    canonicalPath: "/en/countries",
+    title: "Study destinations",
+    description: "Explore current destinations.",
+    indexable: true,
+    countries: [{
+      id: 1,
+      name: "United Kingdom <script>",
+      code: "GB",
+      canonicalPath: "/en/countries/united-kingdom",
+      universityCount: 12,
+      programCount: 48,
+      featured: true,
+    }],
+  };
+  const html = renderPublicCatalogHtml({
+    indexHtml: '<html lang="en"><head><title>App</title><link rel="canonical" href="/" /></head><body><div id="root"></div><script src="/assets/index.js"></script></body></html>',
+    model,
+    siteUrl: "https://example.test",
+    nonce: "safe-nonce",
+  });
+  assert.match(html, /data-public-render-shell="country-list"/);
+  assert.match(html, /href="\/en\/countries\/united-kingdom"/);
+  assert.match(html, /United Kingdom &lt;script&gt;/);
+  assert.doesNotMatch(html, /United Kingdom <script>/);
+  assert.match(html, /"@type":"CollectionPage"/);
 });
 
 test("rendered shell escapes catalogue content, emits canonical metadata, and nonces every script", () => {
@@ -395,6 +516,77 @@ test("CMS page detail renders only the immutable projection and escapes block co
   assert.match(html, /hreflang="x-default"/);
 });
 
+test("internal home fallback hero preserves the existing React fallback geometry", () => {
+  const model: PublicCatalogRenderModel = {
+    kind: "page_detail",
+    locale: "en",
+    canonicalPath: "/en",
+    title: "Home",
+    description: "Home page",
+    indexable: true,
+    alternatePaths: { en: "/en" },
+    page: {
+      id: 0,
+      title: "Study abroad",
+      slug: "home",
+      versionNumber: 0,
+      publishedAt: new Date(0).toISOString(),
+      blocks: [{
+        blockType: "home_fallback_hero",
+        content: {
+          badge: "Trusted guidance",
+          title: "Study abroad",
+          subtitle: "Find your program",
+          ctaLabel: "Get started",
+          ctaUrl: "/en/programs",
+          secondaryLabel: "Browse programs",
+          secondaryUrl: "/en/programs",
+        },
+        settings: {},
+        sortOrder: 0,
+      }],
+    },
+  };
+  const html = renderPublicCatalogHtml({ indexHtml, model, siteUrl: "https://findandstudy.com", nonce: "home-nonce" });
+  assert.match(html, /pt-24 pb-32 lg:pt-36 lg:pb-40/);
+  assert.match(html, /text-5xl md:text-7xl/);
+  assert.match(html, /max-w-2xl mx-auto leading-relaxed/);
+  assert.match(html, /rounded-full px-8 h-14/);
+  assert.match(html, /href="\/en\/programs"/);
+  const client = readFileSync(new URL("../../edcons/src/pages/public/PublicPage.tsx", import.meta.url), "utf8");
+  assert.match(client, /case "home_fallback_hero"/);
+  assert.match(client, /pt-24 pb-32 lg:pt-36 lg:pb-40/);
+  assert.match(client, /text-5xl md:text-7xl/);
+});
+
+test("first-visit consent is server-rendered, escaped and usable before React", () => {
+  const model: PublicCatalogRenderModel = {
+    kind: "not_found",
+    locale: "en",
+    canonicalPath: "/en/missing",
+    title: "Missing",
+    description: "Missing page",
+    indexable: false,
+    consentCopy: {
+      title: "Cookie <preferences>",
+      description: "Choose essential cookies & continue.",
+      essentialOnly: "Essential only",
+      acceptAll: "Accept all",
+    },
+  };
+  const html = renderPublicCatalogHtml({ indexHtml, model, siteUrl: "https://findandstudy.com", nonce: "consent-nonce" });
+  assert.match(html, /class="public-consent-shell/);
+  assert.match(html, /data-cookie-consent-choice="essential"/);
+  assert.match(html, /data-cookie-consent-choice="all"/);
+  assert.match(html, /Cookie &lt;preferences&gt;/);
+  assert.match(html, /cookies &amp; continue/);
+  assert.doesNotMatch(html, /Cookie <preferences>/);
+  const bootstrap = readFileSync(new URL("../../edcons/public/bootstrap.js", import.meta.url), "utf8");
+  assert.match(bootstrap, /cookie-consent-known/);
+  assert.match(bootstrap, /data-cookie-consent-choice/);
+  assert.match(bootstrap, /localStorage\.setItem\("cookie_consent", choice\)/);
+});
+
 test("CMS catalogue grid renders current data bindings without storing duplicate facts", () => {
   const model: PublicCatalogRenderModel = {
     kind: "page_detail",
@@ -509,7 +701,8 @@ test("read model is on-demand, bounded, stale-while-revalidate, and detail index
   assert.match(readModel, /async function readUniversityDetail/);
   assert.match(readModel, /async function readDestinationDetail/);
   assert.match(readModel, /async function readCityDetail/);
-  assert.match(readModel, /localizedDelivery\.mode !== "published"/);
+  assert.match(readModel, /indexable: Boolean\(localizedDelivery\.snapshot\) && seoState.indexable/);
+  assert.match(readModel, /alternatePaths: localizedDelivery\.snapshot \? seoState.alternates : \{\}/);
   assert.match(readModel, /localizedDelivery\.snapshot\?\.canonicalPath/);
   assert.match(readModel, /const candidateLimit = internalLinkMode === "published"/);
   assert.match(readModel, /async function readArticleDetail/);

@@ -187,9 +187,11 @@ router.get("/public/web/cities/:routeKey", async (req: Request, res: Response): 
     return;
   }
   setPublicHeaders(res);
+  res.setHeader("Cache-Control", "no-store");
   res.setHeader("Content-Location", rendered.value.canonicalPath);
   res.json({
     data: rendered.value.city,
+    editorial: rendered.value.editorial ?? null,
     meta: {
       locale,
       title: rendered.value.title,

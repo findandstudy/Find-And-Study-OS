@@ -22,6 +22,8 @@ export interface ApplicationFinanceSyncResult {
   serviceFeeUpdated: boolean;
 }
 
+type ApplicationFinanceExecutor = Pick<typeof db, "select" | "insert" | "update" | "execute">;
+
 function statusFromStage(
   explicitStatus: string | null | undefined,
   variant: string | null | undefined,
@@ -47,8 +49,11 @@ function finiteNumber(value: unknown): number {
  * missing finance rows, and reconciles stage-driven statuses without ever
  * downgrading collected/settled money.
  */
-export async function syncApplicationFinance(applicationId: number): Promise<ApplicationFinanceSyncResult | null> {
-  return db.transaction(async (tx) => {
+export async function syncApplicationFinance(
+  applicationId: number,
+  executor?: ApplicationFinanceExecutor,
+): Promise<ApplicationFinanceSyncResult | null> {
+  const reconcile = async (tx: ApplicationFinanceExecutor): Promise<ApplicationFinanceSyncResult | null> => {
     await tx.execute(sql`SELECT pg_advisory_xact_lock(74021, ${applicationId})`);
 
     const [app] = await tx
@@ -226,5 +231,6 @@ export async function syncApplicationFinance(applicationId: number): Promise<App
     }
 
     return result;
-  });
+  };
+  return executor ? reconcile(executor) : db.transaction(reconcile);
 }

@@ -128,10 +128,6 @@ async function loadDbLabels(): Promise<Record<string, string>> {
   }
 }
 
-// Kick off a background refresh on module load so the first request
-// already has the cache warm (best-effort, errors swallowed above).
-void loadDbLabels();
-
 export function invalidateDocLabelCache(): void {
   dbLabelCache = null;
   dbLabelCacheUntil = 0;

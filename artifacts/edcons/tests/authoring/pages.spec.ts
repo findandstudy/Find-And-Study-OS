@@ -15,7 +15,7 @@ test("shared template review is explicit, bounded and mobile usable", async ({ p
   });
   await page.goto("/tests/fixtures/page-authoring.html");
   await expect(page.getByRole("heading", { name: "Shared detail templates" })).toBeVisible();
-  await expect(page.getByLabel("hero", { exact: true })).toBeDisabled();
+  await expect(page.getByLabel("Hero", { exact: true })).toBeDisabled();
   await page.getByLabel("Include saved draft in review").check();
   const publish = page.getByRole("button", { name: "Publish approved layouts" });
   await expect(publish).toBeDisabled();
@@ -24,11 +24,12 @@ test("shared template review is explicit, bounded and mobile usable", async ({ p
   await expect(page.getByRole("alert")).toContainText("different administrator");
   expect(writes).toEqual([{ path: "/api/website/detail-layouts/publish", body: { approved: true, selections: [{ pageId: 21, digest: entry.digest }] } }]);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-  await page.getByLabel("programs", { exact: true }).uncheck();
+  await page.getByLabel("Programs", { exact: true }).uncheck();
   await expect(publish).toHaveCount(0);
 });
 
 async function mock(page: Page) {
+  await page.addInitScript(() => localStorage.setItem("edcons_lang", "en"));
   const writes: { path: string; body: unknown }[] = [];
   await page.route("**/api/**", async route => {
     const path = new URL(route.request().url()).pathname;
@@ -38,6 +39,8 @@ async function mock(page: Page) {
     if (path === "/api/website/pages/drafts") body = draft;
     else if (path === "/api/website/detail-layouts") body = [];
     else if (path === "/api/website/pages") body = [];
+    else if (path === "/api/website/catalog-pages") body = { items: [], pagination: { page: 1, pageSize: 12, total: 0, totalPages: 0 }, publicationEvaluated: false };
+    else if (path === "/api/website/catalog-filters") body = [];
     else if (path.endsWith("/blocks")) body = [block];
     else if (path.endsWith("/versions")) body = [];
     else if (path === "/api/website/pages/1") body = draft;

@@ -1,6 +1,5 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import { z } from "zod";
-import * as fsPromises from "node:fs/promises";
 import * as nodePath from "node:path";
 import { ObjectStorageService, ObjectNotFoundError } from "../lib/objectStorage";
 import { requireAuth } from "../lib/auth";
@@ -14,11 +13,19 @@ import { checkAndIncrementRateLimit } from "../lib/pgRateLimiter";
 import { validateApplicationDocumentFile, validateUploadedFile } from "../lib/fileUploadValidation";
 import { processUpload, UploadTooLargeError } from "../lib/uploads/processUpload";
 import {
+  isValidLocalUploadPath,
+  LocalUploadBusyError,
+  LocalUploadConflictError,
+  publishLocalUpload,
+  UnsafeLocalUploadPathError,
+} from "../lib/localUploadPublication";
+import {
   socialMediaSyntheticFileName,
   validateSocialMediaBuffer,
 } from "../lib/socialMediaAssets";
 import { agentsTable, db } from "@workspace/db";
 import { eq } from "drizzle-orm";
+import { finalizeUploadGrant, issueUploadGrant } from "../lib/uploadGrant";
 
 const RequestUploadUrlBody = z.object({
   name: z.string(),
@@ -35,6 +42,10 @@ const RequestUploadUrlResponse = z.object({
     size: z.number(),
     contentType: z.string(),
   }),
+});
+
+const FinalizeUploadBody = z.object({
+  objectPath: z.string().min(1).max(1200),
 });
 
 const router: IRouter = Router();
@@ -89,6 +100,14 @@ router.post("/storage/uploads/request-url", requireAuth, async (req: Request, re
 
   try {
     const { name, size, contentType, prefix } = parsed.data;
+
+    // Refuse local aliases/reserved staging paths before issuing an ownership
+    // grant for a URL that the local PUT handler would necessarily reject.
+    if (process.env.STORAGE_DRIVER === "local" && prefix
+      && !isValidLocalUploadPath(prefix.replace(/\/$/, ""))) {
+      res.status(400).json({ error: "Invalid upload prefix" });
+      return;
+    }
 
     // Provisional applicants only need storage for the contract/onboarding
     // evidence shown in their limited portal. Do not let the generic upload
@@ -187,6 +206,15 @@ router.post("/storage/uploads/request-url", requireAuth, async (req: Request, re
       res.status(503).json({ error: "Upload authorization could not be established" });
       return;
     }
+    if (!(await issueUploadGrant({
+      objectPath,
+      uploadedBy: userId,
+      expectedSize: size,
+      expectedContentType: contentType,
+    }))) {
+      res.status(503).json({ error: "Upload grant could not be established" });
+      return;
+    }
 
     res.json(
       RequestUploadUrlResponse.parse({
@@ -198,6 +226,62 @@ router.post("/storage/uploads/request-url", requireAuth, async (req: Request, re
   } catch (error) {
     console.error("Error generating upload URL:", error);
     res.status(500).json({ error: "Failed to generate upload URL" });
+  }
+});
+
+// Cloud drivers cannot call back into the API when a signed PUT completes.
+// The client explicitly finalizes the object; the server reads authoritative
+// provider metadata and exact bytes, then seals their digest in the durable
+// grant. Local PUTs finalize inside their authenticated handler below.
+router.post("/storage/uploads/finalize", requireAuth, async (req: Request, res: Response) => {
+  const parsed = FinalizeUploadBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid upload finalization request" });
+    return;
+  }
+  const objectPath = parsed.data.objectPath;
+  if (!(await callerOwnsObject(req.user!.id, objectPath))) {
+    res.status(403).json({ error: "Upload target is not owned by the current user" });
+    return;
+  }
+  try {
+    const file = await objectStorageService.getObjectEntityFile(objectPath);
+    const [metadata] = await file.getMetadata();
+    const size = Number(metadata.size);
+    const contentType = String(metadata.contentType ?? "").split(";", 1)[0].trim().toLowerCase();
+    if (!Number.isSafeInteger(size) || size <= 0 || size > LOCAL_UPLOAD_ABSOLUTE_MAX_BYTES || !contentType) {
+      res.status(400).json({ error: "Uploaded object metadata is invalid" });
+      return;
+    }
+    const [bytes] = await file.download();
+    if (bytes.length !== size) {
+      res.status(409).json({ error: "Uploaded object changed during finalization" });
+      return;
+    }
+    const finalized = await finalizeUploadGrant({
+      objectPath,
+      uploadedBy: req.user!.id,
+      declaredSize: size,
+      declaredContentType: contentType,
+      bytes,
+      contentType,
+    });
+    if (!finalized.ok) {
+      const status = finalized.reason === "expired" ? 410
+        : finalized.reason === "not_found" ? 404
+          : 409;
+      res.status(status).json({ error: "Upload grant could not be finalized", code: finalized.reason });
+      return;
+    }
+    res.setHeader("Cache-Control", "private, no-store");
+    res.json({ ok: true, replayed: finalized.replayed, sha256: finalized.sha256 });
+  } catch (error) {
+    if (error instanceof ObjectNotFoundError) {
+      res.status(404).json({ error: "Uploaded object was not found" });
+      return;
+    }
+    console.error("[upload-finalize] failed", error);
+    res.status(500).json({ error: "Upload finalization failed" });
   }
 });
 
@@ -222,7 +306,7 @@ router.put("/storage/local-upload/:encoded", requireAuth, async (req: Request, r
     return;
   }
 
-  if (relPath.includes("..") || relPath.includes("\\") || relPath.startsWith("/")) {
+  if (!isValidLocalUploadPath(relPath)) {
     res.status(400).json({ error: "Invalid path" });
     return;
   }
@@ -235,14 +319,6 @@ router.put("/storage/local-upload/:encoded", requireAuth, async (req: Request, r
   const localDir = process.env.STORAGE_LOCAL_DIR ?? "";
   if (!localDir) {
     res.status(500).json({ error: "STORAGE_LOCAL_DIR not configured" });
-    return;
-  }
-
-  const localPath = nodePath.join(localDir, relPath);
-
-  // Guard against path traversal after join
-  if (!localPath.startsWith(localDir + nodePath.sep) && localPath !== localDir) {
-    res.status(400).json({ error: "Invalid path" });
     return;
   }
 
@@ -263,8 +339,6 @@ router.put("/storage/local-upload/:encoded", requireAuth, async (req: Request, r
   }
 
   try {
-    await fsPromises.mkdir(nodePath.dirname(localPath), { recursive: true });
-
     const chunks: Buffer[] = [];
     let receivedBytes = 0;
     for await (const chunk of req) {
@@ -328,11 +402,37 @@ router.put("/storage/local-upload/:encoded", requireAuth, async (req: Request, r
       }
     }
 
-    await fsPromises.writeFile(localPath, body);
-    await fsPromises.writeFile(`${localPath}.ct`, finalContentType);
+    await publishLocalUpload({ root: localDir, relativePath: relPath, body, contentType: finalContentType });
 
-    res.status(200).json({ ok: true });
+    const finalized = await finalizeUploadGrant({
+      objectPath: relPath,
+      uploadedBy: userId,
+      declaredSize: rawBody.length,
+      declaredContentType: contentType,
+      bytes: body,
+      contentType: finalContentType,
+    });
+    if (!finalized.ok) {
+      console.error(`[local-upload] durable grant finalization failed: ${finalized.reason}`);
+      res.status(finalized.reason === "expired" ? 410 : 409).json({ error: "Upload grant could not be finalized" });
+      return;
+    }
+
+    res.status(200).json({ ok: true, replayed: finalized.replayed });
   } catch (error) {
+    if (error instanceof LocalUploadBusyError) {
+      res.setHeader("Retry-After", "1");
+      res.status(503).json({ error: "Upload is in progress; retry shortly" });
+      return;
+    }
+    if (error instanceof LocalUploadConflictError) {
+      res.status(409).json({ error: "Upload target already exists; request a new upload URL" });
+      return;
+    }
+    if (error instanceof UnsafeLocalUploadPathError) {
+      res.status(400).json({ error: "Invalid upload target" });
+      return;
+    }
     console.error("[local-upload] write failed:", error);
     res.status(500).json({ error: "Failed to store file" });
   }

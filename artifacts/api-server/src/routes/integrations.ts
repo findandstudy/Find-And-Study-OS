@@ -1,7 +1,7 @@
-import { Router, type IRouter } from "express";
-import { db, integrationsTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
-import { requireAuth, requireRole, logAudit } from "../lib/auth";
+import { Router, type IRouter, type Request } from "express";
+import { db, integrationsTable, auditLogsTable } from "@workspace/db";
+import { and, eq } from "drizzle-orm";
+import { requireAuth, requireRole } from "../lib/auth";
 import { ADMIN_ROLES } from "../lib/roles";
 import Anthropic from "@anthropic-ai/sdk";
 import { clearConfigCache } from "@workspace/integrations-anthropic-ai";
@@ -18,6 +18,24 @@ import { simulatedIntegrationTestResult, unsupportedIntegrationTestResult } from
 const router: IRouter = Router();
 
 const LIVE_GATED_KEYS = new Set(["whatsapp", "web_form", "facebook_messenger", "instagram", "zernio"]);
+type IntegrationTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+async function writeIntegrationAudit(
+  tx: IntegrationTransaction,
+  req: Request,
+  action: "update_integration" | "toggle_integration",
+  resourceId: number,
+  changes: { key: string; isEnabled: boolean },
+): Promise<void> {
+  await tx.insert(auditLogsTable).values({
+    userId: req.user!.id,
+    action,
+    resource: "integration",
+    resourceId,
+    changes: JSON.stringify(changes),
+    ipAddress: req.ip || null,
+  });
+}
 
 router.get("/integrations/live-mode", requireAuth, requireRole(...ADMIN_ROLES), async (_req, res): Promise<void> => {
   res.json({ live: isLiveIntegrationsEnabled(), reason: liveModeReason() });
@@ -76,7 +94,7 @@ router.put("/integrations/:key", requireAuth, requireRole(...ADMIN_ROLES), async
     res.status(403).json({
       error: "live_integrations_disabled",
       message:
-        "This integration can only be enabled in production. Set NODE_ENV=production or ALLOW_LIVE_INTEGRATIONS=true.",
+        "Live integrations are disabled by the deployment environment.",
     });
     return;
   }
@@ -111,16 +129,21 @@ router.put("/integrations/:key", requireAuth, requireRole(...ADMIN_ROLES), async
     if (key === "web_form" && !mergedConfig.formId) mergedConfig.formId = crypto.randomUUID();
     if (key === "web_form" && !mergedConfig.secret) mergedConfig.secret = crypto.randomBytes(24).toString("hex");
     const toStore = encryptConfig(mergedConfig);
-    [result] = await db
-      .update(integrationsTable)
-      .set({
-        name,
-        category,
-        isEnabled: isEnabled ?? existing.isEnabled,
-        config: toStore,
-      })
-      .where(eq(integrationsTable.key, key))
-      .returning();
+    result = await db.transaction(async (tx) => {
+      const [updated] = await tx
+        .update(integrationsTable)
+        .set({
+          name,
+          category,
+          isEnabled: isEnabled ?? existing.isEnabled,
+          config: toStore,
+        })
+        .where(and(eq(integrationsTable.key, key), eq(integrationsTable.updatedAt, existing.updatedAt)))
+        .returning();
+      if (!updated) return null;
+      await writeIntegrationAudit(tx, req, "update_integration", updated.id, { key, isEnabled: updated.isEnabled });
+      return updated;
+    });
   } else {
     const initialConfig: Record<string, any> = { ...(config || {}) };
     if (key === "web_form") {
@@ -128,10 +151,19 @@ router.put("/integrations/:key", requireAuth, requireRole(...ADMIN_ROLES), async
       if (!initialConfig.secret) initialConfig.secret = crypto.randomBytes(24).toString("hex");
     }
     const toStore = encryptConfig(initialConfig);
-    [result] = await db
-      .insert(integrationsTable)
-      .values({ key, name, category, isEnabled: isEnabled ?? false, config: toStore })
-      .returning();
+    result = await db.transaction(async (tx) => {
+      const [created] = await tx
+        .insert(integrationsTable)
+        .values({ key, name, category, isEnabled: isEnabled ?? false, config: toStore })
+        .returning();
+      await writeIntegrationAudit(tx, req, "update_integration", created.id, { key, isEnabled: created.isEnabled });
+      return created;
+    });
+  }
+
+  if (!result) {
+    res.status(409).json({ error: "integration_version_conflict" });
+    return;
   }
 
   if (isAnthropicConnectionKey(key)) {
@@ -139,7 +171,6 @@ router.put("/integrations/:key", requireAuth, requireRole(...ADMIN_ROLES), async
     clearDocumentAiConnectionCache();
   }
   if (key === "smtp") invalidateSmtpCache();
-  await logAudit(req.user!.id, "update_integration", "integration", result.id, { key, isEnabled: result.isEnabled }, req.ip);
   res.json({ ...result, config: maskSecrets(decryptConfig(result.config as Record<string, any>)) });
 });
 
@@ -156,17 +187,17 @@ router.patch("/integrations/:key/toggle", requireAuth, requireRole(...ADMIN_ROLE
   }
 
   const willEnable = !existing.isEnabled;
-  if (LIVE_GATED_KEYS.has(String(req.params.key)) && willEnable && !isLiveIntegrationsEnabled()) {
+  if (LIVE_GATED_KEYS.has(integrationKey) && willEnable && !isLiveIntegrationsEnabled()) {
     res.status(403).json({
       error: "live_integrations_disabled",
       message:
-        "This integration can only be enabled in production. Set NODE_ENV=production or ALLOW_LIVE_INTEGRATIONS=true.",
+        "Live integrations are disabled by the deployment environment.",
     });
     return;
   }
 
   // Same WA secrets check as PUT — toggling must not bypass mandatory creds.
-  if (String(req.params.key) === "whatsapp" && willEnable) {
+  if (integrationKey === "whatsapp" && willEnable) {
     const plain = decryptConfig(existing.config as Record<string, any>);
     if (!plain.appSecret || !plain.webhookVerifyToken) {
       res.status(400).json({
@@ -177,22 +208,32 @@ router.patch("/integrations/:key/toggle", requireAuth, requireRole(...ADMIN_ROLE
     }
   }
 
-  const [result] = await db
-    .update(integrationsTable)
-    .set({ isEnabled: willEnable })
-    .where(eq(integrationsTable.key, integrationKey))
-    .returning();
+  const result = await db.transaction(async (tx) => {
+    const [updated] = await tx
+      .update(integrationsTable)
+      .set({ isEnabled: willEnable })
+      .where(and(eq(integrationsTable.key, integrationKey), eq(integrationsTable.updatedAt, existing.updatedAt)))
+      .returning();
+    if (!updated) return null;
+    await writeIntegrationAudit(tx, req, "toggle_integration", updated.id, { key: integrationKey, isEnabled: updated.isEnabled });
+    return updated;
+  });
+
+  if (!result) {
+    res.status(409).json({ error: "integration_version_conflict" });
+    return;
+  }
 
   if (isAnthropicConnectionKey(integrationKey)) {
     clearConfigCache();
     clearDocumentAiConnectionCache();
   }
   if (integrationKey === "smtp") invalidateSmtpCache();
-  await logAudit(req.user!.id, "toggle_integration", "integration", result.id, { key: integrationKey, isEnabled: result.isEnabled }, req.ip);
   res.json({ ...result, config: maskSecrets(decryptConfig(result.config as Record<string, any>)) });
 });
 
 router.post("/integrations/:key/test", requireAuth, requireRole(...ADMIN_ROLES), async (req, res): Promise<void> => {
+  const integrationKey = String(req.params.key).trim().toLowerCase();
   const [integration] = await db
     .select()
     .from(integrationsTable)
@@ -200,6 +241,16 @@ router.post("/integrations/:key/test", requireAuth, requireRole(...ADMIN_ROLES),
 
   if (!integration) {
     res.status(404).json({ error: "Integration not found" });
+    return;
+  }
+
+  // Credential checks also contact providers (SMTP verify and Anthropic test
+  // prompts included). Stop before decrypting credentials, DNS or SDK creation.
+  if (
+    (LIVE_GATED_KEYS.has(integrationKey) || integrationKey === "smtp" || isAnthropicConnectionKey(integrationKey))
+    && !isLiveIntegrationsEnabled()
+  ) {
+    res.json(simulatedIntegrationTestResult("Live credential check was skipped; simulated mode is not health evidence."));
     return;
   }
 

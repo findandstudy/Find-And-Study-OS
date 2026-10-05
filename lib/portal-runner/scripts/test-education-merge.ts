@@ -31,6 +31,7 @@ test("current AI education fills only gaps in detailed education", () => {
     level: "high_school",
     institution: "Punjab School",
     program: null,
+    country: "India",
     graduationYear: 2025,
     gpa: "87",
     gpaRaw: "955/1100",
@@ -47,6 +48,29 @@ test("current AI education fills only gaps in detailed education", () => {
   assert.equal(merged.endYear, 2025);
   assert.equal(merged.gpa, "91", "existing detailed GPA must not be overwritten");
   assert.equal(merged.country, "Pakistan");
+});
+
+test("current education country fills a missing detailed country", () => {
+  const now = new Date("2026-01-02");
+  const [merged] = mergePortalEducationRecords([], [{
+    id: 31,
+    studentId: 20,
+    level: "doctorate",
+    institution: "Example Institute",
+    program: "Education",
+    country: "Türkiye",
+    graduationYear: 2025,
+    gpa: "90",
+    gpaRaw: "90",
+    gpaScale: 100,
+    languageScore: null,
+    sortOrder: 3,
+    createdAt: now,
+    updatedAt: now,
+    deletedAt: null,
+  }]);
+  assert.equal(merged.level, "doctorate");
+  assert.equal(merged.country, "Türkiye");
 });
 
 test("portal profile can use live label matching when a catalog program id was retired", () => {

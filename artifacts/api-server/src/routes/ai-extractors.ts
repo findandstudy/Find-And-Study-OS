@@ -1,9 +1,9 @@
 import { Router, type IRouter, json } from "express";
 import { z } from "zod";
-import { db, aiExtractorsTable, aiExtractorRunsTable } from "@workspace/db";
+import { db, aiExtractorsTable, aiExtractorRunsTable, auditLogsTable, embedWidgetsTable } from "@workspace/db";
 import { eq, desc, sql } from "drizzle-orm";
 import { getAnthropicClient, getClaudeConfig } from "@workspace/integrations-anthropic-ai";
-import { requireAuth, requireRole, logAudit } from "../lib/auth";
+import { requireAuth, requireRole } from "../lib/auth";
 import { ADMIN_ROLES } from "../lib/roles";
 import {
   buildExtractionPrompt,
@@ -15,6 +15,7 @@ import { normalizeGpaEvidenceTo100 } from "../lib/gpaNormalize";
 
 const router: IRouter = Router();
 const jsonBody = json({ limit: "20mb" });
+const configJsonBody = json({ limit: "256kb" });
 
 const FIELD_TYPES = ["string", "number", "date", "boolean", "enum"] as const;
 const SCOPES = ["public_apply", "embed", "staff", "agent"] as const;
@@ -26,10 +27,10 @@ const fieldSchema = z.object({
   description: z.string().max(500).optional().default(""),
   type: z.enum(FIELD_TYPES),
   required: z.boolean().optional().default(false),
-  enumValues: z.array(z.string()).optional().default([]),
+  enumValues: z.array(z.string().max(160)).max(100).optional().default([]),
   normalize: z.enum(["gpa100", "dateYmd", "none"]).optional().default("none"),
   format: z.string().max(40).optional().default(""),
-  labelByLang: z.record(z.string(), z.string()).optional().default({}),
+  labelByLang: z.record(z.string().max(16), z.string().max(160)).optional().default({}),
 });
 
 const extractorSchema = z.object({
@@ -38,17 +39,17 @@ const extractorSchema = z.object({
   description: z.string().max(2000).optional().nullable(),
   provider: z.enum(PROVIDERS).default("anthropic"),
   model: z.string().min(1).max(120),
-  systemPrompt: z.string().default(""),
-  systemPromptByLang: z.record(z.string(), z.string()).default({}),
-  fields: z.array(fieldSchema).min(1),
+  systemPrompt: z.string().max(32_000).default(""),
+  systemPromptByLang: z.record(z.string().max(16), z.string().max(32_000)).default({}),
+  fields: z.array(fieldSchema).min(1).max(200),
   rules: z
     .object({
-      globalRules: z.array(z.string()).optional().default([]),
-      perDocType: z.record(z.string(), z.array(z.string())).optional().default({}),
+      globalRules: z.array(z.string().max(2_000)).max(200).optional().default([]),
+      perDocType: z.record(z.string().max(120), z.array(z.string().max(2_000)).max(200)).optional().default({}),
     })
     .default({ globalRules: [], perDocType: {} }),
-  scopes: z.array(z.enum(SCOPES)).default([]),
-  documentTypes: z.array(z.string()).default([]),
+  scopes: z.array(z.enum(SCOPES)).max(SCOPES.length).default([]),
+  documentTypes: z.array(z.string().min(1).max(120)).max(200).default([]),
   temperature: z.coerce.number().min(0).max(2).default(0.2),
   maxTokens: z.coerce.number().int().min(256).max(32000).default(4096),
   isActive: z.boolean().default(true),
@@ -95,16 +96,17 @@ router.get(
   },
 );
 
-async function clearOtherDefaultsForScopes(scopes: string[], exceptId: number | null): Promise<void> {
+type ExtractorTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+async function clearOtherDefaultsForScopes(tx: ExtractorTransaction, scopes: string[], exceptId: number | null): Promise<void> {
   // Enforce one default per scope: clear the default flag on any active
   // extractor whose scope set overlaps the new defaults scope set.
   if (!scopes || scopes.length === 0) return;
-  const rows = await db.select().from(aiExtractorsTable).where(eq(aiExtractorsTable.isDefault, true));
+  const rows = await tx.select().from(aiExtractorsTable).where(eq(aiExtractorsTable.isDefault, true));
   for (const r of rows) {
     if (exceptId != null && r.id === exceptId) continue;
     const overlap = Array.isArray(r.scopes) && (r.scopes as string[]).some((s) => scopes.includes(s));
     if (overlap) {
-      await db.update(aiExtractorsTable).set({ isDefault: false }).where(eq(aiExtractorsTable.id, r.id));
+      await tx.update(aiExtractorsTable).set({ isDefault: false }).where(eq(aiExtractorsTable.id, r.id));
     }
   }
 }
@@ -114,7 +116,7 @@ router.post(
   "/ai-extractors",
   requireAuth,
   requireRole(...ADMIN_ROLES),
-  jsonBody,
+  configJsonBody,
   async (req, res): Promise<void> => {
     const parsed = extractorSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -122,30 +124,25 @@ router.post(
       return;
     }
     const data = parsed.data;
+    if (Buffer.byteLength(JSON.stringify(data), "utf8") > 131_072) {
+      res.status(413).json({ error: "AI extractor configuration exceeds 128 KiB" });
+      return;
+    }
     try {
-      if (data.isDefault) await clearOtherDefaultsForScopes(data.scopes, null);
-      const [row] = await db
-        .insert(aiExtractorsTable)
-        .values({
-          name: data.name,
-          slug: data.slug,
-          description: data.description ?? null,
-          provider: data.provider,
-          model: data.model,
-          systemPrompt: data.systemPrompt,
-          systemPromptByLang: data.systemPromptByLang,
-          fields: data.fields,
-          rules: data.rules,
-          scopes: data.scopes,
-          documentTypes: data.documentTypes,
-          temperature: String(data.temperature),
-          maxTokens: data.maxTokens,
-          isActive: data.isActive,
-          isDefault: data.isDefault,
-          createdBy: req.user!.id,
-        })
-        .returning();
-      logAudit(req.user!.id, "create_ai_extractor", "ai_extractor", row.id, { name: row.name });
+      const row = await db.transaction(async (tx) => {
+        await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext('ai-extractor-management'), 0)`);
+        if (data.isDefault) await clearOtherDefaultsForScopes(tx, data.scopes, null);
+        const [created] = await tx.insert(aiExtractorsTable).values({
+            name: data.name, slug: data.slug, description: data.description ?? null,
+            provider: data.provider, model: data.model, systemPrompt: data.systemPrompt,
+            systemPromptByLang: data.systemPromptByLang, fields: data.fields, rules: data.rules,
+            scopes: data.scopes, documentTypes: data.documentTypes, temperature: String(data.temperature),
+            maxTokens: data.maxTokens, isActive: data.isActive, isDefault: data.isDefault, createdBy: req.user!.id,
+          }).returning();
+        await tx.insert(auditLogsTable).values({ userId: req.user!.id, action: "create_ai_extractor", resource: "ai_extractor",
+          resourceId: created.id, changes: JSON.stringify({ slug: created.slug, provider: created.provider, isActive: created.isActive, isDefault: created.isDefault }), ipAddress: req.ip || null });
+        return created;
+      });
       res.status(201).json({ extractor: row });
     } catch (e) {
       const msg = (e as Error).message;
@@ -153,7 +150,7 @@ router.post(
         res.status(409).json({ error: "Slug already exists" });
         return;
       }
-      res.status(500).json({ error: msg });
+      res.status(503).json({ error: "AI_EXTRACTOR_OPERATION_UNAVAILABLE" });
     }
   },
 );
@@ -163,10 +160,10 @@ router.put(
   "/ai-extractors/:id",
   requireAuth,
   requireRole(...ADMIN_ROLES),
-  jsonBody,
+  configJsonBody,
   async (req, res): Promise<void> => {
     const id = Number(req.params.id);
-    if (!Number.isFinite(id)) {
+    if (!Number.isSafeInteger(id) || id <= 0) {
       res.status(400).json({ error: "Invalid id" });
       return;
     }
@@ -176,23 +173,29 @@ router.put(
       return;
     }
     const data = parsed.data;
-    if (data.isDefault === true) {
-      // Need to know which scopes this extractor occupies (incoming or stored).
-      const existing = data.scopes ?? (await getExtractorById(id))?.scopes ?? [];
-      await clearOtherDefaultsForScopes(existing as string[], id);
+    if (Buffer.byteLength(JSON.stringify(data), "utf8") > 131_072) {
+      res.status(413).json({ error: "AI extractor configuration exceeds 128 KiB" });
+      return;
     }
     const updates: Record<string, unknown> = { ...data };
     if (data.temperature != null) updates.temperature = String(data.temperature);
-    const [row] = await db
-      .update(aiExtractorsTable)
-      .set(updates)
-      .where(eq(aiExtractorsTable.id, id))
-      .returning();
+    const row = await db.transaction(async (tx) => {
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext('ai-extractor-management'), 0)`);
+      const [current] = await tx.select().from(aiExtractorsTable).where(eq(aiExtractorsTable.id, id)).for("update");
+      if (!current) return null;
+      if (data.isDefault === true) {
+        const scopes = data.scopes ?? current.scopes ?? [];
+        await clearOtherDefaultsForScopes(tx, scopes as string[], id);
+      }
+      const [saved] = await tx.update(aiExtractorsTable).set(updates).where(eq(aiExtractorsTable.id, id)).returning();
+      await tx.insert(auditLogsTable).values({ userId: req.user!.id, action: "update_ai_extractor", resource: "ai_extractor",
+        resourceId: id, changes: JSON.stringify({ changedFields: Object.keys(data).sort(), slug: saved.slug, provider: saved.provider, isActive: saved.isActive, isDefault: saved.isDefault }), ipAddress: req.ip || null });
+      return saved;
+    });
     if (!row) {
       res.status(404).json({ error: "Not found" });
       return;
     }
-    logAudit(req.user!.id, "update_ai_extractor", "ai_extractor", id, data);
     res.json({ extractor: row });
   },
 );
@@ -204,19 +207,33 @@ router.delete(
   requireRole(...ADMIN_ROLES),
   async (req, res): Promise<void> => {
     const id = Number(req.params.id);
-    if (!Number.isFinite(id)) {
+    if (!Number.isSafeInteger(id) || id <= 0) {
       res.status(400).json({ error: "Invalid id" });
       return;
     }
-    const [row] = await db
-      .delete(aiExtractorsTable)
-      .where(eq(aiExtractorsTable.id, id))
-      .returning({ id: aiExtractorsTable.id });
+    const result = await db.transaction(async (tx) => {
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext('ai-extractor-management'), 0)`);
+      const [current] = await tx.select().from(aiExtractorsTable).where(eq(aiExtractorsTable.id, id)).for("update");
+      if (!current) return { status: "missing" as const };
+      const [[run], [widget]] = await Promise.all([
+        tx.select({ id: aiExtractorRunsTable.id }).from(aiExtractorRunsTable).where(eq(aiExtractorRunsTable.extractorId, id)).limit(1),
+        tx.select({ id: embedWidgetsTable.id }).from(embedWidgetsTable).where(eq(embedWidgetsTable.aiExtractorId, id)).limit(1),
+      ]);
+      if (run || widget) return { status: "in_use" as const };
+      await tx.delete(aiExtractorsTable).where(eq(aiExtractorsTable.id, id));
+      await tx.insert(auditLogsTable).values({ userId: req.user!.id, action: "delete_ai_extractor", resource: "ai_extractor",
+        resourceId: id, changes: JSON.stringify({ slug: current.slug, provider: current.provider }), ipAddress: req.ip || null });
+      return { status: "deleted" as const };
+    });
+    if (result.status === "in_use") {
+      res.status(409).json({ error: "AI_EXTRACTOR_IN_USE", message: "Deactivate this extractor instead of deleting evidence or active references." });
+      return;
+    }
+    const row = result.status === "deleted" ? { id } : null;
     if (!row) {
       res.status(404).json({ error: "Not found" });
       return;
     }
-    logAudit(req.user!.id, "delete_ai_extractor", "ai_extractor", id);
     res.json({ ok: true });
   },
 );

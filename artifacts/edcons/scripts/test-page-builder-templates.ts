@@ -45,6 +45,10 @@ test("source-specific selectors load live definitions and show unmatched legacy 
   assert.match(fields, /<select/);
   assert.match(fields, /matches.length === 1/);
   assert.match(fields, /unmatched, please reselect/);
-  assert.match(source("pages/admin/website/CatalogBlockPreview.tsx"), /error.*data.*error/);
+  const preview = source("pages/admin/website/CatalogBlockPreview.tsx");
+  assert.match(preview, /isError \? <p role="alert"/);
+  assert.match(preview, /Preview unavailable/);
+  assert.match(preview, /validPreview\(result\)/);
+  assert.doesNotMatch(preview, /error\.message|error.*data.*error/);
   assert.match(source("pages/admin/website/PageEditor.tsx"), /window.confirm/);
 });

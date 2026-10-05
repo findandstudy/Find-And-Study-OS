@@ -6,6 +6,7 @@ const STUDENT_VERIFICATION_ALLOWLIST_EXACT = new Set([
   "/auth/resend-verification-email",
   "/auth/verify-email",
   "/auth/resend-code",
+  "/public/student-registration/matches",
   "/health",
 ]);
 

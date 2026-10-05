@@ -2,13 +2,33 @@ import { Router } from "express";
 import { db, leadsTable, studentsTable, applicationsTable, notesTable, followUpsTable, auditLogsTable, usersTable, externalContactsTable } from "@workspace/db";
 import { and, eq, or, inArray, isNull, desc, lt, sql } from "drizzle-orm";
 import { z } from "zod";
-import { requireAuth, requireRole, logAudit } from "../lib/auth";
+import { requireAuth, requireRole } from "../lib/auth";
 import { STAFF_ROLES, ADMIN_ROLES, AGENT_ROLES, isAgentRole, isStaffRole } from "../lib/roles";
 import { getAgentVisibleIds } from "../lib/agentVisibility";
 import { assertCanAccessStudent } from "../lib/studentAccess";
 import { feedBus, personKeys } from "../lib/feedBus";
 
 const router = Router();
+
+type PersonFeedTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+async function writePersonFeedAudit(
+  tx: PersonFeedTransaction,
+  req: any,
+  action: string,
+  resource: string,
+  resourceId: number,
+  changes: Record<string, unknown>,
+): Promise<void> {
+  await tx.insert(auditLogsTable).values({
+    userId: req.user!.id,
+    action,
+    resource,
+    resourceId,
+    changes: JSON.stringify(changes),
+    ipAddress: req.ip || null,
+  });
+}
 
 const STATUS_CHANGE_ACTIONS = new Set([
   "update_lead", "update_student", "convert_lead",
@@ -269,16 +289,22 @@ router.post("/persons/feed/notes", requireAuth, requireRole(...STAFF_ROLES, ...A
   const resourceType = ids.studentId ? "student" : "lead";
   const resourceId = (ids.studentId ?? ids.leadId)!;
 
-  const [note] = await db.insert(notesTable).values({
-    content,
-    authorId: req.user!.id,
-    resourceType,
-    resourceId,
-    isInternal,
-  }).returning();
+  const note = await db.transaction(async (tx) => {
+    const [created] = await tx.insert(notesTable).values({
+      content,
+      authorId: req.user!.id,
+      resourceType,
+      resourceId,
+      isInternal,
+    }).returning();
+    await writePersonFeedAudit(tx, req, "create_note", resourceType, resourceId, {
+      noteId: created.id,
+      isInternal,
+    });
+    return created;
+  });
 
   feedBus.publish({ personKeys: personKeys(ids.leadId, ids.studentId), action: "note_added", itemId: note.id });
-  logAudit(req.user!.id, "create_note", resourceType, resourceId, { noteId: note.id, isInternal }, req.ip);
 
   res.status(201).json({
     data: {
@@ -320,9 +346,14 @@ router.delete("/persons/feed/notes/:noteId", requireAuth, requireRole(...STAFF_R
     return;
   }
 
-  await db.delete(notesTable).where(eq(notesTable.id, noteId));
+  const deleted = await db.transaction(async (tx) => {
+    const removed = await tx.delete(notesTable).where(eq(notesTable.id, noteId)).returning({ id: notesTable.id });
+    if (removed.length === 0) return false;
+    await writePersonFeedAudit(tx, req, "delete_note", note.resourceType, note.resourceId, { noteId });
+    return true;
+  });
+  if (!deleted) { res.status(404).json({ error: "Note not found" }); return; }
   feedBus.publish({ personKeys: personKeys(ids.leadId, ids.studentId), action: "note_deleted", itemId: noteId });
-  logAudit(req.user!.id, "delete_note", note.resourceType, note.resourceId, { noteId }, req.ip);
 
   res.status(204).end();
 });
@@ -350,19 +381,24 @@ router.post("/persons/feed/follow-ups", requireAuth, requireRole(...STAFF_ROLES,
 
   const resourceType: "lead" | "student" = ids.studentId ? "student" : "lead";
 
-  const [fu] = await db.insert(followUpsTable).values({
-    leadId: ids.leadId,
-    studentId: ids.studentId,
-    resourceType,
-    title: bodyParsed.data.title,
-    scheduledAt: new Date(bodyParsed.data.scheduledAt),
-    notes: bodyParsed.data.notes ?? null,
-    assignedToId: bodyParsed.data.assignedToId ?? req.user!.id,
-    createdById: req.user!.id,
-  }).returning();
+  const fu = await db.transaction(async (tx) => {
+    const [created] = await tx.insert(followUpsTable).values({
+      leadId: ids.leadId,
+      studentId: ids.studentId,
+      resourceType,
+      title: bodyParsed.data.title,
+      scheduledAt: new Date(bodyParsed.data.scheduledAt),
+      notes: bodyParsed.data.notes ?? null,
+      assignedToId: bodyParsed.data.assignedToId ?? req.user!.id,
+      createdById: req.user!.id,
+    }).returning();
+    await writePersonFeedAudit(tx, req, "create_follow_up", resourceType, (ids.studentId ?? ids.leadId)!, {
+      followUpId: created.id,
+    });
+    return created;
+  });
 
   feedBus.publish({ personKeys: personKeys(ids.leadId, ids.studentId), action: "followup_added", itemId: fu.id });
-  logAudit(req.user!.id, "create_follow_up", resourceType, (ids.studentId ?? ids.leadId)!, { fuId: fu.id }, req.ip);
 
   res.status(201).json({
     data: {
@@ -419,9 +455,21 @@ router.patch("/persons/feed/follow-ups/:fuId", requireAuth, requireRole(...STAFF
     ...(ids.leadId ? [eq(followUpsTable.leadId, ids.leadId)] : []),
     ...(ids.studentId ? [eq(followUpsTable.studentId, ids.studentId)] : []),
   ];
-  const [updated] = await db.update(followUpsTable).set(updates as any).where(
-    and(eq(followUpsTable.id, fuId), fuContextConds.length > 0 ? or(...fuContextConds) : sql`false`),
-  ).returning();
+  const updated = await db.transaction(async (tx) => {
+    const [saved] = await tx.update(followUpsTable).set(updates as any).where(
+      and(eq(followUpsTable.id, fuId), fuContextConds.length > 0 ? or(...fuContextConds) : sql`false`),
+    ).returning();
+    if (!saved) return null;
+    await writePersonFeedAudit(
+      tx,
+      req,
+      "update_follow_up",
+      saved.resourceType ?? (saved.studentId ? "student" : "lead"),
+      (saved.studentId ?? saved.leadId)!,
+      { followUpId: fuId, fields: Object.keys(bodyParsed.data).sort() },
+    );
+    return saved;
+  });
   if (!updated) { res.status(404).json({ error: "Follow-up not found" }); return; }
 
   feedBus.publish({ personKeys: personKeys(ids.leadId, ids.studentId), action: "followup_updated", itemId: fuId });

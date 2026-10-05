@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { customFetch } from "@workspace/api-client-react";
-import { ArrowLeft, FileText } from "lucide-react";
+import { ArrowLeft, ArrowRight, FileText, Star } from "lucide-react";
 import { Link } from "wouter";
 
 import { Button } from "@/components/ui/button";
@@ -104,6 +104,27 @@ function ActionLink({ href, label, secondary = false }: { href: unknown; label: 
 export function Block({ block, index }: { block: PageBlock; index: number }) {
   const content = block.content;
   switch (block.blockType) {
+    case "home_fallback_hero": {
+      const primaryHref = safeUrl(content.ctaUrl);
+      const secondaryHref = safeUrl(content.secondaryUrl);
+      return (
+        <section className="relative pt-24 pb-32 lg:pt-36 lg:pb-40 overflow-hidden">
+          <div className="absolute inset-0 z-0" aria-hidden="true">
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,hsl(var(--primary)/0.12),transparent_38%),radial-gradient(circle_at_80%_10%,hsl(var(--accent)/0.10),transparent_34%)]" />
+            <div className="absolute inset-0 bg-gradient-to-b from-background/0 via-background/50 to-background" />
+          </div>
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 text-center">
+            {content.badge ? <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 text-primary font-medium text-sm mb-8 border border-primary/20 shadow-sm"><Star className="w-4 h-4 fill-primary" />{text(content.badge, 200)}</div> : null}
+            <h1 className="text-5xl md:text-7xl font-bold font-display tracking-tight text-foreground max-w-4xl mx-auto leading-[1.1]">{text(content.title, 500)}</h1>
+            {content.subtitle ? <p className="mt-6 text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed">{text(content.subtitle)}</p> : null}
+            <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">
+              {primaryHref && content.ctaLabel ? <Button size="lg" className="rounded-full px-8 h-14 text-base shadow-xl shadow-primary/25 hover:shadow-primary/40 hover:-translate-y-1 transition-all duration-300" asChild><Link href={primaryHref}>{text(content.ctaLabel, 200)} <ArrowRight className="ms-2 w-5 h-5" /></Link></Button> : null}
+              {secondaryHref && content.secondaryLabel ? <Button size="lg" variant="outline" className="rounded-full px-8 h-14 text-base bg-white/50 backdrop-blur hover:bg-white transition-all duration-300" asChild><Link href={secondaryHref}>{text(content.secondaryLabel, 200)}</Link></Button> : null}
+            </div>
+          </div>
+        </section>
+      );
+    }
     case "hero": {
       const background = safeImageUrl(content.backgroundImage);
       return (

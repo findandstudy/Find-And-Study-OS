@@ -1,7 +1,7 @@
 import { Router, type IRouter, type Request, type Response, type NextFunction } from "express";
-import { db, apiTokensTable } from "@workspace/db";
+import { db, apiTokensTable, auditLogsTable } from "@workspace/db";
 import { eq, and, desc } from "drizzle-orm";
-import { requireAuth, requireRole, logAudit } from "../lib/auth";
+import { requireAuth, requireRole } from "../lib/auth";
 import { ADMIN_ROLES } from "../lib/roles";
 import { generateToken, validateScopes, AVAILABLE_SCOPES } from "../lib/apiToken";
 import { getClientIp } from "../lib/clientIp";
@@ -102,20 +102,29 @@ router.post("/api-tokens", requireAuth, requireRole(...ADMIN_ROLES), blockTokenA
   const expiresAt = expiry.expiresAt;
 
   const { plain, prefix, hash } = generateToken();
-  const [row] = await db
-    .insert(apiTokensTable)
-    .values({
+  const row = await db.transaction(async (tx) => {
+    const [created] = await tx
+      .insert(apiTokensTable)
+      .values({
+        userId: req.user!.id,
+        name,
+        tokenHash: hash,
+        tokenPrefix: prefix,
+        scopes,
+        expiresAt,
+        createdBy: req.user!.id,
+      })
+      .returning();
+    await tx.insert(auditLogsTable).values({
       userId: req.user!.id,
-      name,
-      tokenHash: hash,
-      tokenPrefix: prefix,
-      scopes,
-      expiresAt,
-      createdBy: req.user!.id,
-    })
-    .returning();
-
-  logAudit(req.user!.id, "create", "api_token", row.id, { name, scopes, expiresAt }, getClientIp(req) ?? undefined);
+      action: "create",
+      resource: "api_token",
+      resourceId: created.id,
+      changes: JSON.stringify({ name, scopes, expiresAt }),
+      ipAddress: getClientIp(req) ?? null,
+    });
+    return created;
+  });
 
   // `token` is the only time the plain value is ever exposed.
   res.status(201).json({ token: plain, ...publicToken(row) });
@@ -130,27 +139,34 @@ router.post("/api-tokens/:id/revoke", requireAuth, requireRole(...ADMIN_ROLES), 
     res.status(400).json({ error: "Invalid id" });
     return;
   }
-  const [existing] = await db
-    .select()
-    .from(apiTokensTable)
-    .where(and(eq(apiTokensTable.id, id), eq(apiTokensTable.userId, req.user!.id)));
-  if (!existing) {
+  const result = await db.transaction(async (tx) => {
+    const [existing] = await tx
+      .select()
+      .from(apiTokensTable)
+      .where(and(eq(apiTokensTable.id, id), eq(apiTokensTable.userId, req.user!.id)))
+      .for("update");
+    if (!existing) return { kind: "missing" as const };
+    if (existing.revokedAt) return { kind: "existing" as const, row: existing };
+    const [updated] = await tx
+      .update(apiTokensTable)
+      .set({ revokedAt: new Date() })
+      .where(and(eq(apiTokensTable.id, id), eq(apiTokensTable.userId, req.user!.id)))
+      .returning();
+    await tx.insert(auditLogsTable).values({
+      userId: req.user!.id,
+      action: "revoke",
+      resource: "api_token",
+      resourceId: id,
+      changes: JSON.stringify({ name: existing.name }),
+      ipAddress: getClientIp(req) ?? null,
+    });
+    return { kind: "updated" as const, row: updated };
+  });
+  if (result.kind === "missing") {
     res.status(404).json({ error: "Token not found" });
     return;
   }
-  if (existing.revokedAt) {
-    res.json(publicToken(existing));
-    return;
-  }
-  const [updated] = await db
-    .update(apiTokensTable)
-    .set({ revokedAt: new Date() })
-    .where(eq(apiTokensTable.id, id))
-    .returning();
-
-  logAudit(req.user!.id, "revoke", "api_token", id, { name: existing.name }, getClientIp(req) ?? undefined);
-
-  res.json(publicToken(updated));
+  res.json(publicToken(result.row));
 });
 
 // Atomically replace an active token. The old token is revoked in the same
@@ -187,16 +203,20 @@ router.post("/api-tokens/:id/rotate", requireAuth, requireRole(...ADMIN_ROLES), 
       })
       .returning();
     await tx.update(apiTokensTable).set({ revokedAt: new Date() }).where(eq(apiTokensTable.id, existing.id));
+    await tx.insert(auditLogsTable).values({
+      userId: req.user!.id,
+      action: "rotate",
+      resource: "api_token",
+      resourceId: replacement.id,
+      changes: JSON.stringify({ previousTokenId: existing.id, expiresAt: replacement.expiresAt }),
+      ipAddress: getClientIp(req) ?? null,
+    });
     return { plain: generated.plain, replacement, previous: existing };
   });
   if (!result) {
     res.status(404).json({ error: "Active token not found" });
     return;
   }
-  logAudit(req.user!.id, "rotate", "api_token", result.replacement.id, {
-    previousTokenId: result.previous.id,
-    expiresAt: result.replacement.expiresAt,
-  }, getClientIp(req) ?? undefined);
   res.status(201).json({ token: result.plain, ...publicToken(result.replacement) });
 });
 

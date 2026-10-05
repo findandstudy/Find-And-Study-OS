@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import * as pdfjsLib from "pdfjs-dist";
+import { fetchBoundedPdf, runBoundedPdfPreview } from "@/lib/pdfPreviewRuntime";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
   "pdfjs-dist/build/pdf.worker.min.mjs",
@@ -20,45 +21,38 @@ export default function PdfPhotoAvatar({ src, className, alt, fallback }: PdfPho
 
   useEffect(() => {
     let cancelled = false;
+    const controller = new AbortController();
     setRendered(false);
     setFailed(false);
 
     async function render() {
       try {
-        const resp = await fetch(src, { credentials: "include" });
-        if (!resp.ok) { if (!cancelled) setFailed(true); return; }
-        const data = await resp.arrayBuffer();
-
-        const pdf = await pdfjsLib.getDocument({ data }).promise;
-        const page = await pdf.getPage(1);
-
-        if (cancelled) return;
-        const canvas = canvasRef.current;
-        if (!canvas) return;
-
-        const unscaled = page.getViewport({ scale: 1 });
-        const targetPx = 160;
-        const scale = targetPx / Math.max(unscaled.width, unscaled.height);
-        const viewport = page.getViewport({ scale });
-
-        canvas.width = viewport.width;
-        canvas.height = viewport.height;
-
-        const ctx = canvas.getContext("2d")!;
-        // pdfjs-dist RenderParameters type varies across versions; bypass via any.
-        const renderTask = (page.render as (p: { canvasContext: object; viewport: object }) => { promise: Promise<void> })(
-          { canvasContext: ctx, viewport },
-        );
-        await renderTask.promise;
-
-        if (!cancelled) setRendered(true);
+        await runBoundedPdfPreview(null, controller.signal, async (signal) => {
+          const data = await fetchBoundedPdf(src, signal);
+          const loadingTask = pdfjsLib.getDocument({ data });
+          signal.addEventListener("abort", () => loadingTask.destroy(), { once: true });
+          const pdf = await loadingTask.promise;
+          const page = await pdf.getPage(1);
+          if (cancelled) return;
+          const canvas = canvasRef.current;
+          if (!canvas) return;
+          const unscaled = page.getViewport({ scale: 1 });
+          const viewport = page.getViewport({ scale: 160 / Math.max(unscaled.width, unscaled.height) });
+          canvas.width = viewport.width;
+          canvas.height = viewport.height;
+          const ctx = canvas.getContext("2d")!;
+          const renderTask = page.render({ canvas, canvasContext: ctx, viewport });
+          signal.addEventListener("abort", () => renderTask.cancel(), { once: true });
+          await renderTask.promise;
+          if (!cancelled) setRendered(true);
+        });
       } catch {
         if (!cancelled) setFailed(true);
       }
     }
 
     render();
-    return () => { cancelled = true; };
+    return () => { cancelled = true; controller.abort(); };
   }, [src]);
 
   if (failed) return <>{fallback ?? null}</>;

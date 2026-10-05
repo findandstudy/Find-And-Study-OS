@@ -835,6 +835,7 @@ export const StudentEducationRecordLevel = {
   high_school: 'high_school',
   bachelor: 'bachelor',
   master: 'master',
+  doctorate: 'doctorate',
 } as const;
 
 export interface StudentEducationRecord {
@@ -845,6 +846,8 @@ export interface StudentEducationRecord {
   institution?: string | null;
   /** @nullable */
   program?: string | null;
+  /** @nullable */
+  country?: string | null;
   /** @nullable */
   graduationYear?: number | null;
   /** @nullable */
@@ -867,6 +870,7 @@ export const StudentEducationRecordInputLevel = {
   high_school: 'high_school',
   bachelor: 'bachelor',
   master: 'master',
+  doctorate: 'doctorate',
 } as const;
 
 export interface StudentEducationRecordInput {
@@ -875,6 +879,8 @@ export interface StudentEducationRecordInput {
   institution?: string | null;
   /** @nullable */
   program?: string | null;
+  /** @nullable */
+  country?: string | null;
   /** @nullable */
   graduationYear?: number | null;
   /** @nullable */

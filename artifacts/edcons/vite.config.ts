@@ -85,6 +85,10 @@ export default defineConfig({
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,
+    // The API SSR shell reads this manifest to preload only the active locale
+    // and public route chunk. This removes a mobile network waterfall without
+    // pulling portal-only modules into the anonymous entry bundle.
+    manifest: true,
     // Production maps must not be published with the static web root. Enable
     // hidden maps only for an explicit private error-monitoring upload step.
     sourcemap: !isProd && process.env.GENERATE_SOURCEMAPS === "1" ? "hidden" : false,
@@ -92,11 +96,20 @@ export default defineConfig({
       output: {
         manualChunks(id) {
           if (!id.includes("node_modules")) return undefined;
+          // The Pages-only static preview renderer must remain lazy. Bundling
+          // react-dom/server.browser with the public React runtime makes every
+          // anonymous visitor download an editor-only rendering engine.
+          if (id.includes("/react-dom/server.browser") || id.includes("/react-dom/cjs/react-dom-server")) {
+            return "detail-preview-renderer";
+          }
           if (id.includes("/react/") || id.includes("/react-dom/") || id.includes("/scheduler/") || id.includes("react/jsx-runtime")) {
             return "vendor-react";
           }
           if (id.includes("@tanstack/react-query")) return "vendor-react";
-          if (id.includes("@radix-ui/")) return "vendor-radix";
+          // Do not collapse every Radix package into one eagerly preloaded
+          // chunk. Public navigation needs only Slot/Button; a forced shared
+          // chunk pulled dialogs, menus, selects and other portal-only code
+          // into every anonymous visit.
           if (id.includes("react-phone-number-input") || id.includes("libphonenumber-js")) {
             return "vendor-phone";
           }
@@ -107,6 +120,9 @@ export default defineConfig({
           if (id.includes("/xlsx/")) return "vendor-excel";
           if (id.includes("/framer-motion/")) return "vendor-motion";
           if (id.includes("@dnd-kit/") || id.includes("@hello-pangea/dnd")) return "vendor-dnd";
+          // One icon chunk avoids dozens of latency-bound HTTP/1 requests in
+          // the local/mobile fallback path. Unlike the former Radix bucket it
+          // remains small and tree-shaken enough for the public budget.
           if (id.includes("/lucide-react/") || id.includes("/react-icons/")) return "vendor-icons";
           // NOTE: recharts/d3/victory-vendor are deliberately NOT manually
           // chunked. Splitting them into a separate vendor chunk created a

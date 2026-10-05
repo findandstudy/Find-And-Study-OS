@@ -33,6 +33,7 @@ import {
   universitiesTable,
   programsTable,
   GENERAL_MAPPING_KEY,
+  auditLogsTable,
 } from "@workspace/db";
 import {
   resolveAdapterByKey,
@@ -82,6 +83,27 @@ class PortalPartnerRoutingInFlightError extends Error {
 }
 
 type PortalMgmtTx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+async function insertPortalAuditTx(
+  tx: PortalMgmtTx,
+  input: {
+    userId: number;
+    action: string;
+    resource?: string;
+    resourceId?: number;
+    changes: Record<string, unknown>;
+    ipAddress?: string | null;
+  },
+): Promise<void> {
+  await tx.insert(auditLogsTable).values({
+    userId: input.userId,
+    action: input.action,
+    resource: input.resource ?? "portal_university",
+    resourceId: input.resourceId,
+    changes: JSON.stringify(input.changes),
+    ipAddress: input.ipAddress ?? null,
+  });
+}
 
 async function resetPortalAdapterExecutionStateTx(
   tx: PortalMgmtTx,
@@ -344,6 +366,7 @@ router.put(
         .orderBy(asc(portalAutomationSettingsTable.id))
         .limit(1);
 
+      let saved: typeof portalAutomationSettingsTable.$inferSelect;
       if (existing) {
         const [updated] = await tx
           .update(portalAutomationSettingsTable)
@@ -361,24 +384,42 @@ router.put(
           })
           .where(eq(portalAutomationSettingsTable.id, existing.id))
           .returning();
-        return updated;
+        saved = updated;
+      } else {
+        const [inserted] = await tx
+          .insert(portalAutomationSettingsTable)
+          .values({
+            isEnabled:                   body.isEnabled,
+            triggerStages:               snapshot.validConfiguredKeys,
+            mode:                        body.mode,
+            scope:                       body.scope,
+            selectedUniversityKeys:      body.selectedUniversityKeys,
+            autoProcessEnabled:          body.autoProcessEnabled ?? false,
+            autoProcessIntervalMinutes:  body.autoProcessIntervalMinutes ?? 20,
+            fallbackEnabled:             body.fallbackEnabled ?? false,
+            fanOutMode:                  body.fanOutMode ?? "off",
+          })
+          .returning();
+        saved = inserted;
       }
-
-      const [inserted] = await tx
-        .insert(portalAutomationSettingsTable)
-        .values({
-          isEnabled:                   body.isEnabled,
-          triggerStages:               snapshot.validConfiguredKeys,
-          mode:                        body.mode,
-          scope:                       body.scope,
-          selectedUniversityKeys:      body.selectedUniversityKeys,
-          autoProcessEnabled:          body.autoProcessEnabled ?? false,
-          autoProcessIntervalMinutes:  body.autoProcessIntervalMinutes ?? 20,
-          fallbackEnabled:             body.fallbackEnabled ?? false,
-          fanOutMode:                  body.fanOutMode ?? "off",
-        })
-        .returning();
-      return inserted;
+      await tx.insert(auditLogsTable).values({
+        userId: user.id,
+        action: "update_portal_automation_settings",
+        resource: "portal_automation_settings",
+        resourceId: saved.id,
+        changes: JSON.stringify({
+          isEnabled: body.isEnabled,
+          mode: body.mode,
+          scope: body.scope,
+          triggerStagesCount: saved.triggerStages.length,
+          autoProcessEnabled: body.autoProcessEnabled,
+          autoProcessIntervalMinutes: body.autoProcessIntervalMinutes,
+          fallbackEnabled: body.fallbackEnabled,
+          fanOutMode: body.fanOutMode,
+        }),
+        ipAddress: req.ip ?? null,
+      });
+      return saved;
     }).catch((error: Error & { code?: string; details?: string[] }) => {
       if (error.code === "UNKNOWN_TRIGGER_STAGE" || error.code === "INELIGIBLE_TRIGGER_STAGE" || error.code === "TRIGGER_STAGE_REQUIRED") {
         res.status(400).json({
@@ -391,24 +432,6 @@ router.put(
       throw error;
     });
     if (!row) return;
-
-    logAudit(
-      user.id,
-      "update_portal_automation_settings",
-      "portal_automation_settings",
-      row.id,
-      {
-        isEnabled: body.isEnabled,
-        mode: body.mode,
-        scope: body.scope,
-        triggerStagesCount: row.triggerStages.length,
-        autoProcessEnabled: body.autoProcessEnabled,
-        autoProcessIntervalMinutes: body.autoProcessIntervalMinutes,
-        fallbackEnabled: body.fallbackEnabled,
-        fanOutMode: body.fanOutMode,
-      },
-      req.ip,
-    );
 
     res.json(row);
   },
@@ -663,28 +686,29 @@ router.post(
       return;
     }
 
-    const [row] = await db
-      .insert(portalUniversitiesTable)
-      .values({
-        universityKey:   body.universityKey,
-        universityName:  body.universityName,
-        adapterKey:      adapter.key,
-        crmUniversityId: body.crmUniversityId ?? null,
-        // A newly discovered portal must complete credentials, login testing
-        // and program mapping before it participates in routing.
-        isActive:        false,
-        defaults:        body.defaults ?? null,
-      })
-      .returning();
-
-    logAudit(
-      user.id,
-      "create_portal_university",
-      "portal_university",
-      row.id,
-      { universityKey: row.universityKey, adapterKey: row.adapterKey },
-      req.ip,
-    );
+    const row = await db.transaction(async (tx) => {
+      const [created] = await tx
+        .insert(portalUniversitiesTable)
+        .values({
+          universityKey:   body.universityKey,
+          universityName:  body.universityName,
+          adapterKey:      adapter.key,
+          crmUniversityId: body.crmUniversityId ?? null,
+          // A newly discovered portal must complete credentials, login testing
+          // and program mapping before it participates in routing.
+          isActive:        false,
+          defaults:        body.defaults ?? null,
+        })
+        .returning();
+      await insertPortalAuditTx(tx, {
+        userId: user.id,
+        action: "create_portal_university",
+        resourceId: created.id,
+        changes: { universityKey: created.universityKey, adapterKey: created.adapterKey },
+        ipAddress: req.ip,
+      });
+      return created;
+    });
 
     res.status(201).json({
       ...row,
@@ -751,20 +775,21 @@ router.patch(
       }
     }
 
-    const [updated] = await db
-      .update(portalUniversitiesTable)
-      .set({ autoProcess, updatedAt: new Date() })
-      .where(eq(portalUniversitiesTable.id, id))
-      .returning();
-
-    logAudit(
-      user.id,
-      autoProcess ? "enable_portal_auto_process" : "disable_portal_auto_process",
-      "portal_university",
-      id,
-      { autoProcess },
-      req.ip,
-    );
+    const updated = await db.transaction(async (tx) => {
+      const [saved] = await tx
+        .update(portalUniversitiesTable)
+        .set({ autoProcess, updatedAt: new Date() })
+        .where(eq(portalUniversitiesTable.id, id))
+        .returning();
+      await insertPortalAuditTx(tx, {
+        userId: user.id,
+        action: autoProcess ? "enable_portal_auto_process" : "disable_portal_auto_process",
+        resourceId: id,
+        changes: { autoProcess },
+        ipAddress: req.ip,
+      });
+      return saved;
+    });
 
     res.json(updated);
   },
@@ -817,20 +842,21 @@ router.patch(
       }
     }
 
-    const [updated] = await db
-      .update(portalUniversitiesTable)
-      .set({ fanOutMode: fanOutMode ?? null, updatedAt: new Date() })
-      .where(eq(portalUniversitiesTable.id, id))
-      .returning();
-
-    logAudit(
-      user.id,
-      "set_portal_fan_out_mode",
-      "portal_university",
-      id,
-      { fanOutMode },
-      req.ip,
-    );
+    const updated = await db.transaction(async (tx) => {
+      const [saved] = await tx
+        .update(portalUniversitiesTable)
+        .set({ fanOutMode: fanOutMode ?? null, updatedAt: new Date() })
+        .where(eq(portalUniversitiesTable.id, id))
+        .returning();
+      await insertPortalAuditTx(tx, {
+        userId: user.id,
+        action: "set_portal_fan_out_mode",
+        resourceId: id,
+        changes: { fanOutMode },
+        ipAddress: req.ip,
+      });
+      return saved;
+    });
 
     res.json(updated);
   },
@@ -879,26 +905,27 @@ router.patch(
       }
     }
 
-    const [updated] = await db
-      .update(portalUniversitiesTable)
-      .set({
-        isActive,
-        // Deactivation is a kill switch, not a cosmetic flag. A later
-        // reactivation must never silently resurrect automatic fan-out.
-        ...(!isActive ? { autoProcess: false, fanOutMode: "off" as const } : {}),
-        updatedAt: new Date(),
-      })
-      .where(eq(portalUniversitiesTable.id, id))
-      .returning();
-
-    logAudit(
-      user.id,
-      isActive ? "activate_portal_university" : "deactivate_portal_university",
-      "portal_university",
-      id,
-      { isActive },
-      req.ip,
-    );
+    const updated = await db.transaction(async (tx) => {
+      const [saved] = await tx
+        .update(portalUniversitiesTable)
+        .set({
+          isActive,
+          // Deactivation is a kill switch, not a cosmetic flag. A later
+          // reactivation must never silently resurrect automatic fan-out.
+          ...(!isActive ? { autoProcess: false, fanOutMode: "off" as const } : {}),
+          updatedAt: new Date(),
+        })
+        .where(eq(portalUniversitiesTable.id, id))
+        .returning();
+      await insertPortalAuditTx(tx, {
+        userId: user.id,
+        action: isActive ? "activate_portal_university" : "deactivate_portal_university",
+        resourceId: id,
+        changes: { isActive },
+        ipAddress: req.ip,
+      });
+      return saved;
+    });
 
     res.json(updated);
   },
@@ -1047,6 +1074,14 @@ router.patch(
             ));
         }
 
+        await insertPortalAuditTx(tx, {
+          userId: user.id,
+          action: "update_portal_university",
+          resourceId: id,
+          changes: { ...body, safetyReset },
+          ipAddress: req.ip,
+        });
+
         return u;
       });
     } catch (error) {
@@ -1060,15 +1095,6 @@ router.patch(
       }
       throw error;
     }
-
-    logAudit(
-      user.id,
-      "update_portal_university",
-      "portal_university",
-      id,
-      { ...body, safetyReset },
-      req.ip,
-    );
 
     res.json(updated);
   },
@@ -1099,19 +1125,19 @@ router.delete(
       return;
     }
 
-    await db
-      .update(portalUniversitiesTable)
-      .set({ deletedAt: new Date() })
-      .where(eq(portalUniversitiesTable.id, id));
-
-    logAudit(
-      user.id,
-      "delete_portal_university",
-      "portal_university",
-      id,
-      {},
-      req.ip,
-    );
+    await db.transaction(async (tx) => {
+      await tx
+        .update(portalUniversitiesTable)
+        .set({ deletedAt: new Date() })
+        .where(eq(portalUniversitiesTable.id, id));
+      await insertPortalAuditTx(tx, {
+        userId: user.id,
+        action: "delete_portal_university",
+        resourceId: id,
+        changes: {},
+        ipAddress: req.ip,
+      });
+    });
 
     res.json({ ok: true });
   },
@@ -1154,25 +1180,24 @@ router.post(
       eligibleIds = eligibleIds.filter((id) => readyIds.has(id));
     }
 
-    if (eligibleIds.length > 0) {
-      await db
-        .update(portalUniversitiesTable)
-        .set({
-          isActive,
-          ...(!isActive ? { autoProcess: false, fanOutMode: "off" as const } : {}),
-          updatedAt: new Date(),
-        })
-        .where(inArray(portalUniversitiesTable.id, eligibleIds));
-    }
-
-    logAudit(
-      user.id,
-      isActive ? "bulk_activate_portal_university" : "bulk_deactivate_portal_university",
-      "portal_university",
-      undefined,
-      { requested: ids, updated: eligibleIds },
-      req.ip,
-    );
+    await db.transaction(async (tx) => {
+      if (eligibleIds.length > 0) {
+        await tx
+          .update(portalUniversitiesTable)
+          .set({
+            isActive,
+            ...(!isActive ? { autoProcess: false, fanOutMode: "off" as const } : {}),
+            updatedAt: new Date(),
+          })
+          .where(inArray(portalUniversitiesTable.id, eligibleIds));
+      }
+      await insertPortalAuditTx(tx, {
+        userId: user.id,
+        action: isActive ? "bulk_activate_portal_university" : "bulk_deactivate_portal_university",
+        changes: { requested: ids, updated: eligibleIds },
+        ipAddress: req.ip,
+      });
+    });
 
     res.json({
       updated: eligibleIds.length,
@@ -1223,21 +1248,20 @@ router.post(
     }
     const eligibleIds = eligibleRows.map((r) => r.id);
 
-    if (eligibleIds.length > 0) {
-      await db
-        .update(portalUniversitiesTable)
-        .set({ autoProcess, updatedAt: new Date() })
-        .where(inArray(portalUniversitiesTable.id, eligibleIds));
-    }
-
-    logAudit(
-      user.id,
-      autoProcess ? "bulk_enable_portal_auto_process" : "bulk_disable_portal_auto_process",
-      "portal_university",
-      undefined,
-      { requested: ids, updated: eligibleIds },
-      req.ip,
-    );
+    await db.transaction(async (tx) => {
+      if (eligibleIds.length > 0) {
+        await tx
+          .update(portalUniversitiesTable)
+          .set({ autoProcess, updatedAt: new Date() })
+          .where(inArray(portalUniversitiesTable.id, eligibleIds));
+      }
+      await insertPortalAuditTx(tx, {
+        userId: user.id,
+        action: autoProcess ? "bulk_enable_portal_auto_process" : "bulk_disable_portal_auto_process",
+        changes: { requested: ids, updated: eligibleIds },
+        ipAddress: req.ip,
+      });
+    });
 
     res.json({
       updated: eligibleIds.length,
@@ -1267,21 +1291,20 @@ router.post(
       .where(and(inArray(portalUniversitiesTable.id, ids), isNull(portalUniversitiesTable.deletedAt)));
     const eligibleIds = eligible.map((r) => r.id);
 
-    if (eligibleIds.length > 0) {
-      await db
-        .update(portalUniversitiesTable)
-        .set({ deletedAt: new Date() })
-        .where(inArray(portalUniversitiesTable.id, eligibleIds));
-    }
-
-    logAudit(
-      user.id,
-      "bulk_delete_portal_university",
-      "portal_university",
-      undefined,
-      { requested: ids, deleted: eligibleIds },
-      req.ip,
-    );
+    await db.transaction(async (tx) => {
+      if (eligibleIds.length > 0) {
+        await tx
+          .update(portalUniversitiesTable)
+          .set({ deletedAt: new Date() })
+          .where(inArray(portalUniversitiesTable.id, eligibleIds));
+      }
+      await insertPortalAuditTx(tx, {
+        userId: user.id,
+        action: "bulk_delete_portal_university",
+        changes: { requested: ids, deleted: eligibleIds },
+        ipAddress: req.ip,
+      });
+    });
 
     res.json({
       deleted: eligibleIds.length,
@@ -1330,7 +1353,7 @@ router.post(
         requestKey,
         requestedBy: req.user!.id,
       });
-      logAudit(req.user!.id, "queue_portal_test_login", "portal_university", id, {
+      await logAudit(req.user!.id, "queue_portal_test_login", "portal_university", id, {
         adapterKey: uni.adapterKey,
         requestKey,
         workerJobId: job.id,
@@ -1503,33 +1526,35 @@ router.put(
         );
       }
 
+      let saved: typeof portalProgramMappingTable.$inferSelect;
       if (existing) {
-        return (await tx
+        saved = (await tx
           .update(portalProgramMappingTable)
           .set({ ...next, updatedAt: new Date() })
           .where(eq(portalProgramMappingTable.id, existing.id))
           .returning())[0];
+      } else {
+        saved = (await tx
+          .insert(portalProgramMappingTable)
+          .values({ universityKey, ...next })
+          .returning())[0];
       }
-      return (await tx
-        .insert(portalProgramMappingTable)
-        .values({ universityKey, ...next })
-        .returning())[0];
+      await insertPortalAuditTx(tx, {
+        userId: user.id,
+        action: "update_portal_program_mapping",
+        resource: "portal_program_mapping",
+        resourceId: saved.id,
+        changes: {
+          universityKey,
+          mappings:         Object.keys(next.mappings).length,
+          programOverrides: Object.keys(next.programOverrides).length,
+          synonyms:         next.synonyms.length,
+          countryOverrides: Object.keys(next.countryOverrides).length,
+        },
+        ipAddress: req.ip,
+      });
+      return saved;
     });
-
-    logAudit(
-      user.id,
-      "update_portal_program_mapping",
-      "portal_program_mapping",
-      row.id,
-      {
-        universityKey,
-        mappings:         Object.keys(next.mappings).length,
-        programOverrides: Object.keys(next.programOverrides).length,
-        synonyms:         next.synonyms.length,
-        countryOverrides: Object.keys(next.countryOverrides).length,
-      },
-      req.ip,
-    );
 
     res.json(row);
   },
@@ -1583,48 +1608,48 @@ router.post(
     let mappingsAdded = 0;
     const missingProgramIds = new Set<number>();
 
-    for (const r of rows) {
-      rowsScanned++;
-      const overrides = r.programOverrides ?? {};
-      if (Object.keys(overrides).length === 0) continue;
+    await db.transaction(async (tx) => {
+      for (const r of rows) {
+        rowsScanned++;
+        const overrides = r.programOverrides ?? {};
+        if (Object.keys(overrides).length === 0) continue;
 
-      const nextMappings: Record<string, string> = { ...(r.mappings ?? {}) };
-      let changed = false;
+        const nextMappings: Record<string, string> = { ...(r.mappings ?? {}) };
+        let changed = false;
 
-      for (const [idStr, portalValue] of Object.entries(overrides)) {
-        if (!portalValue) continue;
-        const n = Number(idStr);
-        const crmName = Number.isInteger(n) ? idToName.get(n) : undefined;
-        if (!crmName) {
-          if (Number.isInteger(n)) missingProgramIds.add(n);
-          continue;
+        for (const [idStr, portalValue] of Object.entries(overrides)) {
+          if (!portalValue) continue;
+          const n = Number(idStr);
+          const crmName = Number.isInteger(n) ? idToName.get(n) : undefined;
+          if (!crmName) {
+            if (Number.isInteger(n)) missingProgramIds.add(n);
+            continue;
+          }
+          // Portal option value/label is the key of the name map; do not clobber
+          // an existing (panel-authored) entry.
+          if (nextMappings[portalValue] === undefined) {
+            nextMappings[portalValue] = crmName;
+            mappingsAdded++;
+            changed = true;
+          }
         }
-        // Portal option value/label is the key of the name map; do not clobber
-        // an existing (panel-authored) entry.
-        if (nextMappings[portalValue] === undefined) {
-          nextMappings[portalValue] = crmName;
-          mappingsAdded++;
-          changed = true;
+
+        if (changed) {
+          await tx
+            .update(portalProgramMappingTable)
+            .set({ mappings: nextMappings, updatedAt: new Date() })
+            .where(eq(portalProgramMappingTable.id, r.id));
+          rowsUpdated++;
         }
       }
-
-      if (changed) {
-        await db
-          .update(portalProgramMappingTable)
-          .set({ mappings: nextMappings, updatedAt: new Date() })
-          .where(eq(portalProgramMappingTable.id, r.id));
-        rowsUpdated++;
-      }
-    }
-
-    logAudit(
-      user.id,
-      "migrate_portal_program_mapping_ids_to_names",
-      "portal_program_mapping",
-      undefined,
-      { rowsScanned, rowsUpdated, mappingsAdded, missingProgramIds: missingProgramIds.size },
-      req.ip,
-    );
+      await insertPortalAuditTx(tx, {
+        userId: user.id,
+        action: "migrate_portal_program_mapping_ids_to_names",
+        resource: "portal_program_mapping",
+        changes: { rowsScanned, rowsUpdated, mappingsAdded, missingProgramIds: missingProgramIds.size },
+        ipAddress: req.ip,
+      });
+    });
 
     res.json({
       rowsScanned,
@@ -1733,20 +1758,29 @@ router.post(
       return;
     }
 
-    const [row] = await db
-      .insert(portalAdaptersTable)
-      .values({
-        key:        body.key,
-        label:      body.label,
-        baseUrl:    body.baseUrl,
-        matchNames: body.matchNames,
-        kind:       body.kind ?? "declarative",
-        configJson: body.configJson ?? null,
-        isActive:   body.isActive ?? true,
-      })
-      .returning();
-
-    logAudit(user.id, "create_portal_adapter", "portal_adapter", row.id, { key: row.key }, req.ip);
+    const row = await db.transaction(async (tx) => {
+      const [created] = await tx
+        .insert(portalAdaptersTable)
+        .values({
+          key:        body.key,
+          label:      body.label,
+          baseUrl:    body.baseUrl,
+          matchNames: body.matchNames,
+          kind:       body.kind ?? "declarative",
+          configJson: body.configJson ?? null,
+          isActive:   body.isActive ?? true,
+        })
+        .returning();
+      await insertPortalAuditTx(tx, {
+        userId: user.id,
+        action: "create_portal_adapter",
+        resource: "portal_adapter",
+        resourceId: created.id,
+        changes: { key: created.key },
+        ipAddress: req.ip,
+      });
+      return created;
+    });
 
     // Refresh the declarative-adapter resolution cache so the new adapter is
     // usable immediately (without waiting for the TTL or a process restart).
@@ -1803,14 +1837,21 @@ router.patch(
         row.key,
         "ADAPTER_CONFIGURATION_CHANGED_REVIEW_REQUIRED",
       );
-      return (await tx
+      const saved = (await tx
         .update(portalAdaptersTable)
         .set(patch)
         .where(eq(portalAdaptersTable.id, id))
         .returning())[0];
+      await insertPortalAuditTx(tx, {
+        userId: user.id,
+        action: "update_portal_adapter",
+        resource: "portal_adapter",
+        resourceId: id,
+        changes: { key: row.key, changedFields: Object.keys(body).sort() },
+        ipAddress: req.ip,
+      });
+      return saved;
     });
-
-    logAudit(user.id, "update_portal_adapter", "portal_adapter", id, body, req.ip);
 
     invalidateDeclarativeAdapterCache();
 
@@ -1850,9 +1891,15 @@ router.delete(
         .update(portalAdaptersTable)
         .set({ deletedAt: new Date() })
         .where(eq(portalAdaptersTable.id, id));
+      await insertPortalAuditTx(tx, {
+        userId: user.id,
+        action: "delete_portal_adapter",
+        resource: "portal_adapter",
+        resourceId: id,
+        changes: { key: row.key },
+        ipAddress: req.ip,
+      });
     });
-
-    logAudit(user.id, "delete_portal_adapter", "portal_adapter", id, {}, req.ip);
 
     invalidateDeclarativeAdapterCache();
 
@@ -1916,6 +1963,14 @@ router.put(
       safetyReset = await db.transaction(async (tx) => {
         const reset = await resetPortalCredentialExecutionStateTx(tx, storageKey);
         await setPortalCredentials(null, storageKey, { username, password, extra }, tx);
+        await tx.insert(auditLogsTable).values({
+          userId: req.user!.id,
+          action: "upsert_portal_credentials",
+          resource: "portal_credentials",
+          resourceId: uni.id,
+          changes: JSON.stringify({ portalKey, storageKey, safetyReset: reset }),
+          ipAddress: req.ip ?? null,
+        });
         return reset;
       });
     } catch (error) {
@@ -1929,15 +1984,6 @@ router.put(
       }
       throw error;
     }
-
-    logAudit(
-      req.user!.id,
-      "upsert_portal_credentials",
-      "portal_credentials",
-      uni.id,
-      { portalKey, storageKey, safetyReset },
-      req.ip,
-    );
 
     res.json({ ok: true, safetyReset });
   },
@@ -1985,6 +2031,14 @@ router.delete(
         if (!result.length) return { ok: false as const };
 
         const safetyReset = await resetPortalCredentialExecutionStateTx(tx, storageKey);
+        await tx.insert(auditLogsTable).values({
+          userId: req.user!.id,
+          action: "delete_portal_credentials",
+          resource: "portal_credentials",
+          resourceId: result[0].id,
+          changes: JSON.stringify({ portalKey, storageKey, safetyReset }),
+          ipAddress: req.ip ?? null,
+        });
 
         return {
           ok: true as const,
@@ -2008,15 +2062,6 @@ router.delete(
       res.status(404).json({ error: "NOT_FOUND", message: "No active credentials found for this portal key" });
       return;
     }
-
-    logAudit(
-      req.user!.id,
-      "delete_portal_credentials",
-      "portal_credentials",
-      mutation.credentialId,
-      { portalKey, storageKey, safetyReset: mutation.safetyReset },
-      req.ip,
-    );
 
     res.json({ ok: true, safetyReset: mutation.safetyReset });
   },

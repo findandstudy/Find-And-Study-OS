@@ -19,9 +19,13 @@ localEmitter.setMaxListeners(0);
 
 let listenClient: any = null;
 let connecting: Promise<void> | null = null;
+let isShuttingDown = false;
+let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
 function scheduleReconnect(): void {
-  setTimeout(() => {
+  if (isShuttingDown || reconnectTimer || localEmitter.listenerCount("event") === 0) return;
+  reconnectTimer = setTimeout(() => {
+    reconnectTimer = null;
     connectListenClient().catch((err) => {
       console.error("[notificationBus] reconnect failed, will retry", err);
       scheduleReconnect();
@@ -73,6 +77,7 @@ async function connectListenClient(): Promise<void> {
         throw err;
       }
       listenClient = client;
+      console.log("[notificationBus] LISTEN connection established");
       return;
     } finally {
       connecting = null;
@@ -83,11 +88,12 @@ async function connectListenClient(): Promise<void> {
 
 export const notificationBus = {
   subscribe(handler: (event: NotificationBusEvent) => void): () => void {
+    isShuttingDown = false;
+    localEmitter.on("event", handler);
     void connectListenClient().catch((err) => {
       console.error("[notificationBus] initial LISTEN failed, will retry", err);
       scheduleReconnect();
     });
-    localEmitter.on("event", handler);
     return () => {
       localEmitter.off("event", handler);
     };
@@ -99,5 +105,21 @@ export const notificationBus = {
       .catch((err: unknown) => {
         console.error("[notificationBus] publish failed", err);
       });
+  },
+  async shutdown(): Promise<void> {
+    isShuttingDown = true;
+    if (reconnectTimer) {
+      clearTimeout(reconnectTimer);
+      reconnectTimer = null;
+    }
+    const client = listenClient;
+    listenClient = null;
+    if (!client) return;
+    try {
+      await client.query(`UNLISTEN ${CHANNEL}`);
+      client.release();
+    } catch {
+      try { client.release(true); } catch { /* ignore */ }
+    }
   },
 };

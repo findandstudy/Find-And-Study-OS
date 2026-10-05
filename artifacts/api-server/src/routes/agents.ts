@@ -19,7 +19,7 @@ import {
   toAgentInsertValues,
   type AgentCatalog,
 } from "../lib/exportImportExcel";
-import { db, agentsTable, agentIntegrationsTable, usersTable, rolesTable, DEFAULT_ROLE_PERMISSIONS, getAllPermissions, commissionsTable, agentBranchesTable, branchesTable, contractTemplatesTable, signingSessionsTable, settingsTable, emailVerificationCodesTable, conversationsTable, messagesTable, broadcastsTable, messageTemplatesTable, notesTable, applicationStageDocumentsTable } from "@workspace/db";
+import { db, agentsTable, agentIntegrationsTable, usersTable, rolesTable, DEFAULT_ROLE_PERMISSIONS, getAllPermissions, commissionsTable, agentBranchesTable, branchesTable, contractTemplatesTable, signingSessionsTable, settingsTable, emailVerificationCodesTable, conversationsTable, messagesTable, broadcastsTable, messageTemplatesTable, notesTable, applicationStageDocumentsTable, auditLogsTable } from "@workspace/db";
 import { getNewestSignedContractUrl } from "../lib/signContract";
 import { eq, sql, isNull, isNotNull, and, or, ilike, inArray, desc, type SQL } from "drizzle-orm";
 import { requireAuth, requireRole, requireAgentStaffPermission, logAudit, AGENT_STAFF_PERMISSIONS as PERM_KEYS } from "../lib/auth";
@@ -41,6 +41,9 @@ import { getCurrentSeason } from "../lib/season";
 import { setAgencyStaff, getAgencyStaff, getAgencyStaffWithLegacy, getAgencyStaffMap, parseStaffInput, staffDisplayName } from "../lib/agencyStaff";
 import { validatePassword } from "../lib/passwordPolicy";
 import { callerOwnsObject, canonicalizeKey } from "../lib/objectAuthz";
+import { ObjectStorageService } from "../lib/objectStorage";
+import { validateUploadedFileBuffer } from "../lib/fileUploadValidation";
+import { consumeFinalizedUploadGrantInDrizzle } from "../lib/uploadGrant";
 import {
   isHexBrandColor,
   normalizeAgentPlan,
@@ -53,6 +56,55 @@ import { maskSecrets, mergeConfig } from "../lib/configMasking";
 import { applyPermissionOverrides } from "../lib/permissions";
 
 const router: IRouter = Router();
+const agentProfileObjectStorage = new ObjectStorageService();
+
+type PreparedAgentProfileUpload = {
+  field: "logoUrl" | "agentIdProofUrl" | "businessCertUrl" | "contractUrl";
+  objectPath: string;
+  bytes: Buffer;
+  contentType: string;
+};
+
+async function prepareAgentProfileUpload(
+  field: PreparedAgentProfileUpload["field"],
+  objectPath: string,
+): Promise<PreparedAgentProfileUpload> {
+  const objectKey = canonicalizeKey(objectPath);
+  if (!objectKey) throw new Error("AGENT_PROFILE_UPLOAD_INVALID_PATH");
+  const file = await agentProfileObjectStorage.getObjectEntityFile(`/objects/${objectKey}`);
+  const [metadata] = await file.getMetadata();
+  const contentType = String(metadata.contentType ?? "").split(";", 1)[0].trim().toLowerCase();
+  const [bytes] = await file.download();
+  const allowed = field === "logoUrl"
+    ? new Set(["image/jpeg", "image/png", "image/webp", "image/gif"])
+    : new Set(["application/pdf", "image/jpeg", "image/png", "image/webp"]);
+  if (!allowed.has(contentType)) throw new Error("AGENT_PROFILE_UPLOAD_UNSUPPORTED_TYPE");
+  const maxSize = field === "logoUrl" ? 5 * 1024 * 1024 : 10 * 1024 * 1024;
+  if (bytes.length <= 0 || bytes.length > maxSize) throw new Error("AGENT_PROFILE_UPLOAD_INVALID_SIZE");
+  const extensionByMime: Record<string, string> = {
+    "application/pdf": "pdf",
+    "image/jpeg": "jpg",
+    "image/png": "png",
+    "image/webp": "webp",
+    "image/gif": "gif",
+  };
+  // Generic object keys are UUIDs without the original extension. Use a
+  // server-derived synthetic name so signature validation compares the
+  // authoritative MIME with the matching format instead of trusting a client
+  // filename that is not persisted in the object key.
+  const fileStem = field === "logoUrl"
+    ? "logo"
+    : field === "agentIdProofUrl"
+      ? "identity-proof"
+      : field === "contractUrl"
+        ? "contract"
+        : "certificate";
+  const fileName = `${fileStem}.${extensionByMime[contentType]}`;
+  if (await validateUploadedFileBuffer(fileName, contentType, bytes)) {
+    throw new Error("AGENT_PROFILE_UPLOAD_SIGNATURE_MISMATCH");
+  }
+  return { field, objectPath, bytes, contentType };
+}
 
 /**
  * Generate a random login password that satisfies the password policy
@@ -666,6 +718,7 @@ router.patch("/agents/me", requireAuth, requireRole("agent", "sub_agent"), async
   if (!agent) { res.status(404).json({ error: "Agent profile not found" }); return; }
   const features = resolveAgentFeatures(agent.planTier, agent.featureOverrides);
   const updates: Record<string, unknown> = {};
+  const preparedUploads: PreparedAgentProfileUpload[] = [];
   for (const key of AGENT_SELF_PATCH_FIELDS) {
     if (req.body[key] !== undefined) {
       const val = req.body[key] || null;
@@ -676,6 +729,20 @@ router.patch("/agents/me", requireAuth, requireRole("agent", "sub_agent"), async
       if ((key === "logoUrl" || key === "businessCertUrl") && val && !(await callerOwnsObject(userId, val))) {
         res.status(403).json({ error: `The uploaded object does not belong to this account (${key})` });
         return;
+      }
+      if ((agent as Record<string, unknown>)[key] === val) continue;
+      if ((key === "logoUrl" || key === "businessCertUrl") && typeof val === "string") {
+        try {
+          preparedUploads.push(await prepareAgentProfileUpload(key, val));
+        } catch (error) {
+          const code = error instanceof Error ? error.message : "AGENT_PROFILE_UPLOAD_INVALID";
+          if (code === "AGENT_PROFILE_UPLOAD_INVALID_SIZE") {
+            res.status(413).json({ error: `Uploaded file is empty or too large (${key})`, code });
+          } else {
+            res.status(400).json({ error: `Uploaded file content is invalid (${key})`, code });
+          }
+          return;
+        }
       }
       if (key === "businessName" && val && typeof val === "string" && val.length > 200) {
         res.status(400).json({ error: "Business name too long (max 200 characters)" });
@@ -696,22 +763,48 @@ router.patch("/agents/me", requireAuth, requireRole("agent", "sub_agent"), async
     res.json(agent);
     return;
   }
-  const [updated] = await db.update(agentsTable).set(updates).where(eq(agentsTable.id, agent.id)).returning();
   const changedFields: Record<string, { from: unknown; to: unknown }> = {};
   for (const key of Object.keys(updates)) {
     const oldVal = (agent as Record<string, unknown>)[key];
     const newVal = updates[key];
     if (oldVal !== newVal) changedFields[key] = { from: oldVal ?? null, to: newVal ?? null };
   }
-  if (Object.keys(changedFields).length > 0) {
-    await writeAudit({
-      userId,
-      action: "agent_profile_field_changed",
-      resource: "agent_profile",
-      resourceId: agent.id,
-      changes: changedFields,
-      ipAddress: req.ip ?? null,
+  let updated: typeof agentsTable.$inferSelect;
+  try {
+    updated = await db.transaction(async (tx) => {
+      for (const upload of preparedUploads) {
+        if (!await consumeFinalizedUploadGrantInDrizzle(tx, {
+          objectPath: upload.objectPath,
+          uploadedBy: userId,
+          bytes: upload.bytes,
+          contentType: upload.contentType,
+        })) throw new Error("AGENT_PROFILE_UPLOAD_GRANT_NOT_FINALIZED");
+      }
+      const [saved] = await tx.update(agentsTable)
+        .set(updates)
+        .where(eq(agentsTable.id, agent.id))
+        .returning();
+      await tx.insert(auditLogsTable).values({
+        userId,
+        action: "agent_profile_field_changed",
+        resource: "agent_profile",
+        resourceId: agent.id,
+        changes: JSON.stringify(changedFields),
+        ipAddress: req.ip ?? null,
+      });
+      return saved;
     });
+  } catch (error) {
+    if (error instanceof Error && error.message === "AGENT_PROFILE_UPLOAD_GRANT_NOT_FINALIZED") {
+      res.status(409).json({
+        error: "Uploaded file is not finalized or has already been used",
+        code: "UPLOAD_GRANT_NOT_FINALIZED",
+      });
+      return;
+    }
+    throw error;
+  }
+  if (Object.keys(changedFields).length > 0) {
     try {
       const agentName = `${agent.firstName ?? ""} ${agent.lastName ?? ""}`.trim() || agent.companyName || `Agent #${agent.id}`;
       await dispatchAgentProfileChangedNotif({
@@ -904,42 +997,85 @@ router.post("/agents/me/sub-agents", requireAuth, requireRole("agent"), async (r
     res.status(400).json({ error: "First name and last name are required" });
     return;
   }
+  let preparedLogo: PreparedAgentProfileUpload | null = null;
+  if (logoUrl) {
+    if (!isValidStorageUrl(logoUrl)) {
+      res.status(400).json({ error: "Sub-agent logo must be an uploaded storage object" });
+      return;
+    }
+    if (!(await callerOwnsObject(userId, logoUrl))) {
+      res.status(403).json({ error: "The uploaded sub-agent logo does not belong to this account" });
+      return;
+    }
+    try {
+      preparedLogo = await prepareAgentProfileUpload("logoUrl", logoUrl);
+    } catch (error) {
+      const code = error instanceof Error ? error.message : "AGENT_PROFILE_UPLOAD_INVALID";
+      res.status(code === "AGENT_PROFILE_UPLOAD_INVALID_SIZE" ? 413 : 400)
+        .json({ error: "Uploaded sub-agent logo content is invalid", code });
+      return;
+    }
+  }
 
-  let newUserId: number | null = null;
+  let existingUser: typeof usersTable.$inferSelect | undefined;
   if (email) {
-    const [existingUser] = await db.select().from(usersTable).where(eq(usersTable.email, email));
+    [existingUser] = await db.select().from(usersTable).where(eq(usersTable.email, email));
     if (existingUser) {
       res.status(400).json({ error: "A user with this email already exists" });
       return;
     }
-    const userValues: any = { email, firstName, lastName, role: "sub_agent", phone: phone || null, phoneE164: toE164(phone || null), emailVerified: true };
-    if (password) {
-      const pwd = validatePassword(password);
-      if (!pwd.ok) { res.status(400).json({ error: pwd.message }); return; }
-      userValues.passwordHash = await bcrypt.hash(pwd.value, 10);
-    }
-    const [newUser] = await db.insert(usersTable).values(userValues).returning();
-    newUserId = newUser.id;
+  }
+  let passwordHash: string | undefined;
+  if (password) {
+    const pwd = validatePassword(password);
+    if (!pwd.ok) { res.status(400).json({ error: pwd.message }); return; }
+    passwordHash = await bcrypt.hash(pwd.value, 10);
   }
 
-  const [subAgent] = await db.insert(agentsTable).values({
-    userId: newUserId,
-    parentAgentId: parentAgent.id,
-    firstName,
-    lastName,
-    email: email || null,
-    phone: phone || null,
-    phoneE164: toE164(phone || null),
-    commissionRate: commissionRate ? parseFloat(commissionRate) : (parentAgent.subAgentCommissionRate || null),
-    status: "active",
-    agencyCode: sql`('FAS-' || TO_CHAR(CURRENT_TIMESTAMP AT TIME ZONE 'UTC', 'YYYYMMDD') || '-' || LPAD(nextval('agent_agency_code_seq')::text, 6, '0'))`,
-    country: parentAgent.country || null,
-    companyName: companyName || parentAgent.companyName || null,
-    businessName: parentAgent.businessName || null,
-    logoUrl: logoUrl || null,
-    hideServiceFees: hideServiceFees === true,
-    embedToken: crypto.randomUUID(),
-  }).returning();
+  let subAgent: typeof agentsTable.$inferSelect;
+  try {
+    subAgent = await db.transaction(async (tx) => {
+      if (preparedLogo && !await consumeFinalizedUploadGrantInDrizzle(tx, {
+        objectPath: preparedLogo.objectPath,
+        uploadedBy: userId,
+        bytes: preparedLogo.bytes,
+        contentType: preparedLogo.contentType,
+      })) throw new Error("AGENT_PROFILE_UPLOAD_GRANT_NOT_FINALIZED");
+      let newUserId: number | null = null;
+      if (email) {
+        const [newUser] = await tx.insert(usersTable).values({
+          email, firstName, lastName, role: "sub_agent", phone: phone || null,
+          phoneE164: toE164(phone || null), emailVerified: true, passwordHash,
+        }).returning();
+        newUserId = newUser.id;
+      }
+      const [created] = await tx.insert(agentsTable).values({
+        userId: newUserId, parentAgentId: parentAgent.id, firstName, lastName,
+        email: email || null, phone: phone || null, phoneE164: toE164(phone || null),
+        commissionRate: commissionRate ? parseFloat(commissionRate) : (parentAgent.subAgentCommissionRate || null),
+        status: "active",
+        agencyCode: sql`('FAS-' || TO_CHAR(CURRENT_TIMESTAMP AT TIME ZONE 'UTC', 'YYYYMMDD') || '-' || LPAD(nextval('agent_agency_code_seq')::text, 6, '0'))`,
+        country: parentAgent.country || null,
+        companyName: companyName || parentAgent.companyName || null,
+        businessName: parentAgent.businessName || null,
+        logoUrl: logoUrl || null,
+        hideServiceFees: hideServiceFees === true,
+        embedToken: crypto.randomUUID(),
+      }).returning();
+      await tx.insert(auditLogsTable).values({
+        userId, action: "agent.sub_agent.create", resource: "agent", resourceId: created.id,
+        changes: JSON.stringify({ parentAgentId: parentAgent.id, logoUploaded: Boolean(preparedLogo) }),
+        ipAddress: req.ip ?? null,
+      });
+      return created;
+    });
+  } catch (error) {
+    if (error instanceof Error && error.message === "AGENT_PROFILE_UPLOAD_GRANT_NOT_FINALIZED") {
+      res.status(409).json({ error: "Uploaded logo is not finalized or has already been used", code: "UPLOAD_GRANT_NOT_FINALIZED" });
+      return;
+    }
+    throw error;
+  }
 
   try {
     await dispatchNotification({
@@ -989,19 +1125,58 @@ router.patch("/agents/me/sub-agents/:id", requireAuth, requireRole("agent"), asy
   if (Object.prototype.hasOwnProperty.call(updates, "phone")) {
     (updates as any).phoneE164 = toE164((updates as any).phone);
   }
-  const [updated] = await db.update(agentsTable).set(updates).where(eq(agentsTable.id, subAgentId)).returning();
-  if (subAgent.userId && (updates.firstName !== undefined || updates.lastName !== undefined || updates.email !== undefined || updates.phone !== undefined)) {
-    const userUpdates: Record<string, unknown> = {};
-    if (updates.firstName !== undefined) userUpdates.firstName = updates.firstName;
-    if (updates.lastName !== undefined) userUpdates.lastName = updates.lastName;
-    if (updates.email !== undefined) userUpdates.email = updates.email;
-    if (updates.phone !== undefined) {
-      userUpdates.phone = updates.phone;
-      (userUpdates as any).phoneE164 = toE164((updates as any).phone);
+  let preparedLogo: PreparedAgentProfileUpload | null = null;
+  if (updates.logoUrl !== undefined && updates.logoUrl !== subAgent.logoUrl) {
+    const value = updates.logoUrl;
+    if (value !== null) {
+      if (typeof value !== "string" || !isValidStorageUrl(value)) {
+        res.status(400).json({ error: "Sub-agent logo must be an uploaded storage object" }); return;
+      }
+      if (!(await callerOwnsObject(userId, value))) {
+        res.status(403).json({ error: "The uploaded sub-agent logo does not belong to this account" }); return;
+      }
+      try {
+        preparedLogo = await prepareAgentProfileUpload("logoUrl", value);
+      } catch (error) {
+        const code = error instanceof Error ? error.message : "AGENT_PROFILE_UPLOAD_INVALID";
+        res.status(code === "AGENT_PROFILE_UPLOAD_INVALID_SIZE" ? 413 : 400)
+          .json({ error: "Uploaded sub-agent logo content is invalid", code });
+        return;
+      }
     }
-    if (Object.keys(userUpdates).length > 0) {
-      await db.update(usersTable).set(userUpdates).where(eq(usersTable.id, subAgent.userId));
+  } else if (updates.logoUrl === subAgent.logoUrl) {
+    delete updates.logoUrl;
+  }
+  let updated: typeof agentsTable.$inferSelect;
+  try {
+    updated = await db.transaction(async (tx) => {
+      if (preparedLogo && !await consumeFinalizedUploadGrantInDrizzle(tx, {
+        objectPath: preparedLogo.objectPath, uploadedBy: userId,
+        bytes: preparedLogo.bytes, contentType: preparedLogo.contentType,
+      })) throw new Error("AGENT_PROFILE_UPLOAD_GRANT_NOT_FINALIZED");
+      const [saved] = await tx.update(agentsTable).set(updates).where(eq(agentsTable.id, subAgentId)).returning();
+      if (subAgent.userId && (updates.firstName !== undefined || updates.lastName !== undefined || updates.email !== undefined || updates.phone !== undefined)) {
+        const userUpdates: Record<string, unknown> = {};
+        if (updates.firstName !== undefined) userUpdates.firstName = updates.firstName;
+        if (updates.lastName !== undefined) userUpdates.lastName = updates.lastName;
+        if (updates.email !== undefined) userUpdates.email = updates.email;
+        if (updates.phone !== undefined) {
+          userUpdates.phone = updates.phone;
+          userUpdates.phoneE164 = toE164(updates.phone as string | null);
+        }
+        if (Object.keys(userUpdates).length > 0) await tx.update(usersTable).set(userUpdates).where(eq(usersTable.id, subAgent.userId));
+      }
+      await tx.insert(auditLogsTable).values({
+        userId, action: "agent.sub_agent.update", resource: "agent", resourceId: subAgentId,
+        changes: JSON.stringify({ changedFields: Object.keys(updates) }), ipAddress: req.ip ?? null,
+      });
+      return saved;
+    });
+  } catch (error) {
+    if (error instanceof Error && error.message === "AGENT_PROFILE_UPLOAD_GRANT_NOT_FINALIZED") {
+      res.status(409).json({ error: "Uploaded logo is not finalized or has already been used", code: "UPLOAD_GRANT_NOT_FINALIZED" }); return;
     }
+    throw error;
   }
 
   const subAgentRateChanged = updates.commissionRate !== undefined && updates.commissionRate !== subAgent.commissionRate;
@@ -1147,7 +1322,7 @@ router.post("/agents/me/sub-agents/:id/impersonate", requireAuth, requireRole("a
 
   const sid = await createSession(sessionData);
   res.cookie(SESSION_COOKIE, sid, getSessionCookieOptions(req, SESSION_TTL));
-  logAudit(req.user!.id, "auth.impersonate.start", "user", targetUser.id, { targetRole: targetUser.role, via: "agents/sub-agents" }, req.ip);
+  await logAudit(req.user!.id, "auth.impersonate.start", "user", targetUser.id, { targetRole: targetUser.role, via: "agents/sub-agents" }, req.ip);
   res.json({ success: true, redirectTo: "/agent" });
 });
 
@@ -1169,7 +1344,7 @@ router.post("/agents/me/return-to-agent", requireAuth, async (req, res): Promise
   res.cookie(SESSION_COOKIE, originalSid, getSessionCookieOptions(req, SESSION_TTL));
   const originalUserId = originalSession.user?.id ?? null;
   const impersonatedUserId = req.user?.id;
-  logAudit(originalUserId, "auth.impersonate.end", "user", impersonatedUserId, {}, req.ip);
+  await logAudit(originalUserId, "auth.impersonate.end", "user", impersonatedUserId, {}, req.ip);
   res.json({ success: true, redirectTo: "/" });
 });
 
@@ -1542,7 +1717,7 @@ router.patch("/agents/:id/academy-access", requireAuth, async (req, res): Promis
     res.status(403).json({ error: "Agent not in your branch scope" }); return;
   }
   await setUserAcademyAccessOverride(targetAgent.userId, parsed.data.academyAccess);
-  logAudit(actor.id, "agent.academy_access.update", "agent", agentId, { academyAccess: parsed.data.academyAccess }, req.ip);
+  await logAudit(actor.id, "agent.academy_access.update", "agent", agentId, { academyAccess: parsed.data.academyAccess }, req.ip);
   res.json({ success: true });
 });
 
@@ -1624,6 +1799,31 @@ router.post("/agents", requireAuth, requireRole(...MANAGER_ROLES), async (req, r
   if (secondaryBrandColor !== undefined && !isHexBrandColor(secondaryBrandColor)) {
     res.status(400).json({ error: "Invalid secondary brand color" }); return;
   }
+  const preparedProfileUploads: PreparedAgentProfileUpload[] = [];
+  for (const [field, value] of [
+    ["logoUrl", logoUrl],
+    ["agentIdProofUrl", agentIdProofUrl],
+    ["businessCertUrl", businessCertUrl],
+    ["contractUrl", contractUrl],
+  ] as const) {
+    if (!value) continue;
+    if (!isValidStorageUrl(value)) {
+      res.status(400).json({ error: `Invalid URL for ${field}` });
+      return;
+    }
+    if (!(await callerOwnsObject(req.user!.id, value))) {
+      res.status(403).json({ error: `The uploaded object does not belong to this account (${field})` });
+      return;
+    }
+    try {
+      preparedProfileUploads.push(await prepareAgentProfileUpload(field, value));
+    } catch (error) {
+      const code = error instanceof Error ? error.message : "AGENT_PROFILE_UPLOAD_INVALID";
+      res.status(code === "AGENT_PROFILE_UPLOAD_INVALID_SIZE" ? 413 : 400)
+        .json({ error: `Uploaded file content is invalid (${field})`, code });
+      return;
+    }
+  }
   const normalizedPlanTier = normalizeAgentPlan(planTier);
   const normalizedFeatureOverrides = normalizeFeatureOverrides(featureOverrides);
   // Normalize at the source: the email_verification_codes row created below
@@ -1643,38 +1843,44 @@ router.post("/agents", requireAuth, requireRole(...MANAGER_ROLES), async (req, r
   const generatedPassword = generateAgentPassword();
   const generatedPasswordHash = await bcrypt.hash(generatedPassword, 10);
 
-  let userId: number | null = null;
-  {
-    const [existingUser] = await db.select().from(usersTable).where(ilike(usersTable.email, normalizedAccountEmail));
-    if (existingUser) {
-      // Only reuse an existing account when it already belongs to the agent
-      // family. Refuse to take over (and silently reset the password of) an
-      // internal/staff/student account that merely shares this email — doing
-      // so would let agent creation reset credentials and reactivate
-      // unrelated accounts.
-      if (!AGENT_ROLES.includes(existingUser.role)) {
-        res.status(409).json({ error: "An account with this email already exists and is not an agent account. Use a different email." });
-        return;
-      }
-      userId = existingUser.id;
-      // Provision the existing agent account for direct login: normalize the
-      // stored address, mark email verified + active, and (re)set a fresh
-      // password so the credentials email is valid.
-      await db.update(usersTable)
-        .set({ email: normalizedAccountEmail, emailVerified: true, isActive: true, passwordHash: generatedPasswordHash })
-        .where(eq(usersTable.id, existingUser.id));
-    } else {
-      const role = parentAgentId ? "sub_agent" : "agent";
-      const [newUser] = await db.insert(usersTable).values({
-        email: normalizedAccountEmail, firstName, lastName, role,
-        phone: phone || null, phoneE164: toE164(phone || null),
-        emailVerified: true, isActive: true, passwordHash: generatedPasswordHash,
-      }).returning();
-      userId = newUser.id;
-    }
+  const [existingUser] = await db.select().from(usersTable).where(ilike(usersTable.email, normalizedAccountEmail));
+  // Only reuse an existing account when it already belongs to the agent
+  // family. Refuse to take over (and silently reset the password of) an
+  // internal/staff/student account that merely shares this email — doing
+  // so would let agent creation reset credentials and reactivate unrelated
+  // accounts.
+  if (existingUser && !AGENT_ROLES.includes(existingUser.role)) {
+    res.status(409).json({ error: "An account with this email already exists and is not an agent account. Use a different email." });
+    return;
   }
 
-  const [agent] = await db.insert(agentsTable).values({
+  let userId: number | null = null;
+  let agent: typeof agentsTable.$inferSelect;
+  try {
+    agent = await db.transaction(async (tx) => {
+      for (const upload of preparedProfileUploads) {
+        if (!await consumeFinalizedUploadGrantInDrizzle(tx, {
+          objectPath: upload.objectPath,
+          uploadedBy: req.user!.id,
+          bytes: upload.bytes,
+          contentType: upload.contentType,
+        })) throw new Error("AGENT_PROFILE_UPLOAD_GRANT_NOT_FINALIZED");
+      }
+      if (existingUser) {
+        userId = existingUser.id;
+        await tx.update(usersTable)
+          .set({ email: normalizedAccountEmail, emailVerified: true, isActive: true, passwordHash: generatedPasswordHash })
+          .where(eq(usersTable.id, existingUser.id));
+      } else {
+        const role = parentAgentId ? "sub_agent" : "agent";
+        const [newUser] = await tx.insert(usersTable).values({
+          email: normalizedAccountEmail, firstName, lastName, role,
+          phone: phone || null, phoneE164: toE164(phone || null),
+          emailVerified: true, isActive: true, passwordHash: generatedPasswordHash,
+        }).returning();
+        userId = newUser.id;
+      }
+      const [created] = await tx.insert(agentsTable).values({
     userId,
     firstName, lastName, status,
     entityType: ent,
@@ -1708,8 +1914,25 @@ router.post("/agents", requireAuth, requireRole(...MANAGER_ROLES), async (req, r
     featureOverrides: normalizedFeatureOverrides,
     primaryBrandColor: primaryBrandColor ? String(primaryBrandColor).toUpperCase() : "#1D4ED8",
     secondaryBrandColor: secondaryBrandColor ? String(secondaryBrandColor).toUpperCase() : "#10B981",
-    embedToken: crypto.randomUUID(),
-  }).returning();
+        embedToken: crypto.randomUUID(),
+      }).returning();
+      await tx.insert(auditLogsTable).values({
+        userId: req.user!.id,
+        action: "agent.create",
+        resource: "agent",
+        resourceId: created.id,
+        changes: JSON.stringify({ uploadedFields: preparedProfileUploads.map((upload) => upload.field) }),
+        ipAddress: req.ip ?? null,
+      });
+      return created;
+    });
+  } catch (error) {
+    if (error instanceof Error && error.message === "AGENT_PROFILE_UPLOAD_GRANT_NOT_FINALIZED") {
+      res.status(409).json({ error: "Uploaded file is not finalized or has already been used", code: "UPLOAD_GRANT_NOT_FINALIZED" });
+      return;
+    }
+    throw error;
+  }
   await syncAgentAcademyPermission(agent);
 
   // Persist agency-assigned staff (multi). Accepts either the new
@@ -1912,6 +2135,28 @@ router.patch("/agents/:id", requireAuth, requireRole(...MANAGER_ROLES), async (r
   }
   const [oldAgent] = await db.select().from(agentsTable).where(eq(agentsTable.id, id));
   if (!oldAgent) { res.status(404).json({ error: "Agent not found" }); return; }
+  const preparedProfileUploads: PreparedAgentProfileUpload[] = [];
+  for (const field of ["logoUrl", "agentIdProofUrl", "businessCertUrl", "contractUrl"] as const) {
+    if (updates[field] === undefined || updates[field] === oldAgent[field]) continue;
+    const value = updates[field];
+    if (value === null || value === "") continue;
+    if (typeof value !== "string" || !isValidStorageUrl(value)) {
+      res.status(400).json({ error: `Invalid URL for ${field}` });
+      return;
+    }
+    if (!(await callerOwnsObject(req.user!.id, value))) {
+      res.status(403).json({ error: `The uploaded object does not belong to this account (${field})` });
+      return;
+    }
+    try {
+      preparedProfileUploads.push(await prepareAgentProfileUpload(field, value));
+    } catch (error) {
+      const code = error instanceof Error ? error.message : "AGENT_PROFILE_UPLOAD_INVALID";
+      res.status(code === "AGENT_PROFILE_UPLOAD_INVALID_SIZE" ? 413 : 400)
+        .json({ error: `Uploaded file content is invalid (${field})`, code });
+      return;
+    }
+  }
 
   // branchIds is a separate concern (join table), handle it before/after the agent update.
   if (req.body.branchIds !== undefined && Array.isArray(req.body.branchIds)) {
@@ -1939,7 +2184,45 @@ router.patch("/agents/:id", requireAuth, requireRole(...MANAGER_ROLES), async (r
   // No regular fields? Return early.
   let agent = oldAgent;
   if (Object.keys(updates).length > 0) {
-    [agent] = await db.update(agentsTable).set(updates).where(eq(agentsTable.id, id)).returning();
+    const fieldChanges: Record<string, { from: unknown; to: unknown }> = {};
+    for (const key of Object.keys(updates)) {
+      const oldVal = (oldAgent as Record<string, unknown>)[key];
+      const newVal = updates[key];
+      if (String(oldVal ?? "") !== String(newVal ?? "")) {
+        fieldChanges[key] = { from: oldVal ?? null, to: newVal ?? null };
+      }
+    }
+    try {
+      agent = await db.transaction(async (tx) => {
+        for (const upload of preparedProfileUploads) {
+          if (!await consumeFinalizedUploadGrantInDrizzle(tx, {
+            objectPath: upload.objectPath,
+            uploadedBy: req.user!.id,
+            bytes: upload.bytes,
+            contentType: upload.contentType,
+          })) throw new Error("AGENT_PROFILE_UPLOAD_GRANT_NOT_FINALIZED");
+        }
+        const [saved] = await tx.update(agentsTable).set(updates).where(eq(agentsTable.id, id)).returning();
+        if (!saved) throw new Error("AGENT_NOT_FOUND");
+        if (Object.keys(fieldChanges).length > 0) {
+          await tx.insert(auditLogsTable).values({
+            userId: req.user!.id,
+            action: "agent_profile_field_changed",
+            resource: "agent_profile",
+            resourceId: id,
+            changes: JSON.stringify(fieldChanges),
+            ipAddress: req.ip ?? null,
+          });
+        }
+        return saved;
+      });
+    } catch (error) {
+      if (error instanceof Error && error.message === "AGENT_PROFILE_UPLOAD_GRANT_NOT_FINALIZED") {
+        res.status(409).json({ error: "Uploaded file is not finalized or has already been used", code: "UPLOAD_GRANT_NOT_FINALIZED" });
+        return;
+      }
+      throw error;
+    }
   }
   if (updates.planTier !== undefined || updates.featureOverrides !== undefined) {
     await syncAgentAcademyPermission(agent);
@@ -2002,13 +2285,6 @@ router.patch("/agents/:id", requireAuth, requireRole(...MANAGER_ROLES), async (r
   }
 
   const auditChanges: Record<string, { from: unknown; to: unknown }> = {};
-  for (const key of Object.keys(updates)) {
-    const oldVal = (oldAgent as Record<string, unknown>)[key];
-    const newVal = (agent as Record<string, unknown>)[key];
-    if (String(oldVal ?? "") !== String(newVal ?? "")) {
-      auditChanges[key] = { from: oldVal ?? null, to: newVal ?? null };
-    }
-  }
   if (req.body.branchIds !== undefined) {
     auditChanges["branchIds"] = { from: null, to: Array.isArray(req.body.branchIds) ? req.body.branchIds.join(",") : String(req.body.branchIds) };
   }
@@ -2346,7 +2622,7 @@ router.post("/agents/:id/impersonate", requireAuth, async (req, res, next): Prom
 
   const sid = await createSession(sessionData);
   res.cookie(SESSION_COOKIE, sid, getSessionCookieOptions(req, SESSION_TTL));
-  logAudit(req.user!.id, "auth.impersonate.start", "user", targetUser.id, { targetRole: targetUser.role, via: "agents" }, req.ip);
+  await logAudit(req.user!.id, "auth.impersonate.start", "user", targetUser.id, { targetRole: targetUser.role, via: "agents" }, req.ip);
   res.json({ success: true, redirectTo: "/agent" });
 });
 

@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { db, applicationsTable, notesTable, usersTable, studentsTable, leadsTable, agentsTable, commissionsTable, serviceFeesTable, programsTable, universitiesTable, pipelineStagesTable, applicationStageDocumentsTable, documentsTable, settingsTable, lifecycleCascadeStateTable, softDelete } from "@workspace/db";
+import { db, applicationsTable, notesTable, usersTable, studentsTable, leadsTable, agentsTable, commissionsTable, serviceFeesTable, programsTable, universitiesTable, pipelineStagesTable, applicationStageDocumentsTable, documentsTable, settingsTable, lifecycleCascadeStateTable, auditLogsTable, softDelete } from "@workspace/db";
 import { eq, sql, and, inArray, asc, desc, ilike, isNull, isNotNull, ne, lt, gte } from "drizzle-orm";
 import { normalizeGpaTo100 } from "../lib/gpaNormalize";
 import { requireAuth, requireRole, requireAgentStaffPermission, logAudit } from "../lib/auth";
@@ -236,6 +236,25 @@ type LostCascadeTargets = {
 type DbTx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 type DbLike = typeof db | DbTx;
 
+async function writeLostCascadeAudit(
+  executor: DbLike,
+  actorUserId: number,
+  action: "stage.lost_cascade" | "stage.lost_cascade_skipped" | "stage.lost_cascade_restored",
+  resource: "application" | "student" | "lead",
+  resourceId: number,
+  changes: Record<string, unknown>,
+  ipAddress?: string,
+): Promise<void> {
+  await executor.insert(auditLogsTable).values({
+    userId: actorUserId,
+    action,
+    resource,
+    resourceId,
+    changes: JSON.stringify(changes),
+    ipAddress: ipAddress || null,
+  });
+}
+
 async function resolveLostCascadeTargets(applicationStage: string): Promise<LostCascadeTargets | null> {
   const [target] = await db.select({
     variant: pipelineStagesTable.variant,
@@ -350,7 +369,7 @@ async function cascadeApplicationLostStage(opts: {
       await executor.update(studentsTable)
         .set({ status: targets.studentStage })
         .where(and(eq(studentsTable.id, studentId), isNull(studentsTable.deletedAt)));
-      logAudit(actorUserId, "stage.lost_cascade", "student", studentId, {
+      await writeLostCascadeAudit(executor, actorUserId, "stage.lost_cascade", "student", studentId, {
         from: student.status,
         to: targets.studentStage,
         source: "application",
@@ -359,7 +378,7 @@ async function cascadeApplicationLostStage(opts: {
       }, ipAddress);
     }
   } else {
-    logAudit(actorUserId, "stage.lost_cascade_skipped", "student", studentId, {
+    await writeLostCascadeAudit(executor, actorUserId, "stage.lost_cascade_skipped", "student", studentId, {
       source: "application",
       sourceId: applicationId,
       reason: "student_has_non_lost_application",
@@ -370,7 +389,7 @@ async function cascadeApplicationLostStage(opts: {
   // direct-created applications deliberately remain unlinked; never guess a
   // lead from convertedStudentId because one student can have multiple leads.
   if (leadId == null) {
-    logAudit(actorUserId, "stage.lost_cascade_skipped", "application", applicationId, {
+    await writeLostCascadeAudit(executor, actorUserId, "stage.lost_cascade_skipped", "application", applicationId, {
       reason: "application_has_no_lead_link",
     }, ipAddress);
     return;
@@ -384,7 +403,7 @@ async function cascadeApplicationLostStage(opts: {
       isNull(leadsTable.deletedAt),
     ));
   if (!lead) {
-    logAudit(actorUserId, "stage.lost_cascade_skipped", "application", applicationId, {
+    await writeLostCascadeAudit(executor, actorUserId, "stage.lost_cascade_skipped", "application", applicationId, {
       leadId,
       reason: "lead_link_not_active_for_student",
     }, ipAddress);
@@ -410,7 +429,7 @@ async function cascadeApplicationLostStage(opts: {
     await executor.update(leadsTable)
       .set({ status: targets.leadStage })
       .where(and(eq(leadsTable.id, lead.id), isNull(leadsTable.deletedAt)));
-    logAudit(actorUserId, "stage.lost_cascade", "lead", lead.id, {
+    await writeLostCascadeAudit(executor, actorUserId, "stage.lost_cascade", "lead", lead.id, {
       from: lead.status,
       to: targets.leadStage,
       source: "application",
@@ -418,7 +437,7 @@ async function cascadeApplicationLostStage(opts: {
       rule: "all_lead_applications_lost",
     }, ipAddress);
   } else {
-    logAudit(actorUserId, "stage.lost_cascade_skipped", "lead", leadId, {
+    await writeLostCascadeAudit(executor, actorUserId, "stage.lost_cascade_skipped", "lead", leadId, {
       source: "application",
       sourceId: applicationId,
       reason: "lead_has_non_lost_application",
@@ -480,7 +499,7 @@ async function restoreApplicationLostCascade(opts: {
         .where(and(eq(leadsTable.id, entityId), isNull(leadsTable.deletedAt)));
     }
     await executor.delete(lifecycleCascadeStateTable).where(eq(lifecycleCascadeStateTable.id, state.id));
-    logAudit(actorUserId, "stage.lost_cascade_restored", entityType, entityId, {
+    await writeLostCascadeAudit(executor, actorUserId, "stage.lost_cascade_restored", entityType, entityId, {
       from: currentStatus,
       to: state.previousStatus,
       source: "application",
@@ -1492,6 +1511,23 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, ...AG
   const id = parseInt(String(req.params.id), 10);
   const user = req.user!;
   const isStaff = STAFF_ROLES.includes(user.role as any);
+  const changesConcurrencySensitiveState = req.body.stage !== undefined || req.body.assignedToId !== undefined;
+  const expectedUpdatedAtRaw = req.body.expectedUpdatedAt;
+  let expectedUpdatedAt: Date | null = null;
+  if (changesConcurrencySensitiveState) {
+    if (typeof expectedUpdatedAtRaw !== "string") {
+      res.status(428).json({
+        error: "The current application version is required",
+        code: "APPLICATION_VERSION_REQUIRED",
+      });
+      return;
+    }
+    expectedUpdatedAt = new Date(expectedUpdatedAtRaw);
+    if (!Number.isFinite(expectedUpdatedAt.getTime()) || expectedUpdatedAt.toISOString() !== expectedUpdatedAtRaw) {
+      res.status(400).json({ error: "expectedUpdatedAt must be a canonical ISO timestamp" });
+      return;
+    }
+  }
 
   const isAdmin = (ADMIN_ROLES as readonly string[]).includes(user.role);
   const perms = isAdmin || !isStaff
@@ -1801,6 +1837,7 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, ...AG
     agentId: applicationsTable.agentId,
     branchId: applicationsTable.branchId,
     universityApplicationId: applicationsTable.universityApplicationId,
+    updatedAt: applicationsTable.updatedAt,
   }).from(applicationsTable).where(and(eq(applicationsTable.id, id), isNull(applicationsTable.deletedAt)));
 
   // KURAL 1: non-admin staff cannot update agent-sourced applications
@@ -1818,6 +1855,7 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, ...AG
     if (visibleIds.length === 0) { res.status(403).json({ error: "No agent record found" }); return; }
     conditions.push(inArray(applicationsTable.agentId, visibleIds));
   }
+  if (expectedUpdatedAt) conditions.push(eq(applicationsTable.updatedAt, expectedUpdatedAt));
 
   const lostCascadeTargets = updates.stage !== undefined
     ? await resolveLostCascadeTargets(String(updates.stage))
@@ -1840,9 +1878,16 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, ...AG
   const canCascadeAssignment = appAssignmentChanged
     ? await userHasPermission({ id: req.user!.id, role: req.user!.role }, "records.cascade_assignment")
     : false;
-  const needsAtomicJourneyUpdate = appAssignmentChanged || updates.stage !== undefined;
-  const app = needsAtomicJourneyUpdate
-    ? await db.transaction(async (tx) => {
+  const auditChanges = updates.universityApplicationId !== undefined
+    ? {
+        ...updates,
+        universityApplicationId: {
+          from: preUpdateApp?.universityApplicationId ?? null,
+          to: updates.universityApplicationId ?? null,
+        },
+      }
+    : updates;
+  const app = await db.transaction(async (tx) => {
         const [updatedApp] = await tx.update(applicationsTable).set(updates).where(and(...conditions)).returning();
         if (!updatedApp) return null;
         const newAssignedToId = typeof updatedApp.assignedToId === "number" ? updatedApp.assignedToId : null;
@@ -1879,14 +1924,41 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, ...AG
             eq(lifecycleCascadeStateTable.entityId, updatedApp.studentId),
           ));
         }
+        await tx.insert(auditLogsTable).values({
+          userId: req.user!.id,
+          action: "update_application",
+          resource: "application",
+          resourceId: id,
+          changes: JSON.stringify(auditChanges),
+          ipAddress: req.ip || null,
+        });
+        if (updates.stage !== undefined) {
+          // Stage and its finance projection are one atomic command. If the
+          // reconciliation fails, neither the stage nor the audit receipt is
+          // committed; callers may safely retry with the same version.
+          await syncApplicationFinance(updatedApp.id, tx);
+        }
         return updatedApp;
-      })
-    : (await db.update(applicationsTable).set(updates).where(and(...conditions)).returning())[0];
-  if (!app) { res.status(404).json({ error: "Application not found" }); return; }
+      });
+  if (!app) {
+    if (expectedUpdatedAt) {
+      const [current] = await db.select({ updatedAt: applicationsTable.updatedAt })
+        .from(applicationsTable)
+        .where(and(...conditions.slice(0, -1)));
+      if (current) {
+        res.status(409).json({
+          error: "Application changed after this screen was loaded. Refresh and review the latest values.",
+          code: "APPLICATION_VERSION_CONFLICT",
+          currentUpdatedAt: current.updatedAt.toISOString(),
+        });
+        return;
+      }
+    }
+    res.status(404).json({ error: "Application not found" }); return;
+  }
 
+  try {
   if (updates.stage !== undefined) {
-    // Keep every stage-change entry point aligned with portal automation.
-    await syncApplicationFinance(id);
     const newStage = updates.stage as string;
     const [commStatus, sfStatus] = await Promise.all([
       getCommissionFinanceStatus(newStage),
@@ -1972,6 +2044,15 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, ...AG
       }
     }
   }
+  } catch (error) {
+    // The canonical finance projection committed atomically with the stage
+    // above. This compatibility reconciliation is temporary and must never
+    // turn an already-committed command into a misleading HTTP failure.
+    console.error("[applications] post-commit legacy finance reconciliation failed", {
+      applicationId: id,
+      message: error instanceof Error ? error.message : "unknown_error",
+    });
+  }
 
   if (updates.stage !== undefined) {
     const cancelSiblings = await shouldAutoCancelSiblings(String(updates.stage));
@@ -1983,17 +2064,6 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, ...AG
       console.log(`[APPLICATIONS] Stage '${updates.stage}' mapped student #${app.studentId} → status='${mappedStudentStage}'`);
     }
   }
-
-  const auditChanges = updates.universityApplicationId !== undefined
-    ? {
-        ...updates,
-        universityApplicationId: {
-          from: preUpdateApp?.universityApplicationId ?? null,
-          to: app.universityApplicationId ?? null,
-        },
-      }
-    : updates;
-  logAudit(req.user!.id, "update_application", "application", id, auditChanges, req.ip);
 
   if (updates.stage !== undefined) {
     const stageStr = String(updates.stage);
@@ -2030,7 +2100,7 @@ router.patch("/applications/:id", requireAuth, requireRole(...STAFF_ROLES, ...AG
       icon: "ArrowRight",
       recipientUserIds: recipientIds.length > 0 ? recipientIds : undefined,
       templateVars: { studentName: sName3, universityName: app.universityName || "", programName: app.programName || "", newStage: stageLabel, newStageKey: stageStr },
-      data: { stage: stageStr, stageLabel },
+      data: { applicationId: app.id, stage: stageStr, stageLabel },
       createdSource: app.createdSource,
     }).catch(() => {});
   }
@@ -2107,6 +2177,7 @@ router.post("/applications/bulk-action", requireAuth, requireRole(...STAFF_ROLES
   const isAdmin = (ADMIN_ROLES as readonly string[]).includes(user.role);
   const { ids, action, assignedToId, stage } = req.body;
   if (!Array.isArray(ids) || ids.length === 0) { res.status(400).json({ error: "ids required" }); return; }
+  if (ids.length > 500) { res.status(413).json({ error: "A maximum of 500 applications can be changed at once", code: "BULK_APPLICATION_LIMIT" }); return; }
   if (!["delete", "assign", "move", "run_portal_automation"].includes(action)) { res.status(400).json({ error: "Invalid action" }); return; }
   // Task #494: non-admin may only bulk-assign their own records; delete/move remain admin-only.
   // run_portal_automation is staff-accessible (same gate as the rest of the Applications
@@ -2114,17 +2185,28 @@ router.post("/applications/bulk-action", requireAuth, requireRole(...STAFF_ROLES
   if (!isAdmin && !["assign", "run_portal_automation"].includes(action)) {
     res.status(403).json({ error: "Only admins can bulk delete or move applications" }); return;
   }
-  const numericIds = ids.map(Number).filter((n: number) => !isNaN(n));
+  const numericIds = [...new Set(ids.map(Number).filter((n: number) => Number.isInteger(n) && n > 0))];
+  if (numericIds.length === 0) { res.status(400).json({ error: "valid ids required" }); return; }
   let updated = 0;
   if (action === "delete") {
     const existing = await db.select({ id: applicationsTable.id }).from(applicationsTable).where(and(inArray(applicationsTable.id, numericIds), isNull(applicationsTable.deletedAt)));
     const liveIds = existing.map(r => r.id);
-    updated = await softDelete(applicationsTable, liveIds, { actorUserId: user.id });
-    if (liveIds.length > 0) {
-      // documents lacks deletedBy; cascade soft-delete with deletedAt only.
-      await db.update(documentsTable).set({ deletedAt: new Date() }).where(and(inArray(documentsTable.applicationId, liveIds), isNull(documentsTable.deletedAt)));
-    }
-    for (const id of liveIds) logAudit(user.id, "delete_application", "application", id, { soft: true }, req.ip);
+    updated = await db.transaction(async (tx) => {
+      const count = await softDelete(applicationsTable, liveIds, { actorUserId: user.id, tx });
+      if (liveIds.length > 0) {
+        // documents lacks deletedBy; cascade soft-delete with deletedAt only.
+        await tx.update(documentsTable).set({ deletedAt: new Date() }).where(and(inArray(documentsTable.applicationId, liveIds), isNull(documentsTable.deletedAt)));
+        await tx.insert(auditLogsTable).values(liveIds.map(applicationId => ({
+          userId: user.id,
+          action: "delete_application",
+          resource: "application",
+          resourceId: applicationId,
+          changes: JSON.stringify({ soft: true, bulk: true }),
+          ipAddress: req.ip || null,
+        })));
+      }
+      return count;
+    });
   } else if (action === "assign" && assignedToId !== undefined) {
     const newAssignedToId = assignedToId ? Number(assignedToId) : null;
     // Non-admin: filter to only records they are the current assignee of
@@ -2163,9 +2245,15 @@ router.post("/applications/bulk-action", requireAuth, requireRole(...STAFF_ROLES
           });
         }
       }
+      await tx.insert(auditLogsTable).values({
+        userId: user.id,
+        action: "bulk_assign_applications",
+        resource: "application",
+        changes: JSON.stringify({ ids: idsToUpdate, assignedToId: newAssignedToId }),
+        ipAddress: req.ip || null,
+      });
       return result.rowCount ?? idsToUpdate.length;
     });
-    await logAudit(user.id, "bulk_assign_applications", "application", undefined, { ids: idsToUpdate, assignedToId }, req.ip);
     res.json({ success: true, updated, skipped }); return;
   } else if (action === "move" && stage) {
     if (!(await canTransitionToPipelineStage("application", String(stage), user.role))) {
@@ -2262,8 +2350,19 @@ router.post("/applications/bulk-action", requireAuth, requireRole(...STAFF_ROLES
             eq(lifecycleCascadeStateTable.entityId, app.studentId),
           ));
         }
+        await tx.insert(auditLogsTable).values({
+          userId: req.user!.id,
+          action: "bulk_move_application",
+          resource: "application",
+          resourceId: app.id,
+          changes: JSON.stringify({ stage }),
+          ipAddress: req.ip || null,
+        });
+        // Keep the canonical finance projection in the same command boundary
+        // as the bulk stage mutation and its audit receipt. A reconciliation
+        // failure therefore rolls the application stage back as well.
+        await syncApplicationFinance(app.id, tx);
       });
-      await syncApplicationFinance(app.id);
       const [commStatus, sfStatus] = await Promise.all([
         getCommissionFinanceStatus(stage),
         getServiceFeeFinanceStatus(stage),
@@ -2345,7 +2444,6 @@ router.post("/applications/bulk-action", requireAuth, requireRole(...STAFF_ROLES
         await autoCancelSiblingApplications(app.id, app.studentId);
       }
 
-      await logAudit(req.user!.id, "bulk_move_application", "application", app.id, { stage }, req.ip);
       updated++;
     }
     if (bulkSkipped.length > 0) {
@@ -2400,8 +2498,15 @@ router.delete("/applications/:id", requireAuth, requireRole(...STAFF_ROLES), req
     await tx.update(documentsTable)
       .set({ deletedAt: sql`now()` })
       .where(and(eq(documentsTable.applicationId, id), isNull(documentsTable.deletedAt)));
+    await tx.insert(auditLogsTable).values({
+      userId: req.user!.id,
+      action: "delete_application",
+      resource: "application",
+      resourceId: id,
+      changes: JSON.stringify({ soft: true }),
+      ipAddress: req.ip || null,
+    });
   });
-  await logAudit(req.user!.id, "delete_application", "application", id, { soft: true }, req.ip);
   res.sendStatus(204);
 });
 
@@ -2410,13 +2515,27 @@ router.delete("/applications/:id", requireAuth, requireRole(...STAFF_ROLES), req
 router.post("/applications/:id/purge", requireAuth, requireRole("super_admin"), async (req, res): Promise<void> => {
   const id = parseInt(String(req.params.id), 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
-  await db.transaction(async (tx) => {
+  const purged = await db.transaction(async (tx) => {
+    const [existing] = await tx.select({ id: applicationsTable.id })
+      .from(applicationsTable)
+      .where(eq(applicationsTable.id, id))
+      .for("update");
+    if (!existing) return false;
     await tx.delete(notesTable).where(and(eq(notesTable.resourceId, id), eq(notesTable.resourceType, "application")));
     await tx.delete(documentsTable).where(eq(documentsTable.applicationId, id));
     await tx.delete(applicationStageDocumentsTable).where(eq(applicationStageDocumentsTable.applicationId, id));
     await tx.delete(applicationsTable).where(eq(applicationsTable.id, id));
+    await tx.insert(auditLogsTable).values({
+      userId: req.user!.id,
+      action: "purge_application",
+      resource: "application",
+      resourceId: id,
+      changes: JSON.stringify({ hard: true }),
+      ipAddress: req.ip || null,
+    });
+    return true;
   });
-  await logAudit(req.user!.id, "purge_application", "application", id, { hard: true }, req.ip);
+  if (!purged) { res.status(404).json({ error: "Application not found" }); return; }
   res.json({ success: true });
 });
 

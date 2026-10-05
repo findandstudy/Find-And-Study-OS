@@ -1,7 +1,8 @@
 import type { Response } from "express";
 import { Readable } from "stream";
-import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
+import { ObjectStorageService, ObjectNotFoundError, normalizeObjectReadError } from "./objectStorage";
 import { processUpload, UploadTooLargeError, type ProcessUploadMeta } from "./uploads/processUpload";
+import { decodeBoundedDocumentBase64, readBoundedDocumentStream, validateDocumentByteLimits, type DocumentByteLimits } from "./documentByteLimits";
 
 export interface DocBytesSource {
   fileKey?: string | null;
@@ -80,16 +81,25 @@ export async function recompressStoredObjectIfNeeded(
  */
 export async function loadDocumentBytes(
   doc: DocBytesSource,
+  limits?: DocumentByteLimits,
 ): Promise<{ buffer: Buffer; mimeType: string } | null> {
+  if (limits) validateDocumentByteLimits(limits);
   const mime = doc.mimeType || "application/octet-stream";
   if (doc.fileKey) {
     try {
       const file = await objectStorageService.getObjectEntityFile(
         normalizeFileKey(doc.fileKey),
+        limits ? { requireCancellableRead: true } : undefined,
       );
-      const [contents] = await file.download();
+      // Opt-in only: existing document/upload callers keep their original contract.
+      // Range includes one overflow byte; the streaming cap remains authoritative
+      // even when a driver ignores the range or object metadata is stale/missing.
+      const contents = limits
+        ? await readBoundedDocumentStream(file.createReadStream({ start: 0, end: limits.maxBytes }), limits)
+        : (await file.download())[0];
       return { buffer: contents, mimeType: mime };
-    } catch (err) {
+    } catch (readError) {
+      const err = limits ? normalizeObjectReadError(readError) : readError;
       if (err instanceof ObjectNotFoundError && doc.fileData) {
         // fall through to legacy data
       } else if (!(err instanceof ObjectNotFoundError)) {
@@ -100,7 +110,7 @@ export async function loadDocumentBytes(
     }
   }
   if (doc.fileData) {
-    return { buffer: Buffer.from(doc.fileData, "base64"), mimeType: mime };
+    return { buffer: limits ? decodeBoundedDocumentBase64(doc.fileData, limits) : Buffer.from(doc.fileData, "base64"), mimeType: mime };
   }
   return null;
 }

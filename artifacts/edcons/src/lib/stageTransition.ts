@@ -25,19 +25,31 @@ export type StageTransitionResult =
   | { kind: "docs_incomplete"; currentStage: string; missing: MissingDocEntry[] }
   | { kind: "docs_required"; requiredStage: string }
   | { kind: "student_docs_required"; missingDocTypes: string[] }
+  | { kind: "conflict"; currentUpdatedAt: string | null }
   | { kind: "error"; message: string };
 
 /**
  * Attempt to move an application to `targetStage`. Returns a discriminated
  * result the caller can branch on to open the right dialog.
  */
-export async function requestStageChange(appId: number, targetStage: string): Promise<StageTransitionResult> {
+export async function requestStageChange(appId: number, targetStage: string, knownUpdatedAt?: string | null): Promise<StageTransitionResult> {
   try {
+    let expectedUpdatedAt = knownUpdatedAt ?? null;
+    if (!expectedUpdatedAt) {
+      const current = await fetch(`${BASE_URL}/api/applications/${appId}`, {
+        credentials: "include",
+        headers: { "Accept": "application/json" },
+      });
+      if (!current.ok) return { kind: "error", message: "Başvurunun güncel sürümü alınamadı" };
+      const currentBody = await current.json().catch(() => ({}));
+      expectedUpdatedAt = typeof currentBody.updatedAt === "string" ? currentBody.updatedAt : null;
+      if (!expectedUpdatedAt) return { kind: "error", message: "Başvurunun sürüm bilgisi eksik" };
+    }
     const res = await fetch(`${BASE_URL}/api/applications/${appId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json", "x-csrf-token": getCsrfToken() },
       credentials: "include",
-      body: JSON.stringify({ stage: targetStage }),
+      body: JSON.stringify({ stage: targetStage, expectedUpdatedAt }),
     });
     if (res.ok) return { kind: "ok" };
     const body: any = await res.json().catch(() => ({}));
@@ -61,6 +73,9 @@ export async function requestStageChange(appId: number, targetStage: string): Pr
     }
     if (res.status === 422 && body.code === "STUDENT_DOCS_REQUIRED") {
       return { kind: "student_docs_required", missingDocTypes: Array.isArray(body.missingDocTypes) ? body.missingDocTypes : [] };
+    }
+    if (res.status === 409 && body.code === "APPLICATION_VERSION_CONFLICT") {
+      return { kind: "conflict", currentUpdatedAt: typeof body.currentUpdatedAt === "string" ? body.currentUpdatedAt : null };
     }
     return { kind: "error", message: body.error || "Aşama güncellenemedi" };
   } catch {

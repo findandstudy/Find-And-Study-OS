@@ -6,9 +6,10 @@ import { studentsTable } from "./students";
 export const studentEducationRecordsTable = pgTable("student_education_records", {
   id: serial("id").primaryKey(),
   studentId: integer("student_id").notNull().references(() => studentsTable.id, { onDelete: "cascade" }),
-  level: text("level").notNull(), // "high_school" | "bachelor" | "master"
+  level: text("level").notNull(), // "high_school" | "bachelor" | "master" | "doctorate"
   institution: text("institution"),
   program: text("program"),
+  country: text("country"),
   graduationYear: integer("graduation_year"),
   gpa: text("gpa"), // normalized percent string, e.g. "87"
   gpaRaw: text("gpa_raw"), // original value as extracted/entered

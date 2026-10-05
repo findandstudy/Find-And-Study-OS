@@ -11,8 +11,37 @@ import { dispatchNotification } from "../lib/notificationDispatcher";
 import { getCurrentSeason } from "../lib/season";
 import { loadCurrencyCatalog } from "../lib/currencyCatalog";
 import * as XLSX from "xlsx";
+import { callerOwnsObject, canonicalizeKey } from "../lib/objectAuthz";
+import { ObjectStorageService } from "../lib/objectStorage";
+import { validateUploadedFileBuffer } from "../lib/fileUploadValidation";
+import { consumeFinalizedUploadGrantInDrizzle } from "../lib/uploadGrant";
 
 const router: IRouter = Router();
+const financeAttachmentStorage = new ObjectStorageService();
+
+async function prepareFinanceAttachment(actorUserId: number, fileUrl: string) {
+  const objectKey = canonicalizeKey(fileUrl);
+  if (!objectKey) throw new FinanceMutationError(400, "Invalid finance attachment path");
+  if (!(await callerOwnsObject(actorUserId, fileUrl))) {
+    throw new FinanceMutationError(403, "Finance attachment does not belong to this account");
+  }
+  const file = await financeAttachmentStorage.getObjectEntityFile(`/objects/${objectKey}`);
+  const [metadata] = await file.getMetadata();
+  const contentType = String(metadata.contentType ?? "").split(";", 1)[0].trim().toLowerCase();
+  const extensions: Record<string, string> = {
+    "application/pdf": "pdf", "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp",
+  };
+  const extension = extensions[contentType];
+  if (!extension) throw new FinanceMutationError(400, "Finance attachment must be PDF, JPEG, PNG or WebP");
+  const [bytes] = await file.download();
+  if (bytes.length <= 0 || bytes.length > 10 * 1024 * 1024) {
+    throw new FinanceMutationError(413, "Finance attachment is empty or exceeds 10 MB");
+  }
+  if (await validateUploadedFileBuffer(`receipt.${extension}`, contentType, bytes)) {
+    throw new FinanceMutationError(400, "Finance attachment content is invalid");
+  }
+  return { objectPath: fileUrl, bytes, contentType };
+}
 
 const CONFIRMED_COMMISSION_STATUSES = ["confirmed", "collected_partial", "collected_full", "settled"] as const;
 const INVOICE_STATUSES = ["draft", "sent", "paid", "overdue", "cancelled"] as const;
@@ -1412,6 +1441,15 @@ router.post("/financial-transactions", requireAuth, requireRole(...FINANCE_ROLES
     fileName: fileName ?? null,
     notes: notes ?? null,
   };
+  let preparedAttachment: Awaited<ReturnType<typeof prepareFinanceAttachment>> | null = null;
+  if (fileUrl) {
+    try {
+      preparedAttachment = await prepareFinanceAttachment(req.user!.id, String(fileUrl));
+    } catch (error) {
+      if (sendFinanceMutationError(res, error)) return;
+      throw error;
+    }
+  }
 
   let result: {
     response: Record<string, unknown>;
@@ -1427,6 +1465,9 @@ router.post("/financial-transactions", requireAuth, requireRole(...FINANCE_ROLES
         payload,
       );
       if (mutation.replay) return { response: mutation.replay, replayed: true };
+      if (preparedAttachment && !await consumeFinalizedUploadGrantInDrizzle(databaseTx, {
+        ...preparedAttachment, uploadedBy: req.user!.id,
+      })) throw new FinanceMutationError(409, "Finance attachment is not finalized or has already been used");
 
       await databaseTx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${`finance:commission:${parsedCommissionId}`}, 0))`);
       const [commission] = await databaseTx.select().from(commissionsTable)

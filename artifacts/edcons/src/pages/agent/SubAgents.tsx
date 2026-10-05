@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { TablePagination } from "@/components/TablePagination";
+import { uploadAndFinalizeObject } from "@/lib/finalizeObjectUpload";
 import {
   Dialog,
   DialogContent,
@@ -365,7 +366,7 @@ export default function AgentSubAgents() {
         body: JSON.stringify({ name: file.name, size: file.size, contentType: file.type }),
       });
       if (!(urlRes as any).uploadURL || !(urlRes as any).objectPath) throw new Error("Failed to get upload URL");
-      const putRes = await fetch((urlRes as any).uploadURL, { method: "PUT", body: file, headers: { "Content-Type": file.type } });
+      const putRes = await uploadAndFinalizeObject((urlRes as any).uploadURL, (urlRes as any).objectPath, { body: file, headers: { "Content-Type": file.type } });
       if (!putRes.ok) throw new Error("Upload failed");
       const strippedPath = (urlRes as any).objectPath.replace(/^\/objects/, "");
       setForm(f => ({ ...f, logoUrl: `${BASE_URL}/api/storage/objects${strippedPath}` }));

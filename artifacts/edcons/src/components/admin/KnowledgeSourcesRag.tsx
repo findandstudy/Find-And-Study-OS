@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { customFetch } from "@workspace/api-client-react";
 import { apiFetch } from "@/lib/apiFetch";
+import { uploadAndFinalizeObject } from "@/lib/finalizeObjectUpload";
 import { useI18n } from "@/hooks/use-i18n";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -161,8 +162,7 @@ export default function KnowledgeSourcesRag({ aiBotId }: { aiBotId: number }) {
           uploadURL: string;
           objectPath: string;
         };
-        const putRes = await fetch(uploadURL, {
-          method: "PUT",
+        const putRes = await uploadAndFinalizeObject(uploadURL, objectPath, {
           body: pendingFile,
           headers: { "Content-Type": pendingFile.type },
         });

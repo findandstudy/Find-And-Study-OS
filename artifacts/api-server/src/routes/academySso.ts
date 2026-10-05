@@ -5,6 +5,8 @@ import { userHasPermission } from "../lib/permissions";
 import { db, agentsTable, usersTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { resolveAgentFeatures } from "../lib/agentFeatures";
+import { isLiveIntegrationsEnabled } from "../lib/inbox/liveMode";
+import { canUseProductionAcademyReceiver } from "../lib/academySsoPolicy";
 
 const router = Router();
 
@@ -43,6 +45,18 @@ function signHs256(payload: Record<string, unknown>, secret: string): string {
 }
 
 router.get("/academy-sso", requireAuth, requireRole("super_admin", "admin", "manager", "agent", "sub_agent", "agent_staff", "staff", "consultant", "accountant", "editor"), async (req: Request, res: Response) => {
+  res.setHeader("Cache-Control", "private, no-store");
+  res.setHeader("Referrer-Policy", "no-referrer");
+  // Staging uses NODE_ENV=production too. An explicit outbound disable must
+  // stop the production Academy handoff before secrets, PII or JWT creation.
+  if (!isLiveIntegrationsEnabled()) {
+    res.status(403).json({ error: "live_integrations_disabled", message: "Academy single sign-on is disabled by the deployment environment." });
+    return;
+  }
+  if (!canUseProductionAcademyReceiver()) {
+    res.status(403).json({ error: "academy_environment_not_allowed", message: "The production Academy receiver is unavailable in this environment." });
+    return;
+  }
   const secret = process.env.SSO_SHARED_SECRET;
   if (!secret) {
     res.status(500).send("SSO not configured");

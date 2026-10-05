@@ -116,11 +116,24 @@ function flattenObject(obj: Record<string, unknown>, prefix = ""): Record<string
 }
 
 const flatTranslations: Partial<Record<Language, Record<string, string>>> = {};
+const partialTranslations: Partial<Record<Language, Record<string, string>>> = {};
 const inFlight: Partial<Record<Language, Promise<boolean>>> = {};
 
 /** True once a language's dictionary is in the in-memory cache. */
 export function isLanguageLoaded(lang: Language): boolean {
   return flatTranslations[lang] !== undefined;
+}
+
+export function installPartialTranslations(lang: Language, value: unknown): boolean {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const flattened = flattenObject(value as Record<string, unknown>);
+  if (Object.keys(flattened).length === 0) return false;
+  partialTranslations[lang] = flattened;
+  return true;
+}
+
+export function isPartialLanguageLoaded(lang: Language): boolean {
+  return partialTranslations[lang] !== undefined;
 }
 
 /**
@@ -152,8 +165,8 @@ export function loadLanguage(lang: Language): Promise<boolean> {
 
 const _warnedMissing = new Set<string>();
 export function getTranslation(lang: Language, key: string, params?: Record<string, string | number>): string {
-  const direct = flatTranslations[lang]?.[key];
-  const fallback = flatTranslations[DEFAULT_LANGUAGE]?.[key];
+  const direct = flatTranslations[lang]?.[key] ?? partialTranslations[lang]?.[key];
+  const fallback = flatTranslations[DEFAULT_LANGUAGE]?.[key] ?? partialTranslations[DEFAULT_LANGUAGE]?.[key];
   if (import.meta.env?.DEV && !direct && !fallback && !_warnedMissing.has(key)) {
     _warnedMissing.add(key);
     // eslint-disable-next-line no-console

@@ -16,6 +16,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PhoneCodePicker } from "@/components/ui/phone-code-picker";
 import { CountryFlag } from "@/components/CountryFlag";
+import { StudentMatchingOnboarding, type StudentMatchingProfile } from "@/components/auth/StudentMatchingOnboarding";
 
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -112,6 +113,7 @@ export default function Login() {
 
   const [loginForm, setLoginForm] = useState({ email: "", password: "" });
   const [registerForm, setRegisterForm] = useState({ email: "", password: "", confirmPassword: "", firstName: "", lastName: "", phoneCode: "", phone: "" });
+  const [matchingProfile, setMatchingProfile] = useState<StudentMatchingProfile | null>(null);
   const [verifyEmail, setVerifyEmail] = useState("");
   const [verifyCode, setVerifyCode] = useState("");
   const [resending, setResending] = useState(false);
@@ -239,6 +241,7 @@ export default function Login() {
           firstName: registerForm.firstName,
           lastName: registerForm.lastName,
           phone: `${registerForm.phoneCode}${registerForm.phone}`,
+          matchingProfile,
         }),
       });
       const data = await res.json();
@@ -598,8 +601,13 @@ export default function Login() {
 
             {tab === "register" && (
               <motion.div key="register" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
+                {!matchingProfile ? (
+                  <StudentMatchingOnboarding language={lang} onComplete={setMatchingProfile} />
+                ) : (<>
                 <h2 className="text-3xl font-display font-bold text-foreground mb-2">{t("login.createAccount")}</h2>
                 <p className="text-muted-foreground mb-8">{t("login.registerSubtitle")}</p>
+
+                <button type="button" onClick={() => setMatchingProfile(null)} className="text-sm text-primary hover:underline mb-4">← {lang === "tr" ? "Önerileri değiştir" : "Change recommendations"}</button>
 
                 <form onSubmit={handleRegister} className="space-y-4">
                   <div className="grid grid-cols-2 gap-3">
@@ -701,6 +709,7 @@ export default function Login() {
                     {t("login.verificationNote")}
                   </p>
                 </form>
+                </>)}
               </motion.div>
             )}
 

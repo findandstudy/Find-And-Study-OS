@@ -93,9 +93,30 @@ export async function getZernioApiKey(): Promise<string | null> {
     .select()
     .from(integrationsTable)
     .where(eq(integrationsTable.key, "zernio"));
-  if (!row) return null;
+  if (!row?.isEnabled) return null;
   const cfg = decryptConfig(row.config as Record<string, any>) as { apiKey?: string };
-  return cfg.apiKey || null;
+  return typeof cfg.apiKey === "string" && cfg.apiKey && !cfg.apiKey.startsWith("enc::") ? cfg.apiKey : null;
+}
+
+// Separate from provider identification: disabled Zernio accounts must still
+// route here, not fall through to a different direct Meta sender.
+let __zernioAccountSendableOverride: ((externalAccountId: string) => Promise<boolean>) | null = null;
+export function __setZernioAccountSendableOverrideForTests(
+  fn: ((externalAccountId: string) => Promise<boolean>) | null,
+): void {
+  __zernioAccountSendableOverride = fn;
+}
+
+export async function isZernioAccountSendable(externalAccountId: string): Promise<boolean> {
+  if (!externalAccountId) return false;
+  if (__zernioAccountSendableOverride) return __zernioAccountSendableOverride(externalAccountId);
+  const accounts = await db.select({ isActive: channelAccountsTable.isActive })
+    .from(channelAccountsTable)
+    .where(and(eq(channelAccountsTable.provider, "zernio"),
+      eq(channelAccountsTable.externalAccountId, externalAccountId)))
+    .limit(2);
+  // Ambiguous legacy identities also fail closed, never choosing the first row.
+  return accounts.length === 1 && accounts[0].isActive;
 }
 
 /** Never log the raw API key — only enough to correlate log lines by eye. */
@@ -128,7 +149,7 @@ export async function sendViaZernio(params: ZernioSendParams): Promise<ZernioSen
   // the operator explicitly enables live integrations. Returning a simulated
   // message id keeps the normal pending -> sent pipeline testable without
   // contacting real students.
-  if (!isLiveIntegrationsEnabled()) {
+  if ((process.env.ALLOW_LIVE_INTEGRATIONS !== undefined && process.env.ALLOW_LIVE_INTEGRATIONS !== "true") || !isLiveIntegrationsEnabled()) {
     return {
       ok: true,
       externalMessageId: simulatedZernioMessageId("text"),
@@ -136,6 +157,9 @@ export async function sendViaZernio(params: ZernioSendParams): Promise<ZernioSen
     };
   }
 
+  if (!await isZernioAccountSendable(params.externalAccountId)) {
+    return { ok: false, error: "zernio_account_inactive_missing_or_ambiguous" };
+  }
   const apiKey = await getZernioApiKey();
   if (!apiKey) return { ok: false, error: "zernio_api_key_not_configured" };
   if (!params.externalThreadId) return { ok: false, error: "zernio_no_external_thread" };
@@ -404,7 +428,7 @@ function humanizeZernioTemplateError(raw: string): string {
  * counts as delivered — `{ sent: 0, failed: 1 }` is a failure.
  */
 export async function sendZernioTemplate(params: ZernioTemplateSendParams): Promise<ZernioTemplateSendOutcome> {
-  if (!isLiveIntegrationsEnabled()) {
+  if ((process.env.ALLOW_LIVE_INTEGRATIONS !== undefined && process.env.ALLOW_LIVE_INTEGRATIONS !== "true") || !isLiveIntegrationsEnabled()) {
     return {
       ok: true,
       externalMessageId: simulatedZernioMessageId("template"),
@@ -414,6 +438,9 @@ export async function sendZernioTemplate(params: ZernioTemplateSendParams): Prom
     };
   }
 
+  if (!await isZernioAccountSendable(params.externalAccountId)) {
+    return { ok: false, error: "zernio_account_inactive_missing_or_ambiguous" };
+  }
   const apiKey = await getZernioApiKey();
   if (!apiKey) return { ok: false, error: "Template gönderilemedi: Zernio API anahtarı yapılandırılmamış." };
   if (!params.toPhoneE164 || !params.toPhoneE164.startsWith("+")) {

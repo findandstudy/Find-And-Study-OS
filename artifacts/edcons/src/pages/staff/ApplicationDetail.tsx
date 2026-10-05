@@ -127,12 +127,16 @@ export default function ApplicationDetail({ id, basePath = "/staff" }: Props) {
   // file upload, student docs). Returns true once the move completes.
   async function handleStageChange(stage: string): Promise<boolean> {
     const stageLabelOf = (key: string) => pipelineStages.find(s => s.key === key)?.label ?? key;
-    const result = await requestStageChange(Number(id), stage);
+    const result = await requestStageChange(Number(id), stage, app?.updatedAt ?? null);
     switch (result.kind) {
       case "ok":
         queryClient.invalidateQueries({ queryKey: [`/api/applications/${id}`] });
         toast({ title: t("applicationDetailPage.stageUpdated") });
         return true;
+      case "conflict":
+        queryClient.invalidateQueries({ queryKey: [`/api/applications/${id}`] });
+        toast({ title: "Başvuru güncellendi", description: "Başka bir kullanıcı değişiklik yaptı. Güncel kayıt yüklendi; lütfen tekrar deneyin.", variant: "destructive" });
+        return false;
       case "doc_selection_required":
         setDocRequestDialog({
           stage: result.requiredStage,

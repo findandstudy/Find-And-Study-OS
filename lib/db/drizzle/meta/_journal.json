@@ -869,6 +869,69 @@
       "when": 1791792000000,
       "tag": "0123_public_web_draft_intake_replay_hardening",
       "breakpoints": true
+    },
+    {
+      "idx": 124,
+      "version": "7",
+      "when": 1791878400000,
+      "tag": "0124_pipeline_email_automation",
+      "breakpoints": true
+    },
+    {
+      "idx": 125,
+      "version": "7",
+      "when": 1791964800000,
+      "tag": "0125_pipeline_email_history_lookup",
+      "breakpoints": true
+    },
+    {
+      "idx": 126,
+      "version": "7",
+      "when": 1792051200000,
+      "tag": "0126_student_registration_matching",
+      "breakpoints": true
+    },
+    {
+      "idx": 127,
+      "version": "7",
+      "when": 1792137600000,
+      "tag": "0127_web_form_replay_receipts",
+      "breakpoints": true
+    },
+    {
+      "idx": 128,
+      "version": "7",
+      "when": 1792137660000,
+      "tag": "0128_object_upload_grants",
+      "breakpoints": true
+    },
+    {
+      "idx": 129,
+      "version": "7",
+      "when": 1792137720000,
+      "tag": "0129_facet_cache_invalidation",
+      "breakpoints": true
+    },
+    {
+      "idx": 130,
+      "version": "7",
+      "when": 1792137780000,
+      "tag": "0130_facet_cache_invalidation_repair",
+      "breakpoints": true
+    },
+    {
+      "idx": 131,
+      "version": "7",
+      "when": 1792137840000,
+      "tag": "0131_facet_cache_trigger_install",
+      "breakpoints": true
+    },
+    {
+      "idx": 132,
+      "version": "7",
+      "when": 1792224240000,
+      "tag": "0132_education_country",
+      "breakpoints": true
     }
   ]
 }

@@ -3,7 +3,7 @@ import { customFetch } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { AlertTriangle, Link2, RefreshCw, ShieldCheck } from "lucide-react";
+import { AlertTriangle, DatabaseZap, ExternalLink, Link2, RefreshCw, ShieldCheck } from "lucide-react";
 
 type Candidate = {
   entity: "student" | "lead";
@@ -42,20 +42,56 @@ type ApplicationLeadResponse = {
   policy: string;
 };
 
+type CatalogConfidenceResponse = {
+  generatedAt: string;
+  mode: "read_only";
+  data: Array<{
+    programId: number;
+    programName: string;
+    universityId: number;
+    universityName: string;
+    country: string;
+    city: string | null;
+    confidence: "verified" | "partial" | "missing";
+    missingFields: Array<"tuition" | "intake" | "deadline">;
+    sourceName: string | null;
+    sourceUrl: string | null;
+    lastVerifiedAt: string | null;
+    sourceExpiresAt: string | null;
+    publicPagesAffected: number;
+    activeApplicationsAffected: number;
+  }>;
+  summary: {
+    activePrograms: number;
+    verifiedPrograms: number;
+    partialPrograms: number;
+    missingPrograms: number;
+    missingTuition: number;
+    missingIntake: number;
+    missingDeadline: number;
+    rowsReturned: number;
+    truncated: boolean;
+  };
+  policy: string;
+};
+
 export default function DataQualityPage() {
   const [result, setResult] = useState<Response | null>(null);
   const [applicationLinks, setApplicationLinks] = useState<ApplicationLeadResponse | null>(null);
+  const [catalogConfidence, setCatalogConfidence] = useState<CatalogConfidenceResponse | null>(null);
   const [loading, setLoading] = useState(false);
 
   async function load() {
     setLoading(true);
     try {
-      const [duplicates, links] = await Promise.all([
+      const [duplicates, links, confidence] = await Promise.all([
         customFetch<Response>("/api/admin/data-quality/duplicates"),
         customFetch<ApplicationLeadResponse>("/api/admin/data-quality/application-lead-links"),
+        customFetch<CatalogConfidenceResponse>("/api/admin/data-quality/catalog-confidence"),
       ]);
       setResult(duplicates);
       setApplicationLinks(links);
+      setCatalogConfidence(confidence);
     }
     finally { setLoading(false); }
   }
@@ -78,6 +114,66 @@ export default function DataQualityPage() {
         <Card><CardContent className="pt-6"><p className="text-sm text-muted-foreground">Candidate groups</p><p className="text-3xl font-bold">{result?.summary.groups ?? "—"}</p></CardContent></Card>
         <Card><CardContent className="pt-6"><p className="text-sm text-muted-foreground">Affected records</p><p className="text-3xl font-bold">{result?.summary.affectedRecords ?? "—"}</p></CardContent></Card>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <DatabaseZap className="w-4 h-4 text-indigo-500" /> Catalogue confidence and change impact
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            {[
+              ["Active programs", catalogConfidence?.summary.activePrograms],
+              ["Verified facts", catalogConfidence?.summary.verifiedPrograms],
+              ["Partial facts", catalogConfidence?.summary.partialPrograms],
+              ["Missing facts", catalogConfidence?.summary.missingPrograms],
+            ].map(([label, value]) => (
+              <div key={String(label)} className="rounded-lg border p-3">
+                <p className="text-xs text-muted-foreground">{label}</p>
+                <p className="text-2xl font-bold">{value ?? "—"}</p>
+              </div>
+            ))}
+          </div>
+          <div className="flex flex-wrap gap-2 text-xs">
+            <Badge variant="outline">Missing tuition: {catalogConfidence?.summary.missingTuition ?? "—"}</Badge>
+            <Badge variant="outline">Missing intake: {catalogConfidence?.summary.missingIntake ?? "—"}</Badge>
+            <Badge variant="outline">Missing deadline: {catalogConfidence?.summary.missingDeadline ?? "—"}</Badge>
+          </div>
+          <div className="max-h-[36rem] overflow-auto rounded-lg border">
+            <table className="w-full min-w-[960px] text-sm">
+              <thead className="sticky top-0 bg-muted/95 text-left text-xs">
+                <tr><th className="p-3">Program</th><th className="p-3">Confidence</th><th className="p-3">Missing</th><th className="p-3">Source / verified</th><th className="p-3">Read-only impact</th></tr>
+              </thead>
+              <tbody className="divide-y">
+                {(catalogConfidence?.data ?? []).map((row) => (
+                  <tr key={row.programId} className="align-top">
+                    <td className="p-3">
+                      <a href={`/admin/catalog?tab=programs&programId=${row.programId}`} className="font-medium text-primary hover:underline">{row.programName}</a>
+                      <p className="text-xs text-muted-foreground">{row.universityName} · {[row.city, row.country].filter(Boolean).join(", ")}</p>
+                    </td>
+                    <td className="p-3"><Badge variant={row.confidence === "verified" ? "default" : row.confidence === "missing" ? "destructive" : "secondary"}>{row.confidence}</Badge></td>
+                    <td className="p-3 text-xs">{row.missingFields.join(", ") || "None"}</td>
+                    <td className="p-3 text-xs">
+                      <div className="flex items-center gap-1">
+                        <span>{row.sourceName || "No verified source"}</span>
+                        {row.sourceUrl && <a href={row.sourceUrl} target="_blank" rel="noreferrer" aria-label="Open evidence source"><ExternalLink className="size-3.5" /></a>}
+                      </div>
+                      <p className="text-muted-foreground">{row.lastVerifiedAt ? new Date(row.lastVerifiedAt).toLocaleString() : "Not verified"}</p>
+                    </td>
+                    <td className="p-3 text-xs">
+                      <p>{row.publicPagesAffected} public page(s)</p>
+                      <p className="text-muted-foreground">{row.activeApplicationsAffected} active application(s)</p>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {!loading && (catalogConfidence?.data.length ?? 0) === 0 && <div className="py-8 text-center text-muted-foreground">No active catalogue programs found.</div>}
+          <p className="text-xs text-muted-foreground">Read-only preview. Nothing is published or changed from this panel.{catalogConfidence?.summary.truncated ? ` Showing the first ${catalogConfidence.summary.rowsReturned} highest-risk programs.` : ""}</p>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader><CardTitle className="flex items-center gap-2 text-base"><AlertTriangle className="w-4 h-4 text-amber-500" /> Review queue</CardTitle></CardHeader>

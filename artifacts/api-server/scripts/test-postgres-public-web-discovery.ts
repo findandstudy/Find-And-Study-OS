@@ -448,6 +448,18 @@ test("published discovery is tenant-scoped and excludes NOINDEX or undeliverable
     await admin.query("COMMIT");
 
     const discovery = await import("../src/lib/publicWebDiscoveryReadModel");
+    // Detail filtering must obtain the complete scoped eligible set before paging.
+    assert.deepEqual(await discovery.readIndexableUniversityProgramIds({ universityId, locale: "en" }), [programId]);
+    assert.deepEqual(await discovery.readIndexableUniversityProgramIds({ universityId, locale: "tr" }), [programId]);
+    assert.deepEqual(await discovery.readIndexableUniversityProgramIds({ universityId, locale: "fr" }), []);
+    assert.deepEqual(await discovery.readIndexableUniversityProgramIds({ universityId, locale: "it" }), []);
+    assert.deepEqual(await discovery.readIndexableUniversityProgramIds({ universityId: 2147483647, locale: "en" }), []);
+    process.env.PUBLIC_WEB_TENANT_ID = OTHER_TENANT_ID;
+    try {
+      assert.deepEqual(await discovery.readIndexableUniversityProgramIds({ universityId, locale: "en" }), []);
+    } finally {
+      process.env.PUBLIC_WEB_TENANT_ID = TENANT_ID;
+    }
     const counts = await discovery.readPublishedSitemapCounts({
       tenantId: TENANT_ID,
       organizationId: ORGANIZATION_ID,
@@ -757,6 +769,41 @@ test("published discovery is tenant-scoped and excludes NOINDEX or undeliverable
       await discovery.readPublishedSitemapCounts({ tenantId: OTHER_TENANT_ID, organizationId: ORGANIZATION_ID }),
       [],
     );
+    const previousLinkMode = process.env.PUBLIC_WEB_INTERNAL_LINK_MODE;
+    process.env.PUBLIC_WEB_INTERNAL_LINK_MODE = "published";
+    try {
+      const { matchPublicCatalogRenderPath } = await import("../src/lib/publicCatalogRenderContract");
+      const { getPublicCatalogRenderModel } = await import("../src/lib/publicCatalogRenderReadModel");
+      const route = matchPublicCatalogRenderPath(`/en/cities/discovery-test-city-${cityId}`);
+      assert.ok(route && route.kind === "city_detail");
+      const publishedParent = await getPublicCatalogRenderModel(route);
+      assert.equal(publishedParent.value.kind, "city_detail");
+      if (publishedParent.value.kind !== "city_detail") throw new Error("Expected city");
+      assert.ok(publishedParent.value.city.programs.find(program => program.id === programId)?.universityPath);
+      await admin.query("BEGIN");
+      await admin.query("SET LOCAL session_replication_role = replica");
+      await admin.query("UPDATE public_web_publication_states SET index_state='NOINDEX' WHERE tenant_id=$1 AND content_record_id=$2", [TENANT_ID, RECORDS.universityEn]);
+      await admin.query("COMMIT");
+      const noindexParent = await getPublicCatalogRenderModel(route);
+      assert.equal(noindexParent.value.kind, "city_detail");
+      if (noindexParent.value.kind !== "city_detail") throw new Error("Expected city");
+      const noindexCard = noindexParent.value.city.programs.find(program => program.id === programId);
+      assert.ok(noindexCard, "published program stays discoverable");
+      assert.equal(noindexCard.universityPath, undefined, "NOINDEX institution has no promoted detail link");
+      await admin.query("BEGIN");
+      await admin.query("SET LOCAL session_replication_role = replica");
+      await admin.query("DELETE FROM public_web_publication_states WHERE tenant_id=$1 AND content_record_id=$2", [TENANT_ID, RECORDS.universityEn]);
+      await admin.query("COMMIT");
+      const unpublishedParent = await getPublicCatalogRenderModel(route);
+      assert.equal(unpublishedParent.value.kind, "city_detail");
+      if (unpublishedParent.value.kind !== "city_detail") throw new Error("Expected city");
+      const unpublishedCard = unpublishedParent.value.city.programs.find(program => program.id === programId);
+      assert.ok(unpublishedCard);
+      assert.equal(unpublishedCard.universityPath, undefined, "unpublished parent cannot bypass city link policy");
+    } finally {
+      if (previousLinkMode === undefined) delete process.env.PUBLIC_WEB_INTERNAL_LINK_MODE;
+      else process.env.PUBLIC_WEB_INTERNAL_LINK_MODE = previousLinkMode;
+    }
   } finally {
     await admin.query("ROLLBACK").catch(() => undefined);
     await admin.query("BEGIN");

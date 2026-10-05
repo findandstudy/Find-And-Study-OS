@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useDeferredValue } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
+import { uploadAndFinalizeObject } from "@/lib/finalizeObjectUpload";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -751,8 +752,7 @@ function WidgetFormDialog({ open, onClose, widget, initialMode, onSaved }: {
         }),
       }) as { uploadURL?: string; objectPath?: string };
       if (!upload.uploadURL || !upload.objectPath) throw new Error("Upload URL could not be created");
-      const result = await fetch(upload.uploadURL, {
-        method: "PUT",
+      const result = await uploadAndFinalizeObject(upload.uploadURL, upload.objectPath, {
         body: file,
         headers: { "Content-Type": file.type },
       });

@@ -7,6 +7,8 @@ import { sendWhatsAppText, type WhatsAppConfig } from "./inbox/channels/whatsapp
 import { invalidateNotificationCounts } from "./notificationCountCache";
 import { notificationPriority } from "./notificationPriority";
 import { resolveAgentFeatures } from "./agentFeatures";
+import { hasStageEmailForStudent } from "./notifications/stageEmailAutomation";
+import { renderApprovedEmailVersion } from "./notifications/emailTemplateLibrary";
 
 // ---------------------------------------------------------------------------
 // Cached settings helper — suppress_automation_app_notifications
@@ -62,6 +64,9 @@ interface LangTemplate {
 
 interface NotificationTemplate extends LangTemplate {
   translations?: Record<string, LangTemplate>;
+  emailTemplateVersionId?: number | null;
+  emailSenderAccountId?: number | null;
+  emailSenderRevision?: number | null;
 }
 
 /**
@@ -358,6 +363,15 @@ export async function dispatchNotification(ctx: DispatchContext): Promise<void> 
           for (const user of users) {
             if (!user.email) continue;
             try {
+              if (ctx.event === "application.stage_changed" && typeof ctx.data?.applicationId === "number" &&
+                typeof ctx.data.stage === "string" && await hasStageEmailForStudent(ctx.data.applicationId, ctx.data.stage, user.id)) continue;
+              if (!ctx.emailOverride && template?.emailTemplateVersionId) {
+                const approved = await renderApprovedEmailVersion(template.emailTemplateVersionId, vars);
+                if (!approved || !template.emailSenderAccountId || !template.emailSenderRevision) continue;
+                await sendEmail(user.email, approved, { senderAccountId: template.emailSenderAccountId,
+                  senderRevision: template.emailSenderRevision, templateVersionId: template.emailTemplateVersionId });
+                continue;
+              }
               let emailContent = ctx.emailOverride;
               if (!emailContent) {
                 const localized = resolveTemplate(template, user.language);
@@ -448,6 +462,13 @@ export async function dispatchNotification(ctx: DispatchContext): Promise<void> 
       const externalEmailAddr = ctx.externalEmail;
       (async () => {
         try {
+          if (template?.emailTemplateVersionId) {
+            const approved = await renderApprovedEmailVersion(template.emailTemplateVersionId, vars);
+            if (!approved || !template.emailSenderAccountId || !template.emailSenderRevision) return;
+            await sendEmail(externalEmailAddr, approved, { senderAccountId: template.emailSenderAccountId,
+              senderRevision: template.emailSenderRevision, templateVersionId: template.emailTemplateVersionId });
+            return;
+          }
           const localized = resolveTemplate(template, null);
           let emailContent: { subject: string; html: string; text: string };
           if (localized?.subject || localized?.body) {

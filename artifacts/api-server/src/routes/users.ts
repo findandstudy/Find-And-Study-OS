@@ -1,5 +1,5 @@
 import { Router, type IRouter, type Request } from "express";
-import { db, usersTable, rolesTable, studentsTable, softDelete, agentsTable, branchesTable } from "@workspace/db";
+import { db, usersTable, rolesTable, studentsTable, softDelete, agentsTable, branchesTable, auditLogsTable } from "@workspace/db";
 import { eq, ilike, or, sql, and, isNull, desc, inArray, notInArray } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import { requireAuth, requireRole, requirePermission, logAudit } from "../lib/auth";
@@ -17,6 +17,10 @@ import { validate, getValidated } from "../middlewares/validate";
 import { userHasPermission } from "../lib/permissions";
 import { canAssignUserRole, canManageTargetAccount } from "../lib/userAccountSecurity";
 import { evaluateLegacyUserImpersonation } from "../lib/impersonationPolicy";
+import { callerOwnsObject, canonicalizeKey } from "../lib/objectAuthz";
+import { ObjectStorageService } from "../lib/objectStorage";
+import { validateUploadedFileBuffer } from "../lib/fileUploadValidation";
+import { consumeFinalizedUploadGrantInDrizzle } from "../lib/uploadGrant";
 import {
   canLegacyActorAssignRole,
   evaluateLegacyUserManagement,
@@ -39,6 +43,49 @@ const createUserBodySchema = z.object({
 const branchIdBodySchema = z.number().int().positive().nullable();
 
 const router: IRouter = Router();
+const userFileObjectStorage = new ObjectStorageService();
+
+type UserUploadField = "avatarUrl" | "contractUrl" | "passportUrl";
+
+async function prepareUserUpload(field: UserUploadField, objectPath: string): Promise<{
+  objectPath: string;
+  bytes: Buffer;
+  contentType: string;
+}> {
+  const objectKey = canonicalizeKey(objectPath);
+  if (!objectKey) throw new Error("USER_FILE_UPLOAD_INVALID_PATH");
+  const file = await userFileObjectStorage.getObjectEntityFile(`/objects/${objectKey}`);
+  const [metadata] = await file.getMetadata();
+  const contentType = String(metadata.contentType ?? "").split(";", 1)[0].trim().toLowerCase();
+  const [bytes] = await file.download();
+  const extensionByMime: Record<string, string> = {
+    "image/jpeg": "jpg",
+    "image/png": "png",
+    "image/webp": "webp",
+    "image/gif": "gif",
+  };
+  if (field !== "avatarUrl") extensionByMime["application/pdf"] = "pdf";
+  const extension = extensionByMime[contentType];
+  if (!extension) throw new Error("USER_FILE_UPLOAD_UNSUPPORTED_TYPE");
+  const maxSize = field === "avatarUrl" ? 5 * 1024 * 1024 : 10 * 1024 * 1024;
+  if (bytes.length <= 0 || bytes.length > maxSize) {
+    throw new Error("USER_FILE_UPLOAD_INVALID_SIZE");
+  }
+  const stem = field === "avatarUrl" ? "avatar" : field === "passportUrl" ? "passport" : "contract";
+  if (await validateUploadedFileBuffer(`${stem}.${extension}`, contentType, bytes)) {
+    throw new Error("USER_FILE_UPLOAD_SIGNATURE_MISMATCH");
+  }
+  return { objectPath, bytes, contentType };
+}
+
+async function prepareUserAvatarUpload(objectPath: string) {
+  try {
+    return await prepareUserUpload("avatarUrl", objectPath);
+  } catch (error) {
+    const code = error instanceof Error ? error.message : "USER_FILE_UPLOAD_INVALID";
+    throw new Error(code.replace("USER_FILE_UPLOAD_", "USER_AVATAR_UPLOAD_"));
+  }
+}
 
 const ALLOWED_PATCH_FIELDS = ["email", "firstName", "lastName", "phone", "language", "avatarUrl", "startDate", "homeAddress", "passportNumber", "contractUrl", "passportUrl", "emergencyContactName", "emergencyContactPhone"];
 const ADMIN_PATCH_FIELDS = [...ALLOWED_PATCH_FIELDS, "role", "isActive", "permissionOverrides", "branchId"];
@@ -250,21 +297,65 @@ router.post("/users", requireAuth, requirePermission("users.create"), validate({
     passwordHash = await bcrypt.hash(pwd.value, 10);
   }
 
-  const [user] = await db
-    .insert(usersTable)
-    .values({
-      email: normalizedEmail,
-      firstName, lastName, role,
-      phone: phone || null,
-      language: language || "en",
-      avatarUrl: avatarUrl || null,
-      branchId: branchId ?? null,
-      isActive: true,
-      emailVerified: true,
-      passwordHash: passwordHash || null,
-    })
-    .returning();
-  await logAudit(req.user!.id, "create_user", "user", user.id, { role, branchId: branchId ?? null }, req.ip);
+  let preparedAvatar: Awaited<ReturnType<typeof prepareUserAvatarUpload>> | null = null;
+  if (avatarUrl) {
+    if (!avatarUrl.startsWith("/api/storage/objects/")) {
+      res.status(400).json({ error: "Avatar must be an uploaded storage object" });
+      return;
+    }
+    if (!(await callerOwnsObject(req.user!.id, avatarUrl))) {
+      res.status(403).json({ error: "The uploaded avatar does not belong to this account" });
+      return;
+    }
+    try {
+      preparedAvatar = await prepareUserAvatarUpload(avatarUrl);
+    } catch (error) {
+      const code = error instanceof Error ? error.message : "USER_AVATAR_UPLOAD_INVALID";
+      if (code === "USER_AVATAR_UPLOAD_INVALID_SIZE") {
+        res.status(413).json({ error: "Avatar is empty or exceeds 5 MB", code });
+      } else {
+        res.status(400).json({ error: "Avatar content is invalid", code });
+      }
+      return;
+    }
+  }
+  let user: typeof usersTable.$inferSelect;
+  try {
+    user = await db.transaction(async (tx) => {
+      if (preparedAvatar && !await consumeFinalizedUploadGrantInDrizzle(tx, {
+        objectPath: preparedAvatar.objectPath,
+        uploadedBy: req.user!.id,
+        bytes: preparedAvatar.bytes,
+        contentType: preparedAvatar.contentType,
+      })) throw new Error("USER_AVATAR_UPLOAD_GRANT_NOT_FINALIZED");
+      const [created] = await tx.insert(usersTable).values({
+        email: normalizedEmail,
+        firstName, lastName, role,
+        phone: phone || null,
+        language: language || "en",
+        avatarUrl: avatarUrl || null,
+        branchId: branchId ?? null,
+        isActive: true,
+        emailVerified: true,
+        passwordHash: passwordHash || null,
+      }).returning();
+      await tx.insert(auditLogsTable).values({
+        userId: req.user!.id,
+        action: "create_user",
+        resource: "user",
+        resourceId: created.id,
+        changes: JSON.stringify({ role, branchId: branchId ?? null }),
+        ipAddress: req.ip ?? null,
+      });
+      return created;
+    });
+  } catch (error) {
+    if (error instanceof Error && error.message === "USER_AVATAR_UPLOAD_GRANT_NOT_FINALIZED") {
+      res.status(409).json({ error: "Uploaded avatar is not finalized or has already been used", code: "UPLOAD_GRANT_NOT_FINALIZED" });
+      return;
+    }
+    throw error;
+  }
   const { passwordHash: _ph, replitId: _ri, ...safeNewUser } = user as any;
   res.status(201).json(safeNewUser);
 });
@@ -299,6 +390,9 @@ router.patch("/users/:id", requireAuth, async (req, res): Promise<void> => {
     id: usersTable.id,
     role: usersTable.role,
     branchId: usersTable.branchId,
+    avatarUrl: usersTable.avatarUrl,
+    contractUrl: usersTable.contractUrl,
+    passportUrl: usersTable.passportUrl,
     deletedAt: usersTable.deletedAt,
   })
     .from(usersTable).where(eq(usersTable.id, id));
@@ -425,6 +519,34 @@ router.patch("/users/:id", requireAuth, async (req, res): Promise<void> => {
     }
   }
 
+  const preparedFiles: Array<Awaited<ReturnType<typeof prepareUserUpload>> & { field: UserUploadField }> = [];
+  for (const field of ["avatarUrl", "contractUrl", "passportUrl"] as const) {
+    if (updates[field] === undefined) continue;
+    const value = typeof updates[field] === "string" ? updates[field].trim() : updates[field];
+    if (value === targetCheck[field]) {
+      delete updates[field];
+    } else if (value === "" || value === null) {
+      updates[field] = null;
+    } else if (typeof value !== "string" || !value.startsWith("/api/storage/objects/")) {
+      res.status(400).json({ error: `${field} must be an uploaded storage object` });
+      return;
+    } else {
+      if (!(await callerOwnsObject(req.user!.id, value))) {
+        res.status(403).json({ error: `The uploaded file does not belong to this account (${field})` });
+        return;
+      }
+      try {
+        preparedFiles.push({ field, ...(await prepareUserUpload(field, value)) });
+        updates[field] = value;
+      } catch (error) {
+        const code = error instanceof Error ? error.message : "USER_FILE_UPLOAD_INVALID";
+        res.status(code === "USER_FILE_UPLOAD_INVALID_SIZE" ? 413 : 400)
+          .json({ error: `Uploaded file content is invalid (${field})`, code });
+        return;
+      }
+    }
+  }
+
   if (Object.keys(updates).length === 0) {
     res.status(400).json({ error: "No valid fields to update" });
     return;
@@ -437,21 +559,47 @@ router.patch("/users/:id", requireAuth, async (req, res): Promise<void> => {
   }
   let user: any = null;
   let syncedAgentId: number | null = null;
-  await db.transaction(async (tx) => {
-    const [u] = await tx.update(usersTable).set(updates).where(eq(usersTable.id, id)).returning();
-    if (!u) return;
-    user = u;
-    if (updates.phone !== undefined && AGENT_ROLES.includes(u.role as any)) {
-      const phoneE164 = toE164(u.phone ?? null);
-      const [agentRow] = await tx.update(agentsTable)
-        .set({ phone: u.phone ?? null, phoneE164 })
-        .where(eq(agentsTable.userId, u.id))
-        .returning({ id: agentsTable.id });
-      syncedAgentId = agentRow?.id ?? null;
+  try {
+    await db.transaction(async (tx) => {
+      for (const file of preparedFiles) {
+        if (!await consumeFinalizedUploadGrantInDrizzle(tx, {
+          objectPath: file.objectPath,
+          uploadedBy: req.user!.id,
+          bytes: file.bytes,
+          contentType: file.contentType,
+        })) throw new Error("USER_FILE_UPLOAD_GRANT_NOT_FINALIZED");
+      }
+      const [u] = await tx.update(usersTable).set(updates).where(eq(usersTable.id, id)).returning();
+      if (!u) return;
+      user = u;
+      if (updates.phone !== undefined && AGENT_ROLES.includes(u.role as any)) {
+        const phoneE164 = toE164(u.phone ?? null);
+        const [agentRow] = await tx.update(agentsTable)
+          .set({ phone: u.phone ?? null, phoneE164 })
+          .where(eq(agentsTable.userId, u.id))
+          .returning({ id: agentsTable.id });
+        syncedAgentId = agentRow?.id ?? null;
+      }
+      await tx.insert(auditLogsTable).values({
+        userId: req.user!.id,
+        action: "update_user",
+        resource: "user",
+        resourceId: id,
+        changes: JSON.stringify({ changedFields: Object.keys(updates) }),
+        ipAddress: req.ip ?? null,
+      });
+    });
+  } catch (error) {
+    if (error instanceof Error && error.message === "USER_FILE_UPLOAD_GRANT_NOT_FINALIZED") {
+      res.status(409).json({
+        error: "Uploaded file is not finalized or has already been used",
+        code: "UPLOAD_GRANT_NOT_FINALIZED",
+      });
+      return;
     }
-  });
+    throw error;
+  }
   if (!user) { res.status(404).json({ error: "User not found" }); return; }
-  await logAudit(req.user!.id, "update_user", "user", id, updates, req.ip);
   if (updates.phone !== undefined && AGENT_ROLES.includes(user.role as any) && syncedAgentId !== null) {
     await writeAudit({
       userId: req.user!.id,

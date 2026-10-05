@@ -14,7 +14,8 @@ import {
   websitePageVersionsTable,
   websiteGlobalComponentsTable,
 } from "@workspace/db";
-import { and, asc, desc, eq, gte, isNotNull, isNull, lte, ne, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, isNotNull, isNull, lte, ne, or, sql, inArray } from "drizzle-orm";
+import { publicCatalogInvalidationBus, type PublicCatalogInvalidation } from "./publicCatalogInvalidationBus";
 import {
   PUBLIC_CATALOG_RELATED_CANDIDATE_LIMIT,
   PUBLIC_CATALOG_RELATED_LIMIT,
@@ -35,9 +36,16 @@ import type {
   PublicCatalogPageBlockSource,
 } from "./publicCatalogRenderContract";
 import { parsePublicCatalogPageBlockSource } from "./publicCatalogRenderContract";
-import { readPublishedDetailLayout } from "./websiteDetailLayouts";
+import { invalidatePublishedDetailLayout, readPublishedDetailLayout } from "./websiteDetailLayouts";
 import { DETAIL_LAYOUT_KINDS, type DetailLayoutKind } from "./websiteDetailLayoutContract";
-import { websiteCatalogTaxonomy, countryMatches, catalogName } from "./websiteCatalogFilters";
+import { websiteCatalogTaxonomy, countryMatches, countryAliases, catalogName } from "./websiteCatalogFilters";
+import { readCatalogCountryFallback, matchCatalogCountry, readPublicCatalogCountryDirectory, resolvePublicCatalogLocationLinks } from "./publicCatalogLocationLinks";
+import { readPublishedDetailContent } from "./websiteDetailContent";
+import { readPublicCatalogPrices } from "./publicCatalogPriceReadModel";
+import { projectPublicTuition } from "./publicCatalogTuition";
+import { projectPublicProgramBrief } from "./publicCatalogProgramBrief";
+import { publicCatalogRequirements } from "./publicCatalogRequirements";
+import { courseFinderUniversityLogoUrl } from "./courseFinderVisibility";
 import {
   readIndexableArticleIds,
   readIndexableProgramIds,
@@ -48,55 +56,146 @@ import {
   resolvePublishedEntitySeoState,
 } from "./publicWebDiscoveryReadModel";
 import { buildPublicWebCanonicalPath } from "./publicWebContentContract";
-import type { ProgramSupportedLocale } from "./programTranslationContract";
+import { PROGRAM_SUPPORTED_LOCALES, type ProgramSupportedLocale } from "./programTranslationContract";
 import {
   resolveLocalizedDestinationFields,
   resolveLocalizedCityFields,
   resolveLocalizedUniversityFields,
   selectLocalizedEntityDelivery,
 } from "./publicLocalizedEntityContract";
+import fs from "node:fs";
+import path from "node:path";
 
 const PILOT_LIST_LIMIT = 12;
 const CACHE_FRESH_MS = 5 * 60_000;
 const CACHE_STALE_MS = 60 * 60_000;
 const CACHE_MAX_ENTRIES = 500;
+const publicHomeFallbackCache = new Map<ProgramSupportedLocale, PublicCatalogRenderModel>();
+const publicConsentCopyCache = new Map<ProgramSupportedLocale, NonNullable<PublicCatalogRenderModel["consentCopy"]>>();
 
-const LIST_TITLES: Record<ProgramSupportedLocale, string> = {
-  en: "Study programs", tr: "Eğitim programları", ar: "البرامج الدراسية",
-  fr: "Programmes d’études", ru: "Учебные программы", fa: "برنامه‌های تحصیلی",
-  zh: "留学课程", hi: "अध्ययन कार्यक्रम", es: "Programas de estudio",
-  id: "Program studi", ur: "تعلیمی پروگرام", tk: "Okuw programmalary",
-  ky: "Окуу программалары", kk: "Оқу бағдарламалары", uz: "Ta’lim dasturlari",
-  tg: "Барномаҳои таҳсил", bn: "শিক্ষা প্রোগ্রাম", pt: "Programas de estudo",
-  ne: "अध्ययन कार्यक्रमहरू", vi: "Chương trình học", ko: "유학 프로그램",
-  uk: "Навчальні програми", it: "Programmi di studio",
+function readPublicConsentCopy(locale: ProgramSupportedLocale): PublicCatalogRenderModel["consentCopy"] | undefined {
+  const cached = publicConsentCopyCache.get(locale);
+  if (cached) return cached;
+  try {
+    const file = path.join(process.cwd(), "artifacts", "edcons", "dist", "public", "i18n-critical", `${locale}.json`);
+    const stat = fs.statSync(file);
+    if (!stat.isFile() || stat.size <= 0 || stat.size > 65_536) return undefined;
+    const parsed = JSON.parse(fs.readFileSync(file, "utf8")) as Record<string, unknown>;
+    const cookie = isRecord(parsed.cookie) ? parsed.cookie : {};
+    const value = {
+      title: boundedString(cookie.title, 200).trim(),
+      description: boundedString(cookie.description, 1_000).trim(),
+      essentialOnly: boundedString(cookie.essentialOnly, 200).trim(),
+      acceptAll: boundedString(cookie.acceptAll, 200).trim(),
+    };
+    if (Object.values(value).some(item => !item)) return undefined;
+    publicConsentCopyCache.set(locale, value);
+    return value;
+  } catch {
+    return undefined;
+  }
+}
+
+function readPublicHomeFallback(locale: ProgramSupportedLocale): PublicCatalogRenderModel | null {
+  const cached = publicHomeFallbackCache.get(locale);
+  if (cached) return cached;
+  try {
+    const file = path.join(process.cwd(), "artifacts", "edcons", "dist", "public", "i18n-critical", `${locale}.json`);
+    const stat = fs.statSync(file);
+    if (!stat.isFile() || stat.size <= 0 || stat.size > 65_536) return null;
+    const parsed = JSON.parse(fs.readFileSync(file, "utf8")) as Record<string, unknown>;
+    const hero = isRecord(parsed.hero) ? parsed.hero : {};
+    const seo = isRecord(parsed.seo) ? parsed.seo : {};
+    const title = boundedString(hero.title, 500).trim();
+    const subtitle = boundedString(hero.subtitle, 2_000).trim();
+    const badge = boundedString(hero.badge, 200).trim();
+    const cta = boundedString(hero.cta, 200).trim();
+    const browse = boundedString(hero.browse, 200).trim();
+    const metaTitle = boundedString(seo.homeTitle, 500).trim();
+    const metaDescription = boundedString(seo.homeDesc, 2_000).trim();
+    if (!title || !subtitle || !metaTitle || !metaDescription) return null;
+    const canonicalPath = `/${locale}`;
+    const alternatePaths = Object.fromEntries(PROGRAM_SUPPORTED_LOCALES.map(item => [item, `/${item}`]));
+    const value: PublicCatalogRenderModel = {
+      kind: "page_detail",
+      locale,
+      canonicalPath,
+      title: metaTitle,
+      description: metaDescription,
+      indexable: true,
+      alternatePaths,
+      page: {
+        id: 0,
+        title,
+        slug: "home",
+        versionNumber: 0,
+        publishedAt: new Date(0).toISOString(),
+        blocks: [{
+          // This internal-only block mirrors Home.tsx's existing static
+          // fallback. Keeping it distinct from the CMS hero prevents the SSR
+          // shell from changing size when the public React app takes over.
+          blockType: "home_fallback_hero",
+          content: {
+            title,
+            subtitle,
+            badge,
+            ctaLabel: cta,
+            ctaUrl: `/${locale}/programs`,
+            secondaryLabel: browse,
+            secondaryUrl: `/${locale}/programs`,
+          },
+          settings: {},
+          sortOrder: 0,
+        }],
+        seo: { robotsIndex: true, robotsFollow: true },
+      },
+    };
+    publicHomeFallbackCache.set(locale, value);
+    return value;
+  } catch {
+    return null;
+  }
+}
+
+type PublicListCopy = {
+  programTitle: string;
+  programDescription: string;
+  countryTitle: string;
+  countryDescription: string;
 };
 
-const LIST_DESCRIPTIONS: Record<ProgramSupportedLocale, string> = {
-  en: "Compare current study opportunities from universities around the world.",
-  tr: "Dünyanın farklı üniversitelerindeki güncel eğitim fırsatlarını karşılaştırın.",
-  ar: "قارن فرص الدراسة الحالية في الجامعات حول العالم.",
-  fr: "Comparez les possibilités d’études actuelles dans les universités du monde entier.",
-  ru: "Сравните актуальные возможности обучения в университетах по всему миру.",
-  fa: "فرصت‌های تحصیلی به‌روز دانشگاه‌های سراسر جهان را مقایسه کنید.",
-  zh: "比较世界各地大学的最新留学机会。",
-  hi: "दुनिया भर के विश्वविद्यालयों में उपलब्ध वर्तमान अध्ययन अवसरों की तुलना करें।",
-  es: "Compara oportunidades de estudio actuales en universidades de todo el mundo.",
-  id: "Bandingkan peluang studi terbaru di universitas di seluruh dunia.",
-  ur: "دنیا بھر کی جامعات میں موجودہ تعلیمی مواقع کا موازنہ کریں۔",
-  tk: "Dünýäniň dürli uniwersitetlerindäki häzirki okuw mümkinçiliklerini deňeşdiriň.",
-  ky: "Дүйнөдөгү университеттердин учурдагы окуу мүмкүнчүлүктөрүн салыштырыңыз.",
-  kk: "Әлем университеттеріндегі қазіргі оқу мүмкіндіктерін салыстырыңыз.",
-  uz: "Dunyo universitetlaridagi amaldagi ta’lim imkoniyatlarini solishtiring.",
-  tg: "Имкониятҳои ҷории таҳсилро дар донишгоҳҳои ҷаҳон муқоиса кунед.",
-  bn: "বিশ্বজুড়ে বিশ্ববিদ্যালয়ের বর্তমান পড়াশোনার সুযোগগুলো তুলনা করুন।",
-  pt: "Compare as oportunidades de estudo atuais em universidades de todo o mundo.",
-  ne: "विश्वभरका विश्वविद्यालयमा उपलब्ध हालका अध्ययन अवसरहरू तुलना गर्नुहोस्।",
-  vi: "So sánh các cơ hội học tập hiện có tại các trường đại học trên toàn thế giới.",
-  ko: "전 세계 대학의 최신 유학 기회를 비교해 보세요.",
-  uk: "Порівнюйте актуальні можливості навчання в університетах усього світу.",
-  it: "Confronta le opportunità di studio attuali nelle università di tutto il mondo.",
+// Keep the factual SSR shell aligned with the existing public React copy. A
+// different server/client heading becomes a second, later LCP candidate during
+// the shell handoff and also creates a visible copy flash on slow connections.
+const PUBLIC_LIST_COPY: Record<ProgramSupportedLocale, PublicListCopy> = {
+  en: { programTitle: "Discover Programs", programDescription: "Browse thousands of programs from top universities worldwide.", countryTitle: "Explore Study Destinations", countryDescription: "Discover the best countries for your education journey. Each destination offers unique opportunities and experiences." },
+  tr: { programTitle: "Programları Keşfedin", programDescription: "Dünya çapında en iyi üniversitelerden binlerce programı inceleyin.", countryTitle: "Eğitim Destinasyonlarını Keşfedin", countryDescription: "Eğitim yolculuğunuz için en iyi ülkeleri keşfedin. Her destinasyon benzersiz fırsatlar ve deneyimler sunar." },
+  ar: { programTitle: "اكتشف البرامج", programDescription: "تصفح آلاف البرامج من أفضل الجامعات حول العالم.", countryTitle: "اكتشف وجهات الدراسة", countryDescription: "اكتشف أفضل الدول لرحلتك التعليمية. كل وجهة تقدم فرصاً وتجارب فريدة." },
+  fr: { programTitle: "Découvrez les Programmes", programDescription: "Parcourez des milliers de programmes des meilleures universités du monde.", countryTitle: "Explorez les destinations d'études", countryDescription: "Découvrez les meilleurs pays pour votre parcours éducatif. Chaque destination offre des opportunités uniques." },
+  ru: { programTitle: "Откройте Программы", programDescription: "Просмотрите тысячи программ лучших университетов мира.", countryTitle: "Исследуйте направления обучения", countryDescription: "Откройте лучшие страны для вашего образования. Каждое направление предлагает уникальные возможности." },
+  fa: { programTitle: "کشف برنامه‌ها", programDescription: "هزاران برنامه از بهترین دانشگاه‌ها را مرور کنید.", countryTitle: "کاوش در مقاصد تحصیلی", countryDescription: "بهترین کشورها را برای سفر آموزشی خود کشف کنید." },
+  zh: { programTitle: "发现 项目", programDescription: "浏览全球顶尖大学的数千个项目。", countryTitle: "探索留学 目的地", countryDescription: "发现最适合您教育之旅的国家。每个目的地都提供独特的机会和体验。" },
+  hi: { programTitle: "कार्यक्रम खोजें", programDescription: "विश्व के शीर्ष विश्वविद्यालयों से हज़ारों कार्यक्रम ब्राउज़ करें।", countryTitle: "अध्ययन गंतव्य खोजें", countryDescription: "अपनी शिक्षा यात्रा के लिए सर्वश्रेष्ठ देशों की खोज करें।" },
+  es: { programTitle: "Descubre Programas", programDescription: "Explora miles de programas de las mejores universidades del mundo.", countryTitle: "Explora destinos de estudio", countryDescription: "Descubre los mejores países para tu viaje educativo. Cada destino ofrece oportunidades únicas." },
+  id: { programTitle: "Temukan Program", programDescription: "Jelajahi ribuan program dari universitas terbaik di dunia.", countryTitle: "Jelajahi Destinasi Studi", countryDescription: "Temukan negara terbaik untuk perjalanan pendidikan Anda. Setiap destinasi menawarkan peluang unik." },
+  ur: { programTitle: "تلاش پروگرام", programDescription: "عالمی عالمی یونیورسٹیسٹس سے ہزاروں پروگراموں کا جائزہ لیں", countryTitle: "مطالعے کی تحقیق سمت", countryDescription: "ہر منتخب کے لئے خاص موقعات اور تجربات فراہم کرتے ہیں ۔" },
+  tk: { programTitle: "Netijeler Programler", programDescription: "Bütin dünýäde uniwersitetleriň müňlerçe programmasyny görmeli bolýar.", countryTitle: "Yhlasly okamagy öwren Maksad Hatlar", countryDescription: "Her bir ýere baranyňda, bilim almak üçin gowy ýurtlaryň bardygyna göz ýetir." },
+  ky: { programTitle: "Ажырымдуу Программалар", programDescription: "Дүйнө жүзү боюнча жогорку университеттерден миңдеген программаларды көрүү.", countryTitle: "Изилдөөнү изилдөө Жайгашкан жери", countryDescription: "Билим берүү үчүн эң жакшы өлкөлөрдү таап алгыла." },
+  kk: { programTitle: "Ажыратылды Бағдарламалар", programDescription: "Бүкіл әлемдік университеттерде мыңдаған бағдарламаларды қара.", countryTitle: "Егізін зерттеуді зерттеу Қайда", countryDescription: "Біліміңіздің ең жақсы елдерін байқаңыз. Әрбір мақсатқа бір мүмкіндік пен тәжірибе сунуш етеді." },
+  uz: { programTitle: "Yigʻish Dasturlar", programDescription: "Hamma yuqori universitetlardan minglab dasturlar koʻrish.", countryTitle: "Name Taʼrifi:", countryDescription: "Ta'lim sohasida rivojlanish uchun eng yaxshi davlatlarni rivojlata olinadi. Har joyda har bir o'sha imkoniyatlar va ta'lim sohalar bor." },
+  tg: { programTitle: "Кофтан Барномаҳо", programDescription: "Тамошо кардани ҳазорҳо барномаҳо аз университетҳои болои умумиҷаҳон.", countryTitle: "Омӯзиши омӯзиш Ҷойгиршавӣ", countryDescription: "Дар ҳар ҷойи таъинот имкониятҳо ва таҷрибаҳои ягонаро пешкаш кунед." },
+  bn: { programTitle: "আবিষ্কার করুন প্রোগ্রাম", programDescription: "বিশ্বব্যাপী শীর্ষ বিশ্ববিদ্যালয় থেকে হাজার হাজার প্রোগ্রাম ব্রাউজ করুন৷", countryTitle: "অন্বেষণ অধ্যয়ন গন্তব্যস্থল", countryDescription: "​​শিক্ষার জন্য সেরা দেশগুলি প্রতিটি গন্তব্য অনন্য সুযোগ এবং অভিজ্ঞতা প্রদান করে৷" },
+  pt: { programTitle: "Descubra Programas", programDescription: "Navegue por milhares de programas das melhores universidades do mundo.", countryTitle: "Explorar estudos Destinos", countryDescription: "Descubra os melhores países para sua jornada educacional. Cada destino oferece oportunidades e experiências únicas." },
+  ne: { programTitle: "डिस्कवर कार्यक्रम", programDescription: "विश्वभरका शीर्ष विश्वविद्यालयहरूबाट हजारौं कार्यक्रमहरू ब्राउज गर्नुहोस्।", countryTitle: "अन्वेषण अध्ययन गन्तव्यहरू", countryDescription: "​​शिक्षाको लागि उत्तम देशहरू प्रत्येक गन्तव्यले अद्वितीय अवसरहरू र अनुभवहरू प्रदान गर्दछ।" },
+  vi: { programTitle: "Khám phá Chương trình", programDescription: "Duyệt qua hàng nghìn chương trình từ các trường đại học hàng đầu trên toàn thế giới.", countryTitle: "Khám phá nghiên cứu Điểm đến", countryDescription: "Khám phá những quốc gia tốt nhất cho hành trình học tập của bạn. Mỗi điểm đến mang lại những cơ hội và trải nghiệm độc đáo." },
+  ko: { programTitle: "발견 프로그램", programDescription: "전 세계 최고의 대학에서 수천 개의 프로그램을 찾아보세요.", countryTitle: "학습 탐색 목적지", countryDescription: "교육 여정에 가장 적합한 국가를 찾아보세요. 각 목적지는 고유한 기회와 경험을 제공합니다." },
+  uk: { programTitle: "Відкрийте Програми", programDescription: "Переглядайте тисячі програм із початку університети по всьому світу.", countryTitle: "Досліджуйте навчання Напрямки", countryDescription: "Відкрийте для себе найкращі країни для вашої освітньої подорожі. Кожен напрямок пропонує унікальні можливості та враження." },
+  it: { programTitle: "Scopri Programmi", programDescription: "Sfoglia migliaia di programmi dalle migliori università di tutto il mondo.", countryTitle: "Esplora Studio Destinazioni", countryDescription: "Scopri i paesi migliori per il tuo percorso formativo. Ogni destinazione offre opportunità ed esperienze uniche." },
 };
+
+export function publicCatalogListCopy(locale: ProgramSupportedLocale): PublicListCopy {
+  return PUBLIC_LIST_COPY[locale] ?? PUBLIC_LIST_COPY.en;
+}
 
 type CacheEntry = {
   freshUntil: number;
@@ -114,6 +213,7 @@ const inFlight = new Map<string, Promise<PublicCatalogRenderModel>>();
 let cacheGeneration = 0;
 
 const CATALOG_DERIVED_CACHE_KINDS = new Set([
+  "country_list",
   "program_list",
   "program_detail",
   "university_detail",
@@ -386,12 +486,36 @@ async function hydratePublicCatalogBlocks(
 }
 
 function cacheKey(route: PublicCatalogRenderRoute): string {
-  const identity = route.kind === "program_list"
+  const identity = route.kind === "program_list" || route.kind === "country_list"
     ? "index"
     : route.kind === "destination_detail" || route.kind === "page_detail"
       ? route.slug
       : route.identity?.id ?? route.routeKey;
   return `${route.locale}:${route.kind}:${identity}`;
+}
+
+async function readCountryList(
+  route: Extract<PublicCatalogRenderRoute, { kind: "country_list" }>,
+): Promise<PublicCatalogRenderModel> {
+  const directory = await readPublicCatalogCountryDirectory(route.locale);
+  const copy = publicCatalogListCopy(route.locale);
+  return {
+    kind: "country_list",
+    locale: route.locale,
+    canonicalPath: route.path,
+    title: copy.countryTitle,
+    description: copy.countryDescription,
+    indexable: true,
+    countries: directory.entries.map((entry) => ({
+      id: entry.country.id,
+      name: entry.destination?.name || entry.country.name,
+      code: entry.country.code,
+      canonicalPath: entry.canonicalPath,
+      universityCount: entry.universityCount,
+      programCount: entry.programCount,
+      featured: entry.destination?.isFeatured === true,
+    })).sort((left, right) => Number(right.featured) - Number(left.featured) || left.name.localeCompare(right.name, route.locale)).slice(0, 64),
+  };
 }
 
 function pruneCache(now: number): void {
@@ -451,13 +575,13 @@ async function readProgramList(
       .orderBy(asc(universitiesTable.name), asc(localizedName), asc(programsTable.id))
       .limit(PILOT_LIST_LIMIT),
   ]);
-  const title = LIST_TITLES[route.locale] || LIST_TITLES.en;
+  const copy = publicCatalogListCopy(route.locale);
   return {
     kind: "program_list",
     locale: route.locale,
     canonicalPath: route.path,
-    title,
-    description: LIST_DESCRIPTIONS[route.locale] || LIST_DESCRIPTIONS.en,
+    title: copy.programTitle,
+    description: copy.programDescription,
     total: Number(countRow?.count ?? 0),
     indexable: true,
     programs: rows.map((program) => ({
@@ -496,6 +620,7 @@ async function readProgramDetail(
       id: programsTable.id,
       name: sql<string>`COALESCE(${programTranslationsTable.name}, ${programsTable.name})`,
       description: sql<string | null>`COALESCE(${programTranslationsTable.description}, ${programsTable.description})`,
+      requirements: sql<string | null>`COALESCE(${programTranslationsTable.requirements}, ${programsTable.requirements})`,
       degree: programsTable.degree,
       field: sql<string | null>`COALESCE(${programTranslationsTable.field}, ${programsTable.field})`,
       duration: sql<string | null>`COALESCE(${programTranslationsTable.duration}, ${programsTable.duration})`,
@@ -506,6 +631,7 @@ async function readProgramDetail(
       translatedLocale: programTranslationsTable.locale,
       universityId: universitiesTable.id,
       universityName: universitiesTable.name,
+      universityIsActive: universitiesTable.isActive,
       country: universitiesTable.country,
       city: universitiesTable.city,
     })
@@ -561,6 +687,21 @@ async function readProgramDetail(
         universityName: universitiesTable.name,
         degree: programsTable.degree,
         field: sql<string | null>`COALESCE(${programTranslationsTable.field}, ${programsTable.field})`,
+        duration: sql<string | null>`COALESCE(${programTranslationsTable.duration}, ${programsTable.duration})`,
+        language: programsTable.language,
+        description: sql<string | null>`COALESCE(${programTranslationsTable.description}, ${programsTable.description})`,
+        requirements: sql<string | null>`COALESCE(${programTranslationsTable.requirements}, ${programsTable.requirements})`,
+        isActive: programsTable.isActive,
+        tuitionFee: programsTable.tuitionFee,
+        discountedFee: programsTable.discountedFee,
+        currency: programsTable.currency,
+        universityId: universitiesTable.id,
+        universityCountry: universitiesTable.country,
+        universityCity: universitiesTable.city,
+        universityType: universitiesTable.universityType,
+        universityIsActive: universitiesTable.isActive,
+        universityWebsite: universitiesTable.website,
+        universityHasLogo: sql<boolean>`${universitiesTable.logoUrl} IS NOT NULL AND length(trim(${universitiesTable.logoUrl})) > 0`,
         score: relatedScore,
       })
       .from(programsTable)
@@ -604,35 +745,7 @@ async function readProgramDetail(
         asc(programIntakesTable.id),
       )
       .limit(24),
-    db
-      .select({
-        id: priceComponentsTable.id,
-        componentType: priceComponentsTable.componentType,
-        amountMinor: priceComponentsTable.amountMinor,
-        currencyCode: priceComponentsTable.currencyCode,
-        frequency: priceComponentsTable.frequency,
-      })
-      .from(priceComponentsTable)
-      .where(and(
-        eq(priceComponentsTable.programId, program.id),
-        eq(priceComponentsTable.status, "ACTIVE"),
-        isNotNull(priceComponentsTable.sourceVerifiedAt),
-        lte(priceComponentsTable.effectiveFrom, now),
-        or(
-          isNull(priceComponentsTable.effectiveUntil),
-          gte(priceComponentsTable.effectiveUntil, now),
-        ),
-        or(
-          isNull(priceComponentsTable.sourceExpiresAt),
-          gte(priceComponentsTable.sourceExpiresAt, now),
-        ),
-      ))
-      .orderBy(
-        asc(priceComponentsTable.componentType),
-        asc(priceComponentsTable.effectiveFrom),
-        asc(priceComponentsTable.id),
-      )
-      .limit(48),
+    readPublicCatalogPrices([program.id], now).then(prices => prices.get(program.id) ?? []),
   ]);
   const indexableRelatedIds = internalLinkMode === "published"
     ? await readIndexableProgramIds({
@@ -640,25 +753,33 @@ async function readProgramDetail(
       programIds: relatedCandidates.map((candidate) => candidate.id),
     })
     : new Set<number>();
-  const relatedPrograms = relatedCandidates
+  const deliveredRelatedPrograms = relatedCandidates
     .filter((candidate) => internalLinkMode === "published" && indexableRelatedIds.has(candidate.id))
-    .slice(0, PUBLIC_CATALOG_RELATED_LIMIT)
-    .map(({ score: _score, ...candidate }) => ({
-      ...candidate,
-      canonicalPath: publicCatalogPath({
-        locale: route.locale,
-        entityType: "program",
-        id: candidate.id,
-        name: candidate.name,
-      }),
-    }));
-  const prices = priceRows.map((price) => ({
+    .slice(0, PUBLIC_CATALOG_RELATED_LIMIT);
+  const relatedUniversityIds = [...new Set(deliveredRelatedPrograms.map(row => row.universityId))];
+  const [relatedPrices, localizedRelatedUniversities, indexableRelatedUniversityIds] = await Promise.all([
+    readPublicCatalogPrices(deliveredRelatedPrograms.map(row => row.id), now),
+    readPublishedLocalizedEntities({ entityType: "university", entityIds: relatedUniversityIds, locale: route.locale }),
+    readIndexableUniversityIds({ locale: route.locale, universityIds: relatedUniversityIds }),
+  ]);
+  const relatedPrograms = deliveredRelatedPrograms.map(candidate => {
+    const localizedUniversity = resolveLocalizedUniversityFields({ locale: route.locale,
+      delivery: selectLocalizedEntityDelivery(localizedRelatedUniversities, candidate.universityId),
+      base: { name: candidate.universityName, description: null, universityType: candidate.universityType } });
+    return projectPublicProgramBrief(candidate, {
+      locale: route.locale, prices: relatedPrices.get(candidate.id) ?? [],
+      universityName: localizedUniversity.name, universityType: localizedUniversity.universityType,
+      universityPath: indexableRelatedUniversityIds.has(candidate.universityId)
+        ? publicCatalogPath({ locale: route.locale, entityType: "university", id: candidate.universityId, name: localizedUniversity.name }) : null,
+    });
+  });
+  const prices = Object.assign(priceRows.map((price) => ({
     id: price.id,
     componentType: price.componentType,
     amountMinor: price.amountMinor.toString(),
     currencyCode: price.currencyCode,
     frequency: price.frequency,
-  }));
+  })), { truncated: !!priceRows.truncated });
   const verifiedTuition = prices.find((price) => price.componentType === "TUITION") || null;
   const fallbackDescription = [
     program.degree,
@@ -677,6 +798,7 @@ async function readProgramDetail(
     alternatePaths: seoState.alternates,
     relatedPrograms,
     program: {
+      ...await resolvePublicCatalogLocationLinks({ locale: route.locale, country: program.country, city: program.city }),
       id: program.id,
       name: program.name,
       universityName: program.universityName,
@@ -686,9 +808,11 @@ async function readProgramDetail(
         id: program.universityId,
         name: program.universityName,
       }),
+      universityIsActive: program.universityIsActive,
       country: program.country,
       city: program.city,
       degree: program.degree,
+      requirements: program.requirements,
       field: program.field,
       duration: program.duration,
       language: program.language,
@@ -732,6 +856,7 @@ async function readUniversityDetail(
       id: universitiesTable.id,
       name: universitiesTable.name,
       description: universitiesTable.description,
+      isActive: universitiesTable.isActive,
       country: universitiesTable.country,
       city: universitiesTable.city,
       universityType: universitiesTable.universityType,
@@ -836,9 +961,11 @@ async function readUniversityDetail(
     indexable: seoState.indexable,
     alternatePaths: seoState.alternates,
     university: {
+      ...await resolvePublicCatalogLocationLinks({ locale: route.locale, country: university.country, city: university.city }),
       id: university.id,
       name: localizedUniversity.name,
       country: university.country,
+      isActive: university.isActive,
       city: university.city,
       universityType: localizedUniversity.universityType,
       programCount: Number(countRow?.count ?? 0),
@@ -887,6 +1014,16 @@ async function readDestinationDetail(
     ))
     .limit(1);
   if (!destination) {
+    const fallback = await readCatalogCountryFallback(route.locale, route.slug);
+    if (fallback) return {
+      kind: "destination_detail", locale: route.locale,
+      canonicalPath: fallback.meta.canonicalPath, title: fallback.destination.name,
+      description: `Study opportunities in ${fallback.destination.name}`,
+      indexable: false, alternatePaths: {},
+      destination: { ...fallback.destination, ...fallback.stats,
+        popularCities: fallback.cities.map(city => city.name), cityLinks: fallback.cities,
+        universities: fallback.universities },
+    };
     return {
       kind: "not_found",
       locale: route.locale,
@@ -899,11 +1036,11 @@ async function readDestinationDetail(
 
   const policy = await getPublicCatalogPolicy();
   const universityConditions: any[] = [
-    sql`lower(trim(${universitiesTable.country})) = lower(trim(${destination.country}))`,
+    sql`lower(trim(${universitiesTable.country})) IN (${sql.join((countryAliases(matchCatalogCountry(destination.country, await db.select().from(countriesTable)) ?? { name: destination.country, code: destination.country })).map(alias => sql`${alias.toLowerCase().trim()}`), sql`, `)})`,
   ];
   addPublicCatalogConditions(universityConditions, policy);
   const programConditions: any[] = [
-    sql`lower(trim(${universitiesTable.country})) = lower(trim(${destination.country}))`,
+    ...universityConditions,
     eq(programsTable.isActive, true),
   ];
   addPublicCatalogConditions(programConditions, policy);
@@ -1032,6 +1169,10 @@ async function readDestinationDetail(
       visaInfo: localizedDestination.visaInfo,
       workPermit: localizedDestination.workPermit,
       popularCities: localizedDestination.popularCities,
+      cityLinks: (await Promise.all(localizedDestination.popularCities.slice(0, 24).map(async city => {
+        const links = await resolvePublicCatalogLocationLinks({ locale: route.locale, country: destination.country, city });
+        return links.cityPath ? { name: city, canonicalPath: links.cityPath } : null;
+      }))).filter((city): city is { name: string; canonicalPath: string } => city !== null),
       universityCount: Number(universityCount?.count ?? 0),
       programCount: Number(programCount?.count ?? 0),
       universities: deliveredUniversities.map((university) => ({
@@ -1089,7 +1230,7 @@ async function readCityDetail(
   const policy = await getPublicCatalogPolicy();
   const universityConditions: any[] = [
     sql`lower(trim(${universitiesTable.city})) = lower(trim(${city.name}))`,
-    sql`(lower(trim(${universitiesTable.country})) = lower(trim(${city.country})) OR upper(trim(${universitiesTable.country})) = upper(trim(${city.countryCode})))`,
+    sql`lower(trim(${universitiesTable.country})) IN (${sql.join(countryAliases({ name: city.country, code: city.countryCode }).map(alias => sql`${alias.toLowerCase().trim()}`), sql`, `)})`,
   ];
   addPublicCatalogConditions(universityConditions, policy);
   const programConditions: any[] = [
@@ -1099,7 +1240,7 @@ async function readCityDetail(
   const internalLinkMode = parsePublicWebInternalLinkMode(process.env.PUBLIC_WEB_INTERNAL_LINK_MODE);
   const candidateLimit = internalLinkMode === "published"
     ? PUBLIC_CATALOG_RELATED_CANDIDATE_LIMIT
-    : 0;
+    : PILOT_LIST_LIMIT;
 
   const [
     [universityCount],
@@ -1131,8 +1272,21 @@ async function readCityDetail(
       universityId: universitiesTable.id,
       universityName: universitiesTable.name,
       universityType: universitiesTable.universityType,
+      universityCity: universitiesTable.city,
+      universityCountry: universitiesTable.country,
+      universityWebsite: universitiesTable.website,
+      universityHasLogo: sql<boolean>`${universitiesTable.logoUrl} IS NOT NULL AND length(trim(${universitiesTable.logoUrl})) > 0`,
+      universityIsActive: universitiesTable.isActive,
+      isActive: programsTable.isActive,
+      language: programsTable.language,
+      duration: sql<string | null>`COALESCE(${programTranslationsTable.duration}, ${programsTable.duration})`,
+      description: sql<string | null>`COALESCE(${programTranslationsTable.description}, ${programsTable.description})`,
+      requirements: sql<string | null>`COALESCE(${programTranslationsTable.requirements}, ${programsTable.requirements})`,
+      tuitionFee: programsTable.tuitionFee,
+      discountedFee: programsTable.discountedFee,
+      currency: programsTable.currency,
       degree: programsTable.degree,
-      field: programsTable.field,
+      field: sql<string | null>`COALESCE(${programTranslationsTable.field}, ${programsTable.field})`,
     })
       .from(programsTable)
       .innerJoin(universitiesTable, eq(programsTable.universityId, universitiesTable.id))
@@ -1156,16 +1310,6 @@ async function readCityDetail(
     }),
   ]);
 
-  if (localizedDelivery.mode !== "published") {
-    return {
-      kind: "not_found",
-      locale: route.locale,
-      canonicalPath: route.path,
-      title: "City publication not found",
-      description: "The requested city has no published revision.",
-      indexable: false,
-    };
-  }
   const localizedCity = resolveLocalizedCityFields({
     locale: route.locale,
     delivery: localizedDelivery,
@@ -1185,7 +1329,7 @@ async function readCityDetail(
   const [localizedUniversities, indexableUniversityIds, indexableProgramIds] = await Promise.all([
     readPublishedLocalizedEntities({
       entityType: "university",
-      entityIds: universityRows.map((university) => university.id),
+      entityIds: universityRows.map(university => university.id),
       locale: route.locale,
     }),
     internalLinkMode === "published"
@@ -1224,13 +1368,22 @@ async function readCityDetail(
         : [];
     })
     .slice(0, PILOT_LIST_LIMIT);
-  const programs = programRows
+  const deliveredProgramRows = programRows
     .filter((program) => indexableProgramIds === null || indexableProgramIds.has(program.id))
-    .slice(0, PILOT_LIST_LIMIT)
+    .slice(0, PILOT_LIST_LIMIT);
+  const programUniversityIds = [...new Set(deliveredProgramRows.map(program => program.universityId))];
+  const [cityProgramPrices, localizedProgramUniversities, indexableProgramUniversityIds] = await Promise.all([
+    readPublicCatalogPrices(deliveredProgramRows.map(program => program.id)),
+    readPublishedLocalizedEntities({ entityType: "university", entityIds: programUniversityIds, locale: route.locale }),
+    internalLinkMode === "published"
+      ? readIndexableUniversityIds({ locale: route.locale, universityIds: programUniversityIds })
+      : Promise.resolve(null),
+  ]);
+  const programs = deliveredProgramRows
     .flatMap((program) => {
       const localizedUniversity = resolveLocalizedUniversityFields({
         locale: route.locale,
-        delivery: selectLocalizedEntityDelivery(localizedUniversities, program.universityId),
+        delivery: selectLocalizedEntityDelivery(localizedProgramUniversities, program.universityId),
         base: {
           name: program.universityName,
           description: null,
@@ -1238,10 +1391,32 @@ async function readCityDetail(
         },
       });
       if (!localizedUniversity.available) return [];
+      const programPath = publicCatalogPath({ locale: route.locale, entityType: "program", id: program.id, name: program.name });
+      let website: string | null = null;
+      try {
+        const parsed = new URL(program.universityWebsite ?? "");
+        if ((parsed.protocol === "https:" || parsed.protocol === "http:") && !parsed.username && !parsed.password) website = parsed.href;
+      } catch { /* Invalid catalogue websites are not public links. */ }
       return [{
         id: program.id,
         name: program.name,
         universityName: localizedUniversity.name,
+        universityId: program.universityId,
+        universityPath: indexableProgramUniversityIds === null || indexableProgramUniversityIds.has(program.universityId)
+          ? publicCatalogPath({ locale: route.locale, entityType: "university", id: program.universityId, name: localizedUniversity.name })
+          : undefined,
+        universityType: localizedUniversity.universityType,
+        universityCity: program.universityCity,
+        universityCountry: program.universityCountry,
+        universityLogoUrl: courseFinderUniversityLogoUrl(program.universityId, program.universityHasLogo),
+        universityWebsite: website,
+        universityIsActive: program.universityIsActive,
+        isActive: program.isActive,
+        language: program.language,
+        duration: program.duration,
+        description: program.description,
+        requirements: publicCatalogRequirements(program.requirements, { canonicalPath: programPath, id: program.id }),
+        tuition: projectPublicTuition(program, cityProgramPrices.get(program.id) ?? []),
         degree: program.degree,
         field: program.field,
         canonicalPath: publicCatalogPath({
@@ -1269,9 +1444,10 @@ async function readCityDetail(
       localizedCity.description,
       `Study opportunities in ${localizedCity.name}, ${localizedCity.country}`,
     ),
-    indexable: seoState.indexable,
-    alternatePaths: seoState.alternates,
+    indexable: Boolean(localizedDelivery.snapshot) && seoState.indexable,
+    alternatePaths: localizedDelivery.snapshot ? seoState.alternates : {},
     city: {
+      ...await resolvePublicCatalogLocationLinks({ locale: route.locale, country: city.country, city: city.name }),
       id: city.id,
       name: localizedCity.name,
       country: localizedCity.country,
@@ -1482,6 +1658,8 @@ export async function readPageDetail(
   // Ambiguous legacy aliases must not select an arbitrary published page.
   const page = pages.length === 1 ? pages[0] : null;
   if (!page || !page.publishedAt) {
+    const fallback = route.slug === "home" ? readPublicHomeFallback(route.locale) : null;
+    if (fallback) return fallback;
     return {
       kind: "not_found",
       locale: route.locale,
@@ -1507,6 +1685,8 @@ export async function readPageDetail(
     .orderBy(desc(websitePageVersionsTable.versionNumber))
     .limit(1);
   if (!version || !version.publishedAt) {
+    const fallback = route.slug === "home" ? readPublicHomeFallback(route.locale) : null;
+    if (fallback) return fallback;
     return {
       kind: "not_found",
       locale: route.locale,
@@ -1608,6 +1788,7 @@ export async function readPageDetail(
 }
 
 async function loadModel(route: PublicCatalogRenderRoute): Promise<PublicCatalogRenderModel> {
+  if (route.kind === "country_list") return readCountryList(route);
   if (route.kind === "program_list") return readProgramList(route);
   if (route.kind === "program_detail") return readProgramDetail(route);
   if (route.kind === "university_detail") return readUniversityDetail(route);
@@ -1624,9 +1805,19 @@ function refresh(key: string, route: PublicCatalogRenderRoute): Promise<PublicCa
   let pending: Promise<PublicCatalogRenderModel>;
   pending = loadModel(route)
     .then(async (value) => {
+      value.consentCopy = readPublicConsentCopy(route.locale);
       const kind = value.kind.replace(/_detail$/, "") as DetailLayoutKind;
       if (DETAIL_LAYOUT_KINDS.includes(kind)) value.detailLayout = await readPublishedDetailLayout(kind);
-      if (generation === cacheGeneration) saveCache(key, value);
+      let contentId: number | undefined;
+      if (value.kind === "program_detail") contentId = value.program.id;
+      if (value.kind === "university_detail") contentId = value.university.id;
+      if (value.kind === "city_detail") contentId = value.city.id;
+      if (value.kind === "destination_detail") {
+        contentId = value.destination.catalogCountryId ?? matchCatalogCountry(value.destination.country, await db.select().from(countriesTable))?.id;
+        value.destination.catalogCountryId = contentId;
+      }
+      if (contentId && DETAIL_LAYOUT_KINDS.includes(kind)) value.editorial = await readPublishedDetailContent(kind, contentId, route.locale);
+      if (generation === cacheGeneration && route.kind !== "city_detail" && route.kind !== "program_detail") saveCache(key, value);
       return value;
     })
     .finally(() => {
@@ -1643,6 +1834,12 @@ export async function getPublicCatalogRenderModel(
   route: PublicCatalogRenderRoute,
 ): Promise<{ value: PublicCatalogRenderModel; cacheStatus: PublicCatalogRenderCacheStatus }> {
   const key = cacheKey(route);
+  // City and program cards include time-bound prices and admission flags: coalesce concurrent
+  // reads, but never replay a cached value after its evidence may have expired.
+  if (route.kind === "city_detail" || route.kind === "program_detail") {
+    const coalesced = inFlight.has(key);
+    return { value: await refresh(key, route), cacheStatus: coalesced ? "COALESCED" : "MISS" };
+  }
   const now = Date.now();
   const entry = cache.get(key);
   if (entry?.freshUntil && entry.freshUntil > now) {
@@ -1664,12 +1861,8 @@ export async function getPublicCatalogRenderModel(
 
 export function getPublicCatalogCacheGeneration(): number { return cacheGeneration; }
 
-export function invalidatePublicCatalogRenderCache(input: {
-  detailTemplate?: DetailLayoutKind;
-  entityType?: "program" | "university" | "destination" | "city" | "catalog" | "article" | "page" | "all";
-  entityId?: number;
-  locale?: string;
-} = {}): number {
+export function applyPublicCatalogRenderCacheInvalidation(input: PublicCatalogInvalidation = {}): number {
+  if (input.detailTemplate) invalidatePublishedDetailLayout(input.detailTemplate);
   let removed = 0;
   const candidateKeys = new Set([...cache.keys(), ...inFlight.keys()]);
   const matches = (key: string): boolean => {
@@ -1680,15 +1873,17 @@ export function invalidatePublicCatalogRenderCache(input: {
       || input.entityType === "all"
       || (input.entityType === "catalog" && CATALOG_DERIVED_CACHE_KINDS.has(kind))
       || (input.entityType === "program" && (
-        kind === "program_list"
+        kind === "country_list"
+        || kind === "program_list"
+        || kind === "city_detail"
         || kind === "page_detail"
         || (kind === "program_detail" && input.entityId !== undefined && identity === String(input.entityId))
       ))
       || (input.entityType === "university" && (
-        kind === "program_list" || kind === "program_detail" || kind === "page_detail"
+        kind === "country_list" || kind === "program_list" || kind === "program_detail" || kind === "page_detail" || kind === "city_detail"
         || (kind === "university_detail" && input.entityId !== undefined && identity === String(input.entityId))
       ))
-      || (input.entityType === "destination" && (kind === "destination_detail" || kind === "page_detail"))
+      || (input.entityType === "destination" && (kind === "country_list" || kind === "destination_detail" || kind === "page_detail"))
       || (input.entityType === "city" && (kind === "city_detail" || kind === "page_detail"))
       || (input.entityType === "article" && kind === "article_detail"
         && input.entityId !== undefined && identity === String(input.entityId))
@@ -1704,5 +1899,11 @@ export function invalidatePublicCatalogRenderCache(input: {
   // Other catalogue consumers (Course Finder) also key their caches by this generation.
   // A mutation must advance it even when no SSR entry happens to be cached.
   cacheGeneration += 1;
+  return removed;
+}
+
+export function invalidatePublicCatalogRenderCache(input: PublicCatalogInvalidation = {}): number {
+  const removed = applyPublicCatalogRenderCacheInvalidation(input);
+  publicCatalogInvalidationBus.publish(input);
   return removed;
 }

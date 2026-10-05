@@ -11,6 +11,7 @@ import { getCsrfCookieOptions } from "./lib/cookieOptions";
 import { getCurrentSeason } from "./lib/season";
 import { seedDocumentTypes } from "./scripts/seedDocumentTypes";
 import { seedCurrencies } from "./scripts/seedCurrencies";
+import { seedNotificationRules } from "./lib/notificationRuleSeed";
 import { HARDCODED_EXTRACTOR_FIELDS, HARDCODED_EXTRACTOR_RULES } from "./lib/aiDefaultConfigs";
 import { seedAiAgentConfig } from "./lib/inbox/aiAgentConfig";
 import { seedProgramScopeSource } from "./lib/inbox/knowledgeSources";
@@ -20,6 +21,10 @@ import {
   renderPublicCatalogHtml,
   shouldRenderPublicCatalogPath,
 } from "./lib/publicCatalogRenderContract";
+import {
+  readPublicAssetManifest,
+  resolvePublicAssetPreloads,
+} from "./lib/publicAssetPreloads";
 import { shouldNoindexSpaPath } from "./lib/spaRobotsPolicy";
 import {
   parsePublicWebRobotsConfig,
@@ -310,6 +315,15 @@ function serveStaticFrontend() {
     express.static(path.join(distPath, "assets"))
   );
 
+  // A missing hashed module must never fall through to the SPA/SSR HTML
+  // handler. Browsers reject that HTML as a JavaScript module and surface an
+  // opaque dynamic-import error. Return an honest, non-cacheable 404 instead.
+  app.use("/assets", (_req: express.Request, res: express.Response) => {
+    res.setHeader("Cache-Control", "no-store");
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.status(404).type("text/plain").send("Asset not found");
+  });
+
   app.use(express.static(distPath, {
     index: false,
     setHeaders: (res, filePath) => {
@@ -321,6 +335,7 @@ function serveStaticFrontend() {
 
   const indexPath = path.join(distPath, "index.html");
   const indexHtml = fs.readFileSync(indexPath, "utf8");
+  const publicAssetManifest = readPublicAssetManifest(distPath);
   const configuredSiteUrl = (() => {
     try {
       const parsed = new URL(
@@ -386,11 +401,14 @@ function serveStaticFrontend() {
         model: rendered.value,
         siteUrl: configuredSiteUrl,
         nonce,
+        preloadHrefs: resolvePublicAssetPreloads(publicAssetManifest, rendered.value),
       });
       const durationMs = Number(process.hrtime.bigint() - startedAt) / 1_000_000;
       res.setHeader(
         "Cache-Control",
-        "public, max-age=0, s-maxage=300, stale-while-revalidate=3600",
+        rendered.value.kind === "program_detail" || rendered.value.kind === "city_detail"
+          ? "no-store"
+          : "public, max-age=0, must-revalidate",
       );
       res.setHeader("Content-Security-Policy", publicCatalogCsp(nonce));
       res.setHeader("X-Public-Render", "ssr-isr-pilot");
@@ -1424,8 +1442,9 @@ async function seedClaudeIntegration() {
     await pool.query(`ALTER TABLE email_queue ADD COLUMN IF NOT EXISTS max_retries INTEGER NOT NULL DEFAULT 3`);
     await pool.query(`ALTER TABLE email_queue ADD COLUMN IF NOT EXISTS next_retry_at TIMESTAMPTZ`);
     await pool.query(`CREATE INDEX IF NOT EXISTS email_queue_retry_idx ON email_queue (status, next_retry_at)`);
-    // Recover any rows stuck in 'processing' from a previous crashed worker.
-    await pool.query(`UPDATE email_queue SET status = 'pending' WHERE status = 'processing'`);
+    // A crashed sender may have received SMTP acceptance. Never blindly requeue
+    // processing rows here; the bounded email worker reconciles stale claims to
+    // UNKNOWN after the additive claim-column migration has been applied.
   } catch (err) {
     console.error("[migrate] email_queue retry columns:", err);
   }
@@ -2948,6 +2967,7 @@ async function seedClaudeIntegration() {
     }
     await seedDocumentTypes(pool);
     await seedCurrencies(pool);
+    await seedNotificationRules();
 
     // Idempotent: ensure the assignment.inconsistency notification rule exists
     // for environments seeded before this event was introduced.
@@ -3428,7 +3448,27 @@ async function seedClaudeIntegration() {
 
   serveStaticFrontend();
 
-  const { feedBus } = await import("./lib/feedBus");
+  const [{ feedBus }, { inboxBus }, { notificationBus }, { invalidateNotificationCounts }, { publicCatalogInvalidationBus }, { applyPublicCatalogRenderCacheInvalidation }, { clearPublicCatalogPolicyCache }, { facetCacheInvalidationBus }, { invalidateFacetCache }] = await Promise.all([
+    import("./lib/feedBus"),
+    import("./lib/inbox/eventBus"),
+    import("./lib/notificationBus"),
+    import("./lib/notificationCountCache"),
+    import("./lib/publicCatalogInvalidationBus"),
+    import("./lib/publicCatalogRenderReadModel"),
+    import("./lib/publicCatalogQueryPolicy"),
+    import("./lib/facetCacheInvalidationBus"),
+    import("./lib/facetCache"),
+  ]);
+  const unsubscribeNotificationCountInvalidation = notificationBus.subscribe(event => invalidateNotificationCounts(event.userId));
+  const unsubscribePublicCatalogInvalidation = publicCatalogInvalidationBus.subscribe(invalidation => {
+    applyPublicCatalogRenderCacheInvalidation(invalidation);
+    if (!invalidation.entityType || invalidation.entityType === "catalog" || invalidation.entityType === "all") {
+      clearPublicCatalogPolicyCache();
+    }
+  });
+  const unsubscribeFacetCacheInvalidation = facetCacheInvalidationBus.subscribe(namespace => {
+    invalidateFacetCache(namespace);
+  });
   let shuttingDown = false;
   let httpServer: ReturnType<typeof app.listen> | null = null;
   const shutdown = async (signal: string, exitCode = 0) => {
@@ -3465,6 +3505,25 @@ async function seedClaudeIntegration() {
     }
     try { await feedBus.shutdown(); } catch (error) {
       console.error("[shutdown] feedBus shutdown failed:", error);
+      exitCode = 1;
+    }
+    try { await inboxBus.shutdown(); } catch (error) {
+      console.error("[shutdown] inboxBus shutdown failed:", error);
+      exitCode = 1;
+    }
+    unsubscribeNotificationCountInvalidation();
+    try { await notificationBus.shutdown(); } catch (error) {
+      console.error("[shutdown] notificationBus shutdown failed:", error);
+      exitCode = 1;
+    }
+    unsubscribePublicCatalogInvalidation();
+    try { await publicCatalogInvalidationBus.shutdown(); } catch (error) {
+      console.error("[shutdown] public catalog invalidation bus shutdown failed:", error);
+      exitCode = 1;
+    }
+    unsubscribeFacetCacheInvalidation();
+    try { await facetCacheInvalidationBus.shutdown(); } catch (error) {
+      console.error("[shutdown] facet cache invalidation bus shutdown failed:", error);
       exitCode = 1;
     }
     process.exit(exitCode);

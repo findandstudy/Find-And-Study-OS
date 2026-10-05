@@ -1,16 +1,10 @@
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { useCustomBrowserLocation, getSavedNavPath } from "@/lib/navigation";
 import { getAuthCache, setAuthCache, clearAuthCache, getStickyUser, setStickyUser } from "@/lib/auth-cache";
-import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { PublicLayout } from "@/components/layout/PublicLayout";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { Switch, Route, Router as WouterRouter, useLocation } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { Toaster } from "@/components/ui/toaster";
-import { TooltipProvider } from "@/components/ui/tooltip";
-import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
-import { EmailVerificationGuard } from "@/components/auth/EmailVerificationGuard";
-import { AgentOnboardingGuard } from "@/components/auth/AgentOnboardingGuard";
 import { SeasonProvider } from "@/contexts/SeasonContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { ActivityTrackerProvider } from "@/components/ActivityTrackerProvider";
@@ -19,12 +13,8 @@ import { DashboardSkeleton } from "@/components/ui/page-skeleton";
 import { I18nProvider } from "@/lib/i18n/context";
 import { useI18nContext } from "@/lib/i18n/use-i18n-context";
 import { isValidLanguage, DEFAULT_LANGUAGE, type Language } from "@/lib/i18n/index";
-import NotFound from "@/pages/not-found";
 import { useGetMe } from "@workspace/api-client-react";
 import { useAgencyBranding } from "@/hooks/use-agency-branding";
-
-import Home from "@/pages/public/Home";
-import Login from "@/pages/auth/Login";
 
 function lazyRetry<T extends { default: React.ComponentType<any> }>(
   factory: () => Promise<T>,
@@ -57,6 +47,15 @@ if (typeof window !== "undefined") {
 }
 
 const About = lazyRetry(() => import("@/pages/public/About"));
+const DashboardLayout = lazyRetry(() => import("@/components/layout/DashboardLayout").then((module) => ({ default: module.DashboardLayout })));
+const ProtectedRoute = lazyRetry(() => import("@/components/auth/ProtectedRoute").then((module) => ({ default: module.ProtectedRoute })));
+const EmailVerificationGuard = lazyRetry(() => import("@/components/auth/EmailVerificationGuard").then((module) => ({ default: module.EmailVerificationGuard })));
+const AgentOnboardingGuard = lazyRetry(() => import("@/components/auth/AgentOnboardingGuard").then((module) => ({ default: module.AgentOnboardingGuard })));
+const TooltipProvider = lazyRetry(() => import("@/components/ui/tooltip").then((module) => ({ default: module.TooltipProvider })));
+const LazyToaster = lazyRetry(() => import("@/components/ui/toaster").then((module) => ({ default: module.Toaster })));
+const Home = lazyRetry(() => import("@/pages/public/Home"));
+const Login = lazyRetry(() => import("@/pages/auth/Login"));
+const NotFound = lazyRetry(() => import("@/pages/not-found"));
 const Countries = lazyRetry(() => import("@/pages/public/Countries"));
 const CountryDetail = lazyRetry(() => import("@/pages/public/CountryDetail"));
 const CityDetail = lazyRetry(() => import("@/pages/public/CityDetail"));
@@ -68,6 +67,33 @@ const UniversityDetail = lazyRetry(() => import("@/pages/public/UniversityDetail
 const Blog = lazyRetry(() => import("@/pages/public/Blog"));
 const Contact = lazyRetry(() => import("@/pages/public/Contact"));
 const AgencyApplication = lazyRetry(() => import("@/pages/public/AgencyApplication"));
+
+// Start the active public route chunk in parallel with the locale dictionary.
+// I18nProvider intentionally gates rendering until its dictionary arrives; if
+// route loading starts only after that gate, slow mobile connections pay a
+// needless second network waterfall before meaningful content can paint.
+if (typeof window !== "undefined") {
+  const segments = window.location.pathname.split("/").filter(Boolean);
+  const publicSection = segments[1] ?? "";
+  const preload = publicSection === "programs"
+    ? (segments[2] ? import("@/pages/public/ProgramDetail") : import("@/pages/public/Programs"))
+    : publicSection === "universities"
+      ? import("@/pages/public/UniversityDetail")
+      : publicSection === "countries" || publicSection === "destinations"
+        ? (segments[2] ? import("@/pages/public/CountryDetail") : import("@/pages/public/Countries"))
+        : publicSection === "cities"
+          ? import("@/pages/public/CityDetail")
+          : publicSection === "blog"
+            ? import("@/pages/public/Blog")
+            : publicSection === "contact"
+              ? import("@/pages/public/Contact")
+              : publicSection === "about"
+                ? import("@/pages/public/About")
+                : publicSection === "" && segments.length === 1
+                  ? import("@/pages/public/Home")
+                  : null;
+  void preload?.catch(() => undefined);
+}
 
 const StaffDashboard = lazyRetry(() => import("@/pages/staff/Dashboard"));
 const StaffLeads = lazyRetry(() => import("@/pages/staff/Leads"));
@@ -745,7 +771,7 @@ function Router() {
     );
   }
 
-  return <ErrorBoundary><NotFound /></ErrorBoundary>;
+  return <ErrorBoundary><Suspense fallback={<PageLoader />}><NotFound /></Suspense></ErrorBoundary>;
 }
 
 function AuthPrefetch() {
@@ -910,25 +936,46 @@ function AgencyBrandingApplier() {
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <AuthPrefetch />
-      <AgencyBrandingApplier />
       <ThemeProvider>
-        <SeasonProvider>
-          <I18nProvider>
-            <UserLanguageSyncer />
-            <TooltipProvider>
-              <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")} hook={useCustomBrowserLocation as any}>
-                <ActivityTrackerProvider>
-                  <Router />
-                </ActivityTrackerProvider>
-              </WouterRouter>
-              <Toaster />
-            </TooltipProvider>
-          </I18nProvider>
-        </SeasonProvider>
+        <I18nProvider>
+          <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")} hook={useCustomBrowserLocation as any}>
+            <RouteScopeProviders><Router /></RouteScopeProviders>
+          </WouterRouter>
+        </I18nProvider>
       </ThemeProvider>
     </QueryClientProvider>
   );
+}
+
+function DeferredToaster() {
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    // Public read pages do not need toast primitives during first paint. Keep
+    // the queue intact, but defer its renderer until after the CWV window so
+    // dialog/portal code cannot compete with the page's meaningful content.
+    const timer = window.setTimeout(() => setReady(true), 5_000);
+    return () => window.clearTimeout(timer);
+  }, []);
+  return ready ? <Suspense fallback={null}><LazyToaster /></Suspense> : null;
+}
+
+function RouteScopeProviders({ children }: { children: React.ReactNode }) {
+  const [location] = useLocation();
+  const isPortal = /^(?:\/admin|\/staff|\/student|\/agent|\/institution)(?:\/|$)/.test(location);
+  if (isPortal) {
+    return (
+      <Suspense fallback={<PageLoader />}>
+        <AuthPrefetch />
+        <AgencyBrandingApplier />
+        <SeasonProvider>
+          <UserLanguageSyncer />
+          <TooltipProvider><ActivityTrackerProvider>{children}</ActivityTrackerProvider></TooltipProvider>
+          <LazyToaster />
+        </SeasonProvider>
+      </Suspense>
+    );
+  }
+  return <>{children}<DeferredToaster /></>;
 }
 
 export default App;

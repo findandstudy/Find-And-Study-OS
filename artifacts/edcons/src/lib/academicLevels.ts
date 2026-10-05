@@ -9,8 +9,8 @@
  */
 
 export type AcademicGroup = "A" | "B" | "C";
-export type EducationLevel = "high_school" | "bachelor" | "master";
-export type AcademicField = "institution" | "program" | "graduationYear" | "gpa" | "languageScore";
+export type EducationLevel = "high_school" | "bachelor" | "master" | "doctorate";
+export type AcademicField = "institution" | "country" | "program" | "graduationYear" | "gpa" | "languageScore";
 
 function normalizeLevelKey(levelKey: string): string {
   return String(levelKey || "")
@@ -59,7 +59,7 @@ export function requiredEducationLevels(levelKey: string): EducationLevel[] {
 
 export function academicFieldsForLevel(edLevel: EducationLevel): AcademicField[] {
   if (edLevel === "high_school") {
-    return ["institution", "graduationYear", "gpa", "languageScore"];
+    return ["institution", "country", "graduationYear", "gpa", "languageScore"];
   }
-  return ["institution", "program", "graduationYear", "gpa", "languageScore"];
+  return ["institution", "program", "country", "graduationYear", "gpa", "languageScore"];
 }

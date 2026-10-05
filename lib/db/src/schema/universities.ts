@@ -32,6 +32,25 @@ export const universitiesTable = pgTable("universities", {
   contactPersonEmail: text("contact_person_email"),
   status: text("status").notNull().default("open"),
 
+  // Public registration matching policy. "unknown" is intentionally not
+  // equivalent to accepting every nationality; the matcher reports that a
+  // human/catalog check is required until verified evidence is entered.
+  nationalityPolicy: text("nationality_policy").notNull().default("unknown"),
+  acceptedNationalityCodes: jsonb("accepted_nationality_codes").notNull().default([]).$type<string[]>(),
+  defaultRequiredEducationLevel: text("default_required_education_level"),
+  defaultMinGradeValue: real("default_min_grade_value"),
+  defaultGradeScale: text("default_grade_scale"),
+  defaultLanguageRequirements: jsonb("default_language_requirements").notNull().default([]).$type<Array<{
+    test: string;
+    overall: number;
+    sections?: Record<string, number>;
+    validMonths?: number;
+  }>>(),
+  defaultConditionalAdmission: boolean("default_conditional_admission").notNull().default(false),
+  admissionSourceUrl: text("admission_source_url"),
+  admissionVerifiedAt: timestamp("admission_verified_at", { withTimezone: true }),
+  admissionValidUntil: timestamp("admission_valid_until", { withTimezone: true }),
+
   // Active staff explicitly responsible for this university — they
   // also receive university-contract expiry warnings (alongside
   // active super_admin/admin/manager users).
@@ -71,6 +90,19 @@ export const programsTable = pgTable("programs", {
   feeType: text("fee_type"),
   minGpa: real("min_gpa"),
   minLanguageScore: real("min_language_score"),
+  requiredEducationLevel: text("required_education_level"),
+  minGradeValue: real("min_grade_value"),
+  gradeScale: text("grade_scale"),
+  languageRequirements: jsonb("language_requirements").$type<Array<{
+    test: string;
+    overall: number;
+    sections?: Record<string, number>;
+    validMonths?: number;
+  }>>(),
+  conditionalAdmission: boolean("conditional_admission"),
+  admissionSourceUrl: text("admission_source_url"),
+  admissionVerifiedAt: timestamp("admission_verified_at", { withTimezone: true }),
+  admissionValidUntil: timestamp("admission_valid_until", { withTimezone: true }),
   quota: integer("quota"),
   isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

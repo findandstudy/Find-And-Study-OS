@@ -4,7 +4,6 @@ import { useSeo } from "@/hooks/use-seo";
 import { useJsonLd, SITE_URL, SITE_NAME } from "@/hooks/use-json-ld";
 import { customFetch } from "@workspace/api-client-react";
 import { Link } from "wouter";
-import { motion } from "framer-motion";
 import { Globe2, GraduationCap, Building2, ArrowRight, MapPin } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -70,7 +69,7 @@ export default function Countries() {
     <>
       <section className="pt-24 pb-16 bg-gradient-to-br from-primary/5 via-accent/5 to-primary/5">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+          <div>
             <span className="inline-flex items-center gap-2 bg-primary/10 text-primary text-sm font-semibold px-4 py-2 rounded-full mb-6">
               <Globe2 className="w-4 h-4" /> {destinations.length > 0 ? t("countries.badgeCount", { count: destinations.length }) : t("countries.badge")}
             </span>
@@ -80,7 +79,7 @@ export default function Countries() {
             <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
               {t("countries.subtitle")}
             </p>
-          </motion.div>
+          </div>
         </div>
       </section>
 
@@ -155,12 +154,7 @@ function DestinationCard({ destination: dest, index, featured, t, localePath }: 
   const gradient = gradients[index % gradients.length];
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true }}
-      transition={{ delay: index * 0.05 }}
-    >
+    <div>
       <Link href={dest.canonicalPath || localePath(`/destinations/${dest.slug}`)}>
         <div className={`group relative rounded-3xl overflow-hidden border border-border/40 bg-card shadow-lg hover:shadow-xl hover:-translate-y-1 transition-all duration-300 cursor-pointer ${featured ? 'min-h-[320px]' : 'min-h-[280px]'} flex flex-col`}>
           <div className={`h-36 bg-gradient-to-br ${gradient} relative flex items-center justify-center`}>
@@ -209,6 +203,6 @@ function DestinationCard({ destination: dest, index, featured, t, localePath }: 
           </div>
         </div>
       </Link>
-    </motion.div>
+    </div>
   );
 }

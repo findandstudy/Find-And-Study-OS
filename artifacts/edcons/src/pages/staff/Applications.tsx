@@ -320,6 +320,7 @@ type ColVariant = "won" | "lost" | undefined;
 interface ApplicationRow {
   id: number;
   stage: string;
+  updatedAt?: string | null;
   [key: string]: unknown;
 }
 interface StageDocumentEntry {
@@ -904,6 +905,7 @@ function EditApplicationDialog({ open, onClose, app, stages }: { open: boolean; 
   async function handleSave() {
     const fee = parseFloat(form.tuitionFee);
     const payload: any = {
+      expectedUpdatedAt: app.updatedAt,
       stage: form.stage,
       level: form.level || null,
       country: form.country || null,
@@ -1930,13 +1932,19 @@ export default function ApplicationsPage() {
   // modal, DOCS_REQUIRED → file upload dialog. Returns true on a completed move.
   async function performStageMove(appId: number, targetStage: string): Promise<boolean> {
     const colLabel = stageLabelOf(targetStage);
-    const result = await requestStageChange(appId, targetStage);
+    const currentApp = allApps.find((candidate: any) => candidate.id === appId);
+    const result = await requestStageChange(appId, targetStage, currentApp?.updatedAt ?? null);
     switch (result.kind) {
       case "ok":
         queryClient.invalidateQueries({ queryKey: ["applications"] });
         queryClient.invalidateQueries({ queryKey: [`/api/applications/${appId}`] });
         toast({ title: t("staffApplications.movedTo", { stage: colLabel }) });
         return true;
+      case "conflict":
+        queryClient.invalidateQueries({ queryKey: ["applications"] });
+        queryClient.invalidateQueries({ queryKey: [`/api/applications/${appId}`] });
+        toast({ title: "Başvuru değişti", description: "Başka bir kullanıcı kaydı güncelledi. Liste yenilendi; lütfen tekrar deneyin.", variant: "destructive" });
+        return false;
       case "doc_selection_required":
         setDocRequestDialog({
           appId,

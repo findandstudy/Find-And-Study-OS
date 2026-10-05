@@ -42,7 +42,7 @@ import { validatePassportNumber } from "@workspace/portal-adapters/identity-vali
 import { validateStudentCreateFields } from "../lib/studentCreateValidation";
 import { recordRequestSpan } from "../lib/requestTelemetry";
 import { buildFacetFilterInput, loadFacetValue } from "../lib/facetCache";
-import { getStudentPhotoThumbnail } from "../lib/studentPhotoThumbnail";
+import { getStudentPhotoThumbnail, studentPhotoThumbnailResponsePolicy } from "../lib/studentPhotoThumbnail";
 import { studentHasServablePhotoSql } from "../lib/studentPhoto";
 import { buildStudentJourneyProjection } from "../lib/studentJourneyProjection";
 import { isStudentJourneyEnabled } from "../lib/studentJourneyFeature";
@@ -415,21 +415,22 @@ router.get("/students/:id/photo/thumbnail", photoAccessGuard, async (req, res): 
     res.status(404).json({ error: "No photo" }); return;
   }
 
-  const etag = `\"student-photo-thumb-${photoDoc.id}\"`;
-  if (req.headers["if-none-match"] === etag) {
-    res.status(304).end();
-    return;
-  }
   try {
     const thumbnail = await getStudentPhotoThumbnail(
       `${photoDoc.id}:${photoDoc.createdAt?.getTime() || 0}`,
       photoDoc,
       `${photoDoc.firstName} ${photoDoc.lastName}`,
     );
+    const policy = studentPhotoThumbnailResponsePolicy(thumbnail, req.headers["if-none-match"]);
+    res.setHeader("Cache-Control", policy.cacheControl);
+    if (policy.etag) res.setHeader("ETag", policy.etag);
+    else res.removeHeader("ETag");
+    if (policy.notModified) {
+      res.status(304).end();
+      return;
+    }
     res.setHeader("Content-Type", "image/jpeg");
     res.setHeader("Content-Length", String(thumbnail.buffer.length));
-    res.setHeader("Cache-Control", "private, max-age=300");
-    res.setHeader("ETag", etag);
     res.setHeader("X-Thumbnail-Cache", thumbnail.cacheStatus);
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.end(thumbnail.buffer);
@@ -941,7 +942,7 @@ router.post("/students", requireAuth, requireRole(...STAFF_ROLES, ...AGENT_ROLES
 
     if (resolvedEducationRecords.length > 0) {
       await tx.insert(studentEducationRecordsTable).values(
-        resolvedEducationRecords.map(({ country: _country, ...record }) => ({
+        resolvedEducationRecords.map((record) => ({
           ...record,
           studentId: insertedStudent.id,
         })),
@@ -1049,7 +1050,7 @@ router.get("/students/:id", requireAuth, requireAgentStaffPermission("students")
 });
 
 // --- Education records (FAZ 2) -------------------------------------------
-const EDUCATION_LEVELS = ["high_school", "bachelor", "master"] as const;
+const EDUCATION_LEVELS = ["high_school", "bachelor", "master", "doctorate"] as const;
 
 router.get("/students/:id/education", requireAuth, requireAgentStaffPermission("students"), async (req, res): Promise<void> => {
   const id = parseInt(String(req.params.id), 10);
@@ -1158,7 +1159,7 @@ router.put("/students/:id/education", requireAuth, requireAgentStaffPermission("
   const s = (v: any, max: number) => (v === undefined || v === null || v === "") ? null : String(v).slice(0, max);
   const seenLevels = new Set<string>();
   const cleaned: Array<{
-    level: string; institution: string | null; program: string | null;
+    level: string; institution: string | null; program: string | null; country: string | null;
     graduationYear: number | null; gpa: string | null; gpaRaw: string | null;
     gpaScale: number | null; languageScore: string | null; sortOrder: number;
   }> = [];
@@ -1180,6 +1181,7 @@ router.put("/students/:id/education", requireAuth, requireAgentStaffPermission("
       level,
       institution: s(r.institution, 300),
       program: level === "high_school" ? null : s(r.program, 300),
+      country: s(r.country, 100),
       graduationYear: Number.isFinite(gy as number) ? gy : null,
       gpa: s(r.gpa, 20),
       gpaRaw: s(r.gpaRaw, 50),

@@ -254,22 +254,68 @@ router.post("/applications/:id/stage-documents", requireAuth, requireAgentStaffP
 
   const uploaderName = `${user.firstName || ""} ${user.lastName || ""}`.trim() || user.email;
 
-  const [doc] = await db.insert(applicationStageDocumentsTable).values({
-    applicationId,
-    stage,
-    fileName: safeName,
-    fileData: fileData || null,
-    fileUrl: fileUrl || null,
-    mimeType: mimeType || null,
-    sizeBytes: sizeBytes ? Number(sizeBytes) : null,
-    uploadedBy: user.id,
-    uploadedByRole: user.role,
-    uploadedByName: uploaderName,
-    isMissingDocNote: false,
-    validUntil: behavior.tracksOfferExpiry ? validUntilDate : null,
-  }).returning();
+  const docType = (typeof documentNameOverride === "string" && documentNameOverride.trim())
+    ? documentNameOverride.trim()
+    : stage;
+  const doc = await db.transaction(async (tx) => {
+    const [inserted] = await tx.insert(applicationStageDocumentsTable).values({
+      applicationId,
+      stage,
+      fileName: safeName,
+      fileData: fileData || null,
+      fileUrl: fileUrl || null,
+      mimeType: mimeType || null,
+      sizeBytes: sizeBytes ? Number(sizeBytes) : null,
+      uploadedBy: user.id,
+      uploadedByRole: user.role,
+      uploadedByName: uploaderName,
+      isMissingDocNote: false,
+      validUntil: behavior.tracksOfferExpiry ? validUntilDate : null,
+    }).returning();
 
-  await logAudit(user.id, "upload_stage_document", "application", applicationId, { stage, fileName, docId: doc.id }, req.ip);
+    const [appRow] = await tx
+      .select({ studentId: applicationsTable.studentId })
+      .from(applicationsTable)
+      .where(eq(applicationsTable.id, applicationId));
+    if (!appRow?.studentId) throw new Error("STAGE_DOCUMENT_APPLICATION_NOT_FOUND");
+    const [existingMirror] = await tx
+      .select({ id: documentsTable.id })
+      .from(documentsTable)
+      .where(and(
+        eq(documentsTable.sourceStageDocumentId, inserted.id),
+        isNull(documentsTable.deletedAt),
+      ));
+    if (!existingMirror) {
+      await tx.insert(documentsTable).values({
+        studentId: appRow.studentId,
+        applicationId,
+        name: safeName,
+        type: docType,
+        status: "approved",
+        fileData: fileData || null,
+        fileUrl: fileUrl || null,
+        mimeType: mimeType || null,
+        sizeBytes: sizeBytes ? Number(sizeBytes) : null,
+        sourceStageDocumentId: inserted.id,
+      });
+    }
+    await tx.insert(auditLogsTable).values({
+      userId: user.id,
+      action: "upload_stage_document",
+      resource: "application",
+      resourceId: applicationId,
+      changes: JSON.stringify({ stage, docId: inserted.id }),
+      ipAddress: req.ip || null,
+    });
+    return inserted;
+  }).catch((error) => {
+    if (error instanceof Error && error.message === "STAGE_DOCUMENT_APPLICATION_NOT_FOUND") return null;
+    throw error;
+  });
+  if (!doc) {
+    res.status(404).json({ error: "Application not found" });
+    return;
+  }
 
   // Task #187 — stage uploads may fulfil an open missing-doc request.
   // Use the override name (admin-configured Document Name) when present,
@@ -284,48 +330,6 @@ router.post("/applications/:id/stage-documents", requireAuth, requireAgentStaffP
     doc.id,
     parsedRespondingToNoteId,
   );
-
-  // Mirror ALL stage uploads to the student's shared document pool so they
-  // appear in the application detail (Program Document Requirements), the
-  // student Belgeler tab, and are counted by the mandatory-gate / automation.
-  // The catalog type comes from documentNameOverride when the admin configured
-  // it for this stage action, otherwise we fall back to the stage key.
-  // Idempotent: if a mirror already exists for this stage-doc ID, skip insert.
-  try {
-    const [appRow] = await db
-      .select({ studentId: applicationsTable.studentId })
-      .from(applicationsTable)
-      .where(eq(applicationsTable.id, applicationId));
-    if (appRow?.studentId) {
-      const docType = (typeof documentNameOverride === "string" && documentNameOverride.trim())
-        ? documentNameOverride.trim()
-        : stage;
-      const [existingMirror] = await db
-        .select({ id: documentsTable.id })
-        .from(documentsTable)
-        .where(and(
-          eq(documentsTable.sourceStageDocumentId, doc.id),
-          isNull(documentsTable.deletedAt)
-        ));
-      if (!existingMirror) {
-        await db.insert(documentsTable).values({
-          studentId: appRow.studentId,
-          applicationId,
-          name: safeName,
-          type: docType,
-          status: "approved",
-          fileData: fileData || null,
-          fileUrl: fileUrl || null,
-          mimeType: mimeType || null,
-          sizeBytes: sizeBytes ? Number(sizeBytes) : null,
-          sourceStageDocumentId: doc.id,
-        });
-      }
-    }
-  } catch (e) {
-    // Non-fatal: the stage document record was already saved; log and continue.
-    console.error("[STAGE-DOC] failed to mirror stage upload to student pool:", e);
-  }
 
   // Re-evaluate mandatory doc gate AFTER the mirror insert above so the
   // just-uploaded document is already visible in documentsTable when the
@@ -370,12 +374,21 @@ router.patch("/applications/:id/stage-documents/:docId", requireAuth, requireAge
     return;
   }
 
-  const [updated] = await db.update(applicationStageDocumentsTable)
-    .set(updates)
-    .where(eq(applicationStageDocumentsTable.id, docId))
-    .returning();
-
-  await logAudit(user.id, "update_stage_document", "application", applicationId, { docId, ...updates }, req.ip);
+  const updated = await db.transaction(async (tx) => {
+    const [saved] = await tx.update(applicationStageDocumentsTable)
+      .set(updates)
+      .where(eq(applicationStageDocumentsTable.id, docId))
+      .returning();
+    await tx.insert(auditLogsTable).values({
+      userId: user.id,
+      action: "update_stage_document",
+      resource: "application",
+      resourceId: applicationId,
+      changes: JSON.stringify({ docId, fields: Object.keys(updates).sort() }),
+      ipAddress: req.ip || null,
+    });
+    return saved;
+  });
   res.json(updated);
 });
 
@@ -400,24 +413,24 @@ router.delete("/applications/:id/stage-documents/:docId", requireAuth, requireAg
     return;
   }
 
-  await db.delete(applicationStageDocumentsTable)
-    .where(eq(applicationStageDocumentsTable.id, docId));
-
-  // Faz J — sync-delete the documents mirror that was created when this
-  // stage doc was uploaded so the application detail and student Belgeler
-  // tab no longer show the deleted document.
-  try {
-    await db.update(documentsTable)
+  await db.transaction(async (tx) => {
+    await tx.delete(applicationStageDocumentsTable)
+      .where(eq(applicationStageDocumentsTable.id, docId));
+    await tx.update(documentsTable)
       .set({ deletedAt: new Date() })
       .where(and(
         eq(documentsTable.sourceStageDocumentId, docId),
-        isNull(documentsTable.deletedAt)
+        isNull(documentsTable.deletedAt),
       ));
-  } catch (e) {
-    console.error("[STAGE-DOC] failed to remove document mirror on stage-doc delete:", e);
-  }
-
-  await logAudit(user.id, "delete_stage_document", "application", applicationId, { docId, stage: doc.stage }, req.ip);
+    await tx.insert(auditLogsTable).values({
+      userId: user.id,
+      action: "delete_stage_document",
+      resource: "application",
+      resourceId: applicationId,
+      changes: JSON.stringify({ docId, stage: doc.stage }),
+      ipAddress: req.ip || null,
+    });
+  });
   res.sendStatus(204);
 });
 

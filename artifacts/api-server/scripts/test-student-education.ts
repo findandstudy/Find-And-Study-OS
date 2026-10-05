@@ -3,7 +3,7 @@
  *
  * SE-1  GET on fresh student → empty records.
  * SE-2  PUT 2 records → both active, ordered.
- * SE-3  PUT again with 3 records → replace-set: old soft-deleted, new set active.
+ * SE-3  PUT again with 4 records → replace-set: old soft-deleted, new set active.
  * SE-4  Duplicate level in body → 400.
  * SE-5  Invalid level → 400.
  * SE-6  PUT empty array → clears all active records.
@@ -111,8 +111,8 @@ test("SE-1 GET fresh student → empty records", async () => {
 test("SE-2 PUT 2 records → active + ordered", async () => {
   const r = await apiReq("PUT", `/api/students/${studentId}/education`, {
     records: [
-      { level: "high_school", institution: "HS One", graduationYear: 2018, gpa: "85" },
-      { level: "bachelor", institution: "Uni One", program: "CS", graduationYear: 2022, gpa: "3.2", gpaRaw: "3.2", gpaScale: 4 },
+      { level: "high_school", institution: "HS One", country: "Türkiye", graduationYear: 2018, gpa: "85" },
+      { level: "bachelor", institution: "Uni One", program: "CS", country: "Germany", graduationYear: 2022, gpa: "3.2", gpaRaw: "3.2", gpaScale: 4 },
     ],
   });
   assert.equal(r.status, 200);
@@ -120,6 +120,7 @@ test("SE-2 PUT 2 records → active + ordered", async () => {
   assert.equal(r.body.records[0].level, "high_school");
   assert.equal(r.body.records[1].level, "bachelor");
   assert.equal(r.body.records[1].program, "CS");
+  assert.equal(r.body.records[0].country, "Türkiye");
 });
 
 test("SE-3 PUT replace-set: old soft-deleted, new active", async () => {
@@ -128,22 +129,23 @@ test("SE-3 PUT replace-set: old soft-deleted, new active", async () => {
       { level: "high_school", institution: "HS Two" },
       { level: "bachelor", institution: "Uni Two", program: "EE" },
       { level: "master", institution: "Uni Three", program: "AI" },
+      { level: "doctorate", institution: "Uni Four", program: "Law", country: null },
     ],
   });
   assert.equal(r.status, 200);
-  assert.equal(r.body.records.length, 3);
+  assert.equal(r.body.records.length, 4);
 
   const active = await db.select().from(studentEducationRecordsTable)
     .where(and(eq(studentEducationRecordsTable.studentId, studentId), isNull(studentEducationRecordsTable.deletedAt)));
-  assert.equal(active.length, 3);
+  assert.equal(active.length, 4);
   assert.ok(active.every((x) => x.institution !== "HS One" && x.institution !== "Uni One"));
 
   const all = await db.select().from(studentEducationRecordsTable)
     .where(eq(studentEducationRecordsTable.studentId, studentId));
-  assert.equal(all.length, 5); // 2 soft-deleted + 3 active
+  assert.equal(all.length, 6); // 2 soft-deleted + 4 active
 
   const g = await apiReq("GET", `/api/students/${studentId}/education`);
-  assert.equal(g.body.records.length, 3);
+  assert.equal(g.body.records.length, 4);
 });
 
 test("SE-4 duplicate level → 400", async () => {
