@@ -713,3 +713,30 @@ Cluster durduruldu; staging/production/PII/provider, commit/push/deploy değişm
 Gerçek kaynaklı katalog veri girişi, 23 locale çeviri, hacim p95/p99 ve browser
 UAT ayrı release kapılarıdır. Kanıt ve kapsam:
 `docs/STUDENT_REGISTRATION_MATCHING_2026-09-28.md`.
+
+## 5 Ekim 2026 — Pages öncelikleri (yerel; deploy edilmedi)
+
+Kullanıcının Pages önceliklerini uygulama onayıyla
+`codex/public-detail-staging-20260919` branch'inde, temiz `d85d75f3fcc8...`
+başlangıcından mevcut dört public detay bileşenini kullanan sandbox taslak
+önizlemesi, modüle yerel TR/EN metinleri ve editör kayıt/çıkış güvenliği
+genişletildi. Katalog bloklarında bozuk yanıt/retry koruması eklendi. Taslak
+önizlemesi gerçek katalog bilgilerini ve yayınlanmış düzeni salt-okunur alır;
+private/external medya ve işlemler kapalı, draft public URL'si yoktur.
+Önizleme render paketi public ilk yüklemeye eklenmez.
+
+Birleşik browser 56/56, gerçek uygulama router hook'uyla tekrar 11/11,
+detail-content 20/20, mevcut API saf regresyon 16/16, Edcons build öncesi
+125/125, typecheck/i18n/build/sitemap/bundle-budget PASS. Test grupları
+örtüşür; benzersiz test toplamı değildir. Gerçek verili browser testleri
+staging'den anonim GET ile dört örneği alıp yerel kodda EN/AR ve üç genişlikte
+render eder; staging login/yazı veya PostgreSQL/gerçek başvuru testi değildir.
+
+Navigation API bulunmayan tarayıcılarda geri/ileri koruması global router'ın
+önüne bağlanmadan garanti edilemez; scope genişletilmedi, dirty editörde açık
+TR/EN uyarı vardır. Gerçek editoryal/çeviri/medya tamamlama, tam staging UAT
+ve onaylı yayın kapıları açıktır. Auth/CRM/payment/Course Finder mantığı,
+DB/migration, global router/i18n/design, CI/deploy değişmedi. Commit/push,
+staging/production deploy ve gerçek içerik yayını yapılmadı. Kapsam, bütün
+dosyalar, kanıt ve PARTIALLY READY sınırı:
+`docs/PAGES_AUTHORING_LOCAL_2026-09-16.md` içindeki 5 Ekim eki.

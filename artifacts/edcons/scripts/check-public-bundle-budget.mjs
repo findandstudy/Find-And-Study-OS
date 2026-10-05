@@ -56,6 +56,10 @@ assert.ok(
   modulePreloads.every((asset) => !asset.includes("vendor-radix")),
   "public bootstrap must not preload the portal component runtime",
 );
+assert.ok(
+  initialJavascript.every((asset) => !asset.includes("detail-preview-renderer")),
+  "public bootstrap must not preload the Pages-only static preview renderer",
+);
 
 const localeCodes = [
   "en", "tr", "ar", "fr", "ru", "fa", "zh", "hi", "es", "id", "ur",

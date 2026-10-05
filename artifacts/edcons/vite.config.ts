@@ -96,6 +96,12 @@ export default defineConfig({
       output: {
         manualChunks(id) {
           if (!id.includes("node_modules")) return undefined;
+          // The Pages-only static preview renderer must remain lazy. Bundling
+          // react-dom/server.browser with the public React runtime makes every
+          // anonymous visitor download an editor-only rendering engine.
+          if (id.includes("/react-dom/server.browser") || id.includes("/react-dom/cjs/react-dom-server")) {
+            return "detail-preview-renderer";
+          }
           if (id.includes("/react/") || id.includes("/react-dom/") || id.includes("/scheduler/") || id.includes("react/jsx-runtime")) {
             return "vendor-react";
           }

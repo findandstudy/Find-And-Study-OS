@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useId, useRef, useState } from "react";
 import { customFetch } from "@workspace/api-client-react";
 import { ArrowDown, ArrowUp, ExternalLink, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -15,8 +15,9 @@ import {
 } from "@/lib/website/detailContentContract";
 
 export type DetailContentTarget = {
-  kind: DetailContentKind; entityId: number; locale: string; title: string; sourceEditPath: string;
+  kind: DetailContentKind; entityId: number; locale: string; title: string; sourceEditPath: string; canonicalPath?: string | null;
 };
+const DetailFullPreview = lazy(() => import("./DetailFullPreview"));
 type SavedContent = {
   content: DetailContent; pageId: number | null; updatedAt: string | null;
   digest: string | null; published: DetailContent | null;
@@ -136,6 +137,8 @@ export default function DetailContentEditor({ target, onClose, onSaved }: { targ
   const [message, setMessage] = useState("");
   const [approved, setApproved] = useState(false);
   const [preview, setPreview] = useState(false);
+  const [previewReady, setPreviewReady] = useState(false);
+  const onPreviewReady = useCallback((ready: boolean) => { setPreviewReady(ready); if (!ready) setApproved(false); }, []);
   const [showPublished, setShowPublished] = useState(false);
   const [reloadRequired, setReloadRequired] = useState(false);
   const [attempt, setAttempt] = useState(0);
@@ -155,7 +158,7 @@ export default function DetailContentEditor({ target, onClose, onSaved }: { targ
     return { ...entry, content: parsed };
   };
   const readEntry = async (signal?: AbortSignal) => checkedEntry(await customFetch<SavedContent>(readUrl, { signal, cache: "no-store" }));
-  const accept = (entry: SavedContent) => { setSaved(entry); setContent(entry.content); setApproved(false); setReloadRequired(false); setNewKey(""); };
+  const accept = (entry: SavedContent) => { setSaved(entry); setContent(entry.content); setApproved(false); setPreview(false); setPreviewReady(false); setReloadRequired(false); setNewKey(""); };
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   useEffect(() => {
     const controller = new AbortController();
@@ -171,7 +174,7 @@ export default function DetailContentEditor({ target, onClose, onSaved }: { targ
     window.addEventListener("beforeunload", warn);
     return () => window.removeEventListener("beforeunload", warn);
   }, [dirty, busy]);
-  const change = (next: DetailContent) => { setContent(next); setApproved(false); setMessage(""); setError(""); setShowPublished(false); };
+  const change = (next: DetailContent) => { setContent(next); setApproved(false); setPreviewReady(false); setMessage(""); setError(""); setShowPublished(false); };
   const performAction = (action: PendingAction) => {
     if (action.type === "close") onClose();
     else if (action.type === "locale") { setContent(null); setSaved(null); setLocale(action.locale); setApproved(false); }
@@ -215,7 +218,7 @@ export default function DetailContentEditor({ target, onClose, onSaved }: { targ
     finally { if (mounted.current) setBusy(false); }
   };
   const publish = async () => {
-    if (!saved?.pageId || !saved.digest || dirty || busy || !approved || reloadRequired || savedIsPublished) return;
+    if (!saved?.pageId || !saved.digest || dirty || busy || !approved || reloadRequired || savedIsPublished || !previewReady || !preview || showPublished) return;
     setBusy(true); setError(""); setMessage(""); setApproved(false);
     try {
       const entry = checkedEntry(await customFetch<SavedContent>("/api/website/detail-content/publish", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pageId: saved.pageId, digest: saved.digest, approved: true }) }));
@@ -241,14 +244,14 @@ export default function DetailContentEditor({ target, onClose, onSaved }: { targ
       {message && <p role="status" className="rounded-lg bg-muted p-3 text-sm">{message}</p>}
       {content && saved && <>
         <div className="flex flex-wrap items-center gap-2"><Badge variant={dirty ? "outline" : "secondary"}>{dirty ? copy("Unsaved changes", "Kaydedilmemiş değişiklikler") : saved.pageId ? copy("Saved draft", "Kaydedilmiş taslak") : copy("No saved draft", "Kaydedilmiş taslak yok")}</Badge><Badge variant="outline">{savedIsPublished ? copy("Saved version is published", "Kaydedilmiş sürüm yayında") : saved.published ? copy("An earlier version is published", "Önceki sürüm yayında") : copy("No supplemental content published", "Yayınlanmış ek içerik yok")}</Badge>{saved.updatedAt && <span className="text-xs text-muted-foreground"><bdi>{new Date(saved.updatedAt).toLocaleString(lang)}</bdi></span>}</div>
-        <div className="flex flex-wrap gap-2"><Button size="sm" variant={!preview ? "secondary" : "outline"} onClick={() => { setPreview(false); setShowPublished(false); }}>{copy("Edit draft", "Taslağı düzenle")}</Button><Button size="sm" variant={preview && !showPublished ? "secondary" : "outline"} onClick={() => { setPreview(true); setShowPublished(false); }}>{copy("Local draft preview", "Yerel taslak önizlemesi")}</Button>{saved.published && <Button size="sm" variant={preview && showPublished ? "secondary" : "outline"} onClick={() => { setPreview(true); setShowPublished(true); }}>{copy("Published version", "Yayındaki sürüm")}</Button>}</div>
-        {preview ? <div className="space-y-3"><p className="text-sm text-muted-foreground">{copy("Text preview only: images and links are listed without loading external resources. Unpublished content is not sent to a public page.", "Metin önizlemesi: görsel ve bağlantılar dış kaynak yüklenmeden listelenir. Yayınlanmamış içerik halka açık sayfaya gönderilmez.")}</p>{previewContent && <DetailContentPreview content={previewContent} copy={copy} />}</div>
+        <div className="flex flex-wrap gap-2"><Button size="sm" variant={!preview ? "secondary" : "outline"} onClick={() => { setApproved(false); setPreviewReady(false); setPreview(false); setShowPublished(false); }}>{copy("Edit draft", "Taslağı düzenle")}</Button><Button size="sm" variant={preview && !showPublished ? "secondary" : "outline"} onClick={() => { if (!preview || showPublished) { setApproved(false); setPreviewReady(false); } setPreview(true); setShowPublished(false); }}>{copy("Local draft preview", "Yerel taslak önizlemesi")}</Button>{saved.published && <Button size="sm" variant={preview && showPublished ? "secondary" : "outline"} onClick={() => { if (!preview || !showPublished) { setApproved(false); setPreviewReady(false); } setPreview(true); setShowPublished(true); }}>{copy("Published version", "Yayındaki sürüm")}</Button>}</div>
+        {preview ? <div className="space-y-3">{previewContent && <><Suspense fallback={<p role="status">{copy("Preparing full preview…", "Tam önizleme hazırlanıyor…")}</p>}><DetailFullPreview target={target} content={prepareDetailContentDraft(previewContent)} copy={copy} onReady={onPreviewReady} /></Suspense><details className="rounded-lg border p-3"><summary className="cursor-pointer text-sm font-medium">{copy("Supplemental text and image references", "Ek metin ve görsel referansları")}</summary><div className="mt-3"><DetailContentPreview content={previewContent} copy={copy} /></div></details></>}</div>
           : <fieldset disabled={busy} className="min-w-0 space-y-4" dir={LANGUAGE_META[locale as Language]?.dir ?? "ltr"}>
             {content.sections.map((section, index) => <details key={section.key} open className="min-w-0 rounded-xl border p-3 sm:p-4"><summary className="cursor-pointer break-words font-semibold">{index + 1}. {keyLabel(section.key)}{section.title ? ` — ${section.title}` : ""}</summary><div className="mt-4 space-y-4"><div className="flex flex-wrap justify-end gap-2"><Button type="button" variant="outline" size="icon" disabled={index === 0} aria-label={`${copy("Move up", "Yukarı taşı")}: ${keyLabel(section.key)}`} onClick={() => moveSection(index, -1)}><ArrowUp className="h-4 w-4" /></Button><Button type="button" variant="outline" size="icon" disabled={index === content.sections.length - 1} aria-label={`${copy("Move down", "Aşağı taşı")}: ${keyLabel(section.key)}`} onClick={() => moveSection(index, 1)}><ArrowDown className="h-4 w-4" /></Button><Button type="button" variant="outline" size="sm" onClick={() => requestAction({ type: "remove", key: section.key })}><Trash2 className="me-1 h-4 w-4" />{copy("Remove section", "Bölümü kaldır")}</Button></div><SectionFields section={section} onChange={value => changeSection(index, value)} copy={copy} /></div></details>)}
             {!content.sections.length && <p className="rounded-lg border border-dashed p-5 text-sm">{copy("No sections yet. Add only content supported by real sources.", "Henüz bölüm yok. Yalnız gerçek kaynaklarla desteklenen içerik ekleyin.")}</p>}
             <div className="flex flex-wrap items-end gap-2"><label className="min-w-0 flex-1 space-y-1 text-sm"><span className="block font-medium">{copy("New section", "Yeni bölüm")}</span><select className="h-10 w-full rounded-md border bg-background px-3" value={newKey} onChange={event => setNewKey(event.target.value)}><option value="">{copy("Choose a section", "Bölüm seçin")}</option>{availableKeys.map(key => <option key={key} value={key}>{keyLabel(key)}</option>)}</select></label><Button type="button" variant="outline" disabled={!newKey || content.sections.length >= 14 || !availableKeys.includes(newKey)} onClick={() => { change({ ...content, sections: [...content.sections, { key: newKey, title: "", reviewedOn: "", sources: [{ label: "", url: "" }] }] }); setNewKey(""); }}><Plus className="me-1 h-4 w-4" />{copy("Add section", "Bölüm ekle")}</Button></div>
           </fieldset>}
-        {!!saved.pageId && !savedIsPublished && <div className="space-y-3 rounded-lg border border-primary/30 p-4"><h3 className="font-semibold">{copy("Separate publication review", "Ayrı yayın incelemesi")}</h3><p className="text-sm">{copy("A different authorized administrator must review this exact saved version and its sources. This does not publish the catalogue entity or change SEO approval. Editing or saving resets approval.", "Farklı bir yetkili yönetici bu kaydedilmiş sürümü ve kaynaklarını incelemelidir. Bu işlem katalog kaydını yayınlamaz veya SEO onayını değiştirmez. Düzenleme veya kaydetme onayı sıfırlar.")}</p><p className="break-all font-mono text-xs" dir="ltr">{saved.digest}</p><label className="flex items-start gap-2 text-sm"><input type="checkbox" className="mt-1" checked={approved} disabled={dirty || busy || reloadRequired || !preview || showPublished} onChange={event => setApproved(event.target.checked)} />{copy("I reviewed the local preview of this exact saved draft and approve publication.", "Bu kaydedilmiş taslağın yerel önizlemesini inceledim ve yayınlanmasını onaylıyorum.")}</label><Button disabled={!approved || dirty || busy || reloadRequired || !saved.digest} onClick={() => void publish()}>{copy("Publish reviewed draft", "İncelenen taslağı yayınla")}</Button></div>}
+        {!!saved.pageId && !savedIsPublished && <div className="space-y-3 rounded-lg border border-primary/30 p-4"><h3 className="font-semibold">{copy("Separate publication review", "Ayrı yayın incelemesi")}</h3><p className="text-sm">{copy("A different authorized administrator must review this exact saved version and its sources. This does not publish the catalogue entity or change SEO approval. Editing or saving resets approval.", "Farklı bir yetkili yönetici bu kaydedilmiş sürümü ve kaynaklarını incelemelidir. Bu işlem katalog kaydını yayınlamaz veya SEO onayını değiştirmez. Düzenleme veya kaydetme onayı sıfırlar.")}</p><p className="break-all font-mono text-xs" dir="ltr">{saved.digest}</p><label className="flex items-start gap-2 text-sm"><input type="checkbox" className="mt-1" checked={approved} disabled={dirty || busy || reloadRequired || !preview || showPublished || !previewReady} onChange={event => setApproved(event.target.checked)} />{copy("I reviewed the local preview of this exact saved draft and approve publication.", "Bu kaydedilmiş taslağın yerel önizlemesini inceledim ve yayınlanmasını onaylıyorum.")}</label><Button disabled={!approved || dirty || busy || reloadRequired || !saved.digest || !previewReady || !preview || showPublished} onClick={() => void publish()}>{copy("Publish reviewed draft", "İncelenen taslağı yayınla")}</Button></div>}
       </>}
     </div>
     <div className="flex shrink-0 flex-wrap justify-end gap-2 border-t bg-background p-4"><Button variant="outline" disabled={busy} onClick={close}>{copy("Close", "Kapat")}</Button><Button disabled={loading || busy || !content || !saved || reloadRequired || (!dirty && !!saved.pageId)} onClick={() => void save()}>{busy ? copy("Working…", "İşleniyor…") : copy("Save draft only", "Yalnız taslağı kaydet")}</Button></div>

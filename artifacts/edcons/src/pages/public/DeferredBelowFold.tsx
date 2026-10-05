@@ -1,4 +1,5 @@
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState, useContext } from "react";
+import { DetailPreviewContext } from "./DetailPreviewContext";
 
 /**
  * Keeps expensive discovery widgets out of the initial render until they are
@@ -6,8 +7,9 @@ import { type ReactNode, useEffect, useRef, useState } from "react";
  * bounded placeholder preserves layout and the widget mounts on scroll.
  */
 export function DeferredBelowFold({ children, minHeight = 280 }: { children: ReactNode; minHeight?: number }) {
+  const preview = useContext(DetailPreviewContext);
   const anchor = useRef<HTMLDivElement>(null);
-  const [visible, setVisible] = useState(false);
+  const [visible, setVisible] = useState(!!preview);
 
   useEffect(() => {
     const node = anchor.current;

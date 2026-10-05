@@ -1,6 +1,7 @@
 import { DetailLayout } from "./DetailLayout";
 import { programAdmissionsOpen } from "@/lib/programAdmissions";
-import { lazy, Suspense, useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState, useContext } from "react";
+import { DetailPreviewContext } from "./DetailPreviewContext";
 import { Link, useLocation } from "wouter";
 import { customFetch } from "@workspace/api-client-react";
 import { useI18n } from "@/hooks/use-i18n";
@@ -115,10 +116,12 @@ function minorAmount(value: string, currency: string): number | null {
 }
 
 export default function ProgramDetail({ routeKey }: { routeKey: string }) {
+  const preview = useContext(DetailPreviewContext);
   const { t, lang, localePath } = useI18n();
   const [, setLocation] = useLocation();
-  const [payload, setPayload] = useState<ProgramDetailPayload | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [fetchedPayload, setPayload] = useState<ProgramDetailPayload | null>(null);
+  const payload = preview ? preview.payload as ProgramDetailPayload : fetchedPayload;
+  const [loading, setLoading] = useState(!preview);
   const [error, setError] = useState(false);
   const program = payload?.data;
   const editorial = boundDetailContent(payload?.editorial, "program", program?.id, lang);
@@ -167,6 +170,7 @@ export default function ProgramDetail({ routeKey }: { routeKey: string }) {
   ] : []);
 
   useEffect(() => {
+    if (preview) return;
     let cancelled = false;
     setLoading(true);
     setError(false);

@@ -1,5 +1,6 @@
 import { DetailLayout } from "./DetailLayout";
-import { lazy, Suspense, useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState, useContext } from "react";
+import { DetailPreviewContext } from "./DetailPreviewContext";
 import { Link, useLocation } from "wouter";
 import { customFetch } from "@workspace/api-client-react";
 import { ArrowLeft, ArrowUpRight, MapPin, Building2, GraduationCap, Globe2 } from "lucide-react";
@@ -47,10 +48,12 @@ type CityPayload = {
 const CityProgramCards = lazy(() => import("./CityProgramCards").then(module => ({ default: module.CityProgramCards })));
 
 export default function CityDetail({ routeKey }: { routeKey: string }) {
+  const preview = useContext(DetailPreviewContext);
   const { t, lang, localePath } = useI18n();
   const [, setLocation] = useLocation();
-  const [payload, setPayload] = useState<CityPayload | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [fetchedPayload, setPayload] = useState<CityPayload | null>(null);
+  const payload = preview ? preview.payload as CityPayload : fetchedPayload;
+  const [loading, setLoading] = useState(!preview);
   const [error, setError] = useState(false);
   const city = payload?.data;
   const editorial = boundDetailContent(payload?.editorial, "city", city?.id, lang);
@@ -85,6 +88,7 @@ export default function CityDetail({ routeKey }: { routeKey: string }) {
   ] : []);
 
   useEffect(() => {
+    if (preview) return;
     let cancelled = false;
     setLoading(true);
     setError(false);

@@ -1,5 +1,6 @@
 import { DetailLayout } from "./DetailLayout";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useContext } from "react";
+import { DetailPreviewContext } from "./DetailPreviewContext";
 import { useI18n } from "@/hooks/use-i18n";
 import { useSeo } from "@/hooks/use-seo";
 import { useJsonLd, SITE_URL, SITE_NAME } from "@/hooks/use-json-ld";
@@ -73,8 +74,9 @@ function fixStorageUrl(url: string | null | undefined): string | null {
 }
 
 export default function CountryDetail({ slug }: { slug: string }) {
+  const preview = useContext(DetailPreviewContext);
   const { t, lang, localePath } = useI18n();
-  const [data, setData] = useState<{
+  const [fetchedData, setData] = useState<{
     editorial?: unknown;
     destination: Destination;
     universities: UniversityBrief[];
@@ -89,7 +91,8 @@ export default function CountryDetail({ slug }: { slug: string }) {
       internalLinkPolicy: "PUBLISHED_INDEXABLE_ONLY" | "LEGACY_UNGATED";
     };
   } | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const data = preview ? preview.payload as NonNullable<typeof fetchedData> : fetchedData;
+  const [isLoading, setIsLoading] = useState(!preview);
   const [error, setError] = useState(false);
   const editorial = boundDetailContent(data?.editorial, "destination", data?.destination.catalogCountryId, lang);
 
@@ -135,6 +138,7 @@ export default function CountryDetail({ slug }: { slug: string }) {
   );
 
   useEffect(() => {
+    if (preview) return;
     const controller = new AbortController();
     setIsLoading(true);
     setError(false);

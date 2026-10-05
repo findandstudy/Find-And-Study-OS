@@ -17,7 +17,7 @@
     "test:language-flags": "tsx --test ./scripts/test-language-country-codes.ts",
     "test:public-detail-templates": "tsx --test ./scripts/test-public-detail-templates.ts",
     "test:catalog-pages-inventory": "tsx --test ./scripts/test-catalog-pages-inventory.ts",
-    "test:detail-content": "tsx --test ./scripts/test-detail-content-editor.ts ./scripts/test-detail-content-sections.ts",
+    "test:detail-content": "tsx --test ./scripts/test-detail-content-editor.ts ./scripts/test-detail-content-sections.ts ./scripts/test-detail-full-preview.ts",
     "check:public-bundle-budget": "node scripts/check-public-bundle-budget.mjs",
     "serve": "vite preview --config vite.config.ts --host 0.0.0.0",
     "test:inbox-education-payload": "tsx --test ./scripts/test-inbox-education-payload.ts",

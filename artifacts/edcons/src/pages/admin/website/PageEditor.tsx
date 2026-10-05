@@ -25,6 +25,9 @@ import { SUPPORTED_LANGUAGES, LANGUAGE_META } from "@/lib/i18n";
 import DOMPurify from "isomorphic-dompurify";
 import { CatalogBlockPreview } from "./CatalogBlockPreview";
 import { CatalogBlockFields } from "./CatalogBlockFields";
+import { useI18n } from "@/hooks/use-i18n";
+import { installPageEditorNavigationGuard, supportsPageEditorHistoryGuard } from "./pageEditorNavigationGuard";
+import { pageEditorText } from "./pageEditorCopy";
 
 const ALLOWED_TAGS = ["p", "br", "b", "i", "u", "strong", "em", "a", "ul", "ol", "li", "h1", "h2", "h3", "h4", "h5", "h6", "blockquote", "code", "pre", "span", "div", "img", "hr"];
 const ALLOWED_ATTRS = ["href", "target", "rel", "src", "alt", "class", "style"];
@@ -70,6 +73,12 @@ type PreviewSize = "desktop" | "tablet" | "mobile";
 const PREVIEW_WIDTHS: Record<PreviewSize, string> = { desktop: "100%", tablet: "768px", mobile: "375px" };
 
 export default function PageEditor({ id }: { id: number }) {
+  return <PageEditorSession key={id} id={id} />;
+}
+
+function PageEditorSession({ id }: { id: number }) {
+  const { lang } = useI18n();
+  const copy = (en: string, tr?: string) => pageEditorText(lang, en, tr);
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [, setLocation] = useLocation();
@@ -79,6 +88,12 @@ export default function PageEditor({ id }: { id: number }) {
   const [mobilePane, setMobilePane] = useState<"blocks" | "editor" | "preview">("preview");
   const [showAddBlock, setShowAddBlock] = useState(false);
   const [dirty, setDirty] = useState(false);
+  const blockRevision = useRef(0);
+  const markDirty = useCallback(() => {
+    blockRevision.current += 1;
+    setDirty(true);
+  }, []);
+  const [savedSeo, setSavedSeo] = useState<string | null>(null);
   const blocksInitialized = useRef(false);
   const [editLocale, setEditLocale] = useState("en");
   const defaultBlocksRef = useRef<PageBlock[]>([]);
@@ -92,6 +107,19 @@ export default function PageEditor({ id }: { id: number }) {
     slug: "",
   });
   const seoInitialized = useRef(false);
+  const seoDirty = savedSeo !== null && JSON.stringify(seo) !== savedSeo;
+  const unsavedRef = useRef(false);
+  const savingRef = useRef(false);
+  unsavedRef.current = dirty || seoDirty;
+  const leaveMessageRef = useRef("");
+  leaveMessageRef.current = copy("You have unsaved changes. Leave this page and discard them?", "Kaydedilmemiş değişiklikleriniz var. Bu sayfadan ayrılıp değişiklikleri silmek istiyor musunuz?");
+  useEffect(() => installPageEditorNavigationGuard(window, () => unsavedRef.current, () => window.confirm(leaveMessageRef.current), () => savingRef.current), []);
+  function leaveEditor() {
+    if (savingRef.current) return;
+    if (unsavedRef.current && !window.confirm(leaveMessageRef.current)) return;
+    unsavedRef.current = false;
+    setLocation("/admin/website/pages");
+  }
 
   const { data: page, isLoading: pageLoading } = useQuery<WebsitePage>({
     queryKey: ["website-page", id],
@@ -99,7 +127,7 @@ export default function PageEditor({ id }: { id: number }) {
   });
   const sourceLocale = page?.locale || "en";
 
-  const { data: savedBlocks = [], isFetched: blocksFetched } = useQuery<PageBlock[]>({
+  const { data: savedBlocks = [], isSuccess: blocksFetched, isError: blocksError, isFetching: blocksRefreshing, refetch: reloadBlocks } = useQuery<PageBlock[]>({
     queryKey: ["website-page-blocks", id],
     queryFn: () => customFetch(`/api/website/pages/${id}/blocks`),
     enabled: !!page,
@@ -140,7 +168,7 @@ export default function PageEditor({ id }: { id: number }) {
     }
   }, [blocksFetched, savedBlocks, page]);
 
-  const { data: seoData } = useQuery<Record<string, unknown>>({
+  const { data: seoData, isSuccess: seoFetched, isError: seoError, refetch: reloadSeo } = useQuery<Record<string, unknown>>({
     queryKey: ["website-page-seo", id],
     queryFn: () => customFetch(`/api/website/pages/${id}/seo`),
     enabled: !!page,
@@ -161,7 +189,7 @@ export default function PageEditor({ id }: { id: number }) {
   useEffect(() => {
     if (seoInitialized.current || !seoData) return;
     seoInitialized.current = true;
-    setSeo({
+    const initialSeo = {
       metaTitle: (seoData.metaTitle as string) || "",
       metaDescription: (seoData.metaDescription as string) || "",
       canonicalUrl: (seoData.canonicalUrl as string) || "",
@@ -174,22 +202,28 @@ export default function PageEditor({ id }: { id: number }) {
       twitterDescription: (seoData.twitterDescription as string) || "",
       twitterImageUrl: (seoData.twitterImageUrl as string) || "",
       slug: (seoData.slug as string) || "",
-    });
+    };
+    setSeo(initialSeo);
+    setSavedSeo(JSON.stringify(initialSeo));
   }, [seoData]);
 
   const saveSeoMutation = useMutation({
-    mutationFn: () =>
-      customFetch(`/api/website/pages/${id}/seo`, {
+    mutationFn: async () => {
+      const snapshot = JSON.stringify(seo);
+      await customFetch(`/api/website/pages/${id}/seo`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(seo),
-      }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["website-page-seo", id] });
-      toast({ title: "SEO settings saved" });
-      setSeoOpen(false);
+        body: snapshot,
+      });
+      return snapshot;
     },
-    onError: () => toast({ title: "Error", description: "Failed to save SEO settings.", variant: "destructive" }),
+    onSuccess: (snapshot) => {
+      setSavedSeo(snapshot);
+      queryClient.invalidateQueries({ queryKey: ["website-page-seo", id] });
+      toast({ title: copy("SEO settings saved", "SEO ayarları kaydedildi") });
+      if (JSON.stringify(seo) === snapshot) setSeoOpen(false);
+    },
+    onError: () => toast({ title: copy("Error", "Hata"), description: copy("Failed to save SEO settings. Your changes are still here.", "SEO ayarları kaydedilemedi. Değişiklikleriniz korunuyor."), variant: "destructive" }),
   });
 
   function buildTranslationsPayload() {
@@ -207,32 +241,35 @@ export default function PageEditor({ id }: { id: number }) {
   }
 
   const saveDraftMutation = useMutation({
-    mutationFn: () => {
+    mutationFn: async () => {
+      const revision = blockRevision.current;
       const payload: Record<string, unknown> = {
         blocks: editLocale === sourceLocale ? blocks.map((b, i) => ({ ...b, sortOrder: i })) : defaultBlocksRef.current.map((b, i) => ({ ...b, sortOrder: i })),
       };
       const tx = buildTranslationsPayload();
       if (tx) payload.translationsJson = tx;
-      return customFetch(`/api/website/pages/${id}/save-draft`, {
+      await customFetch(`/api/website/pages/${id}/save-draft`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
+      return revision;
     },
-    onSuccess: () => {
+    onSuccess: (revision) => {
       queryClient.invalidateQueries({ queryKey: ["website-page", id] });
       queryClient.invalidateQueries({ queryKey: ["website-page-blocks", id] });
       queryClient.invalidateQueries({ queryKey: ["website-pages"] });
-      setDirty(false);
-      toast({ title: "Draft saved" });
+      if (blockRevision.current === revision) setDirty(false);
+      toast({ title: copy("Draft saved", "Taslak kaydedildi") });
     },
-    onError: () => toast({ title: "Error", description: "Failed to save draft.", variant: "destructive" }),
+    onError: () => toast({ title: copy("Error", "Hata"), description: copy("Failed to save draft. Your changes are still here.", "Taslak kaydedilemedi. Değişiklikleriniz korunuyor."), variant: "destructive" }),
   });
 
   const publishMutation = useMutation({
     mutationFn: async () => {
+      const revision = blockRevision.current;
       if (blocks.some(b => b.blockType === "global_block" && !b.content.globalComponentId)) {
-        if (!window.confirm("An unbound Global Block will be skipped on the public page. Publish anyway?")) throw new Error("Publication cancelled");
+        if (!window.confirm(copy("An unbound Global Block will be skipped on the public page. Publish anyway?", "Bağlanmamış ortak blok, herkese açık sayfada gösterilmeyecek. Yine de yayınlansın mı?"))) throw new Error("Publication cancelled");
       }
       const payload: Record<string, unknown> = {
         blocks: editLocale === sourceLocale ? blocks.map((b, i) => ({ ...b, sortOrder: i })) : defaultBlocksRef.current.map((b, i) => ({ ...b, sortOrder: i })),
@@ -244,20 +281,21 @@ export default function PageEditor({ id }: { id: number }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      return customFetch(`/api/website/pages/${id}/publish`, {
+      await customFetch(`/api/website/pages/${id}/publish`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
       });
+      return revision;
     },
-    onSuccess: () => {
+    onSuccess: (revision) => {
       queryClient.invalidateQueries({ queryKey: ["website-page", id] });
       queryClient.invalidateQueries({ queryKey: ["website-page-blocks", id] });
       queryClient.invalidateQueries({ queryKey: ["website-page-versions", id] });
       queryClient.invalidateQueries({ queryKey: ["website-pages"] });
-      setDirty(false);
-      toast({ title: "Published!", description: "Page is now live." });
+      if (blockRevision.current === revision) setDirty(false);
+      toast({ title: copy("Published!", "Yayınlandı!"), description: copy("Page is now live.", "Sayfa artık yayında.") });
     },
-    onError: () => toast({ title: "Error", description: "Failed to publish.", variant: "destructive" }),
+    onError: () => toast({ title: copy("Error", "Hata"), description: copy("Failed to publish.", "Yayınlanamadı."), variant: "destructive" }),
   });
 
   function handleLocaleSwitch(newLocale: string) {
@@ -274,37 +312,54 @@ export default function PageEditor({ id }: { id: number }) {
       if (translated && translated.length > 0) {
         setBlocks(JSON.parse(JSON.stringify(translated)));
       } else {
-        const copy = JSON.parse(JSON.stringify(defaultBlocksRef.current));
-        setBlocks(copy);
-        toast({ title: "No translation yet", description: `Showing source (${sourceLocale}) content. Edit to create translation.` });
+        const clonedBlocks = JSON.parse(JSON.stringify(defaultBlocksRef.current));
+        setBlocks(clonedBlocks);
+        toast({ title: copy("No translation yet", "Henüz çeviri yok"), description: copy(`Showing source (${sourceLocale}) content. Edit to create translation.`, `Kaynak (${sourceLocale}) içerik gösteriliyor. Çeviri oluşturmak için düzenleyin.`) });
       }
     }
     setEditLocale(newLocale);
     setSelectedBlockIdx(null);
-    setDirty(true);
+    markDirty();
   }
 
   const restoreMutation = useMutation({
-    mutationFn: (versionId: number) =>
-      customFetch(`/api/website/pages/${id}/restore-version/${versionId}`, {
+    mutationFn: async (versionId: number) => {
+      const revision = blockRevision.current;
+      const result = await customFetch(`/api/website/pages/${id}/restore-version/${versionId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-      }) as Promise<{ page: WebsitePage; blocks: PageBlock[] }>,
-    onSuccess: (result) => {
-      setBlocks(result.blocks.map((b, i) => ({
+      }) as { page: WebsitePage; blocks: PageBlock[] };
+      return { result, revision };
+    },
+    onSuccess: ({ result, revision }) => {
+      if (blockRevision.current !== revision) {
+        toast({ title: copy("Your newer edits are still here", "Yeni düzenlemeleriniz korunuyor"), description: copy("The restored draft was saved, but newer local edits were not replaced. Save them when ready.", "Geri yüklenen taslak kaydedildi; daha yeni yerel düzenlemeleriniz değiştirilmedi. Hazır olduğunuzda kaydedin.") });
+        return;
+      }
+      const restoredBlocks = result.blocks.map((b, i) => ({
         id: b.id,
         blockType: b.blockType,
         content: (b.content || {}) as Record<string, unknown>,
         settings: (b.settings || {}) as Record<string, unknown>,
         sortOrder: b.sortOrder ?? i,
         isVisible: b.isVisible ?? true,
-      })));
-      setDirty(true);
+      }));
+      setBlocks(restoredBlocks);
+      defaultBlocksRef.current = JSON.parse(JSON.stringify(restoredBlocks));
+      translationsRef.current = {};
+      for (const [locale, value] of Object.entries((result.page?.translationsJson || {}) as Record<string, unknown>)) {
+        if (Array.isArray(value)) translationsRef.current[locale] = value as PageBlock[];
+        else if (value && typeof value === "object" && Array.isArray((value as { blocks?: unknown }).blocks)) translationsRef.current[locale] = (value as { blocks: PageBlock[] }).blocks;
+      }
+      setEditLocale(result.page?.locale || sourceLocale);
+      setSelectedBlockIdx(null);
+      blockRevision.current += 1;
+      setDirty(false);
       queryClient.invalidateQueries({ queryKey: ["website-page", id] });
       queryClient.invalidateQueries({ queryKey: ["website-page-blocks", id] });
-      toast({ title: "Version restored", description: "Loaded as a new draft." });
+      toast({ title: copy("Version restored", "Sürüm geri yüklendi"), description: copy("Loaded as a new draft.", "Yeni taslak olarak yüklendi.") });
     },
-    onError: () => toast({ title: "Error", description: "Failed to restore version.", variant: "destructive" }),
+    onError: () => toast({ title: copy("Error", "Hata"), description: copy("Failed to restore version.", "Sürüm geri yüklenemedi."), variant: "destructive" }),
   });
 
   const addBlock = useCallback((blockType: string) => {
@@ -319,15 +374,15 @@ export default function PageEditor({ id }: { id: number }) {
     setSelectedBlockIdx(blocks.length);
     setMobilePane("editor");
     setShowAddBlock(false);
-    setDirty(true);
-  }, [blocks.length]);
+    markDirty();
+  }, [blocks.length, markDirty]);
 
   const removeBlock = useCallback((idx: number) => {
     setBlocks(prev => prev.filter((_, i) => i !== idx));
     if (selectedBlockIdx === idx) setSelectedBlockIdx(null);
     else if (selectedBlockIdx !== null && selectedBlockIdx > idx) setSelectedBlockIdx(selectedBlockIdx - 1);
-    setDirty(true);
-  }, [selectedBlockIdx]);
+    markDirty();
+  }, [selectedBlockIdx, markDirty]);
 
   const duplicateBlock = useCallback((idx: number) => {
     setBlocks(prev => {
@@ -336,8 +391,8 @@ export default function PageEditor({ id }: { id: number }) {
       next.splice(idx + 1, 0, copy);
       return next;
     });
-    setDirty(true);
-  }, []);
+    markDirty();
+  }, [markDirty]);
 
   const moveBlock = useCallback((idx: number, dir: -1 | 1) => {
     setBlocks(prev => {
@@ -348,21 +403,23 @@ export default function PageEditor({ id }: { id: number }) {
       return next;
     });
     if (selectedBlockIdx === idx) setSelectedBlockIdx(idx + dir);
-    setDirty(true);
-  }, [selectedBlockIdx]);
+    markDirty();
+  }, [selectedBlockIdx, markDirty]);
 
   const toggleVisibility = useCallback((idx: number) => {
     setBlocks(prev => prev.map((b, i) => i === idx ? { ...b, isVisible: !b.isVisible } : b));
-    setDirty(true);
-  }, []);
+    markDirty();
+  }, [markDirty]);
 
   const updateBlockContent = useCallback((idx: number, key: string, value: unknown) => {
     setBlocks(prev => prev.map((b, i) => i === idx ? { ...b, content: { ...b.content, [key]: value } } : b));
-    setDirty(true);
-  }, []);
+    markDirty();
+  }, [markDirty]);
 
   const selectedBlock = selectedBlockIdx !== null ? blocks[selectedBlockIdx] : null;
   const selectedTypeDef = selectedBlock ? getBlockTypeDef(selectedBlock.blockType) : null;
+  const saving = saveDraftMutation.isPending || publishMutation.isPending || saveSeoMutation.isPending || restoreMutation.isPending;
+  savingRef.current = saving;
 
   if (pageLoading) {
     return (
@@ -375,31 +432,46 @@ export default function PageEditor({ id }: { id: number }) {
   if (!page) {
     return (
         <div className="flex flex-col items-center justify-center py-20">
-          <p className="text-muted-foreground">Page not found.</p>
-          <Button variant="link" onClick={() => setLocation("/admin/website/pages")}>
-            Back to Pages
+          <p className="text-muted-foreground">{copy("Page not found.", "Sayfa bulunamadı.")}</p>
+          <Button variant="link" onClick={leaveEditor}>
+            {copy("Back to Pages", "Sayfalara dön")}
           </Button>
         </div>
     );
   }
 
+  if (!blocksInitialized.current) {
+    return <div className="p-6 space-y-3" role={blocksError ? "alert" : "status"}>
+      <p>{blocksError ? copy("Page content could not be loaded. Retry before editing.", "Sayfa içeriği yüklenemedi. Düzenlemeden önce yeniden deneyin.") : copy("Loading page content...", "Sayfa içeriği yükleniyor...")}</p>
+      {blocksError && <Button onClick={() => reloadBlocks()}>{copy("Retry", "Yeniden dene")}</Button>}
+      <Button variant="outline" onClick={leaveEditor}>{copy("Back to Pages", "Sayfalara dön")}</Button>
+    </div>;
+  }
+
   return (
       <div className="flex min-w-0 flex-col h-[calc(100dvh-3.5rem)]">
+        {blocksError && <div role="alert" className="flex flex-wrap items-center gap-3 border-b border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
+          <p>{copy("Page content could not be refreshed. Your current edits are preserved.", "Sayfa içeriği yenilenemedi. Mevcut düzenlemeleriniz korunuyor.")}</p>
+          <Button variant="outline" size="sm" disabled={blocksRefreshing} onClick={() => reloadBlocks()}>{copy("Retry content loading", "İçeriği yeniden yükle")}</Button>
+        </div>}
+        {(dirty || seoDirty || saving) && typeof window !== "undefined" && !supportsPageEditorHistoryGuard(window) && <div role="alert" className="border-b border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
+          {copy("This browser cannot reliably protect unsaved changes when using Back or Forward. Save your changes before using browser history.", "Bu tarayıcıda Geri/İleri düğmeleri kaydedilmemiş değişiklikleri güvenilir biçimde koruyamaz. Tarayıcı geçmişini kullanmadan önce değişikliklerinizi kaydedin.")}
+        </div>}
         <div className="min-h-12 border-b bg-card flex flex-wrap gap-3 items-center justify-between px-4 py-2 shrink-0">
           <div className="flex min-w-0 flex-wrap items-center gap-3">
-            <Button aria-label="Back to pages" variant="ghost" size="icon" className="h-8 w-8" onClick={() => setLocation("/admin/website/pages")}>
+            <Button aria-label={copy("Back to pages", "Sayfalara dön")} disabled={saving} variant="ghost" size="icon" className="h-8 w-8" onClick={leaveEditor}>
               <ArrowLeft className="w-4 h-4" />
             </Button>
             <Separator orientation="vertical" className="h-5" />
             <h2 className="font-semibold text-sm">{page.title}</h2>
             <Badge variant={page.status === "published" ? "default" : "secondary"} className="text-xs">
-              {page.status}
+              {page.status === "published" ? copy("Published", "Yayında") : page.status === "draft" ? copy("Draft", "Taslak") : page.status}
             </Badge>
-            {dirty && <Badge variant="outline" className="text-xs text-amber-600 border-amber-300">Unsaved</Badge>}
+            {(dirty || seoDirty) && <Badge variant="outline" role="status" className="text-xs text-amber-600 border-amber-300">{copy("Unsaved", "Kaydedilmedi")}{seoDirty ? " (SEO)" : ""}</Badge>}
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <Select value={editLocale} onValueChange={handleLocaleSwitch}>
-              <SelectTrigger aria-label="Editing language" className="h-7 w-[100px] text-xs">
+              <SelectTrigger aria-label={copy("Editing language", "İçerik dili")} className="h-7 w-[100px] text-xs">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -420,7 +492,7 @@ export default function PageEditor({ id }: { id: number }) {
               {(["desktop", "tablet", "mobile"] as PreviewSize[]).map(size => (
                 <Button
                   key={size}
-                  aria-label={`${size} preview width`}
+                  aria-label={copy(`${size} preview width`, `${size === "desktop" ? "Masaüstü" : size === "tablet" ? "Tablet" : "Mobil"} önizleme genişliği`)}
                   aria-pressed={previewSize === size}
                   variant={previewSize === size ? "default" : "ghost"}
                   size="icon"
@@ -434,109 +506,110 @@ export default function PageEditor({ id }: { id: number }) {
             <Separator orientation="vertical" className="h-5" />
             <Sheet open={seoOpen} onOpenChange={setSeoOpen}>
               <SheetTrigger asChild>
-                <Button variant="outline" size="sm" className="h-7 text-xs gap-1">
+                <Button disabled={!seoFetched} variant="outline" size="sm" className="h-7 text-xs gap-1">
                   <Settings2 className="w-3.5 h-3.5" /> SEO
                 </Button>
               </SheetTrigger>
               <SheetContent>
                 <SheetHeader>
-                  <SheetTitle>Page SEO Settings</SheetTitle>
+                  <SheetTitle>{copy("Page SEO Settings", "Sayfa SEO ayarları")}</SheetTitle>
                 </SheetHeader>
                 <ScrollArea className="h-[calc(100vh-80px)] mt-4 pr-2">
                 <div className="space-y-4 pb-6">
                   <div className="space-y-1.5">
-                    <Label className="text-xs font-medium">URL Slug</Label>
-                    <Input value={seo.slug} onChange={e => setSeo(s => ({ ...s, slug: e.target.value }))} placeholder="page-url-slug" className="h-8 text-sm" />
+                    <Label htmlFor="page-seo-slug" className="text-xs font-medium">{copy("URL Slug", "Sayfa adresi")}</Label>
+                    <Input id="page-seo-slug" value={seo.slug} onChange={e => setSeo(s => ({ ...s, slug: e.target.value }))} placeholder={copy("page-url-slug", "sayfa-adresi")} className="h-8 text-sm" />
                   </div>
                   <div className="space-y-1.5">
-                    <Label className="text-xs font-medium">Meta Title</Label>
-                    <Input value={seo.metaTitle} onChange={e => setSeo(s => ({ ...s, metaTitle: e.target.value }))} placeholder="SEO page title" className="h-8 text-sm" />
-                    <p className="text-[10px] text-muted-foreground">{seo.metaTitle.length}/60 characters</p>
+                    <Label htmlFor="page-seo-title" className="text-xs font-medium">{copy("Meta Title", "SEO başlığı")}</Label>
+                    <Input id="page-seo-title" value={seo.metaTitle} onChange={e => setSeo(s => ({ ...s, metaTitle: e.target.value }))} placeholder={copy("SEO page title", "SEO sayfa başlığı")} className="h-8 text-sm" />
+                    <p className="text-[10px] text-muted-foreground">{seo.metaTitle.length}/60 {copy("characters", "karakter")}</p>
                   </div>
                   <div className="space-y-1.5">
-                    <Label className="text-xs font-medium">Meta Description</Label>
-                    <Textarea value={seo.metaDescription} onChange={e => setSeo(s => ({ ...s, metaDescription: e.target.value }))} placeholder="SEO description" rows={3} className="text-sm" />
-                    <p className="text-[10px] text-muted-foreground">{seo.metaDescription.length}/160 characters</p>
+                    <Label htmlFor="page-seo-description" className="text-xs font-medium">{copy("Meta Description", "SEO açıklaması")}</Label>
+                    <Textarea id="page-seo-description" value={seo.metaDescription} onChange={e => setSeo(s => ({ ...s, metaDescription: e.target.value }))} placeholder={copy("SEO description", "SEO açıklaması")} rows={3} className="text-sm" />
+                    <p className="text-[10px] text-muted-foreground">{seo.metaDescription.length}/160 {copy("characters", "karakter")}</p>
                   </div>
                   <div className="rounded border p-3 bg-muted/30">
-                    <p className="text-[10px] text-muted-foreground mb-1">Google Search Preview</p>
+                    <p className="text-[10px] text-muted-foreground mb-1">{copy("Google Search Preview", "Google arama önizlemesi")}</p>
                     <p className="text-sm text-blue-700 truncate">{seo.metaTitle || page?.title || globalSeo.metaTitle || "Page Title"}</p>
                     <p className="text-xs text-green-700 truncate">{globalSeo.siteName ? globalSeo.siteName.toLowerCase().replace(/\s+/g, '') + '.com' : 'findandstudy.com'}/{seo.slug || page?.slug || ""}</p>
-                    <p className="text-xs text-muted-foreground line-clamp-2">{seo.metaDescription || globalSeo.metaDescription || "No description set"}</p>
+                    <p className="text-xs text-muted-foreground line-clamp-2">{seo.metaDescription || globalSeo.metaDescription || copy("No description set", "Açıklama eklenmedi")}</p>
                     {!seo.metaTitle && !seo.metaDescription && globalSeo.metaTitle && (
-                      <p className="text-[10px] text-amber-600 mt-1">Using global SEO defaults from Settings.</p>
+                      <p className="text-[10px] text-amber-600 mt-1">{copy("Using global SEO defaults from Settings.", "Ayarlar bölümündeki genel SEO değerleri kullanılıyor.")}</p>
                     )}
                   </div>
                   <div className="space-y-1.5">
-                    <Label className="text-xs font-medium">Canonical URL</Label>
-                    <Input value={seo.canonicalUrl} onChange={e => setSeo(s => ({ ...s, canonicalUrl: e.target.value }))} placeholder="https://..." className="h-8 text-sm" />
+                    <Label htmlFor="page-seo-canonical" className="text-xs font-medium">{copy("Canonical URL", "Kanonik adres")}</Label>
+                    <Input id="page-seo-canonical" value={seo.canonicalUrl} onChange={e => setSeo(s => ({ ...s, canonicalUrl: e.target.value }))} placeholder="https://..." className="h-8 text-sm" />
                   </div>
                   <div className="flex items-center gap-4">
                     <div className="flex items-center gap-2">
-                      <Switch checked={seo.robotsIndex} onCheckedChange={v => setSeo(s => ({ ...s, robotsIndex: v }))} />
-                      <Label className="text-xs">Index</Label>
+                      <Switch id="page-seo-index" checked={seo.robotsIndex} onCheckedChange={v => setSeo(s => ({ ...s, robotsIndex: v }))} />
+                      <Label htmlFor="page-seo-index" className="text-xs">{copy("Index", "Dizine ekle")}</Label>
                     </div>
                     <div className="flex items-center gap-2">
-                      <Switch checked={seo.robotsFollow} onCheckedChange={v => setSeo(s => ({ ...s, robotsFollow: v }))} />
-                      <Label className="text-xs">Follow</Label>
+                      <Switch id="page-seo-follow" checked={seo.robotsFollow} onCheckedChange={v => setSeo(s => ({ ...s, robotsFollow: v }))} />
+                      <Label htmlFor="page-seo-follow" className="text-xs">{copy("Follow", "Bağlantıları takip et")}</Label>
                     </div>
                   </div>
                   <Separator />
                   <h4 className="text-xs font-bold uppercase text-muted-foreground">Open Graph</h4>
                   <div className="space-y-1.5">
-                    <Label className="text-xs font-medium">OG Title</Label>
-                    <Input value={seo.ogTitle} onChange={e => setSeo(s => ({ ...s, ogTitle: e.target.value }))} placeholder="Social share title" className="h-8 text-sm" />
+                    <Label htmlFor="page-seo-og-title" className="text-xs font-medium">{copy("OG Title", "Paylaşım başlığı (OG)")}</Label>
+                    <Input id="page-seo-og-title" value={seo.ogTitle} onChange={e => setSeo(s => ({ ...s, ogTitle: e.target.value }))} placeholder={copy("Social share title", "Sosyal paylaşım başlığı")} className="h-8 text-sm" />
                   </div>
                   <div className="space-y-1.5">
-                    <Label className="text-xs font-medium">OG Description</Label>
-                    <Textarea value={seo.ogDescription} onChange={e => setSeo(s => ({ ...s, ogDescription: e.target.value }))} placeholder="Social share description" rows={2} className="text-sm" />
+                    <Label htmlFor="page-seo-og-description" className="text-xs font-medium">{copy("OG Description", "Paylaşım açıklaması (OG)")}</Label>
+                    <Textarea id="page-seo-og-description" value={seo.ogDescription} onChange={e => setSeo(s => ({ ...s, ogDescription: e.target.value }))} placeholder={copy("Social share description", "Sosyal paylaşım açıklaması")} rows={2} className="text-sm" />
                   </div>
                   <div className="space-y-1.5">
-                    <Label className="text-xs font-medium">OG Image URL</Label>
-                    <Input value={seo.ogImageUrl} onChange={e => setSeo(s => ({ ...s, ogImageUrl: e.target.value }))} placeholder="https://..." className="h-8 text-sm" />
+                    <Label htmlFor="page-seo-og-image" className="text-xs font-medium">{copy("OG Image URL", "Paylaşım görseli adresi (OG)")}</Label>
+                    <Input id="page-seo-og-image" value={seo.ogImageUrl} onChange={e => setSeo(s => ({ ...s, ogImageUrl: e.target.value }))} placeholder="https://..." className="h-8 text-sm" />
                   </div>
                   {(seo.ogTitle || seo.ogDescription || seo.ogImageUrl || globalSeo.ogImageUrl) && (
                     <div className="rounded border p-3 bg-muted/30">
-                      <p className="text-[10px] text-muted-foreground mb-1">Social Share Preview</p>
+                      <p className="text-[10px] text-muted-foreground mb-1">{copy("Social Share Preview", "Sosyal paylaşım önizlemesi")}</p>
                       {(seo.ogImageUrl || globalSeo.ogImageUrl) && <div className="w-full h-24 bg-muted rounded mb-2 flex items-center justify-center text-xs text-muted-foreground overflow-hidden"><img src={seo.ogImageUrl || globalSeo.ogImageUrl} alt="OG" className="w-full h-full object-cover" onError={e => { (e.target as HTMLImageElement).style.display = "none" }} /></div>}
                       <p className="text-sm font-medium truncate">{seo.ogTitle || seo.metaTitle || page?.title || globalSeo.metaTitle || "Title"}</p>
                       <p className="text-xs text-muted-foreground line-clamp-2">{seo.ogDescription || seo.metaDescription || globalSeo.metaDescription || ""}</p>
                     </div>
                   )}
                   <Separator />
-                  <h4 className="text-xs font-bold uppercase text-muted-foreground">Twitter Card</h4>
+                  <h4 className="text-xs font-bold uppercase text-muted-foreground">{copy("Twitter Card", "Twitter kartı")}</h4>
                   <div className="space-y-1.5">
-                    <Label className="text-xs font-medium">Twitter Title</Label>
-                    <Input value={seo.twitterTitle} onChange={e => setSeo(s => ({ ...s, twitterTitle: e.target.value }))} className="h-8 text-sm" />
+                    <Label htmlFor="page-seo-twitter-title" className="text-xs font-medium">{copy("Twitter Title", "Twitter başlığı")}</Label>
+                    <Input id="page-seo-twitter-title" value={seo.twitterTitle} onChange={e => setSeo(s => ({ ...s, twitterTitle: e.target.value }))} className="h-8 text-sm" />
                   </div>
                   <div className="space-y-1.5">
-                    <Label className="text-xs font-medium">Twitter Description</Label>
-                    <Textarea value={seo.twitterDescription} onChange={e => setSeo(s => ({ ...s, twitterDescription: e.target.value }))} rows={2} className="text-sm" />
+                    <Label htmlFor="page-seo-twitter-description" className="text-xs font-medium">{copy("Twitter Description", "Twitter açıklaması")}</Label>
+                    <Textarea id="page-seo-twitter-description" value={seo.twitterDescription} onChange={e => setSeo(s => ({ ...s, twitterDescription: e.target.value }))} rows={2} className="text-sm" />
                   </div>
                   <div className="space-y-1.5">
-                    <Label className="text-xs font-medium">Twitter Image URL</Label>
-                    <Input value={seo.twitterImageUrl} onChange={e => setSeo(s => ({ ...s, twitterImageUrl: e.target.value }))} placeholder="https://..." className="h-8 text-sm" />
+                    <Label htmlFor="page-seo-twitter-image" className="text-xs font-medium">{copy("Twitter Image URL", "Twitter görseli adresi")}</Label>
+                    <Input id="page-seo-twitter-image" value={seo.twitterImageUrl} onChange={e => setSeo(s => ({ ...s, twitterImageUrl: e.target.value }))} placeholder="https://..." className="h-8 text-sm" />
                   </div>
                   <Button onClick={() => saveSeoMutation.mutate()} disabled={saveSeoMutation.isPending} className="w-full">
-                    {saveSeoMutation.isPending ? "Saving..." : "Save SEO Settings"}
+                    {saveSeoMutation.isPending ? copy("Saving...", "Kaydediliyor...") : copy("Save SEO Settings", "SEO ayarlarını kaydet")}
                   </Button>
                 </div>
                 </ScrollArea>
               </SheetContent>
             </Sheet>
+            {seoError && <Button variant="outline" size="sm" onClick={() => reloadSeo()}>{copy("Retry SEO loading", "SEO yüklemeyi yeniden dene")}</Button>}
             <Sheet>
               <SheetTrigger asChild>
                 <Button variant="outline" size="sm" className="h-7 text-xs gap-1">
-                  <History className="w-3.5 h-3.5" /> Versions ({versions.length})
+                  <History className="w-3.5 h-3.5" /> {copy("Versions", "Sürümler")} ({versions.length})
                 </Button>
               </SheetTrigger>
               <SheetContent>
                 <SheetHeader>
-                  <SheetTitle>Version History</SheetTitle>
+                  <SheetTitle>{copy("Version History", "Sürüm geçmişi")}</SheetTitle>
                 </SheetHeader>
                 <div className="mt-4 space-y-3">
                   {versions.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">No published versions yet.</p>
+                    <p className="text-sm text-muted-foreground">{copy("No published versions yet.", "Henüz yayınlanmış sürüm yok.")}</p>
                   ) : (
                     versions.map(v => {
                       const authorName = v.authorFirstName
@@ -546,7 +619,7 @@ export default function PageEditor({ id }: { id: number }) {
                       <Card key={v.id}>
                         <CardContent className="p-3 flex items-center justify-between">
                           <div>
-                            <p className="text-sm font-medium">Version {v.versionNumber}</p>
+                            <p className="text-sm font-medium">{copy("Version", "Sürüm")} {v.versionNumber}</p>
                             <p className="text-xs text-muted-foreground">
                               {v.publishedAt ? new Date(v.publishedAt).toLocaleString() : new Date(v.createdAt).toLocaleString()}
                             </p>
@@ -556,10 +629,13 @@ export default function PageEditor({ id }: { id: number }) {
                             variant="outline"
                             size="sm"
                             className="h-7 text-xs gap-1"
-                            onClick={() => restoreMutation.mutate(v.id)}
-                            disabled={restoreMutation.isPending}
+                            onClick={() => {
+                              if (dirty && !window.confirm(copy("Restore this version and replace unsaved block edits?", "Bu sürüm geri yüklenip kaydedilmemiş blok değişiklikleri silinsin mi?"))) return;
+                              restoreMutation.mutate(v.id);
+                            }}
+                            disabled={saving}
                           >
-                            <RotateCcw className="w-3 h-3" /> Restore
+                            <RotateCcw className="w-3 h-3" /> {copy("Restore", "Geri yükle")}
                           </Button>
                         </CardContent>
                       </Card>
@@ -569,31 +645,31 @@ export default function PageEditor({ id }: { id: number }) {
                 </div>
               </SheetContent>
             </Sheet>
-            <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={() => saveDraftMutation.mutate()} disabled={saveDraftMutation.isPending}>
-              <Save className="w-3.5 h-3.5" /> {saveDraftMutation.isPending ? "Saving..." : "Save Draft"}
+            <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={() => saveDraftMutation.mutate()} disabled={saveDraftMutation.isPending || publishMutation.isPending || restoreMutation.isPending}>
+              <Save className="w-3.5 h-3.5" /> {saveDraftMutation.isPending ? copy("Saving...", "Kaydediliyor...") : copy("Save Draft", "Taslağı kaydet")}
             </Button>
-            <Button size="sm" className="h-7 text-xs gap-1" onClick={() => publishMutation.mutate()} disabled={publishMutation.isPending}>
-              <Upload className="w-3.5 h-3.5" /> {publishMutation.isPending ? "Publishing..." : "Publish"}
+            <Button size="sm" className="h-7 text-xs gap-1" onClick={() => publishMutation.mutate()} disabled={publishMutation.isPending || saveDraftMutation.isPending || restoreMutation.isPending}>
+              <Upload className="w-3.5 h-3.5" /> {publishMutation.isPending ? copy("Publishing...", "Yayınlanıyor...") : copy("Publish", "Yayınla")}
             </Button>
           </div>
         </div>
 
-        <nav aria-label="Editor panels" className="flex gap-2 border-b p-2 lg:hidden">
-          {(["blocks", "editor", "preview"] as const).map(pane => <Button key={pane} size="sm" variant={mobilePane === pane ? "default" : "outline"} aria-pressed={mobilePane === pane} onClick={() => setMobilePane(pane)}>{pane === "blocks" ? "Blocks" : pane === "editor" ? "Edit block" : "Preview"}</Button>)}
+        <nav aria-label={copy("Editor panels", "Editör panelleri")} className="flex gap-2 border-b p-2 lg:hidden">
+          {(["blocks", "editor", "preview"] as const).map(pane => <Button key={pane} size="sm" variant={mobilePane === pane ? "default" : "outline"} aria-pressed={mobilePane === pane} onClick={() => setMobilePane(pane)}>{pane === "blocks" ? copy("Blocks", "Bloklar") : pane === "editor" ? copy("Edit block", "Bloğu düzenle") : copy("Preview", "Önizleme")}</Button>)}
         </nav>
         <div className="flex min-h-0 flex-1 overflow-hidden">
           <div className={`${mobilePane === "blocks" ? "flex" : "hidden"} w-full lg:w-64 border-e bg-card lg:flex flex-col shrink-0`}>
             <div className="p-3 border-b flex items-center justify-between">
-              <h3 className="text-xs font-bold uppercase text-muted-foreground">Blocks</h3>
+              <h3 className="text-xs font-bold uppercase text-muted-foreground">{copy("Blocks", "Bloklar")}</h3>
               <Dialog open={showAddBlock} onOpenChange={setShowAddBlock}>
                 <DialogTrigger asChild>
-                  <Button aria-label="Add block" variant="outline" size="icon" className="h-8 w-8">
+                  <Button aria-label={copy("Add block", "Blok ekle")} variant="outline" size="icon" className="h-8 w-8">
                     <Plus className="w-3.5 h-3.5" />
                   </Button>
                 </DialogTrigger>
                 <DialogContent className="max-w-lg">
                   <DialogHeader>
-                    <DialogTitle>Add Block</DialogTitle>
+                    <DialogTitle>{copy("Add Block", "Blok ekle")}</DialogTitle>
                   </DialogHeader>
                   <div className="grid grid-cols-2 gap-2 mt-2 max-h-[60vh] overflow-y-auto">
                     {BLOCK_TYPES.map(bt => (
@@ -604,8 +680,8 @@ export default function PageEditor({ id }: { id: number }) {
                       >
                         <span className="text-lg">{bt.icon}</span>
                         <div>
-                          <p className="text-sm font-medium">{bt.label}</p>
-                          <p className="text-[10px] text-muted-foreground capitalize">{bt.category}</p>
+                          <p className="text-sm font-medium">{copy(bt.label)}</p>
+                          <p className="text-[10px] text-muted-foreground capitalize">{copy(bt.category)}</p>
                         </div>
                       </button>
                     ))}
@@ -626,21 +702,21 @@ export default function PageEditor({ id }: { id: number }) {
                     >
                       <GripVertical className="w-3 h-3 text-muted-foreground shrink-0" />
                       <span className="text-sm shrink-0">{def?.icon || "📦"}</span>
-                      <button className="min-w-0 flex-1 truncate py-2 text-start text-xs font-medium" onClick={() => { setSelectedBlockIdx(idx); setMobilePane("editor"); }}>{def?.label || block.blockType}</button>
+                      <button className="min-w-0 flex-1 truncate py-2 text-start text-xs font-medium" onClick={() => { setSelectedBlockIdx(idx); setMobilePane("editor"); }}>{copy(def?.label || block.blockType)}</button>
                       <div className="flex items-center gap-0.5">
-                        <button aria-label="Move block up" onClick={e => { e.stopPropagation(); moveBlock(idx, -1); }} className="p-1 hover:bg-secondary rounded" disabled={idx === 0}>
+                        <button aria-label={copy("Move block up")} onClick={e => { e.stopPropagation(); moveBlock(idx, -1); }} className="p-1 hover:bg-secondary rounded" disabled={idx === 0}>
                           <ChevronUp className="w-3 h-3" />
                         </button>
-                        <button aria-label="Move block down" onClick={e => { e.stopPropagation(); moveBlock(idx, 1); }} className="p-1 hover:bg-secondary rounded" disabled={idx === blocks.length - 1}>
+                        <button aria-label={copy("Move block down")} onClick={e => { e.stopPropagation(); moveBlock(idx, 1); }} className="p-1 hover:bg-secondary rounded" disabled={idx === blocks.length - 1}>
                           <ChevronDown className="w-3 h-3" />
                         </button>
-                        <button aria-label={block.isVisible ? "Hide block" : "Show block"} onClick={e => { e.stopPropagation(); toggleVisibility(idx); }} className="p-1 hover:bg-secondary rounded">
+                        <button aria-label={copy(block.isVisible ? "Hide block" : "Show block")} onClick={e => { e.stopPropagation(); toggleVisibility(idx); }} className="p-1 hover:bg-secondary rounded">
                           {block.isVisible ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
                         </button>
-                        <button aria-label="Duplicate block" onClick={e => { e.stopPropagation(); duplicateBlock(idx); }} className="p-1 hover:bg-secondary rounded">
+                        <button aria-label={copy("Duplicate block")} onClick={e => { e.stopPropagation(); duplicateBlock(idx); }} className="p-1 hover:bg-secondary rounded">
                           <Copy className="w-3 h-3" />
                         </button>
-                        <button aria-label="Remove block" onClick={e => { e.stopPropagation(); removeBlock(idx); }} className="p-1 hover:bg-red-100 dark:hover:bg-red-900/30 text-red-500 rounded">
+                        <button aria-label={copy("Remove block")} onClick={e => { e.stopPropagation(); removeBlock(idx); }} className="p-1 hover:bg-red-100 dark:hover:bg-red-900/30 text-red-500 rounded">
                           <Trash2 className="w-3 h-3" />
                         </button>
                       </div>
@@ -649,8 +725,8 @@ export default function PageEditor({ id }: { id: number }) {
                 })}
                 {blocks.length === 0 && (
                   <div className="text-center py-8 text-xs text-muted-foreground">
-                    <p>No blocks yet.</p>
-                    <p>Click + to add your first block.</p>
+                    <p>{copy("No blocks yet.", "Henüz blok yok.")}</p>
+                    <p>{copy("Click + to add your first block.", "İlk bloğu eklemek için + düğmesine basın.")}</p>
                   </div>
                 )}
               </div>
@@ -660,27 +736,27 @@ export default function PageEditor({ id }: { id: number }) {
           <div className={`${mobilePane === "editor" ? "flex" : "hidden"} w-full lg:w-80 border-e bg-background lg:flex flex-col shrink-0`}>
             <div className="p-3 border-b">
               <h3 className="text-xs font-bold uppercase text-muted-foreground">
-                {selectedBlock ? `Edit: ${selectedTypeDef?.label || selectedBlock.blockType}` : "Block Editor"}
+                {selectedBlock ? `${copy("Edit", "Düzenle")}: ${copy(selectedTypeDef?.label || selectedBlock.blockType)}` : copy("Block Editor", "Blok editörü")}
               </h3>
             </div>
             {editLocale !== sourceLocale && (
               <div className="mx-3 mt-2 p-2 rounded-lg bg-blue-50 border border-blue-200 text-xs">
                 <p className="font-medium text-blue-800 flex items-center gap-1">
-                  {LANGUAGE_META[editLocale as keyof typeof LANGUAGE_META]?.flag} Editing in {LANGUAGE_META[editLocale as keyof typeof LANGUAGE_META]?.name || editLocale}
+                  {LANGUAGE_META[editLocale as keyof typeof LANGUAGE_META]?.flag} {copy("Editing language:", "Düzenleme dili:")} {LANGUAGE_META[editLocale as keyof typeof LANGUAGE_META]?.nativeName || editLocale}
                 </p>
-                <p className="text-blue-600 mt-0.5">Content entered here is for this locale's translation.</p>
+                <p className="text-blue-600 mt-0.5">{copy("Content entered here is for this locale's translation.", "Buraya girilen içerik, seçilen dilin çevirisine aittir.")}</p>
                 <Button type="button" variant="outline" size="sm" className="h-5 text-[10px] px-2 mt-1" onClick={() => {
                   const defaultBlocks = defaultBlocksRef.current;
                   setBlocks(defaultBlocks.map(b => ({ ...b })));
-                  setDirty(true);
-                  toast({ title: `Copied blocks from ${sourceLocale}` });
-                }}>Copy blocks from source language</Button>
+                  markDirty();
+                  toast({ title: copy(`Copied blocks from ${sourceLocale}`, `${sourceLocale} dilindeki bloklar kopyalandı`) });
+                }}>{copy("Copy blocks from source language", "Kaynak dildeki blokları kopyala")}</Button>
               </div>
             )}
             <ScrollArea className="flex-1">
               <div className="p-4 space-y-4">
                 {!selectedBlock ? (
-                  <p className="text-sm text-muted-foreground text-center py-8">Select a block to edit its content.</p>
+                  <p className="text-sm text-muted-foreground text-center py-8">{copy("Select a block to edit its content.", "İçeriğini düzenlemek için bir blok seçin.")}</p>
                 ) : selectedBlock.blockType === "global_block" ? (
                   <GlobalBlockSelector
                     content={selectedBlock.content}
@@ -747,13 +823,16 @@ function BlockFieldEditor({
   content: Record<string, unknown>;
   onChange: (key: string, value: unknown) => void;
 }) {
+  const { lang } = useI18n();
+  const copy = (value: string) => pageEditorText(lang, value);
   return (
     <div className="space-y-4">
       {fields.map(field => (
         <div key={field.key} className="space-y-1.5">
-          <Label className="text-xs font-medium">{field.label}</Label>
+          <Label className="text-xs font-medium">{copy(field.label)}</Label>
           {field.type === "text" && (
             <Input
+              aria-label={copy(field.label)}
               value={(content[field.key] as string) || ""}
               onChange={e => onChange(field.key, e.target.value)}
               placeholder={field.placeholder}
@@ -762,6 +841,7 @@ function BlockFieldEditor({
           )}
           {field.type === "textarea" && (
             <Textarea
+              aria-label={copy(field.label)}
               value={(content[field.key] as string) || ""}
               onChange={e => onChange(field.key, e.target.value)}
               placeholder={field.placeholder}
@@ -771,6 +851,7 @@ function BlockFieldEditor({
           )}
           {field.type === "richtext" && (
             <Textarea
+              aria-label={copy(field.label)}
               value={(content[field.key] as string) || ""}
               onChange={e => onChange(field.key, e.target.value)}
               placeholder={field.placeholder}
@@ -780,6 +861,7 @@ function BlockFieldEditor({
           )}
           {field.type === "url" && (
             <Input
+              aria-label={copy(field.label)}
               value={(content[field.key] as string) || ""}
               onChange={e => onChange(field.key, e.target.value)}
               placeholder={field.placeholder || "https://..."}
@@ -788,14 +870,16 @@ function BlockFieldEditor({
           )}
           {field.type === "image" && (
             <Input
+              aria-label={copy(field.label)}
               value={(content[field.key] as string) || ""}
               onChange={e => onChange(field.key, e.target.value)}
-              placeholder="Image URL"
+              placeholder={copy("Image URL")}
               className="h-8 text-sm"
             />
           )}
           {field.type === "number" && (
             <Input
+              aria-label={copy(field.label)}
               type="number"
               value={(content[field.key] as number) ?? field.defaultValue ?? ""}
               onChange={e => onChange(field.key, e.target.value ? Number(e.target.value) : "")}
@@ -806,6 +890,7 @@ function BlockFieldEditor({
             <div className="flex items-center gap-2">
               <div className="w-8 h-8 rounded border relative overflow-hidden" style={{ backgroundColor: (content[field.key] as string) || "#e5e7eb" }}>
                 <input
+                  aria-label={copy(field.label)}
                   type="color"
                   value={(content[field.key] as string) || "#e5e7eb"}
                   onChange={e => onChange(field.key, e.target.value)}
@@ -813,6 +898,7 @@ function BlockFieldEditor({
                 />
               </div>
               <Input
+                aria-label={copy(field.label)}
                 value={(content[field.key] as string) || ""}
                 onChange={e => onChange(field.key, e.target.value)}
                 className="h-8 text-xs font-mono"
@@ -821,15 +907,16 @@ function BlockFieldEditor({
           )}
           {field.type === "toggle" && (
             <Switch
+              aria-label={copy(field.label)}
               checked={!!content[field.key]}
               onCheckedChange={val => onChange(field.key, val)}
             />
           )}
           {field.type === "select" && field.options && (
             <Select value={(content[field.key] as string) || ""} onValueChange={v => onChange(field.key, v)}>
-              <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Select..." /></SelectTrigger>
+              <SelectTrigger aria-label={copy(field.label)} className="h-8 text-sm"><SelectValue placeholder={copy("Select...")} /></SelectTrigger>
               <SelectContent>
-                {field.options.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+                {field.options.map(o => <SelectItem key={o.value} value={o.value}>{copy(o.label)}</SelectItem>)}
               </SelectContent>
             </Select>
           )}
@@ -855,6 +942,8 @@ function ItemsEditor({
   itemFields: BlockFieldDef[];
   onChange: (items: Record<string, unknown>[]) => void;
 }) {
+  const { lang } = useI18n();
+  const copy = (value: string) => pageEditorText(lang, value);
   const addItem = () => {
     const defaults: Record<string, unknown> = {};
     itemFields.forEach(f => { defaults[f.key] = f.defaultValue ?? ""; });
@@ -875,16 +964,17 @@ function ItemsEditor({
         <Card key={idx} className="bg-secondary/30">
           <CardContent className="p-3 space-y-2">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-medium text-muted-foreground">Item {idx + 1}</span>
-              <Button variant="ghost" size="icon" className="h-5 w-5 text-red-500" onClick={() => removeItem(idx)}>
+              <span className="text-xs font-medium text-muted-foreground">{copy("Item")} {idx + 1}</span>
+              <Button aria-label={`${copy("Remove item")} ${idx + 1}`} variant="ghost" size="icon" className="h-5 w-5 text-red-500" onClick={() => removeItem(idx)}>
                 <Trash2 className="w-3 h-3" />
               </Button>
             </div>
             {itemFields.map(f => (
               <div key={f.key} className="space-y-1">
-                <Label className="text-[10px] text-muted-foreground">{f.label}</Label>
+                <Label className="text-[10px] text-muted-foreground">{copy(f.label)}</Label>
                 {(f.type === "text" || f.type === "url" || f.type === "image") && (
                   <Input
+                    aria-label={`${copy(f.label)} ${idx + 1}`}
                     value={(item[f.key] as string) || ""}
                     onChange={e => updateItem(idx, f.key, e.target.value)}
                     placeholder={f.placeholder}
@@ -893,6 +983,7 @@ function ItemsEditor({
                 )}
                 {f.type === "textarea" && (
                   <Textarea
+                    aria-label={`${copy(f.label)} ${idx + 1}`}
                     value={(item[f.key] as string) || ""}
                     onChange={e => updateItem(idx, f.key, e.target.value)}
                     rows={2}
@@ -901,6 +992,7 @@ function ItemsEditor({
                 )}
                 {f.type === "number" && (
                   <Input
+                    aria-label={`${copy(f.label)} ${idx + 1}`}
                     type="number"
                     value={(item[f.key] as number) ?? ""}
                     onChange={e => updateItem(idx, f.key, Number(e.target.value))}
@@ -913,7 +1005,7 @@ function ItemsEditor({
         </Card>
       ))}
       <Button variant="outline" size="sm" className="w-full h-7 text-xs" onClick={addItem}>
-        <Plus className="w-3 h-3 mr-1" /> Add Item
+        <Plus className="w-3 h-3 mr-1" /> {copy("Add Item")}
       </Button>
     </div>
   );

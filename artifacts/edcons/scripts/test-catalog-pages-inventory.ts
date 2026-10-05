@@ -13,7 +13,7 @@ test("catalogue deep links validate stable source IDs and supported tabs", () =>
 test("Pages retains CMS and shared templates next to read-only catalogue inventory", () => {
   const pages = readFileSync(new URL("../src/pages/admin/website/Pages.tsx", import.meta.url), "utf8");
   assert.match(pages, /<CatalogPagesInventory \/>/);
-  assert.match(pages, /<DetailTemplates \/>/);
+  assert.match(pages, /<DetailTemplates\b[^>]*\/>/);
   assert.match(pages, /customFetch\("\/api\/website\/pages"\)/);
   const inventory = readFileSync(new URL("../src/pages/admin/website/CatalogPagesInventory.tsx", import.meta.url), "utf8");
   assert.doesNotMatch(inventory, /useMutation|method: "(?:POST|PUT|PATCH|DELETE)"/);

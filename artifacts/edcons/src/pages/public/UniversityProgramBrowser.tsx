@@ -1,4 +1,5 @@
-import { lazy, Suspense, useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState, useContext } from "react";
+import { DetailPreviewContext } from "./DetailPreviewContext";
 import { BookOpen, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import { customFetch } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
@@ -19,13 +20,14 @@ const PublicProgramDetailDialog = lazy(() => import("./PublicProgramDetailDialog
 
 /** Full server-paged discovery inside one university, not the 12 related links. */
 export function UniversityProgramBrowser({ universityId, admissionsOpen }: { universityId: number; admissionsOpen: boolean }) {
+  const preview = useContext(DetailPreviewContext);
   const { t, lang, localePath } = useI18n();
   const [selection, setSelection] = useState(emptyProgramSelection);
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
-  const [facets, setFacets] = useState(emptyFacets);
-  const [result, setResult] = useState<Results>({ data: [], meta: { total: 0, totalPages: 0 } });
-  const [loading, setLoading] = useState(true);
+  const [facets, setFacets] = useState((preview?.universityPrograms?.facets as PublicProgramFacets | undefined) ?? emptyFacets);
+  const [result, setResult] = useState<Results>((preview?.universityPrograms?.result as Results | undefined) ?? { data: [], meta: { total: 0, totalPages: 0 } });
+  const [loading, setLoading] = useState(!preview);
   const [failed, setFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const [detailProgram, setDetailProgram] = useState<ProgramRow | null>(null);
@@ -33,6 +35,7 @@ export function UniversityProgramBrowser({ universityId, admissionsOpen }: { uni
   const [settledQuery, setSettledQuery] = useState(query);
   useEffect(() => { const timer = setTimeout(() => setSettledQuery(query), 300); return () => clearTimeout(timer); }, [query]);
   useEffect(() => {
+    if (preview) return;
     const controller = new AbortController();
     setLoading(true); setFailed(false);
     Promise.all([

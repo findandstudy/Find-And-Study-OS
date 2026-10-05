@@ -1,5 +1,6 @@
 import { DetailLayout } from "./DetailLayout";
-import { lazy, Suspense, useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState, useContext } from "react";
+import { DetailPreviewContext } from "./DetailPreviewContext";
 import { Link, useLocation } from "wouter";
 import { customFetch } from "@workspace/api-client-react";
 import { useI18n } from "@/hooks/use-i18n";
@@ -62,10 +63,12 @@ type UniversityPayload = {
 const UniversityProgramBrowser = lazy(() => import("./UniversityProgramBrowser").then(module => ({ default: module.UniversityProgramBrowser })));
 
 export default function UniversityDetail({ routeKey }: { routeKey: string }) {
+  const preview = useContext(DetailPreviewContext);
   const { t, lang, localePath } = useI18n();
   const [, setLocation] = useLocation();
-  const [payload, setPayload] = useState<UniversityPayload | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [fetchedPayload, setPayload] = useState<UniversityPayload | null>(null);
+  const payload = preview ? preview.payload as UniversityPayload : fetchedPayload;
+  const [loading, setLoading] = useState(!preview);
   const [error, setError] = useState(false);
   const university = payload?.data;
   const editorial = boundDetailContent(payload?.editorial, "university", university?.id, lang);
@@ -106,6 +109,7 @@ export default function UniversityDetail({ routeKey }: { routeKey: string }) {
   ] : []);
 
   useEffect(() => {
+    if (preview) return;
     let cancelled = false;
     setLoading(true);
     setError(false);
