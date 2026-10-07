@@ -75,6 +75,13 @@ async function buildAll() {
     console.log("copied seed.sql to dist/");
   } catch { }
 
+  // Static visual preview assets only; no task or execution client is shipped here.
+  const personaAssetsDir = path.resolve(distDir, "assets/persona-workspace");
+  await mkdir(personaAssetsDir, { recursive: true });
+  for (const file of ["persona-team-tree.client.js", "persona-team-tree.css"]) {
+    await copyFile(path.resolve(__dirname, "src/lib", file), path.join(personaAssetsDir, file));
+  }
+
   // Copy bundled fonts (used by contract PDF generator) so the production
   // build can find them next to index.cjs the same way dev (tsx) finds them
   // next to src/lib/contractPdf.ts.
