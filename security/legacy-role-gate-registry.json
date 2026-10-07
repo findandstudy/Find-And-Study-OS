@@ -770,7 +770,7 @@
     },
     {
       "path": "artifacts/api-server/src/routes/persona-team-preview.ts",
-      "sha256": "c33c3ff3f67f86758474ee97e972a2bc5055adfb563e668f324c3773a71f5cf0",
+      "sha256": "1b00cf9e0c6edf17480791b6a5b838ae7e2e372845dec3bb116b4a969b1d97f9",
       "routeRegistrations": 5,
       "requireAuth": 0,
       "requireRole": 0,
