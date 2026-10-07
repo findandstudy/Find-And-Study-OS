@@ -119,4 +119,3 @@ test("runtime kill switch is checked again after awaiting the session read", asy
   })(request(), response, () => { nextCalls++; });
   assert.equal(status, 404); assert.equal(nextCalls, 0);
 });
-

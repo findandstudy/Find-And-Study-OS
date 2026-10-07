@@ -1619,4 +1619,3 @@ export function initializePersonaTeamEditor({ designPreviewTemplate } = {}) {
   );
   controls();
 }
-
