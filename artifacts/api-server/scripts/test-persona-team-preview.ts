@@ -15,7 +15,7 @@ const previewEnvironment = {
   PERSONA_TEAM_PREVIEW_ENABLED: "true",
 };
 
-test("design preview: staging only, static routes, memory-only editor, zero business requests", async (t) => {
+test("design preview: staging-only shell handoff, fixed synthetic data and legacy editor isolation", async (t) => {
   const previous = Object.fromEntries(
     Object.keys(previewEnvironment).map((key) => [key, process.env[key]]),
   );
@@ -56,6 +56,16 @@ test("design preview: staging only, static routes, memory-only editor, zero busi
       requests.push({ method: req.method, path: req.path });
       next();
     });
+    // Test-only host for retained legacy assets. The application route now opens
+    // the React dashboard; this separate fixture is not a product page or route.
+    const legacyFixturePath = "/__test-only/legacy-design-preview";
+    app.get(legacyFixturePath, (req, res) => {
+      if (req.headers["x-preview-test-session"] !== "fixture") {
+        res.sendStatus(401);
+        return;
+      }
+      res.type("html").send(`<!doctype html><html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="${PERSONA_TEAM_PREVIEW_PATH}/panel.css"><link rel="stylesheet" href="${PERSONA_TEAM_PREVIEW_PATH}/team-tree.css"></head><body data-persona-mode="design-preview"><main></main><script type="module" src="${PERSONA_TEAM_PREVIEW_PATH}/preview.js"></script></body></html>`);
+    });
     // Synthetic HTTP fixture only. The app's actual mount must reuse real admin
     // session middleware; this route cannot issue a session or grant a role.
     app.use(
@@ -75,6 +85,7 @@ test("design preview: staging only, static routes, memory-only editor, zero busi
     const get = (path: string, method = "GET") =>
       fetch(url + path, {
         method,
+        redirect: "manual",
         headers: { "x-preview-test-session": "fixture" },
       });
     try {
@@ -83,6 +94,7 @@ test("design preview: staging only, static routes, memory-only editor, zero busi
         async () => {
           for (const path of [
             "/",
+            "/template.json",
             "/panel.css",
             "/preview.js",
             "/team-tree.js",
@@ -90,7 +102,8 @@ test("design preview: staging only, static routes, memory-only editor, zero busi
           ]) {
             assert.equal((await fetch(url + path)).status, 401);
             const response = await get(path);
-            assert.equal(response.status, 200);
+            assert.equal(response.status, path === "/" ? 302 : 200);
+            assert.equal(response.headers.get("location"), path === "/" ? "/?workspace=team-preview" : null);
             assert.equal(
               response.headers.get("cache-control"),
               "private, no-store",
@@ -121,6 +134,31 @@ test("design preview: staging only, static routes, memory-only editor, zero busi
             ).text(),
             await (await get("/")).text(),
           );
+          assert.equal((await get("/?returnTo=https%3A%2F%2Funtrusted.invalid")).headers.get("location"), "/?workspace=team-preview");
+          assert.equal((await get("")).headers.get("location"), "/?workspace=team-preview");
+          const response = await get("/template.json");
+          assert.match(response.headers.get("content-type") ?? "", /application\/json/);
+          const template = await response.json();
+          assert.deepEqual(Object.keys(template).sort(), ["members", "name", "schemaVersion"]);
+          assert.equal(template.schemaVersion, 1);
+          assert.equal(template.members.length, 5);
+          for (const member of template.members) {
+            assert.equal(member.provider, "mock");
+            assert.equal(member.model, "mock-fixture");
+            assert.deepEqual(member.tools, ["mock_draft"]);
+            assert.deepEqual(member.dataScopes, ["persona_mock_context"]);
+            assert.equal(member.humanApproval, true);
+            assert.equal(member.purpose, "Örnek talimat — bu önizlemede çalıştırılmaz");
+            assert.equal(member.output, "Örnek çıktı tanımı — herhangi bir içerik üretilmez");
+          }
+          assert.doesNotMatch(JSON.stringify(template), /projectId|principalId|userId|accountId|access_token|apiKey|cookie|https?:\/\//);
+          template.members[0].name = "caller-only mutation";
+          const stable = await (await get("/template.json?projectId=other&name=override")).json();
+          assert.notEqual(stable.members[0].name, "caller-only mutation");
+          assert.equal(stable.name, "Örnek sosyal medya takımı — yalnız tasarım");
+          for (const method of ["HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]) {
+            assert.equal((await get("/template.json", method)).status, 405);
+          }
           const bootstrap = await (await get("/preview.js")).text();
           assert.match(
             bootstrap,
@@ -132,12 +170,14 @@ test("design preview: staging only, static routes, memory-only editor, zero busi
           );
           process.env.PERSONA_TEAM_PREVIEW_ENABLED = "false";
           assert.equal((await get("/team-tree.js")).status, 404);
+          assert.equal((await get("/template.json")).status, 404);
+          assert.equal((await get("/")).status, 404);
           Object.assign(process.env, previewEnvironment);
         },
       );
 
       await t.test(
-        "real browser edits and reloads without API/storage/export/import/worker use",
+        "retained legacy assets edit and reload only in a test fixture without API/storage/export/import/worker use",
         async () => {
           const requireBrowser = createRequire(
             new URL("../../edcons/package.json", import.meta.url),
@@ -178,7 +218,7 @@ test("design preview: staging only, static routes, memory-only editor, zero busi
                 url: request.url(),
               }),
             );
-            await page.goto(url);
+            await page.goto(origin + legacyFixturePath);
             await page.locator('.org-card[data-key="research"]').waitFor();
             assert.equal(
               await page.evaluate(() => (window as any).__previewProbesReady),
@@ -380,6 +420,7 @@ test("design preview: staging only, static routes, memory-only editor, zero busi
               const parsed = new URL(request.url);
               assert.equal(request.method, "GET");
               assert.equal(parsed.origin, origin);
+              if (parsed.pathname === legacyFixturePath) continue;
               assert.equal(
                 fixed.has(
                   parsed.pathname.slice(PERSONA_TEAM_PREVIEW_PATH.length),

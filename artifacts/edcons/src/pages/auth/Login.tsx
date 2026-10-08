@@ -142,8 +142,8 @@ export default function Login() {
 
   useEffect(() => {
     if (!isLoading && user) {
-      // The protected preview is served by the server, outside the SPA router.
-      // Only the exact staging-only path may trigger a full-document return.
+      // The canonical preview document validates the session before returning
+      // to the integrated workspace. Only its exact staging path is accepted.
       const previewTarget = getPersonaTeamPreviewReturnTarget(window.location.origin, returnTo);
       if (previewTarget) {
         // A display cache is not proof of a live session. Otherwise an expired

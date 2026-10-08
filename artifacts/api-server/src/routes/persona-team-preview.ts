@@ -6,6 +6,20 @@ import { socialMockTeamTemplate } from "../lib/personaTeamDraft";
 
 export const PERSONA_TEAM_PREVIEW_PATH = "/admin/agent-team-preview";
 
+/** Synthetic design data only. No project, persona, account or task lookup is
+ * performed, and no request input can alter this read-only fixture. */
+function previewTemplate() {
+  return {
+    ...socialMockTeamTemplate,
+    name: "Örnek sosyal medya takımı — yalnız tasarım",
+    members: socialMockTeamTemplate.members.map((member) => ({
+      ...member,
+      purpose: "Örnek talimat — bu önizlemede çalıştırılmaz",
+      output: "Örnek çıktı tanımı — herhangi bir içerik üretilmez",
+    })),
+  };
+}
+
 /** Static design surface only. This is not a PersonaRuntimeBoundary and cannot
  * authorize data access, a write, approval or execution. */
 export function isPersonaTeamPreviewEnabled() {
@@ -57,13 +71,10 @@ export function createPersonaTeamPreview() {
     }
     next();
   });
-  router.get("/", (_req, res) =>
-    res
-      .type("html")
-      .send(
-        `<!doctype html><html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Takım tasarım önizlemesi — kayıt ve çalıştırma yok</title><link rel="stylesheet" href="${PERSONA_TEAM_PREVIEW_PATH}/panel.css"><link rel="stylesheet" href="${PERSONA_TEAM_PREVIEW_PATH}/team-tree.css"></head><body data-persona-mode="design-preview"><main></main><noscript>Bu tasarım önizlemesi için JavaScript gereklidir. Kalıcı kayıt veya görev çalıştırma yoktur.</noscript><script type="module" src="${PERSONA_TEAM_PREVIEW_PATH}/preview.js"></script></body></html>`,
-      ),
-  );
+  // The surrounding access middleware authenticates this deep link before the
+  // normal React dashboard is opened. Never forward a caller-supplied target.
+  router.get("/", (_req, res) => res.redirect(302, "/?workspace=team-preview"));
+  router.get("/template.json", (_req, res) => res.json(previewTemplate()));
   router.get("/panel.css", (_req, res) =>
     res
       .type("css")
@@ -72,16 +83,10 @@ export function createPersonaTeamPreview() {
       ),
   );
   router.get("/preview.js", (_req, res) => {
-    const template = {
-      ...socialMockTeamTemplate,
-      name: "Örnek sosyal medya takımı — yalnız tasarım",
-      members: socialMockTeamTemplate.members.map((member) => ({
-        ...member,
-        purpose: "Örnek talimat — bu önizlemede çalıştırılmaz",
-        output: "Örnek çıktı tanımı — herhangi bir içerik üretilmez",
-      })),
-    };
-    const safeLiteral = JSON.stringify(template).replace(/</g, "\\u003c");
+    const safeLiteral = JSON.stringify(previewTemplate()).replace(
+      /</g,
+      "\\u003c",
+    );
     res
       .type("js")
       .send(

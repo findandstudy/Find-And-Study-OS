@@ -8,14 +8,14 @@
     "defaultEnforcement": "legacy_quarantine"
   },
   "totals": {
-    "routeRegistrations": 889,
+    "routeRegistrations": 890,
     "requireAuth": 771,
     "requireRole": 495,
     "requirePermission": 78,
     "requireScope": 0,
     "directRoleChecks": 32,
     "authOnlyRouteCandidates": 129,
-    "publicRouteCandidates": 197
+    "publicRouteCandidates": 198
   },
   "files": [
     {
@@ -770,15 +770,15 @@
     },
     {
       "path": "artifacts/api-server/src/routes/persona-team-preview.ts",
-      "sha256": "1b00cf9e0c6edf17480791b6a5b838ae7e2e372845dec3bb116b4a969b1d97f9",
-      "routeRegistrations": 5,
+      "sha256": "79cb39ad10326f68ed9b089942cd3f50cb7d9ac33fec6dfca8faaacb67f5aeb3",
+      "routeRegistrations": 6,
       "requireAuth": 0,
       "requireRole": 0,
       "requirePermission": 0,
       "requireScope": 0,
       "directRoleChecks": 0,
       "authOnlyRouteCandidates": 0,
-      "publicRouteCandidates": 5,
+      "publicRouteCandidates": 6,
       "enforcement": "legacy_quarantine",
       "owner": "Platform Engineering",
       "note": "Route-local review required before corridor migration."

@@ -6,6 +6,7 @@ import { request as httpRequest } from "node:http";
 import type { Request, Response } from "express";
 import type { SessionData, SessionUser } from "../src/lib/replitAuth";
 import { createPersonaTeamPreviewAccess, isPersonaTeamPreviewEnabled } from "../src/lib/personaTeamPreviewAccess";
+import { createPersonaTeamPreview } from "../src/routes/persona-team-preview";
 
 // Existing requireAuth/requireRole import the DB module; no test makes a DB
 // connection. Only the canonical session reader is replaced with a test double.
@@ -126,7 +127,7 @@ test("runtime kill switch is checked again after awaiting the session read", asy
 
 async function withHttpAccess(
   run: (base: string, reads: () => number) => Promise<void>,
-  session: SessionData | null = null,
+  session: SessionData | null | (() => SessionData | null) = null,
 ) {
   environment();
   let reads = 0;
@@ -143,8 +144,8 @@ async function withHttpAccess(
   });
   app.use("/admin/agent-team-preview", createPersonaTeamPreviewAccess(async () => {
     reads++;
-    return session; // A canonical-session test double, never a live DB request.
-  }), (_req, res) => res.send("authenticated synthetic preview"));
+    return typeof session === "function" ? session() : session; // Canonical-session test double, never a live DB request.
+  }), createPersonaTeamPreview());
   const server = app.listen(0, "127.0.0.1");
   await new Promise<void>((resolve) => server.once("listening", resolve));
   try {
@@ -207,7 +208,7 @@ test("non-document assets, API-style accepts and HEAD keep unauthenticated JSON 
       { path: "/", accept: "text/html", extra: { "sec-fetch-dest": "empty" } },
       { path: "/", accept: "text/html", extra: { "sec-fetch-mode": "cors" } },
       { path: "/", accept: "text/html", extra: { "x-requested-with": "XMLHttpRequest" } },
-      ...["/preview.js", "/panel.css", "/team-tree.js", "/team-tree.css", "/nested", "//"].map((path) => ({ path, accept: "text/html" })),
+      ...["/template.json", "/preview.js", "/panel.css", "/team-tree.js", "/team-tree.css", "/nested", "//"].map((path) => ({ path, accept: "text/html" })),
       { path: "/", accept: "text/html", method: "HEAD" },
     ];
     for (const item of cases) {
@@ -243,7 +244,7 @@ test("HTML requests never redirect authorization headers, tokens, denied roles o
 
 test("HTML entry still requires a matching non-impersonated admin session and enabled staging gate", async () => {
   for (const item of [
-    { session: { user: user(), access_token: "" }, status: 200 },
+    { session: { user: user(), access_token: "" }, status: 302 },
     { session: { user: { ...user(), id: 8 }, access_token: "" }, status: 401 },
     { session: { user: user(), access_token: "", originalSid: "b".repeat(64) }, status: 403 },
   ]) {
@@ -252,7 +253,7 @@ test("HTML entry still requires a matching non-impersonated admin session and en
         headers: { accept: "text/html", "x-test-actor": "admin" },
       });
       assert.equal(response.status, item.status);
-      assert.equal(response.headers.get("location"), null);
+      assert.equal(response.headers.get("location"), item.status === 302 ? "/?workspace=team-preview" : null);
     }, item.session);
   }
   await withHttpAccess(async (base, reads) => {
@@ -262,4 +263,61 @@ test("HTML entry still requires a matching non-impersonated admin session and en
     assert.equal(response.headers.get("location"), null);
     assert.equal(reads(), 0);
   });
+});
+
+test("synthetic template reuses the actual guarded route for allowed sessions and every deny case", async () => {
+  for (const role of ["admin", "super_admin"]) {
+    await withHttpAccess(async (base, reads) => {
+      const response = await fetch(`${base}/admin/agent-team-preview/template.json`, {
+        headers: { accept: "application/json", "x-test-actor": role },
+        redirect: "manual",
+      });
+      assert.equal(response.status, 200);
+      assert.equal(response.headers.get("location"), null);
+      assert.equal(response.headers.get("cache-control"), "private, no-store");
+      assert.equal(response.headers.get("x-robots-tag"), "noindex, nofollow");
+      assert.equal((await response.json()).members.length, 5);
+      assert.equal(reads(), 1);
+    }, { user: user(role), access_token: "" });
+  }
+  const denied = [
+    { actor: undefined, session: { user: user(), access_token: "" }, status: 401 },
+    ...["student", "staff", "agent", "agent_staff", "manager", "inactive"].map((actor) => ({ actor, session: { user: user(), access_token: "" }, status: 403 })),
+    { actor: "admin", session: null, status: 401 },
+    { actor: "admin", session: { user: { ...user(), id: 8 }, access_token: "" }, status: 401 },
+    { actor: "admin", session: { user: user(), access_token: "", originalSid: sid }, status: 403 },
+    { actor: "admin", session: { user: user(), access_token: "" }, status: 403, authorization: "Bearer invalid" },
+  ];
+  for (const item of denied) {
+    await withHttpAccess(async (base) => {
+      const response = await fetch(`${base}/admin/agent-team-preview/template.json`, {
+        headers: {
+          accept: "application/json",
+          ...(item.actor ? { "x-test-actor": item.actor } : {}),
+          ...("authorization" in item ? { authorization: item.authorization } : {}),
+        },
+        redirect: "manual",
+      });
+      assert.equal(response.status, item.status);
+      assert.equal(response.headers.get("location"), null);
+      const content = await response.json();
+      assert.equal(typeof content.error, "string");
+      assert.equal(content.members, undefined);
+    }, item.session);
+  }
+});
+
+test("template read revalidates canonical revocation instead of trusting a prior successful preview", async () => {
+  let current: SessionData | null = { user: user(), access_token: "" };
+  await withHttpAccess(async (base, reads) => {
+    const url = `${base}/admin/agent-team-preview/template.json`;
+    const headers = { accept: "application/json", "x-test-actor": "admin" };
+    assert.equal((await fetch(url, { headers })).status, 200);
+    current = null;
+    const revoked = await fetch(url, { headers, redirect: "manual" });
+    assert.equal(revoked.status, 401);
+    assert.equal(revoked.headers.get("location"), null);
+    assert.deepEqual(await revoked.json(), { error: "PERSONA_TEAM_PREVIEW_SESSION_INVALID" });
+    assert.equal(reads(), 2);
+  }, () => current);
 });

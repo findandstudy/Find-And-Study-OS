@@ -1,6 +1,7 @@
 import "./lib/client-state-version";
 import { activateInMemoryRouting, getSavedNavPath } from "./lib/navigation";
 import { getAuthCache } from "./lib/auth-cache";
+import { getPersonaTeamPreviewBridgePath } from "./lib/personaTeamPreviewNavigation";
 import "./lib/csrfSetup";
 import { createRoot } from "react-dom/client";
 import App from "./App";
@@ -36,6 +37,13 @@ import "./index.css";
 
 const _PORTAL_PREFIXES = ["/admin", "/staff", "/student", "/agent"];
 
+// Fixed staging-only entry from the guarded preview document. This selects a
+// page, never authority: its template requires a current server-checked session.
+const _teamPreviewEntry = getPersonaTeamPreviewBridgePath(
+  window.location.origin, window.location.pathname, window.location.search,
+);
+if (_teamPreviewEntry) window.history.replaceState(null, "", _teamPreviewEntry);
+
 function _isKnownPublicPath(path: string): boolean {
   const PUBLIC_SUB = new Set(["", "about", "countries", "programs", "universities", "blog", "contact", "login"]);
   const parts = path.split("/").filter(Boolean);
@@ -57,7 +65,9 @@ const _savedOk = !!_savedPath && (_isPortalPath(_savedPath) || _isKnownPublicPat
 
 let _startPath: string;
 
-if (_savedOk) {
+if (_teamPreviewEntry) {
+  _startPath = _teamPreviewEntry;
+} else if (_savedOk) {
   _startPath = _savedPath!;
 } else {
   // ── Priority 2 & 3 ────────────────────────────────────────────────────────
