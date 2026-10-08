@@ -10,6 +10,8 @@ import { getAllowedOrigins, isCredentialedCorsOriginAllowed } from "./lib/reques
 import router from "./routes";
 import webhooksRouter from "./routes/webhooks";
 import { requestPerformanceMiddleware } from "./lib/requestPerformance";
+import { createPersonaTeamPreviewAccess, isPersonaTeamPreviewEnabled } from "./lib/personaTeamPreviewAccess";
+import { createPersonaTeamPreview } from "./routes/persona-team-preview";
 
 const app: Express = express();
 
@@ -253,6 +255,11 @@ app.use((req, res, next) => {
 app.use(authMiddleware);
 
 app.use(csrfProtection);
+
+// Staging-only visual fixture. No persona/workspace business API is mounted.
+if (isPersonaTeamPreviewEnabled()) {
+  app.use("/admin/agent-team-preview", createPersonaTeamPreviewAccess(), createPersonaTeamPreview());
+}
 
 app.use("/api", router);
 

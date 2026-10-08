@@ -2,7 +2,8 @@ import { useState, useEffect, useMemo, useRef, startTransition } from "react";
 import { useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
-import { setAuthCache, setStickyUser } from "@/lib/auth-cache";
+import { clearAuthCache, setAuthCache, setStickyUser } from "@/lib/auth-cache";
+import { getPersonaTeamPreviewReturnTarget } from "@/lib/personaTeamPreviewNavigation";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useI18n } from "@/hooks/use-i18n";
 import { GraduationCap, Globe2, Star, ArrowRight, Loader2, Mail, Lock, User, Phone, Eye, EyeOff, ShieldCheck, ChevronDown } from "lucide-react";
@@ -141,6 +142,29 @@ export default function Login() {
 
   useEffect(() => {
     if (!isLoading && user) {
+      // The canonical preview document validates the session before returning
+      // to the integrated workspace. Only its exact staging path is accepted.
+      const previewTarget = getPersonaTeamPreviewReturnTarget(window.location.origin, returnTo);
+      if (previewTarget) {
+        // A display cache is not proof of a live session. Otherwise an expired
+        // cookie plus a sticky user would loop between preview and login.
+        let cancelled = false;
+        void authFetch(`${BASE_URL}/api/auth/me`, {
+          method: "GET", credentials: "include", cache: "no-store",
+        }, 0).then(async (res) => {
+          const currentUser = await safeJson(res);
+          if (cancelled) return;
+          if (res.ok && currentUser?.id === user.id) {
+            window.location.replace(previewTarget);
+          } else if (res.status === 401 || res.status === 403) {
+            clearAuthCache();
+            queryClient.setQueryData(["/api/auth/me"], null);
+          } else {
+            setError(t("login.serverError"));
+          }
+        }).catch(() => { if (!cancelled) setError(t("login.connectionError")); });
+        return () => { cancelled = true; };
+      }
       startTransition(() => {
         if (returnTo) {
           setLocation(returnTo);
@@ -159,7 +183,8 @@ export default function Login() {
         }
       });
     }
-  }, [user, isLoading, setLocation, returnTo]);
+    return undefined;
+  }, [user, isLoading, setLocation, returnTo, queryClient, t]);
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
