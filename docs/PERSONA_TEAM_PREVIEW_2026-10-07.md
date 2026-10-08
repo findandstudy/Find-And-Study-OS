@@ -45,3 +45,24 @@ Tek yeni ayar yalnız staging tasarım önizleme bayrağıdır.
 DB/container/worker restart, DB restore, migration veya production işlemi yoktur.
 Görsel editör veriyi kalıcı tutmadığı için kaydedilmiş iş/veri geri alma yoktur.
 Tam kalıcı takım platformu ayrı signer/ownership/approval/provisioning kapılarında kalır.
+
+## 8 Ekim 2026 — menü ve giriş dönüşü
+
+- Staging'de admin/super_admin menüsünün Otomasyon ve Entegrasyonlar grubunda,
+  AI Personaları yanında `Takım Tasarımcısı — Önizleme` görünür. İngilizce arayüzde
+  `Team Designer — Preview` olarak gösterilir; diğer diller İngilizce etiketi kullanır.
+- Mevcut güvenli yeni-sekme bağlantısı kullanılır. Önizleme bir SPA rotası değildir;
+  menü tıklaması normal bir belge isteği yapar. Favorilere sabitleme de aynı bağlantıyı korur.
+- Oturumsuz/süresi dolmuş kök HTML ziyaretleri sabit normal giriş adresine yönlenir.
+  Caller query'si dönüş hedefini belirlemez. Giriş sonrası yalnız exact staging origin
+  ve exact önizleme yolu tam sayfa geçişi yapar; diğer giriş dönüşleri değişmez.
+  Eski ekran önbelleği oturum kanıtı sayılmaz: sunucudan yeniden doğrulanır;
+  süresi dolmuş oturumda önbellek temizlenir ve giriş formu kullanılabilir kalır.
+- JSON, asset ve HEAD istekleri giriş yönlendirmesi almaz. Rol, token, impersonation,
+  canonical session ve default-off runtime kontrolleri korunur.
+- Bu ekin tabanı staging'de doğrulanmış `2a665099d9f0e74be1b775076565e0aa00f93845`.
+  Artık yalnız API giriş paketi ve bu menü/giriş düzeltmelerini içeren frontend derlemesi
+  yenilenir. Önceki hashed frontend varlıkları korunur; DB/migration/provider değişmez.
+- Doğrulama: erişim/editör testleri, menü/dönüş unit testleri, sentetik API'lerle gerçek
+  derlenmiş arayüz tarayıcı testi, API/frontend build ve typecheck. Staging yayını ayrıca
+  exact-head CI, yedek/izole restore ve yayın sonrası erişim testlerine bağlıdır.

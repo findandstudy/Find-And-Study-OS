@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import express from "express";
+import type { AddressInfo } from "node:net";
+import { request as httpRequest } from "node:http";
 import type { Request, Response } from "express";
 import type { SessionData, SessionUser } from "../src/lib/replitAuth";
 import { createPersonaTeamPreviewAccess, isPersonaTeamPreviewEnabled } from "../src/lib/personaTeamPreviewAccess";
@@ -16,7 +19,7 @@ function environment() {
 }
 const user = (role = "admin") => ({ id: 7, role, isActive: true }) as SessionUser;
 function request(patch: Partial<Request> = {}): Request {
-  return { method: "GET", headers: {}, cookies: { sid }, user: user(), ...patch } as Request;
+  return { method: "GET", originalUrl: "/admin/agent-team-preview/", headers: {}, cookies: { sid }, user: user(), ...patch } as Request;
 }
 async function invoke(req = request(), session: SessionData | null = { user: user(), access_token: "" }, readerError = false) {
   let status = 200, body: unknown, nextCalls = 0, sessionReads = 0;
@@ -25,6 +28,7 @@ async function invoke(req = request(), session: SessionData | null = { user: use
     set(key: string, value: string) { headers[key] = value; return this; },
     status(code: number) { status = code; return this; },
     json(value: unknown) { body = value; return this; },
+    redirect(code: number, path: string) { status = code; headers.Location = path; return this; },
   } as unknown as Response;
   await createPersonaTeamPreviewAccess(async (value) => {
     sessionReads++;
@@ -118,4 +122,144 @@ test("runtime kill switch is checked again after awaiting the session read", asy
     return { user: user(), access_token: "" };
   })(request(), response, () => { nextCalls++; });
   assert.equal(status, 404); assert.equal(nextCalls, 0);
+});
+
+async function withHttpAccess(
+  run: (base: string, reads: () => number) => Promise<void>,
+  session: SessionData | null = null,
+) {
+  environment();
+  let reads = 0;
+  const app = express();
+  app.use((req, _res, next) => {
+    // Synthetic authenticated identity replaces only the upstream middleware;
+    // the actual preview access middleware and role guards execute below.
+    const actor = req.headers["x-test-actor"];
+    if (typeof actor === "string") req.user = { ...user(actor), isActive: actor !== "inactive" };
+    if (actor === "inactive") req.user!.role = "admin";
+    req.cookies = { sid };
+    if (req.headers["x-test-token"]) req.apiTokenAuth = true;
+    next();
+  });
+  app.use("/admin/agent-team-preview", createPersonaTeamPreviewAccess(async () => {
+    reads++;
+    return session; // A canonical-session test double, never a live DB request.
+  }), (_req, res) => res.send("authenticated synthetic preview"));
+  const server = app.listen(0, "127.0.0.1");
+  await new Promise<void>((resolve) => server.once("listening", resolve));
+  try {
+    await run(`http://127.0.0.1:${(server.address() as AddressInfo).port}`, () => reads);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+  }
+}
+
+// Node fetch overrides Sec-Fetch-Mode with "cors". Send raw HTTP headers so
+// these requests exercise actual browser navigation content negotiation.
+function httpProbe(url: string, options: { headers: Record<string, string>; method?: string }) {
+  return new Promise<{ status: number; headers: { get(name: string): string | null } }>((resolve, reject) => {
+    const req = httpRequest(url, options, (res) => {
+      res.resume();
+      res.on("end", () => resolve({
+        status: res.statusCode!,
+        headers: { get: (name) => {
+          const value = res.headers[name.toLowerCase()];
+          return typeof value === "string" ? value : null;
+        } },
+      }));
+      res.on("error", reject);
+    });
+    req.setTimeout(5000, () => req.destroy(new Error("preview HTTP test timeout")));
+    req.on("error", reject);
+    req.end();
+  });
+}
+
+test("browser document entry redirects anonymous or expired sessions only to the fixed login target", async () => {
+  await withHttpAccess(async (base, reads) => {
+    for (const suffix of ["", "/", "/?returnTo=https%3A%2F%2Funtrusted.invalid%2F&next=%2Fadmin%2Fusers"]) {
+      for (const actor of [undefined, "admin", "super_admin"]) {
+        const response = await httpProbe(`${base}/admin/agent-team-preview${suffix}`, {
+          headers: {
+            accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "sec-fetch-dest": "document",
+            "sec-fetch-mode": "navigate",
+            ...(actor ? { "x-test-actor": actor } : {}),
+          },
+        });
+        assert.equal(response.status, 302);
+        assert.equal(response.headers.get("location"), "/en/login?returnTo=%2Fadmin%2Fagent-team-preview%2F");
+        assert.equal(response.headers.get("cache-control"), "private, no-store");
+        assert.equal(response.headers.get("x-robots-tag"), "noindex, nofollow");
+      }
+    }
+    assert.equal(reads(), 6);
+  });
+});
+
+test("non-document assets, API-style accepts and HEAD keep unauthenticated JSON responses", async () => {
+  await withHttpAccess(async (base) => {
+    const cases = [
+      { path: "/", accept: "application/json" },
+      { path: "/", accept: "*/*" },
+      { path: "/", accept: "application/json,text/html;q=0.5" },
+      { path: "/", accept: "text/html;q=0,application/json" },
+      { path: "/", accept: "text/html", extra: { "sec-fetch-dest": "empty" } },
+      { path: "/", accept: "text/html", extra: { "sec-fetch-mode": "cors" } },
+      { path: "/", accept: "text/html", extra: { "x-requested-with": "XMLHttpRequest" } },
+      ...["/preview.js", "/panel.css", "/team-tree.js", "/team-tree.css", "/nested", "//"].map((path) => ({ path, accept: "text/html" })),
+      { path: "/", accept: "text/html", method: "HEAD" },
+    ];
+    for (const item of cases) {
+      for (const actor of [undefined, "admin"]) {
+        const response = await httpProbe(`${base}/admin/agent-team-preview${item.path}`, {
+          method: item.method ?? "GET",
+          headers: { accept: item.accept, ...item.extra, ...(actor ? { "x-test-actor": actor } : {}) },
+        });
+        assert.equal(response.status, 401, `${item.path} ${item.accept} ${actor}`);
+        assert.equal(response.headers.get("location"), null);
+        assert.match(response.headers.get("content-type")!, /application\/json/);
+      }
+    }
+  });
+});
+
+test("HTML requests never redirect authorization headers, tokens, denied roles or inactive accounts", async () => {
+  await withHttpAccess(async (base, reads) => {
+    for (const extra of [
+      { authorization: "Bearer invalid" }, { authorization: "Basic invalid" }, { authorization: "" },
+      { "x-test-token": "1" },
+      ...["staff", "student", "agent", "agent_staff", "manager", "inactive"].map((role) => ({ "x-test-actor": role })),
+    ]) {
+      const response = await httpProbe(`${base}/admin/agent-team-preview/`, {
+        headers: { accept: "text/html", ...extra },
+      });
+      assert.equal(response.status, 403);
+      assert.equal(response.headers.get("location"), null);
+    }
+    assert.equal(reads(), 0);
+  });
+});
+
+test("HTML entry still requires a matching non-impersonated admin session and enabled staging gate", async () => {
+  for (const item of [
+    { session: { user: user(), access_token: "" }, status: 200 },
+    { session: { user: { ...user(), id: 8 }, access_token: "" }, status: 401 },
+    { session: { user: user(), access_token: "", originalSid: "b".repeat(64) }, status: 403 },
+  ]) {
+    await withHttpAccess(async (base) => {
+      const response = await httpProbe(`${base}/admin/agent-team-preview/`, {
+        headers: { accept: "text/html", "x-test-actor": "admin" },
+      });
+      assert.equal(response.status, item.status);
+      assert.equal(response.headers.get("location"), null);
+    }, item.session);
+  }
+  await withHttpAccess(async (base, reads) => {
+    process.env.PERSONA_TEAM_PREVIEW_ENABLED = "false";
+    const response = await httpProbe(`${base}/admin/agent-team-preview/`, { headers: { accept: "text/html" } });
+    assert.equal(response.status, 404);
+    assert.equal(response.headers.get("location"), null);
+    assert.equal(reads(), 0);
+  });
 });

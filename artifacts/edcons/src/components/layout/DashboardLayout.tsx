@@ -7,6 +7,7 @@ import { useSeason } from "@/contexts/SeasonContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { performLogout } from "@/lib/logout";
+import { getPersonaTeamPreviewMenuLink } from "@/lib/personaTeamPreviewNavigation";
 import { customFetch } from "@workspace/api-client-react";
 import { FINANCE_ROLES } from "@workspace/roles";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -117,6 +118,8 @@ function getMenuForRole(
   agentAccessTier?: string,
   agentFeatures?: Record<string, boolean>,
   institutionCapabilities?: string[],
+  origin = "",
+  language = "en",
 ): { groups: { id?: string; label: string; items: MenuItem[] }[] } {
   const showFinance = (FINANCE_ROLES as readonly string[]).includes(role);
 
@@ -208,8 +211,10 @@ function getMenuForRole(
       ...(isAdmin ? [{ title: t("dashboard.dataQuality"), icon: ShieldCheck, url: '/admin/data-quality' }] : []),
     ];
 
+    const teamPreviewLink = getPersonaTeamPreviewMenuLink(origin, role, language);
     const aiItems: MenuItem[] = isAdmin ? [
       { title: t('dashboard.aiPersonas'), icon: Sparkles, url: '/admin/ai-personas' },
+      ...(teamPreviewLink ? [{ ...teamPreviewLink, icon: Users }] : []),
       { title: t('dashboard.aiActionQueue'), icon: ListChecks, url: '/admin/ai-action-queue' },
       { title: t('aiExtractor.sidebar'), icon: FileSearch, url: '/admin/ai-extractors' },
       { title: t('aiAgentAdmin.sidebar'), icon: MessageSquare, url: '/admin/ai-agent' },
@@ -447,7 +452,7 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
     e.preventDefault();
     navigate(url);
   };
-  const { t, localePath } = useI18n();
+  const { t, localePath, lang } = useI18n();
   const { season, setSeason, availableYears } = useSeason();
   const { mode, setMode, resolvedTheme, settings: themeSettings } = useTheme();
   const isAgentRole = !!user && (user.role === "agent" || user.role === "sub_agent" || user.role === "agent_staff");
@@ -655,6 +660,8 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
     (agentProfile as any)?.accessTier,
     (agentProfile as any)?.effectiveFeatures,
     institutionContext?.capabilities,
+    window.location.origin,
+    lang,
   );
   const allItems = groups.flatMap(g => g.items);
 
