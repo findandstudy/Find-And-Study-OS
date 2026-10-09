@@ -1781,7 +1781,7 @@ router.post("/agents", requireAuth, requireRole(...MANAGER_ROLES), async (req, r
       res.status(400).json({ error: `Template language (${template.language}) does not match agent preferredContractLanguage (${preferredContractLanguage})` });
       return;
     }
-    templateBrandingSnapshot = await resolveContractTemplateBranding(template);
+    templateBrandingSnapshot = await resolveContractTemplateBranding(template, { captureLogo: true });
     if (!hasContractCompanySignature(templateBrandingSnapshot)) {
       res.status(409).json({
         error: "Selected contract template has no official company signature. Configure one in Contract Brand Profiles before creating the agent.",

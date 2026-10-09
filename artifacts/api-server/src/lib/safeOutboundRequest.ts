@@ -56,6 +56,8 @@ export interface SafeOutboundRequestOptions {
   allowedPorts?: readonly number[];
   allowedHostnames?: readonly string[];
   headersOnly?: boolean;
+  /** Optional caller-owned deadline, covering DNS, connect and response body. */
+  signal?: AbortSignal;
 }
 
 export interface SafeOutboundResponse {
@@ -124,21 +126,49 @@ export function parseSafeOutboundUrl(
   return url;
 }
 
-async function resolvePublicAddress(hostname: string): Promise<{ address: string; family: 4 | 6 }> {
+function checkAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) throw new Error("outbound_request_aborted");
+}
+
+// dns.lookup itself is not cancellable. Stop waiting on cancellation, and never
+// open a socket when its late answer arrives. Both outcomes retain handlers.
+async function withAbort<T>(pending: Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (!signal) return pending;
+  if (signal.aborted) {
+    pending.catch(() => {});
+    throw new Error("outbound_request_aborted");
+  }
+  return new Promise<T>((resolve, reject) => {
+    const aborted = () => {
+      signal.removeEventListener("abort", aborted);
+      reject(new Error("outbound_request_aborted"));
+    };
+    signal.addEventListener("abort", aborted, { once: true });
+    pending.then(
+      (value) => { signal.removeEventListener("abort", aborted); resolve(value); },
+      (error) => { signal.removeEventListener("abort", aborted); reject(error); },
+    );
+  });
+}
+
+async function resolvePublicAddress(hostname: string, signal?: AbortSignal): Promise<{ address: string; family: 4 | 6 }> {
+  checkAborted(signal);
   let addresses: Array<{ address: string; family: 4 | 6 }>;
   if (isIP(hostname)) {
     addresses = [{ address: hostname, family: isIP(hostname) as 4 | 6 }];
   } else {
     try {
-      const resolved = await lookup(hostname, { all: true, verbatim: true });
+      const resolved = await withAbort(lookup(hostname, { all: true, verbatim: true }), signal);
       addresses = resolved.map(({ address, family }) => ({
         address,
         family: family === 6 ? 6 : 4,
       }));
     } catch {
+      checkAborted(signal);
       throw new Error("outbound_host_unresolvable");
     }
   }
+  checkAborted(signal);
   // Reject the hostname if any answer is private/reserved. This prevents a
   // mixed public/private DNS response from becoming an address-selection
   // bypass and keeps the connection pinned to a vetted answer.
@@ -162,10 +192,12 @@ export async function safeOutboundRequest(
   rawUrl: string,
   options: SafeOutboundRequestOptions = {},
 ): Promise<SafeOutboundResponse> {
+  checkAborted(options.signal);
   if (safeOutboundRequestOverride) return safeOutboundRequestOverride(rawUrl, options);
   const url = parseSafeOutboundUrl(rawUrl, options);
   const hostname = normalizedHostname(url);
-  const resolved = await resolvePublicAddress(hostname);
+  const resolved = await resolvePublicAddress(hostname, options.signal);
+  checkAborted(options.signal);
   const method = options.method ?? "GET";
   const body = options.body === undefined
     ? undefined
@@ -191,11 +223,14 @@ export async function safeOutboundRequest(
       method,
       path: `${url.pathname}${url.search}`,
       headers,
+      signal: options.signal,
       ...(url.protocol === "https:" ? {
         servername: isIP(hostname) ? undefined : hostname,
         rejectUnauthorized: true,
       } : {}),
     }, (incoming) => {
+      incoming.on("error", reject);
+      incoming.on("aborted", () => reject(new Error("outbound_response_aborted")));
       const status = incoming.statusCode ?? 0;
       const location = headerValue(incoming.headers.location);
       if (status >= 300 && status < 400 && location) {
