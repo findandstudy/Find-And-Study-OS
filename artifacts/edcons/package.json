@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "test:contract-editor": "tsx --test ./scripts/test-contract-editor-mode.ts",
     "test:email-automation": "tsx --test ./scripts/test-email-automation-ui.ts",
     "test:email-automation-browser": "node ./scripts/test-email-automation-browser.mjs",
     "test:system-health": "tsx --test ./scripts/test-system-health.ts",

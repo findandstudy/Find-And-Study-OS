@@ -223,7 +223,7 @@ async function createApplicationSession(params: {
   body: ApplicationBody;
   template: Template;
 }, writer: Pick<typeof db, "insert" | "update"> = db) {
-  const branding = await resolveContractTemplateBranding(params.template);
+  const branding = await resolveContractTemplateBranding(params.template, { captureLogo: true });
   if (!hasContractCompanySignature(branding)) throw new Error("CONTRACT_SIGNATURE_MISSING");
   const { rawToken, tokenHash } = createSigningToken();
   const expiresAt = params.application.contractDeadlineAt || new Date(Date.now() + CONTRACT_SIGNING_TTL_MS);

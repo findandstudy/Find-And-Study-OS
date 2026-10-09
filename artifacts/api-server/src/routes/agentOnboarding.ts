@@ -961,7 +961,7 @@ router.post("/contracts/agent/:agentId/resend-onboarding", requireAuth, requireR
   }
   if (!template) { res.status(404).json({ error: "No matching contract template found" }); return; }
 
-  const templateBrandingSnapshot = await resolveContractTemplateBranding(template);
+  const templateBrandingSnapshot = await resolveContractTemplateBranding(template, { captureLogo: true });
   if (!hasContractCompanySignature(templateBrandingSnapshot)) {
     res.status(409).json({
       error: "Selected contract template has no official company signature. Configure one in Contract Brand Profiles before resending.",

@@ -1,6 +1,11 @@
+import { JSDOM } from "jsdom";
+import { validateContractLogoSnapshot, type ContractLogoSnapshot } from "./contractPdfAssets";
+
 export type ContractBrandingConfig = {
   brandName?: string;
   logoUrl?: string;
+  /** Server-captured image bytes frozen with a NEW signing session, never refreshed during PDF generation. */
+  logoSnapshot?: ContractLogoSnapshot;
   primaryColor?: string;
   accentColor?: string;
   pageTitle?: string;
@@ -52,9 +57,11 @@ export function sanitizeContractBranding(value: unknown): ContractBrandingConfig
   const requireEmailVerification = typeof input.requireEmailVerification === "boolean"
     ? input.requireEmailVerification
     : undefined;
+  const logoSnapshot = validateContractLogoSnapshot(input.logoSnapshot, text(input.logoUrl, 2000));
   const config: ContractBrandingConfig = {
     brandName: text(input.brandName, 200),
     logoUrl: text(input.logoUrl, 2000),
+    ...(logoSnapshot ? { logoSnapshot } : {}),
     primaryColor: color("primaryColor"),
     accentColor: color("accentColor"),
     pageTitle: text(input.pageTitle, 500),
@@ -139,6 +146,7 @@ export function resolveContractEmailVerificationEvidence(
 export function validateContractBrandingInput(value: unknown): string | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const input = value as Record<string, unknown>;
+  if (input.logoSnapshot !== undefined) return "Logo snapshots are managed by the server";
   if (
     input.requireEmailVerification !== undefined
     && typeof input.requireEmailVerification !== "boolean"
@@ -195,9 +203,31 @@ export function applyContractBranding(innerHtml: string, value: unknown): string
   if (!config) return innerHtml;
   const primary = config.primaryColor || "#1e3a8a";
   const accent = config.accentColor || primary;
+  // No network, storage lookup or profile refresh here: every byte comes from
+  // the already-frozen signing-session config. Preserve legacy behaviour when
+  // no snapshot exists, including already-signed, lazily generated documents.
+  const logoSrc = config.logoSnapshot?.dataUrl || config.logoUrl;
+  if (config.logoSnapshot) {
+    // The same configured logo may also appear in the designed template body.
+    // Replace only exact image-source matches, never arbitrary text/links/CSS.
+    const dom = new JSDOM(innerHtml);
+    try {
+      for (const img of dom.window.document.querySelectorAll("img[src]")) {
+        if (img.getAttribute("src") === config.logoSnapshot.sourceUrl) {
+          img.setAttribute("src", config.logoSnapshot.dataUrl);
+        }
+      }
+      const doc = dom.window.document;
+      innerHtml = /<(?:!doctype|html|head|body)\b/i.test(innerHtml)
+        ? `<!doctype html>${doc.documentElement.outerHTML}`
+        : `${Array.from(doc.head.querySelectorAll("style"), el => el.outerHTML).join("")}${doc.body.innerHTML}`;
+    } finally {
+      dom.window.close();
+    }
+  }
   const header = (config.logoUrl || config.brandName || config.pdfHeaderText) ? `
     <header class="fas-contract-brand-header">
-      ${config.logoUrl ? `<img src="${escapeBrandingHtml(config.logoUrl)}" alt="" />` : ""}
+      ${logoSrc ? `<img src="${escapeBrandingHtml(logoSrc)}" alt="" />` : ""}
       <div><strong>${escapeBrandingHtml(config.brandName || "")}</strong>${config.pdfHeaderText ? `<span>${escapeBrandingHtml(config.pdfHeaderText)}</span>` : ""}</div>
     </header>` : "";
   const footer = config.pdfFooterText

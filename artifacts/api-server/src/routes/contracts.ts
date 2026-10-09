@@ -417,7 +417,7 @@ router.post("/contracts/admin-send", requireAuth, requirePermission("contracts.m
     const days = parseExpiryDays(expiryDays);
     const expiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
 
-    const brandingSnapshot = await resolveContractTemplateBranding(tpl);
+    const brandingSnapshot = await resolveContractTemplateBranding(tpl, { captureLogo: true });
     if (!hasContractCompanySignature(brandingSnapshot)) {
       res.status(409).json({
         error: "The selected template has no official company signature. Assign a brand profile with a signature and publish a new template version before issuing a signing link.",
@@ -537,7 +537,7 @@ router.post("/contracts/self-fill-link", requireAuth, requirePermission("self_fi
     const expiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
 
     const normalizedEmail = hasEmail ? String(signerEmail).toLowerCase().trim() : "";
-    const brandingSnapshot = await resolveContractTemplateBranding(tpl);
+    const brandingSnapshot = await resolveContractTemplateBranding(tpl, { captureLogo: true });
     if (!hasContractCompanySignature(brandingSnapshot)) {
       res.status(409).json({
         error: "The selected template has no official company signature. Assign a brand profile with a signature and publish a new template version before issuing a signing link.",
