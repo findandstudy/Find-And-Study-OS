@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { customFetch } from "@workspace/api-client-react";
+import { ApiError, customFetch } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -15,19 +15,24 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/co
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import {
   Save, Upload, Eye, EyeOff, Plus, Trash2, Copy, ChevronUp, ChevronDown,
-  Monitor, Tablet, Smartphone, History, ArrowLeft, RotateCcw, GripVertical, Sparkles, Settings2,
+  Monitor, Tablet, Smartphone, History, ArrowLeft, RotateCcw, RefreshCw, GripVertical, Settings2, GitCompareArrows, Download, Search, ExternalLink, Layers3,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { AiAssistantPanel } from "@/components/AiAssistantPanel";
 import { useLocation } from "wouter";
-import { BLOCK_TYPES, getBlockTypeDef, getDefaultContent, type PageBlock, type BlockFieldDef } from "@/lib/website/blockTypes";
-import { SUPPORTED_LANGUAGES, LANGUAGE_META } from "@/lib/i18n";
+import { BLOCK_APPEARANCE_KEYS, BLOCK_TYPES, getBlockTypeDef, getDefaultContent, type PageBlock } from "@/lib/website/blockTypes";
+import { SUPPORTED_LANGUAGES, LANGUAGE_META, type Language } from "@/lib/i18n";
 import DOMPurify from "isomorphic-dompurify";
-import { CatalogBlockPreview } from "./CatalogBlockPreview";
 import { CatalogBlockFields } from "./CatalogBlockFields";
+import { CatalogBlockPreview } from "./CatalogBlockPreview";
 import { useI18n } from "@/hooks/use-i18n";
 import { installPageEditorNavigationGuard, supportsPageEditorHistoryGuard } from "./pageEditorNavigationGuard";
 import { pageEditorText } from "./pageEditorCopy";
+// Field controls live separately so the editor route stays responsive while sections grow.
+import { BlockFieldEditor, GlobalBlockSelector } from "./PageEditorFields";
+import { CmsBlock, CmsPageCanvas } from "../../public/PublicPage";
+import { isSystemManagedPage, managedPagePublicPath } from "@/lib/website/managedPageRoutes";
+import { enrichManagedPageBlocks, managedPageStarterBlocks, managedPageStarterTranslations, MANAGED_HOME_BLOCK_TYPES } from "@/lib/website/managedPageStarters";
+import { SITE_NAME } from "@/hooks/use-json-ld";
 
 const ALLOWED_TAGS = ["p", "br", "b", "i", "u", "strong", "em", "a", "ul", "ol", "li", "h1", "h2", "h3", "h4", "h5", "h6", "blockquote", "code", "pre", "span", "div", "img", "hr"];
 const ALLOWED_ATTRS = ["href", "target", "rel", "src", "alt", "class", "style"];
@@ -52,6 +57,7 @@ interface WebsitePage {
   metaTitle: string | null;
   metaDescription: string | null;
   publishedAt: string | null;
+  updatedAt: string;
   translationsJson: Record<string, Record<string, string>> | null;
 }
 
@@ -60,7 +66,7 @@ interface PageVersion {
   pageId: number;
   versionNumber: number;
   blocksSnapshot: PageBlock[];
-  metaSnapshot: Record<string, string> | null;
+  metaSnapshot: Record<string, unknown> | null;
   publishedAt: string | null;
   createdBy: number | null;
   createdAt: string;
@@ -70,24 +76,98 @@ interface PageVersion {
 }
 
 type PreviewSize = "desktop" | "tablet" | "mobile";
-const PREVIEW_WIDTHS: Record<PreviewSize, string> = { desktop: "100%", tablet: "768px", mobile: "375px" };
+const PREVIEW_WIDTHS: Record<PreviewSize, number> = { desktop: 1280, tablet: 768, mobile: 375 };
+
+const SEO_COMPARISON_FIELDS = [
+  ["slug", "Route"], ["metaTitle", "SEO title"], ["metaDescription", "SEO description"],
+  ["canonicalUrl", "Canonical"], ["robotsIndex", "Index"], ["robotsFollow", "Follow"],
+  ["ogTitle", "OG title"], ["ogDescription", "OG description"], ["ogImageUrl", "OG image"],
+  ["twitterTitle", "Twitter title"], ["twitterDescription", "Twitter description"], ["twitterImageUrl", "Twitter image"],
+] as const;
+
+function normalizedSnapshotValue(value: unknown): string {
+  if (value === null || value === undefined) return "";
+  return typeof value === "string" ? value.trim() : JSON.stringify(value);
+}
+
+function snapshotTranslations(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function normalizeBlockAppearance(block: PageBlock): PageBlock {
+  const content = { ...(block.content || {}) };
+  const settings = { ...(block.settings || {}) };
+  for (const key of BLOCK_APPEARANCE_KEYS) {
+    if (settings[key] === undefined && content[key] !== undefined) settings[key] = content[key];
+    delete content[key];
+  }
+  return { ...block, content, settings };
+}
+
+function normalizeBlocks(blocks: PageBlock[]): PageBlock[] {
+  return blocks.map(normalizeBlockAppearance);
+}
 
 export default function PageEditor({ id }: { id: number }) {
   return <PageEditorSession key={id} id={id} />;
 }
 
+interface PublicationPreflight {
+  eligible: boolean;
+  revision: string;
+  digest: string;
+  checkedAt: string;
+  expiresAt: string;
+  publication: { route: string; canonical: string; locale: string; indexable: boolean; sitemapEligible: boolean; invalidationScopes: string[] };
+  blockers: Array<{ code: string; message: string }>;
+  warnings: Array<{ code: string; message: string }>;
+}
+
 function PageEditorSession({ id }: { id: number }) {
   const { lang } = useI18n();
   const copy = (en: string, tr?: string) => pageEditorText(lang, en, tr);
+  const preflightIssueText = (issue: { code: string; message: string }) => ({
+    TITLE_REQUIRED: copy("Page title is required.", "Sayfa başlığı zorunludur."),
+    SLUG_REQUIRED: copy("Page address is required.", "Sayfa adresi zorunludur."),
+    LOCALE_REQUIRED: copy("Page language is required.", "Sayfa dili zorunludur."),
+    VISIBLE_CONTENT_REQUIRED: copy("At least one visible content block is required.", "En az bir görünür içerik bloğu zorunludur."),
+    META_TITLE_MISSING: copy("SEO title is empty.", "SEO başlığı boş."),
+    META_DESCRIPTION_MISSING: copy("SEO description is empty.", "SEO açıklaması boş."),
+    NOINDEX_ENABLED: copy("This page is currently noindex.", "Bu sayfa şu anda noindex."),
+    UNSAFE_OR_INVALID_URL: copy(issue.message, "Güvensiz veya geçersiz bir bağlantı bulundu."),
+    INSECURE_HTTP_URL: copy(issue.message, "HTTPS kullanmayan bir bağlantı bulundu."),
+    MEDIA_LABEL_MISSING: copy(issue.message, "Erişilebilir adı veya alternatif metni olmayan medya bulundu."),
+    CONTENT_TOO_COMPLEX: copy(issue.message, "İçerik güvenli yayın kontrolü sınırını aşıyor."),
+    TRANSLATION_FACTUAL_OVERRIDE: copy("A translated catalogue fact differs from the source page.", "Çevrilmiş bir katalog bilgisi kaynak sayfadan farklı."),
+    CANONICAL_CONFLICT: copy("Another page already uses this canonical URL.", "Bu canonical adresi başka bir sayfa kullanıyor."),
+  } as Record<string, string>)[issue.code] ?? issue.message;
+  const openPreflightIssue = (issue: { message: string }) => {
+    const match = issue.message.match(/^blocks\[(\d+)\]/);
+    if (!match) return;
+    const index = Number(match[1]);
+    if (!Number.isSafeInteger(index) || index < 0 || index >= blocks.length) return;
+    setSelectedBlockIdx(index);
+    setMobilePane("editor");
+    setPreflightOpen(false);
+  };
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [, setLocation] = useLocation();
   const [blocks, setBlocks] = useState<PageBlock[]>([]);
   const [selectedBlockIdx, setSelectedBlockIdx] = useState<number | null>(null);
   const [previewSize, setPreviewSize] = useState<PreviewSize>("desktop");
+  const previewHostRef = useRef<HTMLElement | null>(null);
+  const previewCanvasRef = useRef<HTMLDivElement | null>(null);
+  const [previewScale, setPreviewScale] = useState(1);
+  const [previewHeight, setPreviewHeight] = useState(400);
   const [mobilePane, setMobilePane] = useState<"blocks" | "editor" | "preview">("preview");
   const [showAddBlock, setShowAddBlock] = useState(false);
+  const [blockSearch, setBlockSearch] = useState("");
+  const [blockCategory, setBlockCategory] = useState<"all" | "content" | "media" | "data" | "layout" | "reference">("all");
   const [dirty, setDirty] = useState(false);
+  const [starterLoaded, setStarterLoaded] = useState(false);
+  const [revisionConflict, setRevisionConflict] = useState(false);
+  const serverRevision = useRef<string | null>(null);
   const blockRevision = useRef(0);
   const markDirty = useCallback(() => {
     blockRevision.current += 1;
@@ -98,7 +178,15 @@ function PageEditorSession({ id }: { id: number }) {
   const [editLocale, setEditLocale] = useState("en");
   const defaultBlocksRef = useRef<PageBlock[]>([]);
   const translationsRef = useRef<Record<string, PageBlock[]>>({});
+  const managedTranslationsSeeded = useRef<number | null>(null);
+  const [, bumpTranslationCoverage] = useState(0);
   const [seoOpen, setSeoOpen] = useState(false);
+  const [compareOpen, setCompareOpen] = useState(false);
+  const [translationsOpen, setTranslationsOpen] = useState(false);
+  const [preflightOpen, setPreflightOpen] = useState(false);
+  const [preflight, setPreflight] = useState<PublicationPreflight | null>(null);
+  const [changesOpen, setChangesOpen] = useState(false);
+  const [changeRequest, setChangeRequest] = useState({ reasonCode: "CONTENT", comment: "" });
   const [seo, setSeo] = useState({
     metaTitle: "", metaDescription: "", canonicalUrl: "",
     robotsIndex: true, robotsFollow: true,
@@ -114,6 +202,27 @@ function PageEditorSession({ id }: { id: number }) {
   const leaveMessageRef = useRef("");
   leaveMessageRef.current = copy("You have unsaved changes. Leave this page and discard them?", "Kaydedilmemiş değişiklikleriniz var. Bu sayfadan ayrılıp değişiklikleri silmek istiyor musunuz?");
   useEffect(() => installPageEditorNavigationGuard(window, () => unsavedRef.current, () => window.confirm(leaveMessageRef.current), () => savingRef.current), []);
+  useEffect(() => {
+    const host = previewHostRef.current;
+    const canvas = previewCanvasRef.current;
+    if (!host || !canvas) return;
+
+    const updatePreviewGeometry = () => {
+      const targetWidth = PREVIEW_WIDTHS[previewSize];
+      const availableWidth = Math.max(280, host.clientWidth - 32);
+      setPreviewScale(Math.min(1, availableWidth / targetWidth));
+      setPreviewHeight(Math.max(400, canvas.scrollHeight));
+    };
+
+    const observer = new ResizeObserver(updatePreviewGeometry);
+    observer.observe(host);
+    observer.observe(canvas);
+    const frame = window.requestAnimationFrame(updatePreviewGeometry);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      observer.disconnect();
+    };
+  }, [mobilePane, previewSize]);
   function leaveEditor() {
     if (savingRef.current) return;
     if (unsavedRef.current && !window.confirm(leaveMessageRef.current)) return;
@@ -121,11 +230,14 @@ function PageEditorSession({ id }: { id: number }) {
     setLocation("/admin/website/pages");
   }
 
-  const { data: page, isLoading: pageLoading } = useQuery<WebsitePage>({
+  const { data: page, isLoading: pageLoading, refetch: reloadPage } = useQuery<WebsitePage>({
     queryKey: ["website-page", id],
     queryFn: () => customFetch(`/api/website/pages/${id}`),
   });
   const sourceLocale = page?.locale || "en";
+  useEffect(() => {
+    if (page?.updatedAt && serverRevision.current === null) serverRevision.current = page.updatedAt;
+  }, [page?.updatedAt]);
 
   const { data: savedBlocks = [], isSuccess: blocksFetched, isError: blocksError, isFetching: blocksRefreshing, refetch: reloadBlocks } = useQuery<PageBlock[]>({
     queryKey: ["website-page-blocks", id],
@@ -144,29 +256,81 @@ function PageEditorSession({ id }: { id: number }) {
     if (!blocksFetched) return;
     blocksInitialized.current = true;
     setEditLocale(page?.locale || "en");
-    const parsed = savedBlocks.map((b, i) => ({
+    const persisted = normalizeBlocks(savedBlocks.map((b, i) => ({
       id: b.id,
       blockType: b.blockType,
       content: (b.content || {}) as Record<string, unknown>,
       settings: (b.settings || {}) as Record<string, unknown>,
       sortOrder: b.sortOrder ?? i,
       isVisible: b.isVisible ?? true,
-    }));
+    })));
+    const starter = persisted.length === 0 && page && isSystemManagedPage(page)
+      ? normalizeBlocks(managedPageStarterBlocks(page.template, page.locale as Language))
+      : [];
+    const parsedBase = persisted.length > 0 ? persisted : starter;
+    const parsed = page && isSystemManagedPage(page)
+      ? normalizeBlocks(enrichManagedPageBlocks(page.template, parsedBase, page.locale as Language))
+      : parsedBase;
+    const managedStructureEnriched = parsed.length > parsedBase.length;
     setBlocks(parsed);
     defaultBlocksRef.current = JSON.parse(JSON.stringify(parsed));
+    if (starter.length > 0 || managedStructureEnriched) {
+      setSelectedBlockIdx(0);
+      setMobilePane("editor");
+      setStarterLoaded(true);
+      blockRevision.current += 1;
+      setDirty(true);
+    }
     if (page?.translationsJson) {
       try {
         const tj = page.translationsJson as Record<string, unknown>;
         for (const [loc, data] of Object.entries(tj)) {
           if (Array.isArray(data)) {
-            translationsRef.current[loc] = data as PageBlock[];
+            translationsRef.current[loc] = normalizeBlocks(data as PageBlock[]);
           } else if (data && typeof data === "object" && "blocks" in (data as Record<string, unknown>)) {
-            translationsRef.current[loc] = (data as { blocks: PageBlock[] }).blocks;
+            translationsRef.current[loc] = normalizeBlocks((data as { blocks: PageBlock[] }).blocks);
           }
         }
       } catch {}
     }
   }, [blocksFetched, savedBlocks, page]);
+
+  // Hot updates and long-lived editor tabs can retain an older managed-page
+  // starter in memory. Upgrade only recognized legacy compositions; custom
+  // page structures are intentionally left untouched.
+  useEffect(() => {
+    if (!blocksInitialized.current || !page || !isSystemManagedPage(page)) return;
+    const enriched = normalizeBlocks(enrichManagedPageBlocks(page.template, blocks, page.locale as Language));
+    if (enriched.length <= blocks.length) return;
+    setBlocks(enriched);
+    defaultBlocksRef.current = JSON.parse(JSON.stringify(enriched));
+    setStarterLoaded(true);
+    setSelectedBlockIdx(current => current ?? 0);
+    blockRevision.current += 1;
+    setDirty(true);
+  }, [blocks, page]);
+
+  useEffect(() => {
+    if (!page || !blocksInitialized.current || !isSystemManagedPage(page) || page.template === "home" || managedTranslationsSeeded.current === page.id) return;
+    const expected = managedPageStarterBlocks(page.template, page.locale as Language);
+    if (expected.length !== blocks.length || expected.some((entry, index) => entry.blockType !== blocks[index]?.blockType)) return;
+    managedTranslationsSeeded.current = page.id;
+    let active = true;
+    void managedPageStarterTranslations(page.template, page.locale as Language).then(starters => {
+      if (!active) return;
+      let changed = false;
+      for (const [locale, value] of Object.entries(starters)) {
+        if ((translationsRef.current[locale]?.length ?? 0) > 0) continue;
+        translationsRef.current[locale] = normalizeBlocks(value.blocks);
+        changed = true;
+      }
+      if (!changed) return;
+      bumpTranslationCoverage(value => value + 1);
+      setStarterLoaded(true);
+      markDirty();
+    });
+    return () => { active = false; };
+  }, [blocks, markDirty, page]);
 
   const { data: seoData, isSuccess: seoFetched, isError: seoError, refetch: reloadSeo } = useQuery<Record<string, unknown>>({
     queryKey: ["website-page-seo", id],
@@ -210,14 +374,15 @@ function PageEditorSession({ id }: { id: number }) {
   const saveSeoMutation = useMutation({
     mutationFn: async () => {
       const snapshot = JSON.stringify(seo);
-      await customFetch(`/api/website/pages/${id}/seo`, {
+      const result = await customFetch(`/api/website/pages/${id}/seo`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: snapshot,
-      });
-      return snapshot;
+      }) as WebsitePage;
+      return { snapshot, result };
     },
-    onSuccess: (snapshot) => {
+    onSuccess: ({ snapshot, result }) => {
+      if (result.updatedAt) serverRevision.current = result.updatedAt;
       setSavedSeo(snapshot);
       queryClient.invalidateQueries({ queryKey: ["website-page-seo", id] });
       toast({ title: copy("SEO settings saved", "SEO ayarları kaydedildi") });
@@ -244,58 +409,117 @@ function PageEditorSession({ id }: { id: number }) {
     mutationFn: async () => {
       const revision = blockRevision.current;
       const payload: Record<string, unknown> = {
+        expectedUpdatedAt: serverRevision.current,
         blocks: editLocale === sourceLocale ? blocks.map((b, i) => ({ ...b, sortOrder: i })) : defaultBlocksRef.current.map((b, i) => ({ ...b, sortOrder: i })),
       };
       const tx = buildTranslationsPayload();
       if (tx) payload.translationsJson = tx;
-      await customFetch(`/api/website/pages/${id}/save-draft`, {
+      const result = await customFetch(`/api/website/pages/${id}/save-draft`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
-      });
-      return revision;
+      }) as { page: WebsitePage; blocks: PageBlock[] };
+      return { revision, result };
     },
-    onSuccess: (revision) => {
-      queryClient.invalidateQueries({ queryKey: ["website-page", id] });
-      queryClient.invalidateQueries({ queryKey: ["website-page-blocks", id] });
-      queryClient.invalidateQueries({ queryKey: ["website-pages"] });
-      if (blockRevision.current === revision) setDirty(false);
-      toast({ title: copy("Draft saved", "Taslak kaydedildi") });
-    },
-    onError: () => toast({ title: copy("Error", "Hata"), description: copy("Failed to save draft. Your changes are still here.", "Taslak kaydedilemedi. Değişiklikleriniz korunuyor."), variant: "destructive" }),
-  });
-
-  const publishMutation = useMutation({
-    mutationFn: async () => {
-      const revision = blockRevision.current;
-      if (blocks.some(b => b.blockType === "global_block" && !b.content.globalComponentId)) {
-        if (!window.confirm(copy("An unbound Global Block will be skipped on the public page. Publish anyway?", "Bağlanmamış ortak blok, herkese açık sayfada gösterilmeyecek. Yine de yayınlansın mı?"))) throw new Error("Publication cancelled");
-      }
-      const payload: Record<string, unknown> = {
-        blocks: editLocale === sourceLocale ? blocks.map((b, i) => ({ ...b, sortOrder: i })) : defaultBlocksRef.current.map((b, i) => ({ ...b, sortOrder: i })),
-      };
-      const tx = buildTranslationsPayload();
-      if (tx) payload.translationsJson = tx;
-      await customFetch(`/api/website/pages/${id}/save-draft`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      await customFetch(`/api/website/pages/${id}/publish`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-      });
-      return revision;
-    },
-    onSuccess: (revision) => {
+    onSuccess: ({ revision, result }) => {
+      serverRevision.current = result.page.updatedAt;
+      setRevisionConflict(false);
       queryClient.invalidateQueries({ queryKey: ["website-page", id] });
       queryClient.invalidateQueries({ queryKey: ["website-page-blocks", id] });
       queryClient.invalidateQueries({ queryKey: ["website-page-versions", id] });
       queryClient.invalidateQueries({ queryKey: ["website-pages"] });
       if (blockRevision.current === revision) setDirty(false);
+      setStarterLoaded(false);
+      toast({ title: copy("Draft saved", "Taslak kaydedildi") });
+    },
+    onError: (error) => {
+      const conflict = error instanceof ApiError && error.status === 409;
+      setRevisionConflict(conflict);
+      toast({ title: conflict ? copy("A newer version exists", "Daha yeni bir sürüm var") : copy("Error", "Hata"), description: conflict ? copy("Another administrator changed this page. Your edits are preserved; reload the saved version before retrying.", "Başka bir yönetici bu sayfayı değiştirdi. Düzenlemeleriniz korunuyor; yeniden denemeden önce kayıtlı sürümü yenileyin.") : copy("Failed to save draft. Your changes are still here.", "Taslak kaydedilemedi. Değişiklikleriniz korunuyor."), variant: "destructive" });
+    },
+  });
+
+  const requestReviewMutation = useMutation({
+    mutationFn: async () => customFetch(`/api/website/pages/${id}/request-review`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ expectedUpdatedAt: serverRevision.current }),
+    }) as Promise<WebsitePage>,
+    onSuccess: (result) => {
+      serverRevision.current = result.updatedAt;
+      setRevisionConflict(false);
+      queryClient.setQueryData(["website-page", id], result);
+      queryClient.invalidateQueries({ queryKey: ["website-pages"] });
+      toast({ title: copy("Sent for review", "İncelemeye gönderildi"), description: copy("A different administrator must approve this exact saved revision.", "Bu kayıtlı sürümü farklı bir yönetici onaylamalıdır.") });
+    },
+    onError: (error) => {
+      const conflict = error instanceof ApiError && error.status === 409;
+      const blocked = error instanceof ApiError && error.status === 422;
+      setRevisionConflict(conflict);
+      toast({ title: conflict ? copy("A newer version exists", "Daha yeni bir sürüm var") : blocked ? copy("Publication blockers remain", "Yayın engelleri bulunuyor") : copy("Could not send for review", "İncelemeye gönderilemedi"), description: conflict ? copy("Reload the saved page before retrying.", "Yeniden denemeden önce kayıtlı sayfayı yenileyin.") : blocked ? copy("Run the publication readiness check and resolve its blocking items.", "Yayın öncesi kontrolü çalıştırıp engelleyici maddeleri düzeltin.") : copy("Your draft remains saved.", "Taslağınız kayıtlı kalır."), variant: "destructive" });
+    },
+  });
+
+  const preflightMutation = useMutation({
+    mutationFn: async () => {
+      if (dirty || seoDirty) throw new Error("UNSAVED_CHANGES");
+      return customFetch(`/api/website/pages/${id}/publication-preflight`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ expectedUpdatedAt: serverRevision.current }),
+      }) as Promise<PublicationPreflight>;
+    },
+    onSuccess: result => {
+      setPreflight(result);
+      setPreflightOpen(true);
+    },
+    onError: error => {
+      const conflict = error instanceof ApiError && error.status === 409;
+      setRevisionConflict(conflict);
+      toast({
+        title: conflict ? copy("A newer version exists", "Daha yeni bir sürüm var") : copy("Readiness check failed", "Yayın kontrolü başarısız"),
+        description: error instanceof Error && error.message === "UNSAVED_CHANGES" ? copy("Save all changes before the publication check.", "Yayın kontrolünden önce tüm değişiklikleri kaydedin.") : copy("Reload the saved page and retry.", "Kayıtlı sayfayı yenileyip tekrar deneyin."),
+        variant: "destructive",
+      });
+    },
+  });
+
+  const downloadPreflightReceipt = () => {
+    if (!preflight) return;
+    const href = URL.createObjectURL(new Blob([JSON.stringify({ schemaVersion: 1, pageId: id, ...preflight }, null, 2)], { type: "application/json" }));
+    const anchor = document.createElement("a");
+    anchor.href = href;
+    anchor.download = `page-${id}-publication-preflight-${preflight.digest.slice(0, 12)}.json`;
+    anchor.click();
+    URL.revokeObjectURL(href);
+  };
+
+  const publishMutation = useMutation({
+    mutationFn: async () => {
+      if (dirty || seoDirty) throw new Error("UNSAVED_CHANGES");
+      return customFetch(`/api/website/pages/${id}/publish`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ approved: true, expectedUpdatedAt: serverRevision.current, preflightDigest: preflight?.digest }),
+      }) as Promise<{ page: WebsitePage; version: PageVersion }>;
+    },
+    onSuccess: (result) => {
+      setPreflightOpen(false);
+      setPreflight(null);
+      serverRevision.current = result.page.updatedAt;
+      setRevisionConflict(false);
+      queryClient.invalidateQueries({ queryKey: ["website-page", id] });
+      queryClient.invalidateQueries({ queryKey: ["website-page-blocks", id] });
+      queryClient.invalidateQueries({ queryKey: ["website-page-versions", id] });
+      queryClient.invalidateQueries({ queryKey: ["website-pages"] });
       toast({ title: copy("Published!", "Yayınlandı!"), description: copy("Page is now live.", "Sayfa artık yayında.") });
     },
-    onError: () => toast({ title: copy("Error", "Hata"), description: copy("Failed to publish.", "Yayınlanamadı."), variant: "destructive" }),
+    onError: (error) => {
+      const conflict = error instanceof ApiError && error.status === 409;
+      const reviewer = error instanceof ApiError && error.status === 403;
+      setRevisionConflict(conflict);
+      toast({ title: conflict ? copy("A newer version exists", "Daha yeni bir sürüm var") : reviewer ? copy("Different reviewer required", "Farklı bir inceleyen gerekli") : copy("Error", "Hata"), description: conflict ? copy("Another administrator changed this page. Reload before publishing.", "Başka bir yönetici bu sayfayı değiştirdi. Yayınlamadan önce yenileyin.") : reviewer ? copy("The author cannot approve their own revision.", "Yazar kendi sürümünü onaylayamaz.") : error instanceof Error && error.message === "UNSAVED_CHANGES" ? copy("Save the draft before sending it through review.", "İnceleme akışına geçmeden önce taslağı kaydedin.") : copy("Failed to publish.", "Yayınlanamadı."), variant: "destructive" });
+    },
   });
 
   function handleLocaleSwitch(newLocale: string) {
@@ -336,20 +560,20 @@ function PageEditorSession({ id }: { id: number }) {
         toast({ title: copy("Your newer edits are still here", "Yeni düzenlemeleriniz korunuyor"), description: copy("The restored draft was saved, but newer local edits were not replaced. Save them when ready.", "Geri yüklenen taslak kaydedildi; daha yeni yerel düzenlemeleriniz değiştirilmedi. Hazır olduğunuzda kaydedin.") });
         return;
       }
-      const restoredBlocks = result.blocks.map((b, i) => ({
+      const restoredBlocks = normalizeBlocks(result.blocks.map((b, i) => ({
         id: b.id,
         blockType: b.blockType,
         content: (b.content || {}) as Record<string, unknown>,
         settings: (b.settings || {}) as Record<string, unknown>,
         sortOrder: b.sortOrder ?? i,
         isVisible: b.isVisible ?? true,
-      }));
+      })));
       setBlocks(restoredBlocks);
       defaultBlocksRef.current = JSON.parse(JSON.stringify(restoredBlocks));
       translationsRef.current = {};
       for (const [locale, value] of Object.entries((result.page?.translationsJson || {}) as Record<string, unknown>)) {
-        if (Array.isArray(value)) translationsRef.current[locale] = value as PageBlock[];
-        else if (value && typeof value === "object" && Array.isArray((value as { blocks?: unknown }).blocks)) translationsRef.current[locale] = (value as { blocks: PageBlock[] }).blocks;
+        if (Array.isArray(value)) translationsRef.current[locale] = normalizeBlocks(value as PageBlock[]);
+        else if (value && typeof value === "object" && Array.isArray((value as { blocks?: unknown }).blocks)) translationsRef.current[locale] = normalizeBlocks((value as { blocks: PageBlock[] }).blocks);
       }
       setEditLocale(result.page?.locale || sourceLocale);
       setSelectedBlockIdx(null);
@@ -363,17 +587,19 @@ function PageEditorSession({ id }: { id: number }) {
   });
 
   const addBlock = useCallback((blockType: string) => {
-    const newBlock: PageBlock = {
+    const newBlock: PageBlock = normalizeBlockAppearance({
       blockType,
       content: getDefaultContent(blockType),
       settings: {},
       sortOrder: blocks.length,
       isVisible: true,
-    };
+    });
     setBlocks(prev => [...prev, newBlock]);
     setSelectedBlockIdx(blocks.length);
     setMobilePane("editor");
     setShowAddBlock(false);
+    setBlockSearch("");
+    setBlockCategory("all");
     markDirty();
   }, [blocks.length, markDirty]);
 
@@ -416,10 +642,70 @@ function PageEditorSession({ id }: { id: number }) {
     markDirty();
   }, [markDirty]);
 
+  const updateBlockAppearance = useCallback((idx: number, key: string, value: unknown) => {
+    const apply = (items: PageBlock[]) => items.map((block, index) => index === idx
+      ? { ...block, settings: { ...block.settings, [key]: value } }
+      : block);
+    setBlocks(apply);
+    defaultBlocksRef.current = apply(defaultBlocksRef.current);
+    for (const locale of Object.keys(translationsRef.current)) {
+      translationsRef.current[locale] = apply(translationsRef.current[locale]);
+    }
+    markDirty();
+  }, [markDirty]);
+
   const selectedBlock = selectedBlockIdx !== null ? blocks[selectedBlockIdx] : null;
   const selectedTypeDef = selectedBlock ? getBlockTypeDef(selectedBlock.blockType) : null;
-  const saving = saveDraftMutation.isPending || publishMutation.isPending || saveSeoMutation.isPending || restoreMutation.isPending;
+  const latestPublished = versions.find(version => Boolean(version.publishedAt));
+  const publishedBlocks = Array.isArray(latestPublished?.blocksSnapshot) ? latestPublished.blocksSnapshot : [];
+  const compareRows = Array.from({ length: Math.max(blocks.length, publishedBlocks.length) }, (_, index) => {
+    const draftBlock = blocks[index]; const publishedBlock = publishedBlocks[index];
+    const status = !publishedBlock ? "added" : !draftBlock ? "removed" : JSON.stringify({ type: draftBlock.blockType, content: draftBlock.content, settings: draftBlock.settings, visible: draftBlock.isVisible }) === JSON.stringify({ type: publishedBlock.blockType, content: publishedBlock.content, settings: publishedBlock.settings, visible: publishedBlock.isVisible }) ? "unchanged" : "changed";
+    return { index, draftBlock, publishedBlock, status };
+  });
+  const publishedMeta = latestPublished?.metaSnapshot ?? {};
+  const seoCompareRows = SEO_COMPARISON_FIELDS.map(([key, label]) => ({
+    key,
+    label,
+    published: normalizedSnapshotValue(publishedMeta[key]),
+    draft: normalizedSnapshotValue(seo[key]),
+  })).filter(row => row.published !== row.draft);
+  const publishedTranslations = snapshotTranslations(publishedMeta.translationsJson);
+  const translationCompareRows = SUPPORTED_LANGUAGES.map(locale => {
+    const draftValue = locale === sourceLocale ? blocks : translationsRef.current[locale];
+    const publishedValue = locale === sourceLocale ? publishedBlocks : publishedTranslations[locale];
+    const draftAvailable = locale === sourceLocale || (Array.isArray(draftValue) && draftValue.length > 0);
+    const publishedAvailable = locale === sourceLocale || (Array.isArray(publishedValue) && publishedValue.length > 0);
+    const changed = normalizedSnapshotValue(draftValue) !== normalizedSnapshotValue(publishedValue);
+    return { locale, draftAvailable, publishedAvailable, changed };
+  }).filter(row => row.changed || row.draftAvailable !== row.publishedAvailable);
+
+  const requestChangesMutation = useMutation({
+    mutationFn: async () => customFetch(`/api/website/pages/${id}/request-changes`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ expectedUpdatedAt: serverRevision.current, ...changeRequest }),
+    }) as Promise<{ page: WebsitePage; receipt: PageVersion }>,
+    onSuccess: result => {
+      serverRevision.current = result.page.updatedAt;
+      setChangesOpen(false);
+      setChangeRequest({ reasonCode: "CONTENT", comment: "" });
+      queryClient.setQueryData(["website-page", id], result.page);
+      queryClient.invalidateQueries({ queryKey: ["website-page-versions", id] });
+      queryClient.invalidateQueries({ queryKey: ["website-pages"] });
+      toast({ title: copy("Changes requested", "Değişiklik istendi"), description: copy("The review receipt was saved and the page returned to draft.", "İnceleme makbuzu kaydedildi ve sayfa taslağa döndürüldü.") });
+    },
+    onError: error => {
+      const conflict = error instanceof ApiError && error.status === 409;
+      const reviewer = error instanceof ApiError && error.status === 403;
+      setRevisionConflict(conflict);
+      toast({ title: conflict ? copy("A newer version exists", "Daha yeni bir sürüm var") : reviewer ? copy("Different reviewer required", "Farklı bir inceleyen gerekli") : copy("Could not request changes", "Değişiklik talebi kaydedilemedi"), variant: "destructive" });
+    },
+  });
+  const saving = saveDraftMutation.isPending || requestReviewMutation.isPending || preflightMutation.isPending || publishMutation.isPending || requestChangesMutation.isPending || saveSeoMutation.isPending || restoreMutation.isPending;
   savingRef.current = saving;
+  const changedCount = compareRows.filter(row => row.status !== "unchanged").length + seoCompareRows.length + translationCompareRows.length;
+  const translatedLocaleCount = SUPPORTED_LANGUAGES.filter(locale => locale === sourceLocale || (translationsRef.current[locale]?.length ?? 0) > 0).length;
 
   if (pageLoading) {
     return (
@@ -440,6 +726,48 @@ function PageEditorSession({ id }: { id: number }) {
     );
   }
 
+  async function refreshEditorContent() {
+    if (savingRef.current) return;
+    if (unsavedRef.current && !window.confirm(copy("Reload the saved page and discard unsaved changes in this editor?", "Kayıtlı sayfa yeniden yüklensin ve bu editördeki kaydedilmemiş değişiklikler silinsin mi?"))) return;
+    const [pageResult, blockResult] = await Promise.all([reloadPage(), reloadBlocks()]);
+    const latestPage = pageResult.data || page;
+    if (!latestPage || blockResult.error || !Array.isArray(blockResult.data)) {
+      toast({ title: copy("Content could not be refreshed", "İçerik yenilenemedi"), description: copy("Your current editor content is still available.", "Mevcut editör içeriğiniz korunuyor."), variant: "destructive" });
+      return;
+    }
+    const persisted = normalizeBlocks(blockResult.data.map((entry, index) => ({
+      id: entry.id,
+      blockType: entry.blockType,
+      content: (entry.content || {}) as Record<string, unknown>,
+      settings: (entry.settings || {}) as Record<string, unknown>,
+      sortOrder: entry.sortOrder ?? index,
+      isVisible: entry.isVisible ?? true,
+    })));
+    const starter = persisted.length === 0 && isSystemManagedPage(latestPage)
+      ? normalizeBlocks(managedPageStarterBlocks(latestPage.template, latestPage.locale as Language))
+      : [];
+    const base = persisted.length > 0 ? persisted : starter;
+    const refreshed = isSystemManagedPage(latestPage)
+      ? normalizeBlocks(enrichManagedPageBlocks(latestPage.template, base, latestPage.locale as Language))
+      : base;
+    const generatedStructure = starter.length > 0 || refreshed.length > persisted.length;
+    setBlocks(refreshed);
+    defaultBlocksRef.current = JSON.parse(JSON.stringify(refreshed));
+    translationsRef.current = {};
+    for (const [locale, value] of Object.entries((latestPage.translationsJson || {}) as Record<string, unknown>)) {
+      if (Array.isArray(value)) translationsRef.current[locale] = normalizeBlocks(value as PageBlock[]);
+      else if (value && typeof value === "object" && Array.isArray((value as { blocks?: unknown }).blocks)) translationsRef.current[locale] = normalizeBlocks((value as { blocks: PageBlock[] }).blocks);
+    }
+    serverRevision.current = latestPage.updatedAt;
+    setEditLocale(latestPage.locale || "en");
+    setSelectedBlockIdx(refreshed.length > 0 ? 0 : null);
+    setStarterLoaded(generatedStructure);
+    setRevisionConflict(false);
+    blockRevision.current += 1;
+    setDirty(generatedStructure);
+    toast({ title: copy("Page content refreshed", "Sayfa içeriği yenilendi"), description: generatedStructure ? copy("The complete editable Home structure is ready. Save it to keep the new sections.", "Home sayfasının tüm düzenlenebilir yapısı hazır. Yeni bölümleri korumak için kaydedin.") : copy("The latest saved content is now open.", "En son kaydedilen içerik açıldı.") });
+  }
+
   if (!blocksInitialized.current) {
     return <div className="p-6 space-y-3" role={blocksError ? "alert" : "status"}>
       <p>{blocksError ? copy("Page content could not be loaded. Retry before editing.", "Sayfa içeriği yüklenemedi. Düzenlemeden önce yeniden deneyin.") : copy("Loading page content...", "Sayfa içeriği yükleniyor...")}</p>
@@ -449,23 +777,40 @@ function PageEditorSession({ id }: { id: number }) {
   }
 
   return (
-      <div className="flex min-w-0 flex-col h-[calc(100dvh-3.5rem)]">
+      <div className="flex h-full max-h-full min-h-0 min-w-0 flex-col overflow-hidden bg-muted/20">
+        {starterLoaded && <div role="status" className="flex flex-wrap items-center justify-between gap-3 border-b border-blue-200 bg-blue-50 px-4 py-2 text-sm text-blue-950">
+          <div><strong>{copy("Current page structure loaded", "Mevcut sayfa yapısı yüklendi")}</strong><span className="ms-2">{copy("Every section below is now editable. Save the draft to keep this CMS version; the public page is unchanged until the governed publication step is completed.", "Aşağıdaki her bölüm artık düzenlenebilir. Bu CMS sürümünü korumak için taslağı kaydedin; kontrollü yayın adımı tamamlanana kadar public sayfa değişmez.")}</span></div>
+          <Button size="sm" onClick={() => saveDraftMutation.mutate()} disabled={saving}>{copy("Save editable structure", "Düzenlenebilir yapıyı kaydet")}</Button>
+        </div>}
         {blocksError && <div role="alert" className="flex flex-wrap items-center gap-3 border-b border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
           <p>{copy("Page content could not be refreshed. Your current edits are preserved.", "Sayfa içeriği yenilenemedi. Mevcut düzenlemeleriniz korunuyor.")}</p>
           <Button variant="outline" size="sm" disabled={blocksRefreshing} onClick={() => reloadBlocks()}>{copy("Retry content loading", "İçeriği yeniden yükle")}</Button>
         </div>}
+        {revisionConflict && <div role="alert" className="flex flex-wrap items-center justify-between gap-3 border-b border-red-300 bg-red-50 p-3 text-sm text-red-950">
+          <div>
+            <p className="font-semibold">{copy("A newer saved version exists", "Daha yeni kaydedilmiş bir sürüm var")}</p>
+            <p>{copy("Your local edits have not been overwritten. Open the saved page in another tab to compare, then reload only when you are ready.", "Yerel düzenlemelerinizin üzerine yazılmadı. Karşılaştırmak için kayıtlı sayfayı başka sekmede açın; yalnız hazır olduğunuzda bu sayfayı yenileyin.")}</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" size="sm" onClick={() => window.open(`/admin/website/pages/${id}/edit`, "_blank", "noopener,noreferrer")}>{copy("Open saved copy", "Kayıtlı kopyayı aç")}</Button>
+            <Button variant="destructive" size="sm" onClick={() => { if (window.confirm(copy("Reload and discard the local edits in this tab?", "Bu sekmedeki yerel düzenlemeler silinerek sayfa yenilensin mi?"))) window.location.reload(); }}>{copy("Reload this editor", "Bu editörü yenile")}</Button>
+          </div>
+        </div>}
         {(dirty || seoDirty || saving) && typeof window !== "undefined" && !supportsPageEditorHistoryGuard(window) && <div role="alert" className="border-b border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
           {copy("This browser cannot reliably protect unsaved changes when using Back or Forward. Save your changes before using browser history.", "Bu tarayıcıda Geri/İleri düğmeleri kaydedilmemiş değişiklikleri güvenilir biçimde koruyamaz. Tarayıcı geçmişini kullanmadan önce değişikliklerinizi kaydedin.")}
         </div>}
-        <div className="min-h-12 border-b bg-card flex flex-wrap gap-3 items-center justify-between px-4 py-2 shrink-0">
+        <div className="min-h-16 border-b bg-card/95 backdrop-blur flex flex-wrap gap-3 items-center justify-between px-4 py-3 shrink-0 shadow-sm">
           <div className="flex min-w-0 flex-wrap items-center gap-3">
             <Button aria-label={copy("Back to pages", "Sayfalara dön")} disabled={saving} variant="ghost" size="icon" className="h-8 w-8" onClick={leaveEditor}>
               <ArrowLeft className="w-4 h-4" />
             </Button>
             <Separator orientation="vertical" className="h-5" />
-            <h2 className="font-semibold text-sm">{page.title}</h2>
+            <div className="min-w-0">
+              <p className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-primary"><Layers3 className="h-3 w-3" />{copy("Managed page editor", "Yönetilen sayfa editörü")}</p>
+              <h2 className="mt-0.5 truncate text-base font-semibold">{page.title}</h2>
+            </div>
             <Badge variant={page.status === "published" ? "default" : "secondary"} className="text-xs">
-              {page.status === "published" ? copy("Published", "Yayında") : page.status === "draft" ? copy("Draft", "Taslak") : page.status}
+              {page.status === "published" ? copy("Published", "Yayında") : page.status === "draft" ? copy("Draft", "Taslak") : page.status === "in_review" ? copy("Awaiting review", "İnceleme bekliyor") : page.status}
             </Badge>
             {(dirty || seoDirty) && <Badge variant="outline" role="status" className="text-xs text-amber-600 border-amber-300">{copy("Unsaved", "Kaydedilmedi")}{seoDirty ? " (SEO)" : ""}</Badge>}
           </div>
@@ -480,13 +825,18 @@ function PageEditorSession({ id }: { id: number }) {
                 ))}
               </SelectContent>
             </Select>
-            <div className="flex gap-0.5">
-              {SUPPORTED_LANGUAGES.filter(l => l !== sourceLocale).slice(0, 5).map(l => {
-                const trBlocks = translationsRef.current[l];
-                const has = trBlocks && trBlocks.length > 0;
-                return <span key={l} className={`text-[9px] ${has ? "text-green-600" : "text-muted-foreground/40"}`} title={`${LANGUAGE_META[l].name}: ${has ? "translated" : "not translated"}`}>{has ? "●" : "○"}</span>;
-              })}
-            </div>
+            <Sheet open={translationsOpen} onOpenChange={setTranslationsOpen}>
+              <SheetTrigger asChild><Button variant="outline" size="sm" className="h-7 text-xs">{copy("Languages", "Diller")} {translatedLocaleCount}/{SUPPORTED_LANGUAGES.length}</Button></SheetTrigger>
+              <SheetContent className="w-full sm:max-w-md">
+                <SheetHeader><SheetTitle>{copy("Translation coverage", "Çeviri kapsamı")}</SheetTitle></SheetHeader>
+                <p className="mt-3 text-sm text-muted-foreground">{copy("Missing languages show source content as fallback and must remain noindex until translated and reviewed.", "Eksik diller kaynak içeriği fallback olarak gösterir; çevrilip incelenene kadar noindex kalmalıdır.")}</p>
+                <ScrollArea className="mt-4 h-[calc(100dvh-130px)] pe-3"><div className="space-y-2 pb-8">{SUPPORTED_LANGUAGES.map(locale => {
+                  const source = locale === sourceLocale;
+                  const hasTranslation = source || (translationsRef.current[locale]?.length ?? 0) > 0;
+                  return <button type="button" key={locale} className="flex w-full items-center justify-between gap-3 rounded-lg border p-3 text-start hover:border-primary" onClick={() => { handleLocaleSwitch(locale); setTranslationsOpen(false); }}><span><strong className="text-sm">{LANGUAGE_META[locale].flag} {LANGUAGE_META[locale].nativeName}</strong><span className="mt-0.5 block text-xs text-muted-foreground">{source ? copy("Source language", "Kaynak dil") : hasTranslation ? copy("Translation draft available", "Çeviri taslağı var") : copy("Source fallback · noindex", "Kaynak fallback · noindex")}</span></span><Badge variant={source ? "default" : hasTranslation ? "secondary" : "outline"}>{source ? copy("Source", "Kaynak") : hasTranslation ? copy("Draft", "Taslak") : copy("Missing", "Eksik")}</Badge></button>;
+                })}</div></ScrollArea>
+              </SheetContent>
+            </Sheet>
             <Separator orientation="vertical" className="h-5" />
             <div className="flex items-center border rounded-md">
               {(["desktop", "tablet", "mobile"] as PreviewSize[]).map(size => (
@@ -503,6 +853,12 @@ function PageEditorSession({ id }: { id: number }) {
                 </Button>
               ))}
             </div>
+            <Button asChild variant="outline" size="sm" className="h-7 gap-1 text-xs">
+              <a href={managedPagePublicPath({ ...page, locale: editLocale, slug: seo.slug || page.slug })} target="_blank" rel="noopener noreferrer"><ExternalLink className="h-3.5 w-3.5" />{copy("Open page", "Sayfayı aç")}</a>
+            </Button>
+            <Button type="button" variant="outline" size="sm" className="h-7 gap-1 text-xs" disabled={blocksRefreshing || saving} onClick={refreshEditorContent}>
+              <RefreshCw className={`h-3.5 w-3.5 ${blocksRefreshing ? "animate-spin" : ""}`} />{copy("Refresh content", "İçeriği yenile")}
+            </Button>
             <Separator orientation="vertical" className="h-5" />
             <Sheet open={seoOpen} onOpenChange={setSeoOpen}>
               <SheetTrigger asChild>
@@ -615,17 +971,20 @@ function PageEditorSession({ id }: { id: number }) {
                       const authorName = v.authorFirstName
                         ? `${v.authorFirstName} ${v.authorLastName || ""}`.trim()
                         : v.authorEmail || "Unknown";
+                      const review = v.metaSnapshot?.review && typeof v.metaSnapshot.review === "object" ? v.metaSnapshot.review as { outcome?: string; reasonCode?: string; comment?: string } : null;
+                      const revision = v.metaSnapshot?.revision && typeof v.metaSnapshot.revision === "object" ? v.metaSnapshot.revision as { kind?: string } : null;
                       return (
                       <Card key={v.id}>
                         <CardContent className="p-3 flex items-center justify-between">
                           <div>
-                            <p className="text-sm font-medium">{copy("Version", "Sürüm")} {v.versionNumber}</p>
+                            <p className="text-sm font-medium">{review?.outcome === "CHANGES_REQUESTED" ? copy("Changes requested", "Değişiklik istendi") : revision?.kind === "DRAFT_SAVED" ? `${copy("Saved draft", "Kaydedilen taslak")} · ${copy("Version", "Sürüm")} ${v.versionNumber}` : `${copy("Published version", "Yayınlanan sürüm")} ${v.versionNumber}`}</p>
                             <p className="text-xs text-muted-foreground">
                               {v.publishedAt ? new Date(v.publishedAt).toLocaleString() : new Date(v.createdAt).toLocaleString()}
                             </p>
                             <p className="text-xs text-muted-foreground">by {authorName}</p>
+                            {review && <p className="mt-1 max-w-48 text-xs text-muted-foreground">{review.reasonCode}: {review.comment}</p>}
                           </div>
-                          <Button
+                          {!review && <Button
                             variant="outline"
                             size="sm"
                             className="h-7 text-xs gap-1"
@@ -635,8 +994,8 @@ function PageEditorSession({ id }: { id: number }) {
                             }}
                             disabled={saving}
                           >
-                            <RotateCcw className="w-3 h-3" /> {copy("Restore", "Geri yükle")}
-                          </Button>
+                            <RotateCcw className="w-3 h-3" /> {revision?.kind === "DRAFT_SAVED" ? copy("Restore draft", "Taslağı geri yükle") : copy("Restore", "Geri yükle")}
+                          </Button>}
                         </CardContent>
                       </Card>
                       );
@@ -645,64 +1004,138 @@ function PageEditorSession({ id }: { id: number }) {
                 </div>
               </SheetContent>
             </Sheet>
+            <Sheet open={compareOpen} onOpenChange={setCompareOpen}>
+              <SheetTrigger asChild>
+                <Button variant="outline" size="sm" className="h-7 text-xs gap-1" disabled={!latestPublished}>
+                  <GitCompareArrows className="w-3.5 h-3.5" /> {copy("Compare", "Karşılaştır")}{latestPublished ? ` (${changedCount})` : ""}
+                </Button>
+              </SheetTrigger>
+              <SheetContent className="w-full sm:max-w-xl">
+                <SheetHeader><SheetTitle>{copy("Draft compared with published version", "Taslak ve yayındaki sürüm karşılaştırması")}</SheetTitle></SheetHeader>
+                {!latestPublished ? <p className="mt-6 text-sm text-muted-foreground">{copy("There is no published version to compare yet.", "Henüz karşılaştırılabilecek yayınlanmış sürüm yok.")}</p> : <ScrollArea className="mt-4 h-[calc(100dvh-90px)] pe-3">
+                  <div className="space-y-4 pb-8">
+                    <div className="rounded-lg border bg-muted/30 p-3 text-sm">
+                      <p className="font-medium">{copy(`Version ${latestPublished.versionNumber}`, `Sürüm ${latestPublished.versionNumber}`)}</p>
+                      <p className="text-muted-foreground">{changedCount === 0 ? copy("No content, SEO, or translation changes.", "İçerik, SEO veya çeviri değişikliği yok.") : copy(`${changedCount} content, SEO, or translation differences.`, `${changedCount} içerik, SEO veya çeviri farkı.`)}</p>
+                    </div>
+                    {seoCompareRows.length > 0 && <section aria-labelledby="seo-comparison-title" className="space-y-2">
+                      <h3 id="seo-comparison-title" className="text-sm font-semibold">{copy("SEO and route changes", "SEO ve adres değişiklikleri")}</h3>
+                      {seoCompareRows.map(row => <div key={row.key} className="rounded-lg border p-3 text-xs">
+                        <strong>{copy(row.label, row.label === "Route" ? "Sayfa adresi" : row.label)}</strong>
+                        <div className="mt-2 grid gap-2 sm:grid-cols-2"><div className="rounded bg-muted p-2"><span className="font-medium">{copy("Published", "Yayındaki")}</span><p className="mt-1 break-all text-muted-foreground">{row.published || copy("Empty", "Boş")}</p></div><div className="rounded bg-primary/5 p-2"><span className="font-medium">{copy("Draft", "Taslak")}</span><p className="mt-1 break-all text-muted-foreground">{row.draft || copy("Empty", "Boş")}</p></div></div>
+                      </div>)}
+                    </section>}
+                    {translationCompareRows.length > 0 && <section aria-labelledby="translation-comparison-title" className="space-y-2">
+                      <h3 id="translation-comparison-title" className="text-sm font-semibold">{copy("Translation changes", "Çeviri değişiklikleri")}</h3>
+                      {translationCompareRows.map(row => <div key={row.locale} className="flex items-center justify-between gap-3 rounded-lg border p-3 text-xs"><span><strong>{LANGUAGE_META[row.locale].flag} {LANGUAGE_META[row.locale].nativeName}</strong><span className="mt-0.5 block text-muted-foreground">{copy(`Published: ${row.publishedAvailable ? "available" : "fallback"} · Draft: ${row.draftAvailable ? "available" : "fallback"}`, `Yayındaki: ${row.publishedAvailable ? "mevcut" : "fallback"} · Taslak: ${row.draftAvailable ? "mevcut" : "fallback"}`)}</span></span><Badge variant="outline">{copy("Changed", "Değişti")}</Badge></div>)}
+                    </section>}
+                    {compareRows.map(row => <div key={row.index} className="rounded-lg border p-3">
+                      <div className="flex items-center justify-between gap-3"><strong className="text-sm">#{row.index + 1} · {row.draftBlock?.blockType || row.publishedBlock?.blockType || copy("Unknown", "Bilinmiyor")}</strong><Badge variant={row.status === "unchanged" ? "secondary" : row.status === "removed" ? "destructive" : "outline"}>{row.status === "added" ? copy("Added", "Eklendi") : row.status === "removed" ? copy("Removed", "Kaldırıldı") : row.status === "changed" ? copy("Changed", "Değişti") : copy("Unchanged", "Değişmedi")}</Badge></div>
+                      {row.status === "changed" && <div className="mt-3 grid gap-2 text-xs sm:grid-cols-2"><div className="rounded bg-muted p-2"><span className="font-medium">{copy("Published", "Yayındaki")}</span><p className="mt-1 text-muted-foreground">{row.publishedBlock?.blockType} · {row.publishedBlock?.isVisible === false ? copy("Hidden", "Gizli") : copy("Visible", "Görünür")}</p></div><div className="rounded bg-primary/5 p-2"><span className="font-medium">{copy("Draft", "Taslak")}</span><p className="mt-1 text-muted-foreground">{row.draftBlock?.blockType} · {row.draftBlock?.isVisible === false ? copy("Hidden", "Gizli") : copy("Visible", "Görünür")}</p></div></div>}
+                    </div>)}
+                  </div>
+                </ScrollArea>}
+              </SheetContent>
+            </Sheet>
+            <Dialog open={preflightOpen} onOpenChange={setPreflightOpen}>
+              <DialogContent className="max-w-lg">
+                <DialogHeader><DialogTitle>{copy("Publication readiness", "Yayın öncesi kontrol")}</DialogTitle></DialogHeader>
+                {preflight && <div className="space-y-4">
+                  <div className={`rounded-lg border p-3 text-sm ${preflight.eligible ? "border-emerald-300 bg-emerald-50 text-emerald-900" : "border-destructive/40 bg-destructive/5"}`}>
+                    <strong>{preflight.eligible ? copy("Ready for approval", "Onay için hazır") : copy("Publication is blocked", "Yayın engellendi")}</strong>
+                    <p className="mt-1 opacity-80">{preflight.eligible ? copy("No blocking content issues were found. Review the warnings before approving.", "Engelleyici içerik sorunu bulunmadı. Onaylamadan önce uyarıları inceleyin.") : copy("Resolve the blocking items, save the draft, and run the check again.", "Engelleyici maddeleri düzeltin, taslağı kaydedin ve kontrolü yeniden çalıştırın.")}</p>
+                  </div>
+                  <dl className="grid gap-2 rounded-lg border p-3 text-xs sm:grid-cols-2">
+                    <div><dt className="text-muted-foreground">{copy("Public route", "Public adres")}</dt><dd className="mt-1 break-all font-medium">{preflight.publication.route}</dd></div>
+                    <div><dt className="text-muted-foreground">Canonical</dt><dd className="mt-1 break-all font-medium">{preflight.publication.canonical}</dd></div>
+                    <div><dt className="text-muted-foreground">{copy("Search visibility", "Arama görünürlüğü")}</dt><dd className="mt-1 font-medium">{preflight.publication.indexable ? copy("Indexable", "İndekslenebilir") : "Noindex"}</dd></div>
+                    <div><dt className="text-muted-foreground">Sitemap</dt><dd className="mt-1 font-medium">{preflight.publication.sitemapEligible ? copy("Eligible", "Uygun") : copy("Excluded", "Hariç")}</dd></div>
+                    <div><dt className="text-muted-foreground">{copy("Revision", "Sürüm")}</dt><dd className="mt-1 break-all font-mono">{preflight.digest.slice(0, 16)}</dd></div>
+                    <div><dt className="text-muted-foreground">{copy("Valid until", "Geçerlilik sonu")}</dt><dd className="mt-1 font-medium">{new Date(preflight.expiresAt).toLocaleString(lang)}</dd></div>
+                  </dl>
+                  {preflight.blockers.length > 0 && <section><h3 className="text-sm font-semibold">{copy("Blocking issues", "Engelleyici sorunlar")}</h3><ul className="mt-2 list-disc space-y-1 ps-5 text-sm">{preflight.blockers.map((issue, index) => <li key={`${issue.code}-${index}`}>{preflightIssueText(issue)} {/^blocks\[\d+\]/.test(issue.message) && <button type="button" className="font-medium text-primary underline underline-offset-2" onClick={() => openPreflightIssue(issue)}>{copy("Open block", "Bloğu aç")}</button>}</li>)}</ul></section>}
+                  {preflight.warnings.length > 0 && <section><h3 className="text-sm font-semibold">{copy("Warnings", "Uyarılar")}</h3><ul className="mt-2 list-disc space-y-1 ps-5 text-sm text-muted-foreground">{preflight.warnings.map((issue, index) => <li key={`${issue.code}-${index}`}>{preflightIssueText(issue)} {/^blocks\[\d+\]/.test(issue.message) && <button type="button" className="font-medium text-primary underline underline-offset-2" onClick={() => openPreflightIssue(issue)}>{copy("Open block", "Bloğu aç")}</button>}</li>)}</ul></section>}
+                  {preflight.blockers.length === 0 && preflight.warnings.length === 0 && <p className="text-sm text-muted-foreground">{copy("All current checks passed.", "Mevcut kontrollerin tamamı geçti.")}</p>}
+                  <div className="flex flex-wrap justify-end gap-2"><Button variant="outline" onClick={downloadPreflightReceipt}><Download className="me-2 h-4 w-4" />{copy("Download receipt", "Makbuzu indir")}</Button><Button variant="outline" onClick={() => setPreflightOpen(false)}>{copy("Close", "Kapat")}</Button><Button onClick={() => publishMutation.mutate()} disabled={!preflight.eligible || publishMutation.isPending}>{publishMutation.isPending ? copy("Publishing...", "Yayınlanıyor...") : copy("Approve and publish", "Onayla ve yayınla")}</Button></div>
+                </div>}
+              </DialogContent>
+            </Dialog>
+            <Dialog open={changesOpen} onOpenChange={setChangesOpen}>
+              <DialogContent className="max-w-lg">
+                <DialogHeader><DialogTitle>{copy("Request changes", "Değişiklik iste")}</DialogTitle></DialogHeader>
+                <p className="text-sm text-muted-foreground">{copy("The exact reviewed revision and your reason will be kept in version history. The page returns to draft; published content is not changed.", "İncelenen exact sürüm ve nedeniniz sürüm geçmişinde saklanır. Sayfa taslağa döner; yayındaki içerik değişmez.")}</p>
+                <div className="space-y-2"><Label htmlFor="change-reason">{copy("Reason", "Neden")}</Label><Select value={changeRequest.reasonCode} onValueChange={reasonCode => setChangeRequest(value => ({ ...value, reasonCode }))}><SelectTrigger id="change-reason"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="CONTENT">{copy("Content", "İçerik")}</SelectItem><SelectItem value="SEO">SEO</SelectItem><SelectItem value="TRANSLATION">{copy("Translation", "Çeviri")}</SelectItem><SelectItem value="MEDIA">{copy("Media", "Medya")}</SelectItem><SelectItem value="LEGAL">{copy("Legal / compliance", "Hukuk / uyum")}</SelectItem><SelectItem value="OTHER">{copy("Other", "Diğer")}</SelectItem></SelectContent></Select></div>
+                <div className="space-y-2"><Label htmlFor="change-comment">{copy("What needs to change?", "Nelerin değişmesi gerekiyor?")}</Label><Textarea id="change-comment" maxLength={1000} rows={5} value={changeRequest.comment} onChange={event => setChangeRequest(value => ({ ...value, comment: event.target.value }))} /></div>
+                <div className="flex justify-end gap-2"><Button variant="outline" onClick={() => setChangesOpen(false)}>{copy("Cancel", "İptal")}</Button><Button variant="destructive" disabled={changeRequest.comment.trim().length < 3 || requestChangesMutation.isPending} onClick={() => requestChangesMutation.mutate()}>{requestChangesMutation.isPending ? copy("Saving...", "Kaydediliyor...") : copy("Return to draft", "Taslağa geri gönder")}</Button></div>
+              </DialogContent>
+            </Dialog>
             <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={() => saveDraftMutation.mutate()} disabled={saveDraftMutation.isPending || publishMutation.isPending || restoreMutation.isPending}>
               <Save className="w-3.5 h-3.5" /> {saveDraftMutation.isPending ? copy("Saving...", "Kaydediliyor...") : copy("Save Draft", "Taslağı kaydet")}
             </Button>
-            <Button size="sm" className="h-7 text-xs gap-1" onClick={() => publishMutation.mutate()} disabled={publishMutation.isPending || saveDraftMutation.isPending || restoreMutation.isPending}>
-              <Upload className="w-3.5 h-3.5" /> {publishMutation.isPending ? copy("Publishing...", "Yayınlanıyor...") : copy("Publish", "Yayınla")}
-            </Button>
+            {page.status !== "in_review" ? <Button size="sm" className="h-7 text-xs gap-1" onClick={() => requestReviewMutation.mutate()} disabled={dirty || seoDirty || requestReviewMutation.isPending || saveDraftMutation.isPending || restoreMutation.isPending}>
+              <Upload className="w-3.5 h-3.5" /> {requestReviewMutation.isPending ? copy("Sending...", "Gönderiliyor...") : copy("Send for review", "İncelemeye gönder")}
+            </Button> : <><Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => setChangesOpen(true)} disabled={requestChangesMutation.isPending || publishMutation.isPending}>{copy("Request changes", "Değişiklik iste")}</Button><Button size="sm" className="h-7 text-xs gap-1" onClick={() => preflightMutation.mutate()} disabled={preflightMutation.isPending || publishMutation.isPending || saveDraftMutation.isPending || restoreMutation.isPending}>
+              <Upload className="w-3.5 h-3.5" /> {preflightMutation.isPending ? copy("Checking...", "Kontrol ediliyor...") : copy("Review and publish", "İncele ve yayınla")}
+            </Button></>}
           </div>
         </div>
 
-        <nav aria-label={copy("Editor panels", "Editör panelleri")} className="flex gap-2 border-b p-2 lg:hidden">
-          {(["blocks", "editor", "preview"] as const).map(pane => <Button key={pane} size="sm" variant={mobilePane === pane ? "default" : "outline"} aria-pressed={mobilePane === pane} onClick={() => setMobilePane(pane)}>{pane === "blocks" ? copy("Blocks", "Bloklar") : pane === "editor" ? copy("Edit block", "Bloğu düzenle") : copy("Preview", "Önizleme")}</Button>)}
+        <nav aria-label={copy("Editor panels", "Editör panelleri")} className="grid w-full grid-cols-3 gap-2 border-b p-2 lg:hidden">
+          {(["blocks", "editor", "preview"] as const).map(pane => <Button key={pane} className="min-w-0 px-2" size="sm" variant={mobilePane === pane ? "default" : "outline"} aria-pressed={mobilePane === pane} onClick={() => setMobilePane(pane)}>{pane === "blocks" ? (isSystemManagedPage(page) ? copy("Sections", "Bölümler") : copy("Blocks", "Bloklar")) : pane === "editor" ? (isSystemManagedPage(page) ? copy("Edit section", "Bölümü düzenle") : copy("Edit block", "Bloğu düzenle")) : copy("Preview", "Önizleme")}</Button>)}
         </nav>
         <div className="flex min-h-0 flex-1 overflow-hidden">
-          <div className={`${mobilePane === "blocks" ? "flex" : "hidden"} w-full lg:w-64 border-e bg-card lg:flex flex-col shrink-0`}>
-            <div className="p-3 border-b flex items-center justify-between">
-              <h3 className="text-xs font-bold uppercase text-muted-foreground">{copy("Blocks", "Bloklar")}</h3>
+          <aside className={`${mobilePane === "blocks" ? "flex" : "hidden"} min-h-0 w-full lg:w-72 border-e bg-card lg:flex flex-col shrink-0 overflow-hidden`}>
+            <div className="p-3 border-b flex items-start justify-between gap-2">
+              <div><div className="flex items-center gap-2"><h3 className="text-xs font-bold uppercase tracking-wide text-muted-foreground">{isSystemManagedPage(page) ? copy("Page sections", "Sayfa bölümleri") : copy("Blocks", "Bloklar")}</h3><Badge variant="secondary" className="h-5 px-1.5 text-[10px]">{blocks.length}</Badge></div>{isSystemManagedPage(page) && <p className="mt-1 text-[11px] leading-4 text-muted-foreground">{copy("Build the page, change its order and inspect every section.", "Sayfayı oluşturun, sıralamayı değiştirin ve her bölümü inceleyin.")}</p>}</div>
               <Dialog open={showAddBlock} onOpenChange={setShowAddBlock}>
                 <DialogTrigger asChild>
-                  <Button aria-label={copy("Add block", "Blok ekle")} variant="outline" size="icon" className="h-8 w-8">
-                    <Plus className="w-3.5 h-3.5" />
+                  <Button aria-label={copy("Add section", "Bölüm ekle")} size="sm" className="h-8 shrink-0 gap-1 px-2 text-xs">
+                    <Plus className="w-3.5 h-3.5" />{copy("Add", "Ekle")}
                   </Button>
                 </DialogTrigger>
-                <DialogContent className="max-w-lg">
+                <DialogContent className="max-w-3xl gap-0 overflow-hidden p-0">
                   <DialogHeader>
-                    <DialogTitle>{copy("Add Block", "Blok ekle")}</DialogTitle>
+                    <div className="border-b px-6 py-5">
+                      <DialogTitle>{copy("Section library", "Bölüm kütüphanesi")}</DialogTitle>
+                      <p className="mt-1 text-sm text-muted-foreground">{copy("Choose a responsive section. It is added to the end of the page and opens ready to edit.", "Responsive bir bölüm seçin. Sayfanın sonuna eklenir ve düzenlemeye hazır açılır.")}</p>
+                    </div>
                   </DialogHeader>
-                  <div className="grid grid-cols-2 gap-2 mt-2 max-h-[60vh] overflow-y-auto">
-                    {BLOCK_TYPES.map(bt => (
+                  <div className="border-b bg-muted/30 px-6 py-4">
+                    <div className="relative"><Search className="absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" /><Input value={blockSearch} onChange={event => setBlockSearch(event.target.value)} placeholder={copy("Search sections...", "Bölümlerde ara...")} className="ps-9" /></div>
+                    <div className="mt-3 flex flex-wrap gap-2">{(["all", "content", "media", "data", "layout", "reference"] as const).map(category => <Button key={category} type="button" size="sm" variant={blockCategory === category ? "default" : "outline"} className="h-7 rounded-full text-xs" onClick={() => setBlockCategory(category)}>{category === "all" ? copy("All", "Tümü") : copy(category[0].toUpperCase() + category.slice(1))}</Button>)}</div>
+                  </div>
+                  <div className="grid max-h-[58vh] grid-cols-1 gap-3 overflow-y-auto p-6 sm:grid-cols-2 lg:grid-cols-3">
+                    {BLOCK_TYPES.filter(bt => (blockCategory === "all" || bt.category === blockCategory) && (!blockSearch.trim() || `${bt.label} ${bt.category}`.toLowerCase().includes(blockSearch.trim().toLowerCase()))).map(bt => (
                       <button
                         key={bt.type}
                         onClick={() => addBlock(bt.type)}
-                        className="flex items-center gap-2 p-3 rounded-lg border hover:border-primary hover:bg-primary/5 transition-colors text-left"
+                        className="group flex min-h-28 flex-col items-start rounded-2xl border bg-card p-4 text-left transition hover:-translate-y-0.5 hover:border-primary hover:shadow-md"
                       >
-                        <span className="text-lg">{bt.icon}</span>
-                        <div>
-                          <p className="text-sm font-medium">{copy(bt.label)}</p>
-                          <p className="text-[10px] text-muted-foreground capitalize">{copy(bt.category)}</p>
-                        </div>
+                        <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-xl transition group-hover:bg-primary group-hover:text-primary-foreground">{bt.icon}</span>
+                        <p className="mt-3 text-sm font-semibold">{copy(bt.label)}</p>
+                        <p className="mt-1 text-[11px] capitalize text-muted-foreground">{copy(bt.category)} · {bt.fields.length} {copy("settings", "ayar")}</p>
                       </button>
                     ))}
+                    {BLOCK_TYPES.filter(bt => (blockCategory === "all" || bt.category === blockCategory) && (!blockSearch.trim() || `${bt.label} ${bt.category}`.toLowerCase().includes(blockSearch.trim().toLowerCase()))).length === 0 && <div className="col-span-full rounded-2xl border border-dashed p-10 text-center text-sm text-muted-foreground">{copy("No section matches this search.", "Bu aramayla eşleşen bölüm yok.")}</div>}
                   </div>
                 </DialogContent>
               </Dialog>
             </div>
-            <ScrollArea className="flex-1">
+            <ScrollArea className="min-h-0 flex-1 overscroll-contain">
               <div className="p-2 space-y-1">
                 {blocks.map((block, idx) => {
                   const def = getBlockTypeDef(block.blockType);
                   return (
                     <div
                       key={idx}
-                      className={`group flex items-center gap-1 p-2 rounded-lg cursor-pointer transition-colors text-sm ${
-                        selectedBlockIdx === idx ? "bg-primary/10 border border-primary/30" : "hover:bg-secondary"
+                      className={`group mb-1.5 flex items-center gap-1 rounded-xl border p-1.5 cursor-pointer transition-all text-sm ${
+                        selectedBlockIdx === idx ? "border-primary bg-primary/10 shadow-sm" : "border-transparent hover:border-border hover:bg-secondary/70"
                       } ${!block.isVisible ? "opacity-50" : ""}`}
                     >
                       <GripVertical className="w-3 h-3 text-muted-foreground shrink-0" />
-                      <span className="text-sm shrink-0">{def?.icon || "📦"}</span>
-                      <button className="min-w-0 flex-1 truncate py-2 text-start text-xs font-medium" onClick={() => { setSelectedBlockIdx(idx); setMobilePane("editor"); }}>{copy(def?.label || block.blockType)}</button>
+                      <span className="w-5 shrink-0 text-center text-[10px] font-semibold text-muted-foreground">{idx + 1}</span>
+                      <span className={`h-2 w-2 shrink-0 rounded-full ${block.isVisible ? "bg-emerald-500" : "bg-muted-foreground/40"}`} />
+                      <button className="min-w-0 flex-1 py-1.5 text-start" onClick={() => { setSelectedBlockIdx(idx); setMobilePane("editor"); }}><span className="block truncate text-xs font-semibold">{String(block.content.title || block.content.badge || copy(def?.label || block.blockType))}</span><span className="mt-0.5 block truncate text-[10px] text-muted-foreground">{copy(def?.label || block.blockType)} · {block.isVisible ? copy("Visible", "Görünür") : copy("Hidden", "Gizli")}</span></button>
                       <div className="flex items-center gap-0.5">
                         <button aria-label={copy("Move block up")} onClick={e => { e.stopPropagation(); moveBlock(idx, -1); }} className="p-1 hover:bg-secondary rounded" disabled={idx === 0}>
                           <ChevronUp className="w-3 h-3" />
@@ -731,13 +1164,15 @@ function PageEditorSession({ id }: { id: number }) {
                 )}
               </div>
             </ScrollArea>
-          </div>
+          </aside>
 
-          <div className={`${mobilePane === "editor" ? "flex" : "hidden"} w-full lg:w-80 border-e bg-background lg:flex flex-col shrink-0`}>
-            <div className="p-3 border-b">
-              <h3 className="text-xs font-bold uppercase text-muted-foreground">
+          <section className={`${mobilePane === "editor" ? "flex" : "hidden"} min-h-0 w-full lg:w-[420px] border-e bg-background lg:flex flex-col shrink-0 overflow-hidden`}>
+            <div className="border-b bg-card/60 p-3">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-primary">{selectedBlockIdx !== null ? `${copy("Section", "Bölüm")} ${selectedBlockIdx + 1}` : copy("Section editor", "Bölüm editörü")}</p>
+              <h3 className="mt-1 text-sm font-bold">
                 {selectedBlock ? `${copy("Edit", "Düzenle")}: ${copy(selectedTypeDef?.label || selectedBlock.blockType)}` : copy("Block Editor", "Blok editörü")}
               </h3>
+              {selectedBlock && <p className="mt-1 text-[11px] text-muted-foreground">{copy("Changes appear instantly in the draft preview.", "Değişiklikler taslak önizlemede anında görünür.")}</p>}
             </div>
             {editLocale !== sourceLocale && (
               <div className="mx-3 mt-2 p-2 rounded-lg bg-blue-50 border border-blue-200 text-xs">
@@ -745,15 +1180,17 @@ function PageEditorSession({ id }: { id: number }) {
                   {LANGUAGE_META[editLocale as keyof typeof LANGUAGE_META]?.flag} {copy("Editing language:", "Düzenleme dili:")} {LANGUAGE_META[editLocale as keyof typeof LANGUAGE_META]?.nativeName || editLocale}
                 </p>
                 <p className="text-blue-600 mt-0.5">{copy("Content entered here is for this locale's translation.", "Buraya girilen içerik, seçilen dilin çevirisine aittir.")}</p>
-                <Button type="button" variant="outline" size="sm" className="h-5 text-[10px] px-2 mt-1" onClick={() => {
-                  const defaultBlocks = defaultBlocksRef.current;
-                  setBlocks(defaultBlocks.map(b => ({ ...b })));
-                  markDirty();
-                  toast({ title: copy(`Copied blocks from ${sourceLocale}`, `${sourceLocale} dilindeki bloklar kopyalandı`) });
-                }}>{copy("Copy blocks from source language", "Kaynak dildeki blokları kopyala")}</Button>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <Button type="button" variant="outline" size="sm" className="h-7 px-2 text-[10px]" onClick={() => {
+                    const defaultBlocks = defaultBlocksRef.current;
+                    setBlocks(JSON.parse(JSON.stringify(defaultBlocks)));
+                    markDirty();
+                    toast({ title: copy(`Copied blocks from ${sourceLocale}`, `${sourceLocale} dilindeki bloklar kopyalandı`) });
+                  }}>{copy("Copy without translating", "Çevirmeden kopyala")}</Button>
+                </div>
               </div>
             )}
-            <ScrollArea className="flex-1">
+            <ScrollArea className="min-h-0 flex-1 overscroll-contain">
               <div className="p-4 space-y-4">
                 {!selectedBlock ? (
                   <p className="text-sm text-muted-foreground text-center py-8">{copy("Select a block to edit its content.", "İçeriğini düzenlemek için bir blok seçin.")}</p>
@@ -766,452 +1203,46 @@ function PageEditorSession({ id }: { id: number }) {
                   <>
                     <BlockFieldEditor
                       fields={selectedBlock.blockType === "catalog_grid" ? (selectedTypeDef?.fields || []).filter(f => !["country", "city", "limit"].includes(f.key)) : selectedTypeDef?.fields || []}
-                      content={selectedBlock.content}
+                      content={{ ...selectedBlock.content, ...selectedBlock.settings }}
                       onChange={(key, value) => {
-                        updateBlockContent(selectedBlockIdx!, key, value);
+                        if (BLOCK_APPEARANCE_KEYS.has(key)) updateBlockAppearance(selectedBlockIdx!, key, value);
+                        else updateBlockContent(selectedBlockIdx!, key, value);
                         if (selectedBlock.blockType === "catalog_grid" && key === "source") for (const filter of ["country", "city", "countryId", "cityId", "universityId", "degree", "language", "institutionType"]) updateBlockContent(selectedBlockIdx!, filter, "");
                       }}
+                      variableContext={{ siteName: SITE_NAME, pageTitle: page.title, pageSlug: seo.slug || page.slug, pageLocale: editLocale }}
                     />
                     {selectedBlock.blockType === "catalog_grid" && <CatalogBlockFields content={selectedBlock.content} locale={editLocale} onChange={(key, value) => updateBlockContent(selectedBlockIdx!, key, value)} />}
-                    <AiAssistantPanel
-                      context={Object.values(selectedBlock.content).filter(v => typeof v === "string").join(" ").slice(0, 500)}
-                      locale={editLocale}
-                      onResult={(action, result) => {
-                        const fieldMap: Record<string, string> = {
-                          generateMetaTitle: "title",
-                          generateMetaDescription: "subtitle",
-                          generateHeroTitle: "heading",
-                          generateCTAText: "buttonText",
-                          generateOGText: "description",
-                          improveTone: "body",
-                          shortenText: "body",
-                          expandText: "body",
-                          generateExcerpt: "description",
-                          generateAltText: "altText",
-                        };
-                        const targetField = fieldMap[action];
-                        if (targetField && selectedBlockIdx !== null) {
-                          updateBlockContent(selectedBlockIdx, targetField, result);
-                        }
-                      }}
-                    />
                   </>
                 )}
               </div>
             </ScrollArea>
-          </div>
+          </section>
 
-          <div className={`${mobilePane === "preview" ? "flex" : "hidden"} min-w-0 flex-1 bg-secondary/30 lg:flex flex-col items-center p-4 overflow-auto`}>
+          <section ref={previewHostRef} className={`${mobilePane === "preview" ? "flex" : "hidden"} min-h-0 min-w-0 flex-1 bg-[radial-gradient(circle_at_top,hsl(var(--primary)/0.08),transparent_38%)] lg:flex flex-col items-center p-4 overflow-auto overscroll-contain`}>
+            <div className="mb-3 flex w-full max-w-7xl shrink-0 flex-wrap items-center justify-between gap-2 rounded-xl border bg-card/95 p-3 text-xs shadow-sm" role="status" aria-label={copy("Preview context", "Önizleme bağlamı")}>
+              <div className="flex flex-wrap items-center gap-2"><Badge variant="secondary">{LANGUAGE_META[editLocale as keyof typeof LANGUAGE_META]?.flag} {editLocale.toUpperCase()}</Badge><span>{copy("DRAFT PREVIEW", "TASLAK ÖNİZLEME")}</span><span className="text-muted-foreground">{editLocale === sourceLocale ? copy("Native source", "Kaynak dil") : (translationsRef.current[editLocale]?.length ?? 0) > 0 ? copy("Translation draft", "Çeviri taslağı") : copy("Source fallback · noindex", "Kaynak fallback · noindex")}</span></div>
+              <div className="flex min-w-0 flex-wrap items-center gap-2 text-muted-foreground"><span className="truncate">{managedPagePublicPath({ ...page, locale: editLocale, slug: seo.slug || page.slug })}</span><span>{previewSize}</span><span>{copy("Not public", "Public değil")}</span></div>
+            </div>
             <div
-              className="bg-white dark:bg-card rounded-lg shadow-lg border overflow-hidden transition-all duration-300"
-              style={{ width: PREVIEW_WIDTHS[previewSize], maxWidth: "100%", minHeight: "400px" }}
+              className="relative shrink-0 transition-[width,height] duration-300"
+              style={{ width: PREVIEW_WIDTHS[previewSize] * previewScale, height: previewHeight * previewScale }}
             >
-              <BlockPreview blocks={blocks} locale={editLocale} />
+              <div
+                ref={previewCanvasRef}
+                className="cms-preview-viewport absolute left-0 top-0 bg-white dark:bg-card rounded-lg shadow-lg border overflow-hidden"
+                data-preview-size={previewSize}
+                style={{ width: PREVIEW_WIDTHS[previewSize], minHeight: "400px", transform: `scale(${previewScale})`, transformOrigin: "top left" }}
+              >
+                <BlockPreview blocks={blocks} locale={editLocale} template={page.template} pageTitle={page.title} pageSlug={seo.slug || page.slug} />
+              </div>
             </div>
-          </div>
+          </section>
         </div>
       </div>
   );
 }
 
-function BlockFieldEditor({
-  fields,
-  content,
-  onChange,
-}: {
-  fields: BlockFieldDef[];
-  content: Record<string, unknown>;
-  onChange: (key: string, value: unknown) => void;
-}) {
-  const { lang } = useI18n();
-  const copy = (value: string) => pageEditorText(lang, value);
-  return (
-    <div className="space-y-4">
-      {fields.map(field => (
-        <div key={field.key} className="space-y-1.5">
-          <Label className="text-xs font-medium">{copy(field.label)}</Label>
-          {field.type === "text" && (
-            <Input
-              aria-label={copy(field.label)}
-              value={(content[field.key] as string) || ""}
-              onChange={e => onChange(field.key, e.target.value)}
-              placeholder={field.placeholder}
-              className="h-8 text-sm"
-            />
-          )}
-          {field.type === "textarea" && (
-            <Textarea
-              aria-label={copy(field.label)}
-              value={(content[field.key] as string) || ""}
-              onChange={e => onChange(field.key, e.target.value)}
-              placeholder={field.placeholder}
-              rows={3}
-              className="text-sm"
-            />
-          )}
-          {field.type === "richtext" && (
-            <Textarea
-              aria-label={copy(field.label)}
-              value={(content[field.key] as string) || ""}
-              onChange={e => onChange(field.key, e.target.value)}
-              placeholder={field.placeholder}
-              rows={6}
-              className="text-sm font-mono"
-            />
-          )}
-          {field.type === "url" && (
-            <Input
-              aria-label={copy(field.label)}
-              value={(content[field.key] as string) || ""}
-              onChange={e => onChange(field.key, e.target.value)}
-              placeholder={field.placeholder || "https://..."}
-              className="h-8 text-sm"
-            />
-          )}
-          {field.type === "image" && (
-            <Input
-              aria-label={copy(field.label)}
-              value={(content[field.key] as string) || ""}
-              onChange={e => onChange(field.key, e.target.value)}
-              placeholder={copy("Image URL")}
-              className="h-8 text-sm"
-            />
-          )}
-          {field.type === "number" && (
-            <Input
-              aria-label={copy(field.label)}
-              type="number"
-              value={(content[field.key] as number) ?? field.defaultValue ?? ""}
-              onChange={e => onChange(field.key, e.target.value ? Number(e.target.value) : "")}
-              className="h-8 text-sm"
-            />
-          )}
-          {field.type === "color" && (
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded border relative overflow-hidden" style={{ backgroundColor: (content[field.key] as string) || "#e5e7eb" }}>
-                <input
-                  aria-label={copy(field.label)}
-                  type="color"
-                  value={(content[field.key] as string) || "#e5e7eb"}
-                  onChange={e => onChange(field.key, e.target.value)}
-                  className="absolute inset-0 opacity-0 cursor-pointer"
-                />
-              </div>
-              <Input
-                aria-label={copy(field.label)}
-                value={(content[field.key] as string) || ""}
-                onChange={e => onChange(field.key, e.target.value)}
-                className="h-8 text-xs font-mono"
-              />
-            </div>
-          )}
-          {field.type === "toggle" && (
-            <Switch
-              aria-label={copy(field.label)}
-              checked={!!content[field.key]}
-              onCheckedChange={val => onChange(field.key, val)}
-            />
-          )}
-          {field.type === "select" && field.options && (
-            <Select value={(content[field.key] as string) || ""} onValueChange={v => onChange(field.key, v)}>
-              <SelectTrigger aria-label={copy(field.label)} className="h-8 text-sm"><SelectValue placeholder={copy("Select...")} /></SelectTrigger>
-              <SelectContent>
-                {field.options.map(o => <SelectItem key={o.value} value={o.value}>{copy(o.label)}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          )}
-          {field.type === "items" && field.itemFields && (
-            <ItemsEditor
-              items={(content[field.key] as Record<string, unknown>[]) || []}
-              itemFields={field.itemFields}
-              onChange={newItems => onChange(field.key, newItems)}
-            />
-          )}
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function ItemsEditor({
-  items,
-  itemFields,
-  onChange,
-}: {
-  items: Record<string, unknown>[];
-  itemFields: BlockFieldDef[];
-  onChange: (items: Record<string, unknown>[]) => void;
-}) {
-  const { lang } = useI18n();
-  const copy = (value: string) => pageEditorText(lang, value);
-  const addItem = () => {
-    const defaults: Record<string, unknown> = {};
-    itemFields.forEach(f => { defaults[f.key] = f.defaultValue ?? ""; });
-    onChange([...items, defaults]);
-  };
-
-  const removeItem = (idx: number) => {
-    onChange(items.filter((_, i) => i !== idx));
-  };
-
-  const updateItem = (idx: number, key: string, value: unknown) => {
-    onChange(items.map((item, i) => i === idx ? { ...item, [key]: value } : item));
-  };
-
-  return (
-    <div className="space-y-2">
-      {items.map((item, idx) => (
-        <Card key={idx} className="bg-secondary/30">
-          <CardContent className="p-3 space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-medium text-muted-foreground">{copy("Item")} {idx + 1}</span>
-              <Button aria-label={`${copy("Remove item")} ${idx + 1}`} variant="ghost" size="icon" className="h-5 w-5 text-red-500" onClick={() => removeItem(idx)}>
-                <Trash2 className="w-3 h-3" />
-              </Button>
-            </div>
-            {itemFields.map(f => (
-              <div key={f.key} className="space-y-1">
-                <Label className="text-[10px] text-muted-foreground">{copy(f.label)}</Label>
-                {(f.type === "text" || f.type === "url" || f.type === "image") && (
-                  <Input
-                    aria-label={`${copy(f.label)} ${idx + 1}`}
-                    value={(item[f.key] as string) || ""}
-                    onChange={e => updateItem(idx, f.key, e.target.value)}
-                    placeholder={f.placeholder}
-                    className="h-7 text-xs"
-                  />
-                )}
-                {f.type === "textarea" && (
-                  <Textarea
-                    aria-label={`${copy(f.label)} ${idx + 1}`}
-                    value={(item[f.key] as string) || ""}
-                    onChange={e => updateItem(idx, f.key, e.target.value)}
-                    rows={2}
-                    className="text-xs"
-                  />
-                )}
-                {f.type === "number" && (
-                  <Input
-                    aria-label={`${copy(f.label)} ${idx + 1}`}
-                    type="number"
-                    value={(item[f.key] as number) ?? ""}
-                    onChange={e => updateItem(idx, f.key, Number(e.target.value))}
-                    className="h-7 text-xs"
-                  />
-                )}
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-      ))}
-      <Button variant="outline" size="sm" className="w-full h-7 text-xs" onClick={addItem}>
-        <Plus className="w-3 h-3 mr-1" /> {copy("Add Item")}
-      </Button>
-    </div>
-  );
-}
-
-function GlobalBlockSelector({
-  content,
-  onChange,
-}: {
-  content: Record<string, unknown>;
-  onChange: (key: string, value: unknown) => void;
-}) {
-  const { data: globalComponents = [] } = useQuery<{ id: number; name: string; slug: string; componentType: string; isActive: boolean }[]>({
-    queryKey: ["website-global-components"],
-    queryFn: () => customFetch("/api/website/global-components"),
-  });
-
-  const activeComponents = globalComponents.filter(c => c.isActive);
-  const selectedId = content.globalComponentId as number | null;
-  const selectedComp = activeComponents.find(c => c.id === selectedId);
-
-  return (
-    <div className="space-y-4">
-      <div className="space-y-1.5">
-        <Label className="text-xs font-medium">Global Component</Label>
-        {activeComponents.length === 0 ? (
-          <p className="text-xs text-muted-foreground py-2">
-            No active global components. Create one in Website &gt; Global Components first.
-          </p>
-        ) : (
-          <Select
-            value={selectedId ? String(selectedId) : ""}
-            onValueChange={v => {
-              const comp = activeComponents.find(c => c.id === Number(v));
-              if (comp) {
-                onChange("globalComponentId", comp.id);
-                onChange("globalComponentSlug", comp.slug);
-              }
-            }}
-          >
-            <SelectTrigger className="h-9">
-              <SelectValue placeholder="Select a component..." />
-            </SelectTrigger>
-            <SelectContent>
-              {activeComponents.map(c => (
-                <SelectItem key={c.id} value={String(c.id)}>
-                  {c.name} ({c.componentType.replace(/_/g, " ")})
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        )}
-      </div>
-      {selectedComp && (
-        <div className="p-3 rounded-lg bg-purple-50 dark:bg-purple-950/20 border border-purple-200 dark:border-purple-800">
-          <p className="text-xs font-medium text-purple-700 dark:text-purple-300">{selectedComp.name}</p>
-          <p className="text-[10px] text-purple-500 dark:text-purple-400 mt-0.5">
-            Type: {selectedComp.componentType.replace(/_/g, " ")} | Slug: {selectedComp.slug}
-          </p>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function GlobalBlockPreview({ componentId, slug }: { componentId: number | null; slug: string }) {
-  const { data: globalComponents } = useQuery<{ id: number; name: string; slug: string; componentType: string; content: Record<string, unknown>; isActive: boolean }[]>({
-    queryKey: ["website-global-components"],
-    queryFn: () => customFetch("/api/website/global-components"),
-  });
-
-  if (!componentId && !slug) {
-    return (
-      <div className="py-4 px-6 text-center bg-purple-50 dark:bg-purple-950/20 border-2 border-dashed border-purple-200 dark:border-purple-800">
-        <p className="text-xs text-purple-500 font-medium">No global component selected</p>
-      </div>
-    );
-  }
-
-  const comp = globalComponents?.find(c => c.id === componentId || c.slug === slug);
-  if (!comp) {
-    return (
-      <div className="py-4 px-6 text-center bg-amber-50 dark:bg-amber-950/20 border-2 border-dashed border-amber-300 dark:border-amber-700">
-        <p className="text-xs text-amber-600 font-medium">Component not found: {slug || `ID ${componentId}`}</p>
-      </div>
-    );
-  }
-
-  if (!comp.isActive) {
-    return (
-      <div className="py-4 px-6 text-center bg-amber-50 dark:bg-amber-950/20 border-2 border-dashed border-amber-300 dark:border-amber-700">
-        <p className="text-xs text-amber-600 font-medium">Inactive component: {comp.name}</p>
-      </div>
-    );
-  }
-
-  const raw = (comp.content || {}) as Record<string, unknown>;
-  const s = (k: string) => (raw[k] as string) || "";
-
-  switch (comp.componentType) {
-    case "cta_banner":
-      return (
-        <div className="relative py-10 px-8 text-center text-white" style={{ backgroundColor: s("backgroundColor") || "#2563eb" }}>
-          {s("backgroundImage") && (
-            <div className="absolute inset-0 bg-cover bg-center opacity-30" style={{ backgroundImage: `url(${s("backgroundImage")})` }} />
-          )}
-          <div className="relative z-10">
-            <h2 className="text-2xl font-bold mb-2">{s("heading") || "CTA Heading"}</h2>
-            {s("body") && <p className="text-sm opacity-90 mb-4 max-w-lg mx-auto">{s("body")}</p>}
-            {s("buttonText") && (
-              <span className="inline-block px-5 py-2 bg-white text-blue-600 rounded-lg font-medium text-sm">
-                {s("buttonText")}
-              </span>
-            )}
-          </div>
-        </div>
-      );
-
-    case "stats_strip": {
-      const items = (raw.items as { value: string; label: string }[]) || [];
-      return (
-        <div className="py-6 px-4 bg-gray-50 dark:bg-gray-900">
-          <div className="flex justify-center gap-8 flex-wrap">
-            {items.map((item, i) => (
-              <div key={i} className="text-center">
-                <div className="text-2xl font-bold text-primary">{item.value || "—"}</div>
-                <div className="text-xs text-muted-foreground mt-1">{item.label || "Label"}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-      );
-    }
-
-    case "testimonials": {
-      const items = (raw.items as { quote: string; author: string; role: string; avatar?: string }[]) || [];
-      return (
-        <div className="py-6 px-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {items.slice(0, 4).map((item, i) => (
-              <div key={i} className="p-4 bg-gray-50 dark:bg-gray-900 rounded-lg border">
-                <p className="text-sm italic text-muted-foreground mb-3">"{item.quote || "Quote..."}"</p>
-                <div className="flex items-center gap-2">
-                  {item.avatar && <img src={item.avatar} alt="" className="w-8 h-8 rounded-full object-cover" />}
-                  <div>
-                    <p className="text-xs font-medium">{item.author || "Author"}</p>
-                    {item.role && <p className="text-[10px] text-muted-foreground">{item.role}</p>}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      );
-    }
-
-    case "contact_strip":
-      return (
-        <div className="py-6 px-6 bg-gray-50 dark:bg-gray-900">
-          <div className="flex flex-wrap justify-center gap-6 text-sm">
-            {s("phone") && <span>Tel: {s("phone")}</span>}
-            {s("email") && <span>Email: {s("email")}</span>}
-            {s("whatsapp") && <span>WhatsApp: {s("whatsapp")}</span>}
-            {s("address") && <span>{s("address")}</span>}
-          </div>
-        </div>
-      );
-
-    case "logo_grid": {
-      const items = (raw.items as { name: string; imageUrl: string }[]) || [];
-      const cols = (raw.columns as number) || 4;
-      return (
-        <div className="py-6 px-6">
-          <div className="grid gap-4" style={{ gridTemplateColumns: `repeat(${cols}, 1fr)` }}>
-            {items.map((item, i) => (
-              <div key={i} className="flex items-center justify-center p-3 border rounded-lg bg-white dark:bg-gray-900 min-h-[60px]">
-                {item.imageUrl ? (
-                  <img src={item.imageUrl} alt={item.name} className="max-h-10 max-w-full object-contain" />
-                ) : (
-                  <span className="text-xs text-muted-foreground">{item.name || "Logo"}</span>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      );
-    }
-
-    case "custom_html":
-      return (
-        <div className="py-4 px-6 bg-gray-50 dark:bg-gray-900 border-l-4 border-purple-400">
-          <p className="text-[10px] text-purple-500 font-medium mb-1">Custom HTML: {comp.name}</p>
-          <div className="text-xs text-muted-foreground truncate">{s("html").slice(0, 120) || "(empty)"}...</div>
-        </div>
-      );
-
-    default:
-      return (
-        <div className="py-4 px-6 text-center bg-purple-50 dark:bg-purple-950/20 border-2 border-dashed border-purple-200 dark:border-purple-800">
-          <p className="text-xs text-purple-600 font-medium">{comp.name} ({comp.componentType})</p>
-        </div>
-      );
-  }
-}
-
-function BlockPreview({ blocks, locale }: { blocks: PageBlock[]; locale: string }) {
+function BlockPreview({ blocks, locale, template, pageTitle, pageSlug }: { blocks: PageBlock[]; locale: string; template?: string | null; pageTitle: string; pageSlug: string }) {
   const visibleBlocks = blocks.filter(b => b.isVisible);
 
   if (visibleBlocks.length === 0) {
@@ -1222,8 +1253,7 @@ function BlockPreview({ blocks, locale }: { blocks: PageBlock[]; locale: string 
     );
   }
 
-  return (
-    <div className="divide-y" dir={["ar", "fa", "ur"].includes(locale) ? "rtl" : "ltr"} lang={locale}>
+  const preview = <div dir={["ar", "fa", "ur"].includes(locale) ? "rtl" : "ltr"} lang={locale}>
       {visibleBlocks.map((block, idx) => (
         <div key={idx} className="relative">
           <div className="absolute top-1 right-1 z-10">
@@ -1231,182 +1261,19 @@ function BlockPreview({ blocks, locale }: { blocks: PageBlock[]; locale: string 
               {getBlockTypeDef(block.blockType)?.label || block.blockType}
             </Badge>
           </div>
-          {block.blockType === "catalog_grid" ? <CatalogBlockPreview content={block.content} locale={locale} /> : <BlockPreviewItem block={block} />}
+          {block.blockType === "catalog_grid"
+            ? <CatalogBlockPreview content={block.content} locale={locale} />
+            : <CmsBlock block={block} index={idx} variables={{ siteName: SITE_NAME, pageTitle, pageSlug, pageLocale: locale }} />}
         </div>
       ))}
-    </div>
-  );
-}
-
-function BlockPreviewItem({ block }: { block: PageBlock }) {
-  const c = block.content as Record<string, string | number | boolean | Record<string, unknown>[] | null>;
-
-  switch (block.blockType) {
-    case "hero":
-      return (
-        <div className="relative py-16 px-6 text-center bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-950/30 dark:to-indigo-950/30">
-          {c.badge && <span className="inline-block px-3 py-1 rounded-full bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 text-xs font-medium mb-4">{c.badge as string}</span>}
-          <h1 className="text-2xl font-bold mb-2">{(c.title as string) || "Hero Title"}</h1>
-          {c.subtitle && <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">{c.subtitle as string}</p>}
-          <div className="flex gap-2 justify-center">
-            {c.ctaLabel && <span className="inline-block px-4 py-2 bg-blue-600 text-white rounded-lg text-xs font-medium">{c.ctaLabel as string}</span>}
-            {c.secondaryLabel && <span className="inline-block px-4 py-2 border rounded-lg text-xs font-medium">{c.secondaryLabel as string}</span>}
-          </div>
-        </div>
-      );
-
-    case "rich_text":
-      return (
-        <div className="p-6 prose prose-sm max-w-none dark:prose-invert" dangerouslySetInnerHTML={{ __html: sanitizeHtml((c.content as string) || "") }} />
-      );
-
-    case "stats_strip":
-      return (
-        <div className={`py-8 px-6 ${c.bgColor === "primary" ? "bg-blue-600 text-white" : "bg-gray-50 dark:bg-gray-900"}`}>
-          <div className="grid grid-cols-4 gap-4 text-center">
-            {((c.stats as { value: string; label: string }[]) || []).map((s, i) => (
-              <div key={i}>
-                <p className="text-xl font-bold">{s.value}</p>
-                <p className={`text-xs ${c.bgColor === "primary" ? "text-white/70" : "text-gray-500"}`}>{s.label}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      );
-
-    case "feature_cards":
-    case "icon_cards":
-      return (
-        <div className="py-8 px-6">
-          {c.title && <h2 className="text-lg font-bold text-center mb-1">{c.title as string}</h2>}
-          {c.subtitle && <p className="text-sm text-gray-500 text-center mb-4">{c.subtitle as string}</p>}
-          <div className={`grid gap-3 ${c.columns === "2" ? "grid-cols-2" : c.columns === "4" ? "grid-cols-4" : "grid-cols-3"}`}>
-            {((c.cards as { title: string; description: string }[]) || []).map((card, i) => (
-              <div key={i} className="p-4 rounded-xl border bg-white dark:bg-card">
-                <h3 className="text-sm font-semibold mb-1">{card.title}</h3>
-                <p className="text-xs text-gray-500">{card.description}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      );
-
-    case "cta_banner":
-      return (
-        <div className={`py-10 px-6 text-center ${c.bgStyle === "gradient" ? "bg-gradient-to-r from-blue-600 to-indigo-600 text-white" : c.bgStyle === "solid" ? "bg-blue-600 text-white" : "bg-gray-100 dark:bg-gray-800"}`}>
-          <h2 className="text-lg font-bold mb-2">{(c.title as string) || "CTA Title"}</h2>
-          {c.subtitle && <p className={`text-sm mb-4 ${c.bgStyle !== "image" ? "text-white/80" : "text-gray-600"}`}>{c.subtitle as string}</p>}
-          <div className="flex gap-2 justify-center">
-            {c.ctaLabel && <span className="inline-block px-4 py-2 bg-white text-blue-600 rounded-lg text-xs font-medium">{c.ctaLabel as string}</span>}
-          </div>
-        </div>
-      );
-
-    case "faq":
-      return (
-        <div className="py-8 px-6">
-          {c.title && <h2 className="text-lg font-bold text-center mb-4">{c.title as string}</h2>}
-          <div className="space-y-2 max-w-xl mx-auto">
-            {((c.items as { question: string; answer: string }[]) || []).map((item, i) => (
-              <div key={i} className="p-3 rounded-lg border">
-                <p className="text-sm font-medium">{item.question}</p>
-                <p className="text-xs text-gray-500 mt-1">{item.answer}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      );
-
-    case "team_grid":
-      return (
-        <div className="py-8 px-6">
-          {c.title && <h2 className="text-lg font-bold text-center mb-4">{c.title as string}</h2>}
-          <div className="grid grid-cols-4 gap-3">
-            {((c.members as { name: string; role: string }[]) || []).map((m, i) => (
-              <div key={i} className="text-center p-3">
-                <div className="w-12 h-12 rounded-full bg-blue-100 dark:bg-blue-900 mx-auto mb-2 flex items-center justify-center text-sm font-bold text-blue-600">{m.name?.[0]}</div>
-                <p className="text-xs font-medium">{m.name}</p>
-                <p className="text-[10px] text-gray-500">{m.role}</p>
-              </div>
-            ))}
-            {((c.members as unknown[]) || []).length === 0 && <p className="col-span-4 text-center text-xs text-gray-400">Team members from collections</p>}
-          </div>
-        </div>
-      );
-
-    case "office_list":
-      return (
-        <div className="py-8 px-6">
-          {c.title && <h2 className="text-lg font-bold text-center mb-4">{c.title as string}</h2>}
-          <div className="grid grid-cols-2 gap-3">
-            {((c.offices as { name: string; city: string; address: string }[]) || []).map((o, i) => (
-              <div key={i} className="p-3 rounded-lg border">
-                <p className="text-sm font-semibold">{o.name}</p>
-                <p className="text-xs text-gray-500">{o.city}</p>
-              </div>
-            ))}
-            {((c.offices as unknown[]) || []).length === 0 && <p className="col-span-2 text-center text-xs text-gray-400">Offices from collections</p>}
-          </div>
-        </div>
-      );
-
-    case "logo_grid":
-      return (
-        <div className="py-8 px-6">
-          {c.title && <h2 className="text-lg font-bold text-center mb-4">{c.title as string}</h2>}
-          <div className="flex flex-wrap gap-4 justify-center">
-            {((c.logos as { name: string; imageUrl: string }[]) || []).map((l, i) => (
-              <div key={i} className="w-20 h-12 rounded border flex items-center justify-center text-xs text-gray-400 bg-gray-50 dark:bg-gray-800">
-                {l.imageUrl ? <img src={l.imageUrl} alt={l.name} className="max-h-10 max-w-16 object-contain" /> : l.name}
-              </div>
-            ))}
-            {((c.logos as unknown[]) || []).length === 0 && <p className="text-xs text-gray-400">Add logos to display</p>}
-          </div>
-        </div>
-      );
-
-    case "testimonials":
-      return (
-        <div className="py-8 px-6">
-          {c.title && <h2 className="text-lg font-bold text-center mb-4">{c.title as string}</h2>}
-          <div className={c.layout === "grid" ? "grid grid-cols-2 gap-3" : "space-y-3"}>
-            {((c.items as { name: string; content: string; role: string }[]) || []).map((t, i) => (
-              <div key={i} className="p-3 rounded-lg border bg-white dark:bg-card">
-                <p className="text-xs italic text-gray-600 dark:text-gray-400 mb-2">"{t.content}"</p>
-                <p className="text-xs font-medium">{t.name}</p>
-                {t.role && <p className="text-[10px] text-gray-500">{t.role}</p>}
-              </div>
-            ))}
-            {((c.items as unknown[]) || []).length === 0 && <p className="text-center text-xs text-gray-400">Testimonials from collections</p>}
-          </div>
-        </div>
-      );
-
-    case "section_title": {
-      const alignCls = c.alignment === "left" ? "text-left" : c.alignment === "right" ? "text-right" : "text-center";
-      return (
-        <div className={`py-6 px-6 ${alignCls}`}>
-          <h2 className={`font-bold ${c.size === "lg" ? "text-2xl" : c.size === "sm" ? "text-base" : "text-lg"}`}>{(c.title as string) || "Section Title"}</h2>
-          {c.subtitle && <p className="text-sm text-gray-500 mt-1">{c.subtitle as string}</p>}
-        </div>
-      );
-    }
-
-    case "spacer_divider":
-      return (
-        <div style={{ height: `${(c.height as number) || 48}px` }} className="flex items-center justify-center">
-          {c.showDivider && <hr className="w-full border-t" style={{ borderColor: (c.dividerColor as string) || "#e5e7eb" }} />}
-        </div>
-      );
-
-    case "global_block":
-      return <GlobalBlockPreview componentId={c.globalComponentId as number | null} slug={c.globalComponentSlug as string} />;
-
-    default:
-      return (
-        <div className="py-6 px-6 text-center text-sm text-gray-400">
-          Unknown block type: {block.blockType}
-        </div>
-      );
-  }
+    </div>;
+  const isExactHome = template === "home" && visibleBlocks.every(block => MANAGED_HOME_BLOCK_TYPES.has(block.blockType));
+  const managedTemplate = ["about", "countries", "programs", "blog", "contact"].includes(String(template || ""))
+    ? String(template)
+    : null;
+  return isExactHome
+    ? <div className="home-future-page">{preview}</div>
+    : <CmsPageCanvas className={`cms-editor-preview${managedTemplate ? ` managed-agency-page managed-agency-page--${managedTemplate}` : ""}`}>
+        <div data-managed-template={managedTemplate || undefined}>{preview}</div>
+      </CmsPageCanvas>;
 }

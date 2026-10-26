@@ -1,12 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { parseCatalogInventoryQuery, catalogAvailability, catalogSourceEditPath } from "../src/lib/websiteCatalogInventoryContract";
+import { parseCatalogInventoryQuery, catalogAvailability, catalogSourceEditPath, resolveCatalogEditorialState } from "../src/lib/websiteCatalogInventoryContract";
 
 test("catalogue inventory validates bounded explicit kinds, locales, search and pagination", () => {
-  assert.deepEqual(parseCatalogInventoryQuery({}), { kind: "program", locale: "en", q: "", page: 1, pageSize: 25 });
-  assert.deepEqual(parseCatalogInventoryQuery({ kind: "city", locale: "ar", page: "2", pageSize: "50", q: " London " }), { kind: "city", locale: "ar", page: 2, pageSize: 50, q: "London" });
-  for (const bad of [{ kind: "users" }, { kind: ["city"] }, { locale: "xx" }, { page: "0" }, { page: "10001" }, { pageSize: "51" }, { pageSize: "-1" }, { q: "x".repeat(121) }, { q: "\n" }, { q: {} }, { status: "published" }]) assert.throws(() => parseCatalogInventoryQuery(bad));
+  assert.deepEqual(parseCatalogInventoryQuery({}), { kind: "program", locale: "en", q: "", page: 1, pageSize: 25, sort: "title_asc" });
+  assert.deepEqual(parseCatalogInventoryQuery({ kind: "city", locale: "ar", page: "12003", pageSize: "50", q: " London ", sort: "updated_desc" }), { kind: "city", locale: "ar", page: 12003, pageSize: 50, q: "London", sort: "updated_desc" });
+  for (const bad of [{ kind: "users" }, { kind: ["city"] }, { locale: "xx" }, { page: "0" }, { page: "1000000" }, { pageSize: "51" }, { pageSize: "-1" }, { sort: "random" }, { q: "x".repeat(121) }, { q: "\n" }, { q: {} }, { status: "published" }]) assert.throws(() => parseCatalogInventoryQuery(bad));
 });
 
 test("inventory separates catalogue visibility, source activity and admissions", () => {
@@ -29,6 +29,14 @@ test("source links preserve catalogue identity and never use public titles as re
   assert.equal(url.searchParams.get("q"), "A&B / Test");
 });
 
+test("editorial state distinguishes live pages, pending drafts and template-only pages", () => {
+  assert.equal(resolveCatalogEditorialState({}), "TEMPLATE_ONLY");
+  assert.equal(resolveCatalogEditorialState({ pageStatus: "draft" }), "DRAFT");
+  assert.equal(resolveCatalogEditorialState({ pageStatus: "published", pagePublishedAt: new Date(), publishedVersionNumber: 2 }), "LIVE");
+  assert.equal(resolveCatalogEditorialState({ pageStatus: "draft", pagePublishedAt: new Date(), publishedVersionNumber: 2 }), "LIVE_WITH_DRAFT");
+  assert.equal(resolveCatalogEditorialState({ pageStatus: "published", pagePublishedAt: new Date(), publishedVersionNumber: null }), "DRAFT");
+});
+
 test("inventory is admin-only, no-store, bounded and contains no catalogue or publication writer", () => {
   const routes = readFileSync(new URL("../src/routes/website.ts", import.meta.url), "utf8");
   assert.match(routes, /router.get\("\/website\/catalog-pages", \.\.\.adminOnly/);
@@ -42,4 +50,6 @@ test("inventory is admin-only, no-store, bounded and contains no catalogue or pu
   assert.match(model, /readPublicEntityPublicationSummaries/);
   assert.match(model, /resolvePublishedEntitySeoState/);
   assert.match(model, /NOT_EVALUATED/);
+  assert.match(model, /resolveCatalogEditorialState/);
+  assert.match(model, /websitePageVersionsTable/);
 });

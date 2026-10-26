@@ -178,7 +178,7 @@ export function PublicProgramCard({ program: prog, index: _index, onApply, onDet
           </div>
         )}
 
-        <div className="grid grid-cols-3 gap-2 bg-muted/40 rounded-xl p-3">
+        <div className="grid grid-cols-1 min-[420px]:grid-cols-2 sm:grid-cols-3 gap-2 bg-muted/40 rounded-xl p-3">
           {prog.degree && (
             <div className="flex flex-col gap-0.5 min-w-0">
               <span className="flex items-center gap-1 text-[9px] text-muted-foreground font-medium"><GraduationCap className="w-3 h-3 text-violet-500 shrink-0" aria-hidden="true" />{t("courseFinderPage.degree")}</span>

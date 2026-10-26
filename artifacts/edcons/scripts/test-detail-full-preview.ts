@@ -94,8 +94,15 @@ test("static preview uses the real renderers, no public route and no executable 
   for (const page of ["CountryDetail", "CityDetail", "UniversityDetail", "ProgramDetail"]) assert.ok(render.includes(`@/pages/public/${page}`));
   assert.match(render, /renderToReadableStream/); assert.match(render, /stream\.allReady/);
   assert.match(render, /script-src 'none'/); assert.match(render, /connect-src 'none'/); assert.match(render, /form-action 'none'/);
+  assert.match(render, /public-website-assets/);
+  assert.match(render, /\[a-f0-9\]\{64\}/);
   assert.match(render, /template\.content\.querySelectorAll/); assert.match(render, /element\.setAttribute\("disabled", ""\)/);
-  assert.match(preview, /sandbox="" referrerPolicy="no-referrer" srcDoc=/);
+  assert.match(
+    preview.replace(/\s+/g, " "),
+    /sandbox="" referrerPolicy="no-referrer" srcDoc=/,
+  );
   assert.match(preview, /if \(!current \|\| controller\.signal\.aborted\) return/);
+  assert.match(preview.replace(/\s+/g, " "), /payloadOverride \?\? readDetailPreviewJson\(route\.readPath/);
+  assert.match(preview.replace(/\s+/g, " "), /!payloadOverride && target\.kind === "university"/);
   assert.doesNotMatch(render + preview, /localStorage|sessionStorage|dangerouslySetInnerHTML|method: "(?:POST|PUT|PATCH|DELETE)"/);
 });

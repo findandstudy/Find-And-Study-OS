@@ -1,11 +1,12 @@
-import { db, countriesTable, citiesTable, universitiesTable, programsTable, programTranslationsTable } from "@workspace/db";
-import { and, asc, eq, ilike, or, sql } from "drizzle-orm";
+import { db, countriesTable, citiesTable, universitiesTable, programsTable, programTranslationsTable, websitePagesTable, websitePageVersionsTable } from "@workspace/db";
+import { and, asc, desc, eq, ilike, inArray, isNotNull, lte, or, sql } from "drizzle-orm";
 import { getPublicCatalogPolicy, addPublicCatalogConditions } from "./publicCatalogQueryPolicy";
 import { publicCatalogPath, publicCatalogRouteKey } from "./publicCatalogRouteContract";
 import { readPublicCatalogCountryDirectory, catalogCountryRoute } from "./publicCatalogLocationLinks";
 import { countryMatches } from "./websiteCatalogFilters";
 import { readPublicEntityPublicationSummaries, readPublishedLocalizedEntities, resolvePublishedEntitySeoState } from "./publicWebDiscoveryReadModel";
-import { catalogAvailability, catalogSourceEditPath, type CatalogInventoryQuery, type CatalogInventoryIssue } from "./websiteCatalogInventoryContract";
+import { catalogAvailability, catalogSourceEditPath, resolveCatalogEditorialState, type CatalogInventoryQuery, type CatalogInventoryIssue } from "./websiteCatalogInventoryContract";
+import { detailContentSlug } from "./websiteDetailContent";
 
 type Source = { id: number; name: string; sourceName: string; active: boolean; parentActive: boolean; policyVisible: boolean; hasDescription: boolean; hasMedia: boolean; updatedAt: Date; translationStatus: string | null; countryId?: number };
 
@@ -14,6 +15,14 @@ export async function readWebsiteCatalogInventory(query: CatalogInventoryQuery) 
   const offset = (query.page - 1) * query.pageSize;
   const pattern = `%${query.q.replace(/[\\%_]/g, "\\$&")}%`;
   const sourceSearch = (name: any, id: any) => !query.q ? undefined : or(ilike(name, pattern), /^\d+$/.test(query.q) && Number(query.q) <= 2_147_483_647 ? eq(id, Number(query.q)) : sql`false`);
+  const orderFor = (name: any, id: any, updatedAt: any) => {
+    if (query.sort === "title_desc") return [desc(name), desc(id)];
+    if (query.sort === "updated_desc") return [desc(updatedAt), desc(id)];
+    if (query.sort === "updated_asc") return [asc(updatedAt), asc(id)];
+    if (query.sort === "id_desc") return [desc(id)];
+    if (query.sort === "id_asc") return [asc(id)];
+    return [asc(name), asc(id)];
+  };
   let rows: Source[];
   let total: number;
   let directory: Awaited<ReturnType<typeof readPublicCatalogCountryDirectory>> | undefined;
@@ -21,7 +30,7 @@ export async function readWebsiteCatalogInventory(query: CatalogInventoryQuery) 
     const where = sourceSearch(countriesTable.name, countriesTable.id);
     const [[count], sources, countryDirectory] = await Promise.all([
       db.select({ value: sql<number>`count(*)` }).from(countriesTable).where(where),
-      db.select({ id: countriesTable.id, name: countriesTable.name, isActive: countriesTable.isActive, updatedAt: countriesTable.updatedAt }).from(countriesTable).where(where).orderBy(asc(countriesTable.name), asc(countriesTable.id)).limit(query.pageSize).offset(offset),
+      db.select({ id: countriesTable.id, name: countriesTable.name, isActive: countriesTable.isActive, updatedAt: countriesTable.updatedAt }).from(countriesTable).where(where).orderBy(...orderFor(countriesTable.name, countriesTable.id, countriesTable.updatedAt)).limit(query.pageSize).offset(offset),
       readPublicCatalogCountryDirectory(query.locale),
     ]);
     directory = countryDirectory;
@@ -32,7 +41,7 @@ export async function readWebsiteCatalogInventory(query: CatalogInventoryQuery) 
     const [[count], sources] = await Promise.all([
       db.select({ value: sql<number>`count(*)` }).from(citiesTable).where(where),
       db.select({ id: citiesTable.id, name: citiesTable.name, isActive: citiesTable.isActive, countryId: citiesTable.countryId, parentActive: countriesTable.isActive, updatedAt: citiesTable.updatedAt })
-        .from(citiesTable).innerJoin(countriesTable, eq(citiesTable.countryId, countriesTable.id)).where(where).orderBy(asc(citiesTable.name), asc(citiesTable.id)).limit(query.pageSize).offset(offset),
+        .from(citiesTable).innerJoin(countriesTable, eq(citiesTable.countryId, countriesTable.id)).where(where).orderBy(...orderFor(citiesTable.name, citiesTable.id, citiesTable.updatedAt)).limit(query.pageSize).offset(offset),
     ]);
     total = Number(count.value);
     rows = sources.map(row => ({ ...row, sourceName: row.name, active: row.isActive, policyVisible: true, hasDescription: false, hasMedia: false, translationStatus: null }));
@@ -46,7 +55,7 @@ export async function readWebsiteCatalogInventory(query: CatalogInventoryQuery) 
         db.select({ value: sql<number>`count(*)` }).from(universitiesTable).where(where),
         db.select({ id: universitiesTable.id, name: universitiesTable.name, active: universitiesTable.isActive, policyVisible,
           hasDescription: sql<boolean>`length(trim(coalesce(${universitiesTable.description},'')))>0`, hasMedia: sql<boolean>`length(trim(coalesce(${universitiesTable.logoUrl},'')))>0`, updatedAt: universitiesTable.updatedAt })
-          .from(universitiesTable).where(where).orderBy(asc(universitiesTable.name), asc(universitiesTable.id)).limit(query.pageSize).offset(offset),
+          .from(universitiesTable).where(where).orderBy(...orderFor(universitiesTable.name, universitiesTable.id, universitiesTable.updatedAt)).limit(query.pageSize).offset(offset),
       ]);
       total = Number(count.value);
       rows = sources.map(row => ({ ...row, sourceName: row.name, parentActive: true, translationStatus: null }));
@@ -60,7 +69,7 @@ export async function readWebsiteCatalogInventory(query: CatalogInventoryQuery) 
           hasMedia: sql<boolean>`length(trim(coalesce(${universitiesTable.logoUrl},'')))>0`, updatedAt: programsTable.updatedAt, translationStatus: programTranslationsTable.status })
           .from(programsTable).innerJoin(universitiesTable, eq(programsTable.universityId, universitiesTable.id))
           .leftJoin(programTranslationsTable, and(eq(programTranslationsTable.programId, programsTable.id), eq(programTranslationsTable.locale, query.locale), eq(programTranslationsTable.status, "published")))
-          .where(where).orderBy(asc(programsTable.name), asc(programsTable.id)).limit(query.pageSize).offset(offset),
+          .where(where).orderBy(...orderFor(programsTable.name, programsTable.id, programsTable.updatedAt)).limit(query.pageSize).offset(offset),
       ]);
       total = Number(count.value);
       rows = sources;
@@ -81,10 +90,32 @@ export async function readWebsiteCatalogInventory(query: CatalogInventoryQuery) 
   }
   const entityIdFor = (row: Source) => query.kind === "country" ? destinationByCountry.get(row.id)?.id ?? null : row.id;
   const entityIds = rows.flatMap(row => { const id = entityIdFor(row); return id === null ? [] : [id]; });
-  const [publication, localized] = await Promise.all([
+  const detailKind = query.kind === "country" ? "destination" : query.kind;
+  const detailSlugs = rows.map(row => detailContentSlug(detailKind, row.id, query.locale));
+  const [publication, localized, detailPages] = await Promise.all([
     readPublicEntityPublicationSummaries({ entityType, entityIds, locale: query.locale }),
     entityType === "program" ? Promise.resolve(null) : readPublishedLocalizedEntities({ entityType, entityIds, locale: query.locale }),
+    detailSlugs.length ? db.select({
+      id: websitePagesTable.id,
+      slug: websitePagesTable.slug,
+      status: websitePagesTable.status,
+      publishedAt: websitePagesTable.publishedAt,
+      updatedAt: websitePagesTable.updatedAt,
+    }).from(websitePagesTable).where(inArray(websitePagesTable.slug, detailSlugs)) : Promise.resolve([]),
   ]);
+  const detailPageIds = detailPages.map(page => page.id);
+  const publishedVersions = detailPageIds.length ? await db.select({
+    pageId: websitePageVersionsTable.pageId,
+    versionNumber: websitePageVersionsTable.versionNumber,
+    publishedAt: websitePageVersionsTable.publishedAt,
+  }).from(websitePageVersionsTable).where(and(
+    inArray(websitePageVersionsTable.pageId, detailPageIds),
+    isNotNull(websitePageVersionsTable.publishedAt),
+    lte(websitePageVersionsTable.publishedAt, new Date()),
+  )).orderBy(desc(websitePageVersionsTable.versionNumber)) : [];
+  const latestPublishedVersion = new Map<number, typeof publishedVersions[number]>();
+  for (const version of publishedVersions) if (!latestPublishedVersion.has(version.pageId)) latestPublishedVersion.set(version.pageId, version);
+  const detailPageBySlug = new Map(detailPages.map(page => [page.slug, page]));
   // At most four scoped reads at a time; never fan out across the full catalogue.
   const seo = new Map<number, Awaited<ReturnType<typeof resolvePublishedEntitySeoState>>>();
   for (let at = 0; at < entityIds.length; at += 4) {
@@ -112,6 +143,8 @@ export async function readWebsiteCatalogInventory(query: CatalogInventoryQuery) 
     const contentDelivery = query.kind === "program" && row.translationStatus === "published" ? "PUBLISHED_TRANSLATION" : snapshot ? "PUBLISHED_REVISION" : query.locale === "en" ? "SOURCE_CATALOG" : "SOURCE_FALLBACK";
     if (contentDelivery === "SOURCE_FALLBACK") issues.push("TRANSLATION_FALLBACK");
     const state = entityId === null ? undefined : publication.entries.get(entityId);
+    const editorialPage = detailPageBySlug.get(detailContentSlug(detailKind, row.id, query.locale));
+    const editorialVersion = editorialPage ? latestPublishedVersion.get(editorialPage.id) : undefined;
     return {
       kind: query.kind, sourceId: row.id, title, sourceTitle: row.sourceName, canonicalPath,
       sourceEditPath: catalogSourceEditPath(query.kind, row.id, row.sourceName, row.countryId), locale: query.locale,
@@ -119,6 +152,17 @@ export async function readWebsiteCatalogInventory(query: CatalogInventoryQuery) 
       contentDelivery, issues, publication: {
         status: ambiguousCountries.has(row.id) ? "AMBIGUOUS_CONTENT_LINK" : !publication.evaluated ? "NOT_EVALUATED" : state?.status ?? "NO_CONTENT_RECORD",
         revisionNumber: state?.revisionNumber ?? null, qualityStatus: state?.qualityStatus ?? null, translationStatus: state?.translationStatus ?? null,
+      },
+      editorial: {
+        status: resolveCatalogEditorialState({
+          pageStatus: editorialPage?.status,
+          pagePublishedAt: editorialPage?.publishedAt,
+          publishedVersionNumber: editorialVersion?.versionNumber,
+        }),
+        pageId: editorialPage?.id ?? null,
+        publishedVersionNumber: editorialVersion?.versionNumber ?? null,
+        publishedAt: editorialVersion?.publishedAt?.toISOString() ?? null,
+        updatedAt: editorialPage?.updatedAt.toISOString() ?? null,
       },
       seo: !publication.evaluated ? "NOT_EVALUATED" : entityId !== null && seo.get(entityId)?.indexable ? "INDEX_ELIGIBLE" : "NOINDEX",
     };

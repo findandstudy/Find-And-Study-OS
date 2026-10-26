@@ -7,8 +7,14 @@ interface SeoOptions {
   description?: string;
   canonical?: string;
   noindex?: boolean;
+  nofollow?: boolean;
   ogImage?: string;
+  ogTitle?: string;
+  ogDescription?: string;
   ogType?: "website" | "article";
+  twitterTitle?: string;
+  twitterDescription?: string;
+  twitterImage?: string;
   lang?: Language;
   alternates?: Partial<Record<Language, string>>;
 }
@@ -42,7 +48,7 @@ function removeHreflangLinks() {
   document.querySelectorAll('link[rel="alternate"][hreflang]').forEach((el) => el.remove());
 }
 
-export function useSeo({ title, description, canonical, noindex = false, ogImage, ogType = "website", lang, alternates }: SeoOptions) {
+export function useSeo({ title, description, canonical, noindex = false, nofollow = false, ogImage, ogTitle, ogDescription, ogType = "website", twitterTitle, twitterDescription, twitterImage, lang, alternates }: SeoOptions) {
   const agencyBusinessName = useSyncExternalStore(
     subscribeAgencyBusinessName,
     getActiveAgencyBusinessName,
@@ -53,27 +59,28 @@ export function useSeo({ title, description, canonical, noindex = false, ogImage
     // White-label: when an agent / sub-agent is logged in, the browser tab
     // shows ONLY their business name — no page title, no site suffix.
     const siteName = agencyBusinessName || "Find And Study";
-    const fullTitle = agencyBusinessName ? agencyBusinessName : `${title} | ${siteName}`;
+    const alreadyBranded = /(?:^|\|)\s*find\s*(?:&|and)\s*study\s*$/i.test(title.trim());
+    const fullTitle = agencyBusinessName ? agencyBusinessName : alreadyBranded ? title : `${title} | ${siteName}`;
 
     document.title = fullTitle;
 
     if (description) setMeta("description", description);
-    setMeta("robots", noindex ? "noindex, nofollow" : "index, follow");
+    setMeta("robots", `${noindex ? "noindex" : "index"}, ${nofollow ? "nofollow" : "follow"}`);
 
     const canonicalHref = canonical ?? window.location.href.split("?")[0].split("#")[0];
     setLink("canonical", canonicalHref);
 
-    setMeta("og:title", fullTitle, true);
+    setMeta("og:title", ogTitle || fullTitle, true);
     setMeta("og:site_name", siteName, true);
     setMeta("og:type", ogType, true);
     setMeta("og:url", canonicalHref, true);
-    if (description) setMeta("og:description", description, true);
+    if (ogDescription || description) setMeta("og:description", ogDescription || description || "", true);
     if (ogImage) setMeta("og:image", ogImage, true);
 
     setMeta("twitter:card", "summary_large_image");
-    setMeta("twitter:title", fullTitle);
-    if (description) setMeta("twitter:description", description);
-    if (ogImage) setMeta("twitter:image", ogImage);
+    setMeta("twitter:title", twitterTitle || ogTitle || fullTitle);
+    if (twitterDescription || ogDescription || description) setMeta("twitter:description", twitterDescription || ogDescription || description || "");
+    if (twitterImage || ogImage) setMeta("twitter:image", twitterImage || ogImage || "");
 
     removeHreflangLinks();
 
@@ -107,5 +114,5 @@ export function useSeo({ title, description, canonical, noindex = false, ogImage
     return () => {
       removeHreflangLinks();
     };
-  }, [title, description, canonical, noindex, ogImage, ogType, lang, alternates, agencyBusinessName]);
+  }, [title, description, canonical, noindex, nofollow, ogImage, ogTitle, ogDescription, ogType, twitterTitle, twitterDescription, twitterImage, lang, alternates, agencyBusinessName]);
 }

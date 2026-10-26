@@ -6,10 +6,12 @@ import { useSeo } from "@/hooks/use-seo";
 import { useJsonLd, SITE_URL, SITE_NAME } from "@/hooks/use-json-ld";
 import { Input } from "@/components/ui/input";
 import { motion } from "framer-motion";
-import { Mail, Phone, MapPin, Clock, MessageSquare, Send, CheckCircle } from "lucide-react";
+import { Mail, Phone, MapPin, Clock, Send, CheckCircle } from "lucide-react";
 import { customFetch } from "@workspace/api-client-react";
 import { useQuery } from "@tanstack/react-query";
 import { PhoneCodePicker } from "@/components/ui/phone-code-picker";
+import { ManagedPublicPage } from "./ManagedPublicPage";
+import { useTemplatePage, useTemplatePageSeo } from "./useTemplatePage";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
@@ -56,6 +58,7 @@ interface Branding {
 
 export default function Contact() {
   const { t, lang } = useI18n();
+  const managedPage = useTemplatePage("contact", lang);
 
   const { data: offices = [] } = useQuery<Office[]>({
     queryKey: ["cms-offices", lang],
@@ -75,7 +78,9 @@ export default function Contact() {
 
   const primaryOffice = offices[0] ?? null;
 
-  useSeo({ title: t("seo.contactTitle"), description: t("seo.contactDesc"), lang });
+  useSeo({ title: managedPage?.meta.title || t("seo.contactTitle"), description: managedPage?.meta.description || t("seo.contactDesc"), lang,
+    noindex: managedPage ? !managedPage.meta.indexable : false, alternates: managedPage?.meta.alternatePaths });
+  useTemplatePageSeo(managedPage);
   useJsonLd([
     {
       "@context": "https://schema.org",
@@ -201,28 +206,8 @@ export default function Contact() {
     workingHours ? { icon: Clock, label: t("contact.hoursLabel"), value: workingHours, href: undefined } : null,
   ].filter(Boolean) as { icon: typeof Mail; label: string; value: string; href: string | undefined }[];
 
-  return (
-    <>
-      <section className="pt-24 pb-16 bg-gradient-to-br from-primary/5 to-background">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-            <span className="inline-flex items-center gap-2 bg-primary/10 text-primary text-sm font-semibold px-4 py-2 rounded-full mb-6">
-              <MessageSquare className="w-4 h-4" /> {t("contact.badge")}
-            </span>
-            <h1 className="text-4xl md:text-6xl font-display font-bold text-foreground mb-6">
-              {t("contact.title")}
-              {t("contact.titleHighlight") ? (
-                <> <span className="text-primary">{t("contact.titleHighlight")}</span></>
-              ) : null}
-            </h1>
-            <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-              {t("contact.subtitle")}
-            </p>
-          </motion.div>
-        </div>
-      </section>
-
-      <section className="py-16">
+  const contactWorkspace = (
+      <section id="offices" className="scroll-mt-28 py-16">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 grid lg:grid-cols-2 gap-16">
           <motion.div initial={{ opacity: 0, x: -30 }} animate={{ opacity: 1, x: 0 }}>
             <h2 className="text-2xl font-display font-bold text-foreground mb-2">{t("contact.formTitle")}</h2>
@@ -374,6 +359,13 @@ export default function Contact() {
           </motion.div>
         </div>
       </section>
-    </>
   );
+
+  return <ManagedPublicPage
+    template="contact"
+    lang={lang}
+    page={managedPage}
+    slotBlockType="office_list"
+    slotContent={contactWorkspace}
+  />;
 }

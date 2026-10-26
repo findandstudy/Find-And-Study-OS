@@ -1,6 +1,8 @@
 import { projectPublicTuition, publicMinorAmount, publicCurrency } from "./publicCatalogTuition";
+import { JSDOM } from "jsdom";
 import { publicCatalogRequirements } from "./publicCatalogRequirements";
-import { parseDetailContent } from "./websiteDetailContentContract";
+import { detailContentPresentationOverrides, parseDetailContent, resolveDetailTemplateContent, type DetailContent } from "./websiteDetailContentContract";
+import type { DetailSectionPresentation } from "./websiteDetailLayoutContract";
 import {
   PROGRAM_SUPPORTED_LOCALES,
   type ProgramSupportedLocale,
@@ -556,12 +558,82 @@ function safeJson(value: unknown): string {
     .replace(/&/g, "\\u0026");
 }
 
-/** Mirrors the visitor-visible editorial content without authoring state or raw HTML. */
-function renderDetailContent(model: PublicCatalogRenderModel): string {
+const templateNumber = (value: unknown, locale: string) => typeof value === "number" && Number.isFinite(value) ? new Intl.NumberFormat(locale).format(value) : null;
+
+function detailTemplateVariablesForModel(model: PublicCatalogRenderModel): Record<string, string | null> {
+  if (model.kind === "destination_detail") return {
+    "destination.name": model.destination.name,
+    "destination.country": model.destination.country,
+    "destination.shortDescription": model.description,
+    "destination.description": model.description,
+    "destination.language": model.destination.language,
+    "destination.currency": model.destination.currency,
+    "destination.climate": model.destination.climate,
+    "destination.livingCost": model.destination.livingCost,
+    "destination.visaInfo": model.destination.visaInfo,
+    "destination.workPermit": model.destination.workPermit,
+    "stats.universityCount": templateNumber(model.destination.universityCount, model.locale),
+    "stats.programCount": templateNumber(model.destination.programCount, model.locale),
+    "stats.cityCount": templateNumber(model.destination.cityLinks?.length ?? model.destination.popularCities.length, model.locale),
+  };
+  if (model.kind === "city_detail") return {
+    "city.name": model.city.name,
+    "city.country": model.city.country,
+    "city.description": model.city.description,
+    "city.universityCount": templateNumber(model.city.universityCount, model.locale),
+    "city.programCount": templateNumber(model.city.programCount, model.locale),
+    "city.programLanguages": null,
+    "city.transportModes": null,
+    "city.campusGeography": null,
+    "city.climateSummary": null,
+    "city.climateAverage": null,
+    "city.housingSummary": null,
+    "city.housingFormats": null,
+  };
+  if (model.kind === "university_detail") return {
+    "university.name": model.university.name,
+    "university.country": model.university.country,
+    "university.city": model.university.city,
+    "university.type": model.university.universityType,
+    "stats.programCount": templateNumber(model.university.programCount, model.locale),
+  };
+  if (model.kind === "program_detail") {
+    const tuition = model.program.verifiedTuition ? publicMinorAmount(model.program.verifiedTuition.amountMinor, model.program.verifiedTuition.currencyCode) : model.program.tuitionFee;
+    const currency = model.program.verifiedTuition?.currencyCode ?? model.program.currency;
+    const money = (value: number | null | undefined) => value == null || !currency ? null : new Intl.NumberFormat(model.locale, { style: "currency", currency }).format(value);
+    return {
+      "program.name": model.program.name,
+      "program.degree": model.program.degree,
+      "program.field": model.program.field,
+      "program.language": model.program.language,
+      "program.duration": model.program.duration,
+      "program.tuitionFee": money(tuition),
+      "program.discountedFee": money(model.program.discountedFee),
+      "program.currency": currency,
+      "program.requirements": model.program.requirements ?? null,
+      "university.name": model.program.universityName,
+      "university.country": model.program.country,
+      "university.city": model.program.city,
+      "stats.intakeCount": templateNumber(model.intakes?.length ?? 0, model.locale),
+      "stats.relatedProgramCount": templateNumber(model.relatedPrograms.length, model.locale),
+    };
+  }
+  return {};
+}
+
+function detailContentForModel(model: PublicCatalogRenderModel): DetailContent | null {
   const content = parseDetailContent(model.editorial);
   const entityId = model.kind === "program_detail" ? model.program.id : model.kind === "university_detail" ? model.university.id
     : model.kind === "city_detail" ? model.city.id : model.kind === "destination_detail" ? model.destination.catalogCountryId : null;
-  if (!content || content.locale !== model.locale || content.entityId !== entityId || `${content.kind}_detail` !== model.kind) return "";
+  return !content || content.locale !== model.locale || content.entityId !== entityId || `${content.kind}_detail` !== model.kind
+    ? null
+    : resolveDetailTemplateContent(content, detailTemplateVariablesForModel(model));
+}
+
+/** Mirrors the visitor-visible editorial content without authoring state or raw HTML. */
+function renderDetailContent(model: PublicCatalogRenderModel): string {
+  const content = detailContentForModel(model);
+  if (!content) return "";
   return content.sections.map(section => {
     const cards = section.cards?.map(card => `<article><h3>${card.href ? `<a href="${escapeHtml(card.href)}" rel="noopener noreferrer">${escapeHtml(card.title)}</a>` : escapeHtml(card.title)}</h3><p>${escapeHtml(card.body)}</p></article>`).join("") || "";
     const images = section.images?.map(image => `<figure><img loading="lazy" decoding="async" src="${escapeHtml(image.src)}" alt="${escapeHtml(image.alt)}" width="800" height="560" />${image.caption ? `<figcaption>${escapeHtml(image.caption)}</figcaption>` : ""}</figure>`).join("") || "";
@@ -863,6 +935,53 @@ function pageText(value: unknown, maximum = 2_000): string {
     .trim();
 }
 
+const PUBLIC_HTML_SECTION_TAGS = new Set([
+  "p", "br", "strong", "em", "b", "i", "u", "a", "ul", "ol", "li", "h2", "h3", "h4", "h5", "h6",
+  "blockquote", "code", "pre", "span", "hr", "div", "section", "article", "aside", "header", "footer", "main", "nav",
+  "figure", "figcaption", "img", "table", "thead", "tbody", "tfoot", "tr", "th", "td", "caption", "dl", "dt", "dd",
+  "details", "summary",
+]);
+const PUBLIC_HTML_SECTION_ATTRS = new Set([
+  "href", "src", "alt", "title", "class", "id", "width", "height", "loading", "colspan", "rowspan", "scope", "open",
+  "aria-label", "aria-labelledby", "aria-describedby",
+]);
+const PUBLIC_HTML_SECTION_FORBIDDEN = new Set([
+  "script", "style", "iframe", "object", "embed", "form", "input", "button", "textarea", "select", "option", "svg", "math",
+]);
+
+function sanitizePublicHtmlSection(value: unknown): string {
+  const source = typeof value === "string" ? value.slice(0, 200_000) : "";
+  const body = new JSDOM(`<!doctype html><body>${source}</body>`).window.document.body;
+  for (const element of Array.from(body.querySelectorAll("*"))) {
+    const tag = element.tagName.toLowerCase();
+    if (PUBLIC_HTML_SECTION_FORBIDDEN.has(tag)) {
+      element.remove();
+      continue;
+    }
+    if (!PUBLIC_HTML_SECTION_TAGS.has(tag)) {
+      element.replaceWith(...Array.from(element.childNodes));
+      continue;
+    }
+    for (const attribute of Array.from(element.attributes)) {
+      const name = attribute.name.toLowerCase();
+      if (!PUBLIC_HTML_SECTION_ATTRS.has(name) || name.startsWith("on")) element.removeAttribute(attribute.name);
+    }
+    const href = element.getAttribute("href");
+    if (href && !safePublicUrl(href)) element.removeAttribute("href");
+    const src = element.getAttribute("src");
+    if (src && !safePublicImageUrl(src)) element.removeAttribute("src");
+    const className = element.getAttribute("class");
+    if (className && !/^[a-zA-Z0-9_\-\s]{1,512}$/.test(className)) element.removeAttribute("class");
+    const id = element.getAttribute("id");
+    if (id && !/^[a-zA-Z][a-zA-Z0-9_\-:.]{0,127}$/.test(id)) element.removeAttribute("id");
+    for (const name of ["width", "height", "colspan", "rowspan"] as const) {
+      const current = element.getAttribute(name);
+      if (current && !/^\d{1,4}$/.test(current)) element.removeAttribute(name);
+    }
+  }
+  return body.innerHTML;
+}
+
 function spacerHeightClass(value: unknown): string {
   // Keep the same literal sizes in PublicPage.tsx so Tailwind emits their CSS.
   const classes = [
@@ -876,7 +995,7 @@ function spacerHeightClass(value: unknown): string {
   return classes[Math.round(height / 8) - 1];
 }
 
-function renderPublicPageBlock(block: PublicPageBlock, index: number): string {
+function renderPublicPageBlockBody(block: PublicPageBlock, index: number): string {
   const content = block.content;
   if (block.blockType === "home_fallback_hero") {
     const title = pageText(content.title, 500);
@@ -886,7 +1005,18 @@ function renderPublicPageBlock(block: PublicPageBlock, index: number): string {
     const label = pageText(content.ctaLabel, 200);
     const secondaryHref = safePublicUrl(content.secondaryUrl);
     const secondaryLabel = pageText(content.secondaryLabel, 200);
-    return `<section class="relative pt-24 pb-32 lg:pt-36 lg:pb-40 overflow-hidden"><div class="absolute inset-0 z-0" aria-hidden="true"><div class="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,hsl(var(--primary)/0.12),transparent_38%),radial-gradient(circle_at_80%_10%,hsl(var(--accent)/0.10),transparent_34%)]"></div><div class="absolute inset-0 bg-gradient-to-b from-background/0 via-background/50 to-background"></div></div><div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 text-center"><div>${badge ? `<div class="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 text-primary font-medium text-sm mb-8 border border-primary/20 shadow-sm"><svg aria-hidden="true" class="w-4 h-4 fill-primary" viewBox="0 0 24 24" width="16" height="16"><path d="m12 2.5 2.9 5.9 6.5.9-4.7 4.6 1.1 6.5-5.8-3.1-5.8 3.1 1.1-6.5-4.7-4.6 6.5-.9L12 2.5Z"></path></svg>${escapeHtml(badge)}</div>` : ""}<h1 class="text-5xl md:text-7xl font-bold font-display tracking-tight text-foreground max-w-4xl mx-auto leading-[1.1]">${escapeHtml(title)}</h1>${subtitle ? `<p class="mt-6 text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed">${escapeHtml(subtitle)}</p>` : ""}<div class="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">${href && label ? `<a class="inline-flex items-center justify-center rounded-full px-8 h-14 text-base font-medium bg-primary text-primary-foreground shadow-xl shadow-primary/25 hover:shadow-primary/40 hover:-translate-y-1 transition-all duration-300" href="${escapeHtml(href)}">${escapeHtml(label)}<svg aria-hidden="true" class="ms-2 w-5 h-5" viewBox="0 0 24 24" width="20" height="20"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14m-6-6 6 6-6 6"></path></svg></a>` : ""}${secondaryHref && secondaryLabel ? `<a class="inline-flex items-center justify-center rounded-full px-8 h-14 text-base font-medium border border-input bg-white/50 backdrop-blur hover:bg-white transition-all duration-300" href="${escapeHtml(secondaryHref)}">${escapeHtml(secondaryLabel)}</a>` : ""}</div></div></div></section>`;
+    const signals = pageItems(content.signals, 5);
+    const journeySignals = signals.length ? signals : [{ label: "Explore", detail: "Destinations and programs" }, { label: "Prepare", detail: "Requirements and documents" }, { label: "Progress", detail: "Milestones and next actions" }];
+    const journey = journeySignals.map((signal, signalIndex) => `<article><span>${String(signalIndex + 1).padStart(2, "0")}</span><div><strong>${escapeHtml(pageText(signal.label, 120))}</strong><p>${escapeHtml(pageText(signal.detail, 240))}</p></div>${signalIndex < journeySignals.length - 1 ? `<i aria-hidden="true"></i>` : ""}</article>`).join("");
+    return `<section class="home-future-hero relative overflow-hidden"><div class="home-future-aurora" aria-hidden="true"></div><div class="home-future-hero-grid relative z-10 mx-auto grid max-w-7xl items-center gap-14 px-4 py-20 sm:px-6 lg:grid-cols-[1.08fr_.92fr] lg:px-8 lg:py-28"><div class="home-future-hero-copy">${badge ? `<div class="home-future-badge">${escapeHtml(badge)}</div>` : ""}<h1 class="font-display text-5xl font-bold leading-[1.02] tracking-[-.055em] sm:text-6xl lg:text-7xl">${escapeHtml(title)}</h1>${subtitle ? `<p class="mt-7 max-w-2xl text-lg leading-8 text-white/70 sm:text-xl">${escapeHtml(subtitle)}</p>` : ""}<div class="cms-action-row mt-10 flex flex-col items-stretch gap-3 sm:flex-row sm:items-center">${href && label ? `<a class="inline-flex items-center justify-center rounded-full px-8 h-14 text-base font-medium bg-primary text-primary-foreground" href="${escapeHtml(href)}">${escapeHtml(label)}</a>` : ""}${secondaryHref && secondaryLabel ? `<a class="inline-flex items-center justify-center rounded-full border border-white/25 bg-white/5 px-8 h-14 text-base text-white" href="${escapeHtml(secondaryHref)}">${escapeHtml(secondaryLabel)}</a>` : ""}</div></div><aside class="home-journey-console"><div class="home-console-head"><p>${escapeHtml(pageText(content.signalTitle, 300) || "Student journey")}</p>${content.signalSubtitle ? `<span>${escapeHtml(pageText(content.signalSubtitle, 500))}</span>` : ""}</div><div class="home-console-flow">${journey}</div></aside></div></section>`;
+  }
+  if (block.blockType === "home_fallback_stats") {
+    const stats = pageItems(content.stats, 12).map((item) => `<div class="space-y-2"><h3 class="text-4xl md:text-5xl font-bold font-display text-primary">${escapeHtml(pageText(item.value, 100))}</h3><p class="text-muted-foreground font-medium">${escapeHtml(pageText(item.label, 200))}</p></div>`).join("");
+    return `<section class="py-20 bg-card border-y border-border/50"><div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8"><div class="grid grid-cols-2 md:grid-cols-4 gap-8 text-center">${stats}</div></div></section>`;
+  }
+  if (block.blockType === "home_fallback_features") {
+    const cards = pageItems(content.cards, 12).map((item) => `<article class="glass-card p-8 rounded-3xl"><h3 class="text-xl font-bold font-display mb-3">${escapeHtml(pageText(item.title, 300))}</h3><p class="text-muted-foreground leading-relaxed">${escapeHtml(pageText(item.description, 2_000))}</p></article>`).join("");
+    return `<section class="py-24 bg-background"><div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8"><div class="text-center max-w-3xl mx-auto mb-16"><h2 class="text-3xl md:text-4xl font-bold font-display mb-4">${escapeHtml(pageText(content.title, 500))}</h2>${content.subtitle ? `<p class="text-lg text-muted-foreground">${escapeHtml(pageText(content.subtitle, 2_000))}</p>` : ""}</div><div class="grid md:grid-cols-3 gap-8">${cards}</div></div></section>`;
   }
   if (block.blockType === "hero") {
     const title = pageText(content.title, 500);
@@ -902,6 +1032,11 @@ function renderPublicPageBlock(block: PublicPageBlock, index: number): string {
   if (block.blockType === "rich_text") {
     const body = articlePlainText(pageText(content.content, 200_000));
     return `<section class="mx-auto max-w-3xl px-4 py-10"><div class="whitespace-pre-line leading-7">${escapeHtml(body)}</div></section>`;
+  }
+  if (block.blockType === "html_content") {
+    const title = pageText(content.title, 500);
+    const html = sanitizePublicHtmlSection(content.html);
+    return `<section class="cms-layout-section cms-html-content-section">${title ? `<h2 class="cms-html-content-title">${escapeHtml(title)}</h2>` : ""}<div class="cms-html-content">${html}</div></section>`;
   }
   if (block.blockType === "stats_strip") {
     const stats = pageItems(content.stats, 12).map((item) => `<div><strong class="text-3xl">${escapeHtml(pageText(item.value, 100))}</strong><p>${escapeHtml(pageText(item.label, 200))}</p></div>`).join("");
@@ -923,6 +1058,26 @@ function renderPublicPageBlock(block: PublicPageBlock, index: number): string {
       return `<article class="rounded-2xl border border-border bg-card p-5">${href ? `<a class="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2" href="${escapeHtml(href)}">${card}</a>` : card}</article>`;
     }).join("");
     return `<section class="mx-auto max-w-6xl px-4 py-12" aria-labelledby="${headingId}" data-catalog-source="${escapeHtml(source)}"><h2 id="${headingId}" class="text-3xl font-bold">${escapeHtml(title)}</h2>${subtitle ? `<p class="mt-3 text-muted-foreground">${escapeHtml(subtitle)}</p>` : ""}<div class="mt-7 ${layout}"${content.layout === "carousel" ? ' tabindex="0"' : ""}>${cards}</div></section>`;
+  }
+  if (block.blockType === "media_text") {
+    const image = safePublicImageUrl(content.imageUrl);
+    const href = safePublicUrl(content.ctaUrl);
+    const media = `<div class="overflow-hidden rounded-3xl bg-secondary/60">${image ? `<img src="${escapeHtml(image)}" alt="${escapeHtml(pageText(content.altText, 300))}" class="h-full min-h-80 w-full object-cover" loading="lazy" />` : `<div class="flex min-h-80 items-center justify-center text-sm text-muted-foreground">Image</div>`}</div>`;
+    const editorial = `<div class="flex flex-col justify-center py-4">${content.eyebrow ? `<p class="text-sm font-semibold uppercase tracking-[0.18em] text-primary">${escapeHtml(pageText(content.eyebrow, 200))}</p>` : ""}<h2 class="mt-3 font-display text-3xl font-bold md:text-5xl">${escapeHtml(pageText(content.title, 500))}</h2>${content.body ? `<p class="mt-5 text-lg leading-8 text-muted-foreground">${escapeHtml(pageText(content.body, 4_000))}</p>` : ""}${href && content.ctaLabel ? `<p class="mt-7"><a href="${escapeHtml(href)}" class="inline-flex rounded-full bg-primary px-6 py-3 font-semibold text-primary-foreground">${escapeHtml(pageText(content.ctaLabel, 200))}</a></p>` : ""}</div>`;
+    return `<section class="mx-auto grid max-w-6xl gap-10 px-4 py-16 md:grid-cols-2 md:items-stretch">${content.imagePosition === "right" ? `${editorial}${media}` : `${media}${editorial}`}</section>`;
+  }
+  if (block.blockType === "image_gallery") {
+    const columns = content.columns === "2" ? "sm:grid-cols-2" : content.columns === "4" ? "sm:grid-cols-2 lg:grid-cols-4" : "sm:grid-cols-2 lg:grid-cols-3";
+    const images = pageItems(content.images, 24).map((item) => { const image = safePublicImageUrl(item.imageUrl); const href = safePublicUrl(item.linkUrl); const figure = `<figure class="overflow-hidden rounded-2xl border bg-card"><div class="aspect-[4/3] overflow-hidden bg-secondary/60">${image ? `<img src="${escapeHtml(image)}" alt="${escapeHtml(pageText(item.altText, 300))}" class="h-full w-full object-cover" loading="lazy" />` : ""}</div>${item.caption ? `<figcaption class="p-4 text-sm font-medium">${escapeHtml(pageText(item.caption, 300))}</figcaption>` : ""}</figure>`; return href ? `<a href="${escapeHtml(href)}">${figure}</a>` : figure; }).join("");
+    return `<section class="mx-auto max-w-6xl px-4 py-16"><h2 class="font-display text-3xl font-bold md:text-4xl">${escapeHtml(pageText(content.title, 500))}</h2>${content.subtitle ? `<p class="mt-3 text-lg text-muted-foreground">${escapeHtml(pageText(content.subtitle, 2_000))}</p>` : ""}<div class="mt-8 grid gap-5 ${columns}">${images}</div></section>`;
+  }
+  if (block.blockType === "process_steps") {
+    const steps = pageItems(content.steps, 12).map((item, itemIndex) => `<li class="rounded-3xl border bg-card p-7 shadow-sm"><span class="text-sm font-bold tracking-[0.18em] text-primary">${escapeHtml(pageText(item.number, 32) || String(itemIndex + 1).padStart(2, "0"))}</span><h3 class="mt-5 text-xl font-bold">${escapeHtml(pageText(item.title, 300))}</h3><p class="mt-3 leading-7 text-muted-foreground">${escapeHtml(pageText(item.description, 2_000))}</p></li>`).join("");
+    return `<section class="bg-secondary/35 px-4 py-16"><div class="mx-auto max-w-6xl"><h2 class="font-display text-3xl font-bold md:text-4xl">${escapeHtml(pageText(content.title, 500))}</h2>${content.subtitle ? `<p class="mt-3 text-lg text-muted-foreground">${escapeHtml(pageText(content.subtitle, 2_000))}</p>` : ""}<ol class="mt-10 grid gap-5 md:grid-cols-3">${steps}</ol></div></section>`;
+  }
+  if (block.blockType === "quote_banner") {
+    const portrait = safePublicImageUrl(content.imageUrl);
+    return `<section class="mx-auto max-w-6xl px-4 py-16"><blockquote class="rounded-[2rem] bg-slate-950 px-8 py-12 text-white md:px-14"><div class="flex flex-col gap-8 md:flex-row md:items-center">${portrait ? `<img src="${escapeHtml(portrait)}" alt="" class="h-20 w-20 shrink-0 rounded-full object-cover" loading="lazy" />` : ""}<div><p class="font-display text-2xl font-semibold leading-relaxed md:text-4xl">“${escapeHtml(pageText(content.quote, 4_000))}”</p>${content.author || content.role ? `<footer class="mt-6 text-sm text-white/70"><strong class="text-white">${escapeHtml(pageText(content.author, 200))}</strong>${content.role ? ` · ${escapeHtml(pageText(content.role, 300))}` : ""}</footer>` : ""}</div></div></blockquote></section>`;
   }
   if (block.blockType === "team_grid") {
     const title = pageText(content.title, 500);
@@ -976,6 +1131,44 @@ function renderPublicPageBlock(block: PublicPageBlock, index: number): string {
     }).join("");
     return `<section class="mx-auto max-w-6xl px-4 py-12"><h2 class="text-center text-3xl font-bold">${escapeHtml(title)}</h2>${subtitle ? `<p class="mt-3 text-center text-muted-foreground">${escapeHtml(subtitle)}</p>` : ""}<div class="mt-7 grid gap-5 md:grid-cols-2">${testimonials}</div></section>`;
   }
+  if (block.blockType === "grid_box") {
+    const columns = content.columns === "2" ? "sm:grid-cols-2" : content.columns === "4" ? "sm:grid-cols-2 lg:grid-cols-4" : "sm:grid-cols-2 lg:grid-cols-3";
+    const cards = pageItems(content.cards, 24).map((item, itemIndex) => {
+      const image = safePublicImageUrl(item.imageUrl);
+      const href = safePublicUrl(item.linkUrl);
+      const body = `<div class="cms-grid-box-media">${image ? `<img src="${escapeHtml(image)}" alt="" loading="lazy" />` : `<span aria-hidden="true">${String(itemIndex + 1).padStart(2, "0")}</span>`}</div><div class="cms-grid-box-copy"><h3>${escapeHtml(pageText(item.title, 300))}</h3>${item.description ? `<p>${escapeHtml(pageText(item.description, 2_000))}</p>` : ""}${href && item.linkLabel ? `<span class="cms-inline-link">${escapeHtml(pageText(item.linkLabel, 200))}</span>` : ""}</div>`;
+      return `<article class="cms-grid-box-card">${href ? `<a href="${escapeHtml(href)}">${body}</a>` : body}</article>`;
+    }).join("");
+    return `<section class="cms-layout-section">${content.eyebrow ? `<p class="cms-section-eyebrow">${escapeHtml(pageText(content.eyebrow, 200))}</p>` : ""}<h2>${escapeHtml(pageText(content.title, 500))}</h2>${content.subtitle ? `<p>${escapeHtml(pageText(content.subtitle, 2_000))}</p>` : ""}<div class="cms-responsive-grid cms-grid-box-grid grid gap-5 ${columns}">${cards}</div></section>`;
+  }
+  if (block.blockType === "scroll_box" || block.blockType === "carousel_box") {
+    const source = block.blockType === "scroll_box" ? content.items : content.slides;
+    const cards = pageItems(source, 30).map((item, itemIndex) => {
+      const image = safePublicImageUrl(item.imageUrl);
+      const href = safePublicUrl(item.linkUrl);
+      const body = `${image ? `<img src="${escapeHtml(image)}" alt="" loading="lazy" />` : ""}<div><span>${String(itemIndex + 1).padStart(2, "0")}</span><h3>${escapeHtml(pageText(item.title, 300))}</h3>${item.description ? `<p>${escapeHtml(pageText(item.description, 2_000))}</p>` : ""}${href && item.linkLabel ? `<strong>${escapeHtml(pageText(item.linkLabel, 200))}</strong>` : ""}</div>`;
+      return `<article>${href ? `<a href="${escapeHtml(href)}">${body}</a>` : body}</article>`;
+    }).join("");
+    return `<section class="cms-layout-section ${block.blockType === "scroll_box" ? "cms-scroll-section" : "cms-carousel-section"}"><h2>${escapeHtml(pageText(content.title, 500))}</h2>${content.subtitle ? `<p>${escapeHtml(pageText(content.subtitle, 2_000))}</p>` : ""}<div class="${block.blockType === "scroll_box" ? "cms-horizontal-scroll" : "cms-carousel-track"}" tabindex="0">${cards}</div></section>`;
+  }
+  if (block.blockType === "column_layout") {
+    const columns = content.columns === "2" ? "sm:grid-cols-2" : content.columns === "4" ? "sm:grid-cols-2 lg:grid-cols-4" : "sm:grid-cols-2 lg:grid-cols-3";
+    const items = pageItems(content.items, 16).map((item, itemIndex) => `<article><span class="cms-column-number">${String(itemIndex + 1).padStart(2, "0")}</span>${item.eyebrow ? `<p class="cms-section-eyebrow">${escapeHtml(pageText(item.eyebrow, 200))}</p>` : ""}<h3>${escapeHtml(pageText(item.title, 300))}</h3>${item.body ? `<p>${escapeHtml(pageText(item.body, 3_000))}</p>` : ""}</article>`).join("");
+    return `<section class="cms-layout-section"><h2>${escapeHtml(pageText(content.title, 500))}</h2>${content.subtitle ? `<p>${escapeHtml(pageText(content.subtitle, 2_000))}</p>` : ""}<div class="cms-responsive-grid cms-column-layout-grid grid gap-5 ${columns}">${items}</div></section>`;
+  }
+  if (block.blockType === "progress_bars") {
+    const items = pageItems(content.items, 20).map((item) => { const value = Math.min(100, Math.max(0, Number(item.value) || 0)); return `<div class="cms-progress-item"><div class="cms-progress-label"><strong>${escapeHtml(pageText(item.label, 300))}</strong><span>${value}%</span></div>${item.note ? `<small>${escapeHtml(pageText(item.note, 500))}</small>` : ""}<progress max="100" value="${value}" aria-label="${escapeHtml(pageText(item.label, 300))}">${value}%</progress></div>`; }).join("");
+    return `<section class="cms-layout-section cms-progress-section"><h2>${escapeHtml(pageText(content.title, 500))}</h2>${content.subtitle ? `<p>${escapeHtml(pageText(content.subtitle, 2_000))}</p>` : ""}<div class="cms-progress-list">${items}</div></section>`;
+  }
+  if (block.blockType === "counter_grid") {
+    const columns = content.columns === "2" ? "sm:grid-cols-2" : content.columns === "4" ? "sm:grid-cols-2 lg:grid-cols-4" : "sm:grid-cols-2 lg:grid-cols-3";
+    const items = pageItems(content.items, 16).map((item) => `<article><p class="cms-counter-value"><span>${escapeHtml(pageText(item.prefix, 40))}</span>${escapeHtml(pageText(item.value, 80))}<span>${escapeHtml(pageText(item.suffix, 40))}</span></p><h3>${escapeHtml(pageText(item.label, 300))}</h3>${item.description ? `<p>${escapeHtml(pageText(item.description, 1_000))}</p>` : ""}</article>`).join("");
+    return `<section class="cms-layout-section cms-counter-section"><h2>${escapeHtml(pageText(content.title, 500))}</h2>${content.subtitle ? `<p>${escapeHtml(pageText(content.subtitle, 2_000))}</p>` : ""}<div class="cms-responsive-grid cms-counter-grid grid gap-5 ${columns}">${items}</div></section>`;
+  }
+  if (block.blockType === "logo_marquee") {
+    const logos = pageItems(content.items, 40).map((item) => { const image = safePublicImageUrl(item.imageUrl); const href = safePublicUrl(item.linkUrl); const body = image ? `<img src="${escapeHtml(image)}" alt="${escapeHtml(pageText(item.name, 200))}" loading="lazy" />` : `<strong>${escapeHtml(pageText(item.name, 200))}</strong>`; return href ? `<a href="${escapeHtml(href)}">${body}</a>` : `<div>${body}</div>`; }).join("");
+    return `<section class="cms-layout-section cms-logo-marquee-section"><h2>${escapeHtml(pageText(content.title, 500))}</h2>${content.subtitle ? `<p>${escapeHtml(pageText(content.subtitle, 2_000))}</p>` : ""}<div class="cms-logo-marquee" tabindex="0">${logos}</div></section>`;
+  }
   if (block.blockType === "spacer_divider") {
     return `<div aria-hidden="true" class="mx-auto max-w-6xl px-4 ${spacerHeightClass(content.height)}">${content.showDivider ? "<hr />" : ""}</div>`;
   }
@@ -1004,9 +1197,63 @@ function renderPublicPageBlock(block: PublicPageBlock, index: number): string {
   return "";
 }
 
+function publicPageBlockStyle(block: PublicPageBlock): string {
+  const appearance = { ...block.content, ...block.settings };
+  const declarations: string[] = [];
+  const color = (variable: string, value: unknown) => {
+    const normalized = pageText(value, 16);
+    if (/^#[0-9a-f]{6}$/i.test(normalized)) declarations.push(`${variable}:${normalized}`);
+  };
+  if (appearance.useThemeColors === false) {
+    color("--cms-section-bg", appearance.sectionBackgroundColor);
+    color("--cms-section-text", appearance.sectionTextColor);
+    color("--cms-section-accent", appearance.sectionAccentColor);
+    color("--cms-card-bg", appearance.cardBackgroundColor);
+    color("--cms-section-border", appearance.sectionBorderColor);
+    color("--cms-section-button-bg", appearance.sectionButtonColor);
+    color("--cms-section-button-text", appearance.sectionButtonTextColor);
+    const width = pageText(appearance.sectionWidth, 16);
+    if (["760px", "960px", "1260px", "100%"].includes(width)) declarations.push(`--cms-section-max:${width}`);
+    const padding = Number(appearance.sectionPadding);
+    if (Number.isFinite(padding)) declarations.push(`--cms-section-padding:${Math.min(160, Math.max(0, padding))}px`);
+    if (block.blockType === "hero") {
+      color("--cms-hero-start", appearance.backgroundColor);
+      color("--cms-hero-end", appearance.gradientColor);
+      color("--cms-hero-text", appearance.textColor);
+      color("--cms-hero-overlay", appearance.overlayColor);
+      color("--cms-button-bg", appearance.primaryButtonColor);
+      color("--cms-button-text", appearance.primaryButtonTextColor);
+      const opacity = appearance.overlay === false ? 0 : Number(appearance.overlayOpacity);
+      if (Number.isFinite(opacity)) declarations.push(`--cms-hero-overlay-opacity:${Math.min(100, Math.max(0, opacity)) / 100}`);
+    }
+  } else if (block.blockType === "hero" && appearance.overlay === false) {
+    declarations.push("--cms-hero-overlay-opacity:0");
+  }
+  return declarations.join(";");
+}
+
+function renderPublicPageBlock(block: PublicPageBlock, index: number): string {
+  const body = renderPublicPageBlockBody(block, index);
+  if (!body) return "";
+  const style = publicPageBlockStyle(block);
+  return `<div class="cms-editorial-block" data-cms-block="${escapeHtml(block.blockType)}"${style ? ` style="${escapeHtml(style)}"` : ""}>${body}</div>`;
+}
+
+const CMS_TEXT_TOKEN = /\{\{\s*(site\.name|page\.(?:title|slug|locale)|date\.year)\s*(?:\|\s*([^{}]{1,160}?))?\s*\}\}/g;
+function resolvePublicPageValue<T>(value: T, context: { title: string; slug: string; locale: string }): T {
+  if (typeof value === "string") {
+    const values: Record<string, string> = { "site.name": "Find And Study", "page.title": context.title, "page.slug": context.slug, "page.locale": context.locale, "date.year": String(new Date().getFullYear()) };
+    return value.replace(CMS_TEXT_TOKEN, (_token, key: string, fallback?: string) => values[key]?.trim() || fallback?.trim() || "").replace(/[ \t]{2,}/g, " ").trim() as T;
+  }
+  if (Array.isArray(value)) return value.map(item => resolvePublicPageValue(item, context)) as T;
+  if (value && typeof value === "object") return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, resolvePublicPageValue(item, context)])) as T;
+  return value;
+}
+
 function renderPageDetail(model: Extract<PublicCatalogRenderModel, { kind: "page_detail" }>): string {
-  const blocks = model.page.blocks.map((block, index) => renderPublicPageBlock(block, index)).join("");
-  return `<main data-public-render-shell="page-detail" data-public-page-version="${model.page.versionNumber}">${blocks || `<section class="mx-auto max-w-3xl px-4 py-24"><h1 class="text-4xl font-bold">${escapeHtml(model.page.title)}</h1></section>`}</main>`;
+  const context = { title: model.page.title, slug: model.page.slug, locale: model.locale };
+  const blocks = model.page.blocks.map((block, index) => renderPublicPageBlock({ ...block, content: resolvePublicPageValue(block.content, context) }, index)).join("");
+  return `<main class="public-cms-page" data-public-render-shell="page-detail" data-public-page-version="${model.page.versionNumber}">${blocks || `<section class="mx-auto max-w-3xl px-4 py-24"><h1 class="text-4xl font-bold">${escapeHtml(model.page.title)}</h1></section>`}</main>`;
 }
 
 function renderNotFound(model: Extract<PublicCatalogRenderModel, { kind: "not_found" }>): string {
@@ -1269,10 +1516,34 @@ export function renderPublicCatalogHtml(input: {
                 ? renderPageDetail(input.model)
                 : renderNotFound(input.model);
   shell = shell.replace("</main>", `${renderDetailContent(input.model)}</main>`);
+  const appearanceRules: string[] = [];
   if (input.model.detailLayout) {
     const layout = input.model.detailLayout;
+    const pagePresentation = detailContentPresentationOverrides(parseDetailContent(input.model.editorial));
     const sections = new Map<string, string>();
-    shell = shell.replace(/<section data-detail-section="([a-zA-Z-]+)"[\s\S]*?<\/section>/g, (markup, key) => { sections.set(key, markup); return ""; });
+    shell = shell.replace(/<section data-detail-section="([a-zA-Z-]+)"[\s\S]*?<\/section>/g, (markup, key) => {
+      const setting: DetailSectionPresentation = { ...(layout.presentation?.[key] ?? {}), ...(pagePresentation[key] ?? {}) };
+      const attributes = Object.keys(setting).length
+        ? `${setting.tone ? ` data-template-tone="${escapeHtml(setting.tone)}"` : ""}${setting.width ? ` data-template-width="${escapeHtml(setting.width)}"` : ""}${setting.spacing ? ` data-template-spacing="${escapeHtml(setting.spacing)}"` : ""}${setting.align ? ` data-template-align="${escapeHtml(setting.align)}"` : ""}${setting.minHeight ? ` data-template-min-height="${escapeHtml(setting.minHeight)}"` : ""}`
+        : "";
+      if (Object.keys(setting).length && !layout.hidden.includes(key)) {
+        const declarations: string[] = [];
+        if (setting.backgroundColor) declarations.push(`background-color:${setting.backgroundColor}`);
+        if (setting.textColor) declarations.push(`color:${setting.textColor}`);
+        if (setting.accentColor) declarations.push(`--detail-section-accent:${setting.accentColor}`, `--detail-accent:${setting.accentColor}`);
+        const overlay = setting.overlayColor && setting.overlayOpacity !== undefined
+          ? `rgba(${parseInt(setting.overlayColor.slice(1, 3), 16)},${parseInt(setting.overlayColor.slice(3, 5), 16)},${parseInt(setting.overlayColor.slice(5, 7), 16)},${setting.overlayOpacity / 100})`
+          : null;
+        const image = setting.backgroundImageUrl ? `url(${JSON.stringify(setting.backgroundImageUrl).replace(/</g, "\\3c ")})` : null;
+        if (overlay || image) declarations.push(`background-image:${[overlay ? `linear-gradient(${overlay},${overlay})` : null, image].filter(Boolean).join(",")}`);
+        if (setting.backgroundImageFit) declarations.push(`background-size:${setting.backgroundImageFit}`);
+        if (setting.backgroundImagePosition) declarations.push(`background-position:${setting.backgroundImagePosition}`);
+        if (setting.backgroundImageRepeat) declarations.push(`background-repeat:${setting.backgroundImageRepeat}`);
+        if (declarations.length) appearanceRules.push(`.public-detail>[data-detail-section="${key}"]{${declarations.join(";")}}`);
+      }
+      sections.set(key, attributes ? markup.replace("<section ", `<section${attributes} `) : markup);
+      return "";
+    });
     const ordered = layout.sections.filter(key => !layout.hidden.includes(key)).map(key => sections.get(key) ?? "").join("");
     shell = shell.replace("</main>", `${ordered}</main>`);
     for (const key of layout.hidden) shell = shell.replace(new RegExp(`<a href="#${key}"[^>]*>[\\s\\S]*?<\\/a>`, "g"), "");
@@ -1300,7 +1571,8 @@ export function renderPublicCatalogHtml(input: {
     .filter((href) => /^\/assets\/[A-Za-z0-9._-]+\.js$/.test(href))
     .slice(0, 16)
     .map((href) => `  <link rel="modulepreload" crossorigin href="${escapeHtml(href)}" />`);
-  const extraHead = `  <meta name="csp-nonce" content="${escapeHtml(input.nonce)}" />\n  <meta name="public-render" content="ssr-isr-pilot" />\n${preloadLinks.join("\n")}${preloadLinks.length ? "\n" : ""}${hreflangLinks.join("\n")}${hreflangLinks.length ? "\n" : ""}  <script nonce="${escapeHtml(input.nonce)}" type="application/ld+json">${safeJson(structuredData(input.model, siteUrl))}</script>\n`;
+  const appearanceStyle = appearanceRules.length ? `  <style nonce="${escapeHtml(input.nonce)}" data-detail-appearance>${appearanceRules.join("")}</style>\n` : "";
+  const extraHead = `  <meta name="csp-nonce" content="${escapeHtml(input.nonce)}" />\n  <meta name="public-render" content="ssr-isr-pilot" />\n${preloadLinks.join("\n")}${preloadLinks.length ? "\n" : ""}${hreflangLinks.join("\n")}${hreflangLinks.length ? "\n" : ""}${appearanceStyle}  <script nonce="${escapeHtml(input.nonce)}" type="application/ld+json">${safeJson(structuredData(input.model, siteUrl))}</script>\n`;
   return html
     .replace("</head>", `${extraHead}${input.model.detailLayout ? `<script id="public-detail-layout" nonce="${escapeHtml(input.nonce)}" type="application/json">${safeJson(input.model.detailLayout)}</script>` : ""}</head>`)
     .replace(/<div\s+id=["']root["']\s*><\/div>/i, `<div id="root" data-public-render-shell-root="true">${shell}${renderConsentShell(input.model)}</div>`);
@@ -1311,6 +1583,8 @@ export function publicCatalogCsp(nonce: string): string {
     "default-src 'self'",
     `script-src 'self' 'nonce-${nonce}'`,
     "style-src 'self'",
+    `style-src-elem 'self' 'nonce-${nonce}'`,
+    "style-src-attr 'none'",
     "img-src 'self' data: https:",
     "font-src 'self' data:",
     "connect-src 'self' https:",

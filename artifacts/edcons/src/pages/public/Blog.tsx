@@ -1,187 +1,74 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useI18n } from "@/hooks/use-i18n";
-import { useSeo } from "@/hooks/use-seo";
-import { useJsonLd, SITE_URL, SITE_NAME } from "@/hooks/use-json-ld";
+import { customFetch } from "@workspace/api-client-react";
+import { Link } from "wouter";
+import { ArrowRight, BookOpen, Calendar, Clock, Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { customFetch } from "@workspace/api-client-react";
-import { Search, BookOpen, Calendar, Clock, ArrowRight } from "lucide-react";
-import { motion } from "framer-motion";
-import { Link } from "wouter";
+import { useI18n } from "@/hooks/use-i18n";
+import { useJsonLd, SITE_NAME, SITE_URL } from "@/hooks/use-json-ld";
+import { useSeo } from "@/hooks/use-seo";
+import { ManagedPublicPage } from "./ManagedPublicPage";
+import { useTemplatePage, useTemplatePageSeo } from "./useTemplatePage";
+
+type Guide = {
+  id: number;
+  title: string;
+  category?: string | null;
+  excerpt?: string | null;
+  summary?: string | null;
+  featuredImageUrl?: string | null;
+  publishedAt?: string | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+  canonicalPath: string;
+};
 
 export default function Blog() {
   const { t, lang } = useI18n();
-  useSeo({ title: t("seo.blogTitle"), description: t("seo.blogDesc"), lang });
+  const page = useTemplatePage("blog", lang);
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("All");
-  const { data: postsResp, isLoading } = useQuery({
+  const { data: postsResponse, isLoading } = useQuery<{ data?: Guide[] }>({
     queryKey: ["public-web-guides", lang],
-    queryFn: () => customFetch<any>(`/api/public/web/guides?locale=${encodeURIComponent(lang)}&limit=24`),
+    queryFn: () => customFetch(`/api/public/web/guides?locale=${encodeURIComponent(lang)}&limit=24`, { cache: "no-store" }),
   });
-  const posts = postsResp?.data || [];
-
+  const posts = Array.isArray(postsResponse?.data) ? postsResponse.data : [];
   const categories = [
-    { key: "All", label: t("blog.all") },
-    { key: "University Guide", label: t("blog.universityGuide") },
-    { key: "Visa Tips", label: t("blog.visaTips") },
-    { key: "Scholarships", label: t("blog.scholarships") },
-    { key: "Student Life", label: t("blog.studentLife") },
-    { key: "Career Advice", label: t("blog.careerAdvice") },
+    ["All", t("blog.all")],
+    ["University Guide", t("blog.universityGuide")],
+    ["Visa Tips", t("blog.visaTips")],
+    ["Scholarships", t("blog.scholarships")],
+    ["Student Life", t("blog.studentLife")],
+    ["Career Advice", t("blog.careerAdvice")],
   ];
+  const filtered = posts.filter(post => (!search || post.title.toLowerCase().includes(search.toLowerCase())) && (category === "All" || post.category === category));
 
-  const filtered = (Array.isArray(posts) ? posts : []).filter((p: any) => {
-    const matchSearch = !search || p.title.toLowerCase().includes(search.toLowerCase());
-    const matchCat = category === "All" || p.category === category;
-    return matchSearch && matchCat;
+  useSeo({ title: page?.meta.title || t("seo.blogTitle"), description: page?.meta.description || t("seo.blogDesc"), lang,
+    noindex: page ? !page.meta.indexable : false, alternates: page?.meta.alternatePaths });
+  useTemplatePageSeo(page);
+  useJsonLd({
+    "@context": "https://schema.org",
+    "@type": "Blog",
+    "@id": `${SITE_URL}/en/blog#blog`,
+    name: `${SITE_NAME} Blog`,
+    url: `${SITE_URL}/en/blog`,
+    description: "International education guides, application advice, scholarship information, and student stories.",
   });
 
-  const allPublished = Array.isArray(posts) ? posts : [];
+  const liveBlog = <section id="articles" className="scroll-mt-28 py-14">
+    <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-2xl rounded-[1.5rem] border bg-card/90 p-3 shadow-lg shadow-slate-950/5">
+        <div className="relative"><Search className="absolute start-4 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" aria-hidden="true" /><Input id="blog-search" value={search} onChange={event => setSearch(event.target.value)} placeholder={t("blog.searchPlaceholder")} aria-label={t("blog.searchPlaceholder")} className="h-12 rounded-xl border-0 ps-12 shadow-none" /></div>
+      </div>
+      <div className="mt-8 flex flex-wrap justify-center gap-3" role="group" aria-label={t("blog.filterByCategory")}>
+        {categories.map(([key, label]) => <button key={key} type="button" onClick={() => setCategory(key)} aria-pressed={category === key} className={`rounded-full px-5 py-2 text-sm font-medium transition ${category === key ? "bg-primary text-primary-foreground shadow-md" : "bg-secondary text-muted-foreground hover:text-primary"}`}>{label}</button>)}
+      </div>
+      {isLoading ? <div className="mt-12 grid gap-8 md:grid-cols-2 lg:grid-cols-3">{Array.from({ length: 6 }, (_, index) => <div key={index} className="h-80 animate-pulse rounded-3xl bg-secondary" />)}</div>
+        : filtered.length === 0 ? <div className="py-24 text-center"><BookOpen className="mx-auto mb-4 h-16 w-16 text-muted-foreground/30" /><h2 className="text-xl font-bold">{t("blog.noArticles")}</h2><p className="mt-2 text-muted-foreground">{t("blog.tryAdjusting")}</p></div>
+        : <div className="mt-12 grid gap-8 md:grid-cols-2 lg:grid-cols-3">{filtered.map(post => <article key={post.id} className="group flex flex-col overflow-hidden rounded-[1.75rem] border border-border/50 bg-card shadow-lg shadow-slate-950/5 transition duration-300 hover:-translate-y-1 hover:shadow-xl"><div className="relative h-48 overflow-hidden bg-gradient-to-br from-accent/20 via-primary/10 to-accent/5">{post.featuredImageUrl ? <img src={post.featuredImageUrl} alt="" className="absolute inset-0 h-full w-full object-cover transition duration-500 group-hover:scale-105" loading="lazy" /> : <BookOpen className="absolute inset-0 m-auto h-16 w-16 text-accent/30" />}{post.category ? <Badge className="absolute start-4 top-4 bg-accent text-white">{post.category}</Badge> : null}</div><div className="flex flex-1 flex-col p-6"><div className="mb-3 flex flex-wrap gap-4 text-xs text-muted-foreground">{post.publishedAt ? <span className="flex items-center gap-1"><Calendar className="h-3 w-3" />{new Date(post.publishedAt).toLocaleDateString(lang, { month: "short", day: "numeric", year: "numeric" })}</span> : null}<span className="flex items-center gap-1"><Clock className="h-3 w-3" />5 {t("blog.minRead")}</span></div><h2 className="font-display text-xl font-bold leading-snug transition-colors group-hover:text-primary"><Link href={post.canonicalPath}>{post.title}</Link></h2>{post.excerpt ? <p className="mt-3 line-clamp-3 text-sm text-muted-foreground">{post.excerpt}</p> : null}<Link href={post.canonicalPath} aria-label={`${t("blog.readMore")} — ${post.title}`} className="mt-auto inline-flex items-center gap-2 pt-6 text-sm font-semibold text-primary">{t("blog.readMore")} <ArrowRight className="h-4 w-4" /></Link></div></article>)}</div>}
+    </div>
+  </section>;
 
-  useJsonLd([
-    {
-      "@context": "https://schema.org",
-      "@type": "Blog",
-      "@id": `${SITE_URL}/en/blog#blog`,
-      name: `${SITE_NAME} Blog`,
-      url: `${SITE_URL}/en/blog`,
-      description: "Expert advice on studying abroad, university applications, scholarships, visa tips, and student life.",
-      publisher: {
-        "@type": "EducationalOrganization",
-        "@id": `${SITE_URL}/#organization`,
-        name: SITE_NAME,
-      },
-      breadcrumb: {
-        "@type": "BreadcrumbList",
-        itemListElement: [
-          { "@type": "ListItem", position: 1, name: "Home", item: SITE_URL },
-          { "@type": "ListItem", position: 2, name: "Blog", item: `${SITE_URL}/en/blog` },
-        ],
-      },
-    },
-    ...(allPublished.slice(0, 10).map((p: any) => ({
-      "@context": "https://schema.org",
-      "@type": "BlogPosting",
-      "@id": `${SITE_URL}${p.canonicalPath}#blogposting`,
-      headline: p.title,
-      url: `${SITE_URL}${p.canonicalPath}`,
-      description: p.excerpt || p.summary || undefined,
-      datePublished: p.publishedAt || p.createdAt || undefined,
-      dateModified: p.updatedAt || p.publishedAt || undefined,
-      author: {
-        "@type": "Organization",
-        name: SITE_NAME,
-        url: SITE_URL,
-      },
-      publisher: {
-        "@type": "EducationalOrganization",
-        "@id": `${SITE_URL}/#organization`,
-        name: SITE_NAME,
-      },
-      isPartOf: { "@id": `${SITE_URL}/en/blog#blog` },
-      ...(p.category ? { articleSection: p.category } : {}),
-      ...(p.featuredImageUrl
-        ? { image: { "@type": "ImageObject", url: p.featuredImageUrl } }
-        : {}),
-    }))),
-  ]);
-
-  return (
-    <>
-      <section className="pt-24 pb-16 bg-gradient-to-br from-accent/5 via-background to-primary/5">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-            <span className="inline-flex items-center gap-2 bg-accent/10 text-accent text-sm font-semibold px-4 py-2 rounded-full mb-6">
-              <BookOpen className="w-4 h-4" /> {t("blog.badge")}
-            </span>
-            <h1 className="text-4xl md:text-6xl font-display font-bold text-foreground mb-6">
-              {t("blog.title")} <span className="text-accent">{t("blog.titleHighlight")}</span>
-            </h1>
-            <p className="text-xl text-muted-foreground max-w-2xl mx-auto mb-10">
-              {t("blog.subtitle")}
-            </p>
-            <div className="max-w-lg mx-auto relative">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" aria-hidden="true" />
-              <Input
-                id="blog-search"
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                placeholder={t("blog.searchPlaceholder")}
-                aria-label={t("blog.searchPlaceholder")}
-                className="pl-12 py-5 rounded-full shadow-md" />
-            </div>
-          </motion.div>
-        </div>
-      </section>
-
-      <section className="py-8 border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex gap-3 flex-wrap justify-center" role="group" aria-label={t("blog.filterByCategory")}>
-            {categories.map(c => (
-              <button
-                key={c.key}
-                type="button"
-                onClick={() => setCategory(c.key)}
-                aria-pressed={category === c.key}
-                className={`px-5 py-2 rounded-full text-sm font-medium transition-all
-                  ${category === c.key ? 'bg-accent text-white shadow-md shadow-accent/25' : 'bg-secondary hover:bg-accent/10 text-muted-foreground hover:text-accent'}`}>
-                {c.label}
-              </button>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <section className="py-16">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          {isLoading ? (
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
-              {[...Array(6)].map((_, i) => <div key={i} className="h-80 rounded-2xl bg-secondary animate-pulse" />)}
-            </div>
-          ) : filtered.length === 0 ? (
-            <div className="text-center py-24">
-              <BookOpen className="w-16 h-16 text-muted-foreground/30 mx-auto mb-4" />
-              <h3 className="text-xl font-bold mb-2">{t("blog.noArticles")}</h3>
-              <p className="text-muted-foreground">{t("blog.tryAdjusting")}</p>
-            </div>
-          ) : (
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
-              {filtered.map((post: any, i: number) => (
-                <motion.article key={post.id} initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}
-                  className="group bg-card rounded-2xl overflow-hidden shadow-lg shadow-black/5 hover:-translate-y-2 transition-all duration-300 hover:shadow-xl border border-border/40 flex flex-col">
-                  <div className="h-48 bg-gradient-to-br from-accent/20 via-primary/10 to-accent/5 relative overflow-hidden">
-                    {post.featuredImageUrl ? <img src={post.featuredImageUrl} alt="" className="absolute inset-0 h-full w-full object-cover" loading="lazy" /> : <div className="absolute inset-0 flex items-center justify-center"><BookOpen className="w-16 h-16 text-accent/30" /></div>}
-                    {post.category && (
-                      <Badge className="absolute top-4 left-4 bg-accent text-white">{post.category}</Badge>
-                    )}
-                  </div>
-                  <div className="p-6 flex flex-col flex-1">
-                    <div className="flex items-center gap-4 text-xs text-muted-foreground mb-3">
-                      {post.publishedAt && (
-                        <span className="flex items-center gap-1">
-                          <Calendar className="w-3 h-3" />
-                          {new Date(post.publishedAt).toLocaleDateString(lang, { month: 'short', day: 'numeric', year: 'numeric' })}
-                        </span>
-                      )}
-                      <span className="flex items-center gap-1"><Clock className="w-3 h-3" /> 5 {t("blog.minRead")}</span>
-                    </div>
-                    <h2 className="font-display font-bold text-foreground text-xl mb-3 group-hover:text-accent transition-colors leading-snug flex-1"><Link href={post.canonicalPath}>{post.title}</Link></h2>
-                    {post.excerpt && (
-                      <p className="text-muted-foreground text-sm line-clamp-3 mb-4">{post.excerpt}</p>
-                    )}
-                    <Link
-                      href={post.canonicalPath}
-                      aria-label={`${t("blog.readMore")} — ${post.title}`}
-                      className="flex items-center gap-2 text-accent font-semibold text-sm mt-auto hover:gap-4 transition-all">
-                      {t("blog.readMore")} <ArrowRight className="w-4 h-4" aria-hidden="true" />
-                    </Link>
-                  </div>
-                </motion.article>
-              ))}
-            </div>
-          )}
-        </div>
-      </section>
-    </>
-  );
+  return <ManagedPublicPage template="blog" lang={lang} page={page} slotBlockType="carousel_box" slotContent={liveBlog} />;
 }

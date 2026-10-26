@@ -25,7 +25,7 @@ export function createDetailPreviewDocument(markup: string, locale: Language, so
   previewDocument.documentElement.dir = LANGUAGE_META[locale].dir;
   const csp = previewDocument.createElement("meta");
   csp.httpEquiv = "Content-Security-Policy";
-  csp.content = `default-src 'none'; script-src 'none'; connect-src 'none'; style-src 'unsafe-inline'; img-src ${sourceDocument.location.origin}/assets/ ${sourceDocument.location.origin}/images/; font-src 'none'; frame-src 'none'; object-src 'none'; form-action 'none'; base-uri 'none'`;
+  csp.content = `default-src 'none'; script-src 'none'; connect-src 'none'; style-src 'unsafe-inline'; img-src ${sourceDocument.location.origin}/assets/ ${sourceDocument.location.origin}/images/ ${sourceDocument.location.origin}/api/storage/public-website-assets/; font-src 'none'; frame-src 'none'; object-src 'none'; form-action 'none'; base-uri 'none'`;
   previewDocument.head.prepend(csp);
   const viewport = previewDocument.createElement("meta"); viewport.name = "viewport"; viewport.content = "width=device-width, initial-scale=1"; previewDocument.head.append(viewport);
   const robots = previewDocument.createElement("meta"); robots.name = "robots"; robots.content = "noindex, nofollow"; previewDocument.head.append(robots);
@@ -64,7 +64,7 @@ export function createDetailPreviewDocument(markup: string, locale: Language, so
         const url = new URL(src, sourceDocument.location.origin);
         if (url.origin === sourceDocument.location.origin && !url.search && !url.hash) path = url.pathname;
       } catch { /* Unavailable media stays a labelled placeholder. */ }
-      if (element.tagName === "IMG" && /^\/(?:assets|images)\/[a-zA-Z0-9_/-]+\.(?:png|jpe?g|webp|gif|avif)$/.test(path)) {
+      if (element.tagName === "IMG" && /^(?:\/(?:assets|images)\/[a-zA-Z0-9_/-]+|\/api\/storage\/public-website-assets\/detail-pages\/(?:destination|city|university|program)\/\d+\/(?:hero|gallery)-\d+\/[a-f0-9]{64})\.(?:png|jpe?g|webp|gif|avif)$/.test(path)) {
         element.setAttribute("src", `${sourceDocument.location.origin}${path}`); element.setAttribute("referrerpolicy", "no-referrer");
       } else { element.removeAttribute("src"); element.setAttribute("data-preview-media", "blocked"); }
     }

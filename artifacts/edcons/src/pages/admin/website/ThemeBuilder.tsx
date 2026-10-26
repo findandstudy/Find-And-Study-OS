@@ -34,6 +34,10 @@ const COLOR_TOKENS = [
   { group: "colors", key: "border", label: "Border", description: "Default border color" },
   { group: "colors", key: "text", label: "Text", description: "Primary text color" },
   { group: "colors", key: "muted", label: "Muted Text", description: "Secondary text" },
+  { group: "colors", key: "heroStart", label: "Hero Start", description: "Hero gradient start color" },
+  { group: "colors", key: "heroEnd", label: "Hero End", description: "Hero gradient end color" },
+  { group: "colors", key: "heroText", label: "Hero Text", description: "Hero heading and text color" },
+  { group: "colors", key: "heroOverlay", label: "Hero Overlay", description: "Overlay color used over hero images" },
 ];
 
 const TYPOGRAPHY_TOKENS = [
@@ -119,6 +123,7 @@ export default function WebsiteThemeBuilder() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["website-theme-tokens"] });
+      queryClient.invalidateQueries({ queryKey: ["public-cms-theme"] });
       setDirty(false);
       toast({ title: "Theme saved", description: "Your theme tokens have been updated." });
     },
@@ -174,6 +179,7 @@ export default function WebsiteThemeBuilder() {
       setLocalTokens({});
       setDirty(false);
       queryClient.setQueryData(["website-theme-tokens"], []);
+      queryClient.invalidateQueries({ queryKey: ["public-cms-theme"] });
       toast({ title: "Theme reset", description: "All overrides removed. Branding defaults will be used." });
     },
     onError: () => {
@@ -182,7 +188,7 @@ export default function WebsiteThemeBuilder() {
   });
 
   function handleReset() {
-    resetMutation.mutate();
+    if (window.confirm("Reset every website theme override? Published pages will immediately use the branding defaults.")) resetMutation.mutate();
   }
 
   function selectVal(group: string, key: string): string | undefined {
