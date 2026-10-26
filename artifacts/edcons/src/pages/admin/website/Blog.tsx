@@ -13,10 +13,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import {
-  BookOpen, Plus, Edit, Trash2, Search, Eye, EyeOff, Clock, Tag, FolderOpen, Star, Archive, User, Sparkles,
+  BookOpen, Plus, Edit, Trash2, Search, Eye, EyeOff, Clock, Tag, FolderOpen, Star, Archive, User, Sparkles, ExternalLink, LayoutTemplate, Monitor,
 } from "lucide-react";
 import { AiAssistantPanel, AiFieldButton } from "@/components/AiAssistantPanel";
 import { SUPPORTED_LANGUAGES, LANGUAGE_META } from "@/lib/i18n";
+import { sanitizePublicHtmlContent } from "@/lib/publicHtmlSanitizer";
+import "@/pages/public/guideEditorial.css";
 
 interface BlogPost {
   id: number;
@@ -42,6 +44,19 @@ interface BlogPostContent {
   featured?: boolean;
   readTime?: number;
   ogImageUrl?: string;
+  seo?: {
+    canonicalUrl?: string;
+    robotsIndex?: boolean;
+    robotsFollow?: boolean;
+    ogTitle?: string;
+    ogDescription?: string;
+    ogImageUrl?: string;
+    twitterTitle?: string;
+    twitterDescription?: string;
+    twitterImageUrl?: string;
+  };
+  sources?: Array<{ url: string; title?: string }>;
+  aiGeneration?: { provider?: string; sourceCount?: number; generatedAt?: string };
 }
 
 interface BlogCategory {
@@ -75,6 +90,12 @@ interface UsersResponse {
   data?: UserSummary[];
 }
 
+interface WebsitePageSummary {
+  id: number;
+  template: string;
+  locale: string;
+}
+
 interface PostFormData {
   title: string;
   slug: string;
@@ -86,7 +107,15 @@ interface PostFormData {
   locale: string;
   metaTitle: string;
   metaDescription: string;
+  canonicalUrl: string;
+  robotsIndex: boolean;
+  robotsFollow: boolean;
+  ogTitle: string;
+  ogDescription: string;
   ogImageUrl: string;
+  twitterTitle: string;
+  twitterDescription: string;
+  twitterImageUrl: string;
   featured: boolean;
   selectedTagIds: number[];
   status: string;
@@ -130,6 +159,28 @@ interface TagPayload {
   slug: string;
 }
 
+interface AiBlogBrief {
+  topic: string;
+  sourceUrls: string;
+  sourceNotes: string;
+  audience: string;
+  instructions: string;
+  locale: string;
+  tone: "authoritative" | "helpful" | "practical" | "inspiring";
+  length: "short" | "standard" | "deep";
+}
+
+interface AiBlogGenerationResponse {
+  post: BlogPost;
+  draft: {
+    tagIds: number[];
+    categoryId: number | null;
+    authorId: number | null;
+  };
+  sources: Array<{ url: string; title: string; used: boolean; warning?: string }>;
+  provider: string;
+}
+
 function slugify(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 }
@@ -142,10 +193,24 @@ function readTime(text: string): number {
 const EMPTY_FORM: PostFormData = {
   title: "", slug: "", excerpt: "", body: "", featuredImageUrl: "",
   categoryId: "", authorId: "", locale: "en", metaTitle: "", metaDescription: "",
-  ogImageUrl: "", featured: false, selectedTagIds: [], status: "draft", publishDate: "",
+  canonicalUrl: "", robotsIndex: true, robotsFollow: true,
+  ogTitle: "", ogDescription: "", ogImageUrl: "",
+  twitterTitle: "", twitterDescription: "", twitterImageUrl: "",
+  featured: false, selectedTagIds: [], status: "draft", publishDate: "",
 };
 
-export default function WebsiteBlog() {
+const EMPTY_AI_BRIEF: AiBlogBrief = {
+  topic: "",
+  sourceUrls: "",
+  sourceNotes: "",
+  audience: "Prospective international students and their families",
+  instructions: "",
+  locale: "en",
+  tone: "helpful",
+  length: "standard",
+};
+
+export default function WebsiteBlog({ embedded = false }: { embedded?: boolean }) {
   const qc = useQueryClient();
   const { toast } = useToast();
   const [tab, setTab] = useState("posts");
@@ -166,6 +231,8 @@ export default function WebsiteBlog() {
   const [tagDialog, setTagDialog] = useState(false);
   const [editTag, setEditTag] = useState<BlogTag | null>(null);
   const [tagForm, setTagForm] = useState<TagFormData>({ name: "", slug: "" });
+  const [showAiGenerator, setShowAiGenerator] = useState(false);
+  const [aiBrief, setAiBrief] = useState<AiBlogBrief>({ ...EMPTY_AI_BRIEF });
 
   const { data: posts = [] } = useQuery<BlogPost[]>({
     queryKey: ["website-blog-posts"],
@@ -194,6 +261,18 @@ export default function WebsiteBlog() {
       if (Array.isArray(res)) return res;
       return res.data ?? [];
     },
+  });
+
+  const { data: managedPages = [] } = useQuery<WebsitePageSummary[]>({
+    queryKey: ["website-pages-for-blog-workspace"],
+    queryFn: () => customFetch("/api/website/pages"),
+  });
+  const blogLanding = managedPages.find(page => page.template === "blog" && page.locale === "en")
+    ?? managedPages.find(page => page.template === "blog");
+  const { data: aiStatus } = useQuery<{ configured: boolean; provider: string | null }>({
+    queryKey: ["/api/website/ai/status"],
+    queryFn: () => customFetch("/api/website/ai/status"),
+    staleTime: 60_000,
   });
 
   const saveMut = useMutation({
@@ -265,6 +344,33 @@ export default function WebsiteBlog() {
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["website-blog-tags"] }); toast({ title: "Tag deleted" }); },
   });
 
+  const generatePostMut = useMutation({
+    mutationFn: () => customFetch("/api/website/ai/generate-blog-post", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        ...aiBrief,
+        sourceUrls: aiBrief.sourceUrls.split(/\r?\n/).map(url => url.trim()).filter(Boolean),
+      }),
+    }) as Promise<AiBlogGenerationResponse>,
+    onSuccess: data => {
+      qc.invalidateQueries({ queryKey: ["website-blog-posts"] });
+      qc.invalidateQueries({ queryKey: ["website-blog-post-tags"] });
+      setShowAiGenerator(false);
+      setAiBrief({ ...EMPTY_AI_BRIEF });
+      openEditPost(data.post);
+      setEditLocale(data.post.locale || "en");
+      setForm(current => ({ ...current, selectedTagIds: data.draft.tagIds }));
+      const used = data.sources.filter(source => source.used).length;
+      const unavailable = data.sources.length - used;
+      toast({
+        title: "AI draft created",
+        description: `${used} web source${used === 1 ? "" : "s"} used${unavailable ? `; ${unavailable} could not be read` : ""}. Review before publishing.`,
+      });
+    },
+    onError: (error: Error) => toast({ title: "AI draft could not be created", description: error.message, variant: "destructive" }),
+  });
+
   function openNewPost() {
     setEditPost(null);
     setForm({ ...EMPTY_FORM });
@@ -292,7 +398,15 @@ export default function WebsiteBlog() {
       locale: p.locale || "en",
       metaTitle: p.metaTitle ?? "",
       metaDescription: p.metaDescription ?? "",
-      ogImageUrl: content.ogImageUrl ?? "",
+      canonicalUrl: content.seo?.canonicalUrl ?? "",
+      robotsIndex: content.seo?.robotsIndex !== false,
+      robotsFollow: content.seo?.robotsFollow !== false,
+      ogTitle: content.seo?.ogTitle ?? "",
+      ogDescription: content.seo?.ogDescription ?? "",
+      ogImageUrl: content.seo?.ogImageUrl ?? content.ogImageUrl ?? "",
+      twitterTitle: content.seo?.twitterTitle ?? "",
+      twitterDescription: content.seo?.twitterDescription ?? "",
+      twitterImageUrl: content.seo?.twitterImageUrl ?? "",
       featured: !!content.featured,
       selectedTagIds: assignedTagIds,
       status: p.status,
@@ -318,13 +432,28 @@ export default function WebsiteBlog() {
       toast({ title: "Title and slug are required", variant: "destructive" });
       return;
     }
+    if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(form.slug.trim())) {
+      toast({ title: "Invalid slug", description: "Use lowercase letters, numbers and single hyphens.", variant: "destructive" });
+      return;
+    }
+    if (form.status === "published" && !form.body.trim()) {
+      toast({ title: "Published articles need content", variant: "destructive" });
+      return;
+    }
+    if (form.canonicalUrl.trim()) {
+      const expected = editPost ? new RegExp(`^/${form.locale}/guides/[a-z0-9-]+-${editPost.id}$`) : null;
+      if (!expected?.test(form.canonicalUrl.trim())) {
+        toast({ title: "Canonical path is not valid", description: editPost ? `Use /${form.locale}/guides/article-slug-${editPost.id}, or leave it empty.` : "Save the new article first, then add a canonical override if needed.", variant: "destructive" });
+        return;
+      }
+    }
 
     const rt = readTime(form.body);
     const publishedAt = form.status === "published" && form.publishDate
       ? new Date(form.publishDate).toISOString()
       : form.status === "published" ? new Date().toISOString() : null;
 
-    const TRANSLATABLE_BLOG = ["title", "excerpt", "body", "metaTitle", "metaDescription"] as const;
+    const TRANSLATABLE_BLOG = ["title", "excerpt", "body", "metaTitle", "metaDescription", "ogTitle", "ogDescription", "twitterTitle", "twitterDescription"] as const;
     if (editLocale !== "en") {
       const partial: Record<string, string> = {};
       for (const f of TRANSLATABLE_BLOG) partial[f] = form[f];
@@ -339,7 +468,22 @@ export default function WebsiteBlog() {
       title: baseForm.title.trim(),
       slug: baseForm.slug.trim(),
       excerpt: baseForm.excerpt.trim() || null,
-      content: { body: baseForm.body, featured: baseForm.featured, readTime: rt, ogImageUrl: baseForm.ogImageUrl || undefined },
+      content: {
+        body: baseForm.body,
+        featured: baseForm.featured,
+        readTime: rt,
+        seo: {
+          canonicalUrl: baseForm.canonicalUrl.trim() || undefined,
+          robotsIndex: baseForm.robotsIndex,
+          robotsFollow: baseForm.robotsFollow,
+          ogTitle: baseForm.ogTitle.trim() || undefined,
+          ogDescription: baseForm.ogDescription.trim() || undefined,
+          ogImageUrl: baseForm.ogImageUrl.trim() || undefined,
+          twitterTitle: baseForm.twitterTitle.trim() || undefined,
+          twitterDescription: baseForm.twitterDescription.trim() || undefined,
+          twitterImageUrl: baseForm.twitterImageUrl.trim() || undefined,
+        },
+      },
       featuredImageUrl: baseForm.featuredImageUrl || null,
       categoryId: baseForm.categoryId ? parseInt(baseForm.categoryId) : null,
       authorId: baseForm.authorId ? parseInt(baseForm.authorId) : null,
@@ -413,13 +557,32 @@ export default function WebsiteBlog() {
 
   return (
     <>
-      <div className="max-w-6xl mx-auto p-6 space-y-6">
-        <div className="flex items-center gap-3">
-          <BookOpen className="w-6 h-6 text-primary" />
-          <div>
+      <div className={embedded ? "space-y-6" : "max-w-6xl mx-auto p-6 space-y-6"}>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <BookOpen className="w-6 h-6 text-primary" />
+            <div>
             <h1 className="text-2xl font-bold">Blog</h1>
-            <p className="text-sm text-muted-foreground">Manage blog posts, categories, and tags.</p>
+              <p className="text-sm text-muted-foreground">Create articles, translations and article SEO. The managed Blog page controls the listing layout.</p>
+            </div>
           </div>
+          <div className="flex flex-wrap gap-2">
+            {blogLanding && <Button asChild variant="outline"><a href={`/admin/website/pages/${blogLanding.id}/edit`}><LayoutTemplate className="me-2 h-4 w-4" />Edit blog page</a></Button>}
+            <Button asChild variant="outline"><a href="/en/blog" target="_blank" rel="noopener noreferrer"><ExternalLink className="me-2 h-4 w-4" />Open public blog</a></Button>
+            <Button variant="outline" onClick={() => setShowAiGenerator(true)}><Sparkles className="me-2 h-4 w-4 text-violet-600" />Create with AI</Button>
+            <Button onClick={openNewPost}><Plus className="me-2 h-4 w-4" />New post</Button>
+          </div>
+        </div>
+
+        <div className="grid gap-3 md:grid-cols-2">
+          <Card className="border-primary/15 bg-primary/[0.035] p-4">
+            <p className="flex items-center gap-2 font-semibold"><LayoutTemplate className="h-4 w-4 text-primary" />Blog listing page</p>
+            <p className="mt-1 text-sm text-muted-foreground">Hero, filters, cards slot and supporting sections are edited from the managed Blog page.</p>
+          </Card>
+          <Card className="border-primary/15 bg-primary/[0.035] p-4">
+            <p className="flex items-center gap-2 font-semibold"><BookOpen className="h-4 w-4 text-primary" />Blog articles</p>
+            <p className="mt-1 text-sm text-muted-foreground">Title, body/HTML, media, categories, translations, publishing and article-level SEO are managed here.</p>
+          </Card>
         </div>
 
         <Tabs value={tab} onValueChange={setTab}>
@@ -446,7 +609,10 @@ export default function WebsiteBlog() {
                   </SelectContent>
                 </Select>
               </div>
-              <Button onClick={openNewPost} className="rounded-xl gap-2"><Plus className="w-4 h-4" /> New Post</Button>
+              <div className="flex flex-wrap gap-2">
+                <Button variant="outline" onClick={() => setShowAiGenerator(true)} className="rounded-xl gap-2"><Sparkles className="w-4 h-4 text-violet-600" /> Create with AI</Button>
+                <Button onClick={openNewPost} className="rounded-xl gap-2"><Plus className="w-4 h-4" /> New Post</Button>
+              </div>
             </div>
 
             <Card className="border-none shadow-lg shadow-black/5 overflow-hidden">
@@ -494,6 +660,7 @@ export default function WebsiteBlog() {
                         <td className="py-3 px-4 text-right">
                           <div className="flex gap-1 justify-end">
                             <Button size="icon" variant="ghost" className="w-7 h-7" title="Edit" onClick={() => openEditPost(p)}><Edit className="w-3.5 h-3.5" /></Button>
+                            {p.status === "published" && <Button asChild size="icon" variant="ghost" className="w-7 h-7" title="Open public article"><a href={`/${p.locale}/guides/${p.slug}-${p.id}`} target="_blank" rel="noopener noreferrer"><ExternalLink className="w-3.5 h-3.5" /></a></Button>}
                             {p.status !== "archived" && (
                               <Button size="icon" variant="ghost" className="w-7 h-7" title={p.status === "published" ? "Unpublish" : "Publish"}
                                 onClick={() => publishMut.mutate({ id: p.id, action: p.status === "published" ? "unpublish" : "publish" })}>
@@ -574,6 +741,77 @@ export default function WebsiteBlog() {
         </Tabs>
       </div>
 
+      <Dialog open={showAiGenerator} onOpenChange={setShowAiGenerator}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><Sparkles className="h-5 w-5 text-violet-600" />Create a sourced article with AI</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-5">
+            <div className="rounded-2xl border border-violet-200 bg-violet-50/70 p-4 text-sm text-violet-950">
+              <p className="font-semibold">One action creates a complete draft</p>
+              <p className="mt-1 text-violet-900/70">The system reads the supplied public sources, creates the article HTML, fills SEO and social fields, selects existing categories and tags, and saves the result as a draft. Nothing is published automatically.</p>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Article topic *</Label>
+              <Input value={aiBrief.topic} onChange={event => setAiBrief(value => ({ ...value, topic: event.target.value }))} placeholder="Example: A practical guide to UK student visa documents" className="rounded-xl" />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Public source URLs</Label>
+              <Textarea value={aiBrief.sourceUrls} onChange={event => setAiBrief(value => ({ ...value, sourceUrls: event.target.value }))} rows={4} className="rounded-xl font-mono text-xs" placeholder={"https://official-source.example/page\nhttps://university.example/requirements"} />
+              <p className="text-xs text-muted-foreground">One HTTPS URL per line, maximum four. Private/local addresses, oversized pages and unsupported files are rejected.</p>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Pasted source notes</Label>
+              <Textarea value={aiBrief.sourceNotes} onChange={event => setAiBrief(value => ({ ...value, sourceNotes: event.target.value }))} rows={5} className="rounded-xl" placeholder="Paste verified notes, facts or a source excerpt here..." />
+              <p className="text-xs text-muted-foreground">At least one URL or a source note is required. Source content is treated as evidence, never as an instruction.</p>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label>Audience</Label>
+                <Input value={aiBrief.audience} onChange={event => setAiBrief(value => ({ ...value, audience: event.target.value }))} className="rounded-xl" />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Language</Label>
+                <Select value={aiBrief.locale} onValueChange={locale => setAiBrief(value => ({ ...value, locale }))}>
+                  <SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger>
+                  <SelectContent>{SUPPORTED_LANGUAGES.map(code => <SelectItem key={code} value={code}>{LANGUAGE_META[code].flag} {LANGUAGE_META[code].name}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Tone</Label>
+                <Select value={aiBrief.tone} onValueChange={tone => setAiBrief(value => ({ ...value, tone: tone as AiBlogBrief["tone"] }))}>
+                  <SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger>
+                  <SelectContent><SelectItem value="helpful">Helpful</SelectItem><SelectItem value="practical">Practical</SelectItem><SelectItem value="authoritative">Authoritative</SelectItem><SelectItem value="inspiring">Inspiring</SelectItem></SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Article depth</Label>
+                <Select value={aiBrief.length} onValueChange={length => setAiBrief(value => ({ ...value, length: length as AiBlogBrief["length"] }))}>
+                  <SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger>
+                  <SelectContent><SelectItem value="short">Short · 700–900 words</SelectItem><SelectItem value="standard">Standard · 1,000–1,400</SelectItem><SelectItem value="deep">Deep guide · 1,600–2,200</SelectItem></SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Additional editorial direction</Label>
+              <Textarea value={aiBrief.instructions} onChange={event => setAiBrief(value => ({ ...value, instructions: event.target.value }))} rows={3} className="rounded-xl" placeholder="Optional: sections to include, questions to answer, facts to avoid..." />
+            </div>
+            {!aiStatus?.configured && <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">Connect and enable OpenAI or Anthropic in Settings → Integrations first.</p>}
+            <div className="flex flex-wrap justify-end gap-3">
+              <Button variant="outline" onClick={() => setShowAiGenerator(false)} className="rounded-xl">Cancel</Button>
+              <Button
+                onClick={() => generatePostMut.mutate()}
+                disabled={generatePostMut.isPending || !aiStatus?.configured || !aiBrief.topic.trim() || (!aiBrief.sourceUrls.trim() && !aiBrief.sourceNotes.trim())}
+                className="rounded-xl gap-2 bg-violet-600 hover:bg-violet-700"
+              >
+                <Sparkles className={`h-4 w-4 ${generatePostMut.isPending ? "animate-pulse" : ""}`} />
+                {generatePostMut.isPending ? "Reading sources and creating..." : "Create complete draft"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={showPostDialog} onOpenChange={setShowPostDialog}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>{editPost ? "Edit Post" : "New Post"}</DialogTitle></DialogHeader>
@@ -609,8 +847,35 @@ export default function WebsiteBlog() {
                 </div>
               </div>
               <Textarea value={form.body} onChange={e => setForm(f => ({ ...f, body: e.target.value }))} className="rounded-xl font-mono text-sm" rows={12} placeholder="Write your blog post content here..." />
+              <p className="text-xs text-muted-foreground">Semantic HTML is supported. Reusable layout classes: <code>blog-html-section</code>, <code>blog-html-section--surface</code>, <code>blog-html-grid</code>, <code>blog-html-card</code>, <code>blog-html-timeline</code>, <code>blog-html-table</code>, <code>blog-html-faq</code> and <code>blog-html-cta</code>. Scripts, inline styles, embeds and forms are removed.</p>
               {form.body && <p className="text-xs text-muted-foreground flex items-center gap-1"><Clock className="w-3 h-3" /> ~{readTime(form.body)} min read</p>}
             </div>
+
+            {editPost?.content?.sources?.length ? (
+              <Card className="border-violet-200 bg-violet-50/50 p-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="flex items-center gap-2 text-sm font-semibold"><Sparkles className="h-4 w-4 text-violet-600" />AI source record</p>
+                  {editPost.content.aiGeneration?.provider ? <Badge variant="outline">{editPost.content.aiGeneration.provider}</Badge> : null}
+                </div>
+                <ul className="mt-3 space-y-2 text-xs">
+                  {editPost.content.sources.map((source, index) => <li key={`${source.url}-${index}`} className="flex gap-2"><span className="text-violet-600">{index + 1}.</span><a href={source.url} target="_blank" rel="noopener noreferrer" className="break-all text-primary hover:underline">{source.title || source.url}</a></li>)}
+                </ul>
+                <p className="mt-3 text-xs text-muted-foreground">These references were used to prepare the draft. Always review time-sensitive requirements before publishing.</p>
+              </Card>
+            ) : null}
+
+            <Card className="overflow-hidden border-dashed">
+              <div className="flex items-center justify-between border-b bg-muted/30 px-4 py-3">
+                <p className="flex items-center gap-2 text-sm font-semibold"><Monitor className="h-4 w-4 text-primary" />Live article preview</p>
+                <span className="text-xs text-muted-foreground">Sanitized public output</span>
+              </div>
+              <article className="mx-auto max-w-2xl p-5 sm:p-7">
+                {form.featuredImageUrl && <img src={form.featuredImageUrl} alt="" className="mb-6 h-48 w-full rounded-2xl object-cover" />}
+                <h2 className="font-display text-3xl font-bold leading-tight">{form.title || "Article title"}</h2>
+                {form.excerpt && <p className="mt-4 text-lg text-muted-foreground">{form.excerpt}</p>}
+                {form.body ? <div className="guide-html prose prose-slate mt-7 max-w-none dark:prose-invert" dangerouslySetInnerHTML={{ __html: sanitizePublicHtmlContent(form.body) }} /> : <p className="mt-7 text-sm text-muted-foreground">Start writing to preview the article body.</p>}
+              </article>
+            </Card>
 
             <AiAssistantPanel
               context={form.body || form.excerpt || form.title}
@@ -664,7 +929,7 @@ export default function WebsiteBlog() {
               <div className="space-y-1.5">
                 <Label>Editing Locale</Label>
                 <Select value={editLocale} onValueChange={v => {
-                  const TRANSLATABLE = ["title", "excerpt", "body", "metaTitle", "metaDescription"] as const;
+                  const TRANSLATABLE = ["title", "excerpt", "body", "metaTitle", "metaDescription", "ogTitle", "ogDescription", "twitterTitle", "twitterDescription"] as const;
                   if (editLocale === "en") {
                     defaultFormRef.current = { ...form };
                   } else {
@@ -705,7 +970,7 @@ export default function WebsiteBlog() {
                     <p className="text-[10px] text-blue-600">Editing translation for {LANGUAGE_META[editLocale as keyof typeof LANGUAGE_META]?.name}.</p>
                     <Button type="button" variant="outline" size="sm" className="h-6 text-[10px] px-2" onClick={() => {
                       const base = defaultFormRef.current;
-                      const TRANSLATABLE = ["title", "excerpt", "body", "metaTitle", "metaDescription"] as const;
+                      const TRANSLATABLE = ["title", "excerpt", "body", "metaTitle", "metaDescription", "ogTitle", "ogDescription", "twitterTitle", "twitterDescription"] as const;
                       const copy: Record<string, string> = {};
                       for (const f of TRANSLATABLE) copy[f] = base[f];
                       setForm(f => ({ ...f, ...copy }));
@@ -767,17 +1032,39 @@ export default function WebsiteBlog() {
               <div className="space-y-4">
                 <div className="grid sm:grid-cols-2 gap-4">
                   <div className="space-y-1.5">
-                    <Label>Meta Title</Label>
-                    <Input value={form.metaTitle} onChange={e => setForm(f => ({ ...f, metaTitle: e.target.value }))} className="rounded-xl" placeholder="SEO title" />
+                    <Label>Meta Title <span className="text-muted-foreground">({form.metaTitle.length}/60)</span></Label>
+                    <Input maxLength={70} value={form.metaTitle} onChange={e => setForm(f => ({ ...f, metaTitle: e.target.value }))} className="rounded-xl" placeholder="SEO title" />
                   </div>
                   <div className="space-y-1.5">
-                    <Label>Meta Description</Label>
-                    <Input value={form.metaDescription} onChange={e => setForm(f => ({ ...f, metaDescription: e.target.value }))} className="rounded-xl" placeholder="SEO description" />
+                    <Label>Meta Description <span className="text-muted-foreground">({form.metaDescription.length}/160)</span></Label>
+                    <Textarea maxLength={170} value={form.metaDescription} onChange={e => setForm(f => ({ ...f, metaDescription: e.target.value }))} className="rounded-xl" rows={3} placeholder="SEO description" />
                   </div>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Canonical path</Label>
+                  <Input dir="ltr" value={form.canonicalUrl} onChange={e => setForm(f => ({ ...f, canonicalUrl: e.target.value }))} className="rounded-xl" placeholder={`/${form.locale}/guides/${form.slug || "article"}-${editPost?.id || "id"}`} />
+                  <p className="text-xs text-muted-foreground">Leave empty to use the generated locale-aware article URL. A custom path is accepted only when it keeps this article ID.</p>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="flex items-center justify-between rounded-xl border p-3 text-sm"><span><strong className="block">Search indexing</strong><span className="text-xs text-muted-foreground">Allow this published article in search results</span></span><Switch checked={form.robotsIndex} onCheckedChange={value => setForm(f => ({ ...f, robotsIndex: value }))} /></label>
+                  <label className="flex items-center justify-between rounded-xl border p-3 text-sm"><span><strong className="block">Follow links</strong><span className="text-xs text-muted-foreground">Allow crawlers to follow article links</span></span><Switch checked={form.robotsFollow} onCheckedChange={value => setForm(f => ({ ...f, robotsFollow: value }))} /></label>
+                </div>
+                <div className="grid sm:grid-cols-2 gap-4">
+                  <div className="space-y-1.5"><Label>Open Graph title</Label><Input value={form.ogTitle} onChange={e => setForm(f => ({ ...f, ogTitle: e.target.value }))} className="rounded-xl" placeholder="Defaults to meta title" /></div>
+                  <div className="space-y-1.5"><Label>Open Graph description</Label><Input value={form.ogDescription} onChange={e => setForm(f => ({ ...f, ogDescription: e.target.value }))} className="rounded-xl" placeholder="Defaults to meta description" /></div>
                 </div>
                 <div className="space-y-1.5">
                   <Label>OG Image URL</Label>
                   <Input value={form.ogImageUrl} onChange={e => setForm(f => ({ ...f, ogImageUrl: e.target.value }))} className="rounded-xl" placeholder="https://... (Open Graph image)" />
+                </div>
+                <div className="grid sm:grid-cols-2 gap-4">
+                  <div className="space-y-1.5"><Label>Twitter title</Label><Input value={form.twitterTitle} onChange={e => setForm(f => ({ ...f, twitterTitle: e.target.value }))} className="rounded-xl" placeholder="Defaults to Open Graph title" /></div>
+                  <div className="space-y-1.5"><Label>Twitter description</Label><Input value={form.twitterDescription} onChange={e => setForm(f => ({ ...f, twitterDescription: e.target.value }))} className="rounded-xl" placeholder="Defaults to Open Graph description" /></div>
+                </div>
+                <div className="space-y-1.5"><Label>Twitter image URL</Label><Input value={form.twitterImageUrl} onChange={e => setForm(f => ({ ...f, twitterImageUrl: e.target.value }))} className="rounded-xl" placeholder="Defaults to Open Graph image" /></div>
+                <div className="grid gap-3 lg:grid-cols-2">
+                  <div className="rounded-xl border bg-white p-4 text-slate-900"><p className="text-xs text-emerald-700">findandstudy.com</p><p className="mt-1 truncate text-lg text-blue-700">{form.metaTitle || form.title || "Article title"}</p><p className="mt-1 line-clamp-2 text-sm text-slate-600">{form.metaDescription || form.excerpt || "Add a meta description for the search preview."}</p></div>
+                  <div className="overflow-hidden rounded-xl border bg-white text-slate-900">{form.ogImageUrl ? <img src={form.ogImageUrl} alt="" className="h-28 w-full object-cover" /> : <div className="flex h-28 items-center justify-center bg-slate-100 text-xs text-slate-500">Social image preview</div>}<div className="p-3"><p className="truncate font-semibold">{form.ogTitle || form.metaTitle || form.title || "Article title"}</p><p className="line-clamp-2 text-xs text-slate-600">{form.ogDescription || form.metaDescription || form.excerpt || "Social description"}</p></div></div>
                 </div>
               </div>
             </div>

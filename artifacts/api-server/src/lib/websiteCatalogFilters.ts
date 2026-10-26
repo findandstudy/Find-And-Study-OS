@@ -13,7 +13,15 @@ export function countryAliases(country: { name: string; code: string }) {
   const values = [country.name, country.code];
   if (country.code.toUpperCase() === "TR") values.push("Turkey", "Türkiye", "Turkiye");
   if (country.code.toUpperCase() === "GB") values.push("UK", "United Kingdom");
+  if (country.code.toUpperCase() === "AE") values.push("UAE", "United Arab Emirates");
   return values;
+}
+export function canonicalCountryName(
+  value: string,
+  countries: ReadonlyArray<{ name: string; code: string }>,
+) {
+  const trimmed = value.trim();
+  return countries.find(country => countryMatches(trimmed, country))?.name ?? trimmed;
 }
 export async function websiteCatalogTaxonomy(source: string, countryId?: number) {
   const conditions: any[] = [];

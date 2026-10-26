@@ -10,28 +10,39 @@ import type { PublicProgramDetailData } from "./PublicProgramDetailDialog";
 import { PublicProgramFilters, type PublicProgramFacets, type PublicProgramSelection } from "./PublicProgramFilters";
 import { detailCopy, displayTuition, splitRequirements, type DetailTuition } from "./detailPresentation";
 import { DetailPrice } from "./DetailEditorial";
-import { emptyProgramSelection, programPageNumbers, universityProgramQuery } from "./universityProgramQuery";
+import { detailProgramQuery, emptyProgramSelection, programPageNumbers, type DetailProgramScope } from "./universityProgramQuery";
 
-type ProgramRow = PublicProgramDetailData & { universityId: number; isActive?: boolean; universityIsActive?: boolean; tuition?: DetailTuition | null };
+export type ProgramRow = PublicProgramDetailData & { universityId: number; isActive?: boolean; universityIsActive?: boolean; tuition?: DetailTuition | null };
 type Results = { data: ProgramRow[]; meta: { total: number; totalPages: number } };
 const emptyFacets: PublicProgramFacets = { countries: [], cities: [], universities: [], universityTypes: [], degrees: [], languages: [], fields: [], feeRange: null };
+const unique = (values: Array<string | null | undefined>) => [...new Set(values.filter((value): value is string => Boolean(value)))].sort((a, b) => a.localeCompare(b));
+function facetsFromRows(rows: ProgramRow[]): PublicProgramFacets {
+  const fees = rows.map(row => row.discountedFee ?? row.tuitionFee).filter((value): value is number => typeof value === "number");
+  return {
+    countries: unique(rows.map(row => row.universityCountry)), cities: unique(rows.map(row => row.universityCity)),
+    universityTypes: unique(rows.map(row => row.universityType)),
+    universities: [...new Map(rows.map(row => [row.universityId, { id: row.universityId, name: row.universityName }])).values()].sort((a, b) => a.name.localeCompare(b.name)),
+    degrees: unique(rows.map(row => row.degree)), languages: unique(rows.map(row => row.language)), fields: unique(rows.map(row => row.field)),
+    feeRange: fees.length ? { min: Math.min(...fees), max: Math.max(...fees) } : null,
+  };
+}
 const PublicProgramDetailDialog = lazy(() => import("./PublicProgramDetailDialog")
   .then(module => ({ default: module.PublicProgramDetailDialog })));
 
 /** Full server-paged discovery inside one university, not the 12 related links. */
-export function UniversityProgramBrowser({ universityId, admissionsOpen }: { universityId: number; admissionsOpen: boolean }) {
+export function DetailProgramBrowser({ scope, admissionsOpen, previewPrograms = [], previewTotal }: { scope: DetailProgramScope; admissionsOpen: boolean; previewPrograms?: ProgramRow[]; previewTotal?: number }) {
   const preview = useContext(DetailPreviewContext);
   const { t, lang, localePath } = useI18n();
   const [selection, setSelection] = useState(emptyProgramSelection);
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
-  const [facets, setFacets] = useState((preview?.universityPrograms?.facets as PublicProgramFacets | undefined) ?? emptyFacets);
-  const [result, setResult] = useState<Results>((preview?.universityPrograms?.result as Results | undefined) ?? { data: [], meta: { total: 0, totalPages: 0 } });
+  const [facets, setFacets] = useState((preview?.universityPrograms?.facets as PublicProgramFacets | undefined) ?? (preview ? facetsFromRows(previewPrograms) : emptyFacets));
+  const [result, setResult] = useState<Results>((preview?.universityPrograms?.result as Results | undefined) ?? { data: preview ? previewPrograms : [], meta: { total: preview ? (previewTotal ?? previewPrograms.length) : 0, totalPages: 0 } });
   const [loading, setLoading] = useState(!preview);
   const [failed, setFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const [detailProgram, setDetailProgram] = useState<ProgramRow | null>(null);
-  const query = universityProgramQuery(universityId, lang, search, selection);
+  const query = detailProgramQuery(scope, lang, search, selection);
   const [settledQuery, setSettledQuery] = useState(query);
   useEffect(() => { const timer = setTimeout(() => setSettledQuery(query), 300); return () => clearTimeout(timer); }, [query]);
   useEffect(() => {
@@ -44,21 +55,28 @@ export function UniversityProgramBrowser({ universityId, admissionsOpen }: { uni
     ]).then(([next, options]) => {
       if (controller.signal.aborted) return;
       // A misconfigured/unexpected response must not widen the university scope.
-      if (next.data.some(program => program.universityId !== universityId)) throw new Error("University scope mismatch");
+      if (scope.kind === "university" && next.data.some(program => program.universityId !== scope.universityId)) throw new Error("University scope mismatch");
       setResult(next); setFacets(options);
     }).catch(() => { if (!controller.signal.aborted) { setFailed(true); setResult({ data: [], meta: { total: 0, totalPages: 0 } }); } })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
-  }, [settledQuery, page, universityId, attempt]);
+  }, [settledQuery, page, scope.kind, scope.kind === "university" ? scope.universityId : scope.country, scope.kind === "city" ? scope.city : "", attempt]);
   const busy = loading || query !== settledQuery;
   const clear = () => { setSelection(emptyProgramSelection()); setSearch(""); setPage(1); };
   const changeSelection = (key: keyof PublicProgramSelection, value: string | string[]) => {
-    if (!["level", "language", "field", "feeMin", "feeMax"].includes(key)) return;
+    const allowed = scope.kind === "country"
+      ? ["city", "universityType", "universityId", "level", "language", "field", "feeMin", "feeMax"]
+      : scope.kind === "city"
+        ? ["universityType", "universityId", "level", "language", "field", "feeMin", "feeMax"]
+        : ["level", "language", "field", "feeMin", "feeMax"];
+    if (!allowed.includes(key)) return;
     setSelection(current => ({ ...current, [key]: value })); setPage(1);
   };
   return <div className="university-program-browser" role="region" aria-label={t("catalogDetail.availablePrograms")}>
     <PublicProgramFilters filters={facets} selection={selection} onSelect={changeSelection} onFeeChange={changeSelection}
-      search={search} onSearchChange={value => { setSearch(value); setPage(1); }} onClear={clear} total={result.meta.total} universityLocked feeHint={detailCopy(lang).legacyPrice} />
+      search={search} onSearchChange={value => { setSearch(value); setPage(1); }} onClear={clear} total={result.meta.total}
+      lockedLocationKeys={scope.kind === "university" ? ["country", "city", "universityType", "universityId"] : scope.kind === "city" ? ["country", "city"] : ["country"]}
+      feeHint={detailCopy(lang).legacyPrice} />
     <div className="flex items-center gap-3 my-6 bg-card/60 rounded-2xl px-6 py-4 border border-border/30 shadow-sm" role="status" aria-live="polite">
       <BookOpen className="w-4 h-4 text-primary" aria-hidden="true" />
       {busy ? <Loader2 className="h-5 w-5 animate-spin" aria-label={t("common.loading")} /> : <p className="text-muted-foreground">{failed ? t("common.error") : t("programs.showingResults", { count: String(result.meta.total) })}</p>}
@@ -80,4 +98,8 @@ export function UniversityProgramBrowser({ universityId, admissionsOpen }: { uni
         tuitionContent={<div className="university-program-tuition"><p className="text-[10px] text-muted-foreground mb-1.5">{t("courseFinderPage.tuitionFee")}</p><DetailPrice tuition={displayTuition({ ...detailProgram, tuition: detailProgram.tuition ?? null }, lang)} locale={lang} verifiedLabel={t("catalogDetail.verifiedPrice")} /></div>} />
     </Suspense> : null}
   </div>;
+}
+
+export function UniversityProgramBrowser({ universityId, admissionsOpen }: { universityId: number; admissionsOpen: boolean }) {
+  return <DetailProgramBrowser scope={{ kind: "university", universityId }} admissionsOpen={admissionsOpen} />;
 }

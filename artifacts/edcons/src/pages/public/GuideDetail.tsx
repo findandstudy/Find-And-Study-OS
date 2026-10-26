@@ -8,7 +8,8 @@ import { useI18n } from "@/hooks/use-i18n";
 import { SITE_NAME, SITE_URL, useJsonLd } from "@/hooks/use-json-ld";
 import { useSeo } from "@/hooks/use-seo";
 import type { Language } from "@/lib/i18n";
-import { sanitizePublicRichText } from "@/lib/publicHtmlSanitizer";
+import { sanitizePublicHtmlContent } from "@/lib/publicHtmlSanitizer";
+import "./guideEditorial.css";
 
 type GuideResponse = {
   data: {
@@ -34,6 +35,13 @@ type GuideResponse = {
     canonicalPath: string;
     alternatePaths: Partial<Record<Language, string>>;
     internalLinkPolicy: "PUBLISHED_INDEXABLE_ONLY" | "DISABLED_OR_EMPTY";
+    robotsFollow?: boolean;
+    ogTitle?: string | null;
+    ogDescription?: string | null;
+    ogImageUrl?: string | null;
+    twitterTitle?: string | null;
+    twitterDescription?: string | null;
+    twitterImageUrl?: string | null;
   };
 };
 
@@ -48,7 +56,7 @@ export default function GuideDetail({ routeKey }: { routeKey: string }) {
     setFailed(false);
     customFetch<GuideResponse>(
       `/api/public/web/guides/${encodeURIComponent(routeKey)}?locale=${encodeURIComponent(lang)}`,
-      { method: "GET" },
+      { method: "GET", cache: "no-store" },
     )
       .then(setGuide)
       .catch(() => setFailed(true))
@@ -60,7 +68,14 @@ export default function GuideDetail({ routeKey }: { routeKey: string }) {
     description: guide?.meta.description || t("seo.blogDesc"),
     canonical: guide ? `${SITE_URL}${guide.meta.canonicalPath}` : undefined,
     noindex: !guide?.meta.indexable,
+    nofollow: guide?.meta.robotsFollow === false,
     ogType: "article",
+    ogTitle: guide?.meta.ogTitle || undefined,
+    ogDescription: guide?.meta.ogDescription || undefined,
+    ogImage: guide?.meta.ogImageUrl || undefined,
+    twitterTitle: guide?.meta.twitterTitle || undefined,
+    twitterDescription: guide?.meta.twitterDescription || undefined,
+    twitterImage: guide?.meta.twitterImageUrl || undefined,
     lang,
     alternates: guide?.meta.alternatePaths,
   });
@@ -113,8 +128,8 @@ export default function GuideDetail({ routeKey }: { routeKey: string }) {
           {guide.data.excerpt ? <p className="mt-7 text-xl leading-8 text-muted-foreground">{guide.data.excerpt}</p> : null}
         </header>
         <div
-          className="prose prose-slate mt-10 max-w-none dark:prose-invert"
-          dangerouslySetInnerHTML={{ __html: sanitizePublicRichText(guide.data.body) }}
+          className="guide-html prose prose-slate mt-10 max-w-none dark:prose-invert"
+          dangerouslySetInnerHTML={{ __html: sanitizePublicHtmlContent(guide.data.body) }}
         />
       </article>
       {guide.related.length > 0 ? (

@@ -1,5 +1,5 @@
 import { lazy, Suspense, useState, useEffect, useCallback, useRef, useMemo } from "react";
-import { Link, useLocation } from "wouter";
+import { useLocation } from "wouter";
 import { useI18n } from "@/hooks/use-i18n";
 import { useSeo } from "@/hooks/use-seo";
 import { useJsonLd, SITE_URL, SITE_NAME } from "@/hooks/use-json-ld";
@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PublicProgramFilters } from "./PublicProgramFilters";
 import { PublicProgramCard } from "./PublicProgramCard";
+import { ManagedPublicPage } from "./ManagedPublicPage";
+import { useTemplatePage, useTemplatePageSeo } from "./useTemplatePage";
 import { customFetch } from "@workspace/api-client-react";
 import {
   Search, MapPin, BookOpen, GraduationCap, Globe2, Clock, DollarSign, Users,
@@ -82,9 +84,29 @@ function initialQueryValues(key: string): string[] {
     .slice(0, 20);
 }
 
+const COUNTRY_ALIASES = [
+  ["Turkey", "Türkiye", "Turkiye", "TR"],
+  ["United Kingdom", "UK", "GB"],
+  ["United Arab Emirates", "UAE", "AE"],
+] as const;
+
+function countryKey(value: string): string {
+  return value.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase();
+}
+
+function canonicalCountrySelection(value: string, options: string[]): string | null {
+  const exact = options.find(option => countryKey(option) === countryKey(value));
+  if (exact) return exact;
+  const aliases = COUNTRY_ALIASES.find(group => group.some(alias => countryKey(alias) === countryKey(value)));
+  return aliases ? options.find(option => aliases.some(alias => countryKey(alias) === countryKey(option))) ?? null : null;
+}
+
 export default function Programs() {
-  const { t, lang, localePath } = useI18n();
-  useSeo({ title: t("seo.programsTitle"), description: t("seo.programsDesc"), lang });
+  const { t, lang } = useI18n();
+  const managedPage = useTemplatePage("programs", lang);
+  useSeo({ title: managedPage?.meta.title || t("seo.programsTitle"), description: managedPage?.meta.description || t("seo.programsDesc"), lang,
+    noindex: managedPage ? !managedPage.meta.indexable : false, alternates: managedPage?.meta.alternatePaths });
+  useTemplatePageSeo(managedPage);
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [country, setCountry] = useState<string[]>(() => initialQueryValues("country"));
@@ -216,8 +238,13 @@ export default function Programs() {
     const validLevel = new Set(filters.degrees.map(d => d.toLowerCase()));
     const validLang = new Set(filters.languages.map(l => l.toLowerCase()));
     const validField = new Set(filters.fields.map(f => f.toLowerCase()));
-    const validCountry = new Set(filters.countries);
-    setCountry(prev => { const n = prev.filter(v => validCountry.has(v)); return n.length === prev.length ? prev : n; });
+    setCountry(prev => {
+      const n = prev.flatMap(value => {
+        const canonical = canonicalCountrySelection(value, filters.countries);
+        return canonical ? [canonical] : [];
+      });
+      return n.length === prev.length && n.every((value, index) => value === prev[index]) ? prev : n;
+    });
     setCity(prev => { const n = prev.filter(v => validCity.has(v)); return n.length === prev.length ? prev : n; });
     setUniversityType(prev => { const n = prev.filter(v => validType.has(v)); return n.length === prev.length ? prev : n; });
     setUniversityId(prev => { const n = prev.filter(v => validUni.has(v)); return n.length === prev.length ? prev : n; });
@@ -295,40 +322,20 @@ export default function Programs() {
     return pages;
   })();
 
-  return (
+  const programDirectory = (
     <>
-      <section className="pt-24 pb-6 bg-gradient-to-br from-primary/5 via-accent/5 to-primary/5 relative">
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-primary/[0.07] via-transparent to-transparent" />
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-          <div>
-            <div className="text-center mb-10">
-              <span className="inline-flex items-center gap-2 bg-primary/10 text-primary text-sm font-semibold px-4 py-2 rounded-full mb-6 border border-primary/20">
-                <GraduationCap className="w-4 h-4" /> {t("programs.badge")}
-              </span>
-              <h1 className="text-4xl md:text-5xl font-display font-bold text-foreground mb-4">
-                {t("programs.title")} <span className="text-primary">{t("programs.titleHighlight")}</span>
-              </h1>
-              <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-                {t("programs.subtitle")}
-              </p>
-            </div>
-          </div>
-
-          <div>
-            <div className="-mb-8">
-              <PublicProgramFilters
-                filters={filters}
-                selection={{ country, city, universityType, universityId, level, language, field, feeMin, feeMax }}
-                onSelect={(key, values) => ({ country: setCountry, city: setCity, universityType: setUniversityType, universityId: setUniversityId, level: setLevel, language: setLanguage, field: setField })[key](values)}
-                onFeeChange={(key, value) => key === "feeMin" ? setFeeMin(value) : setFeeMax(value)}
-                search={search} onSearchChange={setSearch} onClear={clearAllFilters} total={total}
-              />
-            </div>
-          </div>
+      <section id="program-directory" className="scroll-mt-28 border-y bg-slate-50/70 py-10 dark:bg-slate-950/30">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <PublicProgramFilters
+            filters={filters}
+            selection={{ country, city, universityType, universityId, level, language, field, feeMin, feeMax }}
+            onSelect={(key, values) => ({ country: setCountry, city: setCity, universityType: setUniversityType, universityId: setUniversityId, level: setLevel, language: setLanguage, field: setField })[key](values)}
+            onFeeChange={(key, value) => key === "feeMin" ? setFeeMin(value) : setFeeMax(value)}
+            search={search} onSearchChange={setSearch} onClear={clearAllFilters} total={total}
+          />
         </div>
       </section>
-
-      <section className="pt-2 pb-16">
+      <section className="pb-16 pt-8">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div
             className="flex items-center justify-between mb-8 bg-card/60 backdrop-blur-sm rounded-2xl px-6 py-4 border border-border/30 shadow-sm">
@@ -412,18 +419,12 @@ export default function Programs() {
           )}
         </div>
       </section>
+    </>
+  );
 
-      <section className="py-16 bg-gradient-to-r from-primary to-accent text-white mx-4 sm:mx-8 rounded-3xl mb-12 overflow-hidden relative">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_bottom_left,_rgba(255,255,255,0.1),transparent_60%)]" />
-        <div className="max-w-3xl mx-auto px-8 text-center relative z-10">
-          <h2 className="text-3xl font-display font-bold mb-4">{t("programs.cantFind")}</h2>
-          <p className="text-white/80 mb-8">{t("programs.cantFindDesc")}</p>
-          <Button asChild size="lg" variant="secondary" className="rounded-full px-8 text-primary font-bold shadow-xl shadow-black/10 hover:-translate-y-1 transition-all duration-300">
-            <Link href={localePath("/contact")}>{t("programs.talkToAdvisor")}</Link>
-          </Button>
-        </div>
-      </section>
-
+  return (
+    <>
+      <ManagedPublicPage template="programs" lang={lang} page={managedPage} slotBlockType="catalog_grid" slotContent={programDirectory} />
       {applyProgram ? (
         <Suspense fallback={null}>
           <PublicProgramApplicationDialog

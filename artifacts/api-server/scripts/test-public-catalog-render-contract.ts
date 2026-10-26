@@ -516,7 +516,7 @@ test("CMS page detail renders only the immutable projection and escapes block co
   assert.match(html, /hreflang="x-default"/);
 });
 
-test("internal home fallback hero preserves the existing React fallback geometry", () => {
+test("internal home fallback hero preserves the current React fallback geometry", () => {
   const model: PublicCatalogRenderModel = {
     kind: "page_detail",
     locale: "en",
@@ -548,15 +548,15 @@ test("internal home fallback hero preserves the existing React fallback geometry
     },
   };
   const html = renderPublicCatalogHtml({ indexHtml, model, siteUrl: "https://findandstudy.com", nonce: "home-nonce" });
-  assert.match(html, /pt-24 pb-32 lg:pt-36 lg:pb-40/);
-  assert.match(html, /text-5xl md:text-7xl/);
-  assert.match(html, /max-w-2xl mx-auto leading-relaxed/);
+  assert.match(html, /home-future-hero/);
+  assert.match(html, /home-future-hero-grid/);
+  assert.match(html, /text-5xl/);
   assert.match(html, /rounded-full px-8 h-14/);
   assert.match(html, /href="\/en\/programs"/);
   const client = readFileSync(new URL("../../edcons/src/pages/public/PublicPage.tsx", import.meta.url), "utf8");
   assert.match(client, /case "home_fallback_hero"/);
-  assert.match(client, /pt-24 pb-32 lg:pt-36 lg:pb-40/);
-  assert.match(client, /text-5xl md:text-7xl/);
+  assert.match(client, /home-future-hero/);
+  assert.match(client, /home-future-hero-grid/);
 });
 
 test("first-visit consent is server-rendered, escaped and usable before React", () => {

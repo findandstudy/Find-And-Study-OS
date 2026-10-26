@@ -17,19 +17,19 @@ export type PublicProgramSelection = {
 type MultiKey = Exclude<keyof PublicProgramSelection, "feeMin" | "feeMax">;
 
 /** The existing public Programs controls, shared without owning query/business logic. */
-export function PublicProgramFilters({ filters, selection, onSelect, onFeeChange, search, onSearchChange, onClear, total, universityLocked = false, feeHint }: {
+export function PublicProgramFilters({ filters, selection, onSelect, onFeeChange, search, onSearchChange, onClear, total, universityLocked = false, lockedLocationKeys = [], feeHint }: {
   filters: PublicProgramFacets; selection: PublicProgramSelection;
   onSelect: (key: MultiKey, values: string[]) => void;
   onFeeChange: (key: "feeMin" | "feeMax", value: string) => void;
   search: string; onSearchChange: (value: string) => void;
-  onClear: () => void; total: number; universityLocked?: boolean; feeHint?: string;
+  onClear: () => void; total: number; universityLocked?: boolean; lockedLocationKeys?: MultiKey[]; feeHint?: string;
 }) {
   const { t } = useI18n();
   const [showFilters, setShowFilters] = useState(false);
   const panelId = useId();
-  const activeKeys: Array<keyof PublicProgramSelection> = universityLocked
-    ? ["level", "language", "field", "feeMin", "feeMax"]
-    : ["country", "city", "universityType", "universityId", "level", "language", "field", "feeMin", "feeMax"];
+  const locked = new Set<MultiKey>(universityLocked ? ["country", "city", "universityType", "universityId"] : lockedLocationKeys);
+  const allKeys: Array<keyof PublicProgramSelection> = ["country", "city", "universityType", "universityId", "level", "language", "field", "feeMin", "feeMax"];
+  const activeKeys = allKeys.filter(key => !locked.has(key as MultiKey));
   const activeCount = activeKeys.filter(key => selection[key].length > 0).length;
   const hasFilters = activeCount > 0 || search.length > 0;
   const locationControls = [
@@ -63,7 +63,7 @@ export function PublicProgramFilters({ filters, selection, onSelect, onFeeChange
     {showFilters && <div>
       <div id={panelId} className="pt-5 space-y-4">
         <div className="h-px bg-gradient-to-r from-transparent via-border/60 to-transparent" />
-        {!universityLocked && <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-4 gap-y-3">{locationControls.map(control)}</div>}
+        {locationControls.some(item => !locked.has(item.key)) && <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-4 gap-y-3">{locationControls.filter(item => !locked.has(item.key)).map(control)}</div>}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-4 gap-y-3">
           {programControls.map(control)}
           <div className="space-y-1.5 min-w-0">

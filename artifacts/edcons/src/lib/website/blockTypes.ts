@@ -1,7 +1,7 @@
 export interface BlockFieldDef {
   key: string;
   label: string;
-  type: "text" | "textarea" | "richtext" | "image" | "url" | "number" | "select" | "toggle" | "color" | "items";
+  type: "text" | "textarea" | "richtext" | "html" | "image" | "url" | "number" | "select" | "toggle" | "color" | "items";
   placeholder?: string;
   options?: { label: string; value: string }[];
   itemFields?: BlockFieldDef[];
@@ -16,6 +16,26 @@ export interface BlockTypeDef {
   fields: BlockFieldDef[];
   defaultContent: Record<string, unknown>;
 }
+
+export const SECTION_STYLE_FIELDS: BlockFieldDef[] = [
+  { key: "useThemeColors", label: "Use Theme Builder Colors", type: "toggle", defaultValue: true },
+  { key: "sectionBackgroundColor", label: "Section Background", type: "color" },
+  { key: "sectionTextColor", label: "Section Text", type: "color" },
+  { key: "sectionAccentColor", label: "Accent / Link Color", type: "color" },
+  { key: "cardBackgroundColor", label: "Card Background", type: "color" },
+  { key: "sectionBorderColor", label: "Border Color", type: "color" },
+  { key: "sectionButtonColor", label: "Button Background", type: "color" },
+  { key: "sectionButtonTextColor", label: "Button Text", type: "color" },
+  { key: "sectionWidth", label: "Content Width", type: "select", options: [{ label: "Narrow", value: "760px" }, { label: "Medium", value: "960px" }, { label: "Wide", value: "1260px" }, { label: "Full", value: "100%" }] },
+  { key: "sectionPadding", label: "Vertical Spacing (px)", type: "number", defaultValue: 72 },
+];
+export const SECTION_STYLE_KEYS = new Set(SECTION_STYLE_FIELDS.map(field => field.key));
+export const BLOCK_APPEARANCE_KEYS = new Set([
+  ...SECTION_STYLE_KEYS,
+  "overlay", "backgroundColor", "gradientColor", "textColor", "overlayColor", "overlayOpacity",
+  "primaryButtonColor", "primaryButtonTextColor",
+]);
+const SECTION_STYLE_BLOCKS = new Set(["hero", "home_fallback_hero", "home_fallback_stats", "home_fallback_features", "rich_text", "html_content", "stats_strip", "catalog_grid", "feature_cards", "icon_cards", "cta_banner", "faq", "team_grid", "office_list", "logo_grid", "testimonials", "grid_box", "scroll_box", "carousel_box", "column_layout", "progress_bars", "counter_grid", "logo_marquee", "section_title", "media_text", "image_gallery", "process_steps", "quote_banner"]);
 
 export const BLOCK_TYPES: BlockTypeDef[] = [
   {
@@ -32,9 +52,17 @@ export const BLOCK_TYPES: BlockTypeDef[] = [
       { key: "secondaryLabel", label: "Secondary Button Label", type: "text" },
       { key: "secondaryUrl", label: "Secondary Button URL", type: "url" },
       { key: "backgroundImage", label: "Background Image", type: "image" },
-      { key: "overlay", label: "Show Overlay", type: "toggle" },
+      { key: "overlay", label: "Show Overlay", type: "toggle", defaultValue: true },
+      { key: "useThemeColors", label: "Use Theme Builder Colors", type: "toggle", defaultValue: true },
+      { key: "backgroundColor", label: "Hero Start Color", type: "color" },
+      { key: "gradientColor", label: "Hero End Color", type: "color" },
+      { key: "textColor", label: "Hero Text Color", type: "color" },
+      { key: "overlayColor", label: "Overlay Color", type: "color" },
+      { key: "overlayOpacity", label: "Overlay Opacity (0–100)", type: "number", defaultValue: 28 },
+      { key: "primaryButtonColor", label: "Primary Button Color", type: "color" },
+      { key: "primaryButtonTextColor", label: "Primary Button Text Color", type: "color" },
     ],
-    defaultContent: { badge: "", title: "Welcome", subtitle: "", ctaLabel: "Get Started", ctaUrl: "/contact", secondaryLabel: "", secondaryUrl: "", backgroundImage: "", overlay: true },
+    defaultContent: { badge: "", title: "Welcome", subtitle: "", ctaLabel: "Get Started", ctaUrl: "/contact", secondaryLabel: "", secondaryUrl: "", backgroundImage: "", overlay: true, useThemeColors: true, backgroundColor: "", gradientColor: "", textColor: "", overlayColor: "", overlayOpacity: 28, primaryButtonColor: "", primaryButtonTextColor: "" },
   },
   {
     type: "rich_text",
@@ -46,6 +74,20 @@ export const BLOCK_TYPES: BlockTypeDef[] = [
       { key: "maxWidth", label: "Max Width", type: "select", options: [{ label: "Narrow", value: "narrow" }, { label: "Medium", value: "medium" }, { label: "Wide", value: "wide" }, { label: "Full", value: "full" }] },
     ],
     defaultContent: { content: "<p>Enter your content here...</p>", maxWidth: "medium" },
+  },
+  {
+    type: "html_content",
+    label: "HTML Content",
+    icon: "</>",
+    category: "content",
+    fields: [
+      { key: "title", label: "Section Title", type: "text", placeholder: "Optional section title" },
+      { key: "html", label: "HTML Markup", type: "html", placeholder: "<section>...</section>" },
+    ],
+    defaultContent: {
+      title: "Custom content",
+      html: "<div class=\"html-content-grid\"><article class=\"html-content-card\"><h3>Editable HTML card</h3><p>Add semantic HTML here. Scripts, inline styles, embeds and forms are removed for safety.</p><a class=\"html-content-button\" href=\"/en/contact\">Learn more</a></article></div>",
+    },
   },
   {
     type: "stats_strip",
@@ -136,6 +178,76 @@ export const BLOCK_TYPES: BlockTypeDef[] = [
       },
     ],
     defaultContent: { title: "Why Choose Us", subtitle: "", cards: [{ icon: "Star", title: "Expert Guidance", description: "Professional consultants." }] },
+  },
+  {
+    type: "media_text",
+    label: "Image + Text",
+    icon: "🖼️",
+    category: "media",
+    fields: [
+      { key: "eyebrow", label: "Upper Label", type: "text", placeholder: "Student support" },
+      { key: "title", label: "Section Title", type: "text" },
+      { key: "body", label: "Supporting Text", type: "textarea" },
+      { key: "imageUrl", label: "Image URL", type: "image" },
+      { key: "altText", label: "Image Alt Text", type: "text" },
+      { key: "imagePosition", label: "Image Position", type: "select", options: [{ label: "Left", value: "left" }, { label: "Right", value: "right" }] },
+      { key: "ctaLabel", label: "Button Label", type: "text" },
+      { key: "ctaUrl", label: "Button URL", type: "url" },
+    ],
+    defaultContent: { eyebrow: "Student support", title: "Guidance at every step", body: "Add a concise explanation that helps visitors understand this part of the journey.", imageUrl: "", altText: "", imagePosition: "left", ctaLabel: "Learn more", ctaUrl: "/contact" },
+  },
+  {
+    type: "image_gallery",
+    label: "Image Gallery",
+    icon: "▦",
+    category: "media",
+    fields: [
+      { key: "title", label: "Section Title", type: "text" },
+      { key: "subtitle", label: "Section Subtitle", type: "textarea" },
+      { key: "columns", label: "Columns", type: "select", options: [{ label: "2", value: "2" }, { label: "3", value: "3" }, { label: "4", value: "4" }] },
+      {
+        key: "images", label: "Gallery Images", type: "items",
+        itemFields: [
+          { key: "imageUrl", label: "Image URL", type: "image" },
+          { key: "altText", label: "Alt Text", type: "text" },
+          { key: "caption", label: "Caption", type: "text" },
+          { key: "linkUrl", label: "Link URL", type: "url" },
+        ],
+      },
+    ],
+    defaultContent: { title: "Life at a glance", subtitle: "Show the campus, city or student experience.", columns: "3", images: [{ imageUrl: "", altText: "", caption: "", linkUrl: "" }] },
+  },
+  {
+    type: "process_steps",
+    label: "Process Steps",
+    icon: "①",
+    category: "content",
+    fields: [
+      { key: "title", label: "Section Title", type: "text" },
+      { key: "subtitle", label: "Section Subtitle", type: "textarea" },
+      {
+        key: "steps", label: "Steps", type: "items",
+        itemFields: [
+          { key: "number", label: "Step Number", type: "text" },
+          { key: "title", label: "Title", type: "text" },
+          { key: "description", label: "Description", type: "textarea" },
+        ],
+      },
+    ],
+    defaultContent: { title: "How it works", subtitle: "A clear path from discovery to enrolment.", steps: [{ number: "01", title: "Discover", description: "Explore suitable study options." }, { number: "02", title: "Prepare", description: "Build a complete application." }, { number: "03", title: "Apply", description: "Submit and track every milestone." }] },
+  },
+  {
+    type: "quote_banner",
+    label: "Featured Quote",
+    icon: "❝",
+    category: "content",
+    fields: [
+      { key: "quote", label: "Quote", type: "textarea" },
+      { key: "author", label: "Author", type: "text" },
+      { key: "role", label: "Role / Context", type: "text" },
+      { key: "imageUrl", label: "Portrait URL", type: "image" },
+    ],
+    defaultContent: { quote: "The right guidance turns a complex application into a clear next step.", author: "Find And Study", role: "Student advisory team", imageUrl: "" },
   },
   {
     type: "cta_banner",
@@ -259,6 +371,155 @@ export const BLOCK_TYPES: BlockTypeDef[] = [
     defaultContent: { title: "What Students Say", subtitle: "", source: "collection", layout: "carousel", items: [] },
   },
   {
+    type: "grid_box",
+    label: "Grid Boxes",
+    icon: "▦",
+    category: "layout",
+    fields: [
+      { key: "eyebrow", label: "Eyebrow", type: "text" },
+      { key: "title", label: "Section Title", type: "text" },
+      { key: "subtitle", label: "Section Subtitle", type: "textarea" },
+      { key: "columns", label: "Columns", type: "select", options: [{ label: "2 Columns", value: "2" }, { label: "3 Columns", value: "3" }, { label: "4 Columns", value: "4" }] },
+      {
+        key: "cards", label: "Cards", type: "items",
+        itemFields: [
+          { key: "imageUrl", label: "Image URL", type: "image" },
+          { key: "title", label: "Title", type: "text" },
+          { key: "description", label: "Description", type: "textarea" },
+          { key: "linkLabel", label: "Link Label", type: "text" },
+          { key: "linkUrl", label: "Link URL", type: "url" },
+        ],
+      },
+    ],
+    defaultContent: { eyebrow: "Explore", title: "A flexible content grid", subtitle: "", columns: "3", cards: [] },
+  },
+  {
+    type: "scroll_box",
+    label: "Horizontal Scroll Boxes",
+    icon: "↔",
+    category: "layout",
+    fields: [
+      { key: "title", label: "Section Title", type: "text" },
+      { key: "subtitle", label: "Section Subtitle", type: "textarea" },
+      { key: "cardSize", label: "Card Size", type: "select", options: [{ label: "Compact", value: "compact" }, { label: "Standard", value: "standard" }, { label: "Wide", value: "wide" }] },
+      {
+        key: "items", label: "Scrollable Cards", type: "items",
+        itemFields: [
+          { key: "imageUrl", label: "Image URL", type: "image" },
+          { key: "title", label: "Title", type: "text" },
+          { key: "description", label: "Description", type: "textarea" },
+          { key: "linkLabel", label: "Link Label", type: "text" },
+          { key: "linkUrl", label: "Link URL", type: "url" },
+        ],
+      },
+    ],
+    defaultContent: { title: "Browse the collection", subtitle: "Swipe or scroll to explore.", cardSize: "standard", items: [] },
+  },
+  {
+    type: "carousel_box",
+    label: "Visual Carousel",
+    icon: "▤",
+    category: "media",
+    fields: [
+      { key: "title", label: "Section Title", type: "text" },
+      { key: "subtitle", label: "Section Subtitle", type: "textarea" },
+      {
+        key: "slides", label: "Slides", type: "items",
+        itemFields: [
+          { key: "imageUrl", label: "Image URL", type: "image" },
+          { key: "eyebrow", label: "Eyebrow", type: "text" },
+          { key: "title", label: "Title", type: "text" },
+          { key: "description", label: "Description", type: "textarea" },
+          { key: "linkLabel", label: "Link Label", type: "text" },
+          { key: "linkUrl", label: "Link URL", type: "url" },
+        ],
+      },
+    ],
+    defaultContent: { title: "Featured stories", subtitle: "", slides: [] },
+  },
+  {
+    type: "column_layout",
+    label: "Text Columns",
+    icon: "▥",
+    category: "layout",
+    fields: [
+      { key: "title", label: "Section Title", type: "text" },
+      { key: "subtitle", label: "Section Subtitle", type: "textarea" },
+      { key: "columns", label: "Columns", type: "select", options: [{ label: "2 Columns", value: "2" }, { label: "3 Columns", value: "3" }, { label: "4 Columns", value: "4" }] },
+      {
+        key: "items", label: "Columns", type: "items",
+        itemFields: [
+          { key: "eyebrow", label: "Eyebrow", type: "text" },
+          { key: "title", label: "Title", type: "text" },
+          { key: "body", label: "Body", type: "textarea" },
+          { key: "linkLabel", label: "Link Label", type: "text" },
+          { key: "linkUrl", label: "Link URL", type: "url" },
+        ],
+      },
+    ],
+    defaultContent: { title: "Built around your journey", subtitle: "", columns: "3", items: [] },
+  },
+  {
+    type: "progress_bars",
+    label: "Progress Bars",
+    icon: "▰",
+    category: "data",
+    fields: [
+      { key: "title", label: "Section Title", type: "text" },
+      { key: "subtitle", label: "Section Subtitle", type: "textarea" },
+      {
+        key: "items", label: "Progress Items", type: "items",
+        itemFields: [
+          { key: "label", label: "Label", type: "text" },
+          { key: "value", label: "Progress (0–100)", type: "number" },
+          { key: "note", label: "Supporting Note", type: "text" },
+        ],
+      },
+    ],
+    defaultContent: { title: "Progress at a glance", subtitle: "", items: [{ label: "Example milestone", value: 72, note: "72% complete" }] },
+  },
+  {
+    type: "counter_grid",
+    label: "Counter Grid",
+    icon: "123",
+    category: "data",
+    fields: [
+      { key: "title", label: "Section Title", type: "text" },
+      { key: "subtitle", label: "Section Subtitle", type: "textarea" },
+      { key: "columns", label: "Columns", type: "select", options: [{ label: "2 Columns", value: "2" }, { label: "3 Columns", value: "3" }, { label: "4 Columns", value: "4" }] },
+      {
+        key: "items", label: "Counters", type: "items",
+        itemFields: [
+          { key: "prefix", label: "Prefix", type: "text" },
+          { key: "value", label: "Value", type: "text" },
+          { key: "suffix", label: "Suffix", type: "text" },
+          { key: "label", label: "Label", type: "text" },
+          { key: "description", label: "Description", type: "textarea" },
+        ],
+      },
+    ],
+    defaultContent: { title: "Impact in numbers", subtitle: "", columns: "4", items: [] },
+  },
+  {
+    type: "logo_marquee",
+    label: "Logo Marquee",
+    icon: "∞",
+    category: "media",
+    fields: [
+      { key: "title", label: "Section Title", type: "text" },
+      { key: "subtitle", label: "Section Subtitle", type: "textarea" },
+      {
+        key: "items", label: "Logos", type: "items",
+        itemFields: [
+          { key: "name", label: "Name", type: "text" },
+          { key: "imageUrl", label: "Logo URL", type: "image" },
+          { key: "linkUrl", label: "Link URL", type: "url" },
+        ],
+      },
+    ],
+    defaultContent: { title: "Trusted partners", subtitle: "", items: [] },
+  },
+  {
     type: "section_title",
     label: "Section Title + Subtitle",
     icon: "📌",
@@ -297,7 +558,48 @@ export const BLOCK_TYPES: BlockTypeDef[] = [
 ];
 
 export function getBlockTypeDef(type: string): BlockTypeDef | undefined {
-  return BLOCK_TYPES.find(bt => bt.type === type);
+  const managedHomeAliases: Record<string, { base: string; label: string }> = {
+    home_fallback_hero: { base: "hero", label: "Hero" },
+    home_fallback_stats: { base: "stats_strip", label: "Statistics" },
+    home_fallback_features: { base: "feature_cards", label: "Services" },
+  };
+  const alias = managedHomeAliases[type];
+  const baseDefinition = BLOCK_TYPES.find(bt => bt.type === (alias?.base || type));
+  let definition = baseDefinition && alias
+    ? { ...baseDefinition, type, label: alias.label }
+    : baseDefinition;
+  if (definition && type === "home_fallback_hero") {
+    definition = {
+      ...definition,
+      fields: [
+        ...definition.fields,
+        { key: "signalTitle", label: "Journey Panel Title", type: "text" },
+        { key: "signalSubtitle", label: "Journey Panel Text", type: "textarea" },
+        {
+          key: "signals",
+          label: "Journey Steps",
+          type: "items",
+          itemFields: [
+            { key: "label", label: "Step", type: "text" },
+            { key: "detail", label: "Description", type: "text" },
+          ],
+        },
+      ],
+      defaultContent: {
+        ...definition.defaultContent,
+        signalTitle: "One connected journey",
+        signalSubtitle: "Keep each decision in context.",
+        signals: [
+          { label: "Explore", detail: "Destinations and programs" },
+          { label: "Prepare", detail: "Requirements and documents" },
+          { label: "Progress", detail: "Milestones and next actions" },
+        ],
+      },
+    };
+  }
+  if (!definition || !SECTION_STYLE_BLOCKS.has(type)) return definition;
+  const existing = new Set(definition.fields.map(field => field.key));
+  return { ...definition, fields: [...definition.fields, ...SECTION_STYLE_FIELDS.filter(field => !existing.has(field.key))] };
 }
 
 export function getDefaultContent(type: string): Record<string, unknown> {

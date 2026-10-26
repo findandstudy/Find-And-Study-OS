@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { sanitizePublicRichText } from "../src/lib/publicHtmlSanitizer";
+import { sanitizePublicHtmlContent, sanitizePublicRichText } from "../src/lib/publicHtmlSanitizer";
 import { catalogueCount, DETAIL_COPY, detailCopy, detailMoney, displayTuition, durationIsAmbiguous, splitRequirements, localDetailPath, tuitionOffer } from "../src/pages/public/detailPresentation";
 import { SUPPORTED_LANGUAGES } from "../src/lib/i18n";
 import { defaultDetailLayout, parseDetailLayout } from "../src/lib/website/detailLayoutContract";
@@ -12,7 +12,7 @@ import { DetailBreadcrumbs, DetailFacts, DetailIdentity, DetailImage, DetailPric
 import { I18nContext, type I18nContextValue } from "../src/lib/i18n/use-i18n-context";
 import { PublicProgramCard, type PublicProgramCardData, type PublicProgramCardProps } from "../src/pages/public/PublicProgramCard";
 import { CityProgramCards, type CityProgramCardData } from "../src/pages/public/CityProgramCards";
-import { emptyProgramSelection, programPageNumbers, universityProgramQuery } from "../src/pages/public/universityProgramQuery";
+import { detailProgramQuery, emptyProgramSelection, programPageNumbers, universityProgramQuery } from "../src/pages/public/universityProgramQuery";
 
 const program = readFileSync(new URL("../src/pages/public/ProgramDetail.tsx", import.meta.url), "utf8");
 const university = readFileSync(new URL("../src/pages/public/UniversityDetail.tsx", import.meta.url), "utf8");
@@ -38,6 +38,15 @@ const publicLayout = readFileSync(new URL("../src/components/layout/PublicLayout
 const cookieBanner = readFileSync(new URL("../src/components/CookieBanner.tsx", import.meta.url), "utf8");
 const bootstrap = readFileSync(new URL("../public/bootstrap.js", import.meta.url), "utf8");
 const indexCss = readFileSync(new URL("../src/index.css", import.meta.url), "utf8");
+
+test("detail sections collapse safely across tablet and mobile layouts", () => {
+  assert.match(css, /@media \(max-width: 1050px\)[\s\S]*\.detail-editorial-gallery \{ grid-template-columns: repeat\(2, minmax\(0, 1fr\)\); \}/);
+  assert.match(css, /@media \(max-width: 760px\)[\s\S]*\.detail-city-coverstrip \{ grid-template-columns: minmax\(0, 1fr\)/);
+  assert.match(css, /@media \(max-width: 760px\)[\s\S]*\.detail-country-stats \{ grid-template-columns: minmax\(0, 1fr\)/);
+  assert.match(css, /@media \(max-width: 760px\)[\s\S]*\.detail-facts \{ grid-template-columns: minmax\(0, 1fr\)/);
+  assert.match(css, /\.detail-editorial-gallery,[\s\S]*grid-template-columns: minmax\(0, 1fr\)/);
+  assert.match(programCard, /grid grid-cols-1 min-\[420px\]:grid-cols-2 sm:grid-cols-3/);
+});
 
 const cardFixture: PublicProgramCardData = {
   id: 145792, name: "Source program", canonicalPath: "/en/programs/source-program-145792",
@@ -108,6 +117,12 @@ test("university template keeps overview, facts and governed programs connected"
   assert.doesNotMatch(university, /dangerouslySetInnerHTML/);
 });
 
+test("country template renders reviewed AI hero and gallery images", () => {
+  assert.match(country, /DetailHeroMedia content=\{editorial\}/);
+  assert.match(country.replace(/\s+/g, " "), /detailContentSections\(editorial, lang, localePath\("\/contact"\), \["hero", "overview"\]\)/);
+  assert.doesNotMatch(country.replace(/\s+/g, " "), /\["hero", "overview", "gallery"\]/);
+});
+
 test("public detail fees require explicit valid currencies without inventing USD", () => {
   assert.match(program, /displayTuition\(program, lang\)/);
   assert.match(universityBrowser, /displayTuition\(\{ \.\.\.program, tuition: program\.tuition \?\? null \}, lang\)/);
@@ -167,8 +182,8 @@ test("editorial layouts upgrade saved v1 layouts and keep frontend/backend parse
   const frontend = readFileSync(new URL("../src/lib/website/detailLayoutContract.ts", import.meta.url), "utf8");
   assert.equal(frontend.replaceAll("\r\n", "\n"), backend.replaceAll("\r\n", "\n"));
   const upgraded = parseDetailLayout({ version: 1, kind: "destination", sections: ["hero", "overview", "cta", "universities"], hidden: ["universities"] });
-  assert.equal(upgraded?.version, 3);
-  assert.deepEqual(upgraded?.sections.filter(key => !key.startsWith("editorial-")), ["hero", "navigation", "overview", "facts", "cities", "cta", "universities"]);
+  assert.equal(upgraded?.version, 5);
+  assert.deepEqual(upgraded?.sections.filter(key => !key.startsWith("editorial-")), ["hero", "navigation", "overview", "facts", "cities", "programs", "cta", "universities"]);
   assert.deepEqual(upgraded?.hidden, ["universities"]);
   const current = defaultDetailLayout("program");
   assert.deepEqual(parseDetailLayout(current), current);
@@ -247,6 +262,12 @@ test("public header reserves brand space and defers the large tenant logo beyond
   assert.match(publicLayout, /headerLogoLoaded \? "opacity-100" : "opacity-0"/);
   assert.match(publicLayout, /decoding="async"/);
   assert.match(publicLayout, /fetchPriority="low"/);
+});
+
+test("public language menu stays above the sticky detail section navigation", () => {
+  assert.match(publicLayout, /<header className="sticky top-0 z-\[100\]/);
+  assert.match(publicLayout, /min-w-\[200px\] z-\[110\]/);
+  assert.match(css, /\.detail-nav\s*\{[^}]*top:\s*80px;[^}]*z-index:\s*40;/);
 });
 
 test("all four detail heroes put the breadcrumb before their real title", () => {
@@ -434,6 +455,31 @@ test("university query independently composes all program filters and supported 
   for (const locale of SUPPORTED_LANGUAGES) assert.equal(new URLSearchParams(universityProgramQuery(1563, locale, "", emptyProgramSelection())).get("locale"), locale);
 });
 
+test("country and city detail queries keep their route scope while exposing compatible facets", () => {
+  const selection = { ...emptyProgramSelection(), country: ["Germany"], city: ["Ankara"], universityType: ["Private"], universityId: ["3120"], level: ["Bachelor"], language: ["English"], field: ["Medicine"], feeMin: "100", feeMax: "50000" };
+  const country = new URLSearchParams(detailProgramQuery({ kind: "country", country: "Türkiye" }, "tr", "health", selection));
+  assert.equal(country.get("country"), "Türkiye");
+  assert.equal(country.get("city"), "Ankara");
+  assert.equal(country.get("universityType"), "Private");
+  assert.equal(country.get("universityId"), "3120");
+  const city = new URLSearchParams(detailProgramQuery({ kind: "city", country: "Türkiye", city: "Istanbul" }, "en", "", selection));
+  assert.equal(city.get("country"), "Türkiye");
+  assert.equal(city.get("city"), "Istanbul");
+  assert.equal(city.get("universityType"), "Private");
+  assert.equal(city.get("universityId"), "3120");
+  for (const query of [country, city]) {
+    assert.equal(query.get("scope"), "public");
+    assert.equal(query.get("level"), "Bachelor");
+    assert.equal(query.get("language"), "English");
+    assert.equal(query.get("field"), "Medicine");
+    assert.equal(query.get("feeMin"), "100");
+    assert.equal(query.get("feeMax"), "50000");
+    assert.equal(query.has("detailUniversityId"), false);
+  }
+  assert.throws(() => detailProgramQuery({ kind: "country", country: " " }, "en", "", emptyProgramSelection()), /Invalid country scope/);
+  assert.throws(() => detailProgramQuery({ kind: "city", country: "Türkiye", city: " " }, "en", "", emptyProgramSelection()), /Invalid city scope/);
+});
+
 test("program pagination covers empty, first, second, middle and final pages without duplicates", () => {
   assert.deepEqual(programPageNumbers(1, 0), []);
   assert.deepEqual(programPageNumbers(1, 1), [1]);
@@ -452,24 +498,25 @@ test("program pagination covers empty, first, second, middle and final pages wit
   }
 });
 
-test("university browser binds locale, cancels stale requests and resets pagination safely", () => {
+test("detail program browser binds immutable scopes, cancels stale requests and resets pagination safely", () => {
   assert.match(university, /<UniversityProgramBrowser key=\{`\$\{university\.id\}:\$\{lang\}`\} universityId=\{university\.id\}/);
-  assert.match(universityBrowser, /universityProgramQuery\(universityId, lang, search, selection\)/);
+  assert.match(country, /<DetailProgramBrowser scope=\{\{ kind: "country", country:/);
+  assert.match(city, /<DetailProgramBrowser key=\{`\$\{city\.id\}:\$\{lang\}`\} scope=\{\{ kind: "city", country:/);
+  assert.match(universityBrowser, /detailProgramQuery\(scope, lang, search, selection\)/);
   assert.match(universityBrowser, /setTimeout\(\(\) => setSettledQuery\(query\), 300\); return \(\) => clearTimeout\(timer\)/);
   assert.match(universityBrowser, /new AbortController\(\)/);
   assert.equal((universityBrowser.match(/signal: controller\.signal/g) ?? []).length, 2, "both rows and facets use the same cancellation boundary");
   assert.match(universityBrowser, /if \(controller\.signal\.aborted\) return/);
-  assert.match(universityBrowser, /if \(next\.data\.some\(program => program\.universityId !== universityId\)\) throw/);
+  assert.match(universityBrowser, /scope\.kind === "university" && next\.data\.some\(program => program\.universityId !== scope\.universityId\)/);
   assert.match(universityBrowser, /return \(\) => controller\.abort\(\)/);
-  assert.match(universityBrowser, /\[settledQuery, page, universityId, attempt\]/);
   assert.match(universityBrowser, /\/api\/course-finder\?\$\{settledQuery\}&page=\$\{page\}&limit=24/);
   assert.match(universityBrowser, /\/api\/course-finder\/filters\?\$\{settledQuery\}/);
   assert.match(universityBrowser, /const busy = loading \|\| query !== settledQuery/);
   assert.match(universityBrowser, /const clear = \(\) => \{ setSelection\(emptyProgramSelection\(\)\); setSearch\(""\); setPage\(1\); \}/);
-  assert.match(universityBrowser, /if \(!\["level", "language", "field", "feeMin", "feeMax"\]\.includes\(key\)\) return/);
+  assert.match(universityBrowser, /const allowed = scope\.kind === "country"/);
   assert.match(universityBrowser, /setSelection\(current => \(\{ \.\.\.current, \[key\]: value \}\)\); setPage\(1\)/);
   assert.match(universityBrowser, /onSearchChange=\{value => \{ setSearch\(value\); setPage\(1\); \}\}/);
-  assert.match(universityBrowser, /universityLocked feeHint=\{detailCopy\(lang\)\.legacyPrice\}/);
+  assert.match(universityBrowser, /lockedLocationKeys=\{scope\.kind === "university"/);
   assert.match(universityBrowser, /aria-current=\{number === page \? "page" : undefined\}/);
   assert.match(universityBrowser, /disabled=\{busy \|\| page <= 1\}/);
   assert.match(universityBrowser, /disabled=\{busy \|\| page >= result\.meta\.totalPages\}/);
@@ -480,8 +527,8 @@ test("university browser binds locale, cancels stale requests and resets paginat
 });
 
 test("shared filters expose labelled controls while locked universities hide location selectors", () => {
-  assert.match(programFilters, /!universityLocked && <div[^\n]*\{locationControls\.map\(control\)\}/);
-  assert.match(programFilters, /universityLocked\s*\? \["level", "language", "field", "feeMin", "feeMax"\]/);
+  assert.match(programFilters, /locationControls\.filter\(item => !locked\.has\(item\.key\)\)\.map\(control\)/);
+  assert.match(programFilters, /const locked = new Set<MultiKey>/);
   assert.match(programFilters, /aria-expanded=\{showFilters\} aria-controls=\{panelId\}/);
   assert.match(programFilters, /const panelId = useId\(\)/);
   assert.match(programFilters, /aria-label=\{t\("programs\.searchPlaceholder"\)\}/);
@@ -537,7 +584,7 @@ test("missing optional facts and tuition do not become invented values", () => {
   const price = renderToStaticMarkup(createElement(DetailPrice, { tuition: null, locale: "en", verifiedLabel: "Verified price" }));
   assert.ok(price.includes(detailCopy("en").confirmPrice));
   assert.doesNotMatch(price, /Verified price|£|\$|€|\bUSD\b/);
-  assert.match(program, /requirements\.length > 0 && <section/);
+  assert.match(program, /\(requirements\.length > 0 \|\| hasEditorialRequirements\) && <section/);
   assert.match(program, /payload\.intakes\.length > 0 && <section/);
   assert.match(program, /hasFees && <section/);
   assert.match(university, /university\.address &&/);
@@ -575,11 +622,11 @@ test("empty optional facts leave no empty definition-list frame but zero remains
 });
 
 test("empty location narratives do not repeat generic SEO copy in an empty overview", () => {
-  assert.match(country, /hasOverview && <a href="#overview"/);
-  assert.match(country, /hasOverview && <section data-detail-section="overview"/);
+  assert.match(country, /\(hasOverview \|\| hasEditorialOverview\) && <a href="#overview"/);
+  assert.match(country, /\(hasOverview \|\| hasEditorialOverview\) && <section data-detail-section="overview"/);
   assert.match(country, /overviewDescription && <p className="detail-prose detail-snapshot">\{overviewDescription\}/);
-  assert.match(city, /overviewDescription && <a href="#overview"/);
-  assert.match(city, /overviewDescription && <section data-detail-section="overview"/);
+  assert.match(city, /\(overviewDescription \|\| hasEditorialOverview\) && <a href="#overview"/);
+  assert.match(city, /\(overviewDescription \|\| hasEditorialOverview\) && <section data-detail-section="overview"/);
   assert.doesNotMatch(city, /city\.description \|\| payload\.meta\.description/);
 });
 
@@ -609,19 +656,19 @@ test("active section navigation is local, follows visible DOM order and cleans u
   assert.match(effect, /window\.addEventListener\("scroll", schedule, \{ passive: true \}\)/);
   assert.match(effect, /window\.addEventListener\("resize", schedule\)/);
   assert.match(effect, /return \(\) => \{ window\.cancelAnimationFrame\(frame\); window\.removeEventListener\("scroll", schedule\); window\.removeEventListener\("resize", schedule\); \}/);
-  assert.match(effect, /\[kind, layout, children\]/);
-  assert.match(layout, /node\.props\.href\?\.startsWith\("#"\) && layout\.hidden\.includes\(node\.props\.href\.slice\(1\)\)\) return null/);
+  assert.match(effect, /\[kind, effectiveLayout, children\]/);
+  assert.match(layout, /node\.props\.href\?\.startsWith\("#"\) && effectiveLayout\.hidden\.includes\(node\.props\.href\.slice\(1\)\)\) return null/);
   assert.match(layout, /const inNavigation = insideNavigation \|\| node\.props\["data-detail-section"\] === "navigation"/);
   assert.match(layout, /"aria-current": node\.props\.href\.slice\(1\) === activeSection \? "location"/);
   assert.match(layout, /cleanLinks\(child, inNavigation\)/);
-  assert.match(layout, /layout\.sections\.indexOf/);
+  assert.match(layout, /effectiveLayout\.sections\.indexOf/);
   assert.match(css, /\.detail-nav a\[aria-current="location"\]/);
 });
 
 test("destination collection requests the active locale and follows canonical paths", () => {
   assert.match(countries, /public\/destinations\?locale=/);
   assert.match(countries, /\[lang\]/);
-  assert.match(countries, /dest\.canonicalPath \|\| localePath/);
+  assert.match(countries, /destination\.canonicalPath \|\| localePath/);
 });
 
 test("Pages editor exposes a bounded live catalogue data block", () => {
@@ -678,11 +725,20 @@ test("city template and destination links stay on governed canonical projections
   assert.doesNotMatch(city, /dangerouslySetInnerHTML|serviceFee|commission|contactPerson/);
 });
 
-test("city programs reuse the shared card and Info modal without changing the bounded discovery flow", () => {
+test("city hero combines catalogue counters and catalogue-owned language facts", () => {
+  assert.match(city, /city\.programLanguages\.length/);
+  assert.match(city, /heroFacts\.map\(\(fact, index\) =>/);
+  assert.match(city, /<dt>\{fact\.title\}<\/dt><dd>\{fact\.body\}<\/dd>/);
+  assert.match(css, /\.detail-city-coverstrip \{[^}]*repeat\(auto-fit, minmax\(118px, 1fr\)\)/);
+  assert.match(css, /\.detail-city-coverstrip \{[^}]*overflow: hidden/);
+});
+
+test("city programs use the scope-locked browser while bounded cards retain their modal contract", () => {
   assert.match(city, /programs: CityProgramCardData\[\]/);
-  assert.match(city, /<CityProgramCards key=\{`\$\{city\.id\}:\$\{lang\}`\} programs=\{city\.programs\} \/>/);
-  assert.match(city, /const programsPath = `\$\{localePath\("\/programs"\)\}\?country=\$\{encodeURIComponent\(city\.country\)\}&city=\$\{encodeURIComponent\(city\.name\)\}`/);
+  assert.match(city, /<DetailProgramBrowser key=\{`\$\{city\.id\}:\$\{lang\}`\} scope=\{\{ kind: "city", country:/);
+  assert.match(city, /const programsPath = `\$\{localePath\("\/programs"\)\}\?country=/);
   assert.match(city, /<Link href=\{programsPath\}>\{t\("countryDetail.viewAllPrograms"\)\}/);
+  assert.match(universityBrowser, /scope\.kind === "city" \? \["country", "city"\]/);
   assert.match(cityProgramCards, /import \{ PublicProgramCard \}/);
   assert.match(cityProgramCards, /lazy\(\(\) => import\("\.\/PublicProgramDetailDialog"\)/);
   assert.match(cityProgramCards, /selected \? <Suspense fallback=\{null\}>/);
@@ -690,7 +746,6 @@ test("city programs reuse the shared card and Info modal without changing the bo
   assert.match(cityProgramCards, /onDetails=\{\(\) => setSelected\(/);
   assert.match(cityProgramCards, /onClose=\{\(\) => setSelected\(null\)\}/);
   assert.doesNotMatch(cityProgramCards, /customFetch|\bfetch\(|setLocation|window\.location|PublicProgramFilters|useEffect|<table/);
-  assert.doesNotMatch(city, /city\.programs\.map/);
   const html = renderPublicElement(createElement(CityProgramCards, { programs: [{ ...cardFixture, isActive: true, universityIsActive: true }] }));
   assert.match(html, /<button[^>]*aria-label="programs.programDetails"/);
   assert.doesNotMatch(html, /<a[^>]*aria-label="programs.programDetails"/);
@@ -767,4 +822,19 @@ test("public rich text strips executable markup and new-tab opener control", () 
   assert.match(sanitized, /<strong>content<\/strong>/);
   assert.match(sanitized, /href="https:\/\/example\.edu\/path"/);
   assert.doesNotMatch(sanitized, /javascript:|onclick|style=|target=|rel=|<svg|<script/i);
+});
+
+test("HTML content sections preserve semantic layout and remove executable markup", () => {
+  const sanitized = sanitizePublicHtmlContent(`
+    <section class="html-content-grid" style="display:none" onclick="alert(1)">
+      <article class="html-content-card"><h3>Safe card</h3><img src="/images/card.jpg" alt="Card" onerror="alert(1)"></article>
+      <table><tbody><tr><th scope="row">Safe</th><td>Value</td></tr></tbody></table>
+      <form><input value="unsafe"></form><iframe src="https://evil.example"></iframe><script>alert(1)</script>
+    </section>
+  `);
+  assert.match(sanitized, /class="html-content-grid"/);
+  assert.match(sanitized, /<article class="html-content-card">/);
+  assert.match(sanitized, /<table>/);
+  assert.match(sanitized, /src="\/images\/card\.jpg"/);
+  assert.doesNotMatch(sanitized, /style=|onclick|onerror|<form|<input|<iframe|<script/i);
 });

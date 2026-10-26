@@ -90,7 +90,7 @@ export function PublicLayout({ children }: { children: ReactNode }) {
       <a href="#main-content" className="sr-only focus:not-sr-only focus:fixed focus:start-4 focus:top-4 focus:z-[100] focus:rounded focus:bg-background focus:p-3 focus:text-foreground focus:ring-2">
         {t("a11y.skipToContent")}
       </a>
-      <header className="sticky top-0 z-50 w-full glass border-b">
+      <header className="sticky top-0 z-[100] w-full glass border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
           <Link href={localePath("/")} className="group relative flex h-10 w-[160px] min-w-0 items-center gap-2 sm:w-[180px]">
             <div className="flex min-w-0 items-center gap-2" aria-hidden={headerLogoLoaded}>
@@ -133,7 +133,7 @@ export function PublicLayout({ children }: { children: ReactNode }) {
                 <ChevronDown className={`w-3.5 h-3.5 text-muted-foreground transition-transform ${langOpen ? "rotate-180" : ""}`} />
               </button>
               {langOpen && (
-                <div className={`absolute top-full mt-2 ${isRTL ? "left-0" : "right-0"} bg-card border border-border rounded-xl shadow-xl py-2 min-w-[200px] z-50 max-h-[400px] overflow-y-auto`}>
+                <div className={`absolute top-full mt-2 ${isRTL ? "left-0" : "right-0"} bg-card border border-border rounded-xl shadow-xl py-2 min-w-[200px] z-[110] max-h-[400px] overflow-y-auto`}>
                   {SUPPORTED_LANGUAGES.map((code) => {
                     const meta = LANGUAGE_META[code];
                     return (

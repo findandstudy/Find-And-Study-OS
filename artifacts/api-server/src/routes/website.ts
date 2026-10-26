@@ -2,7 +2,7 @@ import express, { Router, json, type Request, type Response, type RequestHandler
 import { publicFormLimiter } from "../lib/limiters";
 import { getClientIp } from "../lib/clientIp";
 import { db } from "@workspace/db";
-import { eq, asc, desc, inArray, and } from "drizzle-orm";
+import { eq, asc, desc, inArray, and, ne } from "drizzle-orm";
 import type { AnyPgTable, AnyPgColumn } from "drizzle-orm/pg-core";
 import {
   websitePagesTable,
@@ -67,12 +67,78 @@ import { readWebsiteCatalogFilters } from "../lib/websiteCatalogFilters";
 import { parseCatalogInventoryQuery } from "../lib/websiteCatalogInventoryContract";
 import { readWebsiteCatalogInventory } from "../lib/websiteCatalogInventory";
 import detailContentRouter from "./website-detail-content";
+import { inspectWebsitePageBlockLinks, inspectWebsitePageTranslations, type PublicationPreflightIssue } from "../lib/websitePagePublicationPreflight";
 
 const router = Router();
 router.use("/website/detail-content", detailContentRouter);
 router.get("/website/pages/:slug", readWebsitePublishedPage);
 const WEBSITE_ROLES = ["super_admin", "admin"] as const;
 const adminOnly = [requireAuth, requireRole(...WEBSITE_ROLES)] as const;
+
+function managedPagePublicPath(page: Pick<typeof websitePagesTable.$inferSelect, "locale" | "slug" | "template">): string {
+  const locale = page.locale || "en";
+  if (page.template === "home" && page.slug === "home") return `/${locale}`;
+  if (["about", "countries", "programs", "blog", "contact"].includes(page.template) && page.slug === page.template) {
+    return `/${locale}/${page.template}`;
+  }
+  return `/${locale}/${page.slug.replace(/^\/+|\/+$/g, "")}`;
+}
+
+function buildPagePublicationPreflight(
+  page: typeof websitePagesTable.$inferSelect,
+  blocks: Array<typeof websitePageBlocksTable.$inferSelect>,
+) {
+  const blockers: PublicationPreflightIssue[] = [];
+  const warnings: PublicationPreflightIssue[] = [];
+  const contentInspection = inspectWebsitePageBlockLinks(blocks);
+  const translationInspection = inspectWebsitePageTranslations(blocks, page.translationsJson);
+  blockers.push(...contentInspection.blockers);
+  blockers.push(...translationInspection.blockers);
+  warnings.push(...contentInspection.warnings);
+  warnings.push(...translationInspection.warnings);
+  if (!page.title.trim()) blockers.push({ code: "TITLE_REQUIRED", message: "Page title is required." });
+  if (!page.slug.trim()) blockers.push({ code: "SLUG_REQUIRED", message: "Page address is required." });
+  if (!page.locale.trim()) blockers.push({ code: "LOCALE_REQUIRED", message: "Page language is required." });
+  if (!blocks.some(block => block.isVisible !== false)) blockers.push({ code: "VISIBLE_CONTENT_REQUIRED", message: "At least one visible content block is required." });
+  if (!page.metaTitle?.trim()) warnings.push({ code: "META_TITLE_MISSING", message: "SEO title is empty." });
+  if (!page.metaDescription?.trim()) warnings.push({ code: "META_DESCRIPTION_MISSING", message: "SEO description is empty." });
+  if (page.robotsIndex === false) warnings.push({ code: "NOINDEX_ENABLED", message: "Search engines are currently asked not to index this page." });
+  const route = managedPagePublicPath(page);
+  const canonical = page.canonicalUrl?.trim() || route;
+  const snapshot = {
+    pageId: page.id,
+    updatedAt: page.updatedAt.toISOString(),
+    title: page.title,
+    slug: page.slug,
+    locale: page.locale,
+    template: page.template,
+    canonical,
+    robotsIndex: page.robotsIndex,
+    robotsFollow: page.robotsFollow,
+    metaTitle: page.metaTitle,
+    metaDescription: page.metaDescription,
+    blocks,
+    translationsJson: page.translationsJson,
+  };
+  const checkedAt = new Date();
+  return {
+    eligible: blockers.length === 0,
+    revision: page.updatedAt.toISOString(),
+    digest: createHash("sha256").update(JSON.stringify(snapshot)).digest("hex"),
+    checkedAt: checkedAt.toISOString(),
+    expiresAt: new Date(checkedAt.getTime() + 10 * 60 * 1000).toISOString(),
+    publication: {
+      route,
+      canonical,
+      locale: page.locale,
+      indexable: page.robotsIndex,
+      sitemapEligible: page.robotsIndex,
+      invalidationScopes: ["public-page-render", "public-web-discovery"],
+    },
+    blockers,
+    warnings,
+  };
+}
 
 router.get("/website/catalog-pages", ...adminOnly, async (req, res) => {
   res.setHeader("Cache-Control", "private, no-store");
@@ -200,9 +266,13 @@ router.use(["/website/pages", "/website/page-blocks", "/website/page-versions"],
 });
 
 const VALID_BLOCK_TYPES = new Set([
-  "hero", "rich_text", "stats_strip", "feature_cards", "icon_cards",
+  "hero", "rich_text", "html_content", "stats_strip", "feature_cards", "icon_cards",
   "cta_banner", "faq", "team_grid", "office_list", "logo_grid",
   "testimonials", "section_title", "spacer_divider", "global_block", "catalog_grid",
+  "home_fallback_hero", "home_fallback_stats", "home_fallback_features",
+  "media_text", "image_gallery", "process_steps", "quote_banner",
+  "grid_box", "scroll_box", "carousel_box", "column_layout",
+  "progress_bars", "counter_grid", "logo_marquee",
 ]);
 
 function registerCrud(
@@ -757,19 +827,137 @@ router.get("/website/menus/:menuId/items", ...adminOnly, async (req: Request, re
   }
 });
 
+router.post("/website/pages/:id/request-review", ...adminOnly, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const pageId = Number(req.params.id);
+    const expectedUpdatedAt = req.body?.expectedUpdatedAt;
+    if (!Number.isSafeInteger(pageId) || pageId < 1 || typeof expectedUpdatedAt !== "string" || Object.keys(req.body ?? {}).sort().join() !== "expectedUpdatedAt") {
+      return void res.status(400).json({ error: "A valid page revision is required" });
+    }
+    const result = await db.transaction(async tx => {
+      const [current] = await tx.select().from(websitePagesTable).where(eq(websitePagesTable.id, pageId)).for("update");
+      if (!current) return null;
+      if (current.updatedAt.toISOString() !== expectedUpdatedAt || current.status !== "draft") throw new Error("PAGE_REVISION_CONFLICT");
+      const blocks = await tx.select().from(websitePageBlocksTable)
+        .where(eq(websitePageBlocksTable.pageId, pageId))
+        .orderBy(asc(websitePageBlocksTable.sortOrder));
+      if (!buildPagePublicationPreflight(current, blocks).eligible) throw new Error("PUBLICATION_PREFLIGHT_FAILED");
+      if (current.canonicalUrl?.trim()) {
+        const [conflict] = await tx.select({ id: websitePagesTable.id }).from(websitePagesTable).where(and(eq(websitePagesTable.canonicalUrl, current.canonicalUrl.trim()), ne(websitePagesTable.id, pageId))).limit(1);
+        if (conflict) throw new Error("CANONICAL_CONFLICT");
+      }
+      const [page] = await tx.update(websitePagesTable)
+        .set({ status: "in_review", updatedBy: req.user?.id, updatedAt: new Date() })
+        .where(eq(websitePagesTable.id, pageId)).returning();
+      return page;
+    });
+    if (!result) return void res.status(404).json({ error: "Not found" });
+    res.setHeader("Cache-Control", "private, no-store");
+    res.json(result);
+  } catch (e: unknown) {
+    if (e instanceof Error && e.message === "PAGE_REVISION_CONFLICT") return void res.status(409).json({ error: "Page changed or is not a draft; reload before review." });
+    if (e instanceof Error && e.message === "PUBLICATION_PREFLIGHT_FAILED") return void res.status(422).json({ error: "Resolve publication blockers before requesting review." });
+    if (e instanceof Error && e.message === "CANONICAL_CONFLICT") return void res.status(422).json({ error: "Another page already uses this canonical URL." });
+    res.status(500).json({ error: e instanceof Error ? e.message : "Internal server error" });
+  }
+});
+
+router.post("/website/pages/:id/publication-preflight", ...adminOnly, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const pageId = Number(req.params.id);
+    const expectedUpdatedAt = req.body?.expectedUpdatedAt;
+    if (!Number.isSafeInteger(pageId) || pageId < 1 || typeof expectedUpdatedAt !== "string" || Object.keys(req.body ?? {}).sort().join() !== "expectedUpdatedAt") {
+      return void res.status(400).json({ error: "A valid page revision is required" });
+    }
+    const [page] = await db.select().from(websitePagesTable).where(eq(websitePagesTable.id, pageId));
+    if (!page) return void res.status(404).json({ error: "Not found" });
+    if (page.updatedAt.toISOString() !== expectedUpdatedAt) return void res.status(409).json({ error: "Page changed; reload before checking publication readiness." });
+    const blocks = await db.select().from(websitePageBlocksTable)
+      .where(eq(websitePageBlocksTable.pageId, pageId))
+      .orderBy(asc(websitePageBlocksTable.sortOrder));
+    const preflight = buildPagePublicationPreflight(page, blocks);
+    if (page.canonicalUrl?.trim()) {
+      const [conflict] = await db.select({ id: websitePagesTable.id }).from(websitePagesTable).where(and(eq(websitePagesTable.canonicalUrl, page.canonicalUrl.trim()), ne(websitePagesTable.id, pageId))).limit(1);
+      if (conflict) {
+        preflight.blockers.push({ code: "CANONICAL_CONFLICT", message: "Another page already uses this canonical URL." });
+        preflight.eligible = false;
+      }
+    }
+    res.setHeader("Cache-Control", "private, no-store");
+    res.json(preflight);
+  } catch (e: unknown) {
+    res.status(500).json({ error: e instanceof Error ? e.message : "Internal server error" });
+  }
+});
+
+router.post("/website/pages/:id/request-changes", ...adminOnly, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const pageId = Number(req.params.id);
+    const expectedUpdatedAt = req.body?.expectedUpdatedAt;
+    const reasonCode = req.body?.reasonCode;
+    const comment = typeof req.body?.comment === "string" ? req.body.comment.trim() : "";
+    const allowedReasons = new Set(["CONTENT", "SEO", "TRANSLATION", "MEDIA", "LEGAL", "OTHER"]);
+    if (!Number.isSafeInteger(pageId) || pageId < 1 || typeof expectedUpdatedAt !== "string" || !allowedReasons.has(reasonCode) || comment.length < 3 || comment.length > 1000 || Object.keys(req.body ?? {}).sort().join() !== "comment,expectedUpdatedAt,reasonCode") {
+      return void res.status(400).json({ error: "Exact revision, reason and comment are required" });
+    }
+    const result = await db.transaction(async tx => {
+      const [current] = await tx.select().from(websitePagesTable).where(eq(websitePagesTable.id, pageId)).for("update");
+      if (!current) return null;
+      if (current.updatedAt.toISOString() !== expectedUpdatedAt || current.status !== "in_review") throw new Error("PAGE_REVISION_CONFLICT");
+      if (!current.updatedBy || current.updatedBy === req.user?.id) throw new Error("REVIEWER_REQUIRED");
+      const pageBlocks = await tx.select().from(websitePageBlocksTable).where(eq(websitePageBlocksTable.pageId, pageId)).orderBy(asc(websitePageBlocksTable.sortOrder));
+      const [last] = await tx.select().from(websitePageVersionsTable).where(eq(websitePageVersionsTable.pageId, pageId)).orderBy(desc(websitePageVersionsTable.versionNumber)).limit(1);
+      const now = new Date();
+      const [receipt] = await tx.insert(websitePageVersionsTable).values({
+        pageId,
+        versionNumber: (last?.versionNumber ?? 0) + 1,
+        blocksSnapshot: pageBlocks,
+        metaSnapshot: { review: { outcome: "CHANGES_REQUESTED", reasonCode, comment, authorId: current.updatedBy, reviewerId: req.user?.id, reviewedRevision: expectedUpdatedAt } },
+        publishedAt: null,
+        createdBy: req.user?.id,
+      }).returning();
+      const [page] = await tx.update(websitePagesTable).set({ status: "draft", updatedAt: now }).where(eq(websitePagesTable.id, pageId)).returning();
+      return { page, receipt };
+    });
+    if (!result) return void res.status(404).json({ error: "Not found" });
+    res.setHeader("Cache-Control", "private, no-store");
+    res.json(result);
+  } catch (e: unknown) {
+    if (e instanceof Error && e.message === "PAGE_REVISION_CONFLICT") return void res.status(409).json({ error: "Page changed or is no longer awaiting review." });
+    if (e instanceof Error && e.message === "REVIEWER_REQUIRED") return void res.status(403).json({ error: "A different administrator must review this page." });
+    res.status(500).json({ error: e instanceof Error ? e.message : "Internal server error" });
+  }
+});
+
 router.post("/website/pages/:id/publish", ...adminOnly, async (req: Request, res: Response): Promise<void> => {
   try {
     const pageId = Number(req.params.id);
+    const expectedUpdatedAt = req.body?.expectedUpdatedAt;
+    const preflightDigest = req.body?.preflightDigest;
+    if (!Number.isSafeInteger(pageId) || pageId < 1 || req.body?.approved !== true || typeof expectedUpdatedAt !== "string" || !/^[0-9a-f]{64}$/.test(preflightDigest) || Object.keys(req.body ?? {}).sort().join() !== "approved,expectedUpdatedAt,preflightDigest") {
+      return void res.status(400).json({ error: "Explicit approval and exact page revision are required" });
+    }
     const result = await db.transaction(async (tx) => {
-      const [page] = await tx.update(websitePagesTable)
-        .set({ status: "published", publishedAt: new Date() })
-        .where(eq(websitePagesTable.id, pageId))
-        .returning();
-      if (!page) return null;
+      const [current] = await tx.select().from(websitePagesTable).where(eq(websitePagesTable.id, pageId)).for("update");
+      if (!current) return null;
+      if (current.updatedAt.toISOString() !== expectedUpdatedAt || current.status !== "in_review") throw new Error("PAGE_REVISION_CONFLICT");
+      if (!current.updatedBy || current.updatedBy === req.user?.id) throw new Error("REVIEWER_REQUIRED");
 
       const blocks = await tx.select().from(websitePageBlocksTable)
         .where(eq(websitePageBlocksTable.pageId, pageId))
         .orderBy(asc(websitePageBlocksTable.sortOrder));
+      const preflight = buildPagePublicationPreflight(current, blocks);
+      if (!preflight.eligible) throw new Error("PUBLICATION_PREFLIGHT_FAILED");
+      if (current.canonicalUrl?.trim()) {
+        const [conflict] = await tx.select({ id: websitePagesTable.id }).from(websitePagesTable).where(and(eq(websitePagesTable.canonicalUrl, current.canonicalUrl.trim()), ne(websitePagesTable.id, pageId))).limit(1);
+        if (conflict) throw new Error("CANONICAL_CONFLICT");
+      }
+      if (preflight.digest !== preflightDigest) throw new Error("PREFLIGHT_DIGEST_CONFLICT");
+      const digest = preflight.digest;
+      const now = new Date();
+      const [page] = await tx.update(websitePagesTable)
+        .set({ status: "published", publishedAt: now, updatedAt: now })
+        .where(eq(websitePagesTable.id, pageId)).returning();
 
       const existingVersions = await tx.select().from(websitePageVersionsTable)
         .where(eq(websitePageVersionsTable.pageId, pageId))
@@ -797,8 +985,9 @@ router.post("/website/pages/:id/publish", ...adminOnly, async (req: Request, res
           twitterDescription: page.twitterDescription,
           twitterImageUrl: page.twitterImageUrl,
           translationsJson: page.translationsJson,
+          approval: { digest, authorId: current.updatedBy, reviewerId: req.user?.id, preflight: preflight.publication },
         },
-        publishedAt: new Date(),
+        publishedAt: now,
         createdBy: req.user?.id,
       }).returning();
 
@@ -809,6 +998,11 @@ router.post("/website/pages/:id/publish", ...adminOnly, async (req: Request, res
     invalidatePublicWebDiscoveryCache({ entityType: "page", entityId: pageId });
     res.json(result);
   } catch (e: unknown) {
+    if (e instanceof Error && e.message === "PAGE_REVISION_CONFLICT") return void res.status(409).json({ error: "Page changed or is not awaiting review; reload before publishing." });
+    if (e instanceof Error && e.message === "PREFLIGHT_DIGEST_CONFLICT") return void res.status(409).json({ error: "Publication inputs changed after preflight; run the check again." });
+    if (e instanceof Error && e.message === "REVIEWER_REQUIRED") return void res.status(403).json({ error: "A different administrator must review and approve this page." });
+    if (e instanceof Error && e.message === "PUBLICATION_PREFLIGHT_FAILED") return void res.status(422).json({ error: "Publication preflight found blocking issues." });
+    if (e instanceof Error && e.message === "CANONICAL_CONFLICT") return void res.status(422).json({ error: "Another page already uses this canonical URL." });
     const msg = e instanceof Error ? e.message : "Internal server error";
     res.status(500).json({ error: msg });
   }
@@ -932,11 +1126,21 @@ const DEFAULT_PAGES = [
 router.post("/website/pages/seed", ...adminOnly, async (req: Request, res: Response): Promise<void> => {
   try {
     const existing = await db.select().from(websitePagesTable);
-    if (existing.length > 0) return void res.json({ seeded: false, pages: existing });
-    const pages = await db.insert(websitePagesTable).values(
-      DEFAULT_PAGES.map(p => ({ ...p, status: "draft" as const, locale: "en", createdBy: req.user?.id }))
-    ).returning();
-    res.status(201).json({ seeded: true, pages });
+    const existingSystemKeys = new Set(existing.map(page => `${page.locale}:${page.template}:${page.slug}`));
+    const missing = DEFAULT_PAGES.filter(page => !existingSystemKeys.has(`en:${page.template}:${page.slug}`));
+    const created = missing.length > 0
+      ? await db.insert(websitePagesTable).values(
+          missing.map(page => ({
+            ...page,
+            status: "draft" as const,
+            locale: "en",
+            createdBy: req.user?.id,
+            robotsIndex: false,
+            robotsFollow: true,
+          })),
+        ).returning()
+      : [];
+    res.status(created.length > 0 ? 201 : 200).json({ seeded: created.length > 0, created, pages: [...existing, ...created] });
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : "Internal server error";
     res.status(500).json({ error: msg });
@@ -946,22 +1150,40 @@ router.post("/website/pages/seed", ...adminOnly, async (req: Request, res: Respo
 router.post("/website/pages/:pageId/save-draft", ...adminOnly, async (req: Request, res: Response): Promise<void> => {
   try {
     const pageId = Number(req.params.pageId);
-    const { blocks, meta, translationsJson } = req.body;
+    const { blocks, meta, translationsJson, expectedUpdatedAt } = req.body;
+    if (!Number.isSafeInteger(pageId) || pageId < 1 || typeof expectedUpdatedAt !== "string" || Number.isNaN(Date.parse(expectedUpdatedAt))) {
+      return void res.status(400).json({ error: "A valid page revision is required" });
+    }
 
     if (Array.isArray(blocks)) {
       const invalidBlock = blocks.find((b: { blockType: string }) => !VALID_BLOCK_TYPES.has(b.blockType));
       if (invalidBlock) {
         return void res.status(400).json({ error: `Invalid block type: ${invalidBlock.blockType}` });
       }
+      if (translationsJson !== undefined) {
+        const translationInspection = inspectWebsitePageTranslations(blocks, translationsJson);
+        if (translationInspection.blockers.some(issue => issue.code === "TRANSLATION_FACTUAL_OVERRIDE")) {
+          return void res.status(422).json({ error: "Translated catalogue facts must match the source page", issues: translationInspection.blockers });
+        }
+      }
     }
 
-    await db.transaction(async (tx) => {
+    const result = await db.transaction(async (tx) => {
+      const [current] = await tx.select().from(websitePagesTable)
+        .where(eq(websitePagesTable.id, pageId))
+        .for("update");
+      if (!current) return null;
+      if (current.updatedAt.toISOString() !== expectedUpdatedAt) throw new Error("PAGE_REVISION_CONFLICT");
+
       const pageUpdate: Record<string, unknown> = { status: "draft" };
       if (meta) Object.assign(pageUpdate, meta);
-      if (translationsJson !== undefined) pageUpdate.translationsJson = translationsJson;
-      await tx.update(websitePagesTable)
-        .set(pageUpdate)
-        .where(eq(websitePagesTable.id, pageId));
+      if (translationsJson !== undefined) {
+        pageUpdate.translationsJson = translationsJson;
+      }
+      const [page] = await tx.update(websitePagesTable)
+        .set({ ...pageUpdate, updatedBy: req.user?.id, updatedAt: new Date() })
+        .where(eq(websitePagesTable.id, pageId))
+        .returning();
 
       if (Array.isArray(blocks)) {
         await tx.delete(websitePageBlocksTable).where(eq(websitePageBlocksTable.pageId, pageId));
@@ -978,14 +1200,48 @@ router.post("/website/pages/:pageId/save-draft", ...adminOnly, async (req: Reque
           );
         }
       }
+      const savedBlocks = await tx.select().from(websitePageBlocksTable)
+        .where(eq(websitePageBlocksTable.pageId, pageId))
+        .orderBy(asc(websitePageBlocksTable.sortOrder));
+      const [latestVersion] = await tx.select({ versionNumber: websitePageVersionsTable.versionNumber })
+        .from(websitePageVersionsTable)
+        .where(eq(websitePageVersionsTable.pageId, pageId))
+        .orderBy(desc(websitePageVersionsTable.versionNumber))
+        .limit(1);
+      const [draftVersion] = await tx.insert(websitePageVersionsTable).values({
+        pageId,
+        versionNumber: (latestVersion?.versionNumber || 0) + 1,
+        blocksSnapshot: savedBlocks,
+        metaSnapshot: {
+          title: page.title,
+          slug: page.slug,
+          locale: page.locale,
+          metaTitle: page.metaTitle,
+          metaDescription: page.metaDescription,
+          canonicalUrl: page.canonicalUrl,
+          robotsIndex: page.robotsIndex,
+          robotsFollow: page.robotsFollow,
+          ogTitle: page.ogTitle,
+          ogDescription: page.ogDescription,
+          ogImageUrl: page.ogImageUrl,
+          twitterTitle: page.twitterTitle,
+          twitterDescription: page.twitterDescription,
+          twitterImageUrl: page.twitterImageUrl,
+          translationsJson: page.translationsJson,
+          revision: { kind: "DRAFT_SAVED", authorId: req.user?.id, savedRevision: page.updatedAt.toISOString() },
+        },
+        createdBy: req.user?.id,
+      }).returning();
+      return { page, blocks: savedBlocks, draftVersion };
     });
-
-    const [page] = await db.select().from(websitePagesTable).where(eq(websitePagesTable.id, pageId));
-    const savedBlocks = await db.select().from(websitePageBlocksTable)
-      .where(eq(websitePageBlocksTable.pageId, pageId))
-      .orderBy(asc(websitePageBlocksTable.sortOrder));
-    res.json({ page, blocks: savedBlocks });
+    if (!result) return void res.status(404).json({ error: "Page not found" });
+    res.setHeader("Cache-Control", "private, no-store");
+    res.json(result);
   } catch (e: unknown) {
+    if (e instanceof Error && e.message === "PAGE_REVISION_CONFLICT") {
+      res.status(409).json({ error: "This page changed after you opened it. Reload and compare before saving." });
+      return;
+    }
     const msg = e instanceof Error ? e.message : "Internal server error";
     res.status(500).json({ error: msg });
   }
@@ -1027,11 +1283,25 @@ router.post("/website/pages/:pageId/restore-version/:versionId", ...adminOnly, a
         await tx.update(websitePagesTable)
           .set({
             status: "draft",
+            title: typeof metaSnap.title === "string" ? metaSnap.title : undefined,
+            slug: typeof metaSnap.slug === "string" ? metaSnap.slug : undefined,
+            locale: typeof metaSnap.locale === "string" ? metaSnap.locale : undefined,
             metaTitle: typeof metaSnap.metaTitle === "string" ? metaSnap.metaTitle : null,
             metaDescription: typeof metaSnap.metaDescription === "string" ? metaSnap.metaDescription : null,
+            canonicalUrl: typeof metaSnap.canonicalUrl === "string" ? metaSnap.canonicalUrl : null,
+            robotsIndex: typeof metaSnap.robotsIndex === "boolean" ? metaSnap.robotsIndex : true,
+            robotsFollow: typeof metaSnap.robotsFollow === "boolean" ? metaSnap.robotsFollow : true,
+            ogTitle: typeof metaSnap.ogTitle === "string" ? metaSnap.ogTitle : null,
+            ogDescription: typeof metaSnap.ogDescription === "string" ? metaSnap.ogDescription : null,
+            ogImageUrl: typeof metaSnap.ogImageUrl === "string" ? metaSnap.ogImageUrl : null,
+            twitterTitle: typeof metaSnap.twitterTitle === "string" ? metaSnap.twitterTitle : null,
+            twitterDescription: typeof metaSnap.twitterDescription === "string" ? metaSnap.twitterDescription : null,
+            twitterImageUrl: typeof metaSnap.twitterImageUrl === "string" ? metaSnap.twitterImageUrl : null,
             translationsJson: metaSnap.translationsJson && typeof metaSnap.translationsJson === "object"
               ? metaSnap.translationsJson
               : {},
+            updatedBy: req.user?.id,
+            updatedAt: new Date(),
           })
           .where(eq(websitePagesTable.id, pageId));
       } else {

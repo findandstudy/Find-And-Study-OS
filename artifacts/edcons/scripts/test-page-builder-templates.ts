@@ -25,14 +25,16 @@ test("all layouts have responsive defaults and keyboard scroll semantics", () =>
   }
 });
 test("Home and About reuse published blocks while preserving static fallbacks and team fetch", () => {
-  for (const name of ["Home", "About"]) {
-    const code = source(`pages/public/${name}.tsx`);
+  const home = source("pages/public/Home.tsx");
+  const about = source("pages/public/About.tsx");
+  for (const code of [home, about]) {
     assert.match(code, /useTemplatePage\(/);
-    assert.match(code, /if \(page\) return <main/);
-    assert.match(code, /<Block key=/);
     assert.match(code, /useTemplatePageSeo\(page\)/);
-    assert.match(code, /return \(\s*<>/);
   }
+  assert.match(home, /HomeBlocks/);
+  assert.match(home, /managedHomePageBlocks/);
+  assert.match(home, /<CmsBlock/);
+  assert.match(about, /<ManagedPublicPage/);
   assert.match(source("pages/public/About.tsx"), /\/api\/cms\/team-members\?lang=/);
   const hook = source("pages/public/useTemplatePage.ts");
   assert.match(hook, /!query.isError/);

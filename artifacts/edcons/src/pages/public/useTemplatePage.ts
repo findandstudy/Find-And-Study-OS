@@ -2,7 +2,9 @@ import { useQuery } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
 import type { PageResponse } from "./PublicPage";
 import { useEffect } from "react";
-export function useTemplatePage(slug: "home" | "about", locale: string) {
+export type ManagedTemplateSlug = "home" | "about" | "countries" | "programs" | "blog" | "contact";
+
+export function useTemplatePage(slug: ManagedTemplateSlug, locale: string) {
   const query = useQuery<PageResponse>({
     queryKey: ["published-template-page", slug, locale],
     queryFn: ({ signal }) => customFetch(`/api/website/pages/${slug}?locale=${encodeURIComponent(locale)}`, { signal }),

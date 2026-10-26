@@ -1,11 +1,17 @@
-import { Button } from "@/components/ui/button";
 import { useI18n } from "@/hooks/use-i18n";
 import { useSeo } from "@/hooks/use-seo";
 import { useTemplatePage, useTemplatePageSeo } from "./useTemplatePage";
-import { Block } from "./PublicPage";
+import { CmsBlock, CmsPageCanvas } from "./PublicPage";
+import type { PageBlock } from "@/lib/website/blockTypes";
 import { useJsonLd, SITE_URL, SITE_NAME, ORG_SCHEMA } from "@/hooks/use-json-ld";
-import { ArrowRight, BookOpen, FileText, Globe2, ShieldCheck, Star, Users } from "lucide-react";
-import { Link } from "wouter";
+import { enrichManagedHomePageBlocks, managedHomePageBlocks, MANAGED_HOME_BLOCK_TYPES } from "@/lib/website/managedPageStarters";
+
+function HomeBlocks({ blocks, version, pageTitle, locale }: { blocks: PageBlock[]; version?: number; pageTitle: string; locale: string }) {
+  const content = <div data-public-page-version={version}>{blocks.map((block, index) => <CmsBlock block={block} index={index} variables={{ siteName: SITE_NAME, pageTitle, pageSlug: "home", pageLocale: locale }} key={`${block.blockType}-${index}`} />)}</div>;
+  return blocks.every(block => MANAGED_HOME_BLOCK_TYPES.has(block.blockType))
+    ? <div className="home-future-page">{content}</div>
+    : <CmsPageCanvas className="home-future-page">{content}</CmsPageCanvas>;
+}
 
 export default function Home() {
   const { t, lang, localePath } = useI18n();
@@ -35,87 +41,27 @@ export default function Home() {
     },
   ]);
 
-  if (page) return <main data-public-page-version={page.data.versionNumber}>{page.data.blocks.map((block, index) => <Block key={`${block.blockType}-${index}`} block={block} index={index} />)}</main>;
+  if (page) return <HomeBlocks blocks={enrichManagedHomePageBlocks(page.data.blocks, localePath("/programs"))} version={page.data.versionNumber} pageTitle={page.data.title} locale={lang} />;
 
-  return (
-    <>
-      <section className="relative pt-24 pb-32 lg:pt-36 lg:pb-40 overflow-hidden">
-        <div className="absolute inset-0 z-0" aria-hidden="true">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,hsl(var(--primary)/0.12),transparent_38%),radial-gradient(circle_at_80%_10%,hsl(var(--accent)/0.10),transparent_34%)]" />
-          <div className="absolute inset-0 bg-gradient-to-b from-background/0 via-background/50 to-background" />
-        </div>
-        
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 text-center">
-          <div>
-            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 text-primary font-medium text-sm mb-8 border border-primary/20 shadow-sm">
-              <Star className="w-4 h-4 fill-primary" />
-              {t("hero.badge")}
-            </div>
-            
-            <h1 className="text-5xl md:text-7xl font-bold font-display tracking-tight text-foreground max-w-4xl mx-auto leading-[1.1]">
-              {t("hero.title")}
-            </h1>
-            
-            <p className="mt-6 text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed">
-              {t("hero.subtitle")}
-            </p>
-            
-            <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">
-              <Button size="lg" className="rounded-full px-8 h-14 text-base shadow-xl shadow-primary/25 hover:shadow-primary/40 hover:-translate-y-1 transition-all duration-300" asChild>
-                <Link href={localePath("/programs")}>
-                  {t("hero.cta")} <ArrowRight className="ms-2 w-5 h-5" />
-                </Link>
-              </Button>
-              <Button size="lg" variant="outline" className="rounded-full px-8 h-14 text-base bg-white/50 backdrop-blur hover:bg-white transition-all duration-300" asChild>
-                <Link href={localePath("/programs")}>{t("hero.browse")}</Link>
-              </Button>
-            </div>
-          </div>
-        </div>
-      </section>
+  const fallbackBlocks = managedHomePageBlocks({
+    badge: t("hero.badge"),
+    title: t("hero.title"),
+    subtitle: t("hero.subtitle"),
+    primaryLabel: t("hero.cta"),
+    secondaryLabel: t("hero.browse"),
+    visaRate: t("stats.visaRate"),
+    universities: t("stats.universities"),
+    countries: t("stats.countries"),
+    scholarships: t("stats.scholarships"),
+    featuresTitle: t("features.title"),
+    featuresSubtitle: t("features.subtitle"),
+    universityTitle: t("features.university"),
+    universityDescription: t("features.universityDesc"),
+    applicationTitle: t("features.application"),
+    applicationDescription: t("features.applicationDesc"),
+    visaTitle: t("features.visa"),
+    visaDescription: t("features.visaDesc"),
+  }, localePath("/programs"));
 
-      <section className="py-20 bg-card border-y border-border/50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
-            {[
-              { value: "98%", label: t("stats.visaRate") },
-              { value: "500+", label: t("stats.universities") },
-              { value: "30+", label: t("stats.countries") },
-              { value: "$2M+", label: t("stats.scholarships") },
-            ].map((stat, i) => (
-              <div key={i} className="space-y-2">
-                <h3 className="text-4xl md:text-5xl font-bold font-display text-primary">{stat.value}</h3>
-                <p className="text-muted-foreground font-medium">{stat.label}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <section className="py-24 bg-background">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center max-w-3xl mx-auto mb-16">
-            <h2 className="text-3xl md:text-4xl font-bold font-display mb-4">{t("features.title")}</h2>
-            <p className="text-lg text-muted-foreground">{t("features.subtitle")}</p>
-          </div>
-
-          <div className="grid md:grid-cols-3 gap-8">
-            {[
-              { icon: Globe2, title: t("features.university"), desc: t("features.universityDesc") },
-              { icon: FileText, title: t("features.application"), desc: t("features.applicationDesc") },
-              { icon: ShieldCheck, title: t("features.visa"), desc: t("features.visaDesc") },
-            ].map((feature, i) => (
-              <div key={i} className="glass-card p-8 rounded-3xl hover:-translate-y-2 transition-all duration-300 group">
-                <div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center mb-6 group-hover:bg-primary transition-colors duration-300">
-                  <feature.icon className="w-7 h-7 text-primary group-hover:text-white transition-colors duration-300" />
-                </div>
-                <h3 className="text-xl font-bold font-display mb-3">{feature.title}</h3>
-                <p className="text-muted-foreground leading-relaxed">{feature.desc}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-    </>
-  );
+  return <HomeBlocks blocks={fallbackBlocks} pageTitle={t("seo.homeTitle")} locale={lang} />;
 }

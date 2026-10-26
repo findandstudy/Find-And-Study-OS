@@ -1,13 +1,13 @@
 // Page-editor copy only; catalogue facts and user-authored content are never translated here.
 const TURKISH: Record<string, string> = {
-  Hero: "Üst bölüm", "Rich Text": "Zengin metin", "Stats Strip": "İstatistik şeridi", "Live Catalog Grid": "Güncel katalog listesi",
+  Hero: "Üst bölüm", "Rich Text": "Zengin metin", "HTML Content": "HTML içerik", "Stats Strip": "İstatistik şeridi", "Live Catalog Grid": "Güncel katalog listesi",
   "Feature Cards": "Özellik kartları", "Icon Cards": "Simgeli kartlar", "CTA Banner": "Çağrı bandı", FAQ: "Sık sorulan sorular",
   "Team Grid": "Ekip listesi", "Office List": "Ofis listesi", "Logo Grid": "Logo listesi", Testimonials: "Yorumlar",
   "Section Title + Subtitle": "Bölüm başlığı ve alt başlığı", "Spacer / Divider": "Boşluk / ayırıcı", "Reusable Global Block": "Yeniden kullanılabilir ortak blok",
   content: "İçerik", media: "Medya", layout: "Düzen", data: "Veri", reference: "Referans",
   "Badge Text": "Rozet metni", Title: "Başlık", Subtitle: "Alt başlık", "CTA Button Label": "Çağrı düğmesi metni", "CTA Button URL": "Çağrı düğmesi adresi",
   "Secondary Button Label": "İkinci düğme metni", "Secondary Button URL": "İkinci düğme adresi", "Background Image": "Arka plan görseli", "Show Overlay": "Karartmayı göster",
-  "Content (HTML)": "İçerik (HTML)", "Max Width": "En fazla genişlik", Narrow: "Dar", Medium: "Orta", Wide: "Geniş", Full: "Tam",
+  "Content (HTML)": "İçerik (HTML)", "HTML Markup": "HTML kodu", "Max Width": "En fazla genişlik", Narrow: "Dar", Medium: "Orta", Wide: "Geniş", Full: "Tam",
   Background: "Arka plan", Primary: "Ana renk", Card: "Kart", Transparent: "Saydam", Stats: "İstatistikler", Value: "Değer", Label: "Etiket",
   "Section Title": "Bölüm başlığı", "Section Subtitle": "Bölüm alt başlığı", "Catalogue Source": "Katalog kaynağı", Programs: "Programlar", Universities: "Üniversiteler",
   Destinations: "Destinasyonlar", Cities: "Şehirler", "Items to show": "Gösterilecek kayıt sayısı", "Country filter (optional)": "Ülke filtresi (isteğe bağlı)", "City filter (optional)": "Şehir filtresi (isteğe bağlı)",
@@ -19,6 +19,7 @@ const TURKISH: Record<string, string> = {
   Alignment: "Hizalama", Left: "Sol", Center: "Orta", Right: "Sağ", Size: "Boyut", Small: "Küçük", Large: "Büyük", "Height (px)": "Yükseklik (piksel)", "Show Divider Line": "Ayırıcı çizgiyi göster", "Divider Color": "Ayırıcı rengi",
   "Global Component ID": "Ortak bileşen kimliği", "Component Slug": "Bileşen adresi", "Move block up": "Bloğu yukarı taşı", "Move block down": "Bloğu aşağı taşı", "Hide block": "Bloğu gizle", "Show block": "Bloğu göster", "Duplicate block": "Bloğu kopyala", "Remove block": "Bloğu kaldır",
   "Select...": "Seçin...", "Image URL": "Görsel adresi", "Add Item": "Öğe ekle", Item: "Öğe", "Remove item": "Öğeyi kaldır",
+  "Use semantic HTML and the built-in html-content classes. Scripts, inline styles, iframes, forms and event attributes are removed before preview and publication.": "Anlamlı HTML ve yerleşik html-content sınıflarını kullanın. Scriptler, satır içi stiller, iframe'ler, formlar ve olay öznitelikleri önizleme ve yayın öncesinde kaldırılır.",
 };
 
 export function pageEditorText(lang: string, english: string, turkish?: string): string {

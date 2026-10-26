@@ -20,14 +20,23 @@ export function parseWebsitePageDraft(input: unknown) {
   if (starter !== "blank" && !source) throw new Error("Invalid page starter");
   const country = text(body.country ?? "", 120);
   const city = text(body.city ?? "", 120);
-  return {
-    page: { title, slug, locale, template: "default", status: "draft", robotsIndex: false, robotsFollow: true },
-    blocks: source ? [{
+  const blocks = source ? [{
       blockType: "hero", content: { title }, settings: {}, sortOrder: 0, isVisible: true,
     }, {
       blockType: "catalog_grid", content: { title, source, limit: 6, country, city },
       settings: {}, sortOrder: 1, isVisible: true,
-    }] : [],
+    }] : [];
+  return {
+    page: {
+      title,
+      slug,
+      locale,
+      template: "default",
+      status: "draft",
+      robotsIndex: false,
+      robotsFollow: true,
+    },
+    blocks,
   };
 }
 

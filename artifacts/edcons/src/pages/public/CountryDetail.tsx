@@ -1,5 +1,5 @@
 import { DetailLayout } from "./DetailLayout";
-import { useState, useEffect, useContext } from "react";
+import { lazy, Suspense, useState, useEffect, useContext } from "react";
 import { DetailPreviewContext } from "./DetailPreviewContext";
 import { useI18n } from "@/hooks/use-i18n";
 import { useSeo } from "@/hooks/use-seo";
@@ -7,13 +7,17 @@ import { useJsonLd, SITE_URL, SITE_NAME } from "@/hooks/use-json-ld";
 import { customFetch } from "@workspace/api-client-react";
 import { Link } from "wouter";
 import { DetailBreadcrumbs, DetailCard, DetailHeading, DetailImage } from "./DetailEditorial";
-import { boundDetailContent, detailContentNavigation, detailContentSections } from "./DetailContentSections";
-import { catalogueCount, detailCopy } from "./detailPresentation";
+import { boundDetailContent, detailContentAddon, detailContentIntro, detailContentNavigation, detailContentSections, detailContentTitle, DetailHeroMedia, detailHeroSection, detailHeroStyle } from "./DetailContentSections";
+import { catalogueCount, detailCopy, detailCountLabel } from "./detailPresentation";
 
 import { Button } from "@/components/ui/button";
-import { CountryFlag, countryCodeFromEmoji } from "@/components/CountryFlag";
 import type { Language } from "@/lib/i18n";
+import { detailContentPresentationOverrides, resolveDetailTemplateContent } from "@/lib/website/detailContentContract";
+import { detailTemplateVariableValues } from "./detailTemplateVariables";
 import { Globe2, ArrowLeft, ArrowUpRight, Building2, GraduationCap, MapPin } from "lucide-react";
+import { DeferredBelowFold } from "./DeferredBelowFold";
+
+const DetailProgramBrowser = lazy(() => import("./UniversityProgramBrowser").then(module => ({ default: module.DetailProgramBrowser })));
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") || "";
 
@@ -24,6 +28,7 @@ interface Destination {
   name: string;
   slug: string;
   country: string;
+  filterCountry?: string;
   flagEmoji: string | null;
   heroImageUrl: string | null;
   shortDescription: string | null;
@@ -94,11 +99,15 @@ export default function CountryDetail({ slug }: { slug: string }) {
   const data = preview ? preview.payload as NonNullable<typeof fetchedData> : fetchedData;
   const [isLoading, setIsLoading] = useState(!preview);
   const [error, setError] = useState(false);
-  const editorial = boundDetailContent(data?.editorial, "destination", data?.destination.catalogCountryId, lang);
+  const editorial = resolveDetailTemplateContent(boundDetailContent(data?.editorial, "destination", data?.destination.catalogCountryId, lang), detailTemplateVariableValues("destination", data, lang));
 
   useSeo({
-    title: data ? t("countryDetail.studyIn", { name: data.destination.name }) : t("countryDetail.studyDestination"),
-    description: data?.destination.shortDescription || t("countryDetail.exploreOpportunities"),
+    title: editorial?.seo?.title || (data ? t("countryDetail.studyIn", { name: data.destination.name }) : t("countryDetail.studyDestination")),
+    description: editorial?.seo?.description || data?.destination.shortDescription || t("countryDetail.exploreOpportunities"),
+    ogTitle: editorial?.seo?.ogTitle,
+    ogDescription: editorial?.seo?.ogDescription,
+    twitterTitle: editorial?.seo?.twitterTitle,
+    twitterDescription: editorial?.seo?.twitterDescription,
     canonical: data ? `${SITE_URL}${data.meta.canonicalPath}` : undefined,
     noindex: !data?.meta.indexable,
     lang,
@@ -112,7 +121,7 @@ export default function CountryDetail({ slug }: { slug: string }) {
             "@type": "TouristDestination",
             "@id": `${SITE_URL}${data.meta.canonicalPath}#destination`,
             name: data.destination.name,
-            description: data.destination.shortDescription || undefined,
+            description: editorial?.seo?.description || data.destination.shortDescription || undefined,
             url: `${SITE_URL}${data.meta.canonicalPath}`,
             touristType: { "@type": "Audience", audienceType: "International Students" },
           },
@@ -120,9 +129,9 @@ export default function CountryDetail({ slug }: { slug: string }) {
             "@context": "https://schema.org",
             "@type": "WebPage",
             "@id": `${SITE_URL}${data.meta.canonicalPath}#webpage`,
-            name: `Study in ${data.destination.name} — ${SITE_NAME}`,
+            name: editorial?.seo?.title || `Study in ${data.destination.name} — ${SITE_NAME}`,
             url: `${SITE_URL}${data.meta.canonicalPath}`,
-            description: data.destination.shortDescription || undefined,
+            description: editorial?.seo?.description || data.destination.shortDescription || undefined,
             isPartOf: { "@id": `${SITE_URL}/#website` },
             breadcrumb: {
               "@type": "BreadcrumbList",
@@ -195,60 +204,73 @@ export default function CountryDetail({ slug }: { slug: string }) {
     { label: t("countryDetail.visaInfo"), value: dest.visaInfo },
     { label: t("countryDetail.workPermit"), value: dest.workPermit },
   ].filter(fact => !!fact.value);
-  const iso = (dest.country && dest.country.length === 2 ? dest.country : null) || (dest.flagEmoji ? countryCodeFromEmoji(dest.flagEmoji) : null);
-  const programsPath = localePath(`/programs?country=${encodeURIComponent(dest.country)}`);
+  const programsPath = localePath(`/programs?country=${encodeURIComponent(dest.filterCountry || dest.country)}`);
+  const heroSection = detailHeroSection(editorial);
+  const hero = heroSection?.hero;
+  const universityCountLabel = detailCountLabel(hero?.universityCountLabel, copy.universityCount);
+  const programCountLabel = detailCountLabel(hero?.programCountLabel, copy.programCount);
+  const heroTitle = heroSection?.title || t("countryDetail.studyIn", { name: dest.name });
+  const heroBody = heroSection?.body || dest.shortDescription || t("countryDetail.exploreOpportunities");
+  const primaryCtaHref = hero?.primaryCtaHref || programsPath;
+  const primaryCtaLabel = hero?.primaryCtaLabel || t("countryDetail.browsePrograms");
+  const secondaryCtaHref = hero?.secondaryCtaHref || localePath("/contact");
+  const secondaryCtaLabel = hero?.secondaryCtaLabel || t("countryDetail.talkToAdvisor");
+  const hasEditorialOverview = detailContentTitle(editorial, "overview", "") !== "";
   return (
-    <DetailLayout kind="destination">
+    <DetailLayout kind="destination" sectionOrder={editorial?.sectionOrder} sectionPresentation={detailContentPresentationOverrides(editorial)}>
       <section data-detail-section="hero">
-        <div className="detail-hero is-destination">
-          <div className="detail-wrap detail-hero-top"><DetailBreadcrumbs label={copy.catalogue} items={[{ label: t("nav.countries"), path: localePath("/countries") }, { label: dest.name }]} /></div>
-          <div className="detail-wrap detail-hero-main">
-            <div>
-              <div className="detail-cover-label">{iso ? <CountryFlag code={iso} size="md" alt={dest.name} /> : <Globe2 size={18} aria-hidden="true" />}<span>{copy.destination}</span></div>
-              <h1>{t("countryDetail.studyIn", { name: dest.name })}</h1>
-              <p className="detail-hero-lead">{dest.shortDescription || t("countryDetail.exploreOpportunities")}</p>
-              <div className="detail-actions">
-                <Link href={programsPath}>{t("countryDetail.browsePrograms")}<ArrowUpRight size={18} aria-hidden="true" /></Link>
-                <Link className="is-secondary" href={localePath("/contact")}>{t("countryDetail.talkToAdvisor")}</Link>
-              </div>
+        <div className="detail-hero is-destination detail-country-cover" style={detailHeroStyle(editorial)}>
+          <DetailHeroMedia content={editorial} />
+          <div className="detail-wrap detail-hero-top">
+            <DetailBreadcrumbs label={copy.catalogue} items={[{ label: t("nav.countries"), path: localePath("/countries") }, { label: dest.name }]} />
+          </div>
+          <div className="detail-wrap detail-country-cover-inner">
+            <div className="detail-country-cover-kicker"><span>{hero?.eyebrow || `${copy.destination} · 2026–27`}</span></div>
+              <h1>{heroTitle}</h1>
+            <div className="detail-country-cover-rule" />
+            <p className="detail-country-cover-claim">
+              <span><b>{stats.universityCount.toLocaleString(lang)}</b> {universityCountLabel}. <b>{stats.programCount.toLocaleString(lang)}</b> {programCountLabel}.</span>
+              <span>{heroBody}</span>
+            </p>
+            <div className="detail-country-cover-foot">
+              <span><Building2 size={18} aria-hidden="true" /><strong>{stats.universityCount.toLocaleString(lang)}</strong> {universityCountLabel}</span>
+              <span><GraduationCap size={18} aria-hidden="true" /><strong>{stats.programCount.toLocaleString(lang)}</strong> {programCountLabel}</span>
+              {cities.length > 0 && <a href="#cities"><MapPin size={17} aria-hidden="true" />{t("countryDetail.popularCities")}</a>}
+              <Link href={primaryCtaHref}>{primaryCtaLabel}<ArrowUpRight size={17} aria-hidden="true" /></Link>
+              <Link href={secondaryCtaHref}>{secondaryCtaLabel}<ArrowUpRight size={17} aria-hidden="true" /></Link>
             </div>
-            <aside className="detail-destination-summary" aria-label={copy.studyOptions}>
-              <p className="detail-eyebrow">{copy.studyOptions}</p>
-              <div className="detail-country-stats">
-                <div><Building2 size={21} aria-hidden="true" /><strong>{stats.universityCount.toLocaleString(lang)}</strong><span>{copy.universityCount}</span></div>
-                <div><GraduationCap size={23} aria-hidden="true" /><strong>{stats.programCount.toLocaleString(lang)}</strong><span>{copy.programCount}</span></div>
-              </div>
-              {cities.length > 0 && <div className="detail-location-pills"><a href="#cities"><MapPin size={15} aria-hidden="true" />{t("countryDetail.popularCities")}<ArrowUpRight size={15} aria-hidden="true" /></a></div>}
-            </aside>
           </div>
         </div>
       </section>
-      <nav data-detail-section="navigation" className="detail-nav" aria-label={dest.name}><div className="detail-wrap">
-        {hasOverview && <a href="#overview">{copy.overview}</a>}
+      <nav data-detail-section="navigation" className="detail-nav" aria-label={detailContentTitle(editorial, "navigation", dest.name)}><div className="detail-wrap">
+        {(hasOverview || hasEditorialOverview) && <a href="#overview">{copy.overview}</a>}
         {facts.length > 0 && <a href="#facts">{t("countryDetail.quickFacts")}</a>}
         {cities.length > 0 && <a href="#cities">{t("countryDetail.popularCities")}</a>}
+        {stats.programCount > 0 && <a href="#programs">{t("countryDetail.programs")}</a>}
         {universities.length > 0 && <a href="#universities">{t("countryDetail.universities")}</a>}
-        {detailContentNavigation(editorial)}
+        {detailContentNavigation(editorial ? { ...editorial, sections: editorial.sections.filter(section => section.key !== "gallery"), templateSections: editorial.templateSections?.filter(section => section.key !== "gallery") } : null)}
         <a href="#cta">{copy.next}</a>
       </div></nav>
-      {hasOverview && <section data-detail-section="overview" id="overview" className="detail-section">
-        <div className="detail-wrap">
-          <DetailHeading number="01" eyebrow={copy.destination} title={t("countryDetail.about", { name: dest.name })} />
-          <div className={overviewDescription && (whyPoints.length > 0 || hasOverviewImage) ? "detail-split" : "detail-overview-single"}>
-            {overviewDescription && <p className="detail-prose detail-snapshot">{overviewDescription}</p>}
-            {whyPoints.length > 0 ? <div>{hasOverviewImage && <DetailImage className="detail-destination-image" src={overviewImage} alt={dest.name} />}<p className="detail-eyebrow">{t("countryDetail.whyStudy", { name: dest.name })}</p><ul className="detail-program-points">{whyPoints.map((point, i) => <li key={i}>{point}</li>)}</ul></div> : hasOverviewImage && <DetailImage className="detail-destination-image" src={overviewImage} alt={dest.name} />}
-          </div>
-        </div>
+      {(hasOverview || hasEditorialOverview) && <section data-detail-section="overview" id="overview" className="detail-section">
+        {hasEditorialOverview ? detailContentAddon(editorial, "overview", lang, localePath("/contact")) : <div className="detail-wrap">
+            <DetailHeading number="01" eyebrow={copy.destination} title={t("countryDetail.about", { name: dest.name })} />
+            <div className={overviewDescription && (whyPoints.length > 0 || hasOverviewImage) ? "detail-split" : "detail-overview-single"}>
+              {overviewDescription && <p className="detail-prose detail-snapshot">{overviewDescription}</p>}
+              {whyPoints.length > 0 ? <div>{hasOverviewImage && <DetailImage className="detail-destination-image" src={overviewImage} alt={dest.name} />}<p className="detail-eyebrow">{t("countryDetail.whyStudy", { name: dest.name })}</p><ul className="detail-program-points">{whyPoints.map((point, i) => <li key={i}>{point}</li>)}</ul></div> : hasOverviewImage && <DetailImage className="detail-destination-image" src={overviewImage} alt={dest.name} />}
+            </div>
+          </div>}
       </section>}
       {facts.length > 0 && <section data-detail-section="facts" id="facts" className="detail-section is-sky">
         <div className="detail-wrap detail-split">
-          <DetailHeading number="02" eyebrow={copy.overview} title={t("countryDetail.quickFacts")} />
+          <DetailHeading number="02" eyebrow={copy.overview} title={detailContentTitle(editorial, "facts", t("countryDetail.quickFacts"))} />
+          {detailContentIntro(editorial, "facts")}
           <dl className="detail-keylines">{facts.map(fact => <div key={fact.label}><dt>{fact.label}</dt><dd>{fact.value}</dd></div>)}</dl>
         </div>
       </section>}
       {cities.length > 0 && <section data-detail-section="cities" id="cities" className="detail-section is-sky">
         <div className="detail-wrap">
-          <DetailHeading number="03" eyebrow={dest.name} title={t("countryDetail.popularCities")} />
+          <DetailHeading number="03" eyebrow={dest.name} title={detailContentTitle(editorial, "cities", t("countryDetail.popularCities"))} />
+          {detailContentIntro(editorial, "cities")}
           <div className="detail-grid">{cities.map((city) => {
             const cityPath = city.canonicalPath;
             return cityPath ? <DetailCard key={city.name} href={cityPath} eyebrow={dest.name} title={city.name} kind="city" /> : <article key={city.name} className="detail-catalog-card"><MapPin aria-hidden="true" /><p className="detail-eyebrow">{dest.name}</p><h3>{city.name}</h3></article>;
@@ -257,18 +279,27 @@ export default function CountryDetail({ slug }: { slug: string }) {
       </section>}
       {universities.length > 0 && <section data-detail-section="universities" id="universities" className="detail-section is-sand">
         <div className="detail-wrap">
-          <DetailHeading number="04" eyebrow={copy.studyOptions} title={t("countryDetail.universitiesIn", { name: dest.name })} />
+          <DetailHeading number="04" eyebrow={copy.studyOptions} title={detailContentTitle(editorial, "universities", t("countryDetail.universitiesIn", { name: dest.name }))} />
+          {detailContentIntro(editorial, "universities")}
           <div className="detail-grid">{universities.map((uni) => <DetailCard key={uni.id} href={uni.canonicalPath} title={uni.name} eyebrow={uni.city || dest.name} kind="university" logoUrl={fixStorageUrl(uni.logoUrl)}>
             <p>{[uni.universityType, catalogueCount(uni.programCount, t("countryDetail.programs"))].filter(Boolean).join(" · ")}</p>
           </DetailCard>)}</div>
         </div>
       </section>}
-      {detailContentSections(editorial, lang, localePath("/contact"))}
+      {stats.programCount > 0 && <section data-detail-section="programs" id="programs" className="detail-section">
+        <div className="detail-wrap">
+          <DetailHeading number="05" eyebrow={copy.studyOptions} title={detailContentTitle(editorial, "programs", t("catalogDetail.availablePrograms"))} />
+          {detailContentIntro(editorial, "programs")}
+          <DeferredBelowFold minHeight={520}><Suspense fallback={<div className="h-[32rem] animate-pulse rounded-3xl bg-secondary" />}><DetailProgramBrowser scope={{ kind: "country", country: dest.filterCountry || dest.country }} admissionsOpen previewPrograms={data.programs.map(program => ({ ...program, universityPath: "", universityCountry: dest.country }))} previewTotal={stats.programCount} /></Suspense></DeferredBelowFold>
+          <div className="detail-actions"><Link href={programsPath}>{t("countryDetail.viewAllPrograms")} · {stats.programCount}<ArrowUpRight size={17} aria-hidden="true" /></Link></div>
+        </div>
+      </section>}
+      {detailContentSections(editorial, lang, localePath("/contact"), ["hero", "overview"])}
       <section data-detail-section="cta" id="cta" className="detail-section is-dark">
         <div className="detail-wrap detail-cta">
-          <div><p className="detail-eyebrow">{copy.next}</p><h2>{t("countryDetail.readyToStudy", { name: dest.name })}</h2></div>
+          <div><p className="detail-eyebrow">{copy.next}</p><h2>{detailContentTitle(editorial, "cta", t("countryDetail.readyToStudy", { name: dest.name }))}</h2>{detailContentIntro(editorial, "cta")}</div>
           <div className="detail-actions">
-            <Link href={localePath(`/programs?country=${encodeURIComponent(dest.country)}`)}>{t("countryDetail.browsePrograms")}<ArrowUpRight size={17} aria-hidden="true" /></Link>
+            <Link href={programsPath}>{t("countryDetail.browsePrograms")}<ArrowUpRight size={17} aria-hidden="true" /></Link>
             <Link className="is-secondary" href={localePath("/contact")}>{t("countryDetail.talkToAdvisor")}</Link>
           </div>
         </div>
