@@ -1715,6 +1715,51 @@
       "risk": "critical",
       "owner": "Portal Automation",
       "externalPilot": "quarantine"
+    },
+    {
+      "path": "artifacts/api-server/src/lib/personaAdminSession.ts",
+      "ownership": "tenant_owned",
+      "enforcement": "quarantine_required",
+      "risk": "high",
+      "owner": "Agent Workspace",
+      "externalPilot": "quarantine",
+      "note": "Staging mock-only workspace. Explicit project membership, current human administrator session, FORCE RLS and two-person content-bound approval are tested. This inventory entry enables neither external effects nor production authority; the legacy runner remains quarantined."
+    },
+    {
+      "path": "artifacts/api-server/src/lib/personaBudgetReservation.ts",
+      "ownership": "tenant_owned",
+      "enforcement": "quarantine_required",
+      "risk": "high",
+      "owner": "Agent Workspace",
+      "externalPilot": "quarantine",
+      "note": "Staging mock-only workspace. Explicit project membership, current human administrator session, FORCE RLS and two-person content-bound approval are tested. This inventory entry enables neither external effects nor production authority; the legacy runner remains quarantined."
+    },
+    {
+      "path": "artifacts/api-server/src/lib/personaCookieSession.ts",
+      "ownership": "tenant_owned",
+      "enforcement": "quarantine_required",
+      "risk": "high",
+      "owner": "Agent Workspace",
+      "externalPilot": "quarantine",
+      "note": "Staging mock-only workspace. Explicit project membership, current human administrator session, FORCE RLS and two-person content-bound approval are tested. This inventory entry enables neither external effects nor production authority; the legacy runner remains quarantined."
+    },
+    {
+      "path": "artifacts/api-server/src/lib/personaScopedMock.ts",
+      "ownership": "tenant_owned",
+      "enforcement": "quarantine_required",
+      "risk": "high",
+      "owner": "Agent Workspace",
+      "externalPilot": "quarantine",
+      "note": "Staging mock-only workspace. Explicit project membership, current human administrator session, FORCE RLS and two-person content-bound approval are tested. This inventory entry enables neither external effects nor production authority; the legacy runner remains quarantined."
+    },
+    {
+      "path": "artifacts/api-server/src/lib/personaSocialContentLink.ts",
+      "ownership": "tenant_owned",
+      "enforcement": "quarantine_required",
+      "risk": "high",
+      "owner": "Agent Workspace",
+      "externalPilot": "quarantine",
+      "note": "Staging mock-only workspace. Explicit project membership, current human administrator session, FORCE RLS and two-person content-bound approval are tested. This inventory entry enables neither external effects nor production authority; the legacy runner remains quarantined."
     }
   ]
 }

@@ -8,6 +8,7 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { performLogout } from "@/lib/logout";
 import { getPersonaTeamPreviewMenuLink } from "@/lib/personaTeamPreviewNavigation";
+import { isPersonaWorkspaceLocation } from "@/lib/personaWorkspaceNavigation";
 import { customFetch } from "@workspace/api-client-react";
 import { FINANCE_ROLES } from "@workspace/roles";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -241,6 +242,7 @@ function getMenuForRole(
     ];
 
     const automationIntegrationItems: MenuItem[] = [
+      ...(isAdmin && isPersonaWorkspaceLocation(window.location.protocol, window.location.hostname) ? [{ title: 'Takım çalışma alanı', icon: Sparkles, url: '/admin/agent-team-workspace' }] : []),
       ...(isAdmin ? [{ title: t("dashboard.portalAutomation"), icon: Bot, url: '/admin/portal-automation' }] : []),
       ...(isAdmin ? [{ title: t("dashboard.portalCredentials"), icon: KeyRound, url: '/admin/portal-credentials' }] : []),
       ...aiItems,

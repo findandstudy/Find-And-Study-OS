@@ -9,6 +9,7 @@ import {
 } from "@workspace/db";
 import { redactString } from "./piiRedaction";
 import { runPersona } from "./personaService";
+import { legacyPersonaExecutionBlock } from "./personaSafety";
 import {
   isDiagnosablePortalStatus,
   parsePortalDiagnosis,
@@ -78,6 +79,9 @@ function guardianFromResult(value: unknown): GuardianState {
 }
 
 async function getGuardianPersona(requireAutomatic = false) {
+  // Fail before global persona/history or portal evidence reads, not just the
+  // model runner. Guardian has no independently trusted project authority.
+  if (legacyPersonaExecutionBlock("anthropic")) return null;
   const [persona] = await db
     .select()
     .from(aiPersonasTable)

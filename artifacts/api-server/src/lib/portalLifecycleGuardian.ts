@@ -15,6 +15,7 @@ import {
 } from "./portalLifecycleContract";
 import { PORTAL_GUARDIAN_SLUG } from "./portalAiGuardian";
 import type { PortalApplicationReferenceSyncOutcome } from "./portalApplicationReferenceSync";
+import { legacyPersonaExecutionBlock } from "./personaSafety";
 
 export const PORTAL_LIFECYCLE_ACTION = "portal_lifecycle_proposal";
 
@@ -75,6 +76,9 @@ export async function queuePortalLifecycleReview(input: {
   reason?: string;
   decision?: PortalLifecycleDecision;
 }> {
+  // No legacy Guardian exemption from project ownership / authority quarantine.
+  const blocked = legacyPersonaExecutionBlock("anthropic");
+  if (blocked) return { queued: false, reason: blocked };
   const [persona] = await db
     .select({ id: aiPersonasTable.id })
     .from(aiPersonasTable)

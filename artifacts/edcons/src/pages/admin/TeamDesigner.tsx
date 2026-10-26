@@ -4,6 +4,7 @@ import {
   useRef,
   useState,
   type PointerEvent,
+  type ReactNode,
 } from "react";
 import {
   Building2,
@@ -74,8 +75,23 @@ import {
 } from "@/lib/personaTeamDesigner";
 import "./team-designer.css";
 
-// A view-only design sandbox. No persistence, real personas, tool permissions,
-// approval, provider, budget or execution APIs are imported by this page.
+// Presentation-only editor. Persistence belongs to the scoped workspace wrapper;
+// this component never calls approval, provider or execution APIs.
+export type TeamDesignerValue = {
+  document: DesignerTeam;
+  layout: {
+    positions: { key: string; x: number; y: number }[];
+    zoom: number;
+    selectedKey: string | null;
+  };
+};
+export type TeamDesignerProps = {
+  initialState?: TeamDesignerValue;
+  onChange?: (value: TeamDesignerValue) => void;
+  onPendingChange?: (pending: boolean) => void;
+  controls?: ReactNode;
+  disabled?: boolean;
+};
 type Snapshot = { team: DesignerTeam; positions: DesignerPositions };
 type Viewport = { x: number; y: number; scale: number };
 type Gesture = {
@@ -100,6 +116,8 @@ function MemberEditor({
   onApply,
   onDelete,
   onConnect,
+  durable,
+  onPendingChange,
 }: {
   member: DesignerMember;
   team: DesignerTeam;
@@ -109,6 +127,8 @@ function MemberEditor({
   ) => void;
   onDelete: () => void;
   onConnect: () => void;
+  durable: boolean;
+  onPendingChange?: (pending: boolean) => void;
 }) {
   const [name, setName] = useState(member.name);
   const [purpose, setPurpose] = useState(member.purpose);
@@ -120,6 +140,15 @@ function MemberEditor({
     setOutput(member.output);
     setParent(member.parent ?? "");
   }, [member]);
+  useEffect(() => {
+    onPendingChange?.(
+      name !== member.name ||
+        purpose !== member.purpose ||
+        output !== member.output ||
+        parent !== (member.parent ?? ""),
+    );
+  }, [name, purpose, output, parent, member, onPendingChange]);
+  useEffect(() => () => onPendingChange?.(false), [onPendingChange]);
   return (
     <form
       className="space-y-4"
@@ -209,8 +238,12 @@ function MemberEditor({
       </Button>
       <p className="text-xs text-muted-foreground">
         {copy(
-          "Yalnız bu açık önizlemede uygulanır. Görev başlatmaz.",
-          "Applies only to this open preview. Does not run tasks.",
+          durable
+            ? "Taslağa uygulanır. Sunucuya yazmak için Kaydet düğmesini kullanın. Görev başlatmaz."
+            : "Yalnız bu açık önizlemede uygulanır. Görev başlatmaz.",
+          durable
+            ? "Applies to the draft. Use Save to store it on the server. Does not run tasks."
+            : "Applies only to this open preview. Does not run tasks.",
         )}
       </p>
       {member.kind !== "manager" && (
@@ -236,7 +269,24 @@ function MemberEditor({
   );
 }
 
-export default function TeamDesigner() {
+export default function TeamDesigner({
+  initialState,
+  onChange,
+  onPendingChange,
+  controls,
+  disabled = false,
+}: TeamDesignerProps = {}) {
+  const durable = Boolean(initialState);
+  const initial = useRef(initialState);
+  const notifyChange = useRef(onChange);
+  notifyChange.current = onChange;
+  const notifyPending = useRef(onPendingChange);
+  notifyPending.current = onPendingChange;
+  const pendingMemberFields = useRef(false);
+  const reportPending = useCallback((pending: boolean) => {
+    pendingMemberFields.current = pending;
+    notifyPending.current?.(pending);
+  }, []);
   const { lang, dir } = useI18n();
   const { user } = useAuth();
   const copy: Copy = (tr, en) => (lang === "tr" ? tr : en);
@@ -277,23 +327,32 @@ export default function TeamDesigner() {
   const gesture = useRef<Gesture | null>(null);
   const [dragging, setDragging] = useState(false);
   const [dropKey, setDropKey] = useState<string | null>(null);
-  const initiallyFitted = useRef(false);
-  const allowed = Boolean(
-    getPersonaTeamPreviewMenuLink(
-      window.location.origin,
-      user?.role ?? "",
-      lang,
-    ),
-  );
   useEffect(() => {
-    if (!past.length) return;
+    if (disabled) {
+      setSheetOpen(false);
+      setDeleteKey(null);
+      setConnectingKey(null);
+    }
+  }, [disabled]);
+  const initiallyFitted = useRef(false);
+  const allowed =
+    durable ||
+    Boolean(
+      getPersonaTeamPreviewMenuLink(
+        window.location.origin,
+        user?.role ?? "",
+        lang,
+      ),
+    );
+  useEffect(() => {
+    if (durable || !past.length) return;
     const warn = (event: BeforeUnloadEvent) => {
       event.preventDefault();
       event.returnValue = "";
     };
     window.addEventListener("beforeunload", warn);
     return () => window.removeEventListener("beforeunload", warn);
-  }, [past.length]);
+  }, [past.length, durable]);
   const replace = useCallback((next: Snapshot) => {
     current.current = next;
     setSnapshot(next);
@@ -305,6 +364,24 @@ export default function TeamDesigner() {
 
   useEffect(() => {
     const abort = new AbortController();
+    if (initial.current) {
+      const value = initial.current;
+      const team = validateDesignerTeam(value.document);
+      replace({
+        team,
+        positions: {
+          ...layoutDesignerTeam(team),
+          ...Object.fromEntries(
+            value.layout.positions.map(({ key, x, y }) => [key, { x, y }]),
+          ),
+        },
+      });
+      setSelectedKey(value.layout.selectedKey ?? team.members[0].key);
+      moveViewport({ x: 24, y: 24, scale: value.layout.zoom });
+      initiallyFitted.current = true;
+      setLoadState("ready");
+      return () => abort.abort();
+    }
     setLoadState(allowed ? "loading" : "denied");
     setSnapshot(null);
     current.current = null;
@@ -352,6 +429,24 @@ export default function TeamDesigner() {
     };
   }, [allowed, retry, user?.id, replace]);
 
+  useEffect(() => {
+    if (!snapshot || loadState !== "ready" || !durable) return;
+    notifyChange.current?.({
+      document: snapshot.team,
+      layout: {
+        positions: Object.entries(snapshot.positions).map(
+          ([key, position]) => ({ key, ...position }),
+        ),
+        zoom: viewport.scale,
+        selectedKey: snapshot.team.members.some(
+          (member) => member.key === selectedKey,
+        )
+          ? selectedKey
+          : snapshot.team.members[0].key,
+      },
+    });
+  }, [snapshot, loadState, durable, viewport.scale, selectedKey]);
+
   const fit = useCallback(() => {
     const state = current.current;
     const bounds = canvas.current?.getBoundingClientRect();
@@ -363,7 +458,7 @@ export default function TeamDesigner() {
     const height = Math.max(...points.map((p) => p.y + HEIGHT)) - top;
     const scale = clamp(
       Math.min((bounds.width - 64) / width, (bounds.height - 80) / height),
-      0.2,
+      durable ? 0.25 : 0.2,
       1,
     );
     const next = {
@@ -373,7 +468,7 @@ export default function TeamDesigner() {
     };
     viewportRef.current = next;
     setViewport(next);
-  }, []);
+  }, [durable]);
   useEffect(() => {
     if (!snapshot || view !== "tree" || !canvas.current) return;
     const observer = new ResizeObserver(() => {
@@ -391,7 +486,7 @@ export default function TeamDesigner() {
     message?: string,
     previous = current.current,
   ) => {
-    if (!previous) return;
+    if (!previous || disabled) return;
     setPast((items) => [...items.slice(-29), previous]);
     setFuture([]);
     replace(next);
@@ -455,6 +550,15 @@ export default function TeamDesigner() {
     setConnectingKey(null);
   };
   const choose = (key: string) => {
+    if (durable && pendingMemberFields.current && key !== selectedKey) {
+      setNotice(
+        copy(
+          "Önce karttaki alanları Uygula düğmesiyle taslağa aktarın.",
+          "Apply the current member's fields before selecting another card.",
+        ),
+      );
+      return;
+    }
     if (connectingKey) {
       connect(connectingKey, key);
       return;
@@ -473,6 +577,15 @@ export default function TeamDesigner() {
     );
   };
   const add = (kind: "department" | "specialist") => {
+    if (durable && pendingMemberFields.current) {
+      setNotice(
+        copy(
+          "Önce karttaki alanları Uygula düğmesiyle taslağa aktarın.",
+          "Apply the current member's fields before adding a member.",
+        ),
+      );
+      return;
+    }
     const state = current.current;
     if (!state || !selected) return;
     const parent =
@@ -512,7 +625,7 @@ export default function TeamDesigner() {
     const bounds = canvas.current?.getBoundingClientRect();
     if (!bounds) return;
     const old = viewportRef.current,
-      scale = clamp(old.scale * factor, 0.2, 2);
+      scale = clamp(old.scale * factor, durable ? 0.25 : 0.2, 2);
     const x = bounds.width / 2,
       y = bounds.height / 2;
     moveViewport({
@@ -522,6 +635,8 @@ export default function TeamDesigner() {
     });
   };
   const start = (event: PointerEvent, key: string | null) => {
+    if (disabled) return;
+    if (durable && pendingMemberFields.current) return;
     if (
       event.button !== 0 ||
       !event.isPrimary ||
@@ -651,6 +766,8 @@ export default function TeamDesigner() {
       member={selected}
       team={snapshot.team}
       copy={copy}
+      durable={durable}
+      onPendingChange={reportPending}
       onApply={(patch) =>
         apply(() => {
           const state = current.current!;
@@ -749,7 +866,9 @@ export default function TeamDesigner() {
               {copy("Takım Tasarımcısı", "Team Designer")}
             </h1>
             <Badge variant="secondary" className="font-normal">
-              {copy("Önizleme", "Preview")}
+              {durable
+                ? copy("Yerel taslak", "Local draft")
+                : copy("Önizleme", "Preview")}
             </Badge>
           </div>
           <p className="mt-1 text-sm text-muted-foreground">
@@ -783,12 +902,18 @@ export default function TeamDesigner() {
       <div className="flex items-start gap-2 rounded-lg border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
         <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" />
         <span>
-          {copy(
-            "Yalnız tasarım önizlemesi. Değişiklikler bu ekran açıkken tutulur; ayrılınca veya yenileyince silinir. Gerçek veri girmeyin. Kayıt ve görev çalıştırma kapalı.",
-            "Design preview only. Changes last while this screen is open and are lost on leaving or refreshing. Do not enter real data. Saving and task execution are disabled.",
-          )}
+          {durable
+            ? copy(
+                "Proje ve oturumunuza bağlı çalışma taslağı. Kaydet, yalnız taslak ve yerleşimi saklar; onay, kurulum veya görev çalıştırma değildir. Gerçek veri girmeyin.",
+                "Workspace draft scoped to your project and session. Save stores only the draft and layout; it is not approval, installation or task execution. Do not enter real data.",
+              )
+            : copy(
+                "Yalnız tasarım önizlemesi. Değişiklikler bu ekran açıkken tutulur; ayrılınca veya yenileyince silinir. Gerçek veri girmeyin. Kayıt ve görev çalıştırma kapalı.",
+                "Design preview only. Changes last while this screen is open and are lost on leaving or refreshing. Do not enter real data. Saving and task execution are disabled.",
+              )}
         </span>
       </div>
+      {controls}
       <Card className="overflow-hidden">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b p-3">
           <Tabs value={view} onValueChange={setView}>
@@ -1029,7 +1154,7 @@ export default function TeamDesigner() {
                     size="icon"
                     variant="ghost"
                     onClick={() => zoom(1 / 1.2)}
-                    disabled={viewport.scale <= 0.2}
+                    disabled={viewport.scale <= (durable ? 0.25 : 0.2)}
                     aria-label={copy("Uzaklaştır", "Zoom out")}
                     title={copy("Uzaklaştır", "Zoom out")}
                   >
