@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test, { after } from "node:test";
 import { count, eq } from "drizzle-orm";
 import {
+  aiActionQueueTable,
   aiPersonasTable,
   applicationsTable,
   db,
@@ -14,12 +15,13 @@ import { queuePortalLifecycleReview } from "../src/lib/portalLifecycleGuardian";
 import { PORTAL_GUARDIAN_SLUG } from "../src/lib/portalAiGuardian";
 import { normalizePortalLifecycleObservation } from "../src/lib/portalLifecycleObservation";
 import { recordPortalLifecycleObservation } from "../src/lib/portalLifecycleObservationStore";
+import { planPortalLifecycle } from "../src/lib/portalLifecycleContract";
 
 after(async () => {
   await pool.end();
 });
 
-test("concurrent lifecycle proposals create one durable approval item", async () => {
+test("an active legacy Guardian remains quarantined; independent proposal storage still deduplicates", async () => {
   const [persona] = await db.insert(aiPersonasTable).values({
     name: "Portal Guardian Fixture",
     slug: PORTAL_GUARDIAN_SLUG,
@@ -65,17 +67,67 @@ test("concurrent lifecycle proposals create one durable approval item", async ()
       }),
     );
     const results = await Promise.all(calls);
-    assert.equal(results.filter((result) => result.queued).length, 1);
-    assert.equal(new Set(results.map((result) => result.actionId)).size, 1);
-    assert.ok(results.every((result) => result.decision?.action === "manual_review"));
+    for (const result of results) {
+      assert.deepEqual(result, {
+        queued: false,
+        reason: "PERSONA_SCOPE_AND_BUDGET_BINDING_REQUIRED",
+      });
+    }
+    const [blockedProposals] = await db.select({ value: count() })
+      .from(portalLifecycleProposalsTable)
+      .where(eq(portalLifecycleProposalsTable.applicationId, application.id));
+    const [blockedActions] = await db.select({ value: count() })
+      .from(aiActionQueueTable)
+      .where(eq(aiActionQueueTable.personaId, persona.id));
+    assert.equal(blockedProposals?.value, 0);
+    assert.equal(blockedActions?.value, 0);
+    const [unchanged] = await db.select({ stage: applicationsTable.stage })
+      .from(applicationsTable).where(eq(applicationsTable.id, application.id));
+    assert.equal(unchanged?.stage, "submitted");
+
+    // Exercise the reviewed database contract directly with synthetic fixture
+    // records. This is NOT an authorized Guardian path, an approval, or a bypass.
+    const decision = planPortalLifecycle({
+      rawStatus: observation.rawStatus,
+      currentStage: "submitted",
+      identityVerified: observation.identityVerified,
+      artifacts: [],
+      availableStages: [],
+    });
+    assert.equal(decision.action, "manual_review");
+    const proposalKey = `portal_lifecycle:${observation.observationHash}`;
+    const storageCalls = await Promise.all(Array.from({ length: 8 }, () =>
+      db.insert(portalLifecycleProposalsTable).values({
+        submissionId: submission.id,
+        applicationId: application.id,
+        observationId: recorded.id,
+        proposalKey,
+        observationHash: observation.observationHash,
+        rawStatus: observation.rawStatus,
+        currentStage: "submitted",
+        decision,
+        status: "pending_review",
+        proposedByService: "synthetic-storage-contract-test",
+      }).onConflictDoNothing().returning({ id: portalLifecycleProposalsTable.id }),
+    ));
+    assert.equal(storageCalls.flat().length, 1);
 
     const [stored] = await db
       .select({ value: count() })
       .from(portalLifecycleProposalsTable)
       .where(
-        eq(portalLifecycleProposalsTable.status, "pending_review"),
+        eq(portalLifecycleProposalsTable.proposalKey, proposalKey),
       );
     assert.equal(stored?.value, 1);
+    const [durable] = await db.select().from(portalLifecycleProposalsTable)
+      .where(eq(portalLifecycleProposalsTable.proposalKey, proposalKey));
+    assert.equal(durable?.id, storageCalls.flat()[0]?.id);
+    assert.equal(durable?.observationId, recorded.id);
+    assert.equal(durable?.observationHash, observation.observationHash);
+    assert.deepEqual(durable?.decision, decision);
+    assert.equal(durable?.status, "pending_review");
+    assert.equal(durable?.reviewedBy, null);
+    assert.equal(durable?.executedAt, null);
   } finally {
     await db.delete(aiPersonasTable).where(eq(aiPersonasTable.id, persona.id));
     await db.delete(studentsTable).where(eq(studentsTable.id, student.id));
