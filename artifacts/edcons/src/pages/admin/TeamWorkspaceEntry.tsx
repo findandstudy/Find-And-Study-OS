@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { ArrowRight, FolderKanban, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -13,6 +13,7 @@ import {
 
 export default function TeamWorkspaceEntry() {
   const { lang } = useI18n();
+  const [, setLocation] = useLocation();
   const copy = (tr: string, en: string) => lang === "tr" ? tr : en;
   const [projects, setProjects] = useState<PersonaWorkspaceProject[]>([]);
   const [phase, setPhase] = useState<"loading" | "ready" | "unavailable" | "session" | "error">("loading");
@@ -27,7 +28,13 @@ export default function TeamWorkspaceEntry() {
     void workspaceRequest("/api/persona-workspace/projects", { signal: controller.signal })
       .then((value) => {
         const available = parsePersonaWorkspaceProjects(value);
-        if (mounted) { setProjects(available); setPhase("ready"); }
+        if (!mounted) return;
+        if (available.length === 1) {
+          setLocation(personaWorkspacePath(available[0].id)!, { replace: true });
+          return;
+        }
+        setProjects(available);
+        setPhase("ready");
       })
       .catch((error: unknown) => {
         if (!mounted) return;
@@ -38,25 +45,28 @@ export default function TeamWorkspaceEntry() {
       })
       .finally(() => window.clearTimeout(timeout));
     return () => { mounted = false; controller.abort(); window.clearTimeout(timeout); };
-  }, [attempt]);
+  }, [attempt, setLocation]);
+
+  if (phase === "loading") return <section className="p-3 md:p-6" role="status" aria-live="polite">
+    <div className="flex items-center gap-3 text-muted-foreground">
+      <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />
+      {copy("Çalışma alanı açılıyor…", "Opening workspace…")}
+    </div>
+  </section>;
 
   return <section className="space-y-5 p-3 md:p-6 max-w-4xl">
     <div className="space-y-2">
       <h1 className="text-2xl font-semibold">{copy("Takım çalışma alanı", "Team workspace")}</h1>
-      <p className="text-muted-foreground">{copy(
+      {phase === "ready" && projects.length > 1 && <p className="text-muted-foreground">{copy(
         "Takımınızı düzenlemek, görev hazırlamak ve sonuçları takip etmek için projenizi seçin.",
         "Select your project to organize its team, prepare tasks and follow results.",
-      )}</p>
+      )}</p>}
       <p className="text-sm text-muted-foreground">{copy(
         "Deneme ortamı: takım ve görev kayıtları saklanır. Görevler deneme verileriyle çalışır; dışarıya mesaj veya yayın gönderilmez.",
         "Test environment: team and task records are saved. Tasks use test data; no external messages or publications are sent.",
       )}</p>
     </div>
-    {phase === "loading" && <Card className="p-6 flex items-center gap-3" role="status" aria-live="polite">
-      <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />
-      {copy("Projeler yükleniyor…", "Loading projects…")}
-    </Card>}
-    {phase !== "loading" && phase !== "ready" && <Card className="p-6 space-y-3" role="alert">
+    {phase !== "ready" && <Card className="p-6 space-y-3" role="alert">
       <p>{phase === "unavailable" ? copy(
         "Kalıcı çalışma alanı bu ortamda henüz kullanıma açılmadı. Görsel önizlemenin açık olması, bu alanın hazır olduğu anlamına gelmez.",
         "The persistent workspace is not enabled in this environment yet. An available visual preview does not mean this workspace is ready.",
@@ -72,7 +82,7 @@ export default function TeamWorkspaceEntry() {
     {phase === "ready" && projects.length === 0 && <Card className="p-6" role="status">
       {copy("Bu hesaba tanımlı bir takım çalışma alanı bulunmuyor.", "No team workspace is assigned to this account.")}
     </Card>}
-    {phase === "ready" && projects.length > 0 && <div className="grid gap-4 sm:grid-cols-2">
+    {phase === "ready" && projects.length > 1 && <div className="grid gap-4 sm:grid-cols-2">
       {projects.map((project) => <Card key={project.id} className="p-5 space-y-4 min-w-0">
         <div className="flex items-start gap-3">
           <FolderKanban className="h-5 w-5 mt-0.5 text-primary shrink-0" aria-hidden="true" />
