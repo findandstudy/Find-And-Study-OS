@@ -14,12 +14,27 @@ type TeamMember = {
   photoUrl: string | null;
 };
 
+type Office = {
+  id: number;
+  name: string;
+  city: string | null;
+  country: string | null;
+  address: string | null;
+  phone: string | null;
+  email: string | null;
+};
+
 export default function About() {
   const { t, lang } = useI18n();
   const page = useTemplatePage("about", lang);
   const { data: teamMembers = [] } = useQuery<TeamMember[]>({
     queryKey: ["cms-team-members", lang],
     queryFn: () => customFetch(`/api/cms/team-members?lang=${encodeURIComponent(lang)}`),
+    staleTime: 5 * 60 * 1000,
+  });
+  const { data: offices = [] } = useQuery<Office[]>({
+    queryKey: ["cms-offices", lang],
+    queryFn: () => customFetch(`/api/cms/offices?lang=${encodeURIComponent(lang)}`),
     staleTime: 5 * 60 * 1000,
   });
 
@@ -52,17 +67,16 @@ export default function About() {
     template="about"
     lang={lang}
     page={page}
-    transformBlock={block => block.blockType === "team_grid" ? {
-      ...block,
-      content: {
-        ...block.content,
-        members: teamMembers.map(member => ({
-          name: member.name,
-          role: member.title || "",
-          bio: member.bio || "",
-          photo: member.photoUrl || "",
-        })),
-      },
-    } : block}
+    transformBlock={block => {
+      if (block.blockType === "team_grid") return {
+        ...block,
+        content: { ...block.content, members: teamMembers.map(member => ({ name: member.name, role: member.title || "", bio: member.bio || "", photo: member.photoUrl || "" })) },
+      };
+      if (block.blockType === "office_list") return {
+        ...block,
+        content: { ...block.content, offices: offices.map(office => ({ name: office.name, city: [office.city, office.country].filter(Boolean).join(", "), address: office.address || "", phone: office.phone || "", email: office.email || "" })) },
+      };
+      return block;
+    }}
   />;
 }

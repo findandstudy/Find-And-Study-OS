@@ -38,7 +38,7 @@ test("page editor preview geometry is stable across scrollbar changes", () => {
   assert.equal(samePageEditorPreviewGeometry(beforeScrollbar, subPixelResize), true);
   assert.deepEqual(pageEditorPreviewGeometry(Number.NaN, 0, Number.NaN), { scale: 1, height: 400 });
 });
-test("Home and About reuse published blocks while preserving static fallbacks and team fetch", () => {
+test("Home and About reuse published blocks while preserving static fallbacks and managed collection fetches", () => {
   const home = source("pages/public/Home.tsx");
   const about = source("pages/public/About.tsx");
   for (const code of [home, about]) {
@@ -50,10 +50,30 @@ test("Home and About reuse published blocks while preserving static fallbacks an
   assert.match(home, /<CmsBlock/);
   assert.match(about, /<ManagedPublicPage/);
   assert.match(source("pages/public/About.tsx"), /\/api\/cms\/team-members\?lang=/);
+  assert.match(source("pages/public/About.tsx"), /\/api\/cms\/offices\?lang=/);
+  assert.match(about, /block\.blockType === "office_list"/);
   const hook = source("pages/public/useTemplatePage.ts");
   assert.match(hook, /!query.isError/);
   assert.match(hook, /refetchOnMount: "always"/);
   assert.match(source("App.tsx"), /segment === "about"/);
+});
+
+test("managed editor previews collection-backed blocks with the same data contract as public pages", () => {
+  const editor = source("pages/admin/website/PageEditor.tsx");
+  assert.match(editor, /hydrateCollectionBlock/);
+  assert.match(editor, /\/api\/cms\/team-members\?lang=/);
+  assert.match(editor, /\/api\/cms\/offices\?lang=/);
+  assert.match(editor, /Waiting for collection data/);
+  assert.match(editor, /not rendered publicly until its collection contains data/);
+});
+
+test("quarantined AI features expose capability state instead of empty lists", () => {
+  for (const path of ["pages/admin/AiPersonas.tsx", "pages/admin/AiActionQueue.tsx"]) {
+    const code = source(path);
+    assert.match(code, /\/api\/ai-personas\/status/);
+    assert.match(code, /capability\?\.available/);
+    assert.match(code, /loadError/);
+  }
 });
 test("source-specific selectors load live definitions and show unmatched legacy values", () => {
   const fields = source("pages/admin/website/CatalogBlockFields.tsx");

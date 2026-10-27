@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { useI18n } from "@/hooks/use-i18n";
-import { Sparkles, Plus, Trash2, Settings as SettingsIcon } from "lucide-react";
+import { AlertTriangle, Sparkles, Plus, Trash2, Settings as SettingsIcon } from "lucide-react";
 import AiBuiltinDefaults, { type DefaultFieldDef } from "./AiBuiltinDefaults";
 
 type Persona = {
@@ -23,6 +23,15 @@ type Persona = {
   toolsEnabled: string[];
   triggerMode: string;
   createdAt: string;
+};
+
+type PersonaCapability = {
+  available: boolean;
+  mode: string;
+  reason: string;
+  canRead: boolean;
+  canMutate: boolean;
+  canReview: boolean;
 };
 
 const PERSONA_DEFAULT_FIELDS: DefaultFieldDef[] = [
@@ -41,19 +50,29 @@ const PERSONA_DEFAULT_FIELDS: DefaultFieldDef[] = [
 ];
 
 export default function AiPersonas() {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
+  const copy = (english: string, turkish: string) => lang === "tr" ? turkish : english;
   const [, setLocation] = useLocation();
   const [personas, setPersonas] = useState<Persona[]>([]);
   const [loading, setLoading] = useState(true);
+  const [capability, setCapability] = useState<PersonaCapability | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const { toast } = useToast();
 
   const load = async () => {
     try {
       setLoading(true);
+      setLoadError(null);
+      const status = await customFetch<PersonaCapability>("/api/ai-personas/status", { cache: "no-store" });
+      setCapability(status);
+      if (!status.available || !status.canRead) {
+        setPersonas([]);
+        return;
+      }
       const data = await customFetch<{ personas: Persona[] }>("/api/ai-personas");
       setPersonas(data.personas);
     } catch (e) {
-      toast({ title: t("aiPersona.toastError"), description: (e as Error).message, variant: "destructive" });
+      setLoadError((e as Error).message);
     } finally {
       setLoading(false);
     }
@@ -101,19 +120,37 @@ export default function AiPersonas() {
             {t("aiPersona.subtitle")}
           </p>
         </div>
-        <div className="flex gap-2">
+        {capability?.available && capability.canMutate && <div className="flex gap-2">
           <Button variant="outline" onClick={() => setLocation("/admin/ai-action-queue")}>
             {t("aiPersona.approvalQueue")}
           </Button>
           <Button onClick={() => setLocation("/admin/ai-personas/new")}>
             <Plus className="h-4 w-4 mr-2" /> {t("aiPersona.newPersona")}
           </Button>
-        </div>
+        </div>}
       </div>
 
       {loading && <div className="text-sm text-muted-foreground">{t("aiPersona.loading")}</div>}
 
-      {empty && (
+      {!loading && loadError && (
+        <Card role="alert" className="border-destructive/40">
+          <CardContent className="flex flex-wrap items-center justify-between gap-3 py-6">
+            <div><p className="font-semibold">{copy("AI persona status could not be loaded", "AI persona durumu yüklenemedi")}</p><p className="mt-1 text-sm text-muted-foreground">{loadError}</p></div>
+            <Button variant="outline" onClick={() => void load()}>{copy("Retry", "Yeniden dene")}</Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {!loading && !loadError && capability && !capability.available && (
+        <Card role="status" className="border-amber-300 bg-amber-50/70 dark:border-amber-900 dark:bg-amber-950/20">
+          <CardContent className="flex gap-3 py-6">
+            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+            <div><p className="font-semibold">{copy("Persona management is temporarily unavailable", "Persona yönetimi geçici olarak kullanılamıyor")}</p><p className="mt-1 text-sm text-muted-foreground">{copy("Legacy persona records are being bound to trustworthy project ownership. Reading, creating, editing and approving are disabled until that adoption is complete.", "Eski persona kayıtları güvenilir proje sahipliğine bağlanıyor. Bu geçiş tamamlanana kadar görüntüleme, oluşturma, düzenleme ve onaylama kapalıdır.")}</p></div>
+          </CardContent>
+        </Card>
+      )}
+
+      {empty && capability?.available && (
         <Card>
           <CardContent className="py-12 text-center text-muted-foreground">
             {t("aiPersona.empty")}
@@ -121,13 +158,13 @@ export default function AiPersonas() {
         </Card>
       )}
 
-      <AiBuiltinDefaults
+      {capability?.available && <AiBuiltinDefaults
         fields={PERSONA_DEFAULT_FIELDS}
         title={t("aiDefault.personaTitle")}
         subtitle={t("aiDefault.sectionSubtitle")}
-      />
+      />}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      {capability?.available && <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {personas.map((p) => (
           <Card key={p.id} className="hover:shadow-md transition-shadow">
             <CardHeader className="pb-2">
@@ -172,7 +209,7 @@ export default function AiPersonas() {
             </CardContent>
           </Card>
         ))}
-      </div>
+      </div>}
     </div>
   );
 }

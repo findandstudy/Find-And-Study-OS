@@ -76,17 +76,35 @@ type ActionItem = {
   reviewerEmail: string | null;
 };
 
+type PersonaCapability = {
+  available: boolean;
+  mode: string;
+  reason: string;
+  canReview: boolean;
+};
+
 export default function AiActionQueue() {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
+  const copy = (english: string, turkish: string) => lang === "tr" ? turkish : english;
   const { toast } = useToast();
   const [items, setItems] = useState<ActionItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [reviewingId, setReviewingId] = useState<number | null>(null);
   const [suppressedGuardianCount, setSuppressedGuardianCount] = useState(0);
+  const [capability, setCapability] = useState<PersonaCapability | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const historyPagination = useTablePagination(25);
 
   const load = async () => {
     try {
+      setLoading(true);
+      setLoadError(null);
+      const status = await customFetch<PersonaCapability>("/api/ai-personas/status", { cache: "no-store" });
+      setCapability(status);
+      if (!status.available || !status.canReview) {
+        setItems([]);
+        return;
+      }
       const data = await customFetch<{
         actions: ActionItem[];
         suppressed?: { guardianNoEnabledSpec?: number };
@@ -97,6 +115,8 @@ export default function AiActionQueue() {
       setSuppressedGuardianCount(
         data.suppressed?.guardianNoEnabledSpec ?? 0,
       );
+    } catch (error) {
+      setLoadError((error as Error).message);
     } finally {
       setLoading(false);
     }
@@ -148,7 +168,25 @@ export default function AiActionQueue() {
         </p>
       </div>
 
-      <Card>
+      {!loading && loadError && (
+        <Card role="alert" className="border-destructive/40">
+          <CardContent className="flex flex-wrap items-center justify-between gap-3 py-6">
+            <div><p className="font-semibold">{copy("AI action capability could not be loaded", "AI eylem yeteneği yüklenemedi")}</p><p className="mt-1 text-sm text-muted-foreground">{loadError}</p></div>
+            <Button variant="outline" onClick={() => void load()}>{copy("Retry", "Yeniden dene")}</Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {!loading && !loadError && capability && !capability.available && (
+        <Card role="status" className="border-amber-300 bg-amber-50/70 dark:border-amber-900 dark:bg-amber-950/20">
+          <CardContent className="flex gap-3 py-6">
+            <ShieldAlert className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+            <div><p className="font-semibold">{copy("The action queue is not available", "Eylem kuyruğu kullanılamıyor")}</p><p className="mt-1 text-sm text-muted-foreground">{copy("Persona ownership adoption is incomplete. This is not an empty queue; review actions are disabled until the backend capability is restored.", "Persona sahiplik geçişi tamamlanmadı. Bu boş bir kuyruk değildir; arka uç yeteneği yeniden açılana kadar inceleme işlemleri kapalıdır.")}</p></div>
+          </CardContent>
+        </Card>
+      )}
+
+      {capability?.available && <Card>
         <CardHeader>
           <CardTitle className="text-base">{t("aiActionQueue.pendingTitle", { count: pending.length })}</CardTitle>
         </CardHeader>
@@ -341,9 +379,9 @@ export default function AiActionQueue() {
             </div>
           ))}
         </CardContent>
-      </Card>
+      </Card>}
 
-      {suppressedGuardianCount > 0 && (
+      {capability?.available && suppressedGuardianCount > 0 && (
         <div className="rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900 dark:border-sky-900 dark:bg-sky-950/30 dark:text-sky-200">
           {t("aiActionQueue.suppressedGuardianNotice", {
             count: suppressedGuardianCount,
@@ -351,7 +389,7 @@ export default function AiActionQueue() {
         </div>
       )}
 
-      <Card>
+      {capability?.available && <Card>
         <CardHeader>
           <CardTitle className="text-base">{t("aiActionQueue.historyTitle", { count: history.length })}</CardTitle>
         </CardHeader>
@@ -387,7 +425,7 @@ export default function AiActionQueue() {
             />
           )}
         </CardContent>
-      </Card>
+      </Card>}
     </div>
   );
 }

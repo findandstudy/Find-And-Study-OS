@@ -52,6 +52,11 @@ test("dashboard source uses translations and locale-aware time", () => {
   assert.doesNotMatch(source, />(Latest Students|Latest Updates|Notifications|No notifications\.|Leads|Applications)</);
   assert.doesNotMatch(source, /label: "(Users|Leads|Applications|Finance|Settings|Audit Log)"/);
   assert.doesNotMatch(source, /toLocaleTimeString\("(?:en-US|tr-TR)"/);
+  assert.match(source, /dashboard-latest", season/);
+  assert.match(source, /students\?limit=20&page=1&season=/);
+  assert.doesNotMatch(source, /\/api\/(?:students|audit|notifications|agents\/contract-alerts)[^\n]*\.catch\(\(\) =>/);
+  assert.match(source, /href="\/staff\/agents"/);
+  assert.match(source, /PanelLoadError/);
   for (const role of ["admin", "agent", "staff"]) {
     assert.match(readFileSync(new URL(`../src/pages/${role}/Dashboard.tsx`, import.meta.url), "utf8"), /dashboardActivityLabels\(u.action/);
   }

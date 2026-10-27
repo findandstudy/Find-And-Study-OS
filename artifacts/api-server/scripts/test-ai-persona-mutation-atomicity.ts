@@ -88,6 +88,16 @@ const createBody = { name: "New", slug: "new", personaType: "advisor", provider:
 beforeEach(() => { rows = [existing()]; audits = []; failAudit = false; hasRun = false; hasAction = false; hasMessage = false; reviewAction = null; nextId = 10; });
 after(async () => { await new Promise<void>(resolve => server.close(() => resolve())); await pool.end(); mock.restoreAll(); });
 
+test("persona capability status distinguishes quarantine from an empty collection", async () => {
+  const result = await request("GET", "/quarantined/ai-personas/status");
+  assert.equal(result.status, 200);
+  assert.equal(result.data.available, false);
+  assert.equal(result.data.reason, "PERSONA_OWNERSHIP_ADOPTION_REQUIRED");
+  assert.equal(result.data.canRead, false);
+  assert.equal(result.data.canMutate, false);
+  assert.equal(result.data.canReview, false);
+});
+
 test("actual legacy router denies list/history/mutations before any persona DB access, even for super admin", async () => {
   const reads = (db.select as any).mock.calls.length;
   const executes = (db.execute as any).mock.calls.length;

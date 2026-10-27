@@ -1,11 +1,12 @@
 import { useState, useEffect, useMemo } from "react";
-import { useGetOverviewStats, useGetActivitySummary, useGetKommoSummary, useListUsers } from "@workspace/api-client-react";
+import { customFetch, useGetOverviewStats, useGetActivitySummary, useGetKommoSummary, useListUsers } from "@workspace/api-client-react";
 import { formatDate } from "@workspace/i18n";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import { OfferDeadlinesWidget } from "@/components/OfferDeadlinesWidget";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
@@ -53,6 +54,15 @@ const AVATAR_COLORS = [
 
 function getInitials(firstName?: string, lastName?: string) {
   return `${(firstName || "?")[0]}${(lastName || "?")[0]}`.toUpperCase();
+}
+
+function PanelLoadError({ message, retryLabel, onRetry }: { message: string; retryLabel: string; onRetry: () => void }) {
+  return (
+    <div role="alert" className="rounded-xl border border-destructive/30 bg-destructive/5 p-3 text-sm">
+      <p className="text-destructive">{message}</p>
+      <Button type="button" variant="outline" size="sm" className="mt-2" onClick={onRetry}>{retryLabel}</Button>
+    </div>
+  );
 }
 
 import { formatTimeAgo as i18nTimeAgo } from "@/lib/i18n";
@@ -352,66 +362,51 @@ export default function AdminDashboard() {
 
   const { data: stats, isLoading } = useGetOverviewStats({ season });
 
-  const { data: growthRaw } = useQuery<unknown>({
+  const growthQuery = useQuery<unknown>({
     queryKey: ["/api/stats/growth", season],
-    queryFn: () =>
-      fetch(`${BASE}/api/stats/growth?season=${encodeURIComponent(season)}`, { credentials: "include" })
-        .then(r => r.json())
-        .catch(() => []),
+    queryFn: () => customFetch(`/api/stats/growth?season=${encodeURIComponent(season)}`),
   });
-  const growthData: any[] = toArray(growthRaw);
+  const growthData: any[] = toArray(growthQuery.data);
 
   const followUpCreatedById = followUpFilter === "all" ? null
     : followUpFilter === "mine" ? (user?.id ?? null)
     : parseInt(followUpFilter, 10) || null;
 
-  const { data: upcomingRaw } = useQuery<unknown>({
+  const upcomingQuery = useQuery<unknown>({
     queryKey: ["/api/follow-ups/upcoming", followUpCreatedById],
     queryFn: () => {
-      const url = new URL(`${BASE}/api/follow-ups/upcoming`, window.location.href);
+      const url = new URL("/api/follow-ups/upcoming", window.location.origin);
       if (followUpCreatedById != null) url.searchParams.set("createdById", String(followUpCreatedById));
-      return fetch(url.toString(), { credentials: "include" }).then(r => r.json()).catch(() => []);
+      return customFetch(`${url.pathname}${url.search}`);
     },
   });
-  const upcomingFollowUps: any[] = toArray(upcomingRaw);
+  const upcomingFollowUps: any[] = toArray(upcomingQuery.data);
 
   const { data: staffUsersRaw } = useListUsers({ roles: "super_admin,admin,manager,staff,consultant,editor,accountant", limit: 200 } as any);
 
-  const { data: latestStudentsRaw } = useQuery<unknown>({
-    queryKey: ["/api/students", "dashboard-latest"],
-    queryFn: () =>
-      fetch(`${BASE}/api/students?limit=20&page=1`, { credentials: "include" })
-        .then(r => r.json())
-        .catch(() => ({ data: [] })),
+  const latestStudentsQuery = useQuery<unknown>({
+    queryKey: ["/api/students", "dashboard-latest", season],
+    queryFn: () => customFetch(`/api/students?limit=20&page=1&season=${encodeURIComponent(season)}`),
   });
-  const latestStudents: any[] = toArray(latestStudentsRaw);
+  const latestStudents: any[] = toArray(latestStudentsQuery.data);
 
-  const { data: latestAuditRaw } = useQuery<unknown>({
+  const latestAuditQuery = useQuery<unknown>({
     queryKey: ["/api/audit", "dashboard-latest"],
-    queryFn: () =>
-      fetch(`${BASE}/api/audit?limit=20&page=1`, { credentials: "include" })
-        .then(r => r.json())
-        .catch(() => ({ data: [] })),
+    queryFn: () => customFetch("/api/audit?limit=20&page=1"),
   });
-  const latestUpdates: any[] = toArray(latestAuditRaw);
+  const latestUpdates: any[] = toArray(latestAuditQuery.data);
 
-  const { data: notificationsRaw } = useQuery<unknown>({
+  const notificationsQuery = useQuery<unknown>({
     queryKey: ["/api/notifications", "dashboard-latest"],
-    queryFn: () =>
-      fetch(`${BASE}/api/notifications?limit=5`, { credentials: "include" })
-        .then(r => r.json())
-        .catch(() => ({ data: [] })),
+    queryFn: () => customFetch("/api/notifications?limit=5"),
   });
-  const latestNotifications: any[] = toArray(notificationsRaw);
+  const latestNotifications: any[] = toArray(notificationsQuery.data);
 
-  const { data: contractAgentsRaw } = useQuery<unknown>({
+  const contractAgentsQuery = useQuery<unknown>({
     queryKey: ["/api/agents/contract-alerts"],
-    queryFn: () =>
-      fetch(`${BASE}/api/agents/contract-alerts`, { credentials: "include" })
-        .then(r => r.json())
-        .catch(() => []),
+    queryFn: () => customFetch("/api/agents/contract-alerts"),
   });
-  const contractAgents: any[] = toArray(contractAgentsRaw);
+  const contractAgents: any[] = toArray(contractAgentsQuery.data);
 
   const s: any = stats || {};
   const statCards = [
@@ -475,6 +470,9 @@ export default function AdminDashboard() {
       </div>
 
       {/* Contract Alerts */}
+      {contractAgentsQuery.isError && (
+        <PanelLoadError message={lang === "tr" ? "Sözleşme uyarıları yüklenemedi; uyarı olmadığı varsayılmadı." : "Contract alerts could not be loaded; no-alert state was not assumed."} retryLabel={lang === "tr" ? "Yeniden dene" : "Retry"} onRetry={() => void contractAgentsQuery.refetch()} />
+      )}
       {contractAgents.length > 0 && (
         <Card className="p-5 border-none shadow-lg shadow-black/5 bg-gradient-to-r from-orange-50 to-red-50 dark:from-orange-950/20 dark:to-red-950/20">
           <div className="flex items-center gap-3 mb-3">
@@ -485,7 +483,7 @@ export default function AdminDashboard() {
               <h3 className="font-display font-bold text-sm">{t("adminDash.contractAlerts")}</h3>
               <p className="text-xs text-muted-foreground">{t("adminDash.agentsNeedAttention", { count: contractAgents.length })}</p>
             </div>
-            <Link href="/admin/agents" className="ml-auto">
+            <Link href="/staff/agents" className="ml-auto">
               <Badge variant="outline" className="text-xs cursor-pointer hover:bg-primary/10 gap-1">
                 {t("adminDash.viewAll")} <ArrowUpRight className="w-3 h-3" />
               </Badge>
@@ -544,7 +542,11 @@ export default function AdminDashboard() {
             <h3 className="font-display font-bold text-base">{t("staffDash.latestStudents")}</h3>
           </div>
           <div className="space-y-3 max-h-[320px] overflow-y-auto">
-            {latestStudents.length === 0 ? (
+            {latestStudentsQuery.isError ? (
+              <PanelLoadError message={lang === "tr" ? "Öğrenciler yüklenemedi; boş liste gösterilmedi." : "Students could not be loaded; the list is not empty."} retryLabel={lang === "tr" ? "Yeniden dene" : "Retry"} onRetry={() => void latestStudentsQuery.refetch()} />
+            ) : latestStudentsQuery.isLoading ? (
+              <p role="status" className="text-sm text-muted-foreground">{lang === "tr" ? "Öğrenciler yükleniyor…" : "Loading students…"}</p>
+            ) : latestStudents.length === 0 ? (
               <p className="text-sm text-muted-foreground">{t("staffDash.noStudents")}</p>
             ) : (
               latestStudents.map((st: any, i: number) => (
@@ -590,7 +592,11 @@ export default function AdminDashboard() {
             <h3 className="font-display font-bold text-base">{t("staffDash.latestUpdates")}</h3>
           </div>
           <div className="space-y-3 max-h-[320px] overflow-y-auto">
-            {latestUpdates.length === 0 ? (
+            {latestAuditQuery.isError ? (
+              <PanelLoadError message={lang === "tr" ? "Son güncellemeler yüklenemedi." : "Latest updates could not be loaded."} retryLabel={lang === "tr" ? "Yeniden dene" : "Retry"} onRetry={() => void latestAuditQuery.refetch()} />
+            ) : latestAuditQuery.isLoading ? (
+              <p role="status" className="text-sm text-muted-foreground">{lang === "tr" ? "Güncellemeler yükleniyor…" : "Loading updates…"}</p>
+            ) : latestUpdates.length === 0 ? (
               <p className="text-sm text-muted-foreground">{t("staffDash.noUpdates")}</p>
             ) : (
               latestUpdates.map((u: any, i: number) => {
@@ -634,7 +640,11 @@ export default function AdminDashboard() {
             <h3 className="font-display font-bold text-base">{t("staffDash.notifications")}</h3>
           </div>
           <div className="space-y-3 max-h-[320px] overflow-y-auto">
-            {latestNotifications.length === 0 ? (
+            {notificationsQuery.isError ? (
+              <PanelLoadError message={lang === "tr" ? "Bildirimler yüklenemedi." : "Notifications could not be loaded."} retryLabel={lang === "tr" ? "Yeniden dene" : "Retry"} onRetry={() => void notificationsQuery.refetch()} />
+            ) : notificationsQuery.isLoading ? (
+              <p role="status" className="text-sm text-muted-foreground">{lang === "tr" ? "Bildirimler yükleniyor…" : "Loading notifications…"}</p>
+            ) : latestNotifications.length === 0 ? (
               <p className="text-sm text-muted-foreground">{t("staffDash.noNotifications")}</p>
             ) : (
               latestNotifications.map((n: any) => {
@@ -683,7 +693,7 @@ export default function AdminDashboard() {
             </Select>
           </div>
           <div className="flex-1 min-h-[260px]">
-            <ResponsiveContainer width="100%" height="100%">
+            {growthQuery.isError ? <PanelLoadError message={lang === "tr" ? "Trend verileri yüklenemedi." : "Trend data could not be loaded."} retryLabel={lang === "tr" ? "Yeniden dene" : "Retry"} onRetry={() => void growthQuery.refetch()} /> : <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={growthData} margin={{ top: 10, right: 8, left: -24, bottom: 0 }}>
                 <defs>
                   <linearGradient id="admLeads" x1="0" y1="0" x2="0" y2="1">
@@ -702,7 +712,7 @@ export default function AdminDashboard() {
                 <Area type="monotone" dataKey="leads" name={t("dashboard.leads")} stroke="hsl(var(--primary))" strokeWidth={2.5} fillOpacity={1} fill="url(#admLeads)" />
                 <Area type="monotone" dataKey="applications" name={t("dashboard.applications")} stroke="hsl(var(--accent))" strokeWidth={2.5} fillOpacity={1} fill="url(#admApps)" />
               </AreaChart>
-            </ResponsiveContainer>
+            </ResponsiveContainer>}
           </div>
           {/* Legend */}
           <div className="flex items-center gap-4 mt-3 justify-center">
@@ -750,7 +760,11 @@ export default function AdminDashboard() {
             )}
           </div>
           <div className="space-y-3">
-            {upcomingFollowUps.length === 0 ? (
+            {upcomingQuery.isError ? (
+              <PanelLoadError message={lang === "tr" ? "Takip görevleri yüklenemedi." : "Follow-ups could not be loaded."} retryLabel={lang === "tr" ? "Yeniden dene" : "Retry"} onRetry={() => void upcomingQuery.refetch()} />
+            ) : upcomingQuery.isLoading ? (
+              <p role="status" className="text-sm text-muted-foreground">{lang === "tr" ? "Takip görevleri yükleniyor…" : "Loading follow-ups…"}</p>
+            ) : upcomingFollowUps.length === 0 ? (
               <p className="text-sm text-muted-foreground">{t("adminDash.noFollowUps")}</p>
             ) : (
               upcomingFollowUps.slice(0, 5).map((fu: any) => (

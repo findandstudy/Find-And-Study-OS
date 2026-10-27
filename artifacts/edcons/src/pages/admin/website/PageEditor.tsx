@@ -76,6 +76,33 @@ interface PageVersion {
   authorEmail: string | null;
 }
 
+type CmsTeamMember = { id: number; name: string; title: string | null; bio: string | null; photoUrl: string | null };
+type CmsOffice = { id: number; name: string; city: string | null; country: string | null; address: string | null; phone: string | null; email: string | null };
+
+function hydrateCollectionBlock(block: PageBlock, teamMembers: CmsTeamMember[], offices: CmsOffice[]): PageBlock {
+  if (block.blockType === "team_grid") return {
+    ...block,
+    content: { ...block.content, members: teamMembers.map(member => ({ name: member.name, role: member.title || "", bio: member.bio || "", photo: member.photoUrl || "" })) },
+  };
+  if (block.blockType === "office_list") return {
+    ...block,
+    content: { ...block.content, offices: offices.map(office => ({ name: office.name, city: [office.city, office.country].filter(Boolean).join(", "), address: office.address || "", phone: office.phone || "", email: office.email || "" })) },
+  };
+  return block;
+}
+
+function collectionDependency(block: PageBlock): "team" | "offices" | "logos" | null {
+  if (block.blockType === "team_grid") return "team";
+  if (block.blockType === "office_list") return "offices";
+  if (block.blockType === "logo_marquee") return "logos";
+  return null;
+}
+
+function hasCollectionItems(block: PageBlock): boolean {
+  const key = block.blockType === "team_grid" ? "members" : block.blockType === "office_list" ? "offices" : block.blockType === "logo_marquee" ? "items" : null;
+  return key === null || (Array.isArray(block.content[key]) && (block.content[key] as unknown[]).length > 0);
+}
+
 type PreviewSize = "desktop" | "tablet" | "mobile";
 const PREVIEW_WIDTHS: Record<PreviewSize, number> = { desktop: 1280, tablet: 768, mobile: 375 };
 
@@ -253,6 +280,19 @@ function PageEditorSession({ id }: { id: number }) {
   useEffect(() => {
     if (page?.updatedAt && serverRevision.current === null) serverRevision.current = page.updatedAt;
   }, [page?.updatedAt]);
+
+  const teamMembersQuery = useQuery<CmsTeamMember[]>({
+    queryKey: ["cms-team-members", editLocale],
+    queryFn: () => customFetch(`/api/cms/team-members?lang=${encodeURIComponent(editLocale)}`),
+    enabled: !!page,
+    staleTime: 5 * 60 * 1000,
+  });
+  const officesQuery = useQuery<CmsOffice[]>({
+    queryKey: ["cms-offices", editLocale],
+    queryFn: () => customFetch(`/api/cms/offices?lang=${encodeURIComponent(editLocale)}`),
+    enabled: !!page,
+    staleTime: 5 * 60 * 1000,
+  });
 
   const { data: savedBlocks = [], isSuccess: blocksFetched, isError: blocksError, isFetching: blocksRefreshing, refetch: reloadBlocks } = useQuery<PageBlock[]>({
     queryKey: ["website-page-blocks", id],
@@ -1140,6 +1180,10 @@ function PageEditorSession({ id }: { id: number }) {
               <div className="p-2 space-y-1">
                 {blocks.map((block, idx) => {
                   const def = getBlockTypeDef(block.blockType);
+                  const hydratedBlock = hydrateCollectionBlock(block, teamMembersQuery.data || [], officesQuery.data || []);
+                  const dependency = collectionDependency(hydratedBlock);
+                  const dependencyLoading = dependency === "team" ? teamMembersQuery.isLoading : dependency === "offices" ? officesQuery.isLoading : false;
+                  const waitingForData = !!dependency && !dependencyLoading && !hasCollectionItems(hydratedBlock);
                   return (
                     <div
                       key={idx}
@@ -1150,7 +1194,7 @@ function PageEditorSession({ id }: { id: number }) {
                       <GripVertical className="w-3 h-3 text-muted-foreground shrink-0" />
                       <span className="w-5 shrink-0 text-center text-[10px] font-semibold text-muted-foreground">{idx + 1}</span>
                       <span className={`h-2 w-2 shrink-0 rounded-full ${block.isVisible ? "bg-emerald-500" : "bg-muted-foreground/40"}`} />
-                      <button className="min-w-0 flex-1 py-1.5 text-start" onClick={() => { setSelectedBlockIdx(idx); setMobilePane("editor"); }}><span className="block truncate text-xs font-semibold">{String(block.content.title || block.content.badge || copy(def?.label || block.blockType))}</span><span className="mt-0.5 block truncate text-[10px] text-muted-foreground">{copy(def?.label || block.blockType)} · {block.isVisible ? copy("Visible", "Görünür") : copy("Hidden", "Gizli")}</span></button>
+                      <button className="min-w-0 flex-1 py-1.5 text-start" onClick={() => { setSelectedBlockIdx(idx); setMobilePane("editor"); }}><span className="block truncate text-xs font-semibold">{String(block.content.title || block.content.badge || copy(def?.label || block.blockType))}</span><span className="mt-0.5 block truncate text-[10px] text-muted-foreground">{copy(def?.label || block.blockType)} · {block.isVisible ? copy("Visible", "Görünür") : copy("Hidden", "Gizli")}{dependencyLoading ? ` · ${copy("Loading data", "Veri yükleniyor")}` : waitingForData ? ` · ${copy("Waiting for collection data", "Koleksiyon verisi bekleniyor")}` : ""}</span></button>
                       <div className="flex items-center gap-0.5">
                         <button aria-label={copy("Move block up")} onClick={e => { e.stopPropagation(); moveBlock(idx, -1); }} className="p-1 hover:bg-secondary rounded" disabled={idx === 0}>
                           <ChevronUp className="w-3 h-3" />
@@ -1248,7 +1292,7 @@ function PageEditorSession({ id }: { id: number }) {
                 data-preview-size={previewSize}
                 style={{ width: PREVIEW_WIDTHS[previewSize], minHeight: "400px", transform: `scale(${previewScale})`, transformOrigin: "top left" }}
               >
-                <BlockPreview blocks={blocks} locale={editLocale} template={page.template} pageTitle={page.title} pageSlug={seo.slug || page.slug} />
+                <BlockPreview blocks={blocks} locale={editLocale} template={page.template} pageTitle={page.title} pageSlug={seo.slug || page.slug} teamMembers={teamMembersQuery.data || []} offices={officesQuery.data || []} collectionsLoading={teamMembersQuery.isLoading || officesQuery.isLoading} />
               </div>
             </div>
           </section>
@@ -1257,8 +1301,8 @@ function PageEditorSession({ id }: { id: number }) {
   );
 }
 
-function BlockPreview({ blocks, locale, template, pageTitle, pageSlug }: { blocks: PageBlock[]; locale: string; template?: string | null; pageTitle: string; pageSlug: string }) {
-  const visibleBlocks = blocks.filter(b => b.isVisible);
+function BlockPreview({ blocks, locale, template, pageTitle, pageSlug, teamMembers, offices, collectionsLoading }: { blocks: PageBlock[]; locale: string; template?: string | null; pageTitle: string; pageSlug: string; teamMembers: CmsTeamMember[]; offices: CmsOffice[]; collectionsLoading: boolean }) {
+  const visibleBlocks = blocks.filter(b => b.isVisible).map(block => hydrateCollectionBlock(block, teamMembers, offices));
 
   if (visibleBlocks.length === 0) {
     return (
@@ -1276,7 +1320,11 @@ function BlockPreview({ blocks, locale, template, pageTitle, pageSlug }: { block
               {getBlockTypeDef(block.blockType)?.label || block.blockType}
             </Badge>
           </div>
-          {block.blockType === "catalog_grid"
+          {collectionDependency(block) && !hasCollectionItems(block) ? (
+            <div role="status" className="m-4 rounded-xl border border-dashed border-amber-400 bg-amber-50 p-5 text-sm text-amber-900">
+              {collectionsLoading ? "Collection data is loading…" : `This visible ${getBlockTypeDef(block.blockType)?.label || block.blockType} section is not rendered publicly until its collection contains data.`}
+            </div>
+          ) : block.blockType === "catalog_grid"
             ? <CatalogBlockPreview content={block.content} locale={locale} />
             : <CmsBlock block={block} index={idx} variables={{ siteName: SITE_NAME, pageTitle, pageSlug, pageLocale: locale }} />}
         </div>

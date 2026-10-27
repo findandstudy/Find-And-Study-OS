@@ -28,6 +28,26 @@ import { aiRetryDelaySeconds, classifyAiFailure } from "../lib/aiFailurePolicy";
 const router: IRouter = Router();
 const personaConfigBody = json({ limit: "256kb" });
 
+// The legacy persona surface is intentionally quarantined until every record
+// has a trustworthy project/account owner. Expose that capability state as a
+// normal read contract so clients do not misrepresent a 409 as an empty list.
+router.get(
+  "/ai-personas/status",
+  requireAuth,
+  requireRole(...ADMIN_ROLES),
+  (_req, res): void => {
+    res.setHeader("Cache-Control", "private, no-store");
+    res.json({
+      available: false,
+      mode: "ownership_adoption_required",
+      reason: "PERSONA_OWNERSHIP_ADOPTION_REQUIRED",
+      canRead: false,
+      canMutate: false,
+      canReview: false,
+    });
+  },
+);
+
 // Legacy records have no trustworthy project ownership. Do not expose their
 // list/history, review, configuration or retry paths while adopting scoped flow.
 // No role (including Super Admin), body field or Guardian caller bypasses this.
